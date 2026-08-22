@@ -79,7 +79,7 @@ export function Header() {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={label}
-              className="grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-300"
+              className="grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-700"
             >
               <Icon className="h-5 w-5" />
             </a>
@@ -89,7 +89,7 @@ export function Header() {
             href={generalWhatsappLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden items-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-bold text-ink-950 transition-colors duration-200 hover:bg-[#1fbe5a] sm:inline-flex"
+            className="hidden items-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-bold text-mist-100 transition-colors duration-200 hover:bg-[#1fbe5a] sm:inline-flex"
           >
             <WhatsAppIcon className="h-4 w-4" />
             <span>WhatsApp</span>
@@ -123,7 +123,7 @@ export function Header() {
                   className="flex items-center justify-between rounded-xl px-4 py-3.5 text-base font-medium text-mist-100 transition-colors duration-200 hover:bg-ink-800"
                 >
                   <span>{link.label}</span>
-                  <span aria-hidden className="text-brand-400">
+                  <span aria-hidden className="text-brand-600">
                     ←
                   </span>
                 </Link>
@@ -136,7 +136,7 @@ export function Header() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setOpen(false)}
-            className="mt-4 flex items-center justify-center gap-2.5 rounded-xl bg-[#25D366] px-5 py-3.5 text-base font-bold text-ink-950"
+            className="mt-4 flex items-center justify-center gap-2.5 rounded-xl bg-[#25D366] px-5 py-3.5 text-base font-bold text-mist-100"
           >
             <WhatsAppIcon className="h-5 w-5 shrink-0" />
             <span>

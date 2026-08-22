@@ -29,7 +29,7 @@ export function Section({
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <header className="max-w-2xl">
           {eyebrow ? (
-            <p className="text-xs font-semibold tracking-[0.18em] text-brand-400 uppercase">
+            <p className="text-xs font-semibold tracking-[0.18em] text-brand-700 uppercase">
               {eyebrow}
             </p>
           ) : null}

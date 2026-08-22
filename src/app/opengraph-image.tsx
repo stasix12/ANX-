@@ -23,8 +23,8 @@ export default function OpengraphImage() {
           flexDirection: 'column',
           justifyContent: 'center',
           padding: '90px',
-          background: 'linear-gradient(135deg, #101a2e 0%, #04060b 100%)',
-          color: '#eaf0fb',
+          background: 'linear-gradient(135deg, #ffffff 0%, #eaf3fb 100%)',
+          color: '#0d2340',
           fontFamily: 'sans-serif',
         }}
       >
@@ -48,11 +48,11 @@ export default function OpengraphImage() {
           <div style={{ fontSize: 76, fontWeight: 800, letterSpacing: 10 }}>ANX3D</div>
         </div>
 
-        <div style={{ marginTop: 44, fontSize: 42, color: '#b6c4dd', maxWidth: 900 }}>
+        <div style={{ marginTop: 44, fontSize: 42, color: '#3f5877', maxWidth: 900 }}>
           Professional Cleaning Equipment
         </div>
 
-        <div style={{ marginTop: 18, fontSize: 34, color: '#4d8dff' }}>
+        <div style={{ marginTop: 18, fontSize: 34, color: '#0f52e0' }}>
           Handles · Hoses · Adapters — built for Sabrina machines
         </div>
 
@@ -63,7 +63,7 @@ export default function OpengraphImage() {
             alignItems: 'center',
             gap: 16,
             fontSize: 28,
-            color: '#7d8dab',
+            color: '#6f88a3',
           }}
         >
           <div style={{ width: 60, height: 4, background: '#1f6bff' }} />

@@ -4,7 +4,7 @@ import { WhatsAppButton } from '@/components/WhatsAppButton';
 export default function NotFound() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center px-4 py-28 text-center sm:px-6 sm:py-36">
-      <p className="text-6xl font-extrabold text-brand-400">404</p>
+      <p className="text-6xl font-extrabold text-brand-600">404</p>
       <h1 className="mt-6 text-3xl font-extrabold tracking-tight sm:text-4xl">
         הדף הזה לא קיים
       </h1>

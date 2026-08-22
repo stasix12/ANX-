@@ -251,8 +251,10 @@ async function main() {
   const file = `<title>חנות ANX3D</title>
 <style>
 ${css}
-/* The artifact host owns <html>/<body>, so paint the ground explicitly. */
-html, body { background: #04060b; color: #eaf0fb; }
+/* The artifact host owns <html>/<body>, so paint the ground explicitly.
+   Pulls from the same theme tokens as the compiled CSS above, so this
+   never drifts out of sync with a theme change again. */
+html, body { background: var(--color-ink-950); color: var(--color-mist-100); }
 body { margin: 0; min-height: 100dvh; }
 </style>
 ${markup}

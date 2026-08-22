@@ -35,8 +35,8 @@ export function WhatsAppButton({
 
   const variantClasses =
     variant === 'solid'
-      ? 'bg-[#25D366] text-ink-950 hover:bg-[#1fbe5a] shadow-lg shadow-[#25D366]/20'
-      : 'border border-[#25D366]/50 text-[#25D366] hover:border-[#25D366] hover:bg-[#25D366]/10';
+      ? 'bg-[#25D366] text-mist-100 hover:bg-[#1fbe5a] shadow-lg shadow-[#25D366]/25'
+      : 'border border-[#1da851]/50 text-[#1a9e4f] hover:border-[#1da851] hover:bg-[#25D366]/10';
 
   return (
     <a

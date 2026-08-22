@@ -15,12 +15,16 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = join(root, 'public');
 
-const ink = '#070b14';
-const inkSoft = '#101a2e';
-const line = '#1f2f4d';
+// White-and-sky-blue palette, matching the site's design tokens
+// (globals.css): pale panels, blue linework, dark-navy / slate text.
+const panel = '#ffffff';
+const wash = '#eaf3fb';
+const line = '#cfe1f2';
 const blue = '#1f6bff';
+const blueDeep = '#0f52e0';
 const blueSoft = '#4d8dff';
-const mist = '#b6c4dd';
+const ink = '#0d2340';
+const slate = '#5b7797';
 
 const escapeXml = (value) =>
   value.replace(
@@ -28,18 +32,18 @@ const escapeXml = (value) =>
     (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c],
   );
 
-/** Shared defs: background gradient, grid pattern and a soft blue glow. */
+/** Shared defs: white-to-pale-blue gradient, blueprint grid and a soft glow. */
 const defs = (w, h) => `
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="${inkSoft}"/>
-      <stop offset="100%" stop-color="${ink}"/>
+      <stop offset="0%" stop-color="${panel}"/>
+      <stop offset="100%" stop-color="${wash}"/>
     </linearGradient>
     <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
       <path d="M48 0H0V48" fill="none" stroke="${line}" stroke-width="1"/>
     </pattern>
     <radialGradient id="glow" cx="50%" cy="42%" r="55%">
-      <stop offset="0%" stop-color="${blue}" stop-opacity="0.30"/>
+      <stop offset="0%" stop-color="${blue}" stop-opacity="0.16"/>
       <stop offset="100%" stop-color="${blue}" stop-opacity="0"/>
     </radialGradient>
   </defs>
@@ -65,16 +69,16 @@ function productPlaceholder({ name, index, total }) {
 ${defs(w, h)}
 ${brackets(w, h)}
   <circle cx="${w / 2}" cy="430" r="150" fill="none" stroke="${line}" stroke-width="2"/>
-  <circle cx="${w / 2}" cy="430" r="118" fill="${ink}" fill-opacity="0.65" stroke="${blue}" stroke-width="3"/>
+  <circle cx="${w / 2}" cy="430" r="118" fill="${wash}" stroke="${blue}" stroke-width="3"/>
   <text x="${w / 2}" y="430" text-anchor="middle" dominant-baseline="central"
-        font-family="Heebo, Arial, sans-serif" font-size="140" font-weight="700" fill="${blueSoft}">${index}</text>
+        font-family="Heebo, Arial, sans-serif" font-size="140" font-weight="700" fill="${blueDeep}">${index}</text>
   <text x="${w / 2}" y="640" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="46" font-weight="700" fill="#eaf0fb">${label}</text>
+        font-family="Heebo, Arial, sans-serif" font-size="46" font-weight="700" fill="${ink}">${label}</text>
   <text x="${w / 2}" y="706" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="30" fill="${mist}">תמונה ${index} מתוך ${total} · מציין מיקום</text>
+        font-family="Heebo, Arial, sans-serif" font-size="30" fill="${slate}">תמונה ${index} מתוך ${total} · מציין מיקום</text>
   <rect x="${w / 2 - 190}" y="770" width="380" height="62" rx="31" fill="none" stroke="${line}" stroke-width="2"/>
   <text x="${w / 2}" y="801" text-anchor="middle" dominant-baseline="central"
-        font-family="Heebo, Arial, sans-serif" font-size="26" letter-spacing="4" fill="${blueSoft}">ANX3D</text>
+        font-family="Heebo, Arial, sans-serif" font-size="26" letter-spacing="4" fill="${blueDeep}">ANX3D</text>
 </svg>
 `;
 }
@@ -86,33 +90,33 @@ function heroPlaceholder() {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="מכונת ניקוי מקצועית — מציין מיקום">
 ${defs(w, h)}
   <g transform="translate(700 230)">
-    <!-- body -->
-    <rect x="0" y="120" width="420" height="420" rx="38" fill="#16233c" stroke="${blueSoft}" stroke-width="6"/>
-    <rect x="42" y="176" width="336" height="150" rx="18" fill="#0a1120" stroke="#2b4370" stroke-width="3"/>
-    <rect x="70" y="206" width="180" height="16" rx="8" fill="${blueSoft}"/>
-    <rect x="70" y="240" width="120" height="12" rx="6" fill="#39538a"/>
-    <rect x="70" y="272" width="240" height="12" rx="6" fill="#39538a"/>
+    <!-- body: a pale panel with blue linework, like a technical schematic -->
+    <rect x="0" y="120" width="420" height="420" rx="38" fill="${panel}" stroke="${blue}" stroke-width="6"/>
+    <rect x="42" y="176" width="336" height="150" rx="18" fill="${wash}" stroke="${line}" stroke-width="3"/>
+    <rect x="70" y="206" width="180" height="16" rx="8" fill="${blue}"/>
+    <rect x="70" y="240" width="120" height="12" rx="6" fill="${blueSoft}"/>
+    <rect x="70" y="272" width="240" height="12" rx="6" fill="${blueSoft}"/>
     <!-- control dials -->
-    <circle cx="130" cy="410" r="42" fill="none" stroke="${blueSoft}" stroke-width="6"/>
-    <circle cx="130" cy="410" r="11" fill="${blueSoft}"/>
-    <circle cx="250" cy="410" r="42" fill="none" stroke="#39538a" stroke-width="6"/>
-    <circle cx="250" cy="410" r="11" fill="#39538a"/>
-    <rect x="308" y="382" width="70" height="56" rx="12" fill="${blue}" fill-opacity="0.5" stroke="${blueSoft}" stroke-width="3"/>
+    <circle cx="130" cy="410" r="42" fill="none" stroke="${blue}" stroke-width="6"/>
+    <circle cx="130" cy="410" r="11" fill="${blue}"/>
+    <circle cx="250" cy="410" r="42" fill="none" stroke="${blueSoft}" stroke-width="6"/>
+    <circle cx="250" cy="410" r="11" fill="${blueSoft}"/>
+    <rect x="308" y="382" width="70" height="56" rx="12" fill="${blue}" fill-opacity="0.16" stroke="${blue}" stroke-width="3"/>
     <!-- handle -->
-    <path d="M60 120V56a44 44 0 0144-44h212a44 44 0 0144 44v64" fill="none" stroke="${blueSoft}" stroke-width="16" stroke-linecap="round"/>
+    <path d="M60 120V56a44 44 0 0144-44h212a44 44 0 0144 44v64" fill="none" stroke="${blue}" stroke-width="16" stroke-linecap="round"/>
     <!-- wheels -->
-    <circle cx="80" cy="566" r="40" fill="#0a1120" stroke="#39538a" stroke-width="7"/>
-    <circle cx="340" cy="566" r="40" fill="#0a1120" stroke="#39538a" stroke-width="7"/>
+    <circle cx="80" cy="566" r="40" fill="${panel}" stroke="${blueSoft}" stroke-width="7"/>
+    <circle cx="340" cy="566" r="40" fill="${panel}" stroke="${blueSoft}" stroke-width="7"/>
     <!-- hose leaving the machine -->
     <path d="M420 300c150 0 190 90 300 90s150-70 260-40"
-          fill="none" stroke="${blueSoft}" stroke-width="18" stroke-linecap="round" stroke-opacity="0.8"
+          fill="none" stroke="${blue}" stroke-width="18" stroke-linecap="round" stroke-opacity="0.55"
           stroke-dasharray="34 22"/>
   </g>
 ${brackets(w, h, 72, 96)}
   <text x="380" y="900" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="42" font-weight="700" fill="#eaf0fb">מכונת ניקוי מקצועית</text>
+        font-family="Heebo, Arial, sans-serif" font-size="42" font-weight="700" fill="${ink}">מכונת ניקוי מקצועית</text>
   <text x="380" y="956" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="26" fill="${mist}">מציין מיקום — להחלפה בתמונה אמיתית</text>
+        font-family="Heebo, Arial, sans-serif" font-size="26" fill="${slate}">מציין מיקום — להחלפה בתמונה אמיתית</text>
 </svg>
 `;
 }

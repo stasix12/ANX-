@@ -28,7 +28,7 @@ export function Footer() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="ANX3D באינסטגרם"
-                className="grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-300"
+                className="grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-700"
               >
                 <InstagramIcon className="h-5 w-5" />
               </a>
@@ -37,7 +37,7 @@ export function Footer() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="ANX3D בטיקטוק"
-                className="grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-300"
+                className="grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-700"
               >
                 <TikTokIcon className="h-5 w-5" />
               </a>
@@ -62,7 +62,7 @@ export function Footer() {
                 <li key={category.id}>
                   <Link
                     href="/#products"
-                    className="text-sm text-mist-300 transition-colors duration-200 hover:text-brand-300"
+                    className="text-sm text-mist-300 transition-colors duration-200 hover:text-brand-700"
                   >
                     {category.name}
                   </Link>
@@ -80,7 +80,7 @@ export function Footer() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-sm text-mist-300 transition-colors duration-200 hover:text-brand-300"
+                    className="text-sm text-mist-300 transition-colors duration-200 hover:text-brand-700"
                   >
                     {link.label}
                   </Link>
@@ -90,7 +90,7 @@ export function Footer() {
             <p className="mt-6 text-sm font-bold text-mist-100">{site.shippingNote}</p>
             <a
               href={`tel:+${site.whatsappNumber}`}
-              className="mt-1.5 inline-block text-sm text-mist-300 transition-colors duration-200 hover:text-brand-300"
+              className="mt-1.5 inline-block text-sm text-mist-300 transition-colors duration-200 hover:text-brand-700"
               dir="ltr"
             >
               {site.phoneDisplay}

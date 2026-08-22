@@ -33,7 +33,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
         <h3 className="text-xl font-bold tracking-tight">
           <Link
             href={`/products/${product.slug}`}
-            className="rounded transition-colors duration-200 hover:text-brand-300"
+            className="rounded transition-colors duration-200 hover:text-brand-700"
           >
             {product.name}
           </Link>
@@ -41,7 +41,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
 
         <p className="mt-2.5 text-sm leading-relaxed text-mist-300">{product.tagline}</p>
 
-        <p className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1.5 text-xs font-semibold text-brand-300">
+        <p className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1.5 text-xs font-semibold text-brand-700">
           <CheckIcon className="h-3.5 w-3.5" />
           מתאים ל-Sabrina
         </p>
@@ -59,7 +59,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
         <div className="mt-5 flex flex-col gap-2.5 border-t border-ink-700 pt-5">
           <Link
             href={`/products/${product.slug}`}
-            className="inline-flex flex-1 items-center justify-center rounded-full border border-ink-600 px-5 py-3 text-sm font-bold text-mist-100 transition-colors duration-200 hover:border-brand-500 hover:text-brand-300"
+            className="inline-flex flex-1 items-center justify-center rounded-full border border-ink-600 px-5 py-3 text-sm font-bold text-mist-100 transition-colors duration-200 hover:border-brand-500 hover:text-brand-700"
           >
             לפרטים
           </Link>

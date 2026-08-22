@@ -78,13 +78,13 @@ export default async function ProductPage({ params }: PageProps) {
         <nav aria-label="מסלול ניווט" className="text-sm text-mist-500">
           <ol className="flex flex-wrap items-center gap-2">
             <li>
-              <Link href="/" className="transition-colors hover:text-brand-300">
+              <Link href="/" className="transition-colors hover:text-brand-700">
                 דף הבית
               </Link>
             </li>
             <li aria-hidden>/</li>
             <li>
-              <Link href="/#products" className="transition-colors hover:text-brand-300">
+              <Link href="/#products" className="transition-colors hover:text-brand-700">
                 {categoryName(product.category)}
               </Link>
             </li>
@@ -99,7 +99,7 @@ export default async function ProductPage({ params }: PageProps) {
           <ProductGallery images={product.images} productName={product.name} />
 
           <div>
-            <p className="text-xs font-semibold tracking-[0.18em] text-brand-400 uppercase">
+            <p className="text-xs font-semibold tracking-[0.18em] text-brand-700 uppercase">
               {categoryName(product.category)}
             </p>
             <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-balance-he sm:text-4xl">
@@ -107,7 +107,7 @@ export default async function ProductPage({ params }: PageProps) {
             </h1>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1.5 text-xs font-semibold text-brand-300">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1.5 text-xs font-semibold text-brand-700">
                 <CheckIcon className="h-3.5 w-3.5" />
                 מתאים ל-Sabrina
               </span>
@@ -143,7 +143,7 @@ export default async function ProductPage({ params }: PageProps) {
             </div>
 
             <div className="mt-8 flex items-start gap-3.5 rounded-2xl border border-ink-700 surface p-5">
-              <TruckIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-400" />
+              <TruckIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-600" />
               <div>
                 <p className="font-bold">{site.shippingNote}</p>
                 <p className="mt-1 text-sm text-mist-300">
@@ -160,13 +160,13 @@ export default async function ProductPage({ params }: PageProps) {
             className="rounded-card border border-ink-700 surface p-6 sm:p-7"
           >
             <h2 id="compatibility-title" className="flex items-center gap-2.5 text-xl font-bold">
-              <MachineIcon className="h-6 w-6 text-brand-400" />
+              <MachineIcon className="h-6 w-6 text-brand-600" />
               התאמה למכונות
             </h2>
             <ul className="mt-5 space-y-3">
               {product.compatibility.map((item) => (
                 <li key={item} className="flex items-start gap-2.5 text-sm text-mist-300">
-                  <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
+                  <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
                   <span>{item}</span>
                 </li>
               ))}
@@ -212,7 +212,7 @@ export default async function ProductPage({ params }: PageProps) {
             <ul className="mt-5 space-y-3">
               {product.highlights.map((item) => (
                 <li key={item} className="flex items-start gap-2.5 text-sm text-mist-300">
-                  <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
+                  <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
                   <span>{item}</span>
                 </li>
               ))}

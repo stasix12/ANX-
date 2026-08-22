@@ -2,14 +2,14 @@
 
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#101a2e"/>
-      <stop offset="100%" stop-color="#070b14"/>
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#eaf3fb"/>
     </linearGradient>
     <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
-      <path d="M48 0H0V48" fill="none" stroke="#1f2f4d" stroke-width="1"/>
+      <path d="M48 0H0V48" fill="none" stroke="#cfe1f2" stroke-width="1"/>
     </pattern>
     <radialGradient id="glow" cx="50%" cy="42%" r="55%">
-      <stop offset="0%" stop-color="#1f6bff" stop-opacity="0.30"/>
+      <stop offset="0%" stop-color="#1f6bff" stop-opacity="0.16"/>
       <stop offset="100%" stop-color="#1f6bff" stop-opacity="0"/>
     </radialGradient>
   </defs>
@@ -21,15 +21,15 @@
   <path d="M872 56h72v72" fill="none" stroke="#1f6bff" stroke-width="4" stroke-linecap="square"/>
   <path d="M944 872v72h-72" fill="none" stroke="#1f6bff" stroke-width="4" stroke-linecap="square"/>
   <path d="M128 944H56v-72" fill="none" stroke="#1f6bff" stroke-width="4" stroke-linecap="square"/>
-  <circle cx="500" cy="430" r="150" fill="none" stroke="#1f2f4d" stroke-width="2"/>
-  <circle cx="500" cy="430" r="118" fill="#070b14" fill-opacity="0.65" stroke="#1f6bff" stroke-width="3"/>
+  <circle cx="500" cy="430" r="150" fill="none" stroke="#cfe1f2" stroke-width="2"/>
+  <circle cx="500" cy="430" r="118" fill="#eaf3fb" stroke="#1f6bff" stroke-width="3"/>
   <text x="500" y="430" text-anchor="middle" dominant-baseline="central"
-        font-family="Heebo, Arial, sans-serif" font-size="140" font-weight="700" fill="#4d8dff">3</text>
+        font-family="Heebo, Arial, sans-serif" font-size="140" font-weight="700" fill="#0f52e0">3</text>
   <text x="500" y="640" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="46" font-weight="700" fill="#eaf0fb">מתאם Sabrina ↔ ידית</text>
+        font-family="Heebo, Arial, sans-serif" font-size="46" font-weight="700" fill="#0d2340">מתאם Sabrina ↔ ידית</text>
   <text x="500" y="706" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="30" fill="#b6c4dd">תמונה 3 מתוך 3 · מציין מיקום</text>
-  <rect x="310" y="770" width="380" height="62" rx="31" fill="none" stroke="#1f2f4d" stroke-width="2"/>
+        font-family="Heebo, Arial, sans-serif" font-size="30" fill="#5b7797">תמונה 3 מתוך 3 · מציין מיקום</text>
+  <rect x="310" y="770" width="380" height="62" rx="31" fill="none" stroke="#cfe1f2" stroke-width="2"/>
   <text x="500" y="801" text-anchor="middle" dominant-baseline="central"
-        font-family="Heebo, Arial, sans-serif" font-size="26" letter-spacing="4" fill="#4d8dff">ANX3D</text>
+        font-family="Heebo, Arial, sans-serif" font-size="26" letter-spacing="4" fill="#0f52e0">ANX3D</text>
 </svg>

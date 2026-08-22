@@ -15,7 +15,7 @@ export function Contact() {
 
           <div className="grid gap-10 lg:grid-cols-[1.15fr_1fr] lg:items-center">
             <div>
-              <p className="text-xs font-semibold tracking-[0.18em] text-brand-400 uppercase">
+              <p className="text-xs font-semibold tracking-[0.18em] text-brand-700 uppercase">
                 צור קשר
               </p>
               <h2
@@ -33,7 +33,7 @@ export function Contact() {
                 <WhatsAppButton size="lg" label="דברו איתנו בוואטסאפ" />
                 <a
                   href={`tel:+${site.whatsappNumber}`}
-                  className="inline-flex items-center justify-center gap-2.5 rounded-full border border-ink-600 px-7 py-4 text-lg font-bold text-mist-100 transition-colors duration-200 hover:border-brand-500 hover:text-brand-300"
+                  className="inline-flex items-center justify-center gap-2.5 rounded-full border border-ink-600 px-7 py-4 text-lg font-bold text-mist-100 transition-colors duration-200 hover:border-brand-500 hover:text-brand-700"
                 >
                   <PhoneIcon className="h-5 w-5" />
                   {site.phoneDisplay}
@@ -43,7 +43,7 @@ export function Contact() {
 
             <ul className="space-y-3">
               <li className="flex items-start gap-3.5 rounded-2xl border border-ink-700 surface p-5">
-                <TruckIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-400" />
+                <TruckIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-600" />
                 <div>
                   <p className="font-bold">{site.shippingNote}</p>
                   <p className="mt-1 text-sm text-mist-300">
@@ -52,7 +52,7 @@ export function Contact() {
                 </div>
               </li>
               <li className="flex items-start gap-3.5 rounded-2xl border border-ink-700 surface p-5">
-                <PhoneIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-400" />
+                <PhoneIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-600" />
                 <div>
                   <p className="font-bold">שירות ישיר, בלי מוקד</p>
                   <p className="mt-1 text-sm text-mist-300">
@@ -67,7 +67,7 @@ export function Contact() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="ANX3D באינסטגרם"
-                  className="grid h-10 w-10 place-items-center rounded-xl border border-ink-600 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-300"
+                  className="grid h-10 w-10 place-items-center rounded-xl border border-ink-600 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-700"
                 >
                   <InstagramIcon className="h-5 w-5" />
                 </a>
@@ -76,7 +76,7 @@ export function Contact() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="ANX3D בטיקטוק"
-                  className="grid h-10 w-10 place-items-center rounded-xl border border-ink-600 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-300"
+                  className="grid h-10 w-10 place-items-center rounded-xl border border-ink-600 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-700"
                 >
                   <TikTokIcon className="h-5 w-5" />
                 </a>

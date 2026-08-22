@@ -50,7 +50,7 @@ export function Faq() {
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 text-start text-base font-bold sm:text-lg">
               <span>{item.question}</span>
-              <ChevronDownIcon className="h-5 w-5 shrink-0 text-brand-400 transition-transform duration-300 group-open:rotate-180" />
+              <ChevronDownIcon className="h-5 w-5 shrink-0 text-brand-600 transition-transform duration-300 group-open:rotate-180" />
             </summary>
             <p className="px-5 pb-5 text-sm leading-relaxed text-mist-300 sm:text-base">
               {item.answer}

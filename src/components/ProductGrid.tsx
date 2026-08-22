@@ -25,7 +25,7 @@ export function ProductGrid({ products }: { products: Product[] }) {
       <div
         role="radiogroup"
         aria-label="סינון מוצרים לפי קטגוריה"
-        className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:flex-wrap sm:px-0"
+        className="flex flex-wrap gap-2"
       >
         {filters.map((filter) => {
           const selected = active === filter.id;
@@ -36,7 +36,7 @@ export function ProductGrid({ products }: { products: Product[] }) {
               role="radio"
               aria-checked={selected}
               onClick={() => setActive(filter.id)}
-              className={`shrink-0 rounded-full border px-5 py-2.5 text-sm font-bold transition-colors duration-200 ${
+              className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold transition-colors duration-200 sm:px-5 sm:py-2.5 ${
                 selected
                   ? 'border-brand-500 bg-brand-500 text-white'
                   : 'border-ink-700 text-mist-300 hover:border-brand-500/60 hover:text-mist-100'

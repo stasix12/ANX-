@@ -49,8 +49,6 @@ public/products/anx-pro-handle/3.svg
 
 להחלפה: שימו את הקובץ האמיתי באותה תיקייה (למשל `1.jpg`) ועדכנו את הנתיב במערך `images` של המוצר ב-`src/lib/products.ts`. מומלץ יחס 1:1 (ריבוע), לפחות 1000×1000.
 
-**תמונת ה-Hero** — `public/hero/machine.svg`. הנתיב מוגדר ב-`src/components/Hero.tsx`. מומלץ יחס רחב, לפחות 1920×1080.
-
 **תמונת OG לשיתופים** — נוצרת אוטומטית כ-PNG ב-`src/app/opengraph-image.tsx`. אפשר להחליף אותה בקובץ תמונה קבוע.
 
 **Favicon** — `src/app/icon.svg`.
@@ -63,8 +61,7 @@ public/products/anx-pro-handle/3.svg
 | --- | --- |
 | מוצרים, מחירים, מפרטים, וריאציות | `src/lib/products.ts` |
 | מספר וואטסאפ, קישורי רשתות, שם מותג | `src/lib/site.ts` |
-| שאלות נפוצות | `src/components/Faq.tsx` |
-| אזור "למה ANX3D" | `src/components/WhyUs.tsx` |
+| כותרת הקטלוג ומשפט הפתיחה | `src/app/page.tsx` |
 
 מחיר הוא שדה אופציונלי — מוצר בלי `price` יציג "לפרטי מחיר בוואטסאפ" במקום מחיר.
 
@@ -84,12 +81,12 @@ https://wa.me/972535257250?text=<הודעה מקודדת>
 src/
 ├── app/
 │   ├── layout.tsx              # <html lang="he" dir="rtl">, פונט, מטא-דאטה
-│   ├── page.tsx                # דף הבית
+│   ├── page.tsx                # דף הבית — קטלוג המוצרים
 │   ├── products/[slug]/page.tsx# עמוד מוצר מלא
 │   ├── opengraph-image.tsx     # תמונת OG
 │   ├── sitemap.ts / robots.ts
 │   └── globals.css             # טוקנים של העיצוב
-├── components/                 # Header, Hero, ProductCard, ProductGrid, ...
+├── components/                 # Header, Footer, ProductCard, ProductGrid, ...
 └── lib/
     ├── products.ts             # נתוני המוצרים
     └── site.ts                 # קונפיגורציית מותג + קישורי WhatsApp
@@ -99,9 +96,9 @@ src/
 
 - **RTL מלא**: הפריסה משתמשת ב-logical properties (`ps-`, `me-`, `start-`) כך שהיישור, האייקונים והניווט מתהפכים נכון.
 - **Mobile first**: כל הפריסות נבנו קודם למובייל ומתרחבות מעלה.
-- **ביצועים**: `next/image` עם `sizes` מדויק, lazy loading לכל התמונות פרט ל-Hero, ופונט Heebo עם `display: swap`.
-- **נגישות**: קישור דילוג לתוכן, `alt` לכל התמונות, פוקוס נראה למקלדת, סינון המוצרים ממומש כ-`radiogroup`, ותפריט המובייל נסגר ב-Escape.
-- **SEO**: title/description לכל עמוד, Open Graph ו-Twitter cards, `sitemap.xml`, `robots.txt` ו-JSON-LD (Product, FAQPage, Store).
+- **ביצועים**: `next/image` עם `sizes` מדויק, lazy loading לתמונות המוצרים, ופונט Heebo עם `display: swap`.
+- **נגישות**: קישור דילוג לתוכן, `alt` לכל התמונות, פוקוס נראה למקלדת, וסינון המוצרים ממומש כ-`radiogroup`.
+- **SEO**: title/description לכל עמוד, Open Graph ו-Twitter cards, `sitemap.xml`, `robots.txt` ו-JSON-LD (Product, Store).
 
 לפני עלייה לאוויר כדאי להגדיר את כתובת האתר האמיתית:
 

@@ -1,23 +1,7 @@
-import { CleaningDemo } from '@/components/CleaningDemo';
-import { Contact } from '@/components/Contact';
-import { Faq, faqItems } from '@/components/Faq';
-import { Hero } from '@/components/Hero';
 import { ProductGrid } from '@/components/ProductGrid';
 import { Section } from '@/components/Section';
-import { WhyUs } from '@/components/WhyUs';
 import { products } from '@/lib/products';
 import { site } from '@/lib/site';
-
-/** FAQ rich result — lets search engines surface the answers directly. */
-const faqJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: faqItems.map((item) => ({
-    '@type': 'Question',
-    name: item.question,
-    acceptedAnswer: { '@type': 'Answer', text: item.answer },
-  })),
-};
 
 const businessJsonLd = {
   '@context': 'https://schema.org',
@@ -32,26 +16,19 @@ const businessJsonLd = {
 export default function HomePage() {
   return (
     <>
-      <Hero />
-      <CleaningDemo />
-
+      {/*
+        The catalog is the whole page, so its heading is the page's h1 rather
+        than a section h2 — nothing above it holds that role any more.
+      */}
       <Section
         id="products"
-        eyebrow="קטלוג"
+        titleAs="h1"
         title="המוצרים שלנו"
-        description="ידיות שאיבה, צינורות ומתאמים — כולם מותאמים למכונות Sabrina. בחרו קטגוריה או עברו על הכל."
+        description="ידיות שאיבה, צינורות ומתאמים למכונות Sabrina. משלוחים לכל הארץ, הזמנות בוואטסאפ."
       >
         <ProductGrid products={products} />
       </Section>
 
-      <WhyUs />
-      <Faq />
-      <Contact />
-
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-      />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(businessJsonLd) }}

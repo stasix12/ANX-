@@ -4,6 +4,11 @@ interface SectionProps {
   id?: string;
   eyebrow?: string;
   title: string;
+  /**
+   * Heading level for the title. Defaults to h2 for sections stacked under a
+   * page-level h1; pass 'h1' when this section *is* the page's main heading.
+   */
+  titleAs?: 'h1' | 'h2';
   description?: string;
   children: ReactNode;
   className?: string;
@@ -14,6 +19,7 @@ export function Section({
   id,
   eyebrow,
   title,
+  titleAs: Heading = 'h2',
   description,
   children,
   className = '',
@@ -24,7 +30,7 @@ export function Section({
     <section
       id={id}
       aria-labelledby={headingId}
-      className={`scroll-mt-24 py-16 sm:py-20 lg:py-24 ${className}`}
+      className={`scroll-mt-24 pt-8 pb-16 sm:pt-10 sm:pb-20 lg:pt-12 lg:pb-24 ${className}`}
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <header className="max-w-2xl">
@@ -33,12 +39,12 @@ export function Section({
               {eyebrow}
             </p>
           ) : null}
-          <h2
+          <Heading
             id={headingId}
             className="mt-3 text-3xl font-extrabold tracking-tight text-balance-he sm:text-4xl"
           >
             {title}
-          </h2>
+          </Heading>
           {description ? (
             <p className="mt-4 text-base leading-relaxed text-mist-300 sm:text-lg">{description}</p>
           ) : null}

@@ -44,51 +44,10 @@ export function WhatsAppIcon(props: IconProps) {
   );
 }
 
-export function MenuIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M4 7h16M4 12h16M4 17h16" />
-    </svg>
-  );
-}
-
-export function CloseIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M6 6l12 12M18 6L6 18" />
-    </svg>
-  );
-}
-
-/** Points toward the reading direction; flipped for RTL by the caller. */
-export function ArrowIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M5 12h14M13 6l6 6-6 6" />
-    </svg>
-  );
-}
-
-export function ChevronDownIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M6 9l6 6 6-6" />
-    </svg>
-  );
-}
-
 export function CheckIcon(props: IconProps) {
   return (
     <svg {...base} strokeWidth={2.4} {...props}>
       <path d="M4.5 12.5l5 5 10-11" />
-    </svg>
-  );
-}
-
-export function ToolIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M14.7 6.3a4 4 0 01-5 5L5.4 15.6a2.3 2.3 0 103.2 3.2l4.3-4.3a4 4 0 015-5l-2.6 2.6-2.3-.6-.6-2.3 2.6-2.6a4 4 0 00-2.3.7z" />
     </svg>
   );
 }
@@ -105,15 +64,6 @@ export function MachineIcon(props: IconProps) {
   );
 }
 
-export function ShieldIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M12 3l7 3v5.5c0 4.2-2.9 7.6-7 9.5-4.1-1.9-7-5.3-7-9.5V6l7-3z" />
-      <path d="M9 12l2 2 4-4.5" />
-    </svg>
-  );
-}
-
 export function TruckIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>
@@ -121,33 +71,6 @@ export function TruckIcon(props: IconProps) {
       <path d="M14 9.5h3.6L21 12.6V15h-7V9.5z" />
       <circle cx="7" cy="17.5" r="1.8" />
       <circle cx="17" cy="17.5" r="1.8" />
-    </svg>
-  );
-}
-
-export function PhoneIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M6.5 3.5h3l1.5 4-2 1.4a12 12 0 006.1 6.1l1.4-2 4 1.5v3a2 2 0 01-2.2 2A16.5 16.5 0 014.5 5.7a2 2 0 012-2.2z" />
-    </svg>
-  );
-}
-
-export function HoseIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M3.5 6c3 0 3 4 6 4s3-4 6-4 3 4 5 4" />
-      <circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none" />
-      <circle cx="20.5" cy="10" r="1.4" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-export function SparkleIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" />
-      <path d="M19 14.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
     </svg>
   );
 }

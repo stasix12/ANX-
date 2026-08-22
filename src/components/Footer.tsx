@@ -1,93 +1,37 @@
-import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import { InstagramIcon, TikTokIcon, WhatsAppIcon } from '@/components/icons';
-import { categories } from '@/lib/products';
 import { generalWhatsappLink, site } from '@/lib/site';
 
-const siteLinks = [
-  { href: '/#products', label: 'כל המוצרים' },
-  { href: '/#why', label: 'למה ANX3D' },
-  { href: '/#faq', label: 'שאלות נפוצות' },
-  { href: '/#contact', label: 'צור קשר' },
+const socials = [
+  { href: site.instagram, label: 'ANX3D באינסטגרם', Icon: InstagramIcon, hover: 'hover:border-brand-500 hover:text-brand-700' },
+  { href: site.tiktok, label: 'ANX3D בטיקטוק', Icon: TikTokIcon, hover: 'hover:border-brand-500 hover:text-brand-700' },
+  {
+    href: generalWhatsappLink,
+    label: 'פנייה בוואטסאפ',
+    Icon: WhatsAppIcon,
+    hover: 'hover:border-[#25D366] hover:text-[#25D366]',
+  },
 ];
 
+/**
+ * Contact details only. The category and section link columns went away with
+ * the pages they pointed at — the catalog is the whole site now.
+ */
 export function Footer() {
   return (
     <footer className="border-t border-ink-700 bg-ink-950/60">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-16">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="lg:col-span-2">
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
+        <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+          <div>
             <Logo withTagline />
             <p className="mt-5 max-w-sm text-sm leading-relaxed text-mist-300">
               ידיות שאיבה, צינורות ומתאמים למכונות Sabrina — מפותחים ומיוצרים עבור אנשי מקצוע
               בתחום ניקוי הספות והריפודים.
             </p>
-            <div className="mt-6 flex items-center gap-2">
-              <a
-                href={site.instagram}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="ANX3D באינסטגרם"
-                className="grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-700"
-              >
-                <InstagramIcon className="h-5 w-5" />
-              </a>
-              <a
-                href={site.tiktok}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="ANX3D בטיקטוק"
-                className="grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 hover:border-brand-500 hover:text-brand-700"
-              >
-                <TikTokIcon className="h-5 w-5" />
-              </a>
-              <a
-                href={generalWhatsappLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="פנייה בוואטסאפ"
-                className="grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 hover:border-[#25D366] hover:text-[#25D366]"
-              >
-                <WhatsAppIcon className="h-5 w-5" />
-              </a>
-            </div>
           </div>
 
-          <nav aria-labelledby="footer-categories">
-            <h2 id="footer-categories" className="text-sm font-bold tracking-wide text-mist-100">
-              קטגוריות
-            </h2>
-            <ul className="mt-4 space-y-2.5">
-              {categories.map((category) => (
-                <li key={category.id}>
-                  <Link
-                    href="/#products"
-                    className="text-sm text-mist-300 transition-colors duration-200 hover:text-brand-700"
-                  >
-                    {category.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          <nav aria-labelledby="footer-links">
-            <h2 id="footer-links" className="text-sm font-bold tracking-wide text-mist-100">
-              ניווט
-            </h2>
-            <ul className="mt-4 space-y-2.5">
-              {siteLinks.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-mist-300 transition-colors duration-200 hover:text-brand-700"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-6 text-sm font-bold text-mist-100">{site.shippingNote}</p>
+          <div className="sm:text-end">
+            <p className="text-sm font-bold text-mist-100">{site.shippingNote}</p>
             <a
               href={`tel:+${site.whatsappNumber}`}
               className="mt-1.5 inline-block text-sm text-mist-300 transition-colors duration-200 hover:text-brand-700"
@@ -95,10 +39,25 @@ export function Footer() {
             >
               {site.phoneDisplay}
             </a>
-          </nav>
+
+            <div className="mt-5 flex items-center gap-2 sm:justify-end">
+              {socials.map(({ href, label, Icon, hover }) => (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                  className={`grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 ${hover}`}
+                >
+                  <Icon className="h-5 w-5" />
+                </a>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="mt-12 flex flex-col gap-3 border-t border-ink-700 pt-6 text-xs text-mist-500 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-10 flex flex-col gap-3 border-t border-ink-700 pt-6 text-xs text-mist-500 sm:flex-row sm:items-center sm:justify-between">
           <p>
             © {new Date().getFullYear()} {site.name} · {site.tagline}
           </p>

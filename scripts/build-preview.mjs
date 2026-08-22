@@ -107,7 +107,6 @@ const routerScript = (fontClass) => `
     Object.keys(routes).forEach(function (key) {
       routes[key].hidden = routes[key] !== target;
     });
-    closeMenu();
     if (anchor) {
       var section = target.querySelector('#' + CSS.escape(anchor));
       if (section) {
@@ -126,50 +125,12 @@ const routerScript = (fontClass) => `
 
   window.addEventListener('hashchange', apply);
 
-  /* --- mobile menu --- */
-  function menuParts() {
-    var page = document.querySelector('[data-route]:not([hidden])') || document;
-    return {
-      button: page.querySelector('[aria-controls="mobile-menu"]'),
-      panel: page.querySelector('#mobile-menu'),
-    };
-  }
-
-  function closeMenu() {
-    document.querySelectorAll('#mobile-menu').forEach(function (p) { p.hidden = true; });
-    document.querySelectorAll('[aria-controls="mobile-menu"]').forEach(function (b) {
-      b.setAttribute('aria-expanded', 'false');
-    });
-    document.body.style.overflow = '';
-  }
-
-  document.addEventListener('click', function (event) {
-    var button = event.target.closest('[aria-controls="mobile-menu"]');
-    if (!button) return;
-    var parts = menuParts();
-    if (!parts.panel) return;
-    var opening = parts.panel.hidden;
-    parts.panel.hidden = !opening;
-    button.setAttribute('aria-expanded', String(opening));
-    document.body.style.overflow = opening ? 'hidden' : '';
-  });
-
-  document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') closeMenu();
-  });
-
-  /* --- header background on scroll --- */
-  var solid = ['border-ink-700', 'bg-ink-950/90', 'backdrop-blur-lg'];
-  var clear = ['border-transparent', 'bg-transparent'];
-  function onScroll() {
-    var scrolled = window.scrollY > 12;
-    document.querySelectorAll('header').forEach(function (header) {
-      solid.forEach(function (c) { header.classList.toggle(c, scrolled); });
-      clear.forEach(function (c) { header.classList.toggle(c, !scrolled); });
-    });
-  }
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
+  /*
+   * No mobile-menu or header-scroll handlers here: the header is a plain
+   * static bar with no drawer and a permanent background. A scroll handler
+   * that toggled those background classes would actively strip them at the
+   * top of the page, leaving the header transparent over the content.
+   */
 
   /* --- category filter --- */
   var filterMap = { 'הכל': 'all', 'ידיות שאיבה': 'handles', 'צינורות': 'hoses', 'מתאמים': 'adapters' };

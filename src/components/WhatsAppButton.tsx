@@ -4,7 +4,7 @@ import { generalWhatsappLink, orderLink } from '@/lib/site';
 type Size = 'xs' | 'sm' | 'md' | 'lg';
 
 const sizeClasses: Record<Size, string> = {
-  xs: 'gap-1.5 px-3 py-2 text-xs',
+  xs: 'gap-1.5 px-2.5 py-2 text-xs leading-tight',
   sm: 'gap-2 px-4 py-2.5 text-sm',
   md: 'gap-2.5 px-5 py-3 text-[15px]',
   lg: 'gap-3 px-7 py-4 text-lg',

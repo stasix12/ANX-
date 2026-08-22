@@ -254,7 +254,7 @@ export default async function ProductPage({ params }: PageProps) {
             <h2 id="related-title" className="text-2xl font-extrabold tracking-tight sm:text-3xl">
               מוצרים נוספים בקטגוריה
             </h2>
-            <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+            <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3">
               {related.map((item) => (
                 <ProductCard key={item.slug} product={item} />
               ))}

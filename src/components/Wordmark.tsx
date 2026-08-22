@@ -1,66 +1,46 @@
 /**
- * The ANX wordmark, drawn to match the brand logo's lettering: heavy angular
- * bars, an italic lean and a solid extrude behind the faces.
+ * The ANX wordmark: wide, geometric, squared-off letterforms with even stroke
+ * weight and generous tracking — the extended-technical style used by
+ * equipment brands, set upright and flat rather than italic and extruded.
  *
- * Vector rather than a crop of the logo artwork — it has to stay crisp from a
- * 32px header to a retina display, and it picks up the theme's brand colours
- * instead of baking in the ones from the source image.
- */
-
-/*
- * Letterforms are built from heavy bars, the way the logo's are.
- *
- * The fill rule differs per glyph and is not incidental: the A is one outline
- * plus a counter that has to punch through (evenodd), while the X is two bars
- * that have to merge where they cross — under evenodd their overlap cancels
- * out and leaves a hole in the middle of the letter.
+ * Drawn as paths instead of set in a webfont so three letters do not cost an
+ * extra font download, and so it stays sharp at any size.
  */
 const letters = [
   {
     key: 'a',
     x: 0,
+    // evenodd: the counter has to punch through the letter body
     fillRule: 'evenodd' as const,
-    d: 'M30,0 L55,0 L85,100 L62,100 L56,80 L29,80 L23,100 L0,100 Z M42.5,22 L53,62 L32,62 Z',
+    d: 'M0,100 L14,0 L76,0 L90,100 L68,100 L63,74 L27,74 L22,100 Z M32,56 L38,20 L52,20 L58,56 Z',
   },
   {
     key: 'n',
-    x: 101,
+    x: 120,
     fillRule: 'nonzero' as const,
-    d: 'M0,0 L22,0 L58,62 L58,0 L80,0 L80,100 L58,100 L22,38 L22,100 L0,100 Z',
+    d: 'M0,0 L20,0 L70,66 L70,0 L90,0 L90,100 L70,100 L20,34 L20,100 L0,100 Z',
   },
   {
     key: 'x',
-    x: 197,
+    x: 240,
+    // nonzero: the two bars must merge where they cross, not cancel out
     fillRule: 'nonzero' as const,
-    d: 'M0,0 L24,0 L80,100 L56,100 Z M56,0 L80,0 L24,100 L0,100 Z',
+    d: 'M0,0 L22,0 L90,100 L68,100 Z M68,0 L90,0 L22,100 L0,100 Z',
   },
 ];
 
 export function Wordmark({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 -10 308 126" role="img" aria-label="ANX" className={className} fill="none">
-      <defs>
-        <linearGradient id="anx-face" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--color-brand-500)" />
-          <stop offset="100%" stopColor="var(--color-brand-600)" />
-        </linearGradient>
-      </defs>
-
-      {/* translate compensates for the lean so the glyphs stay in the viewBox */}
-      <g transform="translate(20,0) skewX(-10)">
-        {/* Extrude, drawn first so the faces sit on top of it. */}
-        <g transform="translate(5,6)" fill="var(--color-brand-700)">
-          {letters.map(({ key, d, x, fillRule }) => (
-            <path key={key} d={d} transform={`translate(${x},0)`} fillRule={fillRule} />
-          ))}
-        </g>
-
-        <g fill="url(#anx-face)">
-          {letters.map(({ key, d, x, fillRule }) => (
-            <path key={key} d={d} transform={`translate(${x},0)`} fillRule={fillRule} />
-          ))}
-        </g>
-      </g>
+    <svg
+      viewBox="0 0 330 100"
+      role="img"
+      aria-label="ANX"
+      className={className}
+      fill="currentColor"
+    >
+      {letters.map(({ key, d, x, fillRule }) => (
+        <path key={key} d={d} transform={`translate(${x},0)`} fillRule={fillRule} />
+      ))}
     </svg>
   );
 }

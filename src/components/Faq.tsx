@@ -46,7 +46,7 @@ export function Faq() {
         {faqItems.map((item) => (
           <details
             key={item.question}
-            className="group rounded-2xl border border-ink-700 bg-ink-900 transition-colors duration-300 open:border-brand-500/45 hover:border-ink-600"
+            className="group rounded-2xl border border-ink-700 surface transition-colors duration-300 open:border-brand-500/45 hover:border-ink-600"
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 text-start text-base font-bold sm:text-lg">
               <span>{item.question}</span>

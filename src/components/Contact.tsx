@@ -6,7 +6,7 @@ export function Contact() {
   return (
     <section id="contact" aria-labelledby="contact-title" className="scroll-mt-24 py-16 sm:py-20">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="relative isolate overflow-hidden rounded-card border border-brand-500/30 bg-ink-900 p-7 sm:p-10 lg:p-14">
+        <div className="relative isolate overflow-hidden rounded-card border border-brand-500/30 surface p-7 sm:p-10 lg:p-14">
           <div aria-hidden className="absolute inset-0 -z-10 bg-tech-grid opacity-25" />
           <div
             aria-hidden
@@ -42,7 +42,7 @@ export function Contact() {
             </div>
 
             <ul className="space-y-3">
-              <li className="flex items-start gap-3.5 rounded-2xl border border-ink-700 bg-ink-850 p-5">
+              <li className="flex items-start gap-3.5 rounded-2xl border border-ink-700 surface p-5">
                 <TruckIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-400" />
                 <div>
                   <p className="font-bold">{site.shippingNote}</p>
@@ -51,7 +51,7 @@ export function Contact() {
                   </p>
                 </div>
               </li>
-              <li className="flex items-start gap-3.5 rounded-2xl border border-ink-700 bg-ink-850 p-5">
+              <li className="flex items-start gap-3.5 rounded-2xl border border-ink-700 surface p-5">
                 <PhoneIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-400" />
                 <div>
                   <p className="font-bold">שירות ישיר, בלי מוקד</p>
@@ -60,7 +60,7 @@ export function Contact() {
                   </p>
                 </div>
               </li>
-              <li className="flex items-center gap-3 rounded-2xl border border-ink-700 bg-ink-850 p-5">
+              <li className="flex items-center gap-3 rounded-2xl border border-ink-700 surface p-5">
                 <span className="text-sm font-bold">עקבו אחרינו:</span>
                 <a
                   href={site.instagram}

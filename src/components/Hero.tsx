@@ -7,26 +7,32 @@ import { site } from '@/lib/site';
 export function Hero() {
   return (
     <section className="relative isolate overflow-hidden">
-      {/* Placeholder artwork — replace public/hero/machine.svg with a real photo. */}
-      <Image
-        src="/hero/machine.svg"
-        alt="מכונת ניקוי אקסטרקציה מקצועית בסגנון תעשייתי"
-        fill
-        priority
-        sizes="100vw"
-        className="-z-20 object-cover object-center"
-      />
-
-      {/* Darkening layers keep the Hebrew headline readable over any photo,
-          while still letting the machine behind it show through. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 bg-linear-to-b from-ink-950/45 via-ink-950/70 to-ink-950"
-      />
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 bg-linear-to-l from-ink-950/85 via-ink-950/40 to-transparent"
-      />
+      {/*
+        Artwork and its darkening layers share one masked wrapper, so they fade
+        out together at the base of the hero and the page backdrop continues
+        underneath without a seam.
+        Placeholder artwork — replace public/hero/machine.svg with a real photo.
+      */}
+      <div className="hero-fade absolute inset-0 -z-10">
+        <Image
+          src="/hero/machine.svg"
+          alt="מכונת ניקוי אקסטרקציה מקצועית בסגנון תעשייתי"
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-center"
+        />
+        {/* Darkening keeps the Hebrew headline readable over any photo, while
+            still letting the machine behind it show through. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-linear-to-b from-ink-950/40 via-ink-950/65 to-ink-950/80"
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-linear-to-l from-ink-950/80 via-ink-950/35 to-transparent"
+        />
+      </div>
       <div
         aria-hidden
         className="absolute -top-40 start-1/4 -z-10 h-[26rem] w-[26rem] rounded-full bg-brand-600/25 blur-3xl animate-glow"

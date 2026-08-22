@@ -142,7 +142,7 @@ export default async function ProductPage({ params }: PageProps) {
               </p>
             </div>
 
-            <div className="mt-8 flex items-start gap-3.5 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+            <div className="mt-8 flex items-start gap-3.5 rounded-2xl border border-ink-700 surface p-5">
               <TruckIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-400" />
               <div>
                 <p className="font-bold">{site.shippingNote}</p>
@@ -157,7 +157,7 @@ export default async function ProductPage({ params }: PageProps) {
         <div className="mt-14 grid gap-6 lg:grid-cols-2 lg:gap-8">
           <section
             aria-labelledby="compatibility-title"
-            className="rounded-card border border-ink-700 bg-ink-900 p-6 sm:p-7"
+            className="rounded-card border border-ink-700 surface p-6 sm:p-7"
           >
             <h2 id="compatibility-title" className="flex items-center gap-2.5 text-xl font-bold">
               <MachineIcon className="h-6 w-6 text-brand-400" />
@@ -175,7 +175,7 @@ export default async function ProductPage({ params }: PageProps) {
 
           <section
             aria-labelledby="variants-title"
-            className="rounded-card border border-ink-700 bg-ink-900 p-6 sm:p-7"
+            className="rounded-card border border-ink-700 surface p-6 sm:p-7"
           >
             <h2 id="variants-title" className="text-xl font-bold">
               אפשרויות בחירה
@@ -204,7 +204,7 @@ export default async function ProductPage({ params }: PageProps) {
 
           <section
             aria-labelledby="highlights-title"
-            className="rounded-card border border-ink-700 bg-ink-900 p-6 sm:p-7"
+            className="rounded-card border border-ink-700 surface p-6 sm:p-7"
           >
             <h2 id="highlights-title" className="text-xl font-bold">
               יתרונות
@@ -221,7 +221,7 @@ export default async function ProductPage({ params }: PageProps) {
 
           <section
             aria-labelledby="specs-title"
-            className="rounded-card border border-ink-700 bg-ink-900 p-6 sm:p-7"
+            className="rounded-card border border-ink-700 surface p-6 sm:p-7"
           >
             <h2 id="specs-title" className="text-xl font-bold">
               מפרט טכני
@@ -237,7 +237,7 @@ export default async function ProductPage({ params }: PageProps) {
           </section>
         </div>
 
-        <div className="mt-12 rounded-card border border-brand-500/30 bg-ink-900 p-7 text-center sm:p-10">
+        <div className="mt-12 rounded-card border border-brand-500/30 surface p-7 text-center sm:p-10">
           <h2 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
             רוצים להזמין את {product.name}?
           </h2>

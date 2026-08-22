@@ -56,6 +56,7 @@
   }
 
   body {
+    /* The ambient layer below paints the ground; this is the fallback under it. */
     background-color: var(--color-ink-950);
     color: var(--color-mist-100);
     -webkit-font-smoothing: antialiased;
@@ -74,7 +75,81 @@
   }
 }
 
+/*
+ * Ambient page backdrop.
+ *
+ * A single fixed layer behind the whole document rather than a flat black
+ * body: deep blue pools of light, a blueprint grid that fades out down the
+ * page, and a fine grain so the large dark areas have texture instead of
+ * reading as empty. Fixed, so it stays put while the content scrolls over it.
+ */
+.site-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  background:
+    radial-gradient(58rem 40rem at 78% -8%, color-mix(in oklab, var(--color-brand-500) 22%, transparent), transparent 62%),
+    radial-gradient(46rem 34rem at 6% 26%, color-mix(in oklab, var(--color-brand-600) 16%, transparent), transparent 66%),
+    radial-gradient(52rem 40rem at 88% 70%, color-mix(in oklab, var(--color-brand-500) 13%, transparent), transparent 62%),
+    radial-gradient(40rem 30rem at 20% 96%, color-mix(in oklab, var(--color-brand-700) 18%, transparent), transparent 64%),
+    var(--color-ink-950);
+}
+
+/* Blueprint grid, strongest at the top and gone by the footer. */
+.site-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to left, color-mix(in oklab, var(--color-ink-600) 70%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-ink-600) 70%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 100%);
+  opacity: 0.55;
+}
+
+/* Fine grain — keeps wide dark areas from banding. */
+.site-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.16;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
 @layer utilities {
+  /*
+   * Panel surface for cards and boxes: translucent so the backdrop's light
+   * shows through, with a hairline sheen along the top edge.
+   */
+  .surface {
+    position: relative;
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-ink-850) 82%, transparent),
+      color-mix(in oklab, var(--color-ink-900) 88%, transparent)
+    );
+  }
+
+  .surface::before {
+    content: '';
+    position: absolute;
+    inset-inline: 1.25rem;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(to left, transparent, rgb(255 255 255 / 0.14), transparent);
+    pointer-events: none;
+  }
+
+  /* Fades the hero artwork out at its base so the page backdrop carries on
+     underneath it without a visible seam. */
+  .hero-fade {
+    -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  }
+
   /* Fine grid + radial blue wash used behind dark sections. */
   .bg-tech-grid {
     background-image:

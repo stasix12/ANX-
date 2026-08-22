@@ -41,7 +41,7 @@ export function WhyUs() {
         {reasons.map(({ Icon, title, body }) => (
           <li
             key={title}
-            className="rounded-card border border-ink-700 bg-ink-900 p-6 transition-colors duration-300 hover:border-brand-500/50"
+            className="rounded-card border border-ink-700 surface p-6 transition-colors duration-300 hover:border-brand-500/50"
           >
             <span className="grid h-12 w-12 place-items-center rounded-xl border border-brand-500/35 bg-brand-500/10 text-brand-300">
               <Icon className="h-6 w-6" />

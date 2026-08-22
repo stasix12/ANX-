@@ -6,7 +6,7 @@ import { formatPrice, type Product } from '@/lib/products';
 
 export function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
   return (
-    <article className="group flex flex-col overflow-hidden rounded-card border border-ink-700 bg-ink-900 transition-colors duration-300 hover:border-brand-500/60">
+    <article className="group flex flex-col overflow-hidden rounded-card border border-ink-700 surface transition-colors duration-300 hover:border-brand-500/60">
       <Link
         href={`/products/${product.slug}`}
         tabIndex={-1}
@@ -54,7 +54,9 @@ export function ProductCard({ product, priority = false }: { product: Product; p
           )}
         </p>
 
-        <div className="mt-5 flex flex-col gap-2.5 pt-5 border-t border-ink-700 sm:flex-row">
+        {/* Stacked rather than side by side: at three-column width the Hebrew
+            "הזמנה ב-WhatsApp" label wraps inside a half-width button. */}
+        <div className="mt-5 flex flex-col gap-2.5 border-t border-ink-700 pt-5">
           <Link
             href={`/products/${product.slug}`}
             className="inline-flex flex-1 items-center justify-center rounded-full border border-ink-600 px-5 py-3 text-sm font-bold text-mist-100 transition-colors duration-200 hover:border-brand-500 hover:text-brand-300"

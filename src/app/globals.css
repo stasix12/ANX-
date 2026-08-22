@@ -1,23 +1,26 @@
 @import 'tailwindcss';
 
-/* ANX3D design tokens — white and light-blue base, electric blue accent. */
+/*
+ * ANX3D design tokens — sampled from the brand logo: a white plate, royal
+ * blue lettering (#0341a0) and a deep navy field (#02276a).
+ */
 @theme {
-  --color-ink-950: #f6fafd;
-  --color-ink-900: #eaf3fb;
+  --color-ink-950: #f5f8fd;
+  --color-ink-900: #e9f0fa;
   --color-ink-850: #ffffff;
-  --color-ink-800: #e1edf8;
-  --color-ink-700: #cfe1f2;
-  --color-ink-600: #a9c9e3;
+  --color-ink-800: #dde8f6;
+  --color-ink-700: #c9dcf1;
+  --color-ink-600: #9dbfe2;
 
-  --color-brand-300: #7cb0ff;
-  --color-brand-400: #4d8dff;
-  --color-brand-500: #1f6bff;
-  --color-brand-600: #0f52e0;
-  --color-brand-700: #0b3fae;
+  --color-brand-300: #7fb0ef;
+  --color-brand-400: #3d82d8;
+  --color-brand-500: #0b57c7;
+  --color-brand-600: #0341a0;
+  --color-brand-700: #022a72;
 
-  --color-mist-100: #0d2340;
-  --color-mist-300: #3f5877;
-  --color-mist-500: #6f88a3;
+  --color-mist-100: #0a1c3d;
+  --color-mist-300: #34507c;
+  --color-mist-500: #6b84a9;
 
   --font-sans: var(--font-heebo), 'Segoe UI', system-ui, -apple-system, sans-serif;
 

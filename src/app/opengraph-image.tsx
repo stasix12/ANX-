@@ -23,8 +23,8 @@ export default function OpengraphImage() {
           flexDirection: 'column',
           justifyContent: 'center',
           padding: '90px',
-          background: 'linear-gradient(135deg, #ffffff 0%, #eaf3fb 100%)',
-          color: '#0d2340',
+          background: 'linear-gradient(135deg, #ffffff 0%, #e9f0fa 100%)',
+          color: '#0a1c3d',
           fontFamily: 'sans-serif',
         }}
       >
@@ -34,7 +34,7 @@ export default function OpengraphImage() {
               width: 92,
               height: 92,
               borderRadius: 26,
-              background: 'linear-gradient(135deg, #4d8dff 0%, #0b3fae 100%)',
+              background: 'linear-gradient(135deg, #0b57c7 0%, #022a72 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -48,11 +48,11 @@ export default function OpengraphImage() {
           <div style={{ fontSize: 76, fontWeight: 800, letterSpacing: 10 }}>ANX3D</div>
         </div>
 
-        <div style={{ marginTop: 44, fontSize: 42, color: '#3f5877', maxWidth: 900 }}>
+        <div style={{ marginTop: 44, fontSize: 42, color: '#34507c', maxWidth: 900 }}>
           Professional Cleaning Equipment
         </div>
 
-        <div style={{ marginTop: 18, fontSize: 34, color: '#0f52e0' }}>
+        <div style={{ marginTop: 18, fontSize: 34, color: '#0341a0' }}>
           Handles · Hoses · Adapters — built for Sabrina machines
         </div>
 
@@ -63,10 +63,10 @@ export default function OpengraphImage() {
             alignItems: 'center',
             gap: 16,
             fontSize: 28,
-            color: '#6f88a3',
+            color: '#6b84a9',
           }}
         >
-          <div style={{ width: 60, height: 4, background: '#1f6bff' }} />
+          <div style={{ width: 60, height: 4, background: '#0b57c7' }} />
           <div>WhatsApp 053-5257250</div>
         </div>
       </div>

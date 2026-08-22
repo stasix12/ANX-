@@ -44,14 +44,28 @@ async function inlineFonts(css) {
   return result;
 }
 
-/** Every /products/<slug>/N.svg and /hero/machine.svg referenced by the pages. */
+const mimeByExtension = {
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+};
+
+/**
+ * Every local image the pages reference — the numbered placeholders and the
+ * brand logo. Anything left as a bare /path here would simply fail to load
+ * once the page is opened as a standalone file.
+ */
 async function buildImageMap(html) {
   const map = new Map();
-  const paths = new Set(html.match(/\/(?:products|hero)\/[^"']+?\.svg/g) ?? []);
+  const pattern = /\/(?:products|hero|brand)\/[^"']+?\.(?:svg|png|jpe?g|webp)/g;
 
-  for (const path of paths) {
-    const buf = await readFile(join(root, 'public', path));
-    map.set(path, dataUri(buf, 'image/svg+xml'));
+  for (const path of new Set(html.match(pattern) ?? [])) {
+    const extension = path.slice(path.lastIndexOf('.')).toLowerCase();
+    const mime = mimeByExtension[extension];
+    if (!mime) continue;
+    map.set(path, dataUri(await readFile(join(root, 'public', path)), mime));
   }
   return map;
 }

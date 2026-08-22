@@ -1,23 +1,35 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { site } from '@/lib/site';
 
-/** Wordmark used in the header and the footer. */
+/**
+ * The brand badge plus the wordmark. The badge art is detailed, so the name
+ * is set as text alongside it rather than relying on the lettering inside the
+ * circle, which stops being legible at header size.
+ */
 export function Logo({ withTagline = false }: { withTagline?: boolean }) {
   return (
     <Link
       href="/"
-      className="group flex items-center gap-3 rounded-lg"
+      className="group flex items-center gap-2.5 rounded-lg"
       aria-label={`${site.name} — לעמוד הבית`}
     >
-      <span
+      <Image
+        src="/brand/anx-logo.webp"
+        alt=""
         aria-hidden
-        className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-linear-to-br from-brand-500 to-brand-700 text-base font-extrabold tracking-tight text-white shadow-lg shadow-brand-700/30 transition-transform duration-300 group-hover:scale-105"
-      >
-        A
-        <span className="absolute inset-0 rounded-xl ring-1 ring-white/20" />
-      </span>
+        width={256}
+        height={256}
+        priority
+        sizes="48px"
+        className={`shrink-0 transition-transform duration-300 group-hover:scale-105 ${
+          withTagline ? 'h-12 w-12' : 'h-10 w-10 sm:h-11 sm:w-11'
+        }`}
+      />
       <span className="flex flex-col leading-none">
-        <span className="text-xl font-extrabold tracking-[0.14em] text-mist-100">ANX3D</span>
+        <span className="text-lg font-extrabold tracking-[0.14em] text-mist-100 sm:text-xl">
+          ANX3D
+        </span>
         {withTagline ? (
           <span className="mt-1.5 text-[11px] font-medium tracking-[0.18em] text-mist-500 uppercase">
             {site.tagline}

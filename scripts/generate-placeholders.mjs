@@ -18,13 +18,13 @@ const publicDir = join(root, 'public');
 // White-and-sky-blue palette, matching the site's design tokens
 // (globals.css): pale panels, blue linework, dark-navy / slate text.
 const panel = '#ffffff';
-const wash = '#eaf3fb';
-const line = '#cfe1f2';
-const blue = '#1f6bff';
-const blueDeep = '#0f52e0';
-const blueSoft = '#4d8dff';
-const ink = '#0d2340';
-const slate = '#5b7797';
+const wash = '#e9f0fa';
+const line = '#c9dcf1';
+const blue = '#0b57c7';
+const blueDeep = '#0341a0';
+const blueSoft = '#3d82d8';
+const ink = '#0a1c3d';
+const slate = '#5c789e';
 
 const escapeXml = (value) =>
   value.replace(

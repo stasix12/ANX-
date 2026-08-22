@@ -1,3 +1,4 @@
+import { CleaningDemo } from '@/components/CleaningDemo';
 import { Contact } from '@/components/Contact';
 import { Faq, faqItems } from '@/components/Faq';
 import { Hero } from '@/components/Hero';
@@ -32,6 +33,7 @@ export default function HomePage() {
   return (
     <>
       <Hero />
+      <CleaningDemo />
 
       <Section
         id="products"

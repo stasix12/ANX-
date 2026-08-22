@@ -25,6 +25,10 @@
 
   --animate-rise: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-glow: glow 6s ease-in-out infinite;
+  --animate-wand-sweep: wand-sweep 12s ease-in-out infinite;
+  --animate-clean-reveal: clean-reveal 12s ease-in-out infinite;
+  --animate-suction-particle: suction-particle 12s linear infinite;
+  --animate-power-dot: power-dot 1.6s ease-in-out infinite;
 }
 
 @keyframes rise {
@@ -45,6 +49,127 @@
   }
   50% {
     opacity: 0.75;
+  }
+}
+
+/*
+ * The cleaning demo (CleaningDemo.tsx): a wand sweeps across a cushion,
+ * a "clean" fabric layer is revealed in step with it, dirt particles flow
+ * off toward the machine, then everything resets for the next loop.
+ * All four keyframes below share one 12s timeline so they stay in sync.
+ */
+@keyframes wand-sweep {
+  0% {
+    left: 6%;
+    transform: translate(-50%, -50%) rotate(-16deg) translateY(0);
+  }
+  6% {
+    left: 10%;
+    transform: translate(-50%, -50%) rotate(-14deg) translateY(-4px);
+  }
+  14% {
+    left: 24%;
+    transform: translate(-50%, -50%) rotate(-16deg) translateY(2px);
+  }
+  22% {
+    left: 38%;
+    transform: translate(-50%, -50%) rotate(-14deg) translateY(-3px);
+  }
+  30% {
+    left: 52%;
+    transform: translate(-50%, -50%) rotate(-16deg) translateY(2px);
+  }
+  38% {
+    left: 66%;
+    transform: translate(-50%, -50%) rotate(-14deg) translateY(-3px);
+  }
+  44% {
+    left: 80%;
+    transform: translate(-50%, -50%) rotate(-12deg) translateY(0);
+  }
+  50% {
+    left: 82%;
+    transform: translate(-50%, -58%) rotate(-4deg) translateY(-10px);
+  }
+  58% {
+    left: 82%;
+    transform: translate(-50%, -50%) rotate(-12deg) translateY(0);
+  }
+  80% {
+    left: 20%;
+    transform: translate(-50%, -50%) rotate(-16deg) translateY(0);
+  }
+  92%,
+  100% {
+    left: 6%;
+    transform: translate(-50%, -50%) rotate(-16deg) translateY(0);
+  }
+}
+
+/*
+ * clip-path resolves against the clipped element's own stable box, not a
+ * shrinking parent — so animating it directly on the full-size clean SVG
+ * crops (reveals) rather than squishing the artwork as the window grows.
+ * inset() takes physical top/right/bottom/left, matching the wand's
+ * physical `left` sweep above: 100% right-inset = nothing shown, 20% =
+ * 80% revealed from the left edge.
+ */
+@keyframes clean-reveal {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 1;
+  }
+  44%,
+  90% {
+    clip-path: inset(0 20% 0 0);
+    opacity: 1;
+  }
+  94% {
+    clip-path: inset(0 20% 0 0);
+    opacity: 0;
+  }
+  96% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0;
+  }
+  100% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 1;
+  }
+}
+
+/*
+ * A short local puff off the nozzle, not a journey across the scene — see
+ * the comment above .demo-wand for why these particles are nested inside
+ * it rather than tracking a separately-positioned path.
+ */
+@keyframes suction-particle {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.5);
+  }
+  4% {
+    opacity: 1;
+    transform: translate(-3px, 4px) scale(0.9);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-14px, 16px) scale(0.7);
+  }
+  36%,
+  100% {
+    opacity: 0;
+    transform: translate(-26px, 30px) scale(0.4);
+  }
+}
+
+@keyframes power-dot {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
   }
 }
 
@@ -165,5 +290,28 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+
+  /*
+   * The generic rule above still technically loops these infinite
+   * animations, just too fast to see — for a four-part synced sequence
+   * that reads as a flicker. Pin each piece to the finished "after" frame
+   * instead: cushion already clean, wand parked, no particles in flight.
+   */
+  .demo-wand {
+    animation: none !important;
+    left: 82% !important;
+    transform: translate(-50%, -50%) rotate(-12deg) !important;
+  }
+
+  .demo-clean-wrap {
+    animation: none !important;
+    clip-path: inset(0 20% 0 0) !important;
+    opacity: 1 !important;
+  }
+
+  .demo-particle {
+    animation: none !important;
+    opacity: 0 !important;
   }
 }

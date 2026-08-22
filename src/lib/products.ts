@@ -17,6 +17,14 @@ export interface VariantGroup {
   options: string[];
 }
 
+/**
+ * The Sabrina models a part can be ordered for. Buyers pick one on the product
+ * card and the choice rides along into the WhatsApp order message.
+ */
+export const sabrinaModels = ['סברינה מקסי', 'סברינה מיני'] as const;
+
+export type SabrinaModel = (typeof sabrinaModels)[number];
+
 export interface Product {
   slug: string;
   name: string;
@@ -28,6 +36,12 @@ export interface Product {
   /** Optional — omit and the card shows "לפרטי מחיר בוואטסאפ". */
   price?: number;
   badge?: string;
+  /**
+   * Which Sabrina models this part is offered for. Defaults to all of them —
+   * narrow it here (e.g. `fitsModels: ['סברינה מיני']`) for a part that only
+   * fits one, and the card will offer just that option.
+   */
+  fitsModels?: SabrinaModel[];
   compatibility: string[];
   variants: VariantGroup[];
   highlights: string[];

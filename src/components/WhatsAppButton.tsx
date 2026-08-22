@@ -20,6 +20,8 @@ const iconSize: Record<Size, string> = {
 interface WhatsAppButtonProps {
   /** When given, the message is pre-filled with an order request for this product. */
   productName?: string;
+  /** Appended to the order message — used for the buyer's Sabrina model. */
+  orderNote?: string;
   label?: string;
   size?: Size;
   variant?: 'solid' | 'outline';
@@ -28,12 +30,13 @@ interface WhatsAppButtonProps {
 
 export function WhatsAppButton({
   productName,
+  orderNote,
   label = 'הזמנה ב-WhatsApp',
   size = 'md',
   variant = 'solid',
   className = '',
 }: WhatsAppButtonProps) {
-  const href = productName ? orderLink(productName) : generalWhatsappLink;
+  const href = productName ? orderLink(productName, orderNote) : generalWhatsappLink;
 
   const variantClasses =
     variant === 'solid'

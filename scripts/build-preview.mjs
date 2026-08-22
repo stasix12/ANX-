@@ -162,6 +162,22 @@ const routerScript = (fontClass) => `
     if (count) count.textContent = shown + ' מוצרים';
   });
 
+  /*
+   * --- machine-fit picker ---
+   * Native radios keep their own checked state and the selected label restyles
+   * itself through CSS (:checked), so the only thing React was doing that has
+   * to be replaced here is repointing the card's WhatsApp link. Each radio
+   * carries its finished URL, so there is no order-message format duplicated
+   * between the app and this script.
+   */
+  document.addEventListener('change', function (event) {
+    var radio = event.target.closest('input[data-order-href]');
+    if (!radio) return;
+    var card = radio.closest('article');
+    var link = card && card.querySelector('a[href^="https://wa.me/"]');
+    if (link) link.setAttribute('href', radio.getAttribute('data-order-href'));
+  });
+
   /* --- product gallery --- */
   document.addEventListener('click', function (event) {
     var thumb = event.target.closest('button[aria-label^="הצגת תמונה"]');

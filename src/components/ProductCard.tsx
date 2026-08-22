@@ -1,12 +1,18 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
+import { useState } from 'react';
 import { WhatsAppButton } from '@/components/WhatsAppButton';
-import { CheckIcon } from '@/components/icons';
-import { formatPrice, type Product } from '@/lib/products';
+import { formatPrice, sabrinaModels, type Product } from '@/lib/products';
+import { orderLink } from '@/lib/site';
 
 export function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
+  const models = product.fitsModels ?? sabrinaModels;
+  const [model, setModel] = useState<string>(models[0]);
+
   return (
-    <article className="group overflow-hidden rounded-xl border border-ink-700 surface transition-colors duration-300 hover:border-brand-500/60">
+    <article className="group flex flex-col overflow-hidden rounded-xl border border-ink-700 surface transition-colors duration-300 hover:border-brand-500/60">
       <Link
         href={`/products/${product.slug}`}
         tabIndex={-1}
@@ -29,7 +35,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
         ) : null}
       </Link>
 
-      <div className="p-2.5">
+      <div className="flex flex-1 flex-col p-2.5">
         <p className="text-sm font-extrabold text-mist-100">
           {product.price !== undefined ? (
             formatPrice(product.price)
@@ -48,16 +54,47 @@ export function ProductCard({ product, priority = false }: { product: Product; p
         </h3>
 
         {/*
-          The buyer's first objection is "will this fit my machine?" — answering
-          it on the card itself, not only inside the product page, is what keeps
-          someone who never clicks through from bouncing.
-        */}
-        <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-brand-700">
-          <CheckIcon className="h-3 w-3 shrink-0" />
-          מתאים למכונות Sabrina
-        </p>
+          Native radios rather than styled buttons: they give grouped keyboard
+          navigation and screen-reader semantics for free. Each option also
+          carries its finished wa.me URL in data-order-href so the exported
+          static preview can wire this up without rebuilding the message.
 
-        <WhatsAppButton productName={product.name} size="xs" className="mt-2 w-full" />
+          The dot is drawn with appearance-none instead of accent-color, which
+          renders the unchecked state as a solid dark disc that reads as
+          "selected" when sitting right next to the real one.
+        */}
+        <fieldset className="mt-2 border-t border-ink-700 pt-2">
+          <legend className="sr-only">בחירת דגם מכונה עבור {product.name}</legend>
+          <div className="flex flex-col gap-1">
+            {models.map((option) => (
+              <label
+                key={option}
+                className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-mist-300 transition-colors duration-200 has-[:checked]:text-brand-700"
+              >
+                <input
+                  type="radio"
+                  name={`fit-${product.slug}`}
+                  value={option}
+                  checked={model === option}
+                  onChange={() => setModel(option)}
+                  data-order-href={orderLink(product.name, `מותאם ל${option}`)}
+                  className="h-3.5 w-3.5 shrink-0 appearance-none rounded-full border border-ink-600 bg-white transition-colors duration-200 checked:border-brand-500 checked:bg-brand-500 checked:shadow-[inset_0_0_0_2px_white]"
+                />
+                <span>מותאם ל{option}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {/* mt-auto keeps the buttons aligned across a row of uneven-height cards. */}
+        <div className="mt-auto pt-2">
+          <WhatsAppButton
+            productName={product.name}
+            orderNote={`מותאם ל${model}`}
+            size="xs"
+            className="w-full"
+          />
+        </div>
       </div>
     </article>
   );

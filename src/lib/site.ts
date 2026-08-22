@@ -23,14 +23,19 @@ export function whatsappLink(message: string): string {
   return `https://wa.me/${site.whatsappNumber}?text=${encodeURIComponent(message)}`;
 }
 
-/** Standard order message for a specific product. */
-export function orderMessage(productName: string): string {
-  return `היי, מעוניין להזמין את ${productName}`;
+/**
+ * Standard order message for a specific product. `note` carries the buyer's
+ * selection (the Sabrina model) so the order arrives already specified
+ * instead of costing a round trip in the chat.
+ */
+export function orderMessage(productName: string, note?: string): string {
+  const base = `היי, מעוניין להזמין את ${productName}`;
+  return note ? `${base} — ${note}` : base;
 }
 
 /** Ready-made link for the "order this product" buttons. */
-export function orderLink(productName: string): string {
-  return whatsappLink(orderMessage(productName));
+export function orderLink(productName: string, note?: string): string {
+  return whatsappLink(orderMessage(productName, note));
 }
 
 /** Generic link for the header / hero / contact buttons. */

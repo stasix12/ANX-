@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { WhatsAppButton } from '@/components/WhatsAppButton';
+import { CheckIcon } from '@/components/icons';
 import { formatPrice, type Product } from '@/lib/products';
 
 export function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
@@ -45,6 +46,16 @@ export function ProductCard({ product, priority = false }: { product: Product; p
             {product.name}
           </Link>
         </h3>
+
+        {/*
+          The buyer's first objection is "will this fit my machine?" — answering
+          it on the card itself, not only inside the product page, is what keeps
+          someone who never clicks through from bouncing.
+        */}
+        <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-brand-700">
+          <CheckIcon className="h-3 w-3 shrink-0" />
+          מתאים למכונות Sabrina
+        </p>
 
         <WhatsAppButton productName={product.name} size="xs" className="mt-2 w-full" />
       </div>

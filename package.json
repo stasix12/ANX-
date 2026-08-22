@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "placeholders": "node scripts/generate-placeholders.mjs"
+    "placeholders": "node scripts/generate-placeholders.mjs",
+    "export": "EXPORT=1 next build",
+    "preview": "EXPORT=1 next build && node scripts/build-preview.mjs"
   },
   "dependencies": {
     "next": "16.3.2",

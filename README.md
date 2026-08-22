@@ -19,6 +19,21 @@ npm run dev      # http://localhost:3000
 | `npm start` | הרצת גרסת הפרודקשן שנבנתה |
 | `npm run typecheck` | בדיקת טיפוסים בלבד |
 | `npm run placeholders` | יצירה מחדש של כל קבצי ה-placeholder |
+| `npm run export` | ייצוא סטטי מלא לתיקיית `out/` (לכל אחסון סטטי) |
+| `npm run preview` | יצירת `preview.html` — קובץ אחד עצמאי עם כל האתר, לשליחה למישהו |
+
+## העלאה לאוויר
+
+הדרך הפשוטה ביותר היא Vercel (החברה שמפתחת את Next.js), בחינם:
+
+1. היכנסו ל-[vercel.com](https://vercel.com) והתחברו עם חשבון GitHub.
+2. **Add New → Project**, ובחרו את המאגר `ANX-`.
+3. בשדה הענף בחרו את הענף שבו נמצא הקוד.
+4. **Deploy** — Vercel מזהה Next.js לבד, אין מה להגדיר.
+
+תוך כדקה מתקבלת כתובת חיה. כל דחיפה ל-GitHub מעדכנת את האתר אוטומטית. אפשר לחבר דומיין משלכם דרך **Settings → Domains**.
+
+לחלופין, `npm run export` מייצר אתר סטטי בתיקיית `out/` שאפשר להעלות לכל אחסון (Netlify, Cloudflare Pages, או אפילו FTP רגיל).
 
 ## החלפת התמונות בתמונות אמיתיות
 

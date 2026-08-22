@@ -5,6 +5,9 @@ import { ImageResponse } from 'next/og';
  * work everywhere. Latin-only copy: ImageResponse ships without a Hebrew face.
  * Swap this file for a static public/og.jpg once brand artwork is ready.
  */
+/** The artwork never changes at runtime, so bake it at build time. */
+export const dynamic = 'force-static';
+
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 export const alt = 'ANX3D — Professional Cleaning Equipment';

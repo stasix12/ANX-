@@ -75,12 +75,17 @@ function rewriteLinks(html) {
     .replace(/href="\/"/g, 'href="#/"');
 }
 
-/** The grid markup carries no category, so tag each card by its position. */
+/**
+ * The grid markup carries no category, so tag each card by its position.
+ * Matches on the `<article class="group ` prefix ProductCard always opens
+ * with (its hover/zoom trick needs the `group` utility) rather than the
+ * full class string, so this survives card style edits.
+ */
 function tagCategories(html) {
   let index = 0;
-  return html.replace(/<article class="group flex flex-col/g, (match) => {
+  return html.replace(/<article class="group /g, (match) => {
     const entry = productOrder[index++];
-    return entry ? `<article data-category="${entry[1]}" class="group flex flex-col` : match;
+    return entry ? `<article data-category="${entry[1]}" class="group ` : match;
   });
 }
 

@@ -52,7 +52,7 @@ export function ProductGrid({ products }: { products: Product[] }) {
         {visible.length} מוצרים
       </p>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
         {visible.map((product) => (
           <ProductCard key={product.slug} product={product} />
         ))}

@@ -93,12 +93,49 @@
   inset: 0;
   z-index: -10;
   pointer-events: none;
+  background: var(--color-ink-950);
+}
+
+/*
+ * The pools of light, on their own layer so they can move without dragging the
+ * grid and the grain along with them.
+ *
+ * Negative z-index puts it behind ::before — a child would otherwise paint over
+ * the grid — while still sitting above the flat ground colour.
+ *
+ * It drifts, slowly enough to be felt rather than watched: a minute a lap, a
+ * couple of percent of travel. Anything faster on a shop page competes with the
+ * product photographs, which are the thing that has to hold attention. Only
+ * transform is animated, so the browser moves an already-painted layer instead
+ * of re-rendering four large gradients every frame, and the layer is inset past
+ * the viewport on every side so the drift never exposes an edge.
+ */
+.site-backdrop-glow {
+  position: absolute;
+  inset: -14%;
+  z-index: -1;
+  will-change: transform;
+  animation: backdrop-drift 64s ease-in-out infinite;
   background:
     radial-gradient(58rem 40rem at 78% -8%, color-mix(in oklab, var(--color-brand-400) 34%, transparent), transparent 62%),
     radial-gradient(46rem 34rem at 4% 22%, color-mix(in oklab, var(--color-brand-300) 30%, transparent), transparent 66%),
     radial-gradient(52rem 40rem at 92% 68%, color-mix(in oklab, var(--color-brand-400) 26%, transparent), transparent 62%),
-    radial-gradient(44rem 32rem at 16% 98%, color-mix(in oklab, var(--color-brand-500) 20%, transparent), transparent 64%),
-    var(--color-ink-950);
+    radial-gradient(44rem 32rem at 16% 98%, color-mix(in oklab, var(--color-brand-500) 20%, transparent), transparent 64%);
+}
+
+@keyframes backdrop-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(-5.5%, 4%, 0) scale(1.12);
+  }
+  66% {
+    transform: translate3d(4.5%, -4.5%, 0) scale(1.06);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
 }
 
 /* Blueprint grid, strongest at the top and gone by the footer. */
@@ -113,6 +150,26 @@
   -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.3) 55%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.3) 55%, transparent 100%);
   opacity: 0.4;
+  /*
+   * The grid carries the motion, because the pools cannot: they are so soft
+   * against white that drifting them changes no pixel by more than about 7 of
+   * 255 — measurably there, invisible to anyone. Ruled lines have edges, so the
+   * same slow travel actually reads.
+   *
+   * Exactly one cell per lap, linear, so the pattern lands back on itself and
+   * the loop has no seam. Transform only: the browser slides a painted layer
+   * rather than re-rendering the rules each frame.
+   */
+  animation: grid-drift 42s linear infinite;
+}
+
+@keyframes grid-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(64px, 64px, 0);
+  }
 }
 
 /* Fine grain — keeps wide light areas from banding. */

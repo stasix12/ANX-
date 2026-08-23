@@ -68,6 +68,7 @@ const outDir = join(root, 'out');
 const productOrder = [
   ['anx-anaconda', 'handles'],
   ['anx-anaconda-set', 'handles'],
+  ['anx-hose-clips', 'hoses'],
   ['anx-pro-handle', 'handles'],
   ['anx-mini-handle', 'handles'],
   ['anx-crystal-handle', 'handles'],
@@ -142,16 +143,28 @@ function rewriteLinks(html) {
 
 /**
  * The grid markup carries no category, so tag each card by its position.
- * Matches on the `<article class="group ` prefix ProductCard always opens
- * with (its hover/zoom trick needs the `group` utility) rather than the
- * full class string, so this survives card style edits.
+ *
+ * Keyed on the `class="group ` a ProductCard always carries (its hover/zoom
+ * needs the `group` utility) rather than the full class string, so it survives
+ * card restyling — and it has to tolerate other attributes before `class`,
+ * which is what silently broke this once `data-order-scope` was added ahead of
+ * it: nothing matched, nothing was tagged, and every category filtered down to
+ * an empty grid.
  */
 function tagCategories(html) {
   let index = 0;
-  return html.replace(/<article class="group /g, (match) => {
+  const tagged = html.replace(/<article (?=[^>]*class="group )/g, () => {
     const entry = productOrder[index++];
-    return entry ? `<article data-category="${entry[1]}" class="group ` : match;
+    return entry ? `<article data-category="${entry[1]}" ` : '<article ';
   });
+
+  if (index < productOrder.length) {
+    throw new Error(
+      `build-preview: tagged ${index} product cards but expected ${productOrder.length} — ` +
+        'has ProductCard stopped rendering <article class="group …">?',
+    );
+  }
+  return tagged;
 }
 
 const routerScript = (fontClass) => `

@@ -36,6 +36,7 @@ GALLERIES = {
         'anaconda-set-1.jpg', 'anaconda-set-2.jpg',
         'anaconda-set-3.jpg', 'anaconda-set-4.jpg',
     ],
+    'anx-hose-clips': ['clips-1.jpg', 'clips-2.jpg', 'clips-3.jpg', 'clips-4.jpg'],
 }
 
 

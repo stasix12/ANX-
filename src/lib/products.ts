@@ -177,6 +177,45 @@ export const products: Product[] = [
       asset('/products/anx-anaconda-set/4.webp'),
     ],
   },
+  /*
+   * The copy past the first two sentences is written here rather than dictated
+   * by the shop, at their request. It stays on consequences of what the clip
+   * does — two hoses moving as one — and claims nothing about the part itself
+   * that the photographs do not show.
+   */
+  {
+    slug: 'anx-hose-clips',
+    name: 'סט קליפסים לצינורות — 6 יחידות',
+    tagline: 'מאחדים את צינור השאיבה וצינור ההזרקה לקו אחד — בלי שיתפרקו ויסתבכו.',
+    description:
+      'הקליפסים מחברים את צינור השאיבה וצינור ההזרקה לקו אחד לאורך כל המשיכה. במקום שני צינורות שנפרדים באמצע העבודה, נתפסים ברגל של ספה ומסתבכים ביד — קו אחד שנגרר נקי אחריך בין חדר לחדר.\n\nההבדל מורגש בעיקר בשני מקומות: בזמן העבודה, כשאתה לא עוצר כל כמה דקות כדי להפריד ולסדר, ובסוף — כשגלגול הציוד לוקח פחות זמן כי הכל כבר מאוגד. גם צינור ההזרקה הדק פחות חשוף לדריכה ולמעיכה כשהוא צמוד לצינור השאיבה במקום להסתובב לבד על הרצפה.\n\nהקליפס נפתח בצד: לוחצים אותו על הצינורות ביד, בלי כלים ובלי אזיקונים לחתוך. שש יחידות בסט מאפשרות לפרוס אותם לאורך הצינור — צפוף יותר קרוב לידית, שם התנועה הכי גדולה — ולהזיז אותם בכל רגע.',
+    category: 'hoses',
+    price: 279,
+    badge: 'סט 6 יחידות',
+    compatibility: [
+      'מאחד צינור שאיבה וצינור הזרקה',
+      'נסגר ביד — בלי כלים ובלי אזיקונים',
+      'ניתן להוסיף לסט צינורות קיים',
+    ],
+    variants: [{ id: 'quantity', label: 'כמות', options: ['סט 6 יחידות'] }],
+    highlights: [
+      'שני צינורות נגררים כקו אחד',
+      'פחות עצירות באמצע העבודה לסידור הצינורות',
+      'צינור ההזרקה צמוד ומוגן במקום חופשי על הרצפה',
+      'נפתח ונסגר ביד, וזז לאורך הצינור בכל רגע',
+    ],
+    specs: [
+      { label: 'כמות בסט', value: '6 יחידות' },
+      { label: 'התקנה', value: 'הצמדה ביד, ללא כלים' },
+      { label: 'ייצור', value: 'הדפסת תלת־מימד, מיוצר בישראל' },
+    ],
+    images: [
+      asset('/products/anx-hose-clips/1.webp'),
+      asset('/products/anx-hose-clips/2.webp'),
+      asset('/products/anx-hose-clips/3.webp'),
+      asset('/products/anx-hose-clips/4.webp'),
+    ],
+  },
   {
     slug: 'anx-pro-handle',
     name: 'ידית שאיבה ANX PRO',

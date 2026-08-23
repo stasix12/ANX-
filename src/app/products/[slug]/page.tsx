@@ -123,7 +123,9 @@ export default async function ProductPage({ params }: PageProps) {
               ) : null}
             </div>
 
-            <p className="mt-6 text-base leading-relaxed text-mist-300 sm:text-lg">
+            {/* whitespace-pre-line: longer descriptions are written in paragraphs,
+                and HTML would otherwise run them together. */}
+            <p className="mt-6 text-base leading-relaxed whitespace-pre-line text-mist-300 sm:text-lg">
               {product.description}
             </p>
 

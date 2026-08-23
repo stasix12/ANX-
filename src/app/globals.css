@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 /*
- * ANX3D design tokens — the product's own two colours: jungle green on black.
+ * ANX3D design tokens — aqua on white.
  *
  * Picked over royal blue, mint and a deep steel navy by building the site in
  * each and comparing. Two things decided it:
@@ -18,30 +18,30 @@
  * the fine print had been failing in every palette, this one included.
  */
 @theme {
-  --color-ink-950: #080a07;
-  --color-ink-900: #0e120c;
-  --color-ink-850: #141911;
-  --color-ink-800: #1b2116;
-  --color-ink-700: #2a3322;
-  --color-ink-600: #404d34;
+  --color-ink-950: #f2fafb;
+  --color-ink-900: #e2f5f7;
+  --color-ink-850: #ffffff;
+  --color-ink-800: #d2eef1;
+  --color-ink-700: #b4e2e8;
+  --color-ink-600: #7ec9d4;
 
-  --color-brand-300: #e2fa7a;
-  --color-brand-400: #cdee3f;
-  --color-brand-500: #b4d626;
-  --color-brand-600: #9dbf1c;
-  --color-brand-700: #d6ef52;
+  --color-brand-300: #4dc3d5;
+  --color-brand-400: #12a3ba;
+  --color-brand-500: #097789;
+  --color-brand-600: #076675;
+  --color-brand-700: #044652;
 
-  --color-mist-100: #f2f7ea;
-  --color-mist-300: #bcc9ac;
-  --color-mist-500: #8b9a7c;
+  --color-mist-100: #052c34;
+  --color-mist-300: #2a5b66;
+  --color-mist-500: #5b7a82;
 
   /* Text and marks sitting on a brand-filled element. Its own token because a
      bright accent needs dark text on it and a deep one needs light — the two
      cannot both be "white". */
-  --color-on-brand: #0b1006;
+  --color-on-brand: #ffffff;
   /* What panel shadows are cast in. Black under a light theme reads as depth;
      under a dark one the same shadow is invisible and a lift is wanted instead. */
-  --color-shadow: #000000;
+  --color-shadow: #04252c;
 
   --font-sans: var(--font-heebo), 'Segoe UI', system-ui, -apple-system, sans-serif;
 

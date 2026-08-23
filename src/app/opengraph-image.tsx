@@ -23,8 +23,8 @@ export default function OpengraphImage() {
           flexDirection: 'column',
           justifyContent: 'center',
           padding: '90px',
-          background: 'linear-gradient(135deg, #0e120c 0%, #080a07 100%)',
-          color: '#f2f7ea',
+          background: 'linear-gradient(135deg, #ffffff 0%, #e2f5f7 100%)',
+          color: '#052c34',
           fontFamily: 'sans-serif',
         }}
       >
@@ -34,13 +34,13 @@ export default function OpengraphImage() {
               width: 92,
               height: 92,
               borderRadius: 26,
-              background: 'linear-gradient(135deg, #cdee3f 0%, #9dbf1c 100%)',
+              background: 'linear-gradient(135deg, #12a3ba 0%, #044652 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 52,
               fontWeight: 800,
-              color: '#0b1006',
+              color: '#fff',
             }}
           >
             A
@@ -66,7 +66,7 @@ export default function OpengraphImage() {
             color: '#6b84a9',
           }}
         >
-          <div style={{ width: 60, height: 4, background: '#b4d626' }} />
+          <div style={{ width: 60, height: 4, background: '#097789' }} />
           <div>WhatsApp 053-5257250</div>
         </div>
       </div>

@@ -1,12 +1,13 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import { openExternal } from '@/lib/openExternal';
+import { useState, type ReactNode } from 'react';
+import { WhatsAppFallback } from '@/components/WhatsAppFallback';
+import { messageFromLink, openExternal } from '@/lib/openExternal';
 
 /**
  * Every outbound wa.me link on the site goes through here, so the
- * popup-blocked fallback in openExternal applies everywhere rather than to
- * whichever buttons someone remembered to wire up.
+ * blocked-handoff fallback applies everywhere rather than to whichever buttons
+ * someone remembered to wire up.
  */
 export function WhatsAppLink({
   href,
@@ -19,16 +20,28 @@ export function WhatsAppLink({
   'aria-label'?: string;
   children: ReactNode;
 }) {
+  const [blocked, setBlocked] = useState(false);
+
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={ariaLabel}
-      onClick={(event) => openExternal(event, href)}
-      className={className}
-    >
-      {children}
-    </a>
+    <>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={ariaLabel}
+        onClick={(event) => openExternal(event, href, () => setBlocked(true))}
+        className={className}
+      >
+        {children}
+      </a>
+
+      {blocked ? (
+        <WhatsAppFallback
+          message={messageFromLink(href)}
+          href={href}
+          onClose={() => setBlocked(false)}
+        />
+      ) : null}
+    </>
   );
 }

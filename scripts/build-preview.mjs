@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
  */
 const BULK_THRESHOLD = 3;
 const WHATSAPP_NUMBER = '972535257250';
+const PHONE_DISPLAY = '053-5257250';
 
 /**
  * Fails the build if either value has moved in the app without being updated
@@ -40,6 +41,12 @@ async function assertConstantsInSync() {
       pattern: /whatsappNumber:\s*'(\d+)'/,
       expected: WHATSAPP_NUMBER,
       name: 'whatsappNumber',
+    },
+    {
+      file: 'src/lib/site.ts',
+      pattern: /phoneDisplay:\s*'([\d-]+)'/,
+      expected: PHONE_DISPLAY,
+      name: 'phoneDisplay',
     },
   ];
 
@@ -154,24 +161,209 @@ const routerScript = (fontClass) => `
   ${fontClass ? `root.classList.add(${JSON.stringify(fontClass)});` : ''}
 
   /*
-   * Popup-blocked fallback, mirroring src/lib/openExternal.ts.
+   * --- blocked hand-off fallback ---
+   * Mirrors src/lib/openExternal.ts and src/components/WhatsAppFallback.tsx.
    *
-   * This file is normally opened inside a sandboxed iframe, where a plain
-   * target="_blank" is refused by the browser and every order button looks
-   * simply broken. Self-navigation is still allowed there. Delegated, so it
-   * covers the links the order list builds at runtime too.
+   * This file is normally opened inside a sandboxed iframe, where window.open
+   * is refused and every order button looks simply broken — and a framed page
+   * cannot fall back to navigating itself either, because WhatsApp refuses to
+   * be framed. Some in-app browsers are worse still: they return a Window that
+   * never goes anywhere, so failure has to be watched for rather than
+   * detected. Delegated, so it covers the links the order list builds at
+   * runtime too.
    */
+  var HANDOFF_TIMEOUT_MS = 900;
+
+  function isFramed() {
+    try { return window.top !== window.self; } catch (e) { return true; }
+  }
+
+  /*
+   * A window that reached wa.me is cross-origin, so reading its location
+   * throws — that throw is the success signal. One still sitting on
+   * about:blank, or closed again by a popup blocker, never left.
+   */
+  function didNavigate(opened) {
+    try {
+      if (opened.closed) return false;
+      var loc = opened.location;
+      // An in-app browser can hand back a stub with no usable location at all.
+      if (!loc) return false;
+      return !!loc.href && loc.href !== 'about:blank';
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function watchForHandoff(opened, onBlocked) {
+    var settled = false, timer = 0;
+
+    function settle() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      window.removeEventListener('blur', settle);
+      window.removeEventListener('pagehide', settle);
+      document.removeEventListener('visibilitychange', onVisibility);
+    }
+
+    function onVisibility() {
+      if (document.visibilityState === 'hidden') settle();
+    }
+
+    window.addEventListener('blur', settle);
+    window.addEventListener('pagehide', settle);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    timer = setTimeout(function () {
+      if (settled) return;
+      settle();
+      if (document.visibilityState === 'hidden' || !document.hasFocus()) return;
+      if (didNavigate(opened)) return;
+      onBlocked();
+    }, HANDOFF_TIMEOUT_MS);
+  }
+
+  function openWhatsApp(href) {
+    var opened = null;
+    // No 'noopener' here: some browsers return null for it, which is
+    // indistinguishable from a blocked popup and would double-navigate.
+    try { opened = window.open(href, '_blank'); } catch (e) { opened = null; }
+
+    if (opened) {
+      try { opened.opener = null; } catch (e) {}
+      watchForHandoff(opened, function () { showFallback(href); });
+      return;
+    }
+
+    if (!isFramed()) {
+      window.location.href = href;
+      return;
+    }
+
+    showFallback(href);
+  }
+
   document.addEventListener('click', function (event) {
     var link = event.target.closest('a[href^="https://wa.me/"]');
-    if (!link) return;
+    if (!link || link.hasAttribute('data-direct')) return;
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
 
     event.preventDefault();
-    // No 'noopener' here: some browsers return null for it, which is
-    // indistinguishable from a blocked popup and would double-navigate.
-    var opened = window.open(link.href, '_blank');
-    if (opened) opened.opener = null;
-    else window.location.href = link.href;
+    openWhatsApp(link.href);
+  });
+
+  var fallback;
+
+  function messageFromLink(href) {
+    try { return new URL(href).searchParams.get('text') || ''; } catch (e) { return ''; }
+  }
+
+  /*
+   * navigator.clipboard is unavailable outside a secure context and inside
+   * some sandboxes — exactly the situations this fallback exists for — so the
+   * old selection-based copy stays as a second attempt.
+   */
+  function copyText(value) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(value).then(function () { return true; }, selectionCopy);
+    }
+    return Promise.resolve(selectionCopy());
+
+    function selectionCopy() {
+      var field = document.createElement('textarea');
+      field.value = value;
+      field.setAttribute('readonly', '');
+      field.style.position = 'fixed';
+      field.style.top = '-1000px';
+      document.body.appendChild(field);
+      var ok = false;
+      try {
+        field.select();
+        field.setSelectionRange(0, value.length);
+        ok = document.execCommand('copy');
+      } catch (e) { ok = false; }
+      field.remove();
+      return ok;
+    }
+  }
+
+  function bindCopy(button, getValue, label, doneLabel) {
+    button.textContent = label;
+    button.addEventListener('click', function () {
+      Promise.resolve(copyText(getValue())).then(function (ok) {
+        if (!ok) return;
+        button.textContent = '✓ ' + doneLabel;
+        setTimeout(function () { button.textContent = label; }, 2000);
+      });
+    });
+  }
+
+  function buildFallback() {
+    fallback = document.createElement('div');
+    fallback.className = 'fixed inset-0 z-70 flex items-end justify-center bg-mist-100/50 backdrop-blur-sm sm:items-center sm:p-6';
+    fallback.hidden = true;
+    fallback.innerHTML =
+      '<div role="dialog" aria-modal="true" class="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card border border-ink-700 bg-white shadow-2xl sm:rounded-card">' +
+        '<div class="flex items-start justify-between gap-3 border-b border-ink-700 px-5 py-4">' +
+          '<div>' +
+            '<h2 class="text-lg font-extrabold">שליחת ההזמנה</h2>' +
+            '<p class="mt-1 text-sm text-mist-300">הדפדפן חסם את הפתיחה האוטומטית של וואטסאפ. ההזמנה מוכנה — אפשר לשלוח אותה בשתי לחיצות.</p>' +
+          '</div>' +
+          '<button type="button" data-close aria-label="סגירה" class="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-mist-300">✕</button>' +
+        '</div>' +
+        '<div class="flex-1 overflow-y-auto px-5 py-4">' +
+          '<div>' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-extrabold text-white">1</span>' +
+              '<h3 class="text-sm font-bold">העתיקו את ההזמנה</h3>' +
+            '</div>' +
+            '<pre data-message dir="rtl" class="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl bg-ink-950 p-3 font-sans text-xs leading-relaxed text-mist-100"></pre>' +
+            '<button type="button" data-copy-message class="mt-2 w-full rounded-full bg-[#25D366] px-5 py-3 text-sm font-bold text-mist-100"></button>' +
+          '</div>' +
+          '<div class="mt-4">' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-extrabold text-white">2</span>' +
+              '<h3 class="text-sm font-bold">שלחו לנו בוואטסאפ</h3>' +
+            '</div>' +
+            '<p dir="ltr" class="mt-2 text-center text-2xl font-extrabold tracking-wide tabular-nums">${PHONE_DISPLAY}</p>' +
+            '<button type="button" data-copy-phone class="mt-2 w-full rounded-full border border-ink-600 px-5 py-3 text-sm font-bold text-mist-100"></button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="border-t border-ink-700 px-5 py-4">' +
+          /* data-direct keeps the delegated handler off it: a bare tap gets the
+             browser's own handling, which sometimes succeeds where the scripted
+             open was refused. */
+          '<a data-retry data-direct target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2.5 rounded-full border border-[#1da851]/50 px-6 py-3 text-sm font-bold text-[#1a9e4f]">נסו שוב לפתוח את וואטסאפ</a>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(fallback);
+
+    fallback.querySelector('[data-close]').addEventListener('click', function () { fallback.hidden = true; });
+    fallback.addEventListener('click', function (e) { if (e.target === fallback) fallback.hidden = true; });
+    bindCopy(
+      fallback.querySelector('[data-copy-message]'),
+      function () { return fallback.querySelector('[data-message]').textContent; },
+      'העתקת ההזמנה',
+      'ההזמנה הועתקה'
+    );
+    bindCopy(
+      fallback.querySelector('[data-copy-phone]'),
+      function () { return ${JSON.stringify(PHONE_DISPLAY)}; },
+      'העתקת המספר',
+      'המספר הועתק'
+    );
+  }
+
+  function showFallback(href) {
+    if (!fallback) buildFallback();
+    fallback.querySelector('[data-message]').textContent = messageFromLink(href);
+    fallback.querySelector('[data-retry]').setAttribute('href', href);
+    fallback.hidden = false;
+  }
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && fallback && !fallback.hidden) fallback.hidden = true;
   });
 
   var routes = {};

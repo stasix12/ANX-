@@ -54,6 +54,12 @@ export interface Product {
    * your own .jpg / .webp files.
    */
   images: string[];
+  /**
+   * Optional clip of the product in use, shown under the gallery. Both formats
+   * are needed — Safari plays the MP4, Chrome and Firefox take the smaller
+   * WebM — and the paths are prefixed by the component, not here.
+   */
+  video?: { webm: string; mp4: string; poster: string };
 }
 
 export const categories: Category[] = [
@@ -131,6 +137,11 @@ export const products: Product[] = [
       asset('/products/anx-anaconda/7.webp'),
       asset('/products/anx-anaconda/8.webp'),
     ],
+    video: {
+      webm: '/video/anaconda-demo.webm',
+      mp4: '/video/anaconda-demo.mp4',
+      poster: '/video/anaconda-demo-poster.jpg',
+    },
   },
   {
     slug: 'anx-pro-handle',

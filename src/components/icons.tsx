@@ -107,3 +107,12 @@ export function TruckIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Solid, unlike the rest: it sits over a photograph and has to read at 28px. */
+export function PlayIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props} fill="currentColor" stroke="none">
+      <path d="M8.5 5.6a1 1 0 011.52-.85l8.1 5a1 1 0 010 1.7l-8.1 5a1 1 0 01-1.52-.85V5.6z" />
+    </svg>
+  );
+}

@@ -4,7 +4,6 @@ import { notFound } from 'next/navigation';
 import { ProductCard } from '@/components/ProductCard';
 import { ProductGallery } from '@/components/ProductGallery';
 import { ProductOrderPanel } from '@/components/ProductOrderPanel';
-import { ProductVideo } from '@/components/ProductVideo';
 import { WhatsAppButton } from '@/components/WhatsAppButton';
 import { CheckIcon, MachineIcon, TruckIcon } from '@/components/icons';
 import { categoryName, formatPrice, getProduct, products } from '@/lib/products';
@@ -98,7 +97,11 @@ export default async function ProductPage({ params }: PageProps) {
         </nav>
 
         <div className="mt-8 grid gap-10 lg:grid-cols-2 lg:gap-14">
-          <ProductGallery images={product.images} productName={product.name} />
+          <ProductGallery
+            images={product.images}
+            productName={product.name}
+            video={product.video}
+          />
 
           <div>
             <p className="text-xs font-semibold tracking-[0.18em] text-brand-700 uppercase">
@@ -145,10 +148,6 @@ export default async function ProductPage({ params }: PageProps) {
             </div>
           </div>
         </div>
-
-        {product.video ? (
-          <ProductVideo video={product.video} productName={product.name} />
-        ) : null}
 
         <div className="mt-14 grid gap-6 lg:grid-cols-2 lg:gap-8">
           <section

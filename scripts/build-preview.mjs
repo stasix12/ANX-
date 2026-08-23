@@ -448,14 +448,33 @@ const routerScript = (fontClass) => `
     if (link) link.setAttribute('href', radio.getAttribute('data-order-href'));
   });
 
-  /* --- product gallery --- */
+  /*
+   * --- product gallery ---
+   * The video tile leads the row on products that have one. React swaps the
+   * two by state; here both live in the frame already and only the hidden
+   * attribute moves, which is why the component keeps the video element
+   * mounted rather than conditionally rendering it.
+   */
   document.addEventListener('click', function (event) {
-    var thumb = event.target.closest('button[aria-label^="הצגת תמונה"]');
+    var thumb = event.target.closest('button[aria-label^="הצגת תמונה"], button[aria-label^="הצגת סרטון"]');
     if (!thumb) return;
+
     var strip = thumb.parentElement;
-    var main = strip.parentElement.querySelector('img');
-    var source = thumb.querySelector('img');
-    if (main && source) main.setAttribute('src', source.getAttribute('src'));
+    var frame = strip.parentElement.querySelector('[data-gallery-image]').parentElement;
+    var main = frame.querySelector('[data-gallery-image]');
+    var video = frame.querySelector('[data-gallery-video]');
+    var wantsVideo = thumb.hasAttribute('data-gallery-video-thumb');
+
+    if (main) main.hidden = wantsVideo;
+    if (video) {
+      video.hidden = !wantsVideo;
+      if (wantsVideo) { var p = video.play(); if (p && p.catch) p.catch(function () {}); }
+      else video.pause();
+    }
+    if (!wantsVideo && main) {
+      var source = thumb.querySelector('img');
+      if (source) main.setAttribute('src', source.getAttribute('src'));
+    }
 
     strip.querySelectorAll('button').forEach(function (other) {
       var active = other === thumb;

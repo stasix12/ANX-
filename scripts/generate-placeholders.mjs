@@ -126,46 +126,6 @@ ${brackets(w, h, 72, 96)}
 `;
 }
 
-/**
- * A machine tile for the compatibility strip at the top of the home page.
- *
- * Same schematic as the hero, framed 4:3 and numbered, so it is obvious which
- * file each photograph replaces. Deliberately a drawing rather than anyone
- * else's catalogue shot: the machines these parts fit are made by another
- * company, and their photographs are theirs.
- */
-function machinePlaceholder(index, total) {
-  const w = 1200;
-  const h = 900;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="מכונת ניקוי ${index} מתוך ${total} — מציין מיקום">
-${defs(w, h)}
-  <g transform="translate(390 150) scale(0.92)">
-    <rect x="0" y="120" width="420" height="420" rx="38" fill="${panel}" stroke="${blue}" stroke-width="6"/>
-    <rect x="42" y="176" width="336" height="150" rx="18" fill="${wash}" stroke="${line}" stroke-width="3"/>
-    <rect x="70" y="206" width="180" height="16" rx="8" fill="${blue}"/>
-    <rect x="70" y="240" width="120" height="12" rx="6" fill="${blueSoft}"/>
-    <rect x="70" y="272" width="240" height="12" rx="6" fill="${blueSoft}"/>
-    <circle cx="130" cy="410" r="42" fill="none" stroke="${blue}" stroke-width="6"/>
-    <circle cx="130" cy="410" r="11" fill="${blue}"/>
-    <circle cx="250" cy="410" r="42" fill="none" stroke="${blueSoft}" stroke-width="6"/>
-    <circle cx="250" cy="410" r="11" fill="${blueSoft}"/>
-    <rect x="308" y="382" width="70" height="56" rx="12" fill="${blue}" fill-opacity="0.16" stroke="${blue}" stroke-width="3"/>
-    <path d="M60 120V56a44 44 0 0144-44h212a44 44 0 0144 44v64" fill="none" stroke="${blue}" stroke-width="16" stroke-linecap="round"/>
-    <circle cx="80" cy="566" r="40" fill="${panel}" stroke="${blueSoft}" stroke-width="7"/>
-    <circle cx="340" cy="566" r="40" fill="${panel}" stroke="${blueSoft}" stroke-width="7"/>
-  </g>
-${brackets(w, h, 44, 60)}
-  <circle cx="${w - 110}" cy="110" r="46" fill="${wash}" stroke="${blue}" stroke-width="3"/>
-  <text x="${w - 110}" y="110" text-anchor="middle" dominant-baseline="central"
-        font-family="Heebo, Arial, sans-serif" font-size="46" font-weight="700" fill="${blueDeep}">${index}</text>
-  <text x="${w / 2}" y="${h - 96}" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="38" font-weight="700" fill="${ink}">מכונת ניקוי ${index}</text>
-  <text x="${w / 2}" y="${h - 50}" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="26" fill="${slate}">מציין מיקום — להחלפה בתמונה אמיתית</text>
-</svg>
-`;
-}
-
 const products = [
   ['anx-pro-handle', 'ידית שאיבה ANX PRO'],
   ['anx-mini-handle', 'ידית שאיבה MINI'],
@@ -179,8 +139,6 @@ const products = [
 ];
 
 const IMAGES_PER_PRODUCT = 3;
-/** Tiles in the compatibility strip on the home page. */
-const MACHINE_TILES = 4;
 
 async function main() {
   let count = 0;
@@ -202,12 +160,6 @@ async function main() {
   await writeFile(join(publicDir, 'hero', 'machine.svg'), heroPlaceholder(), 'utf8');
   count++;
 
-  const machinesDir = join(publicDir, 'machines');
-  await mkdir(machinesDir, { recursive: true });
-  for (let i = 1; i <= MACHINE_TILES; i++) {
-    await writeFile(join(machinesDir, `${i}.svg`), machinePlaceholder(i, MACHINE_TILES), 'utf8');
-    count++;
-  }
 
   console.log(`נוצרו ${count} קבצי placeholder תחת public/`);
 }

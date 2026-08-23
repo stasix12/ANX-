@@ -1,5 +1,5 @@
 import { Faq, faqItems } from '@/components/Faq';
-import { MachineStrip } from '@/components/MachineStrip';
+import { Hero } from '@/components/Hero';
 import { ProductGrid } from '@/components/ProductGrid';
 import { Section } from '@/components/Section';
 import { TrustStrip } from '@/components/TrustStrip';
@@ -30,18 +30,18 @@ const faqJsonLd = {
 export default function HomePage() {
   return (
     <>
-      <MachineStrip />
+      <Hero />
       <TrustStrip />
 
       {/*
-        The strip above opens the page, but the h1 and the description stay in
-        the document — they are the page's only descriptive copy, and dropping
-        them outright would leave it with no heading at all for search engines
-        and screen readers.
+        The hero above carries the h1 now, so this heading steps down to an h2.
+        It stays in the document rather than being deleted: the grid needs a
+        heading of its own for search engines and screen readers, even though
+        the page reads better without a second title on screen.
       */}
       <Section
         id="products"
-        titleAs="h1"
+        titleAs="h2"
         title="המוצרים שלנו"
         description="ידיות שאיבה, צינורות ומתאמים למכונות Sabrina. משלוחים לכל הארץ, הזמנות בוואטסאפ."
         headerHidden

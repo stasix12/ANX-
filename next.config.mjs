@@ -4,9 +4,20 @@
  */
 const isExport = process.env.EXPORT === '1';
 
+/**
+ * GitHub Pages serves a project site from a sub-path (/ANX-), so every link and
+ * asset has to be prefixed. Empty everywhere else, including the single-file
+ * preview and a future custom domain, where the site sits at the root.
+ */
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  ...(isExport ? { output: 'export' } : {}),
+  // trailingSlash makes the export emit products/<slug>/index.html rather than
+  // products/<slug>.html, so every page resolves as a plain directory index on
+  // any static host, without relying on extensionless-URL rewriting.
+  ...(isExport ? { output: 'export', trailingSlash: true } : {}),
+  ...(basePath ? { basePath } : {}),
   images: {
     // Product and hero artwork ships as local SVG placeholders until the real
     // photos are dropped in. next/image refuses SVG sources unless it is told

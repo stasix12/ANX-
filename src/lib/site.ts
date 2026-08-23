@@ -16,6 +16,16 @@ export const site = {
 } as const;
 
 /**
+ * Prefixes a public asset with the deployment's base path.
+ *
+ * next/image and next/link apply basePath themselves; a plain <video> or
+ * <source> does not, and on a GitHub Pages project site those files would 404.
+ */
+export function asset(path: string): string {
+  return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}${path}`;
+}
+
+/**
  * Builds a wa.me deep link with a properly URL-encoded Hebrew message.
  * encodeURIComponent is what keeps the RTL text intact across clients.
  */

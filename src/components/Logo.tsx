@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { site } from '@/lib/site';
+import { asset, site } from '@/lib/site';
 
 /**
  * The brand badge plus the wordmark. The badge art is detailed, so the name
@@ -15,7 +15,7 @@ export function Logo({ withTagline = false }: { withTagline?: boolean }) {
       aria-label={`${site.name} — לעמוד הבית`}
     >
       <Image
-        src="/brand/anx-logo.webp"
+        src={asset('/brand/anx-logo.webp')}
         alt=""
         aria-hidden
         width={256}

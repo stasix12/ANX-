@@ -1,3 +1,5 @@
+import { asset } from '@/lib/site';
+
 export type CategoryId = 'handles' | 'hoses' | 'adapters';
 
 export interface Category {
@@ -75,11 +77,17 @@ export const categories: Category[] = [
 export const categoryName = (id: CategoryId): string =>
   categories.find((c) => c.id === id)?.name ?? '';
 
-/** Three numbered placeholders per product. */
+/**
+ * Three numbered placeholders per product.
+ *
+ * Prefixed through asset(): next/image applies basePath only when it routes a
+ * source through the optimiser, and a static export has none, so these would
+ * 404 on a sub-path deployment without it.
+ */
 const gallery = (slug: string): string[] => [
-  `/products/${slug}/1.svg`,
-  `/products/${slug}/2.svg`,
-  `/products/${slug}/3.svg`,
+  asset(`/products/${slug}/1.svg`),
+  asset(`/products/${slug}/2.svg`),
+  asset(`/products/${slug}/3.svg`),
 ];
 
 export const products: Product[] = [

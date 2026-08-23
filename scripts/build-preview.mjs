@@ -640,7 +640,11 @@ async function main() {
   const cssFile = (await readdir(chunksDir)).find((f) => f.endsWith('.css'));
   const css = await inlineFonts(await readFile(join(chunksDir, cssFile), 'utf8'));
 
-  const pages = [['/', 'index.html'], ...productOrder.map(([slug]) => [`/products/${slug}`, `products/${slug}.html`])];
+  // trailingSlash is on for the export, so each route is a directory index.
+  const pages = [
+    ['/', 'index.html'],
+    ...productOrder.map(([slug]) => [`/products/${slug}`, `products/${slug}/index.html`]),
+  ];
 
   const home = await readFile(join(outDir, 'index.html'), 'utf8');
   const fontClass = home.match(/<html[^>]*class="([^"]*)"/)?.[1] ?? '';

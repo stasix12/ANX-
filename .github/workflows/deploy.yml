@@ -1,0 +1,70 @@
+# Builds the static export and publishes it to GitHub Pages on every push to
+# the default branch.
+#
+# The site lands on a project sub-path (https://<user>.github.io/ANX-), so the
+# build is told about that prefix through NEXT_PUBLIC_BASE_PATH — next.config
+# turns it into basePath, and src/lib/site.ts asset() applies it to the plain
+# <video> sources next/image cannot cover.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [claude/anx3d-cleaning-shop-ufxo5m]
+  # Lets the site be re-published from the Actions tab without a code change.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; queue instead, and let a finished one complete.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # enablement: true switches Pages on the first time this runs, so the
+      # site does not need turning on by hand in the repository settings.
+      - id: pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Build static export
+        env:
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_SITE_URL: ${{ steps.pages.outputs.base_url }}
+        run: npm run export
+
+      # Pages does not run Jekyll behind this workflow, but the marker costs
+      # nothing and keeps Next's _next/ directory safe if that ever changes.
+      - run: touch out/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

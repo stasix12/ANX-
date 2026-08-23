@@ -1,3 +1,5 @@
+import { asset } from '@/lib/site';
+
 /**
  * Banner of the handle in use, sitting directly under the header.
  *
@@ -26,11 +28,11 @@ export function DemoVideo() {
           loop
           playsInline
           preload="metadata"
-          poster="/video/anx-demo-poster.jpg"
+          poster={asset('/video/anx-demo-poster.jpg')}
           aria-label="ידית השאיבה של ANX3D מנקה מזרן"
         >
-          <source src="/video/anx-demo.webm" type="video/webm" />
-          <source src="/video/anx-demo.mp4" type="video/mp4" />
+          <source src={asset('/video/anx-demo.webm')} type="video/webm" />
+          <source src={asset('/video/anx-demo.mp4')} type="video/mp4" />
         </video>
       </div>
     </div>

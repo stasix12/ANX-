@@ -1,5 +1,5 @@
-import { DemoVideo } from '@/components/DemoVideo';
 import { Faq, faqItems } from '@/components/Faq';
+import { MachineStrip } from '@/components/MachineStrip';
 import { ProductGrid } from '@/components/ProductGrid';
 import { Section } from '@/components/Section';
 import { TrustStrip } from '@/components/TrustStrip';
@@ -30,14 +30,14 @@ const faqJsonLd = {
 export default function HomePage() {
   return (
     <>
-      <DemoVideo />
+      <MachineStrip />
       <TrustStrip />
 
       {/*
-        The banner above replaces the heading block on screen, but the h1 and
-        the description stay in the document — they are the page's only
-        descriptive copy, and dropping them outright would leave it with no
-        heading at all for search engines and screen readers.
+        The strip above opens the page, but the h1 and the description stay in
+        the document — they are the page's only descriptive copy, and dropping
+        them outright would leave it with no heading at all for search engines
+        and screen readers.
       */}
       <Section
         id="products"

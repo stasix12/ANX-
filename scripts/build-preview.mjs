@@ -111,7 +111,7 @@ const mimeByExtension = {
  */
 async function buildAssetMap(html) {
   const map = new Map();
-  const pattern = /\/(?:products|hero|brand|video)\/[^"']+?\.(?:svg|png|jpe?g|webp|mp4|webm)/g;
+  const pattern = /\/(?:products|machines|hero|brand|video)\/[^"']+?\.(?:svg|png|jpe?g|webp|mp4|webm)/g;
 
   for (const path of new Set(html.match(pattern) ?? [])) {
     const extension = path.slice(path.lastIndexOf('.')).toLowerCase();

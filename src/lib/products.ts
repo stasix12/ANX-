@@ -101,13 +101,13 @@ export const products: Product[] = [
   {
     slug: 'anx-anaconda',
     name: 'ANX ANACONDA',
-    tagline: 'ידית שאיבה מודפסת בתלת־מימד, בירוק ג׳ונגל — עם אטם קצף היקפי והדק לשליטה מלאה.',
+    tagline: 'ידית שאיבה מודפסת בתלת־מימד, בירוק ג׳ונגל או בשחור — עם אטם קצף היקפי והדק לשליטה מלאה.',
     description:
-      'ANX ANACONDA היא ידית השאיבה שלנו לניקוי ספות וריפודים. הגוף מודפס בתלת־מימד ומיוצר בישראל, עם אטם קצף היקפי סביב פתח השאיבה שנצמד לבד ושומר על ואקום מלא לאורך המשיכה. ההדק מאפשר לשלוט בהתזה תוך כדי עבודה בלי להוריד את היד מהידית, והחיבור המהיר בבסיס מתחבר ומתנתק בלי כלים. הצבע — ירוק ג׳ונגל — נבחר גם כדי שהידית תהיה קלה לאיתור באתר עבודה עמוס.',
+      'ANX ANACONDA היא ידית השאיבה שלנו לניקוי ספות וריפודים. הגוף מודפס בתלת־מימד ומיוצר בישראל, עם אטם קצף היקפי סביב פתח השאיבה שנצמד לבד ושומר על ואקום מלא לאורך המשיכה. ההדק מאפשר לשלוט בהתזה תוך כדי עבודה בלי להוריד את היד מהידית, והחיבור המהיר בבסיס מתחבר ומתנתק בלי כלים. הידית מגיעה בשני צבעים: ירוק ג׳ונגל, שקל לאתר באתר עבודה עמוס, ושחור נקי ומקצועי.',
     category: 'handles',
     price: 850,
     compatibility: ['Sabrina — ידית שאיבה לניקוי ספות וריפודים'],
-    variants: [{ id: 'color', label: 'צבע', options: ['ירוק ג׳ונגל'] }],
+    variants: [{ id: 'color', label: 'צבע', options: ['ירוק ג׳ונגל', 'שחור'] }],
     highlights: [
       'אטם קצף היקפי סביב פתח השאיבה',
       'הדק לשליטה בהתזה תוך כדי עבודה',
@@ -115,16 +115,21 @@ export const products: Product[] = [
       'גוף מודפס בתלת־מימד, מיוצר בישראל',
     ],
     specs: [
-      { label: 'צבע', value: 'ירוק ג׳ונגל' },
+      { label: 'צבעים', value: 'ירוק ג׳ונגל · שחור' },
       { label: 'ייצור', value: 'הדפסת תלת־מימד, מיוצר בישראל' },
       { label: 'אטימה', value: 'אטם קצף היקפי' },
       { label: 'שליטה', value: 'הדק התזה מובנה' },
     ],
+    // First four are the jungle-green handle, last four the same handle in black.
     images: [
       asset('/products/anx-anaconda/1.webp'),
       asset('/products/anx-anaconda/2.webp'),
       asset('/products/anx-anaconda/3.webp'),
       asset('/products/anx-anaconda/4.webp'),
+      asset('/products/anx-anaconda/5.webp'),
+      asset('/products/anx-anaconda/6.webp'),
+      asset('/products/anx-anaconda/7.webp'),
+      asset('/products/anx-anaconda/8.webp'),
     ],
   },
   {

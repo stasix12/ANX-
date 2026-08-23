@@ -21,7 +21,14 @@ SOURCE = os.path.join(ROOT, 'photos', 'source')
 DEST = os.path.join(ROOT, 'public', 'products', 'anx-anaconda')
 
 LONGEST_SIDE = 1600
-ORDER = ['anaconda-4.jpg', 'anaconda-1.jpg', 'anaconda-2.jpg', 'anaconda-3.jpg']
+
+# Gallery order: the jungle-green handle first, then the same handle in black.
+# The first entry is also what the catalogue card shows.
+ORDER = [
+    'anaconda-4.jpg', 'anaconda-1.jpg', 'anaconda-2.jpg', 'anaconda-3.jpg',
+    'anaconda-black-1.jpg', 'anaconda-black-2.jpg',
+    'anaconda-black-3.jpg', 'anaconda-black-4.jpg',
+]
 
 
 def web_size(img):

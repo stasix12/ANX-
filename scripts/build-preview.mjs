@@ -153,6 +153,27 @@ const routerScript = (fontClass) => `
   /* next/font declares --font-heebo on <html>, which the host owns here. */
   ${fontClass ? `root.classList.add(${JSON.stringify(fontClass)});` : ''}
 
+  /*
+   * Popup-blocked fallback, mirroring src/lib/openExternal.ts.
+   *
+   * This file is normally opened inside a sandboxed iframe, where a plain
+   * target="_blank" is refused by the browser and every order button looks
+   * simply broken. Self-navigation is still allowed there. Delegated, so it
+   * covers the links the order list builds at runtime too.
+   */
+  document.addEventListener('click', function (event) {
+    var link = event.target.closest('a[href^="https://wa.me/"]');
+    if (!link) return;
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+
+    event.preventDefault();
+    // No 'noopener' here: some browsers return null for it, which is
+    // indistinguishable from a blocked popup and would double-navigate.
+    var opened = window.open(link.href, '_blank');
+    if (opened) opened.opener = null;
+    else window.location.href = link.href;
+  });
+
   var routes = {};
   document.querySelectorAll('[data-route]').forEach(function (el) {
     routes[el.getAttribute('data-route')] = el;

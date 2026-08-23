@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Wordmark } from '@/components/Wordmark';
 import { PhoneIcon, WhatsAppIcon } from '@/components/icons';
+import { WhatsAppLink } from '@/components/WhatsAppLink';
 import { generalWhatsappLink, site } from '@/lib/site';
 
 /**
@@ -32,15 +33,13 @@ export function Header() {
           >
             <PhoneIcon className="h-[22px] w-[22px]" />
           </a>
-          <a
+          <WhatsAppLink
             href={generalWhatsappLink}
-            target="_blank"
-            rel="noopener noreferrer"
             aria-label="הזמנה בוואטסאפ"
             className="grid h-10 w-10 place-items-center rounded-lg text-mist-100 transition-colors duration-200 hover:text-[#25D366]"
           >
             <WhatsAppIcon className="h-[22px] w-[22px]" />
-          </a>
+          </WhatsAppLink>
         </div>
       </div>
     </header>

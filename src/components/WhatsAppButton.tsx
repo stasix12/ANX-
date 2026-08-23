@@ -1,4 +1,5 @@
 import { WhatsAppIcon } from '@/components/icons';
+import { WhatsAppLink } from '@/components/WhatsAppLink';
 import { generalWhatsappLink, orderLink } from '@/lib/site';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg';
@@ -44,14 +45,12 @@ export function WhatsAppButton({
       : 'border border-[#1da851]/50 text-[#1a9e4f] hover:border-[#1da851] hover:bg-[#25D366]/10';
 
   return (
-    <a
+    <WhatsAppLink
       href={href}
-      target="_blank"
-      rel="noopener noreferrer"
       className={`inline-flex items-center justify-center rounded-full font-bold transition-colors duration-200 ${sizeClasses[size]} ${variantClasses} ${className}`}
     >
       <WhatsAppIcon className={iconSize[size]} />
       <span>{label}</span>
-    </a>
+    </WhatsAppLink>
   );
 }

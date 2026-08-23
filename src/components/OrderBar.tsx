@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useOrderList } from '@/components/OrderListProvider';
 import { CloseIcon, WhatsAppIcon } from '@/components/icons';
+import { WhatsAppLink } from '@/components/WhatsAppLink';
 import { formatPrice } from '@/lib/products';
 import {
   BULK_THRESHOLD,
@@ -133,15 +134,13 @@ export function OrderBar() {
                 <span className="text-lg font-extrabold">{formatPrice(total)}</span>
               </div>
 
-              <a
+              <WhatsAppLink
                 href={orderLink(lines)}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="mt-3 flex items-center justify-center gap-2.5 rounded-full bg-[#25D366] px-6 py-3.5 text-base font-bold text-mist-100 transition-colors hover:bg-[#1fbe5a]"
               >
                 <WhatsAppIcon className="h-5 w-5 shrink-0" />
                 שליחת ההזמנה בוואטסאפ
-              </a>
+              </WhatsAppLink>
 
               <button
                 type="button"
@@ -170,15 +169,13 @@ export function OrderBar() {
             <span className="text-xs font-semibold text-brand-700 underline">עריכה</span>
           </button>
 
-          <a
+          <WhatsAppLink
             href={orderLink(lines)}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-bold text-mist-100 transition-colors hover:bg-[#1fbe5a]"
           >
             <WhatsAppIcon className="h-4 w-4 shrink-0" />
             שליחת ההזמנה
-          </a>
+          </WhatsAppLink>
         </div>
       </div>
     </>

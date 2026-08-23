@@ -1,5 +1,6 @@
 import { Logo } from '@/components/Logo';
 import { InstagramIcon, TikTokIcon, WhatsAppIcon } from '@/components/icons';
+import { WhatsAppLink } from '@/components/WhatsAppLink';
 import { generalWhatsappLink, site } from '@/lib/site';
 
 const socials = [
@@ -42,16 +43,14 @@ export function Footer() {
 
             <div className="mt-5 flex items-center gap-2 sm:justify-end">
               {socials.map(({ href, label, Icon, hover }) => (
-                <a
+                <WhatsAppLink
                   key={label}
                   href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   aria-label={label}
                   className={`grid h-10 w-10 place-items-center rounded-xl border border-ink-700 text-mist-300 transition-colors duration-200 ${hover}`}
                 >
                   <Icon className="h-5 w-5" />
-                </a>
+                </WhatsAppLink>
               ))}
             </div>
           </div>

@@ -21,7 +21,7 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
           fill
           priority
           sizes="(min-width: 1024px) 50vw, 100vw"
-          className="animate-rise object-cover"
+          className="animate-rise object-contain"
         />
       </div>
 

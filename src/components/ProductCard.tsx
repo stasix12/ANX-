@@ -30,7 +30,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
           loading={priority ? 'eager' : 'lazy'}
           priority={priority}
           sizes="(min-width: 1024px) 25vw, 45vw"
-          className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+          className="object-contain transition-transform duration-500 group-hover:scale-[1.04]"
         />
         {product.badge ? (
           <span className="absolute top-1.5 start-1.5 rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold text-white">

@@ -62,22 +62,26 @@ const brackets = (w, h, m = 56, len = 72) => {
 };
 
 function productPlaceholder({ name, index, total }) {
+  // 3:4, matching the product frames — the shop's photographs come off a phone
+  // in portrait, and a square placeholder beside them would be the odd one out.
   const w = 1000;
-  const h = 1000;
+  const h = 1333;
+  // The block was laid out against a 1000-tall canvas; keep it centred.
+  const dy = (h - 1000) / 2;
   const label = escapeXml(name);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${label} — תמונה ${index} מתוך ${total} (מציין מיקום)">
 ${defs(w, h)}
 ${brackets(w, h)}
-  <circle cx="${w / 2}" cy="430" r="150" fill="none" stroke="${line}" stroke-width="2"/>
-  <circle cx="${w / 2}" cy="430" r="118" fill="${wash}" stroke="${blue}" stroke-width="3"/>
-  <text x="${w / 2}" y="430" text-anchor="middle" dominant-baseline="central"
+  <circle cx="${w / 2}" cy="${430 + dy}" r="150" fill="none" stroke="${line}" stroke-width="2"/>
+  <circle cx="${w / 2}" cy="${430 + dy}" r="118" fill="${wash}" stroke="${blue}" stroke-width="3"/>
+  <text x="${w / 2}" y="${430 + dy}" text-anchor="middle" dominant-baseline="central"
         font-family="Heebo, Arial, sans-serif" font-size="140" font-weight="700" fill="${blueDeep}">${index}</text>
-  <text x="${w / 2}" y="640" text-anchor="middle" direction="rtl"
+  <text x="${w / 2}" y="${640 + dy}" text-anchor="middle" direction="rtl"
         font-family="Heebo, Arial, sans-serif" font-size="46" font-weight="700" fill="${ink}">${label}</text>
-  <text x="${w / 2}" y="706" text-anchor="middle" direction="rtl"
+  <text x="${w / 2}" y="${706 + dy}" text-anchor="middle" direction="rtl"
         font-family="Heebo, Arial, sans-serif" font-size="30" fill="${slate}">תמונה ${index} מתוך ${total} · מציין מיקום</text>
-  <rect x="${w / 2 - 190}" y="770" width="380" height="62" rx="31" fill="none" stroke="${line}" stroke-width="2"/>
-  <text x="${w / 2}" y="801" text-anchor="middle" dominant-baseline="central"
+  <rect x="${w / 2 - 190}" y="${770 + dy}" width="380" height="62" rx="31" fill="none" stroke="${line}" stroke-width="2"/>
+  <text x="${w / 2}" y="${801 + dy}" text-anchor="middle" dominant-baseline="central"
         font-family="Heebo, Arial, sans-serif" font-size="26" letter-spacing="4" fill="${blueDeep}">ANX3D</text>
 </svg>
 `;

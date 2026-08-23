@@ -13,7 +13,7 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
 
   return (
     <div>
-      <div className="relative aspect-square overflow-hidden rounded-card border border-ink-700 bg-ink-850">
+      <div className="relative aspect-[3/4] overflow-hidden rounded-card border border-ink-700 bg-ink-850">
         <Image
           key={images[activeIndex]}
           src={images[activeIndex]}
@@ -21,7 +21,7 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
           fill
           priority
           sizes="(min-width: 1024px) 50vw, 100vw"
-          className="animate-rise object-contain"
+          className="animate-rise object-cover"
         />
       </div>
 

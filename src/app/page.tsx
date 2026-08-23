@@ -1,6 +1,8 @@
 import { DemoVideo } from '@/components/DemoVideo';
+import { Faq, faqItems } from '@/components/Faq';
 import { ProductGrid } from '@/components/ProductGrid';
 import { Section } from '@/components/Section';
+import { TrustStrip } from '@/components/TrustStrip';
 import { products } from '@/lib/products';
 import { site } from '@/lib/site';
 
@@ -14,10 +16,22 @@ const businessJsonLd = {
   areaServed: 'IL',
 };
 
+/** FAQ rich result — lets the answers surface directly in search. */
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqItems.map((item) => ({
+    '@type': 'Question',
+    name: item.question,
+    acceptedAnswer: { '@type': 'Answer', text: item.answer },
+  })),
+};
+
 export default function HomePage() {
   return (
     <>
       <DemoVideo />
+      <TrustStrip />
 
       {/*
         The banner above replaces the heading block on screen, but the h1 and
@@ -35,9 +49,15 @@ export default function HomePage() {
         <ProductGrid products={products} />
       </Section>
 
+      <Faq />
+
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(businessJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
     </>
   );

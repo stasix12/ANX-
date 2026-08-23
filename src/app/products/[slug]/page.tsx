@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ProductCard } from '@/components/ProductCard';
 import { ProductGallery } from '@/components/ProductGallery';
+import { ProductOrderPanel } from '@/components/ProductOrderPanel';
 import { WhatsAppButton } from '@/components/WhatsAppButton';
 import { CheckIcon, MachineIcon, TruckIcon } from '@/components/icons';
 import { categoryName, formatPrice, getProduct, products } from '@/lib/products';
@@ -130,17 +131,7 @@ export default async function ProductPage({ params }: PageProps) {
               )}
             </p>
 
-            <div className="mt-6">
-              <WhatsAppButton
-                productName={product.name}
-                size="lg"
-                label="הזמנה ב-WhatsApp"
-                className="w-full sm:w-auto"
-              />
-              <p className="mt-3 text-sm text-mist-500">
-                ההודעה נפתחת מוכנה עם שם המוצר — רק לוחצים שליחה.
-              </p>
-            </div>
+            <ProductOrderPanel product={product} />
 
             <div className="mt-8 flex items-start gap-3.5 rounded-2xl border border-ink-700 surface p-5">
               <TruckIcon className="mt-0.5 h-6 w-6 shrink-0 text-brand-600" />

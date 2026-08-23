@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
+import { AddToOrderButton } from '@/components/AddToOrderButton';
 import { WhatsAppButton } from '@/components/WhatsAppButton';
 import { formatPrice, sabrinaModels, type Product } from '@/lib/products';
 import { orderLink } from '@/lib/site';
@@ -12,7 +13,10 @@ export function ProductCard({ product, priority = false }: { product: Product; p
   const [model, setModel] = useState<string>(models[0]);
 
   return (
-    <article className="group flex flex-col overflow-hidden rounded-xl border border-ink-700 surface transition-colors duration-300 hover:border-brand-500/60">
+    <article
+      data-order-scope
+      className="group flex flex-col overflow-hidden rounded-xl border border-ink-700 surface transition-colors duration-300 hover:border-brand-500/60"
+    >
       <Link
         href={`/products/${product.slug}`}
         tabIndex={-1}
@@ -80,6 +84,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
                 checked={model === option}
                 onChange={() => setModel(option)}
                 data-order-href={orderLink(product.name, `מתאים ל${option}`)}
+                data-order-model={`מתאים ל${option}`}
                 className="h-3.5 w-3.5 shrink-0 appearance-none rounded-[3px] border border-ink-600 bg-white transition-colors duration-200 checked:border-brand-500 checked:bg-brand-500 checked:shadow-[inset_0_0_0_2px_white]"
               />
               <span>מתאים ל{option}</span>
@@ -87,7 +92,13 @@ export function ProductCard({ product, priority = false }: { product: Product; p
           ))}
         </fieldset>
 
-        {/* mt-auto keeps the buttons aligned across a row of uneven-height cards. */}
+        {/*
+          Two paths on purpose. The green button is the one-tap order for
+          someone buying a single part; the add button builds a list so an
+          order of several parts is one WhatsApp message instead of one per
+          product, which is what made ordering in bulk tedious before.
+          mt-auto keeps them aligned across a row of uneven-height cards.
+        */}
         <div className="mt-auto border-t border-ink-700 pt-2">
           <WhatsAppButton
             productName={product.name}
@@ -95,6 +106,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
             size="xs"
             className="w-full"
           />
+          <AddToOrderButton product={product} model={model} />
         </div>
       </div>
     </article>

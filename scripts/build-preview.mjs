@@ -14,6 +14,46 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/*
+ * Kept in step with the app rather than hard-coded: the preview's order list
+ * restates the message format, and these two values are what it shares with
+ * src/lib/order.ts and src/lib/site.ts.
+ */
+const BULK_THRESHOLD = 3;
+const WHATSAPP_NUMBER = '972535257250';
+
+/**
+ * Fails the build if either value has moved in the app without being updated
+ * here — otherwise the preview would quietly compose orders against a stale
+ * threshold or, worse, the wrong phone number.
+ */
+async function assertConstantsInSync() {
+  const checks = [
+    {
+      file: 'src/lib/order.ts',
+      pattern: /BULK_THRESHOLD\s*=\s*(\d+)/,
+      expected: String(BULK_THRESHOLD),
+      name: 'BULK_THRESHOLD',
+    },
+    {
+      file: 'src/lib/site.ts',
+      pattern: /whatsappNumber:\s*'(\d+)'/,
+      expected: WHATSAPP_NUMBER,
+      name: 'whatsappNumber',
+    },
+  ];
+
+  for (const { file, pattern, expected, name } of checks) {
+    const match = (await readFile(join(root, file), 'utf8')).match(pattern);
+    if (!match) throw new Error(`build-preview: could not find ${name} in ${file}`);
+    if (match[1] !== expected) {
+      throw new Error(
+        `build-preview: ${name} is ${match[1]} in ${file} but ${expected} in this script — update it here too`,
+      );
+    }
+  }
+}
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = join(root, 'out');
 
@@ -211,11 +251,178 @@ const routerScript = (fontClass) => `
     });
   });
 
+  /*
+   * --- order list ---
+   * The real list is React state, so it renders as nothing in a static export
+   * and every "add" button would be dead. This rebuilds it in plain JS: each
+   * button carries its line in data-order-line, so nothing about the products
+   * is re-derived here. The message format is the one place that is restated
+   * from src/lib/order.ts — the two are checked against each other when the
+   * preview is built.
+   */
+  var BULK_THRESHOLD = ${BULK_THRESHOLD};
+  var order = [];
+
+  function shekels(n) {
+    return '₪' + n.toLocaleString('he-IL');
+  }
+
+  function orderTotal() {
+    var total = 0, complete = true;
+    order.forEach(function (l) {
+      if (typeof l.price !== 'number') complete = false;
+      else total += l.price * l.quantity;
+    });
+    return { total: total, complete: complete };
+  }
+
+  function orderCount() {
+    return order.reduce(function (s, l) { return s + l.quantity; }, 0);
+  }
+
+  function orderMessage() {
+    if (!order.length) return 'היי, מעוניין לקבל פרטים על הציוד ל-Sabrina';
+    var items = order.map(function (l) {
+      return '• ' + l.quantity + '× ' + l.name + ' — ' + l.model;
+    }).join('\\n');
+    var t = orderTotal(), count = orderCount();
+    var parts = ['היי, מעוניין להזמין:', '', items, ''];
+    if (t.total > 0) {
+      parts.push(t.complete
+        ? 'סה״כ: ' + shekels(t.total)
+        : 'סה״כ חלקי: ' + shekels(t.total) + ' (יש פריטים לתמחור)');
+    }
+    if (count >= BULK_THRESHOLD) {
+      parts.push('הזמנה של ' + count + ' יחידות — אשמח לבדוק מחיר לכמות.');
+    }
+    return parts.join('\\n');
+  }
+
+  var waBase = 'https://wa.me/${WHATSAPP_NUMBER}?text=';
+  var bar, sheet, sheetList;
+
+  function buildChrome() {
+    bar = document.createElement('div');
+    bar.className = 'fixed inset-x-0 bottom-0 z-50 border-t border-ink-700 bg-white/95 backdrop-blur-lg';
+    bar.hidden = true;
+    bar.innerHTML =
+      '<div class="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">' +
+        '<button type="button" data-open class="flex min-w-0 flex-1 items-baseline gap-2 rounded-lg text-start">' +
+          '<span class="text-sm font-extrabold" data-count></span>' +
+          '<span class="truncate text-sm text-mist-300" data-total></span>' +
+          '<span class="text-xs font-semibold text-brand-700 underline">עריכה</span>' +
+        '</button>' +
+        '<a target="_blank" rel="noopener noreferrer" data-send class="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-bold text-mist-100">שליחת ההזמנה</a>' +
+      '</div>';
+    document.body.appendChild(bar);
+
+    sheet = document.createElement('div');
+    sheet.className = 'fixed inset-0 z-60 flex items-end justify-center bg-mist-100/40 backdrop-blur-sm sm:items-center sm:p-6';
+    sheet.hidden = true;
+    sheet.innerHTML =
+      '<div class="relative flex max-h-[80vh] w-full max-w-lg flex-col rounded-t-card border border-ink-700 bg-white shadow-2xl sm:rounded-card">' +
+        '<div class="flex items-center justify-between border-b border-ink-700 px-5 py-4">' +
+          '<h2 class="text-lg font-extrabold">רשימת ההזמנה</h2>' +
+          '<button type="button" data-close class="grid h-9 w-9 place-items-center rounded-lg text-mist-300">✕</button>' +
+        '</div>' +
+        '<ul class="flex-1 divide-y divide-ink-700 overflow-y-auto px-5" data-list></ul>' +
+        '<div class="border-t border-ink-700 px-5 py-4">' +
+          '<div class="flex items-baseline justify-between"><span class="text-sm text-mist-300" data-scount></span><span class="text-lg font-extrabold" data-stotal></span></div>' +
+          '<a target="_blank" rel="noopener noreferrer" data-send class="mt-3 flex items-center justify-center gap-2.5 rounded-full bg-[#25D366] px-6 py-3.5 text-base font-bold text-mist-100">שליחת ההזמנה בוואטסאפ</a>' +
+          '<button type="button" data-clear class="mt-2 w-full rounded-lg py-2 text-xs font-semibold text-mist-500">ניקוי הרשימה</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(sheet);
+    sheetList = sheet.querySelector('[data-list]');
+
+    bar.querySelector('[data-open]').addEventListener('click', function () { sheet.hidden = false; });
+    sheet.querySelector('[data-close]').addEventListener('click', function () { sheet.hidden = true; });
+    sheet.querySelector('[data-clear]').addEventListener('click', function () { order = []; render(); });
+    sheet.addEventListener('click', function (e) { if (e.target === sheet) sheet.hidden = true; });
+  }
+
+  function render() {
+    var count = orderCount(), t = orderTotal();
+    bar.hidden = count === 0;
+    if (count === 0) sheet.hidden = true;
+
+    bar.querySelector('[data-count]').textContent = count + ' יחידות';
+    bar.querySelector('[data-total]').textContent = shekels(t.total) + (t.complete ? '' : '+');
+    sheet.querySelector('[data-scount]').textContent = count + ' יחידות';
+    sheet.querySelector('[data-stotal]').textContent = shekels(t.total);
+
+    var href = waBase + encodeURIComponent(orderMessage());
+    [bar, sheet].forEach(function (root) {
+      root.querySelectorAll('[data-send]').forEach(function (a) { a.setAttribute('href', href); });
+    });
+
+    sheetList.innerHTML = order.map(function (l, i) {
+      var value = typeof l.price === 'number'
+        ? shekels(l.price * l.quantity)
+        : '<span class="text-xs font-semibold text-mist-500">לתמחור בוואטסאפ</span>';
+      return '<li class="flex items-start gap-3 py-4">' +
+        '<div class="min-w-0 flex-1"><p class="text-sm font-bold"></p><p class="mt-0.5 text-xs text-mist-500"></p>' +
+        '<p class="mt-1 text-sm font-extrabold">' + value + '</p></div>' +
+        '<div class="flex shrink-0 items-center gap-1">' +
+          '<button type="button" data-step="-1" data-i="' + i + '" class="grid h-8 w-8 place-items-center rounded-lg border border-ink-600 text-base font-bold">−</button>' +
+          '<span class="w-8 text-center text-sm font-bold tabular-nums">' + l.quantity + '</span>' +
+          '<button type="button" data-step="1" data-i="' + i + '" class="grid h-8 w-8 place-items-center rounded-lg border border-ink-600 text-base font-bold">+</button>' +
+          '<button type="button" data-remove data-i="' + i + '" class="ms-1 grid h-8 w-8 place-items-center rounded-lg text-mist-500">✕</button>' +
+        '</div></li>';
+    }).join('');
+
+    // Names go in as text, never as markup, so a product name can never inject HTML.
+    sheetList.querySelectorAll('li').forEach(function (li, i) {
+      li.querySelectorAll('p')[0].textContent = order[i].name;
+      li.querySelectorAll('p')[1].textContent = order[i].model;
+    });
+  }
+
+  document.addEventListener('click', function (event) {
+    var addButton = event.target.closest('[data-order-line]');
+    if (addButton) {
+      var line = JSON.parse(addButton.getAttribute('data-order-line'));
+      /*
+       * data-order-line is rendered once with the default fit, and nothing
+       * rewrites it here the way React would. Read the fit that is actually
+       * ticked, or picking the second model would silently order the first.
+       */
+      var scope = addButton.closest('[data-order-scope]');
+      var picked = scope && scope.querySelector('input[data-order-model]:checked');
+      if (picked) line.model = picked.getAttribute('data-order-model');
+      var found = order.find(function (l) { return l.slug === line.slug && l.model === line.model; });
+      if (found) found.quantity += line.quantity;
+      else order.push(Object.assign({}, line));
+      render();
+      return;
+    }
+
+    var step = event.target.closest('[data-step]');
+    if (step) {
+      var si = +step.getAttribute('data-i');
+      order[si].quantity += +step.getAttribute('data-step');
+      if (order[si].quantity <= 0) order.splice(si, 1);
+      render();
+      return;
+    }
+
+    var rm = event.target.closest('[data-remove]');
+    if (rm) {
+      order.splice(+rm.getAttribute('data-i'), 1);
+      render();
+    }
+  });
+
+  buildChrome();
+  render();
+
   apply();
 })();
 `;
 
 async function main() {
+  await assertConstantsInSync();
+
   const chunksDir = join(outDir, '_next', 'static', 'chunks');
   const cssFile = (await readdir(chunksDir)).find((f) => f.endsWith('.css'));
   const css = await inlineFonts(await readFile(join(chunksDir, cssFile), 'utf8'));

@@ -48,8 +48,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#f5f8fd',
-  colorScheme: 'light',
+  themeColor: '#080a07',
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -61,7 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </div>
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:start-4 focus:z-100 focus:rounded-lg focus:bg-brand-500 focus:px-5 focus:py-3 focus:font-bold focus:text-white"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:start-4 focus:z-100 focus:rounded-lg focus:bg-brand-500 focus:px-5 focus:py-3 focus:font-bold focus:text-on-brand"
         >
           דילוג לתוכן הראשי
         </a>

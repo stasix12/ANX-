@@ -56,7 +56,7 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
            */
           <video
             ref={player}
-            className="absolute inset-0 h-full w-full bg-mist-100 object-contain"
+            className="absolute inset-0 h-full w-full bg-black object-contain"
             controls
             muted
             loop
@@ -95,7 +95,7 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
                 sizes="120px"
                 className="object-cover"
               />
-              <span className="absolute inset-0 grid place-items-center bg-mist-100/35">
+              <span className="absolute inset-0 grid place-items-center bg-black/35">
                 <PlayIcon className="h-7 w-7 text-white drop-shadow" />
               </span>
             </button>

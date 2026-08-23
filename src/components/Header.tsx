@@ -24,7 +24,7 @@ import { generalWhatsappLink, site } from '@/lib/site';
  */
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 border-b border-ink-700 bg-white/90 backdrop-blur-lg">
+    <header className="sticky top-0 z-50 border-b border-ink-700 bg-ink-850/90 backdrop-blur-lg">
       <div className="mx-auto grid h-16 max-w-6xl grid-cols-3 items-center px-4 sm:h-[72px] sm:px-6">
         <div className="justify-self-start">
           <WhatsAppLink

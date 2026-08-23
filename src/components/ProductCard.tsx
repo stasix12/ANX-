@@ -33,7 +33,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
           className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
         />
         {product.badge ? (
-          <span className="absolute top-1.5 start-1.5 rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold text-white">
+          <span className="absolute top-1.5 start-1.5 rounded-full bg-brand-500 px-2 py-0.5 text-[10px] font-bold text-on-brand">
             {product.badge}
           </span>
         ) : null}
@@ -85,7 +85,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
                 onChange={() => setModel(option)}
                 data-order-href={orderLink(product.name, `מתאים ל${option}`)}
                 data-order-model={`מתאים ל${option}`}
-                className="h-3.5 w-3.5 shrink-0 appearance-none rounded-[3px] border border-ink-600 bg-white transition-colors duration-200 checked:border-brand-500 checked:bg-brand-500 checked:shadow-[inset_0_0_0_2px_white]"
+                className="h-3.5 w-3.5 shrink-0 appearance-none rounded-[3px] border border-ink-600 bg-ink-850 transition-colors duration-200 checked:border-brand-500 checked:bg-brand-500 checked:shadow-[inset_0_0_0_2px_var(--color-on-brand)]"
               />
               <span>מתאים ל{option}</span>
             </label>

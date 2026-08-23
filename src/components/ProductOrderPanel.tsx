@@ -35,7 +35,7 @@ export function ProductOrderPanel({ product }: { product: Product }) {
                 checked={model === option}
                 onChange={() => setModel(option)}
                 data-order-model={`מתאים ל${option}`}
-                className="h-4 w-4 shrink-0 appearance-none rounded-[3px] border border-ink-600 bg-white transition-colors duration-200 checked:border-brand-500 checked:bg-brand-500 checked:shadow-[inset_0_0_0_3px_white]"
+                className="h-4 w-4 shrink-0 appearance-none rounded-[3px] border border-ink-600 bg-ink-850 transition-colors duration-200 checked:border-brand-500 checked:bg-brand-500 checked:shadow-[inset_0_0_0_3px_var(--color-on-brand)]"
               />
               <span>מתאים ל{option}</span>
             </label>

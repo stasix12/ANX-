@@ -43,7 +43,7 @@ export function OrderBar() {
   return (
     <>
       {open ? (
-        <div className="fixed inset-0 z-60 flex items-end justify-center bg-mist-100/40 p-0 backdrop-blur-sm sm:items-center sm:p-6">
+        <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-6">
           <button
             type="button"
             aria-label="סגירת רשימת ההזמנה"
@@ -55,7 +55,7 @@ export function OrderBar() {
             role="dialog"
             aria-modal="true"
             aria-label="רשימת ההזמנה"
-            className="relative flex max-h-[80vh] w-full max-w-lg flex-col rounded-t-card border border-ink-700 bg-white shadow-2xl sm:rounded-card"
+            className="relative flex max-h-[80vh] w-full max-w-lg flex-col rounded-t-card border border-ink-700 bg-ink-850 shadow-2xl sm:rounded-card"
           >
             <div className="flex items-center justify-between border-b border-ink-700 px-5 py-4">
               <h2 className="text-lg font-extrabold">רשימת ההזמנה</h2>
@@ -154,7 +154,7 @@ export function OrderBar() {
         </div>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-ink-700 bg-white/95 backdrop-blur-lg">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-ink-700 bg-ink-850/95 backdrop-blur-lg">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
           <button
             type="button"

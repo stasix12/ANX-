@@ -15,16 +15,17 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = join(root, 'public');
 
-// White-and-sky-blue palette, matching the site's design tokens
-// (globals.css): pale panels, blue linework, dark-navy / slate text.
-const panel = '#ffffff';
-const wash = '#e9f0fa';
-const line = '#c9dcf1';
-const blue = '#0b57c7';
-const blueDeep = '#0341a0';
-const blueSoft = '#3d82d8';
-const ink = '#0a1c3d';
-const slate = '#5c789e';
+// Matches the site's design tokens (globals.css): dark panels, lime linework,
+// near-white text. A placeholder on the light palette these were drawn for
+// would sit on a dark page as a glaring white rectangle.
+const panel = '#141911';
+const wash = '#1b2116';
+const line = '#2a3322';
+const blue = '#b4d626';
+const blueDeep = '#d6ef52';
+const blueSoft = '#cdee3f';
+const ink = '#f2f7ea';
+const slate = '#8b9a7c';
 
 const escapeXml = (value) =>
   value.replace(
@@ -32,7 +33,7 @@ const escapeXml = (value) =>
     (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c],
   );
 
-/** Shared defs: white-to-pale-blue gradient, blueprint grid and a soft glow. */
+/** Shared defs: dark panel gradient, blueprint grid and a soft lime glow. */
 const defs = (w, h) => `
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -94,7 +95,7 @@ function heroPlaceholder() {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="מכונת ניקוי מקצועית — מציין מיקום">
 ${defs(w, h)}
   <g transform="translate(700 230)">
-    <!-- body: a pale panel with blue linework, like a technical schematic -->
+    <!-- body: a dark panel with lime linework, like a technical schematic -->
     <rect x="0" y="120" width="420" height="420" rx="38" fill="${panel}" stroke="${blue}" stroke-width="6"/>
     <rect x="42" y="176" width="336" height="150" rx="18" fill="${wash}" stroke="${line}" stroke-width="3"/>
     <rect x="70" y="206" width="180" height="16" rx="8" fill="${blue}"/>

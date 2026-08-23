@@ -15,7 +15,7 @@ const points = [
 
 export function TrustStrip() {
   return (
-    <div className="border-y border-ink-700 bg-white/70">
+    <div className="border-y border-ink-700 bg-ink-850/70">
       <ul className="mx-auto grid max-w-6xl grid-cols-2 gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-4 sm:px-6">
         {points.map(({ Icon, label }) => (
           <li key={label} className="flex items-center gap-2 text-[11px] font-semibold text-mist-300 sm:text-xs">

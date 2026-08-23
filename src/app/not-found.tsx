@@ -14,7 +14,7 @@ export default function NotFound() {
       <div className="mt-9 flex flex-col gap-3 sm:flex-row">
         <Link
           href="/#products"
-          className="inline-flex items-center justify-center rounded-full bg-brand-500 px-7 py-3.5 font-bold text-white transition-colors duration-200 hover:bg-brand-400"
+          className="inline-flex items-center justify-center rounded-full bg-brand-500 px-7 py-3.5 font-bold text-on-brand transition-colors duration-200 hover:bg-brand-400"
         >
           לצפייה במוצרים
         </Link>

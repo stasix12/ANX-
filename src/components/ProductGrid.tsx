@@ -38,7 +38,7 @@ export function ProductGrid({ products }: { products: Product[] }) {
               onClick={() => setActive(filter.id)}
               className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold transition-colors duration-200 sm:px-5 sm:py-2.5 ${
                 selected
-                  ? 'border-brand-500 bg-brand-500 text-white'
+                  ? 'border-brand-500 bg-brand-500 text-on-brand'
                   : 'border-ink-700 text-mist-300 hover:border-brand-500/60 hover:text-mist-100'
               }`}
             >

@@ -117,7 +117,7 @@ export default async function ProductPage({ params }: PageProps) {
                 מתאים ל-Sabrina
               </span>
               {product.badge ? (
-                <span className="rounded-full bg-brand-500 px-3 py-1.5 text-xs font-bold text-white">
+                <span className="rounded-full bg-brand-500 px-3 py-1.5 text-xs font-bold text-on-brand">
                   {product.badge}
                 </span>
               ) : null}

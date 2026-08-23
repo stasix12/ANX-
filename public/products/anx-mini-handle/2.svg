@@ -2,34 +2,34 @@
 
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#e9f0fa"/>
+      <stop offset="0%" stop-color="#141911"/>
+      <stop offset="100%" stop-color="#1b2116"/>
     </linearGradient>
     <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
-      <path d="M48 0H0V48" fill="none" stroke="#c9dcf1" stroke-width="1"/>
+      <path d="M48 0H0V48" fill="none" stroke="#2a3322" stroke-width="1"/>
     </pattern>
     <radialGradient id="glow" cx="50%" cy="42%" r="55%">
-      <stop offset="0%" stop-color="#0b57c7" stop-opacity="0.16"/>
-      <stop offset="100%" stop-color="#0b57c7" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#b4d626" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#b4d626" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="1000" height="1333" fill="url(#bg)"/>
   <rect width="1000" height="1333" fill="url(#grid)"/>
   <rect width="1000" height="1333" fill="url(#glow)"/>
 
-  <path d="M56 128V56h72" fill="none" stroke="#0b57c7" stroke-width="4" stroke-linecap="square"/>
-  <path d="M872 56h72v72" fill="none" stroke="#0b57c7" stroke-width="4" stroke-linecap="square"/>
-  <path d="M944 1205v72h-72" fill="none" stroke="#0b57c7" stroke-width="4" stroke-linecap="square"/>
-  <path d="M128 1277H56v-72" fill="none" stroke="#0b57c7" stroke-width="4" stroke-linecap="square"/>
-  <circle cx="500" cy="596.5" r="150" fill="none" stroke="#c9dcf1" stroke-width="2"/>
-  <circle cx="500" cy="596.5" r="118" fill="#e9f0fa" stroke="#0b57c7" stroke-width="3"/>
+  <path d="M56 128V56h72" fill="none" stroke="#b4d626" stroke-width="4" stroke-linecap="square"/>
+  <path d="M872 56h72v72" fill="none" stroke="#b4d626" stroke-width="4" stroke-linecap="square"/>
+  <path d="M944 1205v72h-72" fill="none" stroke="#b4d626" stroke-width="4" stroke-linecap="square"/>
+  <path d="M128 1277H56v-72" fill="none" stroke="#b4d626" stroke-width="4" stroke-linecap="square"/>
+  <circle cx="500" cy="596.5" r="150" fill="none" stroke="#2a3322" stroke-width="2"/>
+  <circle cx="500" cy="596.5" r="118" fill="#1b2116" stroke="#b4d626" stroke-width="3"/>
   <text x="500" y="596.5" text-anchor="middle" dominant-baseline="central"
-        font-family="Heebo, Arial, sans-serif" font-size="140" font-weight="700" fill="#0341a0">2</text>
+        font-family="Heebo, Arial, sans-serif" font-size="140" font-weight="700" fill="#d6ef52">2</text>
   <text x="500" y="806.5" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="46" font-weight="700" fill="#0a1c3d">ידית שאיבה MINI</text>
+        font-family="Heebo, Arial, sans-serif" font-size="46" font-weight="700" fill="#f2f7ea">ידית שאיבה MINI</text>
   <text x="500" y="872.5" text-anchor="middle" direction="rtl"
-        font-family="Heebo, Arial, sans-serif" font-size="30" fill="#5c789e">תמונה 2 מתוך 3 · מציין מיקום</text>
-  <rect x="310" y="936.5" width="380" height="62" rx="31" fill="none" stroke="#c9dcf1" stroke-width="2"/>
+        font-family="Heebo, Arial, sans-serif" font-size="30" fill="#8b9a7c">תמונה 2 מתוך 3 · מציין מיקום</text>
+  <rect x="310" y="936.5" width="380" height="62" rx="31" fill="none" stroke="#2a3322" stroke-width="2"/>
   <text x="500" y="967.5" text-anchor="middle" dominant-baseline="central"
-        font-family="Heebo, Arial, sans-serif" font-size="26" letter-spacing="4" fill="#0341a0">ANX3D</text>
+        font-family="Heebo, Arial, sans-serif" font-size="26" letter-spacing="4" fill="#d6ef52">ANX3D</text>
 </svg>

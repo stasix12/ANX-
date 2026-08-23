@@ -37,7 +37,7 @@ export function WhatsAppFallback({
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-70 flex items-end justify-center bg-mist-100/50 p-0 backdrop-blur-sm sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-70 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-6">
       <button
         type="button"
         aria-label="סגירה"
@@ -49,7 +49,7 @@ export function WhatsAppFallback({
         role="dialog"
         aria-modal="true"
         aria-label="שליחת ההזמנה בוואטסאפ"
-        className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card border border-ink-700 bg-white shadow-2xl sm:rounded-card"
+        className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card border border-ink-700 bg-ink-850 shadow-2xl sm:rounded-card"
       >
         <div className="flex items-start justify-between gap-3 border-b border-ink-700 px-5 py-4">
           <div>
@@ -135,7 +135,7 @@ function Step({
   return (
     <div className="mt-4 first:mt-0">
       <div className="flex items-center gap-2">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-extrabold text-white">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-extrabold text-on-brand">
           {number}
         </span>
         <h3 className="text-sm font-bold">{title}</h3>

@@ -170,7 +170,12 @@ export const products: Product[] = [
       { label: 'צבעי הידית', value: 'ירוק ג׳ונגל · שחור' },
       { label: 'ייצור', value: 'הדפסת תלת־מימד, מיוצר בישראל' },
     ],
-    images: [asset('/products/anx-anaconda-set/1.webp')],
+    images: [
+      asset('/products/anx-anaconda-set/1.webp'),
+      asset('/products/anx-anaconda-set/2.webp'),
+      asset('/products/anx-anaconda-set/3.webp'),
+      asset('/products/anx-anaconda-set/4.webp'),
+    ],
   },
   {
     slug: 'anx-pro-handle',

@@ -31,7 +31,11 @@ GALLERIES = {
         'anaconda-black-1.jpg', 'anaconda-black-2.jpg',
         'anaconda-black-3.jpg', 'anaconda-black-4.jpg',
     ],
-    'anx-anaconda-set': ['anaconda-set-1.jpg'],
+    # What you get, then it working, then the swivel, then the branded cuff.
+    'anx-anaconda-set': [
+        'anaconda-set-1.jpg', 'anaconda-set-2.jpg',
+        'anaconda-set-3.jpg', 'anaconda-set-4.jpg',
+    ],
 }
 
 

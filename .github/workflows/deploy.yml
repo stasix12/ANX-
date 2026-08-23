@@ -34,12 +34,12 @@ jobs:
           node-version: 22
           cache: npm
 
-      # enablement: true switches Pages on the first time this runs, so the
-      # site does not need turning on by hand in the repository settings.
+      # One-time setup, done by a repository admin rather than here: Settings →
+      # Pages → Source: "GitHub Actions". Creating the Pages site through the
+      # API is not something the workflow token is allowed to do, so asking it
+      # to (configure-pages' `enablement` input) only fails the run.
       - id: pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - run: npm ci
 

@@ -116,3 +116,23 @@ export function PlayIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * The flag of Israel, 11:8 as the standard has it.
+ *
+ * Not part of the icon set above: those are single-colour line drawings that
+ * take their colour from the text around them, and a flag has to keep its own.
+ */
+export function IsraelFlagIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 44 32" aria-hidden focusable={false} {...props}>
+      <rect width="44" height="32" fill="#fff" />
+      <rect y="4.5" width="44" height="3.5" fill="#0038B8" />
+      <rect y="24" width="44" height="3.5" fill="#0038B8" />
+      <g fill="none" stroke="#0038B8" strokeWidth="1.6" strokeLinejoin="round">
+        <path d="M22 9.5 27.63 19.25H16.37Z" />
+        <path d="M22 22.5 27.63 12.75H16.37Z" />
+      </g>
+    </svg>
+  );
+}

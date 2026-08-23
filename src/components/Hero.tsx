@@ -1,3 +1,4 @@
+import { IsraelFlagIcon } from '@/components/icons';
 import { asset } from '@/lib/site';
 
 /**
@@ -15,12 +16,23 @@ export function Hero() {
     <section className="border-b border-ink-700">
       <div className="mx-auto grid max-w-6xl items-center gap-7 px-4 py-8 sm:px-6 sm:py-10 lg:grid-cols-2 lg:gap-10">
         <div className="text-center lg:text-start">
-          <h1 className="text-2xl font-extrabold tracking-tight text-balance-he sm:text-4xl">
-            ציוד שאיבה למכונות Sabrina — מיוצר בישראל
+          {/*
+            The flag keeps its own colours, so it sits on a white chip with a
+            hairline rather than directly on the page — on a pale aqua ground
+            its white field would otherwise bleed into the background and leave
+            two blue stripes floating.
+          */}
+          <p className="inline-flex items-center gap-2 rounded-full border border-ink-700 bg-ink-850 py-1.5 pe-3 ps-1.5 text-xs font-bold shadow-sm sm:text-sm">
+            <IsraelFlagIcon className="h-4 w-[22px] shrink-0 rounded-[2px] ring-1 ring-ink-700 sm:h-[18px] sm:w-6" />
+            <span>מיוצר בישראל · ייצור מקומי</span>
+          </p>
+
+          <h1 className="mt-3 text-2xl font-extrabold tracking-tight text-balance-he sm:text-4xl">
+            ציוד שאיבה למכונות Sabrina
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-mist-300 sm:text-base lg:mx-0 lg:max-w-lg">
-            ידיות, צינורות ומתאמים מודפסים בתלת־מימד. ישירות מהיצרן, בלי מתווכים,
-            והזמנה בוואטסאפ.
+            ידיות, צינורות ומתאמים שמודפסים בתלת־מימד כאן בארץ. ישירות מהיצרן,
+            בלי מתווכים, והזמנה בוואטסאפ.
           </p>
 
           <a

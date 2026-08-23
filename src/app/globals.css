@@ -1,26 +1,39 @@
 @import 'tailwindcss';
 
 /*
- * ANX3D design tokens — sampled from the brand logo: a white plate, royal
- * blue lettering (#0341a0) and a deep navy field (#02276a).
+ * ANX3D design tokens — aqua on white.
+ *
+ * Picked over royal blue, mint and a deep steel navy by building the site in
+ * each and comparing. Two things decided it:
+ *
+ *   - Every order button is WhatsApp green and every product photographed so
+ *     far is jungle green. A green site palette put a third green next to
+ *     those and the buttons stopped reading as the thing to press; a cyan that
+ *     is nowhere near either keeps them separate.
+ *   - Of the palettes that stay clear of green, aqua is the one that says
+ *     water and hygiene rather than machine shop.
+ *
+ * mist-500 and brand-500 are darker than the scale they were drawn from: the
+ * fine print and the white-on-filled-pill both sat under WCAG AA otherwise —
+ * the fine print had been failing in every palette, this one included.
  */
 @theme {
-  --color-ink-950: #f5f8fd;
-  --color-ink-900: #e9f0fa;
+  --color-ink-950: #f2fafb;
+  --color-ink-900: #e2f5f7;
   --color-ink-850: #ffffff;
-  --color-ink-800: #dde8f6;
-  --color-ink-700: #c9dcf1;
-  --color-ink-600: #9dbfe2;
+  --color-ink-800: #d2eef1;
+  --color-ink-700: #b4e2e8;
+  --color-ink-600: #7ec9d4;
 
-  --color-brand-300: #7fb0ef;
-  --color-brand-400: #3d82d8;
-  --color-brand-500: #0b57c7;
-  --color-brand-600: #0341a0;
-  --color-brand-700: #022a72;
+  --color-brand-300: #4dc3d5;
+  --color-brand-400: #12a3ba;
+  --color-brand-500: #097789;
+  --color-brand-600: #076675;
+  --color-brand-700: #044652;
 
-  --color-mist-100: #0a1c3d;
-  --color-mist-300: #34507c;
-  --color-mist-500: #6b84a9;
+  --color-mist-100: #052c34;
+  --color-mist-300: #2a5b66;
+  --color-mist-500: #5b7a82;
 
   --font-sans: var(--font-heebo), 'Segoe UI', system-ui, -apple-system, sans-serif;
 

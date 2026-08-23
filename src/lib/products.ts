@@ -91,6 +91,42 @@ const gallery = (slug: string): string[] => [
 ];
 
 export const products: Product[] = [
+  /*
+   * The only entry so far with real photographs and a real price. Everything
+   * below it is still placeholder copy against numbered SVGs.
+   *
+   * Its specs are deliberately short: they list what the photographs actually
+   * show and what the shop confirmed. Nothing here is a guess.
+   */
+  {
+    slug: 'anx-anaconda',
+    name: 'ANX ANACONDA',
+    tagline: 'ידית שאיבה מודפסת בתלת־מימד, בירוק ג׳ונגל — עם אטם קצף היקפי והדק לשליטה מלאה.',
+    description:
+      'ANX ANACONDA היא ידית השאיבה שלנו לניקוי ספות וריפודים. הגוף מודפס בתלת־מימד ומיוצר בישראל, עם אטם קצף היקפי סביב פתח השאיבה שנצמד לבד ושומר על ואקום מלא לאורך המשיכה. ההדק מאפשר לשלוט בהתזה תוך כדי עבודה בלי להוריד את היד מהידית, והחיבור המהיר בבסיס מתחבר ומתנתק בלי כלים. הצבע — ירוק ג׳ונגל — נבחר גם כדי שהידית תהיה קלה לאיתור באתר עבודה עמוס.',
+    category: 'handles',
+    price: 850,
+    compatibility: ['Sabrina — ידית שאיבה לניקוי ספות וריפודים'],
+    variants: [{ id: 'color', label: 'צבע', options: ['ירוק ג׳ונגל'] }],
+    highlights: [
+      'אטם קצף היקפי סביב פתח השאיבה',
+      'הדק לשליטה בהתזה תוך כדי עבודה',
+      'חיבור מהיר — מתחבר ומתנתק בלי כלים',
+      'גוף מודפס בתלת־מימד, מיוצר בישראל',
+    ],
+    specs: [
+      { label: 'צבע', value: 'ירוק ג׳ונגל' },
+      { label: 'ייצור', value: 'הדפסת תלת־מימד, מיוצר בישראל' },
+      { label: 'אטימה', value: 'אטם קצף היקפי' },
+      { label: 'שליטה', value: 'הדק התזה מובנה' },
+    ],
+    images: [
+      asset('/products/anx-anaconda/1.webp'),
+      asset('/products/anx-anaconda/2.webp'),
+      asset('/products/anx-anaconda/3.webp'),
+      asset('/products/anx-anaconda/4.webp'),
+    ],
+  },
   {
     slug: 'anx-pro-handle',
     name: 'ידית שאיבה ANX PRO',

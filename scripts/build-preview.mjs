@@ -66,6 +66,7 @@ const outDir = join(root, 'out');
 
 /** Order matters: it mirrors the order products render in the grid. */
 const productOrder = [
+  ['anx-anaconda', 'handles'],
   ['anx-pro-handle', 'handles'],
   ['anx-mini-handle', 'handles'],
   ['anx-crystal-handle', 'handles'],
@@ -670,7 +671,12 @@ async function main() {
     })
     .join('\n');
 
-  const file = `<title>חנות ANX3D</title>
+  // The charset has to be declared here. Opened as a standalone file there is
+  // no server sending a Content-Type, and a browser left to guess renders the
+  // whole Hebrew site as mojibake. It only looked right in the shared preview
+  // because a framed page inherits its parent's encoding.
+  const file = `<meta charset="utf-8">
+<title>חנות ANX3D</title>
 <style>
 ${css}
 /* The artifact host owns <html>/<body>, so paint the ground explicitly.

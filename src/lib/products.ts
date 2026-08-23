@@ -143,6 +143,35 @@ export const products: Product[] = [
       poster: '/video/anaconda-demo-poster.jpg',
     },
   },
+  /*
+   * Filed under handles rather than hoses so it sits beside the ANACONDA in
+   * the grid and stays beside it when the category filter is used — the set is
+   * that handle plus what it needs to run.
+   */
+  {
+    slug: 'anx-anaconda-set',
+    name: 'סט ANACONDA מלא',
+    tagline: 'ידית ANACONDA, צינור הזרקה בתוך צינור שאיבה ומחבר 360° — הכל בערכה אחת.',
+    description:
+      'הסט המלא של ANACONDA: ידית השאיבה, צינור הזרקה שעובר בתוך צינור השאיבה, ומחבר מסתובב 360° בין הידית לצינור. צינור אחד במקום שניים מקבילים — פחות סיבוכים מתחת לרגליים ופחות מה לגרור בין חדר לחדר. המחבר המסתובב מאפשר לסובב את הידית לכל כיוון בלי שהצינור יתפתל או ימשוך את היד אחורה, וזה מה שמרגישים אחרי שעה של עבודה רצופה.',
+    category: 'handles',
+    price: 1600,
+    badge: 'סט מלא',
+    compatibility: ['Sabrina — סט שאיבה והזרקה לניקוי ספות וריפודים'],
+    variants: [{ id: 'color', label: 'צבע הידית', options: ['ירוק ג׳ונגל', 'שחור'] }],
+    highlights: [
+      'ידית ANACONDA כלולה בסט',
+      'צינור הזרקה עובר בתוך צינור השאיבה',
+      'מחבר מסתובב 360° לתנועה חופשית של הידית',
+      'חיבור מהיר — מתחבר ומתנתק בלי כלים',
+    ],
+    specs: [
+      { label: 'כולל', value: 'ידית · צינור שאיבה עם צינור הזרקה פנימי · מחבר 360°' },
+      { label: 'צבעי הידית', value: 'ירוק ג׳ונגל · שחור' },
+      { label: 'ייצור', value: 'הדפסת תלת־מימד, מיוצר בישראל' },
+    ],
+    images: [asset('/products/anx-anaconda-set/1.webp')],
+  },
   {
     slug: 'anx-pro-handle',
     name: 'ידית שאיבה ANX PRO',

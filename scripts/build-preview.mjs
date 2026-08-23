@@ -67,6 +67,7 @@ const outDir = join(root, 'out');
 /** Order matters: it mirrors the order products render in the grid. */
 const productOrder = [
   ['anx-anaconda', 'handles'],
+  ['anx-anaconda-set', 'handles'],
   ['anx-pro-handle', 'handles'],
   ['anx-mini-handle', 'handles'],
   ['anx-crystal-handle', 'handles'],

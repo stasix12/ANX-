@@ -18,17 +18,21 @@ import cv2
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCE = os.path.join(ROOT, 'photos', 'source')
-DEST = os.path.join(ROOT, 'public', 'products', 'anx-anaconda')
+PRODUCTS = os.path.join(ROOT, 'public', 'products')
 
 LONGEST_SIDE = 1600
 
-# Gallery order: the jungle-green handle first, then the same handle in black.
-# The first entry is also what the catalogue card shows.
-ORDER = [
-    'anaconda-4.jpg', 'anaconda-1.jpg', 'anaconda-2.jpg', 'anaconda-3.jpg',
-    'anaconda-black-1.jpg', 'anaconda-black-2.jpg',
-    'anaconda-black-3.jpg', 'anaconda-black-4.jpg',
-]
+# Per product slug, the gallery in order. The first entry of each is also what
+# its catalogue card shows.
+GALLERIES = {
+    # The jungle-green handle first, then the same handle in black.
+    'anx-anaconda': [
+        'anaconda-4.jpg', 'anaconda-1.jpg', 'anaconda-2.jpg', 'anaconda-3.jpg',
+        'anaconda-black-1.jpg', 'anaconda-black-2.jpg',
+        'anaconda-black-3.jpg', 'anaconda-black-4.jpg',
+    ],
+    'anx-anaconda-set': ['anaconda-set-1.jpg'],
+}
 
 
 def web_size(img):
@@ -42,18 +46,22 @@ def web_size(img):
 
 
 def main():
-    os.makedirs(DEST, exist_ok=True)
+    for slug, gallery in GALLERIES.items():
+        dest = os.path.join(PRODUCTS, slug)
+        os.makedirs(dest, exist_ok=True)
 
-    for index, filename in enumerate(ORDER, 1):
-        img = cv2.imread(os.path.join(SOURCE, filename))
-        if img is None:
-            raise SystemExit(f'missing source photo: {filename}')
+        for index, filename in enumerate(gallery, 1):
+            # OpenCV applies the EXIF orientation on read, which these need:
+            # they are portrait frames the phone stored landscape.
+            img = cv2.imread(os.path.join(SOURCE, filename))
+            if img is None:
+                raise SystemExit(f'missing source photo: {filename}')
 
-        out = web_size(img)
-        target = os.path.join(DEST, f'{index}.webp')
-        cv2.imwrite(target, out, [cv2.IMWRITE_WEBP_QUALITY, 88])
-        print(f'{os.path.relpath(target, ROOT)}  {out.shape[1]}x{out.shape[0]}  '
-              f'{os.path.getsize(target) // 1024} KB')
+            out = web_size(img)
+            target = os.path.join(dest, f'{index}.webp')
+            cv2.imwrite(target, out, [cv2.IMWRITE_WEBP_QUALITY, 88])
+            print(f'{os.path.relpath(target, ROOT)}  {out.shape[1]}x{out.shape[0]}  '
+                  f'{os.path.getsize(target) // 1024} KB')
 
 
 if __name__ == '__main__':

@@ -10,6 +10,12 @@ interface SectionProps {
    */
   titleAs?: 'h1' | 'h2';
   description?: string;
+  /**
+   * Keeps the heading and description in the document for search engines and
+   * screen readers while hiding them visually — for when something above the
+   * section already carries the message, so repeating it on screen is noise.
+   */
+  headerHidden?: boolean;
   children: ReactNode;
   className?: string;
 }
@@ -21,6 +27,7 @@ export function Section({
   title,
   titleAs: Heading = 'h2',
   description,
+  headerHidden = false,
   children,
   className = '',
 }: SectionProps) {
@@ -33,7 +40,7 @@ export function Section({
       className={`scroll-mt-24 pt-8 pb-16 sm:pt-10 sm:pb-20 lg:pt-12 lg:pb-24 ${className}`}
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <header className="max-w-2xl">
+        <header className={headerHidden ? 'sr-only' : 'max-w-2xl'}>
           {eyebrow ? (
             <p className="text-xs font-semibold tracking-[0.18em] text-brand-700 uppercase">
               {eyebrow}
@@ -50,7 +57,7 @@ export function Section({
           ) : null}
         </header>
 
-        <div className="mt-10 sm:mt-12">{children}</div>
+        <div className={headerHidden ? '' : 'mt-10 sm:mt-12'}>{children}</div>
       </div>
     </section>
   );

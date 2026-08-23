@@ -1,3 +1,4 @@
+import { DemoVideo } from '@/components/DemoVideo';
 import { ProductGrid } from '@/components/ProductGrid';
 import { Section } from '@/components/Section';
 import { products } from '@/lib/products';
@@ -16,15 +17,20 @@ const businessJsonLd = {
 export default function HomePage() {
   return (
     <>
+      <DemoVideo />
+
       {/*
-        The catalog is the whole page, so its heading is the page's h1 rather
-        than a section h2 — nothing above it holds that role any more.
+        The banner above replaces the heading block on screen, but the h1 and
+        the description stay in the document — they are the page's only
+        descriptive copy, and dropping them outright would leave it with no
+        heading at all for search engines and screen readers.
       */}
       <Section
         id="products"
         titleAs="h1"
         title="המוצרים שלנו"
         description="ידיות שאיבה, צינורות ומתאמים למכונות Sabrina. משלוחים לכל הארץ, הזמנות בוואטסאפ."
+        headerHidden
       >
         <ProductGrid products={products} />
       </Section>

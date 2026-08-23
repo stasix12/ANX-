@@ -50,16 +50,18 @@ const mimeByExtension = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
 };
 
 /**
- * Every local image the pages reference — the numbered placeholders and the
- * brand logo. Anything left as a bare /path here would simply fail to load
- * once the page is opened as a standalone file.
+ * Every local asset the pages reference — the numbered placeholders, the brand
+ * logo, and the demo video with its poster. Anything left as a bare /path here
+ * would simply fail to load once the page is opened as a standalone file.
  */
-async function buildImageMap(html) {
+async function buildAssetMap(html) {
   const map = new Map();
-  const pattern = /\/(?:products|hero|brand)\/[^"']+?\.(?:svg|png|jpe?g|webp)/g;
+  const pattern = /\/(?:products|hero|brand|video)\/[^"']+?\.(?:svg|png|jpe?g|webp|mp4|webm)/g;
 
   for (const path of new Set(html.match(pattern) ?? [])) {
     const extension = path.slice(path.lastIndexOf('.')).toLowerCase();
@@ -234,12 +236,12 @@ async function main() {
     combined += body;
   }
 
-  const images = await buildImageMap(combined);
+  const assets = await buildAssetMap(combined);
 
   const markup = sections
     .map(([route, body]) => {
       let html = body;
-      for (const [path, uri] of images) html = html.replaceAll(`"${path}"`, `"${uri}"`);
+      for (const [path, uri] of assets) html = html.replaceAll(`"${path}"`, `"${uri}"`);
       return `<div data-route="${route}"${route === '/' ? '' : ' hidden'}>${html}</div>`;
     })
     .join('\n');

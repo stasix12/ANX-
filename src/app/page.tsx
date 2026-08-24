@@ -1,3 +1,4 @@
+import { CoursePromo } from '@/components/CoursePromo';
 import { Faq, faqItems } from '@/components/Faq';
 import { Hero } from '@/components/Hero';
 import { ProductGrid } from '@/components/ProductGrid';
@@ -29,6 +30,7 @@ const faqJsonLd = {
 
 export default async function HomePage() {
   const products = await fetchPublishedProducts();
+  const course = products.find((p) => p.category === 'courses');
 
   return (
     <>
@@ -50,6 +52,8 @@ export default async function HomePage() {
       >
         <ProductGrid initialProducts={products} />
       </Section>
+
+      {course ? <CoursePromo course={course} /> : null}
 
       <Faq />
 

@@ -7,6 +7,8 @@ export interface OrderLine {
   model: string;
   quantity: number;
   price?: number;
+  /** The product's first gallery photo, shown as a thumbnail in the order list. */
+  image?: string;
 }
 
 /** Minimum quantity that counts as a bulk order and unlocks a price conversation. */
@@ -72,4 +74,5 @@ export const singleLine = (product: Product, model: string, quantity = 1): Order
   model,
   quantity,
   price: product.price,
+  image: product.images[0],
 });

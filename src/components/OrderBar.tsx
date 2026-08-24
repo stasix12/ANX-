@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useOrderList } from '@/components/OrderListProvider';
 import { CloseIcon, WhatsAppIcon } from '@/components/icons';
@@ -74,6 +75,20 @@ export function OrderBar() {
                 const value = lineTotal(line);
                 return (
                   <li key={`${line.slug}-${line.model}`} className="flex items-start gap-3 py-4">
+                    {/* Older lines saved before this shipped have no image — the
+                        tile still holds its place so nothing shifts sideways. */}
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-ink-700 bg-ink-850">
+                      {line.image ? (
+                        <Image
+                          src={line.image}
+                          alt=""
+                          width={56}
+                          height={56}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                    </div>
+
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold">{line.name}</p>
                       <p className="mt-0.5 text-xs text-mist-500">{line.model}</p>

@@ -608,6 +608,9 @@ const routerScript = (fontClass) => `
         ? shekels(l.price * l.quantity)
         : '<span class="text-xs font-semibold text-mist-500">לתמחור בוואטסאפ</span>';
       return '<li class="flex items-start gap-3 py-4">' +
+        '<div class="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-ink-700 bg-ink-850">' +
+          (l.image ? '<img class="h-full w-full object-cover" alt="" />' : '') +
+        '</div>' +
         '<div class="min-w-0 flex-1"><p class="text-sm font-bold"></p><p class="mt-0.5 text-xs text-mist-500"></p>' +
         '<p class="mt-1 text-sm font-extrabold">' + value + '</p></div>' +
         '<div class="flex shrink-0 items-center gap-1">' +
@@ -618,10 +621,14 @@ const routerScript = (fontClass) => `
         '</div></li>';
     }).join('');
 
-    // Names go in as text, never as markup, so a product name can never inject HTML.
+    // Names and the image src go in through the DOM API, never through the
+    // innerHTML string above, so a product name can never inject markup and the
+    // already-inlined data: URI is set directly rather than re-parsed as HTML.
     sheetList.querySelectorAll('li').forEach(function (li, i) {
       li.querySelectorAll('p')[0].textContent = order[i].name;
       li.querySelectorAll('p')[1].textContent = order[i].model;
+      var img = li.querySelector('img');
+      if (img) img.src = order[i].image;
     });
   }
 
@@ -699,7 +706,17 @@ async function main() {
   const markup = sections
     .map(([route, body]) => {
       let html = body;
-      for (const [path, uri] of assets) html = html.replaceAll(`"${path}"`, `"${uri}"`);
+      for (const [path, uri] of assets) {
+        html = html.replaceAll(`"${path}"`, `"${uri}"`);
+        /*
+         * An asset path can also turn up inside a JSON blob sitting in an HTML
+         * attribute (data-order-line carries a product photo this way), where
+         * React has HTML-entity-escaped the quotes around it rather than left
+         * them literal. That form needs its own pass, or the order list ends
+         * up trying to load a bare /products/... path with no server behind it.
+         */
+        html = html.replaceAll(`&quot;${path}&quot;`, `&quot;${uri}&quot;`);
+      }
       return `<div data-route="${route}"${route === '/' ? '' : ' hidden'}>${html}</div>`;
     })
     .join('\n');

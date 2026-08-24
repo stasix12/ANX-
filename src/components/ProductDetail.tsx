@@ -83,10 +83,12 @@ export function ProductDetail({
           </h1>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1.5 text-xs font-semibold text-brand-700">
-              <CheckIcon className="h-3.5 w-3.5" />
-              מתאים ל-Sabrina
-            </span>
+            {product.category === 'courses' ? null : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-500/35 bg-brand-500/10 px-3 py-1.5 text-xs font-semibold text-brand-700">
+                <CheckIcon className="h-3.5 w-3.5" />
+                מתאים ל-Sabrina
+              </span>
+            )}
             {product.badge ? (
               <span className="rounded-full bg-brand-500 px-3 py-1.5 text-xs font-bold text-on-brand">
                 {product.badge}
@@ -135,69 +137,77 @@ export function ProductDetail({
       </div>
 
       <div className="mt-14 grid gap-6 lg:grid-cols-2 lg:gap-8">
-        <section aria-labelledby="compatibility-title" className="rounded-card border border-ink-700 surface p-6 sm:p-7">
-          <h2 id="compatibility-title" className="flex items-center gap-2.5 text-xl font-bold">
-            <MachineIcon className="h-6 w-6 text-brand-600" />
-            התאמה למכונות
-          </h2>
-          <ul className="mt-5 space-y-3">
-            {product.compatibility.map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-sm text-mist-300">
-                <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {product.compatibility.length > 0 ? (
+          <section aria-labelledby="compatibility-title" className="rounded-card border border-ink-700 surface p-6 sm:p-7">
+            <h2 id="compatibility-title" className="flex items-center gap-2.5 text-xl font-bold">
+              <MachineIcon className="h-6 w-6 text-brand-600" />
+              התאמה למכונות
+            </h2>
+            <ul className="mt-5 space-y-3">
+              {product.compatibility.map((item) => (
+                <li key={item} className="flex items-start gap-2.5 text-sm text-mist-300">
+                  <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
-        <section aria-labelledby="variants-title" className="rounded-card border border-ink-700 surface p-6 sm:p-7">
-          <h2 id="variants-title" className="text-xl font-bold">
-            אפשרויות בחירה
-          </h2>
-          <p className="mt-2 text-sm text-mist-500">בוחרים את הווריאציה איתנו בצ׳אט הוואטסאפ בעת ההזמנה.</p>
-          <div className="mt-5 space-y-5">
-            {product.variants.map((group) => (
-              <div key={group.id}>
-                <h3 className="text-sm font-bold text-mist-100">{group.label}</h3>
-                <ul className="mt-2.5 flex flex-wrap gap-2">
-                  {group.options.map((option) => (
-                    <li key={option} className="rounded-full border border-ink-600 px-4 py-2 text-sm text-mist-300">
-                      {option}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </section>
+        {product.variants.length > 0 ? (
+          <section aria-labelledby="variants-title" className="rounded-card border border-ink-700 surface p-6 sm:p-7">
+            <h2 id="variants-title" className="text-xl font-bold">
+              אפשרויות בחירה
+            </h2>
+            <p className="mt-2 text-sm text-mist-500">בוחרים את הווריאציה איתנו בצ׳אט הוואטסאפ בעת ההזמנה.</p>
+            <div className="mt-5 space-y-5">
+              {product.variants.map((group) => (
+                <div key={group.id}>
+                  <h3 className="text-sm font-bold text-mist-100">{group.label}</h3>
+                  <ul className="mt-2.5 flex flex-wrap gap-2">
+                    {group.options.map((option) => (
+                      <li key={option} className="rounded-full border border-ink-600 px-4 py-2 text-sm text-mist-300">
+                        {option}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
-        <section aria-labelledby="highlights-title" className="rounded-card border border-ink-700 surface p-6 sm:p-7">
-          <h2 id="highlights-title" className="text-xl font-bold">
-            יתרונות
-          </h2>
-          <ul className="mt-5 space-y-3">
-            {product.highlights.map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-sm text-mist-300">
-                <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {product.highlights.length > 0 ? (
+          <section aria-labelledby="highlights-title" className="rounded-card border border-ink-700 surface p-6 sm:p-7">
+            <h2 id="highlights-title" className="text-xl font-bold">
+              יתרונות
+            </h2>
+            <ul className="mt-5 space-y-3">
+              {product.highlights.map((item) => (
+                <li key={item} className="flex items-start gap-2.5 text-sm text-mist-300">
+                  <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
-        <section aria-labelledby="specs-title" className="rounded-card border border-ink-700 surface p-6 sm:p-7">
-          <h2 id="specs-title" className="text-xl font-bold">
-            מפרט טכני
-          </h2>
-          <dl className="mt-5 divide-y divide-ink-700">
-            {product.specs.map((spec) => (
-              <div key={spec.label} className="flex items-center justify-between gap-4 py-3">
-                <dt className="text-sm text-mist-500">{spec.label}</dt>
-                <dd className="text-sm font-semibold text-mist-100">{spec.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
+        {product.specs.length > 0 ? (
+          <section aria-labelledby="specs-title" className="rounded-card border border-ink-700 surface p-6 sm:p-7">
+            <h2 id="specs-title" className="text-xl font-bold">
+              מפרט טכני
+            </h2>
+            <dl className="mt-5 divide-y divide-ink-700">
+              {product.specs.map((spec) => (
+                <div key={spec.label} className="flex items-center justify-between gap-4 py-3">
+                  <dt className="text-sm text-mist-500">{spec.label}</dt>
+                  <dd className="text-sm font-semibold text-mist-100">{spec.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ) : null}
       </div>
 
       <div className="mt-12 rounded-card border border-brand-500/30 surface p-7 text-center sm:p-10">

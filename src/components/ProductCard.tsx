@@ -9,6 +9,8 @@ import { formatPrice, sabrinaModels, type Product } from '@/lib/products';
 import { orderLink } from '@/lib/site';
 
 export function ProductCard({ product, priority = false }: { product: Product; priority?: boolean }) {
+  // A course isn't ordered against a Sabrina model, so it skips the fit picker entirely.
+  const isCourse = product.category === 'courses';
   const models = product.fitsModels ?? sabrinaModels;
   const [model, setModel] = useState<string>(models[0]);
 
@@ -82,27 +84,29 @@ export function ProductCard({ product, priority = false }: { product: Product; p
           with appearance-none because the native unchecked state renders as a
           solid dark disc that reads as "selected" next to the real one.
         */}
-        <fieldset className="mt-2">
-          <legend className="sr-only">בחירת דגם מכונה עבור {product.name}</legend>
-          {models.map((option) => (
-            <label
-              key={option}
-              className="flex cursor-pointer items-center gap-2 border-t border-ink-700 py-2 text-[11px] font-semibold text-mist-300 transition-colors duration-200 has-[:checked]:text-brand-700"
-            >
-              <input
-                type="radio"
-                name={`fit-${product.slug}`}
-                value={option}
-                checked={model === option}
-                onChange={() => setModel(option)}
-                data-order-href={orderLink(product.name, `מתאים ל${option}`)}
-                data-order-model={`מתאים ל${option}`}
-                className="h-3.5 w-3.5 shrink-0 appearance-none rounded-[3px] border border-ink-600 bg-ink-850 transition-colors duration-200 checked:border-brand-500 checked:bg-brand-500 checked:shadow-[inset_0_0_0_2px_var(--color-on-brand)]"
-              />
-              <span>מתאים ל{option}</span>
-            </label>
-          ))}
-        </fieldset>
+        {isCourse ? null : (
+          <fieldset className="mt-2">
+            <legend className="sr-only">בחירת דגם מכונה עבור {product.name}</legend>
+            {models.map((option) => (
+              <label
+                key={option}
+                className="flex cursor-pointer items-center gap-2 border-t border-ink-700 py-2 text-[11px] font-semibold text-mist-300 transition-colors duration-200 has-[:checked]:text-brand-700"
+              >
+                <input
+                  type="radio"
+                  name={`fit-${product.slug}`}
+                  value={option}
+                  checked={model === option}
+                  onChange={() => setModel(option)}
+                  data-order-href={orderLink(product.name, `מתאים ל${option}`)}
+                  data-order-model={`מתאים ל${option}`}
+                  className="h-3.5 w-3.5 shrink-0 appearance-none rounded-[3px] border border-ink-600 bg-ink-850 transition-colors duration-200 checked:border-brand-500 checked:bg-brand-500 checked:shadow-[inset_0_0_0_2px_var(--color-on-brand)]"
+                />
+                <span>מתאים ל{option}</span>
+              </label>
+            ))}
+          </fieldset>
+        )}
 
         {/*
           Two paths on purpose. The green button is the one-tap order for
@@ -114,11 +118,11 @@ export function ProductCard({ product, priority = false }: { product: Product; p
         <div className="mt-auto border-t border-ink-700 pt-2">
           <WhatsAppButton
             productName={product.name}
-            orderNote={`מתאים ל${model}`}
+            orderNote={isCourse ? undefined : `מתאים ל${model}`}
             size="xs"
             className="w-full"
           />
-          <AddToOrderButton product={product} model={model} />
+          <AddToOrderButton product={product} model={isCourse ? 'קורס 1 על 1' : model} />
         </div>
       </div>
     </article>

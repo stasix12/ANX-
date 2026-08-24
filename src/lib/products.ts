@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { asset } from '@/lib/site';
 
-export type CategoryId = 'handles' | 'hoses' | 'adapters';
+export type CategoryId = 'handles' | 'hoses' | 'adapters' | 'courses';
 
 export interface Category {
   id: CategoryId;
@@ -82,6 +82,11 @@ export const categories: Category[] = [
     id: 'adapters',
     name: 'מתאמים',
     blurb: 'מתאמים וחיבורים מהירים בין המכונה לאביזרים.',
+  },
+  {
+    id: 'courses',
+    name: 'קורסים',
+    blurb: 'קורסים מקצועיים אונליין להסרת כתמים וטיפול בריפודים.',
   },
 ];
 

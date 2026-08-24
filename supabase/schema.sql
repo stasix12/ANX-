@@ -16,7 +16,7 @@ create table if not exists public.products (
   name text not null,
   tagline text not null default '',
   description text not null default '',
-  category text not null check (category in ('handles', 'hoses', 'adapters')),
+  category text not null check (category in ('handles', 'hoses', 'adapters', 'courses')),
   price numeric,
   sale_price numeric,
   badge text,

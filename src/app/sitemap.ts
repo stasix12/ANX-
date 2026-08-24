@@ -1,11 +1,12 @@
 import type { MetadataRoute } from 'next';
-import { products } from '@/lib/products';
+import { fetchPublishedProducts } from '@/lib/products';
 import { site } from '@/lib/site';
 
 export const dynamic = 'force-static';
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date();
+  const products = await fetchPublishedProducts();
 
   return [
     { url: site.url, lastModified, changeFrequency: 'weekly', priority: 1 },

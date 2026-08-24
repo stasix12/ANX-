@@ -26,6 +26,9 @@ const nextConfig = {
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    // Uploaded product photos are served from Supabase Storage, not this
+    // site's own origin — the optimiser refuses an unlisted remote host.
+    remotePatterns: [{ protocol: 'https', hostname: '*.supabase.co', pathname: '/storage/**' }],
     // A static export has no image optimiser to call at runtime.
     ...(isExport ? { unoptimized: true } : {}),
   },

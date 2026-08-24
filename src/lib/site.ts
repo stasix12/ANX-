@@ -20,8 +20,12 @@ export const site = {
  *
  * next/image and next/link apply basePath themselves; a plain <video> or
  * <source> does not, and on a GitHub Pages project site those files would 404.
+ *
+ * Left untouched when `path` is already absolute (http/https) — uploaded
+ * product photos live in Supabase Storage, not under this site's basePath.
  */
 export function asset(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
   return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}${path}`;
 }
 

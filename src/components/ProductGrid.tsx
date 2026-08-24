@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ProductCard } from '@/components/ProductCard';
-import { categories, type CategoryId, type Product } from '@/lib/products';
+import { categories, fetchPublishedProducts, type CategoryId, type Product } from '@/lib/products';
 
 type Filter = CategoryId | 'all';
 
@@ -11,8 +11,26 @@ const filters: { id: Filter; label: string }[] = [
   ...categories.map((category) => ({ id: category.id as Filter, label: category.name })),
 ];
 
-export function ProductGrid({ products }: { products: Product[] }) {
+/**
+ * Reads the live catalog straight from Supabase on mount, so a product the
+ * admin just published shows up here without anyone having to rebuild the
+ * site. `initialProducts` (rendered server-side at build time, when it can
+ * reach the network CI does) fills the grid before that fetch resolves —
+ * without it, every visitor would see a blank grid for a beat on first paint.
+ */
+export function ProductGrid({ initialProducts = [] }: { initialProducts?: Product[] }) {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
   const [active, setActive] = useState<Filter>('all');
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPublishedProducts().then((fresh) => {
+      if (!cancelled && fresh.length > 0) setProducts(fresh);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const visible = useMemo(
     () => (active === 'all' ? products : products.filter((p) => p.category === active)),

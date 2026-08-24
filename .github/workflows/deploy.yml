@@ -12,6 +12,15 @@ on:
     branches: [claude/anx3d-cleaning-shop-ufxo5m]
   # Lets the site be re-published from the Actions tab without a code change.
   workflow_dispatch:
+  # Product pages are pre-rendered from Supabase at build time (see
+  # generateStaticParams in src/app/products/[slug]/page.tsx) so they load
+  # instantly and index well — but that means a brand-new product added from
+  # the admin panel needs a rebuild before its own page exists. The homepage
+  # catalogue already shows new products immediately (it fetches live), so
+  # this schedule is just the backstop that gives new products their own
+  # page within the hour even if nobody pushes a code change meanwhile.
+  schedule:
+    - cron: '17 * * * *'
 
 permissions:
   contents: read
@@ -49,6 +58,11 @@ jobs:
         env:
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
           NEXT_PUBLIC_SITE_URL: ${{ steps.pages.outputs.base_url }}
+          # The anon/publishable key is meant to be public — RLS in
+          # supabase/schema.sql is what actually restricts access, not
+          # keeping this key secret. Safe to keep as a plain workflow value.
+          NEXT_PUBLIC_SUPABASE_URL: https://kadiiszpmuboawssdhfy.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_ibaDG7kFQL9i5Zab6rEjWw_34vE2NQP
         run: npm run export
 
       # Pages does not run Jekyll behind this workflow, but the marker costs

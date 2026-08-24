@@ -73,6 +73,8 @@ export const singleLine = (product: Product, model: string, quantity = 1): Order
   name: product.name,
   model,
   quantity,
-  price: product.price,
+  price: product.salePrice !== undefined && product.price !== undefined && product.salePrice < product.price
+    ? product.salePrice
+    : product.price,
   image: product.images[0],
 });

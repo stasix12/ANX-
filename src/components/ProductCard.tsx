@@ -37,14 +37,26 @@ export function ProductCard({ product, priority = false }: { product: Product; p
             {product.badge}
           </span>
         ) : null}
+        {!product.inStock ? (
+          <span className="absolute top-1.5 end-1.5 rounded-full bg-ink-950/85 px-2 py-0.5 text-[10px] font-bold text-mist-100">
+            אזל מהמלאי
+          </span>
+        ) : null}
       </Link>
 
       <div className="flex flex-1 flex-col p-2.5">
-        <p className="text-sm font-extrabold text-mist-100">
-          {product.price !== undefined ? (
-            formatPrice(product.price)
-          ) : (
+        <p className="flex items-baseline gap-1.5 text-sm font-extrabold text-mist-100">
+          {product.price === undefined ? (
             <span className="text-xs font-semibold text-mist-500">מחיר בוואטסאפ</span>
+          ) : product.salePrice !== undefined && product.salePrice < product.price ? (
+            <>
+              <span>{formatPrice(product.salePrice)}</span>
+              <span className="text-xs font-semibold text-mist-500 line-through">
+                {formatPrice(product.price)}
+              </span>
+            </>
+          ) : (
+            formatPrice(product.price)
           )}
         </p>
 

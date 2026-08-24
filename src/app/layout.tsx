@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Heebo } from 'next/font/google';
-import { Footer } from '@/components/Footer';
-import { Header } from '@/components/Header';
-import { OrderBar } from '@/components/OrderBar';
-import { OrderListProvider } from '@/components/OrderListProvider';
+import { SiteChrome } from '@/components/SiteChrome';
 import { site } from '@/lib/site';
 import './globals.css';
 
@@ -65,15 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           דילוג לתוכן הראשי
         </a>
-        <OrderListProvider>
-          <Header />
-          {/* Bottom padding clears the order bar, which is fixed over the page. */}
-          <main id="main" className="pb-24">
-            {children}
-          </main>
-          <Footer />
-          <OrderBar />
-        </OrderListProvider>
+        <SiteChrome>{children}</SiteChrome>
       </body>
     </html>
   );

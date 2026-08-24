@@ -3,7 +3,7 @@ import { Hero } from '@/components/Hero';
 import { ProductGrid } from '@/components/ProductGrid';
 import { Section } from '@/components/Section';
 import { TrustStrip } from '@/components/TrustStrip';
-import { products } from '@/lib/products';
+import { fetchPublishedProducts } from '@/lib/products';
 import { site } from '@/lib/site';
 
 const businessJsonLd = {
@@ -27,7 +27,9 @@ const faqJsonLd = {
   })),
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  const products = await fetchPublishedProducts();
+
   return (
     <>
       <Hero />
@@ -46,7 +48,7 @@ export default function HomePage() {
         description="ידיות שאיבה, צינורות ומתאמים למכונות Sabrina. משלוחים לכל הארץ, הזמנות בוואטסאפ."
         headerHidden
       >
-        <ProductGrid products={products} />
+        <ProductGrid initialProducts={products} />
       </Section>
 
       <Faq />

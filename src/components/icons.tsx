@@ -276,6 +276,60 @@ export function SpinnerIcon(props: IconProps) {
   );
 }
 
+export function HomeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 10.5L12 4l8 6.5V19a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 19v-8.5z" />
+      <path d="M9.5 20.5v-6h5v6" />
+    </svg>
+  );
+}
+
+export function CalendarIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 3v3.5M16 3v3.5" />
+    </svg>
+  );
+}
+
+export function ChartIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 4v15a1 1 0 001 1h15" />
+      <path d="M8.5 15.5V11M13 15.5V7.5M17.5 15.5v-5" />
+    </svg>
+  );
+}
+
+export function MapPinIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 21s-6.5-5.3-6.5-10.2A6.5 6.5 0 0112 4.5a6.5 6.5 0 016.5 6.3C18.5 15.7 12 21 12 21z" />
+      <circle cx="12" cy="10.7" r="2.3" />
+    </svg>
+  );
+}
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
+export function NavigationIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M20.5 3.5L3.5 10.8l7 2.7 2.7 7 7.3-17z" />
+    </svg>
+  );
+}
+
 /**
  * The flag of Israel, 11:8 as the standard has it.
  *

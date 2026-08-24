@@ -13,6 +13,7 @@ import {
   weekRangeISO,
   type Lead,
 } from '@/lib/crm/leads';
+import { shiftFor } from '@/lib/crm/shifts';
 import { useLeads } from '@/lib/crm/useLeads';
 
 type CalendarView = 'day' | 'week' | 'month';
@@ -48,11 +49,17 @@ function monthTitle(iso: string): string {
 }
 
 function DayJobs({ date, jobs }: { date: string; jobs: Lead[] }) {
+  const shift = shiftFor(date);
   return (
     <section className="mt-4">
-      <h3 className="mb-3 text-base font-extrabold">
-        {formatDateLongHe(date)}
-        {date === todayISO() ? ' (היום)' : ''}
+      <h3 className="mb-3 flex flex-wrap items-center gap-2 text-base font-extrabold">
+        <span>
+          {formatDateLongHe(date)}
+          {date === todayISO() ? ' (היום)' : ''}
+        </span>
+        <span className={`rounded-full bg-ink-850 px-2.5 py-0.5 text-xs font-bold ${shift.textClass}`}>
+          משמרת: {shift.label}
+        </span>
       </h3>
       {jobs.length === 0 ? (
         <p className="rounded-card border border-ink-700 surface p-5 text-center text-sm font-semibold text-mist-500">
@@ -184,18 +191,22 @@ export default function CrmCalendarPage() {
                 const jobs = jobsOn(date);
                 const isSelected = date === selected;
                 const isToday = date === todayISO();
+                const shift = shiftFor(date);
                 return (
                   <button
                     key={date}
                     type="button"
                     onClick={() => setSelected(date)}
                     aria-pressed={isSelected}
-                    className={`flex min-h-12 flex-col items-center justify-start gap-0.5 rounded-xl border py-1.5 transition-colors ${
+                    className={`flex min-h-14 flex-col items-center justify-start gap-0.5 rounded-xl border py-1 transition-colors ${
                       isSelected
                         ? 'border-brand-500 bg-brand-500/15'
                         : 'border-transparent hover:border-ink-600'
                     } ${inMonth ? '' : 'opacity-35'}`}
                   >
+                    <span className={`text-[9px] font-bold leading-tight ${shift.textClass}`}>
+                      {shift.label}
+                    </span>
                     <span
                       className={`flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold tabular-nums ${
                         isToday ? 'bg-brand-500 text-on-brand' : ''

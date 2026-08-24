@@ -1,5 +1,15 @@
-import { IsraelFlagIcon } from '@/components/icons';
+import { CheckIcon, IsraelFlagIcon } from '@/components/icons';
 import { asset } from '@/lib/site';
+
+/** Sits over the hero clip — a dark chip with its own scrim, since it has to stay legible over moving footage. */
+function VideoBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm sm:text-sm">
+      <CheckIcon className="h-3.5 w-3.5 shrink-0 text-brand-300" />
+      {children}
+    </span>
+  );
+}
 
 /**
  * The top of the home page: what is sold and who it is for, over the tools
@@ -41,7 +51,11 @@ export function Hero() {
           </p>
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-card border border-ink-700 bg-black shadow-xl sm:mt-7">
+        <div className="relative mt-6 overflow-hidden rounded-card border border-ink-700 bg-black shadow-xl sm:mt-7">
+          <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap gap-2 sm:inset-x-4 sm:top-4">
+            <VideoBadge>שאיבה מוגברת</VideoBadge>
+            <VideoBadge>עוצמת התזה מוגברת</VideoBadge>
+          </div>
           <video
             /* 16:9 on a phone, where that is already a short band; squeezed
                further on a wide screen, where 16:9 across the full column

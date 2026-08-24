@@ -1,43 +1,45 @@
 @import 'tailwindcss';
 
 /*
- * ANX3D design tokens — royal blue on light gray.
+ * ANX3D design tokens — charcoal with an amber accent.
  *
- * Matched to a reference screenshot the shop sent (a light-gray page with a
- * bright sky-blue for large headings and a deeper navy for links, list text
- * and filled elements) rather than picked from scratch. brand-400 carries the
- * lighter accent blue, brand-500 the navy, and the hover state on filled
- * buttons brightens from 500 to 400 — the same two blues the reference uses.
+ * Chosen over a light royal-blue palette and two other builds (a warm
+ * terracotta, an indigo/purple) by putting all four on the live site and
+ * comparing. This one won because the shop sells professional equipment
+ * rather than a soft consumer product: a dark ground makes the jungle-green
+ * and black product photographs stand out instead of blending into a pale
+ * background, and amber sits nowhere near WhatsApp's green, so the order
+ * button still reads as the one thing to press.
  *
- * Every text/background pair here passes WCAG AA, checked the same way the
- * previous palettes were: mist-500 (fine print) sits at 5.16:1 against white,
- * brand-500 as text or as a white-on-fill button both clear 7.5:1.
+ * Every text/background pair passes WCAG AA: mist-500 (fine print) sits at
+ * 4.74:1 against the page background, on-brand (dark text on the amber fill)
+ * at 7.44:1.
  */
 @theme {
-  --color-ink-950: #f7f7f7;
-  --color-ink-900: #eef2f5;
-  --color-ink-850: #ffffff;
-  --color-ink-800: #e4ebf0;
-  --color-ink-700: #c2d3df;
-  --color-ink-600: #a3bdcf;
+  --color-ink-950: #17191c;
+  --color-ink-900: #1e2124;
+  --color-ink-850: #24272b;
+  --color-ink-800: #2b2f33;
+  --color-ink-700: #3a3f44;
+  --color-ink-600: #4a5056;
 
-  --color-brand-300: #8cc4e5;
-  --color-brand-400: #56a3cf;
-  --color-brand-500: #23568b;
-  --color-brand-600: #1a4470;
-  --color-brand-700: #123554;
+  --color-brand-300: #ffcf8a;
+  --color-brand-400: #ffb84d;
+  --color-brand-500: #e0940a;
+  --color-brand-600: #c47c06;
+  --color-brand-700: #a56604;
 
-  --color-mist-100: #16232e;
-  --color-mist-300: #3d5872;
-  --color-mist-500: #55708a;
+  --color-mist-100: #f0ede6;
+  --color-mist-300: #b8b2a6;
+  --color-mist-500: #8a8478;
 
   /* Text and marks sitting on a brand-filled element. Its own token because a
      bright accent needs dark text on it and a deep one needs light — the two
      cannot both be "white". */
-  --color-on-brand: #ffffff;
+  --color-on-brand: #1a1200;
   /* What panel shadows are cast in. Black under a light theme reads as depth;
      under a dark one the same shadow is invisible and a lift is wanted instead. */
-  --color-shadow: #0c1822;
+  --color-shadow: #000000;
 
   --font-sans: var(--font-heebo), 'Segoe UI', system-ui, -apple-system, sans-serif;
 

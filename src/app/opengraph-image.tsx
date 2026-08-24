@@ -23,8 +23,8 @@ export default function OpengraphImage() {
           flexDirection: 'column',
           justifyContent: 'center',
           padding: '90px',
-          background: 'linear-gradient(135deg, #ffffff 0%, #eef2f5 100%)',
-          color: '#16232e',
+          background: 'linear-gradient(135deg, #24272b 0%, #17191c 100%)',
+          color: '#f0ede6',
           fontFamily: 'sans-serif',
         }}
       >
@@ -34,13 +34,13 @@ export default function OpengraphImage() {
               width: 92,
               height: 92,
               borderRadius: 26,
-              background: 'linear-gradient(135deg, #56a3cf 0%, #123554 100%)',
+              background: 'linear-gradient(135deg, #ffcf8a 0%, #e0940a 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 52,
               fontWeight: 800,
-              color: '#fff',
+              color: '#1a1200',
             }}
           >
             A
@@ -48,11 +48,11 @@ export default function OpengraphImage() {
           <div style={{ fontSize: 76, fontWeight: 800, letterSpacing: 10 }}>ANX3D</div>
         </div>
 
-        <div style={{ marginTop: 44, fontSize: 42, color: '#3d5872', maxWidth: 900 }}>
+        <div style={{ marginTop: 44, fontSize: 42, color: '#b8b2a6', maxWidth: 900 }}>
           Professional Cleaning Equipment
         </div>
 
-        <div style={{ marginTop: 18, fontSize: 34, color: '#23568b' }}>
+        <div style={{ marginTop: 18, fontSize: 34, color: '#ffb84d' }}>
           Handles · Hoses · Adapters — built for Sabrina machines
         </div>
 
@@ -63,10 +63,10 @@ export default function OpengraphImage() {
             alignItems: 'center',
             gap: 16,
             fontSize: 28,
-            color: '#55708a',
+            color: '#8a8478',
           }}
         >
-          <div style={{ width: 60, height: 4, background: '#23568b' }} />
+          <div style={{ width: 60, height: 4, background: '#e0940a' }} />
           <div>WhatsApp 053-5257250</div>
         </div>
       </div>

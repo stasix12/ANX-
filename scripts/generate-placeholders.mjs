@@ -15,17 +15,17 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = join(root, 'public');
 
-// Matches the site's design tokens (globals.css): white panels, navy
-// linework, deep navy text. These are baked into the SVGs, so they have to be
-// changed and the files regenerated whenever the theme moves.
-const panel = '#ffffff';
-const wash = '#eef2f5';
-const line = '#c2d3df';
-const blue = '#23568b';
-const blueDeep = '#123554';
-const blueSoft = '#56a3cf';
-const ink = '#16232e';
-const slate = '#55708a';
+// Matches the site's design tokens (globals.css): charcoal panels, amber
+// linework, near-white text. These are baked into the SVGs, so they have to
+// be changed and the files regenerated whenever the theme moves.
+const panel = '#24272b';
+const wash = '#1e2124';
+const line = '#3a3f44';
+const blue = '#e0940a';
+const blueDeep = '#ffcf8a';
+const blueSoft = '#ffb84d';
+const ink = '#f0ede6';
+const slate = '#b8b2a6';
 
 const escapeXml = (value) =>
   value.replace(

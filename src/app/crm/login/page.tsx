@@ -52,10 +52,11 @@ export default function CrmLoginPage() {
       </div>
       <div className="relative w-full max-w-sm">
         <div className="text-center">
-          <h1 className="text-4xl font-extrabold tracking-tight">
-            <span className="text-brand-500">הפתרון</span>{' '}
-            <span className="text-emerald-600">המבריק</span>
-            <span aria-hidden className="text-2xl"> ✨</span>
+          <h1 className="font-extrabold leading-none tracking-tight">
+            <span className="block text-6xl text-brand-500">הפתרון</span>
+            <span className="mt-2 block text-6xl text-emerald-600">
+              המבריק<span aria-hidden className="text-3xl"> ✨</span>
+            </span>
           </h1>
           <p className="mt-3 text-xl font-extrabold tracking-tight">ניהול עבודות</p>
           <p className="mt-1 text-sm text-mist-500">לידים ועבודות ניקיון</p>

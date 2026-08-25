@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { LeadCard } from '@/components/crm/LeadCard';
 import { LogOutIcon, NavigationIcon, PhoneIcon, PlusIcon, SpinnerIcon, WhatsAppIcon } from '@/components/icons';
@@ -20,6 +20,8 @@ import {
   whatsAppUrl,
   type Lead,
 } from '@/lib/crm/leads';
+import { fetchAdSpend, formatSpend, type AdSpend } from '@/lib/crm/facebookAds';
+import { getFbAdsConfig } from '@/lib/crm/settings';
 import { shiftFor } from '@/lib/crm/shifts';
 import { useLeads } from '@/lib/crm/useLeads';
 
@@ -151,6 +153,16 @@ export default function CrmDashboardPage() {
   const router = useRouter();
   const { leads, loading, error } = useLeads();
 
+  // Ad spend rides along quietly: shown when Facebook is connected and the
+  // fetch succeeds, invisible otherwise — the dashboard never nags about it.
+  const [adSpend, setAdSpend] = useState<AdSpend | null>(null);
+  useEffect(() => {
+    getFbAdsConfig()
+      .then((config) => (config ? fetchAdSpend(config) : null))
+      .then(setAdSpend)
+      .catch(() => setAdSpend(null));
+  }, []);
+
   const today = todayISO();
   const tomorrow = addDaysISO(today, 1);
   const week = weekRangeISO(today);
@@ -258,6 +270,24 @@ export default function CrmDashboardPage() {
             <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" emoji="✨" accentClass="text-teal-700" />
             <StatTile label="הושלמו החודש" value={view.completedMonth} href="/crm/leads?status=completed" emoji="✅" />
             <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" emoji="❌" />
+            {adSpend ? (
+              <>
+                <StatTile
+                  label="פרסום היום"
+                  value={formatSpend(adSpend.today, adSpend.currency)}
+                  href="/crm/stats"
+                  emoji="📣"
+                  accentClass="text-blue-700"
+                />
+                <StatTile
+                  label="פרסום החודש"
+                  value={formatSpend(adSpend.month, adSpend.currency)}
+                  href="/crm/stats"
+                  emoji="💸"
+                  accentClass="text-blue-700"
+                />
+              </>
+            ) : null}
           </div>
 
           <Section title="העבודות של היום">

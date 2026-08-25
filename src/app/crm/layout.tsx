@@ -12,13 +12,14 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: 'ניהול עבודות',
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#17191c',
-  colorScheme: 'dark',
+  // The header gradient's sky blue, so the phone's status bar blends into it.
+  themeColor: '#0284c7',
+  colorScheme: 'light',
   // Fixed scale so form taps don't zoom the layout — the CRM sets 16px+ font
   // sizes on every input, which is what actually prevents iOS auto-zoom.
   width: 'device-width',
@@ -27,5 +28,6 @@ export const viewport: Viewport = {
 };
 
 export default function CrmLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  // .crm-theme rescopes the brand-* tokens to the CRM's blue (globals.css).
+  return <div className="crm-theme">{children}</div>;
 }

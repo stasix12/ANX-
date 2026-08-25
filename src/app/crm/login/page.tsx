@@ -84,7 +84,7 @@ export default function CrmLoginPage() {
           </div>
 
           {error ? (
-            <p role="alert" className="rounded-xl bg-red-600/10 px-3 py-2.5 text-sm font-semibold text-red-400">
+            <p role="alert" className="rounded-xl bg-red-600/10 px-3 py-2.5 text-sm font-semibold text-red-600">
               {error}
             </p>
           ) : null}

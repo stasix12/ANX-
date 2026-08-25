@@ -87,6 +87,51 @@
 }
 
 /*
+ * CRM palette — light "clean water" theme.
+ *
+ * The cleaning-business CRM (/crm) runs a light theme with a fresh sky-blue
+ * accent — white surfaces and clear water-blue, which is the business.
+ * Scoped to .crm-theme (set on the /crm layout), it re-resolves the SAME
+ * token names the components already use: ink-* flips from dark grounds to
+ * light ones, mist-* from light text to dark, so every existing utility
+ * class inverts without touching markup. The storefront keeps its dark amber
+ * theme untouched.
+ *
+ * Contrast: white on brand-500 (#0284c7) ≈ 4.6:1; brand-400 (#0369a1) is
+ * the text-accent step at ≈ 6.6:1 on white; mist-500 (#64748b) fine print
+ * ≈ 4.8:1.
+ */
+.crm-theme {
+  /* Inherited text color must be re-declared HERE: body sets its color from
+     the store's (unscoped) mist-100, so descendants without an explicit text
+     class would inherit near-white cream onto the light ground. */
+  color: var(--color-mist-100);
+
+  /* Grounds, light: page → cards/inputs → tracks → borders. */
+  --color-ink-950: #eef2f7;
+  --color-ink-900: #f4f7fa;
+  --color-ink-850: #ffffff;
+  --color-ink-800: #e2e8f0;
+  --color-ink-700: #dce3ec;
+  --color-ink-600: #c4cfdd;
+
+  /* Text, dark-on-light: primary → secondary → muted. */
+  --color-mist-100: #10233b;
+  --color-mist-300: #3f5570;
+  --color-mist-500: #64748b;
+
+  /* Water blue. brand-400 doubles as the text accent and button hover, so in
+     the light theme it is the DARKER step; brand-300 is the chart-highlight
+     fill, also darker than the column blue so a selected column pops. */
+  --color-brand-300: #075985;
+  --color-brand-400: #0369a1;
+  --color-brand-500: #0284c7;
+  --color-brand-600: #026da5;
+  --color-brand-700: #075985;
+  --color-on-brand: #ffffff;
+}
+
+/*
  * Ambient page backdrop.
  *
  * A single fixed layer behind the whole document rather than a flat white

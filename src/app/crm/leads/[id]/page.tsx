@@ -217,7 +217,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   type="button"
                   disabled={mutating}
                   onClick={() => changeStatus('canceled')}
-                  className="flex items-center justify-center gap-2 rounded-full border border-red-500/40 bg-red-600/10 px-6 py-3.5 text-base font-bold text-red-400 transition-colors hover:bg-red-600/20 disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 rounded-full border border-red-500/40 bg-red-600/10 px-6 py-3.5 text-base font-bold text-red-600 transition-colors hover:bg-red-600/20 disabled:opacity-60"
                 >
                   <CloseIcon className="h-5 w-5" />
                   בטל עבודה
@@ -227,7 +227,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   type="button"
                   disabled={mutating}
                   onClick={onDelete}
-                  className="flex items-center justify-center gap-2 rounded-full border border-red-500/40 bg-red-600/10 px-6 py-3.5 text-base font-bold text-red-400 transition-colors hover:bg-red-600/20 disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 rounded-full border border-red-500/40 bg-red-600/10 px-6 py-3.5 text-base font-bold text-red-600 transition-colors hover:bg-red-600/20 disabled:opacity-60"
                 >
                   <TrashIcon className="h-5 w-5" />
                   מחק ליד
@@ -239,7 +239,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 type="button"
                 disabled={mutating}
                 onClick={onDelete}
-                className="w-full py-2 text-center text-sm font-semibold text-mist-500 transition-colors hover:text-red-400 disabled:opacity-60"
+                className="w-full py-2 text-center text-sm font-semibold text-mist-500 transition-colors hover:text-red-600 disabled:opacity-60"
               >
                 מחיקת הליד לצמיתות
               </button>
@@ -247,7 +247,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           </div>
 
           {error ? (
-            <p role="alert" className="mt-4 rounded-card bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-400">
+            <p role="alert" className="mt-4 rounded-card bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-600">
               {error}
             </p>
           ) : null}

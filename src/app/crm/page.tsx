@@ -90,7 +90,7 @@ export default function CrmDashboardPage() {
             await signOut();
             router.replace('/crm/login');
           }}
-          className="flex items-center gap-1.5 text-sm font-semibold text-mist-500 transition-colors hover:text-mist-300"
+          className="flex items-center gap-1.5 text-sm font-semibold text-white/85 transition-colors hover:text-white"
         >
           <LogOutIcon className="h-5 w-5" />
           יציאה
@@ -102,7 +102,7 @@ export default function CrmDashboardPage() {
           <SpinnerIcon className="h-8 w-8 animate-spin text-brand-500" />
         </div>
       ) : error ? (
-        <p role="alert" className="rounded-card bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-400">
+        <p role="alert" className="rounded-card bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-600">
           {error}
         </p>
       ) : (
@@ -110,12 +110,12 @@ export default function CrmDashboardPage() {
           <p className="text-sm font-semibold text-mist-500">{formatDateLongHe(today)}</p>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <StatTile label="הכנסות היום" value={formatPrice(view.revenueToday)} href="/crm/stats" accentClass="text-emerald-400" />
-            <StatTile label="הכנסות החודש" value={formatPrice(view.revenueMonth)} href="/crm/stats" accentClass="text-emerald-400" />
+            <StatTile label="הכנסות היום" value={formatPrice(view.revenueToday)} href="/crm/stats" accentClass="text-emerald-600" />
+            <StatTile label="הכנסות החודש" value={formatPrice(view.revenueMonth)} href="/crm/stats" accentClass="text-emerald-600" />
             <StatTile label="עבודות היום" value={view.todayJobs.length} href="/crm/calendar" />
             <StatTile label="עבודות מחר" value={view.tomorrowJobs.length} href="/crm/calendar" />
             <StatTile label="עבודות השבוע" value={view.weekCount} href="/crm/calendar" />
-            <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" accentClass="text-teal-300" />
+            <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" accentClass="text-teal-700" />
             <StatTile label="הושלמו החודש" value={view.completedMonth} href="/crm/leads?status=completed" />
             <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" />
           </div>

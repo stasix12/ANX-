@@ -84,9 +84,10 @@ export function CrmShell({
 
   return (
     <div className="mx-auto min-h-dvh max-w-3xl bg-ink-950 pb-28">
-      <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/95 backdrop-blur-lg">
+      {/* Water-gradient header — the CRM's one loud brand surface. */}
+      <header className="sticky top-0 z-40 bg-gradient-to-l from-sky-600 via-sky-500 to-cyan-400 shadow-md shadow-sky-900/20">
         <div className="flex items-center justify-between px-4 py-4">
-          <h1 className="text-lg font-extrabold">{title}</h1>
+          <h1 className="text-lg font-extrabold text-white">{title}</h1>
           {headerAction}
         </div>
       </header>
@@ -95,7 +96,7 @@ export function CrmShell({
 
       <nav
         aria-label="ניווט ראשי"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700 bg-ink-850/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700 bg-ink-850/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(15,42,72,0.08)] backdrop-blur-lg"
       >
         <ul className="mx-auto flex max-w-lg items-stretch">
           {navStart.map((item) => (

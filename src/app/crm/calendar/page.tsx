@@ -155,7 +155,7 @@ export default function CrmCalendarPage() {
           <SpinnerIcon className="h-8 w-8 animate-spin text-brand-500" />
         </div>
       ) : error ? (
-        <p role="alert" className="mt-4 rounded-card bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-400">
+        <p role="alert" className="mt-4 rounded-card bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-600">
           {error}
         </p>
       ) : view === 'day' ? (

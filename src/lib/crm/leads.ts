@@ -52,12 +52,12 @@ export const STATUS_OPTIONS: {
   /** Accent for the card's status edge. */
   dotClass: string;
 }[] = [
-  { value: 'new', label: 'חדש', badgeClass: 'bg-teal-500/15 text-teal-300', dotClass: 'bg-teal-400' },
-  { value: 'pending', label: 'ממתין לאישור', badgeClass: 'bg-amber-500/15 text-amber-300', dotClass: 'bg-amber-400' },
-  { value: 'scheduled', label: 'נקבע', badgeClass: 'bg-violet-500/15 text-violet-300', dotClass: 'bg-violet-400' },
-  { value: 'on_way', label: 'בדרך ללקוח', badgeClass: 'bg-orange-500/15 text-orange-300', dotClass: 'bg-orange-400' },
-  { value: 'completed', label: 'הושלם', badgeClass: 'bg-emerald-500/15 text-emerald-300', dotClass: 'bg-emerald-400' },
-  { value: 'canceled', label: 'בוטל', badgeClass: 'bg-red-500/15 text-red-300', dotClass: 'bg-red-400' },
+  { value: 'new', label: 'חדש', badgeClass: 'bg-teal-500/15 text-teal-700', dotClass: 'bg-teal-400' },
+  { value: 'pending', label: 'ממתין לאישור', badgeClass: 'bg-amber-500/15 text-amber-700', dotClass: 'bg-amber-400' },
+  { value: 'scheduled', label: 'נקבע', badgeClass: 'bg-violet-500/15 text-violet-700', dotClass: 'bg-violet-400' },
+  { value: 'on_way', label: 'בדרך ללקוח', badgeClass: 'bg-orange-500/15 text-orange-700', dotClass: 'bg-orange-400' },
+  { value: 'completed', label: 'הושלם', badgeClass: 'bg-emerald-500/15 text-emerald-700', dotClass: 'bg-emerald-400' },
+  { value: 'canceled', label: 'בוטל', badgeClass: 'bg-red-500/15 text-red-700', dotClass: 'bg-red-400' },
 ];
 
 export const statusById = Object.fromEntries(STATUS_OPTIONS.map((s) => [s.value, s])) as Record<

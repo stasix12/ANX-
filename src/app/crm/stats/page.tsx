@@ -71,7 +71,7 @@ function DeltaText({ pct, label }: { pct: number | null; label: string }) {
   return (
     <span className="text-sm font-semibold text-mist-500">
       {label}{' '}
-      <span className={`font-extrabold ${pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`} dir="ltr">
+      <span className={`font-extrabold ${pct >= 0 ? 'text-emerald-600' : 'text-red-600'}`} dir="ltr">
         {pct >= 0 ? '+' : ''}
         {pct}%
       </span>
@@ -162,7 +162,7 @@ function YearView({ leads }: { leads: Lead[] }) {
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <StatTile label="סך הכנסות השנה" value={formatPrice(view.total)} accentClass="text-emerald-400" />
+        <StatTile label="סך הכנסות השנה" value={formatPrice(view.total)} accentClass="text-emerald-600" />
         <StatTile label="ממוצע חודשי" value={formatPrice(Math.round(view.avg))} />
         <StatTile
           label={`החודש החזק ביותר${view.best.revenue > 0 ? ` — ${MONTH_LONG[view.best.month]}` : ''}`}
@@ -268,7 +268,7 @@ export default function CrmStatsPage() {
           <SpinnerIcon className="h-8 w-8 animate-spin text-brand-500" />
         </div>
       ) : error ? (
-        <p role="alert" className="mt-4 rounded-card bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-400">
+        <p role="alert" className="mt-4 rounded-card bg-red-600/10 px-4 py-3 text-sm font-semibold text-red-600">
           {error}
         </p>
       ) : tab === 'year' ? (
@@ -293,10 +293,10 @@ export default function CrmStatsPage() {
             </button>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <StatTile label="הכנסה חודשית" value={formatPrice(stats.revenue)} accentClass="text-emerald-400" />
+            <StatTile label="הכנסה חודשית" value={formatPrice(stats.revenue)} accentClass="text-emerald-600" />
             <StatTile label="עבודות שהושלמו" value={stats.jobCount} />
             <StatTile label="עבודה ממוצעת" value={formatPrice(Math.round(stats.avgJob))} />
-            <StatTile label="לידים שנכנסו" value={stats.leadCount} accentClass="text-teal-300" />
+            <StatTile label="לידים שנכנסו" value={stats.leadCount} accentClass="text-teal-700" />
           </div>
 
           <div className="mt-3 rounded-card border border-ink-700 surface p-4">

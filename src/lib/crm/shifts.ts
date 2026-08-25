@@ -22,10 +22,10 @@ const CYCLE: ShiftKey[] = [
 ];
 
 export const SHIFT_META: Record<ShiftKey, { label: string; textClass: string }> = {
-  morning: { label: 'בוקר', textClass: 'text-amber-300' },
-  afternoon: { label: 'צהריים', textClass: 'text-sky-300' },
-  night: { label: 'לילה', textClass: 'text-violet-300' },
-  off: { label: 'חופש', textClass: 'text-emerald-400' },
+  morning: { label: 'בוקר', textClass: 'text-amber-700' },
+  afternoon: { label: 'צהריים', textClass: 'text-sky-700' },
+  night: { label: 'לילה', textClass: 'text-violet-700' },
+  off: { label: 'חופש', textClass: 'text-emerald-600' },
 };
 
 export function shiftFor(iso: string): { key: ShiftKey; label: string; textClass: string } {

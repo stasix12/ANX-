@@ -124,12 +124,20 @@ export interface SpendPoint {
  */
 export async function fetchSpendSeries(
   config: FbAdsConfig,
-  options: { timeIncrement: 'monthly' | 1; datePreset: string },
+  options: {
+    timeIncrement: 'monthly' | 1;
+    datePreset?: string;
+    /** Explicit since/until range instead of a preset — the custom picker. */
+    timeRange?: { since: string; until: string };
+  },
 ): Promise<SpendPoint[]> {
   const account = config.accountId.replace(/^act_/, '').trim();
+  const range = options.timeRange
+    ? `time_range=${encodeURIComponent(JSON.stringify(options.timeRange))}`
+    : `date_preset=${options.datePreset}`;
   let url: string | null =
     `${GRAPH_BASE}/${GRAPH_VERSION}/act_${account}/insights` +
-    `?date_preset=${options.datePreset}&time_increment=${options.timeIncrement}` +
+    `?${range}&time_increment=${options.timeIncrement}` +
     `&fields=spend,actions&limit=100` +
     `&access_token=${encodeURIComponent(config.accessToken)}`;
 

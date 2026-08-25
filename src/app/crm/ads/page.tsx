@@ -18,8 +18,15 @@ import { getFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
 const MONTH_SHORT = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
 const WEEKDAY_LONG = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
-type RangeView = 'monthly' | 'daily';
+type RangeView = 'monthly' | 'daily' | 'custom';
 type Metric = 'spend' | 'conversations' | 'cpl';
+
+const isoToday = () => new Date().toISOString().slice(0, 10);
+const isoYearsAgo = (years: number) => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - years);
+  return d.toISOString().slice(0, 10);
+};
 
 const METRIC_OPTIONS: { value: Metric; label: string }[] = [
   { value: 'spend', label: '💸 הוצאה' },
@@ -101,6 +108,11 @@ export default function CrmAdsPage() {
   const [daily, setDaily] = useState<SpendPoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
+  const [customRange, setCustomRange] = useState({ since: isoYearsAgo(1), until: isoToday() });
+  const [customSeries, setCustomSeries] = useState<SpendPoint[] | null>(null);
+  const [customIncrement, setCustomIncrement] = useState<'monthly' | 1>('monthly');
+  const [customLoading, setCustomLoading] = useState(false);
+  const [customError, setCustomError] = useState<string | null>(null);
 
   useEffect(() => {
     getFbAdsConfig()
@@ -128,7 +140,39 @@ export default function CrmAdsPage() {
     if (config) void load(config);
   }, [config, load]);
 
-  const series = view === 'monthly' ? monthly : daily;
+  const loadCustom = useCallback(
+    async (range: { since: string; until: string }) => {
+      if (!config) return;
+      if (!range.since || !range.until || range.since > range.until) {
+        setCustomError('בחר טווח תקין — תאריך ההתחלה צריך להיות לפני הסיום.');
+        return;
+      }
+      // Long spans (years) come back as monthly buckets — a 4-year daily chart
+      // would be ~1,500 bars; short spans stay daily for the fine detail.
+      const spanDays = (Date.parse(range.until) - Date.parse(range.since)) / 86_400_000;
+      const increment: 'monthly' | 1 = spanDays > 92 ? 'monthly' : 1;
+      setCustomLoading(true);
+      setCustomError(null);
+      try {
+        const rows = await fetchSpendSeries(config, { timeIncrement: increment, timeRange: range });
+        setCustomIncrement(increment);
+        setCustomSeries(rows);
+      } catch (err) {
+        setCustomError(err instanceof Error ? err.message : 'שליפת נתוני הפרסום נכשלה.');
+      } finally {
+        setCustomLoading(false);
+      }
+    },
+    [config],
+  );
+
+  // Entering the custom tab for the first time loads its default range.
+  useEffect(() => {
+    if (view === 'custom' && !customSeries && !customLoading) void loadCustom(customRange);
+  }, [view, customSeries, customLoading, loadCustom, customRange]);
+
+  const series = view === 'monthly' ? monthly : view === 'daily' ? daily : customSeries;
+  const monthlyBuckets = view === 'monthly' || (view === 'custom' && customIncrement === 'monthly');
 
   // Keep the newest bar selected whenever the series or view changes.
   useEffect(() => {
@@ -139,14 +183,25 @@ export default function CrmAdsPage() {
     () =>
       (series ?? []).map((point) => {
         const [, month, day] = point.start.split('-').map(Number);
+        // Custom spans cross years, so their month labels carry the year.
+        const label = monthlyBuckets
+          ? view === 'custom'
+            ? `${MONTH_SHORT[month - 1]} ${point.start.slice(2, 4)}`
+            : MONTH_SHORT[month - 1]
+          : `${day}.${month}`;
         return {
-          label: view === 'monthly' ? MONTH_SHORT[month - 1] : `${day}.${month}`,
+          label,
           value: metricValue(point, metric),
           conversations: point.conversations,
         };
       }),
-    [series, view, metric],
+    [series, view, metric, monthlyBuckets],
   );
+
+  const customTotals = useMemo(() => {
+    if (!customSeries) return null;
+    return { spend: sumSpend(customSeries), conversations: sumConv(customSeries) };
+  }, [customSeries]);
 
   const totals = useMemo(() => {
     const source = monthly ?? [];
@@ -296,7 +351,7 @@ export default function CrmAdsPage() {
 
   const sel = series?.[selected];
   const selTitle = sel
-    ? view === 'monthly'
+    ? monthlyBuckets
       ? `${MONTH_LONG[Number(sel.start.slice(5, 7)) - 1]} ${sel.start.slice(0, 4)}`
       : formatDateLongHe(sel.start)
     : '';
@@ -374,8 +429,9 @@ export default function CrmAdsPage() {
           <div className="mt-4 flex rounded-full border border-ink-700 bg-ink-850 p-1" role="group" aria-label="טווח הגרף">
             {(
               [
-                { value: 'monthly', label: 'חודשי — מההתחלה' },
-                { value: 'daily', label: 'יומי — 30 ימים' },
+                { value: 'monthly', label: 'חודשי — הכל' },
+                { value: 'daily', label: 'יומי — 30' },
+                { value: 'custom', label: '📆 תאריכים' },
               ] as const
             ).map((option) => (
               <button
@@ -391,6 +447,70 @@ export default function CrmAdsPage() {
               </button>
             ))}
           </div>
+
+          {view === 'custom' ? (
+            <div className="mt-2 rounded-card border border-ink-700 surface p-3">
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 2, 3, 4].map((years) => (
+                  <button
+                    key={years}
+                    type="button"
+                    onClick={() => {
+                      const range = { since: isoYearsAgo(years), until: isoToday() };
+                      setCustomRange(range);
+                      void loadCustom(range);
+                    }}
+                    className="rounded-full border border-ink-700 bg-ink-850 px-3 py-1.5 text-xs font-bold text-mist-300"
+                  >
+                    {years === 1 ? 'שנה אחרונה' : years === 2 ? 'שנתיים' : `${years} שנים`}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2.5 grid grid-cols-2 gap-2">
+                <label className="text-xs font-semibold text-mist-500">
+                  מתאריך
+                  <input
+                    type="date"
+                    value={customRange.since}
+                    max={customRange.until}
+                    onChange={(e) => setCustomRange((r) => ({ ...r, since: e.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-ink-700 bg-ink-850 px-2 py-2 text-sm font-semibold"
+                  />
+                </label>
+                <label className="text-xs font-semibold text-mist-500">
+                  עד תאריך
+                  <input
+                    type="date"
+                    value={customRange.until}
+                    min={customRange.since}
+                    max={isoToday()}
+                    onChange={(e) => setCustomRange((r) => ({ ...r, until: e.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-ink-700 bg-ink-850 px-2 py-2 text-sm font-semibold"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                disabled={customLoading}
+                onClick={() => void loadCustom(customRange)}
+                className="mt-2.5 w-full rounded-full bg-brand-500 py-2.5 text-sm font-bold text-on-brand transition-colors hover:bg-brand-400 disabled:opacity-60"
+              >
+                {customLoading ? 'טוען…' : 'הצג טווח'}
+              </button>
+              {customError ? (
+                <p role="alert" className="mt-2 text-xs font-semibold text-red-600">
+                  {customError}
+                </p>
+              ) : null}
+              {customTotals && !customLoading && !customError ? (
+                <p className="mt-2 text-center text-xs font-semibold text-mist-500">
+                  סה״כ בטווח: {formatSpend(customTotals.spend, currency)} ·{' '}
+                  {conversationsLine(customTotals.conversations, customTotals.spend, currency)}
+                  {customIncrement === 'monthly' ? ' · בחלוקה חודשית' : ' · בחלוקה יומית'}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="mt-2 flex gap-1.5" role="group" aria-label="המדד בגרף">
             {METRIC_OPTIONS.map((option) => (
@@ -422,7 +542,11 @@ export default function CrmAdsPage() {
               </div>
             ) : null}
 
-            {points.length === 0 ? (
+            {view === 'custom' && customLoading ? (
+              <div className="grid place-items-center py-10">
+                <SpinnerIcon className="h-6 w-6 animate-spin text-brand-500" />
+              </div>
+            ) : points.length === 0 ? (
               <p className="py-10 text-center text-sm font-semibold text-mist-500">אין עדיין נתונים בטווח הזה.</p>
             ) : (
               <div className="mt-2">

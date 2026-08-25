@@ -329,7 +329,7 @@ export default function CrmStatsPage() {
           <RankedBars title="השירותים הכי נמכרים" entries={stats.topServices} />
           <RankedBars title="מקורות שמביאים עבודות" entries={stats.topSources} />
 
-          <FacebookAdsSection monthRevenue={stats.revenue} />
+          <FacebookAdsSection leads={leads} />
         </>
       )}
     </CrmShell>

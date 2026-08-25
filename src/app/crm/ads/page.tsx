@@ -16,8 +16,31 @@ import { formatDateLongHe } from '@/lib/crm/leads';
 import { getFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
 
 const MONTH_SHORT = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
+const WEEKDAY_LONG = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
 type RangeView = 'monthly' | 'daily';
+type Metric = 'spend' | 'conversations' | 'cpl';
+
+const METRIC_OPTIONS: { value: Metric; label: string }[] = [
+  { value: 'spend', label: '💸 הוצאה' },
+  { value: 'conversations', label: '📥 פניות' },
+  { value: 'cpl', label: '🎯 עלות לפנייה' },
+];
+
+function metricValue(point: SpendPoint, metric: Metric): number {
+  if (metric === 'spend') return point.spend;
+  if (metric === 'conversations') return point.conversations;
+  return point.conversations > 0 ? point.spend / point.conversations : 0;
+}
+
+const sumSpend = (points: SpendPoint[]) => points.reduce((sum, p) => sum + p.spend, 0);
+const sumConv = (points: SpendPoint[]) => points.reduce((sum, p) => sum + p.conversations, 0);
+const cplOf = (points: SpendPoint[]): number | null => {
+  const conversations = sumConv(points);
+  return conversations > 0 ? sumSpend(points) / conversations : null;
+};
+
+const monthName = (isoStart: string) => MONTH_LONG[Number(isoStart.slice(5, 7)) - 1];
 
 function SummaryTile({ label, value, emoji }: { label: string; value: string; emoji: string }) {
   return (
@@ -31,10 +54,49 @@ function SummaryTile({ label, value, emoji }: { label: string; value: string; em
   );
 }
 
+/** A month-over-month cell: the value plus a colored arrow-delta underneath. */
+function DeltaTile({
+  label,
+  value,
+  delta,
+  goodWhenDown,
+}: {
+  label: string;
+  value: string;
+  /** Percent change vs the previous month, null when it can't be computed. */
+  delta: number | null;
+  goodWhenDown: boolean;
+}) {
+  let deltaText = '—';
+  let deltaClass = 'text-mist-500';
+  if (delta !== null) {
+    if (Math.abs(delta) < 0.5) {
+      deltaText = '≈ ללא שינוי';
+    } else {
+      const good = goodWhenDown ? delta < 0 : delta > 0;
+      deltaText = `${delta > 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(0)}%`;
+      deltaClass = good ? 'text-emerald-600' : 'text-red-600';
+    }
+  }
+  return (
+    <div className="text-center">
+      <p className="text-xs font-semibold text-mist-500">{label}</p>
+      <p className="mt-0.5 text-base font-extrabold tabular-nums">{value}</p>
+      <p className={`mt-0.5 text-xs font-bold tabular-nums ${deltaClass}`}>{deltaText}</p>
+    </div>
+  );
+}
+
+interface Insight {
+  emoji: string;
+  text: string;
+}
+
 export default function CrmAdsPage() {
   const [config, setConfig] = useState<FbAdsConfig | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [view, setView] = useState<RangeView>('monthly');
+  const [metric, setMetric] = useState<Metric>('spend');
   const [monthly, setMonthly] = useState<SpendPoint[] | null>(null);
   const [daily, setDaily] = useState<SpendPoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,19 +141,158 @@ export default function CrmAdsPage() {
         const [, month, day] = point.start.split('-').map(Number);
         return {
           label: view === 'monthly' ? MONTH_SHORT[month - 1] : `${day}.${month}`,
-          value: point.spend,
+          value: metricValue(point, metric),
           conversations: point.conversations,
         };
       }),
-    [series, view],
+    [series, view, metric],
   );
 
   const totals = useMemo(() => {
     const source = monthly ?? [];
-    const spend = source.reduce((sum, p) => sum + p.spend, 0);
-    const conversations = source.reduce((sum, p) => sum + p.conversations, 0);
+    const spend = sumSpend(source);
+    const conversations = sumConv(source);
     return { spend, conversations, costPer: conversations > 0 ? spend / conversations : null };
   }, [monthly]);
+
+  // The last two *complete* months — the running month is partial, so comparing
+  // it head-to-head against a full month would always look like a crash.
+  const mom = useMemo(() => {
+    const currentKey = new Date().toISOString().slice(0, 7);
+    const complete = (monthly ?? []).filter((p) => p.start.slice(0, 7) !== currentKey);
+    if (complete.length < 2) return null;
+    const previous = complete[complete.length - 2];
+    const last = complete[complete.length - 1];
+    const lastCpl = last.conversations > 0 ? last.spend / last.conversations : null;
+    const prevCpl = previous.conversations > 0 ? previous.spend / previous.conversations : null;
+    const pct = (prev: number | null, next: number | null): number | null =>
+      prev !== null && next !== null && prev > 0 ? ((next - prev) / prev) * 100 : null;
+    return {
+      title: `${monthName(last.start)} מול ${monthName(previous.start)}`,
+      last,
+      lastCpl,
+      spendDelta: pct(previous.spend, last.spend),
+      convDelta: pct(previous.conversations, last.conversations),
+      cplDelta: pct(prevCpl, lastCpl),
+    };
+  }, [monthly]);
+
+  // Everything here is derived from the two series already on hand — no extra
+  // Graph calls, just reading the data the way a media buyer would.
+  const insights = useMemo<Insight[]>(() => {
+    const items: Insight[] = [];
+    const days = daily ?? [];
+    const months = monthly ?? [];
+    const money = (v: number) => formatSpend(v, 'ILS');
+
+    // 1. Weekly momentum: last 7 days vs the 7 before them.
+    if (days.length >= 14) {
+      const last7 = days.slice(-7);
+      const prev7 = days.slice(-14, -7);
+      const lastCpl = cplOf(last7);
+      const prevCpl = cplOf(prev7);
+      if (lastCpl !== null && prevCpl !== null) {
+        const change = ((lastCpl - prevCpl) / prevCpl) * 100;
+        if (change <= -10) {
+          items.push({
+            emoji: '📉',
+            text: `מגמה מצוינת: עלות לפנייה ירדה בשבוע האחרון ל‑${money(lastCpl)} לעומת ${money(prevCpl)} בשבוע שלפני (${Math.abs(change).toFixed(0)}% שיפור).`,
+          });
+        } else if (change >= 10) {
+          items.push({
+            emoji: '📈',
+            text: `שים לב: עלות לפנייה עלתה בשבוע האחרון ל‑${money(lastCpl)} לעומת ${money(prevCpl)} בשבוע שלפני — שווה לרענן קריאייטיב או קהל.`,
+          });
+        } else {
+          items.push({
+            emoji: '⚖️',
+            text: `יציבות: עלות לפנייה בשבוע האחרון (${money(lastCpl)}) דומה לשבוע שלפני (${money(prevCpl)}).`,
+          });
+        }
+      } else if (sumSpend(last7) > 0 && sumConv(last7) === 0) {
+        items.push({
+          emoji: '🚨',
+          text: `בשבוע האחרון הוצאת ${money(sumSpend(last7))} בלי אף פנייה — כדאי לבדוק את הקמפיין בהקדם.`,
+        });
+      }
+    }
+
+    // 2. Days that burned budget with zero inquiries.
+    const burned = days.filter((p) => p.spend > 0 && p.conversations === 0);
+    if (burned.length > 0) {
+      items.push({
+        emoji: '🔥',
+        text: `ב‑30 הימים האחרונים היו ${burned.length} ימים עם הוצאה של ${money(sumSpend(burned))} בלי אף פנייה. בדוק אילו ימים ושקול תזמון מודעות.`,
+      });
+    } else if (days.some((p) => p.spend > 0)) {
+      items.push({ emoji: '✅', text: 'אין ימים "שרופים" — בכל יום עם הוצאה בחודש האחרון התקבלו פניות.' });
+    }
+
+    // 3. Which weekday converts cheapest / priciest (last 30 days).
+    const byWeekday = new Map<number, { spend: number; conversations: number }>();
+    for (const p of days) {
+      const dow = new Date(`${p.start}T00:00:00`).getDay();
+      const agg = byWeekday.get(dow) ?? { spend: 0, conversations: 0 };
+      agg.spend += p.spend;
+      agg.conversations += p.conversations;
+      byWeekday.set(dow, agg);
+    }
+    const weekdayCpls = [...byWeekday.entries()]
+      .filter(([, agg]) => agg.conversations > 0 && agg.spend > 0)
+      .map(([dow, agg]) => ({ dow, cpl: agg.spend / agg.conversations }));
+    if (weekdayCpls.length >= 3) {
+      const best = weekdayCpls.reduce((a, b) => (b.cpl < a.cpl ? b : a));
+      const worst = weekdayCpls.reduce((a, b) => (b.cpl > a.cpl ? b : a));
+      if (best.dow !== worst.dow && worst.cpl >= best.cpl * 1.4) {
+        items.push({
+          emoji: '📅',
+          text: `היום המשתלם ביותר בחודש האחרון: יום ${WEEKDAY_LONG[best.dow]} (~${money(best.cpl)} לפנייה). היקר ביותר: יום ${WEEKDAY_LONG[worst.dow]} (~${money(worst.cpl)}). שקול להסיט תקציב לימים החזקים.`,
+        });
+      }
+    }
+
+    // 4. Best and priciest month ever (ignoring token months of tiny spend).
+    const qualifying = months
+      .filter((p) => p.spend >= 100 && p.conversations > 0)
+      .map((p) => ({ start: p.start, cpl: p.spend / p.conversations }));
+    if (qualifying.length >= 4) {
+      const best = qualifying.reduce((a, b) => (b.cpl < a.cpl ? b : a));
+      const worst = qualifying.reduce((a, b) => (b.cpl > a.cpl ? b : a));
+      if (best.start !== worst.start) {
+        items.push({
+          emoji: '🏆',
+          text: `החודש המשתלם ביותר אי־פעם: ${monthName(best.start)} ${best.start.slice(0, 4)} (${money(best.cpl)} לפנייה). היקר ביותר: ${monthName(worst.start)} ${worst.start.slice(0, 4)} (${money(worst.cpl)}).`,
+        });
+      }
+    }
+
+    // 5. The running month against the lifetime average.
+    const currentKey = new Date().toISOString().slice(0, 7);
+    const current = months.find((p) => p.start.slice(0, 7) === currentKey);
+    const lifetime = cplOf(months);
+    if (current && current.conversations > 0 && lifetime !== null && lifetime > 0) {
+      const currentCpl = current.spend / current.conversations;
+      const diff = ((currentCpl - lifetime) / lifetime) * 100;
+      if (diff <= -5) {
+        items.push({
+          emoji: '🚀',
+          text: `החודש אתה משיג פניות ב‑${Math.abs(diff).toFixed(0)}% פחות מהממוצע הכללי שלך (${money(currentCpl)} מול ${money(lifetime)}).`,
+        });
+      } else if (diff >= 5) {
+        items.push({
+          emoji: '🧭',
+          text: `החודש עלות הפנייה (${money(currentCpl)}) גבוהה ב‑${diff.toFixed(0)}% מהממוצע הכללי שלך (${money(lifetime)}).`,
+        });
+      } else {
+        items.push({
+          emoji: '🎯',
+          text: `החודש אתה בדיוק בקו הממוצע הכללי שלך — ${money(currentCpl)} לפנייה.`,
+        });
+      }
+    }
+
+    return items;
+  }, [monthly, daily]);
 
   const sel = series?.[selected];
   const selTitle = sel
@@ -144,6 +345,32 @@ export default function CrmAdsPage() {
             מאז תחילת הפעילות בחשבון הפרסום
           </p>
 
+          {mom ? (
+            <div className="mt-3 rounded-card border border-ink-700 surface p-3">
+              <p className="text-center text-xs font-bold text-mist-500">📊 {mom.title}</p>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <DeltaTile
+                  label="הוצאה"
+                  value={formatSpend(mom.last.spend, currency)}
+                  delta={mom.spendDelta}
+                  goodWhenDown
+                />
+                <DeltaTile
+                  label="פניות"
+                  value={mom.last.conversations.toLocaleString('he-IL')}
+                  delta={mom.convDelta}
+                  goodWhenDown={false}
+                />
+                <DeltaTile
+                  label="עלות לפנייה"
+                  value={mom.lastCpl !== null ? formatSpend(mom.lastCpl, currency) : '—'}
+                  delta={mom.cplDelta}
+                  goodWhenDown
+                />
+              </div>
+            </div>
+          ) : null}
+
           <div className="mt-4 flex rounded-full border border-ink-700 bg-ink-850 p-1" role="group" aria-label="טווח הגרף">
             {(
               [
@@ -158,6 +385,24 @@ export default function CrmAdsPage() {
                 onClick={() => setView(option.value)}
                 className={`flex-1 rounded-full py-2 text-sm font-bold transition-colors ${
                   view === option.value ? 'bg-brand-500 text-on-brand' : 'text-mist-300'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-2 flex gap-1.5" role="group" aria-label="המדד בגרף">
+            {METRIC_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={metric === option.value}
+                onClick={() => setMetric(option.value)}
+                className={`flex-1 rounded-full border py-1.5 text-xs font-bold transition-colors ${
+                  metric === option.value
+                    ? 'border-brand-500 bg-brand-500 text-on-brand'
+                    : 'border-ink-700 bg-ink-850 text-mist-300'
                 }`}
               >
                 {option.label}
@@ -189,6 +434,22 @@ export default function CrmAdsPage() {
           <p className="mt-2 text-xs font-semibold text-mist-500">
             💡 לחץ על עמודה כדי לראות את הפירוט שלה. הגרף נגלל הצידה — הישן משמאל, החדש מימין.
           </p>
+
+          {insights.length > 0 ? (
+            <div className="mt-4 rounded-card border border-ink-700 surface p-4">
+              <h2 className="text-sm font-extrabold">🧠 ניתוח אוטומטי</h2>
+              <ul className="mt-2 space-y-2.5">
+                {insights.map((insight, i) => (
+                  <li key={i} className="flex gap-2 text-sm leading-relaxed">
+                    <span aria-hidden className="shrink-0">
+                      {insight.emoji}
+                    </span>
+                    <span>{insight.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </>
       )}
     </CrmShell>

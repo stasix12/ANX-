@@ -15,16 +15,27 @@ export interface AdSpend {
   month: number;
   year: number;
   currency: string;
+  /** Messaging conversations started (the "פניות") today / this month. */
+  todayConversations: number;
+  monthConversations: number;
+}
+
+/** Sums messaging-conversation actions out of the insights actions list. */
+function countConversations(actions: { action_type?: string; value?: string }[] | undefined): number {
+  if (!actions) return 0;
+  return actions
+    .filter((a) => a.action_type?.includes('messaging_conversation_started'))
+    .reduce((sum, a) => sum + Number(a.value ?? 0), 0);
 }
 
 async function fetchPreset(
   config: FbAdsConfig,
   datePreset: string,
-): Promise<{ spend: number; currency: string | null }> {
+): Promise<{ spend: number; currency: string | null; conversations: number }> {
   const account = config.accountId.replace(/^act_/, '').trim();
   const url =
     `${GRAPH_BASE}/${GRAPH_VERSION}/act_${account}/insights` +
-    `?date_preset=${datePreset}&fields=spend,account_currency` +
+    `?date_preset=${datePreset}&fields=spend,account_currency,actions` +
     `&access_token=${encodeURIComponent(config.accessToken)}`;
 
   const response = await fetch(url);
@@ -43,6 +54,7 @@ async function fetchPreset(
   return {
     spend: row?.spend ? Number(row.spend) : 0,
     currency: row?.account_currency ?? null,
+    conversations: countConversations(row?.actions),
   };
 }
 
@@ -57,6 +69,8 @@ export async function fetchAdSpend(config: FbAdsConfig): Promise<AdSpend> {
     month: month.spend,
     year: year.spend,
     currency: year.currency ?? month.currency ?? today.currency ?? 'ILS',
+    todayConversations: today.conversations,
+    monthConversations: month.conversations,
   };
 }
 

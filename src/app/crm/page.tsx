@@ -83,6 +83,53 @@ function StatTile({
   );
 }
 
+/**
+ * The ad tiles run bigger than the rest of the grid, with a compact line
+ * underneath: conversations started (פניות) and cost per conversation.
+ */
+function AdSpendTile({
+  label,
+  spend,
+  conversations,
+  currency,
+  emoji,
+}: {
+  label: string;
+  spend: number;
+  conversations: number;
+  currency: string;
+  emoji: string;
+}) {
+  return (
+    <Link
+      href="/crm/stats"
+      className="flex items-start justify-between gap-2 rounded-card border border-brand-500/30 bg-brand-500/5 p-4 py-5 transition-colors hover:border-brand-500/50"
+    >
+      <div className="min-w-0">
+        <p className="text-3xl font-extrabold tabular-nums text-blue-700">
+          {formatSpend(spend, currency)}
+        </p>
+        <p className="mt-1 text-sm font-semibold text-mist-500">{label}</p>
+        <p className="mt-1.5 text-xs font-semibold text-mist-500">
+          {conversations.toLocaleString('he-IL')} פניות
+          {conversations > 0 ? (
+            <>
+              {' · '}
+              <span className="font-extrabold text-mist-300">
+                {formatSpend(spend / conversations, currency)}
+              </span>{' '}
+              לפנייה
+            </>
+          ) : null}
+        </p>
+      </div>
+      <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
+        {emoji}
+      </span>
+    </Link>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-6">
@@ -272,19 +319,19 @@ export default function CrmDashboardPage() {
             <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" emoji="❌" />
             {adSpend ? (
               <>
-                <StatTile
+                <AdSpendTile
                   label="פרסום היום"
-                  value={formatSpend(adSpend.today, adSpend.currency)}
-                  href="/crm/stats"
+                  spend={adSpend.today}
+                  conversations={adSpend.todayConversations}
+                  currency={adSpend.currency}
                   emoji="📣"
-                  accentClass="text-blue-700"
                 />
-                <StatTile
+                <AdSpendTile
                   label="פרסום החודש"
-                  value={formatSpend(adSpend.month, adSpend.currency)}
-                  href="/crm/stats"
+                  spend={adSpend.month}
+                  conversations={adSpend.monthConversations}
+                  currency={adSpend.currency}
                   emoji="💸"
-                  accentClass="text-blue-700"
                 />
               </>
             ) : null}

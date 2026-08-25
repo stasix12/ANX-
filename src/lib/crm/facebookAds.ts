@@ -170,6 +170,134 @@ export async function fetchSpendSeries(
   return points;
 }
 
+export interface CampaignWindow {
+  spend: number;
+  conversations: number;
+  impressions: number;
+  clicks: number;
+  /** Clicks-to-impressions percentage, straight from Graph (0 when unknown). */
+  ctr: number;
+  /** Average times each person saw the ads in the window. */
+  frequency: number;
+}
+
+export interface CampaignPerf {
+  campaignId: string;
+  name: string;
+  /** Graph effective_status — ACTIVE, PAUSED, ... */
+  status: string;
+  /** Daily budget in whole currency units; null when budget lives on ad sets (CBO off). */
+  dailyBudget: number | null;
+  /** Last 30 days, including today. */
+  d30: CampaignWindow;
+  /** Last 7 days, including today. */
+  d7: CampaignWindow;
+  /** The 7 days before those — the momentum baseline. */
+  prev7: CampaignWindow;
+}
+
+const emptyWindow = (): CampaignWindow => ({
+  spend: 0,
+  conversations: 0,
+  impressions: 0,
+  clicks: 0,
+  ctr: 0,
+  frequency: 0,
+});
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+function windowOfRow(row: any): CampaignWindow {
+  return {
+    spend: row?.spend ? Number(row.spend) : 0,
+    conversations: countConversations(row?.actions),
+    impressions: row?.impressions ? Number(row.impressions) : 0,
+    clicks: row?.clicks ? Number(row.clicks) : 0,
+    ctr: row?.ctr ? Number(row.ctr) : 0,
+    frequency: row?.frequency ? Number(row.frequency) : 0,
+  };
+}
+
+/** One insights call at campaign level for an explicit since/until range. */
+async function fetchCampaignWindow(
+  config: FbAdsConfig,
+  range: { since: string; until: string },
+): Promise<Map<string, CampaignWindow>> {
+  const account = config.accountId.replace(/^act_/, '').trim();
+  const url =
+    `${GRAPH_BASE}/${GRAPH_VERSION}/act_${account}/insights` +
+    `?level=campaign&time_range=${encodeURIComponent(JSON.stringify(range))}` +
+    `&fields=campaign_id,campaign_name,spend,actions,impressions,clicks,ctr,frequency` +
+    `&limit=100&access_token=${encodeURIComponent(config.accessToken)}`;
+  const response = await fetch(url);
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw graphError(body);
+  const map = new Map<string, CampaignWindow>();
+  for (const row of body?.data ?? []) {
+    if (row?.campaign_id) map.set(String(row.campaign_id), windowOfRow(row));
+  }
+  return map;
+}
+
+/**
+ * Per-campaign performance for the optimizer: the last 30 days, the last 7
+ * and the 7 before them, merged with each campaign's name, status and daily
+ * budget. Campaigns with no spend in the last 30 days are left out.
+ */
+export async function fetchCampaignPerf(config: FbAdsConfig): Promise<CampaignPerf[]> {
+  const account = config.accountId.replace(/^act_/, '').trim();
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const daysAgo = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return iso(d);
+  };
+  const today = daysAgo(0);
+
+  const metaUrl =
+    `${GRAPH_BASE}/${GRAPH_VERSION}/act_${account}/campaigns` +
+    `?fields=id,name,effective_status,daily_budget&limit=100` +
+    `&access_token=${encodeURIComponent(config.accessToken)}`;
+
+  const [metaResponse, d30, d7, prev7] = await Promise.all([
+    fetch(metaUrl),
+    fetchCampaignWindow(config, { since: daysAgo(29), until: today }),
+    // The short windows are momentum detail — degrade to empty on failure.
+    fetchCampaignWindow(config, { since: daysAgo(6), until: today }).catch(
+      () => new Map<string, CampaignWindow>(),
+    ),
+    fetchCampaignWindow(config, { since: daysAgo(13), until: daysAgo(7) }).catch(
+      () => new Map<string, CampaignWindow>(),
+    ),
+  ]);
+  const metaBody = await metaResponse.json().catch(() => null);
+  if (!metaResponse.ok) throw graphError(metaBody);
+
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  const meta = new Map<string, any>(
+    (metaBody?.data ?? []).map((row: { id?: string }) => [String(row.id ?? ''), row]),
+  );
+
+  const campaigns: CampaignPerf[] = [];
+  for (const [id, window] of d30) {
+    if (window.spend <= 0) continue;
+    const row = meta.get(id);
+    // daily_budget arrives in minor units (agorot/cents).
+    const budget = row?.daily_budget ? Number(row.daily_budget) / 100 : null;
+    campaigns.push({
+      campaignId: id,
+      name: row?.name ?? `קמפיין ${id}`,
+      status: row?.effective_status ?? 'UNKNOWN',
+      dailyBudget: budget && budget > 0 ? budget : null,
+      d30: window,
+      d7: d7.get(id) ?? emptyWindow(),
+      prev7: prev7.get(id) ?? emptyWindow(),
+    });
+  }
+  campaigns.sort((a, b) => b.d30.spend - a.d30.spend);
+  return campaigns;
+}
+
 /**
  * Trades the current token for a fresh long-lived one (~60 days). Requires
  * the app id + secret; returns null when they're missing or Graph refuses.

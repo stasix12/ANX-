@@ -492,6 +492,13 @@ export default function CrmAdsPage() {
             מאז תחילת הפעילות בחשבון הפרסום
           </p>
 
+          <Link
+            href="/crm/ads/optimize"
+            className="mt-3 flex items-center justify-center gap-2 rounded-full bg-brand-500 py-2.5 text-sm font-bold text-on-brand transition-colors hover:bg-brand-400"
+          >
+            🎛️ אופטימיזציית קמפיינים — מה לעשות עכשיו
+          </Link>
+
           {mom ? (
             <div className="mt-3 rounded-card border border-ink-700 surface p-3">
               <p className="text-center text-xs font-bold text-mist-500">📊 {mom.title}</p>

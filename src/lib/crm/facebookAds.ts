@@ -1,4 +1,4 @@
-import type { FbAdsConfig } from '@/lib/crm/settings';
+import { saveFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
 
 /**
  * Reads ad spend straight from the Facebook Marketing API (Graph API), which
@@ -74,6 +74,46 @@ export async function fetchAdSpend(config: FbAdsConfig): Promise<AdSpend> {
     monthConversations: month.conversations,
     yearConversations: year.conversations,
   };
+}
+
+/**
+ * Trades the current token for a fresh long-lived one (~60 days). Requires
+ * the app id + secret; returns null when they're missing or Graph refuses.
+ */
+export async function exchangeForLongLived(config: FbAdsConfig): Promise<string | null> {
+  if (!config.appId || !config.appSecret) return null;
+  const url =
+    `${GRAPH_BASE}/${GRAPH_VERSION}/oauth/access_token` +
+    `?grant_type=fb_exchange_token&client_id=${encodeURIComponent(config.appId)}` +
+    `&client_secret=${encodeURIComponent(config.appSecret)}` +
+    `&fb_exchange_token=${encodeURIComponent(config.accessToken)}`;
+  const response = await fetch(url);
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body?.access_token) return null;
+  return body.access_token as string;
+}
+
+/** Renew well before the ~60-day expiry; each renewal restarts the clock. */
+const RENEW_AFTER_DAYS = 20;
+
+/**
+ * fetchAdSpend with self-renewal: when app credentials are stored and the
+ * token is older than RENEW_AFTER_DAYS, it is exchanged for a fresh
+ * long-lived one and persisted before fetching. As long as the app gets
+ * opened once in ~60 days, the token never expires.
+ */
+export async function fetchAdSpendManaged(config: FbAdsConfig): Promise<AdSpend> {
+  const ageDays = config.tokenSavedAt
+    ? (Date.now() - Date.parse(config.tokenSavedAt)) / 86_400_000
+    : Number.POSITIVE_INFINITY;
+  if (config.appId && config.appSecret && ageDays > RENEW_AFTER_DAYS) {
+    const fresh = await exchangeForLongLived(config);
+    if (fresh) {
+      config = { ...config, accessToken: fresh, tokenSavedAt: new Date().toISOString() };
+      await saveFbAdsConfig(config).catch(() => {});
+    }
+  }
+  return fetchAdSpend(config);
 }
 
 /** The compact "X פניות · ₪Y לפנייה" line under a spend figure. */

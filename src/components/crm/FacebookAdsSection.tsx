@@ -135,7 +135,7 @@ function SetupForm({
       </div>
       <div>
         <label htmlFor="fb-token" className="mb-1 block text-sm font-semibold text-mist-300">
-          Access Token (עם הרשאת ads_read)
+          Access Token (עם הרשאת ads_read; לעריכת קמפיינים גם ads_management)
         </label>
         <input
           id="fb-token"
@@ -251,7 +251,7 @@ function SetupForm({
           </li>
           <li>
             פתח את <b>Graph API Explorer</b> (בתפריט Tools), בחר את האפליקציה, לחץ{' '}
-            <b>Add a Permission</b> והוסף <span dir="ltr">ads_read</span>, ואז <b>Generate Access Token</b>.
+            <b>Add a Permission</b> והוסף <span dir="ltr">ads_read</span> (וגם <span dir="ltr">ads_management</span> אם רוצים לערוך קמפיינים מהאפליקציה), ואז <b>Generate Access Token</b>.
           </li>
           <li>העתק את הטוקן לכאן. טוקן רגיל תקף כ-60 יום; לטוקן קבוע צור System User ב-Business Settings.</li>
         </ol>

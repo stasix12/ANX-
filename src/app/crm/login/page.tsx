@@ -5,6 +5,17 @@ import { useEffect, useState } from 'react';
 import { SpinnerIcon } from '@/components/icons';
 import { signIn, useAdminSession } from '@/lib/adminAuth';
 
+type SkyPhase = 'dawn' | 'day' | 'dusk' | 'night';
+
+/** The sky the user would see outside right now. */
+function skyPhaseNow(): SkyPhase {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 8) return 'dawn';
+  if (hour >= 8 && hour < 17) return 'day';
+  if (hour >= 17 && hour < 20) return 'dusk';
+  return 'night';
+}
+
 /**
  * CRM sign-in. Same Supabase auth as the store's admin panel — one admin
  * account opens both — but lands on the CRM dashboard instead of /admin.
@@ -16,6 +27,20 @@ export default function CrmLoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [sky, setSky] = useState<SkyPhase>('day');
+
+  // Set after mount (the prerendered HTML can't know the visitor's clock);
+  // ?sky=night etc. forces a phase for previewing.
+  useEffect(() => {
+    const override = new URLSearchParams(window.location.search).get('sky');
+    if (override === 'dawn' || override === 'day' || override === 'dusk' || override === 'night') {
+      setSky(override);
+      return;
+    }
+    setSky(skyPhaseNow());
+    const timer = setInterval(() => setSky(skyPhaseNow()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!loading && session) router.replace('/crm');
@@ -44,10 +69,18 @@ export default function CrmLoginPage() {
 
   return (
     <div
-      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-5 py-10"
-      // The business banner's own light-blue tones.
-      style={{ background: 'linear-gradient(180deg, #ecf6fe 0%, #d6ecff 100%)' }}
+      className={`relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-5 py-10 crm-sky-${sky}`}
     >
+      {/* The living sky: stars, sun or moon, drifting clouds — whichever the
+          hour calls for; the rest hide themselves via the phase class. */}
+      <div aria-hidden className="crm-stars" />
+      <div aria-hidden className="crm-stars-2" />
+      <div aria-hidden className="crm-shooting" />
+      <div aria-hidden className="crm-sun" />
+      <div aria-hidden className="crm-moon" />
+      <div aria-hidden className="crm-cloud crm-cloud-1" />
+      <div aria-hidden className="crm-cloud crm-cloud-2" />
+      <div aria-hidden className="crm-cloud crm-cloud-3" />
       {/* Soap bubbles drifting up the whole screen — the business, animated. */}
       <div aria-hidden className="crm-login-bubbles">
         {Array.from({ length: 18 }, (_, i) => (
@@ -59,9 +92,9 @@ export default function CrmLoginPage() {
           {/* The real logo, lifted from the business banner with its ground
               keyed out to transparency, so it sits seamlessly on the page. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/crm/logo.png" alt="הפתרון המבריק" className="mx-auto w-80 max-w-full" />
-          <p className="mt-2 text-xl font-extrabold tracking-tight">ניהול עבודות</p>
-          <p className="mt-1 text-sm text-mist-500">לידים ועבודות ניקיון</p>
+          <img src="/crm/logo.png" alt="הפתרון המבריק" className="crm-login-logo mx-auto w-80 max-w-full" />
+          <p className="crm-login-title mt-2 text-xl font-extrabold tracking-tight">ניהול עבודות</p>
+          <p className="crm-login-sub mt-1 text-sm text-mist-500">לידים ועבודות ניקיון</p>
         </div>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-card border border-ink-700 surface p-5">

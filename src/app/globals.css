@@ -241,10 +241,245 @@
   }
 }
 
+/*
+ * Time-of-day sky behind the login screen — the gradient, sun/moon, clouds
+ * and stars all switch with a crm-sky-<phase> class set from the clock.
+ */
+.crm-sky-day {
+  background: linear-gradient(180deg, #3f9be0 0%, #7cc3f0 42%, #d9effc 100%);
+}
+.crm-sky-dawn {
+  background: linear-gradient(180deg, #33427e 0%, #8f6fae 38%, #f29d74 72%, #ffd9a3 100%);
+}
+.crm-sky-dusk {
+  background: linear-gradient(180deg, #1b2450 0%, #5d3f85 40%, #e06b45 76%, #ffb469 100%);
+}
+.crm-sky-night {
+  background: linear-gradient(180deg, #050b26 0%, #0c1740 55%, #17295c 100%);
+}
+
+/* The sun — a soft glowing disc that sits high at noon and low at the edges
+   of the day, warming up as it approaches the horizon. */
+.crm-sun {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 9999px;
+  pointer-events: none;
+  background: radial-gradient(circle, #fff7d6 0%, #ffe27a 45%, rgba(255, 214, 90, 0) 72%);
+  animation: crm-sun-pulse 6s ease-in-out infinite;
+}
+.crm-sky-day .crm-sun {
+  top: 7%;
+  inset-inline-end: 9%;
+  box-shadow: 0 0 80px 30px rgba(255, 230, 140, 0.5);
+}
+.crm-sky-dawn .crm-sun {
+  top: 31%;
+  inset-inline-start: -14px;
+  background: radial-gradient(circle, #fff1cf 0%, #ffbf72 48%, rgba(255, 160, 80, 0) 72%);
+  box-shadow: 0 0 90px 40px rgba(255, 170, 110, 0.5);
+}
+.crm-sky-dusk .crm-sun {
+  top: 31%;
+  inset-inline-end: -14px;
+  background: radial-gradient(circle, #ffe8c4 0%, #ff9e5e 48%, rgba(255, 120, 60, 0) 72%);
+  box-shadow: 0 0 100px 45px rgba(255, 140, 80, 0.55);
+}
+.crm-sky-night .crm-sun {
+  display: none;
+}
+@keyframes crm-sun-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+/* The moon — night only, gently floating, with crater shading. */
+.crm-moon {
+  display: none;
+}
+.crm-sky-night .crm-moon {
+  display: block;
+  position: absolute;
+  top: 8%;
+  inset-inline-end: 11%;
+  width: 74px;
+  height: 74px;
+  border-radius: 9999px;
+  pointer-events: none;
+  background: radial-gradient(circle at 35% 35%, #fdfdf4 0%, #e8ead8 55%, #c9ceb9 100%);
+  box-shadow:
+    0 0 50px 18px rgba(240, 244, 255, 0.32),
+    inset -12px -10px 24px rgba(120, 130, 110, 0.35);
+  animation: crm-moon-float 9s ease-in-out infinite;
+}
+@keyframes crm-moon-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* Two star layers twinkling out of phase; they fade in only after dark. */
+.crm-stars,
+.crm-stars-2 {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.2s ease;
+}
+.crm-stars::after,
+.crm-stars-2::after {
+  content: '';
+  position: absolute;
+  /* Pin to the physical top-left: in RTL the static position is the right
+     edge, which would throw every box-shadow star off screen. */
+  top: 0;
+  left: 0;
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow:
+    2vw 6vh 0 0 #fff, 9vw 14vh 0 0 #fff, 15vw 4vh 0 0 #fff, 21vw 10vh 0 0 #fff,
+    28vw 3vh 0 0 #fff, 33vw 16vh 0 0 #fff, 40vw 7vh 0 0 #fff, 47vw 12vh 0 0 #fff,
+    52vw 5vh 0 0 #fff, 60vw 15vh 0 0 #fff, 66vw 3vh 0 0 #fff, 72vw 9vh 0 0 #fff,
+    79vw 14vh 0 0 #fff, 85vw 6vh 0 0 #fff, 92vw 11vh 0 0 #fff, 96vw 4vh 0 0 #fff,
+    6vw 24vh 0 0 #fff, 18vw 28vh 0 0 #fff, 31vw 22vh 0 0 #fff, 44vw 26vh 0 0 #fff,
+    58vw 23vh 0 0 #fff, 70vw 27vh 0 0 #fff, 83vw 21vh 0 0 #fff, 94vw 25vh 0 0 #fff;
+}
+.crm-stars-2::after {
+  width: 1px;
+  height: 1px;
+  box-shadow:
+    4vw 9vh 0 0 rgba(255, 255, 255, 0.8), 12vw 19vh 0 0 rgba(255, 255, 255, 0.8),
+    19vw 6vh 0 0 rgba(255, 255, 255, 0.8), 25vw 13vh 0 0 rgba(255, 255, 255, 0.8),
+    30vw 8vh 0 0 rgba(255, 255, 255, 0.8), 37vw 18vh 0 0 rgba(255, 255, 255, 0.8),
+    43vw 4vh 0 0 rgba(255, 255, 255, 0.8), 50vw 9vh 0 0 rgba(255, 255, 255, 0.8),
+    56vw 17vh 0 0 rgba(255, 255, 255, 0.8), 63vw 6vh 0 0 rgba(255, 255, 255, 0.8),
+    69vw 13vh 0 0 rgba(255, 255, 255, 0.8), 76vw 5vh 0 0 rgba(255, 255, 255, 0.8),
+    82vw 17vh 0 0 rgba(255, 255, 255, 0.8), 88vw 9vh 0 0 rgba(255, 255, 255, 0.8),
+    95vw 15vh 0 0 rgba(255, 255, 255, 0.8), 10vw 31vh 0 0 rgba(255, 255, 255, 0.8),
+    27vw 33vh 0 0 rgba(255, 255, 255, 0.8), 49vw 30vh 0 0 rgba(255, 255, 255, 0.8),
+    68vw 32vh 0 0 rgba(255, 255, 255, 0.8), 88vw 30vh 0 0 rgba(255, 255, 255, 0.8);
+}
+.crm-sky-night .crm-stars {
+  opacity: 1;
+  animation: crm-twinkle 4s ease-in-out infinite;
+}
+.crm-sky-night .crm-stars-2 {
+  opacity: 0.7;
+  animation: crm-twinkle-soft 5.5s ease-in-out infinite 1.5s;
+}
+.crm-sky-dawn .crm-stars,
+.crm-sky-dusk .crm-stars-2 {
+  opacity: 0.3;
+}
+@keyframes crm-twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+@keyframes crm-twinkle-soft {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 0.3; }
+}
+
+/* A shooting star streaks across every few seconds at night. */
+.crm-shooting {
+  display: none;
+}
+.crm-sky-night .crm-shooting {
+  display: block;
+  position: absolute;
+  top: 16%;
+  inset-inline-start: 72%;
+  width: 90px;
+  height: 2px;
+  pointer-events: none;
+  border-radius: 9999px;
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0));
+  opacity: 0;
+  animation: crm-shoot 8s ease-in infinite 3s;
+}
+@keyframes crm-shoot {
+  0% { opacity: 0; transform: rotate(205deg) translateX(0); }
+  2% { opacity: 1; }
+  9% { opacity: 0; transform: rotate(205deg) translateX(190px); }
+  100% { opacity: 0; transform: rotate(205deg) translateX(190px); }
+}
+
+/* Puffy clouds drifting slowly across; hidden after dark, warm at the
+   edges of the day. */
+.crm-cloud {
+  position: absolute;
+  left: -160px;
+  height: 26px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.92);
+  pointer-events: none;
+  animation: crm-cloud-drift linear infinite;
+}
+.crm-cloud::before,
+.crm-cloud::after {
+  content: '';
+  position: absolute;
+  background: inherit;
+  border-radius: 9999px;
+}
+.crm-cloud::before {
+  width: 34px;
+  height: 34px;
+  top: -16px;
+  left: 18%;
+}
+.crm-cloud::after {
+  width: 24px;
+  height: 24px;
+  top: -10px;
+  right: 20%;
+}
+.crm-cloud-1 { top: 12%; width: 110px; animation-duration: 55s; }
+.crm-cloud-2 { top: 26%; width: 76px; height: 20px; opacity: 0.7; animation-duration: 75s; animation-delay: -30s; }
+.crm-cloud-3 { top: 5%; width: 140px; opacity: 0.8; animation-duration: 95s; animation-delay: -60s; }
+.crm-sky-dawn .crm-cloud { background: rgba(255, 226, 205, 0.85); }
+.crm-sky-dusk .crm-cloud { background: rgba(255, 205, 175, 0.8); }
+.crm-sky-night .crm-cloud { background: rgba(200, 215, 255, 0.1); }
+@keyframes crm-cloud-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(100vw + 320px)); }
+}
+
+/* Keep the wordmark and taglines readable once the sky darkens. */
+.crm-sky-dawn .crm-login-title,
+.crm-sky-dusk .crm-login-title,
+.crm-sky-night .crm-login-title {
+  color: #f2f7ff;
+  text-shadow: 0 1px 8px rgba(10, 20, 50, 0.45);
+}
+.crm-sky-dawn .crm-login-sub,
+.crm-sky-dusk .crm-login-sub,
+.crm-sky-night .crm-login-sub {
+  color: #ccd9f0;
+  text-shadow: 0 1px 6px rgba(10, 20, 50, 0.4);
+}
+.crm-sky-dawn .crm-login-logo,
+.crm-sky-dusk .crm-login-logo,
+.crm-sky-night .crm-login-logo {
+  filter: drop-shadow(0 0 28px rgba(255, 255, 255, 0.55)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
+}
+.crm-sky-night .crm-login-bubbles {
+  opacity: 0.55;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .crm-hero,
   .crm-hero .bubble,
-  .crm-login-bubbles span {
+  .crm-login-bubbles span,
+  .crm-sun,
+  .crm-moon,
+  .crm-cloud,
+  .crm-stars,
+  .crm-stars-2,
+  .crm-shooting {
     animation: none;
   }
 }

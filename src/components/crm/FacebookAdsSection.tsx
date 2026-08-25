@@ -2,14 +2,24 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { SpinnerIcon } from '@/components/icons';
-import { fetchAdSpend, formatSpend, type AdSpend } from '@/lib/crm/facebookAds';
+import { conversationsLine, fetchAdSpend, formatSpend, type AdSpend } from '@/lib/crm/facebookAds';
 import { todayISO, type Lead } from '@/lib/crm/leads';
 import { clearFbAdsConfig, getFbAdsConfig, saveFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
 
 const inputClass =
   'w-full rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-base outline-none transition-colors focus:border-brand-500';
 
-function SpendTile({ label, value, emoji }: { label: string; value: string; emoji: string }) {
+function SpendTile({
+  label,
+  value,
+  emoji,
+  detail,
+}: {
+  label: string;
+  value: string;
+  emoji: string;
+  detail?: string;
+}) {
   // Stacked and centered — three of these share one row on a phone.
   return (
     <div className="rounded-card border border-ink-700 surface p-3 text-center">
@@ -18,6 +28,9 @@ function SpendTile({ label, value, emoji }: { label: string; value: string; emoj
       </p>
       <p className="mt-1.5 text-lg font-extrabold tabular-nums text-blue-700">{value}</p>
       <p className="mt-0.5 text-xs font-semibold text-mist-500">{label}</p>
+      {detail ? (
+        <p className="mt-1 text-[10px] font-semibold leading-tight text-mist-500">{detail}</p>
+      ) : null}
     </div>
   );
 }
@@ -389,9 +402,24 @@ export function FacebookAdsSection({ leads }: { leads: Lead[] }) {
       ) : spend ? (
         <>
           <div className="grid grid-cols-3 gap-2">
-            <SpendTile label="היום" value={formatSpend(spend.today, spend.currency)} emoji="📣" />
-            <SpendTile label="החודש" value={formatSpend(spend.month, spend.currency)} emoji="🗓️" />
-            <SpendTile label="השנה" value={formatSpend(spend.year, spend.currency)} emoji="📊" />
+            <SpendTile
+              label="היום"
+              value={formatSpend(spend.today, spend.currency)}
+              emoji="📣"
+              detail={conversationsLine(spend.todayConversations, spend.today, spend.currency)}
+            />
+            <SpendTile
+              label="החודש"
+              value={formatSpend(spend.month, spend.currency)}
+              emoji="🗓️"
+              detail={conversationsLine(spend.monthConversations, spend.month, spend.currency)}
+            />
+            <SpendTile
+              label="השנה"
+              value={formatSpend(spend.year, spend.currency)}
+              emoji="📊"
+              detail={conversationsLine(spend.yearConversations, spend.year, spend.currency)}
+            />
           </div>
           <AdInsights spend={spend} leads={leads} />
         </>

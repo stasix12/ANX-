@@ -27,11 +27,32 @@ export interface AdSpend {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function graphError(body: any): Error {
   const code = body?.error?.code;
-  if (code === 190) return new Error('הטוקן פג תוקף או שגוי — צור טוקן חדש ועדכן בהגדרות.');
-  if (code === 100 || code === 803) return new Error('מזהה חשבון המודעות לא נמצא — בדוק את המספר.');
+  const raw = body?.error?.message ? ` (Facebook: ${body.error.message})` : '';
+  if (code === 190) return new Error(`הטוקן פג תוקף או שגוי — צור טוקן חדש ועדכן בהגדרות.${raw}`);
+  if (code === 100 || code === 803)
+    return new Error(`מזהה חשבון המודעות לא נמצא — בדוק את המספר.${raw}`);
   if (code === 10 || code === 200 || code === 294)
-    return new Error('לטוקן אין הרשאת ads_read לחשבון המודעות הזה.');
+    return new Error(`לטוקן אין הרשאת ads_read לחשבון המודעות הזה.${raw}`);
   return new Error(body?.error?.message ?? 'שליפת נתוני הפרסום נכשלה.');
+}
+
+export interface AdAccountOption {
+  accountId: string;
+  name: string;
+}
+
+/** The ad accounts the pasted token can actually read — for the picker. */
+export async function listAdAccounts(accessToken: string): Promise<AdAccountOption[]> {
+  const url =
+    `${GRAPH_BASE}/${GRAPH_VERSION}/me/adaccounts` +
+    `?fields=account_id,name&limit=50&access_token=${encodeURIComponent(accessToken.trim())}`;
+  const response = await fetch(url);
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw graphError(body);
+  return (body?.data ?? []).map((row: any) => ({
+    accountId: String(row.account_id ?? '').trim(),
+    name: row.name ?? '',
+  }));
 }
 
 /** Sums messaging-conversation actions out of the insights actions list. */
@@ -65,12 +86,18 @@ async function fetchPreset(
 }
 
 export async function fetchAdSpend(config: FbAdsConfig): Promise<AdSpend> {
-  const [today, week, month, year] = await Promise.all([
+  // today+month are the section's backbone — their failure is a real error.
+  // week/year presets vary more across accounts; a failure there degrades to
+  // zero instead of blanking the whole panel.
+  const empty = { spend: 0, currency: null, conversations: 0 };
+  const [today, month, weekResult, yearResult] = await Promise.all([
     fetchPreset(config, 'today'),
-    fetchPreset(config, 'this_week_sun_sat'),
     fetchPreset(config, 'this_month'),
-    fetchPreset(config, 'this_year'),
+    fetchPreset(config, 'this_week_sun_sat').catch(() => empty),
+    fetchPreset(config, 'this_year').catch(() => empty),
   ]);
+  const week = weekResult;
+  const year = yearResult;
   return {
     today: today.spend,
     week: week.spend,

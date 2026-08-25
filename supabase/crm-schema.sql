@@ -80,3 +80,44 @@ create policy "admin delete leads"
   on public.leads for delete
   to authenticated
   using (true);
+
+-- Small key/value store for CRM integrations and preferences (e.g. the
+-- Facebook Ads credentials). Same trust model as leads: RLS locks every
+-- operation to the signed-in admin — the anon key can never read a token.
+create table if not exists public.crm_settings (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists crm_settings_set_updated_at on public.crm_settings;
+create trigger crm_settings_set_updated_at
+  before update on public.crm_settings
+  for each row execute function public.set_updated_at();
+
+alter table public.crm_settings enable row level security;
+
+drop policy if exists "admin read settings" on public.crm_settings;
+create policy "admin read settings"
+  on public.crm_settings for select
+  to authenticated
+  using (true);
+
+drop policy if exists "admin write settings" on public.crm_settings;
+create policy "admin write settings"
+  on public.crm_settings for insert
+  to authenticated
+  with check (true);
+
+drop policy if exists "admin update settings" on public.crm_settings;
+create policy "admin update settings"
+  on public.crm_settings for update
+  to authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "admin delete settings" on public.crm_settings;
+create policy "admin delete settings"
+  on public.crm_settings for delete
+  to authenticated
+  using (true);

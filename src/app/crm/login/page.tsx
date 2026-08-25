@@ -46,14 +46,18 @@ export default function CrmLoginPage() {
     <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink-950 px-5 py-10">
       {/* Soap bubbles drifting up the whole screen — the business, animated. */}
       <div aria-hidden className="crm-login-bubbles">
-        {Array.from({ length: 9 }, (_, i) => (
+        {Array.from({ length: 18 }, (_, i) => (
           <span key={i} />
         ))}
       </div>
       <div className="relative w-full max-w-sm">
         <div className="text-center">
-          <p className="text-3xl">🫧</p>
-          <p className="mt-2 text-2xl font-extrabold tracking-tight">ניהול עבודות</p>
+          <h1 className="text-4xl font-extrabold tracking-tight">
+            <span className="text-brand-500">הפתרון</span>{' '}
+            <span className="text-emerald-600">המבריק</span>
+            <span aria-hidden className="text-2xl"> ✨</span>
+          </h1>
+          <p className="mt-3 text-xl font-extrabold tracking-tight">ניהול עבודות</p>
           <p className="mt-1 text-sm text-mist-500">לידים ועבודות ניקיון</p>
         </div>
 

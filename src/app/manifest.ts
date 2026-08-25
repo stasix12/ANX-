@@ -10,9 +10,9 @@ export const dynamic = 'force-static';
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'ניהול עבודות — לידים ועבודות ניקיון',
-    short_name: 'ניהול עבודות',
-    description: 'מערכת ניהול לידים ועבודות לעסק הניקיון: יומן, לקוחות, סטטוסים והכנסות.',
+    name: 'הפתרון המבריק — ניהול עבודות',
+    short_name: 'הפתרון המבריק',
+    description: 'מערכת ניהול לידים ועבודות של הפתרון המבריק: יומן, לקוחות, סטטוסים והכנסות.',
     id: '/crm',
     start_url: '/crm',
     scope: '/',

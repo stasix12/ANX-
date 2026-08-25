@@ -6,12 +6,12 @@ import type { Metadata, Viewport } from 'next';
  * page for search engines.
  */
 export const metadata: Metadata = {
-  title: 'ניהול עבודות',
+  title: 'הפתרון המבריק — ניהול עבודות',
   robots: { index: false, follow: false },
   icons: { apple: '/crm/apple-touch-icon.png' },
   appleWebApp: {
     capable: true,
-    title: 'ניהול עבודות',
+    title: 'הפתרון המבריק',
     // Fullscreen with white status-bar text — it sits over the header's blue
     // gradient, which pads itself with env(safe-area-inset-top).
     statusBarStyle: 'black-translucent',

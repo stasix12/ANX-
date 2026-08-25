@@ -1,11 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { SpinnerIcon } from '@/components/icons';
 import {
   SERVICE_OPTIONS,
   SOURCE_OPTIONS,
   STATUS_OPTIONS,
+  formatDateHe,
+  formatPrice,
+  listLeadsByPhone,
+  type Lead,
   type LeadInput,
   type LeadSource,
   type LeadStatus,
@@ -55,14 +60,34 @@ export function LeadForm({
   initial,
   submitLabel,
   onSubmit,
+  excludeId,
 }: {
   initial?: LeadInput;
   submitLabel: string;
   onSubmit: (input: LeadInput) => Promise<void>;
+  /** When editing, the lead's own id — so it doesn't match itself as "returning". */
+  excludeId?: string;
 }) {
   const [value, setValue] = useState<LeadInput>(initial ?? emptyInput);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [returning, setReturning] = useState<Lead[]>([]);
+
+  // Recognize a returning customer as the phone number is typed — the moment
+  // it looks like a full number, look up their previous jobs.
+  useEffect(() => {
+    const digits = value.phone.replace(/\D/g, '');
+    if (digits.length < 9) {
+      setReturning([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      listLeadsByPhone(value.phone, excludeId)
+        .then(setReturning)
+        .catch(() => setReturning([]));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [value.phone, excludeId]);
 
   const set = <K extends keyof LeadInput>(key: K, val: LeadInput[K]) =>
     setValue((prev) => ({ ...prev, [key]: val }));
@@ -117,6 +142,17 @@ export function LeadForm({
           className={inputClass}
           dir="ltr"
         />
+        {returning.length > 0 ? (
+          <Link
+            href={`/crm/leads/${returning[0].id}`}
+            className="mt-2 block rounded-xl border border-teal-600/40 bg-teal-500/10 px-3 py-2.5 text-sm font-bold text-teal-800"
+          >
+            🔁 לקוח חוזר — {returning.length === 1 ? 'עבודה קודמת אחת' : `${returning.length} עבודות קודמות`}
+            {returning[0].jobDate
+              ? `, האחרונה ב-${formatDateHe(returning[0].jobDate)} (${formatPrice(returning[0].price)})`
+              : ''}
+          </Link>
+        ) : null}
       </Field>
 
       <Field label="כתובת מלאה" htmlFor="lead-address">

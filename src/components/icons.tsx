@@ -322,6 +322,16 @@ export function ClockIcon(props: IconProps) {
   );
 }
 
+export function MegaphoneIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 10v4a1.5 1.5 0 001.5 1.5H8l7.5 4V4.5L8 8.5H5.5A1.5 1.5 0 004 10z" />
+      <path d="M18.5 9.5a3.5 3.5 0 010 5" />
+      <path d="M8 15.5l1 4.5h2.5l-.8-4.5" />
+    </svg>
+  );
+}
+
 export function NavigationIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

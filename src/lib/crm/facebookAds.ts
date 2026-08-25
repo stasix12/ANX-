@@ -24,6 +24,16 @@ export interface AdSpend {
   yearConversations: number;
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function graphError(body: any): Error {
+  const code = body?.error?.code;
+  if (code === 190) return new Error('הטוקן פג תוקף או שגוי — צור טוקן חדש ועדכן בהגדרות.');
+  if (code === 100 || code === 803) return new Error('מזהה חשבון המודעות לא נמצא — בדוק את המספר.');
+  if (code === 10 || code === 200 || code === 294)
+    return new Error('לטוקן אין הרשאת ads_read לחשבון המודעות הזה.');
+  return new Error(body?.error?.message ?? 'שליפת נתוני הפרסום נכשלה.');
+}
+
 /** Sums messaging-conversation actions out of the insights actions list. */
 function countConversations(actions: { action_type?: string; value?: string }[] | undefined): number {
   if (!actions) return 0;
@@ -44,15 +54,7 @@ async function fetchPreset(
 
   const response = await fetch(url);
   const body = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const code = body?.error?.code;
-    if (code === 190) throw new Error('הטוקן פג תוקף או שגוי — צור טוקן חדש ועדכן בהגדרות.');
-    if (code === 100 || code === 803) throw new Error('מזהה חשבון המודעות לא נמצא — בדוק את המספר.');
-    if (code === 10 || code === 200 || code === 294)
-      throw new Error('לטוקן אין הרשאת ads_read לחשבון המודעות הזה.');
-    throw new Error(body?.error?.message ?? 'שליפת נתוני הפרסום נכשלה.');
-  }
+  if (!response.ok) throw graphError(body);
 
   const row = body?.data?.[0];
   return {
@@ -80,6 +82,48 @@ export async function fetchAdSpend(config: FbAdsConfig): Promise<AdSpend> {
     monthConversations: month.conversations,
     yearConversations: year.conversations,
   };
+}
+
+export interface SpendPoint {
+  /** ISO date the bucket starts on (YYYY-MM-DD). */
+  start: string;
+  spend: number;
+  conversations: number;
+}
+
+/**
+ * A spend time-series from insights — one point per month over the account's
+ * whole lifetime, or one per day — following Graph's paging links.
+ */
+export async function fetchSpendSeries(
+  config: FbAdsConfig,
+  options: { timeIncrement: 'monthly' | 1; datePreset: string },
+): Promise<SpendPoint[]> {
+  const account = config.accountId.replace(/^act_/, '').trim();
+  let url: string | null =
+    `${GRAPH_BASE}/${GRAPH_VERSION}/act_${account}/insights` +
+    `?date_preset=${options.datePreset}&time_increment=${options.timeIncrement}` +
+    `&fields=spend,actions&limit=100` +
+    `&access_token=${encodeURIComponent(config.accessToken)}`;
+
+  const points: SpendPoint[] = [];
+  // A few pages cover years of monthly rows; the cap is a runaway guard.
+  for (let page = 0; page < 8 && url; page++) {
+    const response: Response = await fetch(url);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body: any = await response.json().catch(() => null);
+    if (!response.ok) throw graphError(body);
+    for (const row of body?.data ?? []) {
+      points.push({
+        start: row.date_start,
+        spend: row.spend ? Number(row.spend) : 0,
+        conversations: countConversations(row.actions),
+      });
+    }
+    url = body?.paging?.next ?? null;
+  }
+  points.sort((a, b) => (a.start < b.start ? -1 : 1));
+  return points;
 }
 
 /**

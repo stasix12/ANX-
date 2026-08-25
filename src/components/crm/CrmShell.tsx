@@ -7,6 +7,7 @@ import {
   CalendarIcon,
   ChartIcon,
   HomeIcon,
+  MegaphoneIcon,
   PlusIcon,
   SpinnerIcon,
   UsersIcon,
@@ -20,6 +21,7 @@ const navStart = [
 
 const navEnd = [
   { href: '/crm/leads', label: 'לקוחות', icon: UsersIcon, exact: false },
+  { href: '/crm/ads', label: 'פרסום', icon: MegaphoneIcon, exact: false },
   { href: '/crm/stats', label: 'נתונים', icon: ChartIcon, exact: false },
 ];
 

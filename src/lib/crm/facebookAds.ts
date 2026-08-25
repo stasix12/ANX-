@@ -324,12 +324,13 @@ async function graphPost(
   return json;
 }
 
-export async function setCampaignStatus(
+/** Works on any ad object — campaign, ad set, or ad. */
+export async function setObjectStatus(
   config: FbAdsConfig,
-  campaignId: string,
+  objectId: string,
   status: 'ACTIVE' | 'PAUSED',
 ): Promise<void> {
-  await graphPost(config, campaignId, { status });
+  await graphPost(config, objectId, { status });
 }
 
 /** budget in whole currency units (₪); Graph wants minor units. */
@@ -422,6 +423,32 @@ export async function fetchAdSets(
       raw: row.targeting ?? {},
     };
   });
+}
+
+export interface AdInfo {
+  adId: string;
+  name: string;
+  status: string;
+  /** Small creative preview image, when Graph provides one. */
+  thumbnailUrl: string | null;
+}
+
+/** The ads inside one ad set, with creative thumbnails for recognition. */
+export async function fetchAds(config: FbAdsConfig, adSetId: string): Promise<AdInfo[]> {
+  const url =
+    `${GRAPH_BASE}/${GRAPH_VERSION}/${adSetId}/ads` +
+    `?fields=id,name,effective_status,creative{thumbnail_url}&limit=50` +
+    `&access_token=${encodeURIComponent(config.accessToken)}`;
+  const response = await fetch(url);
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw graphError(body);
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  return (body?.data ?? []).map((row: any) => ({
+    adId: String(row.id),
+    name: row.name ?? '',
+    status: row.effective_status ?? 'UNKNOWN',
+    thumbnailUrl: row.creative?.thumbnail_url ?? null,
+  }));
 }
 
 /** Israeli cities matching the query — for the targeting picker. */

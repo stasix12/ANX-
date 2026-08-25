@@ -185,9 +185,57 @@
   }
 }
 
+/*
+ * Full-page bubble layer for the login screen: blue-tinted soap bubbles
+ * drifting up the whole viewport behind the sign-in card.
+ */
+.crm-login-bubbles {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.crm-login-bubbles span {
+  position: absolute;
+  bottom: -70px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.9), rgba(2, 132, 199, 0.08) 60%);
+  border: 1px solid rgba(2, 132, 199, 0.28);
+  animation: crm-bubble-rise-tall linear infinite;
+}
+
+.crm-login-bubbles span:nth-of-type(1) { width: 34px; height: 34px; inset-inline-start: 6%;  animation-duration: 16s; }
+.crm-login-bubbles span:nth-of-type(2) { width: 16px; height: 16px; inset-inline-start: 16%; animation-duration: 12s; animation-delay: 4s; }
+.crm-login-bubbles span:nth-of-type(3) { width: 46px; height: 46px; inset-inline-start: 27%; animation-duration: 20s; animation-delay: 2s; }
+.crm-login-bubbles span:nth-of-type(4) { width: 12px; height: 12px; inset-inline-start: 38%; animation-duration: 10s; animation-delay: 7s; }
+.crm-login-bubbles span:nth-of-type(5) { width: 26px; height: 26px; inset-inline-start: 49%; animation-duration: 14s; animation-delay: 1s; }
+.crm-login-bubbles span:nth-of-type(6) { width: 18px; height: 18px; inset-inline-start: 60%; animation-duration: 12s; animation-delay: 5s; }
+.crm-login-bubbles span:nth-of-type(7) { width: 40px; height: 40px; inset-inline-start: 71%; animation-duration: 18s; animation-delay: 3s; }
+.crm-login-bubbles span:nth-of-type(8) { width: 14px; height: 14px; inset-inline-start: 82%; animation-duration: 11s; animation-delay: 8s; }
+.crm-login-bubbles span:nth-of-type(9) { width: 28px; height: 28px; inset-inline-start: 91%; animation-duration: 15s; animation-delay: 6s; }
+
+@keyframes crm-bubble-rise-tall {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(-115vh) translateX(14px);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .crm-hero,
-  .crm-hero .bubble {
+  .crm-hero .bubble,
+  .crm-login-bubbles span {
     animation: none;
   }
 }

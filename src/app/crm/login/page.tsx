@@ -86,12 +86,12 @@ export default function CrmLoginPage() {
       </div>
       <div className="relative w-full max-w-sm">
         <div className="text-center">
-          {/* The real logo, lifted from the business banner with its ground
-              keyed out to transparency, so it sits seamlessly on the page. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/crm/logo.png" alt="הפתרון המבריק" className="crm-login-logo mx-auto w-80 max-w-full" />
-          <p className="crm-login-title mt-2 text-xl font-extrabold tracking-tight">ניהול עבודות</p>
-          <p className="crm-login-sub mt-1 text-sm text-mist-500">לידים ועבודות ניקיון</p>
+          {/* Pure typography — the name carries the brand on any sky. */}
+          <h1 className="crm-login-brand whitespace-nowrap text-[44px] font-black leading-tight tracking-tight">
+            <span className="crm-brand-a">הפתרון</span> <span className="crm-brand-b">המבריק</span>
+          </h1>
+          <p className="crm-login-title mt-3 text-3xl font-extrabold tracking-tight">ניהול עבודות</p>
+          <p className="crm-login-sub mt-1.5 text-base font-semibold text-mist-500">לידים ועבודות ניקיון</p>
         </div>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-card border border-ink-700 surface p-5">

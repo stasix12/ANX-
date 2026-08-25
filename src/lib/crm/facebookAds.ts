@@ -65,12 +65,13 @@ function countConversations(actions: { action_type?: string; value?: string }[] 
 
 async function fetchPreset(
   config: FbAdsConfig,
-  datePreset: string,
+  /** A ready query — `date_preset=...` or an explicit `time_range=...`. */
+  rangeQuery: string,
 ): Promise<{ spend: number; currency: string | null; conversations: number }> {
   const account = config.accountId.replace(/^act_/, '').trim();
   const url =
     `${GRAPH_BASE}/${GRAPH_VERSION}/act_${account}/insights` +
-    `?date_preset=${datePreset}&fields=spend,account_currency,actions` +
+    `?${rangeQuery}&fields=spend,account_currency,actions` +
     `&access_token=${encodeURIComponent(config.accessToken)}`;
 
   const response = await fetch(url);
@@ -87,14 +88,22 @@ async function fetchPreset(
 
 export async function fetchAdSpend(config: FbAdsConfig): Promise<AdSpend> {
   // today+month are the section's backbone — their failure is a real error.
-  // week/year presets vary more across accounts; a failure there degrades to
-  // zero instead of blanking the whole panel.
+  // week/year vary more across accounts; a failure there degrades to zero
+  // instead of blanking the whole panel. The week is an explicit Sunday-based
+  // time_range — the this_week_sun_sat preset fails on some accounts.
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date();
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - now.getDay());
+  const weekQuery = `time_range=${encodeURIComponent(JSON.stringify({ since: iso(sunday), until: iso(now) }))}`;
+
   const empty = { spend: 0, currency: null, conversations: 0 };
   const [today, month, weekResult, yearResult] = await Promise.all([
-    fetchPreset(config, 'today'),
-    fetchPreset(config, 'this_month'),
-    fetchPreset(config, 'this_week_sun_sat').catch(() => empty),
-    fetchPreset(config, 'this_year').catch(() => empty),
+    fetchPreset(config, 'date_preset=today'),
+    fetchPreset(config, 'date_preset=this_month'),
+    fetchPreset(config, weekQuery).catch(() => empty),
+    fetchPreset(config, 'date_preset=this_year').catch(() => empty),
   ]);
   const week = weekResult;
   const year = yearResult;

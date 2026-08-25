@@ -241,6 +241,15 @@
   }
 }
 
+/* Swipe rails (the next-jobs carousel): snap-scroll with no visible bar. */
+.crm-snap {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.crm-snap::-webkit-scrollbar {
+  display: none;
+}
+
 /*
  * Time-of-day sky behind the login screen — photographic backdrops (rendered
  * offline into /crm/sky/*.jpg) switched by a crm-sky-<phase> class set from

@@ -140,12 +140,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** The one thing a working day actually revolves around: the next job. */
-function NextJobCard({ lead, today }: { lead: Lead; today: string }) {
+function NextJobCard({ lead, today, first = true }: { lead: Lead; today: string; first?: boolean }) {
   return (
-    <div className="relative mt-4 overflow-hidden rounded-card border border-brand-500/30 surface shadow-sm">
+    <div className="relative h-full overflow-hidden rounded-card border border-brand-500/30 surface shadow-sm">
       <span aria-hidden className="absolute inset-y-0 start-0 w-1 bg-brand-500" />
       <Link href={`/crm/leads/${lead.id}`} className="block p-4 pb-3">
-        <p className="text-xs font-bold text-brand-400">העבודה הבאה · {untilLabel(lead, today)}</p>
+        <p className="text-xs font-bold text-brand-400">
+          {first ? 'העבודה הבאה' : 'בהמשך'} · {untilLabel(lead, today)}
+        </p>
         <div className="mt-1.5 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-lg font-extrabold">{lead.name}</p>
@@ -191,6 +193,49 @@ function NextJobCard({ lead, today }: { lead: Lead; today: string }) {
         <span className="ms-auto self-center text-xs font-semibold text-mist-500">
           {[lead.address, lead.city].filter(Boolean).join(', ')}
         </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The upcoming jobs as a swipeable rail — the nearest job front and center,
+ * the ones after it a slide away, with a dots indicator underneath.
+ */
+function NextJobsCarousel({ jobs, today }: { jobs: Lead[]; today: string }) {
+  const [active, setActive] = useState(0);
+  if (jobs.length === 1) {
+    return (
+      <div className="mt-4">
+        <NextJobCard lead={jobs[0]} today={today} />
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4">
+      <div
+        className="crm-snap -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const per = el.scrollWidth / jobs.length;
+          setActive(Math.min(jobs.length - 1, Math.round(Math.abs(el.scrollLeft) / per)));
+        }}
+      >
+        {jobs.map((lead, i) => (
+          <div key={lead.id} className="w-[88%] shrink-0 snap-center">
+            <NextJobCard lead={lead} today={today} first={i === 0} />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex justify-center gap-1.5" aria-hidden>
+        {jobs.map((_, i) => (
+          <span
+            key={i}
+            className={`h-1.5 rounded-full transition-all duration-300 ${
+              i === active ? 'w-4 bg-brand-500' : 'w-1.5 bg-ink-600'
+            }`}
+          />
+        ))}
       </div>
     </div>
   );
@@ -245,7 +290,7 @@ export default function CrmDashboardPage() {
       revenueMonth: leads
         .filter((l) => completed(l) && l.jobDate?.startsWith(month))
         .reduce((sum, l) => sum + (l.price ?? 0), 0),
-      nextJob: upcoming[0] ?? null,
+      nextJobs: upcoming.slice(0, 8),
       overdueCount: leads.filter((l) => isOverdue(l, today)).length,
     };
   }, [leads, today, tomorrow, week.start, week.end, month]);
@@ -355,7 +400,7 @@ export default function CrmDashboardPage() {
             </Link>
           ) : null}
 
-          {view.nextJob ? <NextJobCard lead={view.nextJob} today={today} /> : null}
+          {view.nextJobs.length > 0 ? <NextJobsCarousel jobs={view.nextJobs} today={today} /> : null}
 
           <div className="mt-4 grid grid-cols-2 gap-3">
             <StatTile label="הכנסות היום" value={formatPrice(view.revenueToday)} href="/crm/stats" emoji="💰" accentClass="text-emerald-600" />

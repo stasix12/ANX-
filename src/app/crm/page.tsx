@@ -23,17 +23,27 @@ function StatTile({
   label,
   value,
   href,
+  emoji,
   accentClass = '',
 }: {
   label: string;
   value: string | number;
   href: string;
+  emoji: string;
   accentClass?: string;
 }) {
   return (
-    <Link href={href} className="rounded-card border border-ink-700 surface p-4 transition-colors hover:border-ink-600">
-      <p className={`text-2xl font-extrabold tabular-nums ${accentClass}`}>{value}</p>
-      <p className="mt-1 text-sm font-semibold text-mist-500">{label}</p>
+    <Link
+      href={href}
+      className="flex items-center justify-between gap-2 rounded-card border border-ink-700 surface p-4 transition-colors hover:border-ink-600"
+    >
+      <div className="min-w-0">
+        <p className={`text-2xl font-extrabold tabular-nums ${accentClass}`}>{value}</p>
+        <p className="mt-1 text-sm font-semibold text-mist-500">{label}</p>
+      </div>
+      <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
+        {emoji}
+      </span>
     </Link>
   );
 }
@@ -110,14 +120,14 @@ export default function CrmDashboardPage() {
           <p className="text-sm font-semibold text-mist-500">{formatDateLongHe(today)}</p>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <StatTile label="הכנסות היום" value={formatPrice(view.revenueToday)} href="/crm/stats" accentClass="text-emerald-600" />
-            <StatTile label="הכנסות החודש" value={formatPrice(view.revenueMonth)} href="/crm/stats" accentClass="text-emerald-600" />
-            <StatTile label="עבודות היום" value={view.todayJobs.length} href="/crm/calendar" />
-            <StatTile label="עבודות מחר" value={view.tomorrowJobs.length} href="/crm/calendar" />
-            <StatTile label="עבודות השבוע" value={view.weekCount} href="/crm/calendar" />
-            <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" accentClass="text-teal-700" />
-            <StatTile label="הושלמו החודש" value={view.completedMonth} href="/crm/leads?status=completed" />
-            <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" />
+            <StatTile label="הכנסות היום" value={formatPrice(view.revenueToday)} href="/crm/stats" emoji="💰" accentClass="text-emerald-600" />
+            <StatTile label="הכנסות החודש" value={formatPrice(view.revenueMonth)} href="/crm/stats" emoji="📈" accentClass="text-emerald-600" />
+            <StatTile label="עבודות היום" value={view.todayJobs.length} href="/crm/calendar" emoji="🧽" />
+            <StatTile label="עבודות מחר" value={view.tomorrowJobs.length} href="/crm/calendar" emoji="⏰" />
+            <StatTile label="עבודות השבוע" value={view.weekCount} href="/crm/calendar" emoji="📅" />
+            <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" emoji="✨" accentClass="text-teal-700" />
+            <StatTile label="הושלמו החודש" value={view.completedMonth} href="/crm/leads?status=completed" emoji="✅" />
+            <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" emoji="❌" />
           </div>
 
           <Section title="העבודות של היום">

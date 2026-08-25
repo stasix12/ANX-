@@ -433,10 +433,34 @@
   color: #ccd9f0;
   text-shadow: 0 1px 6px rgba(10, 20, 50, 0.4);
 }
-.crm-sky-dawn .crm-login-logo,
-.crm-sky-dusk .crm-login-logo,
-.crm-sky-night .crm-login-logo {
-  filter: drop-shadow(0 0 28px rgba(255, 255, 255, 0.55)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
+/* The typographic wordmark: blue "הפתרון", green "המבריק" — cleaning colors.
+   Daylight gets deep tones on a pale halo; after dark they brighten and
+   pick up a soft glow instead. */
+.crm-login-brand {
+  text-shadow: 0 2px 16px rgba(255, 255, 255, 0.75);
+}
+.crm-brand-a {
+  color: #0369a1;
+}
+.crm-brand-b {
+  color: #059669;
+}
+.crm-sky-dawn .crm-login-brand,
+.crm-sky-dusk .crm-login-brand,
+.crm-sky-night .crm-login-brand {
+  text-shadow:
+    0 2px 14px rgba(5, 15, 40, 0.55),
+    0 0 34px rgba(140, 200, 255, 0.3);
+}
+.crm-sky-dawn .crm-brand-a,
+.crm-sky-dusk .crm-brand-a,
+.crm-sky-night .crm-brand-a {
+  color: #8fd0fb;
+}
+.crm-sky-dawn .crm-brand-b,
+.crm-sky-dusk .crm-brand-b,
+.crm-sky-night .crm-brand-b {
+  color: #6ee7b7;
 }
 .crm-sky-night .crm-login-bubbles {
   opacity: 0.55;

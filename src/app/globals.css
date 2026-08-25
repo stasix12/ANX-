@@ -242,80 +242,58 @@
 }
 
 /*
- * Time-of-day sky behind the login screen — the gradient, sun/moon, clouds
- * and stars all switch with a crm-sky-<phase> class set from the clock.
+ * Time-of-day sky behind the login screen — photographic backdrops (rendered
+ * offline into /crm/sky/*.jpg) switched by a crm-sky-<phase> class set from
+ * the clock, with subtle animated layers on top: a breathing glow where the
+ * sun/moon sits in the photo, a drifting cloud sheet, twinkling stars.
  */
 .crm-sky-day {
-  background: linear-gradient(180deg, #3f9be0 0%, #7cc3f0 42%, #d9effc 100%);
+  background: #6aabde url('/crm/sky/day.jpg') center / cover no-repeat;
 }
 .crm-sky-dawn {
-  background: linear-gradient(180deg, #33427e 0%, #8f6fae 38%, #f29d74 72%, #ffd9a3 100%);
+  background: #8a6f98 url('/crm/sky/dawn.jpg') center / cover no-repeat;
 }
 .crm-sky-dusk {
-  background: linear-gradient(180deg, #1b2450 0%, #5d3f85 40%, #e06b45 76%, #ffb469 100%);
+  background: #7a4b64 url('/crm/sky/dusk.jpg') center / cover no-repeat;
 }
 .crm-sky-night {
-  background: linear-gradient(180deg, #050b26 0%, #0c1740 55%, #17295c 100%);
+  background: #0a1230 url('/crm/sky/night.jpg') center / cover no-repeat;
 }
 
-/* The sun — a soft glowing disc that sits high at noon and low at the edges
-   of the day, warming up as it approaches the horizon. */
-.crm-sun {
+/* A soft light that breathes over the photo's own sun (or moon), keeping the
+   still image alive without redrawing it. */
+.crm-glow {
   position: absolute;
-  width: 120px;
-  height: 120px;
+  width: 46vw;
+  height: 46vw;
   border-radius: 9999px;
   pointer-events: none;
-  background: radial-gradient(circle, #fff7d6 0%, #ffe27a 45%, rgba(255, 214, 90, 0) 72%);
-  animation: crm-sun-pulse 6s ease-in-out infinite;
+  transform: translate(-50%, -50%);
+  animation: crm-glow-breathe 7s ease-in-out infinite;
 }
-.crm-sky-day .crm-sun {
-  top: 7%;
-  inset-inline-end: 9%;
-  box-shadow: 0 0 80px 30px rgba(255, 230, 140, 0.5);
+.crm-sky-day .crm-glow {
+  left: 22%;
+  top: 10%;
+  background: radial-gradient(circle, rgba(255, 246, 210, 0.5) 0%, rgba(255, 240, 190, 0) 65%);
 }
-.crm-sky-dawn .crm-sun {
-  top: 31%;
-  inset-inline-start: -14px;
-  background: radial-gradient(circle, #fff1cf 0%, #ffbf72 48%, rgba(255, 160, 80, 0) 72%);
-  box-shadow: 0 0 90px 40px rgba(255, 170, 110, 0.5);
+.crm-sky-dawn .crm-glow {
+  left: 7%;
+  top: 40%;
+  background: radial-gradient(circle, rgba(255, 214, 150, 0.5) 0%, rgba(255, 196, 130, 0) 65%);
 }
-.crm-sky-dusk .crm-sun {
-  top: 31%;
-  inset-inline-end: -14px;
-  background: radial-gradient(circle, #ffe8c4 0%, #ff9e5e 48%, rgba(255, 120, 60, 0) 72%);
-  box-shadow: 0 0 100px 45px rgba(255, 140, 80, 0.55);
+.crm-sky-dusk .crm-glow {
+  left: 93%;
+  top: 40%;
+  background: radial-gradient(circle, rgba(255, 190, 120, 0.55) 0%, rgba(255, 170, 100, 0) 65%);
 }
-.crm-sky-night .crm-sun {
-  display: none;
+.crm-sky-night .crm-glow {
+  left: 20%;
+  top: 10.5%;
+  background: radial-gradient(circle, rgba(215, 228, 252, 0.32) 0%, rgba(205, 220, 250, 0) 65%);
 }
-@keyframes crm-sun-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
-}
-
-/* The moon — night only, gently floating, with crater shading. */
-.crm-moon {
-  display: none;
-}
-.crm-sky-night .crm-moon {
-  display: block;
-  position: absolute;
-  top: 8%;
-  inset-inline-end: 11%;
-  width: 74px;
-  height: 74px;
-  border-radius: 9999px;
-  pointer-events: none;
-  background: radial-gradient(circle at 35% 35%, #fdfdf4 0%, #e8ead8 55%, #c9ceb9 100%);
-  box-shadow:
-    0 0 50px 18px rgba(240, 244, 255, 0.32),
-    inset -12px -10px 24px rgba(120, 130, 110, 0.35);
-  animation: crm-moon-float 9s ease-in-out infinite;
-}
-@keyframes crm-moon-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+@keyframes crm-glow-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 /* Two star layers twinkling out of phase; they fade in only after dark. */
@@ -407,45 +385,39 @@
   100% { opacity: 0; transform: rotate(205deg) translateX(190px); }
 }
 
-/* Puffy clouds drifting slowly across; hidden after dark, warm at the
-   edges of the day. */
-.crm-cloud {
+/* A translucent photographic cloud sheet slides across the still sky —
+   tileable, so the loop is seamless. */
+.crm-clouds-drift {
   position: absolute;
-  left: -160px;
-  height: 26px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.92);
+  inset: 0;
   pointer-events: none;
-  animation: crm-cloud-drift linear infinite;
+  background: url('/crm/sky/clouds.png') repeat-x 0 4%;
+  background-size: 1024px auto;
+  animation: crm-clouds-move 140s linear infinite;
 }
-.crm-cloud::before,
-.crm-cloud::after {
-  content: '';
-  position: absolute;
-  background: inherit;
-  border-radius: 9999px;
+.crm-sky-day .crm-clouds-drift {
+  opacity: 0.8;
 }
-.crm-cloud::before {
-  width: 34px;
-  height: 34px;
-  top: -16px;
-  left: 18%;
+.crm-sky-dawn .crm-clouds-drift {
+  opacity: 0.5;
+  filter: sepia(0.5) saturate(1.3) brightness(1.05);
 }
-.crm-cloud::after {
-  width: 24px;
-  height: 24px;
-  top: -10px;
-  right: 20%;
+.crm-sky-dusk .crm-clouds-drift {
+  opacity: 0.45;
+  filter: sepia(0.6) saturate(1.5) hue-rotate(-16deg) brightness(0.96);
 }
-.crm-cloud-1 { top: 12%; width: 110px; animation-duration: 55s; }
-.crm-cloud-2 { top: 26%; width: 76px; height: 20px; opacity: 0.7; animation-duration: 75s; animation-delay: -30s; }
-.crm-cloud-3 { top: 5%; width: 140px; opacity: 0.8; animation-duration: 95s; animation-delay: -60s; }
-.crm-sky-dawn .crm-cloud { background: rgba(255, 226, 205, 0.85); }
-.crm-sky-dusk .crm-cloud { background: rgba(255, 205, 175, 0.8); }
-.crm-sky-night .crm-cloud { background: rgba(200, 215, 255, 0.1); }
-@keyframes crm-cloud-drift {
-  from { transform: translateX(0); }
-  to { transform: translateX(calc(100vw + 320px)); }
+.crm-sky-night .crm-clouds-drift {
+  opacity: 0.07;
+}
+@keyframes crm-clouds-move {
+  from { background-position: 0 4%; }
+  to { background-position: 1024px 4%; }
+}
+
+/* A pale halo keeps the daytime tagline readable over the clouds. */
+.crm-sky-day .crm-login-title,
+.crm-sky-day .crm-login-sub {
+  text-shadow: 0 1px 8px rgba(255, 255, 255, 0.75);
 }
 
 /* Keep the wordmark and taglines readable once the sky darkens. */
@@ -474,9 +446,8 @@
   .crm-hero,
   .crm-hero .bubble,
   .crm-login-bubbles span,
-  .crm-sun,
-  .crm-moon,
-  .crm-cloud,
+  .crm-glow,
+  .crm-clouds-drift,
   .crm-stars,
   .crm-stars-2,
   .crm-shooting {

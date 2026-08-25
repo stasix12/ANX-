@@ -52,7 +52,7 @@ export const STATUS_OPTIONS: {
   /** Accent for the card's status edge. */
   dotClass: string;
 }[] = [
-  { value: 'new', label: 'חדש', badgeClass: 'bg-sky-500/15 text-sky-300', dotClass: 'bg-sky-400' },
+  { value: 'new', label: 'חדש', badgeClass: 'bg-teal-500/15 text-teal-300', dotClass: 'bg-teal-400' },
   { value: 'pending', label: 'ממתין לאישור', badgeClass: 'bg-amber-500/15 text-amber-300', dotClass: 'bg-amber-400' },
   { value: 'scheduled', label: 'נקבע', badgeClass: 'bg-violet-500/15 text-violet-300', dotClass: 'bg-violet-400' },
   { value: 'on_way', label: 'בדרך ללקוח', badgeClass: 'bg-orange-500/15 text-orange-300', dotClass: 'bg-orange-400' },

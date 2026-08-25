@@ -296,7 +296,7 @@ export default function CrmStatsPage() {
             <StatTile label="הכנסה חודשית" value={formatPrice(stats.revenue)} accentClass="text-emerald-400" />
             <StatTile label="עבודות שהושלמו" value={stats.jobCount} />
             <StatTile label="עבודה ממוצעת" value={formatPrice(Math.round(stats.avgJob))} />
-            <StatTile label="לידים שנכנסו" value={stats.leadCount} accentClass="text-sky-400" />
+            <StatTile label="לידים שנכנסו" value={stats.leadCount} accentClass="text-teal-300" />
           </div>
 
           <div className="mt-3 rounded-card border border-ink-700 surface p-4">

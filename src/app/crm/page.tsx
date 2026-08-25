@@ -115,7 +115,7 @@ export default function CrmDashboardPage() {
             <StatTile label="עבודות היום" value={view.todayJobs.length} href="/crm/calendar" />
             <StatTile label="עבודות מחר" value={view.tomorrowJobs.length} href="/crm/calendar" />
             <StatTile label="עבודות השבוע" value={view.weekCount} href="/crm/calendar" />
-            <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" accentClass="text-sky-400" />
+            <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" accentClass="text-teal-300" />
             <StatTile label="הושלמו החודש" value={view.completedMonth} href="/crm/leads?status=completed" />
             <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" />
           </div>

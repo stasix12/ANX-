@@ -27,5 +27,6 @@ export const viewport: Viewport = {
 };
 
 export default function CrmLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  // .crm-theme rescopes the brand-* tokens to the CRM's blue (globals.css).
+  return <div className="crm-theme">{children}</div>;
 }

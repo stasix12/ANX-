@@ -87,6 +87,25 @@
 }
 
 /*
+ * CRM palette — "clean water" blue.
+ *
+ * The cleaning-business CRM (/crm) trades the store's amber for the blue of
+ * its own app icon: fresh-water blue reads as cleanliness, which is the
+ * business. Scoped to .crm-theme (set on the /crm layout) so every brand-*
+ * utility inside re-resolves to blue while the storefront keeps its amber.
+ * White on brand-500 (#2563eb) passes WCAG AA at ~5.5:1; brand-400 text on
+ * ink-950 is used only bold, where its ~4.5:1 clears the large-text bar.
+ */
+.crm-theme {
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #3b82f6;
+  --color-brand-500: #2563eb;
+  --color-brand-600: #1d4ed8;
+  --color-brand-700: #1e40af;
+  --color-on-brand: #ffffff;
+}
+
+/*
  * Ambient page backdrop.
  *
  * A single fixed layer behind the whole document rather than a flat white

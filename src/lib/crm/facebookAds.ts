@@ -12,11 +12,14 @@ const GRAPH_VERSION = 'v21.0';
 
 export interface AdSpend {
   today: number;
+  /** Sunday-based current week — the Israeli work week. */
+  week: number;
   month: number;
   year: number;
   currency: string;
   /** Messaging conversations started (the "פניות") per period. */
   todayConversations: number;
+  weekConversations: number;
   monthConversations: number;
   yearConversations: number;
 }
@@ -60,17 +63,20 @@ async function fetchPreset(
 }
 
 export async function fetchAdSpend(config: FbAdsConfig): Promise<AdSpend> {
-  const [today, month, year] = await Promise.all([
+  const [today, week, month, year] = await Promise.all([
     fetchPreset(config, 'today'),
+    fetchPreset(config, 'this_week_sun_sat'),
     fetchPreset(config, 'this_month'),
     fetchPreset(config, 'this_year'),
   ]);
   return {
     today: today.spend,
+    week: week.spend,
     month: month.spend,
     year: year.spend,
     currency: year.currency ?? month.currency ?? today.currency ?? 'ILS',
     todayConversations: today.conversations,
+    weekConversations: week.conversations,
     monthConversations: month.conversations,
     yearConversations: year.conversations,
   };

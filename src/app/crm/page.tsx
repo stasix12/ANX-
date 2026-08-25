@@ -333,6 +333,35 @@ export default function CrmDashboardPage() {
                   currency={adSpend.currency}
                   emoji="💸"
                 />
+                {/* Full-width weekly summary bar under the two squares. */}
+                <Link
+                  href="/crm/stats"
+                  className="col-span-2 flex items-center justify-between gap-3 rounded-card border border-brand-500/30 bg-brand-500/5 px-4 py-3.5 transition-colors hover:border-brand-500/50"
+                >
+                  <div className="flex items-center gap-3">
+                    <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
+                      📊
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-mist-500">פרסום השבוע</p>
+                      <p className="text-xs font-semibold text-mist-500">
+                        {adSpend.weekConversations.toLocaleString('he-IL')} פניות
+                        {adSpend.weekConversations > 0 ? (
+                          <>
+                            {' · '}
+                            <span className="font-extrabold text-mist-300">
+                              {formatSpend(adSpend.week / adSpend.weekConversations, adSpend.currency)}
+                            </span>{' '}
+                            לפנייה
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="shrink-0 text-2xl font-extrabold tabular-nums text-blue-700">
+                    {formatSpend(adSpend.week, adSpend.currency)}
+                  </p>
+                </Link>
               </>
             ) : null}
           </div>

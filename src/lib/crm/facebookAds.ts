@@ -15,9 +15,10 @@ export interface AdSpend {
   month: number;
   year: number;
   currency: string;
-  /** Messaging conversations started (the "פניות") today / this month. */
+  /** Messaging conversations started (the "פניות") per period. */
   todayConversations: number;
   monthConversations: number;
+  yearConversations: number;
 }
 
 /** Sums messaging-conversation actions out of the insights actions list. */
@@ -71,7 +72,19 @@ export async function fetchAdSpend(config: FbAdsConfig): Promise<AdSpend> {
     currency: year.currency ?? month.currency ?? today.currency ?? 'ILS',
     todayConversations: today.conversations,
     monthConversations: month.conversations,
+    yearConversations: year.conversations,
   };
+}
+
+/** The compact "X פניות · ₪Y לפנייה" line under a spend figure. */
+export function conversationsLine(
+  conversations: number,
+  spend: number,
+  currency: string,
+): string {
+  const base = `${conversations.toLocaleString('he-IL')} פניות`;
+  if (conversations <= 0) return base;
+  return `${base} · ${formatSpend(spend / conversations, currency)} לפנייה`;
 }
 
 export function formatSpend(amount: number, currency: string): string {

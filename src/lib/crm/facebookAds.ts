@@ -32,9 +32,7 @@ function graphError(body: any): Error {
   if (code === 100 || code === 803)
     return new Error(`מזהה חשבון המודעות לא נמצא — בדוק את המספר.${raw}`);
   if (code === 10 || code === 200 || code === 294)
-    return new Error(
-      `לטוקן אין הרשאה מתאימה לחשבון המודעות: לצפייה נדרשת ads_read, ולעריכת קמפיינים נדרשת גם ads_management.${raw}`,
-    );
+    return new Error(`לטוקן אין הרשאת ads_read לחשבון המודעות הזה.${raw}`);
   return new Error(body?.error?.message ?? 'שליפת נתוני הפרסום נכשלה.');
 }
 
@@ -258,7 +256,7 @@ export async function fetchCampaignPerf(config: FbAdsConfig): Promise<CampaignPe
 
   const metaUrl =
     `${GRAPH_BASE}/${GRAPH_VERSION}/act_${account}/campaigns` +
-    `?fields=id,name,effective_status,daily_budget,created_time&limit=100` +
+    `?fields=id,name,effective_status,daily_budget&limit=100` +
     `&access_token=${encodeURIComponent(config.accessToken)}`;
 
   const [metaResponse, d30, d7, prev7] = await Promise.all([
@@ -275,26 +273,21 @@ export async function fetchCampaignPerf(config: FbAdsConfig): Promise<CampaignPe
   const metaBody = await metaResponse.json().catch(() => null);
   if (!metaResponse.ok) throw graphError(metaBody);
 
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  const meta = new Map<string, any>(
+    (metaBody?.data ?? []).map((row: { id?: string }) => [String(row.id ?? ''), row]),
+  );
+
   const campaigns: CampaignPerf[] = [];
-  for (const row of metaBody?.data ?? []) {
-    const id = String(row?.id ?? '');
-    if (!id) continue;
-    const window = d30.get(id) ?? emptyWindow();
-    const status = row?.effective_status ?? 'UNKNOWN';
-    const createdDaysAgo = row?.created_time
-      ? (Date.now() - Date.parse(row.created_time)) / 86_400_000
-      : Number.POSITIVE_INFINITY;
-    // Spenders always show. Beyond them, only active campaigns and fresh
-    // drafts (e.g. a paused duplicate just created here) — not years of
-    // old paused/archived campaigns.
-    const relevant = window.spend > 0 || status === 'ACTIVE' || (status === 'PAUSED' && createdDaysAgo <= 30);
-    if (!relevant) continue;
+  for (const [id, window] of d30) {
+    if (window.spend <= 0) continue;
+    const row = meta.get(id);
     // daily_budget arrives in minor units (agorot/cents).
     const budget = row?.daily_budget ? Number(row.daily_budget) / 100 : null;
     campaigns.push({
       campaignId: id,
       name: row?.name ?? `קמפיין ${id}`,
-      status,
+      status: row?.effective_status ?? 'UNKNOWN',
       dailyBudget: budget && budget > 0 ? budget : null,
       d30: window,
       d7: d7.get(id) ?? emptyWindow(),
@@ -303,199 +296,6 @@ export async function fetchCampaignPerf(config: FbAdsConfig): Promise<CampaignPe
   }
   campaigns.sort((a, b) => b.d30.spend - a.d30.spend);
   return campaigns;
-}
-
-/* ---------- Campaign management (needs a token with ads_management) ---------- */
-
-/**
- * Form-encoded Graph POST. Kept header-free so the browser sends it as a
- * CORS "simple request" — no preflight, same as the read calls.
- */
-async function graphPost(
-  config: FbAdsConfig,
-  path: string,
-  params: Record<string, string>,
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-): Promise<any> {
-  const body = new URLSearchParams({ ...params, access_token: config.accessToken });
-  const response = await fetch(`${GRAPH_BASE}/${GRAPH_VERSION}/${path}`, { method: 'POST', body });
-  const json = await response.json().catch(() => null);
-  if (!response.ok) throw graphError(json);
-  return json;
-}
-
-/** Works on any ad object — campaign, ad set, or ad. */
-export async function setObjectStatus(
-  config: FbAdsConfig,
-  objectId: string,
-  status: 'ACTIVE' | 'PAUSED',
-): Promise<void> {
-  await graphPost(config, objectId, { status });
-}
-
-/** budget in whole currency units (₪); Graph wants minor units. */
-export async function setCampaignBudget(
-  config: FbAdsConfig,
-  campaignId: string,
-  dailyBudget: number,
-): Promise<void> {
-  await graphPost(config, campaignId, { daily_budget: String(Math.round(dailyBudget * 100)) });
-}
-
-export async function setAdSetBudget(
-  config: FbAdsConfig,
-  adSetId: string,
-  dailyBudget: number,
-): Promise<void> {
-  await graphPost(config, adSetId, { daily_budget: String(Math.round(dailyBudget * 100)) });
-}
-
-/**
- * Copies a whole campaign (ad sets + ads) as a PAUSED draft — the practical
- * way to "add a campaign" here: duplicate a working one, adjust budget and
- * cities, then activate. Returns the new campaign's id.
- */
-export async function duplicateCampaign(
-  config: FbAdsConfig,
-  campaignId: string,
-  newName?: string,
-): Promise<string> {
-  const result = await graphPost(config, `${campaignId}/copies`, {
-    deep_copy: 'true',
-    status_option: 'PAUSED',
-  });
-  const newId = String(result?.copied_campaign_id ?? result?.ad_object_ids?.[0]?.copied_id ?? '');
-  if (!newId) throw new Error('השכפול הצליח אך המזהה החדש לא התקבל — רענן את העמוד.');
-  if (newName) await graphPost(config, newId, { name: newName });
-  return newId;
-}
-
-export interface TargetedCity {
-  /** Graph adgeolocation key. */
-  key: string;
-  name: string;
-  region?: string;
-  /** Kilometers around the city. */
-  radius?: number;
-}
-
-export interface AdSetTargeting {
-  adSetId: string;
-  name: string;
-  status: string;
-  dailyBudget: number | null;
-  cities: TargetedCity[];
-  /** Country codes targeted when no cities are set (e.g. ["IL"]). */
-  countries: string[];
-  /** The full targeting object as read — written back on save. */
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  raw: any;
-}
-
-/** The campaign's ad sets with their current geo targeting. */
-export async function fetchAdSets(
-  config: FbAdsConfig,
-  campaignId: string,
-): Promise<AdSetTargeting[]> {
-  const url =
-    `${GRAPH_BASE}/${GRAPH_VERSION}/${campaignId}/adsets` +
-    `?fields=id,name,effective_status,daily_budget,targeting&limit=50` +
-    `&access_token=${encodeURIComponent(config.accessToken)}`;
-  const response = await fetch(url);
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw graphError(body);
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  return (body?.data ?? []).map((row: any) => {
-    const geo = row?.targeting?.geo_locations ?? {};
-    return {
-      adSetId: String(row.id),
-      name: row.name ?? '',
-      status: row.effective_status ?? 'UNKNOWN',
-      dailyBudget: row.daily_budget ? Number(row.daily_budget) / 100 : null,
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      cities: (geo.cities ?? []).map((c: any) => ({
-        key: String(c.key),
-        name: c.name ?? String(c.key),
-        region: c.region,
-        radius: c.radius ? Number(c.radius) : undefined,
-      })),
-      countries: geo.countries ?? [],
-      raw: row.targeting ?? {},
-    };
-  });
-}
-
-export interface AdInfo {
-  adId: string;
-  name: string;
-  status: string;
-  /** Small creative preview image, when Graph provides one. */
-  thumbnailUrl: string | null;
-}
-
-/** The ads inside one ad set, with creative thumbnails for recognition. */
-export async function fetchAds(config: FbAdsConfig, adSetId: string): Promise<AdInfo[]> {
-  const url =
-    `${GRAPH_BASE}/${GRAPH_VERSION}/${adSetId}/ads` +
-    `?fields=id,name,effective_status,creative{thumbnail_url}&limit=50` +
-    `&access_token=${encodeURIComponent(config.accessToken)}`;
-  const response = await fetch(url);
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw graphError(body);
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  return (body?.data ?? []).map((row: any) => ({
-    adId: String(row.id),
-    name: row.name ?? '',
-    status: row.effective_status ?? 'UNKNOWN',
-    thumbnailUrl: row.creative?.thumbnail_url ?? null,
-  }));
-}
-
-/** Israeli cities matching the query — for the targeting picker. */
-export async function searchCities(
-  config: FbAdsConfig,
-  query: string,
-): Promise<TargetedCity[]> {
-  const url =
-    `${GRAPH_BASE}/${GRAPH_VERSION}/search` +
-    `?type=adgeolocation&location_types=${encodeURIComponent('["city"]')}` +
-    `&country_code=IL&locale=he_IL&limit=10&q=${encodeURIComponent(query)}` +
-    `&access_token=${encodeURIComponent(config.accessToken)}`;
-  const response = await fetch(url);
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw graphError(body);
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  return (body?.data ?? []).map((row: any) => ({
-    key: String(row.key),
-    name: row.name ?? '',
-    region: row.region,
-  }));
-}
-
-/** Kilometers around each targeted city; Facebook's minimum is 17km ≈ 10mi. */
-export const CITY_RADIUS_KM = 17;
-
-/**
- * Replaces the ad set's geo targeting: the given cities (each with a
- * CITY_RADIUS_KM ring), or the whole country when the list is empty. The
- * rest of the targeting object is written back unchanged.
- */
-export async function setAdSetCities(
-  config: FbAdsConfig,
-  adSet: AdSetTargeting,
-  cities: TargetedCity[],
-): Promise<void> {
-  const geo = cities.length
-    ? {
-        cities: cities.map((c) => ({
-          key: c.key,
-          radius: c.radius ?? CITY_RADIUS_KM,
-          distance_unit: 'kilometer',
-        })),
-      }
-    : { countries: adSet.countries.length ? adSet.countries : ['IL'] };
-  const targeting = { ...adSet.raw, geo_locations: geo };
-  await graphPost(config, adSet.adSetId, { targeting: JSON.stringify(targeting) });
 }
 
 /**

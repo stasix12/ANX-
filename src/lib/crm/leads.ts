@@ -240,8 +240,35 @@ export function toWhatsAppNumber(phone: string): string {
   return digits;
 }
 
-export function whatsAppUrl(phone: string): string {
-  return `https://wa.me/${toWhatsAppNumber(phone)}`;
+/** Optional text opens the chat with the message pre-filled, still editable. */
+export function whatsAppUrl(phone: string, text?: string): string {
+  const base = `https://wa.me/${toWhatsAppNumber(phone)}`;
+  return text ? `${base}?text=${encodeURIComponent(text)}` : base;
+}
+
+/** "לפני שעתיים" / "אתמול" / "לפני 3 חודשים" — how systems that live say time. */
+export function relativeTimeHe(iso: string): string {
+  const rtf = new Intl.RelativeTimeFormat('he', { numeric: 'auto' });
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return 'ממש עכשיו';
+  if (minutes < 60) return rtf.format(-minutes, 'minute');
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return rtf.format(-hours, 'hour');
+  const days = Math.round(hours / 24);
+  if (days < 31) return rtf.format(-days, 'day');
+  const months = Math.round(days / 30);
+  if (months < 12) return rtf.format(-months, 'month');
+  return rtf.format(-Math.round(months / 12), 'year');
+}
+
+/** Open (not completed/canceled) jobs whose date has already passed. */
+export function isOverdue(lead: Lead, today: string): boolean {
+  return (
+    Boolean(lead.jobDate) &&
+    (lead.jobDate as string) < today &&
+    lead.status !== 'completed' &&
+    lead.status !== 'canceled'
+  );
 }
 
 export function telUrl(phone: string): string {

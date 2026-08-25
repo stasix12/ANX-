@@ -5,19 +5,52 @@ import { useRouter } from 'next/navigation';
 import { useMemo } from 'react';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { LeadCard } from '@/components/crm/LeadCard';
-import { LogOutIcon, PlusIcon, SpinnerIcon } from '@/components/icons';
+import { LogOutIcon, NavigationIcon, PhoneIcon, PlusIcon, SpinnerIcon, WhatsAppIcon } from '@/components/icons';
 import { signOut } from '@/lib/adminAuth';
 import {
   addDaysISO,
+  formatDateHe,
   formatDateLongHe,
   formatPrice,
+  isOverdue,
+  telUrl,
   todayISO,
+  wazeUrl,
   weekRangeISO,
+  whatsAppUrl,
   type Lead,
 } from '@/lib/crm/leads';
+import { shiftFor } from '@/lib/crm/shifts';
 import { useLeads } from '@/lib/crm/useLeads';
 
 const byTime = (a: Lead, b: Lead) => (a.jobTime ?? '99').localeCompare(b.jobTime ?? '99');
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 5) return 'לילה טוב 🌙';
+  if (hour < 12) return 'בוקר טוב ☀️';
+  if (hour < 17) return 'צהריים טובים 🌤️';
+  if (hour < 21) return 'ערב טוב 🌆';
+  return 'לילה טוב 🌙';
+}
+
+/** "בעוד 20 דקות" / "בעוד כשעתיים" / "מחר ב-09:00" / a date — when the job starts. */
+function untilLabel(lead: Lead, today: string): string {
+  if (!lead.jobDate) return 'טרם נקבע מועד';
+  if (lead.jobDate === today) {
+    if (!lead.jobTime) return 'היום';
+    const [h, m] = lead.jobTime.split(':').map(Number);
+    const at = new Date();
+    at.setHours(h, m, 0, 0);
+    const minutes = Math.round((at.getTime() - Date.now()) / 60_000);
+    if (minutes <= 0) return `היום ב-${lead.jobTime}`;
+    if (minutes < 60) return `בעוד ${minutes} דקות`;
+    const hours = Math.round(minutes / 60);
+    return `בעוד כ-${hours === 1 ? 'שעה' : hours === 2 ? 'שעתיים' : `${hours} שעות`}`;
+  }
+  if (lead.jobDate === addDaysISO(today, 1)) return `מחר${lead.jobTime ? ` ב-${lead.jobTime}` : ''}`;
+  return `${formatDateHe(lead.jobDate)}${lead.jobTime ? ` · ${lead.jobTime}` : ''}`;
+}
 
 function StatTile({
   label,
@@ -57,6 +90,63 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/** The one thing a working day actually revolves around: the next job. */
+function NextJobCard({ lead, today }: { lead: Lead; today: string }) {
+  return (
+    <div className="relative mt-4 overflow-hidden rounded-card border border-brand-500/30 surface shadow-sm">
+      <span aria-hidden className="absolute inset-y-0 start-0 w-1 bg-brand-500" />
+      <Link href={`/crm/leads/${lead.id}`} className="block p-4 pb-3">
+        <p className="text-xs font-bold text-brand-400">העבודה הבאה · {untilLabel(lead, today)}</p>
+        <div className="mt-1.5 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-lg font-extrabold">{lead.name}</p>
+            <p className="mt-0.5 truncate text-sm text-mist-300">
+              {[lead.city || null, lead.services.join(' · ') || null].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+          <span className="shrink-0 text-lg font-extrabold tabular-nums">{formatPrice(lead.price)}</span>
+        </div>
+      </Link>
+      <div className="flex gap-2 border-t border-ink-700/60 px-4 py-2.5">
+        {lead.phone ? (
+          <>
+            <a
+              href={whatsAppUrl(lead.phone)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="WhatsApp ללקוח"
+              className="grid h-9 w-9 place-items-center rounded-full bg-emerald-600 text-white"
+            >
+              <WhatsAppIcon className="h-4.5 w-4.5" />
+            </a>
+            <a
+              href={telUrl(lead.phone)}
+              aria-label="התקשר ללקוח"
+              className="grid h-9 w-9 place-items-center rounded-full bg-sky-600 text-white"
+            >
+              <PhoneIcon className="h-4.5 w-4.5" />
+            </a>
+          </>
+        ) : null}
+        {lead.address || lead.city ? (
+          <a
+            href={wazeUrl(lead.address, lead.city)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="ניווט ב-Waze"
+            className="grid h-9 w-9 place-items-center rounded-full bg-indigo-600 text-white"
+          >
+            <NavigationIcon className="h-4.5 w-4.5" />
+          </a>
+        ) : null}
+        <span className="ms-auto self-center text-xs font-semibold text-mist-500">
+          {[lead.address, lead.city].filter(Boolean).join(', ')}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function CrmDashboardPage() {
   const router = useRouter();
   const { leads, loading, error } = useLeads();
@@ -65,15 +155,24 @@ export default function CrmDashboardPage() {
   const tomorrow = addDaysISO(today, 1);
   const week = weekRangeISO(today);
   const month = today.slice(0, 7);
+  const shift = shiftFor(today);
 
   const view = useMemo(() => {
     const active = (l: Lead) => l.status !== 'canceled';
+    const open = (l: Lead) => l.status !== 'canceled' && l.status !== 'completed';
     const todayJobs = leads.filter((l) => l.jobDate === today && active(l)).sort(byTime);
     const tomorrowJobs = leads.filter((l) => l.jobDate === tomorrow && active(l)).sort(byTime);
     const weekJobs = leads.filter(
       (l) => l.jobDate && l.jobDate >= week.start && l.jobDate <= week.end && active(l),
     );
     const completed = (l: Lead) => l.status === 'completed';
+
+    // The next job: today's open jobs first (by time), else the nearest
+    // future open job.
+    const upcoming = leads
+      .filter((l) => open(l) && l.jobDate && l.jobDate >= today)
+      .sort((a, b) => (a.jobDate! < b.jobDate! ? -1 : a.jobDate! > b.jobDate! ? 1 : byTime(a, b)));
+
     return {
       todayJobs,
       tomorrowJobs,
@@ -87,6 +186,8 @@ export default function CrmDashboardPage() {
       revenueMonth: leads
         .filter((l) => completed(l) && l.jobDate?.startsWith(month))
         .reduce((sum, l) => sum + (l.price ?? 0), 0),
+      nextJob: upcoming[0] ?? null,
+      overdueCount: leads.filter((l) => isOverdue(l, today)).length,
     };
   }, [leads, today, tomorrow, week.start, week.end, month]);
 
@@ -117,7 +218,30 @@ export default function CrmDashboardPage() {
         </p>
       ) : (
         <>
-          <p className="text-sm font-semibold text-mist-500">{formatDateLongHe(today)}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xl font-extrabold">{greeting()}</p>
+              <p className="mt-0.5 text-sm font-semibold text-mist-500">{formatDateLongHe(today)}</p>
+            </div>
+            <span className={`rounded-full bg-ink-850 px-3 py-1.5 text-sm font-bold shadow-sm ${shift.textClass}`}>
+              משמרת: {shift.label}
+            </span>
+          </div>
+
+          {view.overdueCount > 0 ? (
+            <Link
+              href="/crm/leads?filter=overdue"
+              className="mt-4 flex items-center justify-between gap-3 rounded-card border border-amber-500/40 bg-amber-500/10 px-4 py-3"
+            >
+              <span className="text-sm font-bold text-amber-800">
+                ⚠️ {view.overdueCount === 1 ? 'עבודה אחת עברה' : `${view.overdueCount} עבודות עברו`} ולא
+                נסגרו — לחץ לטיפול
+              </span>
+              <span aria-hidden className="text-amber-800">←</span>
+            </Link>
+          ) : null}
+
+          {view.nextJob ? <NextJobCard lead={view.nextJob} today={today} /> : null}
 
           <div className="mt-4 grid grid-cols-2 gap-3">
             <StatTile label="הכנסות היום" value={formatPrice(view.revenueToday)} href="/crm/stats" emoji="💰" accentClass="text-emerald-600" />
@@ -133,7 +257,8 @@ export default function CrmDashboardPage() {
           <Section title="העבודות של היום">
             {view.todayJobs.length === 0 ? (
               <div className="rounded-card border border-ink-700 surface p-6 text-center">
-                <p className="text-sm font-bold">אין עבודות מתוכננות להיום</p>
+                <p aria-hidden className="text-3xl">🧼</p>
+                <p className="mt-2 text-sm font-bold">אין עבודות מתוכננות להיום</p>
                 <Link
                   href="/crm/leads/new"
                   className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-brand-500 px-5 py-2.5 text-sm font-bold text-on-brand transition-colors hover:bg-brand-400"

@@ -5,28 +5,39 @@ import { Suspense, useMemo, useState } from 'react';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { LeadCard } from '@/components/crm/LeadCard';
 import { SearchIcon, SpinnerIcon } from '@/components/icons';
-import { STATUS_OPTIONS, type LeadStatus } from '@/lib/crm/leads';
+import { STATUS_OPTIONS, isOverdue, todayISO, type LeadStatus } from '@/lib/crm/leads';
 import { useLeads } from '@/lib/crm/useLeads';
+
+type Filter = LeadStatus | 'all' | 'overdue';
 
 function LeadsList() {
   const { leads, loading, error } = useLeads();
   const searchParams = useSearchParams();
   const initialStatus = searchParams.get('status') as LeadStatus | null;
+  const initialFilter = searchParams.get('filter');
 
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<LeadStatus | 'all'>(
-    initialStatus && STATUS_OPTIONS.some((s) => s.value === initialStatus) ? initialStatus : 'all',
+  const [status, setStatus] = useState<Filter>(
+    initialFilter === 'overdue'
+      ? 'overdue'
+      : initialStatus && STATUS_OPTIONS.some((s) => s.value === initialStatus)
+        ? initialStatus
+        : 'all',
   );
+
+  const today = todayISO();
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return leads.filter((lead) => {
-      if (status !== 'all' && lead.status !== status) return false;
+      if (status === 'overdue') {
+        if (!isOverdue(lead, today)) return false;
+      } else if (status !== 'all' && lead.status !== status) return false;
       if (!needle) return true;
       return [lead.name, lead.phone, lead.address, lead.city]
         .some((field) => field.toLowerCase().includes(needle));
     });
-  }, [leads, query, status]);
+  }, [leads, query, status, today]);
 
   return (
     <>
@@ -42,7 +53,11 @@ function LeadsList() {
       </div>
 
       <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="סינון לפי סטטוס">
-        {[{ value: 'all' as const, label: 'הכל' }, ...STATUS_OPTIONS].map((option) => {
+        {[
+          { value: 'all' as const, label: 'הכל' },
+          { value: 'overdue' as const, label: '⚠️ באיחור' },
+          ...STATUS_OPTIONS,
+        ].map((option) => {
           const selected = status === option.value;
           return (
             <button
@@ -75,11 +90,18 @@ function LeadsList() {
           {leads.length === 0 ? 'עדיין אין לידים — הוסיפו את הראשון בכפתור ליד חדש.' : 'לא נמצאו תוצאות.'}
         </p>
       ) : (
-        <div className="mt-4 space-y-3">
-          {filtered.map((lead) => (
-            <LeadCard key={lead.id} lead={lead} showDate />
-          ))}
-        </div>
+        <>
+          <p className="mt-4 text-xs font-semibold text-mist-500">
+            {filtered.length === leads.length
+              ? `${leads.length} לקוחות ולידים`
+              : `${filtered.length} מתוך ${leads.length}`}
+          </p>
+          <div className="mt-2 space-y-3">
+            {filtered.map((lead) => (
+              <LeadCard key={lead.id} lead={lead} showDate />
+            ))}
+          </div>
+        </>
       )}
     </>
   );

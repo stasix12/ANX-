@@ -131,6 +131,16 @@
   --color-on-brand: #ffffff;
 }
 
+/* Tactile press feedback — buttons and cards dip slightly under the finger,
+   which is most of what makes a mobile UI feel native rather than web. */
+.crm-theme :is(a, button) {
+  transition-property: transform, color, background-color, border-color, opacity;
+  transition-duration: 120ms;
+}
+.crm-theme :is(a, button):active {
+  transform: scale(0.97);
+}
+
 /*
  * Ambient page backdrop.
  *

@@ -24,6 +24,7 @@ import {
   formatPrice,
   getLead,
   listLeadsByPhone,
+  relativeTimeHe,
   setLeadStatus,
   sourceLabel,
   telUrl,
@@ -32,6 +33,26 @@ import {
   type Lead,
   type LeadStatus,
 } from '@/lib/crm/leads';
+
+/**
+ * One-tap WhatsApp openers with the message pre-filled (and still editable
+ * before sending) — the four messages this business sends all day.
+ */
+function messageTemplates(lead: Lead): { label: string; text: string }[] {
+  const first = lead.name.trim().split(/\s+/)[0] || lead.name;
+  const when = lead.jobDate
+    ? ` ב-${formatDateHe(lead.jobDate)}${lead.jobTime ? ` בשעה ${lead.jobTime}` : ''}`
+    : '';
+  return [
+    { label: '🗓️ אישור עבודה', text: `היי ${first}, מאשר את עבודת הניקיון${when}. נתראה! 🙂` },
+    { label: '🔔 תזכורת', text: `היי ${first}, תזכורת לעבודת הניקיון${when}. אשמח לאישור 🙂` },
+    { label: '🚗 בדרך אליך', text: `היי ${first}, אני בדרך אליך! מגיע בעוד כ-30 דקות 🚗` },
+    {
+      label: '🙏 סיום ותודה',
+      text: `תודה רבה ${first}! שמחתי לנקות אצלך 🧽 אם היית מרוצה — אשמח להמלצה קצרה. יום נהדר!`,
+    },
+  ];
+}
 
 function DetailRow({ label, value, dir }: { label: string; value: React.ReactNode; dir?: 'ltr' }) {
   return (
@@ -151,6 +172,25 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             </a>
           </div>
 
+          {lead.phone ? (
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-bold text-mist-300">הודעה מהירה בוואטסאפ</p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {messageTemplates(lead).map((template) => (
+                  <a
+                    key={template.label}
+                    href={whatsAppUrl(lead.phone, template.text)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 rounded-full border border-emerald-600/40 bg-emerald-500/10 px-4 py-2 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-500/20"
+                  >
+                    {template.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <dl className="mt-5 rounded-card border border-ink-700 surface px-4">
             <DetailRow label="טלפון" value={lead.phone || '—'} dir="ltr" />
             <DetailRow
@@ -167,6 +207,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             <DetailRow label="מקור הליד" value={sourceLabel(lead.source)} />
             {lead.notes ? <DetailRow label="הערות" value={lead.notes} /> : null}
           </dl>
+
+          <p className="mt-2 text-center text-xs font-semibold text-mist-500">
+            נוצר {relativeTimeHe(lead.createdAt)}
+            {lead.updatedAt !== lead.createdAt ? ` · עודכן ${relativeTimeHe(lead.updatedAt)}` : ''}
+          </p>
 
           <fieldset className="mt-5" disabled={mutating}>
             <legend className="mb-2 text-sm font-bold text-mist-300">עדכון סטטוס</legend>

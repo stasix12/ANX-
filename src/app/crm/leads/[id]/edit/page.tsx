@@ -30,6 +30,7 @@ export default function EditLeadPage({ params }: { params: Promise<{ id: string 
       ) : (
         <LeadForm
           initial={lead}
+          excludeId={lead.id}
           submitLabel="שמירת שינויים"
           onSubmit={async (input) => {
             await updateLead(lead.id, input);

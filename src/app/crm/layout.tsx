@@ -12,7 +12,9 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: 'ניהול עבודות',
-    statusBarStyle: 'default',
+    // Fullscreen with white status-bar text — it sits over the header's blue
+    // gradient, which pads itself with env(safe-area-inset-top).
+    statusBarStyle: 'black-translucent',
   },
 };
 

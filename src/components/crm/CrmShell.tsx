@@ -84,10 +84,12 @@ export function CrmShell({
 
   return (
     <div className="mx-auto min-h-dvh max-w-3xl bg-ink-950 pb-28">
-      {/* Water-gradient header — the CRM's one loud brand surface. */}
-      <header className="sticky top-0 z-40 bg-gradient-to-l from-sky-600 via-sky-500 to-cyan-400 shadow-md shadow-sky-900/20">
-        <div className="flex items-center justify-between px-4 py-4">
-          <h1 className="text-lg font-extrabold text-white">{title}</h1>
+      {/* Water-gradient header — the CRM's one loud brand surface. The
+          safe-area padding stretches the gradient up under the iPhone's
+          status bar (clock/battery) so the title starts below it. */}
+      <header className="sticky top-0 z-40 bg-gradient-to-l from-sky-600 via-sky-500 to-cyan-400 pt-[env(safe-area-inset-top)] shadow-md shadow-sky-900/20">
+        <div className="flex items-center justify-between px-4 pb-4 pt-5">
+          <h1 className="text-2xl font-extrabold tracking-tight text-white">{title}</h1>
           {headerAction}
         </div>
       </header>

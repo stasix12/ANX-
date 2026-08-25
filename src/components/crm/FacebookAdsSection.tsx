@@ -7,6 +7,8 @@ import {
   exchangeForLongLived,
   fetchAdSpendManaged,
   formatSpend,
+  listAdAccounts,
+  type AdAccountOption,
   type AdSpend,
 } from '@/lib/crm/facebookAds';
 import { todayISO, type Lead } from '@/lib/crm/leads';
@@ -56,6 +58,27 @@ function SetupForm({
   const [appSecret, setAppSecret] = useState(initial?.appSecret ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<AdAccountOption[] | null>(null);
+  const [findingAccounts, setFindingAccounts] = useState(false);
+
+  async function onFindAccounts() {
+    if (!token.trim()) {
+      setError('קודם הדבק טוקן בשדה למעלה, ואז לחץ שוב.');
+      return;
+    }
+    setFindingAccounts(true);
+    setError(null);
+    try {
+      const found = await listAdAccounts(token);
+      setAccounts(found);
+      if (found.length === 1) setAccountId(found[0].accountId);
+      if (found.length === 0) setError('הטוקן לא רואה אף חשבון מודעות — צור טוקן מהפרופיל שמנהל את הקמפיינים.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'שליפת החשבונות נכשלה.');
+    } finally {
+      setFindingAccounts(false);
+    }
+  }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -124,6 +147,44 @@ function SetupForm({
           dir="ltr"
         />
       </div>
+
+      <button
+        type="button"
+        onClick={onFindAccounts}
+        disabled={findingAccounts}
+        className="flex w-full items-center justify-center gap-2 rounded-full border border-brand-500/40 bg-brand-500/10 px-5 py-2.5 text-sm font-bold text-brand-400 transition-colors hover:bg-brand-500/20 disabled:opacity-60"
+      >
+        {findingAccounts ? <SpinnerIcon className="h-4 w-4 animate-spin" /> : '🔎'}
+        מצא את החשבונות שלי (לפי הטוקן)
+      </button>
+
+      {accounts && accounts.length > 0 ? (
+        <div className="rounded-xl border border-ink-600 bg-ink-950 p-3">
+          <p className="mb-2 text-xs font-bold text-mist-500">בחר את חשבון המודעות (ימולא אוטומטית):</p>
+          <div className="space-y-2">
+            {accounts.map((account) => {
+              const selected = accountId === account.accountId;
+              return (
+                <button
+                  key={account.accountId}
+                  type="button"
+                  onClick={() => setAccountId(account.accountId)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition-colors ${
+                    selected
+                      ? 'border-brand-500 bg-brand-500 text-on-brand'
+                      : 'border-ink-600 bg-ink-850 text-mist-100'
+                  }`}
+                >
+                  <span className="truncate">{account.name || 'ללא שם'}</span>
+                  <span className="shrink-0 text-xs font-semibold tabular-nums" dir="ltr">
+                    {account.accountId}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-xl border border-emerald-600/30 bg-emerald-500/5 p-3">
         <p className="text-sm font-bold text-emerald-700">🔁 חידוש אוטומטי — הטוקן לא יפוג לעולם</p>

@@ -43,7 +43,11 @@ export default function CrmLoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ink-950 px-5 py-10">
+    <div
+      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-5 py-10"
+      // The business banner's own light-blue tones.
+      style={{ background: 'linear-gradient(180deg, #ecf6fe 0%, #d6ecff 100%)' }}
+    >
       {/* Soap bubbles drifting up the whole screen — the business, animated. */}
       <div aria-hidden className="crm-login-bubbles">
         {Array.from({ length: 18 }, (_, i) => (
@@ -52,13 +56,11 @@ export default function CrmLoginPage() {
       </div>
       <div className="relative w-full max-w-sm">
         <div className="text-center">
-          <h1 className="font-extrabold leading-none tracking-tight">
-            <span className="block text-6xl text-brand-500">הפתרון</span>
-            <span className="mt-2 block text-6xl text-emerald-600">
-              המבריק<span aria-hidden className="text-3xl"> ✨</span>
-            </span>
-          </h1>
-          <p className="mt-3 text-xl font-extrabold tracking-tight">ניהול עבודות</p>
+          {/* The real logo, lifted from the business banner with its ground
+              keyed out to transparency, so it sits seamlessly on the page. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/crm/logo.png" alt="הפתרון המבריק" className="mx-auto w-80 max-w-full" />
+          <p className="mt-2 text-xl font-extrabold tracking-tight">ניהול עבודות</p>
           <p className="mt-1 text-sm text-mist-500">לידים ועבודות ניקיון</p>
         </div>
 

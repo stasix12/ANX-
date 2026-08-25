@@ -48,6 +48,13 @@ const cplOf = (points: SpendPoint[]): number | null => {
 };
 
 const monthName = (isoStart: string) => MONTH_LONG[Number(isoStart.slice(5, 7)) - 1];
+const monthKeyLabel = (key: string) => `${MONTH_LONG[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+
+function statsOf(points: SpendPoint[]) {
+  const spend = sumSpend(points);
+  const conversations = sumConv(points);
+  return { spend, conversations, cpl: conversations > 0 ? spend / conversations : null };
+}
 
 function SummaryTile({ label, value, emoji }: { label: string; value: string; emoji: string }) {
   return (
@@ -94,6 +101,29 @@ function DeltaTile({
   );
 }
 
+/** The arrow-percent between two periods; green when the change is good. */
+function DeltaBadge({
+  from,
+  to,
+  goodWhenDown,
+}: {
+  from: number | null;
+  to: number | null;
+  goodWhenDown: boolean;
+}) {
+  if (from === null || to === null || from <= 0) {
+    return <span className="font-bold text-mist-500">—</span>;
+  }
+  const delta = ((to - from) / from) * 100;
+  if (Math.abs(delta) < 0.5) return <span className="font-bold text-mist-500">≈</span>;
+  const good = goodWhenDown ? delta < 0 : delta > 0;
+  return (
+    <span className={`font-bold tabular-nums ${good ? 'text-emerald-600' : 'text-red-600'}`}>
+      {delta > 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(0)}%
+    </span>
+  );
+}
+
 interface Insight {
   emoji: string;
   text: string;
@@ -113,6 +143,11 @@ export default function CrmAdsPage() {
   const [customIncrement, setCustomIncrement] = useState<'monthly' | 1>('monthly');
   const [customLoading, setCustomLoading] = useState(false);
   const [customError, setCustomError] = useState<string | null>(null);
+  const [compareMode, setCompareMode] = useState<'month' | 'year'>('month');
+  const [monthA, setMonthA] = useState('');
+  const [monthB, setMonthB] = useState('');
+  const [yearA, setYearA] = useState('');
+  const [yearB, setYearB] = useState('');
 
   useEffect(() => {
     getFbAdsConfig()
@@ -202,6 +237,63 @@ export default function CrmAdsPage() {
     if (!customSeries) return null;
     return { spend: sumSpend(customSeries), conversations: sumConv(customSeries) };
   }, [customSeries]);
+
+  // Everything the comparison card can pick from — 'YYYY-MM' month keys and
+  // the distinct years, straight out of the lifetime monthly series.
+  const monthKeys = useMemo(() => (monthly ?? []).map((p) => p.start.slice(0, 7)), [monthly]);
+  const yearKeys = useMemo(() => [...new Set(monthKeys.map((k) => k.slice(0, 4)))], [monthKeys]);
+
+  // Sensible defaults: the latest month against the same month a year back
+  // (falling back to the month before), and this year against last year.
+  useEffect(() => {
+    if (!monthKeys.length) return;
+    const latest = monthKeys[monthKeys.length - 1];
+    const sameMonthLastYear = `${Number(latest.slice(0, 4)) - 1}${latest.slice(4)}`;
+    setMonthB((b) => (b && monthKeys.includes(b) ? b : latest));
+    setMonthA((a) =>
+      a && monthKeys.includes(a)
+        ? a
+        : monthKeys.includes(sameMonthLastYear)
+          ? sameMonthLastYear
+          : monthKeys[Math.max(0, monthKeys.length - 2)],
+    );
+    const lastYear = yearKeys[yearKeys.length - 1];
+    setYearB((b) => (b && yearKeys.includes(b) ? b : lastYear));
+    setYearA((a) => (a && yearKeys.includes(a) ? a : (yearKeys[yearKeys.length - 2] ?? lastYear)));
+  }, [monthKeys, yearKeys]);
+
+  const compare = useMemo(() => {
+    const source = monthly ?? [];
+    if (!source.length) return null;
+    const nowMonth = new Date().toISOString().slice(0, 7);
+    if (compareMode === 'month') {
+      if (!monthA || !monthB) return null;
+      const partial = (key: string) => (key === nowMonth ? ' (עד היום)' : '');
+      return {
+        labelA: monthKeyLabel(monthA) + partial(monthA),
+        labelB: monthKeyLabel(monthB) + partial(monthB),
+        a: statsOf(source.filter((p) => p.start.startsWith(monthA))),
+        b: statsOf(source.filter((p) => p.start.startsWith(monthB))),
+        breakdown: null as null | { month: number; aSpend: number | null; bSpend: number | null }[],
+      };
+    }
+    if (!yearA || !yearB) return null;
+    const breakdown: { month: number; aSpend: number | null; bSpend: number | null }[] = [];
+    for (let m = 1; m <= 12; m++) {
+      const mm = `-${String(m).padStart(2, '0')}`;
+      const pa = source.find((p) => p.start.startsWith(yearA + mm));
+      const pb = source.find((p) => p.start.startsWith(yearB + mm));
+      if (pa || pb) breakdown.push({ month: m, aSpend: pa?.spend ?? null, bSpend: pb?.spend ?? null });
+    }
+    const partialYear = (year: string) => (year === nowMonth.slice(0, 4) ? ' (עד היום)' : '');
+    return {
+      labelA: yearA + partialYear(yearA),
+      labelB: yearB + partialYear(yearB),
+      a: statsOf(source.filter((p) => p.start.startsWith(yearA))),
+      b: statsOf(source.filter((p) => p.start.startsWith(yearB))),
+      breakdown,
+    };
+  }, [monthly, compareMode, monthA, monthB, yearA, yearB]);
 
   const totals = useMemo(() => {
     const source = monthly ?? [];
@@ -423,6 +515,168 @@ export default function CrmAdsPage() {
                   goodWhenDown
                 />
               </div>
+            </div>
+          ) : null}
+
+          {compare ? (
+            <div className="mt-3 rounded-card border border-ink-700 surface p-3">
+              <p className="text-center text-xs font-bold text-mist-500">⚖️ השוואה חופשית</p>
+
+              <div className="mt-2 flex rounded-full border border-ink-700 bg-ink-850 p-1" role="group" aria-label="סוג ההשוואה">
+                {(
+                  [
+                    { value: 'month', label: 'חודש מול חודש' },
+                    { value: 'year', label: 'שנה מול שנה' },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={compareMode === option.value}
+                    onClick={() => setCompareMode(option.value)}
+                    className={`flex-1 rounded-full py-1.5 text-xs font-bold transition-colors ${
+                      compareMode === option.value ? 'bg-brand-500 text-on-brand' : 'text-mist-300'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {compareMode === 'month' ? (
+                  <>
+                    <select
+                      aria-label="תקופה ראשונה"
+                      value={monthA}
+                      onChange={(e) => setMonthA(e.target.value)}
+                      className="w-full rounded-xl border border-ink-700 bg-ink-850 px-2 py-2 text-sm font-semibold"
+                    >
+                      {[...monthKeys].reverse().map((key) => (
+                        <option key={key} value={key}>
+                          {monthKeyLabel(key)}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label="תקופה שנייה"
+                      value={monthB}
+                      onChange={(e) => setMonthB(e.target.value)}
+                      className="w-full rounded-xl border border-ink-700 bg-ink-850 px-2 py-2 text-sm font-semibold"
+                    >
+                      {[...monthKeys].reverse().map((key) => (
+                        <option key={key} value={key}>
+                          {monthKeyLabel(key)}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <select
+                      aria-label="שנה ראשונה"
+                      value={yearA}
+                      onChange={(e) => setYearA(e.target.value)}
+                      className="w-full rounded-xl border border-ink-700 bg-ink-850 px-2 py-2 text-sm font-semibold"
+                    >
+                      {[...yearKeys].reverse().map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label="שנה שנייה"
+                      value={yearB}
+                      onChange={(e) => setYearB(e.target.value)}
+                      className="w-full rounded-xl border border-ink-700 bg-ink-850 px-2 py-2 text-sm font-semibold"
+                    >
+                      {[...yearKeys].reverse().map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </div>
+
+              <div className="mt-2.5 overflow-hidden rounded-xl border border-ink-700">
+                <div className="grid grid-cols-[1.1fr_1fr_1fr_0.8fr] gap-1 bg-ink-850 px-2 py-1.5 text-[11px] font-bold text-mist-500">
+                  <span />
+                  <span className="text-center">{compare.labelA}</span>
+                  <span className="text-center">{compare.labelB}</span>
+                  <span className="text-center">שינוי</span>
+                </div>
+                {(
+                  [
+                    {
+                      label: 'הוצאה',
+                      a: compare.a.spend,
+                      b: compare.b.spend,
+                      fmt: (v: number) => formatSpend(v, currency),
+                      goodWhenDown: true,
+                    },
+                    {
+                      label: 'פניות',
+                      a: compare.a.conversations,
+                      b: compare.b.conversations,
+                      fmt: (v: number) => v.toLocaleString('he-IL'),
+                      goodWhenDown: false,
+                    },
+                    {
+                      label: 'עלות לפנייה',
+                      a: compare.a.cpl,
+                      b: compare.b.cpl,
+                      fmt: (v: number) => formatSpend(v, currency),
+                      goodWhenDown: true,
+                    },
+                  ] as const
+                ).map((row) => (
+                  <div
+                    key={row.label}
+                    className="grid grid-cols-[1.1fr_1fr_1fr_0.8fr] items-center gap-1 border-t border-ink-700 px-2 py-2 text-xs"
+                  >
+                    <span className="font-semibold text-mist-500">{row.label}</span>
+                    <span className="text-center font-bold tabular-nums">
+                      {row.a !== null ? row.fmt(row.a) : '—'}
+                    </span>
+                    <span className="text-center font-bold tabular-nums">
+                      {row.b !== null ? row.fmt(row.b) : '—'}
+                    </span>
+                    <span className="text-center">
+                      <DeltaBadge from={row.a} to={row.b} goodWhenDown={row.goodWhenDown} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {compare.breakdown?.length ? (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs font-bold text-brand-400">
+                    📅 פירוט הוצאה חודש מול חודש
+                  </summary>
+                  <div className="mt-1.5 overflow-hidden rounded-xl border border-ink-700">
+                    {compare.breakdown.map((row) => (
+                      <div
+                        key={row.month}
+                        className="grid grid-cols-[1.1fr_1fr_1fr_0.8fr] items-center gap-1 border-t border-ink-700 px-2 py-1.5 text-xs first:border-t-0"
+                      >
+                        <span className="font-semibold text-mist-500">{MONTH_LONG[row.month - 1]}</span>
+                        <span className="text-center font-bold tabular-nums">
+                          {row.aSpend !== null ? formatSpend(row.aSpend, currency) : '—'}
+                        </span>
+                        <span className="text-center font-bold tabular-nums">
+                          {row.bSpend !== null ? formatSpend(row.bSpend, currency) : '—'}
+                        </span>
+                        <span className="text-center">
+                          <DeltaBadge from={row.aSpend} to={row.bSpend} goodWhenDown />
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </div>
           ) : null}
 

@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CampaignManagePanel } from '@/components/crm/CampaignManagePanel';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { SpinnerIcon } from '@/components/icons';
 import { buildRecommendations, type RecommendationTone } from '@/lib/crm/adsOptimizer';
@@ -34,19 +33,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CampaignCard({
-  campaign,
-  config,
-  open,
-  onToggle,
-  onChanged,
-}: {
-  campaign: CampaignPerf;
-  config: FbAdsConfig;
-  open: boolean;
-  onToggle: () => void;
-  onChanged: () => void;
-}) {
+function CampaignCard({ campaign }: { campaign: CampaignPerf }) {
   const status = STATUS_LABEL[campaign.status] ?? {
     label: campaign.status,
     className: 'bg-ink-700 text-mist-300',
@@ -77,19 +64,6 @@ function CampaignCard({
           value={campaign.dailyBudget !== null ? formatSpend(campaign.dailyBudget, currency) : '—'}
         />
       </div>
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={onToggle}
-        className={`mt-2.5 w-full rounded-full border py-2 text-sm font-bold transition-colors ${
-          open
-            ? 'border-brand-500 bg-brand-500 text-on-brand'
-            : 'border-ink-700 bg-ink-850 text-mist-300 hover:bg-ink-700'
-        }`}
-      >
-        ⚙️ ניהול ומיקוד ערים {open ? '▴' : '▾'}
-      </button>
-      {open ? <CampaignManagePanel config={config} campaign={campaign} onChanged={onChanged} /> : null}
     </div>
   );
 }
@@ -99,7 +73,6 @@ export default function CrmAdsOptimizePage() {
   const [configLoaded, setConfigLoaded] = useState(false);
   const [campaigns, setCampaigns] = useState<CampaignPerf[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [manageId, setManageId] = useState<string | null>(null);
 
   useEffect(() => {
     getFbAdsConfig()
@@ -216,24 +189,14 @@ export default function CrmAdsOptimizePage() {
             <h2 className="text-sm font-extrabold">📊 הקמפיינים · 30 הימים האחרונים</h2>
             <div className="mt-2 space-y-2">
               {campaigns.map((campaign) => (
-                <CampaignCard
-                  key={campaign.campaignId}
-                  campaign={campaign}
-                  config={config}
-                  open={manageId === campaign.campaignId}
-                  onToggle={() =>
-                    setManageId((id) => (id === campaign.campaignId ? null : campaign.campaignId))
-                  }
-                  onChanged={() => void load(config)}
-                />
+                <CampaignCard key={campaign.campaignId} campaign={campaign} />
               ))}
             </div>
           </div>
 
           <p className="mt-3 text-xs font-semibold leading-relaxed text-mist-500">
-            💡 ההמלצות מחושבות מנתוני ה‑Ads Manager שלך (30 הימים האחרונים). דרך "ניהול ומיקוד
-            ערים" אפשר להשהות/להפעיל, לשנות תקציב, למקד ערים ולשכפל קמפיין — נדרש טוקן עם הרשאת
-            ads_management (לצפייה בלבד מספיקה ads_read).
+            💡 ההמלצות מחושבות מנתוני ה‑Ads Manager שלך (30 הימים האחרונים). לביצוע השינויים —
+            השהיה, תקציב, מיקוד ערים ושכפול — עוברים ללשונית <b>ניהול</b> בתפריט התחתון.
           </p>
         </>
       )}

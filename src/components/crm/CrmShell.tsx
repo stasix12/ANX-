@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import {
   CalendarIcon,
   ChartIcon,
+  GearIcon,
   HomeIcon,
   MegaphoneIcon,
   PlusIcon,
@@ -17,6 +18,7 @@ import { useAdminSession } from '@/lib/adminAuth';
 const navStart = [
   { href: '/crm', label: 'ראשי', icon: HomeIcon, exact: true },
   { href: '/crm/calendar', label: 'יומן', icon: CalendarIcon, exact: false },
+  { href: '/crm/manage', label: 'ניהול', icon: GearIcon, exact: false },
 ];
 
 const navEnd = [

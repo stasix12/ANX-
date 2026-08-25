@@ -131,6 +131,67 @@
   --color-on-brand: #ffffff;
 }
 
+/*
+ * The dashboard's living greeting panel: a water gradient that drifts slowly,
+ * with soap bubbles rising through it. Pure CSS, pauses under
+ * prefers-reduced-motion.
+ */
+.crm-hero {
+  background: linear-gradient(115deg, #22d3ee, #0ea5e9 45%, #2563eb 85%, #0891b2);
+  background-size: 220% 220%;
+  animation: crm-hero-drift 16s ease-in-out infinite alternate;
+}
+
+@keyframes crm-hero-drift {
+  from {
+    background-position: 0% 40%;
+  }
+  to {
+    background-position: 100% 60%;
+  }
+}
+
+.crm-hero .bubble {
+  position: absolute;
+  bottom: -34px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.1) 55%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  animation: crm-bubble-rise linear infinite;
+  pointer-events: none;
+}
+
+.crm-hero .bubble:nth-of-type(1) { width: 22px; height: 22px; inset-inline-start: 8%;  animation-duration: 9s;  }
+.crm-hero .bubble:nth-of-type(2) { width: 12px; height: 12px; inset-inline-start: 22%; animation-duration: 7s;  animation-delay: 2.5s; }
+.crm-hero .bubble:nth-of-type(3) { width: 28px; height: 28px; inset-inline-start: 41%; animation-duration: 11s; animation-delay: 1s; }
+.crm-hero .bubble:nth-of-type(4) { width: 10px; height: 10px; inset-inline-start: 58%; animation-duration: 6s;  animation-delay: 4s; }
+.crm-hero .bubble:nth-of-type(5) { width: 18px; height: 18px; inset-inline-start: 72%; animation-duration: 8s;  animation-delay: 0.5s; }
+.crm-hero .bubble:nth-of-type(6) { width: 14px; height: 14px; inset-inline-start: 88%; animation-duration: 10s; animation-delay: 3s; }
+
+@keyframes crm-bubble-rise {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-190px) translateX(10px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-hero,
+  .crm-hero .bubble {
+    animation: none;
+  }
+}
+
 /* Tactile press feedback — buttons and cards dip slightly under the finger,
    which is most of what makes a mobile UI feel native rather than web. */
 .crm-theme :is(a, button) {

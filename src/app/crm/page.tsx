@@ -218,14 +218,20 @@ export default function CrmDashboardPage() {
         </p>
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-xl font-extrabold">{greeting()}</p>
-              <p className="mt-0.5 text-sm font-semibold text-mist-500">{formatDateLongHe(today)}</p>
+          <div className="crm-hero relative overflow-hidden rounded-card p-4 shadow-md shadow-sky-900/15">
+            {/* Rising soap bubbles — the ambient layer behind the greeting. */}
+            {Array.from({ length: 6 }, (_, i) => (
+              <span key={i} aria-hidden className="bubble" />
+            ))}
+            <div className="relative flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xl font-extrabold text-white">{greeting()}</p>
+                <p className="mt-0.5 text-sm font-semibold text-white/85">{formatDateLongHe(today)}</p>
+              </div>
+              <span className={`rounded-full bg-white px-3 py-1.5 text-sm font-bold shadow-sm ${shift.textClass}`}>
+                משמרת: {shift.label}
+              </span>
             </div>
-            <span className={`rounded-full bg-ink-850 px-3 py-1.5 text-sm font-bold shadow-sm ${shift.textClass}`}>
-              משמרת: {shift.label}
-            </span>
           </div>
 
           {view.overdueCount > 0 ? (

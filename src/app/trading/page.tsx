@@ -271,7 +271,7 @@ export default function TradingDashboard() {
               <p className="text-sm text-mist-300">אין פוזיציות פתוחות כרגע.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[540px] text-sm">
+                <table className="w-full min-w-[560px] text-sm [&_td]:px-3 [&_th]:px-3">
                   <thead>
                     <tr className="text-right text-mist-300">
                       <th className="pb-2 font-medium">מניה</th>

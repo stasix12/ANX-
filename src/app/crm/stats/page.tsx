@@ -20,11 +20,26 @@ function shiftMonth(month: string, direction: 1 | -1): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function StatTile({ label, value, accentClass = '' }: { label: string; value: string | number; accentClass?: string }) {
+function StatTile({
+  label,
+  value,
+  emoji,
+  accentClass = '',
+}: {
+  label: string;
+  value: string | number;
+  emoji: string;
+  accentClass?: string;
+}) {
   return (
-    <div className="rounded-card border border-ink-700 surface p-4">
-      <p className={`text-2xl font-extrabold tabular-nums ${accentClass}`}>{value}</p>
-      <p className="mt-1 text-sm font-semibold text-mist-500">{label}</p>
+    <div className="flex items-center justify-between gap-2 rounded-card border border-ink-700 surface p-4">
+      <div className="min-w-0">
+        <p className={`text-2xl font-extrabold tabular-nums ${accentClass}`}>{value}</p>
+        <p className="mt-1 text-sm font-semibold text-mist-500">{label}</p>
+      </div>
+      <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
+        {emoji}
+      </span>
     </div>
   );
 }
@@ -162,13 +177,14 @@ function YearView({ leads }: { leads: Lead[] }) {
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <StatTile label="סך הכנסות השנה" value={formatPrice(view.total)} accentClass="text-emerald-600" />
-        <StatTile label="ממוצע חודשי" value={formatPrice(Math.round(view.avg))} />
+        <StatTile label="סך הכנסות השנה" value={formatPrice(view.total)} emoji="💰" accentClass="text-emerald-600" />
+        <StatTile label="ממוצע חודשי" value={formatPrice(Math.round(view.avg))} emoji="🧮" />
         <StatTile
           label={`החודש החזק ביותר${view.best.revenue > 0 ? ` — ${MONTH_LONG[view.best.month]}` : ''}`}
           value={formatPrice(view.best.revenue)}
+          emoji="🏆"
         />
-        <StatTile label="עבודות שהושלמו" value={view.months.reduce((s, m) => s + m.jobs, 0)} />
+        <StatTile label="עבודות שהושלמו" value={view.months.reduce((s, m) => s + m.jobs, 0)} emoji="✅" />
       </div>
 
       <details className="mt-4 rounded-card border border-ink-700 surface px-4 py-3">
@@ -293,10 +309,10 @@ export default function CrmStatsPage() {
             </button>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <StatTile label="הכנסה חודשית" value={formatPrice(stats.revenue)} accentClass="text-emerald-600" />
-            <StatTile label="עבודות שהושלמו" value={stats.jobCount} />
-            <StatTile label="עבודה ממוצעת" value={formatPrice(Math.round(stats.avgJob))} />
-            <StatTile label="לידים שנכנסו" value={stats.leadCount} accentClass="text-teal-700" />
+            <StatTile label="הכנסה חודשית" value={formatPrice(stats.revenue)} emoji="💰" accentClass="text-emerald-600" />
+            <StatTile label="עבודות שהושלמו" value={stats.jobCount} emoji="✅" />
+            <StatTile label="עבודה ממוצעת" value={formatPrice(Math.round(stats.avgJob))} emoji="🧮" />
+            <StatTile label="לידים שנכנסו" value={stats.leadCount} emoji="✨" accentClass="text-teal-700" />
           </div>
 
           <div className="mt-3 rounded-card border border-ink-700 surface p-4">

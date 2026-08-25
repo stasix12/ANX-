@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { SpinnerIcon } from '@/components/icons';
 import { fetchAdSpend, formatSpend, type AdSpend } from '@/lib/crm/facebookAds';
+import { todayISO, type Lead } from '@/lib/crm/leads';
 import { clearFbAdsConfig, getFbAdsConfig, saveFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
 
 const inputClass =
@@ -137,11 +138,157 @@ function SetupForm({
 }
 
 /**
+ * Automatic analysis of the ad numbers against the CRM's own data — computed
+ * fresh on every visit, in plain Hebrew, most important finding first.
+ */
+function AdInsights({ spend, leads }: { spend: AdSpend; leads: Lead[] }) {
+  const today = todayISO();
+  const month = today.slice(0, 7);
+  const monthCount = Number(today.slice(5, 7));
+  const dayOfMonth = Number(today.slice(8, 10));
+
+  const completedMonth = leads.filter((l) => l.status === 'completed' && l.jobDate?.startsWith(month));
+  const monthRevenue = completedMonth.reduce((sum, l) => sum + (l.price ?? 0), 0);
+  const allCompleted = leads.filter((l) => l.status === 'completed');
+  const avgJob = allCompleted.length
+    ? allCompleted.reduce((sum, l) => sum + (l.price ?? 0), 0) / allCompleted.length
+    : 0;
+
+  const monthLeads = leads.filter((l) => l.createdAt.slice(0, 7) === month);
+  const fbLeads = monthLeads.filter((l) => l.source === 'facebook');
+  const fbCompleted = completedMonth.filter((l) => l.source === 'facebook');
+  const fbRevenue = fbCompleted.reduce((sum, l) => sum + (l.price ?? 0), 0);
+  const converted = monthLeads.filter((l) => ['scheduled', 'on_way', 'completed'].includes(l.status));
+  const conversion = monthLeads.length ? converted.length / monthLeads.length : 0;
+
+  const insights: { emoji: string; text: React.ReactNode }[] = [];
+
+  // 1. The bottom line: revenue per ad shekel this month.
+  if (spend.month > 0) {
+    const ratio = monthRevenue / spend.month;
+    insights.push({
+      emoji: ratio >= 1.5 ? '✅' : ratio >= 1 ? '⚖️' : '⚠️',
+      text: (
+        <>
+          החודש: על כל ₪1 פרסום נרשמו <b className="tabular-nums">₪{ratio.toFixed(1)}</b> הכנסות מעבודות
+          שהושלמו{' '}
+          {ratio >= 1.5
+            ? '— הפרסום מחזיר את עצמו ויותר.'
+            : ratio >= 1
+              ? '— בערך על האיזון.'
+              : '— על הנייר הפסד, אבל ככל שתתעד יותר עבודות במערכת המספר יתדייק.'}
+        </>
+      ),
+    });
+  }
+
+  // 2. Is the ad money measurable at all? Untagged leads make ROI a guess.
+  if (spend.month > 0 && fbLeads.length === 0) {
+    insights.push({
+      emoji: '🏷️',
+      text: (
+        <>
+          אף ליד החודש לא תויג במקור <b>Facebook</b> — בלי תיוג אי אפשר לדעת אילו עבודות הגיעו מהפרסום.
+          מהיום: כל פנייה מהקמפיין ← בחר Facebook בטופס הליד.
+        </>
+      ),
+    });
+  } else if (fbLeads.length > 0) {
+    const cpl = spend.month / fbLeads.length;
+    insights.push({
+      emoji: '📥',
+      text: (
+        <>
+          {fbLeads.length} לידים מפייסבוק החודש — עלות של{' '}
+          <b className="tabular-nums">₪{Math.round(cpl).toLocaleString('he-IL')}</b> לליד
+          {fbRevenue > 0 ? (
+            <>
+              , והם הביאו <b className="tabular-nums">₪{fbRevenue.toLocaleString('he-IL')}</b> מעבודות
+              שהושלמו.
+            </>
+          ) : (
+            '.'
+          )}
+        </>
+      ),
+    });
+  }
+
+  // 3. What a lead is allowed to cost, from the business's own numbers.
+  if (avgJob > 0 && conversion > 0) {
+    const maxCpl = avgJob * conversion;
+    insights.push({
+      emoji: '🎯',
+      text: (
+        <>
+          לפי הנתונים שלך (עבודה ממוצעת{' '}
+          <b className="tabular-nums">₪{Math.round(avgJob).toLocaleString('he-IL')}</b>, סגירה של{' '}
+          <b className="tabular-nums">{Math.round(conversion * 100)}%</b>) — ליד משתלם עד{' '}
+          <b className="tabular-nums">₪{Math.round(maxCpl).toLocaleString('he-IL')}</b>. מעל זה הקמפיין
+          מפסיד.
+        </>
+      ),
+    });
+  }
+
+  // 4. Spend pace vs the year's own average.
+  if (monthCount > 1 && spend.year > spend.month) {
+    const prevMonthsAvg = (spend.year - spend.month) / (monthCount - 1);
+    if (prevMonthsAvg > 0) {
+      const projected = (spend.month / Math.max(dayOfMonth, 1)) * 30;
+      const diff = Math.round(((projected - prevMonthsAvg) / prevMonthsAvg) * 100);
+      if (Math.abs(diff) >= 20) {
+        insights.push({
+          emoji: diff > 0 ? '📈' : '📉',
+          text: (
+            <>
+              קצב ההוצאה החודש {diff > 0 ? 'גבוה' : 'נמוך'} בכ-
+              <b className="tabular-nums">{Math.abs(diff)}%</b> מהממוצע החודשי שלך השנה (
+              <b className="tabular-nums">₪{Math.round(prevMonthsAvg).toLocaleString('he-IL')}</b>) — ודא
+              שזה מכוון.
+            </>
+          ),
+        });
+      }
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-card border border-ink-700 surface p-4">
+      <p className="text-sm font-extrabold">🧠 ניתוח אוטומטי</p>
+      <ul className="mt-2 space-y-2.5">
+        {insights.map((insight, i) => (
+          <li key={i} className="flex gap-2 text-sm font-semibold leading-relaxed">
+            <span aria-hidden className="shrink-0">
+              {insight.emoji}
+            </span>
+            <span>{insight.text}</span>
+          </li>
+        ))}
+      </ul>
+
+      <details className="mt-3 border-t border-ink-700/60 pt-3">
+        <summary className="cursor-pointer text-sm font-bold text-brand-400">
+          💡 טיפים לשיפור הקמפיינים
+        </summary>
+        <ul className="mt-2 space-y-2 text-sm font-semibold leading-relaxed text-mist-300">
+          <li>💬 קמפיין הודעות לוואטסאפ עובד הכי טוב בתחום — הלקוח פונה בקליק ואתה סוגר בצ׳אט.</li>
+          <li>🎬 סרטון לפני/אחרי של ספה מנצח כל תמונה סטטית. רענן קריאייטיב כל 3–4 שבועות.</li>
+          <li>📍 מקד גיאוגרפית רק לערים שאתה באמת מגיע אליהן — קליקים מרחוק הם כסף זרוק.</li>
+          <li>🎛️ רכז את התקציב ב-1–2 קמפיינים פעילים — פיזור על עשרות קמפיינים הורג את הלמידה של פייסבוק.</li>
+          <li>📆 קבע שגרה: כל יום ראשון להשוות כאן הכנסות מול הוצאות פרסום, ולכבות מה שלא מחזיר את עצמו.</li>
+        </ul>
+      </details>
+    </div>
+  );
+}
+
+/**
  * Facebook ad-spend panel for the statistics page: today / this month / this
  * year straight from the Marketing API, plus the number the owner actually
  * cares about — how much revenue came back per shekel of ads this month.
  */
-export function FacebookAdsSection({ monthRevenue }: { monthRevenue: number }) {
+export function FacebookAdsSection({ leads }: { leads: Lead[] }) {
   const [config, setConfig] = useState<FbAdsConfig | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -172,9 +319,6 @@ export function FacebookAdsSection({ monthRevenue }: { monthRevenue: number }) {
   useEffect(() => {
     if (config) void load(config);
   }, [config, load]);
-
-  const returnRatio =
-    spend && spend.month > 0 && monthRevenue > 0 ? monthRevenue / spend.month : null;
 
   return (
     <section className="mt-6">
@@ -249,13 +393,7 @@ export function FacebookAdsSection({ monthRevenue }: { monthRevenue: number }) {
             <SpendTile label="החודש" value={formatSpend(spend.month, spend.currency)} emoji="🗓️" />
             <SpendTile label="השנה" value={formatSpend(spend.year, spend.currency)} emoji="📊" />
           </div>
-          {returnRatio !== null ? (
-            <p className="mt-2 rounded-card border border-ink-700 surface px-4 py-3 text-sm font-semibold">
-              🎯 החודש: על כל ₪1 פרסום נכנסו{' '}
-              <b className="tabular-nums">₪{returnRatio.toFixed(1)}</b> מהעבודות שהושלמו
-              {returnRatio >= 3 ? ' — יחס מצוין!' : returnRatio >= 1.5 ? ' — יחס סביר.' : ' — כדאי לבדוק את הקמפיינים.'}
-            </p>
-          ) : null}
+          <AdInsights spend={spend} leads={leads} />
         </>
       ) : null}
     </section>

@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { SpinnerIcon } from '@/components/icons';
-import { conversationsLine, fetchAdSpend, formatSpend, type AdSpend } from '@/lib/crm/facebookAds';
+import {
+  conversationsLine,
+  exchangeForLongLived,
+  fetchAdSpendManaged,
+  formatSpend,
+  type AdSpend,
+} from '@/lib/crm/facebookAds';
 import { todayISO, type Lead } from '@/lib/crm/leads';
 import { clearFbAdsConfig, getFbAdsConfig, saveFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
 
@@ -46,14 +52,19 @@ function SetupForm({
 }) {
   const [accountId, setAccountId] = useState(initial?.accountId ?? '');
   const [token, setToken] = useState(initial?.accessToken ?? '');
+  const [appId, setAppId] = useState(initial?.appId ?? '');
+  const [appSecret, setAppSecret] = useState(initial?.appSecret ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const config: FbAdsConfig = {
+    let config: FbAdsConfig = {
       accountId: accountId.replace(/^act_/, '').trim(),
       accessToken: token.trim(),
+      appId: appId.trim() || undefined,
+      appSecret: appSecret.trim() || undefined,
+      tokenSavedAt: new Date().toISOString(),
     };
     if (!config.accountId || !config.accessToken) {
       setError('חסר מזהה חשבון או טוקן.');
@@ -62,6 +73,17 @@ function SetupForm({
     setSaving(true);
     setError(null);
     try {
+      // With app credentials, immediately trade whatever was pasted (even a
+      // short-lived Explorer token) for a long-lived one.
+      if (config.appId && config.appSecret) {
+        const fresh = await exchangeForLongLived(config);
+        if (!fresh) {
+          setError('החלפת הטוקן נכשלה — בדוק את ה-App ID וה-App Secret (או שהטוקן שהודבק כבר פג).');
+          setSaving(false);
+          return;
+        }
+        config = { ...config, accessToken: fresh, tokenSavedAt: new Date().toISOString() };
+      }
       await saveFbAdsConfig(config);
       onSaved(config);
     } catch (err) {
@@ -101,6 +123,33 @@ function SetupForm({
           className={inputClass}
           dir="ltr"
         />
+      </div>
+
+      <div className="rounded-xl border border-emerald-600/30 bg-emerald-500/5 p-3">
+        <p className="text-sm font-bold text-emerald-700">🔁 חידוש אוטומטי — הטוקן לא יפוג לעולם</p>
+        <p className="mt-1 text-xs font-semibold text-mist-500">
+          מלא את שני השדות והמערכת תאריך את הטוקן לבד לפני שיפוג. נמצאים ב:
+          developers.facebook.com ← האפליקציה crm ← App settings ← Basic.
+        </p>
+        <div className="mt-2 grid grid-cols-1 gap-2">
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="App ID"
+            value={appId}
+            onChange={(e) => setAppId(e.target.value)}
+            className={inputClass}
+            dir="ltr"
+          />
+          <input
+            type="password"
+            placeholder="App Secret"
+            value={appSecret}
+            onChange={(e) => setAppSecret(e.target.value)}
+            className={inputClass}
+            dir="ltr"
+          />
+        </div>
       </div>
 
       {error ? (
@@ -320,7 +369,7 @@ export function FacebookAdsSection({ leads }: { leads: Lead[] }) {
     setLoading(true);
     setError(null);
     try {
-      setSpend(await fetchAdSpend(cfg));
+      setSpend(await fetchAdSpendManaged(cfg));
     } catch (err) {
       setSpend(null);
       setError(err instanceof Error ? err.message : 'שליפת נתוני הפרסום נכשלה.');

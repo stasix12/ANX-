@@ -20,7 +20,7 @@ import {
   whatsAppUrl,
   type Lead,
 } from '@/lib/crm/leads';
-import { fetchAdSpend, formatSpend, type AdSpend } from '@/lib/crm/facebookAds';
+import { fetchAdSpendManaged, formatSpend, type AdSpend } from '@/lib/crm/facebookAds';
 import { getFbAdsConfig } from '@/lib/crm/settings';
 import { shiftFor } from '@/lib/crm/shifts';
 import { useLeads } from '@/lib/crm/useLeads';
@@ -205,7 +205,7 @@ export default function CrmDashboardPage() {
   const [adSpend, setAdSpend] = useState<AdSpend | null>(null);
   useEffect(() => {
     getFbAdsConfig()
-      .then((config) => (config ? fetchAdSpend(config) : null))
+      .then((config) => (config ? fetchAdSpendManaged(config) : null))
       .then(setAdSpend)
       .catch(() => setAdSpend(null));
   }, []);

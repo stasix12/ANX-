@@ -11,6 +11,11 @@ export interface FbAdsConfig {
   /** Numeric ad account id, without the act_ prefix. */
   accountId: string;
   accessToken: string;
+  /** App credentials for automatic token renewal (optional but recommended). */
+  appId?: string;
+  appSecret?: string;
+  /** When the current token was stored — drives the renewal schedule. */
+  tokenSavedAt?: string;
 }
 
 function requireSupabase() {

@@ -71,16 +71,13 @@ export default function CrmLoginPage() {
     <div
       className={`relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-5 py-10 crm-sky-${sky}`}
     >
-      {/* The living sky: stars, sun or moon, drifting clouds — whichever the
-          hour calls for; the rest hide themselves via the phase class. */}
+      {/* Living layers over the photographic sky: drifting clouds, the
+          breathing sun/moon glow, and after dark — twinkling stars. */}
+      <div aria-hidden className="crm-clouds-drift" />
+      <div aria-hidden className="crm-glow" />
       <div aria-hidden className="crm-stars" />
       <div aria-hidden className="crm-stars-2" />
       <div aria-hidden className="crm-shooting" />
-      <div aria-hidden className="crm-sun" />
-      <div aria-hidden className="crm-moon" />
-      <div aria-hidden className="crm-cloud crm-cloud-1" />
-      <div aria-hidden className="crm-cloud crm-cloud-2" />
-      <div aria-hidden className="crm-cloud crm-cloud-3" />
       {/* Soap bubbles drifting up the whole screen — the business, animated. */}
       <div aria-hidden className="crm-login-bubbles">
         {Array.from({ length: 18 }, (_, i) => (

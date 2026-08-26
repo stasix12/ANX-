@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
-import { BeforeAfter, type SceneKind } from '@/components/landing/BeforeAfter';
-import { JobVideoCard } from '@/components/landing/JobVideoCard';
+import { BeforeAfter } from '@/components/landing/BeforeAfter';
+import { CountUp } from '@/components/landing/CountUp';
+import { JobImageCard, JobVideoCard } from '@/components/landing/JobVideoCard';
 import { LeadForm } from '@/components/landing/LeadForm';
 import { Reveal } from '@/components/landing/Reveal';
 import { ReviewsCarousel, type Review } from '@/components/landing/ReviewsCarousel';
 import { StickyCta } from '@/components/landing/StickyCta';
+import { landing } from '@/lib/landing';
 import { WhatsAppLink } from '@/components/WhatsAppLink';
 import {
   CheckIcon,
@@ -19,20 +21,13 @@ import {
 import { asset, site, whatsappLink } from '@/lib/site';
 
 export const metadata: Metadata = {
-  title: 'ניקוי ספות מקצועי עד הבית — החל מ־299 ₪',
-  description:
-    'ניקוי ספות בבית הלקוח: ניקוי עומק בציוד מקצועי, טיפול בכתמים וייבוש מהיר — החל מ־299 ₪, מחיר סגור מראש בוואטסאפ. שלחו תמונה של הספה וקבלו מחיר תוך דקות.',
+  title: `ניקוי ספות מקצועי עד הבית — החל מ־${landing.price} ₪`,
+  description: `ניקוי ספות בבית הלקוח: ניקוי עומק בציוד מקצועי, טיפול בכתמים וייבוש מהיר — החל מ־${landing.price} ₪, מחיר סגור מראש בוואטסאפ. שלחו תמונה של הספה וקבלו מחיר תוך דקות.`,
   alternates: { canonical: '/sofa-cleaning' },
   openGraph: {
-    title: 'ניקוי ספות מקצועי עד הבית — החל מ־299 ₪',
+    title: `ניקוי ספות מקצועי עד הבית — החל מ־${landing.price} ₪`,
     description: 'שלחו תמונה של הספה בוואטסאפ וקבלו מחיר סגור מראש. ניקוי עומק, טיפול בכתמים וייבוש מהיר.',
   },
-};
-
-/* The number the whole page is built around, in one editable place. */
-const offer = {
-  price: '299',
-  includes: ['ניקוי עמוק', 'טיפול בכתמים', 'שאיבה מקצועית', 'עבודה בבית הלקוח', 'מחיר ברור מראש'],
 };
 
 /*
@@ -41,67 +36,21 @@ const offer = {
  */
 const waHero = whatsappLink('היי 🙂 מצרפ/ת תמונה של הספה — אשמח לקבל מחיר');
 const waResults = whatsappLink('היי, ראיתי את התוצאות באתר 👀 אשמח לדעת כמה יעלה אצלי');
-const waPrice = whatsappLink('היי, לגבי ניקוי ספה החל מ־299 ₪ — שולח/ת תמונה לקבלת מחיר');
+const waPrice = whatsappLink(`היי, לגבי ניקוי ספה החל מ־${landing.price} ₪ — שולח/ת תמונה לקבלת מחיר`);
 
 /* Only claims the business actually stands behind — no invented numbers. */
 const trust = [
-  { icon: HomeIcon, title: 'מגיעים עד הבית', desc: 'עם כל הציוד — אתם רק פותחים את הדלת' },
-  { icon: MachineIcon, title: 'ציוד מקצועי', desc: 'מכונות שאיבה וניקוי בלחץ ייעודיות' },
-  { icon: TagIcon, title: 'מחיר ברור מראש', desc: 'נסגר בוואטסאפ, בלי הפתעות ביום הניקוי' },
-  { icon: ClockIcon, title: 'שירות מהיר', desc: 'תיאום פשוט וייבוש מהיר בסוף העבודה' },
-];
-
-const results: { kind: SceneKind; title: string; chips: string[] }[] = [
-  { kind: 'sofa', title: 'ספה תלת-מושבית', chips: ['ניקוי עמוק', 'טיפול בכתמים'] },
-  { kind: 'armchair', title: 'כורסה', chips: ['לפני / אחרי', 'שאיבה מקצועית'] },
-  { kind: 'mattress', title: 'מזרן', chips: ['ניקוי עמוק', 'הסרת כתמים'] },
-];
-
-/* Real footage from the field — the videos already shipped with the site. */
-const recentJobs = [
-  {
-    src: '/video/anx-demo',
-    poster: '/video/anx-demo-poster.jpg',
-    title: 'ניקוי עומק למזרן',
-    chips: ['עוד לקוח מרוצה ✓', 'ניקוי עמוק'],
-  },
-  {
-    src: '/video/anaconda-demo',
-    poster: '/video/anaconda-demo-poster.jpg',
-    title: 'ריפוד כיסא בבית לקוח',
-    chips: ['עבודה מהשטח', 'שאיבה מקצועית'],
-  },
-  {
-    src: '/video/anx-hero',
-    poster: '/video/anx-hero-poster.jpg',
-    title: 'שאיבת הלכלוך מהריפוד',
-    chips: ['ככה זה נראה מקרוב', 'ניקוי עמוק'],
-  },
-  {
-    src: '/video/course-stain-removal',
-    poster: '/video/course-stain-removal-poster.jpg',
-    title: 'טיפול בכתמים במזרן',
-    chips: ['עוד לקוח מרוצה ✓', 'טיפול בכתמים'],
-  },
+  { icon: HomeIcon, title: 'מגיעים עד הבית', desc: 'עם כל הציוד' },
+  { icon: MachineIcon, title: 'ציוד מקצועי', desc: 'שאיבה וניקוי בלחץ' },
+  { icon: TagIcon, title: 'מחיר ברור מראש', desc: 'נסגר בוואטסאפ, בלי הפתעות' },
+  { icon: ClockIcon, title: 'שירות מהיר', desc: 'תיאום פשוט, ייבוש מהיר' },
 ];
 
 const steps = [
-  {
-    title: 'שולחים תמונה',
-    desc: 'מצלמים את הספה, שולחים בוואטסאפ ומקבלים מחיר סגור מראש — בלי ביקור מדידה.',
-  },
-  {
-    title: 'מגיעים אליכם',
-    desc: 'מתאמים מועד נוח, ואנחנו מגיעים עם כל הציוד והחומרים. אין מה להכין מראש.',
-  },
-  {
-    title: 'ניקוי עומק וטיפול בכתמים',
-    desc: 'שאיבה מקצועית, ניקוי בלחץ עם חומר שמותאם לסוג הבד, וטיפול נקודתי בכל כתם.',
-  },
-  {
-    title: 'ייבוש מהיר ותוצאה',
-    desc: 'מסיימים בייבוש מהיר, והספה נשארת רעננה ונקייה — מוכנה לשימוש בהקדם.',
-  },
+  { title: 'שולחים תמונה', desc: 'מצלמים את הספה ← מקבלים מחיר סגור בוואטסאפ. בלי ביקור מדידה.' },
+  { title: 'מגיעים אליכם', desc: 'עם כל הציוד והחומרים. אתם לא מכינים כלום.' },
+  { title: 'ניקוי עומק', desc: 'שאיבה מקצועית, ניקוי בלחץ וטיפול נקודתי בכל כתם.' },
+  { title: 'ייבוש מהיר', desc: 'הספה נשארת רעננה ונקייה — מוכנה לשימוש בהקדם.' },
 ];
 
 /*
@@ -130,8 +79,7 @@ const reviews: Review[] = [
 const faqItems = [
   {
     question: 'כמה עולה ניקוי ספה?',
-    answer:
-      'החל מ־299 ₪ לספה תלת-מושבית סטנדרטית. המחיר המדויק תלוי בגודל, בסוג הבד ובמצב הכתמים — שלחו תמונה בוואטסאפ ותקבלו מחיר סופי וסגור מראש. המחיר שנסגר הוא המחיר שתשלמו, בלי תוספות ביום הניקוי.',
+    answer: `החל מ־${landing.price} ₪ לספה תלת-מושבית סטנדרטית. המחיר המדויק תלוי בגודל, בסוג הבד ובמצב הכתמים — שלחו תמונה בוואטסאפ ותקבלו מחיר סופי וסגור מראש. המחיר שנסגר הוא המחיר שתשלמו, בלי תוספות ביום הניקוי.`,
   },
   {
     question: 'כמה זמן לוקח הניקוי?',
@@ -155,8 +103,7 @@ const faqItems = [
   },
   {
     question: 'לאילו אזורים אתם מגיעים?',
-    answer:
-      'שלחו לנו בוואטסאפ את העיר שלכם יחד עם תמונת הספה — ותקבלו תשובה מיידית אם אנחנו מגיעים אליכם ומה המחיר.',
+    answer: landing.serviceAreaNote,
   },
 ];
 
@@ -171,7 +118,7 @@ const businessJsonLd = {
   makesOffer: {
     '@type': 'Offer',
     itemOffered: { '@type': 'Service', name: 'ניקוי ספה בבית הלקוח' },
-    price: offer.price,
+    price: String(landing.price),
     priceCurrency: 'ILS',
   },
 };
@@ -239,18 +186,23 @@ export default function SofaCleaningLandingPage() {
           </p>
           <p className="lp-price-pop mt-1 flex items-baseline gap-2">
             <span className="text-6xl font-black tracking-tight text-brand-400 sm:text-7xl">
-              299&nbsp;₪
+              {landing.price}&nbsp;₪
             </span>
             <span className="text-lg font-bold text-mist-500">מחיר סגור מראש</span>
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <WaButton href={waHero} className="px-8 py-4 text-lg">
-              📸 שלחו תמונה וקבלו מחיר ב-WhatsApp
-            </WaButton>
+          <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div>
+              <WaButton href={waHero} className="px-8 py-4 text-lg">
+                📸 שלחו תמונה וקבלו מחיר ב-WhatsApp
+              </WaButton>
+              <p className="mt-2 text-center text-sm font-medium text-mist-500">
+                ⏱️ לוקח פחות מדקה
+              </p>
+            </div>
             <a
               href={`tel:+${site.whatsappNumber}`}
-              className="flex items-center justify-center gap-2 rounded-full px-6 py-4 text-lg font-extrabold text-brand-400 transition hover:bg-ink-850"
+              className="flex items-center justify-center gap-2 self-start rounded-full px-6 py-4 text-lg font-extrabold text-brand-400 transition hover:bg-ink-850 max-sm:self-center sm:mb-7"
             >
               <PhoneIcon className="h-5 w-5 shrink-0" />
               או התקשרו: <span dir="ltr" className="whitespace-nowrap">{site.phoneDisplay}</span>
@@ -274,7 +226,7 @@ export default function SofaCleaningLandingPage() {
           <figure className="relative overflow-hidden rounded-card shadow-2xl">
             <video
               className="aspect-4/3 w-full object-cover"
-              poster={asset('/video/anx-hero-poster.jpg')}
+              poster={asset(landing.heroVideo.poster)}
               autoPlay
               muted
               loop
@@ -282,11 +234,11 @@ export default function SofaCleaningLandingPage() {
               preload="metadata"
               aria-label="צילום אמיתי של שאיבת הלכלוך מריפוד במהלך ניקוי"
             >
-              <source src={asset('/video/anx-hero.webm')} type="video/webm" />
-              <source src={asset('/video/anx-hero.mp4')} type="video/mp4" />
+              <source src={asset(landing.heroVideo.webm)} type="video/webm" />
+              <source src={asset(landing.heroVideo.mp4)} type="video/mp4" />
             </video>
             <figcaption className="absolute bottom-3 start-3 rounded-full bg-black/50 px-4 py-1.5 text-sm font-bold text-white backdrop-blur-sm">
-              🎥 צילום אמיתי מעבודה שלנו
+              {landing.heroVideo.label}
             </figcaption>
           </figure>
         </Reveal>
@@ -315,15 +267,15 @@ export default function SofaCleaningLandingPage() {
           <h2 className="text-center text-3xl font-black sm:text-4xl">
             ההבדל שרואים (ומריחים) מיד
           </h2>
-          <p className="mx-auto mt-3 mb-10 max-w-lg text-center text-lg text-mist-300">
-            גררו את הידית על כל כרטיס וראו מה ניקוי עומק מקצועי עושה.
+          <p className="mx-auto mt-3 mb-10 max-w-lg text-center text-lg font-bold text-mist-300">
+            תגררו ותראו בעצמכם 👇
           </p>
         </Reveal>
         <div className="grid gap-6 lg:grid-cols-3">
-          {results.map((result, i) => (
+          {landing.beforeAfter.map((result, i) => (
             <Reveal key={result.kind} delay={i * 110}>
               <div className="transition-transform duration-300 sm:hover:-translate-y-1.5">
-                <BeforeAfter kind={result.kind} />
+                <BeforeAfter kind={result.kind} before={result.before} after={result.after} />
                 <div className="mt-3 flex items-center justify-between px-1">
                   <p className="font-extrabold">{result.title}</p>
                   <p className="flex gap-1.5">
@@ -361,16 +313,20 @@ export default function SofaCleaningLandingPage() {
       <section className="overflow-x-clip bg-ink-850 py-16 lg:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <Reveal>
-            <h2 className="text-3xl font-black sm:text-4xl">עבודות מהימים האחרונים</h2>
+            <h2 className="text-3xl font-black sm:text-4xl">🔥 עבודות מהימים האחרונים</h2>
             <p className="mt-3 mb-8 max-w-lg text-lg text-mist-300">
-              וידאו אמיתי מהשטח — בלי פילטרים ובלי תמונות סטוק. גללו הצידה ולחצו להפעלה.
+              וידאו ותמונות אמיתיים מהשטח — בלי פילטרים ובלי סטוק. גללו הצידה 👈
             </p>
           </Reveal>
           <Reveal>
             <div className="crm-snap -mx-4 flex snap-x snap-mandatory gap-5 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-1">
-              {recentJobs.map((job) => (
-                <JobVideoCard key={job.src} {...job} />
-              ))}
+              {landing.jobs.map((job) =>
+                job.type === 'video' ? (
+                  <JobVideoCard key={job.src} src={job.src} poster={job.poster} title={job.title} chips={job.chips} />
+                ) : (
+                  <JobImageCard key={job.src} src={job.src} alt={job.alt} title={job.title} chips={job.chips} />
+                ),
+              )}
             </div>
           </Reveal>
         </div>
@@ -391,14 +347,17 @@ export default function SofaCleaningLandingPage() {
                 <span className="bubble" />
                 <span className="bubble" />
                 <span className="bubble" />
-                <p className="text-lg font-black">🔥 המחיר שלנו</p>
-                <p className="mt-3 text-xl font-bold">ניקוי ספה</p>
-                <p className="mt-1 text-sm font-medium text-white/85">החל מ־</p>
-                <p className="text-6xl font-black tracking-tight">299&nbsp;₪</p>
+                <p className="text-lg font-black">🔥 מבצע ניקוי ספות</p>
+                <p className="mt-3 text-sm font-medium text-white/85">החל מ־</p>
+                <p className="text-7xl font-black tracking-tight">
+                  <CountUp to={landing.price} />
+                  &nbsp;₪
+                </p>
+                <p className="mt-1 font-bold">{landing.priceUnit}</p>
               </div>
               <div className="p-7">
                 <ul className="space-y-3">
-                  {offer.includes.map((line) => (
+                  {landing.priceIncludes.map((line) => (
                     <li key={line} className="flex items-center gap-3 font-bold">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
                         <CheckIcon className="h-4 w-4" />
@@ -408,7 +367,7 @@ export default function SofaCleaningLandingPage() {
                   ))}
                 </ul>
                 <WaButton href={waPrice} className="mt-7 w-full px-6 py-4 text-base">
-                  שלחו תמונה לקבלת מחיר
+                  📸 שלחו תמונה וקבלו מחיר
                 </WaButton>
                 <p className="mt-3 text-center text-xs text-mist-500">
                   המחיר הסופי נקבע לפי גודל הספה ומצבה — ונסגר מראש, לפני שהגענו.

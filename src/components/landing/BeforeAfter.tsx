@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { asset } from '@/lib/site';
 
 export type SceneKind = 'sofa' | 'armchair' | 'mattress';
 
@@ -137,16 +138,34 @@ function MattressShape({ dirty }: { dirty: boolean }) {
  * keyboard and screen readers as well as touch — on a phone the thumb drags
  * anywhere on the image and the native input tracks it smoothly.
  */
-export function BeforeAfter({ kind = 'sofa' }: { kind?: SceneKind }) {
+export function BeforeAfter({
+  kind = 'sofa',
+  before = null,
+  after = null,
+}: {
+  kind?: SceneKind;
+  /** Optional real photo paths (under /public); the illustration is the fallback. */
+  before?: string | null;
+  after?: string | null;
+}) {
   const [pos, setPos] = useState(50);
+  const usePhotos = Boolean(before && after);
 
   return (
     <div dir="ltr" className="relative aspect-8/5 select-none overflow-hidden rounded-card shadow-xl">
       <div className="absolute inset-0">
-        <Scene kind={kind} variant="before" />
+        {usePhotos ? (
+          <img src={asset(before!)} alt="לפני הניקוי" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+        ) : (
+          <Scene kind={kind} variant="before" />
+        )}
       </div>
       <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
-        <Scene kind={kind} variant="after" />
+        {usePhotos ? (
+          <img src={asset(after!)} alt="אחרי הניקוי" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+        ) : (
+          <Scene kind={kind} variant="after" />
+        )}
       </div>
 
       {/* Divider + handle. */}

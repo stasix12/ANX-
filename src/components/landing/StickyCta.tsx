@@ -22,8 +22,8 @@ export function StickyCta() {
         aria-label="שליחת תמונה בוואטסאפ לקבלת מחיר"
         className="lp-pulse flex flex-1 items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 py-4 text-base font-extrabold text-white shadow-xl shadow-emerald-500/30 active:scale-[0.97]"
       >
-        <WhatsAppIcon className="h-5 w-5" />
-        💬 שלחו תמונה ב-WhatsApp
+        <WhatsAppIcon className="h-5 w-5 shrink-0" />
+        📸 שלחו תמונה וקבלו מחיר
       </WhatsAppLink>
       <a
         href={`tel:+${site.whatsappNumber}`}

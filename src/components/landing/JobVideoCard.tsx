@@ -9,6 +9,43 @@ import { asset } from '@/lib/site';
  * JPGs, not megabytes — then plays with native controls. asset() prefixes the
  * GitHub Pages base path that a plain <video> doesn't get from Next.
  */
+/** A real photo in the recent-jobs rail — same frame as the video cards. */
+export function JobImageCard({
+  src,
+  alt,
+  title,
+  chips,
+}: {
+  src: string;
+  alt: string;
+  title: string;
+  chips: string[];
+}) {
+  return (
+    <figure className="group relative w-72 shrink-0 snap-center overflow-hidden rounded-card bg-ink-800 shadow-lg transition-transform duration-300 sm:w-80 sm:hover:-translate-y-1.5 sm:hover:shadow-xl">
+      <div className="relative aspect-3/4">
+        <img
+          src={asset(src)}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+        />
+        <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent p-4 text-white">
+          <p className="font-extrabold drop-shadow">{title}</p>
+          <p className="mt-1.5 flex flex-wrap gap-1.5">
+            {chips.map((chip) => (
+              <span key={chip} className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-bold backdrop-blur-sm">
+                {chip}
+              </span>
+            ))}
+          </p>
+        </figcaption>
+      </div>
+    </figure>
+  );
+}
+
 export function JobVideoCard({
   src,
   poster,

@@ -2,7 +2,9 @@ import { PhoneIcon, WhatsAppIcon } from '@/components/icons';
 import { WhatsAppLink } from '@/components/WhatsAppLink';
 import { site, whatsappLink } from '@/lib/site';
 
-const message = whatsappLink('היי, אשמח להצעת מחיר לניקוי ספה 🛋️');
+const message = whatsappLink(
+  'היי, ראיתי את מבצע הניקוי, החיטוי והייבוש 🛋️ אשמח להצעת מחיר — אשלח תמונה של הספה',
+);
 
 /**
  * Fixed call/WhatsApp bar. On a phone — where nearly all ad traffic lands —

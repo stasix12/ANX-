@@ -15,6 +15,16 @@ const SERVICES = [
   'משהו אחר',
 ] as const;
 
+/* Sofa size drives the price, so asking it up front saves the first
+   back-and-forth in the chat — the quote arrives one message sooner. */
+const SOFA_SIZES = [
+  'דו-מושבית',
+  'תלת-מושבית',
+  '4 מושבים ומעלה',
+  'ספה פינתית',
+  'לא בטוח/ה — אשלח תמונה',
+] as const;
+
 /** Accepts 05X-XXXXXXX and landlines, with or without separators. */
 function isValidPhone(raw: string): boolean {
   const digits = raw.replace(/\D/g, '');
@@ -33,6 +43,7 @@ export function LeadForm({ compact = false }: { compact?: boolean }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [service, setService] = useState<string>(SERVICES[0]);
+  const [sofaSize, setSofaSize] = useState<string>(SOFA_SIZES[1]);
   const [error, setError] = useState('');
   const [blockedHref, setBlockedHref] = useState('');
 
@@ -49,12 +60,14 @@ export function LeadForm({ compact = false }: { compact?: boolean }) {
     }
     setError('');
 
+    const isSofa = service === 'ניקוי ספה';
     const href = whatsappLink(
       [
-        'היי, אשמח להצעת מחיר 🙂',
+        'היי, הגעתי מדף המבצע ואשמח להצעת מחיר 🙂',
         `שם: ${name.trim()}`,
         `טלפון: ${phone.trim()}`,
         `שירות: ${service}`,
+        ...(isSofa ? [`גודל הספה: ${sofaSize}`] : []),
       ].join('\n'),
     );
     openWhatsApp(href, () => setBlockedHref(href));
@@ -92,21 +105,41 @@ export function LeadForm({ compact = false }: { compact?: boolean }) {
         </label>
       </div>
 
-      <label className="block">
-        <span className="mb-1 block text-sm font-bold text-mist-300">מה מנקים?</span>
-        <select
-          name="service"
-          value={service}
-          onChange={(e) => setService(e.target.value)}
-          className="w-full appearance-none rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-base text-mist-100 focus:border-brand-500"
-        >
-          {SERVICES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className={service === 'ניקוי ספה' ? 'grid gap-3 sm:grid-cols-2' : ''}>
+        <label className="block">
+          <span className="mb-1 block text-sm font-bold text-mist-300">מה מנקים?</span>
+          <select
+            name="service"
+            value={service}
+            onChange={(e) => setService(e.target.value)}
+            className="w-full appearance-none rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-base text-mist-100 focus:border-brand-500"
+          >
+            {SERVICES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {service === 'ניקוי ספה' ? (
+          <label className="block">
+            <span className="mb-1 block text-sm font-bold text-mist-300">גודל הספה</span>
+            <select
+              name="sofaSize"
+              value={sofaSize}
+              onChange={(e) => setSofaSize(e.target.value)}
+              className="w-full appearance-none rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-base text-mist-100 focus:border-brand-500"
+            >
+              {SOFA_SIZES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </div>
 
       {error ? (
         <p role="alert" className="text-sm font-bold text-red-600">

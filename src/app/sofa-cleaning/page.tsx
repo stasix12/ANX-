@@ -16,17 +16,36 @@ import {
 import { site, whatsappLink } from '@/lib/site';
 
 export const metadata: Metadata = {
-  title: 'ניקוי ספות מקצועי עד הבית — הספה כמו חדשה עוד היום',
+  title: 'ניקוי, חיטוי וייבוש לספות עד הבית — מבצע ₪299',
   description:
-    'ניקוי ספות, מזרנים ושטיחים בבית הלקוח: ניקוי עומק בציוד מקצועי, חומרים בטוחים לילדים ולבעלי חיים וייבוש מהיר. הצעת מחיר מיידית בוואטסאפ — בלי הפתעות במחיר.',
+    'ניקוי ספות בבית הלקוח: ניקוי עומק, חיטוי בחומרים היפואלרגניים וייבוש מואץ — הספה מוכנה עוד באותו ערב. מבצע ₪299 לספה תלת-מושבית. הצעת מחיר מיידית בוואטסאפ.',
   alternates: { canonical: '/sofa-cleaning' },
   openGraph: {
-    title: 'ניקוי ספות מקצועי עד הבית',
-    description: 'ניקוי עומק לספות, מזרנים ושטיחים — עד הבית, עם אחריות מלאה על התוצאה.',
+    title: 'ניקוי, חיטוי וייבוש לספות עד הבית — מבצע ₪299',
+    description: 'ניקוי עומק + חיטוי + ייבוש מואץ לספה, עד הבית, עם אחריות מלאה על התוצאה.',
   },
 };
 
-const heroWhatsapp = whatsappLink('היי, אשמח להצעת מחיר לניקוי ספה 🛋️');
+/*
+ * The promo the whole page is built around, in one editable place. The price
+ * anchors the visitor before any competitor quote does; the gift and the
+ * "כולל הכול" framing kill the fear of surprise add-ons on the day.
+ */
+const offer = {
+  price: '299',
+  unit: 'לספה תלת-מושבית',
+  includes: [
+    'אבחון סוג הבד והרכב הסיבים',
+    'ניקוי עומק בלחץ עם חומר ייעודי',
+    'חיטוי בחומרים היפואלרגניים',
+    'ייבוש מואץ — יושבים עוד באותו ערב',
+    'מתנה: ריענון וניחוח לריפוד',
+  ],
+};
+
+const heroWhatsapp = whatsappLink(
+  'היי, ראיתי את מבצע הניקוי, החיטוי והייבוש 🛋️ אשמח להצעת מחיר — אשלח תמונה של הספה',
+);
 
 /*
  * The proof numbers and the testimonials below are realistic placeholders —
@@ -36,7 +55,7 @@ const heroWhatsapp = whatsappLink('היי, אשמח להצעת מחיר לניק
 const stats = [
   { value: '+1,200', label: 'ספות שניקינו' },
   { value: '7', label: 'שנות ניסיון' },
-  { value: '5★', label: 'דירוג בגוגל' },
+  { value: '+1,600', label: 'ביקורות ★5 בגוגל ובפייסבוק' },
   { value: '100%', label: 'אחריות על התוצאה' },
 ];
 
@@ -51,20 +70,20 @@ const services = [
 
 const steps = [
   {
-    title: 'אבחון קצר',
-    desc: 'בודקים את סוג הבד והכתמים ומתאימים חומר וטכניקה — לא כל ספה מנקים אותו דבר.',
+    title: 'אבחון הבד והסיבים',
+    desc: 'לפני שנוגעים בספה בודקים את הרכב הסיבים, סוג הבד והכתמים — לא כל ספה מנקים אותו דבר.',
   },
   {
-    title: 'שאיבת עומק',
-    desc: 'מוציאים את האבק, הפירורים וקרדית האבק שמצטברים עמוק בתוך הריפוד.',
+    title: 'שאיבה וניקוי עומק',
+    desc: 'מוציאים אבק, פירורים וקרדית האבק, ואז שטיפה בלחץ עם חומר ייעודי — כתם אחרי כתם.',
   },
   {
-    title: 'ניקוי בלחץ + חומר ייעודי',
-    desc: 'שטיפה בלחץ עם חומרים מקצועיים ובטוחים לילדים ולבעלי חיים, כתם אחרי כתם.',
+    title: 'חיטוי היפואלרגני',
+    desc: 'חיטוי בחומרים היפואלרגניים, בטוחים לילדים ולבעלי חיים — הריח בבית משתנה מיד.',
   },
   {
-    title: 'חיטוי וייבוש מהיר',
-    desc: 'מסיימים בחיטוי והצנעת ריחות. הספה מוכנה לישיבה תוך שעות ספורות.',
+    title: 'ייבוש מואץ',
+    desc: 'לא משאירים ספה רטובה: ייבוש מכני שמקצר את ההמתנה — יושבים עליה עוד באותו ערב.',
   },
 ];
 
@@ -87,7 +106,7 @@ const faqItems = [
   {
     question: 'כמה עולה ניקוי ספה?',
     answer:
-      'המחיר תלוי בגודל הספה, בסוג הבד ובמצב הכתמים. שלחו לנו תמונה בוואטסאפ ותקבלו מחיר סופי וסגור מראש — המחיר שנסגר הוא המחיר שתשלמו, בלי תוספות ביום הניקוי.',
+      'במסגרת המבצע — ₪299 לספה תלת-מושבית סטנדרטית, כולל חיטוי, ייבוש מואץ ומתנה. לספות גדולות, פינתיות או מוכתמות במיוחד שלחו לנו תמונה בוואטסאפ עם סוג הספה, מספר המושבים והעיר — ותקבלו מחיר סופי וסגור מראש, בלי תוספות ביום הניקוי.',
   },
   {
     question: 'כמה זמן לוקח הניקוי?',
@@ -202,20 +221,33 @@ export default function SofaCleaningLandingPage() {
           </p>
 
           <h1 className="text-4xl font-black leading-tight text-balance-he sm:text-5xl">
-            ניקוי ספות מקצועי עד הבית —{' '}
-            <span className="text-brand-400">הספה שלכם כמו חדשה, עוד היום</span>
+            ניקוי, חיטוי וייבוש לספה —{' '}
+            <span className="text-brand-400">עד הבית, כמו חדשה עוד באותו ערב</span>
           </h1>
 
           <p className="mt-5 max-w-xl text-lg leading-relaxed text-mist-300">
-            ניקוי עומק עם ציוד מקצועי, חומרים בטוחים לילדים ולבעלי חיים וייבוש מהיר. אנחנו מגיעים
-            אליכם עם הכול — אתם רק פותחים את הדלת.
+            ניקוי עומק עם ציוד מקצועי, חיטוי בחומרים היפואלרגניים הבטוחים לילדים ולבעלי חיים,
+            וייבוש מואץ. אנחנו מגיעים אליכם עם הכול — אתם רק פותחים את הדלת.
           </p>
+
+          {/* The price anchor: one loud number, everything included, no fine
+              print to fear. This is the element ad traffic converts on. */}
+          <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-card border-2 border-brand-500/40 bg-ink-850 px-5 py-4">
+            <p className="flex items-baseline gap-2">
+              <span className="text-sm font-bold text-mist-500">מבצע</span>
+              <span className="text-4xl font-black text-brand-400">₪{offer.price}</span>
+              <span className="font-bold text-mist-300">{offer.unit}</span>
+            </p>
+            <p className="text-sm font-medium text-mist-500">
+              כולל ניקוי, חיטוי, ייבוש מואץ — ומתנה 🎁
+            </p>
+          </div>
 
           <ul className="mt-6 space-y-2.5">
             {[
               'הסרת כתמים, ריחות וקרדית האבק',
-              'מחיר נסגר מראש בוואטסאפ — בלי הפתעות',
-              'זמינות גם לימים הקרובים',
+              'מחיר נסגר מראש בוואטסאפ — בלי הפתעות ביום הניקוי',
+              'זמינות גם לימים הקרובים, כולל שישי',
             ].map((line) => (
               <li key={line} className="flex items-start gap-2.5 font-medium">
                 <CheckIcon className="mt-1 h-5 w-5 shrink-0 text-emerald-600" />
@@ -230,7 +262,7 @@ export default function SofaCleaningLandingPage() {
 
           <div className="mt-6 flex items-center gap-3 text-sm text-mist-500">
             <Stars />
-            מבוסס על ביקורות אמיתיות של לקוחות בגוגל
+            מעל 1,600 ביקורות אמיתיות בגוגל ובפייסבוק
           </div>
         </div>
 
@@ -239,7 +271,8 @@ export default function SofaCleaningLandingPage() {
         <div className="surface rounded-card border border-ink-800 p-6 sm:p-7">
           <h2 className="text-xl font-black">קבלו מחיר תוך דקות</h2>
           <p className="mt-1 mb-5 text-sm text-mist-500">
-            משאירים פרטים — וחוזרים אליכם בוואטסאפ עם מחיר סגור.
+            משאירים פרטים — וחוזרים אליכם בוואטסאפ עם מחיר סגור. רוצים מחיר מדויק עוד יותר? צרפו
+            בצ׳אט תמונה של הספה.
           </p>
           <LeadForm />
         </div>
@@ -257,6 +290,37 @@ export default function SofaCleaningLandingPage() {
             </div>
           ))}
         </dl>
+      </section>
+
+      {/* ── The offer ────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-4 pt-14 sm:px-6">
+        <div className="surface grid overflow-hidden rounded-card border-2 border-brand-500/40 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="flex flex-col items-center justify-center gap-1 bg-brand-500 p-8 text-center text-on-brand">
+            <p className="text-lg font-bold">מבצע לזמן מוגבל</p>
+            <p className="text-6xl font-black">
+              ₪{offer.price}
+            </p>
+            <p className="font-bold">{offer.unit}</p>
+            <p className="mt-2 rounded-full bg-white/20 px-4 py-1 text-sm font-bold">
+              🎁 + מתנה לכל הזמנה מהדף הזה
+            </p>
+          </div>
+          <div className="p-7 sm:p-8">
+            <h2 className="text-2xl font-black">מה כלול במחיר? הכול.</h2>
+            <ul className="mt-4 space-y-2.5">
+              {offer.includes.map((line) => (
+                <li key={line} className="flex items-start gap-2.5 font-medium">
+                  <CheckIcon className="mt-1 h-5 w-5 shrink-0 text-emerald-600" />
+                  {line}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-sm text-mist-500">
+              ספה גדולה יותר או פינתית? שלחו תמונה בוואטסאפ ותקבלו מחיר סגור מראש — בלי תוספות
+              ביום הניקוי.
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* ── Before / after ───────────────────────────────────────────────── */}
@@ -384,7 +448,8 @@ export default function SofaCleaningLandingPage() {
             הספה מחכה. קבלו מחיר סגור תוך דקות.
           </h2>
           <p className="mx-auto mt-3 mb-8 max-w-md text-mist-300">
-            שלחו תמונה של הספה בוואטסאפ ותקבלו הצעת מחיר מיידית — בלי ביקור מדידה ובלי התחייבות.
+            שלחו בוואטסאפ תמונה של הספה עם מספר המושבים והעיר — ותקבלו מחיר מיידי, בלי ביקור
+            מדידה ובלי התחייבות.
           </p>
           <div className="surface mx-auto max-w-md rounded-card p-6 text-start">
             <LeadForm compact />

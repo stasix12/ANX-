@@ -600,6 +600,60 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
 
+/*
+ * Landing-page (lp-) animation kit — scroll reveals, a CTA pulse, and a
+ * slow float. All transform/opacity only, so nothing here re-renders layout,
+ * and the global prefers-reduced-motion override at the bottom of this file
+ * neutralises every one of them.
+ */
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--lp-delay, 0ms);
+}
+.lp-reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Gentle attention ring on the floating WhatsApp button: a soft green wave
+   every few seconds, quiet enough to live on screen for a whole visit. */
+.lp-pulse {
+  animation: lp-pulse 3.2s ease-out infinite;
+}
+@keyframes lp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45);
+  }
+  55% {
+    box-shadow: 0 0 0 14px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* The price figure breathes once on reveal — scale only, no layout shift. */
+.lp-price-pop {
+  animation: lp-price-pop 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes lp-price-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @layer utilities {
   /*
    * Panel surface for cards and boxes: a near-white glass tile that lets the

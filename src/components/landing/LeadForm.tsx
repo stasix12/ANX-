@@ -63,7 +63,7 @@ export function LeadForm({ compact = false }: { compact?: boolean }) {
     const isSofa = service === 'ניקוי ספה';
     const href = whatsappLink(
       [
-        'היי, הגעתי מדף המבצע ואשמח להצעת מחיר 🙂',
+        'היי, הגעתי מהאתר ואשמח להצעת מחיר 🙂',
         `שם: ${name.trim()}`,
         `טלפון: ${phone.trim()}`,
         `שירות: ${service}`,

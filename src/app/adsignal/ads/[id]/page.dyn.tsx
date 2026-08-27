@@ -80,7 +80,7 @@ export default async function AdDetailPage(props: { params: Promise<{ id: string
           <div className="as-rows">
             {snapshots.slice(-14).map((s) => (
               <div key={s.captured_at} className="as-row" style={{ padding: '7px 2px' }}>
-                <span className="as-num">{s.captured_at}</span>
+                <span className="as-num">{new Date(s.captured_at).toLocaleDateString('he-IL')}</span>
                 <span className="grow sm">{s.is_active ? 'פעילה' : 'לא פעילה'}</span>
                 <span className="as-num">
                   {s.reach_lower != null

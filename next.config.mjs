@@ -23,6 +23,12 @@ const nextConfig = {
   pageExtensions: isExport
     ? ['tsx', 'ts', 'jsx', 'js']
     : ['dyn.tsx', 'dyn.ts', 'tsx', 'ts', 'jsx', 'js'],
+  // A deployment dedicated to AdSignal (its own Vercel project) sets
+  // ADSIGNAL_HOME=1 so its root URL opens the dashboard instead of the shop.
+  // The shop's own deployments never set it, so nothing changes there.
+  ...(process.env.ADSIGNAL_HOME === '1' && !isExport
+    ? { redirects: async () => [{ source: '/', destination: '/adsignal', permanent: false }] }
+    : {}),
   ...(basePath ? { basePath } : {}),
   images: {
     // Product and hero artwork ships as local SVG placeholders until the real

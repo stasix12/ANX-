@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/adsignal/sync", "schedule": "0 3 * * *" }
+  ]
+}

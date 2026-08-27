@@ -17,6 +17,12 @@ const nextConfig = {
   // products/<slug>.html, so every page resolves as a plain directory index on
   // any static host, without relying on extensionless-URL rewriting.
   ...(isExport ? { output: 'export', trailingSlash: true } : {}),
+  // AdSignal (/adsignal) is server-rendered against Supabase and cannot exist
+  // in a static export. Its pages/routes use the `.dyn.tsx` extension, which
+  // only the dynamic build picks up — the GitHub Pages export skips them.
+  pageExtensions: isExport
+    ? ['tsx', 'ts', 'jsx', 'js']
+    : ['dyn.tsx', 'dyn.ts', 'tsx', 'ts', 'jsx', 'js'],
   ...(basePath ? { basePath } : {}),
   images: {
     // Product and hero artwork ships as local SVG placeholders until the real

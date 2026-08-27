@@ -4,6 +4,26 @@
 
 בנוי ב-Next.js (App Router) + TypeScript + Tailwind CSS, ללא ספריות UI כבדות — כל האייקונים והאנימציות מקומיים.
 
+## AdSignal — ניטור מודעות וטרנדים (`/adsignal`)
+
+מערכת SaaS לניטור מודעות, קריאייטיבים וטרנדים עם זיהוי מוקדם של נישות שמתחממות.
+Mobile-first, RTL, ללא נתוני דמו — כל מדד מתויג `REAL` / `DERIVED` / `AI_ESTIMATE`.
+
+**הפעלה ראשונה:**
+
+1. הרץ את `supabase/adsignal-schema.sql` ב-SQL Editor של Supabase (אידמפוטנטי).
+2. הוסף env לפי `.env.example` — חובה: `SUPABASE_SERVICE_ROLE_KEY`; מקורות נתונים:
+   `META_ADLIB_ACCESS_TOKEN` (Meta Ad Library), `YOUTUBE_API_KEY`, `SERPAPI_KEY`
+   (Google Trends), `ANTHROPIC_API_KEY` (ניתוח AI).
+3. פתח `/adsignal/status` והרץ סנכרון. Cron יומי מוגדר ב-`vercel.json` (03:00 UTC).
+
+מסכים: דשבורד · Ad Explorer · ‏🇮🇱 Israel Trends · ‏💎 Opportunity Finder · Offers ·
+Creative Clusters · Competitor Watch · Alerts · חיבורים. הקוד: `src/lib/adsignal/`
+(קונקטורים, ניקוד, rollup) + `src/app/adsignal/`. טסטים: `npm test`.
+האפיון המלא: `docs/ad-trends-saas/`.
+
+> הערה: AdSignal דורש פריסה דינמית (Vercel וכד'); הוא לא ייכלל ב-export הסטטי ל-GitHub Pages.
+
 ## הפעלה
 
 ```bash

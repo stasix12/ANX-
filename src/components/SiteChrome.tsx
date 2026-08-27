@@ -19,7 +19,8 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
   const isStandaloneApp =
     pathname?.startsWith('/admin') ||
     pathname?.startsWith('/crm') ||
-    pathname?.startsWith('/sofa-cleaning');
+    pathname?.startsWith('/sofa-cleaning') ||
+    pathname?.startsWith('/adsignal');
 
   if (isStandaloneApp) return <main id="main">{children}</main>;
 

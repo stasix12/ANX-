@@ -1,0 +1,50 @@
+# Prints the Vercel deployment URL(s) for each push to the AdSignal branch.
+# Vercel registers its deployments through the GitHub Deployments API; this
+# job polls that API for the pushed commit and prints every environment URL,
+# so the live link can be read straight from the workflow log.
+name: Report deployment URLs
+
+on:
+  push:
+    branches: [claude/saas-ad-trends-monitoring-mabyvb]
+  workflow_dispatch:
+
+permissions:
+  deployments: read
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Vercel deployments and print their URLs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          found=""
+          for i in $(seq 1 30); do
+            deployments=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$REPO/deployments?sha=$SHA&per_page=20") || deployments="[]"
+            ids=$(echo "$deployments" | jq -r '.[].id')
+            urls=""
+            for id in $ids; do
+              url=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$REPO/deployments/$id/statuses?per_page=10" \
+                | jq -r '[.[] | select(.environment_url != null and .environment_url != "")][0].environment_url // empty')
+              [ -n "$url" ] && urls="$urls $url"
+            done
+            if [ -n "$urls" ]; then
+              found="$urls"
+              # keep polling a bit longer so both projects (shop + adsignal) report
+              [ "$i" -gt 6 ] && break
+            fi
+            sleep 10
+          done
+          echo "===== DEPLOYMENT URLS for $SHA ====="
+          if [ -n "$found" ]; then
+            for u in $found; do echo "URL: $u"; done
+          else
+            echo "No deployment URLs reported yet."
+          fi

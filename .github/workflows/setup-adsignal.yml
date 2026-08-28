@@ -1,10 +1,8 @@
-# One-shot AdSignal provisioning, dispatched with tokens as inputs.
-# With both tokens: applies the schema via the Supabase Management API, reads
-# the anon/service_role keys, upserts Vercel env vars, switches the production
-# branch (best effort) and deploys. With only the Vercel token: copies the
-# public Supabase settings from the shop project, sets what it can, and
-# deploys — the service_role key still requires the Supabase token.
-# Tokens are masked immediately and never echoed. Revoke them after the run.
+# One-shot AdSignal provisioning + activation, dispatched with tokens/keys
+# as form inputs. Sets everything it is given, deploys, waits for the build,
+# and fires the first data sync automatically — after a successful run the
+# system fills with real data on its own (and keeps syncing daily via cron).
+# All secrets are masked and never echoed. Revoke the tokens after the run.
 name: Setup AdSignal
 
 on:
@@ -14,7 +12,23 @@ on:
         description: 'Vercel account token'
         required: true
       supabase_token:
-        description: 'Supabase personal access token (sbp_...), optional'
+        description: 'Supabase token (sbp_...) — only needed on first setup'
+        required: false
+        default: ''
+      serpapi_key:
+        description: 'SerpApi key — Google Trends for Israel'
+        required: false
+        default: ''
+      youtube_api_key:
+        description: 'YouTube Data API key — organic niche signal'
+        required: false
+        default: ''
+      anthropic_api_key:
+        description: 'Anthropic API key — Analyze with AI'
+        required: false
+        default: ''
+      meta_adlib_token:
+        description: 'Meta Ad Library token — EU + political ads'
         required: false
         default: ''
       supabase_ref:
@@ -25,6 +39,10 @@ on:
         description: 'Vercel project name'
         required: true
         default: 'adsignal'
+      prod_domain:
+        description: 'Production domain to sync after deploy'
+        required: true
+        default: 'adsignal-six.vercel.app'
 
 permissions:
   contents: read
@@ -32,11 +50,15 @@ permissions:
 jobs:
   setup:
     runs-on: ubuntu-latest
-    # Tokens live at job level: the runner echoes step-level env into the log,
-    # job-level env it does not.
+    # Secrets live at job level: the runner echoes step-level env into the
+    # log, job-level env it does not.
     env:
       SB_TOKEN: ${{ inputs.supabase_token }}
       VC_TOKEN: ${{ inputs.vercel_token }}
+      SERPAPI: ${{ inputs.serpapi_key }}
+      YT_KEY: ${{ inputs.youtube_api_key }}
+      ANTHROPIC: ${{ inputs.anthropic_api_key }}
+      META_TOKEN: ${{ inputs.meta_adlib_token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,14 +66,16 @@ jobs:
           # dispatch button was pressed on.
           ref: claude/saas-ad-trends-monitoring-mabyvb
 
-      - name: Provision
+      - name: Provision and activate
         env:
           SB_REF: ${{ inputs.supabase_ref }}
           VC_PROJECT: ${{ inputs.vercel_project }}
+          PROD_DOMAIN: ${{ inputs.prod_domain }}
           BRANCH: claude/saas-ad-trends-monitoring-mabyvb
         run: |
-          echo "::add-mask::$VC_TOKEN"
-          [ -n "$SB_TOKEN" ] && echo "::add-mask::$SB_TOKEN"
+          for s in "$VC_TOKEN" "$SB_TOKEN" "$SERPAPI" "$YT_KEY" "$ANTHROPIC" "$META_TOKEN"; do
+            [ -n "$s" ] && echo "::add-mask::$s"
+          done
           set -e
           fail() { echo "::error::$1"; exit 1; }
           SB_URL=""; ANON=""; SERVICE=""
@@ -75,14 +99,6 @@ jobs:
             echo "::add-mask::$SERVICE"
             SB_URL="https://$SB_REF.supabase.co"
             echo "keys fetched OK"
-          else
-            echo "== no supabase token: copying public supabase env from the shop project =="
-            code=$(curl -s -o /tmp/anxenv.json -w '%{http_code}' -H "Authorization: Bearer $VC_TOKEN" \
-              "https://api.vercel.com/v9/projects/anx/env?decrypt=true" || echo 000)
-            echo "shop env fetch http: $code keys: $(jq -r '[.envs[]?.key] | join(",")' /tmp/anxenv.json 2>/dev/null)"
-            SB_URL=$(jq -r '[.envs[]? | select(.key=="NEXT_PUBLIC_SUPABASE_URL")][0].value // empty' /tmp/anxenv.json)
-            ANON=$(jq -r '[.envs[]? | select(.key=="NEXT_PUBLIC_SUPABASE_ANON_KEY")][0].value // empty' /tmp/anxenv.json)
-            echo "copied from shop: url=${SB_URL:+yes} anon=${ANON:+yes}"
           fi
 
           echo "== set vercel env =="
@@ -91,33 +107,56 @@ jobs:
           [ -n "$SB_URL" ] && add NEXT_PUBLIC_SUPABASE_URL "$SB_URL" plain
           [ -n "$ANON" ] && add NEXT_PUBLIC_SUPABASE_ANON_KEY "$ANON" plain
           [ -n "$SERVICE" ] && add SUPABASE_SERVICE_ROLE_KEY "$SERVICE" encrypted
+          [ -n "$SERPAPI" ] && add SERPAPI_KEY "$SERPAPI" encrypted
+          [ -n "$YT_KEY" ] && add YOUTUBE_API_KEY "$YT_KEY" encrypted
+          [ -n "$ANTHROPIC" ] && add ANTHROPIC_API_KEY "$ANTHROPIC" encrypted
+          [ -n "$META_TOKEN" ] && add META_ADLIB_ACCESS_TOKEN "$META_TOKEN" encrypted
           code=$(curl -s -o /tmp/env.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $VC_TOKEN" -H "Content-Type: application/json" \
             -d "$envs" "https://api.vercel.com/v10/projects/$VC_PROJECT/env?upsert=true")
           [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { cat /tmp/env.json; fail "vercel env failed ($code)"; }
           echo "env vars set: $(jq -r '[.[].key] | join(", ")' <<<"$envs")"
 
-          echo "== switch production branch (best effort) =="
+          echo "== ensure production branch =="
           code=$(curl -s -o /tmp/b1.json -w '%{http_code}' -X PATCH \
             -H "Authorization: Bearer $VC_TOKEN" -H "Content-Type: application/json" \
             -d "{\"branch\":\"$BRANCH\"}" \
             "https://api.vercel.com/v9/projects/$VC_PROJECT/branch" || echo 000)
-          echo "branch endpoint: $code $(head -c 200 /tmp/b1.json)"
-          if [ "$code" -ge 300 ] || [ "$code" = 000 ]; then
-            code=$(curl -s -o /tmp/b2.json -w '%{http_code}' -X PATCH \
-              -H "Authorization: Bearer $VC_TOKEN" -H "Content-Type: application/json" \
-              -d "{\"productionBranch\":\"$BRANCH\"}" \
-              "https://api.vercel.com/v9/projects/$VC_PROJECT" || echo 000)
-            echo "project patch: $code $(head -c 200 /tmp/b2.json)"
-          fi
+          echo "branch switch http: $code"
 
           echo "== deploy =="
           deploy=$(jq -n --arg p "$VC_PROJECT" --arg b "$BRANCH" \
-            '{name:$p, project:$p, gitSource:{type:"github", org:"stasix12", repo:"ANX-", ref:$b}}')
+            '{name:$p, project:$p, target:"production", gitSource:{type:"github", org:"stasix12", repo:"ANX-", ref:$b}}')
           code=$(curl -s -o /tmp/deploy.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $VC_TOKEN" -H "Content-Type: application/json" \
             -d "$deploy" "https://api.vercel.com/v13/deployments?forceNew=1")
           [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { cat /tmp/deploy.json; fail "deployment trigger failed ($code)"; }
-          echo "===== DEPLOYED ====="
-          jq -r '"URL: https://" + .url' /tmp/deploy.json
-          [ -z "$SERVICE" ] && echo "NOTE: SUPABASE_SERVICE_ROLE_KEY not set - run again with a Supabase token to finish DB wiring."
+          DEPLOY_ID=$(jq -r '.id' /tmp/deploy.json)
+          echo "deployment: https://$(jq -r '.url' /tmp/deploy.json)"
+
+          echo "== wait for build =="
+          state=""
+          for i in $(seq 1 30); do
+            state=$(curl -s -H "Authorization: Bearer $VC_TOKEN" \
+              "https://api.vercel.com/v13/deployments/$DEPLOY_ID" | jq -r '.readyState // .status // "UNKNOWN"')
+            echo "build state: $state"
+            [ "$state" = "READY" ] && break
+            case "$state" in ERROR|CANCELED) fail "deployment ended in state $state";; esac
+            sleep 15
+          done
+          [ "$state" = "READY" ] || fail "deployment not ready after 7.5 minutes"
+
+          echo "== fire first data sync (this can take a few minutes) =="
+          code=$(curl -s -o /tmp/sync.json -w '%{http_code}' --max-time 320 -X POST \
+            "https://$PROD_DOMAIN/api/adsignal/sync" || echo 000)
+          echo "sync http: $code"
+          if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+            echo "===== SYNC REPORT ====="
+            jq '{connectors: (.connectors | map_values({ran, ok, skipped, error, stats})), rollup}' /tmp/sync.json
+          else
+            head -c 400 /tmp/sync.json || true
+            echo "sync did not complete — it will still run on the daily cron"
+          fi
+
+          echo "===== DONE ====="
+          echo "URL: https://$PROD_DOMAIN"

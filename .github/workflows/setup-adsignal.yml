@@ -32,6 +32,11 @@ permissions:
 jobs:
   setup:
     runs-on: ubuntu-latest
+    # Tokens live at job level: the runner echoes step-level env into the log,
+    # job-level env it does not.
+    env:
+      SB_TOKEN: ${{ inputs.supabase_token }}
+      VC_TOKEN: ${{ inputs.vercel_token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,8 +46,6 @@ jobs:
 
       - name: Provision
         env:
-          SB_TOKEN: ${{ inputs.supabase_token }}
-          VC_TOKEN: ${{ inputs.vercel_token }}
           SB_REF: ${{ inputs.supabase_ref }}
           VC_PROJECT: ${{ inputs.vercel_project }}
           BRANCH: claude/saas-ad-trends-monitoring-mabyvb
@@ -74,8 +77,9 @@ jobs:
             echo "keys fetched OK"
           else
             echo "== no supabase token: copying public supabase env from the shop project =="
-            curl -s -H "Authorization: Bearer $VC_TOKEN" \
-              "https://api.vercel.com/v9/projects/anx/env?decrypt=true" > /tmp/anxenv.json || true
+            code=$(curl -s -o /tmp/anxenv.json -w '%{http_code}' -H "Authorization: Bearer $VC_TOKEN" \
+              "https://api.vercel.com/v9/projects/anx/env?decrypt=true" || echo 000)
+            echo "shop env fetch http: $code keys: $(jq -r '[.envs[]?.key] | join(",")' /tmp/anxenv.json 2>/dev/null)"
             SB_URL=$(jq -r '[.envs[]? | select(.key=="NEXT_PUBLIC_SUPABASE_URL")][0].value // empty' /tmp/anxenv.json)
             ANON=$(jq -r '[.envs[]? | select(.key=="NEXT_PUBLIC_SUPABASE_ANON_KEY")][0].value // empty' /tmp/anxenv.json)
             echo "copied from shop: url=${SB_URL:+yes} anon=${ANON:+yes}"
@@ -94,10 +98,18 @@ jobs:
           echo "env vars set: $(jq -r '[.[].key] | join(", ")' <<<"$envs")"
 
           echo "== switch production branch (best effort) =="
-          curl -s -o /tmp/branch.json -w 'branch switch http: %{http_code}\n' -X PATCH \
+          code=$(curl -s -o /tmp/b1.json -w '%{http_code}' -X PATCH \
             -H "Authorization: Bearer $VC_TOKEN" -H "Content-Type: application/json" \
-            -d "{\"link\":{\"productionBranch\":\"$BRANCH\"}}" \
-            "https://api.vercel.com/v9/projects/$VC_PROJECT" || true
+            -d "{\"branch\":\"$BRANCH\"}" \
+            "https://api.vercel.com/v9/projects/$VC_PROJECT/branch" || echo 000)
+          echo "branch endpoint: $code $(head -c 200 /tmp/b1.json)"
+          if [ "$code" -ge 300 ] || [ "$code" = 000 ]; then
+            code=$(curl -s -o /tmp/b2.json -w '%{http_code}' -X PATCH \
+              -H "Authorization: Bearer $VC_TOKEN" -H "Content-Type: application/json" \
+              -d "{\"productionBranch\":\"$BRANCH\"}" \
+              "https://api.vercel.com/v9/projects/$VC_PROJECT" || echo 000)
+            echo "project patch: $code $(head -c 200 /tmp/b2.json)"
+          fi
 
           echo "== deploy =="
           deploy=$(jq -n --arg p "$VC_PROJECT" --arg b "$BRANCH" \

@@ -348,6 +348,70 @@ export async function getCounts(): Promise<Counts> {
   };
 }
 
+export type SearchRankingRow = {
+  niche_key: string;
+  /** Relative search volume, anchor service = 100. REAL (Google Trends comparison). */
+  volume: number;
+  volume_date: string;
+};
+
+/** Latest cross-service relative search volumes (anchored comparison). */
+export async function getSearchRanking(): Promise<SearchRankingRow[]> {
+  const db = getAdsignalDb();
+  if (!db) return [];
+  const { data } = await db
+    .from('adsignal_trend_series')
+    .select('niche_key, date, value')
+    .eq('source', 'google_trends_cmp')
+    .eq('country', 'IL')
+    .order('date', { ascending: false })
+    .limit(200);
+  const latest = new Map<string, SearchRankingRow>();
+  for (const row of data ?? []) {
+    if (!latest.has(row.niche_key)) {
+      latest.set(row.niche_key, { niche_key: row.niche_key, volume: Number(row.value), volume_date: row.date });
+    }
+  }
+  return [...latest.values()].sort((a, b) => b.volume - a.volume);
+}
+
+export type RisingQuery = {
+  query: string;
+  niche_key: string;
+  growth: number;
+  formatted: string;
+  date: string;
+};
+
+/** Google's "rising related queries" — what people started searching for. */
+export async function getRisingQueries(limit = 25): Promise<RisingQuery[]> {
+  const db = getAdsignalDb();
+  if (!db) return [];
+  const { data } = await db
+    .from('adsignal_trend_series')
+    .select('niche_key, keyword, date, value, meta')
+    .eq('source', 'google_trends_rising')
+    .eq('country', 'IL')
+    .gte('date', new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10))
+    .order('value', { ascending: false })
+    .limit(limit * 2);
+  const seen = new Set<string>();
+  const out: RisingQuery[] = [];
+  for (const row of data ?? []) {
+    if (seen.has(row.keyword)) continue;
+    seen.add(row.keyword);
+    out.push({
+      query: row.keyword,
+      niche_key: row.niche_key,
+      growth: Number(row.value),
+      formatted: (row.meta as { formatted?: string })?.formatted ?? '',
+      date: row.date,
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 export async function searchAdvertisers(q: string, limit = 10): Promise<Advertiser[]> {
   const db = getAdsignalDb();
   if (!db || !q) return [];

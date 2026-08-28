@@ -1,128 +1,134 @@
 import Link from 'next/link';
-import { AdCard } from '@/components/adsignal/AdCard';
-import { Empty, StatusPill, fmtPct, pctClass } from '@/components/adsignal/ui';
+import { Empty, Prov, Sparkline, StatusPill, fmtPct, pctClass } from '@/components/adsignal/ui';
 import {
   dbConfigured,
-  getCounts,
   getNicheMetrics,
   getNiches,
-  getTopAds,
-  getTrendingOffers,
+  getRisingQueries,
+  getSearchRanking,
+  getTrendSparklines,
 } from '@/lib/adsignal/queries';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage() {
+/**
+ * The home screen answers one question, from one source: which services are
+ * people in Israel searching for the most right now — Google Trends only.
+ * Volume ranking comes from anchored comparison queries (the only honest way
+ * to compare volumes across keywords), momentum from each service's own
+ * series, and the rising list is Google's own "rising related queries".
+ */
+export default async function SearchNowPage() {
   if (!dbConfigured()) return <SetupNotice />;
 
-  const [counts, niches, topAds, offers, nicheList] = await Promise.all([
-    getCounts(),
+  const [ranking, metrics, sparks, rising, niches] = await Promise.all([
+    getSearchRanking(),
     getNicheMetrics('IL'),
-    getTopAds(null, 6),
-    getTrendingOffers(5),
+    getTrendSparklines('IL'),
+    getRisingQueries(15),
     getNiches(),
   ]);
-  const nicheName = (key: string) => nicheList.find((n) => n.key === key)?.name_he ?? key;
-
-  const trending = niches.filter((n) => n.signal_status === 'hot' || n.signal_status === 'growing');
-  const fastest = [...niches].sort((a, b) => (b.growth ?? -999) - (a.growth ?? -999))[0];
-  const bestOpp = niches[0];
-  const emerging = niches.filter((n) => n.signal_status === 'emerging');
-  const topOffer = offers[0];
-  const hasData = counts.ads > 0 || counts.trendPoints > 0;
+  const name = (key: string) => niches.find((n) => n.key === key)?.name_he ?? key;
+  const metricByKey = new Map(metrics.map((m) => [m.niche_key, m]));
+  const maxVolume = Math.max(1, ...ranking.map((r) => r.volume));
+  const updatedAt = ranking[0]?.volume_date;
 
   return (
     <>
-      <h1 className="as-h1">דשבורד</h1>
+      <h1 className="as-h1">🔍 מה מחפשים עכשיו בישראל</h1>
       <p className="as-sub">
-        {counts.ads.toLocaleString()} מודעות · {counts.advertisers.toLocaleString()} מפרסמים ·{' '}
-        {counts.trendPoints.toLocaleString()} נקודות טרנד במסד
+        דירוג שירותים לפי נפח חיפוש יחסי ב־Google — <Prov kind="REAL" label="Google Trends" />
+        {updatedAt && <> · עודכן {new Date(updatedAt).toLocaleDateString('he-IL')}</>} · מתעדכן כל לילה
       </p>
 
-      {!hasData && (
-        <Empty title="עדיין אין נתונים במסד">
-          המערכת לא מציגה נתוני דמו. עבור אל <Link href="/adsignal/status" style={{ color: 'var(--as-hot)' }}>מסך החיבורים</Link>,
-          ודא שהמפתחות מוגדרים והרץ סנכרון ראשון — ואז המסך הזה יתמלא בנתונים אמיתיים בלבד.
+      {ranking.length === 0 ? (
+        <Empty title="הדירוג ההשוואתי ייבנה בסנכרון הבא">
+          נקודות הטרנד לכל שירות כבר נאספות; הדירוג ״מי מחופש הכי הרבה״ דורש שאילתות השוואה
+          (שיטת עוגן) שנוספו הרגע — הוא יופיע אוטומטית אחרי ריצת הסנכרון הקרובה.
         </Empty>
-      )}
-
-      <div className="as-grid cols2" style={{ marginTop: 14 }}>
-        <Link href="/adsignal/israel" className="as-kpi">
-          <div className="lbl">🔥 Trending Now</div>
-          <div className="val">{trending.length}</div>
-          <div className="d">נישות בישראל בסטטוס Hot/Growing</div>
-        </Link>
-        <Link href={fastest ? `/adsignal/israel#${fastest.niche_key}` : '/adsignal/israel'} className="as-kpi">
-          <div className="lbl">🚀 Fastest Growing</div>
-          <div className="val">{fastest ? nicheName(fastest.niche_key) : '—'}</div>
-          <div className="d">{fastest ? `${fmtPct(fastest.growth)} צמיחה` : 'אין נתונים עדיין'}</div>
-        </Link>
-        <Link href="/adsignal/opportunities" className="as-kpi">
-          <div className="lbl">💎 Opportunity</div>
-          <div className="val">
-            {bestOpp?.opportunity != null ? `${Math.round(bestOpp.opportunity)}/100` : '—'}
-          </div>
-          <div className="d">{bestOpp ? nicheName(bestOpp.niche_key) : 'אין נתונים עדיין'}</div>
-        </Link>
-        <Link href="/adsignal/israel" className="as-kpi">
-          <div className="lbl">📈 Emerging Niches</div>
-          <div className="val">{emerging.length}</div>
-          <div className="d">מתחילות להתעורר עכשיו</div>
-        </Link>
-        <Link href="/adsignal/offers" className="as-kpi">
-          <div className="lbl">🎯 Winning Offer</div>
-          <div className="val" style={{ fontSize: 16 }}>{topOffer?.normalized_text ?? '—'}</div>
-          <div className="d">{topOffer ? `${topOffer.advertisers} מפרסמים` : 'אין נתונים עדיין'}</div>
-        </Link>
-        <Link href="/adsignal/competitors" className="as-kpi">
-          <div className="lbl">🕵️ Competitor Watch</div>
-          <div className="val">מעקב</div>
-          <div className="d">הוסף מפרסמים למעקב</div>
-        </Link>
-      </div>
-
-      {niches.length > 0 && (
-        <section className="as-section">
-          <div className="as-section-head">
-            <h2>🇮🇱 מצב נישות בישראל</h2>
-            <Link href="/adsignal/israel">לכל הנישות ←</Link>
-          </div>
-          <div className="as-card as-rows">
-            {niches.slice(0, 5).map((n) => (
-              <Link key={n.niche_key} href={`/adsignal/israel#${n.niche_key}`} className="as-row">
-                <div className="grow">
-                  <div className="nm">{nicheName(n.niche_key)}</div>
-                  <div className="sm">ביקוש {fmtPct(n.demand_trend)} · פעילות מודעות {fmtPct(n.ad_activity)}</div>
-                </div>
-                <StatusPill status={n.signal_status} />
-                <span className={pctClass(n.opportunity)} style={{ minWidth: 34, textAlign: 'left' }}>
-                  {n.opportunity != null ? Math.round(n.opportunity) : '—'}
+      ) : (
+        <div className="as-card as-rows">
+          {ranking.map((row, i) => {
+            const metric = metricByKey.get(row.niche_key);
+            const spark = sparks.get(row.niche_key) ?? [];
+            return (
+              <Link key={row.niche_key} href={`/adsignal/israel#${row.niche_key}`} className="as-row" style={{ gap: 12 }}>
+                <span className="as-num" style={{ width: 22, color: i < 3 ? 'var(--as-hot)' : 'var(--as-muted)', fontWeight: 700 }}>
+                  {i + 1}
                 </span>
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <div className="as-adline" style={{ marginBottom: 4 }}>
+                    <span className="nm">{name(row.niche_key)}</span>
+                    <span className={pctClass(metric?.demand_trend ?? null)} style={{ fontSize: 12.5 }}>
+                      {fmtPct(metric?.demand_trend ?? null)} ב־7 ימים
+                    </span>
+                  </div>
+                  <div className="as-gauge" style={{ height: 8 }}>
+                    <i style={{
+                      width: `${Math.max(3, (row.volume / maxVolume) * 100)}%`,
+                      background: i < 3
+                        ? 'linear-gradient(90deg, var(--as-amber), var(--as-hot))'
+                        : 'var(--as-teal)',
+                    }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                  <span className="as-num" style={{ fontWeight: 700, fontSize: 15 }}>{row.volume}</span>
+                  <Sparkline values={spark} color={metric?.signal_status === 'hot' ? '#FF6B4A' : '#3EC9A7'} />
+                </div>
               </Link>
-            ))}
+            );
+          })}
+          <div className="sm" style={{ paddingTop: 10, fontSize: 11.5, color: 'var(--as-muted)' }}>
+            נפח יחסי: {name(ranking.find((r) => r.volume === 100)?.niche_key ?? '') || 'שירות העוגן'} = 100.
+            המספר אומר פי כמה שירות מחופש ביחס אליו — לא מספר חיפושים מוחלט.
           </div>
-        </section>
+        </div>
       )}
 
       <section className="as-section">
         <div className="as-section-head">
-          <h2>מודעות חמות</h2>
-          <Link href="/adsignal/ads">לכל המודעות ←</Link>
+          <h2>🚀 חיפושים שמזנקים עכשיו</h2>
+          <Prov kind="REAL" label="Google Rising" />
         </div>
-        {topAds.length ? (
-          <div className="as-grid cards">
-            {topAds.map((ad, i) => (
-              <AdCard key={ad.id} ad={ad} alt={i % 2 === 1} />
+        {rising.length === 0 ? (
+          <Empty>
+            רשימת ה־Rising של Google — ביטויים שאנשים התחילו לחפש פתאום — תופיע אחרי הסנכרון הקרוב.
+          </Empty>
+        ) : (
+          <div className="as-card as-rows">
+            {rising.map((r) => (
+              <div key={r.query} className="as-row">
+                <div className="grow">
+                  <div className="nm" style={{ fontSize: 13.5 }}>{r.query}</div>
+                  <div className="sm">{name(r.niche_key)}</div>
+                </div>
+                <span className={r.growth >= 1000 ? 'as-badge der' : 'as-num up'} style={r.growth >= 1000 ? {} : { fontWeight: 700 }}>
+                  {r.growth >= 1000 ? '🔥 BREAKOUT' : r.formatted || `+${r.growth}%`}
+                </span>
+              </div>
             ))}
           </div>
-        ) : (
-          <Empty>
-            אין עדיין מודעות עם ציון. שתי דרכים להתחיל:{' '}
-            <Link href="/adsignal/import" style={{ color: 'var(--as-hot)' }}>＋ ייבא מודעה של מתחרה</Link>{' '}
-            מ־Ad Library (עובד מיד, בלי מפתחות), או חבר מקורות נתונים במסך{' '}
-            <Link href="/adsignal/status" style={{ color: 'var(--as-hot)' }}>החיבורים</Link>.
-          </Empty>
         )}
+      </section>
+
+      <section className="as-section">
+        {metrics.length > 0 && (
+          <div className="as-filters" style={{ paddingTop: 4 }}>
+            {metrics
+              .filter((m) => m.signal_status === 'hot' || m.signal_status === 'emerging' || m.signal_status === 'growing')
+              .slice(0, 6)
+              .map((m) => (
+                <Link key={m.niche_key} href={`/adsignal/israel#${m.niche_key}`} className="as-chip on" style={{ display: 'inline-flex', gap: 6 }}>
+                  {name(m.niche_key)} <StatusPill status={m.signal_status} />
+                </Link>
+              ))}
+          </div>
+        )}
+        <p className="sm" style={{ fontSize: 12, color: 'var(--as-muted)', marginTop: 10 }}>
+          ניתוח מעמיק לכל שירות — במסך <Link href="/adsignal/israel" style={{ color: 'var(--as-hot)' }}>🇮🇱 ישראל</Link>;
+          דירוג הזדמנויות — ב<Link href="/adsignal/opportunities" style={{ color: 'var(--as-hot)' }}>־💎 הזדמנויות</Link>.
+        </p>
       </section>
     </>
   );
@@ -132,11 +138,10 @@ function SetupNotice() {
   return (
     <>
       <h1 className="as-h1">AdSignal עוד לא מחובר</h1>
-      <p className="as-sub">שלושה צעדים ותראה נתונים אמיתיים — בלי שום דאטה מזויף בדרך.</p>
       <div className="as-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
-        <div>1. הרץ את <code style={{ direction: 'ltr' }}>supabase/adsignal-schema.sql</code> ב־SQL Editor של פרויקט ה־Supabase.</div>
-        <div>2. הוסף ל־env:‏ <code style={{ direction: 'ltr' }}>SUPABASE_SERVICE_ROLE_KEY</code> (ליד ה־URL הקיים).</div>
-        <div>3. הוסף מפתחות מקורות נתונים — הרשימה המלאה במסך <Link href="/adsignal/status" style={{ color: 'var(--as-hot)' }}>חיבורים</Link>.</div>
+        <div>1. הרץ את <code style={{ direction: 'ltr' }}>supabase/adsignal-schema.sql</code> ב־SQL Editor של Supabase.</div>
+        <div>2. הוסף ל־env:‏ <code style={{ direction: 'ltr' }}>SUPABASE_SERVICE_ROLE_KEY</code>.</div>
+        <div>3. פרטים במסך <Link href="/adsignal/status" style={{ color: 'var(--as-hot)' }}>חיבורים</Link>.</div>
       </div>
     </>
   );

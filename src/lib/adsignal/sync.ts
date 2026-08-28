@@ -25,6 +25,11 @@ export async function runSync(db: SupabaseClient): Promise<SyncReport> {
   const startedAt = new Date().toISOString();
   const report: SyncReport = { startedAt, finishedAt: '', connectors: {}, rollup: null };
 
+  // The code-side taxonomy is the source of truth — adding a service there
+  // is enough, the next sync registers it.
+  const { SERVICES } = await import('./taxonomy');
+  await db.from('adsignal_niches').upsert(SERVICES, { onConflict: 'key' });
+
   const { data: nicheData } = await db.from('adsignal_niches').select('*').order('sort');
   const niches = (nicheData ?? []) as Niche[];
 

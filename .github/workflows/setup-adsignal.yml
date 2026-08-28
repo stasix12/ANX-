@@ -34,6 +34,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Always provision from the AdSignal branch, whichever ref the
+          # dispatch button was pressed on.
+          ref: claude/saas-ad-trends-monitoring-mabyvb
 
       - name: Provision
         env:

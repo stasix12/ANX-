@@ -1,0 +1,31 @@
+# Fires the deployed app's data-sync endpoint and prints the report —
+# lets the pipeline be exercised remotely without any credentials.
+name: Run AdSignal sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      prod_domain:
+        description: 'Deployed domain to sync'
+        required: true
+        default: 'adsignal-six.vercel.app'
+
+permissions: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fire sync and print report
+        env:
+          DOMAIN: ${{ inputs.prod_domain }}
+        run: |
+          code=$(curl -s -o /tmp/sync.json -w '%{http_code}' --max-time 320 -X POST "https://$DOMAIN/api/adsignal/sync" || echo 000)
+          echo "sync http: $code"
+          if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+            echo "===== SYNC REPORT ====="
+            jq '{connectors: (.connectors | map_values({ran, ok, skipped, error, stats})), rollup}' /tmp/sync.json
+          else
+            head -c 600 /tmp/sync.json || true
+            exit 1
+          fi

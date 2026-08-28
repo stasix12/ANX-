@@ -75,6 +75,101 @@ export async function deleteAlertAction(id: string): Promise<void> {
   revalidatePath('/adsignal/alerts');
 }
 
+export async function importAdAction(
+  prev: { ok: boolean; error?: string; adId?: string } | null,
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string; adId?: string }> {
+  const db = getAdsignalDb();
+  if (!db) return { ok: false, error: 'Supabase אינו מוגדר' };
+
+  const advertiserName = String(formData.get('advertiser') ?? '').trim();
+  const body = String(formData.get('body') ?? '').trim();
+  if (!advertiserName || !body) return { ok: false, error: 'שם מפרסם וטקסט מודעה הם שדות חובה' };
+
+  const platform = String(formData.get('platform') ?? 'meta');
+  const nicheKey = String(formData.get('niche_key') ?? '') || null;
+  const country = String(formData.get('country') ?? 'IL');
+  const title = String(formData.get('title') ?? '').trim() || null;
+  const landingUrl = String(formData.get('landing_url') ?? '').trim() || null;
+  const sourceUrl = String(formData.get('source_url') ?? '').trim() || null;
+  const startedAtRaw = String(formData.get('started_at') ?? '').trim();
+  const startedAt = startedAtRaw ? new Date(startedAtRaw).toISOString() : null;
+  const watch = formData.get('watch') === 'on';
+
+  const { contentHash, extractOffers, normalizeBody } = await import('./offers');
+  const now = new Date().toISOString();
+
+  // Advertiser identity for manual imports: normalized name.
+  const externalId = `import:${advertiserName.toLowerCase().replace(/\s+/g, '-')}`;
+  const { data: advertiser, error: advErr } = await db
+    .from('adsignal_advertisers')
+    .upsert(
+      { platform, external_id: externalId, name: advertiserName, country, last_seen_at: now },
+      { onConflict: 'platform,external_id' },
+    )
+    .select('id')
+    .single();
+  if (advErr || !advertiser) return { ok: false, error: advErr?.message ?? 'שמירת המפרסם נכשלה' };
+
+  const { data: ad, error: adErr } = await db
+    .from('adsignal_ads')
+    .upsert(
+      {
+        platform,
+        external_id: `import:${contentHash(normalizeBody(advertiserName + body))}`,
+        advertiser_id: advertiser.id,
+        niche_key: nicheKey,
+        country,
+        language: /[א-ת]/.test(body) ? 'he' : null,
+        title,
+        body,
+        body_hash: contentHash(normalizeBody(body)),
+        started_at: startedAt,
+        is_active: true,
+        landing_url: landingUrl,
+        snapshot_url: sourceUrl,
+        source_kind: 'user_imported',
+        last_seen_at: now,
+      },
+      { onConflict: 'platform,external_id' },
+    )
+    .select('id')
+    .single();
+  if (adErr || !ad) return { ok: false, error: adErr?.message ?? 'שמירת המודעה נכשלה' };
+
+  await db.from('adsignal_ad_snapshots').upsert(
+    { ad_id: ad.id, captured_at: now.slice(0, 10), is_active: true, provenance: 'REAL' },
+    { onConflict: 'ad_id,captured_at' },
+  );
+
+  for (const offer of extractOffers([title, body].filter(Boolean).join(' '))) {
+    const { data: offerRow } = await db
+      .from('adsignal_offers')
+      .upsert({ normalized_text: offer.normalized, kind: offer.kind }, { onConflict: 'normalized_text' })
+      .select('id')
+      .single();
+    if (offerRow) {
+      await db
+        .from('adsignal_ad_offers')
+        .upsert({ ad_id: ad.id, offer_id: offerRow.id, detected_by: 'rule' }, { onConflict: 'ad_id,offer_id' });
+    }
+  }
+
+  if (watch) {
+    await db
+      .from('adsignal_competitor_watches')
+      .upsert({ advertiser_id: advertiser.id, label: advertiserName }, { onConflict: 'advertiser_id' });
+  }
+
+  // Score immediately so the ad shows a Hot Score without waiting for cron.
+  const { data: nicheRows } = await db.from('adsignal_niches').select('*').order('sort');
+  const { runRollup } = await import('./rollup');
+  await runRollup(db, (nicheRows ?? []) as import('./types').Niche[]);
+
+  revalidatePath('/adsignal', 'layout');
+  return { ok: true, adId: ad.id };
+}
+
 export async function addCompetitorAction(advertiserId: string, label: string): Promise<void> {
   const db = getAdsignalDb();
   if (!db) return;

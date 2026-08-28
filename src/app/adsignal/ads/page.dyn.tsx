@@ -97,10 +97,10 @@ export default async function AdsPage(props: { searchParams: Promise<Record<stri
         <Empty title="אין מודעות שתואמות לסינון">
           {filters.country === 'IL' ? (
             <>
-              עבור ישראל: ה־API הרשמי של Meta מחזיר רק מודעות פוליטיות/נושאים חברתיים — מודעות
-              מסחריות ישראליות אינן זמינות ב־API (זו מגבלה של Meta, לא של המערכת). נסה לסנן על
-              מדינת EU, או עקוב אחרי מפרסמים ישראלים דרך{' '}
-              <Link href="/adsignal/competitors" style={{ color: 'var(--as-hot)' }}>Competitor Watch</Link>.
+              עבור ישראל: ה־API הרשמי של Meta מחזיר רק מודעות פוליטיות — מודעות מסחריות
+              ישראליות אינן זמינות ב־API (מגבלה של Meta). הדרך להכניס אותן:{' '}
+              <Link href="/adsignal/import" style={{ color: 'var(--as-hot)' }}>＋ ייבוא ידני מ־Ad Library</Link>{' '}
+              — המנוע ינקד ויחלץ Offers מכל מודעה שתדביק.
             </>
           ) : (
             <>ודא שהסנכרון רץ (מסך <Link href="/adsignal/status" style={{ color: 'var(--as-hot)' }}>חיבורים</Link>) או הרחב את הסינון.</>

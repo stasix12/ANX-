@@ -12,6 +12,7 @@ const ITEMS = [
 ];
 
 const TOP_EXTRA = [
+  { href: '/adsignal/import', label: '＋ ייבוא' },
   { href: '/adsignal/offers', label: 'Offers' },
   { href: '/adsignal/clusters', label: 'Clusters' },
   { href: '/adsignal/competitors', label: 'מתחרים' },

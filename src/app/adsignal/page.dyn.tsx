@@ -117,9 +117,10 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <Empty>
-            אין עדיין מודעות עם ציון. לאחר סנכרון ראשון (Meta Ad Library) ועיבוד יומי — הפיד יתמלא.
-            שים לב: מודעות מסחריות שרצות רק בישראל אינן זמינות ב־API של Meta; ראה{' '}
-            <Link href="/adsignal/status" style={{ color: 'var(--as-hot)' }}>מסך החיבורים</Link> לפירוט הכיסוי.
+            אין עדיין מודעות עם ציון. שתי דרכים להתחיל:{' '}
+            <Link href="/adsignal/import" style={{ color: 'var(--as-hot)' }}>＋ ייבא מודעה של מתחרה</Link>{' '}
+            מ־Ad Library (עובד מיד, בלי מפתחות), או חבר מקורות נתונים במסך{' '}
+            <Link href="/adsignal/status" style={{ color: 'var(--as-hot)' }}>החיבורים</Link>.
           </Empty>
         )}
       </section>

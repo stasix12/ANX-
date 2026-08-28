@@ -44,8 +44,9 @@ export default async function CompetitorsPage(props: { searchParams: Promise<Rec
             </div>
           )) : (
             <Empty>
-              לא נמצא מפרסם בשם ״{q}״ במסד. מפרסמים נכנסים למסד דרך הסנכרון — מפרסם ישראלי מסחרי
-              שלא מופיע ב־API של Meta אפשר יהיה להוסיף דרך ייבוא ידני (בפיתוח, שלב P5).
+              לא נמצא מפרסם בשם ״{q}״ במסד. הוסף אותו דרך{' '}
+              <Link href="/adsignal/import" style={{ color: 'var(--as-hot)' }}>＋ ייבוא מודעה</Link> —
+              סמן שם ״הוסף ל־Competitor Watch״ והוא יופיע כאן עם Timeline.
             </Empty>
           )}
         </div>

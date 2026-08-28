@@ -1,0 +1,111 @@
+# One-shot AdSignal provisioning, dispatched with tokens as inputs.
+# With both tokens: applies the schema via the Supabase Management API, reads
+# the anon/service_role keys, upserts Vercel env vars, switches the production
+# branch (best effort) and deploys. With only the Vercel token: copies the
+# public Supabase settings from the shop project, sets what it can, and
+# deploys — the service_role key still requires the Supabase token.
+# Tokens are masked immediately and never echoed. Revoke them after the run.
+name: Setup AdSignal
+
+on:
+  workflow_dispatch:
+    inputs:
+      vercel_token:
+        description: 'Vercel account token'
+        required: true
+      supabase_token:
+        description: 'Supabase personal access token (sbp_...), optional'
+        required: false
+        default: ''
+      supabase_ref:
+        description: 'Supabase project ref'
+        required: true
+        default: 'kadiiszpmuboawssdhfy'
+      vercel_project:
+        description: 'Vercel project name'
+        required: true
+        default: 'adsignal'
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Always provision from the AdSignal branch, whichever ref the
+          # dispatch button was pressed on.
+          ref: claude/saas-ad-trends-monitoring-mabyvb
+
+      - name: Provision
+        env:
+          SB_TOKEN: ${{ inputs.supabase_token }}
+          VC_TOKEN: ${{ inputs.vercel_token }}
+          SB_REF: ${{ inputs.supabase_ref }}
+          VC_PROJECT: ${{ inputs.vercel_project }}
+          BRANCH: claude/saas-ad-trends-monitoring-mabyvb
+        run: |
+          echo "::add-mask::$VC_TOKEN"
+          [ -n "$SB_TOKEN" ] && echo "::add-mask::$SB_TOKEN"
+          set -e
+          fail() { echo "::error::$1"; exit 1; }
+          SB_URL=""; ANON=""; SERVICE=""
+
+          if [ -n "$SB_TOKEN" ]; then
+            echo "== apply schema =="
+            query=$(jq -Rs '{query: .}' supabase/adsignal-schema.sql)
+            code=$(curl -s -o /tmp/schema.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $SB_TOKEN" -H "Content-Type: application/json" \
+              -d "$query" "https://api.supabase.com/v1/projects/$SB_REF/database/query")
+            [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { cat /tmp/schema.json; fail "schema apply failed ($code)"; }
+            echo "schema applied OK"
+
+            echo "== fetch api keys =="
+            curl -sf -H "Authorization: Bearer $SB_TOKEN" \
+              "https://api.supabase.com/v1/projects/$SB_REF/api-keys?reveal=true" > /tmp/keys.json \
+              || fail "could not read api keys"
+            ANON=$(jq -r '[.[] | select(.name=="anon" or .type=="publishable")][0].api_key // empty' /tmp/keys.json)
+            SERVICE=$(jq -r '[.[] | select(.name=="service_role" or .type=="secret")][0].api_key // empty' /tmp/keys.json)
+            [ -n "$ANON" ] && [ -n "$SERVICE" ] || { jq 'map({name, type})' /tmp/keys.json; fail "anon/service keys not found"; }
+            echo "::add-mask::$SERVICE"
+            SB_URL="https://$SB_REF.supabase.co"
+            echo "keys fetched OK"
+          else
+            echo "== no supabase token: copying public supabase env from the shop project =="
+            curl -s -H "Authorization: Bearer $VC_TOKEN" \
+              "https://api.vercel.com/v9/projects/anx/env?decrypt=true" > /tmp/anxenv.json || true
+            SB_URL=$(jq -r '[.envs[]? | select(.key=="NEXT_PUBLIC_SUPABASE_URL")][0].value // empty' /tmp/anxenv.json)
+            ANON=$(jq -r '[.envs[]? | select(.key=="NEXT_PUBLIC_SUPABASE_ANON_KEY")][0].value // empty' /tmp/anxenv.json)
+            echo "copied from shop: url=${SB_URL:+yes} anon=${ANON:+yes}"
+          fi
+
+          echo "== set vercel env =="
+          envs='[{"key":"ADSIGNAL_HOME","value":"1","type":"plain","target":["production","preview","development"]}]'
+          add() { envs=$(jq --arg k "$1" --arg v "$2" --arg t "$3" '. + [{key:$k, value:$v, type:$t, target:["production","preview","development"]}]' <<<"$envs"); }
+          [ -n "$SB_URL" ] && add NEXT_PUBLIC_SUPABASE_URL "$SB_URL" plain
+          [ -n "$ANON" ] && add NEXT_PUBLIC_SUPABASE_ANON_KEY "$ANON" plain
+          [ -n "$SERVICE" ] && add SUPABASE_SERVICE_ROLE_KEY "$SERVICE" encrypted
+          code=$(curl -s -o /tmp/env.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $VC_TOKEN" -H "Content-Type: application/json" \
+            -d "$envs" "https://api.vercel.com/v10/projects/$VC_PROJECT/env?upsert=true")
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { cat /tmp/env.json; fail "vercel env failed ($code)"; }
+          echo "env vars set: $(jq -r '[.[].key] | join(", ")' <<<"$envs")"
+
+          echo "== switch production branch (best effort) =="
+          curl -s -o /tmp/branch.json -w 'branch switch http: %{http_code}\n' -X PATCH \
+            -H "Authorization: Bearer $VC_TOKEN" -H "Content-Type: application/json" \
+            -d "{\"link\":{\"productionBranch\":\"$BRANCH\"}}" \
+            "https://api.vercel.com/v9/projects/$VC_PROJECT" || true
+
+          echo "== deploy =="
+          deploy=$(jq -n --arg p "$VC_PROJECT" --arg b "$BRANCH" \
+            '{name:$p, project:$p, gitSource:{type:"github", org:"stasix12", repo:"ANX-", ref:$b}}')
+          code=$(curl -s -o /tmp/deploy.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $VC_TOKEN" -H "Content-Type: application/json" \
+            -d "$deploy" "https://api.vercel.com/v13/deployments?forceNew=1")
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { cat /tmp/deploy.json; fail "deployment trigger failed ($code)"; }
+          echo "===== DEPLOYED ====="
+          jq -r '"URL: https://" + .url' /tmp/deploy.json
+          [ -z "$SERVICE" ] && echo "NOTE: SUPABASE_SERVICE_ROLE_KEY not set - run again with a Supabase token to finish DB wiring."

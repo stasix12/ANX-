@@ -120,4 +120,6 @@ jobs:
           [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || { cat /tmp/deploy.json; fail "deployment trigger failed ($code)"; }
           echo "===== DEPLOYED ====="
           jq -r '"URL: https://" + .url' /tmp/deploy.json
-          [ -z "$SERVICE" ] && echo "NOTE: SUPABASE_SERVICE_ROLE_KEY not set - run again with a Supabase token to finish DB wiring."
+          if [ -z "$SERVICE" ]; then
+            echo "NOTE: SUPABASE_SERVICE_ROLE_KEY not set - run again with a Supabase token to finish DB wiring."
+          fi

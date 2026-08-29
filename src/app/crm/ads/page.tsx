@@ -463,6 +463,12 @@ export default function CrmAdsPage() {
           >
             לחיבור פייסבוק
           </Link>
+          <Link
+            href="/crm/ads/campaign"
+            className="mt-2 block text-sm font-bold text-brand-400"
+          >
+            🛋️ בינתיים — קמפיין באר שבע מוכן להשקה
+          </Link>
         </div>
       ) : error ? (
         <div className="space-y-3 rounded-card border border-ink-700 surface p-4">
@@ -497,6 +503,12 @@ export default function CrmAdsPage() {
             className="mt-3 flex items-center justify-center gap-2 rounded-full bg-brand-500 py-2.5 text-sm font-bold text-on-brand transition-colors hover:bg-brand-400"
           >
             🎛️ אופטימיזציית קמפיינים — מה לעשות עכשיו
+          </Link>
+          <Link
+            href="/crm/ads/campaign"
+            className="mt-2 flex items-center justify-center gap-2 rounded-full border border-brand-500/50 py-2.5 text-sm font-bold text-brand-400 transition-colors hover:bg-brand-500/10"
+          >
+            🛋️ קמפיין באר שבע — מוכן להשקה
           </Link>
 
           {mom ? (

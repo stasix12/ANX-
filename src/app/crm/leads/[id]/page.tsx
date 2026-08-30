@@ -28,6 +28,7 @@ import {
   setLeadStatus,
   sourceLabel,
   telUrl,
+  timeLabel,
   wazeUrl,
   whatsAppUrl,
   type Lead,
@@ -41,7 +42,7 @@ import {
 function messageTemplates(lead: Lead): { label: string; text: string }[] {
   const first = lead.name.trim().split(/\s+/)[0] || lead.name;
   const when = lead.jobDate
-    ? ` ב-${formatDateHe(lead.jobDate)}${lead.jobTime ? ` בשעה ${lead.jobTime}` : ''}`
+    ? ` ב-${formatDateHe(lead.jobDate)}${lead.jobTime ? (lead.jobTimeEnd ? ` בין ${lead.jobTime} ל-${lead.jobTimeEnd}` : ` בשעה ${lead.jobTime}`) : ''}`
     : '';
   return [
     { label: '🗓️ אישור עבודה', text: `היי ${first}, מאשר את עבודת הניקיון${when}. נתראה! 🙂` },
@@ -134,7 +135,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               {lead.jobDate ? (
                 <p className="mt-1 text-sm font-semibold text-mist-300">
                   {formatDateLongHe(lead.jobDate)}
-                  {lead.jobTime ? ` · ${lead.jobTime}` : ''}
+                  {lead.jobTime ? ` · ${timeLabel(lead)}` : ''}
                 </p>
               ) : (
                 <p className="mt-1 text-sm font-semibold text-mist-500">טרם נקבע מועד</p>

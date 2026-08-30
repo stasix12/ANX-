@@ -24,6 +24,8 @@ create table if not exists public.leads (
   -- (eq/gte/lte on a date) with no timezone arithmetic on the client.
   job_date date,
   job_time time,
+  -- End of the arrival window ("בין 13:00 ל-15:00"); null = fixed hour.
+  job_time_end time,
   services text[] not null default '{}',
   price numeric,
   notes text not null default '',
@@ -34,6 +36,9 @@ create table if not exists public.leads (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Upgrade path for databases created before the arrival-window column.
+alter table public.leads add column if not exists job_time_end time;
 
 create index if not exists leads_job_date_idx on public.leads (job_date);
 create index if not exists leads_status_idx on public.leads (status);

@@ -14,6 +14,7 @@ import {
   formatPrice,
   isOverdue,
   telUrl,
+  timeLabel,
   todayISO,
   wazeUrl,
   weekRangeISO,
@@ -45,13 +46,13 @@ function untilLabel(lead: Lead, today: string): string {
     const at = new Date();
     at.setHours(h, m, 0, 0);
     const minutes = Math.round((at.getTime() - Date.now()) / 60_000);
-    if (minutes <= 0) return `היום ב-${lead.jobTime}`;
+    if (minutes <= 0) return `היום ב-${timeLabel(lead)}`;
     if (minutes < 60) return `בעוד ${minutes} דקות`;
     const hours = Math.round(minutes / 60);
     return `בעוד כ-${hours === 1 ? 'שעה' : hours === 2 ? 'שעתיים' : `${hours} שעות`}`;
   }
-  if (lead.jobDate === addDaysISO(today, 1)) return `מחר${lead.jobTime ? ` ב-${lead.jobTime}` : ''}`;
-  return `${formatDateHe(lead.jobDate)}${lead.jobTime ? ` · ${lead.jobTime}` : ''}`;
+  if (lead.jobDate === addDaysISO(today, 1)) return `מחר${lead.jobTime ? ` ב-${timeLabel(lead)}` : ''}`;
+  return `${formatDateHe(lead.jobDate)}${lead.jobTime ? ` · ${timeLabel(lead)}` : ''}`;
 }
 
 function StatTile({

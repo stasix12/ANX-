@@ -45,6 +45,7 @@ const emptyInput: LeadInput = {
   city: '',
   jobDate: null,
   jobTime: null,
+  jobTimeEnd: null,
   services: [],
   price: null,
   notes: '',
@@ -178,22 +179,35 @@ export function LeadForm({
         />
       </Field>
 
+      <Field label="תאריך העבודה" htmlFor="lead-date">
+        <input
+          id="lead-date"
+          type="date"
+          value={value.jobDate ?? ''}
+          onChange={(e) => set('jobDate', e.target.value || null)}
+          className={inputClass}
+        />
+      </Field>
+
+      {/* An arrival window: "בין 13:00 ל-15:00". The end hour is optional —
+          left empty it behaves like a single fixed hour. */}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="תאריך העבודה" htmlFor="lead-date">
-          <input
-            id="lead-date"
-            type="date"
-            value={value.jobDate ?? ''}
-            onChange={(e) => set('jobDate', e.target.value || null)}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="שעה" htmlFor="lead-time">
+        <Field label="הגעה משעה" htmlFor="lead-time">
           <input
             id="lead-time"
             type="time"
             value={value.jobTime ?? ''}
             onChange={(e) => set('jobTime', e.target.value || null)}
+            className={inputClass}
+          />
+        </Field>
+        <Field label="עד שעה (אופציונלי)" htmlFor="lead-time-end">
+          <input
+            id="lead-time-end"
+            type="time"
+            min={value.jobTime ?? undefined}
+            value={value.jobTimeEnd ?? ''}
+            onChange={(e) => set('jobTimeEnd', e.target.value || null)}
             className={inputClass}
           />
         </Field>

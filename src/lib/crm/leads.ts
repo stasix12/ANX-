@@ -19,8 +19,10 @@ export interface Lead {
   city: string;
   /** ISO date (YYYY-MM-DD) or null while the job has no scheduled day yet. */
   jobDate: string | null;
-  /** HH:MM (24h) or null. */
+  /** HH:MM (24h) or null — the start of the arrival window. */
   jobTime: string | null;
+  /** HH:MM (24h) or null — the end of the arrival window ("בין 13:00 ל-15:00"). */
+  jobTimeEnd: string | null;
   services: string[];
   price: number | null;
   notes: string;
@@ -76,6 +78,10 @@ export const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
 export const sourceLabel = (source: LeadSource): string =>
   SOURCE_OPTIONS.find((s) => s.value === source)?.label ?? source;
 
+/** "13:00" or, when an arrival window was set, "13:00–15:00". */
+export const timeLabel = (lead: Pick<Lead, 'jobTime' | 'jobTimeEnd'>): string | null =>
+  lead.jobTime ? (lead.jobTimeEnd ? `${lead.jobTime}–${lead.jobTimeEnd}` : lead.jobTime) : null;
+
 function requireSupabase() {
   if (!supabase) {
     throw new Error(
@@ -96,6 +102,7 @@ function fromRow(row: any): Lead {
     jobDate: row.job_date ?? null,
     // Postgres returns time as HH:MM:SS — trim the seconds nobody entered.
     jobTime: row.job_time ? String(row.job_time).slice(0, 5) : null,
+    jobTimeEnd: row.job_time_end ? String(row.job_time_end).slice(0, 5) : null,
     services: row.services ?? [],
     price: row.price === null || row.price === undefined ? null : Number(row.price),
     notes: row.notes ?? '',
@@ -114,6 +121,7 @@ function toRow(input: LeadInput) {
     city: input.city.trim(),
     job_date: input.jobDate || null,
     job_time: input.jobTime || null,
+    job_time_end: input.jobTimeEnd || null,
     services: input.services,
     price: input.price,
     notes: input.notes.trim(),

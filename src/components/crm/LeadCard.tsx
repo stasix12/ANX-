@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { StatusBadge } from '@/components/crm/StatusBadge';
-import { formatDateHe, formatPrice, statusById, todayISO, type Lead } from '@/lib/crm/leads';
+import { formatDateHe, formatPrice, statusById, timeLabel, todayISO, type Lead } from '@/lib/crm/leads';
 
 /**
  * One job/lead as a tappable card: time and customer on the first line,
@@ -24,7 +24,7 @@ export function LeadCard({ lead, showDate = false }: { lead: Lead; showDate?: bo
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-base font-extrabold">
-            {lead.jobTime ? <span className="tabular-nums text-brand-400">{lead.jobTime}</span> : null}
+            {lead.jobTime ? <span className="tabular-nums text-brand-400">{timeLabel(lead)}</span> : null}
             <span className="truncate">{lead.name}</span>
           </p>
           <p className="mt-1 truncate text-sm text-mist-300">

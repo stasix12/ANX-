@@ -150,16 +150,36 @@ export async function getLead(id: string): Promise<Lead | null> {
   return data ? fromRow(data) : null;
 }
 
+/**
+ * A database created before the arrival-window column rejects rows carrying
+ * job_time_end. Rather than blocking every save until the one-line migration
+ * runs, detect that exact failure and retry without the field — the lead is
+ * saved, only the end hour is dropped.
+ */
+const isMissingTimeEndColumn = (message: string | undefined) =>
+  !!message && message.includes('job_time_end');
+
+function rowWithoutTimeEnd(input: LeadInput): Omit<ReturnType<typeof toRow>, 'job_time_end'> {
+  const { job_time_end: _dropped, ...rest } = toRow(input);
+  return rest;
+}
+
 export async function createLead(input: LeadInput): Promise<Lead> {
   const client = requireSupabase();
-  const { data, error } = await client.from('leads').insert(toRow(input)).select().single();
+  let { data, error } = await client.from('leads').insert(toRow(input)).select().single();
+  if (error && isMissingTimeEndColumn(error.message)) {
+    ({ data, error } = await client.from('leads').insert(rowWithoutTimeEnd(input)).select().single());
+  }
   if (error || !data) throw new Error(error?.message ?? 'שמירת הליד נכשלה');
   return fromRow(data);
 }
 
 export async function updateLead(id: string, input: LeadInput): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.from('leads').update(toRow(input)).eq('id', id);
+  let { error } = await client.from('leads').update(toRow(input)).eq('id', id);
+  if (error && isMissingTimeEndColumn(error.message)) {
+    ({ error } = await client.from('leads').update(rowWithoutTimeEnd(input)).eq('id', id));
+  }
   if (error) throw new Error(error.message);
 }
 

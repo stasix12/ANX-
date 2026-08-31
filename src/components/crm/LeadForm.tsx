@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { SpinnerIcon } from '@/components/icons';
+import { LightbulbIcon, RepeatIcon, SpinnerIcon } from '@/components/icons';
 import {
   SERVICE_OPTIONS,
   SOURCE_OPTIONS,
@@ -149,9 +149,10 @@ export function LeadForm({
         {returning.length > 0 ? (
           <Link
             href={`/crm/leads/${returning[0].id}`}
-            className="mt-2 block rounded-xl border border-teal-600/40 bg-teal-500/10 px-3 py-2.5 text-sm font-bold text-teal-800"
+            className="mt-2 flex items-center gap-2 rounded-xl border border-teal-600/40 bg-teal-500/10 px-3 py-2.5 text-sm font-bold text-teal-800"
           >
-            🔁 לקוח חוזר — {returning.length === 1 ? 'עבודה קודמת אחת' : `${returning.length} עבודות קודמות`}
+            <RepeatIcon className="h-4 w-4 shrink-0" />
+            לקוח חוזר — {returning.length === 1 ? 'עבודה קודמת אחת' : `${returning.length} עבודות קודמות`}
             {returning[0].jobDate
               ? `, האחרונה ב-${formatDateHe(returning[0].jobDate)} (${formatPrice(returning[0].price)})`
               : ''}
@@ -271,8 +272,9 @@ export function LeadForm({
             );
           })}
         </div>
-        <p className="mt-1.5 text-xs font-semibold text-mist-500">
-          💡 בחרת שירות? כפתורי − ו-+ קובעים כמה פריטים (למשל 2 מזגנים).
+        <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-mist-500">
+          <LightbulbIcon className="h-4 w-4 shrink-0 text-amber-600" />
+          בחרת שירות? כפתורי − ו-+ קובעים כמה פריטים (למשל 2 מזגנים).
         </p>
       </fieldset>
 

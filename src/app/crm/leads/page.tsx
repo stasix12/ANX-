@@ -55,7 +55,7 @@ function LeadsList() {
       <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="סינון לפי סטטוס">
         {[
           { value: 'all' as const, label: 'הכל' },
-          { value: 'overdue' as const, label: '⚠️ באיחור' },
+          { value: 'overdue' as const, label: 'באיחור' },
           ...STATUS_OPTIONS,
         ].map((option) => {
           const selected = status === option.value;

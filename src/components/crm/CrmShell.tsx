@@ -99,8 +99,8 @@ export function CrmShell({
           safe-area padding stretches the gradient up under the iPhone's
           status bar (clock/battery) so the title starts below it. */}
       <header className="sticky top-0 z-40 bg-gradient-to-l from-sky-700 via-sky-500 to-cyan-400 pt-[env(safe-area-inset-top)] shadow-md shadow-sky-900/25">
-        <div className="flex items-center justify-between px-4 pb-3.5 pt-4">
-          <h1 className="text-2xl font-extrabold tracking-tight text-white drop-shadow-sm">{title}</h1>
+        <div className="flex items-center justify-between px-4 pb-2.5 pt-3">
+          <h1 className="text-xl font-extrabold tracking-tight text-white drop-shadow-sm">{title}</h1>
           {headerAction}
         </div>
       </header>

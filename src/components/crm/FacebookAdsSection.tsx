@@ -1,7 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarIcon, ChartIcon, MegaphoneIcon, SpinnerIcon } from '@/components/icons';
+import {
+  CalendarIcon,
+  ChartIcon,
+  LightbulbIcon,
+  MegaphoneIcon,
+  RepeatIcon,
+  SearchIcon,
+  SpinnerIcon,
+} from '@/components/icons';
+import { InsightIcon } from '@/components/crm/InsightIcon';
 import {
   conversationsLine,
   exchangeForLongLived,
@@ -154,7 +163,7 @@ function SetupForm({
         disabled={findingAccounts}
         className="flex w-full items-center justify-center gap-2 rounded-full border border-brand-500/40 bg-brand-500/10 px-5 py-2.5 text-sm font-bold text-brand-400 transition-colors hover:bg-brand-500/20 disabled:opacity-60"
       >
-        {findingAccounts ? <SpinnerIcon className="h-4 w-4 animate-spin" /> : '🔎'}
+        {findingAccounts ? <SpinnerIcon className="h-4 w-4 animate-spin" /> : <SearchIcon className="h-4 w-4" />}
         מצא את החשבונות שלי (לפי הטוקן)
       </button>
 
@@ -187,7 +196,9 @@ function SetupForm({
       ) : null}
 
       <div className="rounded-xl border border-emerald-600/30 bg-emerald-500/5 p-3">
-        <p className="text-sm font-bold text-emerald-700">🔁 חידוש אוטומטי — הטוקן לא יפוג לעולם</p>
+        <p className="flex items-center gap-1.5 text-sm font-bold text-emerald-700">
+          <RepeatIcon className="h-4 w-4" /> חידוש אוטומטי — הטוקן לא יפוג לעולם
+        </p>
         <p className="mt-1 text-xs font-semibold text-mist-500">
           מלא את שני השדות והמערכת תאריך את הטוקן לבד לפני שיפוג. נמצאים ב:
           developers.facebook.com ← האפליקציה crm ← App settings ← Basic.
@@ -378,13 +389,13 @@ function AdInsights({ spend, leads }: { spend: AdSpend; leads: Lead[] }) {
 
   return (
     <div className="mt-3 rounded-card border border-ink-700 surface p-4">
-      <p className="text-sm font-extrabold">🧠 ניתוח אוטומטי</p>
+      <p className="flex items-center gap-1.5 text-sm font-extrabold">
+        <LightbulbIcon className="h-4.5 w-4.5 text-amber-600" /> ניתוח אוטומטי
+      </p>
       <ul className="mt-2 space-y-2.5">
         {insights.map((insight, i) => (
-          <li key={i} className="flex gap-2 text-sm font-semibold leading-relaxed">
-            <span aria-hidden className="shrink-0">
-              {insight.emoji}
-            </span>
+          <li key={i} className="flex gap-2.5 text-sm font-semibold leading-relaxed">
+            <InsightIcon emoji={insight.emoji} className="mt-0.5 h-4.5 w-4.5" />
             <span>{insight.text}</span>
           </li>
         ))}
@@ -392,7 +403,7 @@ function AdInsights({ spend, leads }: { spend: AdSpend; leads: Lead[] }) {
 
       <details className="mt-3 border-t border-ink-700/60 pt-3">
         <summary className="cursor-pointer text-sm font-bold text-brand-400">
-          💡 טיפים לשיפור הקמפיינים
+          טיפים לשיפור הקמפיינים ▾
         </summary>
         <ul className="mt-2 space-y-2 text-sm font-semibold leading-relaxed text-mist-300">
           <li>💬 קמפיין הודעות לוואטסאפ עובד הכי טוב בתחום — הלקוח פונה בקליק ואתה סוגר בצ׳אט.</li>

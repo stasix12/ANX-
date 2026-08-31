@@ -117,10 +117,12 @@
   --color-ink-700: #e4eaf2;
   --color-ink-600: #cdd7e4;
 
-  /* Text, dark-on-light: primary (deep navy) → secondary → muted blue-gray. */
-  --color-mist-100: #0e2038;
-  --color-mist-300: #40587a;
-  --color-mist-500: #61708a;
+  /* Text, dark-on-light: primary (deep navy) → secondary → muted blue-gray.
+     Muted sits a step darker than a typical gray so labels stay crisp and
+     the gap to primary reads as hierarchy, not as faded ink. */
+  --color-mist-100: #0c1e35;
+  --color-mist-300: #3c5476;
+  --color-mist-500: #5b6b86;
 
   /* Water blue. brand-400 doubles as the text accent and button hover, so in
      the light theme it is the DARKER step; brand-300 is the chart-highlight

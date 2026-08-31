@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdsBarChart, type AdsBarPoint } from '@/components/crm/AdsBarChart';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { MONTH_LONG } from '@/components/crm/YearRevenueChart';
-import { InboxIcon, SpinnerIcon, TargetIcon, WalletIcon } from '@/components/icons';
+import { ChartIcon, InboxIcon, LightbulbIcon, ScaleIcon, SpinnerIcon, TargetIcon, WalletIcon } from '@/components/icons';
+import { InsightIcon } from '@/components/crm/InsightIcon';
 import {
   conversationsLine,
   fetchSpendSeries,
@@ -504,12 +505,15 @@ export default function CrmAdsPage() {
             href="/crm/ads/optimize"
             className="mt-3 flex items-center justify-center gap-2 rounded-full bg-brand-500 py-2.5 text-sm font-bold text-on-brand transition-colors hover:bg-brand-400"
           >
-            🎛️ אופטימיזציית קמפיינים — מה לעשות עכשיו
+            <TargetIcon className="h-4.5 w-4.5" />
+            אופטימיזציית קמפיינים — מה לעשות עכשיו
           </Link>
 
           {mom ? (
             <div className="mt-3 rounded-card border border-ink-700 surface p-3">
-              <p className="text-center text-xs font-bold text-mist-500">📊 {mom.title}</p>
+              <p className="flex items-center justify-center gap-1.5 text-center text-xs font-bold text-mist-500">
+                <ChartIcon className="h-4 w-4" /> {mom.title}
+              </p>
               <div className="mt-2 grid grid-cols-3 gap-2">
                 <DeltaTile
                   label="הוצאה"
@@ -535,7 +539,9 @@ export default function CrmAdsPage() {
 
           {compare ? (
             <div className="mt-3 rounded-card border border-ink-700 surface p-3">
-              <p className="text-center text-xs font-bold text-mist-500">⚖️ השוואה חופשית</p>
+              <p className="flex items-center justify-center gap-1.5 text-center text-xs font-bold text-mist-500">
+                <ScaleIcon className="h-4 w-4" /> השוואה חופשית
+              </p>
 
               <div className="mt-2 flex rounded-full border border-ink-700 bg-ink-850 p-1" role="group" aria-label="סוג ההשוואה">
                 {(
@@ -617,7 +623,7 @@ export default function CrmAdsPage() {
               </div>
 
               <div className="mt-2.5 overflow-hidden rounded-xl border border-ink-700">
-                <div className="grid grid-cols-[1.1fr_1fr_1fr_0.8fr] gap-1 bg-ink-850 px-2 py-1.5 text-[11px] font-bold text-mist-500">
+                <div className="grid grid-cols-[1.1fr_1fr_1fr_0.8fr] gap-1 bg-ink-900 px-2.5 py-2 text-[11px] font-bold text-mist-500">
                   <span />
                   <span className="text-center">{compare.labelA}</span>
                   <span className="text-center">{compare.labelB}</span>
@@ -650,7 +656,7 @@ export default function CrmAdsPage() {
                 ).map((row) => (
                   <div
                     key={row.label}
-                    className="grid grid-cols-[1.1fr_1fr_1fr_0.8fr] items-center gap-1 border-t border-ink-700 px-2 py-2 text-xs"
+                    className="grid grid-cols-[1.1fr_1fr_1fr_0.8fr] items-center gap-1 border-t border-ink-700 px-2.5 py-2.5 text-[13px]"
                   >
                     <span className="font-semibold text-mist-500">{row.label}</span>
                     <span className="text-center font-bold tabular-nums">
@@ -669,13 +675,13 @@ export default function CrmAdsPage() {
               {compare.breakdown?.length ? (
                 <details className="mt-2">
                   <summary className="cursor-pointer text-xs font-bold text-brand-400">
-                    📅 פירוט הוצאה חודש מול חודש
+                    פירוט הוצאה חודש מול חודש ▾
                   </summary>
                   <div className="mt-1.5 overflow-hidden rounded-xl border border-ink-700">
                     {compare.breakdown.map((row) => (
                       <div
                         key={row.month}
-                        className="grid grid-cols-[1.1fr_1fr_1fr_0.8fr] items-center gap-1 border-t border-ink-700 px-2 py-1.5 text-xs first:border-t-0"
+                        className="grid grid-cols-[1.1fr_1fr_1fr_0.8fr] items-center gap-1 border-t border-ink-700 px-2.5 py-2 text-xs first:border-t-0"
                       >
                         <span className="font-semibold text-mist-500">{MONTH_LONG[row.month - 1]}</span>
                         <span className="text-center font-bold tabular-nums">
@@ -700,7 +706,7 @@ export default function CrmAdsPage() {
               [
                 { value: 'monthly', label: 'חודשי — הכל' },
                 { value: 'daily', label: 'יומי — 30' },
-                { value: 'custom', label: '📆 תאריכים' },
+                { value: 'custom', label: 'תאריכים' },
               ] as const
             ).map((option) => (
               <button
@@ -824,19 +830,20 @@ export default function CrmAdsPage() {
             )}
           </div>
 
-          <p className="mt-2 text-xs font-semibold text-mist-500">
-            💡 לחץ על עמודה כדי לראות את הפירוט שלה. הגרף נגלל הצידה — הישן משמאל, החדש מימין.
+          <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-mist-500">
+            <LightbulbIcon className="h-4 w-4 shrink-0 text-amber-600" />
+            לחץ על עמודה לפירוט. הגרף נגלל הצידה — הישן משמאל, החדש מימין.
           </p>
 
           {insights.length > 0 ? (
             <div className="mt-4 rounded-card border border-ink-700 surface p-4">
-              <h2 className="text-sm font-extrabold">🧠 ניתוח אוטומטי</h2>
+              <h2 className="flex items-center gap-1.5 text-sm font-extrabold">
+                <LightbulbIcon className="h-4.5 w-4.5 text-amber-600" /> ניתוח אוטומטי
+              </h2>
               <ul className="mt-2 space-y-2.5">
                 {insights.map((insight, i) => (
-                  <li key={i} className="flex gap-2 text-sm leading-relaxed">
-                    <span aria-hidden className="shrink-0">
-                      {insight.emoji}
-                    </span>
+                  <li key={i} className="flex gap-2.5 text-sm leading-relaxed">
+                    <InsightIcon emoji={insight.emoji} className="mt-0.5 h-4.5 w-4.5" />
                     <span>{insight.text}</span>
                   </li>
                 ))}

@@ -553,3 +553,36 @@ export function CalculatorIcon(props: IconProps) {
     </svg>
   );
 }
+
+/* Time-of-day icons for the welcome card. */
+
+export function SunIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+    </svg>
+  );
+}
+
+export function SunsetIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 9V3" />
+      <path d="m4.93 11.93 1.41 1.41" />
+      <path d="M2 19h2M20 19h2" />
+      <path d="m19.07 11.93-1.41 1.41" />
+      <path d="M22 23H2" />
+      <path d="m16 7-4 4-4-4" />
+      <path d="M16 19a4 4 0 0 0-8 0" />
+    </svg>
+  );
+}
+
+export function MoonIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    </svg>
+  );
+}

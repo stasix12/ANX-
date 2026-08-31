@@ -16,11 +16,14 @@ import {
   GemIcon,
   LogOutIcon,
   MegaphoneIcon,
+  MoonIcon,
   NavigationIcon,
   PhoneIcon,
   PlusIcon,
   SparklesIcon,
   SpinnerIcon,
+  SunIcon,
+  SunsetIcon,
   TrendingUpIcon,
   WalletIcon,
   WhatsAppIcon,
@@ -48,13 +51,14 @@ import { useLeads } from '@/lib/crm/useLeads';
 
 const byTime = (a: Lead, b: Lead) => (a.jobTime ?? '99').localeCompare(b.jobTime ?? '99');
 
-function greeting(): string {
+/** The greeting and its time-of-day icon — sun, sunset or moon. */
+function greeting(): { text: string; icon: TileIcon } {
   const hour = new Date().getHours();
-  if (hour < 5) return 'לילה טוב 🌙';
-  if (hour < 12) return 'בוקר טוב ☀️';
-  if (hour < 17) return 'צהריים טובים 🌤️';
-  if (hour < 21) return 'ערב טוב 🌆';
-  return 'לילה טוב 🌙';
+  if (hour < 5) return { text: 'לילה טוב', icon: MoonIcon };
+  if (hour < 12) return { text: 'בוקר טוב', icon: SunIcon };
+  if (hour < 17) return { text: 'צהריים טובים', icon: SunIcon };
+  if (hour < 21) return { text: 'ערב טוב', icon: SunsetIcon };
+  return { text: 'לילה טוב', icon: MoonIcon };
 }
 
 /** "בעוד 20 דקות" / "בעוד כשעתיים" / "מחר ב-09:00" / a date — when the job starts. */
@@ -366,19 +370,38 @@ export default function CrmDashboardPage() {
         </p>
       ) : (
         <>
-          <div className="crm-hero relative overflow-hidden rounded-card p-4 shadow-md shadow-sky-900/15">
-            {/* Rising soap bubbles — the ambient layer behind the greeting. */}
-            {Array.from({ length: 6 }, (_, i) => (
-              <span key={i} aria-hidden className="bubble" />
-            ))}
-            <div className="relative flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-xl font-extrabold text-white">{greeting()}</p>
-                <p className="mt-0.5 text-sm font-semibold text-white/85">{formatDateLongHe(today)}</p>
-              </div>
-              <span className={`rounded-full bg-white px-3 py-1.5 text-sm font-bold shadow-sm ${shift.textClass}`}>
+          <div className="crm-hero relative overflow-hidden rounded-card p-5 shadow-md shadow-sky-900/15">
+            {/* Soft light pools — depth without decoration. */}
+            <span aria-hidden className="crm-hero-glow crm-hero-glow-1" />
+            <span aria-hidden className="crm-hero-glow crm-hero-glow-2" />
+            <div className="relative">
+              {/* The shift pill anchors to the far corner so the greeting
+                  group never wraps away from its icon. */}
+              <span className="absolute end-0 top-0 flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-xs font-bold text-white ring-1 ring-white/30 backdrop-blur-sm">
+                <span aria-hidden className={`h-1.5 w-1.5 rounded-full bg-current ${shift.textClass}`} />
                 משמרת: {shift.label}
               </span>
+              <div className="flex items-center gap-3 pe-28">
+                {(() => {
+                  const g = greeting();
+                  const GreetingIcon = g.icon;
+                  return (
+                    <>
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
+                        <GreetingIcon className="h-6 w-6 text-white" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-2xl font-extrabold leading-tight tracking-tight text-white">
+                          {g.text}
+                        </p>
+                        <p className="mt-0.5 text-[13px] font-medium text-white/75">
+                          {formatDateLongHe(today)}
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
           </div>
 

@@ -237,14 +237,16 @@
 }
 
 /*
- * The dashboard's living greeting panel: a water gradient that drifts slowly,
- * with soap bubbles rising through it. Pure CSS, pauses under
- * prefers-reduced-motion.
+ * The dashboard's welcome card: a soft blue→turquoise wash that drifts very
+ * slowly, with two blurred pools of light for depth — no decorations. It
+ * eases in on its own (the page stagger deliberately skips it).
  */
 .crm-hero {
-  background: linear-gradient(115deg, #22d3ee, #0ea5e9 45%, #2563eb 85%, #0891b2);
-  background-size: 220% 220%;
-  animation: crm-hero-drift 16s ease-in-out infinite alternate;
+  background: linear-gradient(120deg, #0ea5e9 0%, #38bdf8 40%, #22d3ee 75%, #06b6d4 100%);
+  background-size: 200% 200%;
+  animation:
+    crm-hero-drift 22s ease-in-out infinite alternate,
+    crm-hero-in 0.24s ease-out both;
 }
 
 @keyframes crm-hero-drift {
@@ -256,38 +258,38 @@
   }
 }
 
-.crm-hero .bubble {
-  position: absolute;
-  bottom: -34px;
-  border-radius: 9999px;
-  background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.1) 55%);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  animation: crm-bubble-rise linear infinite;
-  pointer-events: none;
+@keyframes crm-hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.crm-hero .bubble:nth-of-type(1) { width: 22px; height: 22px; inset-inline-start: 8%;  animation-duration: 9s;  }
-.crm-hero .bubble:nth-of-type(2) { width: 12px; height: 12px; inset-inline-start: 22%; animation-duration: 7s;  animation-delay: 2.5s; }
-.crm-hero .bubble:nth-of-type(3) { width: 28px; height: 28px; inset-inline-start: 41%; animation-duration: 11s; animation-delay: 1s; }
-.crm-hero .bubble:nth-of-type(4) { width: 10px; height: 10px; inset-inline-start: 58%; animation-duration: 6s;  animation-delay: 4s; }
-.crm-hero .bubble:nth-of-type(5) { width: 18px; height: 18px; inset-inline-start: 72%; animation-duration: 8s;  animation-delay: 0.5s; }
-.crm-hero .bubble:nth-of-type(6) { width: 14px; height: 14px; inset-inline-start: 88%; animation-duration: 10s; animation-delay: 3s; }
-
-@keyframes crm-bubble-rise {
-  0% {
-    transform: translateY(0) translateX(0);
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-  }
-  85% {
-    opacity: 0.9;
-  }
-  100% {
-    transform: translateY(-190px) translateX(10px);
-    opacity: 0;
-  }
+/* Two out-of-focus light pools; blur keeps them reading as atmosphere,
+   never as shapes. */
+.crm-hero-glow {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  filter: blur(32px);
+}
+.crm-hero-glow-1 {
+  top: -48px;
+  inset-inline-end: -28px;
+  width: 170px;
+  height: 170px;
+  background: rgba(255, 255, 255, 0.28);
+}
+.crm-hero-glow-2 {
+  bottom: -56px;
+  inset-inline-start: 12%;
+  width: 210px;
+  height: 130px;
+  background: rgba(103, 232, 249, 0.4);
 }
 
 /*
@@ -582,7 +584,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .crm-hero,
-  .crm-hero .bubble,
+  .crm-hero-glow,
   .crm-login-bubbles span,
   .crm-glow,
   .crm-clouds-drift,

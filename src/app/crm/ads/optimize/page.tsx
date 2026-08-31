@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CrmShell } from '@/components/crm/CrmShell';
-import { SpinnerIcon } from '@/components/icons';
+import { InboxIcon, SpinnerIcon, TargetIcon, WalletIcon } from '@/components/icons';
 import { buildRecommendations, type RecommendationTone } from '@/lib/crm/adsOptimizer';
 import { fetchCampaignPerf, formatSpend, type CampaignPerf } from '@/lib/crm/facebookAds';
 import { getFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
@@ -149,19 +149,19 @@ export default function CrmAdsOptimizePage() {
           <div className="grid grid-cols-3 gap-2">
             {(
               [
-                { label: 'הוצאה · 30 יום', value: formatSpend(totals.spend, currency), emoji: '💰' },
-                { label: 'פניות', value: totals.conversations.toLocaleString('he-IL'), emoji: '📥' },
+                { label: 'הוצאה · 30 יום', value: formatSpend(totals.spend, currency), icon: WalletIcon },
+                { label: 'פניות', value: totals.conversations.toLocaleString('he-IL'), icon: InboxIcon },
                 {
                   label: 'עלות לפנייה',
                   value: totals.cpl !== null ? formatSpend(totals.cpl, currency) : '—',
-                  emoji: '🎯',
+                  icon: TargetIcon,
                 },
               ] as const
             ).map((tile) => (
               <div key={tile.label} className="rounded-card border border-ink-700 surface p-3 text-center">
-                <p aria-hidden className="text-lg leading-none">
-                  {tile.emoji}
-                </p>
+                <span aria-hidden className="mx-auto grid h-8 w-8 place-items-center rounded-lg bg-sky-500/10 text-brand-400">
+                  <tile.icon className="h-4.5 w-4.5" />
+                </span>
                 <p className="mt-1.5 text-lg font-extrabold tabular-nums text-brand-400">{tile.value}</p>
                 <p className="mt-0.5 text-xs font-semibold text-mist-500">{tile.label}</p>
               </div>

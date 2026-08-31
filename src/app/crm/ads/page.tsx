@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdsBarChart, type AdsBarPoint } from '@/components/crm/AdsBarChart';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { MONTH_LONG } from '@/components/crm/YearRevenueChart';
-import { SpinnerIcon } from '@/components/icons';
+import { InboxIcon, SpinnerIcon, TargetIcon, WalletIcon } from '@/components/icons';
 import {
   conversationsLine,
   fetchSpendSeries,
@@ -29,9 +29,9 @@ const isoYearsAgo = (years: number) => {
 };
 
 const METRIC_OPTIONS: { value: Metric; label: string }[] = [
-  { value: 'spend', label: '💸 הוצאה' },
-  { value: 'conversations', label: '📥 פניות' },
-  { value: 'cpl', label: '🎯 עלות לפנייה' },
+  { value: 'spend', label: 'הוצאה' },
+  { value: 'conversations', label: 'פניות' },
+  { value: 'cpl', label: 'עלות לפנייה' },
 ];
 
 function metricValue(point: SpendPoint, metric: Metric): number {
@@ -56,12 +56,20 @@ function statsOf(points: SpendPoint[]) {
   return { spend, conversations, cpl: conversations > 0 ? spend / conversations : null };
 }
 
-function SummaryTile({ label, value, emoji }: { label: string; value: string; emoji: string }) {
+function SummaryTile({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ComponentType<{ className?: string }>;
+}) {
   return (
     <div className="rounded-card border border-ink-700 surface p-3 text-center">
-      <p aria-hidden className="text-lg leading-none">
-        {emoji}
-      </p>
+      <span aria-hidden className="mx-auto grid h-8 w-8 place-items-center rounded-lg bg-sky-500/10 text-brand-400">
+        <Icon className="h-4.5 w-4.5" />
+      </span>
       <p className="mt-1.5 text-lg font-extrabold tabular-nums text-brand-400">{value}</p>
       <p className="mt-0.5 text-xs font-semibold text-mist-500">{label}</p>
     </div>
@@ -480,12 +488,12 @@ export default function CrmAdsPage() {
       ) : (
         <>
           <div className="grid grid-cols-3 gap-2">
-            <SummaryTile label="סה״כ הוצאה" value={formatSpend(totals.spend, currency)} emoji="💰" />
-            <SummaryTile label="סה״כ פניות" value={totals.conversations.toLocaleString('he-IL')} emoji="📥" />
+            <SummaryTile label="סה״כ הוצאה" value={formatSpend(totals.spend, currency)} icon={WalletIcon} />
+            <SummaryTile label="סה״כ פניות" value={totals.conversations.toLocaleString('he-IL')} icon={InboxIcon} />
             <SummaryTile
               label="ממוצע לפנייה"
               value={totals.costPer !== null ? formatSpend(totals.costPer, currency) : '—'}
-              emoji="🎯"
+              icon={TargetIcon}
             />
           </div>
           <p className="mt-1.5 text-center text-xs font-semibold text-mist-500">

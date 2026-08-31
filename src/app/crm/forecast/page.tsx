@@ -6,7 +6,14 @@ import { AdsBarChart, type AdsBarPoint } from '@/components/crm/AdsBarChart';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { LeadCard } from '@/components/crm/LeadCard';
 import { MONTH_LONG } from '@/components/crm/YearRevenueChart';
-import { PlusIcon, SpinnerIcon } from '@/components/icons';
+import {
+  CalendarIcon,
+  ClockIcon,
+  GemIcon,
+  PlusIcon,
+  SpinnerIcon,
+  TrendingUpIcon,
+} from '@/components/icons';
 import {
   addDaysISO,
   formatDateLongHe,
@@ -21,12 +28,20 @@ import { useLeads } from '@/lib/crm/useLeads';
 const byTime = (a: Lead, b: Lead) => (a.jobTime ?? '99').localeCompare(b.jobTime ?? '99');
 const sumPrices = (jobs: Lead[]) => jobs.reduce((sum, l) => sum + (l.price ?? 0), 0);
 
-function ForecastTile({ label, value, emoji }: { label: string; value: string; emoji: string }) {
+function ForecastTile({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ComponentType<{ className?: string }>;
+}) {
   return (
     <div className="rounded-card border border-ink-700 surface p-3 text-center">
-      <p aria-hidden className="text-lg leading-none">
-        {emoji}
-      </p>
+      <span aria-hidden className="mx-auto grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600">
+        <Icon className="h-4.5 w-4.5" />
+      </span>
       <p className="mt-1.5 text-lg font-extrabold tabular-nums text-emerald-600">{value}</p>
       <p className="mt-0.5 text-xs font-semibold text-mist-500">{label}</p>
     </div>
@@ -125,16 +140,18 @@ export default function CrmForecastPage() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <ForecastTile label="צפי היום" value={formatPrice(view.todaySum)} emoji="🕐" />
-            <ForecastTile label="צפי השבוע" value={formatPrice(view.weekSum)} emoji="📅" />
-            <ForecastTile label={`צפי עד סוף ${monthName}`} value={formatPrice(view.monthSum)} emoji="🗓️" />
-            <ForecastTile label={`סה״כ עתידי · ${view.futureCount} עבודות`} value={formatPrice(view.totalSum)} emoji="💎" />
+            <ForecastTile label="צפי היום" value={formatPrice(view.todaySum)} icon={ClockIcon} />
+            <ForecastTile label="צפי השבוע" value={formatPrice(view.weekSum)} icon={CalendarIcon} />
+            <ForecastTile label={`צפי עד סוף ${monthName}`} value={formatPrice(view.monthSum)} icon={TrendingUpIcon} />
+            <ForecastTile label={`סה״כ עתידי · ${view.futureCount} עבודות`} value={formatPrice(view.totalSum)} icon={GemIcon} />
           </div>
 
           {/* Where the month is projected to land: done + still scheduled. */}
           <div className="mt-3 rounded-card border border-emerald-600/30 bg-emerald-500/5 p-4">
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-sm font-bold">📈 תחזית {monthName}</p>
+              <p className="flex items-center gap-1.5 text-sm font-bold">
+                <TrendingUpIcon className="h-4 w-4 text-emerald-600" /> תחזית {monthName}
+              </p>
               <p className="text-2xl font-extrabold tabular-nums text-emerald-600">
                 {formatPrice(projectedMonth)}
               </p>

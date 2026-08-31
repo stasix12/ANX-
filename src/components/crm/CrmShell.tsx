@@ -39,11 +39,20 @@ function NavLink({
   return (
     <Link
       href={href}
-      className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-semibold transition-colors ${
+      aria-current={active ? 'page' : undefined}
+      className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors ${
         active ? 'text-brand-400' : 'text-mist-500'
       }`}
     >
-      <Icon className="h-6 w-6" />
+      {/* The active tab's icon sits in a soft tinted pill — a clear state
+          without shouting. */}
+      <span
+        className={`grid h-7 w-13 place-items-center rounded-full transition-colors ${
+          active ? 'bg-brand-500/10' : ''
+        }`}
+      >
+        <Icon className="h-5.5 w-5.5" />
+      </span>
       {label}
     </Link>
   );
@@ -85,22 +94,22 @@ export function CrmShell({
     exact ? pathname === href : Boolean(pathname?.startsWith(href));
 
   return (
-    <div className="mx-auto min-h-dvh max-w-3xl bg-ink-950 pb-28">
+    <div className="mx-auto min-h-dvh max-w-3xl bg-ink-950 pb-[calc(7.5rem+env(safe-area-inset-bottom))]">
       {/* Water-gradient header — the CRM's one loud brand surface. The
           safe-area padding stretches the gradient up under the iPhone's
           status bar (clock/battery) so the title starts below it. */}
-      <header className="sticky top-0 z-40 bg-gradient-to-l from-sky-600 via-sky-500 to-cyan-400 pt-[env(safe-area-inset-top)] shadow-md shadow-sky-900/20">
-        <div className="flex items-center justify-between px-4 pb-4 pt-5">
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">{title}</h1>
+      <header className="sticky top-0 z-40 bg-gradient-to-l from-sky-700 via-sky-500 to-cyan-400 pt-[env(safe-area-inset-top)] shadow-md shadow-sky-900/25">
+        <div className="flex items-center justify-between px-4 pb-3.5 pt-4">
+          <h1 className="text-2xl font-extrabold tracking-tight text-white drop-shadow-sm">{title}</h1>
           {headerAction}
         </div>
       </header>
 
-      <div className="px-4 py-5">{children}</div>
+      <div className="crm-page px-4 py-5">{children}</div>
 
       <nav
         aria-label="ניווט ראשי"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700 bg-ink-850/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(15,42,72,0.08)] backdrop-blur-lg"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700/70 bg-ink-850/85 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_24px_rgba(13,38,76,0.1)] backdrop-blur-xl"
       >
         <ul className="mx-auto flex max-w-lg items-stretch">
           {navStart.map((item) => (
@@ -112,7 +121,7 @@ export function CrmShell({
             <Link
               href="/crm/leads/new"
               aria-label="ליד חדש"
-              className="-mt-7 flex h-14 w-14 flex-col items-center justify-center rounded-full bg-brand-500 text-on-brand shadow-lg shadow-brand-500/30 transition-colors hover:bg-brand-400"
+              className="-mt-7 flex h-14 w-14 flex-col items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-cyan-400 text-white shadow-lg shadow-sky-600/40 ring-4 ring-ink-850 transition-transform hover:scale-105"
             >
               <PlusIcon className="h-7 w-7" strokeWidth={2.4} />
             </Link>

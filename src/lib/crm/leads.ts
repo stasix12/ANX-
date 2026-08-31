@@ -91,9 +91,14 @@ export function parseService(entry: string): { name: string; qty: number } {
 export const serviceEntry = (name: string, qty: number): string =>
   qty > 1 ? `${name} ×${qty}` : name;
 
-/** "13:00" or, when an arrival window was set, "13:00–15:00". */
+/** "13:00" or, when an arrival window was set, "13:00–15:00". The range is
+ * wrapped in LTR-isolate marks so RTL layout doesn't flip it end-first. */
 export const timeLabel = (lead: Pick<Lead, 'jobTime' | 'jobTimeEnd'>): string | null =>
-  lead.jobTime ? (lead.jobTimeEnd ? `${lead.jobTime}–${lead.jobTimeEnd}` : lead.jobTime) : null;
+  lead.jobTime
+    ? lead.jobTimeEnd
+      ? `⁦${lead.jobTime}–${lead.jobTimeEnd}⁩`
+      : lead.jobTime
+    : null;
 
 function requireSupabase() {
   if (!supabase) {

@@ -62,7 +62,7 @@ function SummaryTile({ label, value, emoji }: { label: string; value: string; em
       <p aria-hidden className="text-lg leading-none">
         {emoji}
       </p>
-      <p className="mt-1.5 text-lg font-extrabold tabular-nums text-blue-700">{value}</p>
+      <p className="mt-1.5 text-lg font-extrabold tabular-nums text-brand-400">{value}</p>
       <p className="mt-0.5 text-xs font-semibold text-mist-500">{label}</p>
     </div>
   );

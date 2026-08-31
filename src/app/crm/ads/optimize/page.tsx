@@ -162,7 +162,7 @@ export default function CrmAdsOptimizePage() {
                 <p aria-hidden className="text-lg leading-none">
                   {tile.emoji}
                 </p>
-                <p className="mt-1.5 text-lg font-extrabold tabular-nums text-blue-700">{tile.value}</p>
+                <p className="mt-1.5 text-lg font-extrabold tabular-nums text-brand-400">{tile.value}</p>
                 <p className="mt-0.5 text-xs font-semibold text-mist-500">{tile.label}</p>
               </div>
             ))}

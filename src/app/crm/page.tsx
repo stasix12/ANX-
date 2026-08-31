@@ -107,7 +107,7 @@ function AdSpendTile({
       className="flex items-start justify-between gap-2 rounded-card border border-brand-500/30 bg-brand-500/5 p-4 py-5 transition-colors hover:border-brand-500/50"
     >
       <div className="min-w-0">
-        <p className="text-3xl font-extrabold tabular-nums text-blue-700">
+        <p className="text-3xl font-extrabold tabular-nums text-brand-400">
           {formatSpend(spend, currency)}
         </p>
         <p className="mt-1 text-sm font-semibold text-mist-500">{label}</p>
@@ -143,23 +143,30 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 /** The one thing a working day actually revolves around: the next job. */
 function NextJobCard({ lead, today, first = true }: { lead: Lead; today: string; first?: boolean }) {
   return (
-    <div className="relative h-full overflow-hidden rounded-card border border-brand-500/30 surface shadow-sm">
-      <span aria-hidden className="absolute inset-y-0 start-0 w-1 bg-brand-500" />
+    <div className="relative h-full overflow-hidden rounded-card border border-brand-500/25 surface">
+      <span aria-hidden className="absolute inset-y-0 start-0 w-1 bg-gradient-to-b from-sky-500 to-cyan-400" />
       <Link href={`/crm/leads/${lead.id}`} className="block p-4 pb-3">
-        <p className="text-xs font-bold text-brand-400">
-          {first ? 'העבודה הבאה' : 'בהמשך'} · {untilLabel(lead, today)}
-        </p>
-        <div className="mt-1.5 flex items-start justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-extrabold uppercase tracking-wide text-brand-400">
+            {first ? '⚡ העבודה הבאה' : 'בהמשך'}
+          </p>
+          <span className="rounded-full bg-brand-500/10 px-2.5 py-0.5 text-xs font-extrabold tabular-nums text-brand-400">
+            {untilLabel(lead, today)}
+          </span>
+        </div>
+        <div className="mt-2 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-lg font-extrabold">{lead.name}</p>
-            <p className="mt-0.5 truncate text-sm text-mist-300">
+            <p className="truncate text-xl font-extrabold">{lead.name}</p>
+            <p className="mt-0.5 truncate text-sm font-medium text-mist-300">
               {[lead.city || null, lead.services.join(' · ') || null].filter(Boolean).join(' · ')}
             </p>
           </div>
-          <span className="shrink-0 text-lg font-extrabold tabular-nums">{formatPrice(lead.price)}</span>
+          <span className="shrink-0 text-xl font-extrabold tabular-nums text-emerald-600">
+            {formatPrice(lead.price)}
+          </span>
         </div>
       </Link>
-      <div className="flex gap-2 border-t border-ink-700/60 px-4 py-2.5">
+      <div className="flex gap-2 border-t border-ink-700/60 bg-ink-900/60 px-4 py-2.5">
         {lead.phone ? (
           <>
             <a
@@ -382,7 +389,7 @@ export default function CrmDashboardPage() {
                     </p>
                   </div>
                 </div>
-                <p className="shrink-0 text-2xl font-extrabold tabular-nums text-blue-700">
+                <p className="shrink-0 text-2xl font-extrabold tabular-nums text-brand-400">
                   {formatSpend(adSpend.week, adSpend.currency)}
                 </p>
               </Link>

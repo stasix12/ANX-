@@ -14,20 +14,38 @@ export type SessionState = { session: Session | null; loading: boolean };
  * render when they shouldn't; it could never make an unauthorized write
  * succeed.
  */
+/*
+ * The last resolved session, cached at module level: every screen mounts its
+ * own useAdminSession, and without the cache each navigation started at
+ * loading=true — flashing a full-page spinner on every tab switch. With it,
+ * only the first mount ever waits; later mounts render instantly and still
+ * track live auth changes.
+ */
+let cachedSession: Session | null = null;
+let sessionResolved = false;
+
 export function useAdminSession(): SessionState {
-  const [state, setState] = useState<SessionState>({ session: null, loading: true });
+  const [state, setState] = useState<SessionState>(() =>
+    sessionResolved ? { session: cachedSession, loading: false } : { session: null, loading: true },
+  );
 
   useEffect(() => {
     if (!supabase) {
+      sessionResolved = true;
+      cachedSession = null;
       setState({ session: null, loading: false });
       return;
     }
 
     supabase.auth.getSession().then(({ data }) => {
+      sessionResolved = true;
+      cachedSession = data.session;
       setState({ session: data.session, loading: false });
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      sessionResolved = true;
+      cachedSession = session;
       setState({ session, loading: false });
     });
 

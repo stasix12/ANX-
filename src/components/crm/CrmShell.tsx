@@ -47,8 +47,8 @@ function NavLink({
       {/* The active tab's icon sits in a soft tinted pill — a clear state
           without shouting. */}
       <span
-        className={`grid h-7 w-13 place-items-center rounded-full transition-colors ${
-          active ? 'bg-brand-500/10' : ''
+        className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${
+          active ? 'scale-105 bg-brand-500/10' : ''
         }`}
       >
         <Icon className="h-5.5 w-5.5" />
@@ -93,6 +93,12 @@ export function CrmShell({
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : Boolean(pathname?.startsWith(href));
 
+  // Detail screens (a lead, the forms, campaign optimization) push in from
+  // the side like an iOS navigation stack; tab screens crossfade in place.
+  const isDeep = Boolean(
+    pathname && (/^\/crm\/leads\/.+/.test(pathname) || pathname.startsWith('/crm/ads/optimize')),
+  );
+
   return (
     <div className="mx-auto min-h-dvh max-w-3xl bg-ink-950 pb-[calc(7.5rem+env(safe-area-inset-bottom))]">
       {/* Water-gradient header — the CRM's one loud brand surface. The
@@ -105,7 +111,7 @@ export function CrmShell({
         </div>
       </header>
 
-      <div className="crm-page px-4 py-5">{children}</div>
+      <div className={`crm-page ${isDeep ? 'crm-page-push' : ''} px-4 py-5`}>{children}</div>
 
       <nav
         aria-label="ניווט ראשי"
@@ -121,7 +127,7 @@ export function CrmShell({
             <Link
               href="/crm/leads/new"
               aria-label="ליד חדש"
-              className="-mt-7 flex h-14 w-14 flex-col items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-cyan-400 text-white shadow-lg shadow-sky-600/40 ring-4 ring-ink-850 transition-transform hover:scale-105"
+              className="-mt-7 flex h-14 w-14 flex-col items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-cyan-400 text-white shadow-lg shadow-sky-600/40 ring-4 ring-ink-850 transition-[transform,box-shadow] duration-200 hover:scale-105 active:scale-90 active:shadow-md active:shadow-sky-600/30"
             >
               <PlusIcon className="h-7 w-7" strokeWidth={2.4} />
             </Link>

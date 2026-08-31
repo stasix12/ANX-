@@ -170,8 +170,45 @@
   box-shadow: 0 2px 10px rgba(2, 132, 199, 0.35);
 }
 
-/* Screens breathe in — a short, subtle settle when a page opens. */
-@keyframes crm-page-in {
+/*
+ * Native-feeling page transitions — all transform/opacity, GPU-composited,
+ * ~200ms. Tab switches crossfade with a staggered content rise; deeper
+ * screens (lead details, forms) push in from the side like an iOS
+ * navigation stack. The reduced-motion block at the bottom disables all.
+ */
+.crm-page {
+  animation: crm-fade 0.18s ease-out both;
+}
+@keyframes crm-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Staggered entrance for the page's top-level blocks: each settles a beat
+   after the previous. The hero keeps its own drift animation untouched. */
+.crm-page:not(.crm-page-push) > *:not(.crm-hero) {
+  animation: crm-child-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.crm-page > :nth-child(2) {
+  animation-delay: 30ms;
+}
+.crm-page > :nth-child(3) {
+  animation-delay: 55ms;
+}
+.crm-page > :nth-child(4) {
+  animation-delay: 80ms;
+}
+.crm-page > :nth-child(5) {
+  animation-delay: 100ms;
+}
+.crm-page > :nth-child(n + 6) {
+  animation-delay: 115ms;
+}
+@keyframes crm-child-in {
   from {
     opacity: 0;
     transform: translateY(8px);
@@ -181,8 +218,21 @@
     transform: none;
   }
 }
-.crm-page {
-  animation: crm-page-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+/* iOS-style push for detail screens — in RTL, forward slides in from the
+   left. One motion for the whole page, no per-block stagger. */
+.crm-page-push {
+  animation: crm-push-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes crm-push-in {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /*

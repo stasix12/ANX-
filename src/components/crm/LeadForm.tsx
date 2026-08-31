@@ -10,6 +10,8 @@ import {
   formatDateHe,
   formatPrice,
   listLeadsByPhone,
+  parseService,
+  serviceEntry,
   type Lead,
   type LeadInput,
   type LeadSource,
@@ -93,13 +95,14 @@ export function LeadForm({
   const set = <K extends keyof LeadInput>(key: K, val: LeadInput[K]) =>
     setValue((prev) => ({ ...prev, [key]: val }));
 
-  const toggleService = (service: string) =>
-    setValue((prev) => ({
-      ...prev,
-      services: prev.services.includes(service)
-        ? prev.services.filter((s) => s !== service)
-        : [...prev.services, service],
-    }));
+  const serviceQty = (name: string): number =>
+    value.services.map(parseService).find((s) => s.name === name)?.qty ?? 0;
+
+  const setServiceQty = (name: string, qty: number) =>
+    setValue((prev) => {
+      const others = prev.services.filter((s) => parseService(s).name !== name);
+      return { ...prev, services: qty <= 0 ? others : [...others, serviceEntry(name, qty)] };
+    });
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -217,24 +220,60 @@ export function LeadForm({
         <legend className="mb-1.5 block text-sm font-bold">סוג השירות</legend>
         <div className="flex flex-wrap gap-2">
           {SERVICE_OPTIONS.map((service) => {
-            const selected = value.services.includes(service);
+            const qty = serviceQty(service);
+            if (qty === 0) {
+              return (
+                <button
+                  key={service}
+                  type="button"
+                  aria-pressed={false}
+                  onClick={() => setServiceQty(service, 1)}
+                  className="rounded-full border border-ink-600 bg-ink-850 px-4 py-2.5 text-sm font-semibold text-mist-300 transition-colors hover:border-ink-500"
+                >
+                  {service}
+                </button>
+              );
+            }
+            // Selected: the chip grows −/+ steppers for the quantity
+            // (2 מזגנים, 3 ספות...); minus below 1 deselects.
             return (
-              <button
+              <div
                 key={service}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => toggleService(service)}
-                className={`rounded-full border px-4 py-2.5 text-sm font-semibold transition-colors ${
-                  selected
-                    ? 'border-brand-500 bg-brand-500 text-on-brand'
-                    : 'border-ink-600 bg-ink-850 text-mist-300 hover:border-ink-500'
-                }`}
+                className="flex items-stretch overflow-hidden rounded-full border border-brand-500 bg-brand-500 text-on-brand"
               >
-                {service}
-              </button>
+                <button
+                  type="button"
+                  aria-label={`פחות ${service}`}
+                  onClick={() => setServiceQty(service, qty - 1)}
+                  className="px-3 text-lg font-bold leading-none transition-colors hover:bg-brand-400"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  aria-pressed
+                  aria-label={`הסר ${service}`}
+                  onClick={() => setServiceQty(service, 0)}
+                  className="py-2.5 text-sm font-semibold"
+                >
+                  {service}
+                  {qty > 1 ? <span className="font-extrabold tabular-nums"> ×{qty}</span> : null}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`עוד ${service}`}
+                  onClick={() => setServiceQty(service, qty + 1)}
+                  className="px-3 text-lg font-bold leading-none transition-colors hover:bg-brand-400"
+                >
+                  +
+                </button>
+              </div>
             );
           })}
         </div>
+        <p className="mt-1.5 text-xs font-semibold text-mist-500">
+          💡 בחרת שירות? כפתורי − ו-+ קובעים כמה פריטים (למשל 2 מזגנים).
+        </p>
       </fieldset>
 
       <Field label="מחיר שסוכם (₪)" htmlFor="lead-price">

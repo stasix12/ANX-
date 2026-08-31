@@ -5,7 +5,7 @@ import { CrmShell } from '@/components/crm/CrmShell';
 import { FacebookAdsSection } from '@/components/crm/FacebookAdsSection';
 import { MONTH_LONG, YearRevenueChart, type MonthRevenue } from '@/components/crm/YearRevenueChart';
 import { SpinnerIcon } from '@/components/icons';
-import { formatPrice, sourceLabel, todayISO, type Lead, type LeadSource } from '@/lib/crm/leads';
+import { formatPrice, parseService, sourceLabel, todayISO, type Lead, type LeadSource } from '@/lib/crm/leads';
 import { useLeads } from '@/lib/crm/useLeads';
 
 function monthTitle(month: string): string {
@@ -230,11 +230,13 @@ export default function CrmStatsPage() {
 
     const revenue = completed.reduce((sum, l) => sum + (l.price ?? 0), 0);
 
+    // "ניקוי מזגן ×3" counts as three air-conditioner cleans, under one name.
     const serviceCounts = new Map<string, number>();
     for (const lead of monthJobs) {
       if (lead.status === 'canceled') continue;
       for (const service of lead.services) {
-        serviceCounts.set(service, (serviceCounts.get(service) ?? 0) + 1);
+        const { name, qty } = parseService(service);
+        serviceCounts.set(name, (serviceCounts.get(name) ?? 0) + qty);
       }
     }
 

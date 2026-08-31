@@ -30,19 +30,21 @@ export function AdsBarChart({
   points,
   selected,
   onSelect,
+  scrollTo = 'end',
 }: {
   points: AdsBarPoint[];
   selected: number;
   onSelect: (index: number) => void;
+  /** Which edge to land on: 'end' = the latest bars (history), 'start' = the first (a forecast). */
+  scrollTo?: 'start' | 'end';
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Land on the most recent bars, not the oldest.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollLeft = el.scrollWidth;
-  }, [points.length]);
+    if (el) el.scrollLeft = scrollTo === 'end' ? el.scrollWidth : 0;
+  }, [points.length, scrollTo]);
 
   const H = 210;
   const pad = { top: 20, bottom: 22, left: 40, right: 8 };

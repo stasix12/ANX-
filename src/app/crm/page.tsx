@@ -292,6 +292,7 @@ export default function CrmDashboardPage() {
         .filter((l) => completed(l) && l.jobDate?.startsWith(month))
         .reduce((sum, l) => sum + (l.price ?? 0), 0),
       nextJobs: upcoming.slice(0, 8),
+      futureRevenue: upcoming.reduce((sum, l) => sum + (l.price ?? 0), 0),
       overdueCount: leads.filter((l) => isOverdue(l, today)).length,
     };
   }, [leads, today, tomorrow, week.start, week.end, month]);
@@ -413,6 +414,25 @@ export default function CrmDashboardPage() {
             <StatTile label="הושלמו החודש" value={view.completedMonth} href="/crm/leads?status=completed" emoji="✅" />
             <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" emoji="❌" />
           </div>
+
+          {/* Doorway to the forecast page, carrying its headline number. */}
+          <Link
+            href="/crm/forecast"
+            className="mt-3 flex items-center justify-between gap-3 rounded-card border border-emerald-600/30 bg-emerald-500/5 px-4 py-3.5 transition-colors hover:border-emerald-600/50"
+          >
+            <div className="flex items-center gap-3">
+              <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
+                🔮
+              </span>
+              <div>
+                <p className="text-sm font-bold">צפי הכנסה</p>
+                <p className="text-xs font-semibold text-mist-500">מה שווה כל מה שמחכה ביומן</p>
+              </div>
+            </div>
+            <p className="shrink-0 text-2xl font-extrabold tabular-nums text-emerald-600">
+              {formatPrice(view.futureRevenue)}
+            </p>
+          </Link>
 
           <Section title="העבודות של היום">
             {view.todayJobs.length === 0 ? (

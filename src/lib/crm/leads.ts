@@ -78,6 +78,19 @@ export const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
 export const sourceLabel = (source: LeadSource): string =>
   SOURCE_OPTIONS.find((s) => s.value === source)?.label ?? source;
 
+/*
+ * Service quantities ride inside the stored text — "ניקוי מזגן ×3" — so no
+ * schema change is needed and every screen that joins the services list
+ * shows the count for free. Quantity 1 keeps the bare name.
+ */
+export function parseService(entry: string): { name: string; qty: number } {
+  const match = entry.match(/^(.*?)\s*×(\d+)$/);
+  return match ? { name: match[1], qty: Number(match[2]) } : { name: entry, qty: 1 };
+}
+
+export const serviceEntry = (name: string, qty: number): string =>
+  qty > 1 ? `${name} ×${qty}` : name;
+
 /** "13:00" or, when an arrival window was set, "13:00–15:00". */
 export const timeLabel = (lead: Pick<Lead, 'jobTime' | 'jobTimeEnd'>): string | null =>
   lead.jobTime ? (lead.jobTimeEnd ? `${lead.jobTime}–${lead.jobTimeEnd}` : lead.jobTime) : null;

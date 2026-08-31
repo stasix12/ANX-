@@ -51,15 +51,24 @@ import { useLeads } from '@/lib/crm/useLeads';
 
 const byTime = (a: Lead, b: Lead) => (a.jobTime ?? '99').localeCompare(b.jobTime ?? '99');
 
-/** The greeting and its time-of-day icon — sun, sunset or moon. */
-function greeting(): { text: string; icon: TileIcon } {
+/** The welcome card's atmosphere follows the clock. */
+type HeroPhase = 'morning' | 'noon' | 'evening' | 'night';
+
+function heroPhaseNow(): HeroPhase {
   const hour = new Date().getHours();
-  if (hour < 5) return { text: 'לילה טוב', icon: MoonIcon };
-  if (hour < 12) return { text: 'בוקר טוב', icon: SunIcon };
-  if (hour < 17) return { text: 'צהריים טובים', icon: SunIcon };
-  if (hour < 21) return { text: 'ערב טוב', icon: SunsetIcon };
-  return { text: 'לילה טוב', icon: MoonIcon };
+  if (hour < 5) return 'night';
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'noon';
+  if (hour < 21) return 'evening';
+  return 'night';
 }
+
+const HERO_COPY: Record<HeroPhase, { text: string; icon: TileIcon }> = {
+  morning: { text: 'בוקר טוב', icon: SunIcon },
+  noon: { text: 'צהריים טובים', icon: SunIcon },
+  evening: { text: 'ערב טוב', icon: SunsetIcon },
+  night: { text: 'לילה טוב', icon: MoonIcon },
+};
 
 /** "בעוד 20 דקות" / "בעוד כשעתיים" / "מחר ב-09:00" / a date — when the job starts. */
 function untilLabel(lead: Lead, today: string): string {
@@ -292,6 +301,14 @@ export default function CrmDashboardPage() {
   const router = useRouter();
   const { leads, loading, error } = useLeads();
 
+  // The welcome card's time-of-day mood, re-checked each minute so a phase
+  // change crossfades in place instead of waiting for the next visit.
+  const [heroPhase, setHeroPhase] = useState<HeroPhase>(heroPhaseNow);
+  useEffect(() => {
+    const timer = setInterval(() => setHeroPhase(heroPhaseNow()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Ad spend rides along quietly: shown when Facebook is connected and the
   // fetch succeeds, invisible otherwise — the dashboard never nags about it.
   const [adSpend, setAdSpend] = useState<AdSpend | null>(null);
@@ -370,10 +387,20 @@ export default function CrmDashboardPage() {
         </p>
       ) : (
         <>
-          <div className="crm-hero relative overflow-hidden rounded-card p-5 shadow-md shadow-sky-900/15">
-            {/* Soft light pools — depth without decoration. */}
+          <div
+            className={`crm-hero crm-hero--${heroPhase} relative overflow-hidden rounded-card p-5 shadow-md shadow-sky-900/15`}
+          >
+            {/* Ambient layers: one tint per time of day crossfading beneath,
+                drifting light pools, night stars, and a rare shimmer sweep.
+                Only these move — the text stays perfectly still. */}
+            <span aria-hidden className="crm-hero-tint crm-tint-morning" />
+            <span aria-hidden className="crm-hero-tint crm-tint-noon" />
+            <span aria-hidden className="crm-hero-tint crm-tint-evening" />
+            <span aria-hidden className="crm-hero-tint crm-tint-night" />
+            <span aria-hidden className="crm-hero-stars" />
             <span aria-hidden className="crm-hero-glow crm-hero-glow-1" />
             <span aria-hidden className="crm-hero-glow crm-hero-glow-2" />
+            <span aria-hidden className="crm-hero-shimmer" />
             <div className="relative">
               {/* The shift pill anchors to the far corner so the greeting
                   group never wraps away from its icon. */}
@@ -383,12 +410,12 @@ export default function CrmDashboardPage() {
               </span>
               <div className="flex items-center gap-3 pe-28">
                 {(() => {
-                  const g = greeting();
+                  const g = HERO_COPY[heroPhase];
                   const GreetingIcon = g.icon;
                   return (
                     <>
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
-                        <GreetingIcon className="h-6 w-6 text-white" />
+                      <span className="crm-hero-iconwrap relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15 ring-1 ring-white/25 backdrop-blur-sm">
+                        <GreetingIcon className="crm-hero-icon relative h-6 w-6 text-white" />
                       </span>
                       <div className="min-w-0">
                         <p className="truncate text-2xl font-extrabold leading-tight tracking-tight text-white">

@@ -48,6 +48,9 @@ function monthTitle(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
 }
 
+/** From this many jobs, a day counts as busy and gets loudly flagged. */
+const BUSY_DAY = 5;
+
 function DayJobs({ date, jobs }: { date: string; jobs: Lead[] }) {
   const shift = shiftFor(date);
   return (
@@ -57,6 +60,11 @@ function DayJobs({ date, jobs }: { date: string; jobs: Lead[] }) {
           {formatDateLongHe(date)}
           {date === todayISO() ? ' (היום)' : ''}
         </span>
+        {jobs.length >= BUSY_DAY ? (
+          <span className="rounded-full bg-brand-500 px-2.5 py-0.5 text-xs font-extrabold text-on-brand shadow-sm shadow-brand-500/30">
+            יום עמוס · {jobs.length} עבודות
+          </span>
+        ) : null}
         <span className={`rounded-full bg-ink-850 px-2.5 py-0.5 text-xs font-bold ${shift.textClass}`}>
           משמרת: {shift.label}
         </span>
@@ -201,7 +209,9 @@ export default function CrmCalendarPage() {
                     className={`flex min-h-14 flex-col items-center justify-start gap-0.5 rounded-xl border py-1 transition-colors ${
                       isSelected
                         ? 'border-brand-500 bg-brand-500/15'
-                        : 'border-transparent hover:border-ink-600'
+                        : jobs.length >= BUSY_DAY
+                          ? 'border-brand-500/40 bg-brand-500/10 hover:border-brand-500'
+                          : 'border-transparent hover:border-ink-600'
                     } ${inMonth ? '' : 'opacity-35'}`}
                   >
                     <span className={`text-[9px] font-bold leading-tight ${shift.textClass}`}>
@@ -214,11 +224,15 @@ export default function CrmCalendarPage() {
                     >
                       {Number(date.slice(8, 10))}
                     </span>
-                    {/* One dot per job; a crowded day collapses to its count.
-                        The row keeps a fixed height so all cells stay level. */}
-                    <span className="flex h-2 items-center gap-0.5">
-                      {jobs.length > 6 ? (
-                        <span aria-hidden className="text-[10px] font-extrabold leading-none text-brand-400">
+                    {/* One dot per job; a busy day trades the dots for a
+                        filled, impossible-to-miss count badge. The fixed row
+                        height keeps every cell level. */}
+                    <span className="flex h-3.5 items-center gap-0.5">
+                      {jobs.length >= BUSY_DAY ? (
+                        <span
+                          aria-hidden
+                          className="rounded-full bg-brand-500 px-1.5 py-[1.5px] text-[9px] font-extrabold leading-none text-on-brand"
+                        >
                           {jobs.length}
                         </span>
                       ) : (

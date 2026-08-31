@@ -231,9 +231,9 @@ export default function CrmCalendarPage() {
                       {jobs.length >= BUSY_DAY ? (
                         <span
                           aria-hidden
-                          className="rounded-full bg-brand-500 px-1.5 py-[1.5px] text-[9px] font-extrabold leading-none text-on-brand"
+                          className="whitespace-nowrap rounded-full bg-brand-500 px-1.5 py-[1.5px] text-[8px] font-extrabold leading-none text-on-brand"
                         >
-                          {jobs.length}
+                          {jobs.length} עבודות
                         </span>
                       ) : (
                         jobs.map((job) => (

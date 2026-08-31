@@ -177,7 +177,7 @@
  * navigation stack. The reduced-motion block at the bottom disables all.
  */
 .crm-page {
-  animation: crm-fade 0.18s ease-out both;
+  animation: crm-fade 0.26s ease-out both;
 }
 @keyframes crm-fade {
   from {
@@ -189,29 +189,30 @@
 }
 
 /* Staggered entrance for the page's top-level blocks: each settles a beat
-   after the previous. The hero keeps its own drift animation untouched. */
+   after the previous — a visible, cascading glide that stays classy. The
+   hero keeps its own drift animation untouched. */
 .crm-page:not(.crm-page-push) > *:not(.crm-hero) {
-  animation: crm-child-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: crm-child-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .crm-page > :nth-child(2) {
-  animation-delay: 30ms;
+  animation-delay: 45ms;
 }
 .crm-page > :nth-child(3) {
-  animation-delay: 55ms;
+  animation-delay: 85ms;
 }
 .crm-page > :nth-child(4) {
-  animation-delay: 80ms;
+  animation-delay: 120ms;
 }
 .crm-page > :nth-child(5) {
-  animation-delay: 100ms;
+  animation-delay: 150ms;
 }
 .crm-page > :nth-child(n + 6) {
-  animation-delay: 115ms;
+  animation-delay: 175ms;
 }
 @keyframes crm-child-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
@@ -222,12 +223,12 @@
 /* iOS-style push for detail screens — in RTL, forward slides in from the
    left. One motion for the whole page, no per-block stagger. */
 .crm-page-push {
-  animation: crm-push-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: crm-push-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes crm-push-in {
   from {
     opacity: 0;
-    transform: translateX(-18px);
+    transform: translateX(-30px);
   }
   to {
     opacity: 1;

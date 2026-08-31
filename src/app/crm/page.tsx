@@ -12,6 +12,7 @@ import {
   CalendarIcon,
   ChartIcon,
   CheckCircleIcon,
+  AlertTriangleIcon,
   GemIcon,
   LogOutIcon,
   MegaphoneIcon,
@@ -435,8 +436,9 @@ export default function CrmDashboardPage() {
               href="/crm/leads?filter=overdue"
               className="mt-4 flex items-center justify-between gap-3 rounded-card border border-amber-500/40 bg-amber-500/10 px-4 py-3"
             >
-              <span className="text-sm font-bold text-amber-800">
-                ⚠️ {view.overdueCount === 1 ? 'עבודה אחת עברה' : `${view.overdueCount} עבודות עברו`} ולא
+              <span className="flex items-center gap-2 text-sm font-bold text-amber-800">
+                <AlertTriangleIcon className="h-4.5 w-4.5 shrink-0" />
+                {view.overdueCount === 1 ? 'עבודה אחת עברה' : `${view.overdueCount} עבודות עברו`} ולא
                 נסגרו — לחץ לטיפול
               </span>
               <span aria-hidden className="text-amber-800">←</span>
@@ -453,7 +455,7 @@ export default function CrmDashboardPage() {
             <StatTile label="עבודות השבוע" value={view.weekCount} href="/crm/calendar" icon={CalendarIcon} chip="blue" />
             <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" icon={SparklesIcon} chip="teal" accentClass="text-teal-700" />
             <StatTile label="הושלמו החודש" value={view.completedMonth} href="/crm/leads?status=completed" icon={CheckCircleIcon} chip="green" />
-            <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" icon={XCircleIcon} chip="red" />
+            <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" icon={XCircleIcon} chip="red" accentClass="text-red-600" />
           </div>
 
           {/* Doorway to the forecast page, carrying its headline number. */}

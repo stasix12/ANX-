@@ -4,7 +4,14 @@ import { useMemo, useState } from 'react';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { FacebookAdsSection } from '@/components/crm/FacebookAdsSection';
 import { MONTH_LONG, YearRevenueChart, type MonthRevenue } from '@/components/crm/YearRevenueChart';
-import { SpinnerIcon } from '@/components/icons';
+import {
+  BanknoteIcon,
+  CalculatorIcon,
+  CheckCircleIcon,
+  SparklesIcon,
+  SpinnerIcon,
+  TrophyIcon,
+} from '@/components/icons';
 import { formatPrice, parseService, sourceLabel, todayISO, type Lead, type LeadSource } from '@/lib/crm/leads';
 import { useLeads } from '@/lib/crm/useLeads';
 
@@ -24,22 +31,30 @@ function shiftMonth(month: string, direction: 1 | -1): string {
 function StatTile({
   label,
   value,
-  emoji,
+  icon: Icon,
+  chip = 'blue',
   accentClass = '',
 }: {
   label: string;
   value: string | number;
-  emoji: string;
+  icon: React.ComponentType<{ className?: string }>;
+  chip?: 'green' | 'blue' | 'teal' | 'amber';
   accentClass?: string;
 }) {
+  const chips = {
+    green: 'bg-emerald-500/10 text-emerald-600',
+    blue: 'bg-sky-500/10 text-brand-400',
+    teal: 'bg-teal-500/10 text-teal-700',
+    amber: 'bg-amber-500/15 text-amber-700',
+  } as const;
   return (
     <div className="flex items-center justify-between gap-2 rounded-card border border-ink-700 surface p-4">
       <div className="min-w-0">
         <p className={`text-2xl font-extrabold tabular-nums ${accentClass}`}>{value}</p>
         <p className="mt-1 text-sm font-semibold text-mist-500">{label}</p>
       </div>
-      <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
-        {emoji}
+      <span aria-hidden className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${chips[chip]}`}>
+        <Icon className="h-5 w-5" />
       </span>
     </div>
   );
@@ -178,14 +193,14 @@ function YearView({ leads }: { leads: Lead[] }) {
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <StatTile label="סך הכנסות השנה" value={formatPrice(view.total)} emoji="💰" accentClass="text-emerald-600" />
-        <StatTile label="ממוצע חודשי" value={formatPrice(Math.round(view.avg))} emoji="🧮" />
+        <StatTile label="סך הכנסות השנה" value={formatPrice(view.total)} icon={BanknoteIcon} chip="green" accentClass="text-emerald-600" />
+        <StatTile label="ממוצע חודשי" value={formatPrice(Math.round(view.avg))} icon={CalculatorIcon} />
         <StatTile
           label={`החודש החזק ביותר${view.best.revenue > 0 ? ` — ${MONTH_LONG[view.best.month]}` : ''}`}
           value={formatPrice(view.best.revenue)}
-          emoji="🏆"
+          icon={TrophyIcon} chip="amber"
         />
-        <StatTile label="עבודות שהושלמו" value={view.months.reduce((s, m) => s + m.jobs, 0)} emoji="✅" />
+        <StatTile label="עבודות שהושלמו" value={view.months.reduce((s, m) => s + m.jobs, 0)} icon={CheckCircleIcon} chip="green" />
       </div>
 
       <details className="mt-4 rounded-card border border-ink-700 surface px-4 py-3">
@@ -312,10 +327,10 @@ export default function CrmStatsPage() {
             </button>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <StatTile label="הכנסה חודשית" value={formatPrice(stats.revenue)} emoji="💰" accentClass="text-emerald-600" />
-            <StatTile label="עבודות שהושלמו" value={stats.jobCount} emoji="✅" />
-            <StatTile label="עבודה ממוצעת" value={formatPrice(Math.round(stats.avgJob))} emoji="🧮" />
-            <StatTile label="לידים שנכנסו" value={stats.leadCount} emoji="✨" accentClass="text-teal-700" />
+            <StatTile label="הכנסה חודשית" value={formatPrice(stats.revenue)} icon={BanknoteIcon} chip="green" accentClass="text-emerald-600" />
+            <StatTile label="עבודות שהושלמו" value={stats.jobCount} icon={CheckCircleIcon} chip="green" />
+            <StatTile label="עבודה ממוצעת" value={formatPrice(Math.round(stats.avgJob))} icon={CalculatorIcon} />
+            <StatTile label="לידים שנכנסו" value={stats.leadCount} icon={SparklesIcon} chip="teal" accentClass="text-teal-700" />
           </div>
 
           <div className="mt-3 rounded-card border border-ink-700 surface p-4">

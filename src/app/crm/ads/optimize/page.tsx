@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { InboxIcon, SpinnerIcon, TargetIcon, WalletIcon } from '@/components/icons';
+import { InsightIcon } from '@/components/crm/InsightIcon';
 import { buildRecommendations, type RecommendationTone } from '@/lib/crm/adsOptimizer';
 import { fetchCampaignPerf, formatSpend, type CampaignPerf } from '@/lib/crm/facebookAds';
 import { getFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
@@ -176,9 +177,7 @@ export default function CrmAdsOptimizePage() {
                   key={i}
                   className={`flex gap-2 rounded-card border surface p-3 text-sm leading-relaxed ${TONE_STYLE[rec.tone]}`}
                 >
-                  <span aria-hidden className="shrink-0">
-                    {rec.emoji}
-                  </span>
+                  <InsightIcon emoji={rec.emoji} className="mt-0.5 h-4.5 w-4.5" />
                   <span>{rec.text}</span>
                 </li>
               ))}

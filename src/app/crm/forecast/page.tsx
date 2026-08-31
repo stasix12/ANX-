@@ -7,9 +7,11 @@ import { CrmShell } from '@/components/crm/CrmShell';
 import { LeadCard } from '@/components/crm/LeadCard';
 import { MONTH_LONG } from '@/components/crm/YearRevenueChart';
 import {
+  AlertTriangleIcon,
   CalendarIcon,
   ClockIcon,
   GemIcon,
+  LightbulbIcon,
   PlusIcon,
   SpinnerIcon,
   TrendingUpIcon,
@@ -179,8 +181,9 @@ export default function CrmForecastPage() {
             <div className="mt-2">
               <AdsBarChart points={points} selected={selected} onSelect={setSelected} scrollTo="start" />
             </div>
-            <p className="mt-1 text-xs font-semibold text-mist-500">
-              💡 14 הימים הקרובים — לחץ על עמודה לפירוט.
+            <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-mist-500">
+              <LightbulbIcon className="h-4 w-4 shrink-0 text-amber-600" />
+              14 הימים הקרובים — לחץ על עמודה לפירוט.
             </p>
           </div>
 
@@ -189,8 +192,9 @@ export default function CrmForecastPage() {
               href="/crm/leads"
               className="mt-3 flex items-center justify-between gap-3 rounded-card border border-amber-500/40 bg-amber-500/10 px-4 py-3"
             >
-              <span className="text-sm font-bold text-amber-800">
-                ⏳ עוד {formatPrice(view.noDateSum)} מ-
+              <span className="flex items-center gap-2 text-sm font-bold text-amber-800">
+                <AlertTriangleIcon className="h-4.5 w-4.5 shrink-0" />
+                עוד {formatPrice(view.noDateSum)} מ-
                 {view.noDateCount === 1 ? 'עבודה אחת' : `${view.noDateCount} עבודות`} בלי תאריך — קבע להן מועד
               </span>
               <span aria-hidden className="text-amber-800">←</span>

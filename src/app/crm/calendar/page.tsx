@@ -214,22 +214,23 @@ export default function CrmCalendarPage() {
                     >
                       {Number(date.slice(8, 10))}
                     </span>
-                    {/* One dot per job; a crowded day collapses to its count. */}
-                    {jobs.length > 6 ? (
-                      <span aria-hidden className="text-[10px] font-extrabold leading-none text-brand-400">
-                        {jobs.length}
-                      </span>
-                    ) : (
-                      <span className="flex gap-0.5">
-                        {jobs.map((job) => (
+                    {/* One dot per job; a crowded day collapses to its count.
+                        The row keeps a fixed height so all cells stay level. */}
+                    <span className="flex h-2 items-center gap-0.5">
+                      {jobs.length > 6 ? (
+                        <span aria-hidden className="text-[10px] font-extrabold leading-none text-brand-400">
+                          {jobs.length}
+                        </span>
+                      ) : (
+                        jobs.map((job) => (
                           <span
                             key={job.id}
                             aria-hidden
                             className={`h-1.5 w-1.5 rounded-full ${statusById[job.status].dotClass}`}
                           />
-                        ))}
-                      </span>
-                    )}
+                        ))
+                      )}
+                    </span>
                   </button>
                 );
               })}

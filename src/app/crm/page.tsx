@@ -5,7 +5,26 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { CrmShell } from '@/components/crm/CrmShell';
 import { LeadCard } from '@/components/crm/LeadCard';
-import { LogOutIcon, NavigationIcon, PhoneIcon, PlusIcon, SpinnerIcon, WhatsAppIcon } from '@/components/icons';
+import {
+  AlarmClockIcon,
+  BanknoteIcon,
+  BriefcaseIcon,
+  CalendarIcon,
+  ChartIcon,
+  CheckCircleIcon,
+  GemIcon,
+  LogOutIcon,
+  MegaphoneIcon,
+  NavigationIcon,
+  PhoneIcon,
+  PlusIcon,
+  SparklesIcon,
+  SpinnerIcon,
+  TrendingUpIcon,
+  WalletIcon,
+  WhatsAppIcon,
+  XCircleIcon,
+} from '@/components/icons';
 import { signOut } from '@/lib/adminAuth';
 import {
   addDaysISO,
@@ -55,17 +74,32 @@ function untilLabel(lead: Lead, today: string): string {
   return `${formatDateHe(lead.jobDate)}${lead.jobTime ? ` · ${timeLabel(lead)}` : ''}`;
 }
 
+type TileIcon = React.ComponentType<{ className?: string }>;
+
+/** Semantic tints for icon chips — one language across every KPI tile. */
+const CHIP = {
+  green: 'bg-emerald-500/10 text-emerald-600',
+  blue: 'bg-sky-500/10 text-brand-400',
+  teal: 'bg-teal-500/10 text-teal-700',
+  amber: 'bg-amber-500/15 text-amber-700',
+  red: 'bg-red-500/10 text-red-600',
+  violet: 'bg-violet-500/10 text-violet-700',
+  gray: 'bg-ink-950 text-mist-500',
+} as const;
+
 function StatTile({
   label,
   value,
   href,
-  emoji,
+  icon: Icon,
+  chip = 'gray',
   accentClass = '',
 }: {
   label: string;
   value: string | number;
   href: string;
-  emoji: string;
+  icon: TileIcon;
+  chip?: keyof typeof CHIP;
   accentClass?: string;
 }) {
   return (
@@ -77,8 +111,8 @@ function StatTile({
         <p className={`text-2xl font-extrabold tabular-nums ${accentClass}`}>{value}</p>
         <p className="mt-1 text-sm font-semibold text-mist-500">{label}</p>
       </div>
-      <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
-        {emoji}
+      <span aria-hidden className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${CHIP[chip]}`}>
+        <Icon className="h-5 w-5" />
       </span>
     </Link>
   );
@@ -93,13 +127,13 @@ function AdSpendTile({
   spend,
   conversations,
   currency,
-  emoji,
+  icon: Icon,
 }: {
   label: string;
   spend: number;
   conversations: number;
   currency: string;
-  emoji: string;
+  icon: TileIcon;
 }) {
   return (
     <Link
@@ -124,8 +158,8 @@ function AdSpendTile({
           ) : null}
         </p>
       </div>
-      <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
-        {emoji}
+      <span aria-hidden className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${CHIP.blue}`}>
+        <Icon className="h-5 w-5" />
       </span>
     </Link>
   );
@@ -148,7 +182,7 @@ function NextJobCard({ lead, today, first = true }: { lead: Lead; today: string;
       <Link href={`/crm/leads/${lead.id}`} className="block p-4 pb-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] font-extrabold uppercase tracking-wide text-brand-400">
-            {first ? '⚡ העבודה הבאה' : 'בהמשך'}
+            {first ? 'העבודה הבאה' : 'בהמשך'}
           </p>
           <span className="rounded-full bg-brand-500/10 px-2.5 py-0.5 text-xs font-extrabold tabular-nums text-brand-400">
             {untilLabel(lead, today)}
@@ -355,14 +389,14 @@ export default function CrmDashboardPage() {
                 spend={adSpend.today}
                 conversations={adSpend.todayConversations}
                 currency={adSpend.currency}
-                emoji="📣"
+                icon={MegaphoneIcon}
               />
               <AdSpendTile
                 label="פרסום החודש"
                 spend={adSpend.month}
                 conversations={adSpend.monthConversations}
                 currency={adSpend.currency}
-                emoji="💸"
+                icon={WalletIcon}
               />
               {/* Full-width weekly summary bar under the two squares. */}
               <Link
@@ -370,8 +404,8 @@ export default function CrmDashboardPage() {
                 className="col-span-2 flex items-center justify-between gap-3 rounded-card border border-brand-500/30 bg-brand-500/5 px-4 py-3.5 transition-colors hover:border-brand-500/50"
               >
                 <div className="flex items-center gap-3">
-                  <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
-                    📊
+                  <span aria-hidden className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${CHIP.blue}`}>
+                    <ChartIcon className="h-5 w-5" />
                   </span>
                   <div>
                     <p className="text-sm font-semibold text-mist-500">פרסום השבוע</p>
@@ -412,14 +446,14 @@ export default function CrmDashboardPage() {
           {view.nextJobs.length > 0 ? <NextJobsCarousel jobs={view.nextJobs} today={today} /> : null}
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <StatTile label="הכנסות היום" value={formatPrice(view.revenueToday)} href="/crm/stats" emoji="💰" accentClass="text-emerald-600" />
-            <StatTile label="הכנסות החודש" value={formatPrice(view.revenueMonth)} href="/crm/stats" emoji="📈" accentClass="text-emerald-600" />
-            <StatTile label="עבודות היום" value={view.todayJobs.length} href="/crm/calendar" emoji="🧽" />
-            <StatTile label="עבודות מחר" value={view.tomorrowJobs.length} href="/crm/calendar" emoji="⏰" />
-            <StatTile label="עבודות השבוע" value={view.weekCount} href="/crm/calendar" emoji="📅" />
-            <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" emoji="✨" accentClass="text-teal-700" />
-            <StatTile label="הושלמו החודש" value={view.completedMonth} href="/crm/leads?status=completed" emoji="✅" />
-            <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" emoji="❌" />
+            <StatTile label="הכנסות היום" value={formatPrice(view.revenueToday)} href="/crm/stats" icon={BanknoteIcon} chip="green" accentClass="text-emerald-600" />
+            <StatTile label="הכנסות החודש" value={formatPrice(view.revenueMonth)} href="/crm/stats" icon={TrendingUpIcon} chip="green" accentClass="text-emerald-600" />
+            <StatTile label="עבודות היום" value={view.todayJobs.length} href="/crm/calendar" icon={BriefcaseIcon} chip="blue" />
+            <StatTile label="עבודות מחר" value={view.tomorrowJobs.length} href="/crm/calendar" icon={AlarmClockIcon} chip="blue" />
+            <StatTile label="עבודות השבוע" value={view.weekCount} href="/crm/calendar" icon={CalendarIcon} chip="blue" />
+            <StatTile label="לידים חדשים" value={view.newCount} href="/crm/leads?status=new" icon={SparklesIcon} chip="teal" accentClass="text-teal-700" />
+            <StatTile label="הושלמו החודש" value={view.completedMonth} href="/crm/leads?status=completed" icon={CheckCircleIcon} chip="green" />
+            <StatTile label="בוטלו החודש" value={view.canceledMonth} href="/crm/leads?status=canceled" icon={XCircleIcon} chip="red" />
           </div>
 
           {/* Doorway to the forecast page, carrying its headline number. */}
@@ -428,8 +462,8 @@ export default function CrmDashboardPage() {
             className="mt-3 flex items-center justify-between gap-3 rounded-card border border-emerald-600/30 bg-emerald-500/5 px-4 py-3.5 transition-colors hover:border-emerald-600/50"
           >
             <div className="flex items-center gap-3">
-              <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-950 text-xl">
-                🔮
+              <span aria-hidden className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${CHIP.green}`}>
+                <GemIcon className="h-5 w-5" />
               </span>
               <div>
                 <p className="text-sm font-bold">צפי הכנסה</p>

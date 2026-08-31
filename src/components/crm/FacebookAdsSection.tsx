@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { SpinnerIcon } from '@/components/icons';
+import { CalendarIcon, ChartIcon, MegaphoneIcon, SpinnerIcon } from '@/components/icons';
 import {
   conversationsLine,
   exchangeForLongLived,
@@ -20,20 +20,20 @@ const inputClass =
 function SpendTile({
   label,
   value,
-  emoji,
+  icon: Icon,
   detail,
 }: {
   label: string;
   value: string;
-  emoji: string;
+  icon: React.ComponentType<{ className?: string }>;
   detail?: string;
 }) {
   // Stacked and centered — three of these share one row on a phone.
   return (
     <div className="rounded-card border border-ink-700 surface p-3 text-center">
-      <p aria-hidden className="text-lg leading-none">
-        {emoji}
-      </p>
+      <span aria-hidden className="mx-auto grid h-8 w-8 place-items-center rounded-lg bg-sky-500/10 text-brand-400">
+        <Icon className="h-4.5 w-4.5" />
+      </span>
       <p className="mt-1.5 text-lg font-extrabold tabular-nums text-brand-400">{value}</p>
       <p className="mt-0.5 text-xs font-semibold text-mist-500">{label}</p>
       {detail ? (
@@ -515,19 +515,19 @@ export function FacebookAdsSection({ leads }: { leads: Lead[] }) {
             <SpendTile
               label="היום"
               value={formatSpend(spend.today, spend.currency)}
-              emoji="📣"
+              icon={MegaphoneIcon}
               detail={conversationsLine(spend.todayConversations, spend.today, spend.currency)}
             />
             <SpendTile
               label="החודש"
               value={formatSpend(spend.month, spend.currency)}
-              emoji="🗓️"
+              icon={CalendarIcon}
               detail={conversationsLine(spend.monthConversations, spend.month, spend.currency)}
             />
             <SpendTile
               label="השנה"
               value={formatSpend(spend.year, spend.currency)}
-              emoji="📊"
+              icon={ChartIcon}
               detail={conversationsLine(spend.yearConversations, spend.year, spend.currency)}
             />
           </div>

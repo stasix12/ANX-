@@ -1,0 +1,11 @@
+{
+  "name": "anx-site-factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Генератор сайтов-визиток для малого бизнеса: clients/<name>.json → dist/<slug>/",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "node generate.js --all"
+  }
+}

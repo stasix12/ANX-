@@ -1,0 +1,14 @@
+{
+  "name": "anx-channel-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Автопилот для Telegram-канала со скидками: сбор источников, AI-рерайт на русском, публикация после одобрения админа.",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "start": "node --env-file=.env index.js",
+    "fetch-once": "node --env-file=.env index.js --fetch-once"
+  }
+}

@@ -104,7 +104,7 @@ export function CrmShell({
       {/* Water-gradient header — the CRM's one loud brand surface. The
           safe-area padding stretches the gradient up under the iPhone's
           status bar (clock/battery) so the title starts below it. */}
-      <header className="sticky top-0 z-40 bg-gradient-to-l from-sky-700 via-sky-500 to-cyan-400 pt-[env(safe-area-inset-top)] shadow-md shadow-sky-900/25">
+      <header className="sticky top-0 z-40 bg-gradient-to-l from-blue-800 via-teal-600 to-emerald-500 pt-[env(safe-area-inset-top)] shadow-md shadow-blue-900/25">
         <div className="flex items-center justify-between px-4 pb-2.5 pt-3">
           <h1 className="text-xl font-extrabold tracking-tight text-white drop-shadow-sm">{title}</h1>
           {headerAction}
@@ -127,7 +127,7 @@ export function CrmShell({
             <Link
               href="/crm/leads/new"
               aria-label="ליד חדש"
-              className="-mt-7 flex h-14 w-14 flex-col items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-cyan-400 text-white shadow-lg shadow-sky-600/40 ring-4 ring-ink-850 transition-[transform,box-shadow] duration-200 hover:scale-105 active:scale-90 active:shadow-md active:shadow-sky-600/30"
+              className="-mt-7 flex h-14 w-14 flex-col items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-400 text-white shadow-lg shadow-emerald-600/40 ring-4 ring-ink-850 transition-[transform,box-shadow] duration-200 hover:scale-105 active:scale-90 active:shadow-md active:shadow-emerald-600/30"
             >
               <PlusIcon className="h-7 w-7" strokeWidth={2.4} />
             </Link>

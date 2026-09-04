@@ -124,15 +124,16 @@
   --color-mist-300: #3c5476;
   --color-mist-500: #5b6b86;
 
-  /* Navy + green, the CRMToday-style duo: deep navy carries text accents
-     and KPI numbers (brand-400), fresh green carries every action fill —
-     buttons, toggles, the FAB (brand-500). brand-300 stays the darker
+  /* The hybrid identity: clean-water sky-blue carries every action fill —
+     buttons, toggles, the FAB, chart columns (brand-500) — while deep navy
+     carries the text accents and KPI numbers (brand-400), and green stays
+     reserved for revenue and success. brand-300 is the darker
      chart-highlight step so a selected column pops. */
-  --color-brand-300: #047857;
+  --color-brand-300: #075985;
   --color-brand-400: #2b479c;
-  --color-brand-500: #059669;
-  --color-brand-600: #047857;
-  --color-brand-700: #065f46;
+  --color-brand-500: #0284c7;
+  --color-brand-600: #026da5;
+  --color-brand-700: #075985;
   --color-on-brand: #ffffff;
 }
 
@@ -168,7 +169,7 @@
 /* Segmented controls: the active segment floats on a brand-tinted shadow —
    one rule upgrades every view/range toggle in the app. */
 .crm-theme [role='group'] > [aria-pressed='true'] {
-  box-shadow: 0 2px 10px rgba(5, 150, 105, 0.35);
+  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.35);
 }
 
 /*

@@ -192,7 +192,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function NextJobCard({ lead, today, first = true }: { lead: Lead; today: string; first?: boolean }) {
   return (
     <div className="relative h-full overflow-hidden rounded-card border border-brand-500/25 surface">
-      <span aria-hidden className="absolute inset-y-0 start-0 w-1 bg-gradient-to-b from-blue-700 to-emerald-500" />
+      <span aria-hidden className="absolute inset-y-0 start-0 w-1 bg-gradient-to-b from-sky-500 to-cyan-400" />
       <Link href={`/crm/leads/${lead.id}`} className="block p-4 pb-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] font-extrabold uppercase tracking-wide text-brand-400">

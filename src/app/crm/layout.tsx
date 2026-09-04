@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   // The header gradient's sky blue, so the phone's status bar blends into it.
-  themeColor: '#1e40af',
+  themeColor: '#0284c7',
   colorScheme: 'light',
   // Fixed scale so form taps don't zoom the layout — the CRM sets 16px+ font
   // sizes on every input, which is what actually prevents iOS auto-zoom.

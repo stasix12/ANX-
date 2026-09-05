@@ -116,6 +116,21 @@ https://wa.me/972535257250?text=<הודעה מקודדת>
 
 ההודעה נבנית ב-`src/lib/site.ts` דרך `encodeURIComponent`, כך שהעברית עוברת תקין בכל המכשירים. שינוי המספר במקום אחד (`site.whatsappNumber`) מתעדכן בכל האתר.
 
+## בוט WhatsApp אוטומטי (נציג AI)
+
+נציג שירות ומכירות אוטומטי שעונה ללקוחות בוואטסאפ: מבין מה הלקוח צריך (עברית/רוסית), נותן מחיר רק מתוך המחירון המוגדר, מנתח תמונות של ספות/מזרנים, בודק זמינות אמיתית מול יומן ה-CRM, קובע תורים ושומר כל ליד ב-CRM. שיחות רגישות (תלונה, בקשת הנחה חריגה, "תן לי בן אדם") עוברות לנציג אנושי והבוט משתתק בשיחה הזו.
+
+הקוד: `src/lib/whatsapp/` (המוח, המחירון, היומן, סנכרון לידים) ו-`src/app/api/whatsapp/webhook/route.ts` (ה-Webhook של Meta). הפרומפט של הנציג נמצא ב-`src/lib/whatsapp/systemPrompt.ts`.
+
+### הפעלה
+
+1. להריץ את `supabase/whatsapp-schema.sql` ב-SQL Editor של Supabase (אחרי `schema.sql` ו-`crm-schema.sql`). זה יוצר את טבלאות השיחות וזורע מחירון התחלתי ב-`crm_settings` תחת המפתח `whatsapp_bot` — **לערוך שם את המחירון, אזור השירות ושעות העבודה**. שירות בלי מחיר גורם לבוט לבקש תמונה או להעביר לנציג במקום להמציא מחיר.
+2. למלא את משתני הסביבה מ-`.env.example`: מפתח service-role של Supabase, מפתח Anthropic, וטוקנים של WhatsApp Cloud API (Meta for Developers).
+3. לפרוס על שרת (Vercel וכד' — לא GitHub Pages: ה-webhook צריך שרת, ולכן הוא מוחרג אוטומטית מבניית ה-export הסטטית).
+4. ב-Meta: להגדיר Webhook על `https://<domain>/api/whatsapp/webhook` עם ה-verify token שבחרתם, ולהירשם לאירועי `messages`.
+
+הבוט רץ על Claude‏ (`claude-opus-5`) עם גיבוי אוטומטי ל-`claude-opus-4-8` אם הבקשה נדחית, כך שלקוח לא נשאר בלי מענה.
+
 ## מבנה הפרויקט
 
 ```

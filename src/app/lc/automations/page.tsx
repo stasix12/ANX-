@@ -151,6 +151,11 @@ function AutomationModal({ automation, onClose, onSave }: { automation: Automati
           <Field label=" "><Select value={unit} onChange={(e) => setF({ ...f, delayMinutes: sign * (abs / unit) * Number(e.target.value) })}><option value={1}>{t('common.minutes')}</option><option value={60}>{t('common.hours')}</option><option value={1440}>{t('common.days')}</option></Select></Field>
           <Field label=" "><Select value={sign} onChange={(e) => setF({ ...f, delayMinutes: Number(e.target.value) * abs })} disabled={f.trigger !== 'before_appointment'}><option value={1}>{t('auto.after')}</option><option value={-1}>{t('auto.before')}</option></Select></Field>
         </div>
+        {f.audience === 'customer' && (
+          <Field label={t('wa.template')} hint={t('wa.templateHint')}>
+            <input value={f.whatsappTemplate ?? ''} onChange={(e) => setF({ ...f, whatsappTemplate: e.target.value.trim() || undefined })} placeholder="lc_followup_1" dir="ltr" className="h-10 w-full rounded-xl border border-lc-border px-3 font-mono text-sm" />
+          </Field>
+        )}
         <Field label={t('common.language')}><Select value={f.language} onChange={(e) => setF({ ...f, language: e.target.value as Automation['language'] })}><option value="auto">{t('auto.langAuto')}</option>{(['he', 'ru', 'en'] as Locale[]).map((l) => <option key={l} value={l}>{LOCALE_META[l].native}</option>)}</Select></Field>
         <div>
           <div className="mb-1.5 flex items-center justify-between">

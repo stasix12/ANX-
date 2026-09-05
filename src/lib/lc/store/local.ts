@@ -7,7 +7,11 @@ function read(orgId: string): Snapshot | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = window.localStorage.getItem(KEY(orgId));
-    return raw ? (JSON.parse(raw) as Snapshot) : null;
+    if (!raw) return null;
+    const snap = JSON.parse(raw) as Snapshot;
+    // Forward-compatibility for workspaces saved before a collection existed.
+    snap.integrations ??= [];
+    return snap;
   } catch {
     return null;
   }

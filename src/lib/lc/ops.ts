@@ -13,6 +13,7 @@ import type {
   CollectionRow,
   Conversation,
   Customer,
+  Integration,
   Job,
   JobStatus,
   Lead,
@@ -515,6 +516,18 @@ export function updateCustomer(s: Snapshot, customer: Customer, now = new Date()
   tx.put('customers', customer);
   return tx.done();
 }
+export function upsertIntegration(s: Snapshot, integration: Integration, now = new Date()): Patch {
+  const tx = new Tx(s, now);
+  tx.put('integrations', { ...integration, updatedAt: now.toISOString() });
+  tx.log('owner', 'integration', integration.id, integration.status === 'connected' ? 'integration_connected' : 'integration_updated', { provider: integration.provider });
+  return tx.done();
+}
+export function removeIntegration(s: Snapshot, id: string, now = new Date()): Patch {
+  const tx = new Tx(s, now);
+  tx.remove('integrations', id);
+  return tx.done();
+}
+
 export function setAdSpend(s: Snapshot, source: LeadSourceKey, amount: number, now = new Date()): Patch {
   const tx = new Tx(s, now);
   const ls = tx.s.leadSources.find((x) => x.key === source);

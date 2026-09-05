@@ -94,5 +94,6 @@ export function createBlankWorkspace(input: NewWorkspaceInput, now = new Date())
     automationRuns: [],
     leadSources: defaultLeadSources(id),
     activityLogs: [],
+    integrations: [],
   };
 }

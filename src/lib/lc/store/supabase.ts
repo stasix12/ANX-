@@ -26,6 +26,7 @@ const TABLE: Record<CollectionName, string> = {
   automationRuns: 'lc_automation_runs',
   leadSources: 'lc_lead_sources',
   activityLogs: 'lc_activity_logs',
+  integrations: 'lc_integrations',
 };
 
 const snake = (s: string) => s.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);

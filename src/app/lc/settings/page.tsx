@@ -8,6 +8,7 @@ import { Modal } from '@/components/lc/ui/overlay';
 import { Avatar, Badge, Button, Card, CardHeader, PageHeader } from '@/components/lc/ui/primitives';
 import { useToast } from '@/components/lc/ui/toast';
 import { INTEGRATIONS } from '@/lib/lc/adapters';
+import { WhatsAppCard } from '@/components/lc/settings/WhatsAppCard';
 import { useLc } from '@/lib/lc/context';
 import { saveOrganization } from '@/lib/lc/ops';
 import type { Industry, Organization } from '@/lib/lc/types';
@@ -61,10 +62,12 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2 border-t border-lc-border px-5 py-3 text-xs text-lc-muted"><ShieldIcon className="h-4 w-4" />{mode === 'live' ? `Supabase Auth · RLS · ${userEmail ?? ''}` : t('common.demoBadge')}</div>
             </Card>
 
+            <WhatsAppCard />
+
             <Card>
               <CardHeader title={t('set.integrations')} subtitle={t('set.integrationsHint')} />
               <ul className="divide-y divide-lc-border px-5 pb-3 pt-2">
-                {INTEGRATIONS.map((i) => (
+                {INTEGRATIONS.filter((i) => i.key !== 'whatsapp').map((i) => (
                   <li key={i.key} className="flex items-center gap-3 py-3">
                     <span className="grid h-9 w-9 place-items-center rounded-lg bg-lc-bg text-lc-muted"><GlobeIcon className="h-4 w-4" /></span>
                     <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-lc-text">{i.name}</span><span className="block truncate text-xs text-lc-muted">{i.adapter.name}</span></span>

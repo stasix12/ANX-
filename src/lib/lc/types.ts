@@ -320,6 +320,8 @@ export interface Automation {
   /** 'auto' = customer's language */
   language: Locale | 'auto';
   audience: 'customer' | 'worker' | 'owner';
+  /** Approved WhatsApp template name, used when the 24h customer-service window is closed. */
+  whatsappTemplate?: string;
 }
 
 export interface AutomationRun {
@@ -393,6 +395,36 @@ export interface ActivityLog {
   createdAt: string;
 }
 
+export type IntegrationProvider = 'whatsapp_cloud';
+
+/**
+ * A connected external account. Secrets live here because the owner enters
+ * them in the UI; Row Level Security keeps them inside the organisation and
+ * the browser never uses them directly — every call to the provider goes
+ * through a server route.
+ */
+export interface Integration {
+  id: string;
+  organizationId: string;
+  provider: IntegrationProvider;
+  status: 'connected' | 'error' | 'disconnected';
+  config: {
+    /** Meta: the phone number id that receives/sends messages. */
+    phoneNumberId?: string;
+    /** Meta: WhatsApp Business Account id (informational). */
+    wabaId?: string;
+    /** Meta: permanent system-user access token with whatsapp_business_messaging. */
+    accessToken?: string;
+    /** Display phone, e.g. +972 50-123-4567 (filled by the test call). */
+    displayPhone?: string;
+    verifiedName?: string;
+    qualityRating?: string;
+  };
+  lastError: string | null;
+  connectedAt: string | null;
+  updatedAt: string;
+}
+
 /** Conversation memory the agent keeps between turns. */
 export interface AgentState {
   step: 'greet' | 'discover' | 'qualify' | 'quote' | 'schedule' | 'confirm' | 'done' | 'handoff';
@@ -423,6 +455,7 @@ export interface Snapshot {
   automationRuns: AutomationRun[];
   leadSources: LeadSource[];
   activityLogs: ActivityLog[];
+  integrations: Integration[];
 }
 
 export type CollectionName = Exclude<keyof Snapshot, 'organization' | 'settings' | 'subscription'>;
@@ -445,6 +478,7 @@ export const COLLECTIONS: CollectionName[] = [
   'automationRuns',
   'leadSources',
   'activityLogs',
+  'integrations',
 ];
 
 export function emptyQualification(): Qualification {

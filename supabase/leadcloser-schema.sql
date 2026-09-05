@@ -318,6 +318,22 @@ create table if not exists public.lc_activity_logs (
 );
 create index if not exists lc_logs_org_idx on public.lc_activity_logs (organization_id, created_at desc);
 
+-- Connected external accounts (WhatsApp Cloud API …). Secrets are protected by
+-- RLS and only ever used by server routes.
+create table if not exists public.lc_integrations (
+  id text primary key,
+  organization_id text not null references public.lc_organizations(id) on delete cascade,
+  provider text not null,
+  status text not null default 'disconnected' check (status in ('connected','error','disconnected')),
+  config jsonb not null default '{}',
+  last_error text,
+  connected_at timestamptz,
+  updated_at timestamptz not null default now(),
+  unique (organization_id, provider)
+);
+-- The webhook looks organisations up by the Meta phone_number_id.
+create index if not exists lc_integrations_phone_idx on public.lc_integrations ((config->>'phoneNumberId'));
+
 -- ───────────────────────────── Row Level Security ─────────────────────────────
 -- Organisations: members read; any signed-in user may create one (they become
 -- its owner via the members insert that follows); owners/admins update.
@@ -358,7 +374,7 @@ begin
   foreach t in array array[
     'lc_ai_agent_settings','lc_subscriptions','lc_customers','lc_lead_sources','lc_leads','lc_conversations',
     'lc_messages','lc_services','lc_pricing_rules','lc_quotes','lc_bookings','lc_jobs','lc_workers',
-    'lc_automations','lc_automation_runs','lc_activity_logs'
+    'lc_automations','lc_automation_runs','lc_activity_logs','lc_integrations'
   ] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "lc tenant select" on public.%I', t);
@@ -385,9 +401,22 @@ create or replace view public.lc_jobs_for_worker as
   left join public.lc_organization_members m on m.organization_id = j.organization_id and m.user_id = auth.uid()::text
   left join public.lc_workers w on w.id = m.worker_id;
 
+-- Realtime: the inbox refreshes when the WhatsApp webhook writes new rows.
+do $$
+declare t text;
+begin
+  foreach t in array array['lc_messages','lc_conversations','lc_leads','lc_jobs','lc_bookings','lc_automation_runs'] loop
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then null;
+    end;
+  end loop;
+end $$;
+
 -- Storage bucket for customer photos (public read, member write).
 insert into storage.buckets (id, name, public) values ('lc-photos', 'lc-photos', true) on conflict (id) do nothing;
 drop policy if exists "lc photos read" on storage.objects;
 create policy "lc photos read" on storage.objects for select using (bucket_id = 'lc-photos');
 drop policy if exists "lc photos write" on storage.objects;
 create policy "lc photos write" on storage.objects for insert to authenticated with check (bucket_id = 'lc-photos');
+-- The webhook (service role) also writes customer photos it downloads from Meta.

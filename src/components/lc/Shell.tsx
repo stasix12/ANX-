@@ -268,6 +268,7 @@ export function Shell({ children, title, wide, flush }: { children: ReactNode; t
     for (const e of events) {
       if (e.type === 'booked') toast.success(t('toast.booked'), `${e.payload?.customer ?? ''} · ₪${e.payload?.total ?? ''}`);
       else if (e.type === 'handoff') toast.info(t('toast.handoff'));
+      else if (e.type === 'wa_send_failed') toast.error(t('wa.sendFailed'), e.payload?.error === 'outside_24h_window_no_template' ? t('wa.windowClosed') : String(e.payload?.error ?? ''));
     }
     clearEvents();
   }, [events, clearEvents, toast, t]);

@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { buildDemoSnapshot, DEMO_ORG_ID } from './demo/seed';
 import { LOCALE_META, t as translate, type TKey } from './i18n';
 import { tick, type Patch, type Write } from './ops';
+import { outboundFromWrites } from './outbound';
 import { getMode, getOrgId, getStoredLocale, hasSupabase, setMode, setOrgId, setStoredLocale, storeFor, supabaseStoreOrNull, type Mode } from './session';
 import type { LcStore } from './store/types';
 import type { Locale, Snapshot } from './types';
@@ -155,10 +156,35 @@ export function LcProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const apply = useCallback((patch: Patch) => {
+    const before = snapRef.current;
     setS(patch.snapshot);
     snapRef.current = patch.snapshot;
     if (storeRef.current) void persist(storeRef.current, patch.snapshot.organization.id, patch.writes);
     if (patch.events.length) setEvents((prev) => [...prev, ...patch.events]);
+    // Live mode: deliver new agent/owner messages to WhatsApp through the server.
+    if (storeRef.current?.kind === 'supabase' && before && supabase) {
+      const connected = patch.snapshot.integrations.some((i) => i.provider === 'whatsapp_cloud' && i.status === 'connected');
+      if (connected) {
+        const items = outboundFromWrites(before, patch.snapshot, patch.writes);
+        if (items.length) {
+          void supabase.auth.getSession().then(async ({ data }) => {
+            const token = data.session?.access_token;
+            if (!token) return;
+            for (const item of items) {
+              try {
+                const res = await fetch('/api/lc/whatsapp/send', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(item) });
+                if (!res.ok) {
+                  const err = (await res.json().catch(() => ({}))) as { error?: string };
+                  setEvents((prev) => [...prev, { type: 'wa_send_failed', payload: { error: err.error ?? res.statusText } }]);
+                }
+              } catch (e) {
+                setEvents((prev) => [...prev, { type: 'wa_send_failed', payload: { error: e instanceof Error ? e.message : String(e) } }]);
+              }
+            }
+          });
+        }
+      }
+    }
     return patch.events;
   }, []);
 
@@ -172,6 +198,27 @@ export function LcProvider({ children }: { children: React.ReactNode }) {
     },
     [apply],
   );
+
+  // Live mode: refresh when the webhook (or another device) writes to this organisation.
+  useEffect(() => {
+    if (status !== 'ready' || mode !== 'live' || !supabase || !s) return;
+    const orgId = s.organization.id;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void loadLive(orgId), 600);
+    };
+    const channel = supabase.channel(`lc:${orgId}`);
+    for (const table of ['lc_messages', 'lc_conversations', 'lc_leads', 'lc_jobs']) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `organization_id=eq.${orgId}` }, schedule);
+    }
+    channel.subscribe();
+    return () => {
+      if (timer) clearTimeout(timer);
+      void supabase?.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, mode, s?.organization.id, loadLive]);
 
   // Automation ticker: deliver due follow-ups/reminders every 20s.
   useEffect(() => {

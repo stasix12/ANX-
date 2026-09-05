@@ -423,6 +423,28 @@ const dict = {
   'shell.workspace': { he: 'סביבת עבודה', ru: 'Рабочее пространство', en: 'Workspace' },
   'shell.agentLive': { he: 'הסוכן פעיל', ru: 'Агент активен', en: 'Agent live' },
   'shell.agentOff': { he: 'הסוכן כבוי', ru: 'Агент выключен', en: 'Agent off' },
+
+  // WhatsApp integration
+  'wa.title': { he: 'WhatsApp Business', ru: 'WhatsApp Business', en: 'WhatsApp Business' },
+  'wa.connect': { he: 'חיבור WhatsApp', ru: 'Подключить WhatsApp', en: 'Connect WhatsApp' },
+  'wa.disconnect': { he: 'ניתוק', ru: 'Отключить', en: 'Disconnect' },
+  'wa.connected': { he: 'מחובר', ru: 'Подключено', en: 'Connected' },
+  'wa.notConnected': { he: 'לא מחובר', ru: 'Не подключено', en: 'Not connected' },
+  'wa.demoOnly': { he: 'חיבור אמיתי זמין רק במצב חי (Supabase)', ru: 'Реальное подключение доступно только в live-режиме (Supabase)', en: 'A real connection is available in live mode (Supabase) only' },
+  'wa.phoneNumberId': { he: 'Phone number ID', ru: 'Phone number ID', en: 'Phone number ID' },
+  'wa.wabaId': { he: 'WhatsApp Business Account ID', ru: 'WhatsApp Business Account ID', en: 'WhatsApp Business Account ID' },
+  'wa.accessToken': { he: 'Permanent access token', ru: 'Постоянный access token', en: 'Permanent access token' },
+  'wa.test': { he: 'בדיקת חיבור', ru: 'Проверить подключение', en: 'Test connection' },
+  'wa.testOk': { he: 'החיבור עובד', ru: 'Подключение работает', en: 'Connection works' },
+  'wa.webhookUrl': { he: 'כתובת Webhook להדבקה ב-Meta', ru: 'URL вебхука для Meta', en: 'Webhook URL to paste in Meta' },
+  'wa.verifyHint': { he: 'ה-Verify token הוא הערך של WHATSAPP_VERIFY_TOKEN במשתני הסביבה של השרת', ru: 'Verify token — значение WHATSAPP_VERIFY_TOKEN в переменных окружения сервера', en: 'The verify token is the WHATSAPP_VERIFY_TOKEN value in the server environment' },
+  'wa.howto': { he: 'איך מקבלים את הערכים', ru: 'Где взять значения', en: 'Where to find these values' },
+  'wa.howtoText': { he: 'Meta for Developers ← האפליקציה שלכם ← WhatsApp ← API Setup. שם מופיעים Phone number ID ו-WABA ID. את הטוקן הקבוע יוצרים דרך Business Settings ← System users ← Generate token עם ההרשאות whatsapp_business_messaging ו-whatsapp_business_management.', ru: 'Meta for Developers → ваше приложение → WhatsApp → API Setup: там Phone number ID и WABA ID. Постоянный токен создаётся в Business Settings → System users → Generate token с правами whatsapp_business_messaging и whatsapp_business_management.', en: 'Meta for Developers → your app → WhatsApp → API Setup shows the Phone number ID and WABA ID. Create the permanent token under Business Settings → System users → Generate token with whatsapp_business_messaging and whatsapp_business_management.' },
+  'wa.template': { he: 'תבנית WhatsApp מאושרת (מחוץ לחלון 24 שעות)', ru: 'Одобренный шаблон WhatsApp (вне окна 24 ч)', en: 'Approved WhatsApp template (outside the 24h window)' },
+  'wa.templateHint': { he: 'שם התבנית ב-Meta. ההודעה כאן נשלחת כפרמטר {{1}} של התבנית.', ru: 'Имя шаблона в Meta. Текст выше передаётся как параметр {{1}}.', en: 'Template name in Meta. The message above is sent as its {{1}} parameter.' },
+  'wa.sendFailed': { he: 'שליחה ל-WhatsApp נכשלה', ru: 'Отправка в WhatsApp не удалась', en: 'WhatsApp send failed' },
+  'wa.windowClosed': { he: 'עברו 24 שעות מההודעה האחרונה של הלקוח — צריך תבנית מאושרת', ru: 'Прошло 24 часа с последнего сообщения клиента — нужен одобренный шаблон', en: 'More than 24h since the customer’s last message — an approved template is required' },
+  'wa.live': { he: 'הודעות אמיתיות: תשובות הסוכן ושלכם נשלחות ללקוח ב-WhatsApp', ru: 'Реальные сообщения: ответы агента и ваши уходят клиенту в WhatsApp', en: 'Live messaging: agent and owner replies are delivered to the customer on WhatsApp' },
 } satisfies Record<string, Entry>;
 
 export type TKey = keyof typeof dict;

@@ -104,6 +104,13 @@ npx tsx scripts/lc-smoke.ts
 2. `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, ובצד השרת `SUPABASE_SERVICE_ROLE_KEY` (לקליטת לידים ב-`/api/lc/intake`). `ANTHROPIC_API_KEY` אופציונלי — כשהוא קיים, Claude מנסח מחדש את ניסוח הסוכן בלבד; ההחלטות (מחיר, שעה, הזמנה, העברה לאדם) נשארות דטרמיניסטיות.
 3. `/lc/login` → הרשמה → onboarding בשבעה צעדים → הפעלה.
 
+### חיבור WhatsApp אמיתי
+
+המדריך המלא, צעד אחר צעד (Supabase → Vercel → Meta Cloud API → תבניות → Live): **`docs/leadcloser/SETUP.md`**.
+בקצרה: מריצים את ה-SQL, פורסים ב-Vercel עם `SUPABASE_SERVICE_ROLE_KEY` ו-`WHATSAPP_VERIFY_TOKEN`, מגדירים ב-Meta את
+ה-webhook `https://<host>/api/lc/whatsapp/webhook`, ומדביקים Phone number ID + טוקן קבוע ב-**הגדרות ← WhatsApp Business**.
+בדיקה מהירה של הצנרת בלי Meta: `npx tsx scripts/lc-whatsapp-smoke.ts`.
+
 ### קליטת ליד מאתר / WhatsApp
 
 ```bash

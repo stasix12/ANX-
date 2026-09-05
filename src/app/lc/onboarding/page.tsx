@@ -59,7 +59,10 @@ export default function OnboardingPage() {
       await createLiveWorkspace(snap);
       setStep(2);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/lc_create_workspace/.test(msg)) setError(`${msg} — run supabase/leadcloser-upgrade-1.sql in the Supabase SQL Editor.`);
+      else if (/not signed in|JWT/i.test(msg)) setError(`${msg} — sign out and sign in again.`);
+      else setError(msg);
     } finally {
       setBusy(false);
     }

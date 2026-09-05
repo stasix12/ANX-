@@ -95,14 +95,27 @@ export class SupabaseStore implements LcStore {
     if (error) throw new Error(error.message);
   }
   async createWorkspace(snapshot: Snapshot) {
-    await this.saveOrganization(snapshot.organization);
-    // Membership first so RLS lets the following inserts through.
-    await this.putMany(snapshot.organization.id, 'members', snapshot.members);
-    await this.saveSettings(snapshot.settings);
-    await this.saveSubscription(snapshot.subscription);
+    // One atomic SECURITY DEFINER call (see leadcloser-upgrade-1.sql): the
+    // organisation, the owner membership and the template rows are inserted
+    // together, so a half-created workspace cannot exist.
+    const rows = (xs: object[]) => xs.map((x) => toRow(x as Record<string, unknown>));
+    const owner = snapshot.members.find((m) => m.role === 'owner') ?? snapshot.members[0];
+    const { error } = await this.client.rpc('lc_create_workspace', {
+      p_org: toRow(snapshot.organization as unknown as Record<string, unknown>),
+      p_member: owner ? toRow(owner as unknown as Record<string, unknown>) : {},
+      p_settings: toRow(snapshot.settings as unknown as Record<string, unknown>),
+      p_subscription: toRow(snapshot.subscription as unknown as Record<string, unknown>),
+      p_services: rows(snapshot.services),
+      p_rules: rows(snapshot.pricingRules),
+      p_automations: rows(snapshot.automations),
+      p_sources: rows(snapshot.leadSources),
+    });
+    if (error) throw new Error(error.message);
+    // Anything else the snapshot carries (demo imports) goes through the normal path.
     for (const c of COLLECTIONS) {
-      if (c === 'members') continue;
-      await this.putMany(snapshot.organization.id, c, snapshot[c] as CollectionRow<typeof c>[]);
+      if (['members', 'services', 'pricingRules', 'automations', 'leadSources'].includes(c)) continue;
+      const list = snapshot[c] as CollectionRow<typeof c>[];
+      if (list.length) await this.putMany(snapshot.organization.id, c, list);
     }
   }
   async destroyWorkspace(orgId: string) {

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NotificationsBell } from '@/components/market/NotificationsBell';
 import { JobOfferPopup } from '@/components/market/JobOfferPopup';
 import { market } from '@/lib/market/config';
@@ -37,10 +37,15 @@ export function ProShell({ children }: { children: React.ReactNode }) {
   const myAvailability = availability.find((a) => a.professionalId === proId);
   const online = myAvailability?.online ?? false;
 
-  // No pro signed in → back to the pro landing to pick/join.
+  // No pro signed in → back to the pro landing to pick/join. The session
+  // hydrates from localStorage in an effect, so the first render always has
+  // proId === null; gate the redirect on a ready flag that flips in the same
+  // effect pass, after the session has synced.
+  const [sessionReady, setSessionReady] = useState(false);
+  useEffect(() => setSessionReady(true), []);
   useEffect(() => {
-    if (typeof window !== 'undefined' && !proId) router.replace('/pro');
-  }, [proId, router]);
+    if (sessionReady && !proId) router.replace('/pro');
+  }, [sessionReady, proId, router]);
 
   // Heartbeat + offer expiry.
   useTicker(() => {

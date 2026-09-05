@@ -22,6 +22,33 @@ npm run dev      # http://localhost:3000
 | `npm run export` | ייצוא סטטי מלא לתיקיית `out/` (לכל אחסון סטטי) |
 | `npm run preview` | יצירת `preview.html` — קובץ אחד עצמאי עם כל האתר, לשליחה למישהו |
 
+## Marketplace — קלינגו (`/market`)
+
+בכתובת **`/market`** חיה פלטפורמת Marketplace בסגנון Uber/Gett שמחברת לקוחות לבעלי
+מקצוע בתחום הניקוי (ספות, מזרנים, מזגנים — וקטלוג מוכן להרחבה). שלושה ממשקים:
+
+| ממשק | כתובת | מה יש בו |
+| --- | --- | --- |
+| לקוח | `/market` | כתובת → שירות → שאלות תמחור → מחיר → "מצא לי מנקה" / בחירת מקצוען / הצעות מחיר → מעקב חי, צ'אט, תשלום ודירוג |
+| בעל מקצוע | `/pro` | Onboarding ב-8 שלבים, Dashboard, מצב זמין/לא-זמין, פופאפ "עבודה חדשה" עם ספירה לאחור, ארנק ומסלול יומי |
+| אדמין | `/market/admin` | KPI וגרפים, אישור/חסימת מקצוענים, עבודות + Refund, אזורים, קופונים, מודל עסקי (סיסמת דמו: `cleango-admin`) |
+
+**מצב דמו מובנה:** בלי שום מפתח חיצוני הכול עובד מקומית — הנתונים ב-localStorage,
+עדכוני זמן-אמת בין טאבים דרך BroadcastChannel, ומקצועני הדמו (אלכס ניקוי ספות,
+דוד קלין, CleanPro…) מקבלים עבודות ומתקדמים לבד. הדגמה מלאה: טאב אחד `/market`
+כלקוח, טאב שני `/pro` כמקצוען — וצפו בהזמנה זורמת בין השניים.
+
+**מעבר לפרודקשן:** מריצים את `supabase/marketplace-schema.sql` בפרויקט Supabase,
+מגדירים `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` — ושכבת
+הנתונים עוברת אוטומטית ל-Postgres + RLS + Realtime (`src/lib/market/store.ts`).
+מקומות לחיבור מפתחות נוספים: מפות ב-`src/lib/market/config.ts`, סליקה
+(Tranzila/Meshulam/Grow/PayPlus/Stripe) ב-`src/lib/market/payments.ts`,
+התראות/WhatsApp ב-`src/lib/market/notifications.ts`, פיקסלים ב-`analytics.ts`.
+
+עמודי SEO סטטיים נוצרים לכל שירות×עיר (`/sofa-cleaning/beer-sheva`,
+`/mattress-cleaning/arad`…) עם Schema.org + FAQ, ולכל מקצוען עמוד ציבורי
+(`/pro/[slug]`). מסמך התכנון המלא: `docs/marketplace/ARCHITECTURE.md`.
+
 ## מערכת ניהול לידים ועבודות (CRM)
 
 בכתובת **`/crm`** חיה מערכת ניהול פנימית לעסק הניקיון עצמו — לידים, עבודות, יומן והכנסות. כולה בעברית (RTL) ובנויה קודם כל לטלפון:

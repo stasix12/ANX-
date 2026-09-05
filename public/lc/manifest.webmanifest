@@ -1,0 +1,12 @@
+{
+  "name": "LeadCloser AI",
+  "short_name": "LeadCloser",
+  "description": "Turn incoming leads into booked jobs automatically.",
+  "id": "/lc",
+  "start_url": "/lc",
+  "scope": "/lc",
+  "display": "standalone",
+  "background_color": "#f6f7fb",
+  "theme_color": "#4f46e5",
+  "icons": [{ "src": "/lc/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

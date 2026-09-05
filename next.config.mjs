@@ -13,6 +13,11 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // LeadCloser's route handlers live in `route.api.ts` files. The extension is
+  // only registered for server builds: a static export (npm run export) cannot
+  // host POST handlers, and this way the storefront export keeps building
+  // while the SaaS API exists on a real server (Vercel & co).
+  pageExtensions: isExport ? ['tsx', 'ts', 'jsx', 'js'] : ['api.ts', 'tsx', 'ts', 'jsx', 'js'],
   // trailingSlash makes the export emit products/<slug>/index.html rather than
   // products/<slug>.html, so every page resolves as a plain directory index on
   // any static host, without relying on extensionless-URL rewriting.

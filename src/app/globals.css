@@ -952,3 +952,211 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ * LeadCloser AI (/lc) — premium light SaaS theme.
+ *
+ * Its own token namespace (lc-*) so it never collides with the storefront's
+ * dark amber palette or the CRM's blue. Inspired by Stripe / Linear: a cool
+ * off-white ground, white cards floated by a soft two-layer shadow, indigo
+ * for actions, green reserved for money, and generous spacing.
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+@theme {
+  --color-lc-bg: #f6f7fb;
+  --color-lc-card: #ffffff;
+  --color-lc-border: #e7e9f2;
+  --color-lc-border-strong: #d4d8e6;
+  --color-lc-text: #0f172a;
+  --color-lc-muted: #5b6579;
+  --color-lc-faint: #94a0b8;
+  --color-lc-primary: #4f46e5;
+  --color-lc-primary-hover: #4338ca;
+  --color-lc-primary-soft: #eef2ff;
+  --color-lc-primary-ring: #c7d2fe;
+  --color-lc-violet: #7c3aed;
+  --color-lc-success: #059669;
+  --color-lc-success-soft: #ecfdf5;
+  --color-lc-warning: #d97706;
+  --color-lc-warning-soft: #fffbeb;
+  --color-lc-danger: #dc2626;
+  --color-lc-danger-soft: #fef2f2;
+  --color-lc-info: #0284c7;
+  --color-lc-info-soft: #f0f9ff;
+  --color-lc-pink: #db2777;
+  --color-lc-pink-soft: #fdf2f8;
+  --color-lc-teal: #0d9488;
+  --color-lc-teal-soft: #f0fdfa;
+
+  --shadow-lc-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px -14px rgba(15, 23, 42, 0.12);
+  --shadow-lc-hover: 0 2px 4px rgba(15, 23, 42, 0.05), 0 18px 40px -16px rgba(15, 23, 42, 0.18);
+  --shadow-lc-pop: 0 4px 6px -2px rgba(15, 23, 42, 0.08), 0 24px 60px -20px rgba(15, 23, 42, 0.25);
+  --shadow-lc-primary: 0 8px 20px -8px rgba(79, 70, 229, 0.55);
+
+  --animate-lc-in: lc-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-lc-fade: lc-fade 0.25s ease-out both;
+  --animate-lc-pulse: lc-pulse 1.8s ease-in-out infinite;
+  --animate-lc-shimmer: lc-shimmer 1.4s linear infinite;
+  --animate-lc-typing: lc-typing 1.2s ease-in-out infinite;
+  --animate-lc-pop: lc-pop 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes lc-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes lc-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes lc-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.45); }
+  60% { box-shadow: 0 0 0 8px rgba(79, 70, 229, 0); }
+}
+@keyframes lc-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@keyframes lc-typing {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}
+@keyframes lc-pop {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.lc-theme {
+  color: var(--color-lc-text);
+  background-color: var(--color-lc-bg);
+  font-family: var(--font-inter), var(--font-heebo), 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'tnum';
+  -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+}
+.lc-theme :focus-visible {
+  outline: 2px solid var(--color-lc-primary);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+.lc-theme ::selection {
+  background-color: var(--color-lc-primary-soft);
+  color: var(--color-lc-primary-hover);
+}
+.lc-theme :is(a, button) {
+  -webkit-tap-highlight-color: transparent;
+}
+.lc-theme input,
+.lc-theme select,
+.lc-theme textarea {
+  font-size: 16px; /* no iOS zoom */
+}
+@media (min-width: 640px) {
+  .lc-theme input,
+  .lc-theme select,
+  .lc-theme textarea {
+    font-size: 0.875rem;
+  }
+}
+
+/* Cards */
+.lc-card {
+  background: var(--color-lc-card);
+  border: 1px solid var(--color-lc-border);
+  border-radius: 1.125rem;
+  box-shadow: var(--shadow-lc-card);
+  transition: box-shadow 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
+}
+.lc-card-hover:hover {
+  box-shadow: var(--shadow-lc-hover);
+  border-color: var(--color-lc-border-strong);
+  transform: translateY(-1px);
+}
+
+/* Page transitions: staggered entrance for top-level blocks. */
+.lc-page > * {
+  animation: lc-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.lc-page > :nth-child(2) { animation-delay: 40ms; }
+.lc-page > :nth-child(3) { animation-delay: 80ms; }
+.lc-page > :nth-child(4) { animation-delay: 120ms; }
+.lc-page > :nth-child(5) { animation-delay: 160ms; }
+.lc-page > :nth-child(n + 6) { animation-delay: 200ms; }
+
+/* Skeleton shimmer */
+.lc-skeleton {
+  background: linear-gradient(90deg, #eef0f6 25%, #f7f8fc 50%, #eef0f6 75%);
+  background-size: 200% 100%;
+  animation: lc-shimmer 1.4s linear infinite;
+  border-radius: 0.5rem;
+}
+
+/* Hero gradient (money card) */
+.lc-hero {
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(124, 58, 237, 0.55), transparent 55%),
+    radial-gradient(90% 120% at 0% 100%, rgba(16, 185, 129, 0.35), transparent 55%),
+    linear-gradient(135deg, #4338ca 0%, #4f46e5 45%, #6d28d9 100%);
+  color: #fff;
+}
+.lc-hero-grid {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(80% 80% at 70% 30%, #000 30%, transparent 100%);
+}
+
+/* Chat bubbles */
+.lc-bubble-customer {
+  background: #fff;
+  border: 1px solid var(--color-lc-border);
+  border-start-start-radius: 0.5rem;
+}
+.lc-bubble-ai {
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  color: #fff;
+  border-start-end-radius: 0.5rem;
+}
+.lc-bubble-owner {
+  background: #0f172a;
+  color: #fff;
+  border-start-end-radius: 0.5rem;
+}
+.lc-typing-dot {
+  animation: lc-typing 1.2s ease-in-out infinite;
+}
+.lc-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.lc-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+/* Thin scrollbars inside panels */
+.lc-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d8e6 transparent;
+}
+.lc-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.lc-scroll::-webkit-scrollbar-thumb { background: #d4d8e6; border-radius: 999px; }
+
+/* Number columns line up */
+.lc-tnum { font-variant-numeric: tabular-nums; }
+
+/* Live dot */
+.lc-live {
+  position: relative;
+}
+.lc-live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: lc-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-page > *, .lc-skeleton, .lc-live::after, .lc-typing-dot { animation: none !important; }
+}
+
+/* Grid children must be allowed to shrink below their content width, or a long
+   truncated label widens the whole column on phones. */
+.lc-theme .grid > * {
+  min-width: 0;
+}

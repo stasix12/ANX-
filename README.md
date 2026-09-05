@@ -63,6 +63,59 @@ npm run dev      # http://localhost:3000
 
 שימו לב: ה-CRM דורש שרת (Vercel וכדומה) — הוא לא נכלל בייצוא הסטטי כי הנתונים נטענים מ-Supabase בזמן אמת.
 
+## LeadCloser AI — פלטפורמת SaaS לסגירת לידים (`/lc`)
+
+> "Turn incoming leads into booked jobs automatically."
+
+מוצר SaaS נפרד שחי באותו מאגר תחת הנתיב **`/lc`**: סוכן מכירות AI לעסקי שירות מקומיים (הגרסה הראשונה ממוטבת לניקוי ריפודים ומזרנים; תעשיות נוספות נוספות כתבניות). עברית (RTL), רוסית ואנגלית מהיום הראשון, multi-tenant עם Row Level Security, ו-PWA שעובד מהטלפון.
+
+הזרימה המרכזית שעובדת מקצה לקצה: **ליד נכנס → שיחת AI → איסוף פרטים → חישוב מחיר במנוע התמחור → הצעת מחיר → בחירת שעה פנויה מהיומן → הזמנה → עבודה → הכנסה בדשבורד.**
+
+### הפעלה מהירה (סביבת דמו, ללא הגדרות)
+
+```bash
+npm install
+npm run dev
+# http://localhost:3000/lc/login → "כניסה לסביבת הדמו"
+```
+
+סביבת הדמו ("הפתרון המבריק") נבנית בדפדפן על ידי הרצת **מנוע הסוכן האמיתי** מול תסריטי לקוח בעברית וברוסית — כך שהמחירים, השעות, ההזמנות והעבודות תמיד עקביים עם המחירון והיומן. הנתונים נשמרים ב-localStorage; איפוס מ-**הגדרות → נתונים**.
+
+בדיקת עשן של הזרימה המלאה בלי דפדפן:
+
+```bash
+npx tsx scripts/lc-smoke.ts
+```
+
+### מבנה
+
+| תיקייה | תוכן |
+| --- | --- |
+| `src/lib/lc/` | ליבת הדומיין: `types.ts`, `pricing.ts` (מנוע תמחור — ה-AI מצטט **רק** מספרים משם), `scheduling.ts` (שעות פנויות, מניעת כפילויות), `agent/` (מנוע השיחה + מתאמי AI), `automations.ts`, `analytics.ts`, `ops.ts` (פעולות עסקיות טהורות), `store/` (LocalStore לדמו, SupabaseStore לפרודקשן), `adapters/` (WhatsApp, תשלומים, ביקורות, פרסום — mock עם ממשקים), `demo/seed.ts` |
+| `src/components/lc/` | ערכת UI (`ui/`), גרפים ב-SVG (`charts/`), Shell (סיידבר בדסקטופ, ניווט תחתון במובייל) |
+| `src/app/lc/` | המסכים: דשבורד, שיחות, סוכן AI, מחירון, יומן, עבודות, לקוחות, עובדים, אוטומציות, אנליטיקה, מנוי, הגדרות, onboarding, login |
+| `src/app/api/lc/` | Route handlers צד-שרת: `intake` (קליטת ליד ציבורית), `agent/reply` (תור של הסוכן), `quote` (תמחור) |
+| `supabase/leadcloser-schema.sql` | הסכימה המלאה + RLS |
+| `docs/leadcloser/ARCHITECTURE.md` | תכנון הארכיטקטורה, הסכימה, הנתיבים, הקומפוננטות וסדר המימוש |
+
+### חיבור ל-Supabase (מצב אמיתי)
+
+1. הריצו את `supabase/leadcloser-schema.sql` ב-SQL Editor. כל טבלה נושאת `organization_id`, וכל פוליסה בודקת `lc_is_member(organization_id)` — עסק לעולם לא רואה נתונים של עסק אחר.
+2. `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, ובצד השרת `SUPABASE_SERVICE_ROLE_KEY` (לקליטת לידים ב-`/api/lc/intake`). `ANTHROPIC_API_KEY` אופציונלי — כשהוא קיים, Claude מנסח מחדש את ניסוח הסוכן בלבד; ההחלטות (מחיר, שעה, הזמנה, העברה לאדם) נשארות דטרמיניסטיות.
+3. `/lc/login` → הרשמה → onboarding בשבעה צעדים → הפעלה.
+
+### קליטת ליד מאתר / WhatsApp
+
+```bash
+curl -X POST https://<host>/api/lc/intake -H 'content-type: application/json' -d '{
+  "organizationId": "org_xxx", "token": "<org slug>",
+  "name": "Наталья", "phone": "0501234567", "source": "google", "channel": "whatsapp",
+  "text": "Сколько стоит почистить угловой диван?"
+}'
+```
+
+התגובה מחזירה את הודעות הסוכן שנשלחו. ה-`route.api.ts` נרשם רק בבנייה לשרת (ב-`npm run export` הוא מושמט), כך שייצוא הסטטי של החנות ממשיך לעבוד.
+
 ## העלאה לאוויר
 
 הדרך הפשוטה ביותר היא Vercel (החברה שמפתחת את Next.js), בחינם:

@@ -34,6 +34,9 @@ WhatsApp שנכנסות ויוצאות מהמספר של העסק. סדר הפע
 | `ANTHROPIC_API_KEY` | אופציונלי, לניסוח טבעי יותר של הסוכן |
 
 3. **Deploy**. הכתובת שתקבלו נקראת בהמשך `https://<host>`.
+   הפריסה הראשונה נבנית מהענף הראשי של המאגר. כדי לפרוס את LeadCloser: **Settings → Environments → Production →
+   Branch Tracking** = `claude/leadcloser-ai-saas-o0rsly`, ואז כל push לענף נפרס אוטומטית. אם "Redeploy" מתלונן
+   שאין פריסה של הענף, די בקומיט אחד חדש לענף כדי להתחיל את הבנייה הראשונה.
 4. כניסה: `https://<host>/lc/login` → **יצירת חשבון** → onboarding בשבעה צעדים → **הפעלה**.
    עד שהעסק מופעל, ה-webhook מתעלם מהודעות שלו.
 

@@ -952,3 +952,72 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/*
+ * Platform theme — the closed-jobs platform (/clean customer site, /pro
+ * professionals app, /hq sales & admin). Light ground with a deep-teal
+ * "clean national brand" accent. Same token re-resolution trick as
+ * .crm-theme: the ink/mist/brand utilities invert without touching markup,
+ * and the storefront keeps its dark amber theme untouched.
+ *
+ * Contrast: white on brand-500 (#0e7490) ≈ 5.3:1; brand-400 text on white
+ * ≈ 6.6:1; mist-500 fine print ≈ 5.6:1.
+ */
+.platform-theme {
+  color: var(--color-mist-100);
+
+  --color-ink-950: #eef4f6;
+  --color-ink-900: #f6fafb;
+  --color-ink-850: #ffffff;
+  --color-ink-800: #e2ecef;
+  --color-ink-700: #dbe7ea;
+  --color-ink-600: #c3d4d9;
+
+  --color-mist-100: #0d2b33;
+  --color-mist-300: #33565f;
+  --color-mist-500: #52707a;
+
+  --color-brand-300: #0b5c70;
+  --color-brand-400: #0f5d73;
+  --color-brand-500: #0e7490;
+  --color-brand-600: #0b5c70;
+  --color-brand-700: #094a5a;
+  --color-on-brand: #ffffff;
+}
+
+.platform-theme .surface {
+  background-color: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(9, 45, 56, 0.05),
+    0 10px 28px -14px rgba(9, 45, 56, 0.16);
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+.platform-theme :is(a, button).surface:hover {
+  box-shadow:
+    0 2px 4px rgba(9, 45, 56, 0.06),
+    0 16px 36px -14px rgba(9, 45, 56, 0.22);
+}
+
+.platform-theme :is(a, button) {
+  -webkit-tap-highlight-color: transparent;
+  transition-property: transform, color, background-color, border-color, opacity, box-shadow;
+  transition-duration: 120ms;
+}
+.platform-theme :is(a, button):active {
+  transform: scale(0.97);
+}
+
+.platform-theme [role='group'] > [aria-pressed='true'] {
+  box-shadow: 0 2px 10px rgba(14, 116, 144, 0.35);
+}
+
+/* Horizontal chip rows scroll without a visible scrollbar. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

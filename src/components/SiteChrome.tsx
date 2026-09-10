@@ -16,10 +16,15 @@ import { OrderListProvider } from '@/components/OrderListProvider';
  */
 export function SiteChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Segment-exact match: '/pro' must not swallow the store's '/products'.
+  const inSegment = (base: string) => pathname === base || pathname?.startsWith(`${base}/`);
   const isStandaloneApp =
-    pathname?.startsWith('/admin') ||
-    pathname?.startsWith('/crm') ||
-    pathname?.startsWith('/sofa-cleaning');
+    inSegment('/admin') ||
+    inSegment('/crm') ||
+    inSegment('/sofa-cleaning') ||
+    inSegment('/clean') ||
+    inSegment('/pro') ||
+    inSegment('/hq');
 
   if (isStandaloneApp) return <main id="main">{children}</main>;
 

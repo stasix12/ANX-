@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useMemo, useState } from 'react';
+import { AddressAutocompleteInput } from '@/components/AddressAutocompleteInput';
 import { HqShell } from '@/components/platform/HqShell';
 import { Badge, btnPrimary, btnSecondary, inputClass, Modal, PageSkeleton } from '@/components/platform/ui';
 import {
   addDaysIso,
   CATEGORIES,
   categoryName,
+  cityById,
   cityName,
   CITIES,
   formatPrice,
@@ -194,7 +196,17 @@ function CloseJobDialog({ lead, onClose }: { lead: Lead; onClose: () => void }) 
             <option value="transfer">העברה</option>
           </select>
         </div>
-        <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="כתובת מדויקת" className={inputClass} />
+        <AddressAutocompleteInput
+          value={address}
+          onChangeText={setAddress}
+          onSelect={(s) => {
+            const match = CITIES.find((c) => c.name === s.city);
+            if (match) setCity(match.id);
+          }}
+          placeholder="כתובת מדויקת"
+          inputClassName={inputClass}
+          bias={cityById(city) ?? null}
+        />
         <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="הערות למנקה (חניה, קומה, בע״ח…)" className={inputClass} />
 
         {/* Fee model */}

@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useMemo, useState } from 'react';
 import { btnPrimary, btnSecondary, inputClass } from '@/components/platform/ui';
+import { AddressAutocompleteInput } from '@/components/AddressAutocompleteInput';
 import {
   addDaysIso,
   CATEGORIES,
   CITIES,
+  cityById,
   CONDITION_OPTIONS,
   todayIso,
 } from '@/lib/platform/catalog';
@@ -297,11 +299,16 @@ function QuoteFunnel() {
                   </option>
                 ))}
               </select>
-              <input
+              <AddressAutocompleteInput
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChangeText={setAddress}
+                onSelect={(s) => {
+                  const match = CITIES.find((c) => c.name === s.city);
+                  if (match) setCity(match.id);
+                }}
                 placeholder="רחוב ומספר (רשות בשלב זה)"
-                className={inputClass}
+                inputClassName={inputClass}
+                bias={cityById(city) ?? null}
               />
             </div>
           </>

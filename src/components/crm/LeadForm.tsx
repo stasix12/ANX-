@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { AddressAutocompleteInput } from '@/components/AddressAutocompleteInput';
 import { LightbulbIcon, RepeatIcon, SpinnerIcon } from '@/components/icons';
 import {
   SERVICE_OPTIONS,
@@ -161,14 +162,20 @@ export function LeadForm({
       </Field>
 
       <Field label="כתובת מלאה" htmlFor="lead-address">
-        <input
+        <AddressAutocompleteInput
           id="lead-address"
-          type="text"
-          autoComplete="off"
           placeholder="רחוב ומספר בית"
           value={value.address}
-          onChange={(e) => set('address', e.target.value)}
-          className={inputClass}
+          onChangeText={(text) => set('address', text)}
+          onSelect={(s) =>
+            // A picked suggestion also fills the city field below.
+            setValue((prev) => ({
+              ...prev,
+              address: s.addressLine || s.label,
+              city: s.city || prev.city,
+            }))
+          }
+          inputClassName={inputClass}
         />
       </Field>
 

@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LightbulbIcon, RepeatIcon, SpinnerIcon } from '@/components/icons';
+import { searchCities, searchStreets } from '@/lib/crm/places';
 import {
   SERVICE_OPTIONS,
   SOURCE_OPTIONS,
@@ -36,6 +37,90 @@ function Field({
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+/**
+ * A text input that drops official address suggestions under the caret,
+ * like the big booking sites: debounced lookup after two letters, tap to
+ * fill. Selection happens on pointer-down so the blur that follows can't
+ * swallow the tap.
+ */
+function SuggestInput({
+  id,
+  value,
+  placeholder,
+  onChange,
+  onPick,
+  fetcher,
+}: {
+  id: string;
+  value: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+  onPick: (value: string) => void;
+  fetcher: (query: string) => Promise<string[]>;
+}) {
+  const [options, setOptions] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+  const picked = useRef<string | null>(null);
+
+  useEffect(() => {
+    const query = value.trim();
+    if (query.length < 2 || query === picked.current) {
+      setOptions([]);
+      setOpen(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetcher(query)
+        .then((results) => {
+          const filtered = results.filter((r) => r !== query);
+          setOptions(filtered);
+          setOpen(filtered.length > 0);
+        })
+        .catch(() => setOptions([]));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [value, fetcher]);
+
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        type="text"
+        autoComplete="off"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => {
+          picked.current = null;
+          onChange(e.target.value);
+        }}
+        onFocus={() => setOpen(options.length > 0)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className={inputClass}
+      />
+      {open ? (
+        <ul className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-ink-700 surface shadow-lg">
+          {options.map((option) => (
+            <li key={option} className="border-t border-ink-700/60 first:border-t-0">
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  picked.current = option.trim();
+                  onPick(option);
+                  setOpen(false);
+                }}
+                className="block w-full px-4 py-3 text-start text-sm font-semibold transition-colors hover:bg-ink-900"
+              >
+                {option}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -94,6 +179,10 @@ export function LeadForm({
 
   const set = <K extends keyof LeadInput>(key: K, val: LeadInput[K]) =>
     setValue((prev) => ({ ...prev, [key]: val }));
+
+  // Street suggestions narrow to the chosen city the moment one is set.
+  const city = value.city;
+  const streetFetcher = useCallback((query: string) => searchStreets(query, city), [city]);
 
   const serviceQty = (name: string): number =>
     value.services.map(parseService).find((s) => s.name === name)?.qty ?? 0;
@@ -161,25 +250,25 @@ export function LeadForm({
       </Field>
 
       <Field label="כתובת מלאה" htmlFor="lead-address">
-        <input
+        <SuggestInput
           id="lead-address"
-          type="text"
-          autoComplete="off"
           placeholder="רחוב ומספר בית"
           value={value.address}
-          onChange={(e) => set('address', e.target.value)}
-          className={inputClass}
+          onChange={(v) => set('address', v)}
+          // Picking a street leaves a trailing space — the house number is
+          // typed right after.
+          onPick={(street) => set('address', `${street} `)}
+          fetcher={streetFetcher}
         />
       </Field>
 
       <Field label="עיר" htmlFor="lead-city">
-        <input
+        <SuggestInput
           id="lead-city"
-          type="text"
-          autoComplete="off"
           value={value.city}
-          onChange={(e) => set('city', e.target.value)}
-          className={inputClass}
+          onChange={(v) => set('city', v)}
+          onPick={(city) => set('city', city)}
+          fetcher={searchCities}
         />
       </Field>
 

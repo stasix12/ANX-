@@ -1,4 +1,6 @@
 import type { MetadataRoute } from 'next';
+import { landingPages } from '@/lib/hamavrik/config';
+import { absoluteUrl } from '@/lib/hamavrik/links';
 import { fetchPublishedProducts } from '@/lib/products';
 import { site } from '@/lib/site';
 
@@ -10,12 +12,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     { url: site.url, lastModified, changeFrequency: 'weekly', priority: 1 },
-    {
-      url: `${site.url}/sofa-cleaning`,
+    // הפתרון המבריק — the cleaning site and its city/service landing pages.
+    { url: absoluteUrl('/'), lastModified, changeFrequency: 'weekly', priority: 0.9 },
+    ...landingPages.map((page) => ({
+      url: absoluteUrl(`/${page.slug}`),
       lastModified,
-      changeFrequency: 'monthly',
-      priority: 0.9,
-    },
+      changeFrequency: 'monthly' as const,
+      priority: 0.8,
+    })),
     ...products.map((product) => ({
       url: `${site.url}/products/${product.slug}`,
       lastModified,

@@ -1021,3 +1021,220 @@
     display: none;
   }
 }
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Shine theme — "הפתרון המבריק" sofa-cleaning site (/sofa-cleaning).
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Light, premium, lots of air: a cool near-white ground, deep-navy text, a
+ * sapphire action blue, and WhatsApp green reserved for the one thing the
+ * page wants pressed. The same token re-resolution trick as .crm-theme, so
+ * the shared utilities (ink-*, mist-*, brand-*, .surface) invert without
+ * touching markup, and the storefront at / keeps its dark amber theme.
+ *
+ * Contrast (WCAG AA): mist-100 on ink-950 ≈ 15:1; mist-500 fine print ≈ 5.4:1;
+ * white on brand-500 (#1a56db) ≈ 5.9:1; white on wa-600 (#15803d) ≈ 4.9:1.
+ */
+.shine-theme {
+  color: var(--color-mist-100);
+
+  --color-ink-950: #f5f8fc;
+  --color-ink-900: #eef3f9;
+  --color-ink-850: #ffffff;
+  --color-ink-800: #e4ebf4;
+  --color-ink-700: #dbe4ef;
+  --color-ink-600: #c3d0e1;
+
+  --color-mist-100: #0b1a33;
+  --color-mist-300: #3b4f6e;
+  --color-mist-500: #5c6e8c;
+
+  --color-brand-300: #cfe0ff;
+  --color-brand-400: #163a8f;
+  --color-brand-500: #1a56db;
+  --color-brand-600: #1747b8;
+  --color-brand-700: #123a94;
+  --color-on-brand: #ffffff;
+  --color-shadow: #0b1a33;
+
+  /* WhatsApp green — the conversion color. */
+  --shine-wa-500: #16a34a;
+  --shine-wa-600: #15803d;
+  --shine-wa-100: #dcfce7;
+
+  /* Aqua highlight used in the dark hero and the section glows. */
+  --shine-aqua-300: #7dd3fc;
+  --shine-aqua-400: #38bdf8;
+
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tailwind utilities for the theme-only colors (bg-wa-500, text-aqua-300…). */
+@theme inline {
+  --color-wa-500: var(--shine-wa-500, #16a34a);
+  --color-wa-600: var(--shine-wa-600, #15803d);
+  --color-wa-100: var(--shine-wa-100, #dcfce7);
+  --color-aqua-300: var(--shine-aqua-300, #7dd3fc);
+  --color-aqua-400: var(--shine-aqua-400, #38bdf8);
+}
+
+/* Cards: white tiles floated on a soft two-layer shadow, not a hairline. */
+.shine-theme .surface {
+  background-color: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(11, 26, 51, 0.05),
+    0 12px 32px -16px rgba(11, 26, 51, 0.16);
+  transition:
+    box-shadow 0.25s ease,
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.shine-theme .surface-hover:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 2px 4px rgba(11, 26, 51, 0.06),
+    0 24px 48px -20px rgba(11, 26, 51, 0.24);
+}
+
+.shine-theme :is(a, button) {
+  -webkit-tap-highlight-color: transparent;
+}
+.shine-theme :is(a, button):active {
+  transform: scale(0.98);
+}
+
+/* Dark hero ground: navy with an aqua light pool and a faint dot grid. */
+.shine-hero {
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, rgba(56, 189, 248, 0.28), transparent 60%),
+    radial-gradient(40rem 26rem at 0% 110%, rgba(26, 86, 219, 0.35), transparent 60%),
+    linear-gradient(150deg, #071a3a 0%, #0a2757 55%, #0d3470 100%);
+  color: #ffffff;
+}
+.shine-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent 85%);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent 85%);
+}
+
+/* Section eyebrow + big section titles share one rhythm. */
+.shine-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--color-brand-300);
+  color: var(--color-brand-400);
+  padding: 0.3rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+/* Soft aqua/blue light behind the quick-quote card and the final CTA. */
+.shine-glow {
+  position: absolute;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40rem 20rem at 20% 20%, rgba(56, 189, 248, 0.22), transparent 60%),
+    radial-gradient(36rem 20rem at 85% 80%, rgba(26, 86, 219, 0.18), transparent 60%);
+  filter: blur(8px);
+}
+
+/* A light sweep crossing the big CTA every few seconds — "press me". */
+.shine-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shine-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.28) 50%, transparent 60%);
+  transform: translateX(-140%);
+  animation: shine-sweep 5s ease-in-out infinite 1.5s;
+}
+@keyframes shine-sweep {
+  0% {
+    transform: translateX(-140%);
+  }
+  22% {
+    transform: translateX(140%);
+  }
+  100% {
+    transform: translateX(140%);
+  }
+}
+
+/* Floating badges in the hero drift very slowly. */
+.shine-float {
+  animation: shine-float 6s ease-in-out infinite;
+}
+.shine-float-delay {
+  animation-delay: -3s;
+}
+@keyframes shine-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* WhatsApp pulse in the site's green. */
+.shine-pulse {
+  animation: shine-pulse 3s ease-out infinite;
+}
+@keyframes shine-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5);
+  }
+  60% {
+    box-shadow: 0 0 0 16px rgba(22, 163, 74, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+  }
+}
+
+/* Process connector line between the numbered steps (desktop). */
+.shine-steps-line {
+  background: linear-gradient(to left, var(--color-brand-500), var(--shine-aqua-400));
+}
+
+/* Native <details> accordion: rotate the chevron, fade the answer in. */
+.shine-faq details[open] .shine-faq-chevron {
+  transform: rotate(180deg);
+}
+.shine-faq details[open] > div {
+  animation: shine-faq-in 0.3s ease-out both;
+}
+@keyframes shine-faq-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Horizontal rails with no visible scrollbar. */
+.shine-rail {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.shine-rail::-webkit-scrollbar {
+  display: none;
+}

@@ -10,8 +10,9 @@ import { analytics } from '@/lib/hamavrik/config';
 export type TrackEvent =
   | 'whatsapp_click'
   | 'phone_click'
-  | 'quote_form_submit'
-  | 'service_click'
+  | 'quote_started'
+  | 'quote_completed'
+  | 'service_selected'
   | 'before_after_interaction';
 
 export type TrackParams = Record<string, string | number | boolean | undefined>;
@@ -25,7 +26,7 @@ declare global {
 }
 
 const META_STANDARD: Partial<Record<TrackEvent, string>> = {
-  quote_form_submit: 'Lead',
+  quote_completed: 'Lead',
   whatsapp_click: 'Contact',
   phone_click: 'Contact',
 };

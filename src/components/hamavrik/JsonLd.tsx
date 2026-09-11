@@ -24,7 +24,7 @@ const BUSINESS_ID = `${absoluteUrl('/')}#business`;
 
 /** LocalBusiness — the anchor entity every page links back to. */
 export function localBusinessSchema() {
-  const real = reviews.filter((r) => !r.placeholder);
+  const real = reviews;
   return {
     '@context': 'https://schema.org',
     '@type': ['LocalBusiness', 'HomeAndConstructionBusiness'],

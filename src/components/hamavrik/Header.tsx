@@ -50,7 +50,7 @@ export function Header() {
               <li key={item.href}>
                 <a
                   href={item.href}
-                  className="rounded-full px-3.5 py-2 text-[15px] font-bold text-mist-300 transition-colors hover:bg-ink-900 hover:text-mist-100"
+                  className="whitespace-nowrap rounded-full px-3 py-2 text-sm font-bold text-mist-300 transition-colors hover:bg-ink-900 hover:text-mist-100 xl:px-3.5 xl:text-[15px]"
                 >
                   {item.label}
                 </a>
@@ -59,12 +59,12 @@ export function Header() {
           </ul>
         </nav>
 
-        <div className="hidden items-center gap-2 lg:flex">
-          <PhoneButton location="header" variant="ghost">
-            <span dir="ltr">{business.phoneDisplay}</span>
+        <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
+          <PhoneButton location="header" variant="ghost" className="max-xl:px-3">
+            <span dir="ltr" className="whitespace-nowrap">{business.phoneDisplay}</span>
           </PhoneButton>
-          <WaButton location="header" href={waLinkFor('(מהתפריט העליון)')}>
-            הצעת מחיר
+          <WaButton location="header" href={waLinkFor('(מהתפריט העליון)')} className="whitespace-nowrap">
+            שלחו תמונה, קבלו מחיר
           </WaButton>
         </div>
 
@@ -106,7 +106,7 @@ export function Header() {
             </ul>
             <div className="mt-3 grid gap-2 pb-2">
               <WaButton location="mobile-menu" href={waLinkFor('(מהתפריט)')} size="lg" className="w-full">
-                קבלו הצעת מחיר ב-WhatsApp
+                שלחו תמונה וקבלו מחיר
               </WaButton>
               <PhoneButton location="mobile-menu" size="lg" className="w-full" />
             </div>

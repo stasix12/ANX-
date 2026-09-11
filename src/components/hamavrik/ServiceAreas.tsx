@@ -6,64 +6,53 @@ import { landingPages, serviceAreas } from '@/lib/hamavrik/config';
 import { href, waLinkFor } from '@/lib/hamavrik/links';
 
 /**
- * Where we go. The two headline cities are big; the nearby towns are a chip
- * cloud; each existing city landing page is linked (internal links for SEO
- * and a real destination for a visitor who wants "their" page).
+ * Where we go: the two headline cities, the nearby towns as quiet chips,
+ * and the city/service pages as a tidy list of links (real destinations,
+ * and internal links for Google) — one card, no keyword walls.
  */
 export function ServiceAreas({ currentSlug }: { currentSlug?: string }) {
   const pages = landingPages.filter((p) => p.slug !== currentSlug);
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-      <Reveal>
-        <div className="shine-hero relative h-full overflow-hidden rounded-[1.5rem] p-7 sm:p-9">
-          <MapPinIcon className="h-8 w-8 text-aqua-300" />
-          <p className="mt-4 text-sm font-bold text-white/70">מגיעים אליכם ב-</p>
-          <p className="mt-1 text-4xl font-black leading-tight sm:text-5xl">
-            {serviceAreas.primary.map((c, i) => (
-              <span key={c} className="block">
-                {c}
-                {i < serviceAreas.primary.length - 1 ? '' : ''}
-              </span>
-            ))}
-            <span className="block text-2xl text-aqua-300 sm:text-3xl">ו{serviceAreas.regionLabel}</span>
+    <Reveal>
+      <div className="surface grid gap-6 rounded-[1.5rem] p-5 sm:p-7 lg:grid-cols-[1fr_1fr] lg:gap-10">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-bold text-mist-500">
+            <MapPinIcon className="h-4 w-4 text-brand-500" />
+            מגיעים אליכם ב-
           </p>
-          <p className="mt-5 max-w-sm text-white/80">{serviceAreas.note}</p>
-          <WaButton location="service-areas" href={waLinkFor('האם אתם מגיעים ליישוב שלי?')} className="mt-6">
-            בדקו אם אנחנו מגיעים אליכם
-          </WaButton>
-        </div>
-      </Reveal>
-
-      <Reveal delay={120}>
-        <div className="surface h-full rounded-[1.5rem] p-7 sm:p-9">
-          <h3 className="text-lg font-black">יישובים נוספים באזור</h3>
-          <ul className="mt-4 flex flex-wrap gap-2">
+          <p className="mt-1 text-3xl font-black leading-tight sm:text-4xl">
+            {serviceAreas.primary.join(', ')}
+            <span className="block text-xl text-brand-400 sm:text-2xl">ו{serviceAreas.regionLabel}</span>
+          </p>
+          <ul className="mt-4 flex flex-wrap gap-1.5">
             {serviceAreas.nearby.map((town) => (
-              <li key={town} className="rounded-full bg-ink-900 px-3.5 py-1.5 text-sm font-bold text-mist-300">
+              <li key={town} className="rounded-full bg-ink-900 px-3 py-1 text-[13px] font-bold text-mist-300">
                 {town}
               </li>
             ))}
           </ul>
-          {pages.length ? (
-            <>
-              <h3 className="mt-8 text-lg font-black">עמודי שירות לפי עיר</h3>
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                {pages.map((p) => (
-                  <li key={p.slug}>
-                    <Link
-                      href={href(`/${p.slug}`)}
-                      className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-brand-400 transition-colors hover:bg-brand-300/40"
-                    >
-                      <MapPinIcon className="h-4 w-4 shrink-0" />
-                      {p.h1}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
+          <p className="mt-4 text-sm text-mist-300">{serviceAreas.note}</p>
+          <WaButton location="service-areas" href={waLinkFor('האם אתם מגיעים ליישוב שלי?')} className="mt-4">
+            שלחו תמונה וקבלו מחיר
+          </WaButton>
         </div>
-      </Reveal>
-    </div>
+
+        {pages.length ? (
+          <div className="border-t border-ink-800 pt-5 lg:border-s lg:border-t-0 lg:ps-10 lg:pt-0">
+            <h3 className="text-sm font-black tracking-wide text-mist-500">עמודי שירות לפי עיר</h3>
+            <ul className="mt-2 divide-y divide-ink-800">
+              {pages.map((p) => (
+                <li key={p.slug}>
+                  <Link href={href(`/${p.slug}`)} className="flex items-center justify-between gap-3 py-2.5 text-[15px] font-bold text-brand-400 transition-colors hover:text-brand-500">
+                    {p.h1}
+                    <span aria-hidden className="text-mist-500">‹</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </Reveal>
   );
 }

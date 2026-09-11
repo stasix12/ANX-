@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq } from '@/components/hamavrik/Faq';
@@ -14,8 +15,8 @@ import { ServiceAreas } from '@/components/hamavrik/ServiceAreas';
 import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
-import { beforeAfter, business, reviews, serviceAreas, services } from '@/lib/hamavrik/config';
-import type { Metadata } from 'next';
+import { WorkGallery } from '@/components/hamavrik/WorkGallery';
+import { beforeAfterJobs, business, priceList, reviews, serviceAreas, services } from '@/lib/hamavrik/config';
 
 /** `absolute` keeps the storefront's "| ANX3D" title template off this page. */
 export const metadata: Metadata = {
@@ -23,12 +24,13 @@ export const metadata: Metadata = {
 };
 
 /**
- * Home page. The order is the sales argument: what changes (hero) → how
- * much and how to order (quote) → proof (before/after) → what we clean →
- * prices → process → why us → reviews → depth for the doubters and for
- * Google (explainer, FAQ) → where → the closing ask.
+ * Home page, ordered for a Google Ads visitor on a phone: what/where/price
+ * (hero) → trust → proof (before/after, reviews) → the quote flow → what
+ * else we clean, prices, how it works, why us → the long-form SEO copy and
+ * FAQ for the doubters and for Google → where we go → the closing ask.
  */
 export default function HomePage() {
+  const sofaFrom = priceList[0]?.from;
   return (
     <>
       <JsonLd data={[...allServicesSchema(), faqSchema(), breadcrumbSchema([{ name: business.name, path: '/' }])]} />
@@ -36,96 +38,69 @@ export default function HomePage() {
       <Hero />
       <TrustStrip />
 
-      <Section id="quote" tone="tint">
+      <Section id="before-after">
+        <SectionHeading eyebrow="לפני ואחרי" title="התוצאות מדברות בעד עצמן" lede="גררו את הידית ותראו את ההבדל בעצמכם." />
+        <BeforeAfterGallery jobs={beforeAfterJobs} />
+      </Section>
+
+      <WorkGallery />
+
+      <Section id="reviews" tone="tint">
+        <SectionHeading eyebrow="ביקורות" title="מה הלקוחות שלנו אומרים?" />
+        <Reviews reviews={reviews} />
+      </Section>
+
+      <Section id="quote">
         <SectionHeading
           eyebrow="הצעת מחיר מהירה"
           title="כמה יעלה לנקות את הספה שלכם?"
-          lede="בוחרים מה לנקות, משאירים פרטים — ונחזור אליכם עם מחיר ב-WhatsApp. אפשר גם פשוט לשלוח תמונה."
+          lede="שלוש לחיצות — ואתם ב-WhatsApp עם כל הפרטים מוכנים. אפשר גם פשוט לשלוח תמונה."
         />
-        <Reveal delay={80}>
+        <Reveal delay={60}>
           <QuickQuote />
         </Reveal>
-      </Section>
-
-      <Section id="before-after">
-        <SectionHeading
-          eyebrow="לפני ואחרי"
-          title="התוצאות מדברות בעד עצמן"
-          lede="גררו את הידית ותראו את ההבדל בעצמכם — ספות, מזרנים, כיסאות, רכב ושטיחים."
-        />
-        <BeforeAfterGallery items={beforeAfter} />
       </Section>
 
       <Section id="services" tone="tint">
         <SectionHeading
           eyebrow="השירותים שלנו"
           title="מה אנחנו מנקים?"
-          lede="כל ריפוד בבית (וברכב) — בציוד מקצועי, בבית הלקוח, עם הצעת מחיר ברורה מראש."
+          lede={sofaFrom ? `ניקוי ספות החל מ-${sofaFrom}₪ — וכל ריפוד אחר בבית וברכב, בבית הלקוח.` : undefined}
         />
         <ServicesGrid services={services} />
       </Section>
 
       <Section id="prices">
-        <SectionHeading
-          eyebrow="מחירון"
-          title="מחירים שקופים, בלי הפתעות"
-          lede="מחירי פתיחה לכל שירות. המחיר הסופי נסגר מראש לפי תמונה — לפני שהגענו."
-        />
+        <SectionHeading eyebrow="מחירון" title="מחירים שקופים, בלי הפתעות" lede="מחירי פתיחה לכל שירות. המחיר הסופי נסגר מראש לפי תמונה." />
         <Pricing />
       </Section>
 
       <Section id="how" tone="tint">
-        <SectionHeading
-          eyebrow="התהליך"
-          title="איך זה עובד?"
-          lede="מתמונה ב-WhatsApp ועד ספה נקייה — בחמישה שלבים פשוטים."
-        />
+        <SectionHeading eyebrow="התהליך" title="איך זה עובד?" />
         <HowItWorks />
       </Section>
 
       <Section id="why">
-        <SectionHeading
-          eyebrow="למה אנחנו"
-          title={`למה לבחור ב${business.name}?`}
-          lede="כי ניקוי ספות הוא מקצוע — וההבדל בין ניקוי חיצוני לניקוי עמוק נראה, מורגש ומריח."
-        />
+        <SectionHeading eyebrow="למה אנחנו" title={`למה לבחור ב${business.name}?`} />
         <WhyUs />
       </Section>
 
-      <Section id="reviews" tone="tint">
-        <SectionHeading
-          eyebrow="ביקורות"
-          title="מה הלקוחות שלנו אומרים?"
-          lede="הביקורות מגיעות מלקוחות אמיתיים ב-Google."
-        />
-        <Reviews reviews={reviews} />
-      </Section>
-
-      <Section id="about">
-        <SectionHeading
-          eyebrow="מדריך מקצועי"
-          title="ניקוי ספות מקצועי — מה חשוב לדעת?"
-          lede="שאלות שלקוחות שואלים אותנו לפני שהם מזמינים, ותשובות ישרות בלי שיווק."
-          align="start"
-        />
+      <Section id="about" tone="tint">
+        <SectionHeading eyebrow="מדריך מקצועי" title="ניקוי ספות מקצועי — מה חשוב לדעת?" align="start" />
         <Explainer />
       </Section>
 
-      <Section id="faq" tone="tint">
+      <Section id="faq">
         <SectionHeading eyebrow="שאלות ותשובות" title="שאלות נפוצות" />
         <Faq />
       </Section>
 
-      <Section id="areas">
-        <SectionHeading
-          eyebrow="אזורי שירות"
-          title={`${serviceAreas.primary.join(', ')} ו${serviceAreas.regionLabel}`}
-          lede="מגיעים אליכם עם כל הציוד. לא בטוחים שאנחנו מגיעים ליישוב שלכם? שאלו אותנו."
-        />
+      <Section id="areas" tone="tint">
+        <SectionHeading eyebrow="אזורי שירות" title={`${serviceAreas.primary.join(', ')} ו${serviceAreas.regionLabel}`} />
         <ServiceAreas />
       </Section>
 
-      <Section id="cta" tone="tint" className="pb-24">
+      <Section id="cta">
         <FinalCta />
       </Section>
     </>

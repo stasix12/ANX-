@@ -93,6 +93,25 @@ export function SprayIcon(props: IconProps) {
   );
 }
 
+export function TagIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" />
+      <circle cx="7.5" cy="7.5" r="1.5" />
+    </svg>
+  );
+}
+
+export function CalendarIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="5" width="18" height="16" rx="2.5" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+      <path d="M8 14h3M13 14h3M8 17.5h3" />
+    </svg>
+  );
+}
+
 export function SofaIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -114,6 +133,8 @@ export const ICONS = {
   clock: ClockIcon,
   check: CheckIcon,
   camera: CameraIcon,
+  tag: TagIcon,
+  calendar: CalendarIcon,
 } as const;
 
 export type IconName = keyof typeof ICONS;

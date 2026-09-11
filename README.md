@@ -34,18 +34,26 @@ npm run dev      # http://localhost:3000
 
 ### קובץ אחד לעריכה
 
-**כל** המידע העסקי יושב ב-`src/lib/hamavrik/config.ts`: שם, טלפון, מספר WhatsApp והודעת הפתיחה, מחירון, שירותים, אזורי שירות, ביקורות, תמונות לפני/אחרי, קישור לביקורות Google, רשתות חברתיות, מזהי אנליטיקס ורשימת עמודי הנחיתה. שינוי שם → מתעדכן בכל הכפתורים, בטקסטים ובנתונים המובנים (JSON-LD).
+**כל** המידע העסקי יושב ב-`src/lib/hamavrik/config.ts`: שם, טלפון, מספר WhatsApp והודעת הפתיחה, מחירון, שירותים, אזורי שירות, ביקורות, עבודות לפני/אחרי, גלריה, קישור לביקורות Google, רשתות חברתיות, מזהי אנליטיקס ורשימת עמודי הנחיתה. שינוי שם → מתעדכן בכל הכפתורים, בטקסטים ובנתונים המובנים (JSON-LD).
 
-- **ביקורות** — שלוש ביקורות placeholder מסומנות `placeholder: true` ומוצגות עם תווית "ביקורת לדוגמה". החליפו את הטקסט בביקורת אמיתית (באישור הלקוח) ושנו ל-`false` — התווית נעלמת והביקורת נכנסת גם ל-JSON-LD.
+**המקומות לתמונות אמיתיות** (כולם מסומנים בקובץ בכותרת `REAL … GO HERE`):
+
+| מה | איפה בקונפיג | קבצים | מה קורה עד אז |
+| --- | --- | --- | --- |
+| וידאו/תמונת Hero | `heroMedia` | `public/video/` או `public/hamavrik/` | מוצג הווידאו האמיתי הקיים של ראש השאיבה |
+| לפני/אחרי (4–6 עבודות) | `beforeAfterJobs` — לכל עבודה `before`, `after`, `itemLabel`, `city`, `problem` | `public/hamavrik/jobs/` (1200×750, אותו פריים) | איור עם תווית "איור להמחשה" |
+| גלריית עבודות | `workGallery` | `public/hamavrik/gallery/` | הסקשן מוסתר לגמרי |
+| צילומי מסך של ביקורות Google | `reviewScreenshots` | `public/hamavrik/reviews/` | לא מוצג |
+| ביקורות Google (טקסט) | `reviews` — שם, עיר, טקסט, דירוג, תאריך | — | מצב "ביקורות יופיעו כאן" נקי + קישור לפרופיל |
+| תמונות שירותים | שדה `image` בכל שירות | `public/hamavrik/services/` | איור |
+
 - **מספרים** (דירוג, כמות ביקורות, שנות ותק) — ב-`stats`, כולם `null` עד שיש נתון אמיתי; `null` פשוט לא מוצג.
-- **לפני/אחרי** — עד שיש תמונות, כל פריט מצייר איור. שימו קבצים ב-`public/hamavrik/before-after/` (1200×750, אותו פריים לשניהם) ומלאו `before` / `after`.
-- **תמונות שירותים** — שדה `image` בכל שירות (`public/hamavrik/services/`).
 - **עמוד נחיתה חדש** (למשל "ניקוי מזרנים בדימונה") — מוסיפים אובייקט ל-`landingPages`. העמוד, ה-title, ה-canonical, ה-JSON-LD, ה-sitemap והקישורים הפנימיים נוצרים לבד.
 - **קישור לביקורות Google** — `googleReviewsUrl`. עד שמוחלף, הכפתור פותח חיפוש Google של העסק.
 
 ### מעקב המרות
 
-ב-`analytics` בקונפיג ממלאים `ga4MeasurementId`, `googleAdsId` (+ תוויות המרה) ו-`metaPixelId`. כל עוד השדות ריקים לא נטען שום סקריפט. האירועים: `whatsapp_click`, `phone_click`, `quote_form_submit`, `service_click`, `before_after_interaction` — נשלחים ל-`dataLayer` (מתאים גם ל-GTM), ל-gtag ול-fbq. הטופס יכול גם לשלוח את הליד ל-webhook (`leads.webhookUrl`) לפני הפתיחה ב-WhatsApp.
+ב-`analytics` בקונפיג ממלאים `ga4MeasurementId`, `googleAdsId` (+ תוויות המרה) ו-`metaPixelId`. כל עוד השדות ריקים לא נטען שום סקריפט. האירועים: `whatsapp_click`, `phone_click`, `quote_started`, `quote_completed`, `service_selected`, `before_after_interaction` — נשלחים ל-`dataLayer` (מתאים גם ל-GTM), ל-gtag ול-fbq. טופס הצעת המחיר (מה מנקים ← כמה מושבים ← כתמים ← עיר) מרכיב הודעת WhatsApp מוכנה, ויכול גם לשלוח את הבחירות ל-webhook (`leads.webhookUrl`).
 
 ### להעביר לדומיין משלו
 

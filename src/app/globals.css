@@ -1083,17 +1083,17 @@
 .shine-theme .surface {
   background-color: #ffffff;
   box-shadow:
-    0 1px 2px rgba(11, 26, 51, 0.05),
-    0 12px 32px -16px rgba(11, 26, 51, 0.16);
+    0 1px 2px rgba(11, 26, 51, 0.04),
+    0 10px 24px -14px rgba(11, 26, 51, 0.12);
   transition:
     box-shadow 0.25s ease,
     transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .shine-theme .surface-hover:hover {
-  transform: translateY(-4px);
+  transform: translateY(-3px);
   box-shadow:
-    0 2px 4px rgba(11, 26, 51, 0.06),
-    0 24px 48px -20px rgba(11, 26, 51, 0.24);
+    0 2px 4px rgba(11, 26, 51, 0.05),
+    0 18px 36px -18px rgba(11, 26, 51, 0.18);
 }
 
 .shine-theme :is(a, button) {

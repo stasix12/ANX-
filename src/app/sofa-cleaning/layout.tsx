@@ -59,7 +59,7 @@ export const viewport: Viewport = {
 
 export default function ShineLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="shine-theme relative min-h-dvh overflow-x-clip bg-ink-950 text-mist-100">
+    <div className="shine-theme relative min-h-dvh overflow-x-clip bg-ink-950 text-mist-100 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:pb-0">
       <JsonLd data={localBusinessSchema()} />
       <Header />
       {children}

@@ -8,11 +8,11 @@ import { explainer } from '@/lib/hamavrik/config';
  */
 export function Explainer() {
   return (
-    <div className="grid gap-x-10 gap-y-8 lg:grid-cols-2">
+    <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
       {explainer.map((block, i) => (
         <Reveal as="article" key={block.title} delay={(i % 2) * 90} className="border-s-4 border-brand-300 ps-5">
-          <h3 className="text-xl font-black">{block.title}</h3>
-          <p className="mt-2 leading-relaxed text-mist-300">{block.body}</p>
+          <h3 className="text-lg font-black sm:text-xl">{block.title}</h3>
+          <p className="mt-1.5 text-[15px] leading-relaxed text-mist-300">{block.body}</p>
         </Reveal>
       ))}
     </div>

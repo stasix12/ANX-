@@ -14,13 +14,13 @@ const INCLUDED = ['הגעה לבית הלקוח', 'ניקוי עמוק בהזר�
  */
 export function Pricing() {
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-start">
+    <div className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr] lg:items-start">
       <Reveal>
-        <ul className="surface overflow-hidden rounded-[1.5rem]">
+        <ul className="surface overflow-hidden rounded-2xl">
           {priceList.map((row) => (
             <li
               key={row.label}
-              className={`flex items-center justify-between gap-4 border-b border-ink-800 px-5 py-4 last:border-0 sm:px-7 ${
+              className={`flex items-center justify-between gap-4 border-b border-ink-800 px-4 py-3 last:border-0 sm:px-6 sm:py-4 ${
                 row.highlight ? 'bg-brand-300/30' : ''
               }`}
             >
@@ -47,7 +47,7 @@ export function Pricing() {
       </Reveal>
 
       <Reveal delay={120}>
-        <div className="shine-hero relative overflow-hidden rounded-[1.5rem] p-6 sm:p-8">
+        <div className="shine-hero relative overflow-hidden rounded-2xl p-5 sm:p-7">
           <p className="text-lg font-black">מה כלול בכל מחיר?</p>
           <ul className="mt-4 space-y-2.5">
             {INCLUDED.map((line) => (
@@ -59,7 +59,7 @@ export function Pricing() {
               </li>
             ))}
           </ul>
-          <WaButton location="pricing" href={waLinkFor('מצרפ/ת תמונה לקבלת מחיר 📷')} size="lg" className="mt-7 w-full">
+          <WaButton location="pricing" href={waLinkFor('מצרפ/ת תמונה לקבלת מחיר 📷')} size="lg" className="mt-6 w-full">
             שלחו תמונה וקבלו מחיר
           </WaButton>
           <p className="mt-3 text-center text-xs text-white/60">המחיר נסגר מראש — לפני שהגענו.</p>

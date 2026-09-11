@@ -19,7 +19,7 @@ export function Section({
   const bg =
     tone === 'tint' ? 'bg-ink-900' : tone === 'dark' ? 'shine-hero relative overflow-hidden' : '';
   return (
-    <section id={id} className={`${bg} py-16 sm:py-20 lg:py-24 ${className}`}>
+    <section id={id} className={`${bg} py-12 sm:py-16 lg:py-20 ${className}`}>
       <div className="mx-auto max-w-6xl px-4 sm:px-6">{children}</div>
     </section>
   );
@@ -42,17 +42,17 @@ export function SectionHeading({
 }) {
   const alignment = align === 'center' ? 'mx-auto text-center items-center' : 'text-start items-start';
   return (
-    <Reveal className={`mb-10 flex max-w-2xl flex-col sm:mb-14 ${alignment}`}>
+    <Reveal className={`mb-8 flex max-w-2xl flex-col sm:mb-12 ${alignment}`}>
       {eyebrow ? (
         <span className={light ? 'shine-eyebrow bg-white/15 text-white' : 'shine-eyebrow'}>{eyebrow}</span>
       ) : null}
       <Tag
-        className={`mt-4 text-3xl font-black leading-tight text-balance-he sm:text-4xl lg:text-[2.75rem] ${light ? 'text-white' : ''}`}
+        className={`mt-3 text-[1.75rem] font-black leading-tight text-balance-he sm:text-4xl lg:text-[2.5rem] ${light ? 'text-white' : ''}`}
       >
         {title}
       </Tag>
       {lede ? (
-        <p className={`mt-4 text-lg leading-relaxed ${light ? 'text-white/80' : 'text-mist-300'}`}>{lede}</p>
+        <p className={`mt-3 text-base leading-relaxed sm:text-lg ${light ? 'text-white/80' : 'text-mist-300'}`}>{lede}</p>
       ) : null}
     </Reveal>
   );

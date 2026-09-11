@@ -248,41 +248,85 @@ export const priceList: PriceRow[] = [
 export const priceDisclaimer =
   'המחיר הסופי נקבע בהתאם לגודל, סוג הבד ומצב הריפוד. ניתן לשלוח תמונה לקבלת הצעת מחיר מדויקת.';
 
-/* ── Before / after gallery ─────────────────────────────────────────────── */
+/* ── Before / after gallery (REAL JOBS GO HERE) ─────────────────────── */
 
-export interface BeforeAfterItem {
-  /** Which category tab the item sits under. */
-  category: 'sofa' | 'mattress' | 'chairs' | 'car' | 'carpet';
-  title: string;
-  chips: string[];
-  /** Illustration used while `before`/`after` are null. */
+/**
+ * One entry per job. Until `before`/`after` point at real photos the card
+ * draws the illustration named in `scene` and wears a small "איור להמחשה"
+ * tag — never an invented "real" job. To publish a real job:
+ *   1. drop the two photos in /public/hamavrik/jobs/ (same framing, 1200×750,
+ *      WebP or JPG — next/image serves them responsively),
+ *   2. fill `before` and `after` with their paths (e.g. '/hamavrik/jobs/sofa-1-before.webp'),
+ *   3. write the real service / city / problem.
+ * The design does not change; only the pixels do. Aim for 4–6 jobs.
+ */
+export interface BeforeAfterJob {
+  id: string;
+  service: ServiceId;
+  /** Shown as "ספת בד | באר שבע". */
+  itemLabel: string;
+  city: string;
+  /** What was treated — "ניקוי עמוק והסרת כתמים". */
+  problem: string;
+  /** Illustration used while the photos are null. */
   scene: SceneKind;
-  /**
-   * Real photo paths (under /public, ideally 1200×750, same framing for both).
-   * Example: '/hamavrik/before-after/sofa-1-before.webp'.
-   */
   before: string | null;
   after: string | null;
 }
 
-export const beforeAfterCategories: { id: BeforeAfterItem['category']; label: string }[] = [
+export const beforeAfterJobs: BeforeAfterJob[] = [
+  { id: 'sofa-1', service: 'sofa', itemLabel: 'ספת בד', city: 'באר שבע', problem: 'ניקוי עמוק והסרת כתמים', scene: 'sofa', before: null, after: null },
+  { id: 'sofa-2', service: 'sofa', itemLabel: 'ספה פינתית', city: 'ערד', problem: 'נטרול ריחות וניקוי עמוק', scene: 'sofa', before: null, after: null },
+  { id: 'mattress-1', service: 'mattress', itemLabel: 'מזרן זוגי', city: 'באר שבע', problem: 'הסרת כתמים וקרדית האבק', scene: 'mattress', before: null, after: null },
+  { id: 'chairs-1', service: 'chairs', itemLabel: 'כיסאות פינת אוכל', city: 'עומר', problem: 'כתמי אוכל והחזרת צבע', scene: 'chair', before: null, after: null },
+  { id: 'car-1', service: 'car', itemLabel: 'מושבי רכב', city: 'באר שבע', problem: 'כתמי קפה וריחות', scene: 'car', before: null, after: null },
+  { id: 'carpet-1', service: 'carpet', itemLabel: 'שטיח סלון', city: 'באר שבע', problem: 'ניקוי עמוק והסרת אבק', scene: 'carpet', before: null, after: null },
+];
+
+/** Gallery tabs; a job is filed under the tab of its service. */
+export type GalleryCategory = 'sofa' | 'mattress' | 'chairs' | 'car' | 'carpet';
+export const galleryCategories: { id: GalleryCategory; label: string }[] = [
   { id: 'sofa', label: 'ספות' },
   { id: 'mattress', label: 'מזרנים' },
   { id: 'chairs', label: 'כיסאות' },
   { id: 'car', label: 'רכב' },
   { id: 'carpet', label: 'שטיחים' },
 ];
+export const galleryCategoryOf: Record<ServiceId, GalleryCategory> = {
+  sofa: 'sofa',
+  armchair: 'sofa',
+  mattress: 'mattress',
+  chairs: 'chairs',
+  stroller: 'chairs',
+  car: 'car',
+  carpet: 'carpet',
+  'wall-to-wall': 'carpet',
+};
 
-export const beforeAfter: BeforeAfterItem[] = [
-  { category: 'sofa', title: 'ספה תלת-מושבית, בד', chips: ['ניקוי עמוק', 'טיפול בכתמים'], scene: 'sofa', before: null, after: null },
-  { category: 'sofa', title: 'ספה פינתית', chips: ['נטרול ריחות', 'ניקוי עמוק'], scene: 'sofa', before: null, after: null },
-  { category: 'mattress', title: 'מזרן זוגי', chips: ['הסרת כתמים', 'קרדית האבק'], scene: 'mattress', before: null, after: null },
-  { category: 'chairs', title: 'כיסאות פינת אוכל', chips: ['כתמי אוכל', 'החזרת צבע'], scene: 'chair', before: null, after: null },
-  { category: 'car', title: 'מושבי רכב', chips: ['כתמי קפה', 'ריחות'], scene: 'car', before: null, after: null },
-  { category: 'carpet', title: 'שטיח סלון', chips: ['ניקוי עמוק', 'אבק'], scene: 'carpet', before: null, after: null },
-];
+/* ── Work gallery (REAL PHOTOS GO HERE) ─────────────────────────────────── */
 
-/* ── Hero media ─────────────────────────────────────────────────────────── */
+/**
+ * Plain photos from jobs (the dirty water, the wand on the fabric, a finished
+ * living room). The section is hidden while this list is empty — nothing
+ * fake is shown in its place. Files: /public/hamavrik/gallery/*.webp.
+ */
+export interface GalleryPhoto {
+  src: string;
+  alt: string;
+  caption?: string;
+}
+export const workGallery: GalleryPhoto[] = [];
+
+/* ── Google review screenshots (REAL SCREENSHOTS GO HERE) ────────────────── */
+
+/**
+ * Optional screenshots of real Google reviews, shown under the review cards.
+ * Files: /public/hamavrik/reviews/*.webp (portrait phone screenshots work
+ * best). Hidden while empty.
+ */
+export const reviewScreenshots: GalleryPhoto[] = [];
+
+/* ── Hero media (REAL HERO PHOTO/VIDEO GOES HERE) ───────────────────────── */
 
 /**
  * The hero visual. Real footage of the extraction wand pulling dirt out of
@@ -321,58 +365,34 @@ export const trustPoints = [
   { icon: 'shield', title: 'שירות מקצועי', desc: 'הצעת מחיר ברורה מראש' },
 ] as const;
 
-/* ── Reviews ────────────────────────────────────────────────────────────── */
+/* ── Google reviews (REAL REVIEWS GO HERE) ──────────────────────────────── */
 
+/**
+ * Real Google reviews only. While this list is empty the reviews section
+ * shows a clean "reviews coming soon" state with the link to the Google
+ * profile — never an invented quote. Copy each review verbatim from Google
+ * (with the customer's first name and city as shown there).
+ */
 export interface Review {
   name: string;
   city: string;
   text: string;
   rating: 1 | 2 | 3 | 4 | 5;
-  /** 'google' shows the Google mark next to the review. */
-  source: 'google' | 'whatsapp' | 'facebook';
-  /**
-   * ⚠️  PLACEHOLDER FLAG. `true` renders a visible "ביקורת לדוגמה" badge and
-   * keeps the review OUT of the structured data. Replace the text with a
-   * real customer review (with permission) and set this to false.
-   */
-  placeholder: boolean;
+  /** ISO date of the review, optional ("2026-03-14"). */
+  date?: string;
 }
 
 export const reviews: Review[] = [
-  {
-    name: 'שם הלקוח/ה',
-    city: 'באר שבע',
-    text: '[ביקורת לדוגמה — להחלפה בביקורת אמיתית מ-Google] כאן יופיע ציטוט של לקוח/ה על ניקוי הספה: מה היה המצב לפני, איך התנהל השירות ומה התוצאה.',
-    rating: 5,
-    source: 'google',
-    placeholder: true,
-  },
-  {
-    name: 'שם הלקוח/ה',
-    city: 'ערד',
-    text: '[ביקורת לדוגמה — להחלפה בביקורת אמיתית] כאן יופיע ציטוט על ניקוי מזרן או כורסה: זמן הגעה, יחס, ומה הלקוח/ה הרגיש/ה אחרי הניקוי.',
-    rating: 5,
-    source: 'google',
-    placeholder: true,
-  },
-  {
-    name: 'שם הלקוח/ה',
-    city: 'עומר',
-    text: '[ביקורת לדוגמה — להחלפה בביקורת אמיתית] כאן יופיע ציטוט על ניקוי ריפודי רכב או שטיח, כולל האם המחיר תאם את ההצעה שנסגרה מראש.',
-    rating: 5,
-    source: 'google',
-    placeholder: true,
-  },
+  // { name: 'דנה', city: 'באר שבע', text: '…', rating: 5, date: '2026-03-14' },
 ];
 
 /* ── How it works ───────────────────────────────────────────────────────── */
 
 export const steps = [
-  { title: 'שולחים תמונה', desc: 'מצלמים את הספה (או המזרן, הכיסא, הרכב) ושולחים בוואטסאפ.' },
-  { title: 'מקבלים הצעת מחיר', desc: 'הצעה ברורה לפי גודל, סוג הבד ומצב הריפוד — בלי הפתעות.' },
-  { title: 'מתאמים הגעה', desc: 'קובעים יום ושעה שנוחים לכם.' },
-  { title: 'מגיעים ומנקים', desc: 'מגיעים אליכם עם כל הציוד ומבצעים ניקוי עמוק במקום.' },
-  { title: 'נהנים מספה נקייה', desc: 'ריפוד נקי, רענן וללא ריחות — מוכן לשימוש תוך שעות ספורות.' },
+  { icon: 'camera', title: 'שולחים תמונה', desc: 'מצלמים את הספה ושולחים ב-WhatsApp.' },
+  { icon: 'tag', title: 'מקבלים מחיר מראש', desc: 'הצעה ברורה לפי גודל ומצב — בלי הפתעות.' },
+  { icon: 'calendar', title: 'קובעים מועד', desc: 'יום ושעה שנוחים לכם.' },
+  { icon: 'home', title: 'מגיעים עד הבית', desc: 'עם כל הציוד. אתם לא מכינים כלום.' },
 ] as const;
 
 /* ── Why us ─────────────────────────────────────────────────────────────── */
@@ -391,35 +411,27 @@ export const whyUs = [
 export const faq = [
   {
     q: 'כמה זמן לוקח ניקוי ספה?',
-    a: 'ספה תלת-מושבית סטנדרטית לוקחת בדרך כלל בין 45 דקות לשעה וחצי, בהתאם לגודל, לסוג הבד ולכמות הכתמים. ספה פינתית או מערכת ישיבה גדולה יכולה לקחת יותר. אנחנו אומרים לכם מראש כמה זמן להקצות.',
+    a: 'ספה תלת-מושבית סטנדרטית לוקחת בדרך כלל בין 45 דקות לשעה וחצי, בהתאם לגודל, לסוג הבד ולכמות הכתמים. ספה פינתית או מערכת ישיבה גדולה יכולה לקחת יותר — אנחנו אומרים לכם מראש כמה זמן להקצות.',
   },
   {
     q: 'כמה זמן לוקח לספה להתייבש?',
-    a: 'ברוב המקרים בין 3 ל-6 שעות, תלוי בסוג הבד, בעובי הריפוד ובאוורור בבית. השאיבה החזקה מוציאה את רוב הלחות כבר במהלך הניקוי, כך שהריפוד נשאר לח ולא רטוב. פתיחת חלון או הפעלת מזגן מקצרות את הזמן.',
+    a: 'ברוב המקרים בין 3 ל-6 שעות. השאיבה החזקה מוציאה את רוב הלחות כבר במהלך הניקוי, כך שהריפוד נשאר לח ולא רטוב. חלון פתוח, מאוורר או מזגן מקצרים את הזמן. מומלץ לא לשבת על הספה עד שהיא יבשה לגמרי.',
   },
   {
     q: 'האם אפשר להסיר כל כתם?',
-    a: 'את רוב הכתמים — כן: אוכל, שתייה, לכלוך יומיומי, זיעה וריחות. כתמים ותיקים מאוד, כתמי צבע או כתמים שנוקו בעבר בחומר לא מתאים עלולים להשאיר סימן קל. אנחנו בודקים את התמונה ואומרים לכם בכנות מה ריאלי עוד לפני שהגענו.',
+    a: 'את רוב הכתמים — כן: אוכל, שתייה, זיעה, לכלוך יומיומי וריחות. כתמי דיו, צבע או אקונומיקה משנים את צבע הסיב עצמו ולא תמיד יורדים לגמרי. אנחנו בודקים את התמונה ואומרים לכם בכנות מה ריאלי לפני שהגענו.',
   },
   {
     q: 'האם אתם מגיעים לבית הלקוח?',
-    a: 'כן, תמיד. כל הניקוי מתבצע אצלכם בבית (או ליד הרכב, במקרה של ריפודי רכב). אנחנו מגיעים עם כל הציוד והחומרים ולא צריך להוביל שום דבר.',
+    a: 'כן, תמיד. כל הניקוי מתבצע אצלכם בבית (או ליד הרכב). אנחנו מגיעים עם כל הציוד והחומרים ולא צריך להוביל שום דבר.',
   },
   {
-    q: 'האם צריך להכין משהו לפני שאתם מגיעים?',
-    a: 'כמעט כלום. מומלץ להוריד מהספה כריות נוי, שמיכות וחפצים אישיים ולפנות גישה נוחה אליה. אנחנו צריכים רק נקודת חשמל וגישה למים. את השאר אנחנו עושים.',
+    q: 'האם צריך להכין משהו לפני שמגיעים?',
+    a: 'כמעט כלום: להוריד מהספה כריות נוי, שמיכות וחפצים אישיים ולפנות גישה נוחה אליה. אנחנו צריכים רק נקודת חשמל וגישה למים.',
   },
   {
-    q: 'האם אפשר לנקות ספה כשיש ילדים או בעלי חיים בבית?',
-    a: 'כן. אנחנו משתמשים בחומרי ניקוי המתאימים לסביבה ביתית ושואבים את החומר מתוך הריפוד בסיום, כך שלא נשארות שאריות. מומלץ להמתין עד שהריפוד יבש לפני שחוזרים לשבת עליו.',
-  },
-  {
-    q: 'כמה עולה ניקוי ספה?',
-    a: 'ניקוי ספה תלת-מושבית מתחיל ב-299 ₪, וספה פינתית ב-350 ₪. המחיר הסופי נקבע לפי הגודל, סוג הבד ומצב הריפוד — ונסגר מראש, לפני שהגענו. שלחו תמונה בוואטסאפ ותקבלו הצעת מחיר מדויקת.',
-  },
-  {
-    q: 'איך מקבלים הצעת מחיר?',
-    a: 'הכי פשוט: מצלמים את הספה ושולחים לנו בוואטסאפ למספר 053-5257250 (או דרך הטופס באתר). אנחנו חוזרים אליכם עם מחיר ברור וזמינות. אפשר גם פשוט להתקשר.',
+    q: 'איך נקבע המחיר?',
+    a: 'לפי גודל הפריט, סוג הבד ומצב הכתמים. ניקוי ספה תלת-מושבית מתחיל ב-299 ₪ וספה פינתית ב-350 ₪. שולחים תמונה ב-WhatsApp למספר 053-5257250, ומקבלים מחיר סופי שנסגר מראש — המחיר שנסגר הוא המחיר שתשלמו.',
   },
 ] as const;
 
@@ -428,27 +440,19 @@ export const faq = [
 export const explainer = [
   {
     title: 'מהו ניקוי ספות מקצועי?',
-    body: 'ניקוי ספות מקצועי הוא תהליך שמנקה את הריפוד לעומק, ולא רק את פני השטח שלו. במקום להסתפק בשפשוף חיצוני, משתמשים בציוד שמזריק תמיסת ניקוי לתוך סיבי הבד ושואב אותה בחזרה יחד עם הלכלוך, האבק, השומן והריחות שהצטברו בפנים במשך שנים. התוצאה היא ספה שנראית, מרגישה ומריחה נקייה באמת.',
+    body: 'ניקוי ספות מקצועי מנקה את הריפוד לעומק, ולא רק את פני השטח שלו. במקום שפשוף חיצוני, הציוד מזריק תמיסת ניקוי לתוך סיבי הבד ושואב אותה בחזרה יחד עם הלכלוך, האבק, השומן והריחות שהצטברו בפנים במשך שנים. התוצאה היא ספה שנראית, מרגישה ומריחה נקייה באמת.',
   },
   {
     title: 'למה ניקוי ביתי רגיל לא מגיע לעומק הריפוד?',
-    body: 'שואב אבק ביתי מוציא רק את האבק העליון, ומטלית עם חומר ניקוי בעיקר מורחת את הכתם ומשאירה שאריות חומר בתוך הבד. הלכלוך שבאמת מעניין — זיעה, שומן מהעור, פירורים, קרדית האבק — יושב עמוק בתוך המילוי והסיבים, ואף מברשת לא מגיעה לשם. בלי שאיבה חזקה שמושכת את הלכלוך החוצה, הוא פשוט נשאר.',
+    body: 'שואב אבק ביתי מוציא רק את האבק העליון, ומטלית עם חומר ניקוי בעיקר מורחת את הכתם ומשאירה שאריות חומר בבד. הלכלוך שבאמת מעניין — זיעה, שומן מהעור, פירורים, קרדית האבק — יושב עמוק בתוך המילוי והסיבים. בלי שאיבה חזקה שמושכת אותו החוצה, הוא פשוט נשאר.',
   },
   {
     title: 'איך עובדת שיטת ההזרקה-יניקה?',
-    body: 'המכונה מזריקה לתוך הריפוד תמיסת ניקוי בלחץ מבוקר, שמפרקת את הלכלוך והכתמים בתוך הסיבים. מיד אחר כך, ראש השאיבה שואב את התמיסה בחזרה יחד עם כל מה שהיא הפרידה מהבד. אפשר לראות את ההבדל בעיניים: המים שנשאבים יוצאים חומים-אפורים, והריפוד נשאר לח בלבד ומתייבש תוך שעות. לפני הזרקה מבצעים שאיבה יבשה וטיפול מקדים בכתמים, ואחרי — שאיבה נוספת לייבוש.',
-  },
-  {
-    title: 'אילו כתמים אפשר לנסות להסיר?',
-    body: 'כתמי אוכל ושתייה (קפה, יין, רטבים), כתמי זיעה ושומן, לכלוך מבעלי חיים, כתמי חלב ומזון תינוקות, סימני שימוש כלליים ואפרוריות של הבד. כל אלה בדרך כלל יורדים היטב. כתמי דיו, צבע, אקונומיקה או שריפה הם מסוג אחר: הם משנים את הצבע של הסיב עצמו, ולכן לא תמיד ניתן להסיר אותם לגמרי. אנחנו מעדיפים לומר זאת מראש מאשר להבטיח ולא לעמוד בזה.',
-  },
-  {
-    title: 'כמה זמן לוקח לספה להתייבש?',
-    body: 'בדרך כלל בין 3 ל-6 שעות. הסיבה שזה מהיר יחסית היא השאיבה החזקה בסיום, שמוציאה את רוב הלחות. בדים עבים או מילוי ספוג יכולים לקחת מעט יותר. חדר מאוורר, מאוורר תקרה או מזגן מקצרים את הזמן. מומלץ לא לשבת על הספה עד שהיא יבשה לחלוטין כדי לא להטביע סימנים בבד הלח.',
+    body: 'המכונה מזריקה לתוך הריפוד תמיסת ניקוי בלחץ מבוקר שמפרקת את הלכלוך בתוך הסיבים, וראש השאיבה שואב אותה מיד בחזרה עם כל מה שהיא הפרידה מהבד. רואים את זה בעיניים: המים שנשאבים יוצאים חומים-אפורים. לפני כן מבצעים שאיבה יבשה וטיפול מקדים בכתמים, ואחרי כן שאיבה נוספת לייבוש.',
   },
   {
     title: 'באיזו תדירות מומלץ לנקות ספה?',
-    body: 'לבית ממוצע — פעם בשנה עד שנה וחצי. במשפחה עם ילדים קטנים, בעלי חיים, או אצל מי שסובל מאלרגיות, מומלץ פעם בחצי שנה עד שנה. ניקוי סדיר שומר על הבד, מונע הצטברות של ריחות וקרדית האבק ומאריך משמעותית את חיי הספה, הרבה מעבר לעלות הניקוי.',
+    body: 'לבית ממוצע — פעם בשנה עד שנה וחצי. עם ילדים קטנים, בעלי חיים או אלרגיות, מומלץ פעם בחצי שנה עד שנה. ניקוי סדיר שומר על הבד, מונע הצטברות של ריחות וקרדית האבק ומאריך את חיי הספה הרבה מעבר לעלות הניקוי.',
   },
 ] as const;
 
@@ -534,7 +538,7 @@ export const landingPages: LandingPage[] = [
 /**
  * Fill in to activate. Empty = the tag is not loaded at all (no requests,
  * no cookies). Events fired by the site: whatsapp_click, phone_click,
- * quote_form_submit, service_click, before_after_interaction.
+ * quote_started, quote_completed, service_selected, before_after_interaction.
  */
 export const analytics = {
   /** GA4 measurement ID, e.g. 'G-XXXXXXXXXX'. */
@@ -545,7 +549,7 @@ export const analytics = {
   googleAdsConversionLabels: {
     whatsapp_click: '',
     phone_click: '',
-    quote_form_submit: '',
+    quote_completed: '',
   },
   /** Meta Pixel ID, e.g. '1234567890'. */
   metaPixelId: '',
@@ -555,7 +559,7 @@ export const analytics = {
 
 /**
  * The quick-quote form always hands the lead to WhatsApp. If this URL is set
- * it ALSO posts the lead as JSON ({ name, phone, city, service, page }) to it
+ * it ALSO posts the lead as JSON ({ service, seats, stains, city, page }) to it
  * first — a Zapier/Make hook, Google Sheets script, or the CRM in this repo.
  */
 export const leads = {
@@ -570,5 +574,5 @@ export const nav = [
   { href: '#before-after', label: 'לפני ואחרי' },
   { href: '#reviews', label: 'ביקורות' },
   { href: '#faq', label: 'שאלות ותשובות' },
-  { href: '#contact', label: 'צור קשר' },
+  { href: '#areas', label: 'אזורי שירות' },
 ] as const;

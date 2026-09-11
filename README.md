@@ -41,7 +41,7 @@ npm run dev      # http://localhost:3000
 
 | מה | איפה בקונפיג | קבצים | מה קורה עד אז |
 | --- | --- | --- | --- |
-| סרטון מהשטח (בראש סקשן לפני/אחרי) | `featuredVideo` — `mp4`, `poster`, `aspect`, כותרת, טקסט, נקודות, `city` | `public/hamavrik/video/` (4:3, ללא קול; סרטון אנכי נכנס למסגרת עם רקע מטושטש) | מוצג סרטון ניקוי הכורסאות |
+| סרטון מהשטח (בראש סקשן לפני/אחרי) | `featuredVideo` = `featuredVideoPortrait` (אנכי 9:16) או `featuredVideoWide` (4:3 עם רקע מטושטש); לכל אחד `mp4`, `poster`, `aspect`, כותרת, טקסט, נקודות, `city` | `public/hamavrik/video/` (ללא קול) | מוצג סרטון ניקוי הכורסאות |
 | וידאו/תמונת Hero | `heroMedia` | `public/video/` או `public/hamavrik/` | מוצג הווידאו האמיתי הקיים של ראש השאיבה |
 | לפני/אחרי (4–6 עבודות) | `beforeAfterJobs` — לכל עבודה `beforeImage`, `afterImage`, `itemLabel`, `city`, `problem`. דף הבית מציג `HOME_JOBS` (4; 3 במובייל) ומקשר לגלריה | `public/hamavrik/jobs/` — **שתי התמונות באותו יחס ובאותו crop** (1200×750) | איור עם תווית "איור להמחשה" |
 | גלריית עבודות | `workGallery` | `public/hamavrik/gallery/` | הסקשן מוסתר לגמרי |

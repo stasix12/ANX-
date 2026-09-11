@@ -314,38 +314,12 @@ export const galleryCategoryOf: Record<ServiceId, GalleryCategory> = {
 
 /* ── Featured video (REAL FOOTAGE) ──────────────────────────────────────── */
 
-/**
- * The one clip that does the selling, shown at the top of the before/after
- * section on the home page, on sofa landing pages and in the gallery.
- * Current clip: the technician deep-cleaning white fabric armchairs at a
- * customer's home (portrait phone footage set inside a 4:3 frame with a
- * blurred fill, muted, ~3 MB). To swap: drop a new MP4 + poster under
- * /public/hamavrik/video/, keep `aspect` matching the file, and rewrite the
- * copy. Set to null to hide. Nothing here is invented — edit `city` when known.
- */
-export const featuredVideo = {
-  mp4: '/hamavrik/video/process-armchairs.mp4',
-  webm: null as string | null,
-  poster: '/hamavrik/video/process-armchairs-poster.jpg',
-  /** Landscape 4:3 — keep new clips at the same ratio so the card doesn't change. */
-  aspect: '4/3',
-  eyebrow: 'מהשטח',
-  title: 'ככה אנחנו עובדים.',
-  itemLabel: 'כורסאות בד',
-  city: null as string | null,
-  problem: 'ניקוי עמוק בהזרקה-יניקה',
-  description: 'צילום אמיתי מעבודה: ניקוי עמוק של כורסאות בד בבית הלקוח — שאיבה, הזרקת תמיסת ניקוי בלחץ ושאיבה חוזרת עד שהריפוד נקי.',
-  points: ['ציוד מקצועי, לא מכשיר ביתי', 'הכול מתבצע אצלכם בבית', 'הריפוד יבש תוך שעות'],
-  service: 'armchair' as ServiceId,
-  /** ISO date the footage was shot/published (for the VideoObject schema). */
-  date: '2026-09-11',
-  /** Length in seconds (for the schema). */
-  seconds: 33,
-} as {
+export interface FeaturedVideo {
   mp4: string;
   webm: string | null;
   poster: string;
-  aspect: string;
+  /** CSS aspect ratio of the file: '9/16' (portrait) or '4/3' (landscape). The card adapts. */
+  aspect: '9/16' | '4/3';
   eyebrow: string;
   title: string;
   itemLabel: string;
@@ -354,9 +328,52 @@ export const featuredVideo = {
   description: string;
   points: string[];
   service: ServiceId;
+  /** ISO date the footage was shot/published (for the VideoObject schema). */
   date: string;
+  /** Length in seconds (for the schema). */
   seconds: number;
-} | null;
+}
+
+const armchairsCopy = {
+  eyebrow: 'מהשטח',
+  title: 'ככה אנחנו עובדים.',
+  itemLabel: 'כורסאות בד',
+  city: null,
+  problem: 'ניקוי עמוק בהזרקה-יניקה',
+  description: 'צילום אמיתי מעבודה: ניקוי עמוק של כורסאות בד בבית הלקוח — שאיבה, הזרקת תמיסת ניקוי בלחץ ושאיבה חוזרת עד שהריפוד נקי.',
+  points: ['ציוד מקצועי, לא מכשיר ביתי', 'הכול מתבצע אצלכם בבית', 'הריפוד יבש תוך שעות'],
+  service: 'armchair' as ServiceId,
+  date: '2026-09-11',
+  seconds: 33,
+};
+
+/** The technician's clip as shot — portrait, full quality, no fill. */
+export const featuredVideoPortrait: FeaturedVideo = {
+  mp4: '/hamavrik/video/process-armchairs-portrait.mp4',
+  webm: null,
+  poster: '/hamavrik/video/process-armchairs-portrait-poster.jpg',
+  aspect: '9/16',
+  ...armchairsCopy,
+};
+
+/** The same clip inside a 4:3 frame with a blurred fill on both sides. */
+export const featuredVideoWide: FeaturedVideo = {
+  mp4: '/hamavrik/video/process-armchairs.mp4',
+  webm: null,
+  poster: '/hamavrik/video/process-armchairs-poster.jpg',
+  aspect: '4/3',
+  ...armchairsCopy,
+};
+
+/**
+ * The one clip that does the selling, shown at the top of the before/after
+ * section on the home page, on sofa landing pages and in the gallery.
+ * Pick `featuredVideoPortrait` or `featuredVideoWide` (or null to hide).
+ * To add a new clip: drop MP4 + poster under /public/hamavrik/video/ and
+ * describe it like the two above. Nothing here is invented — fill `city`
+ * when known.
+ */
+export const featuredVideo: FeaturedVideo | null = featuredVideoPortrait;
 
 /* ── Work gallery (REAL PHOTOS GO HERE) ─────────────────────────────────── */
 

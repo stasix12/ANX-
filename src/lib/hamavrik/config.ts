@@ -312,6 +312,35 @@ export const galleryCategoryOf: Record<ServiceId, GalleryCategory> = {
   'wall-to-wall': 'carpet',
 };
 
+/* ── Featured before/after video (REAL FOOTAGE) ─────────────────────────── */
+
+/**
+ * The one clip that does the selling: the customer's own footage cut into
+ * "לפני → אחרי" (files under /public/hamavrik/video/). Shown at the top of
+ * the before/after section on the home page and on sofa landing pages.
+ * Set to null to hide. Fill `city` once known — nothing is invented.
+ */
+export const featuredVideo = {
+  mp4: '/hamavrik/video/sofa-before-after.mp4',
+  webm: null,
+  poster: '/hamavrik/video/sofa-before-after-poster.jpg',
+  /** Portrait 4:5 — keep new clips at the same ratio so the card doesn't change. */
+  aspect: '4/5',
+  itemLabel: 'ספת בד',
+  city: null as string | null,
+  problem: 'ניקוי עמוק והסרת כתמים',
+  service: 'sofa' as ServiceId,
+} as {
+  mp4: string;
+  webm: string | null;
+  poster: string;
+  aspect: string;
+  itemLabel: string;
+  city: string | null;
+  problem: string;
+  service: ServiceId;
+} | null;
+
 /* ── Work gallery (REAL PHOTOS GO HERE) ─────────────────────────────────── */
 
 /**

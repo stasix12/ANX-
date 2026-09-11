@@ -2,10 +2,11 @@ import type { Metadata } from 'next';
 import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq } from '@/components/hamavrik/Faq';
+import { FeaturedVideo } from '@/components/hamavrik/FeaturedVideo';
 import { FinalCta } from '@/components/hamavrik/FinalCta';
 import { Hero } from '@/components/hamavrik/Hero';
 import { HowItWorks } from '@/components/hamavrik/HowItWorks';
-import { JsonLd, allServicesSchema, breadcrumbSchema, faqSchema } from '@/components/hamavrik/JsonLd';
+import { JsonLd, allServicesSchema, breadcrumbSchema, faqSchema, featuredVideoSchema } from '@/components/hamavrik/JsonLd';
 import { Pricing } from '@/components/hamavrik/Pricing';
 import { QuickQuote } from '@/components/hamavrik/QuickQuote';
 import { Reveal } from '@/components/hamavrik/Reveal';
@@ -33,13 +34,14 @@ export default function HomePage() {
   const sofaFrom = priceList[0]?.from;
   return (
     <>
-      <JsonLd data={[...allServicesSchema(), faqSchema(), breadcrumbSchema([{ name: business.name, path: '/' }])]} />
+      <JsonLd data={[...allServicesSchema(), faqSchema(), breadcrumbSchema([{ name: business.name, path: '/' }]), ...(featuredVideoSchema() ? [featuredVideoSchema()!] : [])]} />
 
       <Hero />
       <TrustStrip />
 
       <Section id="before-after">
-        <SectionHeading eyebrow="לפני ואחרי" title="התוצאות מדברות בעד עצמן" lede="גררו את הידית ותראו את ההבדל בעצמכם." />
+        <SectionHeading eyebrow="לפני ואחרי" title="התוצאות מדברות בעד עצמן" lede="צפו בסרטון, ואז גררו את הידית ותראו את ההבדל בעצמכם." />
+        <FeaturedVideo />
         <BeforeAfterGallery jobs={beforeAfterJobs} limit={HOME_JOBS} galleryLink />
       </Section>
 

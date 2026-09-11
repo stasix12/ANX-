@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq } from '@/components/hamavrik/Faq';
+import { FeaturedVideo } from '@/components/hamavrik/FeaturedVideo';
 import { FinalCta } from '@/components/hamavrik/FinalCta';
 import { Hero } from '@/components/hamavrik/Hero';
 import { HowItWorks } from '@/components/hamavrik/HowItWorks';
@@ -109,6 +110,7 @@ export default async function LandingPage({ params }: PageProps) {
 
       <Section id="before-after" className="pt-8 sm:pt-10 lg:pt-12">
         <SectionHeading eyebrow="לפני ואחרי" title="התוצאות מדברות בעד עצמן" lede={page.intro} />
+        {service.id === 'sofa' ? <FeaturedVideo /> : null}
         <BeforeAfterGallery jobs={gallery.length ? gallery : beforeAfterJobs} limit={3} galleryLink />
       </Section>
 

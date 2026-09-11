@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
+import { FeaturedVideo } from '@/components/hamavrik/FeaturedVideo';
 import { FinalCta } from '@/components/hamavrik/FinalCta';
 import { JsonLd, breadcrumbSchema } from '@/components/hamavrik/JsonLd';
 import { Section, SectionHeading } from '@/components/hamavrik/Section';
@@ -34,6 +35,7 @@ export default function GalleryPage() {
       </nav>
       <Section id="before-after" className="pt-6 sm:pt-8">
         <SectionHeading as="h1" eyebrow="לפני ואחרי" title="גלריית העבודות שלנו" lede="גררו את הידית בכל עבודה ותראו את ההבדל." />
+        <FeaturedVideo />
         <BeforeAfterGallery jobs={beforeAfterJobs} tabs />
       </Section>
       <WorkGallery />

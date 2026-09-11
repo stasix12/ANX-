@@ -1,6 +1,7 @@
 import {
   business,
   faq,
+  featuredVideo,
   priceList,
   reviews,
   serviceAreas,
@@ -87,6 +88,22 @@ export function serviceSchema(service: Service, city?: string) {
           },
         }
       : {}),
+  };
+}
+
+/** VideoObject for the real before/after clip — eligible for video rich results. */
+export function featuredVideoSchema() {
+  if (!featuredVideo) return null;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    name: `${featuredVideo.itemLabel} — לפני ואחרי ניקוי | ${business.name}`,
+    description: `${featuredVideo.problem}. צילום אמיתי מעבודה של ${business.name}: הספה לפני ואחרי ניקוי עמוק בבית הלקוח.`,
+    thumbnailUrl: publicUrl(featuredVideo.poster),
+    contentUrl: publicUrl(featuredVideo.mp4),
+    uploadDate: '2026-09-11',
+    duration: 'PT6S',
+    publisher: { '@id': BUSINESS_ID },
   };
 }
 

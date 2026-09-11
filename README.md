@@ -41,6 +41,7 @@ npm run dev      # http://localhost:3000
 
 | מה | איפה בקונפיג | קבצים | מה קורה עד אז |
 | --- | --- | --- | --- |
+| סרטון לפני/אחרי (הצילום האמיתי, בראש סקשן לפני/אחרי) | `featuredVideo` — `mp4`, `poster`, `itemLabel`, `city`, `problem` | `public/hamavrik/video/` (4:5, ~6 שניות, ללא קול) | מוצג הסרטון הקיים של הספה האפורה |
 | וידאו/תמונת Hero | `heroMedia` | `public/video/` או `public/hamavrik/` | מוצג הווידאו האמיתי הקיים של ראש השאיבה |
 | לפני/אחרי (4–6 עבודות) | `beforeAfterJobs` — לכל עבודה `beforeImage`, `afterImage`, `itemLabel`, `city`, `problem`. דף הבית מציג `HOME_JOBS` (4; 3 במובייל) ומקשר לגלריה | `public/hamavrik/jobs/` — **שתי התמונות באותו יחס ובאותו crop** (1200×750) | איור עם תווית "איור להמחשה" |
 | גלריית עבודות | `workGallery` | `public/hamavrik/gallery/` | הסקשן מוסתר לגמרי |

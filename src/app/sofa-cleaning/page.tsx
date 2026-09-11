@@ -40,7 +40,7 @@ export default function HomePage() {
       <TrustStrip />
 
       <Section id="before-after">
-        <SectionHeading eyebrow="לפני ואחרי" title="התוצאות מדברות בעד עצמן" lede="צפו בסרטון, ואז גררו את הידית ותראו את ההבדל בעצמכם." />
+        <SectionHeading eyebrow="לפני ואחרי" title="התוצאות מדברות בעד עצמן" lede="צפו איך זה נעשה, ואז גררו את הידית ותראו את ההבדל בעצמכם." />
         <FeaturedVideo />
         <BeforeAfterGallery jobs={beforeAfterJobs} limit={HOME_JOBS} galleryLink />
       </Section>

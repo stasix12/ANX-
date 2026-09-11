@@ -91,18 +91,18 @@ export function serviceSchema(service: Service, city?: string) {
   };
 }
 
-/** VideoObject for the real before/after clip — eligible for video rich results. */
+/** VideoObject for the featured real-footage clip — eligible for video rich results. */
 export function featuredVideoSchema() {
   if (!featuredVideo) return null;
   return {
     '@context': 'https://schema.org',
     '@type': 'VideoObject',
-    name: `${featuredVideo.itemLabel} — לפני ואחרי ניקוי | ${business.name}`,
-    description: `${featuredVideo.problem}. צילום אמיתי מעבודה של ${business.name}: הספה לפני ואחרי ניקוי עמוק בבית הלקוח.`,
+    name: `${featuredVideo.itemLabel} — ${featuredVideo.problem} | ${business.name}`,
+    description: featuredVideo.description,
     thumbnailUrl: publicUrl(featuredVideo.poster),
     contentUrl: publicUrl(featuredVideo.mp4),
-    uploadDate: '2026-09-11',
-    duration: 'PT6S',
+    uploadDate: featuredVideo.date,
+    duration: `PT${featuredVideo.seconds}S`,
     publisher: { '@id': BUSINESS_ID },
   };
 }

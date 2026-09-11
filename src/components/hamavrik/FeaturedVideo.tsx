@@ -8,10 +8,8 @@ import { featuredVideo } from '@/lib/hamavrik/config';
 import { waLinkFor } from '@/lib/hamavrik/links';
 import { asset } from '@/lib/site';
 
-const POINTS = ['צילום אמיתי, ללא עריכה של הבד', 'הזרקה-יניקה בלחץ מקצועי', 'הריפוד יבש תוך שעות'];
-
 /**
- * The real before→after clip, placed as the first proof on the page. The
+ * The real job footage, placed as the first proof on the page. The
  * markup is a plain <video> with a poster and preload="none": nothing is
  * fetched until the card scrolls into view, then it plays muted on a loop
  * and pauses again when it leaves the screen. A tap toggles pause/play.
@@ -56,12 +54,12 @@ export function FeaturedVideo() {
   }
 
   return (
-    <div className="surface mb-6 grid overflow-hidden rounded-2xl sm:mb-8 lg:grid-cols-[minmax(0,420px)_1fr]">
+    <div className="surface mb-6 grid overflow-hidden rounded-2xl sm:mb-8 lg:grid-cols-[minmax(0,1.2fr)_1fr]">
       <button
         type="button"
         onClick={toggle}
         aria-label={paused ? 'הפעלת הסרטון' : 'השהיית הסרטון'}
-        className="relative block w-full bg-ink-900 text-start"
+        className="relative block w-full bg-ink-900 text-start lg:h-full lg:min-h-[22rem]"
         style={{ aspectRatio: v.aspect }}
       >
         <video
@@ -86,17 +84,20 @@ export function FeaturedVideo() {
         <span className="pointer-events-none absolute bottom-3 start-3 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">
           🎥 צילום אמיתי מעבודה שלנו
         </span>
+        {!paused ? (
+          <span className="pointer-events-none absolute end-3 top-3 rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-bold text-white backdrop-blur-sm">ללא קול</span>
+        ) : null}
       </button>
 
       <div className="flex flex-col justify-center gap-3 p-5 sm:p-7">
-        <span className="shine-eyebrow self-start">לפני ואחרי בווידאו</span>
-        <h3 className="text-2xl font-black leading-tight sm:text-3xl">ככה זה נראה באמת.</h3>
+        <span className="shine-eyebrow self-start">{v.eyebrow}</span>
+        <h3 className="text-2xl font-black leading-tight sm:text-3xl">{v.title}</h3>
         <p className="text-mist-300">
           <span className="font-extrabold text-mist-100">{v.itemLabel}</span>
-          {v.city ? <span className="text-mist-500"> | {v.city}</span> : null} — {v.problem}. אותה ספה, לפני ואחרי ניקוי עמוק בבית הלקוח.
+          {v.city ? <span className="text-mist-500"> | {v.city}</span> : null} — {v.problem}. {v.description}
         </p>
         <ul className="grid gap-1.5 text-sm font-bold">
-          {POINTS.map((p) => (
+          {v.points.map((p) => (
             <li key={p} className="flex items-center gap-2">
               <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-wa-100 text-wa-600">
                 <CheckIcon className="h-3 w-3" />
@@ -105,7 +106,7 @@ export function FeaturedVideo() {
             </li>
           ))}
         </ul>
-        <WaButton location="featured-video" href={waLinkFor('ראיתי את הסרטון — מצרפ/ת תמונה של הספה שלי 📷')} className="mt-1 self-start">
+        <WaButton location="featured-video" href={waLinkFor('ראיתי את הסרטון — מצרפ/ת תמונה 📷')} className="mt-1 self-start">
           רוצים תוצאה כזאת? שלחו תמונה
         </WaButton>
       </div>

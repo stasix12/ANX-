@@ -312,33 +312,50 @@ export const galleryCategoryOf: Record<ServiceId, GalleryCategory> = {
   'wall-to-wall': 'carpet',
 };
 
-/* ── Featured before/after video (REAL FOOTAGE) ─────────────────────────── */
+/* ── Featured video (REAL FOOTAGE) ──────────────────────────────────────── */
 
 /**
- * The one clip that does the selling: the customer's own footage cut into
- * "לפני → אחרי" (files under /public/hamavrik/video/). Shown at the top of
- * the before/after section on the home page and on sofa landing pages.
- * Set to null to hide. Fill `city` once known — nothing is invented.
+ * The one clip that does the selling, shown at the top of the before/after
+ * section on the home page, on sofa landing pages and in the gallery.
+ * Current clip: the technician deep-cleaning white fabric armchairs at a
+ * customer's home (portrait phone footage set inside a 4:3 frame with a
+ * blurred fill, muted, ~3 MB). To swap: drop a new MP4 + poster under
+ * /public/hamavrik/video/, keep `aspect` matching the file, and rewrite the
+ * copy. Set to null to hide. Nothing here is invented — edit `city` when known.
  */
 export const featuredVideo = {
-  mp4: '/hamavrik/video/sofa-before-after.mp4',
-  webm: null,
-  poster: '/hamavrik/video/sofa-before-after-poster.jpg',
-  /** Portrait 4:5 — keep new clips at the same ratio so the card doesn't change. */
-  aspect: '4/5',
-  itemLabel: 'ספת בד',
+  mp4: '/hamavrik/video/process-armchairs.mp4',
+  webm: null as string | null,
+  poster: '/hamavrik/video/process-armchairs-poster.jpg',
+  /** Landscape 4:3 — keep new clips at the same ratio so the card doesn't change. */
+  aspect: '4/3',
+  eyebrow: 'מהשטח',
+  title: 'ככה אנחנו עובדים.',
+  itemLabel: 'כורסאות בד',
   city: null as string | null,
-  problem: 'ניקוי עמוק והסרת כתמים',
-  service: 'sofa' as ServiceId,
+  problem: 'ניקוי עמוק בהזרקה-יניקה',
+  description: 'צילום אמיתי מעבודה: ניקוי עמוק של כורסאות בד בבית הלקוח — שאיבה, הזרקת תמיסת ניקוי בלחץ ושאיבה חוזרת עד שהריפוד נקי.',
+  points: ['ציוד מקצועי, לא מכשיר ביתי', 'הכול מתבצע אצלכם בבית', 'הריפוד יבש תוך שעות'],
+  service: 'armchair' as ServiceId,
+  /** ISO date the footage was shot/published (for the VideoObject schema). */
+  date: '2026-09-11',
+  /** Length in seconds (for the schema). */
+  seconds: 33,
 } as {
   mp4: string;
   webm: string | null;
   poster: string;
   aspect: string;
+  eyebrow: string;
+  title: string;
   itemLabel: string;
   city: string | null;
   problem: string;
+  description: string;
+  points: string[];
   service: ServiceId;
+  date: string;
+  seconds: number;
 } | null;
 
 /* ── Work gallery (REAL PHOTOS GO HERE) ─────────────────────────────────── */

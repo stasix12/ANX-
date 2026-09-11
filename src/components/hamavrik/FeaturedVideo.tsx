@@ -58,14 +58,14 @@ export function FeaturedVideo() {
   return (
     <div
       className={`surface mb-6 grid overflow-hidden rounded-2xl sm:mb-8 ${
-        portrait ? 'lg:grid-cols-[minmax(0,360px)_1fr]' : 'lg:grid-cols-[minmax(0,1.2fr)_1fr]'
+        portrait ? 'lg:grid-cols-[minmax(0,300px)_1fr]' : 'lg:grid-cols-[minmax(0,1.2fr)_1fr]'
       }`}
     >
       <button
         type="button"
         onClick={toggle}
         aria-label={paused ? 'הפעלת הסרטון' : 'השהיית הסרטון'}
-        className={`relative block w-full bg-ink-900 text-start ${portrait ? 'mx-auto max-w-[430px] lg:max-w-none' : 'lg:h-full lg:min-h-[22rem]'}`}
+        className={`relative block w-full bg-ink-900 text-start ${portrait ? 'mx-auto mt-4 max-w-[260px] overflow-hidden rounded-xl sm:max-w-[300px] lg:mt-0 lg:max-w-none lg:rounded-none' : 'lg:h-full lg:min-h-[22rem]'}`}
         style={{ aspectRatio: v.aspect }}
       >
         <video

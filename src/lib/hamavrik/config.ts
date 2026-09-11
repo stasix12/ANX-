@@ -129,7 +129,7 @@ export const services: Service[] = [
     id: 'sofa',
     label: 'ספה',
     name: 'ניקוי ספות',
-    short: 'ניקוי עמוק לספות בד, פינתיות ומערכות ישיבה — בבית הלקוח.',
+    short: 'ספות בד, פינתיות ומערכות ישיבה — ניקוי עמוק בבית הלקוח.',
     description:
       'ניקוי עמוק של הריפוד בשיטת הזרקה-יניקה, טיפול נקודתי בכתמים, נטרול ריחות והוצאת הלכלוך שהצטבר בתוך סיבי הבד. הספה מתייבשת תוך שעות ספורות ומוכנה לשימוש.',
     scene: 'sofa',
@@ -141,7 +141,7 @@ export const services: Service[] = [
     id: 'mattress',
     label: 'מזרן',
     name: 'ניקוי מזרנים',
-    short: 'הסרת כתמים, קרדית האבק ולכלוך עמוק ממזרנים — לשינה נקייה יותר.',
+    short: 'הסרת כתמים, קרדית האבק ולכלוך עמוק — לשינה נקייה יותר.',
     description:
       'ניקוי עמוק ומקיף למזרנים: הסרת כתמי זיעה ונוזלים, טיפול בריחות והוצאת אבק מצטבר מתוך המזרן. מומלץ במיוחד למי שסובל מאלרגיות או לחדרי ילדים.',
     scene: 'mattress',
@@ -153,7 +153,7 @@ export const services: Service[] = [
     id: 'armchair',
     label: 'כורסאות',
     name: 'ניקוי כורסאות',
-    short: 'רענון והחזרת הצבע לכורסאות, כיסאות טלוויזיה וריקליינרים.',
+    short: 'רענון והחזרת הצבע לכורסאות, ריקליינרים וכיסאות טלוויזיה.',
     description:
       'כורסה נקייה משנה את כל הסלון. אנחנו מנקים כורסאות בד מכל הסוגים, כולל ריקליינרים וכורסאות הנקה, עם התאמת חומרי הניקוי לסוג הבד.',
     scene: 'armchair',
@@ -177,7 +177,7 @@ export const services: Service[] = [
     id: 'car',
     label: 'רכב',
     name: 'ניקוי ריפודי רכב',
-    short: 'מושבים, ריפודי דלתות ושטיחוני רכב — ניקוי עמוק במקום שנוח לכם.',
+    short: 'מושבים, ריפודי דלתות ושטיחונים — ניקוי עמוק במקום שנוח לכם.',
     description:
       'ניקוי מושבי הרכב, ריפודי הדלתות, התקרה והשטיחונים בציוד מקצועי. מסירים כתמי קפה, אוכל, ריחות עשן וסימני שימוש — ומחזירים לרכב תחושה של חדש.',
     scene: 'car',
@@ -189,7 +189,7 @@ export const services: Service[] = [
     id: 'carpet',
     label: 'שטיח',
     name: 'ניקוי שטיחים',
-    short: 'שטיחים מכל הסוגים, בבית הלקוח וללא צורך בהובלה.',
+    short: 'שטיחים מכל הסוגים, בבית הלקוח וללא הובלה.',
     description:
       'ניקוי עמוק לשטיחים מבד, צמר וסיבים סינתטיים — הסרת כתמים, אבק ולכלוך שהצטבר בעומק הסיבים. הכול מתבצע אצלכם בבית, בלי לגלגל ולהוביל את השטיח לשום מקום.',
     scene: 'carpet',
@@ -201,7 +201,7 @@ export const services: Service[] = [
     id: 'wall-to-wall',
     label: 'שטיח מקיר לקיר',
     name: 'ניקוי שטיחים מקיר לקיר',
-    short: 'ניקוי כל השטח בשיטת הזרקה-יניקה, כולל אזורי מעבר מלוכלכים.',
+    short: 'ניקוי כל השטח בשיטת הזרקה-יניקה, כולל אזורי מעבר.',
     description:
       'שטיחים מקיר לקיר צוברים לכלוך בעיקר באזורי המעבר. אנחנו מנקים את כל השטח בשיטת הזרקה-יניקה, עם דגש על הכתמים ואזורי השימוש הכבד, וללא השארת שאריות חומר.',
     scene: 'carpet',
@@ -227,6 +227,9 @@ export const serviceById = Object.fromEntries(services.map((s) => [s.id, s])) as
 
 /* ── Price list ─────────────────────────────────────────────────────────── */
 
+/** What every price includes — the "מה כלול" card next to the price list. */
+export const priceIncludes = ['הגעה לבית הלקוח', 'ניקוי עמוק', 'טיפול בכתמים', 'נטרול ריחות', 'שאיבה לייבוש מהיר'];
+
 export interface PriceRow {
   label: string;
   /** Starting price in ₪; null renders "לפי הצעת מחיר". */
@@ -251,14 +254,17 @@ export const priceDisclaimer =
 /* ── Before / after gallery (REAL JOBS GO HERE) ─────────────────────── */
 
 /**
- * One entry per job. Until `before`/`after` point at real photos the card
- * draws the illustration named in `scene` and wears a small "איור להמחשה"
- * tag — never an invented "real" job. To publish a real job:
- *   1. drop the two photos in /public/hamavrik/jobs/ (same framing, 1200×750,
- *      WebP or JPG — next/image serves them responsively),
- *   2. fill `before` and `after` with their paths (e.g. '/hamavrik/jobs/sofa-1-before.webp'),
+ * One entry per job. Until `beforeImage`/`afterImage` point at real photos
+ * the card draws the illustration named in `scene` and wears a small
+ * "איור להמחשה" tag — never an invented "real" job. To publish a real job:
+ *   1. drop the two photos in /public/hamavrik/jobs/ — SAME aspect ratio and
+ *      SAME crop for both (the slider overlays one on the other; 1200×750 is
+ *      ideal, WebP or JPG — next/image serves AVIF/WebP responsively),
+ *   2. fill `beforeImage` and `afterImage` with their paths
+ *      (e.g. '/hamavrik/jobs/sofa-1-before.webp'),
  *   3. write the real service / city / problem.
- * The design does not change; only the pixels do. Aim for 4–6 jobs.
+ * The home page shows the first `HOME_JOBS` entries; the gallery page shows
+ * them all. The design does not change; only the pixels do.
  */
 export interface BeforeAfterJob {
   id: string;
@@ -270,17 +276,20 @@ export interface BeforeAfterJob {
   problem: string;
   /** Illustration used while the photos are null. */
   scene: SceneKind;
-  before: string | null;
-  after: string | null;
+  beforeImage: string | null;
+  afterImage: string | null;
 }
 
+/** How many before/after jobs the home page shows (the rest live in /gallery). */
+export const HOME_JOBS = 4;
+
 export const beforeAfterJobs: BeforeAfterJob[] = [
-  { id: 'sofa-1', service: 'sofa', itemLabel: 'ספת בד', city: 'באר שבע', problem: 'ניקוי עמוק והסרת כתמים', scene: 'sofa', before: null, after: null },
-  { id: 'sofa-2', service: 'sofa', itemLabel: 'ספה פינתית', city: 'ערד', problem: 'נטרול ריחות וניקוי עמוק', scene: 'sofa', before: null, after: null },
-  { id: 'mattress-1', service: 'mattress', itemLabel: 'מזרן זוגי', city: 'באר שבע', problem: 'הסרת כתמים וקרדית האבק', scene: 'mattress', before: null, after: null },
-  { id: 'chairs-1', service: 'chairs', itemLabel: 'כיסאות פינת אוכל', city: 'עומר', problem: 'כתמי אוכל והחזרת צבע', scene: 'chair', before: null, after: null },
-  { id: 'car-1', service: 'car', itemLabel: 'מושבי רכב', city: 'באר שבע', problem: 'כתמי קפה וריחות', scene: 'car', before: null, after: null },
-  { id: 'carpet-1', service: 'carpet', itemLabel: 'שטיח סלון', city: 'באר שבע', problem: 'ניקוי עמוק והסרת אבק', scene: 'carpet', before: null, after: null },
+  { id: 'sofa-1', service: 'sofa', itemLabel: 'ספת בד', city: 'באר שבע', problem: 'ניקוי עמוק והסרת כתמים', scene: 'sofa', beforeImage: null, afterImage: null },
+  { id: 'sofa-2', service: 'sofa', itemLabel: 'ספה פינתית', city: 'ערד', problem: 'נטרול ריחות וניקוי עמוק', scene: 'sofa', beforeImage: null, afterImage: null },
+  { id: 'mattress-1', service: 'mattress', itemLabel: 'מזרן זוגי', city: 'באר שבע', problem: 'הסרת כתמים וקרדית האבק', scene: 'mattress', beforeImage: null, afterImage: null },
+  { id: 'chairs-1', service: 'chairs', itemLabel: 'כיסאות פינת אוכל', city: 'עומר', problem: 'כתמי אוכל והחזרת צבע', scene: 'chair', beforeImage: null, afterImage: null },
+  { id: 'car-1', service: 'car', itemLabel: 'מושבי רכב', city: 'באר שבע', problem: 'כתמי קפה וריחות', scene: 'car', beforeImage: null, afterImage: null },
+  { id: 'carpet-1', service: 'carpet', itemLabel: 'שטיח סלון', city: 'באר שבע', problem: 'ניקוי עמוק והסרת אבק', scene: 'carpet', beforeImage: null, afterImage: null },
 ];
 
 /** Gallery tabs; a job is filed under the tab of its service. */
@@ -398,12 +407,10 @@ export const steps = [
 /* ── Why us ─────────────────────────────────────────────────────────────── */
 
 export const whyUs = [
-  { icon: 'machine', title: 'ציוד מקצועי', desc: 'אנחנו עובדים עם ציוד מתקדם לניקוי עמוק של הריפוד — לא מכשיר ביתי.' },
-  { icon: 'droplet', title: 'טיפול מקצועי בכתמים', desc: 'התאמת שיטת העבודה וחומרי הניקוי לסוג הבד ולמצב הספה.' },
-  { icon: 'home', title: 'שירות בבית הלקוח', desc: 'אין צורך להוביל את הספה לשום מקום. הכול מתבצע אצלכם.' },
-  { icon: 'chat', title: 'שירות אישי', desc: 'תקשורת ישירה, תיאום ברור והצעת מחיר מראש.' },
-  { icon: 'sparkle', title: 'ניקוי עמוק', desc: 'הוצאת הלכלוך שמצטבר בתוך סיבי הריפוד — לא רק ניקוי חיצוני.' },
-  { icon: 'clock', title: 'ייבוש מהיר', desc: 'שאיבה חזקה משאירה את הריפוד לח בלבד, כך שהוא מתייבש תוך שעות.' },
+  { icon: 'machine', title: 'ציוד מקצועי', desc: 'הזרקה-יניקה בלחץ — לא מכשיר ביתי.' },
+  { icon: 'droplet', title: 'טיפול מקצועי בכתמים', desc: 'שיטה וחומרים לפי סוג הבד.' },
+  { icon: 'home', title: 'שירות בבית הלקוח', desc: 'לא מובילים שום דבר לשום מקום.' },
+  { icon: 'chat', title: 'שירות אישי', desc: 'תיאום ברור והצעת מחיר מראש.' },
 ] as const;
 
 /* ── FAQ ────────────────────────────────────────────────────────────────── */

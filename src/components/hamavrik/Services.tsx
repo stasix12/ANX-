@@ -15,8 +15,8 @@ import Image from 'next/image';
 export function ServiceCard({ service, delay = 0 }: { service: Service; delay?: number }) {
   return (
     <Reveal as="li" delay={delay}>
-      <article className="surface surface-hover flex items-center gap-3.5 rounded-2xl p-3 sm:gap-4 sm:p-4">
-        <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-900 sm:h-24 sm:w-28">
+      <article className="surface surface-hover flex items-center gap-3 rounded-2xl p-2.5 sm:gap-4 sm:p-4">
+        <div className="relative h-[4.25rem] w-[5.5rem] shrink-0 overflow-hidden rounded-xl bg-ink-900 sm:h-24 sm:w-28">
           {service.image ? (
             <Image src={service.image} alt={service.name} fill sizes="112px" className="object-cover" />
           ) : (
@@ -32,11 +32,11 @@ export function ServiceCard({ service, delay = 0 }: { service: Service; delay?: 
               </span>
             ) : null}
           </h3>
-          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-mist-300 sm:text-sm">{service.short}</p>
+          <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-mist-300 sm:text-sm">{service.short}</p>
           <WaLink
             href={waLinkFor(`מתעניין/ת ב${service.name}.`)}
             location={`service-card:${service.id}`}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-wa-100 px-3 py-1.5 text-xs font-extrabold text-wa-600 transition-colors hover:bg-wa-500 hover:text-white"
+            className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-wa-100 px-3 py-1 text-xs font-extrabold text-wa-600 transition-colors hover:bg-wa-500 hover:text-white"
           >
             <WhatsAppIcon className="h-3.5 w-3.5" />
             קבלו מחיר
@@ -49,7 +49,7 @@ export function ServiceCard({ service, delay = 0 }: { service: Service; delay?: 
 
 export function ServicesGrid({ services }: { services: Service[] }) {
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <ul className="grid gap-2.5 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
       {services.map((s, i) => (
         <ServiceCard key={s.id} service={s} delay={(i % 3) * 70} />
       ))}

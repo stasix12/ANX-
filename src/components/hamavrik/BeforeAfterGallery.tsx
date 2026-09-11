@@ -4,7 +4,9 @@ import Image from 'next/image';
 import { useRef, useState } from 'react';
 import { Scene, sceneLabel } from '@/components/hamavrik/Illustrations';
 import { track } from '@/lib/hamavrik/analytics';
-import { galleryCategories, galleryCategoryOf, type BeforeAfterJob, type GalleryCategory } from '@/lib/hamavrik/config';
+import Link from 'next/link';
+import { galleryCategories, galleryCategoryOf, workGallery, type BeforeAfterJob, type GalleryCategory } from '@/lib/hamavrik/config';
+import { href } from '@/lib/hamavrik/links';
 
 /**
  * Draggable before/after comparison. Runs LTR internally so the clip math
@@ -13,11 +15,11 @@ import { galleryCategories, galleryCategoryOf, type BeforeAfterJob, type Gallery
  * keyboard, screen readers and touch alike. A job without photos draws its
  * illustration and says so on the card — nothing pretends to be a real job.
  */
-export function BeforeAfterSlider({ job, eager = false }: { job: BeforeAfterJob; eager?: boolean }) {
+export function BeforeAfterSlider({ job, eager = false, className = '' }: { job: BeforeAfterJob; eager?: boolean; className?: string }) {
   const [pos, setPos] = useState(50);
   const [touched, setTouched] = useState(false);
   const tracked = useRef(false);
-  const real = Boolean(job.before && job.after);
+  const real = Boolean(job.beforeImage && job.afterImage);
 
   function move(next: number) {
     setPos(next);
@@ -29,18 +31,18 @@ export function BeforeAfterSlider({ job, eager = false }: { job: BeforeAfterJob;
   }
 
   return (
-    <figure data-category={galleryCategoryOf[job.service]} className="surface surface-hover overflow-hidden rounded-2xl">
+    <figure data-category={galleryCategoryOf[job.service]} className={`surface surface-hover overflow-hidden rounded-2xl ${className}`}>
       <div dir="ltr" className="relative aspect-8/5 select-none overflow-hidden bg-ink-900">
         <div className="absolute inset-0">
           {real ? (
-            <Image src={job.before!} alt={sceneLabel(job.scene, 'before')} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" loading={eager ? 'eager' : 'lazy'} className="object-cover" />
+            <Image src={job.beforeImage!} alt={sceneLabel(job.scene, 'before')} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" loading={eager ? 'eager' : 'lazy'} className="object-cover" />
           ) : (
             <Scene kind={job.scene} variant="before" />
           )}
         </div>
         <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
           {real ? (
-            <Image src={job.after!} alt={sceneLabel(job.scene, 'after')} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" loading={eager ? 'eager' : 'lazy'} className="object-cover" />
+            <Image src={job.afterImage!} alt={sceneLabel(job.scene, 'after')} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" loading={eager ? 'eager' : 'lazy'} className="object-cover" />
           ) : (
             <Scene kind={job.scene} variant="after" />
           )}
@@ -56,9 +58,6 @@ export function BeforeAfterSlider({ job, eager = false }: { job: BeforeAfterJob;
 
         <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-extrabold text-white backdrop-blur-sm">לפני</span>
         <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-wa-500 px-3 py-1 text-xs font-extrabold text-white">אחרי</span>
-        {!real ? (
-          <span className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-white/90 px-2.5 py-0.5 text-[11px] font-bold text-mist-500">איור להמחשה</span>
-        ) : null}
         {!touched ? (
           <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">⟷ גררו להשוואה</span>
         ) : null}
@@ -73,33 +72,66 @@ export function BeforeAfterSlider({ job, eager = false }: { job: BeforeAfterJob;
           className="absolute inset-0 h-full w-full cursor-ew-resize opacity-0"
         />
       </div>
-      <figcaption className="px-4 py-3">
+      <figcaption className="px-3.5 py-2.5">
         <p className="font-extrabold">
           {job.itemLabel} <span className="font-medium text-mist-500">| {job.city}</span>
         </p>
-        <p className="text-sm text-mist-300">{job.problem}</p>
+        <p className="text-sm text-mist-300">
+          {job.problem}
+          {!real ? <span className="ms-2 rounded-full bg-ink-900 px-2 py-0.5 text-[11px] font-bold text-mist-500">איור להמחשה</span> : null}
+        </p>
       </figcaption>
     </figure>
   );
 }
 
-/** Category tabs above the sliders; "הכול" shows one job per category. */
-export function BeforeAfterGallery({ jobs }: { jobs: BeforeAfterJob[] }) {
-  const present = galleryCategories.filter((c) => jobs.some((j) => galleryCategoryOf[j.service] === c.id));
-  const [active, setActive] = useState<'all' | GalleryCategory>('all');
-  const showTabs = present.length > 1;
+function diversify(jobs: BeforeAfterJob[]): BeforeAfterJob[] {
+  const seen = new Set<string>();
+  const firsts: BeforeAfterJob[] = [];
+  const rest: BeforeAfterJob[] = [];
+  for (const job of jobs) {
+    const cat = galleryCategoryOf[job.service];
+    if (seen.has(cat)) rest.push(job);
+    else {
+      seen.add(cat);
+      firsts.push(job);
+    }
+  }
+  return [...firsts, ...rest];
+}
 
-  const visible =
-    active === 'all'
-      ? showTabs
-        ? present.map((c) => jobs.find((j) => galleryCategoryOf[j.service] === c.id)!).slice(0, 6)
-        : jobs.slice(0, 6)
-      : jobs.filter((j) => galleryCategoryOf[j.service] === active);
+/**
+ * The gallery. `limit` caps the number of jobs (the home page shows 3 on
+ * phones, 4 on wider screens, and links to /gallery for the rest); `tabs`
+ * adds category filters (the gallery page). Real-photo jobs are listed first.
+ */
+export function BeforeAfterGallery({
+  jobs,
+  limit,
+  tabs = false,
+  galleryLink = false,
+}: {
+  jobs: BeforeAfterJob[];
+  limit?: number;
+  tabs?: boolean;
+  galleryLink?: boolean;
+}) {
+  const ordered = [...jobs].sort((a, b) => Number(Boolean(b.beforeImage && b.afterImage)) - Number(Boolean(a.beforeImage && a.afterImage)));
+  const present = galleryCategories.filter((c) => ordered.some((j) => galleryCategoryOf[j.service] === c.id));
+  const [active, setActive] = useState<'all' | GalleryCategory>('all');
+  const showTabs = tabs && present.length > 1;
+
+  const filtered = active === 'all' ? ordered : ordered.filter((j) => galleryCategoryOf[j.service] === active);
+  // A limited view (the home page) shows variety first: one job per
+  // category, then the rest — so four placeholders are never four sofas.
+  const spread = limit && active === 'all' ? diversify(filtered) : filtered;
+  const visible = limit ? spread.slice(0, limit) : spread;
+  const more = jobs.length > visible.length || workGallery.length > 0;
 
   return (
     <div>
       {showTabs ? (
-        <div role="group" aria-label="קטגוריה" className="shine-rail -mx-4 mb-6 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:justify-center sm:px-0">
+        <div role="group" aria-label="קטגוריה" className="shine-rail -mx-4 mb-5 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:justify-center sm:px-0">
           {[{ id: 'all' as const, label: 'הכול' }, ...present].map((c) => {
             const on = active === c.id;
             return (
@@ -120,11 +152,22 @@ export function BeforeAfterGallery({ jobs }: { jobs: BeforeAfterJob[] }) {
         </div>
       ) : null}
 
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={`grid gap-4 sm:grid-cols-2 ${limit === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         {visible.map((job, i) => (
-          <BeforeAfterSlider key={job.id} job={job} eager={i === 0} />
+          <BeforeAfterSlider key={job.id} job={job} eager={i === 0} className={limit && i === limit - 1 ? 'max-sm:hidden' : ''} />
         ))}
       </div>
+
+      {galleryLink && more ? (
+        <p className="mt-5 text-center">
+          <Link
+            href={href('/gallery')}
+            className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-extrabold text-brand-400 shadow-sm ring-1 ring-ink-700 transition hover:ring-brand-500/50 sm:text-base"
+          >
+            כנסו לגלריית העבודות שלנו ‹
+          </Link>
+        </p>
+      ) : null}
     </div>
   );
 }

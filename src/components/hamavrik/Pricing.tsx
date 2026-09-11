@@ -1,10 +1,9 @@
 import { WaButton } from '@/components/hamavrik/CtaLinks';
 import { Reveal } from '@/components/hamavrik/Reveal';
 import { CheckIcon } from '@/components/icons';
-import { priceDisclaimer, priceList } from '@/lib/hamavrik/config';
+import { priceDisclaimer, priceIncludes, priceList } from '@/lib/hamavrik/config';
 import { waLinkFor } from '@/lib/hamavrik/links';
 
-const INCLUDED = ['הגעה לבית הלקוח', 'ניקוי עמוק בהזרקה-יניקה', 'טיפול בכתמים', 'נטרול ריחות', 'שאיבה לייבוש מהיר'];
 
 /**
  * A price list that reads in three seconds: the anchor row (sofa, 299 ₪)
@@ -24,15 +23,15 @@ export function Pricing() {
                 row.highlight ? 'bg-brand-300/30' : ''
               }`}
             >
-              <div>
-                <p className="text-lg font-black">{row.label}</p>
-                {row.note ? <p className="text-sm text-mist-500">{row.note}</p> : null}
+              <div className="min-w-0">
+                <p className="text-base font-black sm:text-lg">{row.label}</p>
+                {row.note ? <p className="text-xs text-mist-500 sm:text-sm">{row.note}</p> : null}
               </div>
-              <p className="shrink-0 text-end">
+              <p className="shrink-0 text-end tabular-nums">
                 {row.from !== null ? (
                   <>
-                    <span className="block text-xs font-bold text-mist-500">החל מ-</span>
-                    <span className="text-2xl font-black text-brand-400 sm:text-3xl">{row.from} ₪</span>
+                    <span className="me-1 text-[11px] font-bold text-mist-500">החל מ-</span>
+                    <span className="text-[1.7rem] font-black leading-none text-brand-400 sm:text-3xl">{row.from}₪</span>
                   </>
                 ) : (
                   <span className="rounded-full bg-ink-900 px-3 py-1.5 text-sm font-extrabold text-mist-300">
@@ -43,26 +42,25 @@ export function Pricing() {
             </li>
           ))}
         </ul>
-        <p className="mt-4 px-2 text-sm leading-relaxed text-mist-500">{priceDisclaimer}</p>
+        <p className="mt-3 px-1 text-xs leading-relaxed text-mist-500 sm:text-sm">{priceDisclaimer}</p>
       </Reveal>
 
       <Reveal delay={120}>
         <div className="shine-hero relative overflow-hidden rounded-2xl p-5 sm:p-7">
-          <p className="text-lg font-black">מה כלול בכל מחיר?</p>
-          <ul className="mt-4 space-y-2.5">
-            {INCLUDED.map((line) => (
-              <li key={line} className="flex items-center gap-3 font-bold text-white/90">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-wa-500 text-white">
-                  <CheckIcon className="h-3.5 w-3.5" />
+          <p className="text-base font-black sm:text-lg">מה כלול בכל מחיר?</p>
+          <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-1">
+            {priceIncludes.map((line) => (
+              <li key={line} className="flex items-center gap-2 text-sm font-bold text-white/90">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-wa-500 text-white">
+                  <CheckIcon className="h-3 w-3" />
                 </span>
                 {line}
               </li>
             ))}
           </ul>
-          <WaButton location="pricing" href={waLinkFor('מצרפ/ת תמונה לקבלת מחיר 📷')} size="lg" className="mt-6 w-full">
+          <WaButton location="pricing" href={waLinkFor('מצרפ/ת תמונה לקבלת מחיר 📷')} className="mt-4 w-full">
             שלחו תמונה וקבלו מחיר
           </WaButton>
-          <p className="mt-3 text-center text-xs text-white/60">המחיר נסגר מראש — לפני שהגענו.</p>
         </div>
       </Reveal>
     </div>

@@ -39,7 +39,7 @@ export function Header() {
         scrolled ? 'shadow-[0_1px_0_0_rgba(11,26,51,0.06),0_10px_30px_-18px_rgba(11,26,51,0.25)]' : ''
       }`}
     >
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:h-[76px]">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-6 lg:h-[76px]">
         <Link href={href('/')} aria-label={`${business.name} — לעמוד הבית`} className="shrink-0 rounded-lg">
           <Logo />
         </Link>
@@ -71,7 +71,7 @@ export function Header() {
         <div className="flex items-center gap-1.5 lg:hidden">
           <PhoneLink
             location="header-mobile"
-            className="grid h-11 w-11 place-items-center rounded-full bg-brand-500 text-white shadow-md shadow-brand-500/25"
+            className="grid h-10 w-10 place-items-center rounded-full bg-brand-500 text-white shadow-md shadow-brand-500/25"
           >
             <PhoneIcon className="h-5 w-5" />
           </PhoneLink>
@@ -81,7 +81,7 @@ export function Header() {
             aria-controls="mobile-menu"
             aria-label={open ? 'סגירת התפריט' : 'פתיחת התפריט'}
             onClick={() => setOpen((v) => !v)}
-            className="grid h-11 w-11 place-items-center rounded-full text-mist-100 transition-colors hover:bg-ink-900"
+            className="grid h-10 w-10 place-items-center rounded-full text-mist-100 transition-colors hover:bg-ink-900"
           >
             {open ? <CloseIcon className="h-6 w-6" /> : <MenuIcon className="h-6 w-6" />}
           </button>

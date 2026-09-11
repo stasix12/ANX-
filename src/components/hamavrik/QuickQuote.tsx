@@ -57,8 +57,9 @@ export function QuickQuote({
     if (!stains) return setError('יש כתמים מיוחדים?');
     setError('');
 
-    const serviceName = services.find((s) => s.id === service)?.name ?? service;
-    const kind = service === 'sofa' && seats ? seats : services.find((s) => s.id === service)?.label ?? service;
+    const picked = services.find((s) => s.id === service);
+    const serviceName = picked?.name ?? service;
+    const kind = service === 'sofa' && seats ? (seats === 'ספה פינתית' ? seats : `ספה, ${seats}`) : picked?.label ?? service;
     const payload = {
       service: serviceName,
       seats: service === 'sofa' ? seats : null,
@@ -82,9 +83,9 @@ export function QuickQuote({
 
     const href = waLink(
       [
-        `היי, אשמח להצעת מחיר ל${serviceName}.`,
+        'היי, אשמח לקבל הצעת מחיר.',
         `סוג: ${kind}`,
-        `כתמים: ${stains === 'yes' ? 'כן' : 'לא'}`,
+        `כתמים מיוחדים: ${stains === 'yes' ? 'כן' : 'לא'}`,
         ...(payload.city ? [`עיר: ${payload.city}`] : []),
       ].join('\n'),
     );

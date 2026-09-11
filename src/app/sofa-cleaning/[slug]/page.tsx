@@ -109,7 +109,7 @@ export default async function LandingPage({ params }: PageProps) {
 
       <Section id="before-after" className="pt-8 sm:pt-10 lg:pt-12">
         <SectionHeading eyebrow="לפני ואחרי" title="התוצאות מדברות בעד עצמן" lede={page.intro} />
-        <BeforeAfterGallery jobs={gallery.length ? gallery : beforeAfterJobs} />
+        <BeforeAfterGallery jobs={gallery.length ? gallery : beforeAfterJobs} limit={3} galleryLink />
       </Section>
 
       <Section id="reviews" tone="tint">

@@ -10,14 +10,14 @@ export function FinalCta() {
     <Reveal>
       <div className="relative">
         <span aria-hidden className="shine-glow" />
-        <div className="surface rounded-[1.75rem] px-5 py-9 text-center sm:px-10 sm:py-12">
-          <h2 className="mx-auto max-w-2xl text-[1.75rem] font-black leading-tight text-balance-he sm:text-4xl">
+        <div className="surface rounded-[1.75rem] px-5 py-7 text-center sm:px-10 sm:py-12">
+          <h2 className="mx-auto max-w-2xl text-[1.6rem] font-black leading-tight text-balance-he sm:text-4xl">
             רוצים לדעת כמה יעלה לנקות את הספה שלכם?
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-base text-mist-300 sm:text-lg">
             שלחו לנו תמונה ב-WhatsApp וקבלו הצעת מחיר מהירה.
           </p>
-          <WaButton location="final-cta" href={waLinkFor('מצרפ/ת תמונה 📷')} size="lg" shimmer className="mt-6 w-full max-w-md sm:text-xl">
+          <WaButton location="final-cta" href={waLinkFor('מצרפ/ת תמונה 📷')} size="lg" shimmer className="mt-5 w-full max-w-md sm:text-xl">
             שלחו תמונה וקבלו מחיר
           </WaButton>
           <p className="mt-4 text-sm font-bold text-mist-500">

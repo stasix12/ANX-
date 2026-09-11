@@ -30,6 +30,7 @@ npm run dev      # http://localhost:3000
 | --- | --- |
 | `/sofa-cleaning` | דף הבית |
 | `/sofa-cleaning/beer-sheva`, `/sofa-cleaning/arad`, `/sofa-cleaning/mattress-cleaning-beer-sheva`, … | עמודי נחיתה לפי עיר × שירות (נוצרים מהקונפיג) |
+| `/sofa-cleaning/gallery` | גלריית כל עבודות הלפני/אחרי (עם טאבים) + תמונות מהשטח |
 | `/sofa-cleaning/opengraph-image` | תמונת השיתוף (נוצרת בבנייה, בעברית) |
 
 ### קובץ אחד לעריכה
@@ -41,13 +42,14 @@ npm run dev      # http://localhost:3000
 | מה | איפה בקונפיג | קבצים | מה קורה עד אז |
 | --- | --- | --- | --- |
 | וידאו/תמונת Hero | `heroMedia` | `public/video/` או `public/hamavrik/` | מוצג הווידאו האמיתי הקיים של ראש השאיבה |
-| לפני/אחרי (4–6 עבודות) | `beforeAfterJobs` — לכל עבודה `before`, `after`, `itemLabel`, `city`, `problem` | `public/hamavrik/jobs/` (1200×750, אותו פריים) | איור עם תווית "איור להמחשה" |
+| לפני/אחרי (4–6 עבודות) | `beforeAfterJobs` — לכל עבודה `beforeImage`, `afterImage`, `itemLabel`, `city`, `problem`. דף הבית מציג `HOME_JOBS` (4; 3 במובייל) ומקשר לגלריה | `public/hamavrik/jobs/` — **שתי התמונות באותו יחס ובאותו crop** (1200×750) | איור עם תווית "איור להמחשה" |
 | גלריית עבודות | `workGallery` | `public/hamavrik/gallery/` | הסקשן מוסתר לגמרי |
 | צילומי מסך של ביקורות Google | `reviewScreenshots` | `public/hamavrik/reviews/` | לא מוצג |
-| ביקורות Google (טקסט) | `reviews` — שם, עיר, טקסט, דירוג, תאריך | — | מצב "ביקורות יופיעו כאן" נקי + קישור לפרופיל |
+| ביקורות Google (טקסט) | `reviews` — שם, עיר, טקסט, דירוג אמיתי, תאריך. מוצגות 3 | — | שורה שקטה + קישור לפרופיל. פס האמון מציג "לקוחות ממליצים" עד ש-`stats.rating`/`reviewCount` ימולאו מ-Google |
 | תמונות שירותים | שדה `image` בכל שירות | `public/hamavrik/services/` | איור |
 
-- **מספרים** (דירוג, כמות ביקורות, שנות ותק) — ב-`stats`, כולם `null` עד שיש נתון אמיתי; `null` פשוט לא מוצג.
+- **מספרים** (דירוג, כמות ביקורות) — ב-`stats`, `null` עד שיש נתון אמיתי מ-Google Business; אז פס האמון מציג כוכבים, דירוג וכמות.
+- **תמונות**: `next/image` מגיש AVIF/WebP אוטומטית עם `srcset` רספונסיבי ו-lazy loading מתחת ל-fold — מעלים JPG/PNG רגיל באיכות טובה.
 - **עמוד נחיתה חדש** (למשל "ניקוי מזרנים בדימונה") — מוסיפים אובייקט ל-`landingPages`. העמוד, ה-title, ה-canonical, ה-JSON-LD, ה-sitemap והקישורים הפנימיים נוצרים לבד.
 - **קישור לביקורות Google** — `googleReviewsUrl`. עד שמוחלף, הכפתור פותח חיפוש Google של העסק.
 

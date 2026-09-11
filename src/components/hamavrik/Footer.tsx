@@ -19,11 +19,11 @@ function LinkGroup({ title, children }: { title: string; children: React.ReactNo
           {title}
           <ChevronDownIcon className="h-4 w-4 transition-transform group-open:rotate-180" />
         </summary>
-        <ul className="space-y-2 pb-4 text-sm font-bold">{children}</ul>
+        <ul className="space-y-1 pb-3 text-sm font-bold">{children}</ul>
       </details>
       <div className="hidden md:block">
         <h3 className="mb-3 text-sm font-black tracking-wide text-mist-500">{title}</h3>
-        <ul className="space-y-2 text-sm font-bold">{children}</ul>
+        <ul className="space-y-1 text-sm font-bold">{children}</ul>
       </div>
     </>
   );
@@ -69,7 +69,7 @@ export function Footer() {
           <LinkGroup title="ניווט">
             {nav.map((item) => (
               <li key={item.href}>
-                <a href={item.href} className="text-mist-300 hover:text-brand-400">
+                <a href={item.href} className="block py-1 text-mist-300 hover:text-brand-400">
                   {item.label}
                 </a>
               </li>
@@ -78,7 +78,7 @@ export function Footer() {
           <LinkGroup title="השירותים שלנו">
             {services.map((s) => (
               <li key={s.id}>
-                <a href="#services" className="text-mist-300 hover:text-brand-400">
+                <a href="#services" className="block py-1 text-mist-300 hover:text-brand-400">
                   {s.name}
                 </a>
               </li>
@@ -87,7 +87,7 @@ export function Footer() {
           <LinkGroup title="אזורי שירות">
             {landingPages.map((page) => (
               <li key={page.slug}>
-                <Link href={href(`/${page.slug}`)} className="text-mist-300 hover:text-brand-400">
+                <Link href={href(`/${page.slug}`)} className="block py-1 text-mist-300 hover:text-brand-400">
                   {page.h1}
                 </Link>
               </li>

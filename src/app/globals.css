@@ -66,6 +66,13 @@
     scroll-padding-top: 5.5rem;
   }
 
+  /* The cleaning site's header is 56px on phones; keep anchors just under it. */
+  @media (max-width: 639px) {
+    html:has(.shine-theme) {
+      scroll-padding-top: 4.5rem;
+    }
+  }
+
   body {
     /* The ambient layer below paints the ground; this is the fallback under it. */
     background-color: var(--color-ink-950);

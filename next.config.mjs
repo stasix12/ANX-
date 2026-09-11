@@ -19,6 +19,9 @@ const nextConfig = {
   ...(isExport ? { output: 'export', trailingSlash: true } : {}),
   ...(basePath ? { basePath } : {}),
   images: {
+    // Serve AVIF where the browser takes it, WebP otherwise — the real job
+    // photos can be dropped in as plain JPG/PNG and still ship small.
+    formats: ['image/avif', 'image/webp'],
     // Product and hero artwork ships as local SVG placeholders until the real
     // photos are dropped in. next/image refuses SVG sources unless it is told
     // to allow them, and these flags are the documented way to do that safely:

@@ -16,7 +16,7 @@ import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
 import { WorkGallery } from '@/components/hamavrik/WorkGallery';
-import { beforeAfterJobs, business, priceList, reviews, serviceAreas, services } from '@/lib/hamavrik/config';
+import { HOME_JOBS, beforeAfterJobs, business, priceList, reviews, serviceAreas, services } from '@/lib/hamavrik/config';
 
 /** `absolute` keeps the storefront's "| ANX3D" title template off this page. */
 export const metadata: Metadata = {
@@ -40,7 +40,7 @@ export default function HomePage() {
 
       <Section id="before-after">
         <SectionHeading eyebrow="לפני ואחרי" title="התוצאות מדברות בעד עצמן" lede="גררו את הידית ותראו את ההבדל בעצמכם." />
-        <BeforeAfterGallery jobs={beforeAfterJobs} />
+        <BeforeAfterGallery jobs={beforeAfterJobs} limit={HOME_JOBS} galleryLink />
       </Section>
 
       <WorkGallery />
@@ -67,7 +67,10 @@ export default function HomePage() {
           title="מה אנחנו מנקים?"
           lede={sofaFrom ? `ניקוי ספות החל מ-${sofaFrom}₪ — וכל ריפוד אחר בבית וברכב, בבית הלקוח.` : undefined}
         />
-        <ServicesGrid services={services} />
+        <ServicesGrid services={services.filter((s) => s.featured)} />
+        <p className="mt-3 text-center text-sm text-mist-500">
+          וגם: {services.filter((s) => !s.featured).map((s) => s.name.replace('ניקוי ', '')).join(', ')} — שלחו תמונה ונחזור עם מחיר.
+        </p>
       </Section>
 
       <Section id="prices">

@@ -14,6 +14,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: site.url, lastModified, changeFrequency: 'weekly', priority: 1 },
     // הפתרון המבריק — the cleaning site and its city/service landing pages.
     { url: absoluteUrl('/'), lastModified, changeFrequency: 'weekly', priority: 0.9 },
+    { url: absoluteUrl('/gallery'), lastModified, changeFrequency: 'weekly', priority: 0.7 },
     ...landingPages.map((page) => ({
       url: absoluteUrl(`/${page.slug}`),
       lastModified,

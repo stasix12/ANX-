@@ -29,7 +29,7 @@ export function BeforeAfterSlider({ item, eager = false }: { item: BeforeAfterIt
   }
 
   return (
-    <figure className="surface surface-hover overflow-hidden rounded-[1.5rem]">
+    <figure data-category={item.category} className="surface surface-hover overflow-hidden rounded-[1.5rem]">
       <div dir="ltr" className="relative aspect-8/5 select-none overflow-hidden bg-ink-900">
         <div className="absolute inset-0">
           {usePhotos ? (
@@ -132,6 +132,7 @@ export function BeforeAfterGallery({ items }: { items: BeforeAfterItem[] }) {
               key={c.id}
               type="button"
               aria-pressed={on}
+              data-category={c.id}
               onClick={() => setActive(c.id)}
               className={`shrink-0 rounded-full px-5 py-2.5 text-sm font-extrabold transition-all ${
                 on ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25' : 'bg-white text-mist-300 ring-1 ring-ink-700 hover:ring-brand-500/40'

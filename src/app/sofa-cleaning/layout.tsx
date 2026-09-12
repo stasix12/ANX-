@@ -47,6 +47,8 @@ export const metadata: Metadata = {
     description: 'שלחו תמונה של הספה ב-WhatsApp וקבלו הצעת מחיר. באר שבע, ערד והדרום.',
   },
   robots: { index: true, follow: true },
+  // icon.svg in this segment supplies the favicon; iOS wants a PNG for the home screen.
+  icons: { apple: '/hamavrik/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = {

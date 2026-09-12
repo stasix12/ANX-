@@ -34,7 +34,11 @@ export function waAsk(noun: string = 'ניקוי ספה', city?: string): string
  * most-tapped button on the page.
  */
 export function waAskForPath(pathname: string | null): string {
-  const slug = (pathname ?? '').replace(`${SITE_BASE}/`, '');
+  // Works with or without the route base, and with the trailing slash a
+  // static export adds: '/sofa-cleaning/arad', '/arad' and '/arad/' → 'arad'.
+  const slug = (pathname ?? '')
+    .replace(new RegExp(`^${SITE_BASE}`), '')
+    .replace(/^\/+|\/+$/g, '');
   const page = landingPages.find((p) => p.slug === slug);
   if (!page) return waAsk();
   return waAsk(serviceById[page.service].waNoun, page.city);

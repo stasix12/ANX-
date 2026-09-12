@@ -34,3 +34,6 @@ yarn-error.log*
 # generated preview build
 /out/
 preview.html
+
+# Standalone build of the cleaning site (scripts/build-hamavrik.mjs)
+/dist-hamavrik

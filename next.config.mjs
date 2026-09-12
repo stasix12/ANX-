@@ -11,6 +11,13 @@ const isExport = process.env.EXPORT === '1';
  */
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
+/**
+ * The cleaning site built for its own domain (scripts/build-hamavrik.mjs) is
+ * served from a static host with no image optimiser behind it, so the few
+ * images it has (video poster, app icons) are served as the files they are.
+ */
+const isStandaloneCleaning = process.env.NEXT_PUBLIC_HAMAVRIK_STANDALONE === '1';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // trailingSlash makes the export emit products/<slug>/index.html rather than
@@ -33,7 +40,7 @@ const nextConfig = {
     // site's own origin — the optimiser refuses an unlisted remote host.
     remotePatterns: [{ protocol: 'https', hostname: '*.supabase.co', pathname: '/storage/**' }],
     // A static export has no image optimiser to call at runtime.
-    ...(isExport ? { unoptimized: true } : {}),
+    ...(isExport || isStandaloneCleaning ? { unoptimized: true } : {}),
   },
 };
 

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Footer } from '@/components/Footer';
 import { Header } from '@/components/Header';
 import { OrderListProvider } from '@/components/OrderListProvider';
+import { STANDALONE } from '@/lib/hamavrik/config';
 
 /*
  * Loaded on demand rather than imported statically. OrderBar pulls in
@@ -27,6 +28,19 @@ const OrderBar = dynamic(() => import('@/components/OrderBar').then((m) => m.Ord
  */
 export function SiteChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Built for its own domain, the cleaning site is the whole site: its pages
+  // are served from the root, so the path no longer says /sofa-cleaning, and
+  // the storefront chrome must never wrap them (on the client it would — and
+  // React would then mismatch against the server's chrome-less markup). The
+  // order-list provider stays: the store's pages are still prerendered in this
+  // build (just never deployed) and they read that context.
+  if (STANDALONE) {
+    return (
+      <OrderListProvider>
+        <main id="main">{children}</main>
+      </OrderListProvider>
+    );
+  }
   // Segment-exact match: '/pro' must not swallow the store's '/products'.
   const inSegment = (base: string) => pathname === base || pathname?.startsWith(`${base}/`);
   const isStandaloneApp =

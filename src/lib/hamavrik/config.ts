@@ -20,12 +20,20 @@ import type { SceneKind } from '@/components/hamavrik/Illustrations';
 /* ── Site root ─────────────────────────────────────────────────────────── */
 
 /**
- * URL prefix the site lives under. This repository also hosts the ANX3D
- * store at `/`, so the cleaning site sits at `/sofa-cleaning`. To move it to
- * the root of its own domain later: rename `src/app/sofa-cleaning` to
- * `src/app/(site)` and set this to ''.
+ * The cleaning site can be built two ways from this one repository:
+ *
+ *  - Alongside the ANX3D store, at `/sofa-cleaning` on the store's domain
+ *    (the default — nothing to set).
+ *  - As its own site at the root of its own domain, e.g. https://hamavrik.co.il
+ *    — `npm run build:hamavrik`, which sets NEXT_PUBLIC_HAMAVRIK_STANDALONE=1
+ *    and assembles only the cleaning pages into dist-hamavrik/. Every link,
+ *    canonical, sitemap entry and JSON-LD URL then drops the `/sofa-cleaning`
+ *    prefix, and the sitemap/robots/manifest describe this site alone.
  */
-export const SITE_BASE = '/sofa-cleaning';
+export const STANDALONE = process.env.NEXT_PUBLIC_HAMAVRIK_STANDALONE === '1';
+
+/** URL prefix the site lives under: '' on its own domain, `/sofa-cleaning` next to the store. */
+export const SITE_BASE = STANDALONE ? '' : '/sofa-cleaning';
 
 /** Absolute origin used for canonical URLs, Open Graph and the sitemap. */
 export const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://anx3d.co.il';

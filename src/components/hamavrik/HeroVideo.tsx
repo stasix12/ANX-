@@ -27,6 +27,15 @@ export function HeroVideo({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
+    /*
+     * The wrapper is `max-lg:hidden`, but CSS does not stop a <video> from
+     * downloading: every phone was pulling the full 2.04MB of anx-hero.webm
+     * into an element it could never see, on exactly the connection that
+     * could least afford it. The gate lives here, in the effect, and not in
+     * render — matchMedia during render would disagree with the server and
+     * throw a hydration mismatch.
+     */
+    if (!window.matchMedia('(min-width: 1024px)').matches) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
     if (conn?.saveData) return;
@@ -58,8 +67,8 @@ export function HeroVideo({
         src={poster}
         alt={alt}
         fill
-        sizes="(max-width: 1024px) 100vw, 560px"
-        preload
+        sizes="560px"
+        fetchPriority="high"
         className={`object-cover transition-opacity duration-700 ${playing ? 'opacity-0' : 'opacity-100'}`}
       />
       {ready ? (

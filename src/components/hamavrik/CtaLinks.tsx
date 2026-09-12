@@ -46,7 +46,7 @@ export function WaLink({
         {children}
       </a>
       {blocked ? (
-        <WhatsAppFallback message={messageFromLink(href)} href={href} onClose={() => setBlocked(false)} />
+        <WhatsAppFallback kind="message" message={messageFromLink(href)} href={href} onClose={() => setBlocked(false)} />
       ) : null}
     </>
   );
@@ -78,7 +78,7 @@ export function PhoneLink({
 /* ── Ready-made buttons ─────────────────────────────────────────────────── */
 
 const WA_BTN =
-  'inline-flex items-center justify-center gap-2.5 rounded-full bg-wa-500 font-extrabold text-white shadow-lg shadow-wa-500/30 transition-colors hover:bg-wa-600';
+  'inline-flex items-center justify-center gap-2.5 rounded-full bg-wa-600 font-extrabold text-white shadow-lg shadow-wa-600/30 transition-colors hover:bg-wa-500';
 const PHONE_BTN =
   'inline-flex items-center justify-center gap-2.5 rounded-full font-extrabold transition-colors';
 

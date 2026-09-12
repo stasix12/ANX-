@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { PhoneButton, PhoneLink, WaButton } from '@/components/hamavrik/CtaLinks';
 import { Logo } from '@/components/hamavrik/Logo';
 import { MenuIcon } from '@/components/hamavrik/icons';
 import { CloseIcon, PhoneIcon } from '@/components/icons';
 import { business, nav } from '@/lib/hamavrik/config';
-import { href, waLinkFor } from '@/lib/hamavrik/links';
+import { href, waAskForPath, waLink } from '@/lib/hamavrik/links';
 
 /**
  * Sticky header. Desktop: logo · anchor nav · phone · "הצעת מחיר" CTA.
@@ -16,6 +17,7 @@ import { href, waLinkFor } from '@/lib/hamavrik/links';
  * so on a city landing page they scroll within that page.
  */
 export function Header() {
+  const message = waAskForPath(usePathname());
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -63,7 +65,7 @@ export function Header() {
           <PhoneButton location="header" variant="ghost" className="max-xl:px-3">
             <span dir="ltr" className="whitespace-nowrap">{business.phoneDisplay}</span>
           </PhoneButton>
-          <WaButton location="header" href={waLinkFor('(מהתפריט העליון)')} className="whitespace-nowrap">
+          <WaButton location="header" href={waLink(message)} className="whitespace-nowrap">
             שלחו תמונה, קבלו מחיר
           </WaButton>
         </div>
@@ -105,8 +107,8 @@ export function Header() {
               ))}
             </ul>
             <div className="mt-3 grid gap-2 pb-2">
-              <WaButton location="mobile-menu" href={waLinkFor('(מהתפריט)')} size="lg" className="w-full">
-                שלחו תמונה וקבלו מחיר
+              <WaButton location="mobile-menu" href={waLink(message)} size="lg" className="w-full">
+                שלחו תמונה, קבלו מחיר
               </WaButton>
               <PhoneButton location="mobile-menu" size="lg" className="w-full" />
             </div>

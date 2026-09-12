@@ -28,6 +28,7 @@ export function Section({
 export function SectionHeading({
   eyebrow,
   title,
+  titleId,
   lede,
   align = 'center',
   as: Tag = 'h2',
@@ -35,6 +36,9 @@ export function SectionHeading({
 }: {
   eyebrow?: string;
   title: ReactNode;
+  /** The quote form points `aria-labelledby` here; without it the form had a
+   *  label pointing at an element that did not exist. */
+  titleId?: string;
   lede?: ReactNode;
   align?: 'center' | 'start';
   as?: 'h1' | 'h2';
@@ -47,6 +51,7 @@ export function SectionHeading({
         <span className={light ? 'shine-eyebrow bg-white/15 text-white' : 'shine-eyebrow'}>{eyebrow}</span>
       ) : null}
       <Tag
+        id={titleId}
         className={`mt-2.5 text-[1.6rem] font-black leading-tight text-balance-he sm:text-4xl lg:text-[2.5rem] ${light ? 'text-white' : ''}`}
       >
         {title}

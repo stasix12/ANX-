@@ -4,7 +4,7 @@ import { Logo } from '@/components/hamavrik/Logo';
 import { FacebookIcon } from '@/components/hamavrik/icons';
 import { ChevronDownIcon, InstagramIcon, PhoneIcon, TikTokIcon, WhatsAppIcon } from '@/components/icons';
 import { business, landingPages, nav, serviceAreas, services } from '@/lib/hamavrik/config';
-import { href, waLinkFor } from '@/lib/hamavrik/links';
+import { href, waLink } from '@/lib/hamavrik/links';
 
 /**
  * Footer. On phones the three link groups collapse into native <details>
@@ -47,9 +47,9 @@ export function Footer() {
               <PhoneIcon className="h-4 w-4" />
               <span dir="ltr">{business.phoneDisplay}</span>
             </PhoneLink>
-            <WaLink href={waLinkFor('(מהפוטר)')} location="footer" className="inline-flex items-center gap-2 text-wa-600 hover:underline">
+            <WaLink href={waLink()} location="footer" className="inline-flex items-center gap-2 text-wa-600 hover:underline">
               <WhatsAppIcon className="h-4 w-4" />
-              שלחו תמונה וקבלו מחיר
+              שלחו תמונה, קבלו מחיר
             </WaLink>
           </div>
           {social.length ? (
@@ -69,16 +69,21 @@ export function Footer() {
           <LinkGroup title="ניווט">
             {nav.map((item) => (
               <li key={item.href}>
-                <a href={item.href} className="block py-1 text-mist-300 hover:text-brand-400">
+                <a href={item.href} className="block py-2 text-mist-300 hover:text-brand-400">
                   {item.label}
                 </a>
               </li>
             ))}
+            <li>
+              <Link href={href('/gallery')} prefetch={false} className="block py-2 text-mist-300 hover:text-brand-400">
+                איורים ודוגמאות
+              </Link>
+            </li>
           </LinkGroup>
           <LinkGroup title="השירותים שלנו">
             {services.map((s) => (
               <li key={s.id}>
-                <a href="#services" className="block py-1 text-mist-300 hover:text-brand-400">
+                <a href="#services" className="block py-2 text-mist-300 hover:text-brand-400">
                   {s.name}
                 </a>
               </li>
@@ -87,7 +92,7 @@ export function Footer() {
           <LinkGroup title="אזורי שירות">
             {landingPages.map((page) => (
               <li key={page.slug}>
-                <Link href={href(`/${page.slug}`)} className="block py-1 text-mist-300 hover:text-brand-400">
+                <Link href={href(`/${page.slug}`)} prefetch={false} className="block py-2 text-mist-300 hover:text-brand-400">
                   {page.h1}
                 </Link>
               </li>

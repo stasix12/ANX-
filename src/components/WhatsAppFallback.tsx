@@ -13,15 +13,29 @@ import { site } from '@/lib/site';
  * than an error, this hands over the two things needed to send it by hand: the
  * exact message, and the number to send it to. Both are one tap to copy.
  */
+/**
+ * The storefront is sending an order; the cleaning site is sending a message
+ * and nobody there has ordered anything yet. Telling a visitor who tapped
+ * "send a photo" that "your order is ready" is alarming at the single most
+ * fragile moment in the funnel, so the noun is a prop.
+ */
+const NOUNS = {
+  order: { title: 'ההזמנה', copy: 'העתיקו את ההזמנה', label: 'העתקת ההזמנה', done: 'ההזמנה הועתקה' },
+  message: { title: 'ההודעה', copy: 'העתיקו את ההודעה', label: 'העתקת ההודעה', done: 'ההודעה הועתקה' },
+} as const;
+
 export function WhatsAppFallback({
   message,
   href,
   onClose,
+  kind = 'order',
 }: {
   message: string;
   href: string;
   onClose: () => void;
+  kind?: keyof typeof NOUNS;
 }) {
+  const noun = NOUNS[kind];
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
@@ -48,14 +62,14 @@ export function WhatsAppFallback({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="שליחת ההזמנה בוואטסאפ"
+        aria-label={`שליחת ${noun.title} בוואטסאפ`}
         className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-card border border-ink-700 bg-ink-850 shadow-2xl sm:rounded-card"
       >
         <div className="flex items-start justify-between gap-3 border-b border-ink-700 px-5 py-4">
           <div>
-            <h2 className="text-lg font-extrabold">שליחת ההזמנה</h2>
+            <h2 className="text-lg font-extrabold">שליחת {noun.title}</h2>
             <p className="mt-1 text-sm text-mist-300">
-              הדפדפן חסם את הפתיחה האוטומטית של וואטסאפ. ההזמנה מוכנה — אפשר לשלוח אותה
+              הדפדפן חסם את הפתיחה האוטומטית של וואטסאפ. {noun.title} מוכנה — אפשר לשלוח אותה
               בשתי לחיצות.
             </p>
           </div>
@@ -70,7 +84,7 @@ export function WhatsAppFallback({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <Step number={1} title="העתיקו את ההזמנה">
+          <Step number={1} title={noun.copy}>
             <pre
               dir="rtl"
               className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl bg-ink-950 p-3 font-sans text-xs leading-relaxed text-mist-100"
@@ -79,8 +93,8 @@ export function WhatsAppFallback({
             </pre>
             <CopyButton
               value={message}
-              label="העתקת ההזמנה"
-              done="ההזמנה הועתקה"
+              label={noun.label}
+              done={noun.done}
               className="mt-2 w-full bg-[#25D366] text-mist-100 hover:bg-[#1fbe5a]"
             />
           </Step>

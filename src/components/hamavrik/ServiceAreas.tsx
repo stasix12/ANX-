@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { WaButton } from '@/components/hamavrik/CtaLinks';
 import { Reveal } from '@/components/hamavrik/Reveal';
 import { MapPinIcon } from '@/components/icons';
-import { landingPages, serviceAreas } from '@/lib/hamavrik/config';
-import { href, waLinkFor } from '@/lib/hamavrik/links';
+import { landingPages, serviceAreas, whatsappMessages } from '@/lib/hamavrik/config';
+import { href, waLink } from '@/lib/hamavrik/links';
 
 /**
  * Where we go: the two headline cities, the nearby towns as quiet chips,
@@ -32,18 +32,18 @@ export function ServiceAreas({ currentSlug }: { currentSlug?: string }) {
             ))}
           </ul>
           <p className="mt-4 text-sm text-mist-300">{serviceAreas.note}</p>
-          <WaButton location="service-areas" href={waLinkFor('האם אתם מגיעים ליישוב שלי?')} className="mt-4">
-            שלחו תמונה וקבלו מחיר
+          <WaButton location="service-areas" href={waLink(whatsappMessages.areas)} className="mt-4">
+            שאלו אם אנחנו מגיעים אליכם
           </WaButton>
         </div>
 
         {pages.length ? (
           <div className="border-t border-ink-800 pt-5 lg:border-s lg:border-t-0 lg:ps-10 lg:pt-0">
-            <h3 className="text-sm font-black tracking-wide text-mist-500">עמודי שירות לפי עיר</h3>
+            <h3 className="text-sm font-black tracking-wide text-mist-500">ניקוי לפי עיר</h3>
             <ul className="mt-2 divide-y divide-ink-800">
               {pages.map((p) => (
                 <li key={p.slug}>
-                  <Link href={href(`/${p.slug}`)} className="flex items-center justify-between gap-3 py-2.5 text-[15px] font-bold text-brand-400 transition-colors hover:text-brand-500">
+                  <Link href={href(`/${p.slug}`)} prefetch={false} className="flex min-h-11 items-center justify-between gap-3 py-2.5 text-[15px] font-bold text-brand-400 transition-colors hover:text-brand-500">
                     {p.h1}
                     <span aria-hidden className="text-mist-500">‹</span>
                   </Link>

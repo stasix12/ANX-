@@ -59,7 +59,7 @@ export function BeforeAfterSlider({ job, eager = false, className = '' }: { job:
         <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-extrabold text-white backdrop-blur-sm">לפני</span>
         <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-wa-500 px-3 py-1 text-xs font-extrabold text-white">אחרי</span>
         {!touched ? (
-          <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">⟷ גררו להשוואה</span>
+          <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">גררו להשוואה</span>
         ) : null}
 
         <input
@@ -164,7 +164,7 @@ export function BeforeAfterGallery({
             href={href('/gallery')}
             className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-extrabold text-brand-400 shadow-sm ring-1 ring-ink-700 transition hover:ring-brand-500/50 sm:text-base"
           >
-            כנסו לגלריית העבודות שלנו ‹
+            איורים ודוגמאות ‹
           </Link>
         </p>
       ) : null}

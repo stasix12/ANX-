@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq } from '@/components/hamavrik/Faq';
 import { FeaturedVideo } from '@/components/hamavrik/FeaturedVideo';
@@ -10,25 +9,39 @@ import { JsonLd, allServicesSchema, breadcrumbSchema, faqSchema, featuredVideoSc
 import { Pricing } from '@/components/hamavrik/Pricing';
 import { QuickQuote } from '@/components/hamavrik/QuickQuote';
 import { Reveal } from '@/components/hamavrik/Reveal';
-import { Reviews } from '@/components/hamavrik/Reviews';
 import { Section, SectionHeading } from '@/components/hamavrik/Section';
 import { ServiceAreas } from '@/components/hamavrik/ServiceAreas';
 import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
 import { WorkGallery } from '@/components/hamavrik/WorkGallery';
-import { HOME_JOBS, beforeAfterJobs, business, priceList, reviews, serviceAreas, services } from '@/lib/hamavrik/config';
+import { business, featuredVideo, priceList, priceText, processVideo, serviceAreas, services } from '@/lib/hamavrik/config';
 
-/** `absolute` keeps the storefront's "| ANX3D" title template off this page. */
+/**
+ * `absolute` keeps the storefront's "| ANX3D" title template off this page.
+ * The city is in the title because the H1 has always had it and the ad always
+ * carries it — without it the home page competed with /beer-sheva for the one
+ * query that matters and neither of them won it.
+ */
 export const metadata: Metadata = {
-  title: { absolute: `ניקוי ספות מקצועי בבית הלקוח | ${business.name}` },
+  title: { absolute: `ניקוי ספות בבאר שבע — עד הבית, החל מ-299 ₪ | ${business.name}` },
 };
 
 /**
- * Home page, ordered for a Google Ads visitor on a phone: what/where/price
- * (hero) → trust → proof (before/after, reviews) → the quote flow → what
- * else we clean, prices, how it works, why us → the long-form SEO copy and
- * FAQ for the doubters and for Google → where we go → the closing ask.
+ * Home page, ordered for a Google Ads visitor on a phone:
+ *   what / where / how much (hero) → why us in one line (trust strip) →
+ *   PROOF (the one real clip) → PRICE (the list) → ACTION (the form) →
+ *   everything else we clean → how it works → what makes us different →
+ *   the long copy and the FAQ for the doubters and for Google → where we go →
+ *   the closing ask.
+ *
+ * Two things used to sit between the proof and the form and no longer do:
+ * three illustrated "before/after" cards (2.4 phone screens of drawings under
+ * a heading that said "the results speak for themselves"), and an empty
+ * reviews box that asked "what do our customers say?" and answered with a
+ * link to Google. Both moved the form to screen four and cost trust on the
+ * way. The illustrations still live in /gallery; the reviews section comes
+ * back by itself the day a real review lands in config.ts.
  */
 export default function HomePage() {
   const sofaFrom = priceList[0]?.from;
@@ -40,23 +53,27 @@ export default function HomePage() {
       <TrustStrip />
 
       <Section id="before-after">
-        <SectionHeading eyebrow="לפני ואחרי" title="התוצאות מדברות בעד עצמן" lede="צפו איך זה נעשה, ואז גררו את הידית ותראו את ההבדל בעצמכם." />
-        <FeaturedVideo />
-        <BeforeAfterGallery jobs={beforeAfterJobs} limit={HOME_JOBS} galleryLink />
+        <SectionHeading
+          eyebrow="מהשטח"
+          title="ככה זה נראה מקרוב"
+          lede="סרטון מעבודה אמיתית שלנו — לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם."
+        />
+        <FeaturedVideo video={processVideo ?? featuredVideo} />
       </Section>
 
       <WorkGallery />
 
-      <Section id="reviews" tone="tint">
-        <SectionHeading eyebrow="ביקורות" title="מה הלקוחות שלנו אומרים?" />
-        <Reviews reviews={reviews} />
+      <Section id="prices" tone="tint">
+        <SectionHeading eyebrow="מחירון" title="מחירים שקופים, בלי הפתעות" lede="מחירי פתיחה לכל שירות. המחיר הסופי נסגר מראש לפי תמונה." />
+        <Pricing />
       </Section>
 
       <Section id="quote">
         <SectionHeading
           eyebrow="הצעת מחיר מהירה"
-          title="כמה יעלה לנקות את הספה שלכם?"
-          lede="שלוש לחיצות — ואתם ב-WhatsApp עם כל הפרטים מוכנים. אפשר גם פשוט לשלוח תמונה."
+          title="קבלו מחיר לספה שלכם"
+          titleId="quote-title"
+          lede="שלוש שאלות, ואז שולחים תמונה בוואטסאפ ומקבלים מחיר."
         />
         <Reveal delay={60}>
           <QuickQuote />
@@ -67,7 +84,7 @@ export default function HomePage() {
         <SectionHeading
           eyebrow="השירותים שלנו"
           title="מה אנחנו מנקים?"
-          lede={sofaFrom ? `ניקוי ספות החל מ-${sofaFrom}₪ — וכל ריפוד אחר בבית וברכב, בבית הלקוח.` : undefined}
+          lede={sofaFrom ? <>ספות החל מ-<bdi dir="rtl">{priceText(sofaFrom)}</bdi> — וכל ריפוד אחר בבית או ברכב. תמיד אצלכם, בלי להוביל.</> : undefined}
         />
         <ServicesGrid services={services.filter((s) => s.featured)} />
         <p className="mt-3 text-center text-sm text-mist-500">
@@ -75,37 +92,32 @@ export default function HomePage() {
         </p>
       </Section>
 
-      <Section id="prices">
-        <SectionHeading eyebrow="מחירון" title="מחירים שקופים, בלי הפתעות" lede="מחירי פתיחה לכל שירות. המחיר הסופי נסגר מראש לפי תמונה." />
-        <Pricing />
-      </Section>
-
-      <Section id="how" tone="tint">
+      <Section id="how">
         <SectionHeading eyebrow="התהליך" title="איך זה עובד?" />
         <HowItWorks />
       </Section>
 
-      <Section id="why">
+      <Section id="why" tone="tint">
         <SectionHeading eyebrow="למה אנחנו" title={`למה לבחור ב${business.name}?`} />
         <WhyUs />
       </Section>
 
-      <Section id="about" tone="tint">
+      <Section id="about">
         <SectionHeading eyebrow="מדריך מקצועי" title="ניקוי ספות מקצועי — מה חשוב לדעת?" align="start" />
         <Explainer />
       </Section>
 
-      <Section id="faq">
+      <Section id="faq" tone="tint">
         <SectionHeading eyebrow="שאלות ותשובות" title="שאלות נפוצות" />
         <Faq />
       </Section>
 
-      <Section id="areas" tone="tint">
+      <Section id="areas">
         <SectionHeading eyebrow="אזורי שירות" title={`${serviceAreas.primary.join(', ')} ו${serviceAreas.regionLabel}`} />
         <ServiceAreas />
       </Section>
 
-      <Section id="cta">
+      <Section id="cta" tone="tint">
         <FinalCta />
       </Section>
     </>

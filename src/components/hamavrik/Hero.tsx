@@ -3,10 +3,10 @@ import type { ReactNode } from 'react';
 import { PhoneButton, WaButton } from '@/components/hamavrik/CtaLinks';
 import { HeroVideo } from '@/components/hamavrik/HeroVideo';
 import { CheckIcon } from '@/components/icons';
-import { business, heroMedia, priceList, serviceAreas } from '@/lib/hamavrik/config';
-import { waLinkFor } from '@/lib/hamavrik/links';
+import { business, heroMedia, priceList, priceText, serviceAreas } from '@/lib/hamavrik/config';
+import { waAsk, waLink } from '@/lib/hamavrik/links';
 
-const TRUST = ['מגיעים עד הבית', 'מחיר ידוע מראש', 'ציוד מקצועי'];
+const TRUST = ['מגיעים עד הבית', 'מחיר ידוע מראש', 'יבש תוך שעות'];
 
 /**
  * The first screen, sized so one phone screen answers the four questions a
@@ -21,27 +21,31 @@ export function Hero({
       <span className="block text-aqua-300">ב{serviceAreaShort()}</span>
     </>
   ),
-  subtitle = 'ניקוי עמוק של כתמים, לכלוך וריחות עם ציוד מקצועי. שלחו תמונה ב-WhatsApp וקבלו הצעת מחיר מהירה.',
-  waContext = '(מה-Hero)',
+  subtitle = 'מוציאים כתמים, לכלוך וריחות מתוך הבד — לא רק מהשטח. שלחו תמונה של הספה ב-WhatsApp ותקבלו מחיר.',
+  waMessage = waAsk(),
   priceFrom = priceList[0]?.from ?? null,
   priceLabel = 'ניקוי ספה',
 }: {
   title?: ReactNode;
   subtitle?: string;
-  waContext?: string;
+  /** The prepared WhatsApp message — narrowed to the service and city on a
+   *  landing page, so the first line the business reads already says both. */
+  waMessage?: string;
   priceFrom?: number | null;
   priceLabel?: string;
 }) {
   return (
     <section className="shine-hero relative overflow-hidden">
       <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 pb-10 pt-8 sm:px-6 sm:pt-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-12 lg:pb-16 lg:pt-16">
-        <div className="min-w-0 animate-rise">
+        <div className="min-w-0 shine-rise">
           <h1 className="text-[2.1rem] font-black leading-[1.1] text-balance-he sm:text-5xl lg:text-[3.4rem]">{title}</h1>
 
           {priceFrom ? (
             <p className="mt-4 inline-flex items-baseline gap-2 rounded-2xl bg-white px-4 py-2 text-mist-100 shadow-lg">
               <span className="text-sm font-bold text-mist-500">{priceLabel}</span>
-              <span className="text-2xl font-black text-brand-400 sm:text-3xl">החל מ-{priceFrom}₪</span>
+              <span className="text-2xl font-black text-brand-400 sm:text-3xl">
+                החל מ-<bdi dir="rtl">{priceText(priceFrom)}</bdi>
+              </span>
             </p>
           ) : null}
 
@@ -58,9 +62,9 @@ export function Hero({
             ))}
           </ul>
 
-          <div className="mt-6 flex flex-col gap-2.5 sm:max-w-md">
-            <WaButton location="hero" href={waLinkFor(waContext)} size="lg" shimmer className="w-full max-sm:px-5 max-sm:text-base">
-              שלחו תמונה וקבלו מחיר ב-WhatsApp
+          <div id="hero-cta" className="mt-6 flex flex-col gap-2.5 sm:max-w-md">
+            <WaButton location="hero" href={waLink(waMessage)} size="lg" shimmer className="w-full max-sm:px-5 max-sm:text-base">
+              שלחו תמונה, קבלו מחיר ב-WhatsApp
             </WaButton>
             <PhoneButton location="hero" variant="light" className="w-full">
               <span className="whitespace-nowrap">
@@ -71,7 +75,7 @@ export function Hero({
         </div>
 
         {/* REAL HERO PHOTO/VIDEO: see heroMedia in config.ts. */}
-        <div className="relative animate-rise [animation-delay:120ms] max-lg:hidden">
+        <div className="relative shine-rise [animation-delay:120ms] max-lg:hidden">
           <div className="relative overflow-hidden rounded-[1.5rem] shadow-2xl shadow-black/40 ring-1 ring-white/15">
             {heroMedia.video ? (
               <HeroVideo

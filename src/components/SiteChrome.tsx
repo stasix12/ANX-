@@ -1,10 +1,21 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { Footer } from '@/components/Footer';
 import { Header } from '@/components/Header';
-import { OrderBar } from '@/components/OrderBar';
 import { OrderListProvider } from '@/components/OrderListProvider';
+
+/*
+ * Loaded on demand rather than imported statically. OrderBar pulls in
+ * lib/order → lib/products → @supabase/supabase-js — 62KB gzipped of database
+ * client that every page in this repository was shipping, including the
+ * sofa-cleaning landing pages, which never render an order bar and have no
+ * database. Splitting it here takes that weight off them without moving a
+ * single file, URL or piece of metadata; the store is unchanged except that
+ * the bar arrives one chunk later, and it is fixed-position, so nothing moves.
+ */
+const OrderBar = dynamic(() => import('@/components/OrderBar').then((m) => m.OrderBar));
 
 /**
  * The admin panel (/admin), the cleaning-business CRM (/crm) and the

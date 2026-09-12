@@ -73,6 +73,12 @@
     }
   }
 
+  /* The cleaning site is a light theme; without this the storefront's dark
+     body shows through on iOS overscroll as a black band above a white page. */
+  html:has(.shine-theme) body {
+    background-color: #f5f8fc;
+  }
+
   body {
     /* The ambient layer below paints the ground; this is the fallback under it. */
     background-color: var(--color-ink-950);
@@ -1196,6 +1202,39 @@
   50% {
     transform: translateY(-8px);
   }
+}
+
+/* The quote form's error names a field; this points at it. A message 300px
+   away from the thing it is about is a form the visitor abandons. */
+.shine-field-error {
+  border-radius: 0.85rem;
+  outline: 2px solid #dc2626;
+  outline-offset: 6px;
+}
+
+/* Hero entrance: transform only, so the LCP text paints on the first frame. */
+.shine-rise {
+  animation: shine-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes shine-rise {
+  from {
+    transform: translateY(14px);
+  }
+  to {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shine-rise {
+    animation: none;
+  }
+}
+
+/* The before/after slider is driven by a transparent range input, so keyboard
+   focus was invisible. Move the ring onto the card the input covers. */
+.shine-theme figure:has(input[type='range']:focus-visible) {
+  outline: 3px solid var(--color-brand-500);
+  outline-offset: 2px;
 }
 
 /* WhatsApp pulse in the site's green. */

@@ -46,12 +46,18 @@ export const business = {
   phoneE164: '+972535257250',
   /** International form (no plus, no dashes) for wa.me links. */
   whatsappNumber: '972535257250',
-  /** The pre-filled opening line of every WhatsApp button on the site. */
-  whatsappGreeting:
-    'שלום, הגעתי דרך האתר של הפתרון המבריק ואני רוצה לקבל הצעת מחיר לניקוי.',
+  /**
+   * Every prepared WhatsApp message is built from these two lines:
+   *   <opener> אשמח למחיר ל<מה> — <photoLine>
+   * No source tags ("(from the hero)") ever reach the customer's chat —
+   * which button converted is recorded in analytics, not in their WhatsApp.
+   * The message always ends by inviting the photo the price depends on.
+   */
+  whatsappOpener: 'היי, הגעתי דרך האתר.',
+  whatsappPhotoLine: 'הנה תמונה:',
 
   /** Shown next to "response time" claims. Keep honest. */
-  responseNote: 'מענה מהיר בוואטסאפ בשעות הפעילות',
+  responseNote: 'עונים בוואטסאפ בשעות הפעילות',
 
   /**
    * Opening hours for the LocalBusiness schema, in schema.org format
@@ -79,6 +85,17 @@ export const business = {
   geo: { latitude: 31.2518, longitude: 34.7913 },
 } as const;
 
+/**
+ * The three places where the visitor has seen something specific before
+ * tapping, so the message can say so. Everything else uses `waAsk()` in
+ * links.ts — one sentence, no tags, ending with the photo invitation.
+ */
+export const whatsappMessages = {
+  video: 'היי, ראיתי את הסרטון באתר. אשמח למחיר לניקוי — הנה תמונה:',
+  prices: 'היי, ראיתי את המחירון באתר. אשמח למחיר מדויק — הנה תמונה:',
+  areas: 'היי, אני מ-____ — אתם מגיעים אליי? אשמח גם למחיר לניקוי ספה, הנה תמונה:',
+} as const;
+
 /* ── Service areas ──────────────────────────────────────────────────────── */
 
 export const serviceAreas = {
@@ -91,7 +108,7 @@ export const serviceAreas = {
    */
   nearby: ['עומר', 'להבים', 'מיתר', 'דימונה', 'ירוחם', 'אופקים', 'נתיבות', 'רהט', 'כסייפה'],
   regionLabel: 'דרום הארץ',
-  note: 'לא בטוחים שאנחנו מגיעים אליכם? שלחו הודעה עם שם היישוב ונענה מיד.',
+  note: 'לא בטוחים שאנחנו מגיעים אליכם? שלחו הודעה עם שם היישוב ונגיד לכם.',
 } as const;
 
 /* ── Services ───────────────────────────────────────────────────────────── */
@@ -112,6 +129,12 @@ export interface Service {
   label: string;
   /** Full name used as card title and in schema. */
   name: string;
+  /**
+   * Singular noun for the prepared WhatsApp message:
+   * "אשמח למחיר ל<waNoun> — הנה תמונה:". Written out rather than derived
+   * from `name`, so a plural title never turns into broken Hebrew.
+   */
+  waNoun: string;
   short: string;
   description: string;
   /** Which illustration the card draws until a real photo is configured. */
@@ -129,6 +152,7 @@ export const services: Service[] = [
     id: 'sofa',
     label: 'ספה',
     name: 'ניקוי ספות',
+    waNoun: 'ניקוי ספה',
     short: 'ספות בד, פינתיות ומערכות ישיבה — ניקוי עמוק בבית הלקוח.',
     description:
       'ניקוי עמוק של הריפוד בשיטת הזרקה-יניקה, טיפול נקודתי בכתמים, נטרול ריחות והוצאת הלכלוך שהצטבר בתוך סיבי הבד. הספה מתייבשת תוך שעות ספורות ומוכנה לשימוש.',
@@ -141,6 +165,7 @@ export const services: Service[] = [
     id: 'mattress',
     label: 'מזרן',
     name: 'ניקוי מזרנים',
+    waNoun: 'ניקוי מזרן',
     short: 'הסרת כתמים, קרדית האבק ולכלוך עמוק — לשינה נקייה יותר.',
     description:
       'ניקוי עמוק ומקיף למזרנים: הסרת כתמי זיעה ונוזלים, טיפול בריחות והוצאת אבק מצטבר מתוך המזרן. מומלץ במיוחד למי שסובל מאלרגיות או לחדרי ילדים.',
@@ -153,7 +178,8 @@ export const services: Service[] = [
     id: 'armchair',
     label: 'כורסאות',
     name: 'ניקוי כורסאות',
-    short: 'רענון והחזרת הצבע לכורסאות, ריקליינרים וכיסאות טלוויזיה.',
+    waNoun: 'ניקוי כורסה',
+    short: 'כורסאות, ריקליינרים וכורסאות הנקה — מנקים במקום, לפי סוג הבד.',
     description:
       'כורסה נקייה משנה את כל הסלון. אנחנו מנקים כורסאות בד מכל הסוגים, כולל ריקליינרים וכורסאות הנקה, עם התאמת חומרי הניקוי לסוג הבד.',
     scene: 'armchair',
@@ -165,7 +191,8 @@ export const services: Service[] = [
     id: 'chairs',
     label: 'כיסאות',
     name: 'ניקוי כיסאות אוכל',
-    short: 'כיסאות פינת אוכל מרופדים חוזרים להיראות חדשים.',
+    waNoun: 'ניקוי כיסאות פינת האוכל',
+    short: 'כתמי אוכל ושומן מכל הסט — בביקור אחד.',
     description:
       'כיסאות פינת אוכל סופגים כתמי אוכל ושומן יום אחרי יום. ניקוי מקצועי מוציא את הלכלוך מתוך הריפוד ומחזיר את הצבע המקורי — לכל סט הכיסאות בביקור אחד.',
     scene: 'chair',
@@ -177,9 +204,10 @@ export const services: Service[] = [
     id: 'car',
     label: 'רכב',
     name: 'ניקוי ריפודי רכב',
+    waNoun: 'ניקוי ריפודי הרכב',
     short: 'מושבים, ריפודי דלתות ושטיחונים — ניקוי עמוק במקום שנוח לכם.',
     description:
-      'ניקוי מושבי הרכב, ריפודי הדלתות, התקרה והשטיחונים בציוד מקצועי. מסירים כתמי קפה, אוכל, ריחות עשן וסימני שימוש — ומחזירים לרכב תחושה של חדש.',
+      'ניקוי מושבי הרכב, ריפודי הדלתות, התקרה והשטיחונים בציוד מקצועי. מסירים כתמי קפה, אוכל, ריחות עשן וסימני שימוש.',
     scene: 'car',
     image: null,
     priceFrom: 299,
@@ -189,6 +217,7 @@ export const services: Service[] = [
     id: 'carpet',
     label: 'שטיח',
     name: 'ניקוי שטיחים',
+    waNoun: 'ניקוי שטיח',
     short: 'שטיחים מכל הסוגים, בבית הלקוח וללא הובלה.',
     description:
       'ניקוי עמוק לשטיחים מבד, צמר וסיבים סינתטיים — הסרת כתמים, אבק ולכלוך שהצטבר בעומק הסיבים. הכול מתבצע אצלכם בבית, בלי לגלגל ולהוביל את השטיח לשום מקום.',
@@ -201,6 +230,7 @@ export const services: Service[] = [
     id: 'wall-to-wall',
     label: 'שטיח מקיר לקיר',
     name: 'ניקוי שטיחים מקיר לקיר',
+    waNoun: 'ניקוי שטיח מקיר לקיר',
     short: 'ניקוי כל השטח בשיטת הזרקה-יניקה, כולל אזורי מעבר.',
     description:
       'שטיחים מקיר לקיר צוברים לכלוך בעיקר באזורי המעבר. אנחנו מנקים את כל השטח בשיטת הזרקה-יניקה, עם דגש על הכתמים ואזורי השימוש הכבד, וללא השארת שאריות חומר.',
@@ -213,6 +243,7 @@ export const services: Service[] = [
     id: 'stroller',
     label: 'עגלות וכיסאות ילדים',
     name: 'ניקוי עגלות וכיסאות ילדים',
+    waNoun: 'ניקוי עגלה או כיסא ילדים',
     short: 'עגלות, כיסאות אוכל לתינוק וכיסאות בטיחות — ניקוי עדין ויסודי.',
     description:
       'ריפוד של עגלה או כיסא בטיחות בא במגע יומיומי עם התינוק. אנחנו מנקים אותו ביסודיות עם חומרים עדינים המתאימים לילדים, ומסירים כתמי אוכל, חלב ולכלוך יומיומי.',
@@ -249,7 +280,40 @@ export const priceList: PriceRow[] = [
 ];
 
 export const priceDisclaimer =
-  'המחיר הסופי נקבע בהתאם לגודל, סוג הבד ומצב הריפוד. ניתן לשלוח תמונה לקבלת הצעת מחיר מדויקת.';
+  'המחיר הסופי תלוי בגודל, בסוג הבד ובכתמים. שלחו תמונה ונסגור מחיר מדויק לפני שמגיעים.';
+
+/**
+ * The ONE way a price is written on this site: digits, a non-breaking space,
+ * then ₪ — "299 ₪". Without the space the bidi algorithm moves the sign to
+ * the wrong side of the number and the most-read detail on the page ("החל
+ * מ-299 ₪") renders as "החל מ-₪299", which reads like a bug. Render it
+ * inside <bdi dir="rtl"> so surrounding text can never flip it again — a bare
+ * <bdi> is dir="auto", finds no strong character in "299 ₪", falls back to LTR
+ * and puts the sign back on the wrong side, which is the bug we are fixing.
+ */
+export function priceText(amount: number): string {
+  return `${amount}\u00A0₪`;
+}
+
+/**
+ * Which price-list row a quick-quote selection points at. The form and the
+ * `#prices` table therefore quote the same number by construction — two
+ * hand-maintained lists would drift apart within a month.
+ */
+export function quotePriceRow(service: ServiceId, seats?: string): PriceRow | null {
+  const label =
+    service === 'sofa' && seats === 'ספה פינתית'
+      ? 'ניקוי ספה פינתית'
+      : ({
+          sofa: 'ניקוי ספה',
+          mattress: 'ניקוי מזרן',
+          car: 'ניקוי ריפודי רכב',
+          armchair: 'ניקוי כורסה',
+          chairs: 'ניקוי כיסאות אוכל',
+          carpet: 'ניקוי שטיחים',
+        } as Partial<Record<ServiceId, string>>)[service];
+  return priceList.find((row) => row.label === label) ?? null;
+}
 
 /* ── Before / after gallery (REAL JOBS GO HERE) ─────────────────────── */
 
@@ -340,7 +404,7 @@ const armchairsCopy = {
   itemLabel: 'כורסאות בד',
   city: null,
   problem: 'ניקוי עמוק בהזרקה-יניקה',
-  description: 'צילום אמיתי מעבודה: ניקוי עמוק של כורסאות בד בבית הלקוח — שאיבה, הזרקת תמיסת ניקוי בלחץ ושאיבה חוזרת עד שהריפוד נקי.',
+  description: 'שואבים, מזריקים תמיסה בלחץ ושואבים בחזרה — עד שהמים שיוצאים נקיים.',
   points: ['ציוד מקצועי, לא מכשיר ביתי', 'הכול מתבצע אצלכם בבית', 'הריפוד יבש תוך שעות'],
   service: 'armchair' as ServiceId,
   date: '2026-09-11',
@@ -374,6 +438,21 @@ export const featuredVideoWide: FeaturedVideo = {
  * when known.
  */
 export const featuredVideo: FeaturedVideo | null = featuredVideoPortrait;
+
+/**
+ * THE 15–25s "before → process → after" CLIP GOES HERE.
+ *
+ * While this is null NOTHING is rendered — no section, no heading, no
+ * "coming soon" frame. An empty box that announces something that does not
+ * exist is what made a real visitor ask "wait, is this a new business?" about
+ * the reviews section; we are not repeating it for the video.
+ *
+ * To publish: drop the MP4 + a poster frame under /public/hamavrik/video/ and
+ * describe the clip here exactly like the two above. Hard requirements so the
+ * page stays fast: ≤1MB, H.264 with the moov atom at the front, a real poster.
+ * It then replaces the current clip at the top of the page.
+ */
+export const processVideo: FeaturedVideo | null = null;
 
 /* ── Work gallery (REAL PHOTOS GO HERE) ─────────────────────────────────── */
 
@@ -430,11 +509,16 @@ export const stats = {
   jobsDone: null as number | null,
 };
 
+/**
+ * Four claims, each one backed by an answer in the FAQ below — and each one
+ * said exactly once on the page (the trust strip, "why us" and the steps used
+ * to repeat the same four promises three times over).
+ */
 export const trustPoints = [
-  { icon: 'home', title: 'שירות בבית הלקוח', desc: 'מגיעים אליכם עם כל הציוד' },
-  { icon: 'machine', title: 'ציוד מתקדם', desc: 'הזרקה-יניקה בלחץ מקצועי' },
-  { icon: 'sparkle', title: 'ניקוי עמוק', desc: 'מתוך סיבי הריפוד, לא רק מבחוץ' },
-  { icon: 'shield', title: 'שירות מקצועי', desc: 'הצעת מחיר ברורה מראש' },
+  { icon: 'home', title: 'מגיעים אליכם', desc: 'עם כל הציוד. לא מובילים כלום' },
+  { icon: 'machine', title: 'מכונה, לא מטלית', desc: 'מזריקה תמיסה ושואבת אותה מתוך הבד' },
+  { icon: 'droplet', title: 'יבש תוך שעות', desc: 'לח ולא רטוב. מאוורר או מזגן מקצרים' },
+  { icon: 'camera', title: 'מחיר לפי תמונה', desc: 'סוגרים בוואטסאפ לפני שמגיעים' },
 ] as const;
 
 /* ── Google reviews (REAL REVIEWS GO HERE) ──────────────────────────────── */
@@ -464,44 +548,85 @@ export const steps = [
   { icon: 'camera', title: 'שולחים תמונה', desc: 'מצלמים את הספה ושולחים ב-WhatsApp.' },
   { icon: 'tag', title: 'מקבלים מחיר מראש', desc: 'הצעה ברורה לפי גודל ומצב — בלי הפתעות.' },
   { icon: 'calendar', title: 'קובעים מועד', desc: 'יום ושעה שנוחים לכם.' },
-  { icon: 'home', title: 'מגיעים עד הבית', desc: 'עם כל הציוד. אתם לא מכינים כלום.' },
+  { icon: 'home', title: 'מגיעים עד הבית', desc: 'עם כל הציוד. אתם רק מפנים גישה לספה.' },
 ] as const;
 
 /* ── Why us ─────────────────────────────────────────────────────────────── */
 
+/**
+ * Four things that are true here and are NOT repeated anywhere else on the
+ * page. Nothing here is a number, a rating or a guarantee — say only what the
+ * business has actually confirmed.
+ *
+ * OWNER: this is the slot for "מי אנחנו" — a first name, one first-person
+ * sentence and one photo from a phone. That single block is worth more than
+ * every other change on this page; it is left out until you send them.
+ */
 export const whyUs = [
-  { icon: 'machine', title: 'ציוד מקצועי', desc: 'הזרקה-יניקה בלחץ — לא מכשיר ביתי.' },
-  { icon: 'droplet', title: 'טיפול מקצועי בכתמים', desc: 'שיטה וחומרים לפי סוג הבד.' },
-  { icon: 'home', title: 'שירות בבית הלקוח', desc: 'לא מובילים שום דבר לשום מקום.' },
-  { icon: 'chat', title: 'שירות אישי', desc: 'תיאום ברור והצעת מחיר מראש.' },
+  {
+    icon: 'droplet',
+    title: 'אומרים מראש מה יירד ומה לא',
+    desc: 'כתמי דיו, צבע או אקונומיקה משנים את צבע הסיב עצמו. מסתכלים על התמונה ואומרים בכנות מה ריאלי — לפני שמגיעים.',
+  },
+  {
+    icon: 'home',
+    title: 'אתם כמעט לא מכינים כלום',
+    desc: 'מורידים כריות נוי ומפנים גישה. אנחנו צריכים רק נקודת חשמל וגישה למים.',
+  },
+  {
+    icon: 'sparkle',
+    title: 'רואים את זה בעיניים',
+    desc: 'המים שנשאבים מהריפוד יוצאים חומים-אפורים. זה הלכלוך שהיה בפנים, לא על פני השטח.',
+  },
+  {
+    icon: 'chat',
+    title: 'בלי הפתעות בסוף',
+    desc: 'אם במקום המצב שונה ממה שראינו בתמונה — אומרים לכם לפני שמתחילים, לא אחרי.',
+  },
 ] as const;
 
 /* ── FAQ ────────────────────────────────────────────────────────────────── */
 
+/**
+ * Order matters: the two questions people actually arrive with — what does it
+ * cost, and will MY stain come out — come first. They are also the two
+ * answers that close deals, and they are honest, which is the point.
+ *
+ * OWNER: three questions are still missing because only you know the answers —
+ * what happens if a stain does not come out, exactly which cleaning agents are
+ * used, and how soon you can usually arrive. Send them and they go in here.
+ */
 export const faq = [
   {
-    q: 'כמה זמן לוקח ניקוי ספה?',
-    a: 'ספה תלת-מושבית סטנדרטית לוקחת בדרך כלל בין 45 דקות לשעה וחצי, בהתאם לגודל, לסוג הבד ולכמות הכתמים. ספה פינתית או מערכת ישיבה גדולה יכולה לקחת יותר — אנחנו אומרים לכם מראש כמה זמן להקצות.',
+    q: 'כמה עולה ניקוי ספה?',
+    a: `ניקוי ספה תלת-מושבית מתחיל ב-${priceText(299)} וספה פינתית ב-${priceText(350)}. המחיר הסופי נקבע לפי גודל הפריט, סוג הבד ומצב הכתמים. שולחים תמונה בוואטסאפ למספר 053-5257250 ומקבלים מחיר שנסגר מראש, לפני שאנחנו מגיעים.`,
+  },
+  {
+    q: 'האם הכתם שלי ירד?',
+    a: 'את רוב הכתמים — כן: אוכל, שתייה, זיעה, לכלוך יומיומי וריחות. כתמי דיו, צבע או אקונומיקה משנים את צבע הסיב עצמו ולא תמיד יורדים לגמרי. אנחנו בודקים את התמונה ואומרים לכם בכנות מה ריאלי לפני שהגענו.',
   },
   {
     q: 'כמה זמן לוקח לספה להתייבש?',
     a: 'ברוב המקרים בין 3 ל-6 שעות. השאיבה החזקה מוציאה את רוב הלחות כבר במהלך הניקוי, כך שהריפוד נשאר לח ולא רטוב. חלון פתוח, מאוורר או מזגן מקצרים את הזמן. מומלץ לא לשבת על הספה עד שהיא יבשה לגמרי.',
   },
   {
-    q: 'האם אפשר להסיר כל כתם?',
-    a: 'את רוב הכתמים — כן: אוכל, שתייה, זיעה, לכלוך יומיומי וריחות. כתמי דיו, צבע או אקונומיקה משנים את צבע הסיב עצמו ולא תמיד יורדים לגמרי. אנחנו בודקים את התמונה ואומרים לכם בכנות מה ריאלי לפני שהגענו.',
+    q: 'כמה זמן לוקח הניקוי עצמו?',
+    a: 'ספה תלת-מושבית סטנדרטית לוקחת בדרך כלל בין 45 דקות לשעה וחצי, בהתאם לגודל, לסוג הבד ולכמות הכתמים. ספה פינתית או מערכת ישיבה גדולה יכולה לקחת יותר — אנחנו אומרים לכם מראש כמה זמן להקצות.',
   },
   {
-    q: 'האם אתם מגיעים לבית הלקוח?',
-    a: 'כן, תמיד. כל הניקוי מתבצע אצלכם בבית (או ליד הרכב). אנחנו מגיעים עם כל הציוד והחומרים ולא צריך להוביל שום דבר.',
+    // Restored: the first thing a parent asks before letting a technician in.
+    // Describes the METHOD only. The claim about which cleaning agents are
+    // used is the owner's to make — do not write it here until he does.
+    q: 'אפשר לנקות כשיש ילדים או בעלי חיים בבית?',
+    a: 'כן. שיטת ההזרקה-יניקה שואבת את תמיסת הניקוי בחזרה מתוך הריפוד בסיום, כך שלא נשארות שאריות חומר בבד. מומלץ להמתין עד שהריפוד יבש לגמרי — בדרך כלל 3 עד 6 שעות — לפני שחוזרים לשבת עליו, ולאוורר את החדר בינתיים.',
   },
   {
-    q: 'האם צריך להכין משהו לפני שמגיעים?',
+    q: 'צריך להכין משהו לפני שאתם מגיעים?',
     a: 'כמעט כלום: להוריד מהספה כריות נוי, שמיכות וחפצים אישיים ולפנות גישה נוחה אליה. אנחנו צריכים רק נקודת חשמל וגישה למים.',
   },
   {
-    q: 'איך נקבע המחיר?',
-    a: 'לפי גודל הפריט, סוג הבד ומצב הכתמים. ניקוי ספה תלת-מושבית מתחיל ב-299 ₪ וספה פינתית ב-350 ₪. שולחים תמונה ב-WhatsApp למספר 053-5257250, ומקבלים מחיר סופי שנסגר מראש — המחיר שנסגר הוא המחיר שתשלמו.',
+    q: 'אתם מגיעים לבית הלקוח?',
+    a: 'כן, תמיד. כל הניקוי מתבצע אצלכם בבית (או ליד הרכב). אנחנו מגיעים עם כל הציוד והחומרים ולא צריך להוביל שום דבר.',
   },
 ] as const;
 
@@ -540,9 +665,23 @@ export interface LandingPage {
   /** <title> (without the brand suffix). */
   title: string;
   h1: string;
+  /** Meta description only — never shown on the page (it used to be, and it
+   *  opened the ad's landing page with four lines repeating the H1). */
   description: string;
-  /** Two or three sentences shown under the H1, written for that city. */
+  /** One or two lines under the H1, written for this page. Keep it short:
+   *  it sits above the price pill on a phone. */
+  heroSubtitle: string;
+  /** Kept for the JSON-LD service description. */
   intro: string;
+  /**
+   * A block of copy unique to this page, rendered under the quote form.
+   * This is what stops a city page from being a near-duplicate of the home
+   * page — write it about the place, not about the service.
+   */
+  localBlock?: { title: string; body: string };
+  /** Replaces the shared FAQ entries whose question matches, so a mattress
+   *  page never asks "how long does a SOFA take to dry". */
+  faqOverrides?: { q: string; a: string; replaces: string }[];
 }
 
 export const landingPages: LandingPage[] = [
@@ -554,8 +693,13 @@ export const landingPages: LandingPage[] = [
     h1: 'ניקוי ספות בבאר שבע',
     description:
       'ניקוי ספות מקצועי בבאר שבע בבית הלקוח: ציוד מתקדם, טיפול בכתמים וריחות, ניקוי עמוק וייבוש מהיר. החל מ-299 ₪. שלחו תמונה בוואטסאפ וקבלו הצעת מחיר.',
+    heroSubtitle: 'מגיעים לכל שכונות באר שבע — מרמות ועד העיר העתיקה — עם כל הציוד. שולחים תמונה, מקבלים מחיר.',
     intro:
       'מגיעים לכל שכונות באר שבע עם הציוד המקצועי המלא — רמות, נווה זאב, נאות לון, הכלניות, שכונה ד׳ ועד לעיר העתיקה. שולחים תמונה של הספה, מקבלים מחיר, ואנחנו אצלכם.',
+    localBlock: {
+      title: 'מגיעים לכל באר שבע',
+      body: 'רמות, נווה זאב, נאות לון, הכלניות, שכונה ד׳, נווה נוי, ועד העיר העתיקה. מגיעים עם כל הציוד עד הדלת — אין צורך להוביל שום דבר, ואין צורך לפנות את הסלון.',
+    },
   },
   {
     slug: 'arad',
@@ -564,7 +708,8 @@ export const landingPages: LandingPage[] = [
     title: 'ניקוי ספות בערד — שירות מקצועי בבית הלקוח',
     h1: 'ניקוי ספות בערד',
     description:
-      'ניקוי ספות בערד בבית הלקוח: ניקוי עמוק בשיטת הזרקה-יניקה, טיפול בכתמים וריחות, ייבוש מהיר. הצעת מחיר בוואטסאפ תוך דקות.',
+      'ניקוי ספות בערד בבית הלקוח: ניקוי עמוק בשיטת הזרקה-יניקה, טיפול בכתמים וריחות, ייבוש מהיר. הצעת מחיר בוואטסאפ, בשעות הפעילות.',
+    heroSubtitle: 'מגיעים לערד עם כל הציוד ומנקים אצלכם בבית. שולחים תמונה, מקבלים מחיר, קובעים יום.',
     intro:
       'שירות ניקוי ספות מקצועי בערד ובסביבה, ללא צורך להוביל שום דבר. מגיעים אליכם הביתה עם כל הציוד ומחזירים לספה את המראה הנקי.',
   },
@@ -576,6 +721,14 @@ export const landingPages: LandingPage[] = [
     h1: 'ניקוי מזרנים בבאר שבע',
     description:
       'ניקוי מזרנים מקצועי בבאר שבע בבית הלקוח: הסרת כתמים, קרדית האבק וריחות. החל מ-279 ₪. שלחו תמונה וקבלו הצעת מחיר בוואטסאפ.',
+    heroSubtitle: 'כתמי זיעה, ריחות ואבק שמצטברים בתוך המזרן. מנקים אצלכם בבית, והמזרן יבש תוך שעות.',
+    faqOverrides: [
+      {
+        replaces: 'כמה עולה ניקוי ספה?',
+        q: 'כמה עולה ניקוי מזרן?',
+        a: `ניקוי מזרן זוגי מתחיל ב-${priceText(279)} לצד אחד. המחיר הסופי נקבע לפי גודל המזרן ומצב הכתמים. שולחים תמונה בוואטסאפ למספר 053-5257250 ומקבלים מחיר שנסגר מראש, לפני שאנחנו מגיעים.`,
+      },
+    ],
     intro:
       'מזרן נקי הוא שינה בריאה יותר. מנקים מזרנים בכל גודל בבאר שבע — הסרת כתמי זיעה ונוזלים, טיפול בריחות והוצאת אבק מצטבר, עם ייבוש מהיר באותו יום.',
   },
@@ -587,6 +740,14 @@ export const landingPages: LandingPage[] = [
     h1: 'ניקוי ריפודי רכב בבאר שבע',
     description:
       'ניקוי ריפודי רכב בבאר שבע: מושבים, ריפודי דלתות ושטיחונים בניקוי עמוק. מגיעים אליכם. החל מ-299 ₪. הצעת מחיר בוואטסאפ.',
+    heroSubtitle: 'מושבים סופגים הכול — קפה, אוכל, ריח עשן. מנקים איפה שנוח לכם: בבית, בעבודה או בחניון.',
+    faqOverrides: [
+      {
+        replaces: 'כמה עולה ניקוי ספה?',
+        q: 'כמה עולה ניקוי ריפודי רכב?',
+        a: `ניקוי ריפודי רכב מתחיל ב-${priceText(299)} למושבים הקדמיים והאחוריים. המחיר הסופי נקבע לפי גודל הרכב ומצב הריפוד. שולחים תמונה בוואטסאפ למספר 053-5257250 ומקבלים מחיר שנסגר מראש.`,
+      },
+    ],
     intro:
       'הרכב מלווה אתכם כל יום — ומושבים סופגים הכול. מנקים ריפודי רכב בבאר שבע במקום שנוח לכם: בבית, בעבודה או בחניון.',
   },
@@ -598,6 +759,14 @@ export const landingPages: LandingPage[] = [
     h1: 'ניקוי שטיחים בבאר שבע',
     description:
       'ניקוי שטיחים מקצועי בבאר שבע בבית הלקוח: שטיחי סלון, שטיחים מקיר לקיר ושטיחי צמר. ניקוי עמוק, הסרת כתמים וייבוש מהיר. הצעת מחיר בוואטסאפ.',
+    heroSubtitle: 'לא צריך לגלגל את השטיח ולחכות שבועיים. מנקים אצלכם בבית — סלון, חדרי ילדים ומקיר לקיר.',
+    faqOverrides: [
+      {
+        replaces: 'כמה עולה ניקוי ספה?',
+        q: 'כמה עולה ניקוי שטיח?',
+        a: 'מחיר ניקוי שטיח נקבע לפי גודל השטיח וסוג הסיבים, ולכן אין לו מחיר פתיחה אחיד. שולחים תמונה בוואטסאפ למספר 053-5257250 עם מידות משוערות, ומקבלים מחיר שנסגר מראש לפני שאנחנו מגיעים.',
+      },
+    ],
     intro:
       'לא צריך לגלגל את השטיח ולחכות שבועיים. מנקים שטיחים בבאר שבע אצלכם בבית — שטיחי סלון, חדרי ילדים ושטיחים מקיר לקיר.',
   },
@@ -638,11 +807,15 @@ export const leads = {
 
 /* ── Navigation ─────────────────────────────────────────────────────────── */
 
+/**
+ * In page order, so the menu is a map of the page rather than a list of
+ * whatever existed first. "ביקורות" is not here while there are none, and
+ * "לפני ואחרי" is not here while the only real proof is the video.
+ */
 export const nav = [
-  { href: '#services', label: 'שירותים' },
   { href: '#prices', label: 'מחירון' },
-  { href: '#before-after', label: 'לפני ואחרי' },
-  { href: '#reviews', label: 'ביקורות' },
+  { href: '#quote', label: 'הצעת מחיר' },
+  { href: '#services', label: 'שירותים' },
   { href: '#faq', label: 'שאלות ותשובות' },
   { href: '#areas', label: 'אזורי שירות' },
 ] as const;

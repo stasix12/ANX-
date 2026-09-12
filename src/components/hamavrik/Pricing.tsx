@@ -1,8 +1,8 @@
 import { WaButton } from '@/components/hamavrik/CtaLinks';
 import { Reveal } from '@/components/hamavrik/Reveal';
 import { CheckIcon } from '@/components/icons';
-import { priceDisclaimer, priceIncludes, priceList } from '@/lib/hamavrik/config';
-import { waLinkFor } from '@/lib/hamavrik/links';
+import { priceDisclaimer, priceIncludes, priceList, priceText, whatsappMessages } from '@/lib/hamavrik/config';
+import { waLink } from '@/lib/hamavrik/links';
 
 
 /**
@@ -31,7 +31,9 @@ export function Pricing() {
                 {row.from !== null ? (
                   <>
                     <span className="me-1 text-[11px] font-bold text-mist-500">החל מ-</span>
-                    <span className="text-[1.7rem] font-black leading-none text-brand-400 sm:text-3xl">{row.from}₪</span>
+                    <span className="text-[1.7rem] font-black leading-none text-brand-400 sm:text-3xl">
+                      <bdi dir="rtl">{priceText(row.from)}</bdi>
+                    </span>
                   </>
                 ) : (
                   <span className="rounded-full bg-ink-900 px-3 py-1.5 text-sm font-extrabold text-mist-300">
@@ -47,7 +49,7 @@ export function Pricing() {
 
       <Reveal delay={120}>
         <div className="shine-hero relative overflow-hidden rounded-2xl p-5 sm:p-7">
-          <p className="text-base font-black sm:text-lg">מה כלול בכל מחיר?</p>
+          <p className="text-base font-black sm:text-lg">מה כלול במחיר</p>
           <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-1">
             {priceIncludes.map((line) => (
               <li key={line} className="flex items-center gap-2 text-sm font-bold text-white/90">
@@ -58,8 +60,8 @@ export function Pricing() {
               </li>
             ))}
           </ul>
-          <WaButton location="pricing" href={waLinkFor('מצרפ/ת תמונה לקבלת מחיר 📷')} className="mt-4 w-full">
-            שלחו תמונה וקבלו מחיר
+          <WaButton location="pricing" href={waLink(whatsappMessages.prices)} className="mt-4 w-full">
+            שלחו תמונה, קבלו מחיר
           </WaButton>
         </div>
       </Reveal>

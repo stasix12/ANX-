@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { WaButton } from '@/components/hamavrik/CtaLinks';
 import { CheckIcon, PlayIcon } from '@/components/icons';
 import { track } from '@/lib/hamavrik/analytics';
-import { featuredVideo } from '@/lib/hamavrik/config';
-import { waLinkFor } from '@/lib/hamavrik/links';
+import { whatsappMessages, type FeaturedVideo as FeaturedVideoData } from '@/lib/hamavrik/config';
+import { waLink } from '@/lib/hamavrik/links';
 import { asset } from '@/lib/site';
 
 /**
@@ -14,7 +14,7 @@ import { asset } from '@/lib/site';
  * fetched until the card scrolls into view, then it plays muted on a loop
  * and pauses again when it leaves the screen. A tap toggles pause/play.
  */
-export function FeaturedVideo() {
+export function FeaturedVideo({ video }: { video?: FeaturedVideoData | null }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
   const tracked = useRef(false);
@@ -34,8 +34,8 @@ export function FeaturedVideo() {
     return () => io.disconnect();
   }, []);
 
-  if (!featuredVideo) return null;
-  const v = featuredVideo;
+  if (!video) return null;
+  const v = video;
 
   function toggle() {
     const video = ref.current;
@@ -112,7 +112,7 @@ export function FeaturedVideo() {
             </li>
           ))}
         </ul>
-        <WaButton location="featured-video" href={waLinkFor('ראיתי את הסרטון — מצרפ/ת תמונה 📷')} className="mt-1 self-start">
+        <WaButton location="featured-video" href={waLink(whatsappMessages.video)} className="mt-1 self-start">
           רוצים תוצאה כזאת? שלחו תמונה
         </WaButton>
       </div>

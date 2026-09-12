@@ -7,8 +7,8 @@ import { Scene } from '@/components/hamavrik/Illustrations';
 import { CameraIcon } from '@/components/hamavrik/icons';
 import { CheckIcon, WhatsAppIcon } from '@/components/icons';
 import { track } from '@/lib/hamavrik/analytics';
-import { business, leads, serviceAreas, services, type ServiceId } from '@/lib/hamavrik/config';
-import { waLink, waLinkFor } from '@/lib/hamavrik/links';
+import { business, leads, priceText, quotePriceRow, serviceAreas, services, type ServiceId } from '@/lib/hamavrik/config';
+import { waLink } from '@/lib/hamavrik/links';
 import { openWhatsApp } from '@/lib/openExternal';
 
 const SEATS = ['2 מושבים', '3 מושבים', '4 מושבים', 'ספה פינתית', 'אחר'] as const;
@@ -33,8 +33,22 @@ export function QuickQuote({
   const [stains, setStains] = useState<'yes' | 'no' | ''>('');
   const [city, setCity] = useState(defaultCity);
   const [error, setError] = useState('');
+  const [errorField, setErrorField] = useState<'service' | 'seats' | 'stains' | null>(null);
   const [blockedHref, setBlockedHref] = useState('');
   const started = useRef(false);
+
+  /*
+   * What the visitor came for. The form used to ask three questions whose
+   * answers are already in the price list two sections up, and then hand back
+   * nothing — "I filled in a questionnaire and got no price" was the exact
+   * words of the one real customer who tested this page. The row comes from
+   * `priceList` itself, so this line and #prices can never quote different
+   * numbers.
+   */
+  const picked = service ? services.find((s) => s.id === service) ?? null : null;
+  const priceRow = service ? quotePriceRow(service, seats) : null;
+  const ready = Boolean(service && (service !== 'sofa' || seats));
+  const choiceLabel = service === 'sofa' && seats ? (seats === 'ספה פינתית' ? seats : `ספה ${seats}`) : picked?.name.replace('ניקוי ', '') ?? '';
 
   function start() {
     if (started.current) return;
@@ -47,19 +61,31 @@ export function QuickQuote({
     setService(id);
     if (id !== 'sofa') setSeats('');
     setError('');
+    setErrorField(null);
     track('service_selected', { service: id, location: 'quick-quote' });
   }
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!service) return setError('בחרו מה לנקות');
-    if (service === 'sofa' && !seats) return setError('כמה מושבים יש בספה?');
-    if (!stains) return setError('יש כתמים מיוחדים?');
+    if (!service) {
+      setErrorField('service');
+      return setError('בחרו מה לנקות');
+    }
+    if (service === 'sofa' && !seats) {
+      setErrorField('seats');
+      return setError('כמה מושבים יש בספה?');
+    }
+    if (!stains) {
+      setErrorField('stains');
+      return setError('בחרו: יש כתמים שמטרידים אתכם? כן / לא');
+    }
     setError('');
+    setErrorField(null);
 
-    const picked = services.find((s) => s.id === service);
     const serviceName = picked?.name ?? service;
-    const kind = service === 'sofa' && seats ? (seats === 'ספה פינתית' ? seats : `ספה, ${seats}`) : picked?.label ?? service;
+    /* Same wording as the live price line above the button, so the message the
+       business receives matches what the visitor was just quoted. */
+    const kind = choiceLabel || picked?.label || service;
     const payload = {
       service: serviceName,
       seats: service === 'sofa' ? seats : null,
@@ -83,17 +109,18 @@ export function QuickQuote({
 
     const href = waLink(
       [
-        'היי, אשמח לקבל הצעת מחיר.',
-        `סוג: ${kind}`,
-        `כתמים מיוחדים: ${stains === 'yes' ? 'כן' : 'לא'}`,
+        `${business.whatsappOpener} אשמח למחיר:`,
+        `מה מנקים: ${kind}`,
+        `כתמים: ${stains === 'yes' ? 'כן' : 'לא'}`,
         ...(payload.city ? [`עיר: ${payload.city}`] : []),
+        business.whatsappPhotoLine,
       ].join('\n'),
     );
     openWhatsApp(href, () => setBlockedHref(href));
   }
 
   const chip = (on: boolean) =>
-    `rounded-full border-2 px-4 py-2 text-sm font-extrabold transition-colors ${
+    `inline-flex min-h-11 items-center rounded-full border-2 px-4 text-sm font-extrabold transition-colors ${
       on ? 'border-brand-500 bg-brand-300/40 text-brand-400' : 'border-ink-800 bg-ink-900 text-mist-300 hover:border-brand-500/40'
     }`;
 
@@ -101,7 +128,7 @@ export function QuickQuote({
     <div className="relative">
       <span aria-hidden className="shine-glow" />
       <form onSubmit={submit} noValidate className="surface rounded-[1.5rem] p-4 sm:p-7" aria-labelledby="quote-title">
-        <fieldset>
+        <fieldset className={errorField === 'service' ? 'shine-field-error' : undefined}>
           <legend className="mb-2.5 text-sm font-extrabold text-mist-300">1. מה מנקים?</legend>
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-6">
             {options.map((s) => {
@@ -135,11 +162,11 @@ export function QuickQuote({
         </fieldset>
 
         {service === 'sofa' ? (
-          <fieldset className="mt-5">
+          <fieldset className={`mt-5 ${errorField === 'seats' ? 'shine-field-error' : ''}`}>
             <legend className="mb-2.5 text-sm font-extrabold text-mist-300">2. כמה מושבים?</legend>
             <div role="group" className="flex flex-wrap gap-2">
               {SEATS.map((s) => (
-                <button key={s} type="button" aria-pressed={seats === s} onClick={() => setSeats(s)} className={chip(seats === s)}>
+                <button key={s} type="button" aria-pressed={seats === s} onClick={() => { setSeats(s); setErrorField(null); }} className={chip(seats === s)}>
                   {s}
                 </button>
               ))}
@@ -147,15 +174,16 @@ export function QuickQuote({
           </fieldset>
         ) : null}
 
-        <fieldset className="mt-5">
+        <fieldset className={`mt-5 ${errorField === 'stains' ? 'shine-field-error' : ''}`}>
           <legend className="mb-2.5 text-sm font-extrabold text-mist-300">
-            {service === 'sofa' ? '3' : '2'}. האם יש כתמים מיוחדים?
+            {service === 'sofa' ? '3' : '2'}. יש כתמים שמטרידים אתכם?
+            <span className="mt-0.5 block text-xs font-medium text-mist-500">קפה, יין, חיות מחמד, פיפי של ילדים…</span>
           </legend>
           <div role="group" className="flex gap-2">
-            <button type="button" aria-pressed={stains === 'yes'} onClick={() => { start(); setStains('yes'); }} className={chip(stains === 'yes')}>
+            <button type="button" aria-pressed={stains === 'yes'} onClick={() => { start(); setStains('yes'); setErrorField(null); }} className={chip(stains === 'yes')}>
               כן
             </button>
-            <button type="button" aria-pressed={stains === 'no'} onClick={() => { start(); setStains('no'); }} className={chip(stains === 'no')}>
+            <button type="button" aria-pressed={stains === 'no'} onClick={() => { start(); setStains('no'); setErrorField(null); }} className={chip(stains === 'no')}>
               לא
             </button>
           </div>
@@ -184,6 +212,22 @@ export function QuickQuote({
           </datalist>
         </label>
 
+        {ready ? (
+          <p className="mt-5 rounded-xl bg-brand-300/40 px-4 py-3 text-[15px] font-extrabold text-brand-400">
+            {priceRow?.from ? (
+              <>
+                {choiceLabel} — החל מ-<bdi dir="rtl">{priceText(priceRow.from)}</bdi>
+                <span className="mt-0.5 block text-[13px] font-bold text-mist-300">המחיר הסופי נקבע לפי התמונה.</span>
+              </>
+            ) : (
+              <>
+                {choiceLabel} — לפי הצעת מחיר
+                <span className="mt-0.5 block text-[13px] font-bold text-mist-300">שלחו תמונה ונחזור עם מספר.</span>
+              </>
+            )}
+          </p>
+        ) : null}
+
         {error ? (
           <p role="alert" className="mt-3 text-sm font-bold text-red-600">
             {error}
@@ -193,13 +237,13 @@ export function QuickQuote({
         <div className="mt-5 grid gap-2.5 sm:grid-cols-[1.2fr_1fr]">
           <button
             type="submit"
-            className="shine-shimmer inline-flex items-center justify-center gap-2.5 rounded-full bg-wa-500 px-6 py-3.5 text-lg font-extrabold text-white shadow-lg shadow-wa-500/30 transition-colors hover:bg-wa-600"
+            className="shine-shimmer inline-flex items-center justify-center gap-2.5 rounded-full bg-wa-600 px-6 py-3.5 text-lg font-extrabold text-white shadow-lg shadow-wa-600/30 transition-colors hover:bg-wa-500"
           >
             <WhatsAppIcon className="h-6 w-6" />
-            קבלו הצעת מחיר ב-WhatsApp
+            שלחו ב-WhatsApp
           </button>
           <WaLink
-            href={waLinkFor('מצרפ/ת תמונה 📷')}
+            href={waLink()}
             location="quick-quote-photo"
             className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 text-base font-extrabold text-brand-400 ring-2 ring-brand-500/25 transition hover:ring-brand-500/50"
           >
@@ -211,6 +255,7 @@ export function QuickQuote({
 
         {blockedHref ? (
           <WhatsAppFallback
+            kind="message"
             message={new URL(blockedHref).searchParams.get('text') ?? ''}
             href={blockedHref}
             onClose={() => setBlockedHref('')}

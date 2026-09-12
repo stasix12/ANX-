@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     template: `%s | ${business.name}`,
   },
   description:
-    'ניקוי ספות מקצועי בבית הלקוח בבאר שבע, ערד ודרום הארץ. ציוד מתקדם, טיפול בכתמים וריחות, ניקוי עמוק וייבוש מהיר — החל מ-299 ₪. שלחו תמונה ב-WhatsApp וקבלו הצעת מחיר תוך דקות.',
+    'ניקוי ספות מקצועי בבית הלקוח בבאר שבע, ערד ודרום הארץ. ציוד מתקדם, טיפול בכתמים וריחות, ניקוי עמוק וייבוש מהיר — החל מ-299 ₪. שלחו תמונה ב-WhatsApp וקבלו הצעת מחיר.',
   keywords: [
     'ניקוי ספות',
     'ניקוי ספות באר שבע',
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0a2757',
+  themeColor: '#f5f8fc',
   colorScheme: 'light',
   width: 'device-width',
   initialScale: 1,

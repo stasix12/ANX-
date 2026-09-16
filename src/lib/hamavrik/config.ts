@@ -369,7 +369,17 @@ export interface BeforeAfterJob {
 export const HOME_JOBS = 4;
 
 export const beforeAfterJobs: BeforeAfterJob[] = [
-  { id: 'sofa-1', service: 'sofa', itemLabel: 'ספת בד', city: 'באר שבע', problem: 'ניקוי עמוק והסרת כתמים', scene: 'sofa', beforeImage: null, afterImage: null },
+  {
+    id: 'sofa-1',
+    service: 'sofa',
+    itemLabel: 'ספת בד תלת-מושבית',
+    city: 'באר שבע',
+    problem: 'ניקוי עמוק — הלכלוך שנספג בבד יצא, הצבע חזר',
+    scene: 'sofa',
+    // Real job photos, same sofa, same room, before and after.
+    beforeImage: '/hamavrik/jobs/sofa-grey-before.jpg',
+    afterImage: '/hamavrik/jobs/sofa-grey-after.jpg',
+  },
   { id: 'sofa-2', service: 'sofa', itemLabel: 'ספה פינתית', city: 'ערד', problem: 'נטרול ריחות וניקוי עמוק', scene: 'sofa', beforeImage: null, afterImage: null },
   { id: 'mattress-1', service: 'mattress', itemLabel: 'מזרן זוגי', city: 'באר שבע', problem: 'הסרת כתמים וקרדית האבק', scene: 'mattress', beforeImage: null, afterImage: null },
   { id: 'chairs-1', service: 'chairs', itemLabel: 'כיסאות פינת אוכל', city: 'עומר', problem: 'כתמי אוכל והחזרת צבע', scene: 'chair', beforeImage: null, afterImage: null },

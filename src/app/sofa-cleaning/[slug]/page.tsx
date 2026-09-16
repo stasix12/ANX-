@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq, faqFor } from '@/components/hamavrik/Faq';
+import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { FeaturedVideo } from '@/components/hamavrik/FeaturedVideo';
 import { FinalCta } from '@/components/hamavrik/FinalCta';
 import { Hero } from '@/components/hamavrik/Hero';
@@ -16,7 +17,7 @@ import { ServiceAreas } from '@/components/hamavrik/ServiceAreas';
 import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
-import { business, featuredVideo, landingPages, processVideo, serviceById, services } from '@/lib/hamavrik/config';
+import { business, featuredVideo, landingPages, processVideo, serviceById, services, beforeAfterJobs, HOME_JOBS } from '@/lib/hamavrik/config';
 import { absoluteUrl, href, waAsk } from '@/lib/hamavrik/links';
 
 interface PageProps {
@@ -66,6 +67,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  * nothing to do with and into a block of its own under the form.
  */
 export default async function LandingPage({ params }: PageProps) {
+  const realJobs = beforeAfterJobs.filter((job) => job.beforeImage && job.afterImage);
   const { slug } = await params;
   const page = landingPages.find((p) => p.slug === slug);
   if (!page) notFound();
@@ -114,6 +116,11 @@ export default async function LandingPage({ params }: PageProps) {
             lede="סרטון מעבודה אמיתית שלנו — לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם."
           />
           <FeaturedVideo video={processVideo ?? featuredVideo} />
+          {realJobs.length > 0 ? (
+            <div className="mt-6 sm:mt-8">
+              <BeforeAfterGallery jobs={realJobs} limit={HOME_JOBS} />
+            </div>
+          ) : null}
         </Section>
       ) : null}
 

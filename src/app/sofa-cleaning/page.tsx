@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq } from '@/components/hamavrik/Faq';
 import { FeaturedVideo } from '@/components/hamavrik/FeaturedVideo';
@@ -15,7 +16,7 @@ import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
 import { WorkGallery } from '@/components/hamavrik/WorkGallery';
-import { business, featuredVideo, priceList, priceText, processVideo, serviceAreas, services } from '@/lib/hamavrik/config';
+import { business, featuredVideo, priceList, priceText, processVideo, serviceAreas, services, beforeAfterJobs, HOME_JOBS } from '@/lib/hamavrik/config';
 
 /**
  * `absolute` keeps the storefront's "| ANX3D" title template off this page.
@@ -45,6 +46,7 @@ export const metadata: Metadata = {
  */
 export default function HomePage() {
   const sofaFrom = priceList[0]?.from;
+  const realJobs = beforeAfterJobs.filter((job) => job.beforeImage && job.afterImage);
   return (
     <>
       <JsonLd data={[...allServicesSchema(), faqSchema(), breadcrumbSchema([{ name: business.name, path: '/' }]), ...(featuredVideoSchema() ? [featuredVideoSchema()!] : [])]} />
@@ -56,9 +58,20 @@ export default function HomePage() {
         <SectionHeading
           eyebrow="מהשטח"
           title="ככה זה נראה מקרוב"
-          lede="סרטון מעבודה אמיתית שלנו — לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם."
+          lede={
+            realJobs.length > 0
+              ? 'סרטון ותמונות מעבודות אמיתיות שלנו — לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל.'
+              : 'סרטון מעבודה אמיתית שלנו — לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם.'
+          }
         />
         <FeaturedVideo video={processVideo ?? featuredVideo} />
+        {/* Only jobs with real photos. Illustrated placeholders stay in /gallery;
+            the first real pair in config.ts brings this block back by itself. */}
+        {realJobs.length > 0 ? (
+          <div className="mt-6 sm:mt-8">
+            <BeforeAfterGallery jobs={realJobs} limit={HOME_JOBS} />
+          </div>
+        ) : null}
       </Section>
 
       <WorkGallery />

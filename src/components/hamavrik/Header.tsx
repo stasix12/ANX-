@@ -12,7 +12,7 @@ import { href, waAskForPath, waLink } from '@/lib/hamavrik/links';
 
 /**
  * Sticky header. Desktop: logo · anchor nav · phone · "הצעת מחיר" CTA.
- * Mobile: logo · phone icon · menu — the menu opens a panel with the same
+ * Mobile: logo · phone icon · menu – the menu opens a panel with the same
  * links and both CTAs, and closes on any navigation. Anchors are relative,
  * so on a city landing page they scroll within that page.
  */
@@ -42,7 +42,7 @@ export function Header() {
       }`}
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-6 lg:h-[76px]">
-        <Link href={href('/')} aria-label={`${business.name} — לעמוד הבית`} className="shrink-0 rounded-lg">
+        <Link href={href('/')} aria-label={`${business.name} – לעמוד הבית`} className="shrink-0 rounded-lg">
           <Logo />
         </Link>
 

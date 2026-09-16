@@ -2,7 +2,7 @@ import { business } from '@/lib/hamavrik/config';
 
 /**
  * Typographic wordmark with a small "spark" mark: navy first word, green
- * second — the two colours of the brand (deep clean / fresh). `light` flips
+ * second – the two colours of the brand (deep clean / fresh). `light` flips
  * to white for the dark hero and footer.
  */
 export function Logo({ light = false, className = '' }: { light?: boolean; className?: string }) {

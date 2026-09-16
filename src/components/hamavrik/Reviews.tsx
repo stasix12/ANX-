@@ -36,7 +36,7 @@ export function GoogleReviewCard({ review, index = 0 }: { review: Review; index?
 }
 
 /**
- * Three real reviews from config.ts, or — while there are none — one quiet
+ * Three real reviews from config.ts, or – while there are none – one quiet
  * line that links to the Google profile. No invented quotes, no invented
  * averages.
  */

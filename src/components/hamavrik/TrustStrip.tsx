@@ -6,7 +6,7 @@ import { business, reviews, stats, trustPoints } from '@/lib/hamavrik/config';
 /**
  * The trust bar right under the hero.
  *
- * The Google block appears only once there is something real behind it — a
+ * The Google block appears only once there is something real behind it – a
  * rating, a review count, or at least one review in config.ts. Until then it
  * is gone entirely, and so is the link it carried: "לקוחות ממליצים" with no
  * customers behind it is a claim the business cannot back, and the link sent

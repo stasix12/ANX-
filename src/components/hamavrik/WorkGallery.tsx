@@ -3,7 +3,7 @@ import { workGallery } from '@/lib/hamavrik/config';
 
 /**
  * Real job photos (REAL PHOTOS: workGallery in config.ts). Renders nothing
- * while the list is empty — the section only exists once there is something
+ * while the list is empty – the section only exists once there is something
  * real to show.
  */
 export function WorkGallery() {

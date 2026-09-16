@@ -6,7 +6,7 @@ import { CheckIcon } from '@/components/icons';
 import { business, heroMedia, priceList, priceText, serviceAreas } from '@/lib/hamavrik/config';
 import { waAsk, waLink } from '@/lib/hamavrik/links';
 
-const TRUST = ['מגיעים עד הבית', 'מחיר ידוע מראש', 'יבש תוך שעות'];
+const TRUST = ['מגיעים עד הבית', 'מחיר סופי ידוע מראש', 'מתייבש תוך מספר שעות'];
 
 /**
  * The first screen, sized so one phone screen answers the four questions a
@@ -17,18 +17,18 @@ const TRUST = ['מגיעים עד הבית', 'מחיר ידוע מראש', 'יב
 export function Hero({
   title = (
     <>
-      ניקוי ספות מקצועי עד הבית{' '}
-      <span className="block text-aqua-300">ב{serviceAreaShort()}</span>
+      ניקוי ספות מקצועי{' '}
+      <span className="block text-aqua-300">ב{serviceAreaShort()} – עד הבית</span>
     </>
   ),
-  subtitle = 'מוציאים כתמים, לכלוך וריחות מתוך הבד — לא רק מהשטח. שלחו תמונה של הספה ב-WhatsApp ותקבלו מחיר.',
+  subtitle = 'מסירים כתמים, לכלוך וריחות מעומק הבד – ולא רק מפני השטח. שלחו לנו תמונה של הספה ב-WhatsApp וקבלו הצעת מחיר.',
   waMessage = waAsk(),
   priceFrom = priceList[0]?.from ?? null,
   priceLabel = 'ניקוי ספה',
 }: {
   title?: ReactNode;
   subtitle?: string;
-  /** The prepared WhatsApp message — narrowed to the service and city on a
+  /** The prepared WhatsApp message – narrowed to the service and city on a
    *  landing page, so the first line the business reads already says both. */
   waMessage?: string;
   priceFrom?: number | null;
@@ -82,7 +82,7 @@ export function Hero({
                 webm={heroMedia.video.webm}
                 mp4={heroMedia.video.mp4}
                 poster={heroMedia.video.poster}
-                alt="ראש שאיבה מקצועי מנקה ריפוד ספה — צילום אמיתי מעבודה של הפתרון המבריק"
+                alt="ראש שאיבה מקצועי מנקה ריפוד ספה – צילום אמיתי מעבודה של הפתרון המבריק"
               />
             ) : heroMedia.image ? (
               <Image
@@ -105,7 +105,7 @@ export function Hero({
   );
 }
 
-/** "באר שבע והדרום" — the two headline areas collapsed into one short phrase. */
+/** "באר שבע והדרום" – the two headline areas collapsed into one short phrase. */
 function serviceAreaShort(): string {
   return `${serviceAreas.primary[0]} והדרום`;
 }

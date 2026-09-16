@@ -4,8 +4,8 @@
  * Illustrations rather than grey "image coming soon" boxes on purpose: a
  * numbered placeholder in the middle of a sales page kills trust, while a
  * clean drawing reads as intentional design until the real photos arrive.
- * Every scene is drawn twice — `before` (faded fabric, stains, dust) and
- * `after` (saturated, spotless, a few sparkles) — so the drag slider has a
+ * Every scene is drawn twice – `before` (faded fabric, stains, dust) and
+ * `after` (saturated, spotless, a few sparkles) – so the drag slider has a
  * real difference to reveal. Swap in photos by filling `before`/`after`
  * paths in config.ts; the components fall back to these automatically.
  */
@@ -24,8 +24,8 @@ const LABELS: Record<SceneKind, string> = {
 
 export function sceneLabel(kind: SceneKind, variant: 'before' | 'after'): string {
   return variant === 'before'
-    ? `${LABELS[kind]} לפני הניקוי — כתמים ולכלוך`
-    : `${LABELS[kind]} אחרי הניקוי — נקי ורענן`;
+    ? `${LABELS[kind]} לפני הניקוי – כתמים ולכלוך`
+    : `${LABELS[kind]} אחרי הניקוי – נקי ורענן`;
 }
 
 function Stains({ spots, dirty }: { spots: [number, number, number, number][]; dirty: boolean }) {

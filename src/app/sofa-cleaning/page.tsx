@@ -21,11 +21,11 @@ import { business, featuredVideo, priceList, priceText, processVideo, serviceAre
 /**
  * `absolute` keeps the storefront's "| ANX3D" title template off this page.
  * The city is in the title because the H1 has always had it and the ad always
- * carries it — without it the home page competed with /beer-sheva for the one
+ * carries it – without it the home page competed with /beer-sheva for the one
  * query that matters and neither of them won it.
  */
 export const metadata: Metadata = {
-  title: { absolute: `ניקוי ספות בבאר שבע — עד הבית, החל מ-299 ₪ | ${business.name}` },
+  title: { absolute: `ניקוי ספות בבאר שבע – עד הבית, החל מ-299 ₪ | ${business.name}` },
 };
 
 /**
@@ -60,8 +60,8 @@ export default function HomePage() {
           title="ככה זה נראה מקרוב"
           lede={
             realJobs.length > 0
-              ? 'סרטון ותמונות מעבודות אמיתיות שלנו — לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל.'
-              : 'סרטון מעבודה אמיתית שלנו — לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם.'
+              ? 'סרטון ותמונות מעבודות אמיתיות שלנו – לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל.'
+              : 'סרטון מעבודה אמיתית שלנו – לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם.'
           }
         />
         <FeaturedVideo video={processVideo ?? featuredVideo} />
@@ -84,9 +84,9 @@ export default function HomePage() {
       <Section id="quote">
         <SectionHeading
           eyebrow="הצעת מחיר מהירה"
-          title="קבלו מחיר לספה שלכם"
+          title="קבלו הצעת מחיר לספה שלכם"
           titleId="quote-title"
-          lede="שלוש שאלות, ואז שולחים תמונה בוואטסאפ ומקבלים מחיר."
+          lede="מסמנים מה לנקות, שולחים ב-WhatsApp – ומקבלים הצעת מחיר."
         />
         <Reveal delay={60}>
           <QuickQuote />
@@ -97,11 +97,11 @@ export default function HomePage() {
         <SectionHeading
           eyebrow="השירותים שלנו"
           title="מה אנחנו מנקים?"
-          lede={sofaFrom ? <>ספות החל מ-<bdi dir="rtl">{priceText(sofaFrom)}</bdi> — וכל ריפוד אחר בבית או ברכב. תמיד אצלכם, בלי להוביל.</> : undefined}
+          lede={sofaFrom ? <>ספות החל מ-<bdi dir="rtl">{priceText(sofaFrom)}</bdi> – וכל ריפוד אחר בבית או ברכב. תמיד אצלכם, בלי להוביל.</> : undefined}
         />
         <ServicesGrid services={services.filter((s) => s.featured)} />
         <p className="mt-3 text-center text-sm text-mist-500">
-          וגם: {services.filter((s) => !s.featured).map((s) => s.name.replace('ניקוי ', '')).join(', ')} — שלחו תמונה ונחזור עם מחיר.
+          וגם: {services.filter((s) => !s.featured).map((s) => s.name.replace('ניקוי ', '')).join(', ')} – שלחו תמונה ונחזור עם מחיר.
         </p>
       </Section>
 
@@ -116,7 +116,7 @@ export default function HomePage() {
       </Section>
 
       <Section id="about">
-        <SectionHeading eyebrow="מדריך מקצועי" title="ניקוי ספות מקצועי — מה חשוב לדעת?" align="start" />
+        <SectionHeading eyebrow="מדריך מקצועי" title="ניקוי ספות מקצועי – מה חשוב לדעת?" align="start" />
         <Explainer />
       </Section>
 

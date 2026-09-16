@@ -8,7 +8,7 @@ import { business } from '@/lib/hamavrik/config';
 import { absoluteUrl } from '@/lib/hamavrik/links';
 
 /**
- * "הפתרון המבריק" — the sofa-cleaning business site. Its own light premium
+ * "הפתרון המבריק" – the sofa-cleaning business site. Its own light premium
  * theme, header, footer and sticky CTAs; the storefront chrome at / is
  * bypassed by SiteChrome for this segment. Every page under here inherits
  * the LocalBusiness JSON-LD, the analytics tags and the title template.
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     template: `%s | ${business.name}`,
   },
   description:
-    'ניקוי ספות מקצועי בבית הלקוח בבאר שבע, ערד ודרום הארץ. ציוד מתקדם, טיפול בכתמים וריחות, ניקוי עמוק וייבוש מהיר — החל מ-299 ₪. שלחו תמונה ב-WhatsApp וקבלו הצעת מחיר.',
+    'ניקוי ספות מקצועי בבית הלקוח בבאר שבע, ערד ודרום הארץ. ציוד מתקדם, טיפול בכתמים וריחות, ניקוי עמוק וייבוש מהיר – החל מ-299 ₪. שלחו תמונה ב-WhatsApp וקבלו הצעת מחיר.',
   keywords: [
     'ניקוי ספות',
     'ניקוי ספות באר שבע',
@@ -39,12 +39,12 @@ export const metadata: Metadata = {
     url: absoluteUrl('/'),
     title: `ניקוי ספות מקצועי בבית הלקוח | ${business.name}`,
     description:
-      'ציוד מתקדם, טיפול בכתמים וריחות, ניקוי עמוק — החל מ-299 ₪. שלחו תמונה ב-WhatsApp וקבלו הצעת מחיר.',
+      'ציוד מתקדם, טיפול בכתמים וריחות, ניקוי עמוק – החל מ-299 ₪. שלחו תמונה ב-WhatsApp וקבלו הצעת מחיר.',
   },
   twitter: {
     card: 'summary_large_image',
     title: `ניקוי ספות מקצועי בבית הלקוח | ${business.name}`,
-    description: 'שלחו תמונה של הספה ב-WhatsApp וקבלו הצעת מחיר. באר שבע, ערד והדרום.',
+    description: 'שלחו לנו תמונה של הספה ב-WhatsApp וקבלו הצעת מחיר. באר שבע, ערד והדרום.',
   },
   robots: { index: true, follow: true },
   // icon.svg in this segment supplies the favicon; iOS wants a PNG for the home screen.

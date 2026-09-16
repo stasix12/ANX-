@@ -10,7 +10,7 @@ import { beforeAfterJobs, business, featuredVideo, processVideo } from '@/lib/ha
 import { absoluteUrl, href } from '@/lib/hamavrik/links';
 
 export const metadata: Metadata = {
-  title: 'גלריית עבודות — לפני ואחרי',
+  title: 'גלריית עבודות – לפני ואחרי',
   description: `עבודות ניקוי ספות, מזרנים, כיסאות, רכב ושטיחים של ${business.name}: לפני ואחרי, לפי סוג ועיר.`,
   alternates: { canonical: absoluteUrl('/gallery') },
   /* The og:url used to point at the home page, so every share of this page
@@ -20,9 +20,9 @@ export const metadata: Metadata = {
     locale: 'he_IL',
     siteName: business.name,
     url: absoluteUrl('/gallery'),
-    title: `איורים ודוגמאות — ${business.name}`,
+    title: `איורים ודוגמאות – ${business.name}`,
   },
-  twitter: { card: 'summary_large_image', title: `איורים ודוגמאות — ${business.name}` },
+  twitter: { card: 'summary_large_image', title: `איורים ודוגמאות – ${business.name}` },
 };
 
 /** Every before/after job with category tabs, plus the plain job photos. */
@@ -48,7 +48,7 @@ export default function GalleryPage() {
           as="h1"
           eyebrow="לפני ואחרי"
           title="איורים ודוגמאות"
-          lede="הסרטון למעלה הוא צילום אמיתי מעבודה שלנו. מתחתיו איורים שמסבירים מה קורה בכל סוג ריפוד — לא תמונות של עבודות."
+          lede="הסרטון למעלה הוא צילום אמיתי מעבודה שלנו. מתחתיו איורים שמסבירים מה קורה בכל סוג ריפוד – לא תמונות של עבודות."
         />
         <FeaturedVideo video={processVideo ?? featuredVideo} />
         <BeforeAfterGallery jobs={beforeAfterJobs} tabs />

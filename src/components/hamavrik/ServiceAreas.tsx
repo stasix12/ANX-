@@ -8,7 +8,7 @@ import { href, waLink } from '@/lib/hamavrik/links';
 /**
  * Where we go: the two headline cities, the nearby towns as quiet chips,
  * and the city/service pages as a tidy list of links (real destinations,
- * and internal links for Google) — one card, no keyword walls.
+ * and internal links for Google) – one card, no keyword walls.
  */
 export function ServiceAreas({ currentSlug }: { currentSlug?: string }) {
   const pages = landingPages.filter((p) => p.slug !== currentSlug);

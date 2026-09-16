@@ -22,7 +22,7 @@ export function WaLink({
   'aria-label': ariaLabel,
 }: {
   href?: string;
-  /** Where on the page the click came from — lands in analytics as `location`. */
+  /** Where on the page the click came from – lands in analytics as `location`. */
   location: string;
   className?: string;
   children: ReactNode;

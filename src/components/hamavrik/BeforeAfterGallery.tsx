@@ -13,7 +13,7 @@ import { href } from '@/lib/hamavrik/links';
  * and the range direction agree; the Hebrew labels are absolute and
  * unaffected. The invisible range input on top is what makes it work with
  * keyboard, screen readers and touch alike. A job without photos draws its
- * illustration and says so on the card — nothing pretends to be a real job.
+ * illustration and says so on the card – nothing pretends to be a real job.
  */
 export function BeforeAfterSlider({ job, eager = false, className = '' }: { job: BeforeAfterJob; eager?: boolean; className?: string }) {
   // Left of the divider is the old (before), right of it the new (after).
@@ -69,7 +69,7 @@ export function BeforeAfterSlider({ job, eager = false, className = '' }: { job:
           max={100}
           value={pos}
           onChange={(e) => move(Number(e.target.value))}
-          aria-label={`השוואת לפני ואחרי — ${job.itemLabel}, ${job.city}`}
+          aria-label={`השוואת לפני ואחרי – ${job.itemLabel}, ${job.city}`}
           className="absolute inset-0 h-full w-full cursor-ew-resize opacity-0"
         />
       </div>
@@ -124,7 +124,7 @@ export function BeforeAfterGallery({
 
   const filtered = active === 'all' ? ordered : ordered.filter((j) => galleryCategoryOf[j.service] === active);
   // A limited view (the home page) shows variety first: one job per
-  // category, then the rest — so four placeholders are never four sofas.
+  // category, then the rest – so four placeholders are never four sofas.
   const spread = limit && active === 'all' ? diversify(filtered) : filtered;
   const visible = limit ? spread.slice(0, limit) : spread;
   const more = jobs.length > visible.length || workGallery.length > 0;

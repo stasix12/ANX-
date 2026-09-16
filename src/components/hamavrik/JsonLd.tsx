@@ -23,7 +23,7 @@ export function JsonLd({ data }: { data: object | object[] }) {
 
 const BUSINESS_ID = `${absoluteUrl('/')}#business`;
 
-/** LocalBusiness — the anchor entity every page links back to. */
+/** LocalBusiness – the anchor entity every page links back to. */
 export function localBusinessSchema() {
   const real = reviews;
   return {
@@ -68,7 +68,7 @@ export function localBusinessSchema() {
   };
 }
 
-/** Service — one per service card, or the single service of a landing page. */
+/** Service – one per service card, or the single service of a landing page. */
 export function serviceSchema(service: Service, city?: string) {
   return {
     '@context': 'https://schema.org',
@@ -91,13 +91,13 @@ export function serviceSchema(service: Service, city?: string) {
   };
 }
 
-/** VideoObject for the featured real-footage clip — eligible for video rich results. */
+/** VideoObject for the featured real-footage clip – eligible for video rich results. */
 export function featuredVideoSchema() {
   if (!featuredVideo) return null;
   return {
     '@context': 'https://schema.org',
     '@type': 'VideoObject',
-    name: `${featuredVideo.itemLabel} — ${featuredVideo.problem} | ${business.name}`,
+    name: `${featuredVideo.itemLabel} – ${featuredVideo.problem} | ${business.name}`,
     description: featuredVideo.description,
     thumbnailUrl: publicUrl(featuredVideo.poster),
     contentUrl: publicUrl(featuredVideo.mp4),

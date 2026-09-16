@@ -8,7 +8,7 @@ import { waLink } from '@/lib/hamavrik/links';
 /**
  * A price list that reads in three seconds: the anchor row (sofa, 299 ₪)
  * is highlighted, everything else is a starting price or "by quote", and
- * the disclaimer sits right under it — no surprises, which is the whole
+ * the disclaimer sits right under it – no surprises, which is the whole
  * pitch. The card next to it says what every price includes.
  */
 export function Pricing() {

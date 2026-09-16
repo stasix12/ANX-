@@ -7,7 +7,7 @@ import { WhatsAppIcon } from '@/components/icons';
 import { landingPages, priceText, type Service } from '@/lib/hamavrik/config';
 import { href, waAsk, waLink } from '@/lib/hamavrik/links';
 
-/** The landing page for this service, when one exists — the only internal
+/** The landing page for this service, when one exists – the only internal
  *  links in the body copy used to be WhatsApp, which is a dead end for Google. */
 function pageFor(service: Service) {
   return landingPages.find((p) => p.service === service.id) ?? null;

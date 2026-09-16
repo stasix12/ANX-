@@ -47,14 +47,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       url,
       title: `${page.title} | ${business.name}`,
       description: page.description,
-      images: [{ url: absoluteUrl('/opengraph-image'), width: 1200, height: 630, alt: `${business.name} — ${page.h1}` }],
+      images: [{ url: absoluteUrl('/opengraph-image'), width: 1200, height: 630, alt: `${business.name} – ${page.h1}` }],
     },
     twitter: { card: 'summary_large_image', title: page.title, description: page.description },
   };
 }
 
 /**
- * City × service landing page — the page the ad actually lands on. Same
+ * City × service landing page – the page the ad actually lands on. Same
  * conversion skeleton as the home page, with the copy, the quote form
  * defaults, the FAQ and the structured data all narrowed to this city and
  * this service.
@@ -62,8 +62,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  * The subtitle under the H1 used to be the meta description: four lines that
  * repeated the H1 and then repeated the price the pill had just shown. It is
  * now `heroSubtitle`, written for the page, and the paragraph that names the
- * Beer Sheva neighbourhoods — the only copy that makes this page anything
- * other than the home page — moved out of a "before and after" lede it had
+ * Beer Sheva neighbourhoods – the only copy that makes this page anything
+ * other than the home page – moved out of a "before and after" lede it had
  * nothing to do with and into a block of its own under the form.
  */
 export default async function LandingPage({ params }: PageProps) {
@@ -116,8 +116,8 @@ export default async function LandingPage({ params }: PageProps) {
             title="ככה זה נראה מקרוב"
             lede={
               realJobs.length > 0
-                ? 'סרטון ותמונות מעבודות אמיתיות שלנו — לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל.'
-                : 'סרטון מעבודה אמיתית שלנו — לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם.'
+                ? 'סרטון ותמונות מעבודות אמיתיות שלנו – לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל.'
+                : 'סרטון מעבודה אמיתית שלנו – לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם.'
             }
           />
           <FeaturedVideo video={processVideo ?? featuredVideo} />
@@ -129,12 +129,12 @@ export default async function LandingPage({ params }: PageProps) {
         </Section>
       ) : pageJobs.length > 0 ? (
         /* The video is of sofas; a mattress or car page shows only its own
-           real before/after photos — and nothing at all until it has some. */
+           real before/after photos – and nothing at all until it has some. */
         <Section id="before-after" className="pt-8 sm:pt-10 lg:pt-12">
           <SectionHeading
             eyebrow="מהשטח"
             title="ככה זה נראה מקרוב"
-            lede="תמונות מעבודות אמיתיות שלנו — לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל."
+            lede="תמונות מעבודות אמיתיות שלנו – לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל."
           />
           <BeforeAfterGallery jobs={pageJobs} limit={HOME_JOBS} />
         </Section>
@@ -148,9 +148,9 @@ export default async function LandingPage({ params }: PageProps) {
       <Section id="quote">
         <SectionHeading
           eyebrow="הצעת מחיר מהירה"
-          title={`קבלו מחיר ל${service.waNoun.replace('ניקוי ', '')} שלכם ב${page.city}`}
+          title={`קבלו הצעת מחיר ל${service.waNoun.replace('ניקוי ', '')} שלכם ב${page.city}`}
           titleId="quote-title"
-          lede="שלוש שאלות, ואז שולחים תמונה בוואטסאפ ומקבלים מחיר."
+          lede="מסמנים מה לנקות, שולחים ב-WhatsApp – ומקבלים הצעת מחיר."
         />
         <Reveal delay={60}>
           <QuickQuote defaultService={service.id} defaultCity={page.city} />
@@ -181,7 +181,7 @@ export default async function LandingPage({ params }: PageProps) {
 
       {service.id === 'sofa' ? (
         <Section id="about">
-          <SectionHeading eyebrow="מדריך מקצועי" title="ניקוי ספות מקצועי — מה חשוב לדעת?" align="start" />
+          <SectionHeading eyebrow="מדריך מקצועי" title="ניקוי ספות מקצועי – מה חשוב לדעת?" align="start" />
           <Explainer />
         </Section>
       ) : null}

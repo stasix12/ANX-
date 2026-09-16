@@ -8,7 +8,7 @@ export interface FaqItem {
 }
 
 /**
- * Swaps in the questions a landing page answers differently — a mattress page
+ * Swaps in the questions a landing page answers differently – a mattress page
  * should not open with "how much does cleaning a SOFA cost". Anything not
  * overridden falls through to the shared list, so nothing silently disappears.
  */
@@ -20,7 +20,7 @@ export function faqFor(overrides?: { q: string; a: string; replaces: string }[])
   });
 }
 
-/** Renders the phone number inside an answer as a real tel: link — on a phone,
+/** Renders the phone number inside an answer as a real tel: link – on a phone,
  *  a number you cannot tap is a number you do not call. */
 function answer(text: string) {
   const parts = text.split(business.phoneDisplay);
@@ -42,7 +42,7 @@ function answer(text: string) {
  * answers are in the HTML for crawlers (matching the FAQPage JSON-LD).
  *
  * Every panel starts closed. The price question leads because it is the
- * question people arrive with — but by the time anyone reaches the FAQ the
+ * question people arrive with – but by the time anyone reaches the FAQ the
  * price has already been stated in the hero, the price list and the form, so
  * opening it by default would cost 180px to repeat what they know and push the
  * question that actually blocks the deal ("will my stain come out") down.

@@ -13,18 +13,18 @@ export function waLink(message: string = waAsk()): string {
  * The prepared message: one sentence, the thing being cleaned, and an
  * invitation to attach the photo the price depends on.
  *
- *   waAsk()                         → "היי, הגעתי דרך האתר. אשמח למחיר לניקוי ספה — הנה תמונה:"
- *   waAsk('ניקוי מזרן', 'באר שבע')  → "...אשמח למחיר לניקוי מזרן בבאר שבע — הנה תמונה:"
+ *   waAsk()                         → "היי, הגעתי דרך האתר. אשמח למחיר לניקוי ספה – הנה תמונה:"
+ *   waAsk('ניקוי מזרן', 'באר שבע')  → "...אשמח למחיר לניקוי מזרן בבאר שבע – הנה תמונה:"
  *
  * There is deliberately NO source tag. The site used to send "(מה-Hero)",
- * "(מהפוטר)" and friends inside the customer's own message — internal
+ * "(מהפוטר)" and friends inside the customer's own message – internal
  * bookkeeping that reads, to the person about to hit send, like being
  * tracked. Which button converted belongs in analytics (`track('whatsapp_
  * click', { location })`), not in their chat.
  */
 export function waAsk(noun: string = 'ניקוי ספה', city?: string): string {
   const where = city ? ` ב${city}` : '';
-  return `${business.whatsappOpener} אשמח למחיר ל${noun}${where} — ${business.whatsappPhotoLine}`;
+  return `${business.whatsappOpener} אשמח למחיר ל${noun}${where} – ${business.whatsappPhotoLine}`;
 }
 
 /**
@@ -44,7 +44,7 @@ export function waAskForPath(pathname: string | null): string {
   return waAsk(serviceById[page.service].waNoun, page.city);
 }
 
-/** tel: link in E.164 form — dials correctly from any country and any device. */
+/** tel: link in E.164 form – dials correctly from any country and any device. */
 export const telLink = `tel:${business.phoneE164}`;
 
 /** Internal link, prefixed with the site's route base. `href('/arad')` → `/sofa-cleaning/arad`. */

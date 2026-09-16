@@ -7,13 +7,13 @@ import { PhoneIcon, WhatsAppIcon } from '@/components/icons';
 import { waAskForPath, waLink } from '@/lib/hamavrik/links';
 
 /**
- * Mobile: a slim fixed bar — WhatsApp takes the wider cell, the call button
- * the narrower one — sitting inside the iPhone safe area. The page wrapper
+ * Mobile: a slim fixed bar – WhatsApp takes the wider cell, the call button
+ * the narrower one – sitting inside the iPhone safe area. The page wrapper
  * reserves matching bottom padding so nothing (FAQ, footer) hides under it.
  * Desktop: one floating WhatsApp button that grows a label on hover.
  *
  * On a phone the bar waits until the hero's own buttons have scrolled away.
- * At 375×553 — the usable height of Safari on an iPhone SE — it was covering
+ * At 375×553 – the usable height of Safari on an iPhone SE – it was covering
  * the hero's WhatsApp button, which is to say the bar meant to catch the
  * conversion was sitting on top of it. It slides, never unmounts, so the
  * reserved padding never moves and CLS stays where it is (0.0019).

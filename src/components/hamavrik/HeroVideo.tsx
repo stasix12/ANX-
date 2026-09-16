@@ -7,7 +7,7 @@ import { asset } from '@/lib/site';
 /**
  * The hero's real-footage loop, loaded the polite way: the poster is the
  * LCP image (preloaded, painted immediately) and the 1.6 MB video only
- * starts fetching after the page has finished loading — never on a
+ * starts fetching after the page has finished loading – never on a
  * data-saver connection, never for reduced-motion users. Until then, and
  * for anyone who never gets the video, the poster is the hero.
  */
@@ -32,7 +32,7 @@ export function HeroVideo({
      * downloading: every phone was pulling the full 2.04MB of anx-hero.webm
      * into an element it could never see, on exactly the connection that
      * could least afford it. The gate lives here, in the effect, and not in
-     * render — matchMedia during render would disagree with the server and
+     * render – matchMedia during render would disagree with the server and
      * throw a hydration mismatch.
      */
     if (!window.matchMedia('(min-width: 1024px)').matches) return;
@@ -57,7 +57,7 @@ export function HeroVideo({
     const video = videoRef.current;
     if (!video) return;
     video.play().catch(() => {
-      /* autoplay refused — the poster stays; nothing to do */
+      /* autoplay refused – the poster stays; nothing to do */
     });
   }, [ready]);
 

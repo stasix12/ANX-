@@ -100,7 +100,7 @@ export function FeaturedVideo({ video }: { video?: FeaturedVideoData | null }) {
         <h3 className="text-2xl font-black leading-tight sm:text-3xl">{v.title}</h3>
         <p className="text-mist-300">
           <span className="font-extrabold text-mist-100">{v.itemLabel}</span>
-          {v.city ? <span className="text-mist-500"> | {v.city}</span> : null} — {v.problem}. {v.description}
+          {v.city ? <span className="text-mist-500"> | {v.city}</span> : null} – {v.problem}. {v.description}
         </p>
         <ul className="grid gap-1.5 text-sm font-bold">
           {v.points.map((p) => (

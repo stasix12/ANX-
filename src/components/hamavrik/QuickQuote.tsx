@@ -17,7 +17,7 @@ interface Pick {
 
 const MAX_QTY = 20;
 
-/** "🛋️ ספה 3 מושבים", "🪑 6 כיסאות", "🛏️ מזרן זוגי" — one line of the message. */
+/** "🛋️ ספה 3 מושבים", "🪑 6 כיסאות", "🛏️ מזרן זוגי" – one line of the message. */
 function itemLine(service: Service, pick: Pick): string {
   const { emoji, one, many } = service.quote;
   const noun = pick.qty === 1 ? one : `${pick.qty} ${many}`;
@@ -25,9 +25,9 @@ function itemLine(service: Service, pick: Pick): string {
 }
 
 /**
- * The visitor ticks everything they want cleaned — several items in one
+ * The visitor ticks everything they want cleaned – several items in one
  * order, a quantity for each, and a size where it matters (seats on a sofa,
- * single or double mattress) — and lands in WhatsApp with one tidy message
+ * single or double mattress) – and lands in WhatsApp with one tidy message
  * listing all of it. No name or phone field: WhatsApp carries both. When a
  * webhook is configured the same choices are posted there first
  * (fire-and-forget).
@@ -240,7 +240,7 @@ export function QuickQuote({
                           )}
                         </span>
                       </span>
-                      <div role="group" aria-label={`כמות — ${s.quote.many}`} className="flex items-center gap-1.5">
+                      <div role="group" aria-label={`כמות – ${s.quote.many}`} className="flex items-center gap-1.5">
                         <button type="button" aria-label="פחות" onClick={() => setQty(s.id, pick.qty - 1)} className={stepBtn}>
                           −
                         </button>
@@ -253,7 +253,7 @@ export function QuickQuote({
                       </div>
                     </div>
                     {s.quote.variants ? (
-                      <div role="group" aria-label={`גודל — ${s.quote.one}`} className="mt-3 flex flex-wrap gap-2">
+                      <div role="group" aria-label={`גודל – ${s.quote.one}`} className="mt-3 flex flex-wrap gap-2">
                         {s.quote.variants.map((v) => (
                           <button key={v} type="button" aria-pressed={pick.variant === v} onClick={() => setVariant(s.id, v)} className={chip(pick.variant === v)}>
                             {v}

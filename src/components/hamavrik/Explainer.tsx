@@ -3,7 +3,7 @@ import { ChevronDownIcon } from '@/components/icons';
 import { explainer } from '@/lib/hamavrik/config';
 
 /**
- * The long-form professional explainer — the page's SEO body copy, written
+ * The long-form professional explainer – the page's SEO body copy, written
  * to be read: one question per block, plain answers, no keyword stuffing.
  * Two columns on desktop so it never turns into a wall of text.
  */

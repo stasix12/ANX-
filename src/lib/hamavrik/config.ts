@@ -143,6 +143,14 @@ export interface Service {
    * from `name`, so a plural title never turns into broken Hebrew.
    */
   waNoun: string;
+  /**
+   * How this service appears as a line in the quick-quote WhatsApp message,
+   * e.g. "🛋️ ספה 3 מושבים" or "🪑 6 כיסאות". `one`/`many` are the singular and
+   * plural nouns (Hebrew cannot be pluralised by rule); `variants`, when set,
+   * is a size the customer must pick (seats, mattress size) and is appended
+   * to the noun.
+   */
+  quote: { emoji: string; one: string; many: string; variants?: readonly string[] };
   short: string;
   description: string;
   /** Which illustration the card draws until a real photo is configured. */
@@ -161,6 +169,7 @@ export const services: Service[] = [
     label: 'ספה',
     name: 'ניקוי ספות',
     waNoun: 'ניקוי ספה',
+    quote: { emoji: '🛋️', one: 'ספה', many: 'ספות', variants: ['2 מושבים', '3 מושבים', '4 מושבים', 'פינתית'] },
     short: 'ספות בד, פינתיות ומערכות ישיבה — ניקוי עמוק בבית הלקוח.',
     description:
       'ניקוי עמוק של הריפוד בשיטת הזרקה-יניקה, טיפול נקודתי בכתמים, נטרול ריחות והוצאת הלכלוך שהצטבר בתוך סיבי הבד. הספה מתייבשת תוך שעות ספורות ומוכנה לשימוש.',
@@ -174,6 +183,7 @@ export const services: Service[] = [
     label: 'מזרן',
     name: 'ניקוי מזרנים',
     waNoun: 'ניקוי מזרן',
+    quote: { emoji: '🛏️', one: 'מזרן', many: 'מזרנים', variants: ['יחיד', 'זוגי'] },
     short: 'הסרת כתמים, קרדית האבק ולכלוך עמוק — לשינה נקייה יותר.',
     description:
       'ניקוי עמוק ומקיף למזרנים: הסרת כתמי זיעה ונוזלים, טיפול בריחות והוצאת אבק מצטבר מתוך המזרן. מומלץ במיוחד למי שסובל מאלרגיות או לחדרי ילדים.',
@@ -187,6 +197,7 @@ export const services: Service[] = [
     label: 'כורסאות',
     name: 'ניקוי כורסאות',
     waNoun: 'ניקוי כורסה',
+    quote: { emoji: '💺', one: 'כורסה', many: 'כורסאות' },
     short: 'כורסאות, ריקליינרים וכורסאות הנקה — מנקים במקום, לפי סוג הבד.',
     description:
       'כורסה נקייה משנה את כל הסלון. אנחנו מנקים כורסאות בד מכל הסוגים, כולל ריקליינרים וכורסאות הנקה, עם התאמת חומרי הניקוי לסוג הבד.',
@@ -200,6 +211,7 @@ export const services: Service[] = [
     label: 'כיסאות',
     name: 'ניקוי כיסאות אוכל',
     waNoun: 'ניקוי כיסאות פינת האוכל',
+    quote: { emoji: '🪑', one: 'כיסא', many: 'כיסאות' },
     short: 'כתמי אוכל ושומן מכל הסט — בביקור אחד.',
     description:
       'כיסאות פינת אוכל סופגים כתמי אוכל ושומן יום אחרי יום. ניקוי מקצועי מוציא את הלכלוך מתוך הריפוד ומחזיר את הצבע המקורי — לכל סט הכיסאות בביקור אחד.',
@@ -213,6 +225,7 @@ export const services: Service[] = [
     label: 'רכב',
     name: 'ניקוי ריפודי רכב',
     waNoun: 'ניקוי ריפודי הרכב',
+    quote: { emoji: '🚗', one: 'ריפודי רכב', many: 'רכבים' },
     short: 'מושבים, ריפודי דלתות ושטיחונים — ניקוי עמוק במקום שנוח לכם.',
     description:
       'ניקוי מושבי הרכב, ריפודי הדלתות, התקרה והשטיחונים בציוד מקצועי. מסירים כתמי קפה, אוכל, ריחות עשן וסימני שימוש.',
@@ -226,6 +239,7 @@ export const services: Service[] = [
     label: 'שטיח',
     name: 'ניקוי שטיחים',
     waNoun: 'ניקוי שטיח',
+    quote: { emoji: '🧹', one: 'שטיח', many: 'שטיחים' },
     short: 'שטיחים מכל הסוגים, בבית הלקוח וללא הובלה.',
     description:
       'ניקוי עמוק לשטיחים מבד, צמר וסיבים סינתטיים — הסרת כתמים, אבק ולכלוך שהצטבר בעומק הסיבים. הכול מתבצע אצלכם בבית, בלי לגלגל ולהוביל את השטיח לשום מקום.',
@@ -239,6 +253,7 @@ export const services: Service[] = [
     label: 'שטיח מקיר לקיר',
     name: 'ניקוי שטיחים מקיר לקיר',
     waNoun: 'ניקוי שטיח מקיר לקיר',
+    quote: { emoji: '🧹', one: 'שטיח מקיר לקיר', many: 'שטיחים מקיר לקיר' },
     short: 'ניקוי כל השטח בשיטת הזרקה-יניקה, כולל אזורי מעבר.',
     description:
       'שטיחים מקיר לקיר צוברים לכלוך בעיקר באזורי המעבר. אנחנו מנקים את כל השטח בשיטת הזרקה-יניקה, עם דגש על הכתמים ואזורי השימוש הכבד, וללא השארת שאריות חומר.',
@@ -252,6 +267,7 @@ export const services: Service[] = [
     label: 'עגלות וכיסאות ילדים',
     name: 'ניקוי עגלות וכיסאות ילדים',
     waNoun: 'ניקוי עגלה או כיסא ילדים',
+    quote: { emoji: '🍼', one: 'עגלה או כיסא ילדים', many: 'עגלות וכיסאות ילדים' },
     short: 'עגלות, כיסאות אוכל לתינוק וכיסאות בטיחות — ניקוי עדין ויסודי.',
     description:
       'ריפוד של עגלה או כיסא בטיחות בא במגע יומיומי עם התינוק. אנחנו מנקים אותו ביסודיות עם חומרים עדינים המתאימים לילדים, ומסירים כתמי אוכל, חלב ולכלוך יומיומי.',
@@ -308,9 +324,9 @@ export function priceText(amount: number): string {
  * `#prices` table therefore quote the same number by construction — two
  * hand-maintained lists would drift apart within a month.
  */
-export function quotePriceRow(service: ServiceId, seats?: string): PriceRow | null {
+export function quotePriceRow(service: ServiceId, variant?: string): PriceRow | null {
   const label =
-    service === 'sofa' && seats === 'ספה פינתית'
+    service === 'sofa' && variant === 'פינתית'
       ? 'ניקוי ספה פינתית'
       : ({
           sofa: 'ניקוי ספה',
@@ -806,7 +822,7 @@ export const analytics = {
 
 /**
  * The quick-quote form always hands the lead to WhatsApp. If this URL is set
- * it ALSO posts the lead as JSON ({ service, seats, stains, city, page }) to it
+ * it ALSO posts the lead as JSON ({ items: [{ service, label, qty, variant }], city, page }) to it
  * first — a Zapier/Make hook, Google Sheets script, or the CRM in this repo.
  */
 export const leads = {

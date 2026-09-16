@@ -40,7 +40,10 @@ export function BeforeAfterSlider({ job, eager = false, className = '' }: { job:
             <Scene kind={job.scene} variant="before" />
           )}
         </div>
-        <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
+        {/* "Before" on the left, "after" on the right: the pair reads left to
+            right, before → after, and the divider shows the result growing in
+            from the right as it is dragged left. */}
+        <div className="absolute inset-0" style={{ clipPath: `inset(0 0 0 ${pos}%)` }}>
           {real ? (
             <Image src={job.afterImage!} alt={sceneLabel(job.scene, 'after')} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" loading={eager ? 'eager' : 'lazy'} className="object-cover" />
           ) : (
@@ -56,8 +59,8 @@ export function BeforeAfterSlider({ job, eager = false, className = '' }: { job:
           </span>
         </div>
 
-        <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-extrabold text-white backdrop-blur-sm">לפני</span>
-        <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-wa-500 px-3 py-1 text-xs font-extrabold text-white">אחרי</span>
+        <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-extrabold text-white backdrop-blur-sm">לפני</span>
+        <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-wa-500 px-3 py-1 text-xs font-extrabold text-white">אחרי</span>
         {!touched ? (
           <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">גררו להשוואה</span>
         ) : null}

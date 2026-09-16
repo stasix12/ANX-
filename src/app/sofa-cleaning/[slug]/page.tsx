@@ -5,6 +5,7 @@ import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq, faqFor } from '@/components/hamavrik/Faq';
 import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { FeaturedVideo } from '@/components/hamavrik/FeaturedVideo';
+import { GoogleReviews } from '@/components/hamavrik/GoogleReviews';
 import { FinalCta } from '@/components/hamavrik/FinalCta';
 import { Hero } from '@/components/hamavrik/Hero';
 import { HowItWorks } from '@/components/hamavrik/HowItWorks';
@@ -18,6 +19,7 @@ import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
 import { business, featuredVideo, landingPages, processVideo, serviceById, services, beforeAfterJobs, HOME_JOBS, galleryCategoryOf } from '@/lib/hamavrik/config';
+import { getGoogleReviews } from '@/lib/hamavrik/googleReviews';
 import { absoluteUrl, href, waAsk } from '@/lib/hamavrik/links';
 
 interface PageProps {
@@ -74,6 +76,7 @@ export default async function LandingPage({ params }: PageProps) {
 
   const service = serviceById[page.service];
   const pageJobs = realJobs.filter((job) => galleryCategoryOf[job.service] === galleryCategoryOf[service.id]);
+  const googleReviews = await getGoogleReviews();
   const otherServices = services.filter((s) => s.id !== service.id && s.featured);
   const faqItems = faqFor(page.faqOverrides);
 
@@ -139,6 +142,8 @@ export default async function LandingPage({ params }: PageProps) {
           <BeforeAfterGallery jobs={pageJobs} limit={HOME_JOBS} />
         </Section>
       ) : null}
+
+      <GoogleReviews data={googleReviews} />
 
       <Section id="prices" tone="tint">
         <SectionHeading eyebrow="מחירון" title={`מחירי ${service.name} ב${page.city}`} lede="מחירי פתיחה שקופים. המחיר הסופי נסגר מראש לפי תמונה." />

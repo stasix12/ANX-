@@ -3,6 +3,7 @@ import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq } from '@/components/hamavrik/Faq';
 import { FeaturedVideo } from '@/components/hamavrik/FeaturedVideo';
+import { GoogleReviews } from '@/components/hamavrik/GoogleReviews';
 import { FinalCta } from '@/components/hamavrik/FinalCta';
 import { Hero } from '@/components/hamavrik/Hero';
 import { HowItWorks } from '@/components/hamavrik/HowItWorks';
@@ -17,6 +18,7 @@ import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
 import { WorkGallery } from '@/components/hamavrik/WorkGallery';
 import { business, featuredVideo, priceList, priceText, processVideo, serviceAreas, services, beforeAfterJobs, HOME_JOBS } from '@/lib/hamavrik/config';
+import { getGoogleReviews } from '@/lib/hamavrik/googleReviews';
 
 /**
  * `absolute` keeps the storefront's "| ANX3D" title template off this page.
@@ -41,10 +43,12 @@ export const metadata: Metadata = {
  * a heading that said "the results speak for themselves"), and an empty
  * reviews box that asked "what do our customers say?" and answered with a
  * link to Google. Both moved the form to screen four and cost trust on the
- * way. The illustrations still live in /gallery; the reviews section comes
- * back by itself the day a real review lands in config.ts.
+ * way. The illustrations still live in /gallery; real before/after photos
+ * and the Google reviews section (fed by the Places API, never typed in by
+ * hand) now fill that spot — each only when it has real content to show.
  */
-export default function HomePage() {
+export default async function HomePage() {
+  const googleReviews = await getGoogleReviews();
   const sofaFrom = priceList[0]?.from;
   const realJobs = beforeAfterJobs.filter((job) => job.beforeImage && job.afterImage);
   return (
@@ -73,6 +77,10 @@ export default function HomePage() {
           </div>
         ) : null}
       </Section>
+
+      {/* Real Google reviews, right after the proof and before the prices.
+          Renders nothing until the Places API is configured and answers. */}
+      <GoogleReviews data={googleReviews} />
 
       <WorkGallery />
 

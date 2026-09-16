@@ -47,8 +47,13 @@ export const metadata: Metadata = {
     description: 'שלחו לנו תמונה של הספה ב‑WhatsApp וקבלו הצעת מחיר. באר שבע, ערד והדרום.',
   },
   robots: { index: true, follow: true },
-  // icon.svg in this segment supplies the favicon; iOS wants a PNG for the home screen.
-  icons: { apple: '/hamavrik/apple-touch-icon.png' },
+  // The sofa mark from the real logo, as plain files under /public: a
+  // file-based icon in this segment was silently dropped once `icons` was
+  // set here, and the static host serves /public as-is.
+  icons: {
+    icon: [{ url: '/hamavrik/favicon.png', type: 'image/png', sizes: '256x256' }],
+    apple: '/hamavrik/apple-touch-icon.png',
+  },
 };
 
 export const viewport: Viewport = {

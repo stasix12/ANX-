@@ -106,8 +106,11 @@ try {
       // (The same URLs also sit inside the RSC payload as JSON, where the
       // closing quote is escaped — hence the backslash excluded from the query
       // match, so the escape survives and the script stays valid.)
-      .replace(/\/(?:sofa-cleaning\/)?opengraph-image(?:\?[^"'\\]*)?(?=\\?["'])/g, '/opengraph-image.png')
-      .replace(/\/sofa-cleaning\/icon\.svg(?:\?[^"'\\]*)?(?=\\?["'])/g, '/icon.svg')
+      .replace(/\/(?:sofa-cleaning\/)?opengraph-image(?:\?[^"'\\]*)?(?=\\?["'])/g, '/opengraph-image.jpg')
+      // The card is a photo now, and as a PNG it weighs ~900KB – WhatsApp
+      // silently drops previews above ~300KB, so it is re-encoded as JPEG
+      // below and the type tag follows.
+      .replace(/(?:og|twitter):image:type(" content="|\\",\\"content\\":\\")image\/png/g, (m, sep) => m.replace('image/png', 'image/jpeg'))
       // The optimiser is gone; next/image already emits plain src in this mode,
       // this only covers anything that still went through /_next/image.
       .replace(/\/_next\/image\?url=([^&"'\\]+)[^"'\\]*/g, (_, u) => decodeURIComponent(u));
@@ -126,8 +129,6 @@ try {
     ['/sitemap.xml', 'sitemap.xml'],
     ['/robots.txt', 'robots.txt'],
     ['/manifest.webmanifest', 'manifest.webmanifest'],
-    [route('/opengraph-image'), 'opengraph-image.png'],
-    [route('/icon.svg'), 'icon.svg'],
   ]) {
     try {
       await writeFile(join(dist, file), Buffer.from(await (await get(path)).arrayBuffer()));
@@ -173,10 +174,17 @@ try {
     ].join('\n'),
   );
 
+  // The share card: rendered by Next as PNG, published as JPEG (see fixHtml).
+  {
+    const png = Buffer.from(await (await get(route('/opengraph-image'))).arrayBuffer());
+    const { default: sharp } = await import('sharp');
+    await writeFile(join(dist, 'opengraph-image.jpg'), await sharp(png).jpeg({ quality: 84, mozjpeg: true }).toBuffer());
+  }
+
   // A 404 in the site's own language and theme rather than the store's.
   await writeFile(
     join(dist, '404.html'),
-    `<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>הדף לא נמצא</title><meta name="robots" content="noindex"><link rel="icon" href="/icon.svg" type="image/svg+xml"></head>
+    `<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>הדף לא נמצא</title><meta name="robots" content="noindex"><link rel="icon" href="/hamavrik/favicon.png" type="image/png"></head>
 <body style="margin:0;font-family:Heebo,system-ui,sans-serif;background:#f5f8fc;color:#0f172a;display:grid;place-items:center;min-height:100dvh;text-align:center;padding:24px">
 <main><p style="font-size:14px;font-weight:800;color:#1a56db;letter-spacing:.04em">404</p>
 <h1 style="font-size:28px;margin:8px 0 12px">הדף הזה לא קיים</h1>

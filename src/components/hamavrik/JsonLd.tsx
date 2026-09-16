@@ -40,7 +40,7 @@ export function localBusinessSchema() {
     // Written as the final file name on the standalone host: this string
     // travels inside a length-prefixed RSC text row, and the build script's
     // URL rewrite must never touch it (a changed length breaks hydration).
-    image: [STANDALONE ? absoluteUrl('/opengraph-image.png') : absoluteUrl('/opengraph-image'), publicUrl('/video/anx-hero-poster.jpg')],
+    image: [STANDALONE ? absoluteUrl('/opengraph-image.jpg') : absoluteUrl('/opengraph-image'), publicUrl('/video/anx-hero-poster.jpg')],
     priceRange: '₪₪',
     currenciesAccepted: 'ILS',
     areaServed: [...serviceAreas.primary, ...serviceAreas.nearby].map((name) => ({ '@type': 'City', name })),

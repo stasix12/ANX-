@@ -378,8 +378,8 @@ export const beforeAfterJobs: BeforeAfterJob[] = [
     city: 'באר שבע',
     problem: 'ניקוי עמוק — הבד האפור חזר לצבע האחיד שלו',
     scene: 'sofa',
-    beforeImage: '/hamavrik/jobs/sofa-corner-before.jpg',
-    afterImage: '/hamavrik/jobs/sofa-corner-after.jpg',
+    beforeImage: '/hamavrik/jobs/sofa-corner-wide-before.jpg',
+    afterImage: '/hamavrik/jobs/sofa-corner-wide-after.jpg',
   },
   {
     id: 'sofa-1',

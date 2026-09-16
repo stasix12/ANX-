@@ -52,17 +52,17 @@ export function Header() {
             width={950}
             height={240}
             priority
-            className="h-11 w-auto object-contain sm:h-12 lg:h-14"
+            className="h-11 w-auto object-contain sm:h-12 2xl:h-14"
           />
         </Link>
 
         <nav aria-label="ניווט ראשי" className="hidden lg:block">
-          <ul className="flex items-center gap-1">
+          <ul className="flex items-center gap-0 2xl:gap-1">
             {nav.map((item) => (
               <li key={item.href}>
                 <a
                   href={item.href}
-                  className="whitespace-nowrap rounded-full px-3 py-2 text-sm font-bold text-mist-300 transition-colors hover:bg-ink-900 hover:text-mist-100 xl:px-3.5 xl:text-[15px]"
+                  className="whitespace-nowrap rounded-full px-2.5 py-2 text-sm font-bold text-mist-300 transition-colors hover:bg-ink-900 hover:text-mist-100 xl:px-3 2xl:px-3.5 2xl:text-[15px]"
                 >
                   {item.label}
                 </a>
@@ -72,10 +72,12 @@ export function Header() {
         </nav>
 
         <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
-          <PhoneButton location="header" variant="ghost" className="max-xl:px-3">
-            <span dir="ltr" className="whitespace-nowrap">{business.phoneDisplay}</span>
+          <PhoneButton location="header" variant="ghost" className="max-2xl:px-2.5">
+            {/* Below xl the number itself does not fit next to six nav links; the
+                icon stays and the aria-label still reads the full number. */}
+            <span dir="ltr" className="whitespace-nowrap max-xl:hidden">{business.phoneDisplay}</span>
           </PhoneButton>
-          <WaButton location="header" href={waLink(message)} className="whitespace-nowrap">
+          <WaButton location="header" href={waLink(message)} className="whitespace-nowrap max-2xl:px-4">
             שלחו תמונה, קבלו מחיר
           </WaButton>
         </div>

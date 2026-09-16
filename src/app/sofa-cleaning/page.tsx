@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AirConditioners } from '@/components/hamavrik/AirConditioners';
 import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq } from '@/components/hamavrik/Faq';
@@ -136,6 +137,12 @@ export default async function HomePage() {
       <Section id="areas">
         <SectionHeading eyebrow="אזורי שירות" title={`${serviceAreas.primary.join(', ')} ו${serviceAreas.regionLabel}`} />
         <ServiceAreas />
+      </Section>
+
+      {/* A different job with its own price logic – kept apart from the
+          upholstery sections above, on its own dark band. */}
+      <Section id="air-conditioners" tone="dark">
+        <AirConditioners />
       </Section>
 
       <Section id="cta" tone="tint">

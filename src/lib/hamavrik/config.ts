@@ -336,6 +336,30 @@ export function quotePriceRow(service: ServiceId, variant?: string): PriceRow | 
   return priceList.find((row) => row.label === label) ?? null;
 }
 
+/* ── Air-conditioner cleaning (its own offer, apart from upholstery) ─── */
+
+/**
+ * Air conditioners are not upholstery: they get their own band low on the
+ * page, their own WhatsApp message and their own price, and stay out of the
+ * sofa quote form, the upholstery grid and the "#prices" table on purpose.
+ *
+ * The one price the owner gave is per unit from `bulkMin` units up. Below
+ * that there is no published price – the section says so and sends the
+ * customer to WhatsApp rather than inventing a number.
+ */
+export const acCleaning = {
+  name: 'ניקוי מזגנים',
+  emoji: '❄️',
+  /** Singular / plural for the WhatsApp line: "מזגן אחד", "3 מזגנים". */
+  one: 'מזגן',
+  many: 'מזגנים',
+  /** ₪ per unit, from `bulkMin` units and up. */
+  bulkFrom: 199,
+  bulkMin: 3,
+  maxQty: 10,
+  lede: 'גם המזגנים בבית מגיעים אלינו – ומחיר משתלם במיוחד כשמנקים כמה מזגנים באותו ביקור.',
+} as const;
+
 /* ── Before / after gallery (REAL JOBS GO HERE) ─────────────────────── */
 
 /**
@@ -869,4 +893,5 @@ export const nav = [
   { href: '#services', label: 'שירותים' },
   { href: '#faq', label: 'שאלות ותשובות' },
   { href: '#areas', label: 'אזורי שירות' },
+  { href: '#air-conditioners', label: 'מזגנים' },
 ] as const;

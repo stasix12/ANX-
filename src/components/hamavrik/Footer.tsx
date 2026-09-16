@@ -3,7 +3,7 @@ import { PhoneLink, WaLink } from '@/components/hamavrik/CtaLinks';
 import { Logo } from '@/components/hamavrik/Logo';
 import { FacebookIcon } from '@/components/hamavrik/icons';
 import { ChevronDownIcon, InstagramIcon, PhoneIcon, TikTokIcon, WhatsAppIcon } from '@/components/icons';
-import { business, landingPages, nav, serviceAreas, services } from '@/lib/hamavrik/config';
+import { acCleaning, business, landingPages, nav, serviceAreas, services } from '@/lib/hamavrik/config';
 import { href, waLink } from '@/lib/hamavrik/links';
 
 /**
@@ -88,6 +88,11 @@ export function Footer() {
                 </a>
               </li>
             ))}
+            <li>
+              <a href="#air-conditioners" className="block py-2 text-mist-300 hover:text-brand-400">
+                {acCleaning.name}
+              </a>
+            </li>
           </LinkGroup>
           <LinkGroup title="אזורי שירות">
             {landingPages.map((page) => (

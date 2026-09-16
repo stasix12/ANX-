@@ -1,4 +1,5 @@
 import {
+  acCleaning,
   business,
   faq,
   featuredVideo,
@@ -108,7 +109,32 @@ export function featuredVideoSchema() {
 }
 
 export function allServicesSchema() {
-  return services.map((s) => serviceSchema(s));
+  return [...services.map((s) => serviceSchema(s)), acServiceSchema()];
+}
+
+/** The air-conditioner offer – priced per unit from `bulkMin` units up. */
+export function acServiceSchema() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    name: acCleaning.name,
+    serviceType: acCleaning.name,
+    description: acCleaning.lede,
+    provider: { '@id': BUSINESS_ID },
+    areaServed: serviceAreas.primary.map((name) => ({ '@type': 'City', name })),
+    offers: {
+      '@type': 'Offer',
+      price: String(acCleaning.bulkFrom),
+      priceCurrency: 'ILS',
+      eligibleQuantity: { '@type': 'QuantitativeValue', minValue: acCleaning.bulkMin, unitText: 'מזגנים' },
+      priceSpecification: {
+        '@type': 'UnitPriceSpecification',
+        minPrice: acCleaning.bulkFrom,
+        priceCurrency: 'ILS',
+        eligibleQuantity: { '@type': 'QuantitativeValue', minValue: acCleaning.bulkMin, unitText: 'מזגנים' },
+      },
+    },
+  };
 }
 
 export function faqSchema(items: readonly { q: string; a: string }[] = faq) {

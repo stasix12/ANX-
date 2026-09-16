@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq, faqFor } from '@/components/hamavrik/Faq';
+import { AirConditioners } from '@/components/hamavrik/AirConditioners';
 import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { FeaturedVideo } from '@/components/hamavrik/FeaturedVideo';
 import { GoogleReviews } from '@/components/hamavrik/GoogleReviews';
@@ -199,6 +200,10 @@ export default async function LandingPage({ params }: PageProps) {
       <Section id="areas" tone={service.id === 'sofa' ? 'plain' : 'tint'}>
         <SectionHeading eyebrow="אזורי שירות" title={`${page.city} והסביבה`} />
         <ServiceAreas currentSlug={page.slug} />
+      </Section>
+
+      <Section id="air-conditioners" tone="dark">
+        <AirConditioners />
       </Section>
 
       <Section id="cta" tone={service.id === 'sofa' ? 'tint' : 'plain'}>

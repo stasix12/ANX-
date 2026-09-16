@@ -109,7 +109,10 @@ export function featuredVideoSchema() {
     description: featuredVideo.description,
     thumbnailUrl: publicUrl(featuredVideo.poster),
     contentUrl: publicUrl(featuredVideo.mp4),
-    uploadDate: featuredVideo.date,
+    // Search Console wants a full ISO 8601 datetime with a timezone; a bare
+    // date is read as "time unknown". Midnight Israel time on the day it
+    // was shot is the honest way to say "this day".
+    uploadDate: /T/.test(featuredVideo.date) ? featuredVideo.date : `${featuredVideo.date}T00:00:00+03:00`,
     duration: `PT${featuredVideo.seconds}S`,
     publisher: { '@id': BUSINESS_ID },
   };

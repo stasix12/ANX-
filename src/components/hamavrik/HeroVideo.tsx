@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { asset } from '@/lib/site';
 
@@ -63,14 +62,23 @@ export function HeroVideo({
 
   return (
     <div className="relative aspect-4/3 w-full overflow-hidden bg-ink-900">
-      <Image
-        src={poster}
-        alt={alt}
-        fill
-        sizes="560px"
-        fetchPriority="high"
-        className={`object-cover transition-opacity duration-700 ${playing ? 'opacity-0' : 'opacity-100'}`}
-      />
+      {/* The poster is the desktop LCP image, so it loads eagerly at high
+          priority. Phones never see this card (the wrapper is max-lg:hidden),
+          so the <source> hands them a 1px placeholder instead of the 57KB
+          poster – no download, no lazy/priority contradiction. */}
+      <picture>
+        <source media="(max-width: 1023px)" srcSet="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" />
+        <img
+          src={asset(poster)}
+          alt={alt}
+          width={1024}
+          height={576}
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${playing ? 'opacity-0' : 'opacity-100'}`}
+        />
+      </picture>
       {ready ? (
         <video
           ref={videoRef}

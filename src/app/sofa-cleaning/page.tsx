@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { AirConditioners } from '@/components/hamavrik/AirConditioners';
 import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
 import { Explainer } from '@/components/hamavrik/Explainer';
@@ -18,7 +19,8 @@ import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
 import { WorkGallery } from '@/components/hamavrik/WorkGallery';
-import { business, featuredVideo, priceList, priceText, processVideo, serviceAreas, services, beforeAfterJobs, HOME_JOBS } from '@/lib/hamavrik/config';
+import { business, featuredVideo, priceList, priceText, processVideo, serviceAreas, services, beforeAfterJobs, HOME_JOBS, withPrefix } from '@/lib/hamavrik/config';
+import { href } from '@/lib/hamavrik/links';
 import { getGoogleReviews } from '@/lib/hamavrik/googleReviews';
 
 /**
@@ -28,7 +30,9 @@ import { getGoogleReviews } from '@/lib/hamavrik/googleReviews';
  * query that matters and neither of them won it.
  */
 export const metadata: Metadata = {
-  title: { absolute: `ניקוי ספות בבאר שבע – עד הבית, החל מ-299 ₪ | ${business.name}` },
+  // The home page speaks for the whole area; the exact city phrases belong
+  // to /beer-sheva and /arad, so the two never compete for the same query.
+  title: { absolute: `ניקוי ספות מקצועי עד הבית – באר שבע, ערד והדרום | ${business.name}` },
 };
 
 /**
@@ -112,6 +116,19 @@ export default async function HomePage() {
         <p className="mt-3 text-center text-sm text-mist-500">
           וגם: {services.filter((s) => !s.featured).map((s) => s.name.replace('ניקוי ', '')).join(', ')} – שלחו תמונה ונחזור עם מחיר.
         </p>
+        {/* The two city pages, linked from the body and not only from the
+            areas card – with anchors that read like a sentence. */}
+        <p className="mt-2 text-center text-sm text-mist-500">
+          מגיעים עד הבית ב
+          <Link href={href('/beer-sheva')} prefetch={false} className="font-bold text-brand-400 hover:underline">
+            באר שבע
+          </Link>
+          , ב
+          <Link href={href('/arad')} prefetch={false} className="font-bold text-brand-400 hover:underline">
+            ערד
+          </Link>{' '}
+          ובכל הדרום.
+        </p>
       </Section>
 
       <Section id="how">
@@ -120,7 +137,7 @@ export default async function HomePage() {
       </Section>
 
       <Section id="why" tone="tint">
-        <SectionHeading eyebrow="למה אנחנו" title={`למה לבחור ב${business.name}?`} />
+        <SectionHeading eyebrow="למה אנחנו" title={`למה לבחור ${withPrefix('ב', business.name)}?`} />
         <WhyUs />
       </Section>
 

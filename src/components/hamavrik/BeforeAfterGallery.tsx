@@ -1,12 +1,31 @@
 'use client';
 
-import Image from 'next/image';
 import { useRef, useState } from 'react';
-import { Scene, sceneLabel } from '@/components/hamavrik/Illustrations';
+import { Scene } from '@/components/hamavrik/Illustrations';
 import { track } from '@/lib/hamavrik/analytics';
 import Link from 'next/link';
-import { galleryCategories, galleryCategoryOf, workGallery, type BeforeAfterJob, type GalleryCategory } from '@/lib/hamavrik/config';
+import { galleryCategories, galleryCategoryOf, serviceById, workGallery, type BeforeAfterJob, type GalleryCategory } from '@/lib/hamavrik/config';
 import { href } from '@/lib/hamavrik/links';
+
+const JOB_SIZES = '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw';
+
+/**
+ * Real job photos are committed as JPEG plus three WebP renditions made by
+ * scripts (640, 960 and 1200px wide, same basename). The static host has no
+ * image optimiser, so the srcset is written here: a phone fetches ~20KB, not
+ * the 130KB original.
+ */
+function jobSrcSet(path: string): string {
+  const base = path.replace(/\.[a-z]+$/i, '');
+  return `${base}-640.webp 640w, ${base}-960.webp 960w, ${base}.webp 1200w`;
+}
+
+/** "ספה פינתית לפני הניקוי – באר שבע" / "ניקוי ספות בבאר שבע – ספה פינתית אחרי הניקוי". */
+function jobAlt(job: BeforeAfterJob, variant: 'before' | 'after'): string {
+  return variant === 'before'
+    ? `${job.itemLabel} לפני הניקוי – ${job.city}`
+    : `${serviceById[job.service].name} ב${job.city} – ${job.itemLabel} אחרי הניקוי`;
+}
 
 /**
  * Draggable before/after comparison. Runs LTR internally so the clip math
@@ -15,7 +34,7 @@ import { href } from '@/lib/hamavrik/links';
  * keyboard, screen readers and touch alike. A job without photos draws its
  * illustration and says so on the card – nothing pretends to be a real job.
  */
-export function BeforeAfterSlider({ job, eager = false, className = '' }: { job: BeforeAfterJob; eager?: boolean; className?: string }) {
+export function BeforeAfterSlider({ job, className = '' }: { job: BeforeAfterJob; className?: string }) {
   // Left of the divider is the old (before), right of it the new (after).
   const [pos, setPos] = useState(50);
   const [touched, setTouched] = useState(false);
@@ -36,14 +55,34 @@ export function BeforeAfterSlider({ job, eager = false, className = '' }: { job:
       <div dir="ltr" className="relative aspect-8/5 select-none overflow-hidden bg-ink-900">
         <div className="absolute inset-0">
           {real ? (
-            <Image src={job.beforeImage!} alt={sceneLabel(job.scene, 'before')} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" loading={eager ? 'eager' : 'lazy'} className="object-cover" />
+            <img
+              src={job.beforeImage!.replace(/\.[a-z]+$/i, '.webp')}
+              srcSet={jobSrcSet(job.beforeImage!)}
+              sizes={JOB_SIZES}
+              alt={jobAlt(job, 'before')}
+              width={1200}
+              height={750}
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           ) : (
             <Scene kind={job.scene} variant="before" />
           )}
         </div>
         <div className="absolute inset-0" style={{ clipPath: `inset(0 0 0 ${pos}%)` }}>
           {real ? (
-            <Image src={job.afterImage!} alt={sceneLabel(job.scene, 'after')} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" loading={eager ? 'eager' : 'lazy'} className="object-cover" />
+            <img
+              src={job.afterImage!.replace(/\.[a-z]+$/i, '.webp')}
+              srcSet={jobSrcSet(job.afterImage!)}
+              sizes={JOB_SIZES}
+              alt={jobAlt(job, 'after')}
+              width={1200}
+              height={750}
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           ) : (
             <Scene kind={job.scene} variant="after" />
           )}
@@ -155,7 +194,7 @@ export function BeforeAfterGallery({
 
       <div className={`grid gap-4 sm:grid-cols-2 ${limit === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         {visible.map((job, i) => (
-          <BeforeAfterSlider key={job.id} job={job} eager={i === 0} className={limit && i === limit - 1 ? 'max-sm:hidden' : ''} />
+          <BeforeAfterSlider key={job.id} job={job} className={limit && i === limit - 1 ? 'max-sm:hidden' : ''} />
         ))}
       </div>
 
@@ -165,7 +204,7 @@ export function BeforeAfterGallery({
             href={href('/gallery')}
             className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-extrabold text-brand-400 shadow-sm ring-1 ring-ink-700 transition hover:ring-brand-500/50 sm:text-base"
           >
-            איורים ודוגמאות ‹
+            לכל העבודות – לפני ואחרי ‹
           </Link>
         </p>
       ) : null}

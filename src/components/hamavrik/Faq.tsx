@@ -12,12 +12,12 @@ export interface FaqItem {
  * should not open with "how much does cleaning a SOFA cost". Anything not
  * overridden falls through to the shared list, so nothing silently disappears.
  */
-export function faqFor(overrides?: { q: string; a: string; replaces: string }[]): FaqItem[] {
-  if (!overrides?.length) return faq.map((item) => ({ ...item }));
-  return faq.map((item) => {
-    const swap = overrides.find((o) => o.replaces === item.q);
+export function faqFor(overrides?: { q: string; a: string; replaces: string }[], extra?: FaqItem[]): FaqItem[] {
+  const base = faq.map((item) => {
+    const swap = overrides?.find((o) => o.replaces === item.q);
     return swap ? { q: swap.q, a: swap.a } : { ...item };
   });
+  return extra?.length ? [...base, ...extra.map((item) => ({ ...item }))] : base;
 }
 
 /** Renders the phone number inside an answer as a real tel: link – on a phone,

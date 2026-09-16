@@ -42,7 +42,7 @@ export function Header() {
       }`}
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-6 lg:h-[76px]">
-        <Link href={href('/')} aria-label={`${business.name} – לעמוד הבית`} className="shrink-0 rounded-lg">
+        <Link href={href('/')} prefetch={false} aria-label={`${business.name} – לעמוד הבית`} className="shrink-0 rounded-lg">
           {/* The full logo as one image (mark + wordmark), trimmed to its ink,
               transparent background, exported at 240px tall for Retina. The
               height is the only thing the header sets; the width follows. */}

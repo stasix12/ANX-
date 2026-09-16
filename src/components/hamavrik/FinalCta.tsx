@@ -5,14 +5,14 @@ import { business } from '@/lib/hamavrik/config';
 import { waLink } from '@/lib/hamavrik/links';
 
 /** The closing ask: one big green button and the phone number as a plain alternative. */
-export function FinalCta() {
+export function FinalCta({ noun = 'הספה' }: { noun?: string }) {
   return (
     <Reveal>
       <div className="relative">
         <span aria-hidden className="shine-glow" />
         <div className="surface rounded-[1.75rem] px-5 py-7 text-center sm:px-10 sm:py-12">
           <h2 className="mx-auto max-w-2xl text-[1.6rem] font-black leading-tight text-balance-he sm:text-4xl">
-            הספה שלכם יכולה להיראות אחרת לגמרי.
+            {noun} שלכם יכול{noun.endsWith('ה') ? 'ה' : ''} להיראות אחרת לגמרי.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-base text-mist-300 sm:text-lg">
             עדיין מתלבטים? שלחו תמונה ב‑WhatsApp. נגיד לכם בכנות מה יירד וכמה זה יעלה.

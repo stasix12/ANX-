@@ -1,4 +1,5 @@
 import {
+  STANDALONE,
   acCleaning,
   business,
   faq,
@@ -35,14 +36,20 @@ export function localBusinessSchema() {
     description: business.description,
     url: absoluteUrl('/'),
     telephone: business.phoneE164,
-    image: publicUrl('/video/anx-hero-poster.jpg'),
+    logo: publicUrl('/hamavrik/brand/logo.png'),
+    // Written as the final file name on the standalone host: this string
+    // travels inside a length-prefixed RSC text row, and the build script's
+    // URL rewrite must never touch it (a changed length breaks hydration).
+    image: [STANDALONE ? absoluteUrl('/opengraph-image.png') : absoluteUrl('/opengraph-image'), publicUrl('/video/anx-hero-poster.jpg')],
     priceRange: '₪₪',
     currenciesAccepted: 'ILS',
     areaServed: [...serviceAreas.primary, ...serviceAreas.nearby].map((name) => ({ '@type': 'City', name })),
     address: { '@type': 'PostalAddress', addressLocality: serviceAreas.primary[0], addressCountry: 'IL' },
     geo: { '@type': 'GeoCoordinates', ...business.geo },
     ...(business.openingHours.length ? { openingHours: business.openingHours } : {}),
-    sameAs: Object.values(business.social).filter(Boolean),
+    // The Google Business Profile joins here the day its URL is in config.ts.
+    ...(business.googleMapsUrl ? { hasMap: business.googleMapsUrl } : {}),
+    sameAs: [...Object.values(business.social), business.googleMapsUrl].filter(Boolean),
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
       name: 'מחירון ניקוי ריפודים',
@@ -70,13 +77,13 @@ export function localBusinessSchema() {
 }
 
 /** Service – one per service card, or the single service of a landing page. */
-export function serviceSchema(service: Service, city?: string) {
+export function serviceSchema(service: Service, city?: string, description: string = service.description) {
   return {
     '@context': 'https://schema.org',
     '@type': 'Service',
     name: city ? `${service.name} ב${city}` : service.name,
     serviceType: service.name,
-    description: service.description,
+    description,
     provider: { '@id': BUSINESS_ID },
     areaServed: city ? { '@type': 'City', name: city } : serviceAreas.primary.map((name) => ({ '@type': 'City', name })),
     ...(service.priceFrom

@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Explainer } from '@/components/hamavrik/Explainer';
 import { Faq, faqFor } from '@/components/hamavrik/Faq';
 import { AirConditioners } from '@/components/hamavrik/AirConditioners';
 import { BeforeAfterGallery } from '@/components/hamavrik/BeforeAfterGallery';
@@ -19,7 +18,7 @@ import { ServiceAreas } from '@/components/hamavrik/ServiceAreas';
 import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
-import { business, featuredVideo, landingPages, processVideo, serviceById, services, beforeAfterJobs, HOME_JOBS, galleryCategoryOf } from '@/lib/hamavrik/config';
+import { business, featuredVideo, landingPages, processVideo, serviceById, services, beforeAfterJobs, HOME_JOBS, galleryCategoryOf, withPrefix } from '@/lib/hamavrik/config';
 import { getGoogleReviews } from '@/lib/hamavrik/googleReviews';
 import { absoluteUrl, href, waAsk } from '@/lib/hamavrik/links';
 
@@ -79,19 +78,17 @@ export default async function LandingPage({ params }: PageProps) {
   const pageJobs = realJobs.filter((job) => galleryCategoryOf[job.service] === galleryCategoryOf[service.id]);
   const googleReviews = await getGoogleReviews();
   const otherServices = services.filter((s) => s.id !== service.id && s.featured);
-  const faqItems = faqFor(page.faqOverrides);
+  const faqItems = faqFor(page.faqOverrides, page.faqExtra);
 
   return (
     <>
-      <JsonLd data={[serviceSchema(service, page.city), faqSchema(faqItems), landingBreadcrumb(page)]} />
+      <JsonLd data={[serviceSchema(service, page.city, page.intro), faqSchema(faqItems), landingBreadcrumb(page)]} />
 
+      {/* The H1 is exactly the phrase people search for; the second line is
+          styled the same but lives outside it. */}
       <Hero
-        title={
-          <>
-            {page.h1}{' '}
-            <span className="block text-aqua-300">עד הבית, מחיר לפי תמונה</span>
-          </>
-        }
+        title={page.h1}
+        kicker="עד הבית, מחיר לפי תמונה"
         subtitle={page.heroSubtitle}
         waMessage={waAsk(service.waNoun, page.city)}
         priceFrom={service.priceFrom}
@@ -161,17 +158,14 @@ export default async function LandingPage({ params }: PageProps) {
         <Reveal delay={60}>
           <QuickQuote defaultService={service.id} defaultCity={page.city} />
         </Reveal>
-
-        {page.localBlock ? (
-          <Reveal className="mx-auto mt-8 max-w-3xl rounded-2xl bg-ink-900 p-5 sm:p-7">
-            <h3 className="text-lg font-black sm:text-xl">{page.localBlock.title}</h3>
-            <p className="mt-2 text-[15px] leading-relaxed text-mist-300">{page.localBlock.body}</p>
-          </Reveal>
-        ) : null}
       </Section>
 
       <Section id="services" tone="tint">
-        <SectionHeading eyebrow="עוד שירותים" title={`מה עוד אנחנו מנקים ב${page.city}?`} />
+        <SectionHeading
+          eyebrow="עוד שירותים"
+          title={`מה עוד אנחנו מנקים ב${page.city}?`}
+          lede={`ניקוי ריפודים ב${page.city} באותו ביקור: ${otherServices.map((s) => s.name.replace('ניקוי ', '')).join(', ')}.`}
+        />
         <ServicesGrid services={otherServices} />
       </Section>
 
@@ -181,23 +175,32 @@ export default async function LandingPage({ params }: PageProps) {
       </Section>
 
       <Section id="why" tone="tint">
-        <SectionHeading eyebrow="למה אנחנו" title={`למה לבחור ב${business.name} ב${page.city}?`} />
+        <SectionHeading eyebrow="למה אנחנו" title={`למה לבחור ${withPrefix('ב', business.name)} ב${page.city}?`} />
         <WhyUs />
       </Section>
 
-      {service.id === 'sofa' ? (
-        <Section id="about">
-          <SectionHeading eyebrow="מדריך מקצועי" title="ניקוי ספות מקצועי – מה חשוב לדעת?" align="start" />
-          <Explainer />
+      {/* The page's own guide – the copy that makes this page about THIS
+          city and THIS service, in place of the explainer the home page has. */}
+      {page.guide ? (
+        <Section id="guide">
+          <SectionHeading eyebrow="מדריך מקומי" title={page.guide.title} lede={page.guide.lede} align="start" />
+          <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
+            {page.guide.blocks.map((block, i) => (
+              <Reveal as="article" key={block.title} delay={(i % 2) * 90} className="border-s-4 border-brand-300 ps-5">
+                <h3 className="text-lg font-black sm:text-xl">{block.title}</h3>
+                <p className="mt-1.5 text-[15px] leading-relaxed text-mist-300">{block.body}</p>
+              </Reveal>
+            ))}
+          </div>
         </Section>
       ) : null}
 
-      <Section id="faq" tone={service.id === 'sofa' ? 'tint' : 'plain'}>
+      <Section id="faq" tone="tint">
         <SectionHeading eyebrow="שאלות ותשובות" title="שאלות נפוצות" />
         <Faq items={faqItems} />
       </Section>
 
-      <Section id="areas" tone={service.id === 'sofa' ? 'plain' : 'tint'}>
+      <Section id="areas">
         <SectionHeading eyebrow="אזורי שירות" title={`${page.city} והסביבה`} />
         <ServiceAreas currentSlug={page.slug} />
       </Section>
@@ -206,8 +209,8 @@ export default async function LandingPage({ params }: PageProps) {
         <AirConditioners />
       </Section>
 
-      <Section id="cta" tone={service.id === 'sofa' ? 'tint' : 'plain'}>
-        <FinalCta />
+      <Section id="cta" tone="tint">
+        <FinalCta noun={service.id === 'sofa' ? 'הספה' : service.id === 'mattress' ? 'המזרן' : service.id === 'car' ? 'הרכב' : service.id === 'carpet' ? 'השטיח' : 'הריפוד'} />
       </Section>
     </>
   );

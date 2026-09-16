@@ -106,7 +106,7 @@ try {
       // (The same URLs also sit inside the RSC payload as JSON, where the
       // closing quote is escaped — hence the backslash excluded from the query
       // match, so the escape survives and the script stays valid.)
-      .replace(/\/sofa-cleaning\/opengraph-image(?:\?[^"'\\]*)?(?=\\?["'])/g, '/opengraph-image.png')
+      .replace(/\/(?:sofa-cleaning\/)?opengraph-image(?:\?[^"'\\]*)?(?=\\?["'])/g, '/opengraph-image.png')
       .replace(/\/sofa-cleaning\/icon\.svg(?:\?[^"'\\]*)?(?=\\?["'])/g, '/icon.svg')
       // The optimiser is gone; next/image already emits plain src in this mode,
       // this only covers anything that still went through /_next/image.
@@ -158,7 +158,19 @@ try {
   );
   await writeFile(
     join(dist, '_headers'),
-    ['/_next/static/*', '  Cache-Control: public, max-age=31536000, immutable', '/hamavrik/video/*', '  Cache-Control: public, max-age=604800', ''].join('\n'),
+    [
+      '/*',
+      '  X-Content-Type-Options: nosniff',
+      '  Referrer-Policy: strict-origin-when-cross-origin',
+      '  X-Frame-Options: SAMEORIGIN',
+      '/_next/static/*',
+      '  Cache-Control: public, max-age=31536000, immutable',
+      '/hamavrik/*',
+      '  Cache-Control: public, max-age=604800',
+      '/video/*',
+      '  Cache-Control: public, max-age=604800',
+      '',
+    ].join('\n'),
   );
 
   // A 404 in the site's own language and theme rather than the store's.

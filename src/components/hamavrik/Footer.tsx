@@ -76,18 +76,36 @@ export function Footer() {
             ))}
             <li>
               <Link href={href('/gallery')} prefetch={false} className="block py-2 text-mist-300 hover:text-brand-400">
-                איורים ודוגמאות
+                לפני ואחרי
               </Link>
             </li>
-          </LinkGroup>
-          <LinkGroup title="השירותים שלנו">
-            {services.map((s) => (
-              <li key={s.id}>
-                <a href="#services" className="block py-2 text-mist-300 hover:text-brand-400">
-                  {s.name}
+            {business.googleMapsUrl ? (
+              <li>
+                <a href={business.googleMapsUrl} target="_blank" rel="noopener noreferrer" className="block py-2 text-mist-300 hover:text-brand-400">
+                  ראו אותנו בגוגל
                 </a>
               </li>
-            ))}
+            ) : null}
+          </LinkGroup>
+          <LinkGroup title="השירותים שלנו">
+            {services.map((s) => {
+              /* A real page where one exists (the sofa page is the Beer Sheva
+                 one); the others point at the services section. */
+              const page = s.id === 'sofa' ? landingPages.find((p) => p.slug === 'beer-sheva') : landingPages.find((p) => p.service === s.id);
+              return (
+                <li key={s.id}>
+                  {page ? (
+                    <Link href={href(`/${page.slug}`)} prefetch={false} className="block py-2 text-mist-300 hover:text-brand-400">
+                      {s.name}
+                    </Link>
+                  ) : (
+                    <a href="#services" className="block py-2 text-mist-300 hover:text-brand-400">
+                      {s.name}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
             <li>
               <a href="#air-conditioners" className="block py-2 text-mist-300 hover:text-brand-400">
                 {acCleaning.name}

@@ -22,11 +22,15 @@ export function Hero({
     </>
   ),
   subtitle = 'מסירים כתמים, לכלוך וריחות מעומק הבד – ולא רק מפני השטח. שלחו לנו תמונה של הספה ב‑WhatsApp וקבלו הצעת מחיר.',
+  kicker,
   waMessage = waAsk(),
   priceFrom = priceList[0]?.from ?? null,
   priceLabel = 'ניקוי ספה',
 }: {
   title?: ReactNode;
+  /** A second headline line OUTSIDE the H1 (same size, aqua) – a landing
+   *  page keeps its H1 to the exact phrase people search for. */
+  kicker?: string;
   subtitle?: string;
   /** The prepared WhatsApp message – narrowed to the service and city on a
    *  landing page, so the first line the business reads already says both. */
@@ -39,6 +43,9 @@ export function Hero({
       <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 pb-10 pt-8 sm:px-6 sm:pt-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-12 lg:pb-16 lg:pt-16">
         <div className="min-w-0 shine-rise">
           <h1 className="text-[2.1rem] font-black leading-[1.1] text-balance-he sm:text-5xl lg:text-[3.4rem]">{title}</h1>
+          {kicker ? (
+            <p className="text-[2.1rem] font-black leading-[1.1] text-aqua-300 text-balance-he sm:text-5xl lg:text-[3.4rem]">{kicker}</p>
+          ) : null}
 
           {priceFrom ? (
             <p className="mt-4 inline-flex items-baseline gap-2 rounded-2xl bg-white px-4 py-2 text-mist-100 shadow-lg">

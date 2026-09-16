@@ -1021,8 +1021,9 @@ export const landingPages: LandingPage[] = [
  * quote_started, quote_completed, service_selected, before_after_interaction.
  */
 export const analytics = {
-  /** GA4 measurement ID, e.g. 'G-XXXXXXXXXX'. */
-  ga4MeasurementId: '',
+  /** The account's Google tag (Google Ads → tag setup). Loads gtag.js and
+   *  reports every track() event; conversions need the AW- id + labels below. */
+  ga4MeasurementId: 'G-ZV2DBWMTXN',
   /** Google Ads conversion ID, e.g. 'AW-XXXXXXXXX'. */
   googleAdsId: '',
   /** Google Ads conversion labels per action, e.g. { whatsapp: 'AbCdEfGh' }. */

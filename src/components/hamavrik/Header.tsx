@@ -1,10 +1,10 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { PhoneButton, PhoneLink, WaButton } from '@/components/hamavrik/CtaLinks';
-import { Logo } from '@/components/hamavrik/Logo';
 import { MenuIcon } from '@/components/hamavrik/icons';
 import { CloseIcon, PhoneIcon } from '@/components/icons';
 import { business, nav } from '@/lib/hamavrik/config';
@@ -43,7 +43,17 @@ export function Header() {
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-6 lg:h-[76px]">
         <Link href={href('/')} aria-label={`${business.name} – לעמוד הבית`} className="shrink-0 rounded-lg">
-          <Logo />
+          {/* The full logo as one image (mark + wordmark), trimmed to its ink,
+              transparent background, exported at 240px tall for Retina. The
+              height is the only thing the header sets; the width follows. */}
+          <Image
+            src="/hamavrik/brand/logo.webp"
+            alt={business.name}
+            width={950}
+            height={240}
+            priority
+            className="h-11 w-auto object-contain sm:h-12 lg:h-14"
+          />
         </Link>
 
         <nav aria-label="ניווט ראשי" className="hidden lg:block">

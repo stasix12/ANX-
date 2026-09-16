@@ -16,6 +16,7 @@ import { href } from '@/lib/hamavrik/links';
  * illustration and says so on the card — nothing pretends to be a real job.
  */
 export function BeforeAfterSlider({ job, eager = false, className = '' }: { job: BeforeAfterJob; eager?: boolean; className?: string }) {
+  // Left of the divider is the old (before), right of it the new (after).
   const [pos, setPos] = useState(50);
   const [touched, setTouched] = useState(false);
   const tracked = useRef(false);
@@ -40,7 +41,7 @@ export function BeforeAfterSlider({ job, eager = false, className = '' }: { job:
             <Scene kind={job.scene} variant="before" />
           )}
         </div>
-        <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
+        <div className="absolute inset-0" style={{ clipPath: `inset(0 0 0 ${pos}%)` }}>
           {real ? (
             <Image src={job.afterImage!} alt={sceneLabel(job.scene, 'after')} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" loading={eager ? 'eager' : 'lazy'} className="object-cover" />
           ) : (
@@ -56,8 +57,8 @@ export function BeforeAfterSlider({ job, eager = false, className = '' }: { job:
           </span>
         </div>
 
-        <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-extrabold text-white backdrop-blur-sm">לפני</span>
-        <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-wa-500 px-3 py-1 text-xs font-extrabold text-white">אחרי</span>
+        <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-extrabold text-white backdrop-blur-sm">לפני</span>
+        <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-wa-500 px-3 py-1 text-xs font-extrabold text-white">אחרי</span>
         {!touched ? (
           <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">גררו להשוואה</span>
         ) : null}

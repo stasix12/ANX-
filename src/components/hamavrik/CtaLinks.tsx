@@ -66,7 +66,9 @@ export function PhoneLink({
   return (
     <a
       href={telLink}
-      aria-label={ariaLabel ?? `התקשרו: ${business.phoneDisplay}`}
+      // No default label: an aria-label that differs from the visible text
+      // ("התקשרו" vs "חייגו") breaks voice control. Icon-only uses pass one.
+      aria-label={ariaLabel}
       className={className}
       onClick={() => track('phone_click', { location })}
     >
@@ -121,12 +123,15 @@ export function PhoneButton({
   size = 'md',
   className = '',
   children,
+  'aria-label': ariaLabel,
 }: {
   location: string;
   variant?: 'outline' | 'solid' | 'ghost' | 'light';
   size?: 'md' | 'lg';
   className?: string;
   children?: ReactNode;
+  /** Only for icon-only renderings (the text is hidden by CSS). */
+  'aria-label'?: string;
 }) {
   const look =
     variant === 'solid'
@@ -138,7 +143,7 @@ export function PhoneButton({
           : 'text-brand-400 ring-2 ring-brand-500/25 hover:ring-brand-500/50 bg-white';
   const sizing = size === 'lg' ? 'px-7 py-4 text-lg' : 'px-5 py-3 text-base';
   return (
-    <PhoneLink location={location} className={`${PHONE_BTN} ${look} ${sizing} ${className}`}>
+    <PhoneLink location={location} aria-label={ariaLabel} className={`${PHONE_BTN} ${look} ${sizing} ${className}`}>
       <PhoneIcon className="h-5 w-5 shrink-0" />
       {children ?? (
         <span className="whitespace-nowrap">

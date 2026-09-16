@@ -97,7 +97,7 @@ export function BeforeAfterSlider({ job, className = '' }: { job: BeforeAfterJob
         </div>
 
         <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-extrabold text-white backdrop-blur-sm">לפני</span>
-        <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-wa-500 px-3 py-1 text-xs font-extrabold text-white">אחרי</span>
+        <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-wa-600 px-3 py-1 text-xs font-extrabold text-white">אחרי</span>
         {!touched ? (
           <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">גררו להשוואה</span>
         ) : null}

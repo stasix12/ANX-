@@ -64,10 +64,12 @@ export function FeaturedVideo({ video }: { video?: FeaturedVideoData | null }) {
       <button
         type="button"
         onClick={toggle}
-        aria-label={paused ? 'הפעלת הסרטון' : 'השהיית הסרטון'}
         className={`relative block w-full bg-ink-900 text-start ${portrait ? 'mx-auto mt-4 max-w-[260px] overflow-hidden rounded-xl sm:max-w-[300px] lg:mt-0 lg:max-w-none lg:rounded-none' : 'lg:h-full lg:min-h-[22rem]'}`}
         style={{ aspectRatio: v.aspect }}
       >
+        {/* Part of the accessible name, next to the visible captions – an
+            aria-label that omitted them failed label-content-name-mismatch. */}
+        <span className="sr-only">{paused ? 'הפעלת הסרטון' : 'השהיית הסרטון'}. </span>
         <video
           ref={ref}
           muted

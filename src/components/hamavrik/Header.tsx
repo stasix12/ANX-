@@ -72,7 +72,7 @@ export function Header() {
         </nav>
 
         <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
-          <PhoneButton location="header" variant="ghost" className="max-2xl:px-2.5">
+          <PhoneButton location="header" variant="ghost" className="max-2xl:px-2.5" aria-label={`חייגו ${business.phoneDisplay}`}>
             {/* Below xl the number itself does not fit next to six nav links; the
                 icon stays and the aria-label still reads the full number. */}
             <span dir="ltr" className="whitespace-nowrap max-xl:hidden">{business.phoneDisplay}</span>
@@ -85,6 +85,7 @@ export function Header() {
         <div className="flex items-center gap-1.5 lg:hidden">
           <PhoneLink
             location="header-mobile"
+            aria-label={`חייגו ${business.phoneDisplay}`}
             className="grid h-10 w-10 place-items-center rounded-full bg-brand-500 text-white shadow-md shadow-brand-500/25"
           >
             <PhoneIcon className="h-5 w-5" />

@@ -45,7 +45,9 @@ export function StickyCta() {
   return (
     <>
       <div
-        aria-hidden={!show}
+        // `inert` (not aria-hidden): the bar slides off-screen but its links
+        // stayed focusable, which fails aria-hidden-focus and traps keyboards.
+        inert={!show}
         className={`fixed inset-x-0 bottom-0 z-50 border-t border-ink-800 bg-white/95 px-3 pt-2 backdrop-blur-lg transition-transform duration-200 sm:hidden ${
           show ? 'translate-y-0' : 'pointer-events-none translate-y-full'
         }`}

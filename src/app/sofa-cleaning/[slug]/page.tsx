@@ -17,7 +17,7 @@ import { ServiceAreas } from '@/components/hamavrik/ServiceAreas';
 import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
-import { business, featuredVideo, landingPages, processVideo, serviceById, services, beforeAfterJobs, HOME_JOBS } from '@/lib/hamavrik/config';
+import { business, featuredVideo, landingPages, processVideo, serviceById, services, beforeAfterJobs, HOME_JOBS, galleryCategoryOf } from '@/lib/hamavrik/config';
 import { absoluteUrl, href, waAsk } from '@/lib/hamavrik/links';
 
 interface PageProps {
@@ -73,6 +73,7 @@ export default async function LandingPage({ params }: PageProps) {
   if (!page) notFound();
 
   const service = serviceById[page.service];
+  const pageJobs = realJobs.filter((job) => galleryCategoryOf[job.service] === galleryCategoryOf[service.id]);
   const otherServices = services.filter((s) => s.id !== service.id && s.featured);
   const faqItems = faqFor(page.faqOverrides);
 
@@ -113,7 +114,11 @@ export default async function LandingPage({ params }: PageProps) {
           <SectionHeading
             eyebrow="מהשטח"
             title="ככה זה נראה מקרוב"
-            lede="סרטון מעבודה אמיתית שלנו — לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם."
+            lede={
+              realJobs.length > 0
+                ? 'סרטון ותמונות מעבודות אמיתיות שלנו — לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל.'
+                : 'סרטון מעבודה אמיתית שלנו — לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם.'
+            }
           />
           <FeaturedVideo video={processVideo ?? featuredVideo} />
           {realJobs.length > 0 ? (
@@ -121,6 +126,17 @@ export default async function LandingPage({ params }: PageProps) {
               <BeforeAfterGallery jobs={realJobs} limit={HOME_JOBS} />
             </div>
           ) : null}
+        </Section>
+      ) : pageJobs.length > 0 ? (
+        /* The video is of sofas; a mattress or car page shows only its own
+           real before/after photos — and nothing at all until it has some. */
+        <Section id="before-after" className="pt-8 sm:pt-10 lg:pt-12">
+          <SectionHeading
+            eyebrow="מהשטח"
+            title="ככה זה נראה מקרוב"
+            lede="תמונות מעבודות אמיתיות שלנו — לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל."
+          />
+          <BeforeAfterGallery jobs={pageJobs} limit={HOME_JOBS} />
         </Section>
       ) : null}
 

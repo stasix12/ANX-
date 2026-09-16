@@ -1024,13 +1024,19 @@ export const analytics = {
   /** The account's Google tag (Google Ads → tag setup). Loads gtag.js and
    *  reports every track() event; conversions need the AW- id + labels below. */
   ga4MeasurementId: 'G-ZV2DBWMTXN',
-  /** Google Ads conversion ID, e.g. 'AW-XXXXXXXXX'. */
-  googleAdsId: '',
-  /** Google Ads conversion labels per action, e.g. { whatsapp: 'AbCdEfGh' }. */
+  /** Google Ads conversion ID (Goals → Conversions → the action's event snippet). */
+  googleAdsId: 'AW-11115484200',
+  /**
+   * Google Ads conversion labels per action. The WhatsApp label counts every
+   * hand-off to WhatsApp (buttons and the quote form alike); the others stay
+   * empty until an action exists for them in Google Ads.
+   */
   googleAdsConversionLabels: {
-    whatsapp_click: '',
+    whatsapp_click: 'HFnoCJiSj_ocEKioo7Qp',
     phone_click: '',
-    quote_completed: '',
+    // The quote form and the air-conditioner card open WhatsApp too, but fire
+    // quote_completed instead of whatsapp_click – same hand-off, same label.
+    quote_completed: 'HFnoCJiSj_ocEKioo7Qp',
   },
   /** Meta Pixel ID, e.g. '1234567890'. */
   metaPixelId: '',

@@ -326,7 +326,7 @@ export function QuickQuote({
           className="shine-shimmer mt-5 inline-flex w-full items-center justify-center gap-2.5 whitespace-nowrap rounded-full bg-wa-600 px-5 py-4 text-base font-extrabold text-white shadow-lg shadow-wa-600/30 transition-colors hover:bg-wa-500 sm:text-lg"
         >
           <WhatsAppIcon className="h-6 w-6 shrink-0" />
-          שלחו לקבלת מחיר ב-WhatsApp
+          שלחו לקבלת מחיר ב‑WhatsApp
         </button>
 
         {blockedHref ? (

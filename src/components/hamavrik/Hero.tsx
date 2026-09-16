@@ -21,7 +21,7 @@ export function Hero({
       <span className="block text-aqua-300">ב{serviceAreaShort()} – עד הבית</span>
     </>
   ),
-  subtitle = 'מסירים כתמים, לכלוך וריחות מעומק הבד – ולא רק מפני השטח. שלחו לנו תמונה של הספה ב-WhatsApp וקבלו הצעת מחיר.',
+  subtitle = 'מסירים כתמים, לכלוך וריחות מעומק הבד – ולא רק מפני השטח. שלחו לנו תמונה של הספה ב‑WhatsApp וקבלו הצעת מחיר.',
   waMessage = waAsk(),
   priceFrom = priceList[0]?.from ?? null,
   priceLabel = 'ניקוי ספה',
@@ -64,7 +64,7 @@ export function Hero({
 
           <div id="hero-cta" className="mt-6 flex flex-col gap-2.5 sm:max-w-md">
             <WaButton location="hero" href={waLink(waMessage)} size="lg" shimmer className="w-full max-sm:px-5 max-sm:text-base">
-              שלחו תמונה, קבלו מחיר ב-WhatsApp
+              שלחו תמונה, קבלו מחיר ב‑WhatsApp
             </WaButton>
             <PhoneButton location="hero" variant="light" className="w-full">
               <span className="whitespace-nowrap">

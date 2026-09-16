@@ -73,7 +73,7 @@ export function StickyCta() {
       <WaLink
         href={waLink(message)}
         location="floating-desktop"
-        aria-label="שליחת תמונה ב-WhatsApp לקבלת מחיר"
+        aria-label="שליחת תמונה ב‑WhatsApp לקבלת מחיר"
         className="shine-pulse group fixed bottom-6 left-6 z-50 hidden h-14 items-center gap-3 rounded-full bg-wa-600 pe-4 ps-3.5 text-white shadow-xl shadow-wa-600/40 transition-colors hover:bg-wa-500 sm:flex"
       >
         <WhatsAppIcon className="h-7 w-7" />

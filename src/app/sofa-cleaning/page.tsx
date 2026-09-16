@@ -86,7 +86,7 @@ export default function HomePage() {
           eyebrow="הצעת מחיר מהירה"
           title="קבלו הצעת מחיר לספה שלכם"
           titleId="quote-title"
-          lede="מסמנים מה לנקות, שולחים ב-WhatsApp – ומקבלים הצעת מחיר."
+          lede="מסמנים מה לנקות, שולחים ב‑WhatsApp – ומקבלים הצעת מחיר."
         />
         <Reveal delay={60}>
           <QuickQuote />

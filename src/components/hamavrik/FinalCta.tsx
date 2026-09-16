@@ -15,7 +15,7 @@ export function FinalCta() {
             הספה שלכם יכולה להיראות אחרת לגמרי.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-base text-mist-300 sm:text-lg">
-            עדיין מתלבטים? שלחו תמונה ב-WhatsApp. נגיד לכם בכנות מה יירד וכמה זה יעלה.
+            עדיין מתלבטים? שלחו תמונה ב‑WhatsApp. נגיד לכם בכנות מה יירד וכמה זה יעלה.
           </p>
           <WaButton location="final-cta" href={waLink()} size="lg" shimmer className="mt-5 w-full max-w-md sm:text-xl">
             שלחו תמונה, קבלו מחיר

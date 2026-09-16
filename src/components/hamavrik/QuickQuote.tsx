@@ -2,9 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { WhatsAppFallback } from '@/components/WhatsAppFallback';
-import { WaLink } from '@/components/hamavrik/CtaLinks';
 import { Scene } from '@/components/hamavrik/Illustrations';
-import { CameraIcon } from '@/components/hamavrik/icons';
 import { CheckIcon, WhatsAppIcon } from '@/components/icons';
 import { track } from '@/lib/hamavrik/analytics';
 import { business, leads, priceText, quotePriceRow, serviceAreas, services, type Service, type ServiceId } from '@/lib/hamavrik/config';
@@ -52,7 +50,6 @@ export function QuickQuote({
   const started = useRef(false);
 
   const chosen = services.filter((s) => picks[s.id]);
-  const byId = (id: ServiceId) => services.find((s) => s.id === id)!;
 
   /*
    * The running total, straight from `priceList` via quotePriceRow, so this
@@ -294,47 +291,43 @@ export function QuickQuote({
           </datalist>
         </label>
 
-        {chosen.length > 0 ? (
-          <p className="mt-5 rounded-xl bg-brand-300/40 px-4 py-3 text-[15px] font-extrabold text-brand-400">
-            {fromTotal > 0 ? (
-              <>
-                סה״כ החל מ-<bdi dir="rtl">{priceText(fromTotal)}</bdi>
-                {unpriced > 0 ? <span className="font-bold"> + {unpriced === 1 ? 'פריט אחד' : `${unpriced} פריטים`} לפי הצעת מחיר</span> : null}
-                <span className="mt-0.5 block text-[13px] font-bold text-mist-300">המחיר הסופי נקבע לפי התמונה.</span>
-              </>
-            ) : (
-              <>
-                לפי הצעת מחיר
-                <span className="mt-0.5 block text-[13px] font-bold text-mist-300">שלחו תמונה ונחזור עם מספר.</span>
-              </>
-            )}
-          </p>
-        ) : null}
-
         {error ? (
           <p role="alert" className="mt-3 text-sm font-bold text-red-600">
             {error}
           </p>
         ) : null}
 
-        <div className="mt-5 grid gap-2.5 sm:grid-cols-[1.2fr_1fr]">
-          <button
-            type="submit"
-            className="shine-shimmer inline-flex items-center justify-center gap-2.5 rounded-full bg-wa-600 px-6 py-3.5 text-lg font-extrabold text-white shadow-lg shadow-wa-600/30 transition-colors hover:bg-wa-500"
-          >
-            <WhatsAppIcon className="h-6 w-6" />
-            שלחו ב-WhatsApp
-          </button>
-          <WaLink
-            href={waLink()}
-            location="quick-quote-photo"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 text-base font-extrabold text-brand-400 ring-2 ring-brand-500/25 transition hover:ring-brand-500/50"
-          >
-            <CameraIcon className="h-5 w-5" />
-            או פשוט שלחו תמונה
-          </WaLink>
-        </div>
-        <p className="mt-3 text-center text-xs text-mist-500">ללא התחייבות · {business.responseNote}</p>
+        {/* The order as it will be sent: items, city, price when there is one to
+            show, and the single way to send it. Nothing competes with it. */}
+        {chosen.length > 0 ? (
+          <div className="mt-5 rounded-2xl bg-brand-300/40 p-4">
+            <p className="text-sm font-extrabold text-mist-300">הסיכום שלכם</p>
+            <ul className="mt-2 grid gap-1 text-[15px] font-extrabold text-mist-100">
+              {chosen.map((s) => (
+                <li key={s.id}>{itemLine(s, picks[s.id]!)}</li>
+              ))}
+            </ul>
+            {city.trim() ? <p className="mt-2 text-[15px] font-bold text-mist-100">📍 {city.trim()}</p> : null}
+            {fromTotal > 0 ? (
+              <p className="mt-2 text-[15px] font-extrabold text-brand-400">
+                סה״כ החל מ-<bdi dir="rtl">{priceText(fromTotal)}</bdi>
+                {unpriced > 0 ? (
+                  <span className="mt-0.5 block text-[13px] font-bold text-mist-300">
+                    {unpriced === 1 ? 'פריט אחד' : `${unpriced} פריטים`} לפי הצעת מחיר
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <button
+          type="submit"
+          className="shine-shimmer mt-5 inline-flex w-full items-center justify-center gap-2.5 whitespace-nowrap rounded-full bg-wa-600 px-5 py-4 text-base font-extrabold text-white shadow-lg shadow-wa-600/30 transition-colors hover:bg-wa-500 sm:text-lg"
+        >
+          <WhatsAppIcon className="h-6 w-6 shrink-0" />
+          שלחו לקבלת מחיר ב-WhatsApp
+        </button>
 
         {blockedHref ? (
           <WhatsAppFallback

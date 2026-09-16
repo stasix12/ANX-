@@ -64,9 +64,6 @@ export const business = {
   whatsappOpener: 'היי, הגעתי דרך האתר.',
   whatsappPhotoLine: 'הנה תמונה:',
 
-  /** Shown next to "response time" claims. Keep honest. */
-  responseNote: 'עונים בוואטסאפ בשעות הפעילות',
-
   /**
    * Opening hours for the LocalBusiness schema, in schema.org format
    * (e.g. ['Su-Th 08:00-20:00', 'Fr 08:00-14:00']). Leave empty until the

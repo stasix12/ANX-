@@ -369,6 +369,18 @@ export interface BeforeAfterJob {
 export const HOME_JOBS = 4;
 
 export const beforeAfterJobs: BeforeAfterJob[] = [
+  // First on purpose: the corner sofa is the most-asked-about item and the
+  // strongest pair — the cleaning wand is still on the seat in the before.
+  {
+    id: 'sofa-corner-1',
+    service: 'sofa',
+    itemLabel: 'ספה פינתית',
+    city: 'באר שבע',
+    problem: 'ניקוי עמוק — הבד האפור חזר לצבע האחיד שלו',
+    scene: 'sofa',
+    beforeImage: '/hamavrik/jobs/sofa-corner-before.jpg',
+    afterImage: '/hamavrik/jobs/sofa-corner-after.jpg',
+  },
   {
     id: 'sofa-1',
     service: 'sofa',
@@ -380,7 +392,6 @@ export const beforeAfterJobs: BeforeAfterJob[] = [
     beforeImage: '/hamavrik/jobs/sofa-grey-before.jpg',
     afterImage: '/hamavrik/jobs/sofa-grey-after.jpg',
   },
-  { id: 'sofa-2', service: 'sofa', itemLabel: 'ספה פינתית', city: 'ערד', problem: 'נטרול ריחות וניקוי עמוק', scene: 'sofa', beforeImage: null, afterImage: null },
   {
     id: 'mattress-1',
     service: 'mattress',

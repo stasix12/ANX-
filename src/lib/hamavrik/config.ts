@@ -548,8 +548,8 @@ export const processVideo: FeaturedVideo | null = null;
 /**
  * The owner's carpet clip – a shaggy rug cleaned outdoors with the
  * injection-extraction wand, shot on his phone. Shown at the top of the
- * carpet page (see `LandingPage.video`). `city` stays null until he says
- * where it was shot.
+ * carpet page (see `LandingPage.video`). Shot in Ramot, Beer Sheva – the
+ * owner's word.
  */
 export const carpetVideo: FeaturedVideo = {
   mp4: '/hamavrik/video/process-carpet-portrait.mp4',
@@ -559,7 +559,7 @@ export const carpetVideo: FeaturedVideo = {
   eyebrow: 'מהשטח',
   title: 'ככה מנקים שטיח.',
   itemLabel: 'שטיח שאגי',
-  city: null,
+  city: 'שכונת רמות, באר שבע',
   problem: 'ניקוי עמוק בהזרקה-יניקה',
   description: 'הראש מזריק תמיסה לתוך הסיבים ושואב אותה מיד בחזרה, יחד עם האבק והלכלוך שישבו בתחתית.',
   points: ['במקום, בלי לגלגל ובלי להוביל', 'ציוד מקצועי, לא מכשיר ביתי', 'השטיח מתייבש תוך מספר שעות'],
@@ -1056,7 +1056,7 @@ export const landingPages: LandingPage[] = [
         },
         {
           title: 'אילו שטיחים אנחנו מנקים?',
-          body: 'שטיחי סלון מסיבים סינתטיים ושטיחי צמר, שטיחים שעירים (שאגי) כמו זה שבסרטון למעלה, שטיחי חדרי ילדים ושטיחים מקיר לקיר. לא בטוחים מה החומר של השטיח שלכם? שלחו תמונה, גם של התווית מאחור אם יש, ונגיד לכם איך מטפלים בו.',
+          body: 'שטיחי סלון מסיבים סינתטיים ושטיחי צמר, שטיחים שעירים (שאגי) כמו זה שבסרטון למעלה, שצולם אצל לקוח בשכונת רמות בבאר שבע, שטיחי חדרי ילדים ושטיחים מקיר לקיר. לא בטוחים מה החומר של השטיח שלכם? שלחו תמונה, גם של התווית מאחור אם יש, ונגיד לכם איך מטפלים בו.',
         },
         {
           title: 'איך מתבצע ניקוי שטיח בבית?',

@@ -18,7 +18,7 @@ import { ServiceAreas } from '@/components/hamavrik/ServiceAreas';
 import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
-import { business, landingPages, mainVideo, serviceById, services, beforeAfterJobs, HOME_JOBS, galleryCategoryOf, withPrefix } from '@/lib/hamavrik/config';
+import { business, landingPages, serviceById, services, beforeAfterJobs, HOME_JOBS, galleryCategoryOf, sofaVideo, withPrefix } from '@/lib/hamavrik/config';
 import { getGoogleReviews } from '@/lib/hamavrik/googleReviews';
 import { absoluteUrl, href, waAsk } from '@/lib/hamavrik/links';
 
@@ -79,8 +79,8 @@ export default async function LandingPage({ params }: PageProps) {
   const googleReviews = await getGoogleReviews();
   const otherServices = services.filter((s) => s.id !== service.id && s.featured);
   const faqItems = faqFor(page.faqOverrides, page.faqExtra);
-  /** The clip this page opens with: the page's own, or the main sofa clip on a sofa page. */
-  const pageVideo = page.video ?? (service.id === 'sofa' ? mainVideo : null);
+  /** The clip this page opens with: the page's own, or the blue-sofa clip on a sofa page. */
+  const pageVideo = page.video ?? (service.id === 'sofa' ? sofaVideo : null);
 
   /* The page's own guide – the copy that makes this page about THIS city
      and THIS service, in place of the explainer the home page has. Sofa
@@ -146,7 +146,7 @@ export default async function LandingPage({ params }: PageProps) {
                 : 'סרטון מעבודה אמיתית שלנו – לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם.'
             }
           />
-          <FeaturedVideo video={mainVideo} />
+          <FeaturedVideo video={sofaVideo} />
           {realJobs.length > 0 ? (
             <div className="mt-6 sm:mt-8">
               <BeforeAfterGallery jobs={realJobs} limit={HOME_JOBS} />

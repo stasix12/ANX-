@@ -4,7 +4,7 @@ import {
   business,
   faq,
   type FeaturedVideo,
-  mainVideo,
+  homeVideo,
   priceList,
   reviews,
   serviceAreas,
@@ -118,9 +118,9 @@ export function videoSchema(video: FeaturedVideo) {
   };
 }
 
-/** The main clip's schema, for the pages that open with it. */
+/** The home clip's schema, for the pages that open with it. */
 export function featuredVideoSchema() {
-  return mainVideo ? videoSchema(mainVideo) : null;
+  return homeVideo ? videoSchema(homeVideo) : null;
 }
 
 export function allServicesSchema() {

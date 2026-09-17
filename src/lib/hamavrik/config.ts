@@ -548,9 +548,9 @@ export const processVideo: FeaturedVideo | null = null;
 /**
  * The owner's blue-sofa clip, shot in Lehavim: the cleaning solution was
  * matched to the fabric first so the sofa's particular blue would not
- * suffer, then injection-extraction. The main clip on the home page, the
- * sofa city pages and the gallery; the armchair clip stays on the gallery
- * page below it.
+ * suffer, then injection-extraction. Opens the Beer Sheva and Arad sofa
+ * pages and is the second card on the gallery page; the home page keeps
+ * the armchair clip.
  */
 export const sofaVideo: FeaturedVideo = {
   mp4: '/hamavrik/video/process-sofa-blue-portrait.mp4',
@@ -592,8 +592,9 @@ export const mattressVideo: FeaturedVideo = {
   seconds: 15,
 };
 
-/** The clip that opens the home page, the sofa city pages and the gallery. */
-export const mainVideo: FeaturedVideo | null = processVideo ?? sofaVideo;
+/** The clip that opens the home page and the gallery – the armchair clip,
+ *  as the owner wants it, unless a `processVideo` replaces it. */
+export const homeVideo: FeaturedVideo | null = processVideo ?? featuredVideo;
 
 /**
  * The owner's carpet clip – a shaggy rug cleaned outdoors with the

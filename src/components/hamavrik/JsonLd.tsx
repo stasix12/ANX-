@@ -4,6 +4,7 @@ import {
   business,
   faq,
   featuredVideo,
+  type FeaturedVideo,
   priceList,
   reviews,
   serviceAreas,
@@ -99,23 +100,27 @@ export function serviceSchema(service: Service, city?: string, description: stri
   };
 }
 
-/** VideoObject for the featured real-footage clip – eligible for video rich results. */
-export function featuredVideoSchema() {
-  if (!featuredVideo) return null;
+/** VideoObject for a real-footage clip – eligible for video rich results. */
+export function videoSchema(video: FeaturedVideo) {
   return {
     '@context': 'https://schema.org',
     '@type': 'VideoObject',
-    name: `${featuredVideo.itemLabel} – ${featuredVideo.problem} | ${business.name}`,
-    description: featuredVideo.description,
-    thumbnailUrl: publicUrl(featuredVideo.poster),
-    contentUrl: publicUrl(featuredVideo.mp4),
+    name: `${video.itemLabel} – ${video.problem} | ${business.name}`,
+    description: video.description,
+    thumbnailUrl: publicUrl(video.poster),
+    contentUrl: publicUrl(video.mp4),
     // Search Console wants a full ISO 8601 datetime with a timezone; a bare
     // date is read as "time unknown". Midnight Israel time on the day it
     // was shot is the honest way to say "this day".
-    uploadDate: /T/.test(featuredVideo.date) ? featuredVideo.date : `${featuredVideo.date}T00:00:00+03:00`,
-    duration: `PT${featuredVideo.seconds}S`,
+    uploadDate: /T/.test(video.date) ? video.date : `${video.date}T00:00:00+03:00`,
+    duration: `PT${video.seconds}S`,
     publisher: { '@id': BUSINESS_ID },
   };
+}
+
+/** The shared clip's schema, for the pages that show it. */
+export function featuredVideoSchema() {
+  return featuredVideo ? videoSchema(featuredVideo) : null;
 }
 
 export function allServicesSchema() {

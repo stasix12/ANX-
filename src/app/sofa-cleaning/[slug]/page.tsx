@@ -9,7 +9,7 @@ import { GoogleReviews } from '@/components/hamavrik/GoogleReviews';
 import { FinalCta } from '@/components/hamavrik/FinalCta';
 import { Hero } from '@/components/hamavrik/Hero';
 import { HowItWorks } from '@/components/hamavrik/HowItWorks';
-import { JsonLd, faqSchema, landingBreadcrumb, serviceSchema } from '@/components/hamavrik/JsonLd';
+import { JsonLd, faqSchema, landingBreadcrumb, serviceSchema, videoSchema } from '@/components/hamavrik/JsonLd';
 import { Pricing } from '@/components/hamavrik/Pricing';
 import { QuickQuote } from '@/components/hamavrik/QuickQuote';
 import { Reveal } from '@/components/hamavrik/Reveal';
@@ -88,7 +88,7 @@ export default async function LandingPage({ params }: PageProps) {
   /* Tints alternate down the page: a guide that follows a (plain) gallery is
      tinted and the price table after it is not; a guide straight under the
      breadcrumb is plain and the price table keeps its tint. */
-  const guideTinted = guideFirst && pageJobs.length > 0;
+  const guideTinted = guideFirst && (pageJobs.length > 0 || Boolean(page.video));
   const guide = page.guide ? (
     <Section id="guide" tone={guideTinted ? 'tint' : undefined} className={guideFirst && !guideTinted ? 'pt-8 sm:pt-10 lg:pt-12' : undefined}>
       <SectionHeading eyebrow={guideFirst ? 'המדריך המלא' : 'מדריך מקומי'} title={page.guide.title} lede={page.guide.lede} align="start" />
@@ -105,7 +105,7 @@ export default async function LandingPage({ params }: PageProps) {
 
   return (
     <>
-      <JsonLd data={[serviceSchema(service, page.city, page.intro), faqSchema(faqItems), landingBreadcrumb(page)]} />
+      <JsonLd data={[serviceSchema(service, page.city, page.intro), faqSchema(faqItems), landingBreadcrumb(page), ...(page.video ? [videoSchema(page.video)] : [])]} />
 
       {/* The H1 is exactly the phrase people search for; the second line is
           styled the same but lives outside it. */}
@@ -151,16 +151,28 @@ export default async function LandingPage({ params }: PageProps) {
             </div>
           ) : null}
         </Section>
-      ) : pageJobs.length > 0 ? (
-        /* The video is of sofas; a mattress or car page shows only its own
-           real before/after photos – and nothing at all until it has some. */
+      ) : pageJobs.length > 0 || page.video ? (
+        /* The shared video is of upholstery; a mattress, car or carpet page
+           shows only its own real clip and its own before/after photos – and
+           nothing at all until it has some. */
         <Section id="before-after" className="pt-8 sm:pt-10 lg:pt-12">
           <SectionHeading
             eyebrow="מהשטח"
             title="ככה זה נראה מקרוב"
-            lede="תמונות מעבודות אמיתיות שלנו – לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל."
+            lede={
+              page.video && pageJobs.length > 0
+                ? 'סרטון ותמונות מעבודות אמיתיות שלנו – לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל.'
+                : page.video
+                  ? 'סרטון מעבודה אמיתית שלנו – לא סטוק ולא הדמיה. ככה זה נראה כשמנקים אצלכם.'
+                  : 'תמונות מעבודות אמיתיות שלנו – לא סטוק ולא הדמיה. גררו את הידית ותראו את ההבדל.'
+            }
           />
-          <BeforeAfterGallery jobs={pageJobs} limit={HOME_JOBS} />
+          {page.video ? <FeaturedVideo video={page.video} /> : null}
+          {pageJobs.length > 0 ? (
+            <div className={page.video ? 'mt-6 sm:mt-8' : undefined}>
+              <BeforeAfterGallery jobs={pageJobs} limit={HOME_JOBS} />
+            </div>
+          ) : null}
         </Section>
       ) : null}
 

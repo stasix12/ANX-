@@ -545,6 +545,29 @@ export const featuredVideo: FeaturedVideo | null = featuredVideoPortrait;
  */
 export const processVideo: FeaturedVideo | null = null;
 
+/**
+ * The owner's carpet clip – a shaggy rug cleaned outdoors with the
+ * injection-extraction wand, shot on his phone. Shown at the top of the
+ * carpet page (see `LandingPage.video`). `city` stays null until he says
+ * where it was shot.
+ */
+export const carpetVideo: FeaturedVideo = {
+  mp4: '/hamavrik/video/process-carpet-portrait.mp4',
+  webm: null,
+  poster: '/hamavrik/video/process-carpet-portrait-poster.jpg',
+  aspect: '9/16',
+  eyebrow: 'מהשטח',
+  title: 'ככה מנקים שטיח.',
+  itemLabel: 'שטיח שאגי',
+  city: null,
+  problem: 'ניקוי עמוק בהזרקה-יניקה',
+  description: 'הראש מזריק תמיסה לתוך הסיבים ושואב אותה מיד בחזרה, יחד עם האבק והלכלוך שישבו בתחתית.',
+  points: ['במקום, בלי לגלגל ובלי להוביל', 'ציוד מקצועי, לא מכשיר ביתי', 'השטיח מתייבש תוך מספר שעות'],
+  service: 'carpet',
+  date: '2026-09-17',
+  seconds: 14,
+};
+
 /* ── Work gallery (REAL PHOTOS GO HERE) ─────────────────────────────────── */
 
 /**
@@ -773,6 +796,9 @@ export interface LandingPage {
   guide?: { title: string; lede?: string; blocks: { title: string; body: string }[] };
   /** Questions specific to this page, appended after the shared FAQ. */
   faqExtra?: { q: string; a: string }[];
+  /** A real clip of THIS service, shown at the top of the page in the same
+   *  card as the home page's video. Sofa pages use the shared clip instead. */
+  video?: FeaturedVideo;
   /** Replaces the shared FAQ entries whose question matches, so a mattress
    *  page never asks "how long does a SOFA take to dry". */
   faqOverrides?: { q: string; a: string; replaces: string }[];
@@ -1005,6 +1031,7 @@ export const landingPages: LandingPage[] = [
     slug: 'carpet-cleaning-beer-sheva',
     service: 'carpet',
     city: 'באר שבע',
+    video: carpetVideo,
     title: 'ניקוי שטיחים בבאר שבע עד הבית | בלי הובלה',
     h1: 'ניקוי שטיחים בבאר שבע',
     description:
@@ -1029,7 +1056,7 @@ export const landingPages: LandingPage[] = [
         },
         {
           title: 'אילו שטיחים אנחנו מנקים?',
-          body: 'שטיחי סלון מסיבים סינתטיים ושטיחי צמר, שטיחי חדרי ילדים ושטיחים מקיר לקיר. לא בטוחים מה החומר של השטיח שלכם? שלחו תמונה, גם של התווית מאחור אם יש, ונגיד לכם איך מטפלים בו.',
+          body: 'שטיחי סלון מסיבים סינתטיים ושטיחי צמר, שטיחים שעירים (שאגי) כמו זה שבסרטון למעלה, שטיחי חדרי ילדים ושטיחים מקיר לקיר. לא בטוחים מה החומר של השטיח שלכם? שלחו תמונה, גם של התווית מאחור אם יש, ונגיד לכם איך מטפלים בו.',
         },
         {
           title: 'איך מתבצע ניקוי שטיח בבית?',

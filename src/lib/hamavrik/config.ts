@@ -546,6 +546,33 @@ export const featuredVideo: FeaturedVideo | null = featuredVideoPortrait;
 export const processVideo: FeaturedVideo | null = null;
 
 /**
+ * The owner's blue-sofa clip, shot in Lehavim: the cleaning solution was
+ * matched to the fabric first so the sofa's particular blue would not
+ * suffer, then injection-extraction. The main clip on the home page, the
+ * sofa city pages and the gallery; the armchair clip stays on the gallery
+ * page below it.
+ */
+export const sofaVideo: FeaturedVideo = {
+  mp4: '/hamavrik/video/process-sofa-blue-portrait.mp4',
+  webm: null,
+  poster: '/hamavrik/video/process-sofa-blue-portrait-poster.jpg',
+  aspect: '9/16',
+  eyebrow: 'מהשטח',
+  title: 'ספה כחולה, בלי לפגוע בצבע.',
+  itemLabel: 'ספה בבד כחול',
+  city: 'להבים',
+  problem: 'ניקוי עמוק עם התאמת חומר לבד צבעוני',
+  description: 'לפני הניקוי התאמנו את חומר הניקוי במיוחד לבד הזה, כדי לשמור על הכחול המיוחד של הספה – ואז הזרקה-יניקה עד שהמים שיוצאים נקיים.',
+  points: ['התאמת חומר לפי סוג הבד והצבע', 'הכול מתבצע אצלכם בבית', 'הספה מתייבשת תוך מספר שעות'],
+  service: 'sofa',
+  date: '2026-09-17',
+  seconds: 13,
+};
+
+/** The clip that opens the home page, the sofa city pages and the gallery. */
+export const mainVideo: FeaturedVideo | null = processVideo ?? sofaVideo;
+
+/**
  * The owner's carpet clip – a shaggy rug cleaned outdoors with the
  * injection-extraction wand, shot on his phone. Shown at the top of the
  * carpet page (see `LandingPage.video`). Shot in Ramot, Beer Sheva – the
@@ -838,7 +865,7 @@ export const landingPages: LandingPage[] = [
         },
         {
           title: 'עבודות שביצענו בבאר שבע',
-          body: 'הספה הפינתית, הספה האפורה והמזרן שבתמונות "לפני ואחרי" למעלה נוקו אצל לקוחות בבאר שבע. אלה תמונות אמיתיות מהעבודה, לא סטוק. גררו את הידית ותראו את ההבדל.',
+          body: 'הספה הפינתית, הספה האפורה והמזרן שבתמונות "לפני ואחרי" למעלה נוקו אצל לקוחות בבאר שבע, והספה הכחולה שבסרטון – אצל לקוח בלהבים, עם חומר שהותאם במיוחד כדי לא לפגוע בצבע. אלה צילומים אמיתיים מהעבודה, לא סטוק. גררו את הידית ותראו את ההבדל.',
         },
         {
           title: 'מתי כדאי לנקות ספה?',

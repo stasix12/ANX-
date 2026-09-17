@@ -3,8 +3,8 @@ import {
   acCleaning,
   business,
   faq,
-  featuredVideo,
   type FeaturedVideo,
+  mainVideo,
   priceList,
   reviews,
   serviceAreas,
@@ -118,9 +118,9 @@ export function videoSchema(video: FeaturedVideo) {
   };
 }
 
-/** The shared clip's schema, for the pages that show it. */
+/** The main clip's schema, for the pages that open with it. */
 export function featuredVideoSchema() {
-  return featuredVideo ? videoSchema(featuredVideo) : null;
+  return mainVideo ? videoSchema(mainVideo) : null;
 }
 
 export function allServicesSchema() {

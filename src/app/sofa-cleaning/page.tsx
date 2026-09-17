@@ -19,7 +19,7 @@ import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
 import { WorkGallery } from '@/components/hamavrik/WorkGallery';
-import { business, featuredVideo, priceList, priceText, processVideo, serviceAreas, services, beforeAfterJobs, HOME_JOBS, withPrefix } from '@/lib/hamavrik/config';
+import { business, mainVideo, priceList, priceText, serviceAreas, services, beforeAfterJobs, HOME_JOBS, withPrefix } from '@/lib/hamavrik/config';
 import { href } from '@/lib/hamavrik/links';
 import { getGoogleReviews } from '@/lib/hamavrik/googleReviews';
 
@@ -73,7 +73,7 @@ export default async function HomePage() {
               : 'סרטון מעבודה אמיתית שלנו – לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם.'
           }
         />
-        <FeaturedVideo video={processVideo ?? featuredVideo} />
+        <FeaturedVideo video={mainVideo} />
         {/* Only jobs with real photos. Illustrated placeholders stay in /gallery;
             the first real pair in config.ts brings this block back by itself. */}
         {realJobs.length > 0 ? (

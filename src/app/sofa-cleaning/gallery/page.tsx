@@ -6,7 +6,7 @@ import { FinalCta } from '@/components/hamavrik/FinalCta';
 import { JsonLd, breadcrumbSchema } from '@/components/hamavrik/JsonLd';
 import { Section, SectionHeading } from '@/components/hamavrik/Section';
 import { WorkGallery } from '@/components/hamavrik/WorkGallery';
-import { beforeAfterJobs, business, featuredVideo, processVideo } from '@/lib/hamavrik/config';
+import { beforeAfterJobs, business, featuredVideo, mainVideo } from '@/lib/hamavrik/config';
 import { absoluteUrl, href } from '@/lib/hamavrik/links';
 
 export const metadata: Metadata = {
@@ -56,7 +56,8 @@ export default function GalleryPage() {
           title="לפני ואחרי – עבודות אמיתיות שלנו"
           lede="סרטון ותמונות מעבודות שביצענו – לא סטוק ולא הדמיה. גררו את הידית בכל תמונה ותראו את ההבדל."
         />
-        <FeaturedVideo video={processVideo ?? featuredVideo} />
+        <FeaturedVideo video={mainVideo} />
+        {featuredVideo && featuredVideo !== mainVideo ? <FeaturedVideo video={featuredVideo} /> : null}
         {realJobs.length > 0 ? <BeforeAfterGallery jobs={realJobs} tabs /> : null}
       </Section>
       <WorkGallery />

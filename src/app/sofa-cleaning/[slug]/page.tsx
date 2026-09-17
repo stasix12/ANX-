@@ -18,7 +18,7 @@ import { ServiceAreas } from '@/components/hamavrik/ServiceAreas';
 import { ServicesGrid } from '@/components/hamavrik/Services';
 import { TrustStrip } from '@/components/hamavrik/TrustStrip';
 import { WhyUs } from '@/components/hamavrik/WhyUs';
-import { business, featuredVideo, landingPages, processVideo, serviceById, services, beforeAfterJobs, HOME_JOBS, galleryCategoryOf, withPrefix } from '@/lib/hamavrik/config';
+import { business, landingPages, mainVideo, serviceById, services, beforeAfterJobs, HOME_JOBS, galleryCategoryOf, withPrefix } from '@/lib/hamavrik/config';
 import { getGoogleReviews } from '@/lib/hamavrik/googleReviews';
 import { absoluteUrl, href, waAsk } from '@/lib/hamavrik/links';
 
@@ -79,6 +79,8 @@ export default async function LandingPage({ params }: PageProps) {
   const googleReviews = await getGoogleReviews();
   const otherServices = services.filter((s) => s.id !== service.id && s.featured);
   const faqItems = faqFor(page.faqOverrides, page.faqExtra);
+  /** The clip this page opens with: the page's own, or the main sofa clip on a sofa page. */
+  const pageVideo = page.video ?? (service.id === 'sofa' ? mainVideo : null);
 
   /* The page's own guide – the copy that makes this page about THIS city
      and THIS service, in place of the explainer the home page has. Sofa
@@ -105,7 +107,7 @@ export default async function LandingPage({ params }: PageProps) {
 
   return (
     <>
-      <JsonLd data={[serviceSchema(service, page.city, page.intro), faqSchema(faqItems), landingBreadcrumb(page), ...(page.video ? [videoSchema(page.video)] : [])]} />
+      <JsonLd data={[serviceSchema(service, page.city, page.intro), faqSchema(faqItems), landingBreadcrumb(page), ...(pageVideo ? [videoSchema(pageVideo)] : [])]} />
 
       {/* The H1 is exactly the phrase people search for; the second line is
           styled the same but lives outside it. */}
@@ -144,7 +146,7 @@ export default async function LandingPage({ params }: PageProps) {
                 : 'סרטון מעבודה אמיתית שלנו – לא סטוק ולא הדמיה. מתחתיו כתוב בדיוק מה קורה שם.'
             }
           />
-          <FeaturedVideo video={processVideo ?? featuredVideo} />
+          <FeaturedVideo video={mainVideo} />
           {realJobs.length > 0 ? (
             <div className="mt-6 sm:mt-8">
               <BeforeAfterGallery jobs={realJobs} limit={HOME_JOBS} />

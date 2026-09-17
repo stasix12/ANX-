@@ -80,6 +80,29 @@ export default async function LandingPage({ params }: PageProps) {
   const otherServices = services.filter((s) => s.id !== service.id && s.featured);
   const faqItems = faqFor(page.faqOverrides, page.faqExtra);
 
+  /* The page's own guide – the copy that makes this page about THIS city
+     and THIS service, in place of the explainer the home page has. Sofa
+     pages open with the video and the gallery and read it further down;
+     every other service opens with it. */
+  const guideFirst = service.id !== 'sofa';
+  /* Tints alternate down the page: a guide that follows a (plain) gallery is
+     tinted and the price table after it is not; a guide straight under the
+     breadcrumb is plain and the price table keeps its tint. */
+  const guideTinted = guideFirst && pageJobs.length > 0;
+  const guide = page.guide ? (
+    <Section id="guide" tone={guideTinted ? 'tint' : undefined} className={guideFirst && !guideTinted ? 'pt-8 sm:pt-10 lg:pt-12' : undefined}>
+      <SectionHeading eyebrow={guideFirst ? 'המדריך המלא' : 'מדריך מקומי'} title={page.guide.title} lede={page.guide.lede} align="start" />
+      <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
+        {page.guide.blocks.map((block, i) => (
+          <Reveal as="article" key={block.title} delay={(i % 2) * 90} className="border-s-4 border-brand-300 ps-5">
+            <h3 className="text-lg font-black sm:text-xl">{block.title}</h3>
+            <p className="mt-1.5 text-[15px] leading-relaxed text-mist-300">{block.body}</p>
+          </Reveal>
+        ))}
+      </div>
+    </Section>
+  ) : null;
+
   return (
     <>
       <JsonLd data={[serviceSchema(service, page.city, page.intro), faqSchema(faqItems), landingBreadcrumb(page)]} />
@@ -141,9 +164,14 @@ export default async function LandingPage({ params }: PageProps) {
         </Section>
       ) : null}
 
+      {/* On a mattress, car or carpet page the guide is the first thing after
+          the hero: those pages have no video and little or no gallery, so
+          without it the visitor lands on a price table and nothing else. */}
+      {guideFirst ? guide : null}
+
       <GoogleReviews data={googleReviews} />
 
-      <Section id="prices" tone="tint">
+      <Section id="prices" tone={guideTinted ? undefined : 'tint'}>
         <SectionHeading eyebrow="מחירון" title={`מחירי ${service.name} ב${page.city}`} lede="מחירי פתיחה שקופים. המחיר הסופי נסגר מראש לפי תמונה." />
         <Pricing />
       </Section>
@@ -179,21 +207,7 @@ export default async function LandingPage({ params }: PageProps) {
         <WhyUs />
       </Section>
 
-      {/* The page's own guide – the copy that makes this page about THIS
-          city and THIS service, in place of the explainer the home page has. */}
-      {page.guide ? (
-        <Section id="guide">
-          <SectionHeading eyebrow="מדריך מקומי" title={page.guide.title} lede={page.guide.lede} align="start" />
-          <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
-            {page.guide.blocks.map((block, i) => (
-              <Reveal as="article" key={block.title} delay={(i % 2) * 90} className="border-s-4 border-brand-300 ps-5">
-                <h3 className="text-lg font-black sm:text-xl">{block.title}</h3>
-                <p className="mt-1.5 text-[15px] leading-relaxed text-mist-300">{block.body}</p>
-              </Reveal>
-            ))}
-          </div>
-        </Section>
-      ) : null}
+      {guideFirst ? null : guide}
 
       <Section id="faq" tone="tint">
         <SectionHeading eyebrow="שאלות ותשובות" title="שאלות נפוצות" />

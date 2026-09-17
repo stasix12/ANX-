@@ -473,8 +473,8 @@ export interface FeaturedVideo {
   mp4: string;
   webm: string | null;
   poster: string;
-  /** CSS aspect ratio of the file: '9/16' (portrait) or '4/3' (landscape). The card adapts. */
-  aspect: '9/16' | '4/3';
+  /** CSS aspect ratio of the file: '9/16' (portrait), '1/1' (square) or '4/3' (landscape). The card adapts. */
+  aspect: '9/16' | '1/1' | '4/3';
   eyebrow: string;
   title: string;
   itemLabel: string;
@@ -567,6 +567,29 @@ export const sofaVideo: FeaturedVideo = {
   service: 'sofa',
   date: '2026-09-17',
   seconds: 13,
+};
+
+/**
+ * The owner's mattress clip: a baby's accident on the parents' double
+ * mattress, the stain treated and the whole mattress deep-cleaned on the
+ * bed. Square, edited on his phone; the editor's outro is trimmed off.
+ * Shown at the top of the mattress page. `city` stays null until he says.
+ */
+export const mattressVideo: FeaturedVideo = {
+  mp4: '/hamavrik/video/process-mattress-square.mp4',
+  webm: null,
+  poster: '/hamavrik/video/process-mattress-square-poster.jpg',
+  aspect: '1/1',
+  eyebrow: 'מהשטח',
+  title: 'כתם שתן של תינוק על מזרן ההורים.',
+  itemLabel: 'מזרן זוגי',
+  city: null,
+  problem: 'כתם שתן של תינוק',
+  description: 'לתינוק ברח על המזרן של ההורים. טיפול ממוקד בכתם ובריח, ואז ניקוי עמוק בהזרקה-יניקה של כל המזרן – על המיטה, בלי להוביל כלום.',
+  points: ['מטפלים בכתם ובריח, לא רק בבד העליון', 'המזרן נשאר על המיטה כל הזמן', 'מתייבש תוך מספר שעות'],
+  service: 'mattress',
+  date: '2026-09-17',
+  seconds: 15,
 };
 
 /** The clip that opens the home page, the sofa city pages and the gallery. */
@@ -956,6 +979,7 @@ export const landingPages: LandingPage[] = [
     slug: 'mattress-cleaning-beer-sheva',
     service: 'mattress',
     city: 'באר שבע',
+    video: mattressVideo,
     title: 'ניקוי מזרנים בבאר שבע עד הבית | החל מ-279 ₪',
     h1: 'ניקוי מזרנים בבאר שבע',
     description:
@@ -984,7 +1008,7 @@ export const landingPages: LandingPage[] = [
         },
         {
           title: 'כתמי שתן של ילדים, זיעה וכתמים צהובים',
-          body: 'כתמי זיעה וכתמים צהובים ישנים הם הסיבה הכי נפוצה שמזמינים אותנו, ורובם יורדים בניקוי עמוק. כתמי שתן של ילדים או של בעלי חיים מקבלים גם טיפול לנטרול הריח, כך שהריח מסולק ולא מכוסה. כתם ותיק מאוד לפעמים מתבהר ולא נעלם לגמרי – שלחו תמונה ונגיד לכם בכנות מה לצפות לפני שאנחנו מגיעים.',
+          body: 'כתמי זיעה וכתמים צהובים ישנים הם הסיבה הכי נפוצה שמזמינים אותנו, ורובם יורדים בניקוי עמוק. כתמי שתן של ילדים או של בעלי חיים – כמו בסרטון למעלה, שבו לתינוק ברח על מזרן ההורים – מקבלים גם טיפול לנטרול הריח, כך שהריח מסולק ולא מכוסה. כתם ותיק מאוד לפעמים מתבהר ולא נעלם לגמרי – שלחו תמונה ונגיד לכם בכנות מה לצפות לפני שאנחנו מגיעים.',
         },
         {
           title: 'כמה עולה ניקוי מזרן בבאר שבע?',

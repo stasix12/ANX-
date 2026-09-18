@@ -28,6 +28,7 @@ export default function GroupsPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [query, setQuery] = useState('');
   const [activeOnly, setActiveOnly] = useState(false);
+  const [view, setView] = useState<'grid' | 'list'>('grid');
   const [form, setForm] = useState({ url: '', name: '' });
   const [bulk, setBulk] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -167,6 +168,14 @@ export default function GroupsPage() {
         >
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <input className={`${inputClass} !w-auto grow`} placeholder="חיפוש לפי שם…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <div role="group" className="flex rounded-xl bg-ink-800 p-0.5 text-xs font-bold">
+              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={`rounded-lg px-2.5 py-1.5 ${view === 'grid' ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
+                משבצות
+              </button>
+              <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')} className={`rounded-lg px-2.5 py-1.5 ${view === 'list' ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
+                רשימה
+              </button>
+            </div>
             <Button variant="secondary" busy={busy === 'refresh'} onClick={() => act('refresh', () => requestGroupRefresh(selected.length ? selected : undefined), 'ה-worker ימשוך שם ותמונה מחדש כשהוא פנוי.')}>
               רענן שם ותמונה{selected.length ? ` (${selected.length})` : ''}
             </Button>
@@ -192,7 +201,41 @@ export default function GroupsPage() {
           </div>
           {groups === null && <Loading />}
           {groups && visible.length === 0 && <Empty>אין קבוצות. הוסיפו קישור למעלה.</Empty>}
-          {visible.length > 0 && (
+          {visible.length > 0 && view === 'grid' && (
+            <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              {visible.map((g) => {
+                const checked = selected.includes(g.id);
+                return (
+                  <li
+                    key={g.id}
+                    className={`relative flex flex-col items-center rounded-2xl border p-3 text-center transition-colors ${checked ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'} ${g.enabled ? '' : 'opacity-50'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={`בחר ${g.name}`}
+                      checked={checked}
+                      onChange={(e) => setSelected((s) => (e.target.checked ? [...s, g.id] : s.filter((x) => x !== g.id)))}
+                      className="absolute end-2 top-2 h-4 w-4 accent-brand-500"
+                    />
+                    <button type="button" className="absolute start-2 top-2" onClick={() => act(g.id, () => updateTarget(g.id, { enabled: !g.enabled }))} title={g.enabled ? 'פעיל — לחצו לכיבוי' : 'כבוי — לחצו להפעלה'}>
+                      <span className={`block h-2.5 w-2.5 rounded-full ${g.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                    </button>
+                    <a href={g.url} target="_blank" rel="noreferrer" className="mt-2">
+                      <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={84} />
+                    </a>
+                    <p className="mt-2 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={g.name}>
+                      {g.name}
+                    </p>
+                    <p className="mt-1 text-[11px] text-mist-500">
+                      {!g.last_synced_at ? 'מושך פרטים…' : g.last_published_at ? `פורסם ${formatDateTimeHe(g.last_published_at).slice(0, 10)}` : 'טרם פורסם'}
+                    </p>
+                    {g.last_status && g.last_status !== 'published' && <p className="text-[11px] text-rose-700">{STATUS_LABEL[g.last_status] ?? g.last_status}</p>}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {visible.length > 0 && view === 'list' && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-xs text-mist-500">

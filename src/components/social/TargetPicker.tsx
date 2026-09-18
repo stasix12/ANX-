@@ -89,14 +89,14 @@ export function TargetPicker({
       </div>
       {note && <p className="text-xs text-amber-700">{note}</p>}
       {visible.length === 0 && <p className="text-sm text-mist-500">אין יעדים תואמים.</p>}
-      <ul className="grid gap-2 sm:grid-cols-2">
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((t) => {
           const on = selected.includes(t.id);
           const mapped = variantMap[t.id];
           return (
-            <li key={t.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${!t.enabled ? 'opacity-50' : ''} ${on ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'}`}>
+            <li key={t.id} className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 ${!t.enabled ? 'opacity-50' : ''} ${on ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'}`}>
               <Toggle checked={on} onChange={(v) => toggle(t.id, v)} label={t.name} />
-              <TargetAvatar name={t.name} imageUrl={t.image_url} channel={t.channel} size={32} />
+              <TargetAvatar name={t.name} imageUrl={t.image_url} channel={t.channel} size={40} />
               <div className="min-w-0 grow">
                 <p className="truncate text-sm font-bold text-mist-100">{t.name}</p>
                 <p className={`truncate text-xs ${t.channel === 'facebook_page' ? 'text-emerald-700' : 'text-sky-700'}`}>

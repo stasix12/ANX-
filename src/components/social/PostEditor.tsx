@@ -100,6 +100,13 @@ export function PostEditor({ postId }: { postId?: string }) {
     if (loadedFor.current === postId) return;
     loadedFor.current = postId;
     const [c, t, b, br] = await Promise.all([listCampaigns(), listTargets(), getBusiness(), getBrowserSettings()]);
+    /*
+     * Targets the post was last scheduled to. Reopening a post used to fall
+     * back to "every enabled Page", and an account with no Pages — which is
+     * every groups-only account — landed on an empty selection and a button
+     * that read "בדוק והתחל (0 יעדים)" with no explanation.
+     */
+    let lastTargets: string[] = [];
     setCampaigns(c);
     setTargets(t);
     setBusiness(b);
@@ -113,12 +120,20 @@ export function PostEditor({ postId }: { postId?: string }) {
       }
       setVariants(v.map((x) => ({ ...x, key: x.id })));
       setSchedules(s);
+      const recent = s.find((x) => x.active) ?? s[0];
+      lastTargets = (recent?.target_ids ?? []).filter((id) => t.some((x) => x.id === id));
     } else {
       const presetCampaign = presets.current.campaign;
       setPost({ ...emptyPost, phone: b.phone, whatsapp_url: whatsappUrlFor(b.whatsapp), campaign_id: presetCampaign && c.some((x) => x.id === presetCampaign) ? presetCampaign : null });
     }
     const presetTargets = presets.current.targets.split(',').filter((id) => t.some((x) => x.id === id));
-    setSelectedTargets((prev) => (prev.length ? prev : presetTargets.length ? presetTargets : t.filter((x) => x.enabled && x.channel === 'facebook_page').map((x) => x.id)));
+    const defaultPages = t.filter((x) => x.enabled && x.channel === 'facebook_page').map((x) => x.id);
+    setSelectedTargets((prev) => {
+      if (prev.length) return prev;
+      if (presetTargets.length) return presetTargets;
+      if (lastTargets.length) return lastTargets;
+      return defaultPages;
+    });
     setLoading(false);
   }, [postId]);
 
@@ -203,6 +218,11 @@ export function PostEditor({ postId }: { postId?: string }) {
 
   /** Nothing is written until the review sheet is confirmed. */
   function openReview() {
+    if (!selectedTargets.length) {
+      toast('בחרו לפחות יעד אחד.', 'error');
+      document.getElementById('post-targets')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     const problem = validateForPublish();
     if (problem) {
       setMessage({ tone: 'error', text: problem });
@@ -429,7 +449,20 @@ export function PostEditor({ postId }: { postId?: string }) {
             )}
           </Card>
 
-          <Card title="יעדי פרסום" action={<Link href="/social/groups" className="text-sm font-bold text-brand-400">ניהול קבוצות</Link>}>
+          <Card
+            id="post-targets"
+            title={`יעדי פרסום${selectedObjects.length ? ` · ${selectedObjects.length} נבחרו` : ''}`}
+            action={
+              <Link href="/social/groups" className="text-sm font-bold text-brand-400">
+                ניהול קבוצות
+              </Link>
+            }
+          >
+            {targets.length > 0 && selectedObjects.length === 0 && (
+              <div className="mb-3">
+                <Notice tone="warn">בחרו לפחות יעד אחד — בלי זה אין לאן לפרסם.</Notice>
+              </div>
+            )}
             {targets.length === 0 ? (
               <Notice tone="warn">אין יעדים עדיין. חברו את פייסבוק במסך הדפים או הוסיפו קבוצות.</Notice>
             ) : (
@@ -482,7 +515,11 @@ export function PostEditor({ postId }: { postId?: string }) {
             <SchedulePicker value={schedule} onChange={setSchedule} targetCount={selectedObjects.length} targetNames={selectedObjects.map((t) => t.name)} />
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Button size="lg" busy={busy === 'schedule'} onClick={openReview}>
-                {schedule.mode === 'now' || schedule.mode === 'drip' ? `בדוק והתחל (${selectedObjects.length} יעדים)` : 'בדוק ושמור תזמון'}
+                {selectedObjects.length === 0
+                  ? 'בחרו יעדים כדי להתחיל'
+                  : schedule.mode === 'now' || schedule.mode === 'drip'
+                    ? `בדוק והתחל (${selectedObjects.length} יעדים)`
+                    : 'בדוק ושמור תזמון'}
               </Button>
               <Button variant="secondary" busy={busy === 'save'} onClick={onSave}>
                 שמור כטיוטה
@@ -493,23 +530,38 @@ export function PostEditor({ postId }: { postId?: string }) {
                 </Button>
               )}
             </div>
-            {schedules.length > 0 && (
+            {schedules.some((s) => s.active) && (
               <ul className="mt-4 divide-y divide-ink-700 text-sm">
-                {schedules.map((s) => (
+                {schedules.filter((s) => s.active).map((s) => (
                   <li key={s.id} className="flex items-center justify-between gap-3 py-2">
                     <span className="text-mist-100">
                       {describeSchedule(s)} · {s.target_ids.length} יעדים
                     </span>
-                    {s.active ? (
-                      <button type="button" className="text-xs font-bold text-rose-600" onClick={() => setScheduleActive(s.id, false).then(() => listSchedules(s.post_id).then(setSchedules))}>
-                        בטל תזמון
-                      </button>
-                    ) : (
-                      <span className="text-xs text-mist-500">לא פעיל</span>
-                    )}
+                    <button type="button" className="text-xs font-bold text-rose-600" onClick={() => setScheduleActive(s.id, false).then(() => listSchedules(s.post_id).then(setSchedules))}>
+                      בטל תזמון
+                    </button>
                   </li>
                 ))}
               </ul>
+            )}
+            {/* Drip schedules retire themselves once planned, so a busy post
+                accumulates a wall of "לא פעיל" rows. They are history, not
+                controls — one line, opened only if asked for. */}
+            {schedules.some((s) => !s.active) && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-bold text-mist-500">
+                  תזמונים קודמים ({schedules.filter((s) => !s.active).length})
+                </summary>
+                <ul className="mt-2 space-y-1 text-xs text-mist-500">
+                  {schedules
+                    .filter((s) => !s.active)
+                    .map((s) => (
+                      <li key={s.id}>
+                        {describeSchedule(s)} · {s.target_ids.length} יעדים
+                      </li>
+                    ))}
+                </ul>
+              </details>
             )}
           </Card>
 

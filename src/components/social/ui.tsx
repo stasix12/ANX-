@@ -35,6 +35,7 @@ export function Card({
   children,
   className = '',
   padded = true,
+  id,
 }: {
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
@@ -42,9 +43,11 @@ export function Card({
   children: React.ReactNode;
   className?: string;
   padded?: boolean;
+  /** So a screen can scroll the person to the card that needs their attention. */
+  id?: string;
 }) {
   return (
-    <section className={`surface rounded-card border border-ink-700 ${padded ? 'p-4' : ''} ${className}`}>
+    <section id={id} className={`surface rounded-card border border-ink-700 ${padded ? 'p-4' : ''} ${className}`}>
       {(title || action) && (
         <header className={`mb-3 flex items-start justify-between gap-3 ${padded ? '' : 'px-4 pt-4'}`}>
           <div className="min-w-0">

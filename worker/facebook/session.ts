@@ -57,6 +57,18 @@ export class BrowserSession {
           : await chromium.launchPersistentContext(env.profileDir, { ...common, channel: env.browserChannel });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      // A Chrome window from an earlier run still holds the profile
+      // directory, so the new one exits the moment it starts. This is the
+      // most common startup failure, and the fix is closing that window —
+      // not reinstalling anything.
+      if (/has been closed|ProcessSingleton|profile appears to be in use|Target page, context or browser/i.test(msg)) {
+        throw new Error(
+          `נשאר חלון דפדפן פתוח מריצה קודמת שמחזיק את הפרופיל (${env.profileDir}).\n` +
+            '   סגרו את חלונות ה-Chrome שה-worker פתח (הלשוניות about:blank / facebook), ואז הריצו שוב.\n' +
+            '   לסגירה מהירה ב-PowerShell:\n' +
+            `   Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like '*${env.profileDir.split(/[\\/]/).pop()}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`,
+        );
+      }
       throw new Error(
         `לא הצלחתי לפתוח דפדפן (${env.browserChannel}). התקינו Google Chrome או הריצו "npx playwright-core install chromium" והגדירו SOCIAL_BROWSER_CHANNEL=chromium. פרטים: ${msg.split('\n')[0]}`,
       );

@@ -98,7 +98,14 @@ async function main(): Promise<void> {
       await heartbeat(state, state.attention ? 'needs_attention' : 'online', browser.debugMode);
       console.log(`[worker] בדיקת חיבור לפייסבוק: ${check.detail}`);
     } catch (err) {
-      console.error('[worker] בדיקת החיבור נכשלה:', err instanceof Error ? err.message : err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[worker] בדיקת החיבור נכשלה:', message);
+      // Surface it on the dashboard too, so the card explains itself instead
+      // of sitting on "not checked yet" while the terminal holds the reason.
+      state.attention = message.split('\n')[0];
+      state.browserState = 'needs_auth';
+      await heartbeat(state, 'needs_attention', false);
+      await logActivity('error', 'browser_start_failed', message.split('\n')[0]);
     }
   }
 

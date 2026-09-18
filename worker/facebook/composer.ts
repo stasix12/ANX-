@@ -73,6 +73,10 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   // 3. Text ----------------------------------------------------------------
   const textbox = await firstVisible(fb.textbox(dialog), 15_000);
   if (!textbox) throw new PublishError('composer', 'חלון הפוסט נפתח אבל אין בו תיבת טקסט.');
+  const dialogName = (await dialog.getAttribute('aria-label').catch(() => '')) ?? '';
+  if (patterns.commentBox.test(dialogName)) {
+    throw new PublishError('composer', `החלון שנפתח הוא חלון תגובות ("${dialogName}"), לא יצירת פוסט — עצרתי.`);
+  }
   await typeIntoEditor(page, textbox, input.text);
 
   // 4. Media ---------------------------------------------------------------
@@ -132,30 +136,47 @@ async function openComposer(page: Page): Promise<Locator | null> {
   await trigger.click({ timeout: 10_000 }).catch(() => undefined);
   // Let the dialog animate in before looking for it.
   await page.waitForTimeout(1500);
-  const dialog = await firstVisible(fb.composerDialog(page), 15_000);
-  if (dialog) return dialog;
-  // Inline composer (no dialog): the editable appeared where the trigger was.
-  return firstVisible(fb.inlineComposer(page), 3_000);
+  // Only a real dialog counts. A feed comment box also has an editable
+  // field, and typing there would post comments — never fall back to it.
+  return firstVisible(fb.composerDialog(page), 15_000);
 }
 
-/** Facebook's editor is contenteditable; insertText behaves like an IME commit and keeps React state in sync. */
+/**
+ * Types into the composer. Guards first: the field must not be a comment
+ * box (its accessible name says "comment"/"תגובה"), because there Enter
+ * submits. Newlines are always Shift+Enter, which is a line break in every
+ * Facebook editor and never a submit.
+ */
 async function typeIntoEditor(page: Page, textbox: Locator, text: string): Promise<void> {
+  const label = [
+    await textbox.getAttribute('aria-label').catch(() => ''),
+    await textbox.getAttribute('aria-placeholder').catch(() => ''),
+    await textbox.getAttribute('placeholder').catch(() => ''),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  if (patterns.commentBox.test(label)) {
+    throw new PublishError('composer', `זוהתה תיבת תגובה ("${label}") במקום חלון פוסט — עצרתי כדי לא לפרסם תגובות.`);
+  }
   await textbox.click({ timeout: 10_000 });
   await page.waitForTimeout(300);
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   for (const [i, line] of lines.entries()) {
     if (line) await page.keyboard.insertText(line);
-    if (i < lines.length - 1) await page.keyboard.press('Enter');
+    if (i < lines.length - 1) await page.keyboard.press('Shift+Enter');
   }
   await page.waitForTimeout(500);
   const probe = lines.find((l) => l.trim().length > 0)?.slice(0, 20) ?? '';
   const current = (await textbox.innerText().catch(() => '')) ?? '';
   if (probe && !current.includes(probe)) {
-    // Fallback: real key presses.
+    // Fallback: real key presses, still never a bare Enter.
     await textbox.click();
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Backspace');
-    await textbox.pressSequentially(text, { delay: 8 });
+    for (const [i, line] of lines.entries()) {
+      if (line) await textbox.pressSequentially(line, { delay: 8 });
+      if (i < lines.length - 1) await page.keyboard.press('Shift+Enter');
+    }
   }
 }
 

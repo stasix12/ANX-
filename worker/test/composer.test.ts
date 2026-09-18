@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
-import { publishToGroup } from '../facebook/composer';
+import { PublishError, publishToGroup } from '../facebook/composer';
 import { SessionError } from '../facebook/session';
 
 /**
@@ -77,6 +77,41 @@ async function main() {
     (err: unknown) => err instanceof SessionError && err.kind === 'checkpoint',
   );
   console.log('✓ security interstitial → SessionError(checkpoint), no bypass attempted');
+
+  // 4. A page with only a comment box (no post composer) must be refused before any typing.
+  const commentsOnly = path.join(tmpdir(), 'hapitaron-comments.html');
+  writeFileSync(
+    commentsOnly,
+    `<html lang="he"><body><div role="main"><div>פוסט של מישהו</div>
+     <form><div role="textbox" contenteditable="true" aria-label="כתבו תגובה…" id="c"></div><button type="button">שיתוף</button></form></div>
+     <script>document.getElementById('c').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ window.__commented=(window.__commented||0)+1; } });</script></body></html>`,
+  );
+  await assert.rejects(
+    publishToGroup(page, { groupUrl: `file://${commentsOnly}`, text: 'שורה 1\nשורה 2', images: [], video: null, onStep: async () => undefined }),
+    (err: unknown) => err instanceof PublishError && err.kind === 'composer',
+  );
+  const commented = await page.evaluate(() => (window as unknown as { __commented?: number }).__commented ?? 0);
+  assert.equal(commented, 0, 'nothing may be typed into a comment box');
+  console.log('✓ comment-box-only page is refused, nothing typed');
+
+  // 5. Newlines never submit: count bare Enter presses across the whole flow (survives navigation).
+  const page2 = await context.newPage();
+  await page2.addInitScript(() => {
+    (window as unknown as { __enterPresses: number }).__enterPresses = 0;
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) (window as unknown as { __enterPresses: number }).__enterPresses += 1;
+      },
+      true,
+    );
+  });
+  await publishToGroup(page2, { groupUrl: fixture, text: 'שורה א\nשורה ב\nשורה ג', images: [], video: null, onStep: async () => undefined, confirm: async () => 'cancelled' });
+  const enters = await page2.evaluate(() => (window as unknown as { __enterPresses: number }).__enterPresses);
+  assert.equal(enters, 0, 'no bare Enter may be pressed while typing');
+  const typed = await page2.evaluate(() => localStorage.getItem('mockFeed'));
+  assert.ok(!(typed ?? '').includes('שורה א'), 'cancelled run must not publish');
+  console.log('✓ line breaks use Shift+Enter only');
 
   await browser.close();
   console.log('composer tests OK');

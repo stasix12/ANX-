@@ -15,15 +15,17 @@ import type { Locator, Page } from 'playwright-core';
 
 export const patterns = {
   /** Group feed: the "Write something..." box that opens the composer. */
-  composerTrigger: /write something|create (a )?(public )?post|what'?s on your mind|כתבו משהו|כתוב משהו|כתבי משהו|יצירת פוסט|צור פוסט|מה עובר לך בראש|напишите что-нибудь|создать публикацию|что у вас нового/i,
+  composerTrigger: /write something|create (a )?(public )?post|what'?s on your mind|כת(ו)?ב(\/י|י|ו)?\s*משהו|יצירת פוסט|צור פוסט|מה עובר לך בראש|напишите что-нибудь|создать публикацию|что у вас нового/i,
+  /** Anything that is a COMMENT box, never a post composer — typing here is forbidden. */
+  commentBox: /comment|reply|תגובה|תגובת|הגב|комментар|ответ/i,
   /** The composer dialog's accessible name. */
   composerDialog: /create post|create a post|יצירת פוסט|פוסט חדש|создать публикацию|создание публикации/i,
   /** The contenteditable text box inside the composer. */
-  composerTextbox: /write something|create a public post|what'?s on your mind|כתבו משהו|כתוב משהו|יצירת פוסט ציבורי|מה עובר לך בראש|напишите что-нибудь|что у вас нового/i,
+  composerTextbox: /write something|create a public post|what'?s on your mind|כת(ו)?ב(\/י|י|ו)?\s*משהו|יצירת פוסט ציבורי|מה עובר לך בראש|напишите что-нибудь|что у вас нового/i,
   /** Button that reveals the file input. */
   photoVideo: /photo\/video|photo or video|add photos?\/videos?|תמונה\/סרטון|תמונה או סרטון|הוספת תמונות|фото\/видео|добавить фото/i,
   /** The final submit button. */
-  postButton: /^(post|publish|share|פרסום|פרסם|פרסמי|שיתוף|опубликовать|поделиться)$/i,
+  postButton: /^(post|publish|פרסום|פרסם|פרסמי|פרסמו|опубликовать)$/i,
   /** Toasts / banners that mean "post did not go out". */
   postFailed: /something went wrong|couldn'?t (be )?(post|shar)|try again later|משהו השתבש|לא ניתן לפרסם|לא הצלחנו|נסו שוב מאוחר יותר|что-то пошло не так|не удалось опубликовать/i,
   /** Group requires admin approval — the post exists but is pending. */
@@ -50,7 +52,6 @@ export const fb = {
     page.getByRole('button', { name: patterns.composerTrigger }),
     page.locator('[role="main"]').getByText(patterns.composerTrigger, { exact: false }).first(),
     page.getByText(patterns.composerTrigger, { exact: false }).first(),
-    page.locator('[role="main"] form [role="button"]').first(),
   ],
 
   /**
@@ -62,12 +63,6 @@ export const fb = {
     page.getByRole('dialog', { name: patterns.composerDialog }).filter({ has: page.locator('[contenteditable="true"], [role="textbox"]') }),
     page.getByRole('dialog').filter({ has: page.locator('[contenteditable="true"], [role="textbox"]') }).last(),
     page.locator('[role="dialog"]').filter({ has: page.locator('[contenteditable="true"]') }).last(),
-  ],
-
-  /** Some layouts expand the composer inline instead of a dialog. */
-  inlineComposer: (page: Page): Locator[] => [
-    page.locator('[role="main"]').filter({ has: page.locator('[contenteditable="true"][role="textbox"]') }).first(),
-    page.locator('form').filter({ has: page.locator('[contenteditable="true"]') }).first(),
   ],
 
   /** The editable text area inside the dialog. */

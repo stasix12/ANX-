@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { slotsFor } from '@/lib/social/slots';
+import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { zonedToUtc } from '@/lib/social/time';
 import { parseGroupUrl, type Variant } from '@/lib/social/types';
 import { pickVariant, previewAssignment } from '@/lib/social/variants';
@@ -35,5 +35,17 @@ assert.deepEqual(
   ['2026-09-18T06:00:00.000Z', '2026-09-20T04:30:00.000Z'],
 );
 assert.equal(zonedToUtc('2026-01-15', '09:00').toISOString(), '2026-01-15T07:00:00.000Z');
+
+// --- drip: 10 targets, 4 per day, 09:00–18:00 → 3 days, evenly spaced (Israel summer = UTC+3)
+const targets = Array.from({ length: 10 }, (_, i) => `t${i}`);
+const drip = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T05:00:00Z', drip_per_day: 4, drip_window_start: '09:00', drip_window_end: '18:00', target_ids: targets }, new Date('2026-09-19T12:00:00Z'));
+assert.equal(drip.length, 10);
+assert.deepEqual(drip.slice(0, 4).map((d) => d.toISOString()), ['2026-09-20T06:00:00.000Z', '2026-09-20T09:00:00.000Z', '2026-09-20T12:00:00.000Z', '2026-09-20T15:00:00.000Z']);
+assert.equal(drip[4].toISOString(), '2026-09-21T06:00:00.000Z');
+assert.equal(drip[9].toISOString(), '2026-09-22T09:00:00.000Z');
+// past slots are bumped just after "now" instead of being dropped
+const late = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T05:00:00Z', drip_per_day: 2, drip_window_start: '09:00', drip_window_end: '10:00', target_ids: ['a', 'b', 'c'] }, new Date('2026-09-20T08:00:00Z'));
+assert.ok(late[0] > new Date('2026-09-20T08:00:00Z') && late[1] > late[0]);
+assert.equal(late[2].toISOString(), '2026-09-21T06:00:00.000Z');
 
 console.log('unit tests OK');

@@ -104,7 +104,7 @@ export interface Variant {
   sort: number;
 }
 
-export type ScheduleMode = 'now' | 'once' | 'weekly' | 'interval';
+export type ScheduleMode = 'now' | 'once' | 'weekly' | 'interval' | 'drip';
 
 /** "0" = Sunday … "6" = Saturday → list of "HH:MM" local times. */
 export type WeeklyPlan = Record<string, string[]>;
@@ -118,6 +118,10 @@ export interface Schedule {
   weekly: WeeklyPlan;
   interval_days: number | null;
   interval_time: string | null;
+  /** drip: how many targets per day, inside [drip_window_start, drip_window_end] local time. */
+  drip_per_day?: number | null;
+  drip_window_start?: string;
+  drip_window_end?: string;
   target_ids: string[];
   /** rotate = A→B→C per target over time; distribute = spread approved variants across targets; fixed = variant_map only. */
   variant_strategy?: VariantStrategy;

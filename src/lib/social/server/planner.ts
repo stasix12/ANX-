@@ -1,5 +1,5 @@
 import 'server-only';
-import { slotsFor } from '../slots';
+import { dripSlots, slotsFor } from '../slots';
 import type { MediaItem, Post, Schedule, Variant } from '../types';
 import { dedupeKey, renderPostText } from '../compose';
 import { pickVariant } from '../variants';
@@ -29,6 +29,10 @@ export async function planQueue(now = new Date()): Promise<number> {
   let created = 0;
 
   for (const schedule of (schedules ?? []) as Schedule[]) {
+    if (schedule.mode === 'drip') {
+      created += await planDrip(schedule, now);
+      continue;
+    }
     const slots = slotsFor(schedule, from, until);
     if (!slots.length) {
       // One-off schedules retire themselves once their instant has passed.
@@ -99,5 +103,69 @@ export async function planQueue(now = new Date()): Promise<number> {
   }
 
   if (created) await logActivity('info', 'planned', `נוצרו ${created} פרסומים בתור`, { created });
+  return created;
+}
+
+/**
+ * Drip: every target gets its own slot — N per day inside the daily window,
+ * in the order the targets were selected — so 40 groups become a calm
+ * multi-day campaign instead of a burst. Planned once, then the schedule
+ * retires (the queue rows carry the plan).
+ */
+async function planDrip(schedule: Schedule, now: Date): Promise<number> {
+  const db = serviceDb();
+  if (schedule.planned_until) {
+    await db.from('social_schedules').update({ active: false }).eq('id', schedule.id);
+    return 0;
+  }
+  const { data: post } = await db.from('social_posts').select('*').eq('id', schedule.post_id).maybeSingle();
+  if (!post || post.status === 'archived') return 0;
+  const { data: variants } = await db
+    .from('social_variants')
+    .select('*')
+    .eq('post_id', schedule.post_id)
+    .eq('approval', 'approved')
+    .order('sort')
+    .order('created_at');
+  const approved = (variants ?? []) as Variant[];
+  const media = (post.media ?? []) as MediaItem[];
+  const slots = dripSlots(schedule, now);
+  let created = 0;
+  let last = now;
+
+  for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
+    const at = slots[targetIndex];
+    if (!at) continue;
+    if (at > last) last = at;
+    const variant = pickVariant(approved, schedule, targetId, targetIndex, 0);
+    const text = renderPostText(post as Post, variant);
+    const hash = sha256(dedupeKey(targetId, text, media.map((m) => m.url)));
+    const { error, data } = await db
+      .from('social_queue')
+      .upsert(
+        {
+          schedule_id: schedule.id,
+          post_id: post.id,
+          campaign_id: post.campaign_id ?? null,
+          variant_id: variant?.id ?? null,
+          target_id: targetId,
+          scheduled_at: at.toISOString(),
+          status: 'scheduled',
+          step: 'pending',
+          require_confirmation: Boolean(schedule.require_confirmation),
+          dedupe_hash: hash,
+          rendered_text: text,
+        },
+        { onConflict: 'schedule_id,target_id,scheduled_at', ignoreDuplicates: true },
+      )
+      .select('id');
+    if (error) {
+      await logActivity('error', 'plan_failed', error.message, { schedule: schedule.id });
+      continue;
+    }
+    if (data?.length) created += 1;
+  }
+  await db.from('social_schedules').update({ planned_until: last.toISOString(), active: false }).eq('id', schedule.id);
+  if (created) await logActivity('info', 'drip_planned', `הפצה הדרגתית: ${created} פרסומים תוכננו עד ${last.toISOString()}`, { created });
   return created;
 }

@@ -85,7 +85,7 @@ export function PostEditor({ postId }: { postId?: string }) {
   const presets = useRef({ campaign: searchParams.get('campaign'), targets: searchParams.get('targets') ?? '' });
   const loadedFor = useRef<string | undefined>('__never__');
   const [previewKey, setPreviewKey] = useState<string>('base');
-  const [schedule, setSchedule] = useState<ScheduleDraft>({ mode: 'now', date: '', time: '09:00', weekly: {}, intervalDays: 2, intervalTime: '09:00' });
+  const [schedule, setSchedule] = useState<ScheduleDraft>({ mode: 'now', date: '', time: '09:00', weekly: {}, intervalDays: 2, intervalTime: '09:00', dripPerDay: 8, dripStart: '09:00', dripEnd: '20:00' });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -185,6 +185,7 @@ export function PostEditor({ postId }: { postId?: string }) {
     if (schedule.mode === 'once' && (!schedule.date || !schedule.time)) return 'בחרו תאריך ושעה.';
     if (schedule.mode === 'weekly' && !Object.values(schedule.weekly).some((t) => t.length)) return 'בחרו לפחות יום ושעה אחת.';
     if (schedule.mode === 'interval' && (!schedule.date || !schedule.intervalDays)) return 'הגדירו תאריך התחלה ותדירות.';
+    if (schedule.mode === 'drip' && schedule.dripStart >= schedule.dripEnd) return 'חלון השעות של ההפצה לא תקין.';
     return null;
   }
 
@@ -204,7 +205,7 @@ export function PostEditor({ postId }: { postId?: string }) {
         require_confirmation: requireConfirmation || browser.testMode,
       });
       setStarted(true);
-      if (schedule.mode === 'now') {
+      if (schedule.mode === 'now' || schedule.mode === 'drip') {
         const r = await callSocialApi<{ ran: boolean; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
         setMessage({
           tone: r.ran ? 'success' : 'info',
@@ -422,7 +423,7 @@ export function PostEditor({ postId }: { postId?: string }) {
             <SchedulePicker value={schedule} onChange={setSchedule} />
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Button busy={busy === 'schedule'} onClick={onSchedule}>
-                {schedule.mode === 'now' ? '🚀 התחל פרסום' : 'שמור תזמון'}
+                {schedule.mode === 'now' ? '🚀 התחל פרסום' : schedule.mode === 'drip' ? `🚀 התחל הפצה (${selectedTargets.length} יעדים)` : 'שמור תזמון'}
               </Button>
               <Button variant="secondary" busy={busy === 'save'} onClick={onSave}>
                 שמור כטיוטה
@@ -484,6 +485,7 @@ function describeSchedule(s: Schedule): string {
   if (s.mode === 'now') return `פורסם מיד (${formatDateTimeHe(s.run_at)})`;
   if (s.mode === 'once') return `פעם אחת ב-${formatDateTimeHe(s.run_at)}`;
   if (s.mode === 'interval') return `כל ${s.interval_days} ימים ב-${s.interval_time} החל מ-${formatDateTimeHe(s.run_at)}`;
+  if (s.mode === 'drip') return `הפצה הדרגתית: ${s.drip_per_day} ביום, ${s.drip_window_start}–${s.drip_window_end}, מ-${formatDateTimeHe(s.run_at)}`;
   const days = Object.entries(s.weekly)
     .filter(([, t]) => t.length)
     .map(([d, t]) => `${['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'][Number(d)]} ${t.join('/')}`)

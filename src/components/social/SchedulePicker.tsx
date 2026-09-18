@@ -12,6 +12,9 @@ export interface ScheduleDraft {
   weekly: WeeklyPlan;
   intervalDays: number;
   intervalTime: string;
+  dripPerDay: number;
+  dripStart: string;
+  dripEnd: string;
 }
 
 /** Converts the picker state into a schedule row; local times are Asia/Jerusalem. */
@@ -29,6 +32,15 @@ export function scheduleDraftToInput(d: ScheduleDraft, postId: string, targetIds
   if (d.mode === 'now') return { ...base, run_at: new Date().toISOString() };
   if (d.mode === 'once') return { ...base, run_at: zonedToUtc(d.date, d.time).toISOString() };
   if (d.mode === 'weekly') return { ...base, weekly: d.weekly };
+  if (d.mode === 'drip') {
+    return {
+      ...base,
+      run_at: d.date ? zonedToUtc(d.date, d.dripStart).toISOString() : new Date().toISOString(),
+      drip_per_day: d.dripPerDay,
+      drip_window_start: d.dripStart,
+      drip_window_end: d.dripEnd,
+    };
+  }
   return { ...base, run_at: zonedToUtc(d.date, d.intervalTime).toISOString(), interval_days: d.intervalDays, interval_time: d.intervalTime };
 }
 
@@ -37,6 +49,7 @@ const MODES: { value: ScheduleMode; label: string }[] = [
   { value: 'once', label: 'תאריך ושעה' },
   { value: 'weekly', label: 'ימים קבועים' },
   { value: 'interval', label: 'כל X ימים' },
+  { value: 'drip', label: 'הפצה הדרגתית' },
 ];
 
 export function SchedulePicker({ value, onChange }: { value: ScheduleDraft; onChange: (v: ScheduleDraft) => void }) {
@@ -134,6 +147,33 @@ export function SchedulePicker({ value, onChange }: { value: ScheduleDraft; onCh
             <span className="mb-1 block font-bold text-mist-300">בשעה</span>
             <input type="time" className={inputClass} value={value.intervalTime} onChange={(e) => set({ intervalTime: e.target.value })} />
           </label>
+        </div>
+      )}
+
+      {value.mode === 'drip' && (
+        <div className="space-y-3">
+          <p className="text-sm text-mist-300">
+            כל קבוצה מקבלת שעה משלה: N קבוצות ביום בתוך חלון השעות, לפי סדר הבחירה, עד שכולן מכוסות. 40 קבוצות ב-8 ליום = 5 ימים. זו הדרך הבטוחה להפיץ פוסט להרבה קבוצות.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <label className="text-sm">
+              <span className="mb-1 block font-bold text-mist-300">מתאריך</span>
+              <input type="date" className={inputClass} value={value.date} onChange={(e) => set({ date: e.target.value })} />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-bold text-mist-300">קבוצות ביום</span>
+              <input type="number" min={1} max={20} className={inputClass} value={value.dripPerDay} onChange={(e) => set({ dripPerDay: Math.min(20, Math.max(1, Number(e.target.value) || 1)) })} />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-bold text-mist-300">משעה</span>
+              <input type="time" className={inputClass} value={value.dripStart} onChange={(e) => set({ dripStart: e.target.value })} />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-bold text-mist-300">עד שעה</span>
+              <input type="time" className={inputClass} value={value.dripEnd} onChange={(e) => set({ dripEnd: e.target.value })} />
+            </label>
+          </div>
+          <p className="text-xs text-mist-500">ריק בתאריך = מתחיל היום. המכסות והמרווחים בהגדרות עדיין חלים (הם יכולים לדחות פרסום לזמן פנוי הבא).</p>
         </div>
       )}
 

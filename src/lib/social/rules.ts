@@ -31,7 +31,7 @@ export interface RuleContext {
   now?: Date;
 }
 
-const MAX_DEFERRALS = 12;
+const MAX_DEFERRALS = 40;
 
 async function countPublished(db: SupabaseClient, filter: (q: any) => any): Promise<number> {
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */

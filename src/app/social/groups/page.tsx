@@ -28,6 +28,7 @@ export default function GroupsPage() {
   const [query, setQuery] = useState('');
   const [activeOnly, setActiveOnly] = useState(false);
   const [form, setForm] = useState({ url: '', name: '' });
+  const [bulk, setBulk] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -105,6 +106,44 @@ export default function GroupsPage() {
             </div>
           </form>
           <p className="mt-2 text-xs text-mist-500">הוסיפו רק קבוצות שאתם חברים בהן ומותר לכם לפרסם בהן. הפרסום נעשה מהחשבון שלכם, דרך הדפדפן, בקצב שמרני.</p>
+          <details className="mt-3">
+            <summary className="cursor-pointer text-sm font-bold text-brand-400">הוספה של הרבה קבוצות בבת אחת</summary>
+            <div className="mt-2 space-y-2">
+              <textarea
+                className={`${inputClass} min-h-32 font-mono text-sm`}
+                dir="ltr"
+                placeholder={'הדביקו קישור לקבוצה בכל שורה:\nhttps://www.facebook.com/groups/…\nhttps://www.facebook.com/groups/…'}
+                value={bulk}
+                onChange={(e) => setBulk(e.target.value)}
+              />
+              <Button
+                busy={busy === 'bulk'}
+                onClick={() =>
+                  act(
+                    'bulk',
+                    async () => {
+                      const lines = bulk.split(/\s+/).map((l) => l.trim()).filter(Boolean);
+                      let added = 0;
+                      const failed: string[] = [];
+                      for (const line of lines) {
+                        try {
+                          await addGroup({ url: line });
+                          added += 1;
+                        } catch (err) {
+                          failed.push(`${line} (${err instanceof Error ? err.message : 'שגיאה'})`);
+                        }
+                      }
+                      setBulk(failed.map((f) => f.split(' (')[0]).join('\n'));
+                      setFlash(`נוספו ${added} קבוצות.${failed.length ? ` ${failed.length} לא נוספו (נשארו בתיבה): ${failed.slice(0, 3).join('; ')}` : ''}`);
+                    },
+                  )
+                }
+              >
+                הוסף את כולן
+              </Button>
+              <p className="text-xs text-mist-500">השם של כל קבוצה מתעדכן אוטומטית מפייסבוק בפרסום הראשון אליה.</p>
+            </div>
+          </details>
         </Card>
 
         <Card

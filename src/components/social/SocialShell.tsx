@@ -193,6 +193,12 @@ export function SocialShell({
             </Link>
           </li>
         </ul>
+        {/* Which build the phone is actually running. Two taps from any screen:
+            if this does not change after a deploy, the browser is serving a
+            cached copy and a refresh is what is needed — not another fix. */}
+        <p className="pb-2 text-center text-[11px] text-mist-500">
+          גרסת המערכת: <span dir="ltr" className="font-mono">{process.env.NEXT_PUBLIC_BUILD_STAMP || '—'}</span>
+        </p>
       </Sheet>
     </div>
   );

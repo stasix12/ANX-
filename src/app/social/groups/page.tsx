@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Button, Card, Empty, Field, Loading, Notice, Toggle, inputClass } from '@/components/social/ui';
-import { addGroup, bulkDeleteTargets, bulkUpdateTargets, listTargets, listWorkers, requestGroupRefresh, updateTarget } from '@/lib/social/client';
+import { addGroup, bulkDeleteTargets, bulkUpdateTargets, listQueue, listTargets, listWorkers, requestGroupRefresh, updateTarget } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import { KNOWN_CITIES, OTHER_CITY, detectCity, sortCities } from '@/lib/social/cities';
 import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
@@ -31,6 +31,8 @@ export default function GroupsPage() {
   const [activeOnly, setActiveOnly] = useState(false);
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [cityFilter, setCityFilter] = useState<string>('');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [nextByTarget, setNextByTarget] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ url: '', name: '' });
   const [bulk, setBulk] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -38,9 +40,19 @@ export default function GroupsPage() {
   const [flash, setFlash] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [t, w] = await Promise.all([listTargets(), listWorkers().catch(() => [])]);
+    const [t, w, queued] = await Promise.all([
+      listTargets(),
+      listWorkers().catch(() => []),
+      listQueue({ status: ['scheduled'], limit: 300 }).catch(() => []),
+    ]);
     setGroups(t.filter((x) => x.channel === 'facebook_group' || x.channel === 'facebook_group_manual'));
     setWorkerOnline(w.some((x) => x.online));
+    // Soonest scheduled publication per group, for the "next publication" line.
+    const next: Record<string, string> = {};
+    for (const row of [...queued].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))) {
+      if (!next[row.target_id]) next[row.target_id] = row.scheduled_at;
+    }
+    setNextByTarget(next);
   }, []);
 
   useEffect(() => {
@@ -52,10 +64,11 @@ export default function GroupsPage() {
     return (groups ?? []).filter(
       (g) =>
         (!activeOnly || g.enabled) &&
+        (!favoritesOnly || g.favorite) &&
         (!cityFilter || (g.city || detectCity(g.name)) === cityFilter) &&
         (!q || g.name.toLowerCase().includes(q) || g.url.toLowerCase().includes(q)),
     );
-  }, [groups, query, activeOnly, cityFilter]);
+  }, [groups, query, activeOnly, cityFilter, favoritesOnly]);
 
   const cityOf = (g: SocialTarget) => g.city || detectCity(g.name);
   const cities = useMemo(() => sortCities((groups ?? []).map(cityOf)), [groups]);
@@ -175,6 +188,10 @@ export default function GroupsPage() {
               <button type="button" aria-pressed={activeOnly} className={activeOnly ? 'text-emerald-700' : 'text-brand-400'} onClick={() => setActiveOnly((v) => !v)}>
                 פעילות בלבד {activeOnly ? '✓' : ''}
               </button>
+              <span className="text-mist-500">·</span>
+              <button type="button" aria-pressed={favoritesOnly} className={favoritesOnly ? 'text-amber-600' : 'text-brand-400'} onClick={() => setFavoritesOnly((v) => !v)}>
+                ⭐ מועדפות {favoritesOnly ? '✓' : ''}
+              </button>
             </div>
           }
         >
@@ -208,6 +225,9 @@ export default function GroupsPage() {
                 </Button>
                 <Button variant="secondary" busy={busy === 'off'} onClick={() => act('off', () => bulkUpdateTargets(selected, { enabled: false }))}>
                   כבה
+                </Button>
+                <Button variant="secondary" busy={busy === 'fav'} onClick={() => act('fav', () => bulkUpdateTargets(selected, { favorite: true }))}>
+                  ⭐ למועדפות
                 </Button>
                 <Button
                   variant="danger"
@@ -257,8 +277,16 @@ export default function GroupsPage() {
                               onChange={(e) => setSelected((s) => (e.target.checked ? [...s, g.id] : s.filter((x) => x !== g.id)))}
                               className="absolute end-2 top-2 h-4 w-4 accent-brand-500"
                             />
-                            <button type="button" className="absolute start-2 top-2" onClick={() => act(g.id, () => updateTarget(g.id, { enabled: !g.enabled }))} title={g.enabled ? 'פעיל — לחצו לכיבוי' : 'כבוי — לחצו להפעלה'}>
+                            <button type="button" className="absolute start-2 top-2 flex items-center gap-1.5" onClick={() => act(g.id, () => updateTarget(g.id, { enabled: !g.enabled }))} title={g.enabled ? 'פעיל — לחצו לכיבוי' : 'כבוי — לחצו להפעלה'}>
                               <span className={`block h-2.5 w-2.5 rounded-full ${g.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                            </button>
+                            <button
+                              type="button"
+                              className="absolute start-2 bottom-2 text-base leading-none"
+                              aria-label={g.favorite ? `הסר את ${g.name} מהמועדפות` : `הוסף את ${g.name} למועדפות`}
+                              onClick={() => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite }))}
+                            >
+                              {g.favorite ? '⭐' : '☆'}
                             </button>
                             <a href={g.url} target="_blank" rel="noreferrer" className="mt-2">
                               <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={84} />
@@ -269,6 +297,9 @@ export default function GroupsPage() {
                             <p className="mt-1 text-[11px] text-mist-500">
                               {!g.last_synced_at ? 'מושך פרטים…' : g.last_published_at ? `פורסם ${formatDateTimeHe(g.last_published_at).slice(0, 10)}` : 'טרם פורסם'}
                             </p>
+                            {nextByTarget[g.id] && (
+                              <p className="text-[11px] font-semibold text-sky-700">הבא: {formatDateTimeHe(nextByTarget[g.id]).slice(0, 16)}</p>
+                            )}
                             {g.last_status && g.last_status !== 'published' && <p className="text-[11px] text-rose-700">{STATUS_LABEL[g.last_status] ?? g.last_status}</p>}
                             <select
                               aria-label={`עיר של ${g.name}`}

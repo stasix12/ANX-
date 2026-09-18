@@ -2,18 +2,20 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   CalendarIcon,
   ClipboardListIcon,
   GearIcon,
   HomeIcon,
+  MenuIcon,
   MegaphoneIcon,
   SpinnerIcon,
   TargetIcon,
   UsersIcon,
 } from '@/components/icons';
 import { useAdminSession } from '@/lib/adminAuth';
+import { NotificationBell } from './NotificationBell';
 
 const nav = [
   { href: '/social', label: 'ראשי', icon: HomeIcon, exact: true, mobile: true },
@@ -22,8 +24,11 @@ const nav = [
   { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false, mobile: true },
   { href: '/social/targets', label: 'דפים', icon: TargetIcon, exact: false, mobile: false },
   { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false, mobile: true },
-  { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false, mobile: true },
+  { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false, mobile: false },
 ];
+
+/** What the phone's bottom bar shows; everything else lives behind "עוד". */
+const MOBILE_TABS = ['/social', '/social/posts', '/social/groups', '/social/history'];
 
 /**
  * Frame for every /social screen: the same Supabase session as the CRM
@@ -42,6 +47,13 @@ export function SocialShell({
   const { session, loading } = useAdminSession();
   const router = useRouter();
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  // A tap through the sheet navigates; make sure it never stays open behind
+  // the new screen.
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!loading && !session) router.replace(`/crm/login?next=${encodeURIComponent(pathname || '/social')}`);
@@ -65,7 +77,10 @@ export function SocialShell({
             <p className="text-[11px] font-bold uppercase tracking-wider text-white/70">הפתרון המבריק · פרסום</p>
             <h1 className="truncate text-xl font-extrabold tracking-tight text-white drop-shadow-sm">{title}</h1>
           </div>
-          {headerAction}
+          <div className="flex shrink-0 items-center gap-2">
+            {headerAction}
+            <NotificationBell />
+          </div>
         </div>
         {/* Desktop / tablet: pill toolbar under the title. Phones use the bottom bar below. */}
         <nav aria-label="ניווט פרסום" className="mx-auto hidden max-w-6xl overflow-x-auto px-2 [scrollbar-width:none] md:block">
@@ -99,7 +114,7 @@ export function SocialShell({
       >
         <ul className="mx-auto flex max-w-lg items-stretch">
           {nav
-            .filter((n) => n.mobile)
+            .filter((n) => MOBILE_TABS.includes(n.href))
             .map(({ href, label, icon: Icon, exact }) => {
               const active = isActive(href, exact);
               return (
@@ -117,8 +132,51 @@ export function SocialShell({
                 </li>
               );
             })}
+          <li className="flex flex-1">
+            <button
+              type="button"
+              onClick={() => setMoreOpen(true)}
+              aria-expanded={moreOpen}
+              className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors ${
+                moreOpen || !MOBILE_TABS.some((h) => isActive(h, h === '/social')) ? 'text-brand-400' : 'text-mist-500'
+              }`}
+            >
+              <span className="grid h-7 w-13 place-items-center rounded-full">
+                <MenuIcon className="h-5.5 w-5.5" />
+              </span>
+              עוד
+            </button>
+          </li>
         </ul>
       </nav>
+
+      {/* Overflow sheet: the screens that do not earn a permanent tab. */}
+      {moreOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-label="תפריט">
+          <button type="button" aria-label="סגור" className="absolute inset-0 bg-black/40" onClick={() => setMoreOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-ink-850 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 shadow-2xl">
+            <div aria-hidden className="mx-auto mb-2 h-1 w-10 rounded-full bg-ink-600" />
+            <ul className="px-3 pb-2">
+              {nav
+                .filter((n) => !MOBILE_TABS.includes(n.href))
+                .map(({ href, label, icon: Icon, exact }) => (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      onClick={() => setMoreOpen(false)}
+                      className={`flex items-center gap-3 rounded-xl px-3 py-3.5 text-base font-bold ${
+                        isActive(href, exact) ? 'bg-brand-500/10 text-brand-400' : 'text-mist-100'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                      {label}
+                    </Link>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

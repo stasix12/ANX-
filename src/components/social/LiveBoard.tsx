@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cancelQueueItem, confirmQueueItem, listLiveQueue, pauseCampaign, retryQueueItem, screenshotUrl, stopCampaign, type QueueRow } from '@/lib/social/client';
 import { formatTimeHe } from '@/lib/social/time';
 import { QUEUE_STEP_LABEL, type QueueStatus, type QueueStep } from '@/lib/social/types';
+import { ErrorDetail } from './ErrorDetail';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, Card, Empty, Notice } from './ui';
 
@@ -21,11 +22,11 @@ function lineFor(row: QueueRow): { icon: string; text: string; cls: string } {
     case 'published':
       return { icon: '✅', text: 'Published', cls: 'text-emerald-700' };
     case 'failed':
-      return { icon: '❌', text: `Failed${row.error ? ` — ${row.error}` : ''}`, cls: 'text-rose-700' };
+      return { icon: '❌', text: 'נכשל', cls: 'text-rose-700' };
     case 'skipped':
       return { icon: '⏭️', text: `Skipped${row.skip_reason ? ` — ${row.skip_reason}` : ''}`, cls: 'text-slate-600' };
     case 'needs_attention':
-      return { icon: '⚠️', text: `Needs attention — ${row.error ?? ''}`, cls: 'text-orange-700' };
+      return { icon: '⚠️', text: 'דורש טיפול', cls: 'text-orange-700' };
     case 'awaiting_confirmation':
       return { icon: '🛑', text: 'מוכן — ממתין לאישור שלכם לפני הפרסום', cls: 'text-fuchsia-700' };
     case 'paused':
@@ -181,6 +182,11 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
                           </>
                         )}
                       </div>
+                      {(r.status === 'failed' || r.status === 'needs_attention' || r.status === 'skipped') && (r.error || r.skip_reason) && (
+                        <div className="mt-1.5 ps-9">
+                          <ErrorDetail row={r} />
+                        </div>
+                      )}
                       {shots[r.id] && (
                         <a href={shots[r.id]} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-lg border border-ink-600">
                           {/* eslint-disable-next-line @next/next/no-img-element */}

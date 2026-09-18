@@ -1,9 +1,11 @@
 'use client';
 
+import { useMemo } from 'react';
 import type { ScheduleInput } from '@/lib/social/client';
-import { zonedToUtc } from '@/lib/social/time';
+import { dripSlots, slotsFor } from '@/lib/social/slots';
+import { formatDateTimeHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { TIMEZONE, WEEKDAYS_HE, type ScheduleMode, type WeeklyPlan } from '@/lib/social/types';
-import { inputClass } from './ui';
+import { Notice, inputClass } from './ui';
 
 export interface ScheduleDraft {
   mode: ScheduleMode;
@@ -46,6 +48,122 @@ export function scheduleDraftToInput(d: ScheduleDraft, postId: string, targetIds
   return { ...base, run_at: zonedToUtc(d.date, d.intervalTime).toISOString(), interval_days: d.intervalDays, interval_time: d.intervalTime };
 }
 
+/**
+ * What this schedule will actually do, computed with the very same functions
+ * the server planner uses (src/lib/social/slots.ts). Nothing here is an
+ * illustration — if the preview says 20:48, the queue row will say 20:48.
+ */
+export interface SchedulePlan {
+  /** One instant per publication, in order. */
+  slots: Date[];
+  /** True when every target fires at the same instant (now / once / weekly). */
+  simultaneous: boolean;
+  summary: string;
+  firstAt: Date | null;
+  lastAt: Date | null;
+  days: number;
+}
+
+export function planFor(draft: ScheduleDraft, targetCount: number, now = new Date()): SchedulePlan {
+  const count = Math.max(0, targetCount);
+  const empty: SchedulePlan = { slots: [], simultaneous: true, summary: '', firstAt: null, lastAt: null, days: 0 };
+  if (!count) return { ...empty, summary: 'עדיין לא נבחרו יעדים.' };
+
+  if (draft.mode === 'drip') {
+    const slots = dripSlots(
+      {
+        timezone: TIMEZONE,
+        run_at: draft.date ? zonedToUtc(draft.date, draft.dripStart).toISOString() : now.toISOString(),
+        drip_per_day: draft.dripPerDay,
+        drip_gap_minutes: draft.dripGapMinutes,
+        drip_window_start: draft.dripStart,
+        drip_window_end: draft.dripEnd,
+        target_ids: Array.from({ length: count }, (_, i) => String(i)),
+      },
+      now,
+    );
+    return finish(slots, false, `${count} פרסומים, אחד כל ${draft.dripGapMinutes} דקות, בין ${draft.dripStart} ל-${draft.dripEnd}`);
+  }
+
+  if (draft.mode === 'now') {
+    return finish([now], true, `${count} יעדים — נכנסים לתור מיד`);
+  }
+
+  if (draft.mode === 'once') {
+    if (!draft.date || !draft.time) return { ...empty, summary: 'בחרו תאריך ושעה.' };
+    return finish([zonedToUtc(draft.date, draft.time)], true, `${count} יעדים, כולם ב-${draft.time}`);
+  }
+
+  // weekly / interval: show the next occurrences inside a two-week horizon.
+  const from = new Date(now.getTime() - 60_000);
+  const until = new Date(now.getTime() + 14 * 86_400_000);
+  const slots = slotsFor(
+    {
+      mode: draft.mode,
+      timezone: TIMEZONE,
+      run_at: draft.date ? zonedToUtc(draft.date, draft.intervalTime).toISOString() : now.toISOString(),
+      weekly: draft.weekly,
+      interval_days: draft.intervalDays,
+      interval_time: draft.intervalTime,
+    },
+    from,
+    until,
+  );
+  if (!slots.length) return { ...empty, summary: 'לא נמצאו מועדים בשבועיים הקרובים — בדקו את ההגדרה.' };
+  return finish(slots, true, `${count} יעדים בכל מועד · ${slots.length} מועדים בשבועיים הקרובים`);
+}
+
+function finish(slots: Date[], simultaneous: boolean, summary: string): SchedulePlan {
+  const days = new Set(slots.map((d) => zonedDateISO(d))).size;
+  return { slots, simultaneous, summary, firstAt: slots[0] ?? null, lastAt: slots[slots.length - 1] ?? null, days };
+}
+
+/**
+ * The plan, shown before anything is created: first publication, last one,
+ * how many days it spans, and the first handful of exact times.
+ */
+export function SchedulePlanPreview({ plan, names = [] }: { plan: SchedulePlan; names?: string[] }) {
+  if (!plan.slots.length) {
+    return <p className="text-xs text-mist-500">{plan.summary || 'בחרו יעדים כדי לראות מה יקרה.'}</p>;
+  }
+  const rows = plan.slots.slice(0, 6);
+  return (
+    <div className="rounded-xl border border-ink-600 bg-ink-900/40 p-3">
+      <p className="text-xs font-bold text-mist-300">{plan.summary}</p>
+      <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+        <Stat label="ראשון">{formatTimeHe(plan.firstAt as Date)}</Stat>
+        <Stat label="אחרון">{formatTimeHe(plan.lastAt as Date)}</Stat>
+        <Stat label="ימים">{plan.days}</Stat>
+      </dl>
+      <ul className="mt-2.5 space-y-1">
+        {rows.map((at, i) => (
+          <li key={i} className="flex items-center gap-2 text-xs">
+            <span className="w-12 shrink-0 font-extrabold tabular-nums text-brand-400">{formatTimeHe(at)}</span>
+            <span className="min-w-0 truncate text-mist-300">
+              {plan.simultaneous ? `כל ${names.length || 'ה'}${names.length ? ' היעדים' : 'יעדים'}` : names[i] || `יעד ${i + 1}`}
+            </span>
+            <span className="ms-auto shrink-0 text-[11px] text-mist-500">{formatDateTimeHe(at).slice(0, 5)}</span>
+          </li>
+        ))}
+      </ul>
+      {plan.slots.length > rows.length && (
+        <p className="mt-1.5 text-[11px] text-mist-500">
+          ועוד {plan.slots.length - rows.length} — האחרון ב-{formatDateTimeHe(plan.lastAt as Date)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg bg-ink-850 py-1.5">
+      <dt className="text-[10px] font-bold text-mist-500">{label}</dt>
+      <dd className="text-sm font-extrabold tabular-nums text-mist-100">{children}</dd>
+    </div>
+  );
+}
+
 const MODES: { value: ScheduleMode; label: string }[] = [
   { value: 'now', label: 'פרסם עכשיו' },
   { value: 'once', label: 'תאריך ושעה' },
@@ -54,8 +172,20 @@ const MODES: { value: ScheduleMode; label: string }[] = [
   { value: 'drip', label: 'הפצה הדרגתית' },
 ];
 
-export function SchedulePicker({ value, onChange }: { value: ScheduleDraft; onChange: (v: ScheduleDraft) => void }) {
+export function SchedulePicker({
+  value,
+  onChange,
+  targetCount = 0,
+  targetNames = [],
+}: {
+  value: ScheduleDraft;
+  onChange: (v: ScheduleDraft) => void;
+  targetCount?: number;
+  targetNames?: string[];
+}) {
   const set = (patch: Partial<ScheduleDraft>) => onChange({ ...value, ...patch });
+  // Recomputed on every keystroke so the plan and the controls never disagree.
+  const plan = useMemo(() => planFor(value, targetCount), [value, targetCount]);
 
   function toggleDay(day: number) {
     const key = String(day);
@@ -187,16 +317,25 @@ export function SchedulePicker({ value, onChange }: { value: ScheduleDraft; onCh
               </button>
             ))}
           </div>
-          <p className="text-xs text-mist-500">"קבוצות ביום" = 0 פירושו בלי הגבלה (רק חלון השעות). ריק בתאריך = מתחיל היום. המכסות בהגדרות → מניעת ספאם עדיין חלות ויכולות לדחות פרסומים.</p>
-          {value.dripGapMinutes < 15 && (
-            <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              ⚠️ פחות מ-15 דקות בין פוסטים זהים מאותו חשבון הוא בדיוק הדפוס שפייסבוק מזהה כספאם ועלול להוביל לחסימה זמנית. מומלץ 20 דקות ומעלה.
-            </p>
-          )}
+          <p className="text-xs text-mist-500">
+            "קבוצות ביום" = 0 פירושו בלי הגבלה (רק חלון השעות). ריק בתאריך = מתחיל היום. המכסות בהגדרות עדיין חלות ויכולות לדחות פרסומים.
+          </p>
+          <p className="text-xs text-mist-500">
+            המרווח הוא הגדרה שלכם בלבד. אין מרווח שמבטיח שלא תיחסם ואין לפייסבוק מספר רשמי שאפשר להסתמך עליו — המערכת פשוט תעשה מה שביקשתם.
+          </p>
         </div>
       )}
 
-      {value.mode === 'now' && <p className="text-sm text-mist-500">נכנס לתור מיד ומתפרסם בריצה הקרובה, בכפוף למרווח ולמכסות בהגדרות.</p>}
+      {value.mode === 'now' && (
+        <Notice tone="info">
+          הפרסומים נכנסים לתור מיד. קבוצות יוצאות דרך ה-worker שעל המחשב, בזו אחר זו ובכפוף למרווח ולמכסות שהגדרתם.
+        </Notice>
+      )}
+
+      <div>
+        <p className="mb-1.5 text-xs font-extrabold uppercase tracking-wide text-mist-500">מה יקרה בפועל</p>
+        <SchedulePlanPreview plan={plan} names={targetNames} />
+      </div>
     </div>
   );
 }

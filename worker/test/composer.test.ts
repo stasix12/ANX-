@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
@@ -15,9 +15,27 @@ import { SessionError } from '../facebook/session';
  *   npx tsx worker/test/composer.test.ts
  */
 const fixture = `file://${path.resolve(__dirname, 'mock-group.html')}`;
-const executablePath = process.env.SOCIAL_BROWSER_EXECUTABLE;
+
+/**
+ * playwright-core only looks for the exact build it shipped with, so a host
+ * that has a different (perfectly usable) Chromium in PLAYWRIGHT_BROWSERS_PATH
+ * fails to launch. Find one rather than make the suite unrunnable.
+ */
+function findChromium(): string | undefined {
+  if (process.env.SOCIAL_BROWSER_EXECUTABLE) return process.env.SOCIAL_BROWSER_EXECUTABLE;
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (!root || !existsSync(root)) return undefined;
+  for (const dir of readdirSync(root).filter((d) => d.startsWith('chromium')).sort().reverse()) {
+    for (const rel of ['chrome-linux/chrome', 'chrome-linux/headless_shell', 'chrome-win/chrome.exe', 'chrome-mac/Chromium.app/Contents/MacOS/Chromium']) {
+      const candidate = path.join(root, dir, rel);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return undefined;
+}
 
 async function main() {
+  const executablePath = findChromium();
   const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : { channel: process.env.SOCIAL_BROWSER_CHANNEL as 'chrome' | undefined }) });
   const context = await browser.newContext({ locale: 'he-IL' });
   const page = await context.newPage();

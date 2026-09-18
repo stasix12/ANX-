@@ -1,171 +1,269 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { CampaignProgressBar } from '@/components/social/CampaignProgressBar';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CampaignCard } from '@/components/social/CampaignCard';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Button, Card, Empty, Field, Loading, Notice, inputClass } from '@/components/social/ui';
-import { campaignProgress, deleteCampaign, duplicateCampaign, getBusiness, listCampaigns, listPosts, pauseCampaign, saveCampaign, stopCampaign } from '@/lib/social/client';
-import { DEFAULT_BUSINESS, EMPTY_PROGRESS, type BusinessSettings, type Campaign, type CampaignProgress, type Post } from '@/lib/social/types';
+import {
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Notice,
+  SegmentedControl,
+  Sheet,
+  SkeletonList,
+  inputClass,
+  useConfirm,
+  useToast,
+} from '@/components/social/ui';
+import {
+  campaignStates,
+  deleteCampaign,
+  duplicateCampaign,
+  getBusiness,
+  listCampaigns,
+  listPosts,
+  pauseCampaign,
+  reopenCampaign,
+  saveCampaign,
+} from '@/lib/social/client';
+import { campaignState, type CampaignState } from '@/lib/social/campaign';
+import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type Post } from '@/lib/social/types';
 
 const blank = { name: '', service: '', city: '', language: 'he' as Campaign['language'], notes: '' };
 
+type Filter = 'live' | 'all' | 'done';
+
 /**
- * Campaign = a theme ("ניקוי ספות באר שבע") that groups posts, their
- * variants and images. The city/service feed the variant generator.
+ * The campaign list: one card per campaign showing how far it has got and
+ * what happens next, with the editor in a sheet rather than a permanent
+ * column — on a phone the form used to take the whole first screen before
+ * any campaign was visible.
+ *
+ * "Live" is the default filter, because a finished campaign is history and
+ * belongs one tap away.
  */
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [progress, setProgress] = useState<Record<string, CampaignProgress>>({});
+  const [states, setStates] = useState<Record<string, CampaignState>>({});
   const [business, setBusiness] = useState<BusinessSettings>(DEFAULT_BUSINESS);
   const [form, setForm] = useState<typeof blank & { id?: string }>(blank);
-  const [busy, setBusy] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [filter, setFilter] = useState<Filter>('live');
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
 
-  async function load() {
-    const [c, p, b, prog] = await Promise.all([listCampaigns(), listPosts(), getBusiness(), campaignProgress()]);
-    setCampaigns(c);
-    setPosts(p);
-    setBusiness(b);
-    setProgress(prog);
-    setForm((f) => (f.id ? f : { ...f, service: f.service || b.services[0], city: f.city || b.cities[0] }));
-  }
+  const load = useCallback(async () => {
+    try {
+      const [c, p, b, st] = await Promise.all([listCampaigns(), listPosts(), getBusiness(), campaignStates()]);
+      setCampaigns(c);
+      setPosts(p);
+      setBusiness(b);
+      setStates(st);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
+    }
+  }, []);
 
   useEffect(() => {
-    load().catch((err) => setError(err instanceof Error ? err.message : 'טעינה נכשלה.'));
-  }, []);
+    load();
+  }, [load]);
+
+  const stateOf = useCallback((c: Campaign): CampaignState => states[c.id] ?? campaignState([], c), [states]);
+
+  const counts = useMemo(() => {
+    const list = campaigns ?? [];
+    const done = list.filter((c) => ['completed', 'stopped'].includes(stateOf(c).state)).length;
+    return { all: list.length, done, live: list.length - done };
+  }, [campaigns, stateOf]);
+
+  const visible = useMemo(() => {
+    const list = campaigns ?? [];
+    if (filter === 'all') return list;
+    const finished = (c: Campaign) => ['completed', 'stopped'].includes(stateOf(c).state);
+    return filter === 'done' ? list.filter(finished) : list.filter((c) => !finished(c));
+  }, [campaigns, filter, stateOf]);
+
+  function openEditor(c?: Campaign) {
+    setForm(c ? { id: c.id, name: c.name, service: c.service, city: c.city, language: c.language, notes: c.notes } : { ...blank, service: business.services[0], city: business.cities[0] });
+    setEditorOpen(true);
+  }
+
+  async function act(key: string, fn: () => Promise<unknown>, done: string) {
+    setBusy(key);
+    try {
+      await fn();
+      toast(done);
+      await load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
-    setBusy(true);
-    try {
-      await saveCampaign({ ...form, status: 'active' });
-      setForm({ ...blank, service: business.services[0], city: business.cities[0] });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'השמירה נכשלה.');
-    } finally {
-      setBusy(false);
-    }
+    // Editing must never resurrect a stopped campaign, so status is only set
+    // when the campaign is being created.
+    const payload = form.id ? { ...form } : { ...form, status: 'active' as const };
+    await act('save', () => saveCampaign(payload), form.id ? 'הקמפיין עודכן.' : 'הקמפיין נוצר.');
+    setEditorOpen(false);
   }
 
-  const suggestName = () => setForm((f) => ({ ...f, name: f.name || `${f.service || 'ניקוי ספות'} ${f.city || ''}`.trim() }));
-
   return (
-    <SocialShell title="קמפיינים">
-      {error && <div className="mb-4"><Notice tone="error">{error}</Notice></div>}
-      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <Card title={form.id ? 'עריכת קמפיין' : 'קמפיין חדש'}>
-          <form onSubmit={submit} className="space-y-3">
-            <Field label="שירות">
-              <select className={inputClass} value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })}>
-                {business.services.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-                <option value={form.service && !business.services.includes(form.service) ? form.service : 'אחר'}>אחר</option>
-              </select>
-            </Field>
-            <Field label="עיר / אזור">
-              <input className={inputClass} list="cities" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-              <datalist id="cities">
-                {business.cities.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
-            </Field>
-            <Field label="שם הקמפיין">
-              <input className={inputClass} value={form.name} onFocus={suggestName} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ניקוי ספות באר שבע" />
-            </Field>
-            <Field label="שפה">
-              <select className={inputClass} value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value as Campaign['language'] })}>
-                <option value="he">עברית</option>
-                <option value="ru">רוסית</option>
-                <option value="mixed">שתיהן</option>
-              </select>
-            </Field>
-            <Field label="הערות">
-              <textarea className={`${inputClass} min-h-20`} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-            </Field>
-            <div className="flex gap-2">
-              <Button type="submit" busy={busy}>
-                {form.id ? 'שמור' : 'צור קמפיין'}
-              </Button>
-              {form.id && (
-                <Button variant="secondary" onClick={() => setForm({ ...blank, service: business.services[0], city: business.cities[0] })}>
-                  ביטול
-                </Button>
-              )}
-            </div>
-          </form>
-        </Card>
+    <SocialShell
+      title="קמפיינים"
+      headerAction={
+        <button type="button" onClick={() => openEditor()} className="inline-flex min-h-10 items-center rounded-full bg-white px-3.5 text-sm font-bold text-blue-700 shadow-sm">
+          + קמפיין
+        </button>
+      }
+    >
+      <div className="space-y-4">
+        {error && <Notice tone="error">{error}</Notice>}
 
-        <div className="space-y-3">
-          {!campaigns && <Loading />}
-          {campaigns && campaigns.length === 0 && <Empty>אין קמפיינים. צרו למשל "ניקוי ספות באר שבע".</Empty>}
-          {campaigns?.map((c) => {
+        <SegmentedControl
+          label="סינון קמפיינים"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'live', label: 'פעילים', count: counts.live },
+            { value: 'done', label: 'הסתיימו', count: counts.done },
+            { value: 'all', label: 'הכל', count: counts.all },
+          ]}
+        />
+
+        {!campaigns && (
+          <Card>
+            <SkeletonList rows={3} />
+          </Card>
+        )}
+
+        {campaigns && visible.length === 0 && (
+          <EmptyState
+            icon="📣"
+            title={counts.all === 0 ? 'אין עדיין קמפיינים' : 'אין קמפיינים בסינון הזה'}
+            description={
+              counts.all === 0
+                ? 'קמפיין הוא המסגרת שמאגדת פוסטים לפי שירות ועיר — למשל "ניקוי ספות באר שבע". אחר כך מוסיפים לו פוסט ובוחרים קבוצות.'
+                : 'החליפו סינון כדי לראות את השאר.'
+            }
+            action={counts.all === 0 ? <Button onClick={() => openEditor()}>צור קמפיין ראשון</Button> : undefined}
+          />
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          {visible.map((c) => {
+            const state = stateOf(c);
             const mine = posts.filter((p) => p.campaign_id === c.id);
             return (
-              <Card key={c.id} title={c.name} action={<Link href={`/social/posts/new?campaign=${c.id}`} className="text-sm font-bold text-brand-400">+ פוסט</Link>}>
-                <p className="text-sm text-mist-300">
-                  {c.service} · {c.city} · {c.language === 'he' ? 'עברית' : c.language === 'ru' ? 'רוסית' : 'עברית + רוסית'} ·{' '}
-                  <span className={c.status === 'active' ? 'text-emerald-700' : 'text-amber-700'}>{c.status === 'active' ? 'פעיל' : c.status === 'paused' ? 'מושהה' : 'בארכיון'}</span>
-                </p>
-                {c.notes && <p className="mt-1 text-sm text-mist-500">{c.notes}</p>}
-                <div className="mt-3">
-                  <CampaignProgressBar progress={progress[c.id] ?? EMPTY_PROGRESS} />
-                </div>
-                <ul className="mt-3 space-y-1 text-sm">
-                  {mine.length === 0 && <li className="text-mist-500">אין פוסטים בקמפיין הזה עדיין.</li>}
-                  {mine.map((p) => (
-                    <li key={p.id}>
-                      <Link href={`/social/posts/${p.id}`} className="font-bold text-brand-400">
-                        {p.title || p.base_text.slice(0, 50) || 'ללא כותרת'}
-                      </Link>
-                      <span className="text-mist-500"> · {p.status === 'ready' ? 'מוכן' : 'טיוטה'}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={() => setForm({ id: c.id, name: c.name, service: c.service, city: c.city, language: c.language, notes: c.notes })}>
+              <div key={c.id} className="space-y-1.5">
+                <CampaignCard
+                  campaign={c}
+                  state={state}
+                  busy={busy === `pause-${c.id}` || busy === `resume-${c.id}`}
+                  onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הקמפיין הושהה.')}
+                  onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הקמפיין ממשיך.')}
+                />
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs font-bold">
+                  <span className="text-mist-500">{mine.length} פוסטים</span>
+                  <button type="button" className="text-brand-400" onClick={() => openEditor(c)}>
                     ערוך
-                  </Button>
-                  {c.status === 'active' ? (
-                    <Button variant="secondary" onClick={() => pauseCampaign(c.id, true).then(load)}>
-                      ⏸ Pause
-                    </Button>
-                  ) : (
-                    <Button variant="secondary" onClick={() => pauseCampaign(c.id, false).then(load)}>
-                      ▶ Resume
-                    </Button>
+                  </button>
+                  <button type="button" className="text-brand-400" onClick={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}>
+                    שכפל
+                  </button>
+                  {state.state === 'stopped' && (
+                    <button type="button" className="text-brand-400" onClick={() => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הקמפיין נפתח מחדש.')}>
+                      פתח מחדש
+                    </button>
                   )}
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      if (window.confirm('לעצור את הקמפיין? כל הפרסומים שטרם התחילו יבוטלו.')) stopCampaign(c.id).then(load);
-                    }}
-                  >
-                    ⏹ Stop
-                  </Button>
-                  <Button variant="ghost" onClick={() => duplicateCampaign(c.id).then(load)}>
-                    ⧉ שכפל
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="text-rose-600"
-                    onClick={() => {
-                      if (window.confirm('למחוק את הקמפיין? הפוסטים יישארו ללא קמפיין.')) deleteCampaign(c.id).then(load);
+                  <Link href={`/social/posts/new?campaign=${c.id}`} className="text-brand-400">
+                    + פוסט
+                  </Link>
+                  <button
+                    type="button"
+                    className="ms-auto text-rose-600"
+                    onClick={async () => {
+                      const ok = await confirm.ask({
+                        title: 'למחוק את הקמפיין?',
+                        body: 'הפוסטים עצמם יישארו במערכת ללא שיוך לקמפיין. היסטוריית הפרסומים לא נמחקת.',
+                        confirmLabel: 'מחק',
+                        danger: true,
+                      });
+                      if (ok) await act(`del-${c.id}`, () => deleteCampaign(c.id), 'הקמפיין נמחק.');
                     }}
                   >
                     מחק
-                  </Button>
+                  </button>
                 </div>
-              </Card>
+              </div>
             );
           })}
         </div>
       </div>
+
+      <Sheet
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        title={form.id ? 'עריכת קמפיין' : 'קמפיין חדש'}
+        footer={
+          <div className="flex gap-2">
+            <Button size="lg" busy={busy === 'save'} onClick={submit} className="grow" disabled={!form.name.trim()}>
+              {form.id ? 'שמור שינויים' : 'צור קמפיין'}
+            </Button>
+            <Button variant="secondary" size="lg" onClick={() => setEditorOpen(false)}>
+              ביטול
+            </Button>
+          </div>
+        }
+      >
+        <form onSubmit={submit} className="space-y-3">
+          <Field label="שירות">
+            <select className={inputClass} value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })}>
+              {business.services.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+              <option value={form.service && !business.services.includes(form.service) ? form.service : 'אחר'}>אחר</option>
+            </select>
+          </Field>
+          <Field label="עיר / אזור">
+            <input className={inputClass} list="campaign-cities" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+            <datalist id="campaign-cities">
+              {business.cities.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </Field>
+          <Field label="שם הקמפיין" hint="כך הוא יופיע בלוח הבקרה ובהיסטוריה">
+            <input
+              className={inputClass}
+              value={form.name}
+              onFocus={() => setForm((f) => ({ ...f, name: f.name || `${f.service || ''} ${f.city || ''}`.trim() }))}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="ניקוי ספות באר שבע"
+            />
+          </Field>
+          <Field label="שפה">
+            <select className={inputClass} value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value as Campaign['language'] })}>
+              <option value="he">עברית</option>
+              <option value="ru">רוסית</option>
+              <option value="mixed">שתיהן</option>
+            </select>
+          </Field>
+          <Field label="הערות">
+            <textarea className={`${inputClass} min-h-20`} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          </Field>
+        </form>
+      </Sheet>
+      {confirm.dialog}
     </SocialShell>
   );
 }

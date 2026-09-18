@@ -4,6 +4,7 @@ import { zonedToUtc } from '@/lib/social/time';
 import { parseGroupUrl, type Variant } from '@/lib/social/types';
 import { pickVariant, previewAssignment } from '@/lib/social/variants';
 import { detectCity, sortCities } from '@/lib/social/cities';
+import { campaignState, percentDone, type CampaignQueueRow } from '@/lib/social/campaign';
 
 /** Pure helpers shared by the dashboard, the server worker and the local worker. */
 
@@ -54,5 +55,70 @@ assert.deepEqual(capped.map((d) => d.toISOString().slice(0, 16)), ['2026-09-20T0
 const late = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T05:00:00Z', drip_per_day: 0, drip_gap_minutes: 10, drip_window_start: '08:00', drip_window_end: '08:15', target_ids: ['a', 'b', 'c'] }, new Date('2026-09-20T08:00:00Z'));
 assert.ok(late[0] > new Date('2026-09-20T08:00:00Z') && late[1].getTime() - late[0].getTime() === 10 * 60_000);
 assert.equal(late[2].toISOString(), '2026-09-21T05:00:00.000Z');
+
+// --- campaign state: every field must come from the rows, never be invented
+const row = (over: Partial<CampaignQueueRow> & { id: string }): CampaignQueueRow => ({
+  status: 'scheduled',
+  scheduled_at: '2026-09-20T15:00:00.000Z',
+  published_at: null,
+  target_id: `t-${over.id}`,
+  post_id: 'p1',
+  target: { id: `t-${over.id}`, name: `קבוצה ${over.id}` },
+  ...over,
+});
+
+// An empty campaign has no progress and, crucially, no fabricated times.
+const blank = campaignState([], { status: 'active' });
+assert.equal(blank.state, 'not_started');
+assert.equal(blank.startedAt, null);
+assert.equal(blank.estimatedCompletionAt, null);
+assert.equal(blank.nextAt, null);
+assert.equal(percentDone(blank.progress), 0);
+
+const rows: CampaignQueueRow[] = [
+  row({ id: '1', status: 'published', published_at: '2026-09-20T15:05:00.000Z', scheduled_at: '2026-09-20T15:00:00.000Z' }),
+  row({ id: '2', status: 'published', published_at: '2026-09-20T15:25:00.000Z', scheduled_at: '2026-09-20T15:20:00.000Z' }),
+  row({ id: '3', status: 'failed', scheduled_at: '2026-09-20T15:40:00.000Z' }),
+  row({ id: '4', status: 'publishing', scheduled_at: '2026-09-20T16:00:00.000Z' }),
+  row({ id: '5', status: 'scheduled', scheduled_at: '2026-09-20T16:20:00.000Z' }),
+  row({ id: '6', status: 'scheduled', scheduled_at: '2026-09-20T16:40:00.000Z' }),
+];
+const live = campaignState(rows, { status: 'active' });
+assert.equal(live.state, 'running');
+assert.equal(live.progress.total, 6);
+assert.equal(live.progress.published, 2);
+assert.equal(live.progress.failed, 1);
+assert.equal(live.progress.running, 1);
+assert.equal(live.progress.scheduled, 2);
+assert.equal(live.progress.done, 3);
+assert.equal(percentDone(live.progress), 50);
+// started = the FIRST real publication, not the first scheduled slot
+assert.equal(live.startedAt, '2026-09-20T15:05:00.000Z');
+// next / last come from the remaining scheduled rows only
+assert.equal(live.nextAt, '2026-09-20T16:20:00.000Z');
+assert.equal(live.nextTargetName, 'קבוצה 5');
+assert.equal(live.estimatedCompletionAt, '2026-09-20T16:40:00.000Z');
+assert.deepEqual(live.now.map((r) => r.id), ['4']);
+assert.deepEqual(live.upcoming.map((r) => r.id), ['4', '5', '6']);
+// Newest first. A failed row has no published_at, so its scheduled slot is
+// the timestamp that places it — 15:40 is later than row 2's 15:25.
+assert.deepEqual(live.done.map((r) => r.id), ['3', '2', '1']);
+
+// Pause is a campaign-level flag; it must not rewrite the rows' own counts.
+const paused = campaignState(rows, { status: 'paused' });
+assert.equal(paused.state, 'paused');
+assert.deepEqual(paused.progress, live.progress);
+
+// Stopped campaigns read as stopped even though rows remain.
+assert.equal(campaignState(rows, { status: 'archived' }).state, 'stopped');
+
+// Everything finished → completed, and no estimate is offered any more.
+const finished = campaignState(
+  rows.map((r) => ({ ...r, status: 'published' as const, published_at: r.scheduled_at })),
+  { status: 'active' },
+);
+assert.equal(finished.state, 'completed');
+assert.equal(finished.estimatedCompletionAt, null);
+assert.equal(percentDone(finished.progress), 100);
 
 console.log('unit tests OK');

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { ToastProvider } from '@/components/social/ui';
 
 export const metadata: Metadata = {
   title: 'הפתרון המבריק — ניהול פרסום',
@@ -20,7 +21,15 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-/** Reuses the CRM's light theme tokens (globals.css → .crm-theme). */
+/**
+ * Reuses the CRM's light theme tokens (globals.css → .crm-theme), and hosts
+ * the toast outlet so any screen can confirm an action without inventing its
+ * own banner.
+ */
 export default function SocialLayout({ children }: { children: React.ReactNode }) {
-  return <div className="crm-theme">{children}</div>;
+  return (
+    <div className="crm-theme">
+      <ToastProvider>{children}</ToastProvider>
+    </div>
+  );
 }

@@ -53,10 +53,40 @@ export interface WorkerReport {
   deferred: number;
 }
 
+/**
+ * How long a run is assumed to still be in flight. Shorter than the route's
+ * maxDuration so a crashed run cannot wedge the queue.
+ */
+const RUN_LOCK_SECONDS = 70;
+
 export async function runWorker(trigger: 'cron' | 'manual'): Promise<WorkerReport> {
   const db = serviceDb();
   const report: WorkerReport = { ran: false, planned: 0, processed: 0, published: 0, manual: 0, skipped: 0, failed: 0, deferred: 0 };
 
+  /*
+   * A soft lock against overlapping runs — a double-tap on "publish now", a
+   * retried request, a cron tick landing on top of a manual one. It is not a
+   * distributed lock (two requests could still read it in the same instant),
+   * and it is not what makes publishing safe: the atomic claim below
+   * (UPDATE … WHERE status = 'scheduled') is the guarantee that one queue row
+   * is published exactly once. This just stops the pointless work.
+   */
+  const lock = await getSetting<{ startedAt: string | null }>('run_lock', { startedAt: null });
+  if (lock.startedAt && Date.now() - new Date(lock.startedAt).getTime() < RUN_LOCK_SECONDS * 1000) {
+    report.reason = 'ריצה קודמת עדיין פועלת';
+    return report;
+  }
+  await setSetting('run_lock', { startedAt: new Date().toISOString() });
+
+  try {
+    return await runWorkerLocked(db, trigger, report);
+  } finally {
+    await setSetting('run_lock', { startedAt: null });
+  }
+}
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: WorkerReport): Promise<WorkerReport> {
   const control = await getSetting<ControlSettings>('control', { paused: false, rateLimitedUntil: null });
   if (control.paused) {
     report.reason = 'התורים מושהים';

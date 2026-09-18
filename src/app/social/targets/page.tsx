@@ -4,10 +4,22 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Button, Card, Empty, Loading, Notice, Toggle } from '@/components/social/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Loading,
+  MethodBadge,
+  Notice,
+  SkeletonList,
+  Toggle,
+  useConfirm,
+  useToast,
+} from '@/components/social/ui';
 import { callSocialApi, listTargets, updateTarget } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
-import { CHANNEL_LABEL, PERMISSION_LABEL, REQUIRED_SCOPES, type SocialAccount, type SocialTarget } from '@/lib/social/types';
+import { PERMISSION_LABEL, REQUIRED_SCOPES, type SocialAccount, type SocialTarget } from '@/lib/social/types';
 
 interface Status {
   configured: { facebookApp: boolean; serviceRole: boolean; encryptionKey: boolean; cronSecret: boolean };
@@ -16,7 +28,7 @@ interface Status {
 
 export default function TargetsPage() {
   return (
-    <Suspense fallback={<SocialShell title="יעדי פרסום"><Loading /></SocialShell>}>
+    <Suspense fallback={<SocialShell title="דפי פייסבוק"><Loading /></SocialShell>}>
       <TargetsScreen />
     </Suspense>
   );
@@ -29,6 +41,8 @@ function TargetsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     const [t, s] = await Promise.all([listTargets(), callSocialApi<Status>('/api/social/status', { method: 'GET' })]);
@@ -61,10 +75,10 @@ function TargetsScreen() {
     setError(null);
     try {
       await fn();
-      if (done) setFlash(done);
+      if (done) toast(done);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'הפעולה נכשלה.');
+      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
     } finally {
       setBusy(null);
     }
@@ -85,7 +99,7 @@ function TargetsScreen() {
   const groups = (targets ?? []).filter((t) => t.channel === 'facebook_group' || t.channel === 'facebook_group_manual');
 
   return (
-    <SocialShell title="יעדי פרסום">
+    <SocialShell title="דפי פייסבוק">
       <div className="space-y-5">
         {flash && <Notice tone="info">{flash}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
@@ -144,9 +158,14 @@ function TargetsScreen() {
                 <Button
                   variant="danger"
                   busy={busy === 'revoke'}
-                  onClick={() => {
-                    if (window.confirm('לנתק את פייסבוק? ההרשאה תבוטל אצל Meta וכל הטוקנים יימחקו.'))
-                      act('revoke', () => callSocialApi('/api/social/facebook/revoke'), 'החיבור נותק והטוקנים נמחקו.');
+                  onClick={async () => {
+                    const ok = await confirm.ask({
+                      title: 'לנתק את פייסבוק?',
+                      body: 'ההרשאה תבוטל אצל Meta וכל הטוקנים יימחקו מהשרת. פרסום לדפים ייפסק עד שתתחברו שוב. פרסום בקבוצות לא מושפע.',
+                      confirmLabel: 'נתק ומחק טוקנים',
+                      danger: true,
+                    });
+                    if (ok) act('revoke', () => callSocialApi('/api/social/facebook/revoke'), 'החיבור נותק והטוקנים נמחקו.');
                   }}
                 >
                   נתק ומחק טוקנים
@@ -156,79 +175,63 @@ function TargetsScreen() {
           )}
         </Card>
 
-        <Card title={`דפי פייסבוק (${pages.length})`}>
-          {targets === null && <Loading />}
-          {targets && pages.length === 0 && <Empty>אין דפים. אחרי ההתחברות לחצו "סנכרן". מוצגים רק דפים שאתם מנהלים.</Empty>}
-          {pages.length > 0 && <TargetTable rows={pages} busy={busy} onToggle={(t, v) => act(t.id, () => updateTarget(t.id, { enabled: v }))} />}
+        <Card title={`דפים שאתם מנהלים (${pages.length})`} subtitle="מתפרסמים דרך Graph API הרשמי של Meta">
+          {targets === null && <SkeletonList rows={2} />}
+          {targets && pages.length === 0 && (
+            <EmptyState
+              icon="🏷️"
+              title="אין דפים מחוברים"
+              description='התחברו לפייסבוק ולחצו "סנכרן". מוצגים רק דפים שאתם מנהלים ושנתתם להם הרשאת פרסום.'
+            />
+          )}
+          {pages.length > 0 && (
+            <ul className="divide-y divide-ink-700">
+              {pages.map((t) => (
+                <li key={t.id} className="flex items-center gap-3 py-3">
+                  <div className="min-w-0 grow">
+                    <a href={t.url || undefined} target="_blank" rel="noreferrer" className="truncate font-bold text-mist-100 hover:text-brand-400">
+                      {t.name}
+                    </a>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <MethodBadge method="api" />
+                      <Badge tone={t.permission_status === 'ok' ? 'good' : t.permission_status === 'manual_only' ? 'brand' : 'bad'}>
+                        {PERMISSION_LABEL[t.permission_status]}
+                      </Badge>
+                      {!t.can_api_publish && <Badge tone="warn">אין הרשאת פרסום</Badge>}
+                    </div>
+                    {t.tasks.length > 0 && (
+                      <p className="mt-0.5 truncate font-mono text-[11px] text-mist-500" dir="ltr">
+                        {t.tasks.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                  <Toggle checked={t.enabled} onChange={(v) => act(t.id, () => updateTarget(t.id, { enabled: v }))} label={`הפעל ${t.name}`} />
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
-        <Card title={`קבוצות פייסבוק (${groups.length})`} action={<Link href="/social/groups" className="text-sm font-bold text-brand-400">ניהול קבוצות ←</Link>}>
-          <p className="text-sm text-mist-300">
-            Meta ביטלה את ה-Groups API באפריל 2024, ולכן קבוצות מתפרסמות דרך ה-worker המקומי (Playwright בדפדפן שלכם). ניהול הקבוצות, הסטטוסים והשגיאות — במסך הקבוצות.
+        <Card
+          title={`קבוצות (${groups.length})`}
+          subtitle="מתפרסמות בסיוע דפדפן מקומי — לא דרך API רשמי"
+          action={
+            <Link href="/social/groups" className="text-sm font-bold text-brand-400">
+              ניהול ←
+            </Link>
+          }
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            <MethodBadge method="browser" />
+            <Badge tone="neutral">{groups.filter((g) => g.enabled).length} פעילות</Badge>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-mist-300">
+            Meta ביטלה את ה-Groups API באפריל 2024. לכן קבוצות מתפרסמות דרך חלון Chrome על המחשב שלכם, מהחשבון שלכם — לא דרך אינטגרציה
+            רשמית של פייסבוק. ניהול הקבוצות, הסטטוסים והשגיאות נמצא במסך הקבוצות.
           </p>
         </Card>
       </div>
+      {confirm.dialog}
     </SocialShell>
-  );
-}
-
-function TargetTable({
-  rows,
-  busy,
-  onToggle,
-  onDelete,
-}: {
-  rows: SocialTarget[];
-  busy: string | null;
-  onToggle: (t: SocialTarget, v: boolean) => void;
-  onDelete?: (t: SocialTarget) => void;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="text-xs text-mist-500">
-          <tr className="text-start">
-            <th className="py-2 text-start font-bold">שם</th>
-            <th className="py-2 text-start font-bold">מזהה</th>
-            <th className="py-2 text-start font-bold">סטטוס הרשאה</th>
-            <th className="py-2 text-start font-bold">פרסום דרך API</th>
-            <th className="py-2 text-start font-bold">פעיל</th>
-            {onDelete && <th />}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-ink-700">
-          {rows.map((t) => (
-            <tr key={t.id} className={t.enabled ? '' : 'opacity-60'}>
-              <td className="py-2.5 pe-3">
-                <a href={t.url || undefined} target="_blank" rel="noreferrer" className="font-bold text-mist-100 hover:text-brand-400">
-                  {t.name}
-                </a>
-                <p className="text-xs text-mist-500">{CHANNEL_LABEL[t.channel]}</p>
-              </td>
-              <td className="py-2.5 pe-3 font-mono text-xs text-mist-300" dir="ltr">
-                {t.external_id || '—'}
-              </td>
-              <td className="py-2.5 pe-3">
-                <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${t.permission_status === 'ok' ? 'bg-emerald-100 text-emerald-700' : t.permission_status === 'manual_only' ? 'bg-violet-100 text-violet-700' : 'bg-rose-100 text-rose-700'}`}>
-                  {PERMISSION_LABEL[t.permission_status]}
-                </span>
-                {t.tasks.length > 0 && <p className="mt-0.5 text-[11px] text-mist-500" dir="ltr">{t.tasks.join(', ')}</p>}
-              </td>
-              <td className="py-2.5 pe-3 font-bold">{t.can_api_publish ? <span className="text-emerald-700">כן</span> : <span className="text-violet-700">לא — ידני</span>}</td>
-              <td className="py-2.5 pe-3">
-                <Toggle checked={t.enabled} onChange={(v) => onToggle(t, v)} label={`הפעל ${t.name}`} />
-              </td>
-              {onDelete && (
-                <td className="py-2.5">
-                  <button type="button" disabled={busy === t.id} onClick={() => onDelete(t)} className="text-xs font-bold text-rose-600">
-                    מחק
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }

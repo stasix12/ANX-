@@ -1,17 +1,57 @@
 'use client';
 
-import { SpinnerIcon } from '@/components/icons';
-import { QUEUE_STATUS_LABEL, type QueueStatus } from '@/lib/social/types';
+import Link from 'next/link';
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { CheckCircleIcon, CloseIcon, SpinnerIcon, XCircleIcon } from '@/components/icons';
+import { QUEUE_STATUS_LABEL, type PublishMethod, type QueueStatus } from '@/lib/social/types';
 
-/** Small shared primitives for the social screens — same tokens as the CRM. */
+/**
+ * The design system for every /social screen.
+ *
+ * One file so the product reads as one product: a screen that needs a card,
+ * a button, a sheet or an empty state takes it from here rather than
+ * inventing a variant. The scales below are the whole vocabulary — when a
+ * new screen needs a size that is not in them, the right move is to pick the
+ * nearest one, not to add a new one.
+ *
+ *   spacing     gap-2 (8px) · gap-3 (12px) · gap-4 (16px) · gap-5 (20px)
+ *   radius      lg (8px, chips) · xl (12px, controls) · 2xl (16px, tiles)
+ *               · rounded-card (20px, panels) · full (pills, avatars)
+ *   type        11px meta · 13-14px body · 16px input (never smaller on iOS,
+ *               or Safari zooms the page on focus) · 18-24px numbers
+ *   controls    h-11 (44px) is the minimum touch target; compact variants
+ *               (h-9) are for desktop toolbars only
+ *   colour      brand = the one action · emerald = published · amber =
+ *               in flight · rose = failed · slate = skipped · violet =
+ *               needs a human
+ */
 
-export function Card({ title, action, children, className = '' }: { title?: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
+/* ------------------------------------------------------------ containers */
+
+export function Card({
+  title,
+  subtitle,
+  action,
+  children,
+  className = '',
+  padded = true,
+}: {
+  title?: React.ReactNode;
+  subtitle?: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  padded?: boolean;
+}) {
   return (
-    <section className={`surface rounded-card border border-ink-700 p-4 ${className}`}>
+    <section className={`surface rounded-card border border-ink-700 ${padded ? 'p-4' : ''} ${className}`}>
       {(title || action) && (
-        <header className="mb-3 flex items-center justify-between gap-3">
-          {title && <h2 className="text-base font-extrabold text-mist-100">{title}</h2>}
-          {action}
+        <header className={`mb-3 flex items-start justify-between gap-3 ${padded ? '' : 'px-4 pt-4'}`}>
+          <div className="min-w-0">
+            {title && <h2 className="truncate text-base font-extrabold text-mist-100">{title}</h2>}
+            {subtitle && <p className="mt-0.5 text-xs text-mist-500">{subtitle}</p>}
+          </div>
+          {action && <div className="shrink-0">{action}</div>}
         </header>
       )}
       {children}
@@ -19,7 +59,23 @@ export function Card({ title, action, children, className = '' }: { title?: stri
   );
 }
 
+/** A labelled group inside a long form — the Settings screen's section rule. */
+export function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-extrabold uppercase tracking-wide text-mist-500">{title}</h3>
+        {hint && <p className="mt-0.5 text-xs text-mist-500">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/* --------------------------------------------------------------- buttons */
+
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+type ButtonSize = 'sm' | 'md' | 'lg';
 
 const buttonClass: Record<ButtonVariant, string> = {
   primary: 'bg-brand-500 text-on-brand hover:bg-brand-600 shadow-sm shadow-sky-600/30',
@@ -28,25 +84,55 @@ const buttonClass: Record<ButtonVariant, string> = {
   ghost: 'text-brand-400 hover:bg-ink-800',
 };
 
+/** 44px is Apple's minimum target; `sm` is for desktop toolbars only. */
+const buttonSize: Record<ButtonSize, string> = {
+  sm: 'min-h-9 px-3 py-1.5 text-xs',
+  md: 'min-h-11 px-4 py-2.5 text-sm',
+  lg: 'min-h-12 px-5 py-3 text-base',
+};
+
 export function Button({
   variant = 'primary',
+  size = 'md',
   busy = false,
   className = '',
   children,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; busy?: boolean }) {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize; busy?: boolean }) {
   return (
     <button
       type="button"
       {...props}
       disabled={props.disabled || busy}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-[background-color,transform] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${buttonClass[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl font-bold transition-[background-color,transform,box-shadow] duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 ${buttonClass[variant]} ${buttonSize[size]} ${className}`}
     >
       {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
       {children}
     </button>
   );
 }
+
+/** Square, icon-only, always a full touch target even when the glyph is small. */
+export function IconButton({
+  label,
+  className = '',
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      {...props}
+      className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-300 transition-colors hover:bg-ink-800 hover:text-mist-100 active:scale-[0.94] disabled:opacity-40 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ---------------------------------------------------------------- inputs */
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -58,8 +144,9 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
+/** 16px text: anything smaller makes iOS Safari zoom the page on focus. */
 export const inputClass =
-  'w-full rounded-xl border border-ink-600 bg-ink-850 px-3.5 py-2.5 text-base text-mist-100 placeholder:text-mist-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30';
+  'w-full min-h-11 rounded-xl border border-ink-600 bg-ink-850 px-3.5 py-2.5 text-base text-mist-100 placeholder:text-mist-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30';
 
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
@@ -71,12 +158,53 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       onClick={() => onChange(!checked)}
       className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${checked ? 'bg-brand-500' : 'bg-ink-600'}`}
     >
-      <span
-        className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-[inset-inline-start] ${checked ? 'start-6' : 'start-1'}`}
-      />
+      <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-[inset-inline-start] ${checked ? 'start-6' : 'start-1'}`} />
     </button>
   );
 }
+
+/**
+ * The one control for "pick one of a few" — view switchers, filters, modes.
+ * Every screen used to hand-roll this; they now look and behave the same.
+ */
+export function SegmentedControl<T extends string>({
+  value,
+  onChange,
+  options,
+  label,
+  size = 'md',
+  className = '',
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: React.ReactNode; count?: number }[];
+  label?: string;
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const pad = size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm';
+  return (
+    <div role="group" aria-label={label} className={`flex flex-wrap gap-0.5 rounded-xl bg-ink-800 p-0.5 ${className}`}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(o.value)}
+            className={`rounded-lg font-bold transition-colors ${pad} ${active ? 'bg-brand-500 text-on-brand shadow-sm' : 'text-mist-300 hover:text-mist-100'}`}
+          >
+            {o.label}
+            {o.count !== undefined && <span className="ms-1 tabular-nums opacity-70">{o.count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- badges */
 
 const statusClass: Record<QueueStatus, string> = {
   scheduled: 'bg-sky-500/15 text-sky-700',
@@ -90,13 +218,54 @@ const statusClass: Record<QueueStatus, string> = {
   paused: 'bg-slate-500/15 text-slate-600',
 };
 
-export function StatusPill({ status }: { status: QueueStatus }) {
+/** Short Hebrew labels for the pills; the long bilingual names stay in types.ts. */
+const statusShort: Record<QueueStatus, string> = {
+  scheduled: 'ממתין',
+  publishing: 'מפרסם',
+  published: 'פורסם',
+  failed: 'נכשל',
+  skipped: 'דולג',
+  manual_pending: 'ידני',
+  needs_attention: 'דורש טיפול',
+  awaiting_confirmation: 'ממתין לאישור',
+  paused: 'מושהה',
+};
+
+export function StatusPill({ status, long = false }: { status: QueueStatus; long?: boolean }) {
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap ${statusClass[status]}`}>
-      {QUEUE_STATUS_LABEL[status]}
+      {long ? QUEUE_STATUS_LABEL[status] : statusShort[status]}
     </span>
   );
 }
+
+export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'brand' | 'good' | 'warn' | 'bad' | 'info'; children: React.ReactNode }) {
+  const cls = {
+    neutral: 'bg-ink-800 text-mist-300',
+    brand: 'bg-brand-500/15 text-brand-400',
+    good: 'bg-emerald-500/15 text-emerald-700',
+    warn: 'bg-amber-500/15 text-amber-700',
+    bad: 'bg-rose-500/15 text-rose-700',
+    info: 'bg-sky-500/15 text-sky-700',
+  }[tone];
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ${cls}`}>{children}</span>;
+}
+
+/**
+ * Official API vs. assisted publishing, stated plainly wherever a
+ * publication is shown. Meta removed the Groups publishing API in April 2024,
+ * so a group post is driven through a real browser session — that is not an
+ * official integration and this badge never pretends otherwise.
+ */
+export function MethodBadge({ method, channel }: { method?: PublishMethod; channel?: string }) {
+  const resolved: PublishMethod = method || (channel === 'facebook_page' ? 'api' : channel ? 'browser' : '');
+  if (!resolved) return null;
+  if (resolved === 'api') return <Badge tone="good">API רשמי</Badge>;
+  if (resolved === 'browser') return <Badge tone="info">בסיוע דפדפן</Badge>;
+  return <Badge tone="brand">ידני</Badge>;
+}
+
+/* -------------------------------------------------------------- feedback */
 
 export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warn' | 'error' | 'success'; children: React.ReactNode }) {
   const cls = {
@@ -109,23 +278,96 @@ export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warn' | '
 }
 
 /**
- * A KPI tile. Deliberately tighter on phones: eight of these are the first
+ * A KPI tile. Deliberately tighter on phones: a row of these is the first
  * thing on the dashboard, and at full padding they pushed every actionable
  * card below the fold.
  */
-export function Tile({ label, value, sub, tone = 'default' }: { label: string; value: string | number; sub?: string; tone?: 'default' | 'good' | 'bad' | 'warn' }) {
+export function Tile({
+  label,
+  value,
+  sub,
+  tone = 'default',
+  href,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  tone?: 'default' | 'good' | 'bad' | 'warn';
+  href?: string;
+}) {
   const color = { default: 'text-brand-400', good: 'text-emerald-600', bad: 'text-rose-600', warn: 'text-amber-600' }[tone];
-  return (
-    <div className="surface rounded-card border border-ink-700 px-3 py-2.5 sm:p-3.5">
+  const body = (
+    <>
       <p className="truncate text-[11px] font-bold text-mist-500 sm:text-xs">{label}</p>
       <p className={`mt-0.5 text-xl font-extrabold tabular-nums sm:mt-1 sm:text-2xl ${color}`}>{value}</p>
       {sub && <p className="truncate text-[11px] text-mist-300 sm:mt-0.5 sm:text-xs">{sub}</p>}
+    </>
+  );
+  const cls = 'surface block rounded-2xl border border-ink-700 px-3 py-2.5 text-start sm:p-3.5';
+  if (href) {
+    return (
+      <Link href={href} className={`${cls} transition-transform active:scale-[0.98]`}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={cls}>{body}</div>;
+}
+
+/** Thin progress bar. `segments` paints published/failed/skipped in one track. */
+export function ProgressBar({
+  segments,
+  total,
+  ariaLabel,
+  height = 'h-2',
+}: {
+  segments: { value: number; className: string }[];
+  total: number;
+  ariaLabel: string;
+  height?: string;
+}) {
+  const safe = Math.max(1, total);
+  return (
+    <div className={`flex ${height} overflow-hidden rounded-full bg-ink-700`} role="img" aria-label={ariaLabel}>
+      {segments
+        .filter((s) => s.value > 0)
+        .map((s, i) => (
+          <span key={i} className={`${s.className} transition-[width] duration-500 ease-out`} style={{ width: `${(s.value / safe) * 100}%` }} />
+        ))}
     </div>
   );
 }
 
+/** Legacy one-liner empty state; new screens should use EmptyState. */
 export function Empty({ children }: { children: React.ReactNode }) {
   return <p className="rounded-xl border border-dashed border-ink-600 px-4 py-6 text-center text-sm text-mist-500">{children}</p>;
+}
+
+/**
+ * A screen with nothing in it yet should still tell you what to do next —
+ * never a blank panel. The action is optional but strongly encouraged.
+ */
+export function EmptyState({
+  icon = '📭',
+  title,
+  description,
+  action,
+}: {
+  icon?: React.ReactNode;
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-ink-600 px-5 py-9 text-center">
+      <span aria-hidden className="text-3xl leading-none opacity-80">
+        {icon}
+      </span>
+      <p className="text-base font-extrabold text-mist-100">{title}</p>
+      {description && <p className="max-w-md text-sm leading-relaxed text-mist-500">{description}</p>}
+      {action && <div className="mt-2">{action}</div>}
+    </div>
+  );
 }
 
 export function Loading() {
@@ -133,5 +375,258 @@ export function Loading() {
     <div className="grid place-items-center py-16">
       <SpinnerIcon className="h-7 w-7 animate-spin text-brand-500" />
     </div>
+  );
+}
+
+/** Grey placeholder with the shimmer defined in globals.css. */
+export function Skeleton({ className = 'h-4 w-full' }: { className?: string }) {
+  return <span aria-hidden className={`block rounded-lg bg-ink-800 skeleton-shimmer ${className}`} />;
+}
+
+/** The shape of a loading list: rows of avatar + two lines. */
+export function SkeletonList({ rows = 4 }: { rows?: number }) {
+  return (
+    <ul className="space-y-3" aria-busy="true" aria-label="טוען…">
+      {Array.from({ length: rows }).map((_, i) => (
+        <li key={i} className="flex items-center gap-3">
+          <Skeleton className="h-10 w-10 rounded-xl" />
+          <div className="grow space-y-1.5">
+            <Skeleton className="h-3.5 w-1/2" />
+            <Skeleton className="h-3 w-1/3" />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function SkeletonTiles({ count = 6 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3" aria-busy="true" aria-label="טוען…">
+      {Array.from({ length: count }).map((_, i) => (
+        <Skeleton key={i} className="h-[74px] rounded-2xl" />
+      ))}
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- toasts */
+
+type ToastTone = 'success' | 'error' | 'info';
+interface ToastItem {
+  id: number;
+  tone: ToastTone;
+  text: string;
+}
+
+const ToastContext = createContext<(text: string, tone?: ToastTone) => void>(() => undefined);
+
+/** `const toast = useToast(); toast('הקמפיין נוצר')` from anywhere under the shell. */
+export const useToast = () => useContext(ToastContext);
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [items, setItems] = useState<ToastItem[]>([]);
+  const seq = useRef(0);
+
+  const push = useCallback((text: string, tone: ToastTone = 'success') => {
+    seq.current += 1;
+    const id = seq.current;
+    setItems((all) => [...all, { id, tone, text }]);
+    setTimeout(() => setItems((all) => all.filter((t) => t.id !== id)), 4000);
+  }, []);
+
+  return (
+    <ToastContext.Provider value={push}>
+      {children}
+      {/* Above the bottom tab bar on phones, bottom-right on desktop. */}
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 md:bottom-6 md:items-end">
+        {items.map((t) => (
+          <div
+            key={t.id}
+            className={`toast-in pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-2xl px-4 py-3 text-sm font-bold shadow-xl ${
+              t.tone === 'error' ? 'bg-rose-600 text-white' : t.tone === 'info' ? 'bg-ink-800 text-mist-100' : 'bg-emerald-600 text-white'
+            }`}
+          >
+            {t.tone === 'error' ? <XCircleIcon className="h-5 w-5 shrink-0" /> : t.tone === 'success' ? <CheckCircleIcon className="h-5 w-5 shrink-0" /> : null}
+            <span className="min-w-0">{t.text}</span>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+/* ------------------------------------------------------- sheets & modals */
+
+/**
+ * One overlay for both shapes: a bottom sheet on phones (thumb-reachable,
+ * the iOS convention) and a centred dialog from `md` up. Height is capped
+ * below the viewport so a long body scrolls inside instead of pushing the
+ * actions off-screen.
+ */
+export function Sheet({
+  open,
+  onClose,
+  title,
+  footer,
+  children,
+  size = 'md',
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+  size?: 'md' | 'lg';
+}) {
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    // Freeze the page behind the sheet so a scroll gesture moves the sheet.
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <button type="button" aria-label="סגור" className="absolute inset-0 cursor-default bg-black/45 backdrop-blur-[2px]" onClick={onClose} />
+      <div
+        className={`sheet-in absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col rounded-t-3xl bg-ink-850 pb-[env(safe-area-inset-bottom)] shadow-2xl md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:max-h-[85dvh] md:w-full md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl ${
+          size === 'lg' ? 'md:max-w-2xl' : 'md:max-w-lg'
+        }`}
+      >
+        <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink-600 md:hidden" />
+        <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3">
+          <h2 id={titleId} className="text-base font-extrabold text-mist-100">
+            {title}
+          </h2>
+          <IconButton label="סגור" onClick={onClose} className="-me-2">
+            <CloseIcon className="h-5 w-5" />
+          </IconButton>
+        </header>
+        <div className="min-h-0 grow overflow-y-auto px-4 pb-4">{children}</div>
+        {footer && <footer className="shrink-0 border-t border-ink-700 bg-ink-850 px-4 py-3">{footer}</footer>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Replaces window.confirm for anything destructive. Returns a component plus
+ * an `ask()` that resolves when the person answers, so callers keep reading
+ * top to bottom:
+ *
+ *   if (!(await confirm.ask({ title: 'לעצור?', danger: true }))) return;
+ */
+export interface ConfirmRequest {
+  title: string;
+  body?: React.ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+}
+
+export function useConfirm() {
+  const [request, setRequest] = useState<ConfirmRequest | null>(null);
+  const resolver = useRef<((ok: boolean) => void) | null>(null);
+
+  const ask = useCallback((req: ConfirmRequest) => {
+    setRequest(req);
+    return new Promise<boolean>((resolve) => {
+      resolver.current = resolve;
+    });
+  }, []);
+
+  const answer = useCallback((ok: boolean) => {
+    setRequest(null);
+    resolver.current?.(ok);
+    resolver.current = null;
+  }, []);
+
+  const dialog = request ? (
+    <Sheet open onClose={() => answer(false)} title={request.title}>
+      {request.body && <div className="text-sm leading-relaxed text-mist-300">{request.body}</div>}
+      <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button variant="secondary" size="lg" onClick={() => answer(false)} className="sm:min-w-28">
+          {request.cancelLabel ?? 'ביטול'}
+        </Button>
+        <Button variant={request.danger ? 'danger' : 'primary'} size="lg" onClick={() => answer(true)} className="sm:min-w-28">
+          {request.confirmLabel ?? 'אישור'}
+        </Button>
+      </div>
+    </Sheet>
+  ) : null;
+
+  return useMemo(() => ({ ask, dialog }), [ask, dialog]);
+}
+
+/* ----------------------------------------------------------------- menus */
+
+export interface MenuAction {
+  label: string;
+  icon?: React.ReactNode;
+  onSelect: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+}
+
+/**
+ * The "⋯" overflow used by group and campaign cards, so a card carries one
+ * primary action and everything else lives one tap away instead of crowding
+ * it. Renders as a bottom sheet on phones — a 12px dropdown item is not a
+ * touch target.
+ */
+export function OverflowMenu({ label, actions, className = '' }: { label: string; actions: MenuAction[]; className?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-lg font-extrabold leading-none text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-100 ${className}`}
+      >
+        ⋯
+      </button>
+      <Sheet open={open} onClose={() => setOpen(false)} title={label}>
+        <ul role="menu" className="pb-2">
+          {actions.map((a) => (
+            <li key={a.label} role="none">
+              <button
+                type="button"
+                role="menuitem"
+                disabled={a.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  a.onSelect();
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-start text-base font-bold transition-colors disabled:opacity-40 ${
+                  a.danger ? 'text-rose-600 hover:bg-rose-500/10' : 'text-mist-100 hover:bg-ink-800'
+                }`}
+              >
+                {a.icon && <span className="grid h-6 w-6 shrink-0 place-items-center">{a.icon}</span>}
+                {a.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Sheet>
+    </>
   );
 }

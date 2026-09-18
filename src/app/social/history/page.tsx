@@ -1,52 +1,105 @@
 'use client';
 
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { PublicationItem } from '@/components/social/PublicationItem';
 import { SocialShell } from '@/components/social/SocialShell';
-import { ErrorDetail } from '@/components/social/ErrorDetail';
-import { TargetAvatar } from '@/components/social/TargetAvatar';
-import { Card, Empty, Loading, Notice, StatusPill, inputClass } from '@/components/social/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Loading,
+  Notice,
+  SegmentedControl,
+  SkeletonList,
+  inputClass,
+  useToast,
+} from '@/components/social/ui';
 import { cancelQueueItem, listCampaigns, listQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
-import { formatDateHe, formatTimeHe, zonedToUtc } from '@/lib/social/time';
-import { METHOD_LABEL, QUEUE_STATUS_LABEL, QUEUE_STEP_LABEL, type PublishMethod, type QueueStatus } from '@/lib/social/types';
+import { zonedToUtc } from '@/lib/social/time';
+import { type PublishMethod, type QueueStatus } from '@/lib/social/types';
 
-const STATUSES = Object.keys(QUEUE_STATUS_LABEL) as QueueStatus[];
+/** Coarse buckets people actually filter by, mapped onto the real statuses. */
+const STATUS_GROUPS: { value: string; label: string; statuses: QueueStatus[] }[] = [
+  { value: '', label: 'הכל', statuses: [] },
+  { value: 'published', label: 'פורסמו', statuses: ['published'] },
+  { value: 'pending', label: 'ממתינים', statuses: ['scheduled', 'publishing', 'awaiting_confirmation', 'paused'] },
+  { value: 'failed', label: 'נכשלו', statuses: ['failed'] },
+  { value: 'skipped', label: 'דולגו', statuses: ['skipped'] },
+  { value: 'manual', label: 'ידניים', statuses: ['manual_pending', 'needs_attention'] },
+];
+
+const RANGES: { value: string; label: string; days: number | null }[] = [
+  { value: '1', label: 'היום', days: 0 },
+  { value: '7', label: '7 ימים', days: 7 },
+  { value: '30', label: '30 ימים', days: 30 },
+  { value: 'custom', label: 'טווח', days: null },
+  { value: 'all', label: 'הכל', days: null },
+];
+
+const PAGE_SIZE = 40;
 
 export default function HistoryPage() {
   return (
-    <Suspense fallback={<SocialShell title="היסטוריית פרסומים"><Loading /></SocialShell>}>
+    <Suspense
+      fallback={
+        <SocialShell title="היסטוריה">
+          <Loading />
+        </SocialShell>
+      }
+    >
       <HistoryScreen />
     </Suspense>
   );
 }
 
+/**
+ * History as a working tool: filter by outcome, method and date, search by
+ * group / campaign / post, and open any publication for its full detail
+ * (including the plain-language reason it failed).
+ *
+ * The list pages locally in blocks of 40 — a season of publishing is
+ * thousands of rows, and rendering them all is what turns a phone's scroll
+ * into a stutter.
+ */
 function HistoryScreen() {
   const params = useSearchParams();
   const [rows, setRows] = useState<QueueRow[] | null>(null);
-  const [status, setStatus] = useState<QueueStatus | ''>((params.get('status') as QueueStatus) || '');
+  const [group, setGroup] = useState<string>(mapIncomingStatus(params.get('status')));
+  const [method, setMethod] = useState<PublishMethod | ''>('');
+  const [range, setRange] = useState('30');
   const [since, setSince] = useState('');
-  const [campaigns, setCampaigns] = useState<Record<string, string>>({});
   const [until, setUntil] = useState('');
+  const [query, setQuery] = useState('');
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [campaigns, setCampaigns] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     try {
-      setRows(
-        await listQueue({
-          status: status ? [status] : undefined,
-          since: since ? zonedToUtc(since, '00:00').toISOString() : undefined,
-          until: until ? zonedToUtc(until, '23:59').toISOString() : undefined,
-          limit: 300,
-        }),
-      );
+      const statuses = STATUS_GROUPS.find((g) => g.value === group)?.statuses ?? [];
+      const days = RANGES.find((r) => r.value === range)?.days;
+      // The window is computed from the range chips unless a custom one is set.
+      let fromISO: string | undefined;
+      let toISO: string | undefined;
+      if (range === 'custom') {
+        fromISO = since ? zonedToUtc(since, '00:00').toISOString() : undefined;
+        toISO = until ? zonedToUtc(until, '23:59').toISOString() : undefined;
+      } else if (days !== null && days !== undefined) {
+        fromISO = new Date(Date.now() - Math.max(days, 1) * 86_400_000).toISOString();
+      }
+      setRows(await listQueue({ status: statuses.length ? statuses : undefined, since: fromISO, until: toISO, limit: 500 }));
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
     }
-  }, [status, since, until]);
+  }, [group, range, since, until]);
 
   useEffect(() => {
     load();
+    setLimit(PAGE_SIZE);
   }, [load]);
 
   useEffect(() => {
@@ -55,177 +108,146 @@ function HistoryScreen() {
       .catch(() => undefined);
   }, []);
 
-  /** Quick ranges — the filter people actually reach for. */
-  const setRange = (days: number) => {
-    const end = new Date();
-    const start = new Date(end.getTime() - days * 86_400_000);
-    setSince(start.toISOString().slice(0, 10));
-    setUntil(end.toISOString().slice(0, 10));
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (rows ?? []).filter((r) => {
+      if (method && (r.method ?? '') !== method) return false;
+      if (!q) return true;
+      const campaignName = r.campaign_id ? campaigns[r.campaign_id] ?? '' : '';
+      return [r.target?.name, r.post?.title, campaignName, r.rendered_text].some((v) => v?.toLowerCase().includes(q));
+    });
+  }, [rows, query, method, campaigns]);
+
+  const page = filtered.slice(0, limit);
+
+  async function act(fn: () => Promise<boolean>, ok: string) {
+    try {
+      const changed = await fn();
+      toast(changed ? ok : 'הפריט כבר השתנה — המסך רוענן.', changed ? 'success' : 'info');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+    }
+    await load();
+  }
+
+  const actions = {
+    onRetry: (r: QueueRow) => act(() => retryQueueItem(r.id), 'הוחזר לתור.'),
+    onCancel: (r: QueueRow) => act(() => cancelQueueItem(r.id), 'בוטל.'),
+    onScreenshot: (r: QueueRow) => r.screenshot_path && screenshotUrl(r.screenshot_path).then((u) => u && window.open(u, '_blank', 'noreferrer')),
   };
 
   return (
-    <SocialShell title="היסטוריית פרסומים">
-      {error && <Notice tone="error">{error}</Notice>}
-      <Card>
-        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value as QueueStatus | '')}>
-            <option value="">כל הסטטוסים</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {QUEUE_STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
-          <input type="date" className={inputClass} value={since} onChange={(e) => setSince(e.target.value)} />
-          <input type="date" className={inputClass} value={until} onChange={(e) => setUntil(e.target.value)} />
-          <button type="button" onClick={load} className="rounded-xl bg-ink-800 px-4 py-2.5 text-sm font-bold text-mist-100">
-            רענן
-          </button>
-        </div>
-        <div className="mb-3 flex flex-wrap gap-1.5 text-xs font-bold">
-          <span className="self-center text-mist-500">טווח מהיר:</span>
-          {([['היום', 0], ['7 ימים', 7], ['30 ימים', 30], ['90 ימים', 90]] as const).map(([label, days]) => (
-            <button key={label} type="button" onClick={() => setRange(days)} className="rounded-full bg-ink-800 px-2.5 py-1 text-mist-300 hover:text-brand-400">
-              {label}
-            </button>
-          ))}
-          <button type="button" onClick={() => { setSince(''); setUntil(''); }} className="rounded-full bg-ink-800 px-2.5 py-1 text-mist-300 hover:text-brand-400">
-            הכל
-          </button>
-        </div>
-        {!rows && <Loading />}
-        {rows && rows.length === 0 && <Empty>אין רשומות בסינון הזה.</Empty>}
-        {rows && rows.length > 0 && (
-          <ul className="divide-y divide-ink-700 md:hidden">
-            {rows.map((r) => {
-              const when = r.published_at ?? r.scheduled_at;
-              return (
-                <li key={r.id} className="py-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="min-w-0 truncate font-bold text-mist-100">{r.target?.name ?? '—'}</p>
-                    <StatusPill status={r.status} />
-                  </div>
-                  <p className="mt-0.5 text-xs text-mist-500">
-                    {formatDateHe(when)} · {formatTimeHe(when)} · {r.post?.title || 'פוסט'}
-                    {r.variant ? ` · ${r.variant.label}` : ''}
-                    {r.campaign_id && campaigns[r.campaign_id] ? ` · ${campaigns[r.campaign_id]}` : ''}
-                    {r.method ? ` · ${METHOD_LABEL[r.method as PublishMethod]}` : ''}
-                  </p>
-                  {(r.error || r.skip_reason) && (
-                    <div className="mt-1">
-                      <ErrorDetail row={r} />
-                    </div>
-                  )}
-                  <div className="mt-1.5 flex flex-wrap gap-3 text-xs font-bold">
-                    {r.permalink && (
-                      <a href={r.permalink} target="_blank" rel="noreferrer" className="text-brand-400">
-                        פתח בפייסבוק
-                      </a>
-                    )}
-                    {r.screenshot_path && (
-                      <button type="button" className="text-violet-700" onClick={() => screenshotUrl(r.screenshot_path as string).then((u) => u && window.open(u, '_blank'))}>
-                        צילום התקלה
-                      </button>
-                    )}
-                    {(r.status === 'failed' || r.status === 'skipped' || r.status === 'needs_attention') && (
-                      <button type="button" className="text-brand-400" onClick={() => retryQueueItem(r.id).then(load)}>
-                        נסה שוב
-                      </button>
-                    )}
-                    {(r.status === 'scheduled' || r.status === 'awaiting_confirmation' || r.status === 'paused') && (
-                      <button type="button" className="text-rose-600" onClick={() => cancelQueueItem(r.id).then(load)}>
-                        בטל
-                      </button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {rows && rows.length > 0 && (
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full text-sm">
-              <thead className="text-xs text-mist-500">
-                <tr>
-                  <th className="py-2 text-start font-bold">תאריך</th>
-                  <th className="py-2 text-start font-bold">שעה</th>
-                  <th className="py-2 text-start font-bold">יעד</th>
-                  <th className="py-2 text-start font-bold">פוסט</th>
-                  <th className="py-2 text-start font-bold">קמפיין</th>
-                  <th className="py-2 text-start font-bold">שיטה</th>
-                  <th className="py-2 text-start font-bold">סטטוס</th>
-                  <th className="py-2 text-start font-bold">שגיאה / הערה</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink-700">
-                {rows.map((r) => {
-                  const when = r.published_at ?? r.scheduled_at;
-                  return (
-                    <tr key={r.id} className="align-top">
-                      <td className="py-2.5 pe-3 whitespace-nowrap tabular-nums text-mist-100">{formatDateHe(when)}</td>
-                      <td className="py-2.5 pe-3 whitespace-nowrap tabular-nums text-mist-100">{formatTimeHe(when)}</td>
-                      <td className="py-2.5 pe-3">
-                        <div className="flex items-center gap-2">
-                          <TargetAvatar name={r.target?.name ?? '?'} imageUrl={r.target?.image_url} channel={r.target?.channel} size={26} />
-                          <span className="font-bold text-mist-100">{r.target?.name ?? '—'}</span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 pe-3">
-                        <Link href={`/social/posts/${r.post_id}`} className="text-brand-400">
-                          {r.post?.title || 'פוסט'}
-                        </Link>
-                        {r.variant && <span className="text-xs text-mist-500"> · {r.variant.label}</span>}
-                      </td>
-                      <td className="py-2.5 pe-3 text-xs text-mist-300">{r.campaign_id ? campaigns[r.campaign_id] ?? '—' : '—'}</td>
-                      <td className="py-2.5 pe-3 text-xs text-mist-300">{r.method ? METHOD_LABEL[r.method as PublishMethod] : '—'}</td>
-                      <td className="py-2.5 pe-3">
-                        <StatusPill status={r.status} />
-                      </td>
-                      <td className="max-w-xs py-2.5 pe-3 text-xs text-mist-300">
-                        {r.step && r.status === 'publishing' ? <span className="block text-amber-700">{QUEUE_STEP_LABEL[r.step]}</span> : null}
-                        {r.error || r.skip_reason ? <ErrorDetail row={r} technical /> : null}
-                        {r.permalink && (
-                          <a href={r.permalink} target="_blank" rel="noreferrer" className="block text-brand-400" dir="ltr">
-                            {r.permalink}
-                          </a>
-                        )}
-                      </td>
-                      <td className="py-2.5 whitespace-nowrap text-xs font-bold">
-                        {r.status === 'manual_pending' && (
-                          <Link href={`/social/manual/${r.id}`} className="text-violet-700">
-                            ערכת פרסום
-                          </Link>
-                        )}
-                        {r.screenshot_path && (
-                          <button
-                            type="button"
-                            className="block text-violet-700"
-                            onClick={() => screenshotUrl(r.screenshot_path as string).then((u) => u && window.open(u, '_blank'))}
-                          >
-                            צפה בצילום התקלה
-                          </button>
-                        )}
-                        {(r.status === 'failed' || r.status === 'skipped' || r.status === 'needs_attention') && (
-                          <button type="button" className="text-brand-400" onClick={() => retryQueueItem(r.id).then(load)}>
-                            נסה שוב
-                          </button>
-                        )}
-                        {(r.status === 'scheduled' || r.status === 'awaiting_confirmation' || r.status === 'paused') && (
-                          <button type="button" className="block text-rose-600" onClick={() => cancelQueueItem(r.id).then(load)}>
-                            בטל
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+    <SocialShell title="היסטוריה">
+      <div className="space-y-4">
+        {error && <Notice tone="error">{error}</Notice>}
+
+        <Card padded={false} className="p-3">
+          <input
+            type="search"
+            className={inputClass}
+            placeholder="חיפוש לפי קבוצה, קמפיין, פוסט או טקסט…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="חיפוש בהיסטוריה"
+          />
+          <div className="mt-2.5 space-y-2 overflow-x-auto scrollbar-none">
+            <SegmentedControl
+              size="sm"
+              label="תוצאה"
+              value={group}
+              onChange={setGroup}
+              options={STATUS_GROUPS.map((g) => ({ value: g.value, label: g.label }))}
+              className="min-w-max"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <SegmentedControl
+                size="sm"
+                label="טווח"
+                value={range}
+                onChange={setRange}
+                options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
+                className="min-w-max"
+              />
+              <SegmentedControl
+                size="sm"
+                label="שיטה"
+                value={method}
+                onChange={setMethod}
+                options={[
+                  { value: '', label: 'כל השיטות' },
+                  { value: 'api', label: 'API רשמי' },
+                  { value: 'browser', label: 'בסיוע דפדפן' },
+                  { value: 'manual', label: 'ידני' },
+                ]}
+                className="min-w-max"
+              />
+            </div>
+            {range === 'custom' && (
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs font-bold text-mist-500">
+                  מתאריך
+                  <input type="date" className={inputClass} value={since} onChange={(e) => setSince(e.target.value)} />
+                </label>
+                <label className="text-xs font-bold text-mist-500">
+                  עד תאריך
+                  <input type="date" className={inputClass} value={until} onChange={(e) => setUntil(e.target.value)} />
+                </label>
+              </div>
+            )}
           </div>
-        )}
-      </Card>
+        </Card>
+
+        <Card
+          title="פרסומים"
+          subtitle={rows ? `${filtered.length} רשומות${filtered.length > page.length ? ` · מוצגות ${page.length}` : ''}` : undefined}
+          action={rows ? <Badge tone="neutral">{rows.length >= 500 ? '500+ אחרונים' : `${rows.length} בטווח`}</Badge> : undefined}
+        >
+          {!rows && <SkeletonList rows={6} />}
+          {rows && filtered.length === 0 && (
+            <EmptyState
+              icon="🗂️"
+              title="אין רשומות בסינון הזה"
+              description="נסו טווח תאריכים רחב יותר, או נקו את החיפוש."
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setQuery('');
+                    setGroup('');
+                    setMethod('');
+                    setRange('all');
+                  }}
+                >
+                  נקה סינון
+                </Button>
+              }
+            />
+          )}
+          {rows && page.length > 0 && (
+            <>
+              <ul className="divide-y divide-ink-700">
+                {page.map((r) => (
+                  <PublicationItem key={r.id} row={r} actions={actions} showDate />
+                ))}
+              </ul>
+              {filtered.length > page.length && (
+                <div className="mt-3 flex justify-center">
+                  <Button variant="secondary" onClick={() => setLimit((n) => n + PAGE_SIZE)}>
+                    טען עוד {Math.min(PAGE_SIZE, filtered.length - page.length)}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+      </div>
     </SocialShell>
   );
+}
+
+/** Links from the dashboard still arrive with a raw status; map it onto a bucket. */
+function mapIncomingStatus(raw: string | null): string {
+  if (!raw) return '';
+  const hit = STATUS_GROUPS.find((g) => g.statuses.includes(raw as QueueStatus));
+  return hit?.value ?? '';
 }

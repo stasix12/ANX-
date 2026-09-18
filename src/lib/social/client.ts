@@ -1,12 +1,12 @@
 'use client';
 
 import { supabase } from '@/lib/supabase';
+import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import {
   DEFAULT_BROWSER,
   DEFAULT_BUSINESS,
   DEFAULT_LIMITS,
-  EMPTY_PROGRESS,
   WORKER_OFFLINE_AFTER_SECONDS,
   parseGroupUrl,
   type ActivityEntry,
@@ -352,12 +352,32 @@ export async function updateQueueItem(id: string, patch: Partial<QueueItem>): Pr
   unwrap(await db().from('social_queue').update(patch).eq('id', id));
 }
 
-export async function retryQueueItem(id: string): Promise<void> {
-  await updateQueueItem(id, { status: 'scheduled', scheduled_at: new Date().toISOString(), error: null, skip_reason: null });
+/**
+ * Retry and cancel both name the statuses they are allowed to act on, so a
+ * stale screen (or a second tap while the first request is in flight) can
+ * never move a row that has since started publishing or already published.
+ * The write simply matches nothing and the caller reloads the real state.
+ */
+const RETRYABLE: QueueItem['status'][] = ['failed', 'skipped', 'needs_attention', 'scheduled', 'paused'];
+const CANCELLABLE: QueueItem['status'][] = ['scheduled', 'awaiting_confirmation', 'needs_attention', 'paused', 'manual_pending'];
+
+async function guardedUpdate(id: string, allowed: QueueItem['status'][], patch: Partial<QueueItem>): Promise<boolean> {
+  const rows = unwrap<{ id: string }[]>(await db().from('social_queue').update(patch).eq('id', id).in('status', allowed).select('id'));
+  return rows.length > 0;
 }
 
-export async function cancelQueueItem(id: string): Promise<void> {
-  await updateQueueItem(id, { status: 'skipped', skip_reason: 'בוטל ידנית' });
+export async function retryQueueItem(id: string): Promise<boolean> {
+  return guardedUpdate(id, RETRYABLE, {
+    status: 'scheduled',
+    step: 'pending',
+    scheduled_at: new Date().toISOString(),
+    error: null,
+    skip_reason: null,
+  });
+}
+
+export async function cancelQueueItem(id: string): Promise<boolean> {
+  return guardedUpdate(id, CANCELLABLE, { status: 'skipped', step: '', skip_reason: 'בוטל ידנית' });
 }
 
 export async function confirmQueueItem(id: string): Promise<void> {
@@ -385,13 +405,30 @@ export async function listLiveQueue(): Promise<QueueRow[]> {
   );
 }
 
+/**
+ * Pause leaves the queue exactly as it is — the rules engine returns
+ * "wait" for a paused campaign, so every scheduled row keeps its slot and
+ * resume picks up from the same place. Nothing is deleted either way.
+ */
 export async function pauseCampaign(id: string, paused: boolean): Promise<void> {
-  unwrap(await db().from('social_campaigns').update({ status: paused ? 'paused' : 'active' }).eq('id', id));
+  const { data: campaign } = await db().from('social_campaigns').select('name').eq('id', id).maybeSingle();
+  unwrap(await db().from('social_campaigns').update({ status: paused ? 'paused' : 'active', archived_at: null }).eq('id', id));
+  await logClientActivity(
+    'info',
+    paused ? 'campaign_paused' : 'campaign_resumed',
+    `הקמפיין "${campaign?.name ?? ''}" ${paused ? 'הושהה' : 'חזר לפעול'}`,
+    { campaignId: id },
+  );
 }
 
-/** Stop: nothing new starts; scheduled rows are cancelled; a running job finishes. */
+/**
+ * Stop: nothing new starts, every row that has not begun is cancelled, and a
+ * job already running is left to finish safely. Publications that already
+ * happened stay in the history — stop never rewrites the past.
+ */
 export async function stopCampaign(id: string): Promise<number> {
-  unwrap(await db().from('social_campaigns').update({ status: 'paused' }).eq('id', id));
+  const { data: campaign } = await db().from('social_campaigns').select('name').eq('id', id).maybeSingle();
+  unwrap(await db().from('social_campaigns').update({ status: 'archived', archived_at: new Date().toISOString() }).eq('id', id));
   const posts = unwrap<{ id: string }[]>(await db().from('social_posts').select('id').eq('campaign_id', id));
   const postIds = posts.map((p) => p.id);
   if (postIds.length) unwrap(await db().from('social_schedules').update({ active: false }).in('post_id', postIds));
@@ -403,7 +440,16 @@ export async function stopCampaign(id: string): Promise<number> {
       .in('status', ['scheduled', 'awaiting_confirmation', 'needs_attention', 'paused'])
       .select('id'),
   );
+  await logClientActivity('warn', 'campaign_stopped', `הקמפיין "${campaign?.name ?? ''}" נעצר — ${rows.length} פרסומים שטרם התחילו בוטלו`, {
+    campaignId: id,
+    cancelled: rows.length,
+  });
   return rows.length;
+}
+
+/** Re-opens a stopped campaign for editing; it does not resurrect cancelled rows. */
+export async function reopenCampaign(id: string): Promise<void> {
+  unwrap(await db().from('social_campaigns').update({ status: 'active', archived_at: null }).eq('id', id));
 }
 
 export async function screenshotUrl(path: string): Promise<string | null> {
@@ -414,29 +460,85 @@ export async function screenshotUrl(path: string): Promise<string | null> {
 
 /* ------------------------------------------------------------ campaigns */
 
+/** Ceiling for the cross-campaign rollup read. */
+const CAMPAIGN_ROLLUP_LIMIT = 5000;
+
 /**
- * One rollup per campaign, from the queue rows that carry campaign_id.
- * A single grouped read keeps the campaigns screen to one request no matter
+ * One full control-centre state per campaign, from the queue rows that carry
+ * campaign_id. A single read (narrow columns plus the target's name) keeps
+ * the campaigns screen and the dashboard hero to one request each, no matter
  * how many campaigns exist.
  */
-export async function campaignProgress(): Promise<Record<string, CampaignProgress>> {
-  const rows = unwrap<{ campaign_id: string | null; status: QueueItem['status'] }[]>(
-    await db().from('social_queue').select('campaign_id, status').not('campaign_id', 'is', null),
-  );
-  const out: Record<string, CampaignProgress> = {};
+export async function campaignStates(campaignIds?: string[]): Promise<Record<string, CampaignState>> {
+  if (campaignIds && campaignIds.length === 0) return {};
+  let query = db()
+    .from('social_queue')
+    .select('id, status, scheduled_at, published_at, target_id, post_id, campaign_id, target:social_targets(id,name,channel,image_url)')
+    .not('campaign_id', 'is', null)
+    .order('scheduled_at')
+    // A hard ceiling so one screen can never pull an unbounded table. Callers
+    // that care about a single campaign use campaignQueue() instead, which is
+    // scoped to it; this one is the overview.
+    .limit(CAMPAIGN_ROLLUP_LIMIT);
+  if (campaignIds) query = query.in('campaign_id', campaignIds);
+  const [rows, campaigns] = await Promise.all([unwrap<(CampaignQueueRow & { campaign_id: string })[]>(await query), listCampaigns()]);
+  const byId = new Map(campaigns.map((c) => [c.id, c]));
+  const grouped = new Map<string, CampaignQueueRow[]>();
   for (const row of rows) {
-    const id = row.campaign_id as string;
-    const p = (out[id] ??= { ...EMPTY_PROGRESS });
-    p.total += 1;
-    if (row.status === 'published') p.published += 1;
-    else if (row.status === 'failed') p.failed += 1;
-    else if (row.status === 'skipped') p.skipped += 1;
-    else if (row.status === 'scheduled' || row.status === 'paused') p.scheduled += 1;
-    else if (row.status === 'publishing' || row.status === 'awaiting_confirmation') p.running += 1;
-    else if (row.status === 'manual_pending' || row.status === 'needs_attention') p.manual += 1;
+    const list = grouped.get(row.campaign_id);
+    if (list) list.push(row);
+    else grouped.set(row.campaign_id, [row]);
   }
-  for (const p of Object.values(out)) p.done = p.published + p.failed + p.skipped;
+  const out: Record<string, CampaignState> = {};
+  for (const [id, list] of grouped) out[id] = campaignState(list, byId.get(id) ?? null);
   return out;
+}
+
+/** Backwards-compatible slice of the above, for callers that only draw a bar. */
+export async function campaignProgress(): Promise<Record<string, CampaignProgress>> {
+  const states = await campaignStates();
+  return Object.fromEntries(Object.entries(states).map(([id, s]) => [id, s.progress]));
+}
+
+export async function getCampaign(id: string): Promise<Campaign | null> {
+  return unwrap<Campaign | null>(await db().from('social_campaigns').select('*').eq('id', id).maybeSingle());
+}
+
+/** Every queue row of one campaign, with its target — the control centre's feed. */
+export async function campaignQueue(campaignId: string): Promise<QueueRow[]> {
+  return unwrap<QueueRow[]>(
+    await db().from('social_queue').select(QUEUE_SELECT).eq('campaign_id', campaignId).order('scheduled_at').limit(1000),
+  );
+}
+
+/** One group's publication history, for its profile screen. */
+export async function targetQueue(targetId: string, limit = 100): Promise<QueueRow[]> {
+  return unwrap<QueueRow[]>(
+    await db().from('social_queue').select(QUEUE_SELECT).eq('target_id', targetId).order('scheduled_at', { ascending: false }).limit(limit),
+  );
+}
+
+export async function getTarget(id: string): Promise<SocialTarget | null> {
+  return unwrap<SocialTarget | null>(await db().from('social_targets').select('*').eq('id', id).maybeSingle());
+}
+
+/**
+ * Writes one line into the shared activity log so a campaign action taken on
+ * the phone shows up in the notification bell and the feed, exactly like the
+ * lines the two workers write. Never throws: a missing log line must not fail
+ * the action the person actually asked for.
+ */
+export async function logClientActivity(
+  level: ActivityEntry['level'],
+  event: string,
+  message: string,
+  meta: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await db().from('social_activity_log').insert({ level, event, message, meta });
+  } catch {
+    /* logging is best-effort */
+  }
 }
 
 /* --------------------------------------------------- manual publish queue */

@@ -8,9 +8,10 @@ import { LiveBoard } from '@/components/social/LiveBoard';
 import { MediaUploader } from '@/components/social/MediaUploader';
 import { TargetPicker } from '@/components/social/TargetPicker';
 import { PostPreview } from '@/components/social/PostPreview';
-import { SchedulePicker, type ScheduleDraft, scheduleDraftToInput } from '@/components/social/SchedulePicker';
+import { PreLaunchReview } from '@/components/social/PreLaunchReview';
+import { SchedulePicker, planFor, type ScheduleDraft, scheduleDraftToInput } from '@/components/social/SchedulePicker';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Button, Card, Field, Loading, Notice, Toggle, inputClass } from '@/components/social/ui';
+import { Button, Card, Field, Loading, Notice, inputClass, useConfirm, useToast } from '@/components/social/ui';
 import {
   archivePost,
   callSocialApi,
@@ -91,6 +92,9 @@ export function PostEditor({ postId }: { postId?: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [savedId, setSavedId] = useState<string | undefined>(postId);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     if (loadedFor.current === postId) return;
@@ -123,6 +127,13 @@ export function PostEditor({ postId }: { postId?: string }) {
   }, [load]);
 
   const campaign = campaigns.find((c) => c.id === post.campaign_id) ?? null;
+  // Selected targets in the order they were picked — the drip planner walks
+  // them in exactly this order, so the preview must too.
+  const selectedObjects = useMemo(
+    () => selectedTargets.map((id) => targets.find((t) => t.id === id)).filter((t): t is SocialTarget => Boolean(t)),
+    [selectedTargets, targets],
+  );
+  const plan = useMemo(() => planFor(schedule, selectedObjects.length), [schedule, selectedObjects.length]);
   const previewVariant = variants.find((v) => v.key === previewKey) ?? null;
   const previewText = useMemo(() => renderPostText(post, previewVariant), [post, previewVariant]);
   const approvedCount = variants.filter((v) => v.approval === 'approved').length;
@@ -190,19 +201,41 @@ export function PostEditor({ postId }: { postId?: string }) {
     return null;
   }
 
-  async function onSchedule() {
+  /** Nothing is written until the review sheet is confirmed. */
+  function openReview() {
     const problem = validateForPublish();
     if (problem) {
       setMessage({ tone: 'error', text: problem });
+      toast(problem, 'error');
+      return;
+    }
+    setReviewOpen(true);
+  }
+
+  async function onSchedule() {
+    const problem = validateForPublish();
+    if (problem) {
+      toast(problem, 'error');
       return;
     }
     setBusy('schedule');
     try {
       const id = await persist('ready');
       const pending = await hasPendingQueue(id);
-      if (pending > 0 && !window.confirm(`לפוסט הזה כבר יש ${pending} פרסומים בתור. להוסיף עוד סבב? (בדרך כלל לא — הפרסומים הקיימים ימשיכו לבד)`)) {
-        setBusy(null);
-        return;
+      if (pending > 0) {
+        // A second round on a post that is still going out is almost always a
+        // double-tap rather than an intention.
+        const again = await confirm.ask({
+          title: 'לפוסט הזה כבר יש פרסומים בתור',
+          body: `${pending} פרסומים של הפוסט הזה עדיין ממתינים ויצאו לבד. להוסיף סבב נוסף על גביהם?`,
+          confirmLabel: 'הוסף סבב',
+          cancelLabel: 'לא, השאר כמו שהוא',
+        });
+        if (!again) {
+          setBusy(null);
+          setReviewOpen(false);
+          return;
+        }
       }
       await createSchedule({
         ...scheduleDraftToInput(schedule, id, selectedTargets),
@@ -211,28 +244,42 @@ export function PostEditor({ postId }: { postId?: string }) {
         require_confirmation: requireConfirmation || browser.testMode,
       });
       setStarted(true);
+      setReviewOpen(false);
       if (schedule.mode === 'now' || schedule.mode === 'drip') {
         const r = await callSocialApi<{ ran: boolean; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
-        setMessage({
-          tone: r.ran ? 'success' : 'info',
-          text: r.ran
-            ? `הקמפיין התחיל. דפים: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.deferred} נדחו, ${r.failed} נכשלו. קבוצות מתפרסמות דרך ה-worker — עקבו למטה.`
-            : `הפוסט נכנס לתור אך לא פורסם: ${r.reason}`,
-        });
+        if (r.ran) {
+          toast('הקמפיין התחיל. עקבו אחרי ההתקדמות למטה.');
+          setMessage({
+            tone: 'success',
+            text: `דפים: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.deferred} נדחו, ${r.failed} נכשלו. קבוצות מתפרסמות דרך ה-worker המקומי — ההתקדמות למטה.`,
+          });
+        } else {
+          toast(`נכנס לתור אך לא פורסם: ${r.reason}`, 'info');
+          setMessage({ tone: 'info', text: `הפוסט נכנס לתור אך לא פורסם: ${r.reason}` });
+        }
       } else {
+        toast('התזמון נשמר.');
         setMessage({ tone: 'success', text: 'התזמון נשמר. הפרסומים ייכנסו לתור אוטומטית ויופיעו בלוח הבקרה.' });
       }
       setSchedules(await listSchedules(id));
     } catch (err) {
-      setMessage({ tone: 'error', text: err instanceof Error ? err.message : 'התזמון נכשל.' });
+      toast(err instanceof Error ? err.message : 'התזמון נכשל.', 'error');
     } finally {
       setBusy(null);
     }
   }
 
   async function onArchive() {
-    if (!savedId || !window.confirm('להעביר את הפוסט לארכיון? תזמונים פעילים יבוטלו.')) return;
+    if (!savedId) return;
+    const ok = await confirm.ask({
+      title: 'להעביר את הפוסט לארכיון?',
+      body: 'תזמונים פעילים יבוטלו ופרסומים שטרם יצאו ידולגו. מה שכבר פורסם נשאר בהיסטוריה.',
+      confirmLabel: 'העבר לארכיון',
+      danger: true,
+    });
+    if (!ok) return;
     await archivePost(savedId);
+    toast('הפוסט הועבר לארכיון.');
     router.push('/social/posts');
   }
 
@@ -426,10 +473,10 @@ export function PostEditor({ postId }: { postId?: string }) {
           </Card>
 
           <Card title="תזמון">
-            <SchedulePicker value={schedule} onChange={setSchedule} />
+            <SchedulePicker value={schedule} onChange={setSchedule} targetCount={selectedObjects.length} targetNames={selectedObjects.map((t) => t.name)} />
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Button busy={busy === 'schedule'} onClick={onSchedule}>
-                {schedule.mode === 'now' ? '🚀 התחל פרסום' : schedule.mode === 'drip' ? `🚀 התחל הפצה (${selectedTargets.length} יעדים)` : 'שמור תזמון'}
+              <Button size="lg" busy={busy === 'schedule'} onClick={openReview}>
+                {schedule.mode === 'now' || schedule.mode === 'drip' ? `בדוק והתחל (${selectedObjects.length} יעדים)` : 'בדוק ושמור תזמון'}
               </Button>
               <Button variant="secondary" busy={busy === 'save'} onClick={onSave}>
                 שמור כטיוטה
@@ -483,6 +530,27 @@ export function PostEditor({ postId }: { postId?: string }) {
           <p className="text-xs text-mist-500">התצוגה משוערת; פייסבוק עשויה להציג תמונות וקישורים מעט אחרת.</p>
         </aside>
       </div>
+
+      <PreLaunchReview
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        onStart={onSchedule}
+        busy={busy === 'schedule'}
+        campaignName={campaign?.name ?? ''}
+        postTitle={post.title}
+        text={previewText}
+        media={post.media as MediaItem[]}
+        targets={selectedObjects}
+        plan={plan}
+        requireConfirmation={requireConfirmation || browser.testMode}
+        warnings={[
+          browser.testMode && selectedObjects.some((t) => t.channel === 'facebook_group')
+            ? 'TEST MODE פעיל: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. אפשר לכבות בהגדרות.'
+            : '',
+          approvedCount === 0 && variants.length > 0 ? 'אין גרסה מאושרת — יצא הטקסט הבסיסי.' : '',
+        ].filter(Boolean)}
+      />
+      {confirm.dialog}
     </SocialShell>
   );
 }

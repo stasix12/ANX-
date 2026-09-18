@@ -16,19 +16,23 @@ import {
 } from '@/components/icons';
 import { useAdminSession } from '@/lib/adminAuth';
 import { NotificationBell } from './NotificationBell';
+import { Sheet } from './ui';
 
 const nav = [
-  { href: '/social', label: 'ראשי', icon: HomeIcon, exact: true, mobile: true },
-  { href: '/social/posts', label: 'פוסטים', icon: ClipboardListIcon, exact: false, mobile: true },
-  { href: '/social/campaigns', label: 'קמפיינים', icon: MegaphoneIcon, exact: false, mobile: false },
-  { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false, mobile: true },
-  { href: '/social/targets', label: 'דפים', icon: TargetIcon, exact: false, mobile: false },
-  { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false, mobile: true },
-  { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false, mobile: false },
+  { href: '/social', label: 'ראשי', icon: HomeIcon, exact: true },
+  { href: '/social/campaigns', label: 'קמפיינים', icon: MegaphoneIcon, exact: false },
+  { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false },
+  { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false },
+  { href: '/social/posts', label: 'פוסטים', icon: ClipboardListIcon, exact: false },
+  { href: '/social/targets', label: 'דפי פייסבוק', icon: TargetIcon, exact: false },
+  { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false },
 ];
 
-/** What the phone's bottom bar shows; everything else lives behind "עוד". */
-const MOBILE_TABS = ['/social', '/social/posts', '/social/groups', '/social/history'];
+/**
+ * Four tabs plus "עוד". Five is where a thumb still lands accurately on a
+ * phone; the rest of the product is one tap deeper rather than crammed in.
+ */
+const MOBILE_TABS = ['/social', '/social/campaigns', '/social/groups', '/social/history'];
 
 /**
  * Frame for every /social screen: the same Supabase session as the CRM
@@ -151,32 +155,36 @@ export function SocialShell({
       </nav>
 
       {/* Overflow sheet: the screens that do not earn a permanent tab. */}
-      {moreOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-label="תפריט">
-          <button type="button" aria-label="סגור" className="absolute inset-0 bg-black/40" onClick={() => setMoreOpen(false)} />
-          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-ink-850 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 shadow-2xl">
-            <div aria-hidden className="mx-auto mb-2 h-1 w-10 rounded-full bg-ink-600" />
-            <ul className="px-3 pb-2">
-              {nav
-                .filter((n) => !MOBILE_TABS.includes(n.href))
-                .map(({ href, label, icon: Icon, exact }) => (
-                  <li key={href}>
-                    <Link
-                      href={href}
-                      onClick={() => setMoreOpen(false)}
-                      className={`flex items-center gap-3 rounded-xl px-3 py-3.5 text-base font-bold ${
-                        isActive(href, exact) ? 'bg-brand-500/10 text-brand-400' : 'text-mist-100'
-                      }`}
-                    >
-                      <Icon className="h-5 w-5" />
-                      {label}
-                    </Link>
-                  </li>
-                ))}
-            </ul>
-          </div>
-        </div>
-      )}
+      <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="עוד">
+        <ul className="pb-2">
+          {nav
+            .filter((n) => !MOBILE_TABS.includes(n.href))
+            .map(({ href, label, icon: Icon, exact }) => (
+              <li key={href}>
+                <Link
+                  href={href}
+                  onClick={() => setMoreOpen(false)}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-3.5 text-base font-bold ${
+                    isActive(href, exact) ? 'bg-brand-500/10 text-brand-400' : 'text-mist-100'
+                  }`}
+                >
+                  <Icon className="h-5 w-5" />
+                  {label}
+                </Link>
+              </li>
+            ))}
+          <li>
+            <Link
+              href="/social/posts/new"
+              onClick={() => setMoreOpen(false)}
+              className="mt-1 flex items-center gap-3 rounded-xl bg-brand-500/10 px-3 py-3.5 text-base font-bold text-brand-400"
+            >
+              <ClipboardListIcon className="h-5 w-5" />
+              פוסט חדש
+            </Link>
+          </li>
+        </ul>
+      </Sheet>
     </div>
   );
 }

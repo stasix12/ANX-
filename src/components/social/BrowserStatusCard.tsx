@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { listRecentCommands, listWorkers, resumeNeedsAttention, sendWorkerCommand } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import type { SocialWorker, WorkerCommand, WorkerCommandName } from '@/lib/social/types';
-import { Button, Card, Notice } from './ui';
+import { Button, Card, Notice, useConfirm } from './ui';
 
 type Light = { icon: string; label: string; cls: string };
 
@@ -27,6 +27,7 @@ export function BrowserStatusCard({ onChanged }: { onChanged?: () => void }) {
   const [commands, setCommands] = useState<WorkerCommand[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   async function load() {
     try {
@@ -106,8 +107,14 @@ export function BrowserStatusCard({ onChanged }: { onChanged?: () => void }) {
           variant="danger"
           busy={busy === 'logout'}
           disabled={!worker?.online}
-          onClick={() => {
-            if (window.confirm('לנתק? הפרופיל המקומי של הדפדפן (כולל ההתחברות לפייסבוק) יימחק מהמחשב.')) send('logout');
+          onClick={async () => {
+            const ok = await confirm.ask({
+              title: 'לנתק את הדפדפן?',
+              body: 'פרופיל Chrome המקומי — כולל ההתחברות שלכם לפייסבוק — יימחק מהמחשב. תצטרכו להתחבר שוב לפני הפרסום הבא בקבוצות.',
+              confirmLabel: 'נתק ומחק פרופיל',
+              danger: true,
+            });
+            if (ok) send('logout');
           }}
         >
           נתק
@@ -119,6 +126,7 @@ export function BrowserStatusCard({ onChanged }: { onChanged?: () => void }) {
           {lastCommand.result ? ` · ${lastCommand.result}` : ''}
         </p>
       )}
+      {confirm.dialog}
       {!worker?.online && (
         <p className="mt-2 text-xs text-mist-500">"התחבר לפייסבוק" פותח חלון Chrome אמיתי על המחשב שמריץ את ה-worker; אתם מתחברים בעצמכם, והמערכת לא רואה סיסמה.</p>
       )}

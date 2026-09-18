@@ -1,54 +1,83 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { GroupCard } from '@/components/social/GroupCard';
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
-import { Button, Card, Empty, Field, Loading, Notice, Toggle, inputClass } from '@/components/social/ui';
-import { addGroup, bulkDeleteTargets, bulkUpdateTargets, listQueue, listTargets, listWorkers, requestGroupRefresh, updateTarget } from '@/lib/social/client';
-import { formatDateTimeHe } from '@/lib/social/time';
-import { KNOWN_CITIES, OTHER_CITY, detectCity, sortCities } from '@/lib/social/cities';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Notice,
+  SegmentedControl,
+  Sheet,
+  SkeletonList,
+  Toggle,
+  inputClass,
+  useConfirm,
+  useToast,
+} from '@/components/social/ui';
+import {
+  addGroup,
+  bulkDeleteTargets,
+  bulkUpdateTargets,
+  listQueue,
+  listTargets,
+  listWorkers,
+  requestGroupRefresh,
+  updateTarget,
+} from '@/lib/social/client';
+import { formatDayMonthHe } from '@/lib/social/time';
+import { detectCity, sortCities } from '@/lib/social/cities';
 import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
 
-const STATUS_LABEL: Record<string, string> = {
-  '': '—',
-  published: '✅ פורסם',
-  pending_approval: '🕓 ממתין לאישור מנהל',
-  failed: '❌ נכשל',
-  needs_attention: '⚠️ דורש טיפול',
-  cannot_post: '🚫 אין הרשאת פרסום',
-};
+type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent';
+type View = 'grid' | 'list';
+
+const RECENT_DAYS = 14;
 
 /**
- * /social/groups — the Facebook Groups the owner may post in. Each one is
- * published by the local browser worker; there is no Meta API for groups.
+ * /social/groups — the Facebook Groups the owner may post in, built for
+ * hundreds of them: one search box, three filter rows, and a selection bar
+ * that turns "37 groups in Be'er Sheva" into one tap.
+ *
+ * Each group is published by the local browser worker — there is no Meta API
+ * for group posting since April 2024 — and the screen says so rather than
+ * implying an official integration.
  */
 export default function GroupsPage() {
+  const router = useRouter();
   const [groups, setGroups] = useState<SocialTarget[] | null>(null);
   const [workerOnline, setWorkerOnline] = useState<boolean | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [query, setQuery] = useState('');
-  const [activeOnly, setActiveOnly] = useState(false);
-  const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [cityFilter, setCityFilter] = useState<string>('');
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [status, setStatus] = useState<StatusFilter>('all');
+  const [view, setView] = useState<View>('grid');
+  const [cityFilter, setCityFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [nextByTarget, setNextByTarget] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ url: '', name: '' });
   const [bulk, setBulk] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     const [t, w, queued] = await Promise.all([
       listTargets(),
       listWorkers().catch(() => []),
-      listQueue({ status: ['scheduled'], limit: 300 }).catch(() => []),
+      listQueue({ status: ['scheduled'], limit: 500 }).catch(() => []),
     ]);
     setGroups(t.filter((x) => x.channel === 'facebook_group' || x.channel === 'facebook_group_manual'));
     setWorkerOnline(w.some((x) => x.online));
-    // Soonest scheduled publication per group, for the "next publication" line.
     const next: Record<string, string> = {};
     for (const row of [...queued].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))) {
       if (!next[row.target_id]) next[row.target_id] = row.scheduled_at;
@@ -60,333 +89,431 @@ export default function GroupsPage() {
     load().catch((err) => setError(err instanceof Error ? err.message : 'טעינה נכשלה.'));
   }, [load]);
 
+  const cityOf = useCallback((g: SocialTarget) => g.city || detectCity(g.name), []);
+  const all = useMemo(() => groups ?? [], [groups]);
+
+  const recentCutoff = useMemo(() => new Date(Date.now() - RECENT_DAYS * 86_400_000).toISOString(), []);
+
+  const matchesStatus = useCallback(
+    (g: SocialTarget) => {
+      if (status === 'active') return g.enabled;
+      if (status === 'paused') return !g.enabled;
+      if (status === 'favorites') return Boolean(g.favorite);
+      if (status === 'recent') return Boolean(g.last_published_at && g.last_published_at > recentCutoff);
+      return true;
+    },
+    [status, recentCutoff],
+  );
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (groups ?? []).filter(
+    return all.filter(
       (g) =>
-        (!activeOnly || g.enabled) &&
-        (!favoritesOnly || g.favorite) &&
-        (!cityFilter || (g.city || detectCity(g.name)) === cityFilter) &&
-        (!q || g.name.toLowerCase().includes(q) || g.url.toLowerCase().includes(q)),
+        matchesStatus(g) &&
+        (!cityFilter || cityOf(g) === cityFilter) &&
+        (!categoryFilter || (g.category || '') === categoryFilter) &&
+        (!q || g.name.toLowerCase().includes(q) || g.url.toLowerCase().includes(q) || (g.category ?? '').toLowerCase().includes(q)),
     );
-  }, [groups, query, activeOnly, cityFilter, favoritesOnly]);
+  }, [all, query, matchesStatus, cityFilter, categoryFilter, cityOf]);
 
-  const cityOf = (g: SocialTarget) => g.city || detectCity(g.name);
-  const cities = useMemo(() => sortCities((groups ?? []).map(cityOf)), [groups]);
-  const sections = useMemo(() => cities.map((c) => ({ city: c, items: visible.filter((g) => cityOf(g) === c) })).filter((s) => s.items.length), [cities, visible]);
-  const cityOptions = sortCities(Array.from(new Set([...KNOWN_CITIES, ...cities, OTHER_CITY])));
+  const cities = useMemo(() => sortCities(all.map(cityOf)), [all, cityOf]);
+  const categories = useMemo(() => Array.from(new Set(all.map((g) => g.category).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'he')), [all]);
+  const sections = useMemo(
+    () => cities.map((c) => ({ city: c, items: visible.filter((g) => cityOf(g) === c) })).filter((s) => s.items.length),
+    [cities, visible, cityOf],
+  );
+
+  const statusCounts = useMemo(
+    () => ({
+      all: all.length,
+      active: all.filter((g) => g.enabled).length,
+      paused: all.filter((g) => !g.enabled).length,
+      favorites: all.filter((g) => g.favorite).length,
+      recent: all.filter((g) => g.last_published_at && g.last_published_at > recentCutoff).length,
+    }),
+    [all, recentCutoff],
+  );
 
   async function act(key: string, fn: () => Promise<unknown>, done?: string) {
     setBusy(key);
     setError(null);
     try {
       await fn();
-      if (done) setFlash(done);
+      if (done) toast(done);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'הפעולה נכשלה.');
+      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
     } finally {
       setBusy(null);
     }
   }
 
   const parsed = parseGroupUrl(form.url);
+  const toggleSelect = (id: string, on: boolean) => setSelected((s) => (on ? [...new Set([...s, id])] : s.filter((x) => x !== id)));
+
+  function menuFor(g: SocialTarget) {
+    return [
+      { label: 'פתח את הקבוצה בפייסבוק', icon: '↗', onSelect: () => window.open(g.url, '_blank', 'noreferrer') },
+      { label: 'פרופיל והיסטוריה', icon: '📊', onSelect: () => router.push(`/social/groups/${g.id}`) },
+      { label: 'צור פוסט לקבוצה הזו', icon: '📝', onSelect: () => router.push(`/social/posts/new?targets=${g.id}`) },
+      { label: g.favorite ? 'הסר מהמועדפות' : 'הוסף למועדפות', icon: g.favorite ? '☆' : '⭐', onSelect: () => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite })) },
+      { label: g.enabled ? 'השהה קבוצה' : 'הפעל קבוצה', icon: g.enabled ? '⏸' : '▶', onSelect: () => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: !g.enabled }), g.enabled ? 'הקבוצה הושהתה.' : 'הקבוצה הופעלה.') },
+      { label: 'רענן שם ותמונה', icon: '🔄', onSelect: () => act(`sync-${g.id}`, () => requestGroupRefresh([g.id]), 'ה-worker ימשוך מחדש כשיהיה פנוי.') },
+      {
+        label: 'הסר מהרשימה',
+        icon: '🗑',
+        danger: true,
+        onSelect: async () => {
+          const ok = await confirm.ask({
+            title: `להסיר את "${g.name}"?`,
+            body: 'הקבוצה תוסר מרשימת היעדים. היסטוריית הפרסומים אליה נשמרת.',
+            confirmLabel: 'הסר',
+            danger: true,
+          });
+          if (ok) await act(`del-${g.id}`, () => bulkDeleteTargets([g.id]), 'הקבוצה הוסרה.');
+        },
+      },
+    ];
+  }
 
   return (
     <SocialShell
-      title="קבוצות פייסבוק"
+      title="קבוצות"
       headerAction={
-        selected.length > 0 ? (
-          <Link href={`/social/posts/new?targets=${selected.join(',')}`} className="rounded-full bg-white px-3.5 py-2 text-sm font-bold text-blue-700 shadow-sm">
-            פוסט ל-{selected.length} קבוצות ←
-          </Link>
-        ) : undefined
+        <button type="button" onClick={() => setAddOpen(true)} className="inline-flex min-h-10 items-center rounded-full bg-white px-3.5 text-sm font-bold text-blue-700 shadow-sm">
+          + הוסף
+        </button>
       }
     >
-      <div className="space-y-5">
-        {flash && <Notice tone="info">{flash}</Notice>}
+      <div className="space-y-4 pb-20">
         {error && <Notice tone="error">{error}</Notice>}
         {workerOnline === false && (
           <Notice tone="warn">
-            ה-worker המקומי לא רץ כרגע. קבוצות מתפרסמות רק כשהוא פועל על המחשב שלכם: <code dir="ltr">npm run social-worker</code>. פרטים ב-docs/SOCIAL.md.
+            ה-worker המקומי לא רץ. קבוצות מתפרסמות רק כשהוא פועל על המחשב שלכם: <code dir="ltr">npm run social-worker</code>
           </Notice>
         )}
 
-        {/* Collapsed by default: with 100+ groups the list is what people
-            came for, and on a phone the form filled the entire first screen. */}
-        <details className="group" open={addOpen} onToggle={(e) => setAddOpen((e.currentTarget as HTMLDetailsElement).open)}>
-          <summary className="mb-3 flex cursor-pointer list-none items-center justify-between rounded-card border border-ink-600 bg-ink-850 px-4 py-3 text-sm font-extrabold text-mist-100">
-            <span>+ הוספת קבוצה</span>
-            <span aria-hidden className="text-mist-500 transition-transform group-open:rotate-180">⌄</span>
-          </summary>
-        <Card>
-          <form
-            className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!parsed) return setError('כתובת לא תקינה — צריך קישור בסגנון facebook.com/groups/…');
-              act('add', () => addGroup(form).then(() => setForm({ url: '', name: '' })), 'הקבוצה נוספה. השם יתעדכן אוטומטית מהקבוצה בפרסום הראשון.');
-            }}
-          >
-            <Field label="קישור לקבוצה" hint={parsed ? `זוהה: ${parsed.externalId}` : 'facebook.com/groups/…'}>
-              <input className={inputClass} dir="ltr" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://www.facebook.com/groups/…" />
-            </Field>
-            <Field label="שם (רשות)">
-              <input className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="באר שבע ביחד" />
-            </Field>
-            <div className="flex items-end">
-              <Button type="submit" busy={busy === 'add'} disabled={!parsed}>
-                הוסף
-              </Button>
-            </div>
-          </form>
-          <p className="mt-2 text-xs text-mist-500">הוסיפו רק קבוצות שאתם חברים בהן ומותר לכם לפרסם בהן. הפרסום נעשה מהחשבון שלכם, דרך הדפדפן, בקצב שמרני.</p>
-          <details className="mt-3">
-            <summary className="cursor-pointer text-sm font-bold text-brand-400">הוספה של הרבה קבוצות בבת אחת</summary>
-            <div className="mt-2 space-y-2">
-              <textarea
-                className={`${inputClass} min-h-32 font-mono text-sm`}
-                dir="ltr"
-                placeholder={'הדביקו קישור לקבוצה בכל שורה:\nhttps://www.facebook.com/groups/…\nhttps://www.facebook.com/groups/…'}
-                value={bulk}
-                onChange={(e) => setBulk(e.target.value)}
+        {/* Search + the three filter dimensions. */}
+        <Card padded={false} className="p-3">
+          <input
+            className={inputClass}
+            placeholder="חיפוש קבוצה…"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="חיפוש קבוצה"
+          />
+          <div className="mt-2.5 space-y-2 overflow-x-auto scrollbar-none">
+            <SegmentedControl
+              size="sm"
+              label="סטטוס"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: 'all', label: 'הכל', count: statusCounts.all },
+                { value: 'active', label: 'פעילות', count: statusCounts.active },
+                { value: 'favorites', label: '⭐', count: statusCounts.favorites },
+                { value: 'recent', label: 'פורסם לאחרונה', count: statusCounts.recent },
+                { value: 'paused', label: 'מושהות', count: statusCounts.paused },
+              ]}
+              className="min-w-max"
+            />
+            <SegmentedControl
+              size="sm"
+              label="עיר"
+              value={cityFilter}
+              onChange={setCityFilter}
+              options={[{ value: '', label: 'כל הערים' }, ...cities.map((c) => ({ value: c, label: c, count: all.filter((g) => cityOf(g) === c).length }))]}
+              className="min-w-max"
+            />
+            {categories.length > 0 && (
+              <SegmentedControl
+                size="sm"
+                label="קטגוריה"
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+                options={[{ value: '', label: 'כל הקטגוריות' }, ...categories.map((c) => ({ value: c, label: c, count: all.filter((g) => g.category === c).length }))]}
+                className="min-w-max"
               />
-              <Button
-                busy={busy === 'bulk'}
-                onClick={() =>
-                  act(
-                    'bulk',
-                    async () => {
-                      const lines = bulk.split(/\s+/).map((l) => l.trim()).filter(Boolean);
-                      let added = 0;
-                      const failed: string[] = [];
-                      for (const line of lines) {
-                        try {
-                          await addGroup({ url: line });
-                          added += 1;
-                        } catch (err) {
-                          failed.push(`${line} (${err instanceof Error ? err.message : 'שגיאה'})`);
-                        }
-                      }
-                      setBulk(failed.map((f) => f.split(' (')[0]).join('\n'));
-                      setFlash(`נוספו ${added} קבוצות.${failed.length ? ` ${failed.length} לא נוספו (נשארו בתיבה): ${failed.slice(0, 3).join('; ')}` : ''}`);
-                    },
-                  )
-                }
-              >
-                הוסף את כולן
-              </Button>
-              <p className="text-xs text-mist-500">השם והתמונה של כל קבוצה נמשכים מפייסבוק אוטומטית תוך דקות (ה-worker צריך לרוץ).</p>
-            </div>
-          </details>
-        </Card>
-        </details>
-
-        <Card
-          title={`הקבוצות שלי (${groups?.length ?? 0})`}
-          action={
-            <div className="flex flex-wrap gap-2 text-xs font-bold">
-              <button type="button" className="text-brand-400" onClick={() => setSelected(visible.map((g) => g.id))}>
-                בחר הכל
-              </button>
-              <span className="text-mist-500">·</span>
-              <button type="button" className="text-brand-400" onClick={() => setSelected([])}>
-                נקה בחירה
-              </button>
-              <span className="text-mist-500">·</span>
-              <button type="button" aria-pressed={activeOnly} className={activeOnly ? 'text-emerald-700' : 'text-brand-400'} onClick={() => setActiveOnly((v) => !v)}>
-                פעילות בלבד {activeOnly ? '✓' : ''}
-              </button>
-              <span className="text-mist-500">·</span>
-              <button type="button" aria-pressed={favoritesOnly} className={favoritesOnly ? 'text-amber-600' : 'text-brand-400'} onClick={() => setFavoritesOnly((v) => !v)}>
-                ⭐ מועדפות {favoritesOnly ? '✓' : ''}
-              </button>
-            </div>
-          }
-        >
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <input className={`${inputClass} !w-auto grow`} placeholder="חיפוש לפי שם…" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <div role="group" className="flex flex-wrap gap-1 rounded-xl bg-ink-800 p-0.5 text-xs font-bold">
-              <button type="button" aria-pressed={!cityFilter} onClick={() => setCityFilter('')} className={`rounded-lg px-2.5 py-1.5 ${!cityFilter ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
-                כל הערים
-              </button>
-              {cities.map((c) => (
-                <button key={c} type="button" aria-pressed={cityFilter === c} onClick={() => setCityFilter(c)} className={`rounded-lg px-2.5 py-1.5 ${cityFilter === c ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
-                  {c} ({(groups ?? []).filter((g) => cityOf(g) === c).length})
-                </button>
-              ))}
-            </div>
-            <div role="group" className="flex rounded-xl bg-ink-800 p-0.5 text-xs font-bold">
-              <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={`rounded-lg px-2.5 py-1.5 ${view === 'grid' ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
-                משבצות
-              </button>
-              <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')} className={`rounded-lg px-2.5 py-1.5 ${view === 'list' ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
-                רשימה
-              </button>
-            </div>
-            <Button variant="secondary" busy={busy === 'refresh'} onClick={() => act('refresh', () => requestGroupRefresh(selected.length ? selected : undefined), 'ה-worker ימשוך שם ותמונה מחדש כשהוא פנוי.')}>
-              רענן שם ותמונה{selected.length ? ` (${selected.length})` : ''}
-            </Button>
-            {selected.length > 0 && (
-              <>
-                <Button variant="secondary" busy={busy === 'on'} onClick={() => act('on', () => bulkUpdateTargets(selected, { enabled: true }))}>
-                  הפעל ({selected.length})
-                </Button>
-                <Button variant="secondary" busy={busy === 'off'} onClick={() => act('off', () => bulkUpdateTargets(selected, { enabled: false }))}>
-                  כבה
-                </Button>
-                <Button variant="secondary" busy={busy === 'fav'} onClick={() => act('fav', () => bulkUpdateTargets(selected, { favorite: true }))}>
-                  ⭐ למועדפות
-                </Button>
-                <Button
-                  variant="danger"
-                  busy={busy === 'del'}
-                  onClick={() => {
-                    if (window.confirm(`למחוק ${selected.length} קבוצות?`)) act('del', () => bulkDeleteTargets(selected).then(() => setSelected([])));
-                  }}
-                >
-                  מחק
-                </Button>
-              </>
             )}
           </div>
-          {groups === null && <Loading />}
-          {groups && visible.length === 0 && <Empty>אין קבוצות. הוסיפו קישור למעלה.</Empty>}
-          {visible.length > 0 && view === 'grid' && (
-            <div className="space-y-5">
-              {sections.map((section) => {
-                const ids = section.items.map((g) => g.id);
-                const allOn = ids.every((id) => selected.includes(id));
-                return (
-                  <section key={section.city}>
-                    <header className="mb-2 flex items-center justify-between gap-2">
-                      <h3 className="text-base font-extrabold text-mist-100">
-                        {section.city} <span className="text-sm font-semibold text-mist-500">({section.items.length})</span>
-                      </h3>
-                      <button
-                        type="button"
-                        className="text-xs font-bold text-brand-400"
-                        onClick={() => setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : Array.from(new Set([...s, ...ids]))))}
-                      >
-                        {allOn ? 'בטל בחירה במקטע' : 'בחר את כל המקטע'}
-                      </button>
-                    </header>
-                    <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                      {section.items.map((g) => {
-                        const checked = selected.includes(g.id);
-                        return (
-                          <li
-                            key={g.id}
-                            className={`relative flex flex-col items-center rounded-2xl border p-3 text-center transition-colors ${checked ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'} ${g.enabled ? '' : 'opacity-50'}`}
-                          >
-                            <input
-                              type="checkbox"
-                              aria-label={`בחר ${g.name}`}
-                              checked={checked}
-                              onChange={(e) => setSelected((s) => (e.target.checked ? [...s, g.id] : s.filter((x) => x !== g.id)))}
-                              className="absolute end-2 top-2 h-4 w-4 accent-brand-500"
-                            />
-                            {/* Status dot and the star share one row at the
-                                top so neither collides with the city select. */}
-                            <div className="absolute start-2 top-2 flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => act(g.id, () => updateTarget(g.id, { enabled: !g.enabled }))}
-                                title={g.enabled ? 'פעיל — לחצו לכיבוי' : 'כבוי — לחצו להפעלה'}
-                                aria-label={g.enabled ? `כבה את ${g.name}` : `הפעל את ${g.name}`}
-                              >
-                                <span className={`block h-2.5 w-2.5 rounded-full ${g.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                              </button>
-                              <button
-                                type="button"
-                                className="text-sm leading-none"
-                                aria-label={g.favorite ? `הסר את ${g.name} מהמועדפות` : `הוסף את ${g.name} למועדפות`}
-                                onClick={() => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite }))}
-                              >
-                                {g.favorite ? '⭐' : '☆'}
-                              </button>
-                            </div>
-                            <a href={g.url} target="_blank" rel="noreferrer" className="mt-2">
-                              <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={84} />
-                            </a>
-                            <p className="mt-2 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={g.name}>
-                              {g.name}
-                            </p>
-                            <p className="mt-1 text-[11px] text-mist-500">
-                              {!g.last_synced_at ? 'מושך פרטים…' : g.last_published_at ? `פורסם ${formatDateTimeHe(g.last_published_at).slice(0, 10)}` : 'טרם פורסם'}
-                            </p>
-                            {nextByTarget[g.id] && (
-                              <p className="text-[11px] font-semibold text-sky-700">הבא: {formatDateTimeHe(nextByTarget[g.id]).slice(0, 16)}</p>
-                            )}
-                            {g.last_status && g.last_status !== 'published' && <p className="text-[11px] text-rose-700">{STATUS_LABEL[g.last_status] ?? g.last_status}</p>}
-                            <select
-                              aria-label={`עיר של ${g.name}`}
-                              value={cityOf(g)}
-                              onChange={(e) => act(`city-${g.id}`, () => updateTarget(g.id, { city: e.target.value }))}
-                              className="mt-1.5 w-full rounded-lg border border-ink-600 bg-ink-850 px-1 py-0.5 text-[11px] text-mist-300"
-                            >
-                              {cityOptions.map((c) => (
-                                <option key={c} value={c}>
-                                  {c}
-                                </option>
-                              ))}
-                            </select>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </section>
-                );
-              })}
+          <div className="mt-2.5 flex items-center justify-between gap-2">
+            <div className="flex gap-3 text-xs font-bold">
+              <button type="button" className="text-brand-400" onClick={() => setSelected(visible.map((g) => g.id))}>
+                בחר את כל {visible.length} המוצגות
+              </button>
+              {selected.length > 0 && (
+                <button type="button" className="text-mist-500" onClick={() => setSelected([])}>
+                  נקה
+                </button>
+              )}
             </div>
-          )}
-          {visible.length > 0 && view === 'list' && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs text-mist-500">
-                  <tr>
-                    <th className="py-2" />
-                    <th className="py-2 text-start font-bold">שם</th>
-                    <th className="py-2 text-start font-bold">מזהה</th>
-                    <th className="py-2 text-start font-bold">פרסום אחרון</th>
-                    <th className="py-2 text-start font-bold">סטטוס אחרון</th>
-                    <th className="py-2 text-start font-bold">פעיל</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ink-700">
-                  {visible.map((g) => (
-                    <tr key={g.id} className={g.enabled ? '' : 'opacity-60'}>
-                      <td className="py-2.5 pe-2">
-                        <input type="checkbox" aria-label={`בחר ${g.name}`} checked={selected.includes(g.id)} onChange={(e) => setSelected((s) => (e.target.checked ? [...s, g.id] : s.filter((x) => x !== g.id)))} className="h-4 w-4 accent-brand-500" />
-                      </td>
-                      <td className="py-2.5 pe-3">
-                        <div className="flex items-center gap-2.5">
-                          <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={56} />
-                          <div className="min-w-0">
-                            <a href={g.url} target="_blank" rel="noreferrer" className="font-bold text-mist-100 hover:text-brand-400">
-                              {g.name}
-                            </a>
-                            {!g.last_synced_at && <p className="text-xs text-mist-500">ממתין למשיכת שם ותמונה מפייסבוק…</p>}
-                            {g.last_error && <p className="max-w-xs truncate text-xs text-rose-700" title={g.last_error}>{g.last_error}</p>}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-2.5 pe-3 font-mono text-xs text-mist-300" dir="ltr">
-                        {g.external_id || '—'}
-                      </td>
-                      <td className="py-2.5 pe-3 whitespace-nowrap text-mist-300">{g.last_published_at ? formatDateTimeHe(g.last_published_at) : '—'}</td>
-                      <td className="py-2.5 pe-3 whitespace-nowrap">{STATUS_LABEL[g.last_status ?? ''] ?? g.last_status}</td>
-                      <td className="py-2.5">
-                        <Toggle checked={g.enabled} onChange={(v) => act(g.id, () => updateTarget(g.id, { enabled: v }))} label={`הפעל ${g.name}`} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+            <SegmentedControl
+              size="sm"
+              label="תצוגה"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'grid', label: 'משבצות' },
+                { value: 'list', label: 'רשימה' },
+              ]}
+            />
+          </div>
         </Card>
+
+        {groups === null && (
+          <Card>
+            <SkeletonList rows={5} />
+          </Card>
+        )}
+
+        {groups && all.length === 0 && (
+          <EmptyState
+            icon="👥"
+            title="אין עדיין קבוצות"
+            description="הדביקו קישור לקבוצת פייסבוק שאתם חברים בה ומותר לכם לפרסם בה. אפשר גם להדביק עשרות קישורים בבת אחת."
+            action={<Button onClick={() => setAddOpen(true)}>הוסף קבוצה ראשונה</Button>}
+          />
+        )}
+
+        {groups && all.length > 0 && visible.length === 0 && (
+          <EmptyState
+            icon="🔎"
+            title="אין קבוצות שמתאימות לסינון"
+            description="נסו לנקות את החיפוש או לבחור 'הכל'."
+            action={
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setQuery('');
+                  setStatus('all');
+                  setCityFilter('');
+                  setCategoryFilter('');
+                }}
+              >
+                נקה סינון
+              </Button>
+            }
+          />
+        )}
+
+        {visible.length > 0 && view === 'grid' && (
+          <div className="space-y-5">
+            {sections.map((section) => {
+              const ids = section.items.map((g) => g.id);
+              const allOn = ids.every((id) => selected.includes(id));
+              return (
+                <section key={section.city}>
+                  <header className="mb-2 flex items-center justify-between gap-2">
+                    <h3 className="text-base font-extrabold text-mist-100">
+                      {section.city} <span className="text-sm font-semibold text-mist-500">({section.items.length})</span>
+                    </h3>
+                    <button
+                      type="button"
+                      className="min-h-9 text-xs font-bold text-brand-400"
+                      onClick={() => setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])]))}
+                    >
+                      {allOn ? 'בטל בחירה' : `בחר את כל ${section.items.length}`}
+                    </button>
+                  </header>
+                  <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                    {section.items.map((g) => (
+                      <GroupCard
+                        key={g.id}
+                        group={g}
+                        selected={selected.includes(g.id)}
+                        onSelect={(on) => toggleSelect(g.id, on)}
+                        onToggleFavorite={() => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite }))}
+                        actions={menuFor(g)}
+                        nextAt={nextByTarget[g.id]}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+        )}
+
+        {visible.length > 0 && view === 'list' && (
+          <Card padded={false}>
+            <ul className="divide-y divide-ink-700">
+              {visible.map((g) => (
+                <li key={g.id} className="flex items-center gap-2.5 px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    aria-label={`בחר את ${g.name}`}
+                    checked={selected.includes(g.id)}
+                    onChange={(e) => toggleSelect(g.id, e.target.checked)}
+                    className="h-4 w-4 shrink-0 accent-brand-500"
+                  />
+                  <Link href={`/social/groups/${g.id}`} className="flex min-w-0 grow items-center gap-2.5">
+                    <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={40} />
+                    <div className="min-w-0">
+                      <p className={`truncate text-sm font-bold ${g.enabled ? 'text-mist-100' : 'text-mist-500'}`}>
+                        {g.favorite && <span aria-hidden>⭐ </span>}
+                        {g.name}
+                      </p>
+                      <p className="truncate text-[11px] text-mist-500">
+                        {cityOf(g)}
+                        {g.category ? ` · ${g.category}` : ''} · {g.last_published_at ? `פורסם ${formatDayMonthHe(g.last_published_at)}` : 'טרם פורסם'}
+                      </p>
+                    </div>
+                  </Link>
+                  <Toggle checked={g.enabled} onChange={(v) => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: v }))} label={`הפעל את ${g.name}`} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
       </div>
+
+      {/* Selection bar: sticky above the tab bar, so it is reachable with a thumb. */}
+      {selected.length > 0 && (
+        <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl bg-ink-850 p-2.5 shadow-2xl ring-1 ring-ink-600">
+            <Badge tone="brand">נבחרו {selected.length}</Badge>
+            <Link href={`/social/posts/new?targets=${selected.join(',')}`}>
+              <Button size="sm">צור פוסט</Button>
+            </Link>
+            <Button size="sm" variant="secondary" busy={busy === 'bulk-on'} onClick={() => act('bulk-on', () => bulkUpdateTargets(selected, { enabled: true }), 'הופעלו.')}>
+              הפעל
+            </Button>
+            <Button size="sm" variant="secondary" busy={busy === 'bulk-off'} onClick={() => act('bulk-off', () => bulkUpdateTargets(selected, { enabled: false }), 'הושהו.')}>
+              השהה
+            </Button>
+            <Button size="sm" variant="secondary" busy={busy === 'bulk-fav'} onClick={() => act('bulk-fav', () => bulkUpdateTargets(selected, { favorite: true }), 'סומנו כמועדפות.')}>
+              ⭐
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => { setCategoryDraft(''); setCategoryOpen(true); }}>
+              קטגוריה
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              busy={busy === 'bulk-del'}
+              onClick={async () => {
+                const ok = await confirm.ask({
+                  title: `להסיר ${selected.length} קבוצות?`,
+                  body: 'הן יוסרו מרשימת היעדים. היסטוריית הפרסומים נשמרת.',
+                  confirmLabel: 'הסר',
+                  danger: true,
+                });
+                if (ok) await act('bulk-del', () => bulkDeleteTargets(selected).then(() => setSelected([])), 'הוסרו.');
+              }}
+            >
+              הסר
+            </Button>
+            <button type="button" className="ms-auto min-h-9 px-2 text-xs font-bold text-mist-500" onClick={() => setSelected([])}>
+              בטל
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Category assignment for the whole selection. */}
+      <Sheet
+        open={categoryOpen}
+        onClose={() => setCategoryOpen(false)}
+        title={`קטגוריה ל-${selected.length} קבוצות`}
+        footer={
+          <Button
+            size="lg"
+            className="w-full"
+            busy={busy === 'bulk-cat'}
+            onClick={() => {
+              setCategoryOpen(false);
+              act('bulk-cat', () => bulkUpdateTargets(selected, { category: categoryDraft.trim() }), categoryDraft.trim() ? `סווגו כ-"${categoryDraft.trim()}".` : 'הקטגוריה נוקתה.');
+            }}
+          >
+            שמור
+          </Button>
+        }
+      >
+        <Field label="שם הקטגוריה" hint="למשל: לוחות מכירה, קהילתי, יד שנייה. השאירו ריק כדי לנקות.">
+          <input className={inputClass} value={categoryDraft} onChange={(e) => setCategoryDraft(e.target.value)} list="group-categories" />
+          <datalist id="group-categories">
+            {categories.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </Field>
+        {categories.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {categories.map((c) => (
+              <button key={c} type="button" onClick={() => setCategoryDraft(c)} className="rounded-full bg-ink-800 px-3 py-1.5 text-xs font-bold text-mist-300">
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+      </Sheet>
+
+      {/* Adding groups: one link, or a whole list pasted at once. */}
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="הוספת קבוצות" size="lg">
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!parsed) {
+              toast('כתובת לא תקינה — צריך קישור בסגנון facebook.com/groups/…', 'error');
+              return;
+            }
+            act('add', () => addGroup(form).then(() => setForm({ url: '', name: '' })), 'הקבוצה נוספה. השם והתמונה יימשכו מפייסבוק אוטומטית.');
+          }}
+        >
+          <Field label="קישור לקבוצה" hint={parsed ? `זוהה: ${parsed.externalId}` : 'facebook.com/groups/…'}>
+            <input className={inputClass} dir="ltr" inputMode="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://www.facebook.com/groups/…" />
+          </Field>
+          <Field label="שם (רשות)">
+            <input className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="באר שבע ביחד" />
+          </Field>
+          <Button type="submit" size="lg" className="w-full" busy={busy === 'add'} disabled={!parsed}>
+            הוסף קבוצה
+          </Button>
+        </form>
+
+        <div className="mt-5 border-t border-ink-700 pt-4">
+          <p className="mb-2 text-sm font-extrabold text-mist-100">הוספה של הרבה קבוצות</p>
+          <textarea
+            className={`${inputClass} min-h-32 font-mono text-sm`}
+            dir="ltr"
+            placeholder={'קישור בכל שורה:\nhttps://www.facebook.com/groups/…\nhttps://www.facebook.com/groups/…'}
+            value={bulk}
+            onChange={(e) => setBulk(e.target.value)}
+          />
+          <Button
+            className="mt-2 w-full"
+            size="lg"
+            busy={busy === 'bulk'}
+            onClick={() =>
+              act('bulk', async () => {
+                const lines = bulk.split(/\s+/).map((l) => l.trim()).filter(Boolean);
+                let added = 0;
+                const failed: string[] = [];
+                for (const line of lines) {
+                  try {
+                    await addGroup({ url: line });
+                    added += 1;
+                  } catch {
+                    failed.push(line);
+                  }
+                }
+                // Whatever failed stays in the box so it can be fixed and retried.
+                setBulk(failed.join('\n'));
+                toast(`נוספו ${added} קבוצות${failed.length ? `; ${failed.length} לא נוספו ונשארו בתיבה` : ''}.`, failed.length ? 'info' : 'success');
+              })
+            }
+          >
+            הוסף את כולן
+          </Button>
+          <p className="mt-2 text-xs text-mist-500">
+            הוסיפו רק קבוצות שאתם חברים בהן ומותר לכם לפרסם בהן. הפרסום נעשה מהחשבון שלכם דרך הדפדפן שעל המחשב — לא דרך API רשמי של פייסבוק.
+          </p>
+        </div>
+      </Sheet>
+
+      {confirm.dialog}
     </SocialShell>
   );
 }

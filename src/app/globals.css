@@ -1021,3 +1021,94 @@
     display: none;
   }
 }
+
+/*
+ * ---------------------------------------------------------------------------
+ * Social module motion.
+ *
+ * Three effects, deliberately: a shimmer so a loading screen reads as
+ * "filling in" rather than broken, and one entrance each for toasts and
+ * sheets. Everything is short (180-260ms) — the product should feel fast, and
+ * an animation a person notices is already too long. All of it collapses
+ * under prefers-reduced-motion.
+ * ---------------------------------------------------------------------------
+ */
+@keyframes skeleton-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--color-ink-800) 100%, transparent) 30%,
+    color-mix(in srgb, var(--color-ink-700) 100%, transparent) 50%,
+    color-mix(in srgb, var(--color-ink-800) 100%, transparent) 70%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s linear infinite;
+}
+
+@keyframes toast-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.toast-in {
+  animation: toast-rise 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Phones: the sheet slides up from the edge it is docked to. */
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.sheet-in {
+  animation: sheet-rise 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* From md up the sheet is a centred dialog, so it must keep its centring
+   transform — it fades and lifts in place instead of sliding. */
+@media (min-width: 768px) {
+  @keyframes sheet-rise-centered {
+    from {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% + 12px)) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+  .sheet-in {
+    animation-name: sheet-rise-centered;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer,
+  .toast-in,
+  .sheet-in {
+    animation: none;
+  }
+  .skeleton-shimmer {
+    background-image: none;
+  }
+}

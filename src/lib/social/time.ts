@@ -94,6 +94,22 @@ export function formatTimeHe(iso: string | Date, tz = TIMEZONE): string {
   return new Intl.DateTimeFormat('he-IL', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
 }
 
+/**
+ * Compact date for dense rows: "18.09" inside the current year, "18.09.25"
+ * outside it. A full dd.mm.yyyy next to a time and a relative phrase does not
+ * fit a 390px row, and the year is noise 99% of the time.
+ */
+export function formatDayMonthHe(iso: string | Date, tz = TIMEZONE): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  const sameYear = zonedDateISO(d, tz).slice(0, 4) === zonedDateISO(new Date(), tz).slice(0, 4);
+  return new Intl.DateTimeFormat('he-IL', {
+    timeZone: tz,
+    day: '2-digit',
+    month: '2-digit',
+    ...(sameYear ? {} : { year: '2-digit' }),
+  }).format(d);
+}
+
 /** Relative wording for the dashboard's "next publication" tile. */
 export function relativeHe(iso: string): string {
   const diff = new Date(iso).getTime() - Date.now();

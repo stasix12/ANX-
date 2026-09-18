@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { CalendarIcon, PlusIcon, UsersIcon } from '@/components/icons';
-import { Button } from './ui';
 
 /**
  * The four things the owner does on a normal morning, one tap each. Sits
@@ -41,6 +40,3 @@ export function QuickActions({ onRunNow, running }: { onRunNow: () => void; runn
     </div>
   );
 }
-
-/** Small helper so the dashboard's "publish now" button stays consistent. */
-export { Button };

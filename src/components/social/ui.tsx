@@ -498,10 +498,24 @@ export function Sheet({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    /*
+     * h-[100dvh] rather than inset-0: on iOS Safari a fixed element's
+     * containing block is the LARGE viewport (the one with the toolbars
+     * hidden), so `bottom: 0` lands underneath Safari's bottom bar. That is
+     * what hid this sheet's footer — and with it the "start publishing"
+     * button — on a real iPhone. The dynamic viewport unit tracks what is
+     * actually on screen, and flexbox docks the panel instead of absolute
+     * positioning plus a centring transform.
+     */
+    <div
+      className="fixed inset-x-0 top-0 z-[70] flex h-[100dvh] flex-col justify-end md:items-center md:justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
       <button type="button" aria-label="סגור" className="absolute inset-0 cursor-default bg-black/45 backdrop-blur-[2px]" onClick={onClose} />
       <div
-        className={`sheet-in absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col rounded-t-3xl bg-ink-850 pb-[env(safe-area-inset-bottom)] shadow-2xl md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:max-h-[85dvh] md:w-full md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl ${
+        className={`sheet-in relative flex max-h-[88dvh] w-full flex-col rounded-t-3xl bg-ink-850 shadow-2xl md:max-h-[85dvh] md:rounded-3xl ${
           size === 'lg' ? 'md:max-w-2xl' : 'md:max-w-lg'
         }`}
       >
@@ -514,8 +528,12 @@ export function Sheet({
             <CloseIcon className="h-5 w-5" />
           </IconButton>
         </header>
-        <div className="min-h-0 grow overflow-y-auto px-4 pb-4">{children}</div>
-        {footer && <footer className="shrink-0 border-t border-ink-700 bg-ink-850 px-4 py-3">{footer}</footer>}
+        {/* The safe-area inset belongs to whichever element is last, so the
+            action button never sits under the home indicator. */}
+        <div className={`min-h-0 grow overflow-y-auto px-4 ${footer ? 'pb-4' : 'pb-[calc(1rem+env(safe-area-inset-bottom))]'}`}>{children}</div>
+        {footer && (
+          <footer className="shrink-0 border-t border-ink-700 bg-ink-850 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{footer}</footer>
+        )}
       </div>
     </div>
   );

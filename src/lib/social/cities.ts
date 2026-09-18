@@ -7,7 +7,8 @@ export const OTHER_CITY = 'אחר';
 
 const CITY_PATTERNS: [string, RegExp][] = [
   ['ערד', /ערד|\barad\b|арад/i],
-  ['באר שבע', /באר[\s-]?שבע|ב["'׳״]?ש\b|beer[\s-]?sheva|beersheba|b7\b|беэр[\s-]?шев|беэр-шева/i],
+  // \b does not work next to Hebrew letters (they are not \w), hence the lookarounds.
+  ['באר שבע', /באר[\s-]?שבע|(?<![\p{L}])ב["'׳״]?ש(?![\p{L}])|beer[\s-]?sheva|beersheba|b7\b|беэр[\s-]?шев|беэр-шева/iu],
   ['אופקים', /אופקים|ofakim|офаким/i],
   ['דימונה', /דימונה|dimona|димон/i],
   ['נתיבות', /נתיבות|netivot|нетивот/i],
@@ -17,10 +18,10 @@ const CITY_PATTERNS: [string, RegExp][] = [
   ['אשקלון', /אשקלון|ashkelon|ашкелон/i],
   ['אשדוד', /אשדוד|ashdod|ашдод/i],
   ['קריית גת', /קרי?ית[\s-]?גת|kiryat[\s-]?gat|кирьят[\s-]?гат/i],
-  ['עומר', /\bעומר\b|\bomer\b/i],
+  ['עומר', /(?<![\p{L}])עומר(?![\p{L}])|\bomer\b/iu],
   ['להבים', /להבים|lehavim/i],
-  ['מיתר', /\bמיתר\b|meitar/i],
-  ['רהט', /\bרהט\b|rahat/i],
+  ['מיתר', /(?<![\p{L}])מיתר(?![\p{L}])|meitar/iu],
+  ['רהט', /(?<![\p{L}])רהט(?![\p{L}])|rahat/iu],
 ];
 
 export function detectCity(name: string): string {

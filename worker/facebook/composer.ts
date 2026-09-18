@@ -130,7 +130,12 @@ async function openComposer(page: Page): Promise<Locator | null> {
   if (!trigger) return null;
   await trigger.scrollIntoViewIfNeeded().catch(() => undefined);
   await trigger.click({ timeout: 10_000 }).catch(() => undefined);
-  return firstVisible(fb.composerDialog(page), 15_000);
+  // Let the dialog animate in before looking for it.
+  await page.waitForTimeout(1500);
+  const dialog = await firstVisible(fb.composerDialog(page), 15_000);
+  if (dialog) return dialog;
+  // Inline composer (no dialog): the editable appeared where the trigger was.
+  return firstVisible(fb.inlineComposer(page), 3_000);
 }
 
 /** Facebook's editor is contenteditable; insertText behaves like an IME commit and keeps React state in sync. */

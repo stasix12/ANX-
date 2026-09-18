@@ -167,9 +167,16 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
                           </>
                         )}
                         {r.status === 'scheduled' && (
-                          <Button variant="ghost" className="!px-2 !py-1.5 text-xs text-rose-600" onClick={() => act(`cancel-${r.id}`, () => cancelQueueItem(r.id))}>
-                            בטל
-                          </Button>
+                          <>
+                            {new Date(r.scheduled_at).getTime() > Date.now() + 60_000 && (
+                              <Button variant="secondary" className="!px-3 !py-1.5 text-xs" busy={busy === `now-${r.id}`} onClick={() => act(`now-${r.id}`, () => retryQueueItem(r.id))}>
+                                הרץ עכשיו
+                              </Button>
+                            )}
+                            <Button variant="ghost" className="!px-2 !py-1.5 text-xs text-rose-600" onClick={() => act(`cancel-${r.id}`, () => cancelQueueItem(r.id))}>
+                              בטל
+                            </Button>
+                          </>
                         )}
                       </div>
                       {shots[r.id] && (

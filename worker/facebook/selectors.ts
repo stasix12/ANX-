@@ -53,11 +53,21 @@ export const fb = {
     page.locator('[role="main"] form [role="button"]').first(),
   ],
 
-  /** The composer dialog. */
+  /**
+   * The composer dialog. Facebook pages carry several role="dialog" nodes
+   * (chat pop-outs, notification panels), so only a dialog that actually
+   * contains an editable field counts.
+   */
   composerDialog: (page: Page): Locator[] => [
-    page.getByRole('dialog', { name: patterns.composerDialog }),
-    page.getByRole('dialog').filter({ has: page.getByRole('button', { name: patterns.postButton }) }).first(),
-    page.locator('[role="dialog"]').last(),
+    page.getByRole('dialog', { name: patterns.composerDialog }).filter({ has: page.locator('[contenteditable="true"], [role="textbox"]') }),
+    page.getByRole('dialog').filter({ has: page.locator('[contenteditable="true"], [role="textbox"]') }).last(),
+    page.locator('[role="dialog"]').filter({ has: page.locator('[contenteditable="true"]') }).last(),
+  ],
+
+  /** Some layouts expand the composer inline instead of a dialog. */
+  inlineComposer: (page: Page): Locator[] => [
+    page.locator('[role="main"]').filter({ has: page.locator('[contenteditable="true"][role="textbox"]') }).first(),
+    page.locator('form').filter({ has: page.locator('[contenteditable="true"]') }).first(),
   ],
 
   /** The editable text area inside the dialog. */

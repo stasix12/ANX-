@@ -203,7 +203,29 @@ export default function SocialDashboard() {
             </Notice>
           )}
 
-          {/* 1 — what is running right now. */}
+          {/* 1 — the numbers first. The owner opens this screen to see where
+              the day stands before anything else, so the tiles lead. */}
+          <section>
+            <h2 className="mb-2 text-sm font-extrabold uppercase tracking-wide text-mist-500">סטטיסטיקה</h2>
+            <div className="grid grid-cols-3 gap-2 md:grid-cols-6 [&>*]:min-w-0">
+              <Tile label="פורסמו היום" value={data.today} tone={data.today ? 'good' : 'default'} sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`} />
+              <Tile label="השבוע" value={data.week} tone="good" sub="מיום ראשון" />
+              <Tile label="מתוזמנים" value={data.counts.scheduled} href="/social/history?status=scheduled" />
+              <Tile label="הצליחו" value={data.counts.published} tone="good" sub="סך הכול" />
+              <Tile label="נכשלו" value={data.counts.failed} tone={data.counts.failed ? 'bad' : 'default'} href="/social/history?status=failed" />
+              <Tile
+                label="דורשים פעולה"
+                value={data.counts.manual_pending + data.counts.needs_attention}
+                tone={data.counts.manual_pending + data.counts.needs_attention ? 'warn' : 'default'}
+                sub={`${data.activeTargets} יעדים פעילים`}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] text-mist-500">
+              המגבלה היומית ({data.limits.maxPerDay}) היא מספר שאתם קובעים בהגדרות — היא לא מכסה רשמית של פייסבוק.
+            </p>
+          </section>
+
+          {/* 2 — what is running right now. */}
           {featured ? (
             <CampaignCard
               campaign={featured.campaign}
@@ -225,7 +247,7 @@ export default function SocialDashboard() {
             />
           )}
 
-          {/* 2 — what happens next. */}
+          {/* 3 — what happens next. */}
           <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
             <Card
               title="הפרסומים הקרובים"
@@ -271,26 +293,6 @@ export default function SocialDashboard() {
             </Card>
           )}
 
-          {/* 3 — and only then, the numbers. */}
-          <section>
-            <h2 className="mb-2 text-sm font-extrabold uppercase tracking-wide text-mist-500">סטטיסטיקה</h2>
-            <div className="grid grid-cols-3 gap-2 md:grid-cols-6 [&>*]:min-w-0">
-              <Tile label="פורסמו היום" value={data.today} tone={data.today ? 'good' : 'default'} sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`} />
-              <Tile label="השבוע" value={data.week} tone="good" sub="מיום ראשון" />
-              <Tile label="מתוזמנים" value={data.counts.scheduled} href="/social/history?status=scheduled" />
-              <Tile label="הצליחו" value={data.counts.published} tone="good" sub="סך הכול" />
-              <Tile label="נכשלו" value={data.counts.failed} tone={data.counts.failed ? 'bad' : 'default'} href="/social/history?status=failed" />
-              <Tile
-                label="דורשים פעולה"
-                value={data.counts.manual_pending + data.counts.needs_attention}
-                tone={data.counts.manual_pending + data.counts.needs_attention ? 'warn' : 'default'}
-                sub={`${data.activeTargets} יעדים פעילים`}
-              />
-            </div>
-            <p className="mt-1.5 text-[11px] text-mist-500">
-              המגבלה היומית ({data.limits.maxPerDay}) היא מספר שאתם קובעים בהגדרות — היא לא מכסה רשמית של פייסבוק.
-            </p>
-          </section>
 
           <LiveBoard />
 

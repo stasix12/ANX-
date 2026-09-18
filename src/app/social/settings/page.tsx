@@ -223,6 +223,12 @@ export default function SettingsPage() {
           <Button size="lg" className="w-full" busy={busy} onClick={save}>
             שמור הגדרות
           </Button>
+
+          {/* Which build the phone is actually running. If this does not change
+              after a deploy, the browser is serving a cached copy. */}
+          <p className="text-center text-[11px] text-mist-500">
+            גרסת המערכת: <span dir="ltr" className="font-mono">{process.env.NEXT_PUBLIC_BUILD_STAMP || '—'}</span>
+          </p>
         </div>
       )}
     </SocialShell>

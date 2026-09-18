@@ -498,24 +498,33 @@ export function Sheet({
 
   if (!open) return null;
   return (
-    /*
-     * h-[100dvh] rather than inset-0: on iOS Safari a fixed element's
-     * containing block is the LARGE viewport (the one with the toolbars
-     * hidden), so `bottom: 0` lands underneath Safari's bottom bar. That is
-     * what hid this sheet's footer — and with it the "start publishing"
-     * button — on a real iPhone. The dynamic viewport unit tracks what is
-     * actually on screen, and flexbox docks the panel instead of absolute
-     * positioning plus a centring transform.
-     */
-    <div
-      className="fixed inset-x-0 top-0 z-[70] flex h-[100dvh] flex-col justify-end md:items-center md:justify-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-    >
-      <button type="button" aria-label="סגור" className="absolute inset-0 cursor-default bg-black/45 backdrop-blur-[2px]" onClick={onClose} />
+    <>
+      {/*
+       * The panel is `fixed … bottom-0` in its own right, NOT absolutely
+       * positioned inside a full-screen overlay.
+       *
+       * That distinction is the whole bug. On iOS Safari a fixed element's
+       * containing block is the LARGE viewport — the one measured with the
+       * toolbars hidden — so `inset-0` produces a box taller than the screen,
+       * and a child pinned to ITS bottom lands underneath Safari's bottom bar.
+       * That is where the "start publishing" button went. The app's own bottom
+       * tab bar has always rendered correctly on the same device using exactly
+       * the pattern below, so the sheet now uses it too.
+       *
+       * svh (the SMALL viewport, measured with the toolbars shown) caps the
+       * height: unlike dvh it never exceeds what is actually visible.
+       */}
+      <button
+        type="button"
+        aria-label="סגור"
+        className="fixed inset-0 z-[70] cursor-default bg-black/45 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
       <div
-        className={`sheet-in relative flex max-h-[88dvh] w-full flex-col rounded-t-3xl bg-ink-850 shadow-2xl md:max-h-[85dvh] md:rounded-3xl ${
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className={`sheet-in fixed inset-x-0 bottom-0 z-[71] mx-auto flex max-h-[85svh] flex-col rounded-t-3xl bg-ink-850 shadow-2xl md:bottom-[8vh] md:max-h-[80svh] md:rounded-3xl ${
           size === 'lg' ? 'md:max-w-2xl' : 'md:max-w-lg'
         }`}
       >
@@ -535,7 +544,7 @@ export function Sheet({
           <footer className="shrink-0 border-t border-ink-700 bg-ink-850 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{footer}</footer>
         )}
       </div>
-    </div>
+    </>
   );
 }
 

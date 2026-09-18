@@ -20,13 +20,37 @@ export async function readGroupProfile(page: Page, groupUrl: string): Promise<Gr
 
   const name = (await page.title().catch(() => '')).replace(/^\(\d+\)\s*/, '').replace(patterns.titleSuffix, '').trim();
 
+  // Candidate pictures, best first. Facebook draws a blurred copy of the
+  // cover behind the real one, so blurred/tiny images are skipped and the
+  // sharpest, largest one wins.
   const candidates: string[] = [];
+  const cover = await page.locator('img[data-imgperflogname="profileCoverPhoto"]').first().getAttribute('src').catch(() => null);
+  if (cover) candidates.push(cover);
+  const ranked = await page
+    .locator('[role="main"] img[src*="scontent"], [role="main"] img[src*="fbcdn"]')
+    .evaluateAll((els) =>
+      els
+        .map((el) => {
+          const img = el as HTMLImageElement;
+          const style = getComputedStyle(img);
+          const rect = img.getBoundingClientRect();
+          return {
+            src: img.currentSrc || img.src,
+            area: (img.naturalWidth || rect.width) * (img.naturalHeight || rect.height),
+            blurred: /blur/.test(style.filter) || /blur/.test(getComputedStyle(img.parentElement ?? img).filter),
+            round: /50%|9999/.test(style.borderRadius),
+            top: rect.top,
+          };
+        })
+        .filter((i) => i.src && !i.blurred && i.area > 40_000 && !i.round && i.top < 900)
+        .sort((a, b) => b.area - a.area)
+        .slice(0, 3)
+        .map((i) => i.src),
+    )
+    .catch(() => [] as string[]);
+  candidates.push(...ranked);
   const og = await page.locator('meta[property="og:image"]').first().getAttribute('content').catch(() => null);
   if (og) candidates.push(og);
-  // The group's own picture sits in the header, above the feed.
-  for (const src of await page.locator('[role="main"] img[src*="scontent"], [role="main"] image[href*="scontent"], [role="banner"] ~ * img[src*="scontent"]').evaluateAll((els) => els.slice(0, 4).map((e) => (e as HTMLImageElement).src || e.getAttribute('href') || '')).catch(() => [])) {
-    if (src) candidates.push(src);
-  }
 
   let image: GroupProfile['image'] = null;
   for (const url of candidates) {

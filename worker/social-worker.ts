@@ -196,7 +196,8 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
         return;
       }
       const patch: Record<string, unknown> = { last_synced_at: new Date().toISOString() };
-      if (profile.name && (target.name === target.external_id || !target.name)) patch.name = profile.name;
+      // The name is always Facebook's own, so the list reads exactly like Facebook.
+      if (profile.name) patch.name = profile.name;
       if (profile.image) {
         const ext = profile.image.contentType.includes('png') ? 'png' : 'jpg';
         const objectPath = `groups/${target.id}.${ext}`;

@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { CampaignProgressBar } from '@/components/social/CampaignProgressBar';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Empty, Field, Loading, Notice, inputClass } from '@/components/social/ui';
-import { deleteCampaign, getBusiness, listCampaigns, listPosts, pauseCampaign, saveCampaign, stopCampaign } from '@/lib/social/client';
-import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type Post } from '@/lib/social/types';
+import { campaignProgress, deleteCampaign, getBusiness, listCampaigns, listPosts, pauseCampaign, saveCampaign, stopCampaign } from '@/lib/social/client';
+import { DEFAULT_BUSINESS, EMPTY_PROGRESS, type BusinessSettings, type Campaign, type CampaignProgress, type Post } from '@/lib/social/types';
 
 const blank = { name: '', service: '', city: '', language: 'he' as Campaign['language'], notes: '' };
 
@@ -16,16 +17,18 @@ const blank = { name: '', service: '', city: '', language: 'he' as Campaign['lan
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [progress, setProgress] = useState<Record<string, CampaignProgress>>({});
   const [business, setBusiness] = useState<BusinessSettings>(DEFAULT_BUSINESS);
   const [form, setForm] = useState<typeof blank & { id?: string }>(blank);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const [c, p, b] = await Promise.all([listCampaigns(), listPosts(), getBusiness()]);
+    const [c, p, b, prog] = await Promise.all([listCampaigns(), listPosts(), getBusiness(), campaignProgress()]);
     setCampaigns(c);
     setPosts(p);
     setBusiness(b);
+    setProgress(prog);
     setForm((f) => (f.id ? f : { ...f, service: f.service || b.services[0], city: f.city || b.cities[0] }));
   }
 
@@ -110,6 +113,9 @@ export default function CampaignsPage() {
                   <span className={c.status === 'active' ? 'text-emerald-700' : 'text-amber-700'}>{c.status === 'active' ? 'פעיל' : c.status === 'paused' ? 'מושהה' : 'בארכיון'}</span>
                 </p>
                 {c.notes && <p className="mt-1 text-sm text-mist-500">{c.notes}</p>}
+                <div className="mt-3">
+                  <CampaignProgressBar progress={progress[c.id] ?? EMPTY_PROGRESS} />
+                </div>
                 <ul className="mt-3 space-y-1 text-sm">
                   {mine.length === 0 && <li className="text-mist-500">אין פוסטים בקמפיין הזה עדיין.</li>}
                   {mine.map((p) => (

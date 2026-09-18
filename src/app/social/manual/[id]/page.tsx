@@ -6,7 +6,7 @@ import { CopyIcon } from '@/components/icons';
 import { PostPreview } from '@/components/social/PostPreview';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, inputClass } from '@/components/social/ui';
-import { cancelQueueItem, getPost, getQueueItem, markManualPublished, type QueueRow } from '@/lib/social/client';
+import { cancelQueueItem, getPost, getQueueItem, manualQueue, markManualPublished, type QueueRow } from '@/lib/social/client';
 import type { MediaItem, Post } from '@/lib/social/types';
 
 /**
@@ -22,15 +22,45 @@ export default function ManualKitPage() {
   const [permalink, setPermalink] = useState('');
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queue, setQueue] = useState<QueueRow[]>([]);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    getQueueItem(id)
-      .then(async (q) => {
+    setCopied(false);
+    setPermalink('');
+    Promise.all([getQueueItem(id), manualQueue()])
+      .then(async ([q, all]) => {
         setItem(q);
+        setQueue(all);
         if (q) setPost(await getPost(q.post_id));
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'טעינה נכשלה.'));
   }, [id]);
+
+  /**
+   * Walks the manual queue in place: finish one group and land straight on
+   * the next, so 30 groups are 30 taps rather than 30 trips to the dashboard.
+   */
+  const position = queue.findIndex((q) => q.id === id);
+  const remaining = queue.filter((q) => q.id !== id);
+  const goNext = () => {
+    if (remaining.length) router.replace(`/social/manual/${remaining[0].id}`);
+    else router.push('/social');
+  };
+
+  async function finish(action: 'published' | 'skip') {
+    if (!item) return;
+    setBusy(true);
+    try {
+      if (action === 'published') await markManualPublished(item.id, permalink);
+      else await cancelQueueItem(item.id);
+      goNext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'הפעולה נכשלה.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function copyText() {
     if (!item) return;
@@ -42,7 +72,16 @@ export default function ManualKitPage() {
   const media = (post?.media ?? []) as MediaItem[];
 
   return (
-    <SocialShell title="ערכת פרסום ידני">
+    <SocialShell
+      title="פרסום ידני"
+      headerAction={
+        queue.length > 1 ? (
+          <span className="rounded-full bg-white/20 px-3 py-1.5 text-xs font-bold text-white">
+            קבוצה {position >= 0 ? position + 1 : 1} מתוך {queue.length}
+          </span>
+        ) : undefined
+      }
+    >
       {error && <Notice tone="error">{error}</Notice>}
       {!item && !error && <Loading />}
       {item && (
@@ -91,12 +130,24 @@ export default function ManualKitPage() {
                 <Field label="קישור לפוסט שפורסם (רשות)">
                   <input className={inputClass} dir="ltr" value={permalink} onChange={(e) => setPermalink(e.target.value)} placeholder="https://www.facebook.com/groups/…/posts/…" />
                 </Field>
-                <div className="mt-3 flex gap-2">
-                  <Button onClick={() => markManualPublished(item.id, permalink).then(() => router.push('/social'))}>סמן כפורסם</Button>
-                  <Button variant="secondary" onClick={() => cancelQueueItem(item.id).then(() => router.push('/social'))}>
-                    דלג על הפרסום הזה
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button busy={busy} onClick={() => finish('published')}>
+                    ✅ סמן כפורסם {remaining.length > 0 && '← הבא'}
                   </Button>
+                  <Button variant="secondary" busy={busy} onClick={() => finish('skip')}>
+                    דלג {remaining.length > 0 && '← הבא'}
+                  </Button>
+                  {remaining.length > 0 && (
+                    <Button variant="ghost" onClick={goNext} className="ms-auto">
+                      עבור לבא בלי לשנות →
+                    </Button>
+                  )}
                 </div>
+                {remaining.length > 0 && (
+                  <p className="mt-2 text-xs text-mist-500">
+                    נשארו עוד {remaining.length} קבוצות בתור. הבאה: {remaining[0].target?.name ?? '—'}
+                  </p>
+                )}
               </Card>
             ) : (
               <Notice tone="success">הפריט כבר טופל (סטטוס: {item.status}).</Notice>

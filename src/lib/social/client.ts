@@ -6,12 +6,14 @@ import {
   DEFAULT_BROWSER,
   DEFAULT_BUSINESS,
   DEFAULT_LIMITS,
+  EMPTY_PROGRESS,
   WORKER_OFFLINE_AFTER_SECONDS,
   parseGroupUrl,
   type ActivityEntry,
   type BrowserSettings,
   type BusinessSettings,
   type Campaign,
+  type CampaignProgress,
   type ControlSettings,
   type LimitsSettings,
   type MediaItem,
@@ -96,7 +98,7 @@ export async function listTargets(): Promise<SocialTarget[]> {
   return rows;
 }
 
-export async function updateTarget(id: string, patch: Partial<Pick<SocialTarget, 'enabled' | 'name' | 'url' | 'notes' | 'city'>>): Promise<void> {
+export async function updateTarget(id: string, patch: Partial<Pick<SocialTarget, 'enabled' | 'name' | 'url' | 'notes' | 'city' | 'favorite' | 'category'>>): Promise<void> {
   unwrap(await db().from('social_targets').update(patch).eq('id', id));
 }
 
@@ -135,7 +137,7 @@ export async function requestGroupRefresh(ids?: string[]): Promise<void> {
   unwrap(await q);
 }
 
-export async function bulkUpdateTargets(ids: string[], patch: Partial<Pick<SocialTarget, 'enabled'>>): Promise<void> {
+export async function bulkUpdateTargets(ids: string[], patch: Partial<Pick<SocialTarget, 'enabled' | 'favorite' | 'category'>>): Promise<void> {
   if (!ids.length) return;
   unwrap(await db().from('social_targets').update(patch).in('id', ids));
 }
@@ -369,6 +371,46 @@ export async function screenshotUrl(path: string): Promise<string | null> {
   return data.signedUrl;
 }
 
+/* ------------------------------------------------------------ campaigns */
+
+/**
+ * One rollup per campaign, from the queue rows that carry campaign_id.
+ * A single grouped read keeps the campaigns screen to one request no matter
+ * how many campaigns exist.
+ */
+export async function campaignProgress(): Promise<Record<string, CampaignProgress>> {
+  const rows = unwrap<{ campaign_id: string | null; status: QueueItem['status'] }[]>(
+    await db().from('social_queue').select('campaign_id, status').not('campaign_id', 'is', null),
+  );
+  const out: Record<string, CampaignProgress> = {};
+  for (const row of rows) {
+    const id = row.campaign_id as string;
+    const p = (out[id] ??= { ...EMPTY_PROGRESS });
+    p.total += 1;
+    if (row.status === 'published') p.published += 1;
+    else if (row.status === 'failed') p.failed += 1;
+    else if (row.status === 'skipped') p.skipped += 1;
+    else if (row.status === 'scheduled' || row.status === 'paused') p.scheduled += 1;
+    else if (row.status === 'publishing' || row.status === 'awaiting_confirmation') p.running += 1;
+    else if (row.status === 'manual_pending' || row.status === 'needs_attention') p.manual += 1;
+  }
+  for (const p of Object.values(out)) p.done = p.published + p.failed + p.skipped;
+  return out;
+}
+
+/* --------------------------------------------------- manual publish queue */
+
+/**
+ * Every publication waiting for the owner to post it by hand, oldest first.
+ * The manual assistant walks this list so it can say "group 7 of 32" and
+ * jump straight to the next one.
+ */
+export async function manualQueue(): Promise<QueueRow[]> {
+  return unwrap<QueueRow[]>(
+    await db().from('social_queue').select(QUEUE_SELECT).eq('status', 'manual_pending').order('scheduled_at').limit(200),
+  );
+}
+
 /* -------------------------------------------------------------- workers */
 
 export async function listWorkers(): Promise<(SocialWorker & { online: boolean })[]> {
@@ -386,7 +428,13 @@ export async function listRecentCommands(limit = 5): Promise<WorkerCommand[]> {
 }
 
 export async function markManualPublished(id: string, permalink: string): Promise<void> {
-  await updateQueueItem(id, { status: 'published', published_at: new Date().toISOString(), permalink: permalink || null, error: null });
+  await updateQueueItem(id, {
+    status: 'published',
+    published_at: new Date().toISOString(),
+    permalink: permalink || null,
+    error: null,
+    method: 'manual',
+  });
 }
 
 export async function cancelAllScheduled(): Promise<number> {
@@ -414,6 +462,15 @@ export async function countByStatus(): Promise<Record<QueueItem['status'], numbe
 }
 
 /* ------------------------------------------------------------------ log */
+
+/** Publications in a window, for the dashboard's "today"/"this week" tiles. */
+export async function countPublishedBetween(sinceISO: string, untilISO?: string): Promise<number> {
+  let q = db().from('social_queue').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('published_at', sinceISO);
+  if (untilISO) q = q.lte('published_at', untilISO);
+  const res = await q;
+  if (res.error) throw new Error(res.error.message);
+  return res.count ?? 0;
+}
 
 export async function listActivity(limit = 40): Promise<ActivityEntry[]> {
   return unwrap<ActivityEntry[]>(await db().from('social_activity_log').select('*').order('at', { ascending: false }).limit(limit));

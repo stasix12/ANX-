@@ -46,6 +46,10 @@ export interface SocialTarget {
   image_url?: string;
   /** Auto-detected from the name (src/lib/social/cities.ts); editable. */
   city?: string;
+  /** Starred by the owner — surfaces first in pickers and filters. */
+  favorite?: boolean;
+  /** Free-form grouping ("לוחות מכירה", "קהילתי"…). */
+  category?: string;
   created_at: string;
 }
 
@@ -203,8 +207,43 @@ export interface QueueItem {
   require_confirmation?: boolean;
   confirmed_at?: string | null;
   campaign_id?: string | null;
+  /** How this row was published: Graph API, local browser worker, or by hand. */
+  method?: PublishMethod;
   created_at: string;
 }
+
+export type PublishMethod = '' | 'api' | 'browser' | 'manual';
+
+export const METHOD_LABEL: Record<PublishMethod, string> = {
+  '': '—',
+  api: 'API',
+  browser: 'דפדפן',
+  manual: 'ידני',
+};
+
+/** Per-campaign rollup used by the campaigns screen and the dashboard. */
+export interface CampaignProgress {
+  total: number;
+  published: number;
+  failed: number;
+  skipped: number;
+  scheduled: number;
+  running: number;
+  manual: number;
+  /** published + failed + skipped — everything that will not change again. */
+  done: number;
+}
+
+export const EMPTY_PROGRESS: CampaignProgress = {
+  total: 0,
+  published: 0,
+  failed: 0,
+  skipped: 0,
+  scheduled: 0,
+  running: 0,
+  manual: 0,
+  done: 0,
+};
 
 export type WorkerStatus = 'online' | 'needs_attention' | 'offline';
 export type BrowserState = 'connected' | 'needs_auth' | 'disconnected' | 'unknown';

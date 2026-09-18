@@ -3,15 +3,21 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { PlusIcon } from '@/components/icons';
+import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { LiveBoard } from '@/components/social/LiveBoard';
+import { QuickActions } from '@/components/social/QuickActions';
+import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Empty, Loading, Notice, StatusPill, Tile } from '@/components/social/ui';
 import {
   callSocialApi,
   cancelAllScheduled,
   countByStatus,
+  countPublishedBetween,
   countPublishedSince,
+  listCampaigns,
+  listPosts,
   getControl,
   getLimits,
   listActivity,
@@ -21,12 +27,16 @@ import {
   setPaused,
   type QueueRow,
 } from '@/lib/social/client';
-import { formatDateTimeHe, formatTimeHe, relativeHe, startOfZonedDay } from '@/lib/social/time';
+import { addDaysISO, formatDateTimeHe, formatTimeHe, relativeHe, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import type { ActivityEntry, ControlSettings, LimitsSettings, QueueStatus } from '@/lib/social/types';
 
 interface DashboardData {
   counts: Record<QueueStatus, number>;
   today: number;
+  week: number;
+  activePosts: number;
+  activeCampaigns: number;
+  upcoming: QueueRow[];
   limits: LimitsSettings;
   control: ControlSettings;
   activeTargets: number;
@@ -45,20 +55,33 @@ export default function SocialDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [counts, today, limits, control, targets, next, manual, recentFailed, log] = await Promise.all([
-        countByStatus(),
-        countPublishedSince(startOfZonedDay(new Date()).toISOString()),
-        getLimits(),
-        getControl(),
-        listTargets(),
-        nextScheduled(),
-        listQueue({ status: ['manual_pending'], limit: 20 }),
-        listQueue({ status: ['failed'], limit: 5 }),
-        listActivity(30),
-      ]);
+      // The local week starts on Sunday, the Israeli work week.
+      const now = new Date();
+      const weekStartISO = addDaysISO(zonedDateISO(now), -new Date().getDay());
+      const [counts, today, week, limits, control, targets, next, manual, recentFailed, log, posts, campaigns, upcoming] =
+        await Promise.all([
+          countByStatus(),
+          countPublishedSince(startOfZonedDay(now).toISOString()),
+          countPublishedBetween(zonedToUtc(weekStartISO, '00:00').toISOString()),
+          getLimits(),
+          getControl(),
+          listTargets(),
+          nextScheduled(),
+          listQueue({ status: ['manual_pending'], limit: 20 }),
+          listQueue({ status: ['failed'], limit: 5 }),
+          listActivity(30),
+          listPosts(),
+          listCampaigns(),
+          listQueue({ status: ['scheduled'], limit: 5 }),
+        ]);
       setData({
         counts,
         today,
+        week,
+        activePosts: posts.filter((p) => p.status === 'ready').length,
+        activeCampaigns: campaigns.filter((c) => c.status === 'active').length,
+        // listQueue sorts newest-first; the soonest publication is last.
+        upcoming: [...upcoming].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)).slice(0, 5),
         limits,
         control,
         activeTargets: targets.filter((t) => t.enabled).length,
@@ -144,12 +167,23 @@ export default function SocialDashboard() {
           )}
           {runReport && <Notice tone="info">{runReport}</Notice>}
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Tile label="ממתינים לפרסום" value={data.counts.scheduled} sub={data.next ? `הבא: ${relativeHe(data.next.scheduled_at)}` : 'אין תזמון'} />
-            <Tile label="פורסמו" value={data.counts.published} tone="good" sub={`${data.today} היום מתוך ${data.limits.maxPerDay}`} />
+          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+            <Tile label="פוסטים פעילים" value={data.activePosts} sub={`${data.activeCampaigns} קמפיינים פעילים`} />
+            <Tile label="פורסמו היום" value={data.today} tone={data.today ? 'good' : 'default'} sub={`מתוך ${data.limits.maxPerDay} מותר`} />
+            <Tile label="פורסמו השבוע" value={data.week} tone="good" sub="מיום ראשון" />
+            <Tile label="קבוצות פעילות" value={data.activeTargets} sub={`${data.apiTargets} דפים · ${data.activeTargets - data.apiTargets} קבוצות`} />
+            <Tile label="מתוזמנים" value={data.counts.scheduled} sub={data.next ? relativeHe(data.next.scheduled_at) : 'אין תזמון'} />
+            <Tile label="פורסמו בהצלחה" value={data.counts.published} tone="good" sub="מאז ומתמיד" />
             <Tile label="נכשלו" value={data.counts.failed} tone={data.counts.failed ? 'bad' : 'default'} sub={`${data.counts.skipped} דולגו`} />
-            <Tile label="יעדים פעילים" value={data.activeTargets} sub={`${data.apiTargets} דרך API · ${data.activeTargets - data.apiTargets} ידניים`} />
+            <Tile
+              label="דורשים פעולה ידנית"
+              value={data.counts.manual_pending + data.counts.needs_attention}
+              tone={data.counts.manual_pending + data.counts.needs_attention ? 'warn' : 'default'}
+              sub={data.counts.needs_attention ? `${data.counts.needs_attention} תקועים` : 'הכל זורם'}
+            />
           </div>
+
+          <QuickActions onRunNow={runNow} running={busy === 'run'} />
 
           <div className="grid gap-5 lg:grid-cols-3">
             <BrowserStatusCard onChanged={load} />
@@ -159,18 +193,25 @@ export default function SocialDashboard() {
           </div>
 
           <div className="grid gap-5 lg:grid-cols-3">
-            <Card title="הפרסום הבא" className="lg:col-span-1">
-              {data.next ? (
-                <div className="space-y-1.5">
-                  <p className="text-2xl font-extrabold text-brand-400">{formatTimeHe(data.next.scheduled_at)}</p>
-                  <p className="text-sm text-mist-300">{formatDateTimeHe(data.next.scheduled_at)}</p>
-                  <p className="font-bold text-mist-100">{data.next.target?.name ?? 'יעד'}</p>
-                  <p className="text-sm text-mist-300">
-                    {data.next.post?.title || 'פוסט'} {data.next.variant ? `· גרסה ${data.next.variant.label}` : ''}
-                  </p>
-                </div>
-              ) : (
+            <Card title="הפרסומים הקרובים" className="lg:col-span-1">
+              {data.upcoming.length === 0 ? (
                 <Empty>אין פרסום מתוזמן. צרו פוסט ותזמנו אותו.</Empty>
+              ) : (
+                <ul className="divide-y divide-ink-700">
+                  {data.upcoming.map((item) => (
+                    <li key={item.id} className="flex items-center gap-2.5 py-2.5">
+                      <TargetAvatar name={item.target?.name ?? '?'} imageUrl={item.target?.image_url} channel={item.target?.channel} size={32} />
+                      <div className="min-w-0 grow">
+                        <p className="truncate text-sm font-bold text-mist-100">{item.target?.name ?? 'יעד'}</p>
+                        <p className="truncate text-xs text-mist-500">{item.post?.title || 'פוסט'}</p>
+                      </div>
+                      <div className="shrink-0 text-end">
+                        <p className="text-sm font-extrabold tabular-nums text-brand-400">{formatTimeHe(item.scheduled_at)}</p>
+                        <p className="text-[11px] text-mist-500">{relativeHe(item.scheduled_at)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button variant="secondary" busy={busy === 'run'} onClick={runNow}>
@@ -185,7 +226,11 @@ export default function SocialDashboard() {
               </div>
             </Card>
 
-            <Card title={data.manual.length ? `ממתינים לפרסום ידני (${data.manual.length})` : 'סיכום'} className="lg:col-span-2">
+            <Card
+              title={data.manual.length ? `ממתינים לפרסום ידני (${data.manual.length})` : 'סיכום'}
+              className="lg:col-span-2"
+              action={data.manual.length > 1 ? <Link href={`/social/manual/${data.manual[0].id}`} className="text-sm font-bold text-brand-400">עבור על כולם ←</Link> : undefined}
+            >
               {data.manual.length === 0 ? (
                 <p className="text-sm text-mist-300">
                   דפים מתפרסמים דרך Graph API מהשרת; קבוצות דרך ה-worker המקומי. הכל נכנס לאותו תור, עם אותן מכסות ואותו מרווח. בהיסטוריה תמצאו כל פרסום עם הסיבה לכל דילוג.
@@ -226,26 +271,8 @@ export default function SocialDashboard() {
             </Card>
           )}
 
-          <Card title="יומן פעילות">
-            {data.log.length === 0 ? (
-              <Empty>עדיין אין פעילות.</Empty>
-            ) : (
-              <ul className="max-h-96 space-y-1.5 overflow-y-auto text-sm">
-                {data.log.map((e) => (
-                  <li key={e.id} className="flex gap-3">
-                    <span className="shrink-0 tabular-nums text-xs text-mist-500">{formatDateTimeHe(e.at)}</span>
-                    <span
-                      className={`shrink-0 rounded px-1.5 text-[11px] font-bold ${
-                        e.level === 'error' ? 'bg-rose-100 text-rose-700' : e.level === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'
-                      }`}
-                    >
-                      {e.event}
-                    </span>
-                    <span className="min-w-0 break-words text-mist-100">{e.message}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <Card title="יומן פעילות" action={<Link href="/social/history" className="text-sm font-bold text-brand-400">להיסטוריה המלאה</Link>}>
+            <ActivityFeed entries={data.log} limit={12} />
           </Card>
         </div>
       )}

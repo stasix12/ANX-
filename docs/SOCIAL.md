@@ -286,6 +286,27 @@ Win+R → `shell:startup` → Enter → לגרור לתוך התיקייה קי�
 (קליק ימני על הקובץ → "צור קיצור דרך"). מעכשיו האתר וה-worker עולים עם המחשב.
 המחשב צריך להישאר דלוק (לא במצב שינה) בשעות ההפצה.
 
+## 10. שדרוג SaaS — שלב P0 (ספטמבר 2026)
+
+דורש `supabase/social-schema-v7.sql`.
+
+| מה | איפה |
+| --- | --- |
+| לוח בקרה: 8 אריחים, פעולות מהירות, 5 הפרסומים הקרובים, יומן פעילות עם אייקונים | `src/app/social/page.tsx`, `components/social/{QuickActions,ActivityFeed}.tsx` |
+| התקדמות קמפיין (הושלמו X מתוך Y + פילוח) | `components/social/CampaignProgressBar.tsx`, `client.ts → campaignProgress()` |
+| תור פרסום ידני ("קבוצה 7 מתוך 32", סמן ← הבא) | `src/app/social/manual/[id]/page.tsx`, `client.ts → manualQueue()` |
+| מועדפים + קטגוריה לקבוצות, "הפרסום הבא" לכל קבוצה | `src/app/social/groups/page.tsx` |
+| שגיאות בשפה אנושית (כותרת, מה לעשות, האם לנסות שוב) | `components/social/ErrorDetail.tsx` |
+| פעמון התראות עם מונה לא-נקראו (per-device ב-localStorage) | `components/social/NotificationBell.tsx` |
+| תפריט "עוד" במובייל, אריחים קומפקטיים | `components/social/SocialShell.tsx`, `ui.tsx` |
+| שכפול פוסט (כולל גרסאות) ושכפול קמפיין | `client.ts → duplicatePost/duplicateCampaign` |
+| היסטוריה: עמודות קמפיין ושיטה, טווחי תאריך מהירים | `src/app/social/history/page.tsx` |
+
+**מה עוד לא נבנה** (ומסומן ככזה, לא כמוכן): אשף יצירת פוסט בשלבים, לוח שנה
+עם גרירה, מסך Analytics, Onboarding למשתמש חדש, ותשתית AI. הערוצים
+Instagram/LinkedIn/Telegram **אינם** מוצגים כזמינים — יש רק ממשק
+`ChannelAdapter` שמאפשר להוסיף אותם.
+
 ### כש-Facebook משנה ממשק
 
 הכל ב-`worker/facebook/selectors.ts`. הריצו `npx tsx worker/test/composer.test.ts`

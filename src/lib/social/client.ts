@@ -191,6 +191,47 @@ export async function savePost(input: PostInput): Promise<Post> {
   return unwrap<Post>(await db().from('social_posts').insert(rest).select('*').single());
 }
 
+/**
+ * Copies a post with its variants — the fastest way to run last month's
+ * campaign again, and what "templates" mostly means in practice here.
+ * The copy starts as a draft so nothing goes out until it is scheduled.
+ */
+export async function duplicatePost(id: string): Promise<Post> {
+  const source = await getPost(id);
+  if (!source) throw new Error('הפוסט לא נמצא.');
+  const { id: _id, created_at: _c, updated_at: _u, ...rest } = source;
+  const copy = unwrap<Post>(
+    await db()
+      .from('social_posts')
+      .insert({ ...rest, title: `${source.title || 'פוסט'} — עותק`, status: 'draft' })
+      .select('*')
+      .single(),
+  );
+  const variants = await listVariants(id);
+  if (variants.length) {
+    unwrap(
+      await db()
+        .from('social_variants')
+        .insert(variants.map(({ id: _vid, post_id: _pid, ...v }) => ({ ...v, post_id: copy.id }))),
+    );
+  }
+  return copy;
+}
+
+/** Copies a campaign's settings (not its posts) as a fresh active campaign. */
+export async function duplicateCampaign(id: string): Promise<Campaign> {
+  const source = (await listCampaigns()).find((c) => c.id === id);
+  if (!source) throw new Error('הקמפיין לא נמצא.');
+  const { id: _id, created_at: _c, ...rest } = source;
+  return unwrap<Campaign>(
+    await db()
+      .from('social_campaigns')
+      .insert({ ...rest, name: `${source.name} — עותק`, status: 'active' })
+      .select('*')
+      .single(),
+  );
+}
+
 export async function archivePost(id: string): Promise<void> {
   unwrap(await db().from('social_posts').update({ status: 'archived' }).eq('id', id));
   unwrap(await db().from('social_schedules').update({ active: false }).eq('post_id', id));

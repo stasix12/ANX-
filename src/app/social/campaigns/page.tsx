@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { CampaignProgressBar } from '@/components/social/CampaignProgressBar';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Empty, Field, Loading, Notice, inputClass } from '@/components/social/ui';
-import { campaignProgress, deleteCampaign, getBusiness, listCampaigns, listPosts, pauseCampaign, saveCampaign, stopCampaign } from '@/lib/social/client';
+import { campaignProgress, deleteCampaign, duplicateCampaign, getBusiness, listCampaigns, listPosts, pauseCampaign, saveCampaign, stopCampaign } from '@/lib/social/client';
 import { DEFAULT_BUSINESS, EMPTY_PROGRESS, type BusinessSettings, type Campaign, type CampaignProgress, type Post } from '@/lib/social/types';
 
 const blank = { name: '', service: '', city: '', language: 'he' as Campaign['language'], notes: '' };
@@ -147,6 +147,9 @@ export default function CampaignsPage() {
                     }}
                   >
                     ⏹ Stop
+                  </Button>
+                  <Button variant="ghost" onClick={() => duplicateCampaign(c.id).then(load)}>
+                    ⧉ שכפל
                   </Button>
                   <Button
                     variant="ghost"

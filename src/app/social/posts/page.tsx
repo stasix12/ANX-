@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { PlusIcon } from '@/components/icons';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Card, Empty, Loading, Notice } from '@/components/social/ui';
-import { listCampaigns, listPosts } from '@/lib/social/client';
+import { duplicatePost, listCampaigns, listPosts } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, Post } from '@/lib/social/types';
 
@@ -13,6 +14,8 @@ export default function PostsPage() {
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [copying, setCopying] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     Promise.all([listPosts(), listCampaigns()])
@@ -62,6 +65,25 @@ export default function PostsPage() {
                         {p.status === 'ready' ? 'מוכן' : 'טיוטה'}
                       </span>
                     </Link>
+                    <div className="flex justify-end pb-2">
+                      <button
+                        type="button"
+                        disabled={copying === p.id}
+                        className="text-xs font-bold text-brand-400 disabled:opacity-50"
+                        onClick={async () => {
+                          setCopying(p.id);
+                          try {
+                            const copy = await duplicatePost(p.id);
+                            router.push(`/social/posts/${copy.id}`);
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : 'השכפול נכשל.');
+                            setCopying(null);
+                          }
+                        }}
+                      >
+                        {copying === p.id ? 'משכפל…' : '⧉ שכפל פוסט'}
+                      </button>
+                    </div>
                   </li>
                 );
               })}

@@ -73,20 +73,30 @@ export function TargetPicker({
     onChange(next);
   }
 
-  /** Adds a set, trimming groups to the cap rather than refusing the whole action. */
-  function add(items: SocialTarget[]) {
-    let next = Array.from(new Set([...selected, ...items.filter((t) => t.enabled).map((t) => t.id)]));
-    if (maxSelectable !== undefined && groupCount(next) > maxSelectable) {
-      const groups = next.filter((id) => targets.find((t) => t.id === id)?.channel === 'facebook_group').slice(0, maxSelectable);
-      next = next.filter((id) => targets.find((t) => t.id === id)?.channel !== 'facebook_group').concat(groups);
-    }
-    onChange(next);
+  /** Trims a candidate list to the test-mode cap rather than refusing it whole. */
+  function capped(ids: string[]): string[] {
+    if (maxSelectable === undefined || groupCount(ids) <= maxSelectable) return ids;
+    const groups = ids.filter((id) => targets.find((t) => t.id === id)?.channel === 'facebook_group').slice(0, maxSelectable);
+    return ids.filter((id) => targets.find((t) => t.id === id)?.channel !== 'facebook_group').concat(groups);
   }
 
+  const enabledIds = (items: SocialTarget[]) => items.filter((t) => t.enabled).map((t) => t.id);
+  /** "Only Be'er Sheva" means only Be'er Sheva — it replaces, it does not merge. */
+  const only = (items: SocialTarget[]) => onChange(capped(enabledIds(items)));
+  const also = (items: SocialTarget[]) => onChange(capped(Array.from(new Set([...selected, ...enabledIds(items)]))));
+
+  /*
+   * Selected targets the current filter hides. Without this the picker could
+   * strand a selection out of sight: pick "all of Be'er Sheva" while a post
+   * still carried Arad from an earlier campaign and the Arad groups stayed
+   * selected, off-screen, with no checkbox to clear them.
+   */
+  const hiddenSelected = selected.filter((id) => !visible.some((t) => t.id === id));
+
   const quickSets = [
-    { label: city ? `כל ${city}` : 'כל המוצגים', items: visible },
+    { label: city || 'כל המוצגים', items: visible },
     { label: '⭐ מועדפות', items: targets.filter((t) => t.favorite) },
-    { label: 'דפים בלבד', items: targets.filter((t) => t.channel === 'facebook_page') },
+    { label: 'דפים', items: targets.filter((t) => t.channel === 'facebook_page') },
   ].filter((s) => s.items.length > 0);
 
   return (
@@ -132,20 +142,58 @@ export function TargetPicker({
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        {quickSets.map((s) => (
-          <Button key={s.label} size="sm" variant="secondary" onClick={() => add(s.items)}>
-            + {s.label} ({s.items.length})
-          </Button>
+        {quickSets.map((q) => (
+          <span key={q.label} className="inline-flex overflow-hidden rounded-xl">
+            <Button size="sm" variant="secondary" className="!rounded-none" onClick={() => only(q.items)}>
+              רק {q.label} ({q.items.length})
+            </Button>
+            {selected.length > 0 && (
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label={`הוסף את ${q.label} לבחירה הקיימת`}
+                title={`הוסף את ${q.label} לבחירה הקיימת`}
+                className="!rounded-none border-s border-ink-600 !px-2.5"
+                onClick={() => also(q.items)}
+              >
+                +
+              </Button>
+            )}
+          </span>
         ))}
         {selected.length > 0 && (
           <Button size="sm" variant="ghost" onClick={() => onChange([])}>
-            נקה בחירה
+            נקה הכל
           </Button>
         )}
         <span className="ms-auto">
           <Badge tone={selected.length ? 'brand' : 'neutral'}>נבחרו {selected.length}</Badge>
         </span>
       </div>
+
+      {hiddenSelected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
+          <span className="text-xs font-bold text-amber-900">
+            {hiddenSelected.length} יעדים נבחרים לא מוצגים בסינון הנוכחי
+          </span>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ms-auto"
+            onClick={() => {
+              setCity('');
+              setCategory('');
+              setChannel('all');
+              setQuery('');
+            }}
+          >
+            הצג אותם
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => onChange(selected.filter((id) => visible.some((t) => t.id === id)))}>
+            הסר אותם
+          </Button>
+        </div>
+      )}
 
       {note && <p className="text-xs font-bold text-amber-700">{note}</p>}
       {atCap && !note && <p className="text-xs text-amber-700">הגעתם למגבלת הקבוצות של מצב הבדיקה.</p>}

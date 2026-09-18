@@ -7,6 +7,13 @@ import { signIn, useAdminSession } from '@/lib/adminAuth';
 
 type SkyPhase = 'dawn' | 'day' | 'dusk' | 'night';
 
+/** Where to land after sign-in: ?next=/social etc., same-origin paths only. */
+function safeNext(): string {
+  if (typeof window === 'undefined') return '/crm';
+  const next = new URLSearchParams(window.location.search).get('next') ?? '';
+  return next.startsWith('/') && !next.startsWith('//') ? next : '/crm';
+}
+
 /** The sky the user would see outside right now. */
 function skyPhaseNow(): SkyPhase {
   const hour = new Date().getHours();
@@ -43,7 +50,7 @@ export default function CrmLoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && session) router.replace('/crm');
+    if (!loading && session) router.replace(safeNext());
   }, [loading, session, router]);
 
   async function onSubmit(event: React.FormEvent) {
@@ -56,7 +63,7 @@ export default function CrmLoginPage() {
       setError(message);
       return;
     }
-    router.replace('/crm');
+    router.replace(safeNext());
   }
 
   if (loading || session) {

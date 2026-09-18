@@ -460,7 +460,14 @@ export default function CrmAdsPage() {
   const currency = 'ILS';
 
   return (
-    <CrmShell title="פרסום ממומן">
+    <CrmShell
+      title="פרסום ממומן"
+      headerAction={
+        <Link href="/social" className="rounded-full bg-white/20 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/30">
+          פוסטים אורגניים ←
+        </Link>
+      }
+    >
       {!configLoaded ? null : !config ? (
         <div className="rounded-card border border-ink-700 surface p-6 text-center">
           <p aria-hidden className="text-3xl">📣</p>

@@ -42,6 +42,8 @@ export interface SocialTarget {
   last_published_at?: string | null;
   last_status?: string;
   last_error?: string;
+  /** Group/page picture, copied into our own storage by the worker (Facebook CDN links expire). */
+  image_url?: string;
   created_at: string;
 }
 

@@ -119,6 +119,13 @@ export async function addGroup(input: { url: string; name?: string; notes?: stri
 /** @deprecated phase-1 name; groups are now browser-published. */
 export const addManualGroup = (input: { name: string; url: string; notes?: string }) => addGroup(input);
 
+/** Ask the worker to (re)fetch name + picture from Facebook for these groups. */
+export async function requestGroupRefresh(ids?: string[]): Promise<void> {
+  let q = db().from('social_targets').update({ last_synced_at: null }).eq('channel', 'facebook_group');
+  if (ids?.length) q = q.in('id', ids);
+  unwrap(await q);
+}
+
 export async function bulkUpdateTargets(ids: string[], patch: Partial<Pick<SocialTarget, 'enabled'>>): Promise<void> {
   if (!ids.length) return;
   unwrap(await db().from('social_targets').update(patch).in('id', ids));
@@ -256,13 +263,13 @@ export async function setScheduleActive(id: string, active: boolean): Promise<vo
 /* ---------------------------------------------------------------- queue */
 
 export interface QueueRow extends QueueItem {
-  target: Pick<SocialTarget, 'id' | 'name' | 'channel' | 'url'> | null;
+  target: Pick<SocialTarget, 'id' | 'name' | 'channel' | 'url' | 'image_url'> | null;
   post: Pick<Post, 'id' | 'title' | 'media' | 'link_url'> | null;
   variant: Pick<Variant, 'id' | 'label'> | null;
 }
 
 const QUEUE_SELECT =
-  '*, target:social_targets(id,name,channel,url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
+  '*, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
 
 export async function listQueue(opts: { status?: QueueItem['status'][]; since?: string; until?: string; limit?: number } = {}): Promise<QueueRow[]> {
   let q = db().from('social_queue').select(QUEUE_SELECT).order('scheduled_at', { ascending: false }).limit(opts.limit ?? 200);

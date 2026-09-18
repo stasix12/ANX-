@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { CHANNEL_LABEL, PERMISSION_LABEL, type SocialTarget, type Variant } from '@/lib/social/types';
+import { TargetAvatar } from './TargetAvatar';
 import { Toggle, inputClass } from './ui';
 
 /**
@@ -95,6 +96,7 @@ export function TargetPicker({
           return (
             <li key={t.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${!t.enabled ? 'opacity-50' : ''} ${on ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'}`}>
               <Toggle checked={on} onChange={(v) => toggle(t.id, v)} label={t.name} />
+              <TargetAvatar name={t.name} imageUrl={t.image_url} channel={t.channel} size={32} />
               <div className="min-w-0 grow">
                 <p className="truncate text-sm font-bold text-mist-100">{t.name}</p>
                 <p className={`truncate text-xs ${t.channel === 'facebook_page' ? 'text-emerald-700' : 'text-sky-700'}`}>

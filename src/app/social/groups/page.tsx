@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
+import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Button, Card, Empty, Field, Loading, Notice, Toggle, inputClass } from '@/components/social/ui';
-import { addGroup, bulkDeleteTargets, bulkUpdateTargets, listTargets, listWorkers, updateTarget } from '@/lib/social/client';
+import { addGroup, bulkDeleteTargets, bulkUpdateTargets, listTargets, listWorkers, requestGroupRefresh, updateTarget } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
 
@@ -141,7 +142,7 @@ export default function GroupsPage() {
               >
                 הוסף את כולן
               </Button>
-              <p className="text-xs text-mist-500">השם של כל קבוצה מתעדכן אוטומטית מפייסבוק בפרסום הראשון אליה.</p>
+              <p className="text-xs text-mist-500">השם והתמונה של כל קבוצה נמשכים מפייסבוק אוטומטית תוך דקות (ה-worker צריך לרוץ).</p>
             </div>
           </details>
         </Card>
@@ -166,6 +167,9 @@ export default function GroupsPage() {
         >
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <input className={`${inputClass} !w-auto grow`} placeholder="חיפוש לפי שם…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <Button variant="secondary" busy={busy === 'refresh'} onClick={() => act('refresh', () => requestGroupRefresh(selected.length ? selected : undefined), 'ה-worker ימשוך שם ותמונה מחדש כשהוא פנוי.')}>
+              רענן שם ותמונה{selected.length ? ` (${selected.length})` : ''}
+            </Button>
             {selected.length > 0 && (
               <>
                 <Button variant="secondary" busy={busy === 'on'} onClick={() => act('on', () => bulkUpdateTargets(selected, { enabled: true }))}>
@@ -208,10 +212,16 @@ export default function GroupsPage() {
                         <input type="checkbox" aria-label={`בחר ${g.name}`} checked={selected.includes(g.id)} onChange={(e) => setSelected((s) => (e.target.checked ? [...s, g.id] : s.filter((x) => x !== g.id)))} className="h-4 w-4 accent-brand-500" />
                       </td>
                       <td className="py-2.5 pe-3">
-                        <a href={g.url} target="_blank" rel="noreferrer" className="font-bold text-mist-100 hover:text-brand-400">
-                          {g.name}
-                        </a>
-                        {g.last_error && <p className="max-w-xs truncate text-xs text-rose-700" title={g.last_error}>{g.last_error}</p>}
+                        <div className="flex items-center gap-2.5">
+                          <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} />
+                          <div className="min-w-0">
+                            <a href={g.url} target="_blank" rel="noreferrer" className="font-bold text-mist-100 hover:text-brand-400">
+                              {g.name}
+                            </a>
+                            {!g.last_synced_at && <p className="text-xs text-mist-500">ממתין למשיכת שם ותמונה מפייסבוק…</p>}
+                            {g.last_error && <p className="max-w-xs truncate text-xs text-rose-700" title={g.last_error}>{g.last_error}</p>}
+                          </div>
+                        </div>
                       </td>
                       <td className="py-2.5 pe-3 font-mono text-xs text-mist-300" dir="ltr">
                         {g.external_id || '—'}

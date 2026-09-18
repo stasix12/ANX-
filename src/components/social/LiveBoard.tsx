@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cancelQueueItem, confirmQueueItem, listLiveQueue, pauseCampaign, retryQueueItem, screenshotUrl, stopCampaign, type QueueRow } from '@/lib/social/client';
 import { formatTimeHe } from '@/lib/social/time';
 import { QUEUE_STEP_LABEL, type QueueStatus, type QueueStep } from '@/lib/social/types';
+import { TargetAvatar } from './TargetAvatar';
 import { Button, Card, Empty, Notice } from './ui';
 
 /**
@@ -139,6 +140,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
                   return (
                     <li key={r.id} className="py-2">
                       <div className="flex flex-wrap items-center gap-2">
+                        <TargetAvatar name={r.target?.name ?? '?'} imageUrl={r.target?.image_url} channel={r.target?.channel} size={28} />
                         <span className="min-w-0 grow truncate text-sm font-bold text-mist-100">
                           {r.target?.name ?? 'יעד'}
                           {r.variant && <span className="ms-1 text-xs font-semibold text-mist-500">· {r.variant.label}</span>}

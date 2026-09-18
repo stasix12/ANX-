@@ -19,6 +19,7 @@ import { FacebookGroupBrowserAdapter } from './adapters/facebookGroupBrowser';
 import { logActivity, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
+import { readGroupProfile } from './facebook/profile';
 import { BrowserSession, SessionError } from './facebook/session';
 import { captureScreenshot } from './screenshots';
 
@@ -134,7 +135,10 @@ async function tick(state: WorkerState): Promise<void> {
     .order('scheduled_at')
     .limit(Math.max(1, Math.min(3, browser.concurrentJobs || 1)));
   if (error) throw new Error(error.message);
-  if (!due?.length) return;
+  if (!due?.length) {
+    await syncGroupProfiles(state, headless);
+    return;
+  }
 
   // Verify the login before the first job of a batch (and at most every 10 min).
   if (state.browserState !== 'connected' || Date.now() - state.lastCheckAt > 10 * 60_000) {
@@ -158,6 +162,55 @@ function idle(state: WorkerState, reason: string): void {
   if (!state.idleNoticeShown) {
     console.log(`[worker] ${reason}`);
     state.idleNoticeShown = true;
+  }
+}
+
+/* ------------------------------------------------------ group profiles */
+
+const PROFILES_PER_TICK = 2;
+
+/**
+ * While idle: groups that were pasted in but never visited get their real
+ * name and picture from Facebook (read-only visit), a couple per tick so
+ * 40 new groups trickle in over a few minutes.
+ */
+async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise<void> {
+  if (state.browserState === 'disconnected' || !session.hasProfile()) return;
+  const db = await workerDb();
+  const { data } = await db
+    .from('social_targets')
+    .select('id, url, name, external_id')
+    .eq('channel', 'facebook_group')
+    .is('last_synced_at', null)
+    .order('created_at')
+    .limit(PROFILES_PER_TICK);
+  if (!data?.length) return;
+
+  for (const target of data) {
+    const page = await session.newPage(headless);
+    try {
+      const profile = await readGroupProfile(page, target.url);
+      if (!profile) {
+        // Login / checkpoint: leave it unsynced and let the job path report it.
+        state.lastCheckAt = 0;
+        return;
+      }
+      const patch: Record<string, unknown> = { last_synced_at: new Date().toISOString() };
+      if (profile.name && (target.name === target.external_id || !target.name)) patch.name = profile.name;
+      if (profile.image) {
+        const ext = profile.image.contentType.includes('png') ? 'png' : 'jpg';
+        const objectPath = `groups/${target.id}.${ext}`;
+        const { error } = await db.storage.from('social-media').upload(objectPath, profile.image.bytes, { contentType: profile.image.contentType, upsert: true });
+        if (!error) patch.image_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
+      }
+      await db.from('social_targets').update(patch).eq('id', target.id);
+      console.log(`[worker] ℹ פרטי קבוצה: "${patch.name ?? target.name}"${profile.image ? ' + תמונה' : ''}`);
+    } catch (err) {
+      await db.from('social_targets').update({ last_synced_at: new Date().toISOString(), last_error: `משיכת פרטים נכשלה: ${err instanceof Error ? err.message : err}` }).eq('id', target.id);
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+    await sleep(4000);
   }
 }
 

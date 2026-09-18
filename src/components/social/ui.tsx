@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircleIcon, CloseIcon, SpinnerIcon, XCircleIcon } from '@/components/icons';
 import { QUEUE_STATUS_LABEL, type PublishMethod, type QueueStatus } from '@/lib/social/types';
 
@@ -483,6 +484,9 @@ export function Sheet({
   size?: 'md' | 'lg';
 }) {
   const titleId = useId();
+  // document.body only exists in the browser, so the portal waits for mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) return;
@@ -499,8 +503,29 @@ export function Sheet({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
-  return (
+  /*
+   * Portalled to <body>, and that is not a nicety — it is the fix.
+   *
+   * A sheet rendered in place is a direct child of <main class="crm-page">,
+   * which gives every child an entrance animation. Two things follow, and
+   * both break a modal:
+   *
+   *   1. `.crm-page > *` outranks `.sheet-in`, so the page's animation wins
+   *      and the panel's own entrance never runs. Measured on the real
+   *      markup: animationName came back as "crm-child-in".
+   *   2. That animation tweens `transform`, and the computed value settles at
+   *      matrix(1,0,0,1,0,0) — NOT `none`. Any transform other than `none`
+   *      makes an element the containing block for fixed descendants, so
+   *      `position: fixed; bottom: 0` stops meaning "the bottom of the
+   *      screen" and starts meaning "the bottom of this page", which on a
+   *      long editor is far below the fold. That is where the publish button
+   *      kept going.
+   *
+   * Outside the page's DOM none of it can reach the sheet, whatever a screen
+   * does to its own children.
+   */
+  if (!open || !mounted) return null;
+  return createPortal(
     <>
       {/*
        * The panel is `fixed … bottom-0` in its own right, NOT absolutely
@@ -547,7 +572,8 @@ export function Sheet({
           <footer className="shrink-0 border-t border-ink-700 bg-ink-850 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{footer}</footer>
         )}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
 

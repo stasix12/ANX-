@@ -193,7 +193,7 @@
 /* Staggered entrance for the page's top-level blocks: each settles a beat
    after the previous — a visible, cascading glide that stays classy. The
    hero keeps its own drift animation untouched. */
-.crm-page:not(.crm-page-push) > *:not(.crm-hero) {
+.crm-page:not(.crm-page-push) > *:not(.crm-hero):not([role='dialog']):not([data-overlay]) {
   animation: crm-child-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .crm-page > :nth-child(2) {

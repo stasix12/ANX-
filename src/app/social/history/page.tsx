@@ -50,7 +50,7 @@ function HistoryScreen() {
     <SocialShell title="היסטוריית פרסומים">
       {error && <Notice tone="error">{error}</Notice>}
       <Card>
-        <div className="mb-3 grid gap-2 sm:grid-cols-4">
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value as QueueStatus | '')}>
             <option value="">כל הסטטוסים</option>
             {STATUSES.map((s) => (
@@ -68,7 +68,49 @@ function HistoryScreen() {
         {!rows && <Loading />}
         {rows && rows.length === 0 && <Empty>אין רשומות בסינון הזה.</Empty>}
         {rows && rows.length > 0 && (
-          <div className="overflow-x-auto">
+          <ul className="divide-y divide-ink-700 md:hidden">
+            {rows.map((r) => {
+              const when = r.published_at ?? r.scheduled_at;
+              return (
+                <li key={r.id} className="py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate font-bold text-mist-100">{r.target?.name ?? '—'}</p>
+                    <StatusPill status={r.status} />
+                  </div>
+                  <p className="mt-0.5 text-xs text-mist-500">
+                    {formatDateHe(when)} · {formatTimeHe(when)} · {r.post?.title || 'פוסט'}
+                    {r.variant ? ` · ${r.variant.label}` : ''}
+                  </p>
+                  {(r.error || r.skip_reason) && <p className="mt-1 text-xs text-mist-300">{r.error || r.skip_reason}</p>}
+                  <div className="mt-1.5 flex flex-wrap gap-3 text-xs font-bold">
+                    {r.permalink && (
+                      <a href={r.permalink} target="_blank" rel="noreferrer" className="text-brand-400">
+                        פתח בפייסבוק
+                      </a>
+                    )}
+                    {r.screenshot_path && (
+                      <button type="button" className="text-violet-700" onClick={() => screenshotUrl(r.screenshot_path as string).then((u) => u && window.open(u, '_blank'))}>
+                        צילום התקלה
+                      </button>
+                    )}
+                    {(r.status === 'failed' || r.status === 'skipped' || r.status === 'needs_attention') && (
+                      <button type="button" className="text-brand-400" onClick={() => retryQueueItem(r.id).then(load)}>
+                        נסה שוב
+                      </button>
+                    )}
+                    {(r.status === 'scheduled' || r.status === 'awaiting_confirmation' || r.status === 'paused') && (
+                      <button type="button" className="text-rose-600" onClick={() => cancelQueueItem(r.id).then(load)}>
+                        בטל
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {rows && rows.length > 0 && (
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="text-xs text-mist-500">
                 <tr>

@@ -4,6 +4,12 @@ export const metadata: Metadata = {
   title: 'הפתרון המבריק — ניהול פרסום',
   robots: { index: false, follow: false },
   icons: { apple: '/crm/apple-touch-icon.png' },
+  manifest: '/social/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'פרסום',
+    statusBarStyle: 'black-translucent',
+  },
 };
 
 export const viewport: Viewport = {

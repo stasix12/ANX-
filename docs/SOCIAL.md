@@ -265,6 +265,21 @@ ready_to_publish → publishing → verifying → published.
 פייסבוק פגים. "רענן שם ותמונה" במסך הקבוצות מבקש משיכה מחדש. דורש
 `supabase/social-schema-v4.sql`.
 
+### מהאייפון (Vercel + אפליקציית מסך בית)
+
+הלוח יושב באינטרנט (Vercel, חינם); ה-worker נשאר על המחשב בבית עם ההתחברות
+לפייסבוק, ושניהם מדברים דרך Supabase.
+
+1. vercel.com → Sign up with GitHub → **Add New → Project** → בוחרים `ANX-` →
+   Branch: `claude/facebook-content-manager-gqtv66` (או main אחרי מיזוג).
+2. **Environment Variables**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `SOCIAL_ENCRYPTION_KEY`, `SOCIAL_CRON_SECRET` (אותם ערכים
+   כמו ב-`.env.local`; **לא** את `SOCIAL_WORKER_*`, הם רק למחשב). **Deploy**.
+3. באייפון, Safari → `https://<הכתובת>.vercel.app/social` → כניסה → כפתור שיתוף →
+   **הוספה למסך הבית**. נפתח כאפליקציה בשם "פרסום" עם ניווט תחתון.
+4. ה-worker במחשב ממשיך כרגיל (`start-social.cmd`); הלוח בטלפון מראה את המצב שלו
+   בזמן אמת, מאשר פרסומים, מוסיף קבוצות ומתחיל הפצות.
+
 ### הפעלה אוטומטית עם Windows
 
 Win+R → `shell:startup` → Enter → לגרור לתוך התיקייה קיצור דרך ל-`start-social.cmd`

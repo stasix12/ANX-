@@ -20,57 +20,51 @@ export async function readGroupProfile(page: Page, groupUrl: string): Promise<Gr
 
   const name = (await page.title().catch(() => '')).replace(/^\(\d+\)\s*/, '').replace(patterns.titleSuffix, '').trim();
 
-  // Candidate pictures, best first. Facebook draws a small, pre-blurred
-  // copy of the cover stretched behind the real one; the real one has a far
-  // larger native resolution. So: wait for images to load, measure native
-  // size only, and take the largest sharp one.
+  // The picture: a centred square screenshot of the rendered cover area.
+  // Facebook draws a blurred copy behind the real cover and serves both as
+  // images, so picking a file is unreliable — what the screen shows is the
+  // real thing, and a centre crop is exactly how the Facebook app builds a
+  // group's small icon.
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
-  await page
-    .waitForFunction(() => Array.from(document.querySelectorAll('[role="main"] img')).some((i) => (i as HTMLImageElement).naturalWidth > 600), null, { timeout: 10_000 })
-    .catch(() => undefined);
-  const ranked = await page
-    .locator('img[src*="scontent"], img[src*="fbcdn"]')
-    .evaluateAll((els) =>
-      els
-        .map((el) => {
-          const img = el as HTMLImageElement;
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(800);
+  const box = await page
+    .evaluate(() => {
+      const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[];
+      const boxes = imgs
+        .map((img) => {
+          const r = img.getBoundingClientRect();
           const style = getComputedStyle(img);
-          const rect = img.getBoundingClientRect();
-          return {
-            src: img.currentSrc || img.src,
-            w: img.naturalWidth,
-            h: img.naturalHeight,
-            blurred: /blur/.test(style.filter) || /blur/.test(getComputedStyle(img.parentElement ?? img).filter),
-            round: /50%|9999/.test(style.borderRadius),
-            top: rect.top + window.scrollY,
-            visible: rect.width > 0 && rect.height > 0,
-          };
+          return { x: r.left, y: r.top, w: r.width, h: r.height, round: /50%|9999/.test(style.borderRadius) };
         })
-        .filter((i) => i.src && i.visible && !i.blurred && !i.round && i.w >= 400 && i.top < 1200)
-        .sort((a, b) => b.w * b.h - a.w * a.h)
-        .slice(0, 3),
-    )
-    .catch(() => [] as { src: string; w: number; h: number }[]);
-  const candidates: string[] = ranked.map((i) => i.src);
-  if (ranked[0]) console.log(`[worker]    תמונת קבוצה: ${ranked[0].w}×${ranked[0].h}`);
-  const cover = await page.locator('img[data-imgperflogname="profileCoverPhoto"]').first().getAttribute('src').catch(() => null);
-  if (cover) candidates.push(cover);
-  const og = await page.locator('meta[property="og:image"]').first().getAttribute('content').catch(() => null);
-  if (og) candidates.push(og);
+        .filter((b) => b.w >= 300 && b.h >= 120 && b.y >= 0 && b.y < 700 && !b.round)
+        .sort((a, b) => b.w * b.h - a.w * a.h);
+      return boxes[0] ?? null;
+    })
+    .catch(() => null);
 
   let image: GroupProfile['image'] = null;
-  for (const url of candidates) {
+  if (box) {
+    const side = Math.min(box.h, box.w, 640);
+    const clip = { x: Math.round(box.x + (box.w - side) / 2), y: Math.round(box.y + (box.h - side) / 2), width: Math.round(side), height: Math.round(side) };
     try {
-      const res = await page.request.get(url, { timeout: 20_000 });
-      if (!res.ok()) continue;
-      const contentType = res.headers()['content-type'] ?? 'image/jpeg';
-      if (!contentType.startsWith('image/')) continue;
-      const bytes = await res.body();
-      if (bytes.length < 1000) continue; // tracking pixels / empty
-      image = { bytes, contentType };
-      break;
+      const bytes = await page.screenshot({ clip, type: 'png', timeout: 15_000 });
+      image = { bytes, contentType: 'image/png' };
+      console.log(`[worker]    תמונת קבוצה: צילום ${clip.width}×${clip.height} מהקאבר`);
     } catch {
-      /* next candidate */
+      image = null;
+    }
+  }
+  if (!image) {
+    // Fallback: the page's own og:image.
+    const og = await page.locator('meta[property="og:image"]').first().getAttribute('content').catch(() => null);
+    if (og) {
+      try {
+        const res = await page.request.get(og, { timeout: 20_000 });
+        if (res.ok()) image = { bytes: await res.body(), contentType: res.headers()['content-type'] ?? 'image/jpeg' };
+      } catch {
+        /* no picture */
+      }
     }
   }
   return { name, image };

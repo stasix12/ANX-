@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckIcon, SparklesIcon, TrashIcon } from '@/components/icons';
 import { LiveBoard } from '@/components/social/LiveBoard';
 import { MediaUploader } from '@/components/social/MediaUploader';
@@ -79,7 +79,11 @@ export function PostEditor({ postId }: { postId?: string }) {
   const [variantMap, setVariantMap] = useState<Record<string, string>>({});
   const [requireConfirmation, setRequireConfirmation] = useState(true);
   const [started, setStarted] = useState(false);
+  // Read once: history.replaceState (after the first save) re-renders
+  // useSearchParams, and re-running load() would wipe the form.
   const searchParams = useSearchParams();
+  const presets = useRef({ campaign: searchParams.get('campaign'), targets: searchParams.get('targets') ?? '' });
+  const loadedFor = useRef<string | undefined>('__never__');
   const [previewKey, setPreviewKey] = useState<string>('base');
   const [schedule, setSchedule] = useState<ScheduleDraft>({ mode: 'now', date: '', time: '09:00', weekly: {}, intervalDays: 2, intervalTime: '09:00' });
   const [loading, setLoading] = useState(true);
@@ -88,6 +92,8 @@ export function PostEditor({ postId }: { postId?: string }) {
   const [savedId, setSavedId] = useState<string | undefined>(postId);
 
   const load = useCallback(async () => {
+    if (loadedFor.current === postId) return;
+    loadedFor.current = postId;
     const [c, t, b, br] = await Promise.all([listCampaigns(), listTargets(), getBusiness(), getBrowserSettings()]);
     setCampaigns(c);
     setTargets(t);
@@ -103,13 +109,13 @@ export function PostEditor({ postId }: { postId?: string }) {
       setVariants(v.map((x) => ({ ...x, key: x.id })));
       setSchedules(s);
     } else {
-      const presetCampaign = searchParams.get('campaign');
+      const presetCampaign = presets.current.campaign;
       setPost({ ...emptyPost, phone: b.phone, whatsapp_url: whatsappUrlFor(b.whatsapp), campaign_id: presetCampaign && c.some((x) => x.id === presetCampaign) ? presetCampaign : null });
     }
-    const presetTargets = (searchParams.get('targets') ?? '').split(',').filter((id) => t.some((x) => x.id === id));
+    const presetTargets = presets.current.targets.split(',').filter((id) => t.some((x) => x.id === id));
     setSelectedTargets((prev) => (prev.length ? prev : presetTargets.length ? presetTargets : t.filter((x) => x.enabled && x.channel === 'facebook_page').map((x) => x.id)));
     setLoading(false);
-  }, [postId, searchParams]);
+  }, [postId]);
 
   useEffect(() => {
     load().catch((err) => setMessage({ tone: 'error', text: err instanceof Error ? err.message : 'טעינה נכשלה.' }));

@@ -213,7 +213,7 @@ export default function GroupsPage() {
                       </td>
                       <td className="py-2.5 pe-3">
                         <div className="flex items-center gap-2.5">
-                          <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} />
+                          <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={56} />
                           <div className="min-w-0">
                             <a href={g.url} target="_blank" rel="noreferrer" className="font-bold text-mist-100 hover:text-brand-400">
                               {g.name}

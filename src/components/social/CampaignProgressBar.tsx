@@ -15,8 +15,10 @@ export function CampaignProgressBar({ progress }: { progress: CampaignProgress }
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
+        {/* Spelled out rather than "4 / 7": a bare fraction flips order in
+            RTL and reads as if the larger number came first. */}
         <p className="text-sm font-bold text-mist-100">
-          {done} / {total} פרסומים הושלמו
+          הושלמו {done} מתוך {total} פרסומים
         </p>
         <p className="text-xs text-mist-500">{Math.round((done / total) * 100)}%</p>
       </div>

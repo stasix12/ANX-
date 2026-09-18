@@ -35,6 +35,7 @@ export default function GroupsPage() {
   const [nextByTarget, setNextByTarget] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ url: '', name: '' });
   const [bulk, setBulk] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -111,7 +112,14 @@ export default function GroupsPage() {
           </Notice>
         )}
 
-        <Card title="הוספת קבוצה">
+        {/* Collapsed by default: with 100+ groups the list is what people
+            came for, and on a phone the form filled the entire first screen. */}
+        <details className="group" open={addOpen} onToggle={(e) => setAddOpen((e.currentTarget as HTMLDetailsElement).open)}>
+          <summary className="mb-3 flex cursor-pointer list-none items-center justify-between rounded-card border border-ink-600 bg-ink-850 px-4 py-3 text-sm font-extrabold text-mist-100">
+            <span>+ הוספת קבוצה</span>
+            <span aria-hidden className="text-mist-500 transition-transform group-open:rotate-180">⌄</span>
+          </summary>
+        <Card>
           <form
             className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
             onSubmit={(e) => {
@@ -172,6 +180,7 @@ export default function GroupsPage() {
             </div>
           </details>
         </Card>
+        </details>
 
         <Card
           title={`הקבוצות שלי (${groups?.length ?? 0})`}
@@ -277,17 +286,26 @@ export default function GroupsPage() {
                               onChange={(e) => setSelected((s) => (e.target.checked ? [...s, g.id] : s.filter((x) => x !== g.id)))}
                               className="absolute end-2 top-2 h-4 w-4 accent-brand-500"
                             />
-                            <button type="button" className="absolute start-2 top-2 flex items-center gap-1.5" onClick={() => act(g.id, () => updateTarget(g.id, { enabled: !g.enabled }))} title={g.enabled ? 'פעיל — לחצו לכיבוי' : 'כבוי — לחצו להפעלה'}>
-                              <span className={`block h-2.5 w-2.5 rounded-full ${g.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                            </button>
-                            <button
-                              type="button"
-                              className="absolute start-2 bottom-2 text-base leading-none"
-                              aria-label={g.favorite ? `הסר את ${g.name} מהמועדפות` : `הוסף את ${g.name} למועדפות`}
-                              onClick={() => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite }))}
-                            >
-                              {g.favorite ? '⭐' : '☆'}
-                            </button>
+                            {/* Status dot and the star share one row at the
+                                top so neither collides with the city select. */}
+                            <div className="absolute start-2 top-2 flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => act(g.id, () => updateTarget(g.id, { enabled: !g.enabled }))}
+                                title={g.enabled ? 'פעיל — לחצו לכיבוי' : 'כבוי — לחצו להפעלה'}
+                                aria-label={g.enabled ? `כבה את ${g.name}` : `הפעל את ${g.name}`}
+                              >
+                                <span className={`block h-2.5 w-2.5 rounded-full ${g.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                              </button>
+                              <button
+                                type="button"
+                                className="text-sm leading-none"
+                                aria-label={g.favorite ? `הסר את ${g.name} מהמועדפות` : `הוסף את ${g.name} למועדפות`}
+                                onClick={() => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite }))}
+                              >
+                                {g.favorite ? '⭐' : '☆'}
+                              </button>
+                            </div>
                             <a href={g.url} target="_blank" rel="noreferrer" className="mt-2">
                               <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={84} />
                             </a>

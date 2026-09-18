@@ -108,13 +108,18 @@ export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warn' | '
   return <div className={`rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed ${cls}`}>{children}</div>;
 }
 
+/**
+ * A KPI tile. Deliberately tighter on phones: eight of these are the first
+ * thing on the dashboard, and at full padding they pushed every actionable
+ * card below the fold.
+ */
 export function Tile({ label, value, sub, tone = 'default' }: { label: string; value: string | number; sub?: string; tone?: 'default' | 'good' | 'bad' | 'warn' }) {
   const color = { default: 'text-brand-400', good: 'text-emerald-600', bad: 'text-rose-600', warn: 'text-amber-600' }[tone];
   return (
-    <div className="surface rounded-card border border-ink-700 p-3.5">
-      <p className="text-xs font-bold text-mist-500">{label}</p>
-      <p className={`mt-1 text-2xl font-extrabold tabular-nums ${color}`}>{value}</p>
-      {sub && <p className="mt-0.5 truncate text-xs text-mist-300">{sub}</p>}
+    <div className="surface rounded-card border border-ink-700 px-3 py-2.5 sm:p-3.5">
+      <p className="truncate text-[11px] font-bold text-mist-500 sm:text-xs">{label}</p>
+      <p className={`mt-0.5 text-xl font-extrabold tabular-nums sm:mt-1 sm:text-2xl ${color}`}>{value}</p>
+      {sub && <p className="truncate text-[11px] text-mist-300 sm:mt-0.5 sm:text-xs">{sub}</p>}
     </div>
   );
 }

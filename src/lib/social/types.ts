@@ -122,8 +122,10 @@ export interface Schedule {
   weekly: WeeklyPlan;
   interval_days: number | null;
   interval_time: string | null;
-  /** drip: how many targets per day, inside [drip_window_start, drip_window_end] local time. */
+  /** drip: how many targets per day (0/null = as many as the window allows), inside [drip_window_start, drip_window_end] local time. */
   drip_per_day?: number | null;
+  /** drip: minutes between two consecutive posts. */
+  drip_gap_minutes?: number | null;
   drip_window_start?: string;
   drip_window_end?: string;
   target_ids: string[];

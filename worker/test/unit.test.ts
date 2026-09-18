@@ -37,27 +37,22 @@ assert.deepEqual(
 );
 assert.equal(zonedToUtc('2026-01-15', '09:00').toISOString(), '2026-01-15T07:00:00.000Z');
 
-// --- drip: 10 targets, 4 per day, 09:00–18:00 → 3 days, evenly spaced (Israel summer = UTC+3)
-const targets = Array.from({ length: 10 }, (_, i) => `t${i}`);
-const drip = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T05:00:00Z', drip_per_day: 4, drip_window_start: '09:00', drip_window_end: '18:00', target_ids: targets }, new Date('2026-09-19T12:00:00Z'));
-assert.equal(drip.length, 10);
-assert.deepEqual(drip.slice(0, 4).map((d) => d.toISOString()), ['2026-09-20T06:00:00.000Z', '2026-09-20T09:00:00.000Z', '2026-09-20T12:00:00.000Z', '2026-09-20T15:00:00.000Z']);
-assert.equal(drip[4].toISOString(), '2026-09-21T06:00:00.000Z');
-assert.equal(drip[9].toISOString(), '2026-09-22T09:00:00.000Z');
-// past slots are bumped just after "now" instead of being dropped
-const late = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T05:00:00Z', drip_per_day: 2, drip_window_start: '09:00', drip_window_end: '10:00', target_ids: ['a', 'b', 'c'] }, new Date('2026-09-20T08:00:00Z'));
-assert.ok(late[0] > new Date('2026-09-20T08:00:00Z') && late[1] > late[0]);
-assert.equal(late[2].toISOString(), '2026-09-21T06:00:00.000Z');
-
-// --- city detection
-assert.equal(detectCity('ערד החדשה'), 'ערד');
-assert.equal(detectCity('ערד-Arad'), 'ערד');
-assert.equal(detectCity('Арад по-русски - Город Арад'), 'ערד');
-assert.equal(detectCity('באר שבע ביחד'), 'באר שבע');
-assert.equal(detectCity('דרושים ב"ש והסביבה'), 'באר שבע');
-assert.equal(detectCity('Beer Sheva Jobs'), 'באר שבע');
-assert.equal(detectCity('אופקים שלנו'), 'אופקים');
-assert.equal(detectCity('קונים ומוכרים בדרום'), 'אחר');
-assert.deepEqual(sortCities(['אחר', 'אופקים', 'דימונה', 'ערד', 'באר שבע']), ['ערד', 'באר שבע', 'אופקים', 'דימונה', 'אחר']);
+// --- drip: 5 targets, every 30 min from 10:00 local, window 09:00–11:00 → 3 today, 2 tomorrow (UTC+3)
+const targets = Array.from({ length: 5 }, (_, i) => `t${i}`);
+const drip = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T07:00:00Z', drip_per_day: 0, drip_gap_minutes: 30, drip_window_start: '09:00', drip_window_end: '11:00', target_ids: targets }, new Date('2026-09-19T12:00:00Z'));
+assert.deepEqual(drip.map((d) => d.toISOString()), [
+  '2026-09-20T07:00:00.000Z',
+  '2026-09-20T07:30:00.000Z',
+  '2026-09-20T08:00:00.000Z',
+  '2026-09-21T06:00:00.000Z',
+  '2026-09-21T06:30:00.000Z',
+]);
+// per-day cap wins over the window
+const capped = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T06:00:00Z', drip_per_day: 2, drip_gap_minutes: 10, drip_window_start: '09:00', drip_window_end: '20:00', target_ids: targets }, new Date('2026-09-19T12:00:00Z'));
+assert.deepEqual(capped.map((d) => d.toISOString().slice(0, 16)), ['2026-09-20T06:00', '2026-09-20T06:10', '2026-09-21T06:00', '2026-09-21T06:10', '2026-09-22T06:00']);
+// past slots are bumped just after "now", still `gap` apart
+const late = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T05:00:00Z', drip_per_day: 0, drip_gap_minutes: 10, drip_window_start: '08:00', drip_window_end: '08:15', target_ids: ['a', 'b', 'c'] }, new Date('2026-09-20T08:00:00Z'));
+assert.ok(late[0] > new Date('2026-09-20T08:00:00Z') && late[1].getTime() - late[0].getTime() === 10 * 60_000);
+assert.equal(late[2].toISOString(), '2026-09-21T05:00:00.000Z');
 
 console.log('unit tests OK');

@@ -13,6 +13,7 @@ export interface ScheduleDraft {
   intervalDays: number;
   intervalTime: string;
   dripPerDay: number;
+  dripGapMinutes: number;
   dripStart: string;
   dripEnd: string;
 }
@@ -37,6 +38,7 @@ export function scheduleDraftToInput(d: ScheduleDraft, postId: string, targetIds
       ...base,
       run_at: d.date ? zonedToUtc(d.date, d.dripStart).toISOString() : new Date().toISOString(),
       drip_per_day: d.dripPerDay,
+      drip_gap_minutes: d.dripGapMinutes,
       drip_window_start: d.dripStart,
       drip_window_end: d.dripEnd,
     };
@@ -153,16 +155,20 @@ export function SchedulePicker({ value, onChange }: { value: ScheduleDraft; onCh
       {value.mode === 'drip' && (
         <div className="space-y-3">
           <p className="text-sm text-mist-300">
-            כל קבוצה מקבלת שעה משלה: N קבוצות ביום בתוך חלון השעות, לפי סדר הבחירה, עד שכולן מכוסות. 40 קבוצות ב-8 ליום = 5 ימים. זו הדרך הבטוחה להפיץ פוסט להרבה קבוצות.
+            כל קבוצה מקבלת שעה משלה: הראשונה בשעת ההתחלה, ואחריה קבוצה כל X דקות, עד המכסה היומית או סוף חלון השעות. מה שלא נכנס היום ממשיך מחר.
           </p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             <label className="text-sm">
               <span className="mb-1 block font-bold text-mist-300">מתאריך</span>
               <input type="date" className={inputClass} value={value.date} onChange={(e) => set({ date: e.target.value })} />
             </label>
             <label className="text-sm">
+              <span className="mb-1 block font-bold text-mist-300">מרווח (דקות)</span>
+              <input type="number" min={1} max={600} className={inputClass} value={value.dripGapMinutes} onChange={(e) => set({ dripGapMinutes: Math.min(600, Math.max(1, Number(e.target.value) || 1)) })} />
+            </label>
+            <label className="text-sm">
               <span className="mb-1 block font-bold text-mist-300">קבוצות ביום</span>
-              <input type="number" min={1} max={20} className={inputClass} value={value.dripPerDay} onChange={(e) => set({ dripPerDay: Math.min(20, Math.max(1, Number(e.target.value) || 1)) })} />
+              <input type="number" min={0} max={200} className={inputClass} value={value.dripPerDay} onChange={(e) => set({ dripPerDay: Math.min(200, Math.max(0, Number(e.target.value) || 0)) })} />
             </label>
             <label className="text-sm">
               <span className="mb-1 block font-bold text-mist-300">משעה</span>
@@ -173,7 +179,20 @@ export function SchedulePicker({ value, onChange }: { value: ScheduleDraft; onCh
               <input type="time" className={inputClass} value={value.dripEnd} onChange={(e) => set({ dripEnd: e.target.value })} />
             </label>
           </div>
-          <p className="text-xs text-mist-500">ריק בתאריך = מתחיל היום. המכסות והמרווחים בהגדרות עדיין חלים (הם יכולים לדחות פרסום לזמן פנוי הבא).</p>
+          <div className="flex flex-wrap gap-1.5 text-xs font-bold">
+            <span className="text-mist-500">מרווח מהיר:</span>
+            {[10, 20, 30, 45, 60, 90].map((m) => (
+              <button key={m} type="button" onClick={() => set({ dripGapMinutes: m })} className={`rounded-full px-2.5 py-1 ${value.dripGapMinutes === m ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>
+                {m} דק׳
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-mist-500">"קבוצות ביום" = 0 פירושו בלי הגבלה (רק חלון השעות). ריק בתאריך = מתחיל היום. המכסות בהגדרות → מניעת ספאם עדיין חלות ויכולות לדחות פרסומים.</p>
+          {value.dripGapMinutes < 15 && (
+            <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              ⚠️ פחות מ-15 דקות בין פוסטים זהים מאותו חשבון הוא בדיוק הדפוס שפייסבוק מזהה כספאם ועלול להוביל לחסימה זמנית. מומלץ 20 דקות ומעלה.
+            </p>
+          )}
         </div>
       )}
 

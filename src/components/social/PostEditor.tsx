@@ -85,7 +85,7 @@ export function PostEditor({ postId }: { postId?: string }) {
   const presets = useRef({ campaign: searchParams.get('campaign'), targets: searchParams.get('targets') ?? '' });
   const loadedFor = useRef<string | undefined>('__never__');
   const [previewKey, setPreviewKey] = useState<string>('base');
-  const [schedule, setSchedule] = useState<ScheduleDraft>({ mode: 'now', date: '', time: '09:00', weekly: {}, intervalDays: 2, intervalTime: '09:00', dripPerDay: 8, dripStart: '09:00', dripEnd: '20:00' });
+  const [schedule, setSchedule] = useState<ScheduleDraft>({ mode: 'now', date: '', time: '09:00', weekly: {}, intervalDays: 2, intervalTime: '09:00', dripPerDay: 0, dripGapMinutes: 20, dripStart: '09:00', dripEnd: '20:00' });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -485,7 +485,7 @@ function describeSchedule(s: Schedule): string {
   if (s.mode === 'now') return `פורסם מיד (${formatDateTimeHe(s.run_at)})`;
   if (s.mode === 'once') return `פעם אחת ב-${formatDateTimeHe(s.run_at)}`;
   if (s.mode === 'interval') return `כל ${s.interval_days} ימים ב-${s.interval_time} החל מ-${formatDateTimeHe(s.run_at)}`;
-  if (s.mode === 'drip') return `הפצה הדרגתית: ${s.drip_per_day} ביום, ${s.drip_window_start}–${s.drip_window_end}, מ-${formatDateTimeHe(s.run_at)}`;
+  if (s.mode === 'drip') return `הפצה הדרגתית: כל ${s.drip_gap_minutes ?? 20} דק׳${s.drip_per_day ? `, עד ${s.drip_per_day} ביום` : ''}, ${s.drip_window_start}–${s.drip_window_end}, מ-${formatDateTimeHe(s.run_at)}`;
   const days = Object.entries(s.weekly)
     .filter(([, t]) => t.length)
     .map(([d, t]) => `${['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'][Number(d)]} ${t.join('/')}`)

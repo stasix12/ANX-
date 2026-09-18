@@ -205,9 +205,16 @@ async function waitForUploads(dialog: Locator, expected: number, timeout: number
   while (Date.now() < deadline) {
     const previews = await fb.mediaPreview(dialog).count().catch(() => 0);
     const busy = (await fb.uploadProgress(dialog).count().catch(() => 0)) > 0;
-    if (previews >= expected && !busy) {
+    // Several photos → Facebook collapses them into a collage with "Edit all";
+    // that, with no progress bar, means every file is in.
+    const collage = expected > 1 && (await fb.collageReady(dialog).isVisible({ timeout: 200 }).catch(() => false));
+    const done = !busy && (previews >= expected || collage || (expected > 1 && previews >= 1 && Date.now() - stableSince > 8000 && stableSince > 0));
+    if (done) {
       if (!stableSince) stableSince = Date.now();
       if (Date.now() - stableSince > 1500) return;
+    } else if (previews >= 1 && !busy) {
+      // At least one preview and no progress bar: start the patience clock.
+      if (!stableSince) stableSince = Date.now();
     } else {
       stableSince = 0;
     }

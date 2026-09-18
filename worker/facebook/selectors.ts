@@ -93,7 +93,9 @@ export const fb = {
   uploadProgress: (dialog: Locator): Locator => dialog.locator('[role="progressbar"]'),
 
   /** Uploaded media previews (an <img> with a blob: or scontent src, or a <video>). */
-  mediaPreview: (dialog: Locator): Locator => dialog.locator('img[src^="blob:"], img[src*="scontent"], video'),
+  mediaPreview: (dialog: Locator): Locator => dialog.locator('img[src^="blob:"], img[src*="scontent"], img[src*="fbcdn"], video'),
+  /** Multi-photo collage: Facebook shows an "Edit all" affordance instead of N separate previews. */
+  collageReady: (dialog: Locator): Locator => dialog.getByText(/edit all|לערוך את הכל|עריכת הכל|редактировать все/i).first(),
 
   /** The submit button. */
   postButton: (dialog: Locator): Locator[] => [

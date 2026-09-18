@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { zonedToUtc } from '@/lib/social/time';
 import { parseGroupUrl, type Variant } from '@/lib/social/types';
@@ -187,4 +188,33 @@ console.log('unit tests OK');
   assert.notEqual(friendlyMessage({ message: 'duplicate key value violates unique constraint' }), GENERIC_ERROR);
 
   console.log('friendly-error tests OK');
+}
+
+/* ------------------------------------------- locked browser profile guard */
+{
+  const src = readFileSync(new URL('../facebook/session.ts', import.meta.url), 'utf8');
+
+  // The lock is left by a Chrome the worker itself opened, so the worker
+  // clears it and retries — it does not ask the owner to paste a kill command.
+  assert.ok(src.includes('releaseProfile'), 'a locked profile must be recovered automatically');
+  assert.ok(/await releaseProfile\(\)/.test(src), 'recovery must be awaited before the retry');
+  assert.ok(!/Get-CimInstance[\s\S]{0,400}הריצו שוב/.test(src), 'the owner must not be handed a PowerShell kill command as the fix');
+
+  // Whatever we end must be scoped to our own profile directory. The owner's
+  // everyday Chrome runs on a different user-data-dir and is never touched.
+  const kill = src.slice(src.indexOf('async function releaseProfile'), src.indexOf('export class BrowserSession'));
+  assert.ok(kill.includes("Name='chrome.exe'"), 'the Windows sweep must be limited to chrome.exe');
+  assert.ok(kill.includes('env.profileDir') || kill.includes('const dir = env.profileDir'), 'the sweep must be scoped to the profile directory');
+  assert.ok(kill.includes('--user-data-dir=${dir}'), 'the POSIX sweep must match the launch flag, not a bare path');
+  assert.ok(!/pkill', \['-f', 'chrome'\]/.test(kill), 'never end every Chrome on the machine');
+
+  // Stale singleton files block a relaunch even with no process alive.
+  for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+    assert.ok(kill.includes(f), `stale ${f} must be cleared`);
+  }
+
+  // One retry, then a plain sentence — never an endless kill/relaunch loop.
+  assert.equal((src.match(/await releaseProfile\(\)/g) ?? []).length, 1, 'exactly one recovery attempt');
+
+  console.log('profile-lock recovery tests OK');
 }

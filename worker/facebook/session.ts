@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
+import path from 'node:path';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { env } from '../env';
 import { CHECKPOINT_PATHS, LOGIN_PATHS, fb, patterns } from './selectors';
@@ -23,6 +25,63 @@ export class SessionError extends Error {
   ) {
     super(message);
   }
+}
+
+/** Chromium's ProcessSingleton refuses to start on a profile another process holds. */
+function isProfileLocked(message: string): boolean {
+  return /has been closed|ProcessSingleton|profile appears to be in use|SingletonLock|Target page, context or browser/i.test(message);
+}
+
+function launchFailureMessage(msg: string): string {
+  return `לא הצלחתי לפתוח דפדפן (${env.browserChannel}). התקינו Google Chrome או הריצו "npx playwright-core install chromium" והגדירו SOCIAL_BROWSER_CHANNEL=chromium. פרטים: ${msg.split('\n')[0]}`;
+}
+
+/**
+ * Frees the worker's own profile directory: ends the Chrome processes that
+ * were started against it, then drops the stale singleton files a killed
+ * Chrome leaves behind.
+ *
+ * Scoped to env.profileDir on purpose. That directory is this tool's private
+ * profile, so a process matching it is always one the worker started — the
+ * owner's everyday Chrome runs on a different user-data-dir and is never
+ * matched, never touched.
+ */
+async function releaseProfile(): Promise<void> {
+  const dir = env.profileDir;
+  try {
+    if (process.platform === 'win32') {
+      execFileSync(
+        'powershell',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like '*${dir.split(/[\\/]/).pop()}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+        ],
+        { stdio: 'ignore', timeout: 15_000 },
+      );
+    } else {
+      // Match the launch flag, not just the path: only a browser started on
+      // this profile can carry it.
+      execFileSync('pkill', ['-f', `--user-data-dir=${dir}`], { stdio: 'ignore', timeout: 15_000 });
+    }
+  } catch {
+    // Nothing matched, or no permission to end it. The lock-file sweep below
+    // still covers the common case of a profile left locked by a crash.
+  }
+  // A Chrome that died without cleaning up leaves these behind; on Windows
+  // they are the reason a relaunch fails even with no process running.
+  for (const name of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+    try {
+      rmSync(path.join(dir, name), { force: true, recursive: true });
+    } catch {
+      // Best effort — if it cannot be removed, the retry reports it properly.
+    }
+  }
+  // Ending a process is not instant: Windows in particular holds the profile
+  // for a moment after Stop-Process returns, and retrying inside that window
+  // fails for the same reason all over again.
+  await new Promise((r) => setTimeout(r, 1_500));
 }
 
 export class BrowserSession {
@@ -50,34 +109,48 @@ export class BrowserSession {
       ignoreDefaultArgs: ['--enable-automation'],
     };
     try {
-      this.context = env.browserExecutable
-        ? await chromium.launchPersistentContext(env.profileDir, { ...common, executablePath: env.browserExecutable })
-        : env.browserChannel === 'chromium'
-          ? await chromium.launchPersistentContext(env.profileDir, common)
-          : await chromium.launchPersistentContext(env.profileDir, { ...common, channel: env.browserChannel });
+      this.context = await this.launch(common);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // A Chrome window from an earlier run still holds the profile
-      // directory, so the new one exits the moment it starts. This is the
-      // most common startup failure, and the fix is closing that window —
-      // not reinstalling anything.
-      if (/has been closed|ProcessSingleton|profile appears to be in use|Target page, context or browser/i.test(msg)) {
-        throw new Error(
-          `נשאר חלון דפדפן פתוח מריצה קודמת שמחזיק את הפרופיל (${env.profileDir}).\n` +
-            '   סגרו את חלונות ה-Chrome שה-worker פתח (הלשוניות about:blank / facebook), ואז הריצו שוב.\n' +
-            '   לסגירה מהירה ב-PowerShell:\n' +
-            `   Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like '*${env.profileDir.split(/[\\/]/).pop()}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`,
-        );
+      /*
+       * A Chrome window from an earlier run still holds the profile
+       * directory, so the new one exits the moment it starts. This is the
+       * most common startup failure by a wide margin, and it is entirely
+       * self-inflicted: the window holding the lock is one the worker itself
+       * opened. Handing the owner a Get-CimInstance one-liner to paste is not
+       * a fix, so the worker clears its own lock and tries once more.
+       */
+      if (isProfileLocked(msg)) {
+        console.warn('[worker] הפרופיל היה תפוס מריצה קודמת — סוגר את החלון שנשאר פתוח ומנסה שוב.');
+        await releaseProfile();
+        try {
+          this.context = await this.launch(common);
+        } catch (retryErr) {
+          const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+          if (isProfileLocked(retryMsg)) {
+            throw new Error(
+              `נשאר חלון דפדפן פתוח שמחזיק את הפרופיל, ולא הצלחתי לסגור אותו לבד (${env.profileDir}).\n` +
+                '   סגרו ידנית את חלונות ה-Chrome שה-worker פתח (הלשוניות about:blank / facebook), ואז הריצו שוב.',
+            );
+          }
+          throw new Error(launchFailureMessage(retryMsg));
+        }
+      } else {
+        throw new Error(launchFailureMessage(msg));
       }
-      throw new Error(
-        `לא הצלחתי לפתוח דפדפן (${env.browserChannel}). התקינו Google Chrome או הריצו "npx playwright-core install chromium" והגדירו SOCIAL_BROWSER_CHANNEL=chromium. פרטים: ${msg.split('\n')[0]}`,
-      );
     }
     this.context.setDefaultTimeout(30_000);
     this.context.on('close', () => {
       this.context = null;
     });
     return this.context;
+  }
+
+  /** The three ways this project can reach a Chrome, in one place. */
+  private launch(common: Parameters<typeof chromium.launchPersistentContext>[1]): Promise<BrowserContext> {
+    if (env.browserExecutable) return chromium.launchPersistentContext(env.profileDir, { ...common, executablePath: env.browserExecutable });
+    if (env.browserChannel === 'chromium') return chromium.launchPersistentContext(env.profileDir, common);
+    return chromium.launchPersistentContext(env.profileDir, { ...common, channel: env.browserChannel });
   }
 
   async newPage(headless: boolean): Promise<Page> {

@@ -22,7 +22,7 @@ export function PostPreview({
 }) {
   const images = media.filter((m) => m.kind === 'image');
   const video = media.find((m) => m.kind === 'video');
-  const ctaLabel = CTA_OPTIONS.find((c) => c.value === cta)?.label;
+  const ctaLabel = cta ? CTA_OPTIONS.find((c) => c.value === cta)?.label : undefined;
   const host = safeHost(link);
 
   return (

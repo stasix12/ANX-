@@ -15,13 +15,13 @@ import type { Locator, Page } from 'playwright-core';
 
 export const patterns = {
   /** Group feed: the "Write something..." box that opens the composer. */
-  composerTrigger: /write something|create (a )?(public )?post|what'?s on your mind|כת(ו)?ב(\/י|י|ו)?\s*משהו|יצירת פוסט|צור פוסט|מה עובר לך בראש|напишите что-нибудь|создать публикацию|что у вас нового/i,
+  composerTrigger: /write something|create (a )?(public )?post|what'?s on your mind|share something|start a discussion|כת(ו)?ב(\/י|י|ו)?\s*(משהו|פוסט)|יצירת פוסט|צור פוסט|כתיבת פוסט|פוסט חדש|מה (תרצ[הו]|בא ל[ךכ][םן]?) לשתף|שת(ף|פי|פו)\s*משהו|פרסם משהו|מה חדש|מה עובר לך בראש|напишите что-нибудь|создать публикацию|что у вас нового|поделитесь/i,
   /** Anything that is a COMMENT box, never a post composer — typing here is forbidden. */
   commentBox: /comment|reply|תגובה|תגובת|הגב|комментар|ответ/i,
   /** The composer dialog's accessible name. */
   composerDialog: /create post|create a post|יצירת פוסט|פוסט חדש|создать публикацию|создание публикации/i,
   /** The contenteditable text box inside the composer. */
-  composerTextbox: /write something|create a public post|what'?s on your mind|כת(ו)?ב(\/י|י|ו)?\s*משהו|יצירת פוסט ציבורי|מה עובר לך בראש|напишите что-нибудь|что у вас нового/i,
+  composerTextbox: /write something|create a public post|what'?s on your mind|share something|כת(ו)?ב(\/י|י|ו)?\s*(משהו|פוסט)|יצירת פוסט|מה (תרצ[הו]|בא ל[ךכ][םן]?) לשתף|שת(ף|פי|פו)\s*משהו|מה עובר לך בראש|напишите что-нибудь|что у вас нового|поделитесь/i,
   /** Button that reveals the file input. */
   photoVideo: /photo\/video|photo or video|add photos?\/videos?|תמונה\/סרטון|תמונה או סרטון|הוספת תמונות|фото\/видео|добавить фото/i,
   /** The final submit button. */

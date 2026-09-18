@@ -1,10 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Button, Card, Empty, Field, Loading, Notice, Toggle, inputClass } from '@/components/social/ui';
-import { addManualGroup, callSocialApi, deleteTarget, listTargets, updateTarget } from '@/lib/social/client';
+import { Button, Card, Empty, Loading, Notice, Toggle } from '@/components/social/ui';
+import { callSocialApi, listTargets, updateTarget } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import { CHANNEL_LABEL, PERMISSION_LABEL, REQUIRED_SCOPES, type SocialAccount, type SocialTarget } from '@/lib/social/types';
 
@@ -27,7 +28,6 @@ function TargetsScreen() {
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [group, setGroup] = useState({ name: '', url: '' });
   const [flash, setFlash] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -82,7 +82,7 @@ function TargetsScreen() {
     : [];
 
   const pages = (targets ?? []).filter((t) => t.channel === 'facebook_page');
-  const groups = (targets ?? []).filter((t) => t.channel === 'facebook_group_manual');
+  const groups = (targets ?? []).filter((t) => t.channel === 'facebook_group' || t.channel === 'facebook_group_manual');
 
   return (
     <SocialShell title="יעדי פרסום">
@@ -162,42 +162,10 @@ function TargetsScreen() {
           {pages.length > 0 && <TargetTable rows={pages} busy={busy} onToggle={(t, v) => act(t.id, () => updateTarget(t.id, { enabled: v }))} />}
         </Card>
 
-        <Card title={`קבוצות פייסבוק — פרסום ידני (${groups.length})`}>
-          <Notice tone="info">
-            Meta ביטלה את ה-Groups API באפריל 2024 — אין דרך רשמית לפרסם לקבוצות אוטומטית, והמערכת לא עוקפת זאת. קבוצה שתוסיפו כאן נכנסת לתור כרגיל, ובזמן הפרסום תקבלו ערכה מוכנה (טקסט, תמונות, קישור לקבוצה) לפרסום ידני בלחיצה.
-          </Notice>
-          <form
-            className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!group.name.trim()) return;
-              act('group', () => addManualGroup(group).then(() => setGroup({ name: '', url: '' })), 'הקבוצה נוספה.');
-            }}
-          >
-            <Field label="שם הקבוצה">
-              <input className={inputClass} value={group.name} onChange={(e) => setGroup({ ...group, name: e.target.value })} placeholder="דרושים / שירותים באר שבע" />
-            </Field>
-            <Field label="קישור לקבוצה">
-              <input className={inputClass} dir="ltr" value={group.url} onChange={(e) => setGroup({ ...group, url: e.target.value })} placeholder="https://www.facebook.com/groups/…" />
-            </Field>
-            <div className="flex items-end">
-              <Button type="submit" busy={busy === 'group'}>
-                הוסף
-              </Button>
-            </div>
-          </form>
-          {groups.length > 0 && (
-            <div className="mt-4">
-              <TargetTable
-                rows={groups}
-                busy={busy}
-                onToggle={(t, v) => act(t.id, () => updateTarget(t.id, { enabled: v }))}
-                onDelete={(t) => {
-                  if (window.confirm(`למחוק את "${t.name}"?`)) act(t.id, () => deleteTarget(t.id));
-                }}
-              />
-            </div>
-          )}
+        <Card title={`קבוצות פייסבוק (${groups.length})`} action={<Link href="/social/groups" className="text-sm font-bold text-brand-400">ניהול קבוצות ←</Link>}>
+          <p className="text-sm text-mist-300">
+            Meta ביטלה את ה-Groups API באפריל 2024, ולכן קבוצות מתפרסמות דרך ה-worker המקומי (Playwright בדפדפן שלכם). ניהול הקבוצות, הסטטוסים והשגיאות — במסך הקבוצות.
+          </p>
         </Card>
       </div>
     </SocialShell>

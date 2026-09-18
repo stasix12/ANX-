@@ -11,6 +11,7 @@ import {
   MegaphoneIcon,
   SpinnerIcon,
   TargetIcon,
+  UsersIcon,
 } from '@/components/icons';
 import { useAdminSession } from '@/lib/adminAuth';
 
@@ -18,7 +19,8 @@ const nav = [
   { href: '/social', label: 'ראשי', icon: HomeIcon, exact: true },
   { href: '/social/posts', label: 'פוסטים', icon: ClipboardListIcon, exact: false },
   { href: '/social/campaigns', label: 'קמפיינים', icon: MegaphoneIcon, exact: false },
-  { href: '/social/targets', label: 'יעדים', icon: TargetIcon, exact: false },
+  { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false },
+  { href: '/social/targets', label: 'דפים', icon: TargetIcon, exact: false },
   { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false },
   { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false },
 ];

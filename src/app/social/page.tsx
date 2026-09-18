@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { PlusIcon } from '@/components/icons';
+import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
+import { LiveBoard } from '@/components/social/LiveBoard';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Empty, Loading, Notice, StatusPill, Tile } from '@/components/social/ui';
 import {
@@ -150,6 +152,13 @@ export default function SocialDashboard() {
           </div>
 
           <div className="grid gap-5 lg:grid-cols-3">
+            <BrowserStatusCard onChanged={load} />
+            <div className="lg:col-span-2">
+              <LiveBoard />
+            </div>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-3">
             <Card title="הפרסום הבא" className="lg:col-span-1">
               {data.next ? (
                 <div className="space-y-1.5">
@@ -176,9 +185,11 @@ export default function SocialDashboard() {
               </div>
             </Card>
 
-            <Card title={`ממתינים לפרסום ידני (${data.manual.length})`} className="lg:col-span-2">
+            <Card title={data.manual.length ? `ממתינים לפרסום ידני (${data.manual.length})` : 'סיכום'} className="lg:col-span-2">
               {data.manual.length === 0 ? (
-                <Empty>אין פוסטים שממתינים לפרסום ידני. קבוצות פייסבוק מגיעות לכאן כשמגיע זמנן.</Empty>
+                <p className="text-sm text-mist-300">
+                  דפים מתפרסמים דרך Graph API מהשרת; קבוצות דרך ה-worker המקומי. הכל נכנס לאותו תור, עם אותן מכסות ואותו מרווח. בהיסטוריה תמצאו כל פרסום עם הסיבה לכל דילוג.
+                </p>
               ) : (
                 <ul className="divide-y divide-ink-700">
                   {data.manual.map((item) => (

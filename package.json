@@ -11,11 +11,15 @@
     "typecheck": "tsc --noEmit",
     "placeholders": "node scripts/generate-placeholders.mjs",
     "export": "EXPORT=1 next build",
-    "preview": "EXPORT=1 next build && node scripts/build-preview.mjs"
+    "preview": "EXPORT=1 next build && node scripts/build-preview.mjs",
+    "social-worker": "tsx worker/social-worker.ts",
+    "social-worker:debug": "SOCIAL_BROWSER_HEADED=1 tsx worker/social-worker.ts",
+    "test:social": "tsx worker/test/unit.test.ts && tsx worker/test/composer.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
     "next": "16.3.2",
+    "playwright-core": "^1.49.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1"
@@ -26,6 +30,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.13",
     "typescript": "^5.9.3"
   }
 }

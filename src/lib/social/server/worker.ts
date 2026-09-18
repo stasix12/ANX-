@@ -1,9 +1,11 @@
 import 'server-only';
 import { adapterFor } from '../channels/registry';
 import { renderPostText } from '../compose';
-import { startOfZonedDay } from '../time';
+import { evaluateQueueItem } from '../rules';
 import {
+  DEFAULT_BROWSER,
   DEFAULT_LIMITS,
+  type BrowserSettings,
   type ControlSettings,
   type LimitsSettings,
   type MediaItem,
@@ -18,14 +20,17 @@ import { logActivity } from './log';
 import { planQueue } from './planner';
 
 /**
- * The publishing worker. Called by /api/social/cron (scheduled) and
- * /api/social/run (the admin pressing "publish now"). One run:
+ * The server-side publishing worker (Pages through the Graph API). Called by
+ * /api/social/cron (scheduled) and /api/social/run ("publish now"). One run:
  *
  *   1. bails out if the owner paused everything or Meta asked us to cool down;
  *   2. materialises upcoming schedules into queue rows;
- *   3. claims due rows one at a time (atomic status flip) and, for each,
- *      applies the anti-spam rules, then hands it to the channel adapter;
+ *   3. claims due rows whose channel is API-publishable (atomic status flip),
+ *      applies the shared anti-spam rules, then hands each to its adapter;
  *   4. records the outcome and writes the activity log.
+ *
+ * Facebook Group rows are deliberately NOT touched here — the local browser
+ * worker (worker/social-worker.ts) claims those.
  *
  * MAX_PER_RUN keeps a single invocation short (serverless time limits) and
  * naturally spreads bursts across cron ticks.
@@ -33,7 +38,8 @@ import { planQueue } from './planner';
 const MAX_PER_RUN = 5;
 const MAX_ATTEMPTS = 4;
 const STUCK_MINUTES = 15;
-const MAX_DEFERRALS = 12;
+/** Channels this (server) worker publishes. Everything else belongs to another worker. */
+const SERVER_CHANNELS = ['facebook_page', 'facebook_group_manual'];
 
 export interface WorkerReport {
   ran: boolean;
@@ -65,29 +71,35 @@ export async function runWorker(trigger: 'cron' | 'manual'): Promise<WorkerRepor
   report.ran = true;
   report.planned = await planQueue();
 
-  // Rows stuck in "publishing" (a crashed run) are failed so they can be retried by hand.
+  // Rows this worker left in "publishing" (a crashed run) are failed so they
+  // can be retried by hand. Browser-worker rows carry a worker_id and are
+  // recovered by that worker itself.
   const stuckBefore = new Date(Date.now() - STUCK_MINUTES * 60_000).toISOString();
   await db
     .from('social_queue')
     .update({ status: 'failed', error: 'הריצה נקטעה באמצע הפרסום — אפשר לנסות שוב.' })
     .eq('status', 'publishing')
+    .is('worker_id', null)
     .lt('claimed_at', stuckBefore);
 
   const limits = await getSetting<LimitsSettings>('limits', DEFAULT_LIMITS);
+  const browser = await getSetting<BrowserSettings>('browser', DEFAULT_BROWSER);
   const { data: due, error } = await db
     .from('social_queue')
-    .select('*')
+    .select('*, target:social_targets!inner(channel)')
     .eq('status', 'scheduled')
+    .in('target.channel', SERVER_CHANNELS)
     .lte('scheduled_at', new Date().toISOString())
     .order('scheduled_at')
     .limit(MAX_PER_RUN);
   if (error) throw new Error(error.message);
 
-  for (const item of (due ?? []) as QueueItem[]) {
+  for (const raw of (due ?? []) as (QueueItem & { target: unknown })[]) {
+    const { target: _joined, ...item } = raw;
     // Atomic claim — two overlapping runs can never publish the same row.
     const { data: claimed } = await db
       .from('social_queue')
-      .update({ status: 'publishing', claimed_at: new Date().toISOString(), attempts: item.attempts + 1 })
+      .update({ status: 'publishing', claimed_at: new Date().toISOString(), attempts: item.attempts + 1, step: 'publishing', step_at: new Date().toISOString() })
       .eq('id', item.id)
       .eq('status', 'scheduled')
       .select('id');
@@ -95,12 +107,12 @@ export async function runWorker(trigger: 'cron' | 'manual'): Promise<WorkerRepor
     report.processed += 1;
 
     try {
-      const outcome = await processItem(item, limits);
+      const outcome = await processItem({ ...item, attempts: item.attempts + 1 }, limits, browser);
       report[outcome] += 1;
     } catch (err) {
       report.failed += 1;
       const message = err instanceof Error ? err.message : 'שגיאה לא ידועה';
-      await db.from('social_queue').update({ status: 'failed', error: message }).eq('id', item.id);
+      await db.from('social_queue').update({ status: 'failed', step: 'failed', error: message }).eq('id', item.id);
       await logActivity('error', 'publish_failed', message, { queueId: item.id });
     }
 
@@ -117,7 +129,7 @@ export async function runWorker(trigger: 'cron' | 'manual'): Promise<WorkerRepor
 
 type Outcome = 'published' | 'manual' | 'skipped' | 'failed' | 'deferred';
 
-async function processItem(item: QueueItem, limits: LimitsSettings): Promise<Outcome> {
+async function processItem(item: QueueItem, limits: LimitsSettings, browser: BrowserSettings): Promise<Outcome> {
   const db = serviceDb();
   const now = new Date();
 
@@ -128,93 +140,51 @@ async function processItem(item: QueueItem, limits: LimitsSettings): Promise<Out
       ? db.from('social_variants').select('*').eq('id', item.variant_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+  const t = (target as SocialTarget | null) ?? null;
+  const p = (post as Post | null) ?? null;
+  const v = (variant as Variant | null) ?? null;
 
   const skip = async (reason: string) => {
-    await db.from('social_queue').update({ status: 'skipped', skip_reason: reason }).eq('id', item.id);
-    await logActivity('warn', 'skipped', reason, { queueId: item.id, target: (target as SocialTarget | null)?.name });
+    await db.from('social_queue').update({ status: 'skipped', step: '', skip_reason: reason }).eq('id', item.id);
+    await logActivity('warn', 'skipped', reason, { queueId: item.id, target: t?.name });
     return 'skipped' as const;
   };
 
-  if (!target) return skip('היעד נמחק.');
-  if (!post || post.status === 'archived') return skip('הפוסט נמחק או הועבר לארכיון.');
-  const t = target as SocialTarget;
-  const p = post as Post;
-  const v = (variant as Variant | null) ?? null;
-
-  if (!t.enabled) return skip(`היעד "${t.name}" כבוי.`);
-  if (v && v.approval !== 'approved') return skip(`הגרסה ${v.label} לא אושרה.`);
-  if (!v && !p.base_text.trim() && !(p.media as MediaItem[]).length) return skip('הפוסט ריק.');
-
-  // --- Anti-spam ---------------------------------------------------------
-  const dayStart = startOfZonedDay(now).toISOString();
-  const { count: todayAll } = await db
-    .from('social_queue')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'published')
-    .gte('published_at', dayStart);
-  if ((todayAll ?? 0) >= limits.maxPerDay) return skip(`הגעת למכסה היומית (${limits.maxPerDay} פרסומים).`);
-
-  const { count: todayTarget } = await db
-    .from('social_queue')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'published')
-    .eq('target_id', t.id)
-    .gte('published_at', dayStart);
-  if ((todayTarget ?? 0) >= limits.maxPerTargetPerDay)
-    return skip(`הגעת למכסה היומית ליעד "${t.name}" (${limits.maxPerTargetPerDay}).`);
-
-  const { data: last } = await db
-    .from('social_queue')
-    .select('published_at')
-    .eq('status', 'published')
-    .not('published_at', 'is', null)
-    .order('published_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (last?.published_at) {
-    const gapMs = limits.minGapMinutes * 60_000;
-    const sinceLast = now.getTime() - new Date(last.published_at).getTime();
-    if (sinceLast < gapMs) {
-      if (item.attempts > MAX_DEFERRALS) return skip('נדחה יותר מדי פעמים בגלל מרווח הזמן בין פרסומים.');
-      const nextAt = new Date(new Date(last.published_at).getTime() + gapMs + 30_000).toISOString();
-      await db.from('social_queue').update({ status: 'scheduled', scheduled_at: nextAt }).eq('id', item.id);
-      await logActivity('info', 'deferred', `נדחה ל-${nextAt} כדי לשמור מרווח של ${limits.minGapMinutes} דק׳`, { queueId: item.id });
-      return 'deferred';
-    }
+  const decision = await evaluateQueueItem(db, { item, target: t, post: p, variant: v, limits, browser, now });
+  if (decision.action === 'skip') return skip(decision.reason);
+  if (decision.action === 'defer') {
+    await db.from('social_queue').update({ status: 'scheduled', step: 'pending', scheduled_at: decision.until }).eq('id', item.id);
+    await logActivity('info', 'deferred', `${decision.reason} (עד ${decision.until})`, { queueId: item.id });
+    return 'deferred';
   }
-
-  const text = item.rendered_text || renderPostText(p, v);
-  const dedupeSince = new Date(now.getTime() - limits.dedupeDays * 86_400_000).toISOString();
-  if (item.dedupe_hash) {
-    const { count: dupes } = await db
-      .from('social_queue')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'published')
-      .eq('dedupe_hash', item.dedupe_hash)
-      .gte('published_at', dedupeSince);
-    if ((dupes ?? 0) > 0) return skip(`אותו תוכן כבר פורסם ליעד הזה ב-${limits.dedupeDays} הימים האחרונים.`);
+  if (decision.action === 'wait') {
+    await db.from('social_queue').update({ status: 'scheduled', step: 'pending' }).eq('id', item.id);
+    return 'deferred';
   }
+  // From here on target/post are non-null (the rules skip otherwise).
+  const tt = t as SocialTarget;
+  const pp = p as Post;
+  const text = item.rendered_text || renderPostText(pp, v);
 
-  // --- Publish through the channel adapter --------------------------------
-  const adapter = adapterFor(t.channel);
-  if (adapter.apiPublishing && !t.can_api_publish) {
-    return skip(`ליעד "${t.name}" אין הרשאת פרסום דרך API (${t.permission_status}). סנכרנו יעדים או התחברו מחדש.`);
+  const adapter = adapterFor(tt.channel);
+  if (adapter.apiPublishing && !tt.can_api_publish) {
+    return skip(`ליעד "${tt.name}" אין הרשאת פרסום דרך API (${tt.permission_status}). סנכרנו יעדים או התחברו מחדש.`);
   }
 
   try {
     const result = await adapter.publish({
-      target: t,
+      target: tt,
       text,
-      link: p.link_url,
-      cta: p.cta_type,
-      media: p.media as MediaItem[],
-      whatsappUrl: p.whatsapp_url,
-      phone: p.phone,
+      link: pp.link_url,
+      cta: pp.cta_type,
+      media: pp.media as MediaItem[],
+      whatsappUrl: pp.whatsapp_url,
+      phone: pp.phone,
     });
 
     if (result.mode === 'manual') {
-      await db.from('social_queue').update({ status: 'manual_pending', rendered_text: text, error: null }).eq('id', item.id);
-      await logActivity('info', 'manual_pending', `"${t.name}": ${result.instructions}`, { queueId: item.id });
+      await db.from('social_queue').update({ status: 'manual_pending', step: '', rendered_text: text, error: null }).eq('id', item.id);
+      await logActivity('info', 'manual_pending', `"${tt.name}": ${result.instructions}`, { queueId: item.id });
       return 'manual';
     }
 
@@ -222,6 +192,7 @@ async function processItem(item: QueueItem, limits: LimitsSettings): Promise<Out
       .from('social_queue')
       .update({
         status: 'published',
+        step: 'published',
         published_at: new Date().toISOString(),
         external_post_id: result.externalPostId,
         permalink: result.permalink,
@@ -229,7 +200,8 @@ async function processItem(item: QueueItem, limits: LimitsSettings): Promise<Out
         error: result.notes ?? null,
       })
       .eq('id', item.id);
-    await logActivity('info', 'published', `פורסם ל-"${t.name}"${v ? ` (גרסה ${v.label})` : ''}`, {
+    await db.from('social_targets').update({ last_published_at: new Date().toISOString(), last_status: 'published', last_error: '' }).eq('id', tt.id);
+    await logActivity('info', 'published', `פורסם ל-"${tt.name}"${v ? ` (גרסה ${v.label})` : ''}`, {
       queueId: item.id,
       permalink: result.permalink,
     });
@@ -240,22 +212,23 @@ async function processItem(item: QueueItem, limits: LimitsSettings): Promise<Out
       if (err.kind === 'rate_limit' || err.kind === 'blocked') {
         // Cooldown already recorded by the graph client; put the row back.
         const retryAt = new Date(now.getTime() + (err.retryAfterMinutes ?? 60) * 60_000).toISOString();
-        await db.from('social_queue').update({ status: 'scheduled', scheduled_at: retryAt, error: err.message }).eq('id', item.id);
+        await db.from('social_queue').update({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: err.message }).eq('id', item.id);
         return 'deferred';
       }
       if (err.kind === 'auth' || err.kind === 'permission') {
         await db
           .from('social_targets')
           .update({ permission_status: err.kind === 'auth' ? 'revoked' : 'missing_permissions', can_api_publish: false })
-          .eq('id', t.id);
+          .eq('id', tt.id);
       }
       if (err.kind === 'unknown' && item.attempts < MAX_ATTEMPTS) {
         const retryAt = new Date(now.getTime() + 10 * 60_000 * item.attempts).toISOString();
-        await db.from('social_queue').update({ status: 'scheduled', scheduled_at: retryAt, error: err.message }).eq('id', item.id);
+        await db.from('social_queue').update({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: err.message }).eq('id', item.id);
         await logActivity('warn', 'retry', `ניסיון ${item.attempts} נכשל, ינסה שוב ב-${retryAt}: ${err.message}`, { queueId: item.id });
         return 'deferred';
       }
     }
+    await db.from('social_targets').update({ last_status: 'failed', last_error: err instanceof Error ? err.message : 'failed' }).eq('id', tt.id);
     throw err;
   }
 }

@@ -9,7 +9,7 @@
 | יעד | אוטומטי דרך Graph API? | מה המערכת עושה |
 | --- | --- | --- |
 | **דף פייסבוק** שאתם מנהלים (תפקיד עם `CREATE_CONTENT`) | **כן** — `POST /{page-id}/feed`, `/photos`, `/videos` עם Page Access Token והרשאת `pages_manage_posts` | מפרסמת טקסט, קישור, תמונה אחת, כמה תמונות (`attached_media`), סרטון (`file_url`); כפתור CTA כ-best-effort |
-| **קבוצת פייסבוק** (כל קבוצה, גם כזו שאתם מנהלים) | **לא** — Meta מחקה את Groups API ואת ההרשאה `publish_to_groups` ב-22.4.2024 | fallback חוקי: הפריט נכנס לתור, ובזמנו מוצגת **ערכת פרסום ידני** (טקסט להעתקה, מדיה להורדה, קישור לקבוצה, כפתור "פורסם") |
+| **קבוצת פייסבוק** (כל קבוצה, גם כזו שאתם מנהלים) | **לא דרך API** — Meta מחקה את Groups API ואת ההרשאה `publish_to_groups` ב-22.4.2024 | **שלב 2:** worker מקומי (Playwright) שמפרסם מהדפדפן שלכם, בחשבון שלכם, בקצב שמרני. ראו §9 |
 | **פרופיל אישי** | לא (הוסר ב-2018) | לא נתמך |
 | **Instagram Business** | כן, דרך Instagram Graph API (מודול נפרד) | מוכן כ-`channel = 'instagram'` בסכמה וב-registry, עדיין ללא adapter |
 
@@ -28,9 +28,14 @@
 - תזמון native של Meta (`scheduled_publish_time`, 10 דק׳–30 יום) **לא** בשימוש: התור
   הפנימי נותן מרווחים, מכסות, מניעת כפילות ועצירה בלחיצה — דברים ש-Meta לא נותנת.
 
-**מה המערכת לא עושה, בכוונה:** אין Selenium/Playwright, אין cookies, אין scraping,
-אין התחזות למשתמש, אין עקיפת CAPTCHA. כל קריאה ל-Meta היא Graph API רשמי עם
-`appsecret_proof`.
+**מה המערכת לא עושה, בכוונה:** לא עוקפת CAPTCHA / Checkpoint / 2FA / חסימות, לא
+משתמשת ב-stealth או בזיוף user-agent, לא מייבאת/מייצאת cookies, ולא שומרת סיסמת
+Facebook. דפים = Graph API רשמי עם `appsecret_proof`; קבוצות = הדפדפן האמיתי שלכם
+(§9), וכל מסך אבטחה של Facebook עוצר את המערכת ומחזיר אתכם לטפל בו ידנית.
+
+> **שקיפות:** תנאי השימוש של Meta אוסרים גישה אוטומטית ללא אישור. הפרסום לקבוצות
+> דרך הדפדפן הוא על אחריות בעל החשבון; Facebook עלולה להגביל את החשבון או להסיר
+> פוסטים גם בקצב שמרני. לכן ברירות המחדל הן TEST MODE + אישור ידני + קבוצה אחת.
 
 ## 2. Architecture
 
@@ -137,3 +142,107 @@ RLS: כל הטבלאות פתוחות רק ל-`authenticated` (המנהל). Stor
    `social_targets` עם `channel = 'instagram'`.
 4. הרשאות: `instagram_basic`, `instagram_content_publish`.
    התור, התזמון, מניעת הספאם וה-UI לא משתנים.
+
+## 9. שלב 2 — קבוצות פייסבוק דרך worker מקומי (Playwright)
+
+### ארכיטקטורה
+
+```
+ Web App (Vercel)  ──▶  Supabase queue (social_queue, social_workers, social_worker_commands)
+                                   ▲                         │
+                                   │ heartbeat / status      │ jobs + commands (login / check / logout / resume)
+                                   │                         ▼
+                        Dedicated Browser Worker — המחשב שלכם: `npm run social-worker`
+                                   │
+                                   ▼
+                     Playwright (playwright-core) + פרופיל Chrome מתמיד (~/.hapitaron-social/facebook-profile)
+                                   │
+                                   ▼
+                              facebook.com/groups/…
+```
+
+- **למה לא ב-Vercel / GitHub Actions?** serverless ו-CI אינם מתאימים ל-session מתמיד של
+  דפדפן (אין דיסק קבוע, אין חלון להתחברות ידנית, זמן ריצה מוגבל). לכן ה-worker רץ
+  על המחשב שלכם (או VPS עם desktop), וה-Dashboard מדבר איתו רק דרך Supabase.
+- **דפים** ממשיכים לעבוד בדיוק כמו קודם (Graph API, `src/lib/social/server/worker.ts`).
+  אותו תור, אותן מכסות, אותו מרווח — `src/lib/social/rules.ts` משותף לשניהם.
+- **קבצי ה-worker** (`worker/`):
+
+| קובץ | תפקיד |
+| --- | --- |
+| `social-worker.ts` | הלולאה: heartbeat, פקודות מהלוח, claim אטומי של עבודות `facebook_group`, תוצאות ולוג |
+| `adapters/facebookGroupBrowser.ts` | `FacebookGroupBrowserAdapter` — group URL + טקסט + מדיה + campaign/variant → תוצאה |
+| `facebook/composer.ts` | הכוריאוגרפיה: פתיחת קבוצה → composer → טקסט → העלאת מדיה → (אישור) → Publish → אימות |
+| `facebook/selectors.ts` | **כל** ה-DOM של Facebook במקום אחד: roles, accessible names (EN/HE/RU), text, fallbacks |
+| `facebook/session.ts` | פרופיל Chrome מתמיד, זיהוי login/checkpoint, התחברות ידנית, ניתוק |
+| `media.ts`, `screenshots.ts`, `db.ts`, `env.ts` | הורדת מדיה מה-Storage לקבצים זמניים, צילומי תקלה ל-bucket פרטי, Supabase, env |
+| `test/composer.test.ts` + `test/mock-group.html` | בדיקה מקומית של הכוריאוגרפיה מול דף שמחקה את Facebook |
+
+### מצבי תור (social_queue)
+
+`status`: Scheduled → Publishing → Published / Failed / Skipped, ובנוסף
+**awaiting_confirmation** (ממתין לאישור שלכם לפני הלחיצה הסופית),
+**needs_attention** (Facebook דרש פעולה ידנית / כישלון אחרי לחיצה על Publish — לא
+מנסים שוב אוטומטית כדי לא לפרסם פעמיים), **paused**.
+`step` (רק לקבוצות): pending → opening → composer_opened → uploading_media →
+ready_to_publish → publishing → verifying → published.
+
+### אבטחה
+
+- ה-session של Facebook = פרופיל Chrome בתיקייה מקומית מחוץ ל-repo. אין storageState
+  ב-Git, ב-Supabase או בלוגים (`.gitignore` מעודכן; `db.ts` מסנן cookies/tokens מהלוג).
+- ה-worker מתחבר ל-Supabase כמשתמש ה-admin (אימייל+סיסמה של Supabase, לא של Facebook)
+  ולכן כפוף ל-RLS. אין service-role key על המחשב.
+- צילומי מסך של תקלות נשמרים ב-bucket **פרטי** `social-debug` ונפתחים רק בקישור חתום
+  ל-10 דקות.
+- "נתק" מוחק את הפרופיל המקומי כולו.
+
+### התקנה והפעלה (פעם אחת)
+
+1. הריצו `supabase/social-schema-v2.sql` ב-SQL Editor (אחרי `social-schema.sql`).
+2. במחשב שמריץ את ה-worker: `git clone`, `npm install`, ו-`.env.local` עם
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SOCIAL_WORKER_EMAIL`,
+   `SOCIAL_WORKER_PASSWORD` (משתמש ה-Supabase שפותח את /crm).
+3. Google Chrome מותקן (ברירת מחדל `SOCIAL_BROWSER_CHANNEL=chrome`). בלי Chrome:
+   `npx playwright-core install chromium` ו-`SOCIAL_BROWSER_CHANNEL=chromium`.
+4. `npm run social-worker` — משאירים את הטרמינל פתוח. בלוח הבקרה כרטיס
+   **Facebook Browser** יראה 🟢/🟡/🔴.
+5. בלוח הבקרה: **התחבר לפייסבוק** → נפתח חלון Chrome אמיתי על המחשב → מתחברים בעצמכם
+   (כולל 2FA אם יש) → הכרטיס עובר ל-🟢 מחובר. **בדוק חיבור** בודק בלי לגעת בכלום;
+   **נתק** מוחק את הפרופיל.
+
+### בדיקה ראשונה (TEST MODE — ברירת מחדל)
+
+1. **קבוצות** → הוסיפו קישור לקבוצה אחת שמותר לכם לפרסם בה.
+2. **פוסט חדש** → טקסט + תמונה → בחרו את הקבוצה (TEST MODE מאפשר אחת בלבד) →
+   **🚀 התחל פרסום**.
+3. ה-worker (במצב Debug, חלון גלוי) פותח את הקבוצה, מכניס טקסט, מעלה תמונה, ועוצר
+   ב-**ready_to_publish**. בלוח הבקרה מופיע צילום מסך + **אשר פרסום** / **בטל**.
+4. אחרי "אשר פרסום" הוא לוחץ Publish, מאמת בפיד, והשורה עוברת ל-✅ Published.
+5. עבר? **הגדרות → Browser Automation**: כבו TEST MODE (ואם תרצו גם את האישור הידני
+   ואת Debug Mode).
+
+### Checkpoint / CAPTCHA / 2FA / חסימה
+
+ה-worker לא מנסה לעקוף. הוא מסמן את העבודה `needs_attention`, שומר צילום מסך, מעדכן
+את הכרטיס ל-🟡 "Facebook דורש פעולה ידנית", ולא מתחיל עבודות חדשות. אתם פותחים את
+החלון (או "התחבר לפייסבוק"), מטפלים, ואז **בדוק שוב** → **המשך קמפיין** (מחזיר את
+העבודות שסומנו לתור).
+
+### Stop / Pause
+
+- **Pause / Resume / Stop** לכל קמפיין (בקמפיינים ובלוח "פרסום בזמן אמת").
+- **עצור הכל** (לוח בקרה): `paused=true` + ביטול כל מה שממתין. עבודה שכבר רצה מסתיימת
+  בבטחה (ה-worker בודק את ההשהיה רק בין עבודות).
+
+### קצב (ברירות מחדל שמרניות)
+
+`limits`: 6 ביום, 2 ליעד ביום, 45 דק׳ מרווח, כפילות 14 יום.
+`browser`: קבוצות מקבלות +20 דק׳ מרווח, 8 לקמפיין ביום, עבודה אחת במקביל.
+כפילות: אותו פוסט לאותה קבוצה לא יוצא פעמיים (גם לא ב-retry), ובנוסף hash של
+טקסט+מדיה+יעד.
+
+### כש-Facebook משנה ממשק
+
+הכל ב-`worker/facebook/selectors.ts`. הריצו `npx tsx worker/test/composer.test.ts`
+אחרי כל שינוי; הלוג ב-Dashboard מציין באיזה שלב נפל וצילום המסך מראה מה היה במסך.

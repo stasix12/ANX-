@@ -2,6 +2,7 @@ import 'server-only';
 import { slotsFor } from '../slots';
 import type { MediaItem, Post, Schedule, Variant } from '../types';
 import { dedupeKey, renderPostText } from '../compose';
+import { pickVariant } from '../variants';
 import { serviceDb } from './db';
 import { logActivity } from './log';
 import { sha256 } from './crypto';
@@ -11,8 +12,8 @@ import { sha256 } from './crypto';
  * (HORIZON_HOURS). Idempotent: the unique (schedule, target, scheduled_at)
  * index means re-running the planner never double-books a slot.
  *
- * Variant rotation: approved variants are cycled per target in creation
- * order, so a page never receives the same wording twice in a row.
+ * Variant assignment is delegated to ../variants.ts (rotate / distribute /
+ * fixed per-target map) so the UI can show the same choice in advance.
  */
 const HORIZON_HOURS = 48;
 
@@ -49,7 +50,7 @@ export async function planQueue(now = new Date()): Promise<number> {
     const approved = (variants ?? []) as Variant[];
     const media = (post.media ?? []) as MediaItem[];
 
-    for (const targetId of schedule.target_ids) {
+    for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
       const { count } = await db
         .from('social_queue')
         .select('id', { count: 'exact', head: true })
@@ -58,7 +59,7 @@ export async function planQueue(now = new Date()): Promise<number> {
       let rotation = count ?? 0;
 
       for (const slot of slots) {
-        const variant = approved.length ? approved[rotation % approved.length] : null;
+        const variant = pickVariant(approved, schedule, targetId, targetIndex, rotation);
         const text = renderPostText(post as Post, variant);
         const hash = sha256(dedupeKey(targetId, text, media.map((m) => m.url)));
         const { error: insErr, data } = await db
@@ -67,10 +68,13 @@ export async function planQueue(now = new Date()): Promise<number> {
             {
               schedule_id: schedule.id,
               post_id: post.id,
+              campaign_id: post.campaign_id ?? null,
               variant_id: variant?.id ?? null,
               target_id: targetId,
               scheduled_at: slot.toISOString(),
               status: 'scheduled',
+              step: 'pending',
+              require_confirmation: Boolean(schedule.require_confirmation),
               dedupe_hash: hash,
               rendered_text: text,
             },

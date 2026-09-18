@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Empty, Field, Loading, Notice, inputClass } from '@/components/social/ui';
-import { deleteCampaign, getBusiness, listCampaigns, listPosts, saveCampaign } from '@/lib/social/client';
+import { deleteCampaign, getBusiness, listCampaigns, listPosts, pauseCampaign, saveCampaign, stopCampaign } from '@/lib/social/client';
 import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type Post } from '@/lib/social/types';
 
 const blank = { name: '', service: '', city: '', language: 'he' as Campaign['language'], notes: '' };
@@ -104,9 +104,10 @@ export default function CampaignsPage() {
           {campaigns?.map((c) => {
             const mine = posts.filter((p) => p.campaign_id === c.id);
             return (
-              <Card key={c.id} title={c.name} action={<Link href={`/social/posts/new`} className="text-sm font-bold text-brand-400">+ פוסט</Link>}>
+              <Card key={c.id} title={c.name} action={<Link href={`/social/posts/new?campaign=${c.id}`} className="text-sm font-bold text-brand-400">+ פוסט</Link>}>
                 <p className="text-sm text-mist-300">
-                  {c.service} · {c.city} · {c.language === 'he' ? 'עברית' : c.language === 'ru' ? 'רוסית' : 'עברית + רוסית'}
+                  {c.service} · {c.city} · {c.language === 'he' ? 'עברית' : c.language === 'ru' ? 'רוסית' : 'עברית + רוסית'} ·{' '}
+                  <span className={c.status === 'active' ? 'text-emerald-700' : 'text-amber-700'}>{c.status === 'active' ? 'פעיל' : c.status === 'paused' ? 'מושהה' : 'בארכיון'}</span>
                 </p>
                 {c.notes && <p className="mt-1 text-sm text-mist-500">{c.notes}</p>}
                 <ul className="mt-3 space-y-1 text-sm">
@@ -120,9 +121,26 @@ export default function CampaignsPage() {
                     </li>
                   ))}
                 </ul>
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => setForm({ id: c.id, name: c.name, service: c.service, city: c.city, language: c.language, notes: c.notes })}>
                     ערוך
+                  </Button>
+                  {c.status === 'active' ? (
+                    <Button variant="secondary" onClick={() => pauseCampaign(c.id, true).then(load)}>
+                      ⏸ Pause
+                    </Button>
+                  ) : (
+                    <Button variant="secondary" onClick={() => pauseCampaign(c.id, false).then(load)}>
+                      ▶ Resume
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (window.confirm('לעצור את הקמפיין? כל הפרסומים שטרם התחילו יבוטלו.')) stopCampaign(c.id).then(load);
+                    }}
+                  >
+                    ⏹ Stop
                   </Button>
                   <Button
                     variant="ghost"

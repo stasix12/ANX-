@@ -2,9 +2,13 @@
 
 import { supabase } from '@/lib/supabase';
 import {
+  DEFAULT_BROWSER,
   DEFAULT_BUSINESS,
   DEFAULT_LIMITS,
+  WORKER_OFFLINE_AFTER_SECONDS,
+  parseGroupUrl,
   type ActivityEntry,
+  type BrowserSettings,
   type BusinessSettings,
   type Campaign,
   type ControlSettings,
@@ -15,7 +19,10 @@ import {
   type Schedule,
   type SocialAccount,
   type SocialTarget,
+  type SocialWorker,
   type Variant,
+  type WorkerCommand,
+  type WorkerCommandName,
 } from './types';
 
 /**
@@ -68,6 +75,7 @@ export async function saveSetting(key: string, value: unknown): Promise<void> {
 export const getLimits = () => getSetting<LimitsSettings>('limits', DEFAULT_LIMITS);
 export const getControl = () => getSetting<ControlSettings>('control', { paused: false, rateLimitedUntil: null });
 export const getBusiness = () => getSetting<BusinessSettings>('business', DEFAULT_BUSINESS);
+export const getBrowserSettings = () => getSetting<BrowserSettings>('browser', DEFAULT_BROWSER);
 
 export async function setPaused(paused: boolean): Promise<void> {
   const control = await getControl();
@@ -84,23 +92,41 @@ export async function updateTarget(id: string, patch: Partial<Pick<SocialTarget,
   unwrap(await db().from('social_targets').update(patch).eq('id', id));
 }
 
-export async function addManualGroup(input: { name: string; url: string; notes?: string }): Promise<SocialTarget> {
+/** Adds a Facebook Group by URL. Published by the local browser worker. */
+export async function addGroup(input: { url: string; name?: string; notes?: string }): Promise<SocialTarget> {
+  const parsed = parseGroupUrl(input.url);
+  if (!parsed) throw new Error('כתובת לא תקינה — צריך קישור בסגנון facebook.com/groups/…');
+  const { data: existing } = await db().from('social_targets').select('id').eq('channel', 'facebook_group').eq('external_id', parsed.externalId).maybeSingle();
+  if (existing) throw new Error('הקבוצה הזו כבר קיימת ברשימה.');
   return unwrap<SocialTarget>(
     await db()
       .from('social_targets')
       .insert({
-        channel: 'facebook_group_manual',
-        external_id: '',
-        name: input.name,
-        url: input.url,
+        channel: 'facebook_group',
+        external_id: parsed.externalId,
+        name: input.name?.trim() || parsed.externalId,
+        url: parsed.url,
         notes: input.notes ?? '',
-        permission_status: 'manual_only',
+        permission_status: 'browser',
         can_api_publish: false,
         enabled: true,
       })
       .select('*')
       .single(),
   );
+}
+
+/** @deprecated phase-1 name; groups are now browser-published. */
+export const addManualGroup = (input: { name: string; url: string; notes?: string }) => addGroup(input);
+
+export async function bulkUpdateTargets(ids: string[], patch: Partial<Pick<SocialTarget, 'enabled'>>): Promise<void> {
+  if (!ids.length) return;
+  unwrap(await db().from('social_targets').update(patch).in('id', ids));
+}
+
+export async function bulkDeleteTargets(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  unwrap(await db().from('social_targets').delete().in('id', ids));
 }
 
 export async function deleteTarget(id: string): Promise<void> {
@@ -268,13 +294,85 @@ export async function cancelQueueItem(id: string): Promise<void> {
   await updateQueueItem(id, { status: 'skipped', skip_reason: 'בוטל ידנית' });
 }
 
+export async function confirmQueueItem(id: string): Promise<void> {
+  await updateQueueItem(id, { confirmed_at: new Date().toISOString() });
+}
+
+/** Rows a browser worker parked because Facebook asked for a human. */
+export async function resumeNeedsAttention(postId?: string): Promise<number> {
+  let q = db().from('social_queue').update({ status: 'scheduled', step: 'pending', error: null, scheduled_at: new Date().toISOString() }).eq('status', 'needs_attention');
+  if (postId) q = q.eq('post_id', postId);
+  const rows = unwrap<{ id: string }[]>(await q.select('id'));
+  return rows.length;
+}
+
+/** Live view: everything that is in flight or finished recently, for the progress board. */
+export async function listLiveQueue(): Promise<QueueRow[]> {
+  const since = new Date(Date.now() - 24 * 3_600_000).toISOString();
+  return unwrap<QueueRow[]>(
+    await db()
+      .from('social_queue')
+      .select(QUEUE_SELECT)
+      .or(`status.in.(scheduled,publishing,awaiting_confirmation,needs_attention,paused),and(status.in.(published,failed,skipped),updated_at.gte.${since})`)
+      .order('scheduled_at', { ascending: true })
+      .limit(200),
+  );
+}
+
+export async function pauseCampaign(id: string, paused: boolean): Promise<void> {
+  unwrap(await db().from('social_campaigns').update({ status: paused ? 'paused' : 'active' }).eq('id', id));
+}
+
+/** Stop: nothing new starts; scheduled rows are cancelled; a running job finishes. */
+export async function stopCampaign(id: string): Promise<number> {
+  unwrap(await db().from('social_campaigns').update({ status: 'paused' }).eq('id', id));
+  const posts = unwrap<{ id: string }[]>(await db().from('social_posts').select('id').eq('campaign_id', id));
+  const postIds = posts.map((p) => p.id);
+  if (postIds.length) unwrap(await db().from('social_schedules').update({ active: false }).in('post_id', postIds));
+  const rows = unwrap<{ id: string }[]>(
+    await db()
+      .from('social_queue')
+      .update({ status: 'skipped', step: '', skip_reason: 'הקמפיין נעצר' })
+      .eq('campaign_id', id)
+      .in('status', ['scheduled', 'awaiting_confirmation', 'needs_attention', 'paused'])
+      .select('id'),
+  );
+  return rows.length;
+}
+
+export async function screenshotUrl(path: string): Promise<string | null> {
+  const { data, error } = await db().storage.from('social-debug').createSignedUrl(path, 600);
+  if (error) return null;
+  return data.signedUrl;
+}
+
+/* -------------------------------------------------------------- workers */
+
+export async function listWorkers(): Promise<(SocialWorker & { online: boolean })[]> {
+  const rows = unwrap<SocialWorker[]>(await db().from('social_workers').select('*').order('created_at'));
+  const cutoff = Date.now() - WORKER_OFFLINE_AFTER_SECONDS * 1000;
+  return rows.map((w) => ({ ...w, online: Boolean(w.last_seen_at && new Date(w.last_seen_at).getTime() > cutoff) }));
+}
+
+export async function sendWorkerCommand(workerId: string | null, command: WorkerCommandName): Promise<WorkerCommand> {
+  return unwrap<WorkerCommand>(await db().from('social_worker_commands').insert({ worker_id: workerId, command }).select('*').single());
+}
+
+export async function listRecentCommands(limit = 5): Promise<WorkerCommand[]> {
+  return unwrap<WorkerCommand[]>(await db().from('social_worker_commands').select('*').order('created_at', { ascending: false }).limit(limit));
+}
+
 export async function markManualPublished(id: string, permalink: string): Promise<void> {
   await updateQueueItem(id, { status: 'published', published_at: new Date().toISOString(), permalink: permalink || null, error: null });
 }
 
 export async function cancelAllScheduled(): Promise<number> {
   const rows = unwrap<{ id: string }[]>(
-    await db().from('social_queue').update({ status: 'skipped', skip_reason: 'בוטל — עצירת כל התורים' }).eq('status', 'scheduled').select('id'),
+    await db()
+      .from('social_queue')
+      .update({ status: 'skipped', step: '', skip_reason: 'בוטל — עצירת כל התורים' })
+      .in('status', ['scheduled', 'awaiting_confirmation', 'needs_attention', 'paused'])
+      .select('id'),
   );
   return rows.length;
 }
@@ -287,7 +385,7 @@ export async function countPublishedSince(sinceISO: string): Promise<number> {
 
 export async function countByStatus(): Promise<Record<QueueItem['status'], number>> {
   const rows = unwrap<{ status: QueueItem['status'] }[]>(await db().from('social_queue').select('status'));
-  const out: Record<QueueItem['status'], number> = { scheduled: 0, publishing: 0, published: 0, failed: 0, skipped: 0, manual_pending: 0 };
+  const out: Record<QueueItem['status'], number> = { scheduled: 0, publishing: 0, published: 0, failed: 0, skipped: 0, manual_pending: 0, needs_attention: 0, awaiting_confirmation: 0, paused: 0 };
   for (const r of rows) out[r.status] += 1;
   return out;
 }

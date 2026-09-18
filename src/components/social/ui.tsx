@@ -85,6 +85,9 @@ const statusClass: Record<QueueStatus, string> = {
   failed: 'bg-rose-500/15 text-rose-700',
   skipped: 'bg-slate-500/15 text-slate-600',
   manual_pending: 'bg-violet-500/15 text-violet-700',
+  needs_attention: 'bg-orange-500/15 text-orange-700',
+  awaiting_confirmation: 'bg-fuchsia-500/15 text-fuchsia-700',
+  paused: 'bg-slate-500/15 text-slate-600',
 };
 
 export function StatusPill({ status }: { status: QueueStatus }) {

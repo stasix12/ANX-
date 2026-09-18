@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckIcon, SparklesIcon, TrashIcon } from '@/components/icons';
+import { LiveBoard } from '@/components/social/LiveBoard';
 import { MediaUploader } from '@/components/social/MediaUploader';
+import { TargetPicker } from '@/components/social/TargetPicker';
 import { PostPreview } from '@/components/social/PostPreview';
 import { SchedulePicker, type ScheduleDraft, scheduleDraftToInput } from '@/components/social/SchedulePicker';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -13,6 +15,7 @@ import {
   archivePost,
   callSocialApi,
   createSchedule,
+  getBrowserSettings,
   getBusiness,
   getPost,
   listCampaigns,
@@ -28,8 +31,9 @@ import { generateVariantSeeds, renderPostText, whatsappUrlFor } from '@/lib/soci
 import { formatDateTimeHe } from '@/lib/social/time';
 import {
   CTA_OPTIONS,
+  DEFAULT_BROWSER,
   DEFAULT_BUSINESS,
-  PERMISSION_LABEL,
+  type BrowserSettings,
   type BusinessSettings,
   type Campaign,
   type CtaType,
@@ -38,6 +42,7 @@ import {
   type Schedule,
   type SocialTarget,
   type Variant,
+  type VariantStrategy,
 } from '@/lib/social/types';
 
 type VariantDraft = Partial<Variant> & { key: string; label: string; text: string; language: Language; approval: Variant['approval'] };
@@ -68,7 +73,13 @@ export function PostEditor({ postId }: { postId?: string }) {
   const [targets, setTargets] = useState<SocialTarget[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [business, setBusiness] = useState<BusinessSettings>(DEFAULT_BUSINESS);
+  const [browser, setBrowser] = useState<BrowserSettings>(DEFAULT_BROWSER);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
+  const [variantStrategy, setVariantStrategy] = useState<VariantStrategy>('rotate');
+  const [variantMap, setVariantMap] = useState<Record<string, string>>({});
+  const [requireConfirmation, setRequireConfirmation] = useState(true);
+  const [started, setStarted] = useState(false);
+  const searchParams = useSearchParams();
   const [previewKey, setPreviewKey] = useState<string>('base');
   const [schedule, setSchedule] = useState<ScheduleDraft>({ mode: 'now', date: '', time: '09:00', weekly: {}, intervalDays: 2, intervalTime: '09:00' });
   const [loading, setLoading] = useState(true);
@@ -77,10 +88,12 @@ export function PostEditor({ postId }: { postId?: string }) {
   const [savedId, setSavedId] = useState<string | undefined>(postId);
 
   const load = useCallback(async () => {
-    const [c, t, b] = await Promise.all([listCampaigns(), listTargets(), getBusiness()]);
+    const [c, t, b, br] = await Promise.all([listCampaigns(), listTargets(), getBusiness(), getBrowserSettings()]);
     setCampaigns(c);
     setTargets(t);
     setBusiness(b);
+    setBrowser(br);
+    setRequireConfirmation(br.requireConfirmation || br.testMode);
     if (postId) {
       const [p, v, s] = await Promise.all([getPost(postId), listVariants(postId), listSchedules(postId)]);
       if (p) {
@@ -90,11 +103,13 @@ export function PostEditor({ postId }: { postId?: string }) {
       setVariants(v.map((x) => ({ ...x, key: x.id })));
       setSchedules(s);
     } else {
-      setPost({ ...emptyPost, phone: b.phone, whatsapp_url: whatsappUrlFor(b.whatsapp) });
+      const presetCampaign = searchParams.get('campaign');
+      setPost({ ...emptyPost, phone: b.phone, whatsapp_url: whatsappUrlFor(b.whatsapp), campaign_id: presetCampaign && c.some((x) => x.id === presetCampaign) ? presetCampaign : null });
     }
-    setSelectedTargets((prev) => (prev.length ? prev : t.filter((x) => x.enabled).map((x) => x.id)));
+    const presetTargets = (searchParams.get('targets') ?? '').split(',').filter((id) => t.some((x) => x.id === id));
+    setSelectedTargets((prev) => (prev.length ? prev : presetTargets.length ? presetTargets : t.filter((x) => x.enabled && x.channel === 'facebook_page').map((x) => x.id)));
     setLoading(false);
-  }, [postId]);
+  }, [postId, searchParams]);
 
   useEffect(() => {
     load().catch((err) => setMessage({ tone: 'error', text: err instanceof Error ? err.message : 'טעינה נכשלה.' }));
@@ -159,6 +174,8 @@ export function PostEditor({ postId }: { postId?: string }) {
       return 'הפוסט ריק — כתבו טקסט או הוסיפו מדיה.';
     if (variants.length && approvedCount === 0) return 'יש גרסאות אך אף אחת לא אושרה. אשרו לפחות גרסה אחת (או מחקו את כולן כדי לפרסם את הטקסט הבסיסי).';
     if (!selectedTargets.length) return 'בחרו לפחות יעד אחד.';
+    const groupCount = selectedTargets.filter((id) => targets.find((t) => t.id === id)?.channel === 'facebook_group').length;
+    if (browser.testMode && groupCount > 1) return 'TEST MODE פעיל — אפשר לבחור קבוצה אחת בלבד. כבו אותו בהגדרות אחרי שהבדיקה הראשונה עברה.';
     if (schedule.mode === 'once' && (!schedule.date || !schedule.time)) return 'בחרו תאריך ושעה.';
     if (schedule.mode === 'weekly' && !Object.values(schedule.weekly).some((t) => t.length)) return 'בחרו לפחות יום ושעה אחת.';
     if (schedule.mode === 'interval' && (!schedule.date || !schedule.intervalDays)) return 'הגדירו תאריך התחלה ותדירות.';
@@ -174,13 +191,19 @@ export function PostEditor({ postId }: { postId?: string }) {
     setBusy('schedule');
     try {
       const id = await persist('ready');
-      await createSchedule(scheduleDraftToInput(schedule, id, selectedTargets));
+      await createSchedule({
+        ...scheduleDraftToInput(schedule, id, selectedTargets),
+        variant_strategy: variantStrategy,
+        variant_map: variantMap,
+        require_confirmation: requireConfirmation || browser.testMode,
+      });
+      setStarted(true);
       if (schedule.mode === 'now') {
         const r = await callSocialApi<{ ran: boolean; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
         setMessage({
           tone: r.ran ? 'success' : 'info',
           text: r.ran
-            ? `נשלח: ${r.published} פורסמו דרך API, ${r.manual} ממתינים לפרסום ידני, ${r.skipped} דולגו, ${r.deferred} נדחו, ${r.failed} נכשלו. פרטים בהיסטוריה.`
+            ? `הקמפיין התחיל. דפים: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.deferred} נדחו, ${r.failed} נכשלו. קבוצות מתפרסמות דרך ה-worker — עקבו למטה.`
             : `הפוסט נכנס לתור אך לא פורסם: ${r.reason}`,
         });
       } else {
@@ -343,27 +366,49 @@ export function PostEditor({ postId }: { postId?: string }) {
             )}
           </Card>
 
-          <Card title="יעדי פרסום" action={<Link href="/social/targets" className="text-sm font-bold text-brand-400">ניהול יעדים</Link>}>
+          <Card title="יעדי פרסום" action={<Link href="/social/groups" className="text-sm font-bold text-brand-400">ניהול קבוצות</Link>}>
             {targets.length === 0 ? (
-              <Notice tone="warn">אין יעדים עדיין. חברו את פייסבוק במסך היעדים או הוסיפו קבוצה לפרסום ידני.</Notice>
+              <Notice tone="warn">אין יעדים עדיין. חברו את פייסבוק במסך הדפים או הוסיפו קבוצות.</Notice>
             ) : (
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {targets.map((t) => {
-                  const on = selectedTargets.includes(t.id);
-                  return (
-                    <li key={t.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${!t.enabled ? 'opacity-50' : ''} ${on ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'}`}>
-                      <Toggle checked={on} onChange={(v) => setSelectedTargets((s) => (v ? [...s, t.id] : s.filter((x) => x !== t.id)))} label={t.name} />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-mist-100">{t.name}</p>
-                        <p className={`text-xs ${t.can_api_publish ? 'text-emerald-700' : 'text-violet-700'}`}>
-                          {t.can_api_publish ? 'אוטומטי דרך API' : PERMISSION_LABEL[t.permission_status]}
-                          {!t.enabled && ' · כבוי'}
-                        </p>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+              <TargetPicker
+                targets={targets}
+                selected={selectedTargets}
+                onChange={setSelectedTargets}
+                variants={variants
+                  .filter((v) => v.id)
+                  .map((v) => ({ id: v.id as string, post_id: savedId ?? '', label: v.label, text: v.text, language: v.language, approval: v.approval, sort: 0 }))}
+                variantMap={variantMap}
+                onVariantMap={setVariantMap}
+                maxSelectable={browser.testMode ? 1 : undefined}
+                note={browser.testMode ? 'TEST MODE: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. אפשר לכבות בהגדרות.' : undefined}
+              />
+            )}
+            {approvedCount > 1 && (
+              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-ink-600 px-3 py-2.5">
+                <span className="text-sm font-bold text-mist-100">חלוקת גרסאות:</span>
+                <div role="group" className="flex rounded-xl bg-ink-800 p-0.5 text-xs font-bold">
+                  {(
+                    [
+                      ['distribute', 'Distribute variants'],
+                      ['rotate', 'סבב לכל יעד'],
+                      ['fixed', 'רק הקצאה ידנית'],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button key={v} type="button" aria-pressed={variantStrategy === v} onClick={() => setVariantStrategy(v)} className={`rounded-lg px-2.5 py-1.5 ${variantStrategy === v ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-mist-500">
+                  {variantStrategy === 'distribute' ? 'הגרסאות המאושרות מתחלקות בין היעדים (A ליעד הראשון, B לשני…).' : variantStrategy === 'rotate' ? 'כל יעד מקבל A, אחר כך B, C… בפרסומים הבאים.' : 'רק יעדים עם גרסה שנבחרה ידנית מקבלים גרסה; השאר — הטקסט הבסיסי.'}
+                </span>
+              </div>
+            )}
+            {selectedTargets.some((id) => targets.find((t) => t.id === id)?.channel === 'facebook_group') && (
+              <label className="mt-3 flex items-center gap-2 text-sm text-mist-100">
+                <input type="checkbox" className="h-4 w-4 accent-brand-500" checked={requireConfirmation || browser.testMode} disabled={browser.testMode} onChange={(e) => setRequireConfirmation(e.target.checked)} />
+                Require confirmation before final publish — ה-worker יעצור לפני "פרסום" ויחכה לאישור שלכם בלוח הבקרה
+              </label>
             )}
           </Card>
 
@@ -371,7 +416,7 @@ export function PostEditor({ postId }: { postId?: string }) {
             <SchedulePicker value={schedule} onChange={setSchedule} />
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Button busy={busy === 'schedule'} onClick={onSchedule}>
-                {schedule.mode === 'now' ? 'פרסם עכשיו' : 'שמור תזמון'}
+                {schedule.mode === 'now' ? '🚀 התחל פרסום' : 'שמור תזמון'}
               </Button>
               <Button variant="secondary" busy={busy === 'save'} onClick={onSave}>
                 שמור כטיוטה
@@ -401,6 +446,12 @@ export function PostEditor({ postId }: { postId?: string }) {
               </ul>
             )}
           </Card>
+
+          {(started || postId) && (
+            <Card title="התקדמות הפרסום">
+              <LiveBoard postId={savedId} compact />
+            </Card>
+          )}
         </div>
 
         <aside className="space-y-3 lg:sticky lg:top-28 lg:self-start">

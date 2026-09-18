@@ -8,9 +8,10 @@
 export const TIMEZONE = 'Asia/Jerusalem';
 
 /** Extension point: add 'instagram' etc. by implementing a Channel adapter. */
-export type Channel = 'facebook_page' | 'facebook_group_manual' | 'instagram';
+/** facebook_group = published by the local Playwright worker (no Meta API exists). */
+export type Channel = 'facebook_page' | 'facebook_group' | 'facebook_group_manual' | 'instagram';
 
-export type PermissionStatus = 'ok' | 'missing_permissions' | 'manual_only' | 'revoked';
+export type PermissionStatus = 'ok' | 'missing_permissions' | 'manual_only' | 'revoked' | 'browser';
 
 export interface SocialAccount {
   id: string;
@@ -38,6 +39,9 @@ export interface SocialTarget {
   enabled: boolean;
   notes: string;
   last_synced_at: string | null;
+  last_published_at?: string | null;
+  last_status?: string;
+  last_error?: string;
   created_at: string;
 }
 
@@ -115,10 +119,16 @@ export interface Schedule {
   interval_days: number | null;
   interval_time: string | null;
   target_ids: string[];
+  /** rotate = A→B→C per target over time; distribute = spread approved variants across targets; fixed = variant_map only. */
+  variant_strategy?: VariantStrategy;
+  variant_map?: Record<string, string>;
+  require_confirmation?: boolean;
   active: boolean;
   planned_until: string | null;
   created_at: string;
 }
+
+export type VariantStrategy = 'rotate' | 'distribute' | 'fixed';
 
 export type QueueStatus =
   | 'scheduled'
@@ -126,7 +136,38 @@ export type QueueStatus =
   | 'published'
   | 'failed'
   | 'skipped'
-  | 'manual_pending';
+  | 'manual_pending'
+  | 'needs_attention'
+  | 'awaiting_confirmation'
+  | 'paused';
+
+/** Fine-grained progress the browser worker reports while a job runs. */
+export type QueueStep =
+  | ''
+  | 'pending'
+  | 'opening'
+  | 'composer_opened'
+  | 'uploading_media'
+  | 'ready_to_publish'
+  | 'publishing'
+  | 'verifying'
+  | 'published'
+  | 'failed'
+  | 'needs_attention';
+
+export const QUEUE_STEP_LABEL: Record<QueueStep, string> = {
+  '': '',
+  pending: '🕐 ממתין',
+  opening: '🌐 פותח את הקבוצה',
+  composer_opened: '📝 חלון הפוסט נפתח',
+  uploading_media: '📤 מעלה מדיה',
+  ready_to_publish: '✅ מוכן לפרסום',
+  publishing: '⏳ מפרסם',
+  verifying: '🔎 מאמת',
+  published: '✅ פורסם',
+  failed: '❌ נכשל',
+  needs_attention: '⚠️ דורש טיפול',
+};
 
 export interface QueueItem {
   id: string;
@@ -145,8 +186,65 @@ export interface QueueItem {
   skip_reason: string | null;
   claimed_at: string | null;
   published_at: string | null;
+  step?: QueueStep;
+  step_at?: string | null;
+  worker_id?: string | null;
+  screenshot_path?: string | null;
+  require_confirmation?: boolean;
+  confirmed_at?: string | null;
+  campaign_id?: string | null;
   created_at: string;
 }
+
+export type WorkerStatus = 'online' | 'needs_attention' | 'offline';
+export type BrowserState = 'connected' | 'needs_auth' | 'disconnected' | 'unknown';
+
+export interface SocialWorker {
+  id: string;
+  name: string;
+  status: WorkerStatus;
+  browser_state: BrowserState;
+  attention_message: string;
+  current_job_id: string | null;
+  debug_mode: boolean;
+  version: string;
+  host: string;
+  last_seen_at: string | null;
+}
+
+export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume';
+
+export interface WorkerCommand {
+  id: string;
+  worker_id: string | null;
+  command: WorkerCommandName;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  result: string;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export interface BrowserSettings {
+  /** Headed Playwright so the owner can watch every step. */
+  debugMode: boolean;
+  /** One group at a time, confirmation forced — for the first runs. */
+  testMode: boolean;
+  /** Pause right before the final "Post" click until the dashboard approves. */
+  requireConfirmation: boolean;
+  concurrentJobs: number;
+  maxPerCampaignPerDay: number;
+  /** Extra spacing between two group posts, on top of the global gap. */
+  groupMinGapMinutes: number;
+}
+
+export const DEFAULT_BROWSER: BrowserSettings = {
+  debugMode: true,
+  testMode: true,
+  requireConfirmation: true,
+  concurrentJobs: 1,
+  maxPerCampaignPerDay: 8,
+  groupMinGapMinutes: 20,
+};
 
 export interface ActivityEntry {
   id: number;
@@ -199,6 +297,9 @@ export const QUEUE_STATUS_LABEL: Record<QueueStatus, string> = {
   failed: 'Failed · נכשל',
   skipped: 'Skipped · דולג',
   manual_pending: 'ידני · ממתין לך',
+  needs_attention: 'Needs attention · דורש טיפול',
+  awaiting_confirmation: 'ממתין לאישור סופי',
+  paused: 'Paused · מושהה',
 };
 
 export const PERMISSION_LABEL: Record<PermissionStatus, string> = {
@@ -206,10 +307,12 @@ export const PERMISSION_LABEL: Record<PermissionStatus, string> = {
   missing_permissions: 'חסרות הרשאות',
   manual_only: 'פרסום ידני בלבד',
   revoked: 'החיבור בוטל',
+  browser: 'פרסום דרך הדפדפן (worker מקומי)',
 };
 
 export const CHANNEL_LABEL: Record<Channel, string> = {
   facebook_page: 'דף פייסבוק',
+  facebook_group: 'קבוצת פייסבוק',
   facebook_group_manual: 'קבוצת פייסבוק (ידני)',
   instagram: 'Instagram',
 };
@@ -230,3 +333,23 @@ export const CTA_OPTIONS: { value: CtaType; label: string }[] = [
 export const REQUIRED_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'] as const;
 
 export const WEEKDAYS_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
+/** Seconds without a heartbeat after which a worker counts as offline. */
+export const WORKER_OFFLINE_AFTER_SECONDS = 90;
+
+/** Parses any facebook.com/groups/… URL into its id or slug. */
+export function parseGroupUrl(input: string): { url: string; externalId: string } | null {
+  const raw = input.trim();
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)facebook\.com$|(^|\.)fb\.com$/i.test(url.hostname)) return null;
+  const m = url.pathname.match(/\/groups\/([^/?#]+)/i);
+  if (!m) return null;
+  const externalId = decodeURIComponent(m[1]);
+  return { url: `https://www.facebook.com/groups/${externalId}`, externalId };
+}

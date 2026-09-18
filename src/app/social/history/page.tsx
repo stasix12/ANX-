@@ -5,9 +5,9 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Card, Empty, Loading, Notice, StatusPill, inputClass } from '@/components/social/ui';
-import { cancelQueueItem, listQueue, retryQueueItem, type QueueRow } from '@/lib/social/client';
+import { cancelQueueItem, listQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
 import { formatDateHe, formatTimeHe, zonedToUtc } from '@/lib/social/time';
-import { QUEUE_STATUS_LABEL, type QueueStatus } from '@/lib/social/types';
+import { QUEUE_STATUS_LABEL, QUEUE_STEP_LABEL, type QueueStatus } from '@/lib/social/types';
 
 const STATUSES = Object.keys(QUEUE_STATUS_LABEL) as QueueStatus[];
 
@@ -99,6 +99,7 @@ function HistoryScreen() {
                         <StatusPill status={r.status} />
                       </td>
                       <td className="max-w-xs py-2.5 pe-3 text-xs text-mist-300">
+                        {r.step && r.status === 'publishing' ? <span className="block text-amber-700">{QUEUE_STEP_LABEL[r.step]}</span> : null}
                         {r.error || r.skip_reason || ''}
                         {r.permalink && (
                           <a href={r.permalink} target="_blank" rel="noreferrer" className="block text-brand-400" dir="ltr">
@@ -112,13 +113,22 @@ function HistoryScreen() {
                             ערכת פרסום
                           </Link>
                         )}
-                        {(r.status === 'failed' || r.status === 'skipped') && (
+                        {r.screenshot_path && (
+                          <button
+                            type="button"
+                            className="block text-violet-700"
+                            onClick={() => screenshotUrl(r.screenshot_path as string).then((u) => u && window.open(u, '_blank'))}
+                          >
+                            צפה בצילום התקלה
+                          </button>
+                        )}
+                        {(r.status === 'failed' || r.status === 'skipped' || r.status === 'needs_attention') && (
                           <button type="button" className="text-brand-400" onClick={() => retryQueueItem(r.id).then(load)}>
                             נסה שוב
                           </button>
                         )}
-                        {r.status === 'scheduled' && (
-                          <button type="button" className="text-rose-600" onClick={() => cancelQueueItem(r.id).then(load)}>
+                        {(r.status === 'scheduled' || r.status === 'awaiting_confirmation' || r.status === 'paused') && (
+                          <button type="button" className="block text-rose-600" onClick={() => cancelQueueItem(r.id).then(load)}>
                             בטל
                           </button>
                         )}

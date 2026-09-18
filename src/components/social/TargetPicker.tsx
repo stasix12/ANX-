@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { detectCity, sortCities } from '@/lib/social/cities';
 import { CHANNEL_LABEL, PERMISSION_LABEL, type SocialTarget, type Variant } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
 import { Toggle, inputClass } from './ui';
@@ -32,11 +33,20 @@ export function TargetPicker({
 }) {
   const [query, setQuery] = useState('');
   const [channel, setChannel] = useState<'all' | 'facebook_page' | 'facebook_group'>('all');
+  const [city, setCity] = useState('');
+  const cityOf = (t: SocialTarget) => t.city || detectCity(t.name);
+  const cities = useMemo(() => sortCities(targets.filter((t) => t.channel === 'facebook_group').map(cityOf)), [targets]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return targets.filter((t) => (channel === 'all' || t.channel === channel) && (!q || t.name.toLowerCase().includes(q) || t.url.toLowerCase().includes(q)));
-  }, [targets, query, channel]);
+    return targets.filter(
+      (t) =>
+        (channel === 'all' || t.channel === channel) &&
+        (!city || cityOf(t) === city) &&
+        (!q || t.name.toLowerCase().includes(q) || t.url.toLowerCase().includes(q)),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targets, query, channel, city]);
 
   const approved = variants.filter((v) => v.approval === 'approved');
   const groupCount = (ids: string[]) => ids.filter((id) => targets.find((t) => t.id === id)?.channel === 'facebook_group').length;
@@ -71,9 +81,21 @@ export function TargetPicker({
           ))}
         </div>
       </div>
+      {cities.length > 1 && (
+        <div role="group" className="flex flex-wrap gap-1 rounded-xl bg-ink-800 p-0.5 text-xs font-bold">
+          <button type="button" aria-pressed={!city} onClick={() => setCity('')} className={`rounded-lg px-2.5 py-1.5 ${!city ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
+            כל הערים
+          </button>
+          {cities.map((c) => (
+            <button key={c} type="button" aria-pressed={city === c} onClick={() => setCity(c)} className={`rounded-lg px-2.5 py-1.5 ${city === c ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
+              {c} ({targets.filter((t) => t.channel === 'facebook_group' && cityOf(t) === c).length})
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 text-xs font-bold">
         <button type="button" className="text-brand-400" onClick={selectAll}>
-          בחר הכל
+          {city ? `בחר את כל ${city}` : 'בחר הכל'}
         </button>
         <span className="text-mist-500">·</span>
         <button type="button" className="text-brand-400" onClick={selectNone}>

@@ -1,5 +1,6 @@
 import { hostname } from 'node:os';
 import type { Page } from 'playwright-core';
+import { detectCity } from '@/lib/social/cities';
 import { renderPostText } from '@/lib/social/compose';
 import { evaluateQueueItem } from '@/lib/social/rules';
 import {
@@ -212,7 +213,10 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
       }
       const patch: Record<string, unknown> = { last_synced_at: new Date().toISOString() };
       // The name is always Facebook's own, so the list reads exactly like Facebook.
-      if (profile.name) patch.name = profile.name;
+      if (profile.name) {
+        patch.name = profile.name;
+        patch.city = detectCity(profile.name);
+      }
       if (profile.image) {
         const ext = profile.image.contentType.includes('png') ? 'png' : 'jpg';
         const objectPath = `groups/${target.id}.${ext}`;

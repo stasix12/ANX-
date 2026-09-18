@@ -7,6 +7,7 @@ import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Button, Card, Empty, Field, Loading, Notice, Toggle, inputClass } from '@/components/social/ui';
 import { addGroup, bulkDeleteTargets, bulkUpdateTargets, listTargets, listWorkers, requestGroupRefresh, updateTarget } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
+import { KNOWN_CITIES, OTHER_CITY, detectCity, sortCities } from '@/lib/social/cities';
 import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -29,6 +30,7 @@ export default function GroupsPage() {
   const [query, setQuery] = useState('');
   const [activeOnly, setActiveOnly] = useState(false);
   const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [cityFilter, setCityFilter] = useState<string>('');
   const [form, setForm] = useState({ url: '', name: '' });
   const [bulk, setBulk] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -47,8 +49,18 @@ export default function GroupsPage() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (groups ?? []).filter((g) => (!activeOnly || g.enabled) && (!q || g.name.toLowerCase().includes(q) || g.url.toLowerCase().includes(q)));
-  }, [groups, query, activeOnly]);
+    return (groups ?? []).filter(
+      (g) =>
+        (!activeOnly || g.enabled) &&
+        (!cityFilter || (g.city || detectCity(g.name)) === cityFilter) &&
+        (!q || g.name.toLowerCase().includes(q) || g.url.toLowerCase().includes(q)),
+    );
+  }, [groups, query, activeOnly, cityFilter]);
+
+  const cityOf = (g: SocialTarget) => g.city || detectCity(g.name);
+  const cities = useMemo(() => sortCities((groups ?? []).map(cityOf)), [groups]);
+  const sections = useMemo(() => cities.map((c) => ({ city: c, items: visible.filter((g) => cityOf(g) === c) })).filter((s) => s.items.length), [cities, visible]);
+  const cityOptions = sortCities(Array.from(new Set([...KNOWN_CITIES, ...cities, OTHER_CITY])));
 
   async function act(key: string, fn: () => Promise<unknown>, done?: string) {
     setBusy(key);
@@ -168,6 +180,16 @@ export default function GroupsPage() {
         >
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <input className={`${inputClass} !w-auto grow`} placeholder="חיפוש לפי שם…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <div role="group" className="flex flex-wrap gap-1 rounded-xl bg-ink-800 p-0.5 text-xs font-bold">
+              <button type="button" aria-pressed={!cityFilter} onClick={() => setCityFilter('')} className={`rounded-lg px-2.5 py-1.5 ${!cityFilter ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
+                כל הערים
+              </button>
+              {cities.map((c) => (
+                <button key={c} type="button" aria-pressed={cityFilter === c} onClick={() => setCityFilter(c)} className={`rounded-lg px-2.5 py-1.5 ${cityFilter === c ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
+                  {c} ({(groups ?? []).filter((g) => cityOf(g) === c).length})
+                </button>
+              ))}
+            </div>
             <div role="group" className="flex rounded-xl bg-ink-800 p-0.5 text-xs font-bold">
               <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} className={`rounded-lg px-2.5 py-1.5 ${view === 'grid' ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
                 משבצות
@@ -202,38 +224,72 @@ export default function GroupsPage() {
           {groups === null && <Loading />}
           {groups && visible.length === 0 && <Empty>אין קבוצות. הוסיפו קישור למעלה.</Empty>}
           {visible.length > 0 && view === 'grid' && (
-            <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {visible.map((g) => {
-                const checked = selected.includes(g.id);
+            <div className="space-y-5">
+              {sections.map((section) => {
+                const ids = section.items.map((g) => g.id);
+                const allOn = ids.every((id) => selected.includes(id));
                 return (
-                  <li
-                    key={g.id}
-                    className={`relative flex flex-col items-center rounded-2xl border p-3 text-center transition-colors ${checked ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'} ${g.enabled ? '' : 'opacity-50'}`}
-                  >
-                    <input
-                      type="checkbox"
-                      aria-label={`בחר ${g.name}`}
-                      checked={checked}
-                      onChange={(e) => setSelected((s) => (e.target.checked ? [...s, g.id] : s.filter((x) => x !== g.id)))}
-                      className="absolute end-2 top-2 h-4 w-4 accent-brand-500"
-                    />
-                    <button type="button" className="absolute start-2 top-2" onClick={() => act(g.id, () => updateTarget(g.id, { enabled: !g.enabled }))} title={g.enabled ? 'פעיל — לחצו לכיבוי' : 'כבוי — לחצו להפעלה'}>
-                      <span className={`block h-2.5 w-2.5 rounded-full ${g.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                    </button>
-                    <a href={g.url} target="_blank" rel="noreferrer" className="mt-2">
-                      <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={84} />
-                    </a>
-                    <p className="mt-2 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={g.name}>
-                      {g.name}
-                    </p>
-                    <p className="mt-1 text-[11px] text-mist-500">
-                      {!g.last_synced_at ? 'מושך פרטים…' : g.last_published_at ? `פורסם ${formatDateTimeHe(g.last_published_at).slice(0, 10)}` : 'טרם פורסם'}
-                    </p>
-                    {g.last_status && g.last_status !== 'published' && <p className="text-[11px] text-rose-700">{STATUS_LABEL[g.last_status] ?? g.last_status}</p>}
-                  </li>
+                  <section key={section.city}>
+                    <header className="mb-2 flex items-center justify-between gap-2">
+                      <h3 className="text-base font-extrabold text-mist-100">
+                        {section.city} <span className="text-sm font-semibold text-mist-500">({section.items.length})</span>
+                      </h3>
+                      <button
+                        type="button"
+                        className="text-xs font-bold text-brand-400"
+                        onClick={() => setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : Array.from(new Set([...s, ...ids]))))}
+                      >
+                        {allOn ? 'בטל בחירה במקטע' : 'בחר את כל המקטע'}
+                      </button>
+                    </header>
+                    <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      {section.items.map((g) => {
+                        const checked = selected.includes(g.id);
+                        return (
+                          <li
+                            key={g.id}
+                            className={`relative flex flex-col items-center rounded-2xl border p-3 text-center transition-colors ${checked ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'} ${g.enabled ? '' : 'opacity-50'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              aria-label={`בחר ${g.name}`}
+                              checked={checked}
+                              onChange={(e) => setSelected((s) => (e.target.checked ? [...s, g.id] : s.filter((x) => x !== g.id)))}
+                              className="absolute end-2 top-2 h-4 w-4 accent-brand-500"
+                            />
+                            <button type="button" className="absolute start-2 top-2" onClick={() => act(g.id, () => updateTarget(g.id, { enabled: !g.enabled }))} title={g.enabled ? 'פעיל — לחצו לכיבוי' : 'כבוי — לחצו להפעלה'}>
+                              <span className={`block h-2.5 w-2.5 rounded-full ${g.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                            </button>
+                            <a href={g.url} target="_blank" rel="noreferrer" className="mt-2">
+                              <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={84} />
+                            </a>
+                            <p className="mt-2 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={g.name}>
+                              {g.name}
+                            </p>
+                            <p className="mt-1 text-[11px] text-mist-500">
+                              {!g.last_synced_at ? 'מושך פרטים…' : g.last_published_at ? `פורסם ${formatDateTimeHe(g.last_published_at).slice(0, 10)}` : 'טרם פורסם'}
+                            </p>
+                            {g.last_status && g.last_status !== 'published' && <p className="text-[11px] text-rose-700">{STATUS_LABEL[g.last_status] ?? g.last_status}</p>}
+                            <select
+                              aria-label={`עיר של ${g.name}`}
+                              value={cityOf(g)}
+                              onChange={(e) => act(`city-${g.id}`, () => updateTarget(g.id, { city: e.target.value }))}
+                              className="mt-1.5 w-full rounded-lg border border-ink-600 bg-ink-850 px-1 py-0.5 text-[11px] text-mist-300"
+                            >
+                              {cityOptions.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
                 );
               })}
-            </ul>
+            </div>
           )}
           {visible.length > 0 && view === 'list' && (
             <div className="overflow-x-auto">

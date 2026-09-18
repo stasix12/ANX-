@@ -44,6 +44,8 @@ export interface SocialTarget {
   last_error?: string;
   /** Group/page picture, copied into our own storage by the worker (Facebook CDN links expire). */
   image_url?: string;
+  /** Auto-detected from the name (src/lib/social/cities.ts); editable. */
+  city?: string;
   created_at: string;
 }
 

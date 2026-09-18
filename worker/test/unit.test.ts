@@ -3,6 +3,7 @@ import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { zonedToUtc } from '@/lib/social/time';
 import { parseGroupUrl, type Variant } from '@/lib/social/types';
 import { pickVariant, previewAssignment } from '@/lib/social/variants';
+import { detectCity, sortCities } from '@/lib/social/cities';
 
 /** Pure helpers shared by the dashboard, the server worker and the local worker. */
 
@@ -47,5 +48,16 @@ assert.equal(drip[9].toISOString(), '2026-09-22T09:00:00.000Z');
 const late = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T05:00:00Z', drip_per_day: 2, drip_window_start: '09:00', drip_window_end: '10:00', target_ids: ['a', 'b', 'c'] }, new Date('2026-09-20T08:00:00Z'));
 assert.ok(late[0] > new Date('2026-09-20T08:00:00Z') && late[1] > late[0]);
 assert.equal(late[2].toISOString(), '2026-09-21T06:00:00.000Z');
+
+// --- city detection
+assert.equal(detectCity('ערד החדשה'), 'ערד');
+assert.equal(detectCity('ערד-Arad'), 'ערד');
+assert.equal(detectCity('Арад по-русски - Город Арад'), 'ערד');
+assert.equal(detectCity('באר שבע ביחד'), 'באר שבע');
+assert.equal(detectCity('דרושים ב"ש והסביבה'), 'באר שבע');
+assert.equal(detectCity('Beer Sheva Jobs'), 'באר שבע');
+assert.equal(detectCity('אופקים שלנו'), 'אופקים');
+assert.equal(detectCity('קונים ומוכרים בדרום'), 'אחר');
+assert.deepEqual(sortCities(['אחר', 'אופקים', 'דימונה', 'ערד', 'באר שבע']), ['ערד', 'באר שבע', 'אופקים', 'דימונה', 'אחר']);
 
 console.log('unit tests OK');

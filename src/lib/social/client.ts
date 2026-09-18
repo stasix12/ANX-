@@ -1,6 +1,7 @@
 'use client';
 
 import { supabase } from '@/lib/supabase';
+import { detectCity } from './cities';
 import {
   DEFAULT_BROWSER,
   DEFAULT_BUSINESS,
@@ -85,10 +86,17 @@ export async function setPaused(paused: boolean): Promise<void> {
 /* -------------------------------------------------------------- targets */
 
 export async function listTargets(): Promise<SocialTarget[]> {
-  return unwrap<SocialTarget[]>(await db().from('social_targets').select('*').order('channel').order('name'));
+  const rows = unwrap<SocialTarget[]>(await db().from('social_targets').select('*').order('channel').order('name'));
+  // Backfill cities for rows created before the column existed (or never classified).
+  const missing = rows.filter((t) => !t.city);
+  for (const t of missing) {
+    t.city = detectCity(t.name);
+    db().from('social_targets').update({ city: t.city }).eq('id', t.id).then(() => undefined, () => undefined);
+  }
+  return rows;
 }
 
-export async function updateTarget(id: string, patch: Partial<Pick<SocialTarget, 'enabled' | 'name' | 'url' | 'notes'>>): Promise<void> {
+export async function updateTarget(id: string, patch: Partial<Pick<SocialTarget, 'enabled' | 'name' | 'url' | 'notes' | 'city'>>): Promise<void> {
   unwrap(await db().from('social_targets').update(patch).eq('id', id));
 }
 
@@ -106,6 +114,7 @@ export async function addGroup(input: { url: string; name?: string; notes?: stri
         external_id: parsed.externalId,
         name: input.name?.trim() || parsed.externalId,
         url: parsed.url,
+        city: detectCity(input.name?.trim() || parsed.externalId),
         notes: input.notes ?? '',
         permission_status: 'browser',
         can_api_publish: false,

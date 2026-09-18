@@ -274,6 +274,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
 
   let livePage: Page | null = null;
   let lastStep = 'opening';
+  let failureShot: string | null = null;
   console.log(`[worker] ▶ "${tt.name}" — ${pp.title || 'פוסט'}${v ? ` (גרסה ${v.label})` : ''}`);
 
   try {
@@ -287,6 +288,9 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       headless: jobEnv.headless,
       onPage: (page) => {
         livePage = page;
+      },
+      onError: async (page) => {
+        failureShot = await captureScreenshot(page, item.id, lastStep);
       },
       onStep: async (step) => {
         lastStep = step;
@@ -315,7 +319,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified });
     console.log(`[worker] ✔ פורסם ל-"${tt.name}"${note ? ` (${note})` : ''}`);
   } catch (err) {
-    const screenshot = await captureScreenshot(livePage, item.id, lastStep);
+    const screenshot = failureShot ?? (await captureScreenshot(livePage, item.id, lastStep));
     if (err instanceof SessionError) {
       state.attention = err.message;
       state.browserState = 'needs_auth';

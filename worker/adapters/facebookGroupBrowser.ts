@@ -29,6 +29,8 @@ export interface GroupPublishInput {
   confirm?: (page: Page) => Promise<'confirmed' | 'cancelled' | 'timeout'>;
   /** Lets the caller grab a screenshot of the live page when something fails. */
   onPage?: (page: Page) => void;
+  /** Called with the still-open page when the run throws, before it is closed. */
+  onError?: (page: Page, error: unknown) => Promise<void>;
 }
 
 export class FacebookGroupBrowserAdapter {
@@ -51,6 +53,10 @@ export class FacebookGroupBrowserAdapter {
         onStep: input.onStep,
         confirm: input.confirm,
       });
+    } catch (err) {
+      // Screenshot while the page still shows what went wrong.
+      await input.onError?.(page, err).catch(() => undefined);
+      throw err;
     } finally {
       cleanupMedia(local);
       // Keep the page open in debug mode for a few seconds so the owner sees the result.

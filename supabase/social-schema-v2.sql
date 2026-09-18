@@ -45,6 +45,10 @@ alter table public.social_queue add column if not exists require_confirmation bo
 alter table public.social_queue add column if not exists confirmed_at timestamptz;
 alter table public.social_queue add column if not exists campaign_id uuid references public.social_campaigns (id) on delete set null;
 
+-- Planner upsert needs a full (non-partial) unique index — see social-schema.sql.
+drop index if exists public.social_queue_slot_idx;
+create unique index if not exists social_queue_slot_idx
+  on public.social_queue (schedule_id, target_id, scheduled_at);
 create index if not exists social_queue_campaign_idx on public.social_queue (campaign_id, status);
 create index if not exists social_queue_post_target_idx on public.social_queue (post_id, target_id, status);
 

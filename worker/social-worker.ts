@@ -253,15 +253,18 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   if (decision.action === 'skip') {
     await finish({ status: 'skipped', step: '', skip_reason: decision.reason });
     await logActivity('warn', 'skipped', decision.reason, { queueId: item.id, target: t?.name });
+    console.log(`[worker] ⏭ "${t?.name ?? item.target_id}": ${decision.reason}`);
     return;
   }
   if (decision.action === 'defer') {
     await finish({ status: 'scheduled', step: 'pending', scheduled_at: decision.until });
     await logActivity('info', 'deferred', `${decision.reason} (עד ${decision.until})`, { queueId: item.id });
+    console.log(`[worker] ⏲ "${t?.name ?? item.target_id}": ${decision.reason} (${decision.until})`);
     return;
   }
   if (decision.action === 'wait') {
     await finish({ status: 'scheduled', step: 'pending' });
+    console.log(`[worker] ⏸ "${t?.name ?? item.target_id}": ${decision.reason}`);
     return;
   }
   const tt = t as SocialTarget;

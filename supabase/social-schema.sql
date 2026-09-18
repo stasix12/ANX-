@@ -202,9 +202,11 @@ create table if not exists public.social_queue (
 create index if not exists social_queue_due_idx on public.social_queue (status, scheduled_at);
 create index if not exists social_queue_target_idx on public.social_queue (target_id, published_at);
 create index if not exists social_queue_hash_idx on public.social_queue (dedupe_hash, published_at);
--- The planner is idempotent thanks to this: re-running never duplicates a slot.
+-- The planner is idempotent thanks to this: re-running never duplicates a
+-- slot. Deliberately NOT partial: ON CONFLICT via PostgREST cannot match a
+-- partial index, and NULL schedule_ids are distinct anyway.
 create unique index if not exists social_queue_slot_idx
-  on public.social_queue (schedule_id, target_id, scheduled_at) where schedule_id is not null;
+  on public.social_queue (schedule_id, target_id, scheduled_at);
 drop trigger if exists social_queue_set_updated_at on public.social_queue;
 create trigger social_queue_set_updated_at
   before update on public.social_queue

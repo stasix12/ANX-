@@ -86,6 +86,21 @@ async function main(): Promise<void> {
   await logActivity('info', 'worker_started', `ה-worker "${env.workerName}" עלה (${hostname()})`, { version: VERSION });
   console.log('[worker] מחובר ל-Supabase. ממתין לעבודות… (Ctrl+C לעצירה)');
 
+  // Check the Facebook login right away so the dashboard shows 🟢/🟡 at once.
+  if (session.hasProfile()) {
+    try {
+      const browser = await getSetting<BrowserSettings>('browser', DEFAULT_BROWSER);
+      const check = await session.checkLogin(!browser.debugMode);
+      state.browserState = check.state;
+      state.lastCheckAt = Date.now();
+      if (check.state !== 'connected') state.attention = check.detail;
+      await heartbeat(state, state.attention ? 'needs_attention' : 'online', browser.debugMode);
+      console.log(`[worker] בדיקת חיבור לפייסבוק: ${check.detail}`);
+    } catch (err) {
+      console.error('[worker] בדיקת החיבור נכשלה:', err instanceof Error ? err.message : err);
+    }
+  }
+
   process.on('SIGINT', () => {
     stopping = true;
     console.log('\n[worker] עוצר אחרי העבודה הנוכחית…');

@@ -40,3 +40,6 @@ preview.html
 /worker/.profile/
 *.storage-state.json
 /worker/screenshots/
+
+# local dev server output
+dev.log

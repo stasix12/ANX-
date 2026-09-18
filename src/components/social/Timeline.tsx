@@ -52,7 +52,7 @@ export function Timeline({ rows, limit = 8 }: { rows: QueueRow[]; limit?: number
                 <span className="w-12 shrink-0 text-sm font-extrabold tabular-nums text-brand-400">{formatTimeHe(row.scheduled_at)}</span>
                 <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
                 <div className="min-w-0 grow">
-                  <p className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
+                  <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
                   {row.status === 'scheduled' && <p className="text-[11px] text-mist-500">{relativeHe(row.scheduled_at)}</p>}
                   {active && <p className="text-[11px] font-bold text-amber-700">מפרסם עכשיו</p>}
                 </div>

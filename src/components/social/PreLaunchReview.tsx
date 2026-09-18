@@ -109,7 +109,7 @@ export function PreLaunchReview({
             {targets.slice(0, 12).map((t) => (
               <li key={t.id} className="flex items-center gap-1.5 rounded-full bg-ink-800 py-1 pe-2.5 ps-1">
                 <TargetAvatar name={t.name} imageUrl={t.image_url} channel={t.channel} size={22} />
-                <span className="max-w-32 truncate text-xs font-bold text-mist-100">{t.name}</span>
+                <span dir="auto" className="max-w-32 truncate text-xs font-bold text-mist-100">{t.name}</span>
               </li>
             ))}
             {targets.length > 12 && <li className="self-center text-xs font-bold text-mist-500">ועוד {targets.length - 12}</li>}
@@ -141,7 +141,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-ink-700 pb-2">
       <span className="text-xs font-bold text-mist-500">{label}</span>
-      <span className="min-w-0 truncate text-sm font-bold text-mist-100">{children}</span>
+      <span dir="auto" className="min-w-0 truncate text-sm font-bold text-mist-100">
+        {children}
+      </span>
     </div>
   );
 }

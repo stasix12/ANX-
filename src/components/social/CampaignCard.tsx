@@ -71,7 +71,13 @@ export function CampaignCard({
             )}
           </Fact>
           <Fact label="הקבוצה הבאה">
-            {state.nextTargetName ? <span className="truncate">{state.nextTargetName}</span> : <span className="text-mist-500">—</span>}
+            {state.nextTargetName ? (
+              <span dir="auto" className="block truncate">
+                {state.nextTargetName}
+              </span>
+            ) : (
+              <span className="text-mist-500">—</span>
+            )}
           </Fact>
           <Fact label="התחיל">{state.startedAt ? <span className="tabular-nums">{whenLabel(state.startedAt)}</span> : <span className="text-mist-500">טרם התחיל</span>}</Fact>
           <Fact label="סיום משוער">

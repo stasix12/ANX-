@@ -34,7 +34,15 @@ export function dripSlots(schedule: DripSchedule, now = new Date()): Date[] {
   }
   let countToday = 0;
   const out: Date[] = [];
-  let bumped = 0;
+  /*
+   * A running floor keeps the sequence honest. Slots that already passed are
+   * pulled up to "soon", and every slot must then sit at least `gap` after the
+   * one before it. Without the floor a start time in the past produced an
+   * out-of-order plan — the first target bumped to now+gap while the second
+   * kept its original (earlier, still-future) slot, so two posts went out four
+   * minutes apart under a ten-minute setting.
+   */
+  let floor = now.getTime() + gap * 60_000;
   for (let i = 0; i < schedule.target_ids.length; i += 1) {
     if ((perDay > 0 && countToday >= perDay) || minute > endMin) {
       dayISO = addDaysISO(dayISO, 1);
@@ -42,11 +50,9 @@ export function dripSlots(schedule: DripSchedule, now = new Date()): Date[] {
       countToday = 0;
     }
     const hm = `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-    let at = zonedToUtc(dayISO, hm, tz);
-    if (at.getTime() < now.getTime()) {
-      bumped += 1;
-      at = new Date(now.getTime() + bumped * gap * 60_000);
-    }
+    const planned = zonedToUtc(dayISO, hm, tz);
+    const at = new Date(Math.max(planned.getTime(), floor));
+    floor = at.getTime() + gap * 60_000;
     out.push(at);
     countToday += 1;
     minute += gap;

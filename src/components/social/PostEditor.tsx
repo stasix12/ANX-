@@ -302,8 +302,11 @@ export function PostEditor({ postId }: { postId?: string }) {
     >
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
 
+      {/* min-w-0 on both tracks: a grid item defaults to min-width:auto, so any
+          horizontally-scrolling child (the filter rows) would stretch the whole
+          page instead of scrolling inside itself. */}
       <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card title="תוכן הפוסט">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="שם פנימי" hint="לזיהוי בלוח הבקרה, לא מתפרסם">
@@ -465,9 +468,12 @@ export function PostEditor({ postId }: { postId?: string }) {
               </div>
             )}
             {selectedTargets.some((id) => targets.find((t) => t.id === id)?.channel === 'facebook_group') && (
-              <label className="mt-3 flex items-center gap-2 text-sm text-mist-100">
-                <input type="checkbox" className="h-4 w-4 accent-brand-500" checked={requireConfirmation || browser.testMode} disabled={browser.testMode} onChange={(e) => setRequireConfirmation(e.target.checked)} />
-                Require confirmation before final publish — ה-worker יעצור לפני "פרסום" ויחכה לאישור שלכם בלוח הבקרה
+              <label className="mt-3 flex items-start gap-2.5 rounded-xl border border-ink-600 px-3 py-2.5 text-sm text-mist-100">
+                <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-brand-500" checked={requireConfirmation || browser.testMode} disabled={browser.testMode} onChange={(e) => setRequireConfirmation(e.target.checked)} />
+                <span className="min-w-0">
+                  <span className="font-bold">בקש אישור לפני כל פרסום</span>
+                  <span className="block text-xs text-mist-500">ה-worker יעצור לפני הלחיצה האחרונה, יצלם מסך, ויחכה לאישור שלכם בלוח הבקרה.</span>
+                </span>
               </label>
             )}
           </Card>
@@ -514,7 +520,7 @@ export function PostEditor({ postId }: { postId?: string }) {
           )}
         </div>
 
-        <aside className="space-y-3 lg:sticky lg:top-28 lg:self-start">
+        <aside className="min-w-0 space-y-3 lg:sticky lg:top-28 lg:self-start">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-extrabold text-mist-100">תצוגה מקדימה</h2>
             <select className="rounded-lg border border-ink-600 bg-ink-850 px-2 py-1 text-sm text-mist-100" value={previewKey} onChange={(e) => setPreviewKey(e.target.value)}>
@@ -537,7 +543,9 @@ export function PostEditor({ postId }: { postId?: string }) {
         onStart={onSchedule}
         busy={busy === 'schedule'}
         campaignName={campaign?.name ?? ''}
-        postTitle={post.title}
+        // A post with no internal name still needs to be identifiable in the
+        // review; its opening line is what the owner recognises.
+        postTitle={post.title || post.base_text.split('\n')[0].slice(0, 60)}
         text={previewText}
         media={post.media as MediaItem[]}
         targets={selectedObjects}

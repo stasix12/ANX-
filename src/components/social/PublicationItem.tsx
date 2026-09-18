@@ -103,7 +103,7 @@ export function PublicationItem({
     <li className={`flex items-center gap-2.5 py-2.5 ${running ? 'rounded-xl bg-amber-500/5 px-2' : ''}`}>
       <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={38} />
       <button type="button" onClick={() => setOpen(true)} className="min-w-0 grow text-start">
-        <p className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
+        <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
         <p className={`truncate text-xs font-semibold ${line.cls}`}>{when}</p>
       </button>
 

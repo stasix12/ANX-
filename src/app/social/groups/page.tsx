@@ -203,7 +203,7 @@ export default function GroupsPage() {
             onChange={(e) => setQuery(e.target.value)}
             aria-label="חיפוש קבוצה"
           />
-          <div className="mt-2.5 space-y-2 overflow-x-auto scrollbar-none">
+          <div className="mt-2.5 min-w-0 space-y-2 overflow-x-auto scrollbar-none">
             <SegmentedControl
               size="sm"
               label="סטטוס"
@@ -350,7 +350,7 @@ export default function GroupsPage() {
                   <Link href={`/social/groups/${g.id}`} className="flex min-w-0 grow items-center gap-2.5">
                     <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={40} />
                     <div className="min-w-0">
-                      <p className={`truncate text-sm font-bold ${g.enabled ? 'text-mist-100' : 'text-mist-500'}`}>
+                      <p dir="auto" className={`truncate text-sm font-bold ${g.enabled ? 'text-mist-100' : 'text-mist-500'}`}>
                         {g.favorite && <span aria-hidden>⭐ </span>}
                         {g.name}
                       </p>

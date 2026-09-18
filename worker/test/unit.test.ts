@@ -56,6 +56,34 @@ const late = dripSlots({ timezone: 'Asia/Jerusalem', run_at: '2026-09-20T05:00:0
 assert.ok(late[0] > new Date('2026-09-20T08:00:00Z') && late[1].getTime() - late[0].getTime() === 10 * 60_000);
 assert.equal(late[2].toISOString(), '2026-09-21T05:00:00.000Z');
 
+/*
+ * A drip plan must always read forwards. Before the running floor, a start
+ * time already in the past made the first target jump to now+gap while the
+ * second kept its earlier (still future) slot — an out-of-order plan that put
+ * two posts four minutes apart under a ten-minute setting.
+ */
+const nowMid = new Date('2026-09-18T19:04:00Z'); // 22:04 Asia/Jerusalem
+const dripOrder = dripSlots(
+  {
+    timezone: 'Asia/Jerusalem',
+    run_at: '2026-09-18T19:00:00Z', // 22:00 local — already past
+    drip_per_day: 0,
+    drip_gap_minutes: 10,
+    drip_window_start: '22:00',
+    drip_window_end: '23:59',
+    target_ids: ['a', 'b', 'c', 'd', 'e'],
+  },
+  nowMid,
+);
+for (let i = 0; i < dripOrder.length; i += 1) {
+  assert.ok(dripOrder[i].getTime() >= nowMid.getTime(), `slot ${i} must not be in the past`);
+  if (i > 0) {
+    const apart = (dripOrder[i].getTime() - dripOrder[i - 1].getTime()) / 60_000;
+    assert.ok(apart >= 10, `slots ${i - 1}->${i} were ${apart} minutes apart, below the 10 requested`);
+  }
+}
+assert.deepEqual([...dripOrder].sort((a, b) => a.getTime() - b.getTime()), dripOrder, 'drip plan must be ascending');
+
 // --- campaign state: every field must come from the rows, never be invented
 const row = (over: Partial<CampaignQueueRow> & { id: string }): CampaignQueueRow => ({
   status: 'scheduled',

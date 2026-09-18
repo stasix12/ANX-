@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { ScheduleInput } from '@/lib/social/client';
 import { dripSlots, slotsFor } from '@/lib/social/slots';
-import { formatDateTimeHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { formatDateTimeHe, formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { TIMEZONE, WEEKDAYS_HE, type ScheduleMode, type WeeklyPlan } from '@/lib/social/types';
 import { Notice, inputClass } from './ui';
 
@@ -82,7 +82,9 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
       },
       now,
     );
-    return finish(slots, false, `${count} פרסומים, אחד כל ${draft.dripGapMinutes} דקות, בין ${draft.dripStart} ל-${draft.dripEnd}`);
+    // The window is a DAILY window: say so, or "בין 22:00 ל-23:59" reads as
+    // if the whole campaign ends tonight when it actually spans days.
+    return finish(slots, false, `${count} פרסומים, אחד כל ${draft.dripGapMinutes} דקות, כל יום בשעות ${draft.dripStart}–${draft.dripEnd}`);
   }
 
   if (draft.mode === 'now') {
@@ -131,20 +133,27 @@ export function SchedulePlanPreview({ plan, names = [] }: { plan: SchedulePlan; 
     <div className="rounded-xl border border-ink-600 bg-ink-900/40 p-3">
       <p className="text-xs font-bold text-mist-300">{plan.summary}</p>
       <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
-        <Stat label="ראשון">{formatTimeHe(plan.firstAt as Date)}</Stat>
-        <Stat label="אחרון">{formatTimeHe(plan.lastAt as Date)}</Stat>
+        <Stat label="ראשון" hint={dayHint(plan.firstAt as Date)}>
+          {formatTimeHe(plan.firstAt as Date)}
+        </Stat>
+        <Stat label="אחרון" hint={dayHint(plan.lastAt as Date)}>
+          {formatTimeHe(plan.lastAt as Date)}
+        </Stat>
         <Stat label="ימים">{plan.days}</Stat>
       </dl>
       <ul className="mt-2.5 space-y-1">
-        {rows.map((at, i) => (
-          <li key={i} className="flex items-center gap-2 text-xs">
-            <span className="w-12 shrink-0 font-extrabold tabular-nums text-brand-400">{formatTimeHe(at)}</span>
-            <span className="min-w-0 truncate text-mist-300">
-              {plan.simultaneous ? `כל ${names.length || 'ה'}${names.length ? ' היעדים' : 'יעדים'}` : names[i] || `יעד ${i + 1}`}
-            </span>
-            <span className="ms-auto shrink-0 text-[11px] text-mist-500">{formatDateTimeHe(at).slice(0, 5)}</span>
-          </li>
-        ))}
+        {rows.map((at, i) => {
+          const newDay = i === 0 || zonedDateISO(at) !== zonedDateISO(rows[i - 1]);
+          return (
+            <li key={i} className="flex items-center gap-2 text-xs">
+              <span className="w-12 shrink-0 font-extrabold tabular-nums text-brand-400">{formatTimeHe(at)}</span>
+              <span dir="auto" className="min-w-0 truncate text-mist-300">
+                {plan.simultaneous ? `כל ${names.length || 'ה'}${names.length ? ' היעדים' : 'יעדים'}` : names[i] || `יעד ${i + 1}`}
+              </span>
+              {newDay && <span className="ms-auto shrink-0 text-[11px] font-bold tabular-nums text-mist-500">{formatDayMonthHe(at)}</span>}
+            </li>
+          );
+        })}
       </ul>
       {plan.slots.length > rows.length && (
         <p className="mt-1.5 text-[11px] text-mist-500">
@@ -155,11 +164,17 @@ export function SchedulePlanPreview({ plan, names = [] }: { plan: SchedulePlan; 
   );
 }
 
-function Stat({ label, children }: { label: string; children: React.ReactNode }) {
+/** A bare time is only unambiguous today; any other day needs its date. */
+function dayHint(at: Date): string | undefined {
+  return zonedDateISO(at) === zonedDateISO(new Date()) ? undefined : formatDayMonthHe(at);
+}
+
+function Stat({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-lg bg-ink-850 py-1.5">
       <dt className="text-[10px] font-bold text-mist-500">{label}</dt>
       <dd className="text-sm font-extrabold tabular-nums text-mist-100">{children}</dd>
+      {hint && <p className="text-[10px] font-bold tabular-nums text-brand-400">{hint}</p>}
     </div>
   );
 }
@@ -184,6 +199,13 @@ export function SchedulePicker({
   targetNames?: string[];
 }) {
   const set = (patch: Partial<ScheduleDraft>) => onChange({ ...value, ...patch });
+  const modesRef = useRef<HTMLDivElement>(null);
+
+  // Five modes do not fit a phone row, so the strip scrolls — which means the
+  // selected one can start out of sight. Bring it into view.
+  useEffect(() => {
+    modesRef.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [value.mode]);
   // Recomputed on every keystroke so the plan and the controls never disagree.
   const plan = useMemo(() => planFor(value, targetCount), [value, targetCount]);
 
@@ -200,8 +222,11 @@ export function SchedulePicker({
   }
 
   return (
-    <div className="space-y-4">
-      <div role="group" className="flex flex-wrap gap-1.5 rounded-xl bg-ink-800 p-1">
+    <div className="min-w-0 space-y-4">
+      {/* Scrolls rather than wraps: five modes never fit a phone row, and a
+          wrapped row pushed the selected one out of sight. */}
+      <div ref={modesRef} className="min-w-0 overflow-x-auto scrollbar-none">
+      <div role="group" className="flex min-w-max gap-1.5 rounded-xl bg-ink-800 p-1">
         {MODES.map((m) => (
           <button
             key={m.value}
@@ -214,16 +239,17 @@ export function SchedulePicker({
           </button>
         ))}
       </div>
+      </div>
 
       {value.mode === 'once' && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid min-w-0 grid-cols-2 gap-3 [&>*]:min-w-0">
           <input type="date" className={inputClass} value={value.date} onChange={(e) => set({ date: e.target.value })} />
           <input type="time" className={inputClass} value={value.time} onChange={(e) => set({ time: e.target.value })} />
         </div>
       )}
 
       {value.mode === 'weekly' && (
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap gap-1.5">
             {WEEKDAYS_HE.map((name, day) => {
               const on = Boolean(value.weekly[String(day)]?.length);
@@ -266,7 +292,7 @@ export function SchedulePicker({
       )}
 
       {value.mode === 'interval' && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid min-w-0 grid-cols-3 gap-3 [&>*]:min-w-0">
           <label className="text-sm">
             <span className="mb-1 block font-bold text-mist-300">מתאריך</span>
             <input type="date" className={inputClass} value={value.date} onChange={(e) => set({ date: e.target.value })} />
@@ -283,23 +309,11 @@ export function SchedulePicker({
       )}
 
       {value.mode === 'drip' && (
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <p className="text-sm text-mist-300">
             כל קבוצה מקבלת שעה משלה: הראשונה בשעת ההתחלה, ואחריה קבוצה כל X דקות, עד המכסה היומית או סוף חלון השעות. מה שלא נכנס היום ממשיך מחר.
           </p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <label className="text-sm">
-              <span className="mb-1 block font-bold text-mist-300">מתאריך</span>
-              <input type="date" className={inputClass} value={value.date} onChange={(e) => set({ date: e.target.value })} />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block font-bold text-mist-300">מרווח (דקות)</span>
-              <input type="number" min={1} max={600} className={inputClass} value={value.dripGapMinutes} onChange={(e) => set({ dripGapMinutes: Math.min(600, Math.max(1, Number(e.target.value) || 1)) })} />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block font-bold text-mist-300">קבוצות ביום</span>
-              <input type="number" min={0} max={200} className={inputClass} value={value.dripPerDay} onChange={(e) => set({ dripPerDay: Math.min(200, Math.max(0, Number(e.target.value) || 0)) })} />
-            </label>
+          <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-5 [&>*]:min-w-0">
             <label className="text-sm">
               <span className="mb-1 block font-bold text-mist-300">משעה</span>
               <input type="time" className={inputClass} value={value.dripStart} onChange={(e) => set({ dripStart: e.target.value })} />
@@ -308,8 +322,20 @@ export function SchedulePicker({
               <span className="mb-1 block font-bold text-mist-300">עד שעה</span>
               <input type="time" className={inputClass} value={value.dripEnd} onChange={(e) => set({ dripEnd: e.target.value })} />
             </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-bold text-mist-300">מרווח (דקות)</span>
+              <input type="number" min={1} max={600} inputMode="numeric" className={inputClass} value={value.dripGapMinutes} onChange={(e) => set({ dripGapMinutes: Math.min(600, Math.max(1, Number(e.target.value) || 1)) })} />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-bold text-mist-300">קבוצות ביום</span>
+              <input type="number" min={0} max={200} inputMode="numeric" className={inputClass} value={value.dripPerDay} onChange={(e) => set({ dripPerDay: Math.min(200, Math.max(0, Number(e.target.value) || 0)) })} />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-bold text-mist-300">מתאריך</span>
+              <input type="date" className={inputClass} value={value.date} onChange={(e) => set({ date: e.target.value })} />
+            </label>
           </div>
-          <div className="flex flex-wrap gap-1.5 text-xs font-bold">
+          <div className="flex min-w-0 flex-wrap gap-1.5 text-xs font-bold">
             <span className="text-mist-500">מרווח מהיר:</span>
             {[10, 20, 30, 45, 60, 90].map((m) => (
               <button key={m} type="button" onClick={() => set({ dripGapMinutes: m })} className={`rounded-full px-2.5 py-1 ${value.dripGapMinutes === m ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>

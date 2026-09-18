@@ -134,7 +134,7 @@ export default function GroupProfilePage() {
           <div className="flex items-start gap-3">
             <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={72} />
             <div className="min-w-0 grow">
-              <h2 className="text-lg font-extrabold leading-tight text-mist-100">
+              <h2 dir="auto" className="text-lg font-extrabold leading-tight text-mist-100">
                 {group.favorite && <span aria-hidden>⭐ </span>}
                 {group.name}
               </h2>

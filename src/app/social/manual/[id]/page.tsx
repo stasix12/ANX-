@@ -111,7 +111,7 @@ export default function ManualKitPage() {
           )}
 
           <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
               <Card
                 title={item.target?.name ?? 'יעד'}
                 subtitle="שלושה שלבים: העתיקו · פתחו · פרסמו"
@@ -199,7 +199,7 @@ export default function ManualKitPage() {
               )}
             </div>
 
-            <aside className="space-y-2">
+            <aside className="min-w-0 space-y-2">
               <p className="text-xs font-extrabold uppercase tracking-wide text-mist-500">איך זה ייראה</p>
               <PostPreview pageName={item.target?.name ?? 'קבוצה'} text={item.rendered_text} media={media} link={post?.link_url ?? ''} cta="" />
             </aside>

@@ -60,6 +60,9 @@ export function TargetPicker({
   }, [targets, query, channel, city, category]);
 
   const approved = variants.filter((v) => v.approval === 'approved');
+  // 125 identical "בסיוע דפדפן" chips say nothing; the badge earns its place
+  // only when the visible list holds both pages and groups.
+  const mixedChannels = new Set(visible.map((t) => t.channel)).size > 1;
   const groupCount = (ids: string[]) => ids.filter((id) => targets.find((t) => t.id === id)?.channel === 'facebook_group').length;
   const atCap = maxSelectable !== undefined && groupCount(selected) >= maxSelectable;
 
@@ -87,10 +90,10 @@ export function TargetPicker({
   ].filter((s) => s.items.length > 0);
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       <input type="search" className={inputClass} placeholder="חיפוש יעד…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="חיפוש יעד" />
 
-      <div className="space-y-2 overflow-x-auto scrollbar-none">
+      <div className="min-w-0 space-y-2 overflow-x-auto scrollbar-none">
         <SegmentedControl
           size="sm"
           label="סוג יעד"
@@ -155,7 +158,7 @@ export function TargetPicker({
           return (
             <li
               key={t.id}
-              className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-colors ${
+              className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-colors ${
                 on ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'
               } ${!t.enabled || blocked ? 'opacity-50' : ''}`}
             >
@@ -172,12 +175,15 @@ export function TargetPicker({
                 />
                 <TargetAvatar name={t.name} imageUrl={t.image_url} channel={t.channel} size={36} />
                 <div className="min-w-0 grow">
-                  <p className="truncate text-sm font-bold text-mist-100">
+                  {/* dir="auto" so an LTR name (Беэр-Шева…) truncates at its own
+                      end; inside an RTL box it was being clipped at the START, which
+                      made every Russian group render as the same "…и Негев". */}
+                  <p dir="auto" className="truncate text-sm font-bold text-mist-100">
                     {t.favorite && <span aria-hidden>⭐ </span>}
                     {t.name}
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1">
-                    <MethodBadge channel={t.channel} />
+                    {mixedChannels && <MethodBadge channel={t.channel} />}
                     {!t.enabled && <Badge tone="neutral">כבוי</Badge>}
                     {t.channel === 'facebook_page' && !t.can_api_publish && <Badge tone="warn">אין הרשאה</Badge>}
                   </div>

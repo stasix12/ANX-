@@ -150,7 +150,7 @@ function HistoryScreen() {
             onChange={(e) => setQuery(e.target.value)}
             aria-label="חיפוש בהיסטוריה"
           />
-          <div className="mt-2.5 space-y-2 overflow-x-auto scrollbar-none">
+          <div className="mt-2.5 min-w-0 space-y-2 overflow-x-auto scrollbar-none">
             <SegmentedControl
               size="sm"
               label="תוצאה"

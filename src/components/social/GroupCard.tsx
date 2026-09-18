@@ -44,7 +44,7 @@ export function GroupCard({
         } ${group.enabled ? '' : 'opacity-55'}`}
       >
         <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={72} />
-        <p className="mt-2 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={group.name}>
+        <p dir="auto" className="mt-2 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={group.name}>
           {group.name}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">

@@ -286,7 +286,9 @@ function Fact({ label, value, fallback, hint }: { label: string; value: string |
   return (
     <div className="min-w-0 rounded-xl border border-ink-600 px-3 py-2">
       <dt className="text-[11px] font-bold text-mist-500">{label}</dt>
-      <dd className={`truncate text-sm font-bold tabular-nums ${value ? 'text-mist-100' : 'text-mist-500'}`}>{value ?? fallback}</dd>
+      <dd dir="auto" className={`truncate text-sm font-bold tabular-nums ${value ? 'text-mist-100' : 'text-mist-500'}`}>
+        {value ?? fallback}
+      </dd>
       {hint && <p className="truncate text-[11px] text-mist-500">{hint}</p>}
     </div>
   );

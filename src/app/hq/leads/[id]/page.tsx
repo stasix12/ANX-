@@ -25,6 +25,7 @@ import { leadScore, leadTier, TIER_META } from '@/lib/platform/scoring';
 import { LEAD_STATUS_META, leadStatusMeta } from '@/lib/platform/stateMachine';
 import { actions, usePlatform, useSession } from '@/lib/platform/store';
 import type { FeeModel, Lead, LeadItem, LeadStatus, PaymentMethod } from '@/lib/platform/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * One lead: contact actions, quote, follow-ups, notes, activity — and the
@@ -111,7 +112,7 @@ function CloseJobDialog({ lead, onClose }: { lead: Lead; onClose: () => void }) 
       );
       router.push('/hq/jobs');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'סגירת העבודה נכשלה');
+      setError(friendlyMessage(e, 'סגירת העבודה נכשלה'));
       setBusy(false);
     }
   }

@@ -17,6 +17,7 @@ import { currentFee } from '@/lib/platform/pricing';
 import { OPEN_STATUSES } from '@/lib/platform/stateMachine';
 import { actions, usePlatform, useSession, walletBalance } from '@/lib/platform/store';
 import type { Job } from '@/lib/platform/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * The internal marketplace: only CLOSED jobs, customer identity masked until
@@ -60,7 +61,7 @@ function JobsFeed() {
       setConfirming(null);
       setTaken(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'קבלת העבודה נכשלה');
+      setError(friendlyMessage(e, 'קבלת העבודה נכשלה'));
     } finally {
       setBusy(false);
     }

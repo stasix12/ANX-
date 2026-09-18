@@ -46,6 +46,7 @@ import {
   type Variant,
   type VariantStrategy,
 } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 type VariantDraft = Partial<Variant> & { key: string; label: string; text: string; language: Language; approval: Variant['approval'] };
 
@@ -138,7 +139,7 @@ export function PostEditor({ postId }: { postId?: string }) {
   }, [postId]);
 
   useEffect(() => {
-    load().catch((err) => setMessage({ tone: 'error', text: err instanceof Error ? err.message : 'טעינה נכשלה.' }));
+    load().catch((err) => setMessage({ tone: 'error', text: friendlyMessage(err, 'טעינה נכשלה.') }));
   }, [load]);
 
   const campaign = campaigns.find((c) => c.id === post.campaign_id) ?? null;
@@ -196,7 +197,7 @@ export function PostEditor({ postId }: { postId?: string }) {
       await persist();
       setMessage({ tone: 'success', text: 'הפוסט נשמר.' });
     } catch (err) {
-      setMessage({ tone: 'error', text: err instanceof Error ? err.message : 'השמירה נכשלה.' });
+      setMessage({ tone: 'error', text: friendlyMessage(err, 'השמירה נכשלה.') });
     } finally {
       setBusy(null);
     }
@@ -283,7 +284,7 @@ export function PostEditor({ postId }: { postId?: string }) {
       }
       setSchedules(await listSchedules(id));
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'התזמון נכשל.', 'error');
+      toast(friendlyMessage(err, 'התזמון נכשל.'), 'error');
     } finally {
       setBusy(null);
     }
@@ -325,10 +326,10 @@ export function PostEditor({ postId }: { postId?: string }) {
       {/* min-w-0 on both tracks: a grid item defaults to min-width:auto, so any
           horizontally-scrolling child (the filter rows) would stretch the whole
           page instead of scrolling inside itself. */}
-      <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
+      <div className="grid gap-5 lg:grid-cols-[1fr_380px] [&>*]:min-w-0">
         <div className="min-w-0 space-y-5">
           <Card title="תוכן הפוסט">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
               <Field label="שם פנימי" hint="לזיהוי בלוח הבקרה, לא מתפרסם">
                 <input className={inputClass} value={post.title} onChange={(e) => update('title', e.target.value)} placeholder="למשל: ניקוי ספות באר שבע — ספטמבר" />
               </Field>
@@ -348,7 +349,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                 <textarea className={`${inputClass} min-h-36`} value={post.base_text} onChange={(e) => update('base_text', e.target.value)} dir="auto" />
               </Field>
             </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
               <Field label="שפה">
                 <select className={inputClass} value={post.language} onChange={(e) => update('language', e.target.value as Language)}>
                   <option value="he">עברית</option>
@@ -416,7 +417,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                         <option value="ru">Русский</option>
                       </select>
                       <span className="grow" />
-                      <button type="button" onClick={() => setPreviewKey(v.key)} className={`rounded-lg px-2.5 py-1 text-xs font-bold ${previewKey === v.key ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>
+                      <button type="button" onClick={() => setPreviewKey(v.key)} className={`min-h-10 rounded-lg px-2.5 text-xs font-bold ${previewKey === v.key ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>
                         תצוגה מקדימה
                       </button>
                       <button
@@ -433,7 +434,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                       >
                         {v.approval === 'rejected' ? 'בטל דחייה' : 'דחה'}
                       </button>
-                      <button type="button" aria-label="מחק גרסה" onClick={() => setVariants((all) => all.filter((x) => x.key !== v.key))} className="rounded-lg p-1 text-rose-600">
+                      <button type="button" aria-label="מחק גרסה" onClick={() => setVariants((all) => all.filter((x) => x.key !== v.key))} className="grid h-10 w-10 place-items-center rounded-lg text-rose-600">
                         <TrashIcon className="h-4 w-4" />
                       </button>
                     </div>
@@ -490,7 +491,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                       ['fixed', 'רק הקצאה ידנית'],
                     ] as const
                   ).map(([v, label]) => (
-                    <button key={v} type="button" aria-pressed={variantStrategy === v} onClick={() => setVariantStrategy(v)} className={`rounded-lg px-2.5 py-1.5 ${variantStrategy === v ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
+                    <button key={v} type="button" aria-pressed={variantStrategy === v} onClick={() => setVariantStrategy(v)} className={`min-h-10 rounded-lg px-2.5 ${variantStrategy === v ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
                       {label}
                     </button>
                   ))}
@@ -537,7 +538,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                     <span className="text-mist-100">
                       {describeSchedule(s)} · {s.target_ids.length} יעדים
                     </span>
-                    <button type="button" className="text-xs font-bold text-rose-600" onClick={() => setScheduleActive(s.id, false).then(() => listSchedules(s.post_id).then(setSchedules))}>
+                    <button type="button" className="min-h-10 px-2 text-xs font-bold text-rose-600" onClick={() => setScheduleActive(s.id, false).then(() => listSchedules(s.post_id).then(setSchedules))}>
                       בטל תזמון
                     </button>
                   </li>

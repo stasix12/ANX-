@@ -20,6 +20,7 @@ import {
 import { callSocialApi, listTargets, updateTarget } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import { PERMISSION_LABEL, REQUIRED_SCOPES, type SocialAccount, type SocialTarget } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 interface Status {
   configured: { facebookApp: boolean; serviceRole: boolean; encryptionKey: boolean; cronSecret: boolean };
@@ -51,7 +52,7 @@ function TargetsScreen() {
   }, []);
 
   useEffect(() => {
-    load().catch((err) => setError(err instanceof Error ? err.message : 'טעינה נכשלה.'));
+    load().catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
     const connect = params.get('connect');
     if (connect === 'ok') setFlash(`פייסבוק חובר בהצלחה. סונכרנו ${params.get('pages') ?? '0'} דפים.`);
     if (connect === 'declined') setFlash('ההתחברות בוטלה בפייסבוק — לא ניתנו הרשאות.');
@@ -65,7 +66,7 @@ function TargetsScreen() {
       const { url } = await callSocialApi<{ url: string }>('/api/social/facebook/connect');
       window.location.href = url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ההתחברות נכשלה.');
+      setError(friendlyMessage(err, 'ההתחברות נכשלה.'));
       setBusy(null);
     }
   }
@@ -78,7 +79,7 @@ function TargetsScreen() {
       if (done) toast(done);
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     } finally {
       setBusy(null);
     }
@@ -124,7 +125,7 @@ function TargetsScreen() {
           )}
           {account && (
             <div className="space-y-3">
-              <div className="grid gap-2 text-sm sm:grid-cols-2">
+              <div className="grid gap-2 text-sm sm:grid-cols-2 [&>*]:min-w-0">
                 <p>
                   <span className="text-mist-500">מחובר בתור:</span> <strong className="text-mist-100">{account.name}</strong>
                 </p>
@@ -189,7 +190,7 @@ function TargetsScreen() {
               {pages.map((t) => (
                 <li key={t.id} className="flex items-center gap-3 py-3">
                   <div className="min-w-0 grow">
-                    <a href={t.url || undefined} target="_blank" rel="noreferrer" className="truncate font-bold text-mist-100 hover:text-brand-400">
+                    <a href={t.url || undefined} target="_blank" rel="noreferrer" dir="auto" className="block truncate font-bold text-mist-100 hover:text-brand-400">
                       {t.name}
                     </a>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">

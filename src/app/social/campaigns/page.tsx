@@ -30,6 +30,7 @@ import {
 } from '@/lib/social/client';
 import { campaignState, type CampaignState } from '@/lib/social/campaign';
 import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type Post } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 const blank = { name: '', service: '', city: '', language: 'he' as Campaign['language'], notes: '' };
 
@@ -66,7 +67,7 @@ export default function CampaignsPage() {
       setStates(st);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
+      setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
   }, []);
 
@@ -101,7 +102,7 @@ export default function CampaignsPage() {
       toast(done);
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     } finally {
       setBusy(null);
     }
@@ -159,7 +160,7 @@ export default function CampaignsPage() {
           />
         )}
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
           {visible.map((c) => {
             const state = stateOf(c);
             const mine = posts.filter((p) => p.campaign_id === c.id);
@@ -174,10 +175,10 @@ export default function CampaignsPage() {
                 />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs font-bold">
                   <span className="text-mist-500">{mine.length} פוסטים</span>
-                  <button type="button" className="text-brand-400" onClick={() => openEditor(c)}>
+                  <button type="button" className="min-h-10 px-1 text-brand-400" onClick={() => openEditor(c)}>
                     ערוך
                   </button>
-                  <button type="button" className="text-brand-400" onClick={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}>
+                  <button type="button" className="min-h-10 px-1 text-brand-400" onClick={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}>
                     שכפל
                   </button>
                   {state.state === 'stopped' && (

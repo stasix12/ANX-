@@ -79,7 +79,7 @@ export function SocialShell({
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pb-2 pt-3 md:pb-2">
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-wider text-white/70">הפתרון המבריק · פרסום</p>
-            <h1 className="truncate text-xl font-extrabold tracking-tight text-white drop-shadow-sm">{title}</h1>
+            <h1 dir="auto" className="truncate text-xl font-extrabold tracking-tight text-white drop-shadow-sm">{title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {headerAction}
@@ -87,7 +87,7 @@ export function SocialShell({
           </div>
         </div>
         {/* Desktop / tablet: pill toolbar under the title. Phones use the bottom bar below. */}
-        <nav aria-label="ניווט פרסום" className="mx-auto hidden max-w-6xl overflow-x-auto px-2 [scrollbar-width:none] md:block">
+        <nav aria-label="ניווט פרסום" className="mx-auto hidden min-w-0 max-w-6xl overflow-x-auto px-2 [scrollbar-width:none] md:block">
           <ul className="flex min-w-max items-stretch gap-1 pb-1.5">
             {nav.map(({ href, label, icon: Icon, exact }) => {
               const active = isActive(href, exact);
@@ -109,7 +109,16 @@ export function SocialShell({
           </ul>
         </nav>
       </header>
-      <main className="crm-page mx-auto max-w-6xl px-4 py-5">{children}</main>
+      {/*
+        The structural net. Four separate bugs in this module were one long
+        child widening a track and taking the whole page sideways with it, so
+        the shell refuses to scroll horizontally at all: overflow-x-clip keeps
+        the vertical axis visible (unlike `hidden`, which would turn this into
+        a scroll container and break the sticky header), and min-w-0 lets the
+        column shrink in the first place. Sheets are portalled to <body>, so
+        nothing that must escape the page is clipped by this.
+      */}
+      <main className="crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">{children}</main>
 
       {/* Phone: iOS-style bottom tab bar, thumb-reachable. */}
       <nav

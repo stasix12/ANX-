@@ -5,6 +5,7 @@ import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { getBrowserSettings, getBusiness, getControl, getLimits, saveSetting } from '@/lib/social/client';
 import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type BrowserSettings, type BusinessSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 type Tab = 'limits' | 'browser' | 'business';
 
@@ -34,7 +35,7 @@ export default function SettingsPage() {
         setBrowser(br);
         setLoaded(true);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'טעינה נכשלה.'));
+      .catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
   }, []);
 
   async function save() {
@@ -48,7 +49,7 @@ export default function SettingsPage() {
       ]);
       toast('ההגדרות נשמרו.');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'השמירה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'השמירה נכשלה.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -92,7 +93,7 @@ export default function SettingsPage() {
                   לפייסבוק אין מספר פרסומים רשמי ומפורסם לחשבון פרטי, ואף כלי לא יכול להבטיח שמספר מסוים לא יוביל להגבלה. המספרים כאן הם
                   התקרה שאתם מגדירים למערכת, והיא תכבד אותה.
                 </Notice>
-                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <div className="mt-3 grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
                   <Field label="מקסימום פרסומים ביום (כל היעדים)" hint="פרסום מעבר לתקרה מדולג עם סיבה ברורה בהיסטוריה">
                     <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.maxPerDay} onChange={num('maxPerDay')} />
                   </Field>
@@ -159,7 +160,7 @@ export default function SettingsPage() {
               </Card>
 
               <Card title="קצב הקבוצות">
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-3 [&>*]:min-w-0">
                   <Field label="עבודות דפדפן במקביל" hint="1 מומלץ — חלון אחד שעושה דבר אחד">
                     <input
                       type="number"
@@ -202,7 +203,7 @@ export default function SettingsPage() {
                 <Field label="שם העסק">
                   <input className={inputClass} value={business.name} onChange={(e) => setBusiness({ ...business, name: e.target.value })} />
                 </Field>
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
                   <Field label="טלפון לתצוגה">
                     <input className={inputClass} dir="ltr" inputMode="tel" value={business.phone} onChange={(e) => setBusiness({ ...business, phone: e.target.value })} />
                   </Field>

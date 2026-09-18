@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { cancelQueueItem, confirmQueueItem, listLiveQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
 import { QueueSections } from './QueueSections';
 import { Button, Card, Notice, SkeletonList, useConfirm, useToast } from './ui';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * The live queue, polled every four seconds: what is publishing now, what is
@@ -27,7 +28,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
       setRows(postId ? all.filter((r) => r.post_id === postId) : all);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
+      setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
   }, [postId]);
 
@@ -43,7 +44,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
       const changed = await fn();
       toast(changed ? ok : stale, changed ? 'success' : 'info');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     }
     await load();
   }

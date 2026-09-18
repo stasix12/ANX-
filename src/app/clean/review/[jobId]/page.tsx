@@ -6,6 +6,7 @@ import { btnPrimary, inputClass, Modal, PageSkeleton, Stars } from '@/components
 import { itemsLabel } from '@/lib/platform/catalog';
 import { actions, usePlatform } from '@/lib/platform/store';
 import type { ComplaintCategory } from '@/lib/platform/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * The rating link the customer receives after the job is completed. Also
@@ -79,7 +80,7 @@ export default function ReviewPage({ params }: { params: Promise<{ jobId: string
       });
       setDone(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'שליחת הדירוג נכשלה');
+      setError(friendlyMessage(e, 'שליחת הדירוג נכשלה'));
     } finally {
       setBusy(false);
     }

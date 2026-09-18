@@ -25,9 +25,9 @@ export function LeadCard({ lead, showDate = false }: { lead: Lead; showDate?: bo
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-base font-extrabold">
             {lead.jobTime ? <span className="tabular-nums text-brand-400">{timeLabel(lead)}</span> : null}
-            <span className="truncate">{lead.name}</span>
+            <span dir="auto" className="min-w-0 truncate">{lead.name}</span>
           </p>
-          <p className="mt-1 truncate text-sm text-mist-300">
+          <p dir="auto" className="mt-1 truncate text-sm text-mist-300">
             {[showDate ? dateLabel : null, lead.city || null, lead.services.join(' · ') || null]
               .filter(Boolean)
               .join(' · ')}

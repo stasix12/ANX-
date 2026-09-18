@@ -1,6 +1,7 @@
 import 'server-only';
 import type { User } from '@supabase/supabase-js';
 import { serviceDb } from './db';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * Route-handler guards.
@@ -49,9 +50,13 @@ export async function requireAdminOrCron(request: Request): Promise<void> {
   }
 }
 
+/**
+ * The browser gets a sentence the owner can act on; the server log keeps the
+ * real error. An unexpected failure must never send its raw text — a stack
+ * trace or an SQL constraint name in a toast is a leak, not a message.
+ */
 export function errorResponse(err: unknown): Response {
   if (err instanceof HttpError) return Response.json({ error: err.message }, { status: err.status });
-  const message = err instanceof Error ? err.message : 'שגיאה לא צפויה.';
-  console.error('[social]', message);
-  return Response.json({ error: message }, { status: 500 });
+  console.error('[social]', err);
+  return Response.json({ error: friendlyMessage(err, 'שגיאה לא צפויה.') }, { status: 500 });
 }

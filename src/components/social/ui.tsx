@@ -52,7 +52,7 @@ export function Card({
       {(title || action) && (
         <header className={`mb-3 flex items-start justify-between gap-3 ${padded ? '' : 'px-4 pt-4'}`}>
           <div className="min-w-0">
-            {title && <h2 className="truncate text-base font-extrabold text-mist-100">{title}</h2>}
+            {title && <h2 dir="auto" className="truncate text-base font-extrabold text-mist-100">{title}</h2>}
             {subtitle && <p className="mt-0.5 text-xs text-mist-500">{subtitle}</p>}
           </div>
           {action && <div className="shrink-0">{action}</div>}
@@ -88,9 +88,13 @@ const buttonClass: Record<ButtonVariant, string> = {
   ghost: 'text-brand-400 hover:bg-ink-800',
 };
 
-/** 44px is Apple's minimum target; `sm` is for desktop toolbars only. */
+/**
+ * 44px is Apple's minimum target. `sm` is the compact variant and still clears
+ * 40px: it is used on phones too (the target picker's quick sets), and a 36px
+ * chip in a row of chips is a mis-tap waiting to happen.
+ */
 const buttonSize: Record<ButtonSize, string> = {
-  sm: 'min-h-9 px-3 py-1.5 text-xs',
+  sm: 'min-h-10 px-3 py-1.5 text-xs',
   md: 'min-h-11 px-4 py-2.5 text-sm',
   lg: 'min-h-12 px-5 py-3 text-base',
 };
@@ -152,6 +156,10 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 export const inputClass =
   'w-full min-h-11 rounded-xl border border-ink-600 bg-ink-850 px-3.5 py-2.5 text-base text-mist-100 placeholder:text-mist-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30';
 
+/**
+ * The switch reads as a 28px track but is tapped as 44px: the track is an
+ * inner span so the button itself can carry the full hit area.
+ */
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <button
@@ -160,9 +168,12 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${checked ? 'bg-brand-500' : 'bg-ink-600'}`}
+      className="relative flex h-11 w-12 shrink-0 items-center"
     >
-      <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-[inset-inline-start] ${checked ? 'start-6' : 'start-1'}`} />
+      <span className={`h-7 w-full rounded-full transition-colors ${checked ? 'bg-brand-500' : 'bg-ink-600'}`} />
+      <span
+        className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-[inset-inline-start] ${checked ? 'start-6' : 'start-1'}`}
+      />
     </button>
   );
 }
@@ -186,7 +197,9 @@ export function SegmentedControl<T extends string>({
   size?: 'sm' | 'md';
   className?: string;
 }) {
-  const pad = size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm';
+  // Height is a floor, not padding: these are filter chips people tap on a
+  // phone, and they measured 28px before.
+  const pad = size === 'sm' ? 'min-h-10 px-2.5 text-xs' : 'min-h-11 px-3 text-sm';
   return (
     <div role="group" aria-label={label} className={`flex flex-wrap gap-0.5 rounded-xl bg-ink-800 p-0.5 ${className}`}>
       {options.map((o) => {
@@ -197,7 +210,7 @@ export function SegmentedControl<T extends string>({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(o.value)}
-            className={`rounded-lg font-bold transition-colors ${pad} ${active ? 'bg-brand-500 text-on-brand shadow-sm' : 'text-mist-300 hover:text-mist-100'}`}
+            className={`inline-flex items-center justify-center rounded-lg font-bold transition-colors ${pad} ${active ? 'bg-brand-500 text-on-brand shadow-sm' : 'text-mist-300 hover:text-mist-100'}`}
           >
             {o.label}
             {o.count !== undefined && <span className="ms-1 tabular-nums opacity-70">{o.count}</span>}
@@ -302,9 +315,9 @@ export function Tile({
   const color = { default: 'text-brand-400', good: 'text-emerald-600', bad: 'text-rose-600', warn: 'text-amber-600' }[tone];
   const body = (
     <>
-      <p className="truncate text-[11px] font-bold text-mist-500 sm:text-xs">{label}</p>
+      <p dir="auto" className="truncate text-[11px] font-bold text-mist-500 sm:text-xs">{label}</p>
       <p className={`mt-0.5 text-xl font-extrabold tabular-nums sm:mt-1 sm:text-2xl ${color}`}>{value}</p>
-      {sub && <p className="truncate text-[11px] text-mist-300 sm:mt-0.5 sm:text-xs">{sub}</p>}
+      {sub && <p dir="auto" className="truncate text-[11px] text-mist-300 sm:mt-0.5 sm:text-xs">{sub}</p>}
     </>
   );
   const cls = 'surface block rounded-2xl border border-ink-700 px-3 py-2.5 text-start sm:p-3.5';
@@ -406,7 +419,7 @@ export function SkeletonList({ rows = 4 }: { rows?: number }) {
 
 export function SkeletonTiles({ count = 6 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3" aria-busy="true" aria-label="טוען…">
+    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
       {Array.from({ length: count }).map((_, i) => (
         <Skeleton key={i} className="h-[74px] rounded-2xl" />
       ))}
@@ -656,7 +669,7 @@ export function OverflowMenu({ label, actions, className = '' }: { label: string
           e.stopPropagation();
           setOpen(true);
         }}
-        className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-lg font-extrabold leading-none text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-100 ${className}`}
+        className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg font-extrabold leading-none text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-100 ${className}`}
       >
         ⋯
       </button>

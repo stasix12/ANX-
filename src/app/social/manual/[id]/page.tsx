@@ -8,6 +8,7 @@ import { SocialShell } from '@/components/social/SocialShell';
 import { Badge, Button, Card, Field, Loading, Notice, ProgressBar, inputClass, useToast } from '@/components/social/ui';
 import { cancelQueueItem, getPost, getQueueItem, manualQueue, markManualPublished, type QueueRow } from '@/lib/social/client';
 import type { MediaItem, Post } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * Assisted publishing: the path for a target with no official publishing API
@@ -41,7 +42,7 @@ export default function ManualKitPage() {
         setQueue(all);
         if (q) setPost(await getPost(q.post_id));
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'טעינה נכשלה.'));
+      .catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
   }, [id]);
 
   const position = queue.findIndex((q) => q.id === id);
@@ -66,7 +67,7 @@ export default function ManualKitPage() {
       }
       goNext();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -110,7 +111,7 @@ export default function ManualKitPage() {
             />
           )}
 
-          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+          <div className="grid gap-4 lg:grid-cols-[1fr_360px] [&>*]:min-w-0">
             <div className="min-w-0 space-y-4">
               <Card
                 title={item.target?.name ?? 'יעד'}
@@ -128,7 +129,7 @@ export default function ManualKitPage() {
                 {/* Step 2 */}
                 {media.length > 0 && (
                   <Step n={2} title="הורידו את המדיה">
-                    <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
                       {media.map((m) => (
                         <li key={m.url}>
                           <a href={m.url} download target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-ink-700 bg-ink-900">
@@ -177,7 +178,7 @@ export default function ManualKitPage() {
                   <Field label="קישור לפוסט שפורסם (רשות)" hint="נשמר בהיסטוריה כדי שתוכלו לחזור אליו">
                     <input className={inputClass} dir="ltr" inputMode="url" value={permalink} onChange={(e) => setPermalink(e.target.value)} placeholder="https://www.facebook.com/groups/…/posts/…" />
                   </Field>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
                     <Button size="lg" busy={busy} onClick={() => finish('published')}>
                       ✅ פורסם{remaining.length > 0 ? ' — לבא' : ''}
                     </Button>

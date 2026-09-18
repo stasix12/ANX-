@@ -3,6 +3,7 @@ import { REQUIRED_SCOPES, type PermissionStatus, type SocialAccount } from '../t
 import { deleteSecrets, readSecret, serviceDb, storeSecret } from './db';
 import { GraphError, fetchManagedPages, fetchPermissions, revokeUserToken } from './graph';
 import { logActivity } from './log';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * Pulls the connected account's permissions and managed Pages from Meta and
@@ -106,7 +107,7 @@ export async function revokeAccount(accountId: string): Promise<void> {
     try {
       await revokeUserToken(token);
     } catch (err) {
-      await logActivity('warn', 'revoke_remote_failed', err instanceof Error ? err.message : 'revoke failed');
+      await logActivity('warn', 'revoke_remote_failed', friendlyMessage(err, 'revoke failed'));
     }
   }
   const { data: targets } = await db.from('social_targets').select('id').eq('account_id', accountId);

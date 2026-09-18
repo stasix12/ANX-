@@ -9,6 +9,7 @@ import { Badge, Button, Card, EmptyState, Notice, OverflowMenu, SegmentedControl
 import { archivePost, duplicatePost, listCampaigns, listPosts } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, Post } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 type Filter = 'all' | 'ready' | 'draft';
 
@@ -36,7 +37,7 @@ export default function PostsPage() {
       setCampaigns(c);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
+      setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
   }, []);
 
@@ -72,7 +73,7 @@ export default function PostsPage() {
       toast(done);
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     } finally {
       setBusy(null);
     }
@@ -149,7 +150,7 @@ export default function PostsPage() {
                         )}
                       </div>
                       <div className="min-w-0 grow">
-                        <p className="truncate font-bold text-mist-100">{p.title || p.base_text.slice(0, 60) || 'ללא כותרת'}</p>
+                        <p dir="auto" className="truncate font-bold text-mist-100">{p.title || p.base_text.slice(0, 60) || 'ללא כותרת'}</p>
                         <p className="truncate text-[11px] text-mist-500">
                           {campaignName(p.campaign_id) ?? 'ללא קמפיין'} · {p.language === 'ru' ? 'רוסית' : 'עברית'}
                           {media.length ? ` · ${media.length} מדיה` : ''} · {formatDateTimeHe(p.updated_at)}
@@ -172,7 +173,7 @@ export default function PostsPage() {
                               toast('נוצר עותק כטיוטה.');
                               router.push(`/social/posts/${copy.id}`);
                             } catch (err) {
-                              toast(err instanceof Error ? err.message : 'השכפול נכשל.', 'error');
+                              toast(friendlyMessage(err, 'השכפול נכשל.'), 'error');
                               setBusy(null);
                             }
                           },

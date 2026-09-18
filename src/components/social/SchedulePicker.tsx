@@ -132,7 +132,7 @@ export function SchedulePlanPreview({ plan, names = [] }: { plan: SchedulePlan; 
   return (
     <div className="rounded-xl border border-ink-600 bg-ink-900/40 p-3">
       <p className="text-xs font-bold text-mist-300">{plan.summary}</p>
-      <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+      <dl className="mt-2 grid grid-cols-3 gap-2 text-center [&>*]:min-w-0">
         <Stat label="ראשון" hint={dayHint(plan.firstAt as Date)}>
           {formatTimeHe(plan.firstAt as Date)}
         </Stat>
@@ -233,7 +233,7 @@ export function SchedulePicker({
             type="button"
             aria-pressed={value.mode === m.value}
             onClick={() => set({ mode: m.value })}
-            className={`rounded-lg px-3.5 py-2 text-sm font-bold transition-colors ${value.mode === m.value ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}
+            className={`min-h-11 rounded-lg px-3.5 text-sm font-bold transition-colors ${value.mode === m.value ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}
           >
             {m.label}
           </button>
@@ -254,7 +254,7 @@ export function SchedulePicker({
             {WEEKDAYS_HE.map((name, day) => {
               const on = Boolean(value.weekly[String(day)]?.length);
               return (
-                <button key={name} type="button" aria-pressed={on} onClick={() => toggleDay(day)} className={`rounded-full px-3 py-1.5 text-sm font-bold ${on ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>
+                <button key={name} type="button" aria-pressed={on} onClick={() => toggleDay(day)} className={`min-h-10 rounded-full px-3 text-sm font-bold ${on ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>
                   {name}
                 </button>
               );
@@ -275,13 +275,13 @@ export function SchedulePicker({
                       onChange={(e) => setTimes(day, times.map((x, j) => (j === i ? e.target.value : x)))}
                     />
                     {times.length > 1 && (
-                      <button type="button" aria-label="הסר שעה" className="text-xs text-rose-600" onClick={() => setTimes(day, times.filter((_, j) => j !== i))}>
+                      <button type="button" aria-label="הסר שעה" className="min-h-10 px-2 text-xs text-rose-600" onClick={() => setTimes(day, times.filter((_, j) => j !== i))}>
                         ✕
                       </button>
                     )}
                   </span>
                 ))}
-                <button type="button" className="text-xs font-bold text-brand-400" onClick={() => setTimes(day, [...times, '18:00'])}>
+                <button type="button" className="min-h-10 px-2 text-xs font-bold text-brand-400" onClick={() => setTimes(day, [...times, '18:00'])}>
                   + שעה
                 </button>
               </div>
@@ -338,7 +338,7 @@ export function SchedulePicker({
           <div className="flex min-w-0 flex-wrap gap-1.5 text-xs font-bold">
             <span className="text-mist-500">מרווח מהיר:</span>
             {[10, 20, 30, 45, 60, 90].map((m) => (
-              <button key={m} type="button" onClick={() => set({ dripGapMinutes: m })} className={`rounded-full px-2.5 py-1 ${value.dripGapMinutes === m ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>
+              <button key={m} type="button" onClick={() => set({ dripGapMinutes: m })} className={`min-h-10 rounded-full px-2.5 ${value.dripGapMinutes === m ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>
                 {m} דק׳
               </button>
             ))}

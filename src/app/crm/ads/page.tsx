@@ -15,6 +15,7 @@ import {
 } from '@/lib/crm/facebookAds';
 import { formatDateLongHe } from '@/lib/crm/leads';
 import { getFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
+import { friendlyMessage } from '@/lib/social/errors';
 
 const MONTH_SHORT = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
 const WEEKDAY_LONG = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
@@ -176,7 +177,7 @@ export default function CrmAdsPage() {
       setMonthly(months);
       setDaily(days);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'שליפת נתוני הפרסום נכשלה.');
+      setError(friendlyMessage(err, 'שליפת נתוני הפרסום נכשלה.'));
     }
   }, []);
 
@@ -202,7 +203,7 @@ export default function CrmAdsPage() {
         setCustomIncrement(increment);
         setCustomSeries(rows);
       } catch (err) {
-        setCustomError(err instanceof Error ? err.message : 'שליפת נתוני הפרסום נכשלה.');
+        setCustomError(friendlyMessage(err, 'שליפת נתוני הפרסום נכשלה.'));
       } finally {
         setCustomLoading(false);
       }

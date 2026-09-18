@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { PlusIcon, SpinnerIcon, TrashIcon } from '@/components/icons';
 import { removeMedia, uploadMedia } from '@/lib/social/client';
 import type { MediaItem } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * Images and one video for a post, stored in the public social-media bucket
@@ -28,7 +29,7 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
       }
       onChange(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ההעלאה נכשלה.');
+      setError(friendlyMessage(err, 'ההעלאה נכשלה.'));
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -42,7 +43,7 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
 
   return (
     <div>
-      <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 [&>*]:min-w-0">
         {media.map((item) => (
           <div key={item.url} className="relative aspect-square overflow-hidden rounded-xl border border-ink-700 bg-ink-900">
             {item.kind === 'video' ? (
@@ -55,7 +56,7 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
               type="button"
               onClick={() => remove(item)}
               aria-label="הסר"
-              className="absolute end-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white"
+              className="absolute end-1.5 top-1.5 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white"
             >
               <TrashIcon className="h-3.5 w-3.5" />
             </button>

@@ -19,6 +19,7 @@ import {
 import { cancelQueueItem, listCampaigns, listQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
 import { zonedToUtc } from '@/lib/social/time';
 import { type PublishMethod, type QueueStatus } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /** Coarse buckets people actually filter by, mapped onto the real statuses. */
 const STATUS_GROUPS: { value: string; label: string; statuses: QueueStatus[] }[] = [
@@ -93,7 +94,7 @@ function HistoryScreen() {
       setRows(await listQueue({ status: statuses.length ? statuses : undefined, since: fromISO, until: toISO, limit: 500 }));
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
+      setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
   }, [group, range, since, until]);
 
@@ -125,7 +126,7 @@ function HistoryScreen() {
       const changed = await fn();
       toast(changed ? ok : 'הפריט כבר השתנה — המסך רוענן.', changed ? 'success' : 'info');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     }
     await load();
   }
@@ -183,7 +184,7 @@ function HistoryScreen() {
               />
             </div>
             {range === 'custom' && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 [&>*]:min-w-0">
                 <label className="text-xs font-bold text-mist-500">
                   מתאריך
                   <input type="date" className={inputClass} value={since} onChange={(e) => setSince(e.target.value)} />

@@ -34,6 +34,7 @@ import {
   type Lead,
   type LeadStatus,
 } from '@/lib/crm/leads';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * One-tap WhatsApp openers with the message pre-filled (and still editable
@@ -83,7 +84,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       setHistory(found?.phone ? await listLeadsByPhone(found.phone, found.id) : []);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינת הליד נכשלה.');
+      setError(friendlyMessage(err, 'טעינת הליד נכשלה.'));
     } finally {
       setLoading(false);
     }
@@ -100,7 +101,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       await setLeadStatus(lead.id, status);
       setLead({ ...lead, status });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'עדכון הסטטוס נכשל.');
+      setError(friendlyMessage(err, 'עדכון הסטטוס נכשל.'));
     } finally {
       setMutating(false);
     }
@@ -114,7 +115,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       await deleteLead(lead.id);
       router.replace('/crm/leads');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'המחיקה נכשלה.');
+      setError(friendlyMessage(err, 'המחיקה נכשלה.'));
       setMutating(false);
     }
   }

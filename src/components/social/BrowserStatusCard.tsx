@@ -5,6 +5,7 @@ import { listRecentCommands, listWorkers, resumeNeedsAttention, sendWorkerComman
 import { formatDateTimeHe } from '@/lib/social/time';
 import type { SocialWorker, WorkerCommand, WorkerCommandName } from '@/lib/social/types';
 import { Button, Card, Notice, useConfirm } from './ui';
+import { friendlyMessage } from '@/lib/social/errors';
 
 type Light = { icon: string; label: string; cls: string };
 
@@ -36,7 +37,7 @@ export function BrowserStatusCard({ onChanged }: { onChanged?: () => void }) {
       setCommands(c);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
+      setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
   }
 
@@ -58,7 +59,7 @@ export function BrowserStatusCard({ onChanged }: { onChanged?: () => void }) {
       await load();
       onChanged?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'הפקודה נכשלה.');
+      setError(friendlyMessage(err, 'הפקודה נכשלה.'));
     } finally {
       setBusy(null);
     }

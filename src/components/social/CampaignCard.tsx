@@ -41,7 +41,7 @@ export function CampaignCard({
     <div className="surface rounded-card border border-ink-700 p-4">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <Link href={link} className="block truncate text-lg font-extrabold text-mist-100 hover:text-brand-400">
+          <Link href={link} dir="auto" className="block truncate py-1.5 text-lg font-extrabold text-mist-100 hover:text-brand-400">
             {campaign.name}
           </Link>
           <p className="mt-0.5 truncate text-xs text-mist-500">
@@ -59,7 +59,7 @@ export function CampaignCard({
       </div>
 
       {!compact && (
-        <dl className="mt-3 grid grid-cols-2 gap-2">
+        <dl className="mt-3 grid grid-cols-2 gap-2 [&>*]:min-w-0">
           <Fact label="הפרסום הבא">
             {state.nextAt ? (
               <>
@@ -113,7 +113,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   return (
     <div className="min-w-0 rounded-xl border border-ink-600 px-3 py-2">
       <dt className="text-[11px] font-bold text-mist-500">{label}</dt>
-      <dd className="truncate text-sm font-bold text-mist-100">{children}</dd>
+      <dd dir="auto" className="truncate text-sm font-bold text-mist-100">{children}</dd>
     </div>
   );
 }

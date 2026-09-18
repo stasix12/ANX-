@@ -5,6 +5,7 @@ import { parseGroupUrl, type Variant } from '@/lib/social/types';
 import { pickVariant, previewAssignment } from '@/lib/social/variants';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { campaignState, percentDone, type CampaignQueueRow } from '@/lib/social/campaign';
+import { friendlyMessage, GENERIC_ERROR } from '@/lib/social/errors';
 
 /** Pure helpers shared by the dashboard, the server worker and the local worker. */
 
@@ -150,3 +151,40 @@ assert.equal(finished.estimatedCompletionAt, null);
 assert.equal(percentDone(finished.progress), 100);
 
 console.log('unit tests OK');
+
+/* ------------------------------------------------ friendly error messages */
+{
+  // Raw backend text never survives to the screen.
+  const raw = [
+    'new row violates row-level security policy for table "social_targets"',
+    'duplicate key value violates unique constraint "social_targets_url_key"',
+    'TypeError: Failed to fetch',
+    'JWT expired',
+    'relation "social_queue" does not exist',
+    'Error: connect ETIMEDOUT 10.0.0.1:5432\n    at TCPConnectWrap.afterConnect',
+  ];
+  for (const r of raw) {
+    const out = friendlyMessage(new Error(r));
+    assert.ok(!/[A-Za-z]{4,}/.test(out.replace(/[֐-׿\s.,—–…!?()״׳]/g, '')), `leaked English/raw text: ${out}`);
+    assert.ok(!out.includes('at '), `leaked a stack frame: ${out}`);
+    assert.ok(/[֐-׿]/.test(out), `not Hebrew: ${out}`);
+  }
+
+  // Each known shape gets its own sentence, not the catch-all.
+  assert.notEqual(friendlyMessage(new Error('Failed to fetch')), GENERIC_ERROR);
+  assert.notEqual(friendlyMessage(new Error('duplicate key value')), GENERIC_ERROR);
+  assert.notEqual(friendlyMessage(new Error('row-level security')), GENERIC_ERROR);
+
+  // Copy we wrote ourselves is already for the owner — passed through intact.
+  assert.equal(friendlyMessage(new Error('הקבוצה הזו כבר קיימת ברשימה.')), 'הקבוצה הזו כבר קיימת ברשימה.');
+
+  // Anything unrecognised, and anything that is not an Error at all.
+  assert.equal(friendlyMessage(new Error('qwerty zxcvbn')), GENERIC_ERROR);
+  assert.equal(friendlyMessage(undefined), GENERIC_ERROR);
+  assert.equal(friendlyMessage(null), GENERIC_ERROR);
+  assert.equal(friendlyMessage({}), GENERIC_ERROR);
+  // Supabase hands back a plain object, not an Error.
+  assert.notEqual(friendlyMessage({ message: 'duplicate key value violates unique constraint' }), GENERIC_ERROR);
+
+  console.log('friendly-error tests OK');
+}

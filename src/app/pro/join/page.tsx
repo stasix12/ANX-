@@ -6,6 +6,7 @@ import { btnPrimary, inputClass } from '@/components/platform/ui';
 import { CATEGORIES, CITIES } from '@/lib/platform/catalog';
 import { actions } from '@/lib/platform/store';
 import type { Professional } from '@/lib/platform/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /** Recruitment landing + onboarding. New accounts await admin approval. */
 
@@ -49,7 +50,7 @@ export default function JoinPage() {
       await actions.registerPro(form);
       setDone(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'ההרשמה נכשלה');
+      setError(friendlyMessage(e, 'ההרשמה נכשלה'));
     } finally {
       setBusy(false);
     }

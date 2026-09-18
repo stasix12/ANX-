@@ -147,9 +147,9 @@ export function AddressAutocompleteInput({
               >
                 <span aria-hidden className="shrink-0 text-sm">📍</span>
                 <span className="min-w-0">
-                  <span className="block truncate font-bold">{s.addressLine || s.label}</span>
+                  <span dir="auto" className="block truncate font-bold">{s.addressLine || s.label}</span>
                   {s.city && s.city !== (s.addressLine || s.label) ? (
-                    <span className="block truncate text-xs opacity-70">{s.city}</span>
+                    <span dir="auto" className="block truncate text-xs opacity-70">{s.city}</span>
                   ) : null}
                 </span>
               </button>

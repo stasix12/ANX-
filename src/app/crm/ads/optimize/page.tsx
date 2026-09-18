@@ -8,6 +8,7 @@ import { InsightIcon } from '@/components/crm/InsightIcon';
 import { buildRecommendations, type RecommendationTone } from '@/lib/crm/adsOptimizer';
 import { fetchCampaignPerf, formatSpend, type CampaignPerf } from '@/lib/crm/facebookAds';
 import { getFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
+import { friendlyMessage } from '@/lib/social/errors';
 
 const currency = 'ILS';
 
@@ -87,7 +88,7 @@ export default function CrmAdsOptimizePage() {
     try {
       setCampaigns(await fetchCampaignPerf(cfg));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'שליפת נתוני הקמפיינים נכשלה.');
+      setError(friendlyMessage(err, 'שליפת נתוני הקמפיינים נכשלה.'));
     }
   }, []);
 

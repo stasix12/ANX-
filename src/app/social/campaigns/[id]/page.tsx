@@ -34,6 +34,7 @@ import {
 import { RUN_STATE_LABEL, RUN_STATE_TONE, campaignState, percentDone, type CampaignState } from '@/lib/social/campaign';
 import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import type { Campaign, Post } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * The campaign control centre — the screen the owner keeps open while a
@@ -71,7 +72,7 @@ export default function CampaignControlCenter() {
       setState(campaignState(q, c));
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
+      setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
   }, [id]);
 
@@ -88,7 +89,7 @@ export default function CampaignControlCenter() {
       toast(done);
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     } finally {
       setBusy(null);
     }
@@ -176,7 +177,7 @@ export default function CampaignControlCenter() {
 
           <div className="mt-3">{state && <CampaignProgressBar progress={state.progress} />}</div>
 
-          <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
             <Fact label="התחיל" value={state?.startedAt ? when(state.startedAt) : null} fallback="טרם התחיל" />
             <Fact label="סיום משוער" value={state?.estimatedCompletionAt ? when(state.estimatedCompletionAt) : null} fallback={closed ? 'הסתיים' : '—'} hint={state?.estimatedCompletionAt ? 'לפי התזמון שהוגדר' : undefined} />
             <Fact label="הפרסום הבא" value={state?.nextAt ? when(state.nextAt) : null} fallback={paused ? 'מושהה' : 'אין'} hint={state?.nextAt ? relativeHe(state.nextAt) : undefined} />
@@ -213,7 +214,7 @@ export default function CampaignControlCenter() {
 
         {/* Counters. Six, compact, each one a real count. */}
         {state && (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 [&>*]:min-w-0">
             <Tile label="פורסמו" value={state.progress.published} tone="good" />
             <Tile label="ממתינים" value={state.progress.scheduled} />
             <Tile label="רצים" value={state.progress.running} tone={state.progress.running ? 'warn' : 'default'} />
@@ -268,7 +269,7 @@ export default function CampaignControlCenter() {
                     onClick={() => router.push(`/social/posts/${p.id}`)}
                     className="flex w-full items-center justify-between gap-3 py-3 text-start"
                   >
-                    <span className="min-w-0 truncate font-bold text-mist-100">{p.title || p.base_text.slice(0, 50) || 'ללא כותרת'}</span>
+                    <span dir="auto" className="min-w-0 truncate font-bold text-mist-100">{p.title || p.base_text.slice(0, 50) || 'ללא כותרת'}</span>
                     <Badge tone={p.status === 'ready' ? 'good' : 'neutral'}>{p.status === 'ready' ? 'מוכן' : 'טיוטה'}</Badge>
                   </button>
                 </li>
@@ -289,7 +290,7 @@ function Fact({ label, value, fallback, hint }: { label: string; value: string |
       <dd dir="auto" className={`truncate text-sm font-bold tabular-nums ${value ? 'text-mist-100' : 'text-mist-500'}`}>
         {value ?? fallback}
       </dd>
-      {hint && <p className="truncate text-[11px] text-mist-500">{hint}</p>}
+      {hint && <p dir="auto" className="truncate text-[11px] text-mist-500">{hint}</p>}
     </div>
   );
 }

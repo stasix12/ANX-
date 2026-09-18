@@ -75,13 +75,13 @@ export function PostPreview({
       {!video && images.length === 0 && link && (
         <div className="border-y border-slate-200 bg-slate-50 px-4 py-3">
           <p className="text-xs uppercase tracking-wide text-slate-500">{host}</p>
-          <p className="truncate text-sm font-bold">{link}</p>
+          <p dir="auto" className="truncate text-sm font-bold">{link}</p>
         </div>
       )}
 
       {ctaLabel && (
         <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="truncate text-xs text-slate-500">{host || 'הפתרון המבריק'}</p>
+          <p dir="auto" className="truncate text-xs text-slate-500">{host || 'הפתרון המבריק'}</p>
           <span className="rounded-md bg-slate-200 px-3 py-1.5 text-sm font-bold text-slate-800">{ctaLabel}</span>
         </div>
       )}

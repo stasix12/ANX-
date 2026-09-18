@@ -18,6 +18,7 @@ import {
   type LeadSource,
   type LeadStatus,
 } from '@/lib/crm/leads';
+import { friendlyMessage } from '@/lib/social/errors';
 
 const inputClass =
   'w-full rounded-xl border border-ink-600 bg-ink-850 px-4 py-3.5 text-base outline-none transition-colors focus:border-brand-500';
@@ -204,7 +205,7 @@ export function LeadForm({
     try {
       await onSubmit(value);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'השמירה נכשלה. נסו שוב.');
+      setError(friendlyMessage(err, 'השמירה נכשלה. נסו שוב.'));
       setSaving(false);
     }
   }

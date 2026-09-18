@@ -12,7 +12,7 @@ export function QuickActions({ onRunNow, running }: { onRunNow: () => void; runn
   const tile =
     'flex flex-col items-center justify-center gap-1 rounded-2xl border border-ink-600 bg-ink-850 px-2 py-3 text-center text-[11px] font-bold leading-tight text-mist-100 transition-[transform,box-shadow] active:scale-[0.98] hover:border-brand-500 sm:gap-1.5 sm:px-3 sm:py-4 sm:text-sm';
   return (
-    <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
+    <div className="grid grid-cols-4 gap-2 sm:gap-2.5 [&>*]:min-w-0">
       <Link href="/social/posts/new" className={tile}>
         <span aria-hidden className="grid h-8 w-8 place-items-center sm:h-9 sm:w-9 rounded-full bg-brand-500/10 text-brand-400">
           <PlusIcon className="h-5 w-5" strokeWidth={2.4} />

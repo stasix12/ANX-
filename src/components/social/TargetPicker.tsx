@@ -199,7 +199,7 @@ export function TargetPicker({
       {atCap && !note && <p className="text-xs text-amber-700">הגעתם למגבלת הקבוצות של מצב הבדיקה.</p>}
       {visible.length === 0 && <p className="text-sm text-mist-500">אין יעדים תואמים לסינון.</p>}
 
-      <ul className="grid max-h-96 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid max-h-96 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
         {visible.map((t) => {
           const on = selected.includes(t.id);
           const blocked = !on && atCap && t.channel === 'facebook_group';

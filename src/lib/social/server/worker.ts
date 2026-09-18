@@ -18,6 +18,7 @@ import { getSetting, serviceDb, setSetting } from './db';
 import { GraphError } from './graph';
 import { logActivity } from './log';
 import { planQueue } from './planner';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * The server-side publishing worker (Pages through the Graph API). Called by
@@ -141,7 +142,7 @@ async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: Work
       report[outcome] += 1;
     } catch (err) {
       report.failed += 1;
-      const message = err instanceof Error ? err.message : 'שגיאה לא ידועה';
+      const message = friendlyMessage(err, 'שגיאה לא ידועה');
       await db.from('social_queue').update({ status: 'failed', step: 'failed', error: message }).eq('id', item.id);
       await logActivity('error', 'publish_failed', message, { queueId: item.id });
     }
@@ -258,7 +259,7 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
         return 'deferred';
       }
     }
-    await db.from('social_targets').update({ last_status: 'failed', last_error: err instanceof Error ? err.message : 'failed' }).eq('id', tt.id);
+    await db.from('social_targets').update({ last_status: 'failed', last_error: friendlyMessage(err, 'failed') }).eq('id', tt.id);
     throw err;
   }
 }

@@ -3,6 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
+import { friendlyError } from './errors';
 import {
   DEFAULT_BROWSER,
   DEFAULT_BUSINESS,
@@ -44,7 +45,7 @@ function db() {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function unwrap<T>(res: { data: any; error: any }): T {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw friendlyError(res.error);
   return res.data as T;
 }
 
@@ -54,13 +55,21 @@ export async function callSocialApi<T = any>(path: string, init: { method?: stri
   const { data } = await db().auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error('נדרשת התחברות.');
-  const res = await fetch(path, {
-    method: init.method ?? 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: init.method ?? 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    });
+  } catch (err) {
+    // fetch itself rejects only on a transport failure — no server, no signal.
+    throw friendlyError(err, 'אין חיבור לשרת. בדקו את האינטרנט ונסו שוב.');
+  }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body?.error ?? `הבקשה נכשלה (${res.status}).`);
+  // A route may hand back a raw backend message; it never reaches the screen
+  // unclassified.
+  if (!res.ok) throw friendlyError(body?.error ?? `HTTP ${res.status}`, `הבקשה נכשלה (${res.status}).`);
   return body as T;
 }
 
@@ -275,7 +284,7 @@ export async function uploadMedia(file: File): Promise<MediaItem> {
   const ext = (file.name.split('.').pop() ?? (kind === 'video' ? 'mp4' : 'jpg')).toLowerCase();
   const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${ext}`;
   const { error } = await client.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false });
-  if (error) throw new Error(error.message);
+  if (error) throw friendlyError(error);
   const { data } = client.storage.from('social-media').getPublicUrl(path);
   return { kind, url: data.publicUrl, path, name: file.name };
 }
@@ -296,7 +305,7 @@ export async function createSchedule(input: ScheduleInput): Promise<Schedule> {
 /** True when the post still has scheduled (not yet published) queue rows. */
 export async function hasPendingQueue(postId: string): Promise<number> {
   const res = await db().from('social_queue').select('id', { count: 'exact', head: true }).eq('post_id', postId).in('status', ['scheduled', 'publishing', 'awaiting_confirmation']);
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw friendlyError(res.error);
   return res.count ?? 0;
 }
 
@@ -593,7 +602,7 @@ export async function cancelAllScheduled(): Promise<number> {
 
 export async function countPublishedSince(sinceISO: string): Promise<number> {
   const res = await db().from('social_queue').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('published_at', sinceISO);
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw friendlyError(res.error);
   return res.count ?? 0;
 }
 
@@ -611,7 +620,7 @@ export async function countPublishedBetween(sinceISO: string, untilISO?: string)
   let q = db().from('social_queue').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('published_at', sinceISO);
   if (untilISO) q = q.lte('published_at', untilISO);
   const res = await q;
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw friendlyError(res.error);
   return res.count ?? 0;
 }
 

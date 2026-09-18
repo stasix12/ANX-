@@ -36,6 +36,7 @@ import {
 import { KNOWN_CITIES, OTHER_CITY, detectCity, sortCities } from '@/lib/social/cities';
 import { formatDateTimeHe } from '@/lib/social/time';
 import { CHANNEL_LABEL, type Campaign, type SocialTarget } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * One group's whole story: how it is configured, how many times we published
@@ -64,7 +65,7 @@ export default function GroupProfilePage() {
       setNotes(t?.notes ?? '');
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
+      setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
   }, [id]);
 
@@ -93,7 +94,7 @@ export default function GroupProfilePage() {
       if (done) toast(done);
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     } finally {
       setBusy(null);
     }
@@ -162,7 +163,7 @@ export default function GroupProfilePage() {
           </div>
         </Card>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
           <Tile label="סך פרסומים" value={stats.published} tone={stats.published ? 'good' : 'default'} />
           <Tile label="ממתינים" value={stats.pending} />
           <Tile label="נכשלו" value={stats.failed} tone={stats.failed ? 'bad' : 'default'} />
@@ -170,7 +171,7 @@ export default function GroupProfilePage() {
         </div>
 
         <Card title="פרטים">
-          <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+          <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2 [&>*]:min-w-0">
             <Row label="פרסום אחרון">{stats.last ? formatDateTimeHe(stats.last) : 'טרם פורסם'}</Row>
             <Row label="נוספה למערכת">{formatDateTimeHe(group.created_at)}</Row>
             <Row label="עודכנה מפייסבוק">{group.last_synced_at ? formatDateTimeHe(group.last_synced_at) : 'טרם'}</Row>
@@ -181,7 +182,7 @@ export default function GroupProfilePage() {
             </Row>
           </dl>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
             <Field label="עיר / אזור" hint="משמש לסינון ולבחירה קבוצתית">
               <select className={inputClass} value={city} onChange={(e) => act('city', () => updateTarget(group.id, { city: e.target.value }), 'העיר עודכנה.')}>
                 {cityOptions.map((c) => (

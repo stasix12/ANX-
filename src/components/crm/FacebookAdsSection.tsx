@@ -22,6 +22,7 @@ import {
 } from '@/lib/crm/facebookAds';
 import { todayISO, type Lead } from '@/lib/crm/leads';
 import { clearFbAdsConfig, getFbAdsConfig, saveFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
+import { friendlyMessage } from '@/lib/social/errors';
 
 const inputClass =
   'w-full rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-base outline-none transition-colors focus:border-brand-500';
@@ -83,7 +84,7 @@ function SetupForm({
       if (found.length === 1) setAccountId(found[0].accountId);
       if (found.length === 0) setError('הטוקן לא רואה אף חשבון מודעות — צור טוקן מהפרופיל שמנהל את הקמפיינים.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'שליפת החשבונות נכשלה.');
+      setError(friendlyMessage(err, 'שליפת החשבונות נכשלה.'));
     } finally {
       setFindingAccounts(false);
     }
@@ -119,7 +120,7 @@ function SetupForm({
       await saveFbAdsConfig(config);
       onSaved(config);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'השמירה נכשלה.');
+      setError(friendlyMessage(err, 'השמירה נכשלה.'));
       setSaving(false);
     }
   }
@@ -184,7 +185,7 @@ function SetupForm({
                       : 'border-ink-600 bg-ink-850 text-mist-100'
                   }`}
                 >
-                  <span className="truncate">{account.name || 'ללא שם'}</span>
+                  <span dir="auto" className="min-w-0 truncate">{account.name || 'ללא שם'}</span>
                   <span className="shrink-0 text-xs font-semibold tabular-nums" dir="ltr">
                     {account.accountId}
                   </span>
@@ -444,7 +445,7 @@ export function FacebookAdsSection({ leads }: { leads: Lead[] }) {
       setSpend(await fetchAdSpendManaged(cfg));
     } catch (err) {
       setSpend(null);
-      setError(err instanceof Error ? err.message : 'שליפת נתוני הפרסום נכשלה.');
+      setError(friendlyMessage(err, 'שליפת נתוני הפרסום נכשלה.'));
     } finally {
       setLoading(false);
     }

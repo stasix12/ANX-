@@ -3,6 +3,7 @@ import { exchangeCode, exchangeForLongLived, graph } from '@/lib/social/server/g
 import { logActivity } from '@/lib/social/server/log';
 import { consumeState, redirectUri } from '@/lib/social/server/oauth';
 import { syncAccount } from '@/lib/social/server/sync';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * Step 2 of Facebook Login. Verifies the CSRF state, swaps the code for a
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
     const synced = await syncAccount(account.id);
     return back({ connect: 'ok', pages: String(synced.pages) });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'connect failed';
+    const message = friendlyMessage(err, 'connect failed');
     await logActivity('error', 'connect_failed', message);
     return back({ connect: 'error', message: message.slice(0, 200) });
   }

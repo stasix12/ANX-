@@ -34,6 +34,7 @@ import {
 import { formatDayMonthHe } from '@/lib/social/time';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent';
 type View = 'grid' | 'list';
@@ -86,7 +87,7 @@ export default function GroupsPage() {
   }, []);
 
   useEffect(() => {
-    load().catch((err) => setError(err instanceof Error ? err.message : 'טעינה נכשלה.'));
+    load().catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
   }, [load]);
 
   const cityOf = useCallback((g: SocialTarget) => g.city || detectCity(g.name), []);
@@ -142,7 +143,7 @@ export default function GroupsPage() {
       if (done) toast(done);
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     } finally {
       setBusy(null);
     }
@@ -239,11 +240,11 @@ export default function GroupsPage() {
           </div>
           <div className="mt-2.5 flex items-center justify-between gap-2">
             <div className="flex gap-3 text-xs font-bold">
-              <button type="button" className="text-brand-400" onClick={() => setSelected(visible.map((g) => g.id))}>
+              <button type="button" className="min-h-10 px-1 text-brand-400" onClick={() => setSelected(visible.map((g) => g.id))}>
                 בחר את כל {visible.length} המוצגות
               </button>
               {selected.length > 0 && (
-                <button type="button" className="text-mist-500" onClick={() => setSelected([])}>
+                <button type="button" className="min-h-10 px-1 text-mist-500" onClick={() => setSelected([])}>
                   נקה
                 </button>
               )}
@@ -316,7 +317,7 @@ export default function GroupsPage() {
                       {allOn ? 'בטל בחירה' : `בחר את כל ${section.items.length}`}
                     </button>
                   </header>
-                  <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 [&>*]:min-w-0">
                     {section.items.map((g) => (
                       <GroupCard
                         key={g.id}
@@ -354,7 +355,7 @@ export default function GroupsPage() {
                         {g.favorite && <span aria-hidden>⭐ </span>}
                         {g.name}
                       </p>
-                      <p className="truncate text-[11px] text-mist-500">
+                      <p dir="auto" className="truncate text-[11px] text-mist-500">
                         {cityOf(g)}
                         {g.category ? ` · ${g.category}` : ''} · {g.last_published_at ? `פורסם ${formatDayMonthHe(g.last_published_at)}` : 'טרם פורסם'}
                       </p>
@@ -368,9 +369,12 @@ export default function GroupsPage() {
         )}
       </div>
 
-      {/* Selection bar: sticky above the tab bar, so it is reachable with a thumb. */}
+      {/* Selection bar: sticky above the tab bar, so it is reachable with a thumb.
+          data-overlay keeps the page's entrance animation off it — that animation
+          sets a transform, and a transformed element is the containing block for
+          anything positioned fixed inside it. */}
       {selected.length > 0 && (
-        <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
+        <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl bg-ink-850 p-2.5 shadow-2xl ring-1 ring-ink-600">
             <Badge tone="brand">נבחרו {selected.length}</Badge>
             <Link href={`/social/posts/new?targets=${selected.join(',')}`}>
@@ -441,7 +445,7 @@ export default function GroupsPage() {
         {categories.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {categories.map((c) => (
-              <button key={c} type="button" onClick={() => setCategoryDraft(c)} className="rounded-full bg-ink-800 px-3 py-1.5 text-xs font-bold text-mist-300">
+              <button key={c} type="button" onClick={() => setCategoryDraft(c)} className="min-h-10 rounded-full bg-ink-800 px-3 text-xs font-bold text-mist-300">
                 {c}
               </button>
             ))}

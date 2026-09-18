@@ -31,6 +31,7 @@ import {
 import { percentDone, type CampaignState } from '@/lib/social/campaign';
 import { addDaysISO, formatDateTimeHe, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, QueueStatus } from '@/lib/social/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 interface DashboardData {
   counts: Record<QueueStatus, number>;
@@ -96,7 +97,7 @@ export default function SocialDashboard() {
       });
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינה נכשלה.');
+      setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
   }, []);
 
@@ -113,7 +114,7 @@ export default function SocialDashboard() {
       toast(done);
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הפעולה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     } finally {
       setBusy(null);
     }
@@ -148,7 +149,7 @@ export default function SocialDashboard() {
       );
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'הריצה נכשלה.', 'error');
+      toast(friendlyMessage(err, 'הריצה נכשלה.'), 'error');
     } finally {
       setBusy(null);
     }
@@ -225,7 +226,7 @@ export default function SocialDashboard() {
           )}
 
           {/* 2 — what happens next. */}
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
             <Card
               title="הפרסומים הקרובים"
               subtitle={data.upcoming.length ? `${data.upcoming.length} ממתינים בתור` : undefined}
@@ -258,8 +259,8 @@ export default function SocialDashboard() {
                 {data.manual.slice(0, 4).map((item) => (
                   <li key={item.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate font-bold text-mist-100">{item.target?.name}</p>
-                      <p className="truncate text-xs text-mist-500">{item.post?.title || 'פוסט'}</p>
+                      <p dir="auto" className="truncate font-bold text-mist-100">{item.target?.name}</p>
+                      <p dir="auto" className="truncate text-xs text-mist-500">{item.post?.title || 'פוסט'}</p>
                     </div>
                     <Link href={`/social/manual/${item.id}`} className="inline-flex min-h-10 shrink-0 items-center rounded-xl bg-violet-600 px-3.5 text-sm font-bold text-white">
                       פתח
@@ -273,7 +274,7 @@ export default function SocialDashboard() {
           {/* 3 — and only then, the numbers. */}
           <section>
             <h2 className="mb-2 text-sm font-extrabold uppercase tracking-wide text-mist-500">סטטיסטיקה</h2>
-            <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
+            <div className="grid grid-cols-3 gap-2 md:grid-cols-6 [&>*]:min-w-0">
               <Tile label="פורסמו היום" value={data.today} tone={data.today ? 'good' : 'default'} sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`} />
               <Tile label="השבוע" value={data.week} tone="good" sub="מיום ראשון" />
               <Tile label="מתוזמנים" value={data.counts.scheduled} href="/social/history?status=scheduled" />

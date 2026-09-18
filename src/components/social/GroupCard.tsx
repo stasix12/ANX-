@@ -75,7 +75,7 @@ export function GroupCard({
             stop(e);
             onToggleFavorite();
           }}
-          className="grid h-7 w-7 place-items-center text-sm leading-none"
+          className="grid h-10 w-10 place-items-center text-sm leading-none"
         >
           {group.favorite ? '⭐' : '☆'}
         </button>

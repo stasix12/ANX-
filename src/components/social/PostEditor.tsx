@@ -18,6 +18,7 @@ import {
   getBrowserSettings,
   getBusiness,
   getPost,
+  hasPendingQueue,
   listCampaigns,
   listSchedules,
   listTargets,
@@ -198,6 +199,11 @@ export function PostEditor({ postId }: { postId?: string }) {
     setBusy('schedule');
     try {
       const id = await persist('ready');
+      const pending = await hasPendingQueue(id);
+      if (pending > 0 && !window.confirm(`לפוסט הזה כבר יש ${pending} פרסומים בתור. להוסיף עוד סבב? (בדרך כלל לא — הפרסומים הקיימים ימשיכו לבד)`)) {
+        setBusy(null);
+        return;
+      }
       await createSchedule({
         ...scheduleDraftToInput(schedule, id, selectedTargets),
         variant_strategy: variantStrategy,

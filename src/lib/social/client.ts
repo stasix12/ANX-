@@ -250,6 +250,13 @@ export async function createSchedule(input: ScheduleInput): Promise<Schedule> {
   return unwrap<Schedule>(await db().from('social_schedules').insert({ ...input, active: true }).select('*').single());
 }
 
+/** True when the post still has scheduled (not yet published) queue rows. */
+export async function hasPendingQueue(postId: string): Promise<number> {
+  const res = await db().from('social_queue').select('id', { count: 'exact', head: true }).eq('post_id', postId).in('status', ['scheduled', 'publishing', 'awaiting_confirmation']);
+  if (res.error) throw new Error(res.error.message);
+  return res.count ?? 0;
+}
+
 export async function listSchedules(postId?: string): Promise<Schedule[]> {
   let q = db().from('social_schedules').select('*').order('created_at', { ascending: false });
   if (postId) q = q.eq('post_id', postId);
@@ -329,7 +336,7 @@ export async function listLiveQueue(): Promise<QueueRow[]> {
     await db()
       .from('social_queue')
       .select(QUEUE_SELECT)
-      .or(`status.in.(scheduled,publishing,awaiting_confirmation,needs_attention,paused),and(status.in.(published,failed,skipped),updated_at.gte.${since})`)
+      .or(`status.in.(scheduled,publishing,awaiting_confirmation,needs_attention,paused),and(status.in.(published,failed),updated_at.gte.${since})`)
       .order('scheduled_at', { ascending: true })
       .limit(200),
   );

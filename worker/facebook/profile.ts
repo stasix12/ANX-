@@ -20,14 +20,16 @@ export async function readGroupProfile(page: Page, groupUrl: string): Promise<Gr
 
   const name = (await page.title().catch(() => '')).replace(/^\(\d+\)\s*/, '').replace(patterns.titleSuffix, '').trim();
 
-  // Candidate pictures, best first. Facebook draws a blurred copy of the
-  // cover behind the real one, so blurred/tiny images are skipped and the
-  // sharpest, largest one wins.
-  const candidates: string[] = [];
-  const cover = await page.locator('img[data-imgperflogname="profileCoverPhoto"]').first().getAttribute('src').catch(() => null);
-  if (cover) candidates.push(cover);
+  // Candidate pictures, best first. Facebook draws a small, pre-blurred
+  // copy of the cover stretched behind the real one; the real one has a far
+  // larger native resolution. So: wait for images to load, measure native
+  // size only, and take the largest sharp one.
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
+  await page
+    .waitForFunction(() => Array.from(document.querySelectorAll('[role="main"] img')).some((i) => (i as HTMLImageElement).naturalWidth > 600), null, { timeout: 10_000 })
+    .catch(() => undefined);
   const ranked = await page
-    .locator('[role="main"] img[src*="scontent"], [role="main"] img[src*="fbcdn"]')
+    .locator('img[src*="scontent"], img[src*="fbcdn"]')
     .evaluateAll((els) =>
       els
         .map((el) => {
@@ -36,19 +38,23 @@ export async function readGroupProfile(page: Page, groupUrl: string): Promise<Gr
           const rect = img.getBoundingClientRect();
           return {
             src: img.currentSrc || img.src,
-            area: (img.naturalWidth || rect.width) * (img.naturalHeight || rect.height),
+            w: img.naturalWidth,
+            h: img.naturalHeight,
             blurred: /blur/.test(style.filter) || /blur/.test(getComputedStyle(img.parentElement ?? img).filter),
             round: /50%|9999/.test(style.borderRadius),
-            top: rect.top,
+            top: rect.top + window.scrollY,
+            visible: rect.width > 0 && rect.height > 0,
           };
         })
-        .filter((i) => i.src && !i.blurred && i.area > 40_000 && !i.round && i.top < 900)
-        .sort((a, b) => b.area - a.area)
-        .slice(0, 3)
-        .map((i) => i.src),
+        .filter((i) => i.src && i.visible && !i.blurred && !i.round && i.w >= 400 && i.top < 1200)
+        .sort((a, b) => b.w * b.h - a.w * a.h)
+        .slice(0, 3),
     )
-    .catch(() => [] as string[]);
-  candidates.push(...ranked);
+    .catch(() => [] as { src: string; w: number; h: number }[]);
+  const candidates: string[] = ranked.map((i) => i.src);
+  if (ranked[0]) console.log(`[worker]    תמונת קבוצה: ${ranked[0].w}×${ranked[0].h}`);
+  const cover = await page.locator('img[data-imgperflogname="profileCoverPhoto"]').first().getAttribute('src').catch(() => null);
+  if (cover) candidates.push(cover);
   const og = await page.locator('meta[property="og:image"]').first().getAttribute('content').catch(() => null);
   if (og) candidates.push(og);
 

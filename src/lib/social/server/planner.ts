@@ -53,6 +53,7 @@ export async function planQueue(now = new Date()): Promise<number> {
       .order('created_at');
     const approved = (variants ?? []) as Variant[];
     const media = (post.media ?? []) as MediaItem[];
+    const taken = await occupiedSlots(db, post.id);
 
     for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
       const { count } = await db
@@ -63,6 +64,8 @@ export async function planQueue(now = new Date()): Promise<number> {
       let rotation = count ?? 0;
 
       for (const slot of slots) {
+        // Already planned for this post by some other schedule.
+        if (taken.has(slotKey(targetId, slot))) continue;
         const variant = pickVariant(approved, schedule, targetId, targetIndex, rotation);
         const text = renderPostText(post as Post, variant);
         const hash = sha256(dedupeKey(targetId, text, media.map((m) => m.url)));
@@ -90,6 +93,7 @@ export async function planQueue(now = new Date()): Promise<number> {
           continue;
         }
         if (data && data.length) {
+          taken.add(slotKey(targetId, slot));
           created += 1;
           rotation += 1;
         }
@@ -105,6 +109,31 @@ export async function planQueue(now = new Date()): Promise<number> {
   if (created) await logActivity('info', 'planned', `נוצרו ${created} פרסומים בתור`, { created });
   return created;
 }
+
+/**
+ * Instants this post already occupies, whichever schedule put them there.
+ *
+ * The queue's unique key is (schedule_id, target_id, scheduled_at), so it can
+ * only see inside one schedule. Two schedules for the same post — which is
+ * what a repeated launch produces — plan the same targets at the same instants
+ * and each insert is unique by that key, so every group lands in the queue
+ * twice. Publishing is still safe (rules.ts refuses a post already sent to a
+ * target), but the owner sees a queue of doubles and cannot tell that half of
+ * it will be skipped.
+ *
+ * Terminal rows are deliberately excluded: something already skipped or failed
+ * should be allowed to be planned again.
+ */
+async function occupiedSlots(db: ReturnType<typeof serviceDb>, postId: string): Promise<Set<string>> {
+  const { data } = await db
+    .from('social_queue')
+    .select('target_id, scheduled_at')
+    .eq('post_id', postId)
+    .in('status', ['scheduled', 'publishing', 'published', 'manual_pending', 'needs_attention', 'awaiting_confirmation', 'paused']);
+  return new Set((data ?? []).map((r) => slotKey(r.target_id as string, r.scheduled_at as string)));
+}
+
+const slotKey = (targetId: string, at: string | Date) => `${targetId}|${new Date(at).toISOString()}`;
 
 /**
  * Drip: every target gets its own slot — N per day inside the daily window,
@@ -130,6 +159,7 @@ async function planDrip(schedule: Schedule, now: Date): Promise<number> {
   const approved = (variants ?? []) as Variant[];
   const media = (post.media ?? []) as MediaItem[];
   const slots = dripSlots(schedule, now);
+  const taken = await occupiedSlots(db, post.id);
   let created = 0;
   let last = now;
 
@@ -137,6 +167,8 @@ async function planDrip(schedule: Schedule, now: Date): Promise<number> {
     const at = slots[targetIndex];
     if (!at) continue;
     if (at > last) last = at;
+    // Already planned for this post by some other schedule.
+    if (taken.has(slotKey(targetId, at))) continue;
     const variant = pickVariant(approved, schedule, targetId, targetIndex, 0);
     const text = renderPostText(post as Post, variant);
     const hash = sha256(dedupeKey(targetId, text, media.map((m) => m.url)));
@@ -163,7 +195,10 @@ async function planDrip(schedule: Schedule, now: Date): Promise<number> {
       await logActivity('error', 'plan_failed', error.message, { schedule: schedule.id });
       continue;
     }
-    if (data?.length) created += 1;
+    if (data?.length) {
+      taken.add(slotKey(targetId, at));
+      created += 1;
+    }
   }
   await db.from('social_schedules').update({ planned_until: last.toISOString(), active: false }).eq('id', schedule.id);
   if (created) await logActivity('info', 'drip_planned', `הפצה הדרגתית: ${created} פרסומים תוכננו עד ${last.toISOString()}`, { created });

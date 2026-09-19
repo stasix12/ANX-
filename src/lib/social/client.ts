@@ -302,11 +302,26 @@ export async function createSchedule(input: ScheduleInput): Promise<Schedule> {
   return unwrap<Schedule>(await db().from('social_schedules').insert({ ...input, active: true }).select('*').single());
 }
 
-/** True when the post still has scheduled (not yet published) queue rows. */
+/**
+ * How much of this post is already on its way out.
+ *
+ * Counts queue rows AND schedules that have not finished planning yet. A
+ * schedule is created first and materialised into the queue moments later by
+ * the planner, so counting only rows leaves a window where a second launch
+ * looks like a first one — and two schedules for one post plan the same
+ * targets at the same instants, which is how every group ended up in the queue
+ * twice.
+ */
 export async function hasPendingQueue(postId: string): Promise<number> {
-  const res = await db().from('social_queue').select('id', { count: 'exact', head: true }).eq('post_id', postId).in('status', ['scheduled', 'publishing', 'awaiting_confirmation']);
-  if (res.error) throw friendlyError(res.error);
-  return res.count ?? 0;
+  const [rows, schedules] = await Promise.all([
+    db().from('social_queue').select('id', { count: 'exact', head: true }).eq('post_id', postId).in('status', ['scheduled', 'publishing', 'awaiting_confirmation']),
+    db().from('social_schedules').select('id', { count: 'exact', head: true }).eq('post_id', postId).eq('active', true),
+  ]);
+  if (rows.error) throw friendlyError(rows.error);
+  if (schedules.error) throw friendlyError(schedules.error);
+  // A schedule that has not been planned yet still means "already launched",
+  // even though it has produced no rows to count.
+  return (rows.count ?? 0) || (schedules.count ?? 0);
 }
 
 export async function listSchedules(postId?: string): Promise<Schedule[]> {

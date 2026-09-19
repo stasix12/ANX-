@@ -243,3 +243,49 @@ console.log('unit tests OK');
 
   console.log('countdown tests OK');
 }
+
+/* --------------------------------------------- duplicate-launch protection */
+{
+  const planner = readFileSync(new URL('../../src/lib/social/server/planner.ts', import.meta.url), 'utf8');
+  const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+
+  /*
+   * The queue's unique key is (schedule_id, target_id, scheduled_at), which
+   * cannot see across schedules. Two schedules for one post plan the same
+   * targets at the same instants, so every group landed in the queue twice.
+   * Both halves of the fix are asserted here: the planner refuses an instant
+   * this post already occupies, and the launch guard counts an active schedule
+   * that has not been materialised yet.
+   */
+  assert.ok(planner.includes('async function occupiedSlots'), 'the planner must know which instants a post already occupies');
+  assert.ok(planner.includes(".eq('post_id', postId)"), 'the occupancy lookup must be by post, not by schedule');
+
+  // Both planning paths — the drip and the fixed-slot one — must consult it.
+  assert.equal(
+    (planner.match(/await occupiedSlots\(db, post\.id\)/g) ?? []).length,
+    2,
+    'both planner branches must check occupancy',
+  );
+  assert.equal(
+    (planner.match(/if \(taken\.has\(slotKey\(targetId, \w+\)\)\) continue;/g) ?? []).length,
+    2,
+    'both planner branches must skip an occupied instant',
+  );
+  // And must record what they just planned, or a run plans the same slot twice.
+  assert.equal((planner.match(/taken\.add\(slotKey\(/g) ?? []).length, 2, 'both branches must record the slot they took');
+
+  // Terminal rows are excluded on purpose: a skipped or failed row may replan.
+  const occ = planner.slice(planner.indexOf('async function occupiedSlots'), planner.indexOf('const slotKey'));
+  for (const status of ['scheduled', 'publishing', 'published', 'awaiting_confirmation']) {
+    assert.ok(occ.includes(`'${status}'`), `occupancy must count ${status}`);
+  }
+  assert.ok(!occ.includes("'skipped'"), 'a skipped row must not block replanning');
+  assert.ok(!occ.includes("'failed'"), 'a failed row must not block replanning');
+
+  // The launch guard has to see a schedule that exists but has not planned yet.
+  const guard = client.slice(client.indexOf('export async function hasPendingQueue'), client.indexOf('export async function listSchedules'));
+  assert.ok(guard.includes('social_schedules'), 'the launch guard must count active schedules too');
+  assert.ok(guard.includes("eq('active', true)"), 'only schedules still active count as pending');
+
+  console.log('duplicate-launch tests OK');
+}

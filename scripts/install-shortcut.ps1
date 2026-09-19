@@ -46,20 +46,47 @@ function Resolve-Dir([string[]]$Candidates) {
     return $null
 }
 
-# Saves the shortcut, falling back to a Latin name if the Hebrew one is refused.
+# The last error from New-Launcher, so a failure can say what actually went
+# wrong instead of only where it was trying to write.
+$script:lastError = ''
+
+<#
+    Saves the shortcut, working down a list of things that can be refused:
+    the Hebrew name (outside a Cyrillic ANSI codepage) and the custom icon
+    (IWshShortcut wants "file,index" and can reject a bare path). If every
+    .lnk attempt fails, falls back to a plain .cmd on the Desktop - not as
+    pretty, but it is a text file rather than a COM call, so it just works.
+#>
 function New-Launcher([string]$Dir) {
     foreach ($name in @($linkName, $altName)) {
+        foreach ($useIcon in @($true, $false)) {
+            $path = Join-Path $Dir $name
+            try {
+                $s = (New-Object -ComObject WScript.Shell).CreateShortcut($path)
+                $s.TargetPath       = $target
+                $s.WorkingDirectory = $repo
+                $s.Description      = 'מפעיל את ה-worker שמפרסם בקבוצות פייסבוק'
+                if ($useIcon -and (Test-Path -LiteralPath $icon)) {
+                    # The index is not optional in practice.
+                    $s.IconLocation = "$icon,0"
+                }
+                $s.Save()
+                if (Test-Path -LiteralPath $path) { return $path }
+            } catch {
+                $script:lastError = $_.Exception.Message
+            }
+        }
+    }
+
+    # No .lnk could be written. A .cmd on the Desktop is double-clickable too.
+    foreach ($name in @('הפתרון המבריק - פרסום.cmd', 'Hapitaron Publish.cmd')) {
         $path = Join-Path $Dir $name
         try {
-            $s = (New-Object -ComObject WScript.Shell).CreateShortcut($path)
-            $s.TargetPath       = $target
-            $s.WorkingDirectory = $repo
-            $s.Description      = 'מפעיל את ה-worker שמפרסם בקבוצות פייסבוק'
-            if (Test-Path -LiteralPath $icon) { $s.IconLocation = $icon }
-            $s.Save()
+            $body = "@echo off`r`ncd /d `"$repo`"`r`ncall `"$target`"`r`n"
+            [IO.File]::WriteAllText($path, $body, [Text.Encoding]::ASCII)
             if (Test-Path -LiteralPath $path) { return $path }
         } catch {
-            # Try the Latin name before giving up on this folder.
+            $script:lastError = $_.Exception.Message
         }
     }
     return $null
@@ -77,6 +104,7 @@ if (-not $link) {
     Write-Host ''
     Write-Host '  [!] לא הצלחתי ליצור את הסמל על שולחן העבודה.' -ForegroundColor Red
     Write-Host "      ניסיתי כאן: $desktop"
+    if ($script:lastError) { Write-Host "      השגיאה: $script:lastError" -ForegroundColor DarkGray }
     Write-Host ''
     Write-Host '      פתרון ידני: הריצו   explorer .   ואז קליק ימני על'
     Write-Host '      start-worker.cmd ובחרו ליצור קיצור דרך, וגררו אותו לשולחן העבודה.'

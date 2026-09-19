@@ -65,14 +65,14 @@ export function CampaignCard({
           <Link
             href={link}
             aria-label="לפוסט אין תמונה או סרטון — הוספת מדיה"
-            className="flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-ink-600 bg-ink-900 text-ink-500 transition-colors hover:border-brand-500 hover:text-brand-400"
+            className="flex h-[72px] w-[72px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-ink-600 bg-ink-900 text-ink-500 transition-colors hover:border-brand-500 hover:text-brand-400"
           >
             <PlusIcon aria-hidden className="h-4 w-4" />
             <span className="text-[9px] font-bold leading-none">מדיה</span>
           </Link>
         )}
         {cover && (
-          <Link href={link} className="relative block h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-ink-800">
+          <Link href={link} className="relative block h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl bg-ink-800">
             {cover.kind === 'image' && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={cover.url} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -87,8 +87,8 @@ export function CampaignCard({
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                 <video src={`${cover.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
                 <span aria-hidden className="absolute inset-0 grid place-items-center">
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-ink-950/60 text-mist-100">
-                    <PlayIcon className="h-3.5 w-3.5" />
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-ink-950/60 text-mist-100">
+                    <PlayIcon className="h-4 w-4" />
                   </span>
                 </span>
               </>

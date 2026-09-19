@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ChevronIcon } from '@/components/icons';
+import { ChevronIcon, PlayIcon } from '@/components/icons';
 import { RUN_STATE_LABEL, openRows, percentPublished, unpublishedNote, type CampaignState } from '@/lib/social/campaign';
 import { countdownTo } from '@/lib/social/countdown';
 import { formatTimeHe } from '@/lib/social/time';
-import type { Campaign, SocialTarget } from '@/lib/social/types';
+import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, TONE_TEXT, TONE_TINT } from './ui';
 
@@ -125,6 +125,41 @@ function NextUp({
   );
 }
 
+
+/**
+ * The post's cover, exactly as CampaignCard and the library card draw it: the
+ * first image, and failing that whatever media exists — picking media[0]
+ * blindly makes the same post look different on each screen.
+ *
+ * A video shows its poster frame, never the film: preload="metadata" fetches
+ * the header only and the #t=0.1 fragment is what makes iOS Safari paint a
+ * frame instead of a black box. If it does not paint, the neutral tile and the
+ * play mark remain — never a stock image standing in for the owner's video.
+ */
+export function PostCover({ media, className = 'h-[72px] w-[72px]' }: { media?: MediaItem[] | null; className?: string }) {
+  const cover = (media ?? []).find((m) => m.kind === 'image') ?? (media ?? [])[0] ?? null;
+  if (!cover) return null;
+  return (
+    <span className={`relative block shrink-0 overflow-hidden rounded-xl bg-ink-800 ${className}`}>
+      {cover.kind === 'image' && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={cover.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+      )}
+      {cover.kind === 'video' && (
+        <>
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video src={`${cover.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+          <span aria-hidden className="absolute inset-0 grid place-items-center">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-ink-950/60 text-mist-100">
+              <PlayIcon className="h-4 w-4" />
+            </span>
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
 /** Ticks once a second, and only while there is something to count down to. */
 function useTick(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -145,6 +180,7 @@ export function LiveCampaignHero({
   nextTarget,
   onTune,
   onReset,
+  media = null,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city'>;
   state: CampaignState;
@@ -152,6 +188,8 @@ export function LiveCampaignHero({
   onResume?: () => void;
   onReset?: () => void;
   busy?: boolean;
+  /** The media of the post this run publishes — same tile as the run card. */
+  media?: MediaItem[] | null;
   nextTarget?: Pick<SocialTarget, 'name' | 'image_url'> | null;
   onTune?: () => void;
 }) {
@@ -173,7 +211,8 @@ export function LiveCampaignHero({
   return (
     <HeroPanel ariaLabel="הסבב הפעיל">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <PostCover media={media} />
+        <div className="min-w-0 grow">
           {/* py-1.5, the same as CampaignCard's title link: this is the same
               control on a different screen and it was measuring 32px tall here
               against 40px there. */}
@@ -272,6 +311,7 @@ export function LiveQueueHero({
   busy,
   nextTarget,
   onTune,
+  media = null,
 }: {
   scheduled: number;
   publishedToday: number;
@@ -283,6 +323,7 @@ export function LiveQueueHero({
   busy?: boolean;
   nextTarget?: Pick<SocialTarget, 'name' | 'image_url'> | null;
   onTune?: () => void;
+  media?: MediaItem[] | null;
 }) {
   const now = useTick(Boolean(nextAt) && !paused);
   const live = !paused && scheduled > 0;
@@ -290,7 +331,8 @@ export function LiveQueueHero({
   return (
     <HeroPanel ariaLabel="מצב התור">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <PostCover media={media} />
+        <div className="min-w-0 grow">
           <p className="truncate text-lg font-extrabold text-mist-100">
             {scheduled > 0 ? `${scheduled} פרסומים בתור` : 'אין פרסומים בתור'}
           </p>

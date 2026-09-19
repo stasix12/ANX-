@@ -367,6 +367,9 @@ export default function SocialDashboard() {
               nextTarget={featuredNext ? { name: featuredNext.name, image_url: featuredNext.image_url ?? undefined } : null}
               onTune={() => setTunerOpen(true)}
               onReset={() => resetRun(featured.campaign.id, featured.campaign.name, featured.state)}
+              /* The post this run publishes. listQueue already selects the post
+                 with its media, so the cover costs no extra read. */
+              media={data.upcoming.find((r) => r.campaign_id === featured.campaign.id)?.post?.media ?? null}
             />
           ) : liveQueue ? (
             /* No campaign, but publications are queued: a post scheduled
@@ -384,6 +387,7 @@ export default function SocialDashboard() {
               busy={busy === 'run'}
               nextTarget={data.upcoming[0]?.target ?? null}
               onTune={() => setTunerOpen(true)}
+              media={data.upcoming[0]?.post?.media ?? null}
             />
           ) : (
             <EmptyState

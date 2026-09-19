@@ -321,3 +321,38 @@ Instagram/LinkedIn/Telegram **אינם** מוצגים כזמינים — יש ר
 
 הכל ב-`worker/facebook/selectors.ts`. הריצו `npx tsx worker/test/composer.test.ts`
 אחרי כל שינוי; הלוג ב-Dashboard מציין באיזה שלב נפל וצילום המסך מראה מה היה במסך.
+
+## 11. ספריית תוכן (`/social/library`)
+
+דורש `supabase/social-schema-v8.sql`. הריצו `supabase/social-schema-v8.sql`
+ב-SQL Editor (אחרי v7, בטוח להרצה חוזרת). בלי זה הספרייה עדיין עובדת אבל בלי
+קטגוריות, וניסיון ליצור קטגוריה יחזיר "מבנה הנתונים לא מעודכן".
+
+הספרייה **מחליפה** את "פוסטים" בתפריט. היא לא טבלה חדשה ולא מודל פוסט שני — זו
+תצוגה על `social_posts`, אותה שורה שהעורך ב-`/social/posts/[id]` עורך. מה שנוסף:
+
+| מה | איפה |
+| --- | --- |
+| רשת כרטיסים עם המדיה כנושא, חיפוש, סינון, מיון ובחירה מרובה | `src/app/social/library/page.tsx`, `components/social/ContentCard.tsx` |
+| קטגוריות תוכן של הבעלים (יצירה, שינוי שם, מחיקה) | `social_content_categories` + `social_posts.category_id`, `lib/social/library.ts` |
+| "פורסם X פעמים ב-Y קבוצות, אחרון בתאריך" | נספר מ-`social_queue` בקריאה אחת (`postUsage()`), בלי עמודת מונה שיכולה להיות לא נכונה |
+| פרסום מהיר: קבוצות, שעה, מרווח, תצוגת לוח הזמנים ואישור | `components/social/QuickPublishSheet.tsx`, `library.ts → quickPublish()` |
+
+**קטגוריה = שתי משמעויות שונות.** "קטגוריית תוכן" כאן מתארת פוסטים;
+"קטגוריית קבוצה" במסך הקבוצות (v7, `social_targets.category`) מתארת קבוצות.
+שני שדות שונים, ובכוונה לא מאוחדים.
+
+**הפרסום המהיר לא בונה מתזמן שני.** הוא הולך באותו מסלול של העורך:
+`savePost(status:'ready')` → `hasPendingQueue()` → `applyGapSettings(gap)` →
+`createSchedule()` → `/api/social/run`. תצוגת לוח הזמנים מחושבת ב-`dripSlots()`
+מ-`lib/social/slots.ts` — אותה פונקציה שהמתזמן עצמו (`plan.ts → planDrip`) מריץ,
+מאותו draft — כך שמה שרואים הוא מה שייווצר בתור.
+
+**המרווח הוא הגדרה גלובלית.** `applyGapSettings()` כותב את
+`limits.minGapMinutes` ואת `browser.groupMinGapMinutes` כך ש-`rules.ts` ידרוש
+בדיוק את המספר שנבחר. בלי זה כל שורה נדחית שוב ושוב ואחרי 40 ניסיונות מדולגת.
+המרווח חל על כל החשבון — לא על פרסום אחד. אם התוספת לקבוצות משתנה, המסך אומר זאת
+במילים.
+
+**אחרי שהתור נבנה** — שינוי מרווח או הוספת קבוצות נעשים ב"כוונון התור"
+(`QueueTunerSheet`), לא בהרצת פרסום מהיר נוסף על אותו פוסט.

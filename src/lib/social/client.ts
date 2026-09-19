@@ -543,6 +543,17 @@ export async function campaignQueue(campaignId: string): Promise<QueueRow[]> {
   );
 }
 
+/**
+ * One post's publication history, with the group on every row — what the
+ * content library shows under "where has this been?". Same shape and same
+ * ceiling as targetQueue() below; only the column it filters on differs.
+ */
+export async function postQueue(postId: string, limit = 100): Promise<QueueRow[]> {
+  return unwrap<QueueRow[]>(
+    await db().from('social_queue').select(QUEUE_SELECT).eq('post_id', postId).order('scheduled_at', { ascending: false }).limit(limit),
+  );
+}
+
 /** One group's publication history, for its profile screen. */
 export async function targetQueue(targetId: string, limit = 100): Promise<QueueRow[]> {
   return unwrap<QueueRow[]>(
@@ -749,7 +760,7 @@ function medianGapMinutes(sortedISO: string[]): number | null {
  * Both settings are editable on the settings screen, so they are always read —
  * never assumed to still be the 45 + 20 the defaults ship with.
  */
-function effectiveGroupGap(limits: LimitsSettings, browser: BrowserSettings): number {
+export function effectiveGroupGap(limits: LimitsSettings, browser: BrowserSettings): number {
   return Math.max(0, Math.round(limits.minGapMinutes + browser.groupMinGapMinutes));
 }
 
@@ -800,8 +811,8 @@ export async function liveQueuePlan(opts: { campaignId?: string } = {}): Promise
 }
 
 /** The owner's own number, guarded. Not a Facebook limit and not a promise about one. */
-const MIN_GAP_MINUTES = 1;
-const MAX_GAP_MINUTES = 720;
+export const MIN_GAP_MINUTES = 1;
+export const MAX_GAP_MINUTES = 720;
 
 /**
  * Postgres 23505 — the unique index (schedule_id, target_id, scheduled_at).
@@ -813,65 +824,97 @@ function isDuplicateSlot(err: unknown): boolean {
   return code === '23505';
 }
 
+export interface GapSplit {
+  /** What was asked for — the number the owner typed. */
+  gapMinutes: number;
+  /** What was written to limits.minGapMinutes. */
+  minGapMinutes: number;
+  /** What was written to (or left in) browser.groupMinGapMinutes. */
+  groupMinGapMinutes: number;
+  /** True when the owner's group surcharge had to move; the screen must SAY so. */
+  surchargeChanged: boolean;
+}
+
 /**
- * Re-spaces the waiting queue to one publication every `gapMinutes`, and — the
- * part that actually makes it work — moves the settings so that the engine
- * agrees with the new spacing.
+ * Makes rules.ts demand exactly `gapMinutes` between two GROUP publications,
+ * and returns what it wrote.
  *
- * WHY THE SETTINGS WRITE IS THE POINT, AND THE ROWS ARE NOT:
- * src/lib/social/rules.ts defers a group publication whenever
- *   now - lastPublishedAt < (limits.minGapMinutes + browser.groupMinGapMinutes) * 60_000
- * and — this is the part that surprises everyone — it re-times the deferred row
- * off the LAST PUBLICATION, not off its own scheduled_at. So re-stamping rows 10
- * minutes apart while the engine still wants 65 does nothing at all: every row is
- * pushed back again on every claim, and each claim burns one of the 40 attempts
- * the engine allows before it skips the row outright. Moving the rows without
- * moving the settings is therefore not a smaller version of this feature — it is
- * a queue that quietly dies.
+ * This is the half of respaceQueue() that actually makes a spacing real, lifted
+ * out so that anything which CREATES a queue (quick publish) can reuse it
+ * instead of copying it. Re-stamping rows is a different job and stays below.
  *
- * THE SPLIT, and why this one:
- * groupMinGapMinutes is the owner's "groups need more air than pages" surcharge;
- * it is a deliberate setting and not ours to reinterpret. So it stays put and the
- * difference comes out of the global gap:
+ * WHY IT IS NEEDED AT ALL: src/lib/social/rules.ts defers a group publication
+ * whenever now - lastPublishedAt < (limits.minGapMinutes +
+ * browser.groupMinGapMinutes) * 60_000, and re-times the deferred row off the
+ * LAST PUBLICATION rather than off its own scheduled_at. So scheduling rows 12
+ * minutes apart while the engine still wants 65 does nothing at all: every row
+ * is pushed back again on every claim, each claim burns one of the 40 attempts
+ * the engine allows, and then the row is skipped. That is exactly how a campaign
+ * on this deployment ended 112 skipped, 0 published.
+ *
+ * THE SPLIT, and why this one: groupMinGapMinutes is the owner's "groups need
+ * more air than pages" surcharge; it is a deliberate setting and not ours to
+ * reinterpret. So it stays put and the difference comes out of the global gap:
  *     limits.minGapMinutes = gapMinutes - browser.groupMinGapMinutes
- * If that would be negative — the owner asked for a gap smaller than the
- * surcharge alone — the global gap goes to 0 and the surcharge itself becomes the
- * whole number. That is the only way to honour the request, and the activity log
- * line says so in words, because silently rewriting a setting the owner chose is
- * exactly the kind of thing they would never find out about.
+ * If that would be negative — a gap smaller than the surcharge alone — the
+ * global gap goes to 0 and the surcharge itself becomes the whole number. That
+ * is the only way to honour the request, and `surchargeChanged` comes back true
+ * so the caller can say it in words. Silently rewriting a setting the owner
+ * chose is exactly the kind of thing they would never find out about.
  *
- * Both objects are written whole. getSetting() spreads the defaults UNDER the
+ * Both objects are written WHOLE. getSetting() spreads the defaults UNDER the
  * stored value, but saveSetting() replaces the entire jsonb — writing
  * { minGapMinutes } alone would wipe maxPerDay, maxPerTargetPerDay and dedupeDays.
  *
- * Returns the number of rows that actually moved.
+ * Global by nature: rules.ts has one spacing setting for the whole account, not
+ * one per campaign. There is no scoped version of this and pretending otherwise
+ * would be worse than saying so.
  */
-export async function respaceQueue(gapMinutes: number, opts: { campaignId?: string; startAt?: string } = {}): Promise<number> {
+export async function applyGapSettings(gapMinutes: number): Promise<GapSplit> {
   if (!Number.isInteger(gapMinutes) || gapMinutes < MIN_GAP_MINUTES || gapMinutes > MAX_GAP_MINUTES) {
     throw new Error(`המרווח צריך להיות מספר שלם של דקות, בין ${MIN_GAP_MINUTES} ל-${MAX_GAP_MINUTES}.`);
   }
 
-  const startMs = opts.startAt ? new Date(opts.startAt).getTime() : NaN;
-  // A minute from now by default: "now" would hand the worker a row it can claim
-  // before the settings write below has landed.
-  const start = Number.isFinite(startMs) ? startMs : Date.now() + 60_000;
-
   const [limits, browser] = await Promise.all([getLimits(), getBrowserSettings()]);
-  // Note the asymmetry, and it is deliberate: `campaignId` narrows which ROWS
-  // are re-stamped, but 'limits' and 'browser' are global — rules.ts has one
-  // spacing setting for the whole account, not one per campaign. Scoping the
-  // settings is not an option; pretending they are scoped would be worse.
   const surcharge = Math.max(0, Math.round(browser.groupMinGapMinutes));
   const globalGap = gapMinutes >= surcharge ? gapMinutes - surcharge : 0;
   const newSurcharge = gapMinutes >= surcharge ? surcharge : gapMinutes;
   const surchargeChanged = newSurcharge !== browser.groupMinGapMinutes;
 
-  // Settings first. The worker re-reads 'limits' and 'browser' on every tick
-  // (worker/social-worker.ts), so from this moment the new spacing is the one
-  // being enforced — and a row that lands on its new instant a second later is
-  // measured against the number the owner just chose, not the old one.
+  // Settings first, always. The worker re-reads 'limits' and 'browser' on every
+  // tick (worker/social-worker.ts), so from this moment the new spacing is the
+  // one being enforced — and a row created (or moved) a second later is measured
+  // against the number the owner just chose, not the old one.
   await saveSetting('limits', { ...limits, minGapMinutes: globalGap });
   if (surchargeChanged) await saveSetting('browser', { ...browser, groupMinGapMinutes: newSurcharge });
+
+  return { gapMinutes, minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, surchargeChanged };
+}
+
+/**
+ * Re-spaces the waiting queue to one publication every `gapMinutes`, and — the
+ * part that actually makes it work — moves the settings so that the engine
+ * agrees with the new spacing.
+ *
+ * WHY THE SETTINGS WRITE IS THE POINT, AND THE ROWS ARE NOT: moving the rows
+ * without moving the settings is not a smaller version of this feature — it is a
+ * queue that quietly dies, because rules.ts re-times every "too soon" row off the
+ * last publication and skips it after 40 attempts. The write, the split and the
+ * reason for the split now live in applyGapSettings() above, which quick publish
+ * reuses; this function is the half that re-stamps the rows.
+ *
+ * Returns the number of rows that actually moved.
+ */
+export async function respaceQueue(gapMinutes: number, opts: { campaignId?: string; startAt?: string } = {}): Promise<number> {
+  const startMs = opts.startAt ? new Date(opts.startAt).getTime() : NaN;
+  // A minute from now by default: "now" would hand the worker a row it can claim
+  // before the settings write below has landed.
+  const start = Number.isFinite(startMs) ? startMs : Date.now() + 60_000;
+
+  // Validates the number, splits it and writes both settings — see above. Note
+  // the asymmetry, and it is deliberate: `campaignId` narrows which ROWS are
+  // re-stamped, but the settings it writes are global.
+  const { minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, surchargeChanged } = await applyGapSettings(gapMinutes);
 
   let query = db()
     .from('social_queue')

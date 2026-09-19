@@ -25,7 +25,7 @@ const nav = [
   { href: '/social/campaigns', label: 'קמפיינים', icon: MegaphoneIcon, exact: false },
   { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false },
   { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false },
-  { href: '/social/posts', label: 'פוסטים', icon: ClipboardListIcon, exact: false },
+  { href: '/social/library', label: 'ספריית תוכן', icon: ClipboardListIcon, exact: false },
   { href: '/social/targets', label: 'דפי פייסבוק', icon: TargetIcon, exact: false },
   { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false },
 ];

@@ -310,7 +310,10 @@ export function PostEditor({ postId }: { postId?: string }) {
     if (!ok) return;
     await archivePost(savedId);
     toast('הפוסט הועבר לארכיון.');
-    router.push('/social/posts');
+    // The content library is the list this post lived in (SocialShell's nav
+    // entry moved there); /social/posts is still a working route but no longer
+    // reachable from the navigation, so landing on it is a one-way street.
+    router.push('/social/library');
   }
 
   if (loading) {

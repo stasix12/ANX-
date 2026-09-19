@@ -434,11 +434,22 @@ console.log('unit tests OK');
    * the queue dies again overnight. So the settings write is asserted here, not
    * remembered.
    */
+  /*
+   * The slice starts at GapSplit, not at respaceQueue: the settings write is now
+   * applyGapSettings(), extracted so that quick publish (src/lib/social/library.ts)
+   * reuses the split instead of owning a second copy of it that can drift. Both
+   * functions are in the window, so every assertion below still asks the same
+   * question — does the spacing the owner chose actually reach the engine.
+   */
   const respace = client.slice(
-    client.indexOf('export async function respaceQueue'),
+    client.indexOf('export interface GapSplit'),
     client.indexOf('export async function removeTargetFromQueue'),
   );
   assert.ok(respace.length > 500, 'respaceQueue must exist in client.ts');
+  assert.ok(
+    /export async function respaceQueue[\s\S]*?await applyGapSettings\(/.test(respace),
+    'respaceQueue must still go through applyGapSettings — moving the rows without moving the settings is the queue that quietly dies',
+  );
   assert.ok(respace.includes("saveSetting('limits'"), 'respaceQueue must write the spacing setting, not only the queue rows');
   assert.ok(respace.includes("saveSetting('browser'"), 'respaceQueue must be able to move the group surcharge too');
   // Whole objects: saveSetting replaces the entire jsonb, so a partial write
@@ -580,4 +591,141 @@ console.log('unit tests OK');
   assert.ok(sheet.includes('לא הופך שום דבר'), 'the gap control must carry its disclaimer, in the owner\'s language');
 
   console.log('queue-tuner tests OK');
+}
+
+/* ------------------------------ the content library reuses, it does not rebuild */
+{
+  const library = readFileSync(new URL('../../src/lib/social/library.ts', import.meta.url), 'utf8');
+  const sheet = readFileSync(new URL('../../src/components/social/QuickPublishSheet.tsx', import.meta.url), 'utf8');
+  const shell = readFileSync(new URL('../../src/components/social/SocialShell.tsx', import.meta.url), 'utf8');
+  const v8 = readFileSync(new URL('../../supabase/social-schema-v8.sql', import.meta.url), 'utf8');
+
+  /*
+   * THE PUBLISH PATH. The library adds a second way to reach the queue, and the
+   * only reason that is safe is that it is not a second implementation: it walks
+   * PostEditor.onSchedule()'s steps, in its order, through its functions. Each
+   * one of these is a bug this deployment has already paid for once.
+   */
+  const quick = library.slice(
+    library.indexOf('export async function quickPublish('),
+    library.indexOf('export function seedTargetsFromSchedules'),
+  );
+  assert.ok(quick.length > 1000, 'quickPublish must exist in library.ts');
+
+  assert.ok(quick.includes('await createSchedule('), 'quick publish must go through createSchedule() — there is one scheduler');
+  assert.ok(
+    !/\.from\('social_schedules'\)|\.from\('social_queue'\)\s*\.\s*(insert|upsert)/.test(quick),
+    'quick publish must never write social_schedules or insert queue rows itself — that is the planner\'s job',
+  );
+  assert.ok(quick.includes("status: 'ready'"), 'quick publish must flip the post to ready, or the library keeps calling it a draft while it goes out');
+  assert.ok(quick.includes('hasPendingQueue('), 'quick publish must run the double-launch guard — two taps on a slow phone otherwise queue every group twice');
+  assert.ok(quick.includes("callSocialApi"), 'quick publish must release the queue: the GitHub cron never ticks on this deployment (plan.ts)');
+  assert.ok(quick.includes("'/api/social/run'"), 'quick publish must call the run route by name');
+  assert.ok(
+    /require_confirmation:\s*ctx\.browser\.requireConfirmation \|\| ctx\.browser\.testMode/.test(quick),
+    'quick publish must carry the editor\'s OR — dropping it makes TEST MODE stop forcing a confirmation',
+  );
+
+  /*
+   * ...and the settings BEFORE the rows. rules.ts re-times a "too soon" row off
+   * the last publication and skips it after 40 attempts, so writing rows 12
+   * minutes apart while the engine still wants 65 is the 112-skipped campaign
+   * again, with a nicer preview on top of it.
+   */
+  assert.ok(quick.includes('applyGapSettings('), 'quick publish must write the gap settings, not only the schedule');
+  assert.ok(
+    quick.indexOf('applyGapSettings(') < quick.indexOf('await createSchedule('),
+    'the gap settings must be written before the schedule, so rows planned from it are measured against the number the owner chose',
+  );
+  assert.ok(
+    !/\brespaceQueue\(/.test(library),
+    'quick publish creates a queue; respaceQueue moves an existing one, and calling it before the rows exist logs a misleading "0 פרסומים תוזמנו מחדש"',
+  );
+
+  /*
+   * THE PREVIEW IS THE TRUTH. It must come out of slots.ts — the planner's own
+   * arithmetic — and out of the SAME draft the write is built from. Two
+   * implementations of "every N minutes" is a preview with a countdown on it.
+   */
+  assert.ok(/import \{ dripSlots, slotsFor \} from '\.\/slots'/.test(library), 'the preview must import the planner\'s slot functions');
+  assert.ok(/function slotsForDraft\(draft: QuickPublishDraft/.test(library), 'the preview must be computed from the draft');
+  assert.ok(/function scheduleInputFor\(draft: QuickPublishDraft/.test(library), 'the write must be built from the same draft');
+  const slotsFn = library.slice(library.indexOf('function slotsForDraft('), library.indexOf('function scheduleInputFor('));
+  assert.ok(slotsFn.includes('dripSlots('), 'the staggered preview must come from dripSlots() — slotsFor() fires every target at once and cannot stagger');
+  assert.ok(
+    /drip_gap_minutes: draft\.gapMinutes/.test(slotsFn),
+    'the preview must read the gap off the draft, not off a second number',
+  );
+  const writeFn = library.slice(library.indexOf('function scheduleInputFor('), library.indexOf('export function planQuickPublish'));
+  for (const field of ['drip_per_day: draft.perDay', 'drip_gap_minutes: draft.gapMinutes', 'drip_window_start: draft.windowStart', 'drip_window_end: draft.windowEnd']) {
+    assert.ok(writeFn.includes(field), `the schedule written must take ${field.split(':')[0]} from the same draft the preview used`);
+    assert.ok(slotsFn.includes(field), `the preview must take ${field.split(':')[0]} from the same draft too`);
+  }
+
+  /*
+   * ONE POST MODEL. The library is a layer over social_posts. A ContentPost
+   * table beside it would give the owner two places their posts live, which is
+   * the exact confusion this module was built to remove.
+   */
+  const createdTables = [...v8.matchAll(/create table (?:if not exists )?([\w.]+)/gi)].map((m) => m[1]);
+  assert.deepEqual(
+    createdTables,
+    ['public.social_content_categories'],
+    'v8 may add the categories table and nothing else — a second posts table is the defect this architecture exists to prevent',
+  );
+  assert.ok(
+    /alter table public\.social_posts add column if not exists category_id uuid/.test(v8),
+    'the category must live as a column on social_posts',
+  );
+  assert.ok(/on delete set null/.test(v8), 'deleting a category must never delete the owner\'s posts');
+  /*
+   * ...and no denormalised counter. campaignProgress() and hasPendingQueue() are
+   * derived for the same reason: a stored count is wrong the first time a row is
+   * cancelled, retried or swept by a stopped campaign — and wrong quietly.
+   */
+  assert.ok(
+    !/alter table public\.social_posts add column[^;]*(publish|count)/i.test(v8),
+    'usage stats are aggregated from social_queue, never counted into a column that drifts',
+  );
+  assert.ok(library.includes("from('social_queue')"), 'the library must read its counts from the queue');
+
+  /*
+   * ONE NAV ENTRY. "Two screens for one idea is exactly what confuses them" —
+   * so the library REPLACES פוסטים rather than sitting beside it.
+   */
+  const navBlock = shell.slice(shell.indexOf('const nav = ['), shell.indexOf('];', shell.indexOf('const nav = [')));
+  assert.equal(
+    (navBlock.match(/\/social\/library/g) ?? []).length,
+    1,
+    'the library must have exactly one nav entry',
+  );
+  assert.ok(
+    !/href: '\/social\/posts'/.test(navBlock),
+    'the old פוסטים entry must be gone — the library replaces it, it does not sit beside it',
+  );
+
+  /*
+   * HONESTY. The interval is the owner's own setting. Nothing here may present
+   * it as protection, and no count may be shown that was not read.
+   */
+  for (const at of [...sheet.matchAll(/בטוח|מבטיח/g)].map((m) => m.index ?? 0)) {
+    assert.ok(
+      sheet.slice(Math.max(0, at - 60), at).includes('אין '),
+      'every claim about an interval and Facebook must be a denial — there is no number that guarantees anything',
+    );
+  }
+  assert.ok(
+    sheet.includes('המרווח הוא הגדרה שלכם בלבד'),
+    'the quick-publish sheet must carry the scheduler\'s own disclaimer, word for word',
+  );
+  assert.ok(
+    sheet.includes('חלה על כל החשבון'),
+    'the sheet must say the gap is an account-wide setting, not a per-publication one',
+  );
+  assert.ok(
+    library.includes('truncated'),
+    'the usage read has a ceiling, and a ceiling presented as a total is a made-up number',
+  );
+
+  console.log('content-library tests OK');
 }

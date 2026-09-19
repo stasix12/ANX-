@@ -250,7 +250,10 @@ export function PostEditor({ postId }: { postId?: string }) {
         // materialised yet, so the wording has to hold for both.
         const again = await confirm.ask({
           title: 'הפוסט הזה כבר בדרך החוצה',
-          body: `${pending} פרסומים של הפוסט הזה כבר ממתינים ויצאו לבד. להוסיף סבב נוסף על גביהם?`,
+          body:
+            pending === 1
+              ? 'פרסום אחד של הפוסט הזה כבר ממתין ויֵצא לבד. להוסיף סבב נוסף על גביו?'
+              : `${pending} פרסומים של הפוסט הזה כבר ממתינים ויצאו לבד. להוסיף סבב נוסף על גביהם?`,
           confirmLabel: 'הוסף סבב',
           cancelLabel: 'לא, השאר כמו שהוא',
         });
@@ -269,7 +272,7 @@ export function PostEditor({ postId }: { postId?: string }) {
       setStarted(true);
       setReviewOpen(false);
       if (schedule.mode === 'now' || schedule.mode === 'drip') {
-        const r = await callSocialApi<{ ran: boolean; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
+        const r = await callSocialApi<{ ran: boolean; planned: number; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
         if (r.ran) {
           toast('הקמפיין התחיל. עקבו אחרי ההתקדמות למטה.');
           setMessage({
@@ -277,8 +280,12 @@ export function PostEditor({ postId }: { postId?: string }) {
             text: `דפים: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.deferred} נדחו, ${r.failed} נכשלו. קבוצות מתפרסמות דרך ה-worker המקומי — ההתקדמות למטה.`,
           });
         } else {
-          toast(`נכנס לתור אך לא פורסם: ${r.reason}`, 'info');
-          setMessage({ tone: 'info', text: `הפוסט נכנס לתור אך לא פורסם: ${r.reason}` });
+          // The queue was still built (planning runs even when publishing is
+          // held), so say what is waiting and what releases it — not just why
+          // nothing came out.
+          const queued = r.planned ? `${r.planned} פרסומים נכנסו לתור. ` : '';
+          toast(`${queued}הפרסום עצמו מושהה: ${r.reason}`, 'info');
+          setMessage({ tone: 'info', text: `${queued}הפרסום עצמו לא רץ — ${r.reason}. לחצו "המשך" בראש הדף כדי לשחרר את התור.` });
         }
       } else {
         toast('התזמון נשמר.');

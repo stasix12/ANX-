@@ -246,7 +246,7 @@ console.log('unit tests OK');
 
 /* --------------------------------------------- duplicate-launch protection */
 {
-  const planner = readFileSync(new URL('../../src/lib/social/server/planner.ts', import.meta.url), 'utf8');
+  const planner = readFileSync(new URL('../../src/lib/social/plan.ts', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
 
   /*
@@ -295,4 +295,46 @@ console.log('unit tests OK');
   assert.ok(guard.includes("is('planned_until', null)"), 'an already-planned recurring schedule must not count as a launch in flight');
 
   console.log('duplicate-launch tests OK');
+}
+
+/* ------------------------------------------- a schedule always reaches the queue */
+{
+  const serverWorker = readFileSync(new URL('../../src/lib/social/server/worker.ts', import.meta.url), 'utf8');
+  const localWorker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const plan = readFileSync(new URL('../../src/lib/social/plan.ts', import.meta.url), 'utf8');
+  const serverPlanner = readFileSync(new URL('../../src/lib/social/server/planner.ts', import.meta.url), 'utf8');
+
+  /*
+   * Launching a campaign wrote a row to social_schedules and then showed
+   * "מתוזמנים 0 / אין קמפיין פעיל", because nothing turned that schedule into
+   * queue rows. Two separate causes, one invariant: planning must not depend
+   * on anything that can be switched off.
+   */
+
+  // 1. Planning is bookkeeping, so it runs before the controls are consulted.
+  const planAt = serverWorker.indexOf('report.planned = await planQueue()');
+  const pauseAt = serverWorker.indexOf('if (control.paused)');
+  assert.ok(planAt > 0 && pauseAt > 0, 'the server worker must both plan and honour the pause switch');
+  assert.ok(planAt < pauseAt, 'a paused queue must still be planned — pausing holds publishing, not bookkeeping');
+
+  // 2. The planner takes its client, so the process that is actually running
+  //    (the owner's PC worker) can do the planning. GitHub registers a
+  //    `schedule:` workflow only from the default branch, so the 5-minute tick
+  //    in .github/workflows/social-cron.yml never fires on this deployment.
+  assert.ok(!plan.includes('server-only'), 'the planner must be usable outside the Next.js server');
+  assert.ok(!plan.includes('serviceDb'), 'the planner must not reach for the service-role client itself');
+  assert.ok(serverPlanner.includes('serviceDb()'), 'the server still plans with the service-role client');
+  assert.ok(localWorker.includes("from '@/lib/social/plan'"), 'the local worker must run the same planner');
+  const planFn = localWorker.slice(localWorker.indexOf('async function plan('), localWorker.indexOf('function idle('));
+  assert.ok(planFn.includes('await planQueue('), 'the local worker must actually call the planner');
+  assert.ok(planFn.includes('catch'), 'a failed plan must never take the publishing loop down');
+
+  // 3. ...and it plans before its own pause check, for the same reason.
+  const tick = localWorker.slice(localWorker.indexOf('async function tick('), localWorker.indexOf('async function plan('));
+  const localPlanAt = tick.indexOf('await plan(state)');
+  const localPauseAt = tick.indexOf('if (control.paused)');
+  assert.ok(localPlanAt > 0 && localPauseAt > 0, 'the local worker must both plan and honour the pause switch');
+  assert.ok(localPlanAt < localPauseAt, 'the local worker must plan even while the queue is paused');
+
+  console.log('planner-reachability tests OK');
 }

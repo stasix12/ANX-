@@ -157,9 +157,12 @@ export default function SocialDashboard() {
   async function runNow() {
     setBusy('run');
     try {
-      const r = await callSocialApi<{ ran: boolean; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
+      const r = await callSocialApi<{ ran: boolean; planned: number; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
+      // Planning happens even when publishing is held, so a run that published
+      // nothing may still have filled the queue — say so rather than "לא רץ".
+      const queued = r.planned ? `${r.planned} פרסומים נכנסו לתור. ` : '';
       toast(
-        r.ran ? `הריצה הסתיימה: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.failed} נכשלו.` : `לא רץ: ${r.reason}`,
+        r.ran ? `${queued}הריצה הסתיימה: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.failed} נכשלו.` : `${queued}הפרסום מושהה: ${r.reason}`,
         r.ran ? 'success' : 'info',
       );
       await load();

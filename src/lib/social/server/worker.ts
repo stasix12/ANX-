@@ -89,6 +89,18 @@ export async function runWorker(trigger: 'cron' | 'manual'): Promise<WorkerRepor
 /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: WorkerReport): Promise<WorkerReport> {
   const control = await getSetting<ControlSettings>('control', { paused: false, rateLimitedUntil: null });
+
+  /*
+   * Planning first, and whatever the controls say. Materialising a schedule
+   * into queue rows publishes nothing — it only writes down what is going to
+   * go out — so a paused or rate-limited queue should still fill up. Doing it
+   * the other way round meant that launching a campaign while publishing was
+   * paused left the dashboard on "מתוזמנים 0 / אין קמפיין פעיל": the schedule
+   * existed, but nothing had turned it into anything the owner could see, and
+   * pressing "המשך" had nothing to resume.
+   */
+  report.planned = await planQueue();
+
   if (control.paused) {
     report.reason = 'התורים מושהים';
     return report;
@@ -100,7 +112,6 @@ async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: Work
   if (control.rateLimitedUntil) await setSetting('control', { ...control, rateLimitedUntil: null });
 
   report.ran = true;
-  report.planned = await planQueue();
 
   // Rows this worker left in "publishing" (a crashed run) are failed so they
   // can be retried by hand. Browser-worker rows carry a worker_id and are

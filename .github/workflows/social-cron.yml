@@ -7,6 +7,13 @@
 #
 # GitHub may delay scheduled runs by a few minutes under load; the planner
 # tolerates slots up to 15 minutes late, so posts are never dropped.
+#
+# IMPORTANT — this tick is a backstop, not the thing the system depends on.
+# GitHub registers a `schedule:` trigger only from the repository's DEFAULT
+# branch, so while this file lives on a feature branch the cron never fires at
+# all (the workflow does not even appear in the Actions list). The planner
+# therefore also runs inside the local browser worker on the owner's PC, which
+# has to be running for groups to publish anyway — see src/lib/social/plan.ts.
 name: Social publishing tick
 
 on:

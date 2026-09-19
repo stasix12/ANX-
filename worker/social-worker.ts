@@ -2,6 +2,7 @@ import { hostname } from 'node:os';
 import type { Page } from 'playwright-core';
 import { detectCity } from '@/lib/social/cities';
 import { renderPostText } from '@/lib/social/compose';
+import { planQueue } from '@/lib/social/plan';
 import { evaluateQueueItem } from '@/lib/social/rules';
 import {
   DEFAULT_BROWSER,
@@ -32,7 +33,8 @@ import { captureScreenshot } from './screenshots';
  * Loop (every SOCIAL_WORKER_POLL_MS):
  *   1. heartbeat into social_workers (status, browser state, current job);
  *   2. run dashboard commands: login / check / logout / resume;
- *   3. if not paused and the browser is logged in, claim due group jobs
+ *   3. turn due schedules into queue rows (every PLAN_EVERY_MS);
+ *   4. if not paused and the browser is logged in, claim due group jobs
  *      (atomic status flip, worker_id stamped), apply the shared anti-spam
  *      rules, run the FacebookGroupBrowserAdapter, record the outcome.
  *
@@ -41,8 +43,9 @@ import { captureScreenshot } from './screenshots';
  * else runs until the owner handles it and presses "בדוק שוב".
  */
 
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 const CONFIRM_TIMEOUT_MS = 15 * 60_000;
+const PLAN_EVERY_MS = 60_000;
 const MAX_PRE_SUBMIT_ATTEMPTS = 3;
 
 interface WorkerState {
@@ -51,6 +54,7 @@ interface WorkerState {
   attention: string;
   currentJob: string | null;
   lastCheckAt: number;
+  lastPlanAt: number;
   idleNoticeShown: boolean;
 }
 
@@ -74,6 +78,7 @@ async function main(): Promise<void> {
     attention: '',
     currentJob: null,
     lastCheckAt: 0,
+    lastPlanAt: 0,
     idleNoticeShown: false,
   };
 
@@ -143,6 +148,7 @@ async function tick(state: WorkerState): Promise<void> {
 
   await runCommands(state, headless, browser);
   await heartbeat(state, state.attention ? 'needs_attention' : 'online', browser.debugMode);
+  await plan(state);
 
   if (control.paused) return idle(state, 'התורים מושהים בלוח הבקרה.');
   if (state.attention) return idle(state, `ממתין לטיפול ידני: ${state.attention}`);
@@ -179,6 +185,30 @@ async function tick(state: WorkerState): Promise<void> {
   const jobs = (due as (QueueItem & { target: unknown })[]).map(({ target: _t, ...item }) => item);
   const concurrency = Math.max(1, Math.min(3, browser.concurrentJobs || 1));
   await Promise.all(jobs.slice(0, concurrency).map((item) => runJob(state, item, { limits, browser, headless })));
+}
+
+/**
+ * Turn schedules into queue rows. Bookkeeping only — nothing is published
+ * here — so it runs before the pause check and before the Facebook login is
+ * verified: a paused or logged-out owner should still see what is waiting.
+ *
+ * This process is the planner that actually runs. The deployed app only plans
+ * when a request reaches it (a launch, "פרסם עכשיו", or the cron endpoint),
+ * and the 5-minute tick in .github/workflows/social-cron.yml never fires —
+ * GitHub registers a `schedule:` workflow only from the repository's default
+ * branch. Without this, a weekly or one-off campaign sat in social_schedules
+ * forever and the dashboard showed "מתוזמנים 0".
+ */
+async function plan(state: WorkerState): Promise<void> {
+  if (Date.now() - state.lastPlanAt < PLAN_EVERY_MS) return;
+  state.lastPlanAt = Date.now();
+  try {
+    const created = await planQueue({ db: await workerDb(), log: logActivity });
+    if (created) console.log(`[worker] ✓ ${created} פרסומים נכנסו לתור`);
+  } catch (err) {
+    // Never let planning take the publishing loop down with it.
+    console.error('[worker] תכנון התור נכשל:', err instanceof Error ? err.message : err);
+  }
 }
 
 function idle(state: WorkerState, reason: string): void {

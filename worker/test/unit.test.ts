@@ -9,6 +9,7 @@ import { detectCity, sortCities } from '@/lib/social/cities';
 import { campaignState, percentDone, type CampaignQueueRow } from '@/lib/social/campaign';
 import { countdownTo } from '@/lib/social/countdown';
 import { friendlyMessage, GENERIC_ERROR } from '@/lib/social/errors';
+import { buildKeywords, extractGroupUrls, facebookGroupSearchUrl, normalizeGroupUrl, scanPastedText } from '@/lib/social/discovery';
 
 /** Pure helpers shared by the dashboard, the server worker and the local worker. */
 
@@ -580,4 +581,247 @@ console.log('unit tests OK');
   assert.ok(sheet.includes('לא הופך שום דבר'), 'the gap control must carry its disclaimer, in the owner\'s language');
 
   console.log('queue-tuner tests OK');
+}
+
+/* ------------------------------------------- group discovery: dedupe, honesty, rule D */
+{
+  const discovery = readFileSync(new URL('../../src/lib/social/discovery.ts', import.meta.url), 'utf8');
+  const localWorker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const screen = readFileSync(new URL('../../src/app/social/discovery/page.tsx', import.meta.url), 'utf8');
+  const card = readFileSync(new URL('../../src/components/social/DiscoveryGroupCard.tsx', import.meta.url), 'utf8');
+  const builder = readFileSync(new URL('../../src/components/social/DiscoverySearchBuilder.tsx', import.meta.url), 'utf8');
+  const v8 = readFileSync(new URL('../../supabase/social-schema-v8.sql', import.meta.url), 'utf8');
+
+  /*
+   * 1. THE DEDUPE, asserted by EXECUTING the real function rather than reading it.
+   *
+   * Every one of these is the same group. If any of them produces a different
+   * key, that group enters the table twice, the owner sees a duplicate card,
+   * and promoting both raises "הקבוצה הזו כבר קיימת ברשימה." on the second —
+   * an error for something the system should have collapsed itself. The killer
+   * case is l.facebook.com/l.php?u=… : that is what you get when you copy a
+   * link out of a Facebook POST, so it is the single most likely thing the
+   * owner will paste, and parseGroupUrl() alone rejects it (its path has no
+   * /groups/ segment).
+   */
+  const SAME_GROUP = [
+    'https://www.facebook.com/groups/123456/',
+    'https://www.facebook.com/groups/123456?fbclid=IwAR_x&ref=share',
+    'https://m.facebook.com/groups/123456',
+    'https://mbasic.facebook.com/groups/123456/',
+    'https://web.facebook.com/groups/123456/',
+    'https://touch.facebook.com/groups/123456',
+    'https://fb.com/groups/123456',
+    'facebook.com/groups/123456',
+    'https://www.facebook.com/groups/123456/permalink/98765/',
+    'https://www.facebook.com/groups/123456/posts/98765/',
+    'https://www.facebook.com/groups/123456/about',
+    'HTTPS://WWW.FACEBOOK.COM/GROUPS/123456/',
+    '(https://www.facebook.com/groups/123456/)',
+    'https://www.facebook.com/groups/123456/,',
+    'https://l.facebook.com/l.php?u=https%3A%2F%2Fwww.facebook.com%2Fgroups%2F123456%2F&h=AT0',
+  ];
+  for (const input of SAME_GROUP) {
+    const hit = normalizeGroupUrl(input);
+    assert.ok(hit, `"${input}" must be recognised as a group link`);
+    assert.equal(hit.key, '123456', `"${input}" must dedupe to the same key as every other spelling`);
+    assert.equal(hit.url, 'https://www.facebook.com/groups/123456', `"${input}" must canonicalise to one url`);
+  }
+
+  // A vanity slug is case-insensitive on Facebook, so the key is lowercased —
+  // otherwise "Beersheva.Yad2" and "beersheva.yad2" become two groups, and the
+  // external_id addGroup() derives from the url differs between them too.
+  assert.equal(normalizeGroupUrl('https://www.facebook.com/groups/Beersheva.Yad2/')?.key, 'beersheva.yad2');
+  assert.equal(normalizeGroupUrl('facebook.com/groups/beersheva.yad2')?.key, 'beersheva.yad2');
+
+  // Facebook's own group surfaces are not groups. Without this, a paste that
+  // includes the owner's groups feed adds a row called "feed" that opens nothing.
+  for (const notAGroup of [
+    'https://www.facebook.com/groups/feed/',
+    'https://www.facebook.com/groups/discover/',
+    'https://www.facebook.com/groups/create/',
+    'https://www.facebook.com/some.person',
+    'https://example.com/groups/123',
+    'https://fb.watch/abc',
+    'not a url at all',
+    '',
+  ]) {
+    assert.equal(normalizeGroupUrl(notAGroup), null, `"${notAGroup}" must never be taken for a group`);
+  }
+
+  /*
+   * 2. THE COUNTS THE OWNER READS. Each of the three numbers on the capture
+   *    result means a different thing, and they were once conflated: an in-paste
+   *    repeat was reported as "already in the discovery list", which told the
+   *    owner something about their data that was simply false. And a Facebook
+   *    link that is merely not a group (a marketplace item, a profile, a photo)
+   *    must not be counted as "unreadable" — copy any slab of Facebook text and
+   *    you get a dozen of them, and an alarming number about nothing is worse
+   *    than no number.
+   */
+  const slab = [
+    'שלום, מצאתי כמה קבוצות טובות:',
+    '1. יד שנייה באר שבע https://www.facebook.com/groups/123456/ — ממש פעילה',
+    '2. גם כאן m.facebook.com/groups/123456?fbclid=abc (אותה קבוצה)',
+    '3. תושבי ערד: https://www.facebook.com/groups/arad.residents/posts/999/',
+    '4. וזה לא קבוצה: https://www.facebook.com/marketplace/item/5',
+    '5. פרופיל: https://www.facebook.com/some.person',
+    '6. וזה הפיד שלי facebook.com/groups/feed/',
+  ].join('\n');
+  const scan = scanPastedText(slab);
+  assert.deepEqual(scan.groups.map((g) => g.key), ['123456', 'arad.residents'], 'links buried in prose must be found, in order, deduped');
+  assert.equal(scan.repeats, 1, 'the same group written twice is ONE repeat — not "already in the discovery list"');
+  assert.equal(scan.unreadable, 1, 'only the /groups/ link that yielded no id counts; a marketplace item and a profile are not failures');
+  assert.deepEqual(scanPastedText('שלום, אין כאן שום קישור.'), { groups: [], repeats: 0, unreadable: 0 }, 'prose is prose, not a failure');
+  assert.deepEqual(extractGroupUrls(slab), [
+    'https://www.facebook.com/groups/123456',
+    'https://www.facebook.com/groups/arad.residents',
+  ]);
+  // ...and the three counts must be separate fields, so the screen cannot print
+  // one under the other's label again.
+  assert.ok(/repeats: number/.test(discovery), 'in-paste repeats must be their own field on CaptureResult');
+  assert.ok(!/let duplicates = repeats/.test(discovery), 'duplicates must never be seeded from the in-paste repeat count');
+
+  /*
+   * 3. PHRASE GENERATION TOUCHES NOTHING. These are strings and a link to
+   *    Facebook's own search page, which the owner's browser follows as them.
+   *    The transliterations are the ones the owner asked for by name.
+   */
+  const bs = buildKeywords('באר שבע', ['secondhand', 'pros']);
+  for (const must of ['באר שבע', 'Beer Sheva', "Be'er Sheva", 'יד שנייה באר שבע', 'בעלי מקצוע באר שבע']) {
+    assert.ok(bs.includes(must), `"${must}" must be among the generated phrases`);
+  }
+  assert.equal(new Set(bs).size, bs.length, 'phrases must be deduplicated — a repeated phrase is a wasted tap');
+  assert.ok(buildKeywords('עיר שלא מכירים', ['secondhand']).includes('יד שנייה עיר שלא מכירים'),
+    'an unknown city must still get its domain phrases — only the transliterations are missing, because inventing one would be guessing');
+  assert.equal(
+    facebookGroupSearchUrl('יד שנייה באר שבע'),
+    `https://www.facebook.com/search/groups/?q=${encodeURIComponent('יד שנייה באר שבע')}`,
+    'the phrase link must be the plain, supported Facebook search URL and nothing cleverer',
+  );
+
+  /*
+   * 4. ONE GROUP MODEL. Promotion goes through addGroup() — the single group
+   *    creation path — and records what it created. A direct insert into
+   *    social_targets here would be a second group system that the campaign,
+   *    scheduler and queue paths know nothing about.
+   */
+  assert.ok(discovery.includes("import { addGroup"), 'promotion must import the existing addGroup');
+  assert.ok(/await addGroup\(\{ url: row\.url/.test(discovery), 'promotion must actually call addGroup');
+  assert.ok(!/from\('social_targets'\)[\s\S]{0,80}\.insert\(/.test(discovery), 'discovery must never insert into social_targets itself');
+  assert.ok(/update\(\{ target_id: targetId \}\)/.test(discovery), 'the discovery row must keep a link to the target it created');
+  assert.ok(/row\.membership !== 'MEMBER'/.test(discovery), 'a group the owner is not in must be refused promotion — a target is publishable the moment it is scheduled');
+
+  /*
+   * 5. RULE D — the owner outranks the worker, permanently.
+   *
+   * A group where only admins post shows no composer, which on the page looks
+   * exactly like a group the owner is not in. If an automatic read were allowed
+   * to lower a hand-set "אני חבר" on that evidence, the group would drop out of
+   * the publishing library the owner deliberately put it in.
+   */
+  const discoveryPass = localWorker.slice(localWorker.indexOf('async function syncDiscoveredGroups('), localWorker.indexOf('/* ----------------------------------------------------------- commands'));
+  assert.ok(discoveryPass.length > 500, 'the discovery enrichment pass must exist in the worker');
+  assert.ok(discoveryPass.includes("row.membership_set_by === 'owner'"), 'the pass must know whether the mark was set by hand');
+  assert.ok(/if \(!ownerSet \|\| stronger\)/.test(discoveryPass), 'an owner-set mark may only ever be raised, never lowered');
+  assert.ok(discoveryPass.includes('MEMBERSHIP_RANK'), 'stronger-vs-weaker must be a declared ordering, not an ad-hoc comparison');
+  assert.ok(/patch\.last_error = `בדף הקבוצה נראה/.test(discoveryPass), 'a contradicting read must be recorded for the owner rather than silently dropped');
+  // ...and what it records has to be rendered, or it is a column nothing reads.
+  assert.ok(/enrichState !== 'failed' && group\.lastError/.test(card), 'a finding recorded on a SUCCESSFUL read must still reach the screen');
+
+  // The pass is small, opt-in, and behind publishing.
+  assert.ok(discoveryPass.includes("eq('enrich_state', 'queued')"), 'only rows the owner opted in for may be read');
+  assert.ok(discoveryPass.includes("eq('ignored', false)"), 'a hidden group must not be opened in the owner\'s Chrome');
+  const perTick = Number(/const DISCOVERED_PER_TICK = (\d+)/.exec(localWorker)?.[1] ?? 99);
+  assert.ok(perTick > 0 && perTick <= 2, `the per-tick budget must stay tiny (found ${perTick})`);
+  assert.ok(/if \(await syncGroupProfiles\([^)]*\)\) await syncDiscoveredGroups\(/.test(localWorker),
+    'discovery enrichment must run only on an idle tick, and must stand down when the profile pass hit a login wall');
+  // A failed read must land on 'failed', never 'done'. syncGroupProfiles() stamps
+  // last_synced_at even in its catch, so a timed-out target silently leaves the
+  // queue forever; this pass must not inherit that.
+  const enrichCatch = discoveryPass.slice(discoveryPass.indexOf('} catch (err) {'));
+  assert.ok(enrichCatch.includes("enrich_state: 'failed'"), 'a failed read must be recorded as failed');
+  assert.ok(!enrichCatch.includes("enrich_state: 'done'"), 'a failed read must never be recorded as a completed one');
+
+  /*
+   * 6. NO FAKE AUTOMATION. There is no Meta endpoint that joins a group or
+   *    sends a join request — Meta removed the entire Groups API on 2024-04-22.
+   *    So no control on this screen may imply the system joined anything, and
+   *    the two membership marks must read as the owner reporting what THEY did.
+   */
+  const joinClaims = /(?:הצטרפנו|המערכת הצטרפה|שלחנו בקשה|נשלחה בקשה אוטומטית|מצטרף אוטומטית|הצטרפות אוטומטית)/;
+  for (const [name, src] of [['screen', screen], ['card', card], ['builder', builder]] as const) {
+    assert.ok(!joinClaims.test(src), `${name}: no copy may claim the system joined a group or sent a request`);
+  }
+  assert.ok(card.includes('שלחתי בקשה'), 'the mark must be first-person — the OWNER sent the request');
+  assert.ok(card.includes('אני חבר'), 'the mark must be first-person — the OWNER is the member');
+  assert.ok(screen.includes('המערכת לא יכולה להצטרף לקבוצה במקומכם'), 'the screen must say plainly that it cannot join for them');
+  // The join path is a link to Facebook, not a button that "does" the joining.
+  assert.ok(/<ButtonLink[\s\S]{0,200}href=\{group\.url\}/.test(card), 'the join affordance must be a link to the group on Facebook');
+
+  /*
+   * 7. NO INVENTED NUMBERS. members_count is NULL until a page printed one and
+   *    privacy is 'unknown' until a page said so in words, so both must be
+   *    absent from the card rather than rendered as 0 or "—".
+   */
+  assert.ok(/typeof group\.membersCount === 'number'/.test(card), 'a member count must be shown only when there actually is one');
+  assert.ok(!/membersCount \?\? 0|membersCount \|\| 0/.test(card), 'an unread member count must never become a zero');
+  assert.ok(/group\.privacy === 'public'/.test(card) && /group\.privacy === 'private'/.test(card),
+    "the privacy badge must be driven by the two known values, never by 'unknown'");
+  assert.ok(v8.includes('members_count integer'), 'members_count must be nullable — NULL is "not read"');
+  assert.ok(!/members_count integer[^\n]*default 0/.test(v8), 'members_count must never default to 0');
+
+  /*
+   * 8. THE MIGRATION. A new public table with RLS off is readable and writable
+   *    by anyone holding the anon key; with RLS on and no policies, every read
+   *    returns [] and the screen looks empty rather than broken. Both halves
+   *    must be in the same file, and the file must be safe to re-run.
+   */
+  assert.ok(v8.includes('create table if not exists public.social_discovered_groups'), 'v8 must be re-runnable');
+  assert.ok(v8.includes('enable row level security'), 'the new table must have RLS enabled');
+  for (const policy of ['admin select', 'admin insert', 'admin update', 'admin delete']) {
+    assert.ok(v8.includes(`"${policy}"`), `v8 must create the "${policy}" policy, or the dashboard reads nothing`);
+  }
+  assert.equal((v8.match(/drop policy if exists/g) ?? []).length, 4, 'every policy must be dropped before it is created, so the file re-runs');
+  assert.ok(v8.includes('drop trigger if exists social_discovered_groups_set_updated_at'), 'the updated_at trigger must be idempotent');
+  assert.ok(v8.includes('execute function public.set_updated_at()'), 'the new table must reuse the existing updated_at function');
+  assert.ok(!/^grant /m.test(v8), 'no social migration grants privileges — default grants plus RLS is the whole model');
+  // The unique index has to be FULL: PostgREST's ON CONFLICT cannot name a
+  // partial one, and bulk capture upserts a whole paste in one round trip.
+  assert.ok(/create unique index if not exists social_discovered_groups_url_key_idx\s*\n\s*on public\.social_discovered_groups \(url_key\);/.test(v8),
+    'the url_key unique index must be full, not partial — capture upserts against it by name');
+  assert.ok(discovery.includes("onConflict: 'url_key'"), 'capture must upsert against that index');
+
+  /*
+   * 9. A SUCCESS IS NEVER FILED UNDER A FAILURE. promoteToTargets() counts a
+   *    group that was already in the pool as ADDED (it links the two rather than
+   *    failing), so that sentence must not travel in `reasons` — the screen
+   *    prints those under "קבוצות שלא נוספו למאגר", which would be the opposite
+   *    of what happened.
+   */
+  assert.ok(/notes: string\[\]/.test(discovery), 'promote must report successes separately from refusals');
+  assert.ok(/notes\.push\(`"\$\{label\(row\)\}" כבר הייתה במאגר הפרסום/.test(discovery),
+    'the "already there, linked" line is a success and belongs in notes');
+  const promoteFn = discovery.slice(discovery.indexOf('export async function promoteToTargets'));
+  const refusals = promoteFn.slice(0, promoteFn.indexOf('return { added'));
+  for (const m of refusals.matchAll(/reasons\.push/g)) {
+    const before = refusals.slice(Math.max(0, (m.index ?? 0) - 400), m.index ?? 0);
+    assert.ok(/skipped \+= 1/.test(before), 'every line in `reasons` must belong to a group that was actually skipped');
+  }
+
+  /*
+   * 10. NO FOREVER-SPINNER. The likeliest first experience of this screen is
+   *     that supabase/social-schema-v8.sql has not been run yet. That must end
+   *     in a Hebrew explanation and a retry, not a skeleton that never resolves
+   *     and not an empty state claiming nothing was found.
+   */
+  assert.ok(screen.includes('loadFailed'), 'the screen must track a failed load rather than sitting at rows === null');
+  assert.ok(/rows === null && !loadFailed/.test(screen), 'the skeleton must stop when the load failed');
+  assert.ok(/counts === null && loadFailed/.test(screen), 'the counter skeletons must stop too');
+  assert.ok(screen.includes('social-schema-v8.sql'), 'the failure must name the file the owner has to run');
+  assert.ok(screen.includes('נסו שוב'), 'a failed load must offer a retry');
+  assert.ok(/rows !== null && all\.length === 0/.test(screen),
+    '"nothing found yet" is a claim about data and must require that the data actually arrived');
+
+  console.log('group-discovery tests OK');
 }

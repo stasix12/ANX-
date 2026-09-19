@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import type { ScheduleInput } from '@/lib/social/client';
-import { dripSlots, slotsFor } from '@/lib/social/slots';
+import { dripSlots, slotsFor, staggeredSlots } from '@/lib/social/slots';
 import { formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { Stamp } from './DateTime';
 import { TIMEZONE, WEEKDAYS_HE, type ScheduleMode, type WeeklyPlan } from '@/lib/social/types';
@@ -65,7 +65,7 @@ export interface SchedulePlan {
   days: number;
 }
 
-export function planFor(draft: ScheduleDraft, targetCount: number, now = new Date()): SchedulePlan {
+export function planFor(draft: ScheduleDraft, targetCount: number, now = new Date(), spacingMinutes = 0): SchedulePlan {
   const count = Math.max(0, targetCount);
   const empty: SchedulePlan = { slots: [], simultaneous: true, summary: '', firstAt: null, lastAt: null, days: 0 };
   if (!count) return { ...empty, summary: 'עדיין לא נבחרו יעדים.' };
@@ -113,7 +113,18 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
     until,
   );
   if (!slots.length) return { ...empty, summary: 'לא נמצאו מועדים בשבועיים הקרובים — בדקו את ההגדרה.' };
-  return finish(slots, true, `${count} יעדים בכל מועד · ${slots.length} מועדים בשבועיים הקרובים`);
+
+  /*
+   * The planner staggers each occasion's targets by the interval rules.ts
+   * enforces (plan.ts enforcedSpacing + staggerAt), so the preview has to do
+   * the same arithmetic or it would show 28 publications at 09:00 that the
+   * planner will actually write across the next day and a half.
+   */
+  const spread = staggeredSlots(slots, count, spacingMinutes);
+  const summary = spacingMinutes
+    ? `${count} יעדים בכל מועד, אחד כל ${spacingMinutes} דק׳ · ${slots.length} מועדים בשבועיים הקרובים`
+    : `${count} יעדים בכל מועד · ${slots.length} מועדים בשבועיים הקרובים`;
+  return finish(spread, !spacingMinutes, summary);
 }
 
 function finish(slots: Date[], simultaneous: boolean, summary: string): SchedulePlan {
@@ -193,11 +204,14 @@ export function SchedulePicker({
   onChange,
   targetCount = 0,
   targetNames = [],
+  spacingMinutes = 0,
 }: {
   value: ScheduleDraft;
   onChange: (v: ScheduleDraft) => void;
   targetCount?: number;
   targetNames?: string[];
+  /** limits.minGapMinutes + browser.groupMinGapMinutes — what the planner will space by. */
+  spacingMinutes?: number;
 }) {
   const set = (patch: Partial<ScheduleDraft>) => onChange({ ...value, ...patch });
   const modesRef = useRef<HTMLDivElement>(null);
@@ -208,7 +222,7 @@ export function SchedulePicker({
     modesRef.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }, [value.mode]);
   // Recomputed on every keystroke so the plan and the controls never disagree.
-  const plan = useMemo(() => planFor(value, targetCount), [value, targetCount]);
+  const plan = useMemo(() => planFor(value, targetCount, new Date(), spacingMinutes), [value, targetCount, spacingMinutes]);
 
   function toggleDay(day: number) {
     const key = String(day);

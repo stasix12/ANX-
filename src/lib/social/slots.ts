@@ -104,3 +104,37 @@ function isoParts(iso: string): [number, number, number] {
   const [y, m, d] = iso.split('-').map(Number);
   return [y, m - 1, d];
 }
+
+/**
+ * Spreads one occasion's targets out in time.
+ *
+ * slotsFor() returns the OCCASIONS a schedule fires on — "Sunday 09:00" — and
+ * the planner then wrote every target to that same instant. With 28 groups that
+ * is 28 rows stamped 09:00:00, and rules.ts holds a group publication until
+ * limits.minGapMinutes + browser.groupMinGapMinutes have passed since the last
+ * one: the first goes out and the other 27 are deferred, re-deferred, and after
+ * MAX_DEFERRALS skipped with "נדחה יותר מדי פעמים". A weekly campaign was
+ * therefore designed to lose almost everything it scheduled.
+ *
+ * The gap is not a new setting. It is the interval the owner already chose,
+ * read back, so rows land exactly as far apart as the rule demands and nothing
+ * is deferred at all. The group surcharge is applied to every target in the
+ * occasion rather than per channel: over-spacing a Page only delays it, while
+ * under-spacing a group is what causes the skip.
+ *
+ * Deterministic in targetIndex, so re-planning reproduces the same instants and
+ * the unique (schedule, target, scheduled_at) index still does its job.
+ */
+export function staggerAt(slot: Date, targetIndex: number, gapMinutes: number): Date {
+  const gap = Math.max(0, Math.round(gapMinutes));
+  return gap ? new Date(slot.getTime() + targetIndex * gap * 60_000) : slot;
+}
+
+/** Every instant an occasion produces for `targetCount` targets, in order. */
+export function staggeredSlots(slots: Date[], targetCount: number, gapMinutes: number): Date[] {
+  const out: Date[] = [];
+  for (const slot of slots) {
+    for (let i = 0; i < Math.max(0, targetCount); i += 1) out.push(staggerAt(slot, i, gapMinutes));
+  }
+  return out.sort((a, b) => a.getTime() - b.getTime());
+}

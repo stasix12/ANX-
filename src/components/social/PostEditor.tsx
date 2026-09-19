@@ -17,6 +17,7 @@ import {
   callSocialApi,
   createSchedule,
   getBrowserSettings,
+  getLimits,
   getBusiness,
   getPost,
   hasPendingQueue,
@@ -34,8 +35,10 @@ import { stampText } from './DateTime';
 import {
   CTA_OPTIONS,
   DEFAULT_BROWSER,
+  DEFAULT_LIMITS,
   DEFAULT_BUSINESS,
   type BrowserSettings,
+  type LimitsSettings,
   type BusinessSettings,
   type Campaign,
   type CtaType,
@@ -77,6 +80,7 @@ export function PostEditor({ postId }: { postId?: string }) {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [business, setBusiness] = useState<BusinessSettings>(DEFAULT_BUSINESS);
   const [browser, setBrowser] = useState<BrowserSettings>(DEFAULT_BROWSER);
+  const [limits, setLimits] = useState<LimitsSettings>(DEFAULT_LIMITS);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [variantStrategy, setVariantStrategy] = useState<VariantStrategy>('rotate');
   const [variantMap, setVariantMap] = useState<Record<string, string>>({});
@@ -100,7 +104,7 @@ export function PostEditor({ postId }: { postId?: string }) {
   const load = useCallback(async () => {
     if (loadedFor.current === postId) return;
     loadedFor.current = postId;
-    const [c, t, b, br] = await Promise.all([listCampaigns(), listTargets(), getBusiness(), getBrowserSettings()]);
+    const [c, t, b, br, lim] = await Promise.all([listCampaigns(), listTargets(), getBusiness(), getBrowserSettings(), getLimits()]);
     /*
      * Targets the post was last scheduled to. Reopening a post used to fall
      * back to "every enabled Page", and an account with no Pages — which is
@@ -112,6 +116,7 @@ export function PostEditor({ postId }: { postId?: string }) {
     setTargets(t);
     setBusiness(b);
     setBrowser(br);
+    setLimits(lim);
     setRequireConfirmation(br.requireConfirmation || br.testMode);
     if (postId) {
       const [p, v, s] = await Promise.all([getPost(postId), listVariants(postId), listSchedules(postId)]);
@@ -520,7 +525,15 @@ export function PostEditor({ postId }: { postId?: string }) {
           </Card>
 
           <Card title="תזמון">
-            <SchedulePicker value={schedule} onChange={setSchedule} targetCount={selectedObjects.length} targetNames={selectedObjects.map((t) => t.name)} />
+            {/* The interval the planner will space these by, so the preview above
+                is the schedule and not a second opinion about it. */}
+            <SchedulePicker
+              value={schedule}
+              onChange={setSchedule}
+              targetCount={selectedObjects.length}
+              targetNames={selectedObjects.map((t) => t.name)}
+              spacingMinutes={limits.minGapMinutes + browser.groupMinGapMinutes}
+            />
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Button size="lg" busy={busy === 'schedule'} onClick={openReview}>
                 {selectedObjects.length === 0

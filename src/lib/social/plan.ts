@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { dedupeKey, renderPostText } from './compose';
-import { dripSlots, slotsFor } from './slots';
+import { dripSlots, slotsFor, staggerAt } from './slots';
 import { CANCELLABLE_STATUSES, OPEN_STATUSES } from './status';
-import type { MediaItem, Post, Schedule, Variant } from './types';
+import { DEFAULT_BROWSER, DEFAULT_LIMITS, type MediaItem, type Post, type Schedule, type Variant } from './types';
 import { pickVariant } from './variants';
 
 /**
@@ -55,6 +55,13 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
   const from = new Date(now.getTime() - 15 * 60_000);
 
   const stopped = await stoppedCampaigns(db, note);
+  /*
+   * The interval rules.ts will enforce, read once. Rows are written this far
+   * apart so nothing is deferred — see staggerAt() in ./slots. Missing settings
+   * fall back to the same defaults the workers use, never to zero, because zero
+   * is what stacks a whole campaign on one instant.
+   */
+  const spacingMinutes = await enforcedSpacing(db);
 
   const { data: schedules, error } = await db.from('social_schedules').select('*').eq('active', true);
   if (error) throw new Error(error.message);
@@ -102,7 +109,10 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
         .eq('target_id', targetId);
       let rotation = count ?? 0;
 
-      for (const slot of slots) {
+      for (const rawSlot of slots) {
+        // Each target gets its own instant inside the occasion, so a weekly
+        // campaign publishes instead of deferring itself into skips.
+        const slot = staggerAt(rawSlot, targetIndex, spacingMinutes);
         // Already planned for this post by some other schedule.
         if (taken.has(slotKey(targetId, slot))) continue;
         const variant = pickVariant(approved, schedule, targetId, targetIndex, rotation);
@@ -174,6 +184,15 @@ async function occupiedSlots(db: SupabaseClient, postId: string): Promise<Set<st
 }
 
 const slotKey = (targetId: string, at: string | Date) => `${targetId}|${new Date(at).toISOString()}`;
+
+/** limits.minGapMinutes + browser.groupMinGapMinutes — what rules.ts demands. */
+async function enforcedSpacing(db: SupabaseClient): Promise<number> {
+  const { data } = await db.from('social_settings').select('key, value').in('key', ['limits', 'browser']);
+  const byKey = new Map((data ?? []).map((r) => [r.key as string, (r.value ?? {}) as Record<string, unknown>]));
+  const limits = { ...DEFAULT_LIMITS, ...(byKey.get('limits') ?? {}) };
+  const browser = { ...DEFAULT_BROWSER, ...(byKey.get('browser') ?? {}) };
+  return Math.max(0, Number(limits.minGapMinutes) || 0) + Math.max(0, Number(browser.groupMinGapMinutes) || 0);
+}
 
 /**
  * Groups that already have a publication of this post WAITING, whatever instant

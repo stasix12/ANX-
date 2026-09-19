@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { staggeredSlots } from '../../src/lib/social/slots';
 import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { zonedToUtc } from '@/lib/social/time';
 import { parseGroupUrl, type Variant } from '@/lib/social/types';
@@ -391,6 +392,41 @@ console.log('unit tests OK');
   assert.ok(!sweep.includes("'paused',\n") || sweep.includes("'paused'"), 'sweep status list is explicit');
 
   console.log('planner-reachability tests OK');
+}
+
+/* ------------------------------- a weekly occasion is spread, not stacked */
+{
+  const planSrc = readFileSync(new URL('../../src/lib/social/plan.ts', import.meta.url), 'utf8');
+  const pickerSrc = readFileSync(new URL('../../src/components/social/SchedulePicker.tsx', import.meta.url), 'utf8');
+
+  /*
+   * slotsFor() returns OCCASIONS — "Sunday 09:00" — and the planner used to
+   * stamp every target with that one instant. rules.ts then held each group
+   * publication until minGap + groupMinGap had passed, so of 28 rows one went
+   * out and 27 were deferred until MAX_DEFERRALS skipped them. A weekly
+   * campaign was built to lose almost everything it scheduled.
+   */
+  assert.ok(planSrc.includes('staggerAt(rawSlot, targetIndex, spacingMinutes)'), 'the planner must give each target its own instant inside an occasion');
+  assert.ok(planSrc.includes('async function enforcedSpacing'), 'the spacing must be read from the settings rules.ts enforces, not invented');
+  assert.ok(/minGapMinutes[\s\S]{0,120}groupMinGapMinutes/.test(planSrc), 'spacing must be the sum rules.ts compares against');
+
+  // And the preview must do the same arithmetic, or it shows a schedule the
+  // planner will not write — the lie this codebase keeps having to re-close.
+  assert.ok(pickerSrc.includes('staggeredSlots(slots, count, spacingMinutes)'), 'the schedule preview must stagger the way the planner does');
+  assert.ok(pickerSrc.includes('spacingMinutes?: number'), 'the picker must be told the real spacing');
+
+  // The arithmetic itself, executed.
+  const base = new Date('2026-09-20T06:00:00Z');
+  const spread = staggeredSlots([base], 28, 65);
+  assert.equal(spread.length, 28, '28 targets produce 28 publications');
+  assert.equal(spread[0].getTime(), base.getTime(), 'the first keeps the chosen time');
+  for (let i = 1; i < spread.length; i += 1) {
+    assert.equal(spread[i].getTime() - spread[i - 1].getTime(), 65 * 60_000, `row ${i} must sit exactly one gap after the one before it`);
+  }
+  // Zero spacing must stay stacked rather than silently inventing a gap.
+  assert.equal(staggeredSlots([base], 3, 0).every((d) => d.getTime() === base.getTime()), true, 'no spacing means no stagger');
+
+  console.log('weekly-stagger tests OK');
 }
 
 /* --------------------------------------- the PC worker cannot go stale quietly */

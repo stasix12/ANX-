@@ -36,29 +36,6 @@ export const patterns = {
   checkpoint: /confirm your identity|enter (the )?(security|login) code|two-factor|two factor|verify (your|it'?s) (you|account)|suspicious activity|unusual activity|temporarily blocked|you'?re temporarily blocked|account restricted|we suspended|captcha|security check|help us confirm|please confirm|אשר את זהותך|אמת את זהותך|קוד אבטחה|אימות דו-שלבי|פעילות חשודה|נחסמת זמנית|חסימה זמנית|החשבון שלך הוגבל|אימות זהות|подтвердите свою личность|код безопасности|подозрительная активность|временно заблокирован|подтвердите, что это вы/i,
   /** Login page markers. */
   loginPage: /log in to facebook|log into facebook|התחברות לפייסבוק|כניסה לפייסבוק|вход на facebook/i,
-  /* ---- Group discovery (read-only). See worker/facebook/profile.ts. ----
-   * These answer "what is the owner to this group?", which patterns.cannotPost
-   * deliberately does NOT: that one conflates "you can't post", "only members
-   * can post" and "join group" into one question ("can I publish here?"), and a
-   * member of an announcement-only group matches it. Reusing it for membership
-   * would mislabel groups the owner is already in. */
-
-  /** An actual join CONTROL. Anchored ^…$ so prose ("הצטרפו לקבוצה כדי לראות…") never matches. */
-  joinGroupButton: /^\s*(join group|join|ask to join|request to join|הצטרפות לקבוצה|הצטרפות|הצטרף|הצטרפי|בקשה להצטרף|בקשת הצטרפות|вступить в группу|вступить|присоединиться|подать заявку)\s*$/i,
-  /** A join request already sent — Facebook renders this as a disabled button, a
-   *  "cancel request" button or a banner, depending on the surface. The least
-   *  stable string in the product: a non-match means UNKNOWN, never NOT_MEMBER. */
-  joinRequestPending: /^\s*(request sent|requested|cancel request|pending approval|request pending|הבקשה נשלחה|בקשה נשלחה|נשלחה בקשה|ביטול הבקשה|בטל בקשה|בקשה ממתינה|ממתין לאישור המנהלים|запрос отправлен|заявка отправлена|отменить запрос|запрос на рассмотрении)\s*$/i,
-  /** The privacy badge, stated in words. "Public"/"Private" alone is far too
-   *  loose (every page footer links to a privacy policy), so the word "group"
-   *  is required. Anything else stays 'unknown'. */
-  groupPublic: /public group|קבוצה ציבורית|открытая группа|публичная группа/i,
-  groupPrivate: /private group|קבוצה פרטית|סגורה קבוצה|закрытая группа|частная группа/i,
-  /** A plainly written member count. Abbreviated forms ("12K", "1.2 אלף",
-   *  "12 тыс.") deliberately do not match — rounding them into a number would be
-   *  inventing one. The caller still validates the digits before believing them. */
-  memberCount: /(\d[\d.,\u00a0\u202f ]{0,14})[\u00a0\u202f ]{0,2}(?:members?|חברים|חברות|участник(?:а|ов)?)(?![\p{L}])/giu,
-
   /** Group page title suffix to strip when auto-naming targets. */
   titleSuffix: /\s*[|·-]\s*facebook\s*$/i,
 } as const;
@@ -124,22 +101,6 @@ export const fb = {
   postButton: (dialog: Locator): Locator[] => [
     dialog.getByRole('button', { name: patterns.postButton }),
     dialog.locator('[role="button"]').filter({ hasText: patterns.postButton }).last(),
-  ],
-
-  /**
-   * A join control for THIS group. Restricted to [role="main"] first: the left
-   * rail and the "suggested groups" tray carry join buttons for other groups,
-   * and one of those would label the group on screen NOT_MEMBER.
-   */
-  joinButton: (page: Page): Locator[] => [
-    page.locator('[role="main"]').getByRole('button', { name: patterns.joinGroupButton }),
-    page.locator('[role="main"]').getByRole('link', { name: patterns.joinGroupButton }),
-  ],
-
-  /** "Request sent" / "Cancel request", same main-region restriction. */
-  joinPending: (page: Page): Locator[] => [
-    page.locator('[role="main"]').getByRole('button', { name: patterns.joinRequestPending }),
-    page.locator('[role="main"]').getByText(patterns.joinRequestPending).first(),
   ],
 
   /** Login form presence. */

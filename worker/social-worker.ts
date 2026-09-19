@@ -22,7 +22,7 @@ import { FacebookGroupBrowserAdapter } from './adapters/facebookGroupBrowser';
 import { logActivity, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
-import { readGroupDetails, readGroupProfile } from './facebook/profile';
+import { readGroupProfile } from './facebook/profile';
 import { BrowserSession, SessionError } from './facebook/session';
 import { captureScreenshot } from './screenshots';
 
@@ -203,10 +203,7 @@ async function tick(state: WorkerState): Promise<void> {
     .limit(Math.max(1, Math.min(3, browser.concurrentJobs || 1)));
   if (error) throw new Error(error.message);
   if (!due?.length) {
-    // Publishing always comes first: both of these run only on a tick where no
-    // group job is due, so during an active campaign neither runs at all.
-    // The owner's own groups go before the discovered ones.
-    if (await syncGroupProfiles(state, headless)) await syncDiscoveredGroups(state, headless);
+    await syncGroupProfiles(state, headless);
     return;
   }
 
@@ -268,8 +265,8 @@ const PROFILES_PER_TICK = 2;
  * name and picture from Facebook (read-only visit), a couple per tick so
  * 40 new groups trickle in over a few minutes.
  */
-async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise<boolean> {
-  if (state.browserState === 'disconnected' || !session.hasProfile()) return false;
+async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise<void> {
+  if (state.browserState === 'disconnected' || !session.hasProfile()) return;
   const db = await workerDb();
   const { data } = await db
     .from('social_targets')
@@ -278,7 +275,7 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
     .is('last_synced_at', null)
     .order('created_at')
     .limit(PROFILES_PER_TICK);
-  if (!data?.length) return true;
+  if (!data?.length) return;
 
   for (const target of data) {
     const page = await session.newPage(headless);
@@ -286,9 +283,8 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
       const profile = await readGroupProfile(page, target.url);
       if (!profile) {
         // Login / checkpoint: leave it unsynced and let the job path report it.
-        // `false` stops the discovery pass too — it would hit the same wall.
         state.lastCheckAt = 0;
-        return false;
+        return;
       }
       const patch: Record<string, unknown> = { last_synced_at: new Date().toISOString() };
       // The name is always Facebook's own, so the list reads exactly like Facebook.
@@ -310,161 +306,6 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
       await page.close().catch(() => undefined);
     }
     await sleep(4000);
-  }
-  return true;
-}
-
-/* ------------------------------------------------- discovered groups */
-
-const DISCOVERED_PER_TICK = 2;
-/**
- * A longer pause than the targets pass above, deliberately.
- *
- * This pass opens groups the owner is NOT a member of. That is a more
- * conspicuous pattern than re-reading their own groups, it runs in the very
- * same Chrome profile that publishes for them, and there is no API behind it —
- * so it is opt-in per batch from the discovery screen (enrich_state='queued'),
- * two groups per idle tick, spaced out, and it never competes with publishing.
- * Nothing here clicks, types, joins, or sends anything.
- */
-const DISCOVERED_GAP_MS = 6000;
-
-/** Weakest → strongest. An automatic read may raise a hand-set mark, never lower it. */
-const MEMBERSHIP_RANK: Record<string, number> = {
-  UNKNOWN: 0,
-  REJECTED: 1,
-  NOT_MEMBER: 1,
-  JOIN_REQUEST_SENT: 2,
-  MEMBER: 3,
-};
-
-const MEMBERSHIP_HE: Record<string, string> = {
-  MEMBER: 'חבר בקבוצה',
-  NOT_MEMBER: 'לא חבר בקבוצה',
-  JOIN_REQUEST_SENT: 'בקשת הצטרפות ממתינה',
-  REJECTED: 'הבקשה נדחתה',
-  UNKNOWN: 'לא ידוע',
-};
-
-/** Said once per process: the table only exists after supabase/social-schema-v8.sql. */
-let discoverySchemaWarned = false;
-
-interface DiscoveredRow {
-  id: string;
-  url: string;
-  name: string;
-  fb_group_id: string;
-  membership: string;
-  membership_set_by: string;
-}
-
-async function syncDiscoveredGroups(state: WorkerState, headless: boolean): Promise<void> {
-  if (state.browserState === 'disconnected' || !session.hasProfile()) return;
-  const db = await workerDb();
-  const { data, error } = await db
-    .from('social_discovered_groups')
-    .select('id, url, name, fb_group_id, membership, membership_set_by')
-    .eq('enrich_state', 'queued')
-    .eq('ignored', false)
-    .order('discovered_at')
-    .limit(DISCOVERED_PER_TICK);
-  if (error) {
-    if (!discoverySchemaWarned) {
-      discoverySchemaWarned = true;
-      console.log('[worker] מסך "גילוי קבוצות" לא פעיל — האם הרצתם את supabase/social-schema-v8.sql?');
-    }
-    return;
-  }
-  if (!data?.length) return;
-
-  for (const row of data as DiscoveredRow[]) {
-    const page = await session.newPage(headless);
-    try {
-      const details = await readGroupDetails(page, row.url);
-      if (!details) {
-        // Login / checkpoint. Leave the row queued so it is read later, exactly
-        // as it was requested — a failed read must never look like a done one.
-        state.lastCheckAt = 0;
-        return;
-      }
-
-      const patch: Record<string, unknown> = {
-        enrich_state: 'done',
-        last_checked_at: new Date().toISOString(),
-        last_error: '',
-      };
-      if (details.name) {
-        patch.name = details.name;
-        patch.city = detectCity(details.name);
-      }
-      // 'unknown' and null are the "page did not say" values. Writing them back
-      // would erase something a previous, luckier read managed to get.
-      if (details.privacy !== 'unknown') patch.privacy = details.privacy;
-      if (details.membersCount !== null) patch.members_count = details.membersCount;
-
-      // Rule: the owner outranks the worker. A group where only admins post
-      // shows no composer, which looks exactly like a group they are not in —
-      // so a hand-set mark is never lowered on the strength of that.
-      if (details.membership !== 'UNKNOWN') {
-        const ownerSet = row.membership_set_by === 'owner';
-        const stronger = (MEMBERSHIP_RANK[details.membership] ?? 0) > (MEMBERSHIP_RANK[row.membership] ?? 0);
-        if (!ownerSet || stronger) {
-          patch.membership = details.membership;
-          patch.membership_set_by = 'system';
-        } else if (details.membership !== row.membership) {
-          // Recorded, not applied — the screen can show the disagreement.
-          patch.last_error = `בדף הקבוצה נראה "${MEMBERSHIP_HE[details.membership]}", אבל הסימון שלכם ("${MEMBERSHIP_HE[row.membership] ?? row.membership}") נשמר.`;
-        }
-      }
-
-      // Reconciliation: the same group captured once by its vanity URL and once
-      // by its numeric id looks like two groups. The page's canonical id is the
-      // only thing that can tell. A clash is marked, never merged blindly —
-      // merging would silently drop whatever the owner had set on one of them.
-      if (details.canonicalId && details.canonicalId !== row.fb_group_id) {
-        const { data: clash } = await db
-          .from('social_discovered_groups')
-          .select('id')
-          .eq('fb_group_id', details.canonicalId)
-          .neq('id', row.id)
-          .maybeSingle();
-        if (clash) {
-          patch.ignored = true;
-          patch.last_error = 'זוהתה ככפילות של קבוצה אחרת ברשימה (אותו מזהה בפייסבוק).';
-        } else {
-          patch.fb_group_id = details.canonicalId;
-        }
-      }
-
-      if (details.image) {
-        const ext = details.image.contentType.includes('png') ? 'png' : 'jpg';
-        const objectPath = `discovered/${row.id}.${ext}`;
-        const { error: upErr } = await db.storage
-          .from('social-media')
-          .upload(objectPath, details.image.bytes, { contentType: details.image.contentType, upsert: true });
-        // The ?v= matters: the path is stable across re-reads, so without it the
-        // old picture stays in every cache.
-        if (!upErr) patch.image_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
-      }
-
-      await db.from('social_discovered_groups').update(patch).eq('id', row.id);
-      const members = details.membersCount === null ? '' : `, ${details.membersCount} חברים`;
-      console.log(`[worker] ℹ גילוי: "${patch.name ?? row.name ?? row.url}" — ${MEMBERSHIP_HE[details.membership]}${members}`);
-    } catch (err) {
-      // 'failed' and not 'done': a timed-out group must stay visible as a
-      // failure with its reason, not quietly leave the queue looking read.
-      await db
-        .from('social_discovered_groups')
-        .update({
-          enrich_state: 'failed',
-          last_checked_at: new Date().toISOString(),
-          last_error: `קריאת פרטי הקבוצה נכשלה: ${err instanceof Error ? err.message : String(err)}`,
-        })
-        .eq('id', row.id);
-    } finally {
-      await page.close().catch(() => undefined);
-    }
-    await sleep(DISCOVERED_GAP_MS);
   }
 }
 

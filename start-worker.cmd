@@ -1,5 +1,14 @@
 @echo off
+rem cmd.exe decodes the rest of this file with the console codepage that was
+rem active when it opened the file, so a `chcp 65001` further down comes too
+rem late and the Hebrew below prints as mojibake. Re-run once in a fresh cmd
+rem that already has UTF-8 set, and every line after this decodes correctly.
+if "%~1"=="--utf8" goto main
 chcp 65001 >nul
+cmd /c "%~f0" --utf8
+exit /b %errorlevel%
+:main
+
 title הפתרון המבריק - worker פרסום
 cd /d "%~dp0"
 
@@ -46,9 +55,9 @@ set FAILS=0
 :run
 rem Seconds before and after the run. A worker that stayed up for a while
 rem and then crashed must not count toward the give-up limit, or a restart
-rem weeks from now would stop the loop. ToFileTimeUtc rather than
-rem -UFormat, which formats differently across PowerShell versions; only
-rem the difference between the two readings matters here.
+rem weeks from now would stop the loop. ToFileTimeUtc rather than -UFormat,
+rem which formats differently across PowerShell versions; only the
+rem difference between the two readings matters here.
 set T0=0
 set T1=0
 set RAN=0

@@ -1,5 +1,14 @@
 @echo off
+rem cmd.exe decodes the rest of this file with the console codepage that was
+rem active when it opened the file, so a `chcp 65001` further down comes too
+rem late and the Hebrew below prints as mojibake. Re-run once in a fresh cmd
+rem that already has UTF-8 set, and every line after this decodes correctly.
+if "%~1"=="--utf8" goto main
 chcp 65001 >nul
+cmd /c "%~f0" --utf8
+exit /b %errorlevel%
+:main
+
 title הפתרון המבריק - עדכון
 cd /d "%~dp0"
 
@@ -15,7 +24,7 @@ if errorlevel 1 goto nogit
 rem The dev server rewrites AGENTS.md and CLAUDE.md, and both are tracked, so
 rem a plain pull fails with "local changes would be overwritten" on any machine
 rem that has ever run start-social.cmd. Park those changes instead of stopping;
-rem stash keeps them, so nothing is thrown away.
+rem stash keeps them, and -u leaves ignored files such as .env.local alone.
 git diff --quiet
 if errorlevel 1 goto stash
 goto pull

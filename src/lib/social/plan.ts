@@ -89,8 +89,11 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     const approved = (variants ?? []) as Variant[];
     const media = (post.media ?? []) as MediaItem[];
     const taken = await occupiedSlots(db, post.id);
+    const waiting = await plannedTargets(db, post.id);
 
     for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
+      // This post is already waiting for this group — see plannedTargets().
+      if (waiting.has(targetId)) continue;
       const { count } = await db
         .from('social_queue')
         .select('id', { count: 'exact', head: true })
@@ -129,6 +132,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
         }
         if (data && data.length) {
           taken.add(slotKey(targetId, slot));
+          waiting.add(targetId);
           created += 1;
           rotation += 1;
         }
@@ -169,6 +173,35 @@ async function occupiedSlots(db: SupabaseClient, postId: string): Promise<Set<st
 }
 
 const slotKey = (targetId: string, at: string | Date) => `${targetId}|${new Date(at).toISOString()}`;
+
+/**
+ * Groups that already have a publication of this post WAITING, whatever instant
+ * it sits on.
+ *
+ * occupiedSlots() above compares instants, which is right for a planner running
+ * against untouched rows — but the queue is no longer untouched. The dashboard's
+ * queue tuner re-spaces the waiting rows (client.ts respaceQueue) and appends
+ * hand-added groups, and both move a row OFF the instant its schedule would plan
+ * it on. The next tick, 60 seconds later, finds that instant free and plans the
+ * whole campaign a second time: the owner sets the gap, watches the queue double,
+ * and every duplicate is later skipped with a reason that explains nothing.
+ *
+ * Matching on the target instead closes that hole, and costs nothing that was
+ * worth keeping: rules.ts already refuses a post that has gone to a target once
+ * ("הפוסט הזה כבר פורסם ל-…"), so a second row for the same post and group was
+ * never going to publish — it only ever made the queue longer than the truth.
+ *
+ * Same status list as occupiedSlots() and for the same reason: a row that was
+ * cancelled or failed is finished, and may be planned again.
+ */
+async function plannedTargets(db: SupabaseClient, postId: string): Promise<Set<string>> {
+  const { data } = await db
+    .from('social_queue')
+    .select('target_id')
+    .eq('post_id', postId)
+    .in('status', ['scheduled', 'publishing', 'manual_pending', 'needs_attention', 'awaiting_confirmation', 'paused']);
+  return new Set((data ?? []).map((r) => r.target_id as string));
+}
 
 /**
  * Campaigns the owner has stopped, and a sweep of anything they still hold.
@@ -229,6 +262,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   const media = (post.media ?? []) as MediaItem[];
   const slots = dripSlots(schedule, now);
   const taken = await occupiedSlots(db, post.id);
+  const waiting = await plannedTargets(db, post.id);
   let created = 0;
   let last = now;
 
@@ -236,6 +270,8 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
     const at = slots[targetIndex];
     if (!at) continue;
     if (at > last) last = at;
+    // This post is already waiting for this group — see plannedTargets().
+    if (waiting.has(targetId)) continue;
     // Already planned for this post by some other schedule.
     if (taken.has(slotKey(targetId, at))) continue;
     const variant = pickVariant(approved, schedule, targetId, targetIndex, 0);
@@ -266,6 +302,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
     }
     if (data?.length) {
       taken.add(slotKey(targetId, at));
+      waiting.add(targetId);
       created += 1;
     }
   }

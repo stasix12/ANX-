@@ -3,7 +3,8 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
-import { friendlyError } from './errors';
+import { dedupeKey } from './compose';
+import { friendlyError, friendlyMessage } from './errors';
 import {
   DEFAULT_BROWSER,
   DEFAULT_BUSINESS,
@@ -663,4 +664,474 @@ export async function publishNow(postId: string, targetIds: string[]): Promise<v
     target_ids: targetIds,
   });
   await callSocialApi('/api/social/run');
+}
+
+/* ------------------------------------------------- live queue tuning */
+
+/**
+ * Everything the "הפרסום הבא" tuner needs about the queue that is still
+ * waiting, in one read.
+ *
+ * "Pending" here means a row that has not started yet — 'scheduled' or
+ * 'paused'. A 'publishing' / 'awaiting_confirmation' row is already mid-flight
+ * and its instant is no longer ours to move, so it is deliberately out.
+ *
+ * Read it from the database rather than from whatever the dashboard happens to
+ * be holding: src/app/social/page.tsx loads the queue newest-first with a limit
+ * of 40, so with a long queue that array holds the FURTHEST-OUT rows, not the
+ * next ones. A tuner that respaced that array would respace the wrong rows.
+ */
+export interface LiveQueueTarget {
+  target: SocialTarget;
+  /** Rows still waiting for this group. */
+  pending: number;
+  /** ISO of its soonest pending row. */
+  nextAt: string | null;
+}
+
+export interface LiveQueuePlan {
+  /** Pending rows, soonest first. */
+  rows: QueueRow[];
+  /** The gap actually between consecutive rows now (median). null if < 2 rows. */
+  gapMinutes: number | null;
+  /** The floor rules.ts enforces for a GROUP target right now. */
+  effectiveGapMinutes: number;
+  targets: LiveQueueTarget[];
+  /** The post the pending rows belong to; null if they are mixed. */
+  postId: string | null;
+  campaignId: string | null;
+  /**
+   * The read hit LIVE_QUEUE_LIMIT, so `rows` is the soonest 500 and not the
+   * whole queue. Additive to the agreed contract, and the screen needs it:
+   * without it "ממתינים בתור: 500" is presented as a total when it is a cap,
+   * and respaceQueue — which reads under the same limit — would leave the rows
+   * beyond it sitting on instants the respaced ones now overlap.
+   */
+  truncated: boolean;
+}
+
+/** Pending statuses — a row that has not begun and can still be re-timed. */
+const PENDING: QueueItem['status'][] = ['scheduled', 'paused'];
+
+/** A hard ceiling so one screen can never pull an unbounded table. */
+const LIVE_QUEUE_LIMIT = 500;
+
+/**
+ * Same shape as QUEUE_SELECT, but the whole target row — the tuner lists the
+ * groups themselves (picture, name, channel), not just the name on a row.
+ */
+const LIVE_QUEUE_SELECT =
+  '*, target:social_targets(*), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
+
+/**
+ * The median gap, not the mean: one row that somebody dragged a day out would
+ * pull an average far away from the spacing every other row actually has, and
+ * the owner would be shown a number that matches nothing on their screen.
+ * Whole minutes, because that is the unit they edit in.
+ */
+function medianGapMinutes(sortedISO: string[]): number | null {
+  if (sortedISO.length < 2) return null;
+  const gaps: number[] = [];
+  for (let i = 1; i < sortedISO.length; i += 1) {
+    const ms = new Date(sortedISO[i]).getTime() - new Date(sortedISO[i - 1]).getTime();
+    if (Number.isFinite(ms)) gaps.push(Math.round(ms / 60_000));
+  }
+  if (!gaps.length) return null;
+  gaps.sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  return gaps.length % 2 ? gaps[mid] : Math.round((gaps[mid - 1] + gaps[mid]) / 2);
+}
+
+/**
+ * What rules.ts will actually demand between two GROUP publications:
+ * src/lib/social/rules.ts adds browser.groupMinGapMinutes on top of
+ * limits.minGapMinutes whenever the target's channel is 'facebook_group'.
+ * Both settings are editable on the settings screen, so they are always read —
+ * never assumed to still be the 45 + 20 the defaults ship with.
+ */
+function effectiveGroupGap(limits: LimitsSettings, browser: BrowserSettings): number {
+  return Math.max(0, Math.round(limits.minGapMinutes + browser.groupMinGapMinutes));
+}
+
+export async function liveQueuePlan(opts: { campaignId?: string } = {}): Promise<LiveQueuePlan> {
+  let query = db()
+    .from('social_queue')
+    .select(LIVE_QUEUE_SELECT)
+    .in('status', PENDING)
+    .order('scheduled_at', { ascending: true })
+    .limit(LIVE_QUEUE_LIMIT);
+  if (opts.campaignId) query = query.eq('campaign_id', opts.campaignId);
+
+  // One queue read; the two settings rows are the only other traffic, and they
+  // are what decides whether the spacing on screen is even legal. All three go
+  // out together — `await query` inside the array would have run first and made
+  // this three round trips on a phone instead of one.
+  const [rowsRes, limits, browser] = await Promise.all([query, getLimits(), getBrowserSettings()]);
+  const rows = unwrap<QueueRow[]>(rowsRes);
+
+  const targets: LiveQueueTarget[] = [];
+  const byTarget = new Map<string, LiveQueueTarget>();
+  for (const row of rows) {
+    if (!row.target) continue;
+    const seen = byTarget.get(row.target_id);
+    if (seen) {
+      seen.pending += 1;
+      // Rows arrive ascending, so the first one seen is already the soonest.
+      continue;
+    }
+    const entry: LiveQueueTarget = { target: row.target as SocialTarget, pending: 1, nextAt: row.scheduled_at };
+    byTarget.set(row.target_id, entry);
+    targets.push(entry);
+  }
+
+  const postIds = new Set(rows.map((r) => r.post_id));
+  const campaignIds = new Set(rows.map((r) => r.campaign_id ?? null));
+
+  return {
+    rows,
+    gapMinutes: medianGapMinutes(rows.map((r) => r.scheduled_at)),
+    effectiveGapMinutes: effectiveGroupGap(limits, browser),
+    targets,
+    // Only a queue that is one post's can be added to — see addTargetsToQueue.
+    postId: postIds.size === 1 ? [...postIds][0] : null,
+    campaignId: opts.campaignId ?? (campaignIds.size === 1 ? ([...campaignIds][0] ?? null) : null),
+    truncated: rows.length >= LIVE_QUEUE_LIMIT,
+  };
+}
+
+/** The owner's own number, guarded. Not a Facebook limit and not a promise about one. */
+const MIN_GAP_MINUTES = 1;
+const MAX_GAP_MINUTES = 720;
+
+/**
+ * Postgres 23505 — the unique index (schedule_id, target_id, scheduled_at).
+ * Recognised by code rather than by message text, because the message is
+ * English, it names the constraint, and it is never shown to anyone.
+ */
+function isDuplicateSlot(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code;
+  return code === '23505';
+}
+
+/**
+ * Re-spaces the waiting queue to one publication every `gapMinutes`, and — the
+ * part that actually makes it work — moves the settings so that the engine
+ * agrees with the new spacing.
+ *
+ * WHY THE SETTINGS WRITE IS THE POINT, AND THE ROWS ARE NOT:
+ * src/lib/social/rules.ts defers a group publication whenever
+ *   now - lastPublishedAt < (limits.minGapMinutes + browser.groupMinGapMinutes) * 60_000
+ * and — this is the part that surprises everyone — it re-times the deferred row
+ * off the LAST PUBLICATION, not off its own scheduled_at. So re-stamping rows 10
+ * minutes apart while the engine still wants 65 does nothing at all: every row is
+ * pushed back again on every claim, and each claim burns one of the 40 attempts
+ * the engine allows before it skips the row outright. Moving the rows without
+ * moving the settings is therefore not a smaller version of this feature — it is
+ * a queue that quietly dies.
+ *
+ * THE SPLIT, and why this one:
+ * groupMinGapMinutes is the owner's "groups need more air than pages" surcharge;
+ * it is a deliberate setting and not ours to reinterpret. So it stays put and the
+ * difference comes out of the global gap:
+ *     limits.minGapMinutes = gapMinutes - browser.groupMinGapMinutes
+ * If that would be negative — the owner asked for a gap smaller than the
+ * surcharge alone — the global gap goes to 0 and the surcharge itself becomes the
+ * whole number. That is the only way to honour the request, and the activity log
+ * line says so in words, because silently rewriting a setting the owner chose is
+ * exactly the kind of thing they would never find out about.
+ *
+ * Both objects are written whole. getSetting() spreads the defaults UNDER the
+ * stored value, but saveSetting() replaces the entire jsonb — writing
+ * { minGapMinutes } alone would wipe maxPerDay, maxPerTargetPerDay and dedupeDays.
+ *
+ * Returns the number of rows that actually moved.
+ */
+export async function respaceQueue(gapMinutes: number, opts: { campaignId?: string; startAt?: string } = {}): Promise<number> {
+  if (!Number.isInteger(gapMinutes) || gapMinutes < MIN_GAP_MINUTES || gapMinutes > MAX_GAP_MINUTES) {
+    throw new Error(`המרווח צריך להיות מספר שלם של דקות, בין ${MIN_GAP_MINUTES} ל-${MAX_GAP_MINUTES}.`);
+  }
+
+  const startMs = opts.startAt ? new Date(opts.startAt).getTime() : NaN;
+  // A minute from now by default: "now" would hand the worker a row it can claim
+  // before the settings write below has landed.
+  const start = Number.isFinite(startMs) ? startMs : Date.now() + 60_000;
+
+  const [limits, browser] = await Promise.all([getLimits(), getBrowserSettings()]);
+  // Note the asymmetry, and it is deliberate: `campaignId` narrows which ROWS
+  // are re-stamped, but 'limits' and 'browser' are global — rules.ts has one
+  // spacing setting for the whole account, not one per campaign. Scoping the
+  // settings is not an option; pretending they are scoped would be worse.
+  const surcharge = Math.max(0, Math.round(browser.groupMinGapMinutes));
+  const globalGap = gapMinutes >= surcharge ? gapMinutes - surcharge : 0;
+  const newSurcharge = gapMinutes >= surcharge ? surcharge : gapMinutes;
+  const surchargeChanged = newSurcharge !== browser.groupMinGapMinutes;
+
+  // Settings first. The worker re-reads 'limits' and 'browser' on every tick
+  // (worker/social-worker.ts), so from this moment the new spacing is the one
+  // being enforced — and a row that lands on its new instant a second later is
+  // measured against the number the owner just chose, not the old one.
+  await saveSetting('limits', { ...limits, minGapMinutes: globalGap });
+  if (surchargeChanged) await saveSetting('browser', { ...browser, groupMinGapMinutes: newSurcharge });
+
+  let query = db()
+    .from('social_queue')
+    .select('id, scheduled_at, status')
+    .in('status', PENDING)
+    .order('scheduled_at', { ascending: true })
+    .limit(LIVE_QUEUE_LIMIT);
+  if (opts.campaignId) query = query.eq('campaign_id', opts.campaignId);
+  const pending = unwrap<{ id: string; scheduled_at: string; status: QueueItem['status'] }[]>(await query);
+
+  const work = pending
+    .map((row, i) => ({ id: row.id, next: new Date(start + i * gapMinutes * 60_000).toISOString(), was: row.scheduled_at }))
+    // A row already sitting on its new instant needs no write, and skipping it
+    // keeps the count we report equal to the number of rows that really moved.
+    .filter((w) => w.next !== w.was);
+
+  // social_queue has a UNIQUE index on (schedule_id, target_id, scheduled_at).
+  // Two rows of one schedule for one group can therefore collide mid-respace if
+  // one lands on an instant a row behind it has not vacated yet. Writing in the
+  // direction of travel — last-first when the queue is moving later, first-first
+  // when it is moving earlier — frees each instant before it is claimed, and is
+  // enough for every queue that moves the same way all the way down.
+  // Sequentially, because Supabase has no per-row UPDATE ... FROM and the order
+  // is the whole point.
+  const movingLater = work.length > 0 && new Date(work[0].next).getTime() >= new Date(work[0].was).getTime();
+  const ordered = movingLater ? [...work].reverse() : work;
+
+  let moved = 0;
+  const writeRow = async (item: { id: string; next: string }) => {
+    // Named statuses, like the rest of this file: a stale screen must never move
+    // a row that has meanwhile started publishing.
+    const res = await db()
+      .from('social_queue')
+      .update({ scheduled_at: item.next })
+      .eq('id', item.id)
+      .in('status', PENDING)
+      .select('id');
+    if (res.error) return res.error;
+    moved += (res.data as { id: string }[] | null)?.length ?? 0;
+    return null;
+  };
+
+  // A queue can also move BOTH ways at once — a longer gap starting earlier
+  // pulls the head back while it pushes the tail out — and then no single
+  // direction is collision-free. Rather than reason about which row crosses
+  // which, a row that hits the unique index is simply set aside and written
+  // again once every other row has vacated. One retry pass is all it can ever
+  // need: after the first pass nothing of ours is left on an old instant.
+  const blocked: { id: string; next: string }[] = [];
+  let failed = 0;
+  let firstError: unknown = null;
+  for (const item of ordered) {
+    const err = await writeRow(item);
+    if (!err) continue;
+    if (isDuplicateSlot(err)) {
+      blocked.push(item);
+      continue;
+    }
+    failed += 1;
+    firstError ??= err;
+  }
+  for (const item of blocked) {
+    const err = await writeRow(item);
+    if (!err) continue;
+    // Still taken — by a row outside this respace (another campaign's, or one
+    // already publishing). Counted and reported, never swallowed.
+    failed += 1;
+    firstError ??= err;
+  }
+
+  const cappedNote = pending.length >= LIVE_QUEUE_LIMIT ? ` (רק ${LIVE_QUEUE_LIMIT} הפרסומים הקרובים בתור תוזמנו מחדש)` : '';
+  const surchargeNote = surchargeChanged
+    ? ` (המרווח הנוסף לקבוצות עודכן ל-${newSurcharge} דק׳ והמרווח הכללי ל-${globalGap} דק׳)`
+    : '';
+  await logClientActivity(
+    failed ? 'warn' : 'info',
+    'queue_respaced',
+    `המרווח בין פרסומים נקבע ל-${gapMinutes} דק׳ — ${moved} פרסומים תוזמנו מחדש${cappedNote}${surchargeNote}`,
+    { gapMinutes, minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, moved, failed, campaignId: opts.campaignId ?? null },
+  );
+
+  // Half-applied is a real outcome and the owner is told the real numbers,
+  // through the same classifier every other failure here goes through.
+  if (failed) {
+    throw new Error(`${moved} פרסומים תוזמנו מחדש, אבל ${failed} לא זזו: ${friendlyMessage(firstError)}`);
+  }
+  return moved;
+}
+
+/**
+ * Takes one group out of the waiting queue. Cancels exactly the way the rest of
+ * this file cancels a row — status 'skipped' with a reason the owner can read in
+ * the history — and names the statuses it is allowed to touch, so a publication
+ * that already happened, or one that is running right now, is never rewritten.
+ *
+ * AND stops it being planned again, which is the half that makes the button
+ * real. Cancelling the rows alone is undone within a minute: src/lib/social/plan.ts
+ * runs every 60 seconds, occupiedSlots() deliberately ignores 'skipped' rows so
+ * that a skipped publication may be re-planned, and the group is still listed in
+ * schedule.target_ids — so a weekly or interval campaign puts every row straight
+ * back, at the same instants, and the owner watches a group they removed reappear.
+ * So the target is taken off the schedules that queued those rows too. A schedule
+ * left with no targets at all can never produce anything again, so it is retired
+ * rather than left ticking.
+ *
+ * Scope: only the schedules that actually put the cancelled rows there. A schedule
+ * that has never been materialised holds no rows to cancel, so there is nothing
+ * here to undo — it is still the scheduler screen's job to edit it.
+ *
+ * Returns how many rows were cancelled.
+ */
+export async function removeTargetFromQueue(targetId: string, opts: { campaignId?: string } = {}): Promise<number> {
+  const { data: target } = await db().from('social_targets').select('name').eq('id', targetId).maybeSingle();
+  const name = (target as { name?: string } | null)?.name ?? '';
+
+  let query = db()
+    .from('social_queue')
+    .update({ status: 'skipped', step: '', skip_reason: name ? `הקבוצה "${name}" הוסרה מהתור` : 'הקבוצה הוסרה מהתור' })
+    .eq('target_id', targetId)
+    .in('status', CANCELLABLE);
+  if (opts.campaignId) query = query.eq('campaign_id', opts.campaignId);
+  const rows = unwrap<{ id: string; schedule_id: string | null }[]>(await query.select('id, schedule_id'));
+
+  const unplanned = await unplanTarget(targetId, [...new Set(rows.map((r) => r.schedule_id).filter((id): id is string => Boolean(id)))]);
+
+  await logClientActivity(
+    'info',
+    'queue_target_removed',
+    `${name ? `הקבוצה "${name}"` : 'קבוצה'} הוסרה מהתור — ${rows.length} פרסומים בוטלו${unplanned ? `, והקבוצה הוסרה מ-${unplanned} תזמונים פעילים` : ''}`,
+    { targetId, cancelled: rows.length, unplannedSchedules: unplanned, campaignId: opts.campaignId ?? null },
+  );
+  return rows.length;
+}
+
+/**
+ * Takes a target off the given schedules so the planner stops re-creating rows
+ * for it. Returns how many ACTIVE schedules were actually changed — an inactive
+ * one ('now', 'once' and 'drip' retire themselves the moment they are planned)
+ * can no longer produce anything, so it is left exactly as it is, as the record
+ * of what was sent.
+ */
+async function unplanTarget(targetId: string, scheduleIds: string[]): Promise<number> {
+  if (!scheduleIds.length) return 0;
+  const schedules = unwrap<Pick<Schedule, 'id' | 'target_ids'>[]>(
+    await db().from('social_schedules').select('id, target_ids').in('id', scheduleIds).eq('active', true),
+  );
+  let changed = 0;
+  for (const schedule of schedules) {
+    const remaining = (schedule.target_ids ?? []).filter((id) => id !== targetId);
+    if (remaining.length === (schedule.target_ids ?? []).length) continue;
+    // A schedule with no targets left has nothing to publish to; leaving it
+    // active would only keep an empty plan alive in every future planner run.
+    const patch = remaining.length ? { target_ids: remaining } : { target_ids: remaining, active: false };
+    unwrap(await db().from('social_schedules').update(patch).eq('id', schedule.id));
+    changed += 1;
+  }
+  return changed;
+}
+
+/**
+ * The browser's half of plan.ts's dedupe hash.
+ *
+ * rules.ts looks a publication up by dedupe_hash to catch the same content going
+ * out twice, and every hash already in the table was written by node's
+ * createHash('sha256')...digest('hex') (src/lib/social/plan.ts, and sha256() in
+ * server/crypto.ts). Both of those are server-only imports by design, so a row
+ * created here has to reproduce that digest exactly — lowercase hex, two
+ * characters per byte, zero-padded. Get it wrong and nothing breaks loudly: the
+ * duplicate check simply stops matching, which is the worst kind of bug to ship
+ * into a rule whose whole job is to be invisible when it works.
+ */
+async function sha256Hex(value: string): Promise<string> {
+  // crypto.subtle exists only in a secure context (https, or localhost). On a
+  // plain-http LAN address it is undefined, and an empty dedupe_hash would make
+  // rules.ts skip the duplicate check entirely — so we refuse instead.
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) throw new Error('אי אפשר להוסיף קבוצות מהכתובת הזו. פתחו את המערכת בכתובת מאובטחת (https) ונסו שוב.');
+  const buf = await subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Adds groups to the queue that is already running: one row each, appended after
+ * the last waiting row, one gap apart.
+ *
+ * The text and the variant are COPIED from a row that is already waiting for this
+ * post rather than re-derived. Re-rendering here would mean re-running
+ * pickVariant()'s rotation out of context and could hand the new group a variant
+ * the owner never approved — rules.ts would then skip the row and the owner would
+ * be left with a group in the list that never publishes.
+ *
+ * schedule_id stays null: the unique index (schedule_id, target_id, scheduled_at)
+ * treats NULLs as distinct, so a hand-made row can never collide with a planned
+ * one. The cost is that setScheduleActive(false) will not reach these rows — they
+ * are cancelled by removeTargetFromQueue or by stopping the campaign.
+ *
+ * Returns how many rows were created.
+ */
+export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?: string } = {}): Promise<number> {
+  const wanted = [...new Set(targetIds.filter(Boolean))];
+  if (!wanted.length) return 0;
+
+  const plan = await liveQueuePlan(opts);
+  if (!plan.rows.length) throw new Error('אין כרגע תור פעיל להוסיף אליו קבוצות.');
+  // Honest refusal: with rows from more than one post there is no single text to
+  // copy, and guessing which post the owner meant is worse than saying so.
+  if (!plan.postId) throw new Error('בתור ממתינים פוסטים שונים, ולכן אי אפשר להוסיף קבוצות מכאן. הוסיפו אותן מתוך הפוסט עצמו.');
+
+  // Prefer a row that actually carries text. The workers fall back to
+  // renderPostText() when rendered_text is empty, so copying an empty one would
+  // publish fine but store a dedupe_hash of the empty string — a hash that
+  // matches nothing the worker ever publishes, quietly disabling the
+  // duplicate-content rule for the new row.
+  const withText = plan.rows.find((r) => r.post_id === plan.postId && r.rendered_text);
+  const template = withText ?? plan.rows.find((r) => r.post_id === plan.postId);
+  if (!template) throw new Error('לא נמצא פרסום קיים להעתיק ממנו את התוכן.');
+
+  const already = new Set(plan.rows.filter((r) => r.post_id === plan.postId).map((r) => r.target_id));
+  const fresh = wanted.filter((id) => !already.has(id));
+  // Skipping instead of double-booking: a second row for the same group and the
+  // same post would be skipped by rules.ts anyway ("הפוסט הזה כבר פורסם ל-…").
+  if (!fresh.length) return 0;
+
+  const gap = Math.max(MIN_GAP_MINUTES, plan.gapMinutes ?? plan.effectiveGapMinutes);
+  const last = plan.rows[plan.rows.length - 1];
+  const lastMs = new Date(last.scheduled_at).getTime();
+  const from = Number.isFinite(lastMs) ? lastMs : Date.now();
+  const mediaUrls = (template.post?.media ?? []).map((m: MediaItem) => m.url);
+
+  const rows = await Promise.all(
+    fresh.map(async (targetId, i) => ({
+      schedule_id: null,
+      post_id: plan.postId as string,
+      // plan.ts reads campaign_id off the POST, and the template row was planned
+      // from that same post, so it already carries the right value.
+      campaign_id: template.campaign_id ?? null,
+      variant_id: template.variant_id,
+      target_id: targetId,
+      scheduled_at: new Date(from + (i + 1) * gap * 60_000).toISOString(),
+      status: 'scheduled' as const,
+      // '' means "terminal" elsewhere in this codebase; the planner sets 'pending'.
+      step: 'pending',
+      require_confirmation: Boolean(template.require_confirmation),
+      // Both of these default to '' in the schema, and both defaults are traps:
+      // an empty rendered_text publishes an empty post, and an empty dedupe_hash
+      // turns the duplicate-content rule off for this row.
+      rendered_text: template.rendered_text,
+      dedupe_hash: await sha256Hex(dedupeKey(targetId, template.rendered_text, mediaUrls)),
+    })),
+  );
+
+  const inserted = unwrap<{ id: string }[]>(await db().from('social_queue').insert(rows).select('id'));
+  await logClientActivity('info', 'queue_targets_added', `${inserted.length} קבוצות נוספו לתור, כל אחת ${gap} דק׳ אחרי הקודמת`, {
+    targetIds: fresh,
+    added: inserted.length,
+    gapMinutes: gap,
+    postId: plan.postId,
+    campaignId: opts.campaignId ?? null,
+  });
+  return inserted.length;
 }

@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { ChevronIcon } from '@/components/icons';
 import { RUN_STATE_LABEL, percentDone, type CampaignState } from '@/lib/social/campaign';
 import { countdownTo } from '@/lib/social/countdown';
 import { formatTimeHe } from '@/lib/social/time';
-import type { Campaign } from '@/lib/social/types';
+import type { Campaign, SocialTarget } from '@/lib/social/types';
+import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD } from './ui';
 
 /**
@@ -58,21 +60,67 @@ function Ratio({ done, total, suffix }: { done: number; total: number; suffix: s
   );
 }
 
-function NextUp({ at, targetName, now }: { at: string; targetName: string | null; now: number }) {
+/** The shape of the row shared by the button and the plain-div variants. */
+const NEXT_UP_BOX = 'mt-3 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-ink-900 px-3 py-2.5';
+
+/**
+ * "The next publication, in 00:20 — <group>".
+ *
+ * The picture is the group's own, from the queue row the countdown was derived
+ * from; when the worker has not copied one yet TargetAvatar draws its lettered
+ * fallback rather than a broken image. Given `onOpen` the whole row becomes a
+ * real button onto the queue tuner — hence the chevron, so it reads as tappable.
+ */
+function NextUp({
+  at,
+  targetName,
+  now,
+  target,
+  onOpen,
+}: {
+  at: string;
+  targetName: string | null;
+  now: number;
+  target?: Pick<SocialTarget, 'name' | 'image_url'> | null;
+  onOpen?: () => void;
+}) {
   const left = countdownTo(at, now);
   if (!left) return null;
-  return (
-    <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-ink-900 px-3 py-2.5">
-      <div className="min-w-0">
+  const name = target?.name ?? targetName;
+
+  const body = (
+    <>
+      {/* shrink-0: the countdown is the subject here, so it is the group beside it that gives way. */}
+      <div className="shrink-0 text-start">
         <p className="text-[11px] font-bold text-mist-500">{left.due ? 'הפרסום הבא — מתבצע כעת' : 'הפרסום הבא בעוד'}</p>
-        <p className="tabular-nums text-xl font-extrabold leading-tight text-mist-100">{left.due ? formatTimeHe(at) : left.label}</p>
-      </div>
-      {targetName && (
-        <p dir="auto" className="min-w-0 max-w-[45%] truncate text-end text-sm font-bold text-mist-300">
-          {targetName}
+        {/* mm:ss around a neutral colon, which an RTL line reorders. */}
+        <p className="text-xl font-extrabold leading-tight text-mist-100">
+          <span dir="ltr" className="inline-block tabular-nums">{left.due ? formatTimeHe(at) : left.label}</span>
         </p>
+      </div>
+      {name && (
+        <div className="flex min-w-0 items-center gap-2">
+          <TargetAvatar name={name} imageUrl={target?.image_url} size={32} />
+          <p dir="auto" className="min-w-0 truncate text-sm font-bold text-mist-300">
+            {name}
+          </p>
+        </div>
       )}
-    </div>
+      {onOpen && <ChevronIcon aria-hidden className="h-4 w-4 shrink-0 text-mist-500 rtl:rotate-180" />}
+    </>
+  );
+
+  if (!onOpen) return <div className={NEXT_UP_BOX}>{body}</div>;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`${NEXT_UP_BOX} text-start transition-colors hover:bg-ink-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40`}
+    >
+      {body}
+      <span className="sr-only">— שינוי המרווח בין הפרסומים והקבוצות בתור</span>
+    </button>
   );
 }
 
@@ -93,12 +141,16 @@ export function LiveCampaignHero({
   onPause,
   onResume,
   busy,
+  nextTarget,
+  onTune,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city'>;
   state: CampaignState;
   onPause?: () => void;
   onResume?: () => void;
   busy?: boolean;
+  nextTarget?: Pick<SocialTarget, 'name' | 'image_url'> | null;
+  onTune?: () => void;
 }) {
   const running = state.state === 'running';
   const paused = state.state === 'paused';
@@ -136,7 +188,7 @@ export function LiveCampaignHero({
         </div>
       </div>
 
-      {state.nextAt && <NextUp at={state.nextAt} targetName={state.nextTargetName} now={now} />}
+      {state.nextAt && <NextUp at={state.nextAt} targetName={state.nextTargetName} now={now} target={nextTarget} onOpen={onTune} />}
 
       <div className="mt-3 flex gap-2">
         {paused ? (
@@ -170,6 +222,8 @@ export function LiveQueueHero({
   nextTargetName,
   onRunNow,
   busy,
+  nextTarget,
+  onTune,
 }: {
   scheduled: number;
   publishedToday: number;
@@ -179,6 +233,8 @@ export function LiveQueueHero({
   nextTargetName: string | null;
   onRunNow?: () => void;
   busy?: boolean;
+  nextTarget?: Pick<SocialTarget, 'name' | 'image_url'> | null;
+  onTune?: () => void;
 }) {
   const now = useTick(Boolean(nextAt) && !paused);
   const live = !paused && scheduled > 0;
@@ -199,7 +255,7 @@ export function LiveQueueHero({
         <Ratio done={publishedToday} total={dailyTarget} suffix="פורסמו היום, מתוך התקרה שהגדרתם" />
       </div>
 
-      {nextAt && !paused && <NextUp at={nextAt} targetName={nextTargetName} now={now} />}
+      {nextAt && !paused && <NextUp at={nextAt} targetName={nextTargetName} now={now} target={nextTarget} onOpen={onTune} />}
 
       <div className="mt-3 flex gap-2">
         {onRunNow && (

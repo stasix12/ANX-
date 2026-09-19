@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { zonedToUtc } from '@/lib/social/time';
@@ -387,4 +388,173 @@ console.log('unit tests OK');
   assert.ok(card.includes('worker.version !== WORKER_VERSION'), 'the dashboard must notice an out-of-date worker');
 
   console.log('worker-freshness tests OK');
+}
+
+/* ------------------------------------ the queue tuner actually changes the queue */
+{
+  const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+  const sheet = readFileSync(new URL('../../src/components/social/QueueTunerSheet.tsx', import.meta.url), 'utf8');
+  const hero = readFileSync(new URL('../../src/components/social/LiveCampaignHero.tsx', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
+  const rules = readFileSync(new URL('../../src/lib/social/rules.ts', import.meta.url), 'utf8');
+  const planner = readFileSync(new URL('../../src/lib/social/plan.ts', import.meta.url), 'utf8');
+
+  /*
+   * A live campaign on this deployment finished 112 skipped, 0 published. The
+   * rows were minutes apart while rules.ts wanted 65, so every claim deferred
+   * the row and burned one of its 40 attempts until the engine gave up on it
+   * with "נדחה יותר מדי פעמים בגלל מרווח הזמן בין פרסומים".
+   *
+   * That is the shape of the bug this whole panel exists to end, and it has an
+   * exact re-entry: re-spacing the ROWS without moving the SETTINGS looks like a
+   * working feature — the times on screen change, the owner is satisfied, and
+   * the queue dies again overnight. So the settings write is asserted here, not
+   * remembered.
+   */
+  const respace = client.slice(
+    client.indexOf('export async function respaceQueue'),
+    client.indexOf('export async function removeTargetFromQueue'),
+  );
+  assert.ok(respace.length > 500, 'respaceQueue must exist in client.ts');
+  assert.ok(respace.includes("saveSetting('limits'"), 'respaceQueue must write the spacing setting, not only the queue rows');
+  assert.ok(respace.includes("saveSetting('browser'"), 'respaceQueue must be able to move the group surcharge too');
+  // Whole objects: saveSetting replaces the entire jsonb, so a partial write
+  // silently wipes maxPerDay / maxPerTargetPerDay / dedupeDays.
+  assert.ok(respace.includes('{ ...limits, minGapMinutes:'), 'the limits write must carry the whole object, or the daily ceilings are erased');
+  assert.ok(respace.includes('{ ...browser, groupMinGapMinutes:'), 'the browser write must carry the whole object');
+  // ...and before the rows, so a row claimed a second after it moves is judged
+  // by the number the owner just chose rather than the one they replaced.
+  assert.ok(
+    respace.indexOf("saveSetting('limits'") < respace.indexOf(".from('social_queue')"),
+    'the settings must be written before the rows move, or the first row out is still measured against the old gap',
+  );
+
+  /*
+   * The arithmetic itself. rules.ts adds the group surcharge on top of the
+   * global gap, so the ONE number the owner edits is the sum — and the split
+   * has to reproduce that sum exactly, or a row placed N minutes after the last
+   * publication is deferred by the very setting that was supposed to allow it.
+   */
+  assert.ok(
+    rules.includes('limits.minGapMinutes + extra'),
+    'rules.ts must still be the sum of the global gap and the group surcharge — the tuner splits one number into these two',
+  );
+  const split = (n: number, surcharge: number) =>
+    n >= surcharge ? { minGap: n - surcharge, group: surcharge } : { minGap: 0, group: n };
+  for (const surcharge of [0, 5, 20, 45]) {
+    for (const n of [1, 5, 19, 20, 21, 30, 45, 65, 90, 720]) {
+      const { minGap, group } = split(n, surcharge);
+      assert.ok(minGap >= 0 && group >= 0, `the split must never store a negative gap (N=${n}, surcharge=${surcharge})`);
+      assert.equal(minGap + group, n, `the split must leave minGapMinutes + groupMinGapMinutes === ${n}`);
+      // ...which is exactly the comparison rules.ts makes for a facebook_group.
+      const gapMs = (minGap + group) * 60_000;
+      assert.equal(n * 60_000 < gapMs, false, `a row exactly ${n} min after the last publication must NOT be deferred`);
+      assert.equal((n - 1) * 60_000 < gapMs, true, `a row ${n - 1} min after the last publication must still be deferred`);
+    }
+  }
+  // And the number on screen is read from the stored settings, never assumed.
+  assert.ok(
+    client.includes('limits.minGapMinutes + browser.groupMinGapMinutes'),
+    'the effective gap must be computed from the saved settings, not from the shipped defaults',
+  );
+
+  /*
+   * Removing a group has to stick. plan.ts runs every 60 seconds, occupiedSlots()
+   * deliberately ignores 'skipped' rows so a cancelled publication may be planned
+   * again, and the group is still listed in schedule.target_ids — so cancelling
+   * the rows alone means the owner watches the group they just removed walk back
+   * into the queue. Removing it from the queue and stopping it being planned are
+   * two acts, and the button has to do both or it does nothing.
+   */
+  // The body only — unplanTarget is defined just below it, and a slice that
+  // swallowed the definition would pass on the definition alone.
+  const remove = client.slice(client.indexOf('export async function removeTargetFromQueue'), client.indexOf('async function unplanTarget'));
+  assert.ok(remove.includes('await unplanTarget('), 'removing a group from the queue must also stop it being planned again');
+  const unplan = client.slice(client.indexOf('async function unplanTarget'), client.indexOf('async function sha256Hex'));
+  assert.ok(unplan.includes("from('social_schedules')"), 'unplanning happens on the schedule, which is what the planner reads');
+  assert.ok(unplan.includes('target_ids'), 'the group must come off the schedule target list');
+  assert.ok(unplan.includes("eq('active', true)"), 'only a schedule that can still fire is worth editing');
+
+  /*
+   * ...and the other half of the same race: re-spacing and hand-adding both move
+   * a row OFF the instant its schedule would plan it on, which leaves that instant
+   * free for the next tick to fill. Matching on the target, not only the instant,
+   * is what stops the owner setting the gap and watching the queue double.
+   */
+  assert.ok(planner.includes('async function plannedTargets'), 'the planner must know which groups are already waiting for this post');
+  assert.equal(
+    (planner.match(/await plannedTargets\(db, post\.id\)/g) ?? []).length,
+    2,
+    'both planner branches must check which groups are already waiting',
+  );
+  assert.equal((planner.match(/if \(waiting\.has\(targetId\)\) continue;/g) ?? []).length, 2, 'both branches must skip a group already waiting');
+  assert.equal((planner.match(/waiting\.add\(targetId\);/g) ?? []).length, 2, 'both branches must record the group they just planned');
+  const planned = planner.slice(planner.indexOf('async function plannedTargets'), planner.indexOf('async function stoppedCampaigns'));
+  assert.ok(!planned.includes("'skipped'"), 'a cancelled row must not block replanning');
+  assert.ok(!planned.includes("'failed'"), 'a failed row must not block replanning');
+  assert.ok(!planned.includes("'published'"), 'a finished publication must not block a later one');
+
+  /*
+   * The browser writes dedupe_hash for a hand-added row, and every hash already
+   * in the table came from node's createHash('sha256').digest('hex') in plan.ts.
+   * Get the encoding wrong and nothing breaks loudly — rules.ts simply stops
+   * matching duplicates, which is the worst way for a rule to fail.
+   */
+  const hashFn = client.slice(client.indexOf('async function sha256Hex'), client.indexOf('export async function addTargetsToQueue'));
+  assert.ok(hashFn.includes('new TextEncoder().encode('), 'the browser digest must hash UTF-8 bytes, like node does for a string');
+  assert.ok(hashFn.includes("toString(16).padStart(2, '0')"), 'the browser digest must be zero-padded lowercase hex, like digest(hex)');
+  assert.ok(hashFn.includes('crypto?.subtle'), 'a missing SubtleCrypto must be noticed, not turned into an empty hash');
+  /*
+   * Proven rather than pattern-matched. The browser path can only diverge from
+   * node's in two places, and both are checked here on real group names — the
+   * Cyrillic ones are not decoration, a third of this owner's groups are Russian:
+   *
+   *   input  — crypto.subtle is handed TextEncoder bytes; createHash('sha256')
+   *            .update(string) defaults to utf8. Same bytes, or every non-ASCII
+   *            name hashes differently.
+   *   output — digest('hex') is lowercase and zero-padded; the browser rebuilds
+   *            that by hand from the digest bytes, and a missing padStart turns
+   *            any byte under 0x10 into one character instead of two.
+   */
+  const toHex = (bytes: Uint8Array) => Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+  for (const sample of ['', 'abc', 'קבוצה של באר שבע', 'Мы вместе — Негев', 'uuid|ניקוי ספות|https://x/a.jpg']) {
+    assert.deepEqual(
+      Array.from(new TextEncoder().encode(sample)),
+      Array.from(Buffer.from(sample, 'utf8')),
+      'the browser hashes the same bytes node does — otherwise every Hebrew and Russian group name hashes differently',
+    );
+    assert.equal(
+      toHex(new Uint8Array(createHash('sha256').update(sample).digest())),
+      createHash('sha256').update(sample).digest('hex'),
+      'the browser hex encoding must be byte-identical to digest(hex), or the duplicate-content rule quietly changes meaning',
+    );
+  }
+
+  /*
+   * Reachability. The whole feature is one tap on the countdown box; if that box
+   * stops being a button, everything above is code nobody can run.
+   */
+  assert.ok(hero.includes('onClick={onOpen}'), 'the "next publication" box must be a real button when the dashboard hands it an action');
+  assert.ok(/<span className="sr-only">[^<]{5,}<\/span>/.test(hero), 'that button needs an accessible name saying what it does, not just a countdown');
+  assert.ok(hero.includes('<TargetAvatar'), 'the next group must be shown by its own picture');
+  assert.ok(hero.includes('min-h-11'), 'the countdown box is tapped with a thumb — 44px floor');
+  assert.equal((hero.match(/onOpen={onTune}/g) ?? []).length, 2, 'both heroes must pass the action down to NextUp');
+  assert.ok(page.includes('<QueueTunerSheet'), 'the dashboard must render the tuner');
+  assert.equal((page.match(/onTune=\{\(\) => setTunerOpen\(true\)\}/g) ?? []).length, 2, 'both heroes on the dashboard must open it');
+
+  /*
+   * Honesty, in the two forms this module keeps having to re-learn: no invented
+   * audience figures (Meta removed the Groups API — there is no honest source for
+   * a member count), and never a number presented as safe with Facebook.
+   */
+  assert.ok(!/\bחברים\b/.test(sheet), 'no member counts — there is no honest source for one since Meta removed the Groups API');
+  for (const at of [...sheet.matchAll(/בטוח/g)].map((m) => m.index ?? 0)) {
+    assert.ok(
+      sheet.slice(Math.max(0, at - 60), at).includes('לא '),
+      'every mention of "safe" must be a denial — the interval is the owner\'s own setting and prevents nothing',
+    );
+  }
+  assert.ok(sheet.includes('לא הופך שום דבר'), 'the gap control must carry its disclaimer, in the owner\'s language');
+
+  console.log('queue-tuner tests OK');
 }

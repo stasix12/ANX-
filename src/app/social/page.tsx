@@ -7,6 +7,7 @@ import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { LiveCampaignHero, LiveQueueHero } from '@/components/social/LiveCampaignHero';
 import { LiveBoard } from '@/components/social/LiveBoard';
+import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { QuickActions } from '@/components/social/QuickActions';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
@@ -57,6 +58,8 @@ export default function SocialDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /* The queue tuner, opened from the "next publication" box of either hero. */
+  const [tunerOpen, setTunerOpen] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -186,6 +189,14 @@ export default function SocialDashboard() {
         })[0] ?? null)
     : null;
 
+  /*
+   * The group the campaign countdown belongs to. `state.upcoming` also holds
+   * rows that are publishing or awaiting confirmation, while `nextAt` comes
+   * from rows that are exactly 'scheduled' — so pairing it with upcoming[0]
+   * would show the wrong picture whenever something is mid-publish.
+   */
+  const featuredNext = featured?.state.upcoming.find((r) => r.status === 'scheduled')?.target ?? null;
+
   /* Work in flight that belongs to no campaign — still the subject of the screen. */
   const liveQueue = Boolean(data && (data.counts.scheduled > 0 || data.upcoming.length > 0));
 
@@ -297,6 +308,8 @@ export default function SocialDashboard() {
               busy={busy?.startsWith('camp')}
               onPause={() => act('camp-pause', () => pauseCampaign(featured.campaign.id, true), 'הקמפיין הושהה.')}
               onResume={() => act('camp-resume', () => pauseCampaign(featured.campaign.id, false), 'הקמפיין ממשיך.')}
+              nextTarget={featuredNext ? { name: featuredNext.name, image_url: featuredNext.image_url ?? undefined } : null}
+              onTune={() => setTunerOpen(true)}
             />
           ) : liveQueue ? (
             /* No campaign, but publications are queued: a post scheduled
@@ -312,6 +325,8 @@ export default function SocialDashboard() {
               nextTargetName={data.upcoming[0]?.target?.name ?? null}
               onRunNow={runNow}
               busy={busy === 'run'}
+              nextTarget={data.upcoming[0]?.target ?? null}
+              onTune={() => setTunerOpen(true)}
             />
           ) : (
             <EmptyState
@@ -391,6 +406,12 @@ export default function SocialDashboard() {
           </div>
         </div>
       )}
+      <QueueTunerSheet
+        open={tunerOpen}
+        onClose={() => setTunerOpen(false)}
+        campaignId={featured ? featured.campaign.id : undefined}
+        onChanged={load}
+      />
       {confirm.dialog}
     </SocialShell>
   );

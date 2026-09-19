@@ -68,11 +68,11 @@ export function NotificationBell() {
         onClick={toggle}
         aria-label={unread ? `${unread} התראות חדשות` : 'התראות'}
         aria-expanded={open}
-        className="relative grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/25"
+        className="relative grid h-11 w-11 place-items-center rounded-full bg-ink-800 text-mist-300 transition-colors hover:bg-ink-700 hover:text-mist-100"
       >
         <BellIcon className="h-5 w-5" />
         {unread > 0 && (
-          <span className="absolute -end-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[11px] font-extrabold text-white">
+          <span className="absolute -end-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-error-500 px-1 text-[11px] font-extrabold text-on-state">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -81,16 +81,16 @@ export function NotificationBell() {
       {open && (
         <>
           <button type="button" aria-label="סגור" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-          <div className="absolute end-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-ink-600 bg-ink-850 shadow-2xl">
+          <div className="absolute end-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-ink-700 bg-ink-800 shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)]">
             <header className="flex items-center justify-between border-b border-ink-700 px-3.5 py-2.5">
               <p className="text-sm font-extrabold text-mist-100">התראות</p>
-              {attention > 0 && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-bold text-orange-700">{attention} דורשים טיפול</span>}
+              {attention > 0 && <span className="rounded-full bg-warning-400/12 px-2 py-0.5 text-[11px] font-bold text-warning-400">{attention} דורשים טיפול</span>}
             </header>
             <ul className="max-h-80 divide-y divide-ink-700 overflow-y-auto">
               {items.length === 0 && <li className="px-3.5 py-6 text-center text-sm text-mist-500">אין התראות חדשות.</li>}
               {items.slice(0, 15).map((e) => (
                 <li key={e.id} className="px-3.5 py-2.5">
-                  <p className={`text-sm leading-snug ${e.level === 'error' ? 'text-rose-700' : e.level === 'warn' ? 'text-amber-700' : 'text-mist-100'}`}>{e.message}</p>
+                  <p className={`text-sm leading-snug ${e.level === 'error' ? 'text-error-400' : e.level === 'warn' ? 'text-warning-400' : 'text-mist-100'}`}>{e.message}</p>
                   <p className="text-[11px] text-mist-500">{relativeHe(e.at)}</p>
                 </li>
               ))}

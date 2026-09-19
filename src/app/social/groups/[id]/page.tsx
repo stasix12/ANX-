@@ -295,7 +295,7 @@ export default function GroupProfilePage() {
           <Button
             variant="ghost"
             size="sm"
-            className="text-rose-600"
+            className="text-error-400"
             busy={busy === 'delete'}
             onClick={async () => {
               const ok = await confirm.ask({

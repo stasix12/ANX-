@@ -405,17 +405,17 @@ export function PostEditor({ postId }: { postId?: string }) {
             ) : (
               <ul className="space-y-3">
                 {variants.map((v) => (
-                  <li key={v.key} className={`rounded-xl border p-3 ${v.approval === 'approved' ? 'border-emerald-300 bg-emerald-50/40' : v.approval === 'rejected' ? 'border-rose-200 opacity-60' : 'border-ink-600'}`}>
+                  <li key={v.key} className={`rounded-xl border p-3 ${v.approval === 'approved' ? 'border-success-400/30 bg-success-400/12' : v.approval === 'rejected' ? 'border-error-300/30 opacity-60' : 'border-ink-700'}`}>
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         aria-label="שם הגרסה"
-                        className="w-40 rounded-lg border border-ink-600 bg-ink-850 px-2 py-1 text-sm font-bold text-mist-100"
+                        className="w-40 min-h-11 rounded-xl border border-ink-600 bg-ink-900 px-2.5 py-1 text-base font-bold text-mist-100"
                         value={v.label}
                         onChange={(e) => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, label: e.target.value } : x)))}
                       />
                       <select
                         aria-label={`שפת הגרסה ${v.label}`}
-                        className="rounded-lg border border-ink-600 bg-ink-850 px-2 py-1 text-sm text-mist-100"
+                        className="min-h-11 rounded-xl border border-ink-600 bg-ink-900 px-2.5 py-1 text-base text-mist-100"
                         value={v.language}
                         onChange={(e) => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, language: e.target.value as Language } : x)))}
                       >
@@ -429,7 +429,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                       <button
                         type="button"
                         onClick={() => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, approval: x.approval === 'approved' ? 'pending' : 'approved' } : x)))}
-                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold ${v.approval === 'approved' ? 'bg-emerald-600 text-white' : 'bg-ink-800 text-mist-300'}`}
+                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold ${v.approval === 'approved' ? 'bg-success-500 text-on-state' : 'bg-ink-800 text-mist-300'}`}
                       >
                         <CheckIcon className="h-3.5 w-3.5" /> {v.approval === 'approved' ? 'מאושר' : 'אשר'}
                       </button>
@@ -440,7 +440,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                       >
                         {v.approval === 'rejected' ? 'בטל דחייה' : 'דחה'}
                       </button>
-                      <button type="button" aria-label="מחק גרסה" onClick={() => setVariants((all) => all.filter((x) => x.key !== v.key))} className="grid h-10 w-10 place-items-center rounded-lg text-rose-600">
+                      <button type="button" aria-label="מחק גרסה" onClick={() => setVariants((all) => all.filter((x) => x.key !== v.key))} className="grid h-11 w-11 place-items-center rounded-lg text-error-400">
                         <TrashIcon className="h-4 w-4" />
                       </button>
                     </div>
@@ -533,7 +533,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                 שמור כטיוטה
               </Button>
               {savedId && (
-                <Button variant="ghost" onClick={onArchive} className="ms-auto text-rose-600">
+                <Button variant="ghost" onClick={onArchive} className="ms-auto text-error-400">
                   ארכיון
                 </Button>
               )}
@@ -545,7 +545,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                     <span className="text-mist-100">
                       {describeSchedule(s)} · {s.target_ids.length} יעדים
                     </span>
-                    <button type="button" className="min-h-10 px-2 text-xs font-bold text-rose-600" onClick={() => setScheduleActive(s.id, false).then(() => listSchedules(s.post_id).then(setSchedules))}>
+                    <button type="button" className="min-h-11 px-2 text-xs font-bold text-error-400" onClick={() => setScheduleActive(s.id, false).then(() => listSchedules(s.post_id).then(setSchedules))}>
                       בטל תזמון
                     </button>
                   </li>
@@ -583,7 +583,7 @@ export function PostEditor({ postId }: { postId?: string }) {
         <aside className="min-w-0 space-y-3 lg:sticky lg:top-28 lg:self-start">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-extrabold text-mist-100">תצוגה מקדימה</h2>
-            <select aria-label="גרסה לתצוגה מקדימה" className="rounded-lg border border-ink-600 bg-ink-850 px-2 py-1 text-sm text-mist-100" value={previewKey} onChange={(e) => setPreviewKey(e.target.value)}>
+            <select aria-label="גרסה לתצוגה מקדימה" className="min-h-11 rounded-xl border border-ink-600 bg-ink-900 px-2.5 py-1 text-base text-mist-100" value={previewKey} onChange={(e) => setPreviewKey(e.target.value)}>
               <option value="base">טקסט בסיסי</option>
               {variants.map((v) => (
                 <option key={v.key} value={v.key}>

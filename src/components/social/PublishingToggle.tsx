@@ -67,8 +67,8 @@ export function PublishingToggle() {
       disabled={busy}
       aria-pressed={paused}
       aria-label={paused ? 'המשך את כל הפרסומים' : 'השהה את כל הפרסומים'}
-      className={`inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-sm font-bold transition-colors disabled:opacity-60 ${
-        paused ? 'bg-amber-500/12 text-amber-700' : 'bg-ink-800 text-mist-500 hover:text-mist-100'
+      className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-sm font-bold transition-colors disabled:text-ink-600 ${
+        paused ? 'bg-warning-400/12 text-warning-400' : 'bg-ink-800 text-mist-500 hover:text-mist-100'
       }`}
     >
       {busy ? (

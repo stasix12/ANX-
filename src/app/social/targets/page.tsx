@@ -139,7 +139,7 @@ function TargetsScreen() {
                 <p>
                   <span className="text-mist-500">הרשאות:</span>{' '}
                   {REQUIRED_SCOPES.map((s) => (
-                    <span key={s} dir="ltr" className={`me-1 inline-block rounded px-1.5 text-xs font-bold ${account.granted_scopes.includes(s) ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                    <span key={s} dir="ltr" className={`me-1 inline-block rounded px-1.5 text-xs font-bold ${account.granted_scopes.includes(s) ? 'bg-success-400/12 text-success-400' : 'bg-error-300/12 text-error-400'}`}>
                       {s}
                     </span>
                   ))}

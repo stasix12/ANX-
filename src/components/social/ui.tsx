@@ -22,10 +22,102 @@ import { QUEUE_STATUS_LABEL, type PublishMethod, type QueueStatus } from '@/lib/
  *               or Safari zooms the page on focus) · 18-24px numbers
  *   controls    h-11 (44px) is the minimum touch target; compact variants
  *               (h-9) are for desktop toolbars only
- *   colour      brand = the one action · emerald = published · amber =
- *               in flight · rose = failed · slate = skipped · violet =
- *               needs a human
+ *   colour      four hues, and the Hebrew label carries any distinction the
+ *               hue no longer does:
+ *                 BLUE   actions, navigation, and WAITING
+ *                 GREEN  active, published, success
+ *                 RED    failed, critical
+ *                 AMBER  warning, and anything that needs a person
+ *               Violet, fuchsia, orange, sky and slate are gone from the
+ *               product: "do not turn the whole app blue" is not answered
+ *               by turning it into a rainbow either.
+ *
+ * Every colour below is a TOKEN, never a literal Tailwind palette class. The
+ * palette classes were tuned against a white card and measured 2.4:1 the
+ * moment the theme went dark; tokens re-resolve per theme, and
+ * worker/test/contrast.test.ts measures them on every build.
  */
+
+/* ------------------------------------------------------------------ tone */
+
+/**
+ * The five tones, and the four class maps every component reads instead of
+ * picking a colour of its own.
+ *
+ * The step suffixes are roles, not lightness — see the state-token comment in
+ * globals.css. What matters at a call site:
+ *
+ *   TONE_TEXT    the -400 step. Every entry clears 4.5:1 on a card AND on a
+ *                sheet, so a status is as readable inside a modal as behind
+ *                it (6.77 / 6.94 / 6.13 / 8.36 / 7.73 on a card).
+ *   TONE_FILL    the indicator step. NON-TEXT only — dots, bar segments, the
+ *                round "!" mark — where 3:1 is the bar. brand-300 and
+ *                error-300 live here and nowhere else, because as text they
+ *                measure 4.49 and 4.17 and would fail.
+ *   TONE_TINT    a 12% wash. Pair it with TONE_TEXT, never with TONE_FILL.
+ *   TONE_BORDER  the same hue at 30%, for a tinted block's edge.
+ */
+export type Tone = 'brand' | 'good' | 'bad' | 'warn' | 'neutral';
+
+export const TONE_TEXT: Record<Tone, string> = {
+  brand: 'text-brand-400',
+  good: 'text-success-400',
+  bad: 'text-error-400',
+  warn: 'text-warning-400',
+  neutral: 'text-mist-300',
+};
+
+export const TONE_FILL: Record<Tone, string> = {
+  brand: 'bg-brand-300',
+  good: 'bg-success-400',
+  bad: 'bg-error-300',
+  warn: 'bg-warning-400',
+  neutral: 'bg-mist-500',
+};
+
+export const TONE_TINT: Record<Tone, string> = {
+  brand: 'bg-brand-300/12',
+  good: 'bg-success-400/12',
+  bad: 'bg-error-300/12',
+  warn: 'bg-warning-400/12',
+  neutral: 'bg-ink-800',
+};
+
+export const TONE_BORDER: Record<Tone, string> = {
+  brand: 'border-brand-300/30',
+  good: 'border-success-400/30',
+  bad: 'border-error-300/30',
+  warn: 'border-warning-400/30',
+  neutral: 'border-ink-700',
+};
+
+/**
+ * One definition of what a queue status LOOKS like, to go beside status.ts's
+ * one definition of what it means.
+ *
+ * The same nine statuses were coloured independently in four places — this
+ * file's pill, Timeline's dot, PublicationItem's row and
+ * CampaignProgressBar's legend — and the four copies drifted. Import this
+ * rather than writing a fifth. It is presentation only: nothing here decides
+ * which rows are counted, cancelled or retried, and status.ts remains the
+ * sole source of those lists.
+ */
+export const STATUS_TONE: Record<QueueStatus, Tone> = {
+  // Waiting is BLUE, in-flight included: a publication going out on its own
+  // is not a warning, and the pulse on the dot carries the liveness.
+  scheduled: 'brand',
+  publishing: 'brand',
+  published: 'good',
+  failed: 'bad',
+  // Skipped is not a failure — it is the scheduler declining a slot. Painting
+  // it red is how a healthy run used to read as a disaster.
+  skipped: 'neutral',
+  // Amber is reserved for "a person is needed", which is exactly these three.
+  manual_pending: 'warn',
+  needs_attention: 'warn',
+  awaiting_confirmation: 'warn',
+  paused: 'neutral',
+};
 
 /* ------------------------------------------------------------ containers */
 
@@ -50,10 +142,10 @@ export function Card({
   return (
     <section id={id} className={`surface rounded-card border border-ink-700 ${padded ? 'p-4' : ''} ${className}`}>
       {(title || action) && (
-        <header className={`mb-3 flex items-start justify-between gap-3 ${padded ? '' : 'px-4 pt-4'}`}>
+        <header className={`mb-3.5 flex items-start justify-between gap-3 ${padded ? '' : 'px-4 pt-4'}`}>
           <div className="min-w-0">
-            {title && <h2 dir="auto" className="truncate text-base font-extrabold text-mist-100">{title}</h2>}
-            {subtitle && <p className="mt-0.5 text-xs text-mist-500">{subtitle}</p>}
+            {title && <h2 dir="auto" className="truncate text-base font-extrabold leading-tight text-mist-100">{title}</h2>}
+            {subtitle && <p className="mt-0.5 text-xs leading-snug text-mist-500">{subtitle}</p>}
           </div>
           {action && <div className="shrink-0">{action}</div>}
         </header>
@@ -68,8 +160,8 @@ export function Section({ title, hint, children }: { title: string; hint?: strin
   return (
     <section className="space-y-3">
       <div>
-        <h3 className="text-sm font-extrabold uppercase tracking-wide text-mist-500">{title}</h3>
-        {hint && <p className="mt-0.5 text-xs text-mist-500">{hint}</p>}
+        <h3 className="text-sm font-extrabold uppercase leading-tight tracking-wide text-mist-500">{title}</h3>
+        {hint && <p className="mt-0.5 text-xs leading-relaxed text-mist-500">{hint}</p>}
       </div>
       {children}
     </section>
@@ -81,11 +173,25 @@ export function Section({ title, hint, children }: { title: string; hint?: strin
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
+/*
+ * Four variants, each measured in every state it can be in.
+ *
+ * The primary is brand-500 rather than the palette's bright --brand: white on
+ * #168bff is 3.40 and would have put the most-pressed control in the product
+ * under AA. On brand-500 it is 4.95, on the hover step 6.62, on the pressed
+ * step 9.07 — a press gets MORE legible, not less.
+ *
+ * disabled:opacity-50 fades a filled button toward its surface, which on a
+ * dark ground reads closer to "gone" than to "greyed out". That is deliberate
+ * and it carries an obligation: a disabled button must never be the only
+ * thing saying why, so every caller repeats the reason in adjacent text.
+ */
 const buttonClass: Record<ButtonVariant, string> = {
-  primary: 'bg-brand-500 text-on-brand hover:bg-brand-600 shadow-sm shadow-sky-600/30',
-  secondary: 'bg-ink-800 text-mist-100 hover:bg-ink-700',
-  danger: 'bg-rose-600 text-white hover:bg-rose-700',
-  ghost: 'text-brand-400 hover:bg-ink-800',
+  primary:
+    'bg-brand-500 text-on-brand shadow-[0_2px_10px_rgba(11,111,212,0.35)] hover:bg-brand-600 active:bg-brand-700 disabled:shadow-none',
+  secondary: 'border border-ink-700 bg-ink-800 text-mist-100 hover:bg-ink-700 active:bg-ink-900',
+  danger: 'bg-error-500 text-on-state shadow-[0_2px_10px_rgba(189,23,57,0.35)] hover:bg-[#a61231] active:bg-[#93102b] disabled:shadow-none',
+  ghost: 'text-brand-400 hover:bg-ink-800 active:bg-ink-800',
 };
 
 /**
@@ -120,9 +226,18 @@ export function Button({
   );
 }
 
-/** The shared shape, so a link that looks like a button really matches one. */
+/**
+ * The shared shape, so a link that looks like a button really matches one.
+ *
+ * It also carries the ONE focus-visible treatment in the module. The global
+ * ring in globals.css is brand-500, which is a surface colour in this theme
+ * and sits at 3.73 on the page; brand-300 is the indicator blue and measures
+ * 5.43 on the page, 4.49 on a card, 4.10 on a sheet. The offset is painted in
+ * ink-950 so the ring never touches a same-hue fill — without it a blue ring
+ * on the blue primary button is invisible.
+ */
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-xl font-bold transition-[background-color,transform,box-shadow] duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex items-center justify-center gap-2 rounded-xl font-bold leading-none transition-[background-color,border-color,transform,box-shadow] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
  * A link that looks like a button.
@@ -160,7 +275,10 @@ export function IconButton({
       aria-label={label}
       title={label}
       {...props}
-      className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-300 transition-colors hover:bg-ink-800 hover:text-mist-100 active:scale-[0.94] disabled:opacity-40 ${className}`}
+      // disabled is an explicit colour, not opacity: mist-300 at 40% over a
+      // navy card composites to 2.06:1 and the control simply disappears.
+      // ink-600 holds 3.66 — dimmed, still findable by a thumb.
+      className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-300 transition-colors hover:bg-ink-800 hover:text-mist-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 active:scale-[0.94] disabled:pointer-events-none disabled:text-ink-600 ${className}`}
     >
       {children}
     </button>
@@ -172,16 +290,28 @@ export function IconButton({
 export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-bold text-mist-300">{label}</span>
+      <span className="mb-1.5 block text-sm font-bold leading-snug text-mist-300">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-mist-500">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-xs leading-relaxed text-mist-500">{hint}</span>}
     </label>
   );
 }
 
-/** 16px text: anything smaller makes iOS Safari zoom the page on focus. */
+/**
+ * 16px text: anything smaller makes iOS Safari zoom the page on focus.
+ *
+ * The fill is ink-900, one step BELOW the card, so a field reads as a recess
+ * rather than as another panel — on a dark ground that is most of what tells
+ * a finger where to tap. The edge is ink-600, the solid control step, at
+ * 3.66:1 on a card; the ambient hairline is 1.34 and would leave the field
+ * with no measurable boundary at all.
+ *
+ * The focus ring was brand-500 at 30% alpha, which composites to roughly
+ * #0e3e6a over this card — about 1.3:1, i.e. no ring. brand-300 at full
+ * strength on the border plus a 40% halo is the visible equivalent.
+ */
 export const inputClass =
-  'w-full min-h-11 rounded-xl border border-ink-600 bg-ink-850 px-3.5 py-2.5 text-base text-mist-100 placeholder:text-mist-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30';
+  'w-full min-h-11 rounded-xl border border-ink-600 bg-ink-900 px-3.5 py-2.5 text-base leading-normal text-mist-100 transition-colors placeholder:text-mist-500 hover:border-[#6b8db2] focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300/40 disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
  * The switch reads as a 28px track but is tapped as 44px: the track is an
@@ -195,9 +325,15 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className="relative flex h-11 w-12 shrink-0 items-center"
+      className="relative flex h-11 w-12 shrink-0 items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950"
     >
-      <span className={`h-7 w-full rounded-full transition-colors ${checked ? 'bg-brand-500' : 'bg-ink-600'}`} />
+      {/* The ON track is brand-300, the indicator blue — a track is a fill,
+          not a label, so the 3:1 bar applies and the brighter step reads far
+          better against the OFF state than the button surface does. */}
+      <span className={`h-7 w-full rounded-full transition-colors ${checked ? 'bg-brand-300' : 'bg-ink-600'}`} />
+      {/* The knob stays literal white rather than a token: it is the one mark
+          that has to read against BOTH track colours, and white is the best
+          available on each (3.40 on the on-track, 3.03 on the off-track). */}
       <span
         className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-[inset-inline-start] ${checked ? 'start-6' : 'start-1'}`}
       />
@@ -226,9 +362,9 @@ export function SegmentedControl<T extends string>({
 }) {
   // Height is a floor, not padding: these are filter chips people tap on a
   // phone, and they measured 28px before.
-  const pad = size === 'sm' ? 'min-h-10 px-2.5 text-xs' : 'min-h-11 px-3 text-sm';
+  const pad = size === 'sm' ? 'min-h-10 px-3 text-xs' : 'min-h-11 px-3.5 text-sm';
   return (
-    <div role="group" aria-label={label} className={`flex flex-wrap gap-0.5 rounded-xl bg-ink-800 p-0.5 ${className}`}>
+    <div role="group" aria-label={label} className={`flex flex-wrap gap-1 rounded-xl bg-ink-800 p-1 ${className}`}>
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -237,10 +373,24 @@ export function SegmentedControl<T extends string>({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(o.value)}
-            className={`inline-flex items-center justify-center rounded-lg font-bold transition-colors ${pad} ${active ? 'bg-brand-500 text-on-brand shadow-sm' : 'text-mist-300 hover:text-mist-100'}`}
+            /*
+             * Three things change at once on the active chip — a solid fill,
+             * a white label and the blue drop shadow that
+             * `.social-theme [role='group'] > [aria-pressed='true']` adds —
+             * because a tint alone was not answering "which filter am I on"
+             * at arm's length on a phone.
+             */
+            className={`inline-flex items-center justify-center rounded-lg transition-colors ${pad} ${
+              active ? 'bg-brand-500 font-extrabold text-on-brand' : 'font-bold text-mist-300 hover:bg-ink-900 hover:text-mist-100'
+            } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-800`}
           >
             {o.label}
-            {o.count !== undefined && <span className="ms-1 tabular-nums opacity-70">{o.count}</span>}
+            {/* Dimming the count on an active chip put it at 3.7:1 on the
+                blue fill. It stays at full strength and is set apart by
+                weight instead. */}
+            {o.count !== undefined && (
+              <span className={`ms-1 tabular-nums ${active ? 'font-normal' : 'opacity-70'}`}>{o.count}</span>
+            )}
           </button>
         );
       })}
@@ -250,17 +400,15 @@ export function SegmentedControl<T extends string>({
 
 /* ---------------------------------------------------------------- badges */
 
-const statusClass: Record<QueueStatus, string> = {
-  scheduled: 'bg-sky-500/15 text-sky-700',
-  publishing: 'bg-amber-500/15 text-amber-700',
-  published: 'bg-emerald-500/15 text-emerald-700',
-  failed: 'bg-rose-500/15 text-rose-700',
-  skipped: 'bg-slate-500/15 text-slate-600',
-  manual_pending: 'bg-violet-500/15 text-violet-700',
-  needs_attention: 'bg-orange-500/15 text-orange-700',
-  awaiting_confirmation: 'bg-fuchsia-500/15 text-fuchsia-700',
-  paused: 'bg-slate-500/15 text-slate-600',
-};
+/*
+ * Nine statuses, five of them on a white-tuned literal colour: sky-700,
+ * violet-700, orange-700 and fuchsia-700 measure 2.2-3.0:1 on a navy card.
+ * They collapse onto the four tones above — the Hebrew label below already
+ * carries every distinction the hue was being asked to make.
+ */
+const statusClass: Record<QueueStatus, string> = Object.fromEntries(
+  (Object.keys(STATUS_TONE) as QueueStatus[]).map((k) => [k, `${TONE_TINT[STATUS_TONE[k]]} ${TONE_TEXT[STATUS_TONE[k]]}`]),
+) as Record<QueueStatus, string>;
 
 /** Short Hebrew labels for the pills; the long bilingual names stay in types.ts. */
 const statusShort: Record<QueueStatus, string> = {
@@ -277,21 +425,26 @@ const statusShort: Record<QueueStatus, string> = {
 
 export function StatusPill({ status, long = false }: { status: QueueStatus; long?: boolean }) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap ${statusClass[status]}`}>
+    // px-2.5 and gap-1, not the roomier px-3/gap-1.5 the rest of the pills
+    // use: this pill shares a 343px queue row with an avatar, a name and an
+    // overflow menu, and every pixel it takes comes off the group name.
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap ${statusClass[status]}`}>
+      {/* A 6px dot in the indicator step, pulsing only while a publication is
+          actually in flight — so "happening now" does not depend on noticing
+          a number change. The pulse is a class, which is what lets the
+          reduced-motion block in globals.css switch it off. */}
+      <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE_FILL[STATUS_TONE[status]]} ${status === 'publishing' ? 'pulse-dot' : ''}`} />
       {long ? QUEUE_STATUS_LABEL[status] : statusShort[status]}
     </span>
   );
 }
 
 export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'brand' | 'good' | 'warn' | 'bad' | 'info'; children: React.ReactNode }) {
-  const cls = {
-    neutral: 'bg-ink-800 text-mist-300',
-    brand: 'bg-brand-500/15 text-brand-400',
-    good: 'bg-emerald-500/15 text-emerald-700',
-    warn: 'bg-amber-500/15 text-amber-700',
-    bad: 'bg-rose-500/15 text-rose-700',
-    info: 'bg-sky-500/15 text-sky-700',
-  }[tone];
+  // `info` is kept as a prop value so call sites do not have to change, but
+  // it resolves to the same blue as `brand`: sky was a fifth hue doing a job
+  // blue already does.
+  const t: Tone = tone === 'info' ? 'brand' : tone;
+  const cls = `${TONE_TINT[t]} ${TONE_TEXT[t]}`;
   return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ${cls}`}>{children}</span>;
 }
 
@@ -311,14 +464,22 @@ export function MethodBadge({ method, channel }: { method?: PublishMethod; chann
 
 /* -------------------------------------------------------------- feedback */
 
+/**
+ * Inline explanation, tinted to its tone.
+ *
+ * The four skins here were `bg-sky-50` / `bg-amber-50` / `bg-rose-50` /
+ * `bg-emerald-50` with a -900 label: near-white blocks that on this ground
+ * rendered at 14:1 against the page — holes punched in the design, with text
+ * inside them at 1.6:1. A 12% wash of the tone plus its text step is the same
+ * idea that actually works on a dark surface.
+ */
 export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warn' | 'error' | 'success'; children: React.ReactNode }) {
-  const cls = {
-    info: 'border-sky-300 bg-sky-50 text-sky-900',
-    warn: 'border-amber-300 bg-amber-50 text-amber-900',
-    error: 'border-rose-300 bg-rose-50 text-rose-900',
-    success: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-  }[tone];
-  return <div className={`rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed ${cls}`}>{children}</div>;
+  const t: Tone = { info: 'brand', warn: 'warn', error: 'bad', success: 'good' }[tone] as Tone;
+  return (
+    <div className={`rounded-card border px-3.5 py-3 text-sm leading-relaxed ${TONE_BORDER[t]} ${TONE_TINT[t]} ${TONE_TEXT[t]}`}>
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -342,26 +503,26 @@ export function Tile({
   /** Paints the tile in its tone instead of plain white. */
   tinted?: boolean;
 }) {
-  const color = { default: 'text-brand-400', good: 'text-emerald-600', bad: 'text-rose-600', warn: 'text-amber-600' }[tone];
+  const t: Tone = { default: 'brand', good: 'good', bad: 'bad', warn: 'warn' }[tone] as Tone;
+  const color = TONE_TEXT[t];
   /*
    * Tinted tiles carry their meaning in the surface, not only in the number,
    * so a red "failed" count is visible at a glance instead of having to be
    * read. The tint is faint enough that the figure keeps its contrast.
    */
-  const tint = {
-    default: 'bg-brand-500/[0.06] border-brand-500/20',
-    good: 'bg-emerald-500/[0.07] border-emerald-500/25',
-    bad: 'bg-rose-500/[0.07] border-rose-500/25',
-    warn: 'bg-amber-500/[0.09] border-amber-500/30',
-  }[tone];
+  const tint = `${TONE_TINT[t]} ${TONE_BORDER[t]}`;
   const body = (
     <>
-      <p dir="auto" className="truncate text-[11px] font-bold text-mist-500 sm:text-xs">{label}</p>
-      <p className={`mt-0.5 text-xl font-extrabold tabular-nums sm:mt-1 sm:text-2xl ${color}`}>{value}</p>
-      {sub && <p dir="auto" className="truncate text-[11px] text-mist-300 sm:mt-0.5 sm:text-xs">{sub}</p>}
+      <p dir="auto" className="truncate text-[11px] font-bold leading-tight text-mist-500 sm:text-xs">{label}</p>
+      <p className={`mt-0.5 text-2xl font-extrabold leading-none tabular-nums sm:mt-1 sm:text-3xl ${color}`}>{value}</p>
+      {sub && (
+        <p dir="auto" className="mt-1 truncate text-[11px] leading-tight text-mist-500 sm:text-xs">
+          {sub}
+        </p>
+      )}
     </>
   );
-  const cls = `block rounded-2xl border px-3 py-2.5 text-start sm:p-3.5 ${tinted ? tint : 'surface border-ink-700'}`;
+  const cls = `block rounded-tile border px-3 py-2.5 text-start sm:p-3.5 ${tinted ? tint : 'surface border-ink-700'}`;
   if (href) {
     return (
       <Link href={href} className={`${cls} transition-transform active:scale-[0.98]`}>
@@ -386,7 +547,10 @@ export function ProgressBar({
 }) {
   const safe = Math.max(1, total);
   return (
-    <div className={`flex ${height} overflow-hidden rounded-full bg-ink-700`} role="img" aria-label={ariaLabel}>
+    // The track is the ambient hairline token, which composites to #213b59 on
+    // a card. Every fill a caller passes clears 3:1 against that: published
+    // 5.20, waiting 3.36, failed 3.42, skipped 4.27.
+    <div className={`flex ${height} min-w-0 overflow-hidden rounded-full bg-ink-700`} role="img" aria-label={ariaLabel}>
       {segments
         .filter((s) => s.value > 0)
         .map((s, i) => (
@@ -398,7 +562,7 @@ export function ProgressBar({
 
 /** Legacy one-liner empty state; new screens should use EmptyState. */
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-xl border border-dashed border-ink-600 px-4 py-6 text-center text-sm text-mist-500">{children}</p>;
+  return <p className="rounded-card border border-dashed border-ink-600 px-4 py-6 text-center text-sm leading-relaxed text-mist-500">{children}</p>;
 }
 
 /**
@@ -420,15 +584,15 @@ export function EmptyState({
   return (
     // Compact on purpose: "nothing here yet" should not take most of a phone
     // screen. The dashed edge says the space is waiting to be filled.
-    <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-dashed border-ink-600 px-5 py-6 text-center">
+    <div className="flex flex-col items-center gap-1.5 rounded-card border border-dashed border-ink-600 px-5 py-7 text-center">
       {icon && (
-        <span aria-hidden className="mb-0.5 grid h-11 w-11 place-items-center rounded-full bg-brand-500/10 text-brand-500">
+        <span aria-hidden className="mb-0.5 grid h-11 w-11 place-items-center rounded-full bg-brand-300/12 text-brand-400">
           {icon}
         </span>
       )}
-      <p className="text-base font-extrabold text-mist-100">{title}</p>
+      <p className="text-base font-extrabold leading-tight text-mist-100">{title}</p>
       {description && <p className="max-w-sm text-sm leading-relaxed text-mist-500">{description}</p>}
-      {action && <div className="mt-2.5">{action}</div>}
+      {action && <div className="mt-3">{action}</div>}
     </div>
   );
 }
@@ -436,12 +600,18 @@ export function EmptyState({
 export function Loading() {
   return (
     <div className="grid place-items-center py-16">
-      <SpinnerIcon className="h-7 w-7 animate-spin text-brand-500" />
+      {/* brand-300, not brand-500: a spinner is a mark, not a label, and
+          brand-500 is a surface colour that sits at 3.09 as ink on a card. */}
+      <SpinnerIcon className="h-7 w-7 animate-spin text-brand-300" />
     </div>
   );
 }
 
-/** Grey placeholder with the shimmer defined in globals.css. */
+/**
+ * Placeholder with the shimmer defined in globals.css. The base is ink-800 —
+ * one step ABOVE the card, so the block is visible as a shape on a dark
+ * ground; ink-900 would have sunk into the panel and read as nothing loading.
+ */
 export function Skeleton({ className = 'h-4 w-full' }: { className?: string }) {
   return <span aria-hidden className={`block rounded-lg bg-ink-800 skeleton-shimmer ${className}`} />;
 }
@@ -506,8 +676,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {items.map((t) => (
           <div
             key={t.id}
-            className={`toast-in pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-2xl px-4 py-3 text-sm font-bold shadow-xl ${
-              t.tone === 'error' ? 'bg-rose-600 text-white' : t.tone === 'info' ? 'bg-ink-800 text-mist-100' : 'bg-emerald-600 text-white'
+            /*
+             * The success skin was emerald-600 under a white label — 3.3:1,
+             * i.e. a confirmation you cannot read. success-500 and error-500
+             * are the surface steps of their families and carry on-state at
+             * 5.35 and 6.28. The info skin stays a raised panel.
+             */
+            className={`toast-in pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-card px-4 py-3 text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)] ${
+              t.tone === 'error'
+                ? 'bg-error-500 text-on-state'
+                : t.tone === 'info'
+                  ? 'border border-ink-700 bg-ink-800 text-mist-100 border-s-[3px] border-s-brand-300'
+                  : 'bg-success-500 text-on-state'
             }`}
           >
             {t.tone === 'error' ? <XCircleIcon className="h-5 w-5 shrink-0" /> : t.tone === 'success' ? <CheckCircleIcon className="h-5 w-5 shrink-0" /> : null}
@@ -634,20 +814,26 @@ export function Sheet({
       <button
         type="button"
         aria-label="סגור"
-        className="fixed inset-0 z-[70] cursor-default bg-black/45 backdrop-blur-[2px]"
+        className="fixed inset-0 z-[70] cursor-default bg-black/60 backdrop-blur-[2px]"
         onClick={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`sheet-in fixed inset-x-0 bottom-0 z-[71] mx-auto flex max-h-[85svh] flex-col rounded-t-3xl bg-ink-850 shadow-2xl md:bottom-[8vh] md:max-h-[80svh] md:rounded-3xl ${
+        /*
+         * ink-800, one step above the card behind it — a sheet has to read as
+         * a layer on top, and on a dark ground a black drop shadow does none
+         * of that work. The lift is the lighter surface plus the hairline;
+         * the shadow only deepens the separation. No glow.
+         */
+        className={`sheet-in fixed inset-x-0 bottom-0 z-[71] mx-auto flex max-h-[85svh] flex-col rounded-t-sheet border border-ink-700 bg-ink-800 shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)] md:bottom-[8vh] md:max-h-[80svh] md:rounded-card ${
           size === 'lg' ? 'md:max-w-2xl' : 'md:max-w-lg'
         }`}
       >
         <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink-600 md:hidden" />
-        <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3">
-          <h2 id={titleId} className="text-base font-extrabold text-mist-100">
+        <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3.5">
+          <h2 id={titleId} className="text-base font-extrabold leading-tight text-mist-100">
             {title}
           </h2>
           <IconButton label="סגור" onClick={onClose} className="-me-2">
@@ -658,7 +844,7 @@ export function Sheet({
             action button never sits under the home indicator. */}
         <div className={`min-h-0 grow overflow-y-auto px-4 ${footer ? 'pb-4' : 'pb-[calc(1rem+env(safe-area-inset-bottom))]'}`}>{children}</div>
         {footer && (
-          <footer className="shrink-0 border-t border-ink-700 bg-ink-850 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{footer}</footer>
+          <footer className="shrink-0 border-t border-ink-700 bg-ink-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{footer}</footer>
         )}
       </div>
         </div>,
@@ -747,7 +933,7 @@ export function OverflowMenu({ label, actions, className = '' }: { label: string
           e.stopPropagation();
           setOpen(true);
         }}
-        className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg font-extrabold leading-none text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-100 ${className}`}
+        className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg font-extrabold leading-none text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 ${className}`}
       >
         ⋯
       </button>
@@ -763,8 +949,8 @@ export function OverflowMenu({ label, actions, className = '' }: { label: string
                   setOpen(false);
                   a.onSelect();
                 }}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-start text-base font-bold transition-colors disabled:opacity-40 ${
-                  a.danger ? 'text-rose-600 hover:bg-rose-500/10' : 'text-mist-100 hover:bg-ink-800'
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-start text-base font-bold transition-colors disabled:pointer-events-none disabled:text-ink-600 ${
+                  a.danger ? 'text-error-400 hover:bg-error-300/12' : 'text-mist-100 hover:bg-ink-900'
                 }`}
               >
                 {a.icon && <span className="grid h-6 w-6 shrink-0 place-items-center">{a.icon}</span>}
@@ -788,29 +974,46 @@ export function OverflowMenu({ label, actions, className = '' }: { label: string
  *   stat      a figure with an icon chip; colour marks the status, not the card
  *   row       a compact list line: image, name, meta, status, menu
  *
- * Colour is reserved for state. A card is white; a number can be green, red or
- * amber; nothing else is tinted. That is what separates a product from an
- * admin template, and it is cheap to hold once it lives in one file.
+ * Colour is reserved for state. A card is one flat surface; a number can be
+ * green, red or amber; nothing else is tinted. That is what separates a
+ * product from an admin template, and it is cheap to hold once it lives in
+ * one file.
+ *
+ * Three levels of elevation and no more. L0 is the page (ink-950, flat), L1
+ * is a card (ink-850 + hairline + a tight contact shadow and a wide ambient
+ * one), L2 is anything that floats over a card — sheet, toast, selection bar,
+ * overflow panel (ink-800, deeper shadow). The old shadows here were cast in
+ * rgba(13,38,76,…): a navy shadow designed for a white page, invisible on
+ * #071426.
  */
-export const CARD = 'rounded-2xl border border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(13,38,76,0.04),0_8px_24px_-16px_rgba(13,38,76,0.18)]';
+export const CARD =
+  'rounded-card border border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(0,0,0,0.35),0_12px_32px_-18px_rgba(0,0,0,0.7)]';
 
-type Tone = 'brand' | 'good' | 'bad' | 'warn' | 'neutral';
+/** L2 — sheets, toasts, the floating selection bars, the notification panel. */
+export const CARD_ELEVATED =
+  'rounded-card border border-ink-700 bg-ink-800 shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)]';
+
+/** A stat tile or a media tile: the same skin as a card, one radius tighter. */
+export const TILE =
+  'rounded-tile border border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(0,0,0,0.35),0_12px_32px_-18px_rgba(0,0,0,0.7)]';
 
 /** Icon chip colours. The chip is tinted; the card never is. */
 const CHIP: Record<Tone, string> = {
-  brand: 'bg-brand-500/10 text-brand-500',
-  good: 'bg-emerald-500/10 text-emerald-600',
-  bad: 'bg-rose-500/10 text-rose-600',
-  warn: 'bg-amber-500/12 text-amber-600',
+  brand: `${TONE_TINT.brand} ${TONE_TEXT.brand}`,
+  good: `${TONE_TINT.good} ${TONE_TEXT.good}`,
+  bad: `${TONE_TINT.bad} ${TONE_TEXT.bad}`,
+  warn: `${TONE_TINT.warn} ${TONE_TEXT.warn}`,
   neutral: 'bg-ink-800 text-mist-500',
 };
 
 /** The figure's colour. Neutral by default: not every number is a status. */
 const FIGURE: Record<Tone, string> = {
-  brand: 'text-brand-500',
-  good: 'text-emerald-600',
-  bad: 'text-rose-600',
-  warn: 'text-amber-600',
+  brand: TONE_TEXT.brand,
+  good: TONE_TEXT.good,
+  bad: TONE_TEXT.bad,
+  warn: TONE_TEXT.warn,
+  // The one place neutral is mist-100 rather than mist-300: this is the
+  // largest number on the screen and it is the thing being read.
   neutral: 'text-mist-100',
 };
 
@@ -821,9 +1024,11 @@ const FIGURE: Record<Tone, string> = {
 export function SectionHeader({ title, href, linkLabel = 'הצג הכל' }: { title: string; href?: string; linkLabel?: string }) {
   return (
     <div className="mb-2.5 flex items-baseline justify-between gap-3">
-      <h2 className="text-base font-extrabold tracking-tight text-mist-100">{title}</h2>
+      <h2 className="text-base font-extrabold leading-tight tracking-tight text-mist-100">{title}</h2>
       {href && (
-        <Link href={href} className="inline-flex min-h-10 items-center gap-0.5 text-sm font-bold text-brand-500">
+        // brand-400, not brand-500: this is a link, and brand-500 is the
+        // button surface — as ink on a card it measures 3.09 and fails.
+        <Link href={href} className="inline-flex min-h-10 items-center gap-0.5 text-sm font-bold text-brand-400">
           {linkLabel}
           <ChevronIcon className="h-4 w-4 rtl:rotate-180" />
         </Link>
@@ -859,20 +1064,27 @@ export function StatCard({
         </span>
         {href && <ChevronIcon aria-hidden className="mt-1 h-4 w-4 shrink-0 text-mist-500 rtl:rotate-180" />}
       </div>
-      <p dir="auto" className="mt-2 truncate text-xs font-bold text-mist-500">
+      <p dir="auto" className="mt-2.5 truncate text-xs font-bold leading-tight text-mist-500">
         {label}
       </p>
-      <p className={`text-[26px] font-extrabold leading-none tabular-nums ${FIGURE[tone]}`}>{value}</p>
+      {/* 34px on a phone, 40 from sm. This one step is most of what makes the
+          numbers the subject of the screen rather than a caption on an icon:
+          at 34/800 the widest realistic figure is ~86px inside a half-width
+          tile on a 360px viewport, so it fits without truncating. */}
+      <p className={`text-[34px] font-extrabold leading-none tabular-nums sm:text-[40px] ${FIGURE[tone]}`}>{value}</p>
       {sub && (
-        <p dir="auto" className="mt-1 truncate text-[11px] text-mist-500">
+        <p dir="auto" className="mt-1 truncate text-[11px] leading-tight text-mist-500">
           {sub}
         </p>
       )}
     </>
   );
-  const cls = `${CARD} block min-w-0 p-3.5 text-start`;
+  const cls = `${TILE} block min-w-0 p-4 text-start`;
   return href ? (
-    <Link href={href} className={`${cls} transition-transform active:scale-[0.985]`}>
+    <Link
+      href={href}
+      className={`${cls} transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 active:scale-[0.985]`}
+    >
       {body}
     </Link>
   ) : (
@@ -906,19 +1118,26 @@ export function AlertBar({
   onDanger?: () => void;
   busy?: boolean;
 }) {
-  const skin = {
-    bad: 'border-rose-500/25 bg-rose-500/[0.06]',
-    warn: 'border-amber-500/30 bg-amber-500/[0.07]',
-    info: 'border-brand-500/25 bg-brand-500/[0.06]',
+  const t: Tone = { bad: 'bad', warn: 'warn', info: 'brand' }[tone] as Tone;
+  const skin = `${TONE_BORDER[t]} ${TONE_TINT[t]}`;
+  /*
+   * The round "!" takes a label chosen per hue, not a blanket white: white on
+   * amber measures 1.83 and the mark reads as an empty circle. Amber gets the
+   * page navy on it (10.10); red and blue get their surface steps under white
+   * (6.28 and 4.95).
+   */
+  const mark = {
+    bad: 'bg-error-500 text-on-state',
+    warn: 'bg-warning-400 text-ink-950',
+    info: 'bg-brand-500 text-on-brand',
   }[tone];
-  const mark = { bad: 'bg-rose-500 text-white', warn: 'bg-amber-500 text-white', info: 'bg-brand-500 text-white' }[tone];
-  const link = { bad: 'text-rose-700 border-rose-500/30', warn: 'text-amber-700 border-amber-500/30', info: 'text-brand-500 border-brand-500/30' }[tone];
+  const link = `${TONE_TEXT[t]} ${TONE_BORDER[t]}`;
 
   return (
     // Wraps rather than truncates: on a 320px screen an alert with two actions
     // had no room left for its own title, and an alert whose text is cut off is
     // not an alert. The actions drop to their own line instead.
-    <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border px-3 py-2.5 ${skin}`}>
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-tile border px-3.5 py-3 ${skin}`}>
       <span aria-hidden className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-extrabold ${mark}`}>
         !
       </span>
@@ -927,7 +1146,7 @@ export function AlertBar({
           {title}
         </p>
         {body && (
-          <p dir="auto" className="text-xs leading-snug text-mist-500">
+          <p dir="auto" className="text-xs leading-relaxed text-mist-500">
             {body}
           </p>
         )}
@@ -938,7 +1157,7 @@ export function AlertBar({
           type="button"
           onClick={onDanger}
           disabled={busy}
-          className="inline-flex min-h-10 shrink-0 items-center rounded-xl px-2 text-sm font-bold text-rose-700 disabled:opacity-60"
+          className="inline-flex min-h-10 shrink-0 items-center rounded-xl px-2 text-sm font-bold text-error-400 disabled:pointer-events-none disabled:text-ink-600"
         >
           {dangerLabel}
         </button>
@@ -960,12 +1179,19 @@ export function AlertBar({
   );
 }
 
-/** The colour of a status dot in a list row. */
+/**
+ * The colour of a status dot in a list row.
+ *
+ * A dot is a mark, not a word, so these are the INDICATOR steps — the same
+ * colours TONE_FILL paints a bar segment in, where 3:1 is the threshold. They
+ * are deliberately not TONE_TEXT: matching the label's colour would make the
+ * dot the quieter of the two, and the dot is what is scanned.
+ */
 export const DOT_TONE: Record<Tone, string> = {
-  brand: 'text-brand-500',
-  good: 'text-emerald-500',
-  bad: 'text-rose-500',
-  warn: 'text-amber-500',
+  brand: 'text-brand-300',
+  good: 'text-success-400',
+  bad: 'text-error-300',
+  warn: 'text-warning-400',
   neutral: 'text-mist-500',
 };
 
@@ -997,11 +1223,11 @@ export function ListRow({
     <>
       {media && <span className="shrink-0">{media}</span>}
       <span className="min-w-0 grow text-start">
-        <span dir="auto" className="block truncate text-sm font-bold text-mist-100">
+        <span dir="auto" className="block truncate text-sm font-bold leading-snug text-mist-100">
           {title}
         </span>
         {subtitle && (
-          <span dir="auto" className="mt-0.5 block truncate text-xs text-mist-500">
+          <span dir="auto" className="mt-0.5 block truncate text-xs leading-snug text-mist-500">
             {subtitle}
           </span>
         )}
@@ -1012,7 +1238,7 @@ export function ListRow({
   );
 
   return (
-    <li className="flex items-center gap-3 py-2.5">
+    <li className="flex min-w-0 items-center gap-3 py-3">
       {href ? (
         <Link href={href} className="flex min-h-11 min-w-0 grow items-center gap-3">
           {inner}

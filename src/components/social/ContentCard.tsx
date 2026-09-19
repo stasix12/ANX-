@@ -44,6 +44,12 @@ export function ContentCard({
    * video-only post then has no subject at all.
    */
   const cover = media.find((m) => m.kind === 'image') ?? media[0] ?? null;
+  /*
+   * What KIND of post this is, said in one word instead of left for the
+   * thumbnail to imply. Read straight off the media that is already loaded —
+   * nothing here inspects a file or guesses at one that is missing.
+   */
+  const kind = !cover ? 'טקסט' : cover.kind === 'video' ? 'וידאו' : 'תמונה';
   const title = post.title || post.base_text.slice(0, 60) || 'ללא כותרת';
   /*
    * Two different numbers, so they get two different words: publishCount counts
@@ -64,8 +70,8 @@ export function ContentCard({
   return (
     <li className="relative">
       <div
-        className={`surface flex h-full flex-col rounded-2xl border p-2 transition-[border-color] ${
-          selected ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'
+        className={`surface flex h-full flex-col rounded-tile border p-2.5 transition-[border-color,box-shadow] ${
+          selected ? 'border-brand-300 bg-brand-300/8' : 'border-ink-700'
         }`}
       >
         <button type="button" onClick={() => onOpen(item)} className="min-w-0 text-start">
@@ -87,7 +93,7 @@ export function ContentCard({
                 {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                 <video src={`${cover.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
                 <span aria-hidden className="absolute inset-0 grid place-items-center">
-                  <span className="grid h-10 w-10 place-items-center rounded-full bg-ink-950/55 text-white">
+                  <span className="grid h-10 w-10 place-items-center rounded-full bg-ink-950/60 text-mist-100">
                     <PlayIcon className="h-5 w-5" />
                   </span>
                 </span>
@@ -103,7 +109,7 @@ export function ContentCard({
             )}
           </span>
 
-          <span dir="auto" className="mt-2 block truncate px-0.5 text-sm font-bold text-mist-100">
+          <span dir="auto" className="mt-2 line-clamp-2 block px-0.5 text-sm font-bold leading-snug text-mist-100">
             {title}
           </span>
           <span dir="auto" className="mt-0.5 line-clamp-2 block px-0.5 text-[11px] leading-snug text-mist-500">
@@ -114,19 +120,29 @@ export function ContentCard({
         <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1 px-0.5">
           {categoryName && (
             <Badge tone="brand">
-              <span dir="auto">{categoryName}</span>
+              {/* A category is the owner's own words and Badge never wraps, so a
+                  long one ("ניקיון ספות ומזרנים באר שבע") computes wider than the
+                  150px a half-width tile has and gets clipped by the card edge.
+                  An explicit cap makes it end in an ellipsis instead. */}
+              <span dir="auto" className="block max-w-[7.5rem] truncate">{categoryName}</span>
             </Badge>
           )}
+          <Badge tone="neutral">{kind}</Badge>
+          {media.length > 1 && <Badge tone="neutral">{media.length} קבצי מדיה</Badge>}
           {post.status === 'draft' && <Badge tone="neutral">טיוטה</Badge>}
           {item.pendingCount > 0 && (
-            <Badge tone="info">{item.pendingCount === 1 ? 'פרסום אחד ממתין בתור' : `${item.pendingCount} פרסומים ממתינים בתור`}</Badge>
+            <Badge tone="brand">{item.pendingCount === 1 ? 'פרסום אחד ממתין בתור' : `${item.pendingCount} פרסומים ממתינים בתור`}</Badge>
           )}
-          {media.length > 1 && <Badge tone="neutral">{media.length} קבצי מדיה</Badge>}
         </div>
 
         <p className="mt-1 px-0.5 text-[11px] leading-tight text-mist-500">
           {published}
-          {item.lastPublishedAt ? ` · אחרון ${formatDayMonthHe(item.lastPublishedAt)}` : ''}
+          {item.lastPublishedAt ? (
+            <>
+              {' · אחרון '}
+              <span dir="ltr" className="inline-block tabular-nums">{formatDayMonthHe(item.lastPublishedAt)}</span>
+            </>
+          ) : null}
         </p>
 
         <div className="mt-auto flex items-center gap-1 pt-2">
@@ -138,13 +154,17 @@ export function ContentCard({
       </div>
 
       {/* Selection floats over the media so the tile below stays one big target. */}
-      <label className="absolute end-2 top-2 grid h-11 w-11 cursor-pointer place-items-center rounded-full bg-ink-850/90 ring-1 ring-ink-600">
+      <label
+        className={`absolute end-2 top-2 grid h-11 w-11 cursor-pointer place-items-center rounded-full bg-ink-950/75 ring-1 backdrop-blur-sm transition-[box-shadow] ${
+          selected ? 'ring-brand-300' : 'ring-ink-600'
+        }`}
+      >
         <input
           type="checkbox"
           aria-label={`בחר את ${title}`}
           checked={selected}
           onChange={(e) => onSelect(post.id, e.target.checked)}
-          className="h-4 w-4 accent-brand-500"
+          className="h-5 w-5 accent-brand-300"
         />
       </label>
     </li>

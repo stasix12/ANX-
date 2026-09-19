@@ -192,7 +192,7 @@ export default function CampaignsPage() {
                   </Link>
                   <button
                     type="button"
-                    className="ms-auto text-rose-600"
+                    className="ms-auto text-error-400"
                     onClick={async () => {
                       const ok = await confirm.ask({
                         title: 'למחוק את הסבב?',

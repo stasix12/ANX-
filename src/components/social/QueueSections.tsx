@@ -57,10 +57,10 @@ export function QueueSections({
 
   return (
     <div className="space-y-4">
-      <Group title="דורשים אתכם" tone="text-orange-700" items={attention} actions={actions} />
-      <Group title="מפרסם עכשיו" tone="text-amber-700" items={now} actions={actions} pulse />
-      <Group title="הבאים בתור" tone="text-sky-700" items={next.slice(0, nextLimit)} actions={actions} showDate more={next.length - nextLimit} />
-      <Group title="הושלמו" tone="text-emerald-700" items={done.slice(0, doneLimit)} actions={actions} more={done.length - doneLimit} />
+      <Group title="דורשים אתכם" tone="text-warning-400" items={attention} actions={actions} />
+      <Group title="מפרסם עכשיו" tone="text-brand-400" items={now} actions={actions} pulse />
+      <Group title="הבאים בתור" tone="text-brand-400" items={next.slice(0, nextLimit)} actions={actions} showDate more={next.length - nextLimit} />
+      <Group title="הושלמו" tone="text-success-400" items={done.slice(0, doneLimit)} actions={actions} more={done.length - doneLimit} />
     </div>
   );
 }

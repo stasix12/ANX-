@@ -574,7 +574,7 @@ export function QueueTunerSheet({
                       label={`הסר את ${t.target.name} מהתור`}
                       disabled={working}
                       onClick={() => void removeTarget(t.target.id, t.target.name, t.pending)}
-                      className="text-rose-600"
+                      className="text-error-400"
                     >
                       {removing ? <SpinnerIcon className="h-5 w-5 animate-spin" /> : <TrashIcon className="h-5 w-5" />}
                     </IconButton>

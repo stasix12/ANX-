@@ -41,7 +41,7 @@ export function ActivityFeed({ entries, limit = 12 }: { entries: ActivityEntry[]
             {EVENT_ICON[e.event] ?? (e.level === 'error' ? '❌' : e.level === 'warn' ? '⚠️' : 'ℹ️')}
           </span>
           <div className="min-w-0 grow">
-            <p className={`text-sm leading-snug ${e.level === 'error' ? 'text-rose-700' : 'text-mist-100'}`}>{e.message}</p>
+            <p className={`text-sm leading-snug ${e.level === 'error' ? 'text-error-400' : 'text-mist-100'}`}>{e.message}</p>
             <p className="text-[11px] text-mist-500" title={formatDateTimeHe(e.at)}>
               {relativeHe(e.at)}
             </p>

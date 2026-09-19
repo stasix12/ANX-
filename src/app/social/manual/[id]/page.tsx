@@ -125,7 +125,7 @@ export default function ManualKitPage() {
           {queue.length > 1 && (
             <ProgressBar
               total={queue.length}
-              segments={[{ value: stepNumber - 1, className: 'bg-emerald-500' }]}
+              segments={[{ value: stepNumber - 1, className: 'bg-success-400' }]}
               ariaLabel={`קבוצה ${stepNumber} מתוך ${queue.length}`}
             />
           )}
@@ -235,7 +235,7 @@ function Step({ n, title, done, children }: { n: number; title: string; done?: b
     <section className="border-t border-ink-700 pt-3 first:border-0 first:pt-0 [&+&]:mt-3">
       <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-mist-100">
         <span
-          className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-extrabold ${done ? 'bg-emerald-500 text-white' : 'bg-brand-500/15 text-brand-400'}`}
+          className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-extrabold ${done ? 'bg-success-400 text-white' : 'bg-brand-500/15 text-brand-400'}`}
         >
           {done ? '✓' : n}
         </span>

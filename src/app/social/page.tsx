@@ -32,7 +32,8 @@ import {
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, type QueueSummary } from '@/lib/social/status';
-import { addDaysISO, formatDateTimeHe, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { addDaysISO, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 
@@ -293,7 +294,7 @@ export default function SocialDashboard() {
             />
           )}
           {data.control.rateLimitedUntil && new Date(data.control.rateLimitedUntil) > new Date() && (
-            <AlertBar tone="warn" title="Meta ביקשה להאט" body={`הפרסום יתחדש אוטומטית ב-${formatDateTimeHe(data.control.rateLimitedUntil)}.`} />
+            <AlertBar tone="warn" title="Meta ביקשה להאט" body={`הפרסום יתחדש אוטומטית ב-${stampText(data.control.rateLimitedUntil)}.`} />
           )}
           {/* The number and the list behind the link are the same set — the
               alert used to count needs_attention alone and open a list that
@@ -311,7 +312,7 @@ export default function SocialDashboard() {
           {/* 1 — where the day stands. White cards; colour marks the status,
               not the card. */}
           <section>
-            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 [&>*]:min-w-0">
+            <div className="grid grid-cols-2 gap-3 sm:gap-3.5 md:grid-cols-4 [&>*]:min-w-0">
               <StatCard
                 icon={<SendIcon className="h-4.5 w-4.5" />}
                 tone={data.today ? 'good' : 'neutral'}
@@ -326,19 +327,11 @@ export default function SocialDashboard() {
                   publishing, awaiting_confirmation and paused out of both. */}
               <StatCard
                 icon={<CalendarIcon className="h-4.5 w-4.5" />}
-                tone="brand"
+                tone={summary.queued ? 'brand' : 'neutral'}
                 label="ממתינים בתור"
                 value={summary.queued}
                 sub="יוצאים לבד בזמנם"
                 href="/social/history?status=scheduled"
-              />
-              <StatCard
-                icon={<ClockIcon className="h-4.5 w-4.5" />}
-                tone={summary.needsHuman ? 'warn' : 'neutral'}
-                label="דורשים אתכם"
-                value={summary.needsHuman}
-                sub={`${data.activeTargets} יעדים פעילים`}
-                href="/social/history?status=needs_attention"
               />
               <StatCard
                 icon={<XCircleIcon className="h-4.5 w-4.5" />}
@@ -347,6 +340,14 @@ export default function SocialDashboard() {
                 value={summary.failed}
                 sub={summary.skipped ? `ועוד ${summary.skipped} דולגו` : 'סך הכול'}
                 href="/social/history?status=failed"
+              />
+              <StatCard
+                icon={<ClockIcon className="h-4.5 w-4.5" />}
+                tone={summary.needsHuman ? 'warn' : 'neutral'}
+                label="דורשים אתכם"
+                value={summary.needsHuman}
+                sub={`${data.activeTargets} יעדים פעילים`}
+                href="/social/history?status=needs_attention"
               />
             </div>
             <p className="mt-2 text-[11px] text-mist-500">
@@ -422,7 +423,7 @@ export default function SocialDashboard() {
               title={`ממתינים לפרסום ידני (${data.manual.length})`}
               subtitle="יעדים שאין להם פרסום אוטומטי — הכול מוכן, נשאר להדביק"
               action={
-                <Link href={`/social/manual/${data.manual[0].id}`} className="text-sm font-bold text-violet-700">
+                <Link href={`/social/manual/${data.manual[0].id}`} className="text-sm font-bold text-warning-400">
                   התחל ←
                 </Link>
               }
@@ -434,7 +435,7 @@ export default function SocialDashboard() {
                       <p dir="auto" className="truncate font-bold text-mist-100">{item.target?.name}</p>
                       <p dir="auto" className="truncate text-xs text-mist-500">{item.post?.title || 'פוסט'}</p>
                     </div>
-                    <Link href={`/social/manual/${item.id}`} className="inline-flex min-h-10 shrink-0 items-center rounded-xl bg-violet-600 px-3.5 text-sm font-bold text-white">
+                    <Link href={`/social/manual/${item.id}`} className="inline-flex min-h-11 shrink-0 items-center rounded-xl bg-warning-400 px-3.5 text-sm font-bold text-ink-950">
                       פתח
                     </Link>
                   </li>
@@ -458,7 +459,7 @@ export default function SocialDashboard() {
           </Card>
 
           <div className="flex justify-center pb-2">
-            <Button variant="ghost" size="sm" busy={busy === 'stop'} onClick={() => discardQueue(true)} className="text-rose-600">
+            <Button variant="ghost" size="sm" busy={busy === 'stop'} onClick={() => discardQueue(true)} className="text-error-400">
               עצור ומחק את כל הפרסומים
             </Button>
           </div>

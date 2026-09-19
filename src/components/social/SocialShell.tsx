@@ -76,7 +76,9 @@ export function SocialShell({
   if (loading || !session) {
     return (
       <div className="grid min-h-dvh place-items-center bg-ink-950">
-        <SpinnerIcon className="h-8 w-8 animate-spin text-brand-500" />
+        {/* brand-300, the indicator blue: brand-500 is the button surface and
+            sits at 3.73 on this page. A spinner is a mark, not a label. */}
+        <SpinnerIcon className="h-8 w-8 animate-spin text-brand-300" />
       </div>
     );
   }
@@ -86,12 +88,13 @@ export function SocialShell({
   return (
     <div className="min-h-dvh bg-ink-950 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-10">
       {/*
-        A quiet, white identity bar. The previous header was a full-width
-        indigo-to-sky gradient carrying the screen title and a white pill
-        button — a lot of colour and height spent on chrome, which is what
-        made the product read as a template. The identity lives here; the
-        screen's own title and its primary action belong to the page, where
-        they can be sized against the content.
+        A quiet identity bar. The previous header was a full-width indigo-to-sky
+        gradient carrying the screen title and a white pill button — a lot of
+        colour and height spent on chrome, which is what made the product read
+        as a template. The identity lives here; the screen's own title and its
+        primary action belong to the page, where they can be sized against the
+        content. On this palette the bar is the card surface at 90% behind a
+        blur, so content scrolling under it stays sensed but never legible.
       */}
       {/* Above the header, so a stale page says so before anything else on it
           is read. Renders nothing when the build in front of the owner is the
@@ -100,7 +103,7 @@ export function SocialShell({
       <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5">
           <Link href="/social" className="flex min-w-0 items-center gap-2.5">
-            <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500 text-white">
+            <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500 text-on-brand">
               <SparklesIcon className="h-5 w-5" />
             </span>
             <span className="min-w-0">
@@ -127,8 +130,15 @@ export function SocialShell({
                   <Link
                     href={href}
                     aria-current={active ? 'page' : undefined}
-                    className={`flex min-h-10 items-center gap-1.5 rounded-xl px-3.5 text-sm font-bold transition-colors ${
-                      active ? 'bg-brand-500/10 text-brand-500' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
+                    /*
+                     * The active pill was brand-500 text on a brand-500 tint —
+                     * 3.09 on this ground, and the one word on screen that
+                     * says where you are. brand-400 on a brand-300 wash is
+                     * 5.58, and the wash is the indicator blue because a pill
+                     * behind a word is a fill, not a word.
+                     */
+                    className={`flex min-h-10 items-center gap-1.5 rounded-xl px-3.5 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850 ${
+                      active ? 'bg-brand-300/14 text-brand-400' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -154,11 +164,11 @@ export function SocialShell({
             squeezed into a coloured bar, with its primary action beside it. */}
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 dir="auto" className="truncate text-2xl font-extrabold tracking-tight text-mist-100">
+            <h1 dir="auto" className="truncate text-2xl font-extrabold leading-tight tracking-tight text-mist-100">
               {title}
             </h1>
             {lede && (
-              <p dir="auto" className="mt-0.5 truncate text-sm text-mist-500">
+              <p dir="auto" className="mt-1 truncate text-sm leading-snug text-mist-500">
                 {lede}
               </p>
             )}
@@ -171,7 +181,10 @@ export function SocialShell({
       {/* Phone: iOS-style bottom tab bar, thumb-reachable. */}
       <nav
         aria-label="ניווט ראשי"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700/70 bg-ink-850/90 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_24px_rgba(13,38,76,0.1)] backdrop-blur-xl md:hidden"
+        // The shadow was cast in rgba(13,38,76,…) — a navy shade built for a
+        // white page, which on #071426 is nothing at all. On a dark ground the
+        // bar has to lift off the content with a real black gradient.
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700 bg-ink-850/92 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_28px_rgba(0,0,0,0.5)] backdrop-blur-xl md:hidden"
       >
         <ul className="mx-auto flex max-w-lg items-stretch">
           {nav
@@ -183,9 +196,9 @@ export function SocialShell({
                   <Link
                     href={href}
                     aria-current={active ? 'page' : undefined}
-                    className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors ${active ? 'text-brand-400' : 'text-mist-500'}`}
+                    className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ${active ? 'text-brand-400' : 'text-mist-500'}`}
                   >
-                    <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${active ? 'scale-105 bg-brand-500/10' : ''}`}>
+                    <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${active ? 'scale-105 bg-brand-300/14' : ''}`}>
                       <Icon className="h-5.5 w-5.5" />
                     </span>
                     {label}
@@ -198,7 +211,7 @@ export function SocialShell({
               type="button"
               onClick={() => setMoreOpen(true)}
               aria-expanded={moreOpen}
-              className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors ${
+              className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ${
                 moreOpen || !MOBILE_TABS.some((h) => isActive(h, h === '/social')) ? 'text-brand-400' : 'text-mist-500'
               }`}
             >
@@ -221,8 +234,8 @@ export function SocialShell({
                 <Link
                   href={href}
                   onClick={() => setMoreOpen(false)}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-3.5 text-base font-bold ${
-                    isActive(href, exact) ? 'bg-brand-500/10 text-brand-400' : 'text-mist-100'
+                  className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-3.5 text-base font-bold ${
+                    isActive(href, exact) ? 'bg-brand-300/14 text-brand-400' : 'text-mist-100 hover:bg-ink-900'
                   }`}
                 >
                   <Icon className="h-5 w-5" />
@@ -234,7 +247,7 @@ export function SocialShell({
             <Link
               href="/social/posts/new"
               onClick={() => setMoreOpen(false)}
-              className="mt-1 flex items-center gap-3 rounded-xl bg-brand-500/10 px-3 py-3.5 text-base font-bold text-brand-400"
+              className="mt-1 flex min-h-11 items-center gap-3 rounded-xl bg-brand-300/14 px-3 py-3.5 text-base font-bold text-brand-400"
             >
               <ClipboardListIcon className="h-5 w-5" />
               פוסט חדש

@@ -30,27 +30,75 @@ function tokensOf(block: string): Record<string, string> {
   return out;
 }
 
-const at = (needle: string) => {
-  const i = css.indexOf(needle);
-  assert.ok(i > -1, `theme block not found: ${needle}`);
-  return i;
-};
-const [iStore, iCrm, iPlatform] = [at('@theme {'), at('.crm-theme {'), at('.platform-theme {')];
+/**
+ * A theme block, bounded by its own braces.
+ *
+ * This used to slice from one block's opening brace to the next one's, and
+ * gave the last theme a flat 1500-character window. Both are traps: adding a
+ * theme anywhere but the end silently folded its tokens into the block above
+ * it (last declaration wins in `tokensOf`, so the guard would have reported
+ * one theme's name while measuring another's palette), and the 1500 window
+ * already ran well past `.platform-theme` into rules that follow it. Matching
+ * the closing brace means a block is exactly itself, wherever it is written.
+ */
+function blockOf(selector: string): string {
+  const start = css.indexOf(selector);
+  assert.ok(start > -1, `theme block not found: ${selector}`);
+  const open = css.indexOf('{', start);
+  const end = css.indexOf('\n}', open);
+  assert.ok(end > -1, `theme block never closes: ${selector}`);
+  return css.slice(open, end);
+}
 
 const THEMES: [string, string][] = [
-  ['storefront (@theme)', css.slice(iStore, iCrm)],
-  ['crm-theme — the theme /social runs in', css.slice(iCrm, iPlatform)],
-  ['platform-theme', css.slice(iPlatform, iPlatform + 1500)],
+  ['storefront (@theme)', blockOf('@theme {')],
+  ['crm-theme — /crm and the sofa-cleaning landing page', blockOf('.crm-theme {')],
+  ['platform-theme — /clean, /pro, /hq', blockOf('.platform-theme {')],
+  ['social-theme — the theme /social runs in', blockOf('.social-theme {')],
 ];
 
-/** Foreground on background, as the UI actually renders them. */
-const PAIRS: [string, string, string][] = [
-  ['mist-500', 'ink-950', 'fine print on the page'],
-  ['mist-500', 'ink-850', 'fine print on a card'],
-  ['mist-300', 'ink-850', 'secondary text on a card'],
-  ['mist-100', 'ink-950', 'body text on the page'],
-  ['brand-400', 'ink-850', 'link on a card'],
-  ['on-brand', 'brand-500', 'text on the primary button'],
+/**
+ * Foreground on background, as the UI actually renders them.
+ *
+ * `only` narrows a pair to the themes where the pairing is real. It is not an
+ * escape hatch for a failing ratio: ink-800 is the ELEVATED SURFACE (sheets,
+ * toasts, the overflow menu) in social-theme, which is why fine print lands
+ * on it there, while in the three light themes ink-800 is a chip and track
+ * fill that never carries 11px text. Asserting it everywhere would be
+ * asserting something the light themes do not do.
+ *
+ * Deliberately absent: brand-300 and error-300. They measure 4.49 and 4.57 on
+ * a card in social-theme and are declared NON-TEXT — indicator fills, dots,
+ * bar segments, focus rings, where the threshold is 3:1. Listing them here
+ * would either fail the build or, worse, be "fixed" by someone using them as
+ * text because the guard said they were fine.
+ */
+type Pair = { fg: string; bg: string; what: string; only?: string };
+const PAIRS: Pair[] = [
+  { fg: 'mist-500', bg: 'ink-950', what: 'fine print on the page' },
+  { fg: 'mist-500', bg: 'ink-850', what: 'fine print on a card' },
+  { fg: 'mist-300', bg: 'ink-850', what: 'secondary text on a card' },
+  { fg: 'mist-100', bg: 'ink-950', what: 'body text on the page' },
+  { fg: 'brand-400', bg: 'ink-850', what: 'link on a card' },
+  { fg: 'on-brand', bg: 'brand-500', what: 'label on the primary button' },
+
+  // Status colour. These were hardcoded Tailwind palette classes until this
+  // palette; unguarded, `text-emerald-700` on a navy card measured 2.4.
+  { fg: 'success-400', bg: 'ink-850', what: 'success text on a card' },
+  { fg: 'error-400', bg: 'ink-850', what: 'error text on a card' },
+  { fg: 'warning-400', bg: 'ink-850', what: 'warning text on a card' },
+  { fg: 'on-state', bg: 'success-500', what: 'label on a success surface' },
+  { fg: 'on-state', bg: 'error-500', what: 'label on a danger button' },
+
+  // The elevated surface — a sheet is where an error gets explained, so every
+  // text step has to survive one step up from the card, not just on it.
+  { fg: 'mist-100', bg: 'ink-800', what: 'body text on a sheet', only: 'social-theme' },
+  { fg: 'mist-300', bg: 'ink-800', what: 'secondary text on a sheet', only: 'social-theme' },
+  { fg: 'mist-500', bg: 'ink-800', what: 'fine print on a sheet', only: 'social-theme' },
+  { fg: 'brand-400', bg: 'ink-800', what: 'link on a sheet', only: 'social-theme' },
+  { fg: 'success-400', bg: 'ink-800', what: 'success text on a sheet', only: 'social-theme' },
+  { fg: 'error-400', bg: 'ink-800', what: 'error text on a sheet', only: 'social-theme' },
+  { fg: 'warning-400', bg: 'ink-800', what: 'warning text on a sheet', only: 'social-theme' },
 ];
 
 // 4.5:1 is the AA threshold for body text. Everything checked here is body
@@ -58,13 +106,16 @@ const PAIRS: [string, string, string][] = [
 // 3.0 deliberately does not apply.
 const AA = 4.5;
 const failures: string[] = [];
+let checked = 0;
 
 for (const [themeName, block] of THEMES) {
   const t = tokensOf(block);
-  for (const [fg, bg, what] of PAIRS) {
+  for (const { fg, bg, what, only } of PAIRS) {
+    if (only && !themeName.startsWith(only)) continue;
     const f = t[`--color-${fg}`];
     const b = t[`--color-${bg}`];
     if (!f || !b) continue;
+    checked += 1;
     const ratio = contrast(f, b);
     if (ratio < AA) failures.push(`${themeName}: ${fg} on ${bg} (${what}) = ${ratio.toFixed(2)}, needs ${AA}`);
   }
@@ -72,4 +123,9 @@ for (const [themeName, block] of THEMES) {
 
 assert.deepEqual(failures, [], `palette pairs below WCAG AA:\n  ${failures.join('\n  ')}`);
 
-console.log('contrast guard OK — 3 themes, 0 pairs below AA');
+// A typo in a token name would silently skip its pair rather than fail, so the
+// count is asserted too: 11 universal pairs across 4 themes, plus 7 that only
+// social-theme declares an elevated surface for.
+assert.equal(checked, 11 * 4 + 7, `expected 51 measured pairs, got ${checked}`);
+
+console.log(`contrast guard OK — ${THEMES.length} themes, ${checked} pairs, 0 below AA`);

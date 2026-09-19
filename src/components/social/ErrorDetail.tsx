@@ -63,7 +63,7 @@ export function ErrorDetail({ row, technical = false }: { row: QueueRow; technic
   const info = explainFailure(row);
   return (
     <div className="text-xs">
-      <p className={`font-bold ${info.needsOwner ? 'text-orange-700' : 'text-rose-700'}`}>{info.headline}</p>
+      <p className={`font-bold ${info.needsOwner ? 'text-warning-400' : 'text-error-400'}`}>{info.headline}</p>
       <p className="mt-0.5 text-mist-300">{info.advice}</p>
       {technical && (row.error || row.skip_reason) && (
         <details className="mt-1">

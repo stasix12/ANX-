@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import type { QueueRow } from '@/lib/social/client';
-import { formatDateTimeHe, formatDayMonthHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import { formatDayMonthHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import { CANCELLABLE_STATUSES } from '@/lib/social/status';
 import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
+import { Stamp } from './DateTime';
 import { ErrorDetail } from './ErrorDetail';
 import { TargetAvatar } from './TargetAvatar';
-import { Badge, Button, MethodBadge, OverflowMenu, Sheet, StatusPill } from './ui';
+import { Badge, Button, MethodBadge, OverflowMenu, Sheet, StatusPill, STATUS_TONE, TONE_TEXT, TONE_TINT } from './ui';
 
 /**
  * One publication, everywhere it appears: the live queue, a campaign's
@@ -33,23 +35,23 @@ export function statusLine(row: QueueRow): { text: string; cls: string } {
     case 'published':
       // No "ב-" before the time: a Hebrew prefix glued to digits with a hyphen
       // is exactly the construction that flips order in a bidi run.
-      return { text: row.published_at ? `פורסם ${formatTimeHe(row.published_at)}` : 'פורסם', cls: 'text-emerald-700' };
+      return { text: row.published_at ? `פורסם ${formatTimeHe(row.published_at)}` : 'פורסם', cls: TONE_TEXT[STATUS_TONE.published] };
     case 'failed':
-      return { text: 'נכשל', cls: 'text-rose-700' };
+      return { text: 'נכשל', cls: TONE_TEXT[STATUS_TONE.failed] };
     case 'skipped':
-      return { text: row.skip_reason || 'דולג', cls: 'text-slate-600' };
+      return { text: row.skip_reason || 'דולג', cls: TONE_TEXT[STATUS_TONE.skipped] };
     case 'needs_attention':
-      return { text: 'דורש טיפול שלכם', cls: 'text-orange-700' };
+      return { text: 'דורש טיפול שלכם', cls: TONE_TEXT[STATUS_TONE.needs_attention] };
     case 'awaiting_confirmation':
-      return { text: 'מוכן — ממתין לאישור שלכם', cls: 'text-fuchsia-700' };
+      return { text: 'מוכן — ממתין לאישור שלכם', cls: TONE_TEXT[STATUS_TONE.awaiting_confirmation] };
     case 'paused':
-      return { text: 'מושהה', cls: 'text-slate-600' };
+      return { text: 'מושהה', cls: TONE_TEXT[STATUS_TONE.paused] };
     case 'publishing':
-      return { text: QUEUE_STEP_LABEL[step] || 'מפרסם עכשיו', cls: 'text-amber-700' };
+      return { text: QUEUE_STEP_LABEL[step] || 'מפרסם עכשיו', cls: TONE_TEXT[STATUS_TONE.publishing] };
     case 'manual_pending':
-      return { text: 'ממתין לפרסום ידני', cls: 'text-violet-700' };
+      return { text: 'ממתין לפרסום ידני', cls: TONE_TEXT[STATUS_TONE.manual_pending] };
     default:
-      return { text: `${formatTimeHe(row.scheduled_at)} · ${relativeHe(row.scheduled_at)}`, cls: 'text-sky-700' };
+      return { text: `${formatTimeHe(row.scheduled_at)} · ${relativeHe(row.scheduled_at)}`, cls: TONE_TEXT[STATUS_TONE.scheduled] };
   }
 }
 
@@ -94,13 +96,13 @@ export function PublicationItem({
     row.permalink ? { label: 'פתח את הפוסט שפורסם', icon: '🔗', onSelect: () => window.open(row.permalink as string, '_blank', 'noreferrer') } : null,
     actions.onScreenshot && row.screenshot_path ? { label: 'צילום מסך של התקלה', icon: '🖼', onSelect: () => actions.onScreenshot?.(row) } : null,
     { label: 'פרטי הפרסום', icon: 'ℹ️', onSelect: () => setOpen(true) },
-    actions.onCancel && ['scheduled', 'awaiting_confirmation', 'needs_attention', 'paused', 'manual_pending'].includes(row.status)
+    actions.onCancel && CANCELLABLE_STATUSES.includes(row.status)
       ? { label: 'בטל פרסום', icon: '🚫', onSelect: () => actions.onCancel?.(row), danger: true }
       : null,
   ].filter(Boolean) as { label: string; icon?: React.ReactNode; onSelect: () => void; danger?: boolean }[];
 
   return (
-    <li className={`flex items-center gap-2.5 py-2.5 ${running ? 'rounded-xl bg-amber-500/5 px-2' : ''}`}>
+    <li className={`flex min-w-0 items-center gap-2 py-2.5 ${running ? `rounded-xl px-2 ${TONE_TINT.brand}` : ''}`}>
       <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={38} />
       <button type="button" onClick={() => setOpen(true)} className="min-h-11 min-w-0 grow text-start">
         <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
@@ -124,8 +126,8 @@ export function PublicationItem({
             {row.variant && <Badge tone="brand">גרסה {row.variant.label}</Badge>}
           </div>
           <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm [&>*]:min-w-0">
-            <Detail label="מתוזמן ל">{formatDateTimeHe(row.scheduled_at)}</Detail>
-            <Detail label="פורסם ב">{row.published_at ? formatDateTimeHe(row.published_at) : '—'}</Detail>
+            <Detail label="מתוזמן ל"><Stamp iso={row.scheduled_at} /></Detail>
+            <Detail label="פורסם ב">{row.published_at ? <Stamp iso={row.published_at} /> : '—'}</Detail>
             <Detail label="פוסט">{row.post?.title || '—'}</Detail>
             <Detail label="ניסיונות">{row.attempts}</Detail>
           </dl>

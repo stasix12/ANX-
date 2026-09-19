@@ -276,7 +276,7 @@ export function SchedulePicker({
                       onChange={(e) => setTimes(day, times.map((x, j) => (j === i ? e.target.value : x)))}
                     />
                     {times.length > 1 && (
-                      <button type="button" aria-label="הסר שעה" className="min-h-10 px-2 text-xs text-rose-600" onClick={() => setTimes(day, times.filter((_, j) => j !== i))}>
+                      <button type="button" aria-label="הסר שעה" className="min-h-10 px-2 text-xs text-error-400" onClick={() => setTimes(day, times.filter((_, j) => j !== i))}>
                         ✕
                       </button>
                     )}

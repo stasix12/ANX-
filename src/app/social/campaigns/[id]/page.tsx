@@ -207,7 +207,7 @@ export default function CampaignControlCenter() {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              {state?.state === 'running' && <span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />}
+              {state?.state === 'running' && <span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-success-400" />}
               <Badge tone={RUN_STATE_TONE[state?.state ?? 'not_started']}>{RUN_STATE_LABEL[state?.state ?? 'not_started']}</Badge>
               <span className="text-xs text-mist-500">
                 {[campaign.service, campaign.city].filter(Boolean).join(' · ')}
@@ -226,9 +226,9 @@ export default function CampaignControlCenter() {
                 sub={`${state.progress.published} / ${state.progress.total} פורסמו`}
               />
               <dl className="grid min-w-0 flex-1 grid-cols-2 gap-2 [&>*]:min-w-0">
-                <Counter label="פורסמו" value={state.progress.published} tone="text-emerald-600" />
-                <Counter label="ממתינים" value={state.progress.scheduled} tone="text-sky-700" />
-                <Counter label="נכשלו" value={state.progress.failed} tone={state.progress.failed ? 'text-rose-600' : 'text-mist-500'} />
+                <Counter label="פורסמו" value={state.progress.published} tone="text-success-400" />
+                <Counter label="ממתינים" value={state.progress.scheduled} tone="text-brand-400" />
+                <Counter label="נכשלו" value={state.progress.failed} tone={state.progress.failed ? 'text-error-400' : 'text-mist-500'} />
                 <Counter label="דילוגים" value={state.progress.skipped} tone="text-mist-500" />
               </dl>
             </div>

@@ -73,7 +73,7 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
       </div>
       <input ref={inputRef} type="file" accept="image/*,video/mp4,video/quicktime" multiple hidden onChange={(e) => onFiles(e.target.files)} />
       <p className="mt-1.5 text-xs text-mist-500">תמונות (כמה שתרצו) או סרטון אחד. הקבצים נשמרים ב-Supabase Storage ומשם פייסבוק מושכת אותם.</p>
-      {error && <p className="mt-1 text-sm text-rose-600">{error}</p>}
+      {error && <p className="mt-1 text-sm text-error-400">{error}</p>}
     </div>
   );
 }

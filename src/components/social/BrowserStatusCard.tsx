@@ -11,11 +11,11 @@ import { friendlyMessage } from '@/lib/social/errors';
 type Light = { icon: string; label: string; cls: string };
 
 function lightFor(w: (SocialWorker & { online: boolean }) | undefined): Light {
-  if (!w || !w.online) return { icon: '🔴', label: 'מנותק — ה-worker לא רץ', cls: 'text-rose-700' };
-  if (w.status === 'needs_attention' || w.browser_state === 'needs_auth') return { icon: '🟡', label: 'נדרש אימות / טיפול ידני', cls: 'text-amber-700' };
-  if (w.browser_state === 'connected') return { icon: '🟢', label: 'מחובר', cls: 'text-emerald-700' };
-  if (w.browser_state === 'disconnected') return { icon: '🔴', label: 'לא מחובר לפייסבוק', cls: 'text-rose-700' };
-  return { icon: '🟡', label: 'לא נבדק עדיין', cls: 'text-amber-700' };
+  if (!w || !w.online) return { icon: '🔴', label: 'מנותק — ה-worker לא רץ', cls: 'text-error-400' };
+  if (w.status === 'needs_attention' || w.browser_state === 'needs_auth') return { icon: '🟡', label: 'נדרש אימות / טיפול ידני', cls: 'text-warning-400' };
+  if (w.browser_state === 'connected') return { icon: '🟢', label: 'מחובר', cls: 'text-success-400' };
+  if (w.browser_state === 'disconnected') return { icon: '🔴', label: 'לא מחובר לפייסבוק', cls: 'text-error-400' };
+  return { icon: '🟡', label: 'לא נבדק עדיין', cls: 'text-warning-400' };
 }
 
 /**

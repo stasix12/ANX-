@@ -41,9 +41,40 @@
      under a dark one the same shadow is invisible and a lift is wanted instead. */
   --color-shadow: #000000;
 
+  /*
+   * State colour, as tokens rather than literal Tailwind palette classes.
+   *
+   * Every status in /social used to be a hardcoded `text-emerald-700` /
+   * `bg-rose-500/15` / `text-amber-700` — tuned for a white card and stranded
+   * at 2.4:1 the moment a theme goes dark. Naming them here gives the same
+   * re-resolution the ink/mist/brand scales already have, so a status reads
+   * correctly in every theme instead of in the one it was picked against.
+   *
+   * The -300/-400/-500 steps are ROLES, not lightness (same convention as the
+   * brand ramp):
+   *   300  indicator only — dots, bar segments, the round "!" mark. Never text.
+   *   400  TEXT and icons.
+   *   500  a solid surface carrying an `on-state` label.
+   * Red needs all three because a single red cannot be both a 3:1 indicator on
+   * a dark sheet and a 4.5:1 label; green and amber need two.
+   */
+  --color-success-400: #34d399;
+  --color-success-500: #047857;
+  --color-error-300: #f43f5e;
+  --color-error-400: #fb7185;
+  --color-error-500: #be123c;
+  --color-warning-400: #fbbf24;
+  /* Label on a success-500 / error-500 fill — the state twin of on-brand. */
+  --color-on-state: #ffffff;
+
   --font-sans: var(--font-heebo), 'Segoe UI', system-ui, -apple-system, sans-serif;
 
+  /* Three panel radii, 18-22px. One value for everything made every surface
+     the same object; the tile is tighter than the card it sits in, and a
+     phone sheet is rounder than either because only its top corners show. */
   --radius-card: 1.25rem;
+  --radius-tile: 1.125rem;
+  --radius-sheet: 1.375rem;
 
   --animate-rise: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -136,6 +167,19 @@
   --color-brand-600: #026da5;
   --color-brand-700: #075985;
   --color-on-brand: #ffffff;
+
+  /* State colour for a LIGHT ground. The storefront's values are tuned against
+     charcoal and would sit near 1.8:1 on a white card, so each theme carries
+     its own. Measured on this theme's card (#ffffff) and on its raised fill:
+     success 7.68 / 6.48, error 6.29 / 5.30, warning 7.09 / 5.98, and white on
+     the success and danger surfaces 5.48 / 6.29. */
+  --color-success-400: #065f46;
+  --color-success-500: #047857;
+  --color-error-300: #e11d48;
+  --color-error-400: #be123c;
+  --color-error-500: #be123c;
+  --color-warning-400: #92400e;
+  --color-on-state: #ffffff;
 }
 
 /*
@@ -984,6 +1028,19 @@
   --color-brand-600: #0b5c70;
   --color-brand-700: #094a5a;
   --color-on-brand: #ffffff;
+
+  /* State colour for a LIGHT ground. The storefront's values are tuned against
+     charcoal and would sit near 1.8:1 on a white card, so each theme carries
+     its own. Measured on this theme's card (#ffffff) and on its raised fill:
+     success 7.68 / 6.48, error 6.29 / 5.30, warning 7.09 / 5.98, and white on
+     the success and danger surfaces 5.48 / 6.29. */
+  --color-success-400: #065f46;
+  --color-success-500: #047857;
+  --color-error-300: #e11d48;
+  --color-error-400: #be123c;
+  --color-error-500: #be123c;
+  --color-warning-400: #92400e;
+  --color-on-state: #ffffff;
 }
 
 .platform-theme .surface {
@@ -1092,6 +1149,207 @@
     animation: none;
   }
   .skeleton-shimmer {
+    background-image: none;
+  }
+}
+
+/*
+ * ===========================================================================
+ * Dark Navy / Premium — the theme /social runs in.
+ * ===========================================================================
+ *
+ * Placed at the very END of this file on purpose. worker/test/contrast.test.ts
+ * slices theme blocks out of this source by brace matching; a block wedged
+ * between two others still parses correctly, but every block after a new one
+ * shifts, and the guard's own comment is the only record of which slice is
+ * which. Appending keeps the three existing themes exactly where they were.
+ *
+ * /social used to borrow .crm-theme, which is also worn by /crm and the
+ * sofa-cleaning landing page — repainting it would have re-themed two other
+ * products. This is a fourth sibling instead, and the switch is one className
+ * in src/app/social/layout.tsx. Same re-resolution trick as the others: the
+ * ink/mist/brand/state utilities already in the markup swap to a dark ground
+ * without a single class change in a screen.
+ *
+ * Measured (WCAG 2.x, the same formula the guard uses), page #071426 ·
+ * bg-2 #0b1d33 · card #102640 · sheet #142d4a:
+ *
+ *              page    bg-2    card   sheet
+ *   mist-100  17.65   16.22   14.62   13.35
+ *   mist-300   9.34    8.58    7.73    7.06
+ *   mist-500   6.89    6.33    5.71    5.21
+ *   brand-400  8.18    7.52    6.77    6.19
+ *   success-4  8.39    7.70    6.94    6.34
+ *   error-400  7.40    6.80    6.13    5.59
+ *   warning-4 10.10    9.28    8.36    7.64
+ *   brand-300  5.43    4.99    4.49    4.10   <- NON-TEXT ONLY
+ *   error-300  5.52    5.07    4.57    4.17   <- NON-TEXT ONLY
+ *
+ * White on brand-500 4.95 · brand-600 6.62 · brand-700 9.07 · success-500
+ * 5.35 · error-500 6.28. ink-950 on warning-400 10.10 (amber takes a dark
+ * label; white on it is 1.83).
+ */
+.social-theme {
+  /* Same reason as .crm-theme: body sets its colour from the storefront's
+     unscoped mist-100, so text with no explicit class would inherit cream. */
+  color: var(--color-mist-100);
+
+  /* Grounds: page → inset boxes and input fills → cards → sheets. Each step
+     is a real step, so a recessed field and a raised sheet are both legible
+     as depth without a border doing the work alone. */
+  --color-ink-950: #071426;
+  --color-ink-900: #0b1d33;
+  --color-ink-850: #102640;
+  --color-ink-800: #142d4a;
+
+  /* The hairline stays TRANSLUCENT on purpose. One value has to read over the
+     page, over a card and over a sheet; a flattened hex is right on one of
+     the three and wrong on the other two. It composites to #192c43 / #213b59
+     / #244161 — ambient separation, not a boundary that carries meaning. */
+  --color-ink-700: rgba(120, 170, 220, 0.16);
+  /* A control's edge is the only thing telling a finger where an input is, so
+     it is a solid step: 3.66:1 on a card, 4.42 on the page, 3.34 on a sheet —
+     above the 3:1 a non-text boundary needs. The hairline above is 1.34 and
+     would leave a text field with no measurable edge at all. */
+  --color-ink-600: #5a7fa6;
+
+  --color-mist-100: #f7faff;
+  --color-mist-300: #a9bad0;
+  --color-mist-500: #8ca0b8;
+
+  /* Two blues, not one, and the split is not cosmetic: white on #168bff
+     measures 3.40 and fails AA, so the bright blue cannot be a button
+     surface; and #168bff as text on a card measures 4.49 — one hundredth
+     under AA — so it cannot be text either. It is the INDICATOR blue
+     (progress fills, focus rings, the active-nav pill, dots) where 3:1
+     applies. brand-400 carries every blue word, brand-500 every blue fill a
+     white label sits on. */
+  --color-brand-300: #168bff;
+  --color-brand-400: #38b6ff;
+  --color-brand-500: #0b6fd4;
+  --color-brand-600: #0a5cb0;
+  --color-brand-700: #08488c;
+  --color-on-brand: #ffffff;
+
+  /* Red needs three steps here. #ff4560 is the owner's error colour and is
+     correct as an indicator everywhere (>=3:1 on all four grounds), but as
+     TEXT it is 4.17 on a sheet and 4.11 on its own 12% tint — and a sheet is
+     exactly where a failure gets explained. So #ff7a8c carries red words
+     (6.13 card / 5.59 sheet / 5.51 on the tint) and #bd1739 is the danger
+     button under a white label. Green and amber clear 4.5 on all four
+     grounds and need no such split. */
+  --color-success-400: #16c784;
+  --color-success-500: #0e7a52;
+  --color-error-300: #ff4560;
+  --color-error-400: #ff7a8c;
+  --color-error-500: #bd1739;
+  --color-warning-400: #ffb020;
+  --color-on-state: #ffffff;
+
+  --color-shadow: #000000;
+}
+
+/*
+ * .surface must be declared explicitly here, not left to the generic fallback
+ * in @layer utilities. That fallback mixes 8% of brand-400 into the card,
+ * which on this ground is a visible cyan cast on every panel in the product,
+ * and it casts its shadow in --color-shadow: pure black is invisible on
+ * #071426. Depth on a dark theme comes from the hairline plus a deeper,
+ * softer drop — never from a glow.
+ */
+/*
+ * iOS rubber-band overscroll paints the DOCUMENT background, and the document
+ * sits outside this scope — SiteChrome renders a bare <main>, so <body> keeps
+ * the storefront's charcoal. A pull past the top or bottom of a /social screen
+ * flashed #17191c at the edge of an otherwise navy app. The literal is the
+ * same value as --color-ink-950 below, spelled out because a custom property
+ * declared on .social-theme cannot be read by its own ancestor; the two are
+ * changed together.
+ */
+html:has(.social-theme) {
+  background-color: #071426;
+}
+
+.social-theme .surface {
+  background-color: var(--color-ink-850);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 32px -18px rgba(0, 0, 0, 0.7);
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+.social-theme :is(a, button).surface:hover {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    0 18px 40px -18px rgba(0, 0, 0, 0.78);
+}
+
+/* No grey tap-flash on iOS — the scale dip below is the feedback. 150ms and
+   a single easing, so a press, a colour change and a nav pill all settle on
+   the same beat. */
+.social-theme :is(a, button) {
+  -webkit-tap-highlight-color: transparent;
+  transition-property: transform, color, background-color, border-color, opacity, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.social-theme :is(a, button):active {
+  transform: scale(0.97);
+}
+
+/* Segmented controls: the active chip is a solid blue fill, a white label AND
+   a blue drop shadow lifting it off the track. Three changes at once is what
+   makes "which filter am I on" answerable at a glance instead of a squint. */
+.social-theme [role='group'] > [aria-pressed='true'] {
+  box-shadow: 0 2px 10px rgba(11, 111, 212, 0.45);
+}
+
+/* The base focus ring is brand-500, which is a SURFACE colour here and sits
+   at 3.73 on the page. brand-300 is the indicator blue: 5.43 on the page,
+   4.49 on a card, 4.10 on a sheet — visible everywhere a control can be. */
+.social-theme :focus-visible {
+  outline-color: var(--color-brand-300);
+}
+
+/*
+ * The shimmer is built from ink-800 → ink-700, and ink-700 is translucent in
+ * this theme: the sweep would be a 1.05 ratio against its own base, i.e. a
+ * skeleton that does not read as loading. A solid lighter navy gives 1.45 —
+ * present, and nowhere near a strobe.
+ */
+.social-theme .skeleton-shimmer {
+  background-image: linear-gradient(100deg, #142d4a 30%, #24466f 50%, #142d4a 70%);
+}
+
+/* A live run's dot breathes so "this is happening now" does not depend on
+   noticing a number change. A class, not an inline style, so the
+   reduced-motion block below can actually reach it. */
+@keyframes social-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.pulse-dot {
+  animation: social-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot {
+    animation: none;
+  }
+  /* The global block only shortens durations, which would turn the press dip
+     into an instant jump rather than removing it. Drop it outright. */
+  .social-theme :is(a, button):active {
+    transform: none;
+  }
+  .social-theme .skeleton-shimmer {
     background-image: none;
   }
 }

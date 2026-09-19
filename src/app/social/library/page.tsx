@@ -10,6 +10,7 @@ import { QuickPublishSheet } from '@/components/social/QuickPublishSheet';
 import { SocialShell } from '@/components/social/SocialShell';
 import {
   Badge,
+  CARD_ELEVATED,
   Button,
   ButtonLink,
   Card,
@@ -368,18 +369,18 @@ export default function LibraryPage() {
 
             <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
               <div className="flex flex-wrap gap-3">
-                <button type="button" className="min-h-10 px-1 text-brand-400" onClick={() => setSelected(visible.map((it) => it.post.id))}>
+                <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => setSelected(visible.map((it) => it.post.id))}>
                   {visible.length === 1 ? 'בחר את הפוסט המוצג' : `בחר את כל ${visible.length} המוצגים`}
                 </button>
                 {selected.length > 0 && (
-                  <button type="button" className="min-h-10 px-1 text-mist-500" onClick={() => setSelected([])}>
+                  <button type="button" className="min-h-11 px-1 text-mist-500" onClick={() => setSelected([])}>
                     נקה בחירה
                   </button>
                 )}
               </div>
               <button
                 type="button"
-                className="inline-flex min-h-10 items-center gap-1.5 px-1 text-brand-400"
+                className="inline-flex min-h-11 items-center gap-1.5 px-1 text-brand-400"
                 onClick={() => {
                   setRenames({});
                   setNewCategory('');
@@ -394,9 +395,9 @@ export default function LibraryPage() {
 
         {/* Loading: cards, not a spinner, so the grid does not jump when it fills. */}
         {!items && (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
             {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-60 rounded-2xl" />
+              <Skeleton key={i} className="h-60 rounded-tile" />
             ))}
           </div>
         )}
@@ -428,7 +429,7 @@ export default function LibraryPage() {
         )}
 
         {page.length > 0 && (
-          <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0">
             {page.map((it) => (
               <ContentCard
                 key={it.post.id}
@@ -456,11 +457,16 @@ export default function LibraryPage() {
         )}
       </div>
 
+      {/* The bar floats above the tab bar, inside the clearance the page already
+          reserves for it — so the rows underneath had no way to scroll clear.
+          This spacer is the bar's own height, present only while it is. */}
+      {selected.length > 0 && <div aria-hidden className="h-24" />}
+
       {/* Selection bar. data-overlay keeps the page's entrance transform off it —
           a transformed ancestor becomes the containing block for `fixed`. */}
       {selected.length > 0 && (
         <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
-          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl bg-ink-850 p-2.5 shadow-2xl ring-1 ring-ink-600">
+          <div className={`mx-auto flex max-w-3xl flex-wrap items-center gap-2 p-2.5 ${CARD_ELEVATED}`}>
             <Badge tone="brand">נבחרו {selected.length}</Badge>
             <Button size="sm" variant="secondary" onClick={() => setAssignOpen(true)}>
               קטגוריה
@@ -489,7 +495,7 @@ export default function LibraryPage() {
             >
               ארכיון
             </Button>
-            <button type="button" className="ms-auto min-h-9 px-2 text-xs font-bold text-mist-500" onClick={() => setSelected([])}>
+            <button type="button" className="ms-auto min-h-11 px-3 text-xs font-bold text-mist-500" onClick={() => setSelected([])}>
               בטל
             </button>
           </div>

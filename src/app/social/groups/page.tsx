@@ -8,6 +8,7 @@ import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import {
   Badge,
+  CARD_ELEVATED,
   Button,
   Card,
   EmptyState,
@@ -268,11 +269,11 @@ export default function GroupsPage() {
           </div>
           <div className="mt-2.5 flex items-center justify-between gap-2">
             <div className="flex gap-3 text-xs font-bold">
-              <button type="button" className="min-h-10 px-1 text-brand-400" onClick={() => setSelected(visible.map((g) => g.id))}>
+              <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => setSelected(visible.map((g) => g.id))}>
                 בחר את כל {visible.length} המוצגות
               </button>
               {selected.length > 0 && (
-                <button type="button" className="min-h-10 px-1 text-mist-500" onClick={() => setSelected([])}>
+                <button type="button" className="min-h-11 px-1 text-mist-500" onClick={() => setSelected([])}>
                   נקה
                 </button>
               )}
@@ -339,7 +340,7 @@ export default function GroupsPage() {
                     </h3>
                     <button
                       type="button"
-                      className="min-h-9 text-xs font-bold text-brand-400"
+                      className="min-h-11 text-xs font-bold text-brand-400"
                       onClick={() => setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])]))}
                     >
                       {allOn ? 'בטל בחירה' : `בחר את כל ${section.total}`}
@@ -410,13 +411,19 @@ export default function GroupsPage() {
         )}
       </div>
 
+      {/* This bar wraps to three rows on a phone and floats inside the clearance
+          the page reserves for the tab bar, so the last few group rows sat under
+          it with no way to scroll clear. The spacer is its height, and it is
+          present only while the bar is. */}
+      {selected.length > 0 && <div aria-hidden className="h-40 sm:h-24" />}
+
       {/* Selection bar: sticky above the tab bar, so it is reachable with a thumb.
           data-overlay keeps the page's entrance animation off it — that animation
           sets a transform, and a transformed element is the containing block for
           anything positioned fixed inside it. */}
       {selected.length > 0 && (
         <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
-          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl bg-ink-850 p-2.5 shadow-2xl ring-1 ring-ink-600">
+          <div className={`mx-auto flex max-w-3xl flex-wrap items-center gap-2 p-2.5 ${CARD_ELEVATED}`}>
             <Badge tone="brand">נבחרו {selected.length}</Badge>
             <ButtonLink href={`/social/posts/new?targets=${selected.join(',')}`} size="sm">צור פוסט</ButtonLink>
             <Button size="sm" variant="secondary" busy={busy === 'bulk-on'} onClick={() => act('bulk-on', () => bulkUpdateTargets(selected, { enabled: true }), 'הופעלו.')}>
@@ -447,7 +454,7 @@ export default function GroupsPage() {
             >
               הסר
             </Button>
-            <button type="button" className="ms-auto min-h-9 px-2 text-xs font-bold text-mist-500" onClick={() => setSelected([])}>
+            <button type="button" className="ms-auto min-h-11 px-3 text-xs font-bold text-mist-500" onClick={() => setSelected([])}>
               בטל
             </button>
           </div>
@@ -484,7 +491,7 @@ export default function GroupsPage() {
         {categories.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {categories.map((c) => (
-              <button key={c} type="button" onClick={() => setCategoryDraft(c)} className="min-h-10 rounded-full bg-ink-800 px-3 text-xs font-bold text-mist-300">
+              <button key={c} type="button" onClick={() => setCategoryDraft(c)} className="min-h-11 rounded-full bg-ink-800 px-3 text-xs font-bold text-mist-300">
                 {c}
               </button>
             ))}

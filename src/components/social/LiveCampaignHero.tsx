@@ -8,16 +8,17 @@ import { countdownTo } from '@/lib/social/countdown';
 import { formatTimeHe } from '@/lib/social/time';
 import type { Campaign, SocialTarget } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
-import { Button, ButtonLink, CARD } from './ui';
+import { Button, ButtonLink, CARD, TONE_TEXT, TONE_TINT } from './ui';
 
 /**
  * What is going out right now — the one thing the owner opens this app to see.
  *
- * Deliberately a white card like everything else. An earlier version painted
- * this panel in a blue gradient to make it the subject of the screen; it read
- * as a demo banner. Prominence comes from position and from the size of the
- * figures, and colour is kept for state: the status pill, the progress fill,
- * and nothing else.
+ * Deliberately the same card skin as everything else. An earlier version
+ * painted this panel in a blue gradient to make it the subject of the screen;
+ * it read as a demo banner. Prominence comes from position, from one extra
+ * step of padding, and from the size of the figures — the published count and
+ * the countdown are both 28px. Colour is kept for state: the status pill, the
+ * progress fill, and nothing else.
  *
  * Every number is derived from real queue rows — the count, the percentage,
  * the next instant and the next group all come from campaignState() or from
@@ -27,7 +28,7 @@ import { Button, ButtonLink, CARD } from './ui';
 
 function HeroPanel({ children, ariaLabel }: { children: React.ReactNode; ariaLabel: string }) {
   return (
-    <section aria-label={ariaLabel} className={`${CARD} p-4`}>
+    <section aria-label={ariaLabel} className={`${CARD} p-5`}>
       {children}
     </section>
   );
@@ -37,11 +38,11 @@ function HeroPanel({ children, ariaLabel }: { children: React.ReactNode; ariaLab
 function StatePill({ label, live }: { label: string; live: boolean }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${
-        live ? 'bg-emerald-500/10 text-emerald-700' : 'bg-ink-800 text-mist-500'
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+        live ? `${TONE_TINT.good} ${TONE_TEXT.good}` : 'bg-ink-800 text-mist-300'
       }`}
     >
-      {live && <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />}
+      {live && <span aria-hidden className="pulse-dot h-1.5 w-1.5 rounded-full bg-success-400" />}
       {label}
     </span>
   );
@@ -52,7 +53,7 @@ function Ratio({ done, total, suffix }: { done: number; total: number; suffix: s
   return (
     <p className="text-sm font-bold text-mist-500">
       <span dir="ltr" className="inline-block">
-        <span className="text-2xl font-extrabold tabular-nums text-mist-100">{done}</span>
+        <span className="text-[28px] font-extrabold leading-none tabular-nums text-mist-100">{done}</span>
         <span> / {total}</span>
       </span>
       <span> {suffix}</span>
@@ -94,7 +95,7 @@ function NextUp({
       <div className="shrink-0 text-start">
         <p className="text-[11px] font-bold text-mist-500">{left.due ? 'הפרסום הבא — מתבצע כעת' : 'הפרסום הבא בעוד'}</p>
         {/* mm:ss around a neutral colon, which an RTL line reorders. */}
-        <p className="text-xl font-extrabold leading-tight text-mist-100">
+        <p className="text-[28px] font-extrabold leading-none text-mist-100">
           <span dir="ltr" className="inline-block tabular-nums">{left.due ? formatTimeHe(at) : left.label}</span>
         </p>
       </div>
@@ -116,7 +117,7 @@ function NextUp({
     <button
       type="button"
       onClick={onOpen}
-      className={`${NEXT_UP_BOX} text-start transition-colors hover:bg-ink-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40`}
+      className={`${NEXT_UP_BOX} text-start transition-colors hover:bg-ink-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300`}
     >
       {body}
       <span className="sr-only">— שינוי המרווח בין הפרסומים והקבוצות בתור</span>
@@ -188,7 +189,7 @@ export function LiveCampaignHero({
       <div className="mt-3">
         <div className="flex items-baseline justify-between gap-2">
           <Ratio done={progress.published} total={progress.total} suffix="פורסמו" />
-          <p className="text-lg font-extrabold tabular-nums text-brand-500">{pct}%</p>
+          <p className="text-lg font-extrabold tabular-nums text-brand-400">{pct}%</p>
         </div>
         <div
           role="progressbar"
@@ -196,9 +197,9 @@ export function LiveCampaignHero({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={`${progress.published} מתוך ${progress.total} פורסמו`}
-          className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-800"
+          className="mt-2 h-2.5 overflow-hidden rounded-full bg-ink-700"
         >
-          <div className="h-full rounded-full bg-brand-500 transition-[width] duration-500" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full bg-success-400 transition-[width] duration-500 ease-out" style={{ width: `${pct}%` }} />
         </div>
         {/* What became of the rest, in the same breath as the bar — one word
             per outcome instead of one word covering three. Nothing is printed
@@ -209,7 +210,7 @@ export function LiveCampaignHero({
           </p>
         )}
         {state.truncated && (
-          <p className="mt-1.5 text-xs text-amber-700">
+          <p className="mt-1.5 text-xs text-warning-400">
             הסבב גדול מכדי לספור אותו כאן במלואו — המספרים למעלה הם של הפרסומים הראשונים בלבד. הרשימה המלאה בעמוד הסבב.
           </p>
         )}
@@ -219,17 +220,17 @@ export function LiveCampaignHero({
 
       <div className="mt-3 flex gap-2">
         {paused ? (
-          <Button className="grow" busy={busy} onClick={onResume}>
+          <Button size="lg" className="grow" busy={busy} onClick={onResume}>
             המשך סבב
           </Button>
         ) : (
           canPause && (
-            <Button variant="secondary" className="grow" busy={busy} onClick={onPause}>
+            <Button variant="secondary" size="lg" className="grow" busy={busy} onClick={onPause}>
               השהה
             </Button>
           )
         )}
-        <ButtonLink href={`/social/campaigns/${campaign.id}`} className="grow">צפה בסבב</ButtonLink>
+        <ButtonLink href={`/social/campaigns/${campaign.id}`} size="lg" className="grow">צפה בסבב</ButtonLink>
       </div>
 
       {/* The counter belongs to this run, and this run is what the card is
@@ -241,7 +242,7 @@ export function LiveCampaignHero({
           type="button"
           onClick={onReset}
           disabled={busy}
-          className="mt-2 min-h-11 w-full rounded-xl text-sm font-bold text-mist-500 transition-colors hover:bg-ink-900 hover:text-mist-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:opacity-40"
+          className="mt-2 min-h-11 w-full rounded-xl text-sm font-bold text-mist-500 transition-colors hover:bg-ink-900 hover:text-mist-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 disabled:text-ink-600"
         >
           סיים את הסבב ואפס את המונה
         </button>
@@ -303,11 +304,11 @@ export function LiveQueueHero({
 
       <div className="mt-3 flex gap-2">
         {onRunNow && (
-          <Button variant="secondary" className="grow" busy={busy} onClick={onRunNow}>
+          <Button variant="secondary" size="lg" className="grow" busy={busy} onClick={onRunNow}>
             פרסם עכשיו
           </Button>
         )}
-        <ButtonLink href="/social/history?status=scheduled" className="grow">צפה בתור</ButtonLink>
+        <ButtonLink href="/social/history?status=scheduled" size="lg" className="grow">צפה בתור</ButtonLink>
       </div>
     </HeroPanel>
   );

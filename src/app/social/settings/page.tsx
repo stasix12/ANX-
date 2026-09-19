@@ -119,7 +119,7 @@ export default function SettingsPage() {
                   <Toggle checked={control.paused} onChange={(v) => setControl({ ...control, paused: v })} label="השהיה" />
                 </div>
                 {control.rateLimitedUntil && (
-                  <p className="mt-2 text-xs text-amber-700">
+                  <p className="mt-2 text-xs text-warning-400">
                     Meta ביקשה להאט — הפרסום מושהה עד {control.rateLimitedUntil}.{' '}
                     <button type="button" className="min-h-9 font-bold underline" onClick={() => setControl({ ...control, rateLimitedUntil: null })}>
                       נקה

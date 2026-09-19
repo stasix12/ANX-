@@ -264,7 +264,7 @@ export function QueueTunerSheet({
     }
     if (p.campaignId && campaignToday > browser.maxPerCampaignPerDay) {
       out.push(
-        `לקמפיין הזה הגדרתם תקרה של ${browser.maxPerCampaignPerDay} פרסומים ביום, ובמרווח הזה ${campaignToday} מהם אמורים לצאת היום. העודף ידולג.`,
+        `לסבב הזה הגדרתם תקרה של ${browser.maxPerCampaignPerDay} פרסומים ביום, ובמרווח הזה ${campaignToday} מהם אמורים לצאת היום. העודף ידולג.`,
       );
     }
     return out;
@@ -591,7 +591,7 @@ export function QueueTunerSheet({
             {plan.postId === null ? (
               <Notice tone="info">
                 בתור ממתינים פרסומים של יותר מפוסט אחד, ולכן אי אפשר לדעת מכאן איזה פוסט הקבוצה החדשה אמורה לקבל. הוסיפו את הקבוצה מתוך
-                מסך הקמפיין או הפוסט עצמו.
+                מסך הסבב או הפוסט עצמו.
               </Notice>
             ) : (
               <>

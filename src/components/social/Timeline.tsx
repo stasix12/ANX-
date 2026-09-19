@@ -30,7 +30,7 @@ const DOT: Record<string, string> = {
 export function Timeline({ rows, limit = 8 }: { rows: QueueRow[]; limit?: number }) {
   const items = rows.slice(0, limit);
   if (!items.length) {
-    return <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="אין פרסום מתוכנן" description="כשתתזמנו קמפיין, סדר הפרסומים יופיע כאן לפי שעות." />;
+    return <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="אין פרסום מתוכנן" description="כשתתזמנו סבב, סדר הפרסומים יופיע כאן לפי שעות." />;
   }
 
   const today = zonedDateISO(new Date());

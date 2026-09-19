@@ -231,7 +231,7 @@ export async function duplicatePost(id: string): Promise<Post> {
 /** Copies a campaign's settings (not its posts) as a fresh active campaign. */
 export async function duplicateCampaign(id: string): Promise<Campaign> {
   const source = (await listCampaigns()).find((c) => c.id === id);
-  if (!source) throw new Error('הקמפיין לא נמצא.');
+  if (!source) throw new Error('הסבב לא נמצא.');
   const { id: _id, created_at: _c, ...rest } = source;
   return unwrap<Campaign>(
     await db()
@@ -448,7 +448,7 @@ export async function pauseCampaign(id: string, paused: boolean): Promise<void> 
   await logClientActivity(
     'info',
     paused ? 'campaign_paused' : 'campaign_resumed',
-    `הקמפיין "${campaign?.name ?? ''}" ${paused ? 'הושהה' : 'חזר לפעול'}`,
+    `הסבב "${campaign?.name ?? ''}" ${paused ? 'הושהה' : 'חזר לפעול'}`,
     { campaignId: id },
   );
 }
@@ -467,12 +467,12 @@ export async function stopCampaign(id: string): Promise<number> {
   const rows = unwrap<{ id: string }[]>(
     await db()
       .from('social_queue')
-      .update({ status: 'skipped', step: '', skip_reason: 'הקמפיין נעצר' })
+      .update({ status: 'skipped', step: '', skip_reason: 'הסבב נעצר' })
       .eq('campaign_id', id)
       .in('status', ['scheduled', 'awaiting_confirmation', 'needs_attention', 'paused'])
       .select('id'),
   );
-  await logClientActivity('warn', 'campaign_stopped', `הקמפיין "${campaign?.name ?? ''}" נעצר — ${rows.length} פרסומים שטרם התחילו בוטלו`, {
+  await logClientActivity('warn', 'campaign_stopped', `הסבב "${campaign?.name ?? ''}" נעצר — ${rows.length} פרסומים שטרם התחילו בוטלו`, {
     campaignId: id,
     cancelled: rows.length,
   });

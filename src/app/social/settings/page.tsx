@@ -173,7 +173,7 @@ export default function SettingsPage() {
                       onChange={(e) => setBrowser({ ...browser, concurrentJobs: Math.min(3, Math.max(1, Number(e.target.value) || 1)) })}
                     />
                   </Field>
-                  <Field label="מקסימום לקמפיין ביום">
+                  <Field label="מקסימום לסבב ביום">
                     <input
                       type="number"
                       min={1}

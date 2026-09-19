@@ -286,7 +286,7 @@ export async function fetchCampaignPerf(config: FbAdsConfig): Promise<CampaignPe
     const budget = row?.daily_budget ? Number(row.daily_budget) / 100 : null;
     campaigns.push({
       campaignId: id,
-      name: row?.name ?? `קמפיין ${id}`,
+      name: row?.name ?? `סבב ${id}`,
       status: row?.effective_status ?? 'UNKNOWN',
       dailyBudget: budget && budget > 0 ? budget : null,
       d30: window,

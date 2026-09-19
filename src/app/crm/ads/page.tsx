@@ -369,7 +369,7 @@ export default function CrmAdsPage() {
       } else if (sumSpend(last7) > 0 && sumConv(last7) === 0) {
         items.push({
           emoji: '🚨',
-          text: `בשבוע האחרון הוצאת ${money(sumSpend(last7))} בלי אף פנייה — כדאי לבדוק את הקמפיין בהקדם.`,
+          text: `בשבוע האחרון הוצאת ${money(sumSpend(last7))} בלי אף פנייה — כדאי לבדוק את הסבב בהקדם.`,
         });
       }
     }
@@ -514,7 +514,7 @@ export default function CrmAdsPage() {
             className="mt-3 flex items-center justify-center gap-2 rounded-full bg-brand-500 py-2.5 text-sm font-bold text-on-brand transition-colors hover:bg-brand-400"
           >
             <TargetIcon className="h-4.5 w-4.5" />
-            אופטימיזציית קמפיינים — מה לעשות עכשיו
+            אופטימיזציית סבבי פרסום — מה לעשות עכשיו
           </Link>
 
           {mom ? (

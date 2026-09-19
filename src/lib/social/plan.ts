@@ -224,12 +224,12 @@ async function stoppedCampaigns(db: SupabaseClient, note: PlanLogger): Promise<S
 
   const { data: stale } = await db
     .from('social_queue')
-    .update({ status: 'skipped', step: '', skip_reason: 'הקמפיין נעצר' })
+    .update({ status: 'skipped', step: '', skip_reason: 'הסבב נעצר' })
     .in('campaign_id', ids)
     .in('status', ['scheduled', 'paused', 'awaiting_confirmation'])
     .select('id');
   if (stale?.length) {
-    await note('warn', 'stopped_campaign_swept', `${stale.length} פרסומים של קמפיין שנעצר בוטלו`, { cancelled: stale.length });
+    await note('warn', 'stopped_campaign_swept', `${stale.length} פרסומים של סבב שנעצר בוטלו`, { cancelled: stale.length });
   }
   return new Set(ids);
 }

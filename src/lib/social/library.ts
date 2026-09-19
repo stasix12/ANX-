@@ -18,6 +18,7 @@ import {
   listVariants,
   logClientActivity,
   postQueue,
+  saveCampaign,
   savePost,
   countPublishedSince,
   type GapSplit,
@@ -802,7 +803,7 @@ export async function quickPublish(
   if (post.campaign_id) {
     const campaign = await getCampaign(post.campaign_id);
     if (campaign?.status === 'archived') {
-      throw new Error(`הקמפיין "${campaign.name}" נעצר, ולכן פרסומים שלו מבוטלים אוטומטית. פתחו אותו מחדש או נתקו את הפוסט מהקמפיין.`);
+      throw new Error(`הסבב "${campaign.name}" נעצר, ולכן פרסומים שלו מבוטלים אוטומטית. פתחו אותו מחדש או נתקו את הפוסט מהסבב.`);
     }
   }
 
@@ -810,12 +811,32 @@ export async function quickPublish(
   const startAt = slots[0]?.toISOString() ?? draft.startAt;
   const endAt = slots.length > 1 ? slots[slots.length - 1].toISOString() : null;
 
-  /* ---- 2. ready ---- */
-  // Only when it is not already ready: an untouched post keeps its updated_at,
-  // so publishing does not silently re-sort the library's "newest" order.
-  if (post.status !== 'ready') {
+  /* ---- 2. ready, and attached to a run ---- */
+  /*
+   * A run (social_campaigns) is what "pause this" and "stop this" act on:
+   * rules.ts:57 holds a paused run's publications, plan.ts:78 refuses to plan
+   * for a stopped one, and the dashboard's progress card is scoped by it. So
+   * every launch needs one — but the owner should never have to make one.
+   * Asking them to invent a container before they can publish is the thing they
+   * said was confusing, and a run named anything other than the post is noise.
+   *
+   * So it is created here, once per post, named after the post. Re-launching
+   * the same post reuses it, which is what makes "פורסם 12 פעמים" and the
+   * progress bar accumulate across rounds instead of resetting.
+   */
+  let runId = post.campaign_id;
+  if (!runId) {
+    // service/city/language/notes carry their column defaults: they describe a
+    // campaign the owner planned, and nothing plans this one.
+    const run = await saveCampaign({ name: post.title.trim() || 'סבב פרסום', status: 'active' });
+    runId = run.id;
+  }
+
+  // Only when something actually changed: an untouched post keeps its
+  // updated_at, so publishing does not silently re-sort the library's "newest".
+  if (post.status !== 'ready' || post.campaign_id !== runId) {
     const { id, created_at: _c, updated_at: _u, ...rest } = post;
-    await savePost({ ...rest, id, status: 'ready' });
+    await savePost({ ...rest, id, status: 'ready', campaign_id: runId });
   }
 
   /* ---- 3. already on its way out? ---- */

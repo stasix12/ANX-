@@ -22,7 +22,7 @@ import { Sheet } from './ui';
 
 const nav = [
   { href: '/social', label: 'ראשי', icon: HomeIcon, exact: true },
-  { href: '/social/campaigns', label: 'קמפיינים', icon: MegaphoneIcon, exact: false },
+  { href: '/social/campaigns', label: 'סבבים', icon: MegaphoneIcon, exact: false },
   { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false },
   { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false },
   { href: '/social/library', label: 'ספריית תוכן', icon: ClipboardListIcon, exact: false },

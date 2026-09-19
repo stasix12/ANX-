@@ -333,7 +333,7 @@ function LeadDetail({ id }: { id: string }) {
           </p>
           <p className="text-mist-500">
             מקור: {sourceLabel(lead.source)}
-            {lead.utm.campaign ? ` · קמפיין ${lead.utm.campaign}` : ''} · נכנס {relativeTimeHe(lead.createdAt)}
+            {lead.utm.campaign ? ` · סבב ${lead.utm.campaign}` : ''} · נכנס {relativeTimeHe(lead.createdAt)}
           </p>
         </div>
 

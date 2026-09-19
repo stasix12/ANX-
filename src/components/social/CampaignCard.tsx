@@ -45,7 +45,7 @@ export function CampaignCard({
             {campaign.name}
           </Link>
           <p className="mt-0.5 truncate text-xs text-mist-500">
-            {[campaign.service, campaign.city].filter(Boolean).join(' · ') || 'קמפיין'}
+            {[campaign.service, campaign.city].filter(Boolean).join(' · ') || 'סבב'}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -93,7 +93,7 @@ export function CampaignCard({
       <div className="mt-3.5 flex flex-wrap gap-2">
         {paused && onResume && (
           <Button busy={busy} onClick={onResume}>
-            המשך קמפיין
+            המשך סבב
           </Button>
         )}
         {!paused && state.state !== 'completed' && state.state !== 'stopped' && onPause && (
@@ -102,7 +102,7 @@ export function CampaignCard({
           </Button>
         )}
         <Link href={link} className="ms-auto inline-flex min-h-11 items-center rounded-xl bg-ink-800 px-4 text-sm font-bold text-mist-100">
-          פתח קמפיין
+          פתח סבב
         </Link>
       </div>
     </div>

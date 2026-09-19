@@ -7,6 +7,7 @@ import { SocialShell } from '@/components/social/SocialShell';
 import {
   Button,
   Card,
+  ButtonLink,
   EmptyState,
   Field,
   Notice,
@@ -115,25 +116,23 @@ export default function CampaignsPage() {
     // Editing must never resurrect a stopped campaign, so status is only set
     // when the campaign is being created.
     const payload = form.id ? { ...form } : { ...form, status: 'active' as const };
-    await act('save', () => saveCampaign(payload), form.id ? 'הקמפיין עודכן.' : 'הקמפיין נוצר.');
+    await act('save', () => saveCampaign(payload), 'הסבב עודכן.');
     setEditorOpen(false);
   }
 
   return (
     <SocialShell
-      title="קמפיינים"
-      lede="נהלו את הקמפיינים שלכם"
-      headerAction={
-        <Button onClick={() => openEditor()}>
-          + קמפיין
-        </Button>
-      }
+      title="סבבי פרסום"
+      lede="כל פרסום שהפעלתם — מה יצא, מה עוד יוצא, ומה אפשר לעצור"
+      /* No "new run" action: a run is created by publishing a post, so the
+         useful thing to offer here is the way back to the posts. */
+      headerAction={<ButtonLink href="/social/library">ספריית תוכן</ButtonLink>}
     >
       <div className="space-y-4">
         {error && <Notice tone="error">{error}</Notice>}
 
         <SegmentedControl
-          label="סינון קמפיינים"
+          label="סינון סבבי פרסום"
           value={filter}
           onChange={setFilter}
           options={[
@@ -152,13 +151,13 @@ export default function CampaignsPage() {
         {campaigns && visible.length === 0 && (
           <EmptyState
             icon={<MegaphoneIcon className="h-5 w-5" />}
-            title={counts.all === 0 ? 'אין עדיין קמפיינים' : 'אין קמפיינים בסינון הזה'}
+            title={counts.all === 0 ? 'עדיין לא הפעלתם פרסום' : 'אין סבבי פרסום בסינון הזה'}
             description={
               counts.all === 0
-                ? 'קמפיין הוא המסגרת שמאגדת פוסטים לפי שירות ועיר — למשל "ניקוי ספות באר שבע". אחר כך מוסיפים לו פוסט ובוחרים קבוצות.'
+                ? 'סבב הוא המסגרת שמאגדת פוסטים לפי שירות ועיר — למשל "ניקוי ספות באר שבע". אחר כך מוסיפים לו פוסט ובוחרים קבוצות.'
                 : 'החליפו סינון כדי לראות את השאר.'
             }
-            action={counts.all === 0 ? <Button onClick={() => openEditor()}>צור קמפיין ראשון</Button> : undefined}
+            action={counts.all === 0 ? <ButtonLink href="/social/library">לספריית התוכן</ButtonLink> : undefined}
           />
         )}
 
@@ -172,8 +171,8 @@ export default function CampaignsPage() {
                   campaign={c}
                   state={state}
                   busy={busy === `pause-${c.id}` || busy === `resume-${c.id}`}
-                  onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הקמפיין הושהה.')}
-                  onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הקמפיין ממשיך.')}
+                  onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הסבב הושהה.')}
+                  onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הסבב ממשיך.')}
                 />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs font-bold">
                   <span className="text-mist-500">{mine.length} פוסטים</span>
@@ -184,7 +183,7 @@ export default function CampaignsPage() {
                     שכפל
                   </button>
                   {state.state === 'stopped' && (
-                    <button type="button" className="text-brand-400" onClick={() => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הקמפיין נפתח מחדש.')}>
+                    <button type="button" className="text-brand-400" onClick={() => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הסבב נפתח מחדש.')}>
                       פתח מחדש
                     </button>
                   )}
@@ -196,12 +195,12 @@ export default function CampaignsPage() {
                     className="ms-auto text-rose-600"
                     onClick={async () => {
                       const ok = await confirm.ask({
-                        title: 'למחוק את הקמפיין?',
-                        body: 'הפוסטים עצמם יישארו במערכת ללא שיוך לקמפיין. היסטוריית הפרסומים לא נמחקת.',
+                        title: 'למחוק את הסבב?',
+                        body: 'הפוסטים עצמם יישארו במערכת ללא שיוך לסבב. היסטוריית הפרסומים לא נמחקת.',
                         confirmLabel: 'מחק',
                         danger: true,
                       });
-                      if (ok) await act(`del-${c.id}`, () => deleteCampaign(c.id), 'הקמפיין נמחק.');
+                      if (ok) await act(`del-${c.id}`, () => deleteCampaign(c.id), 'הסבב נמחק.');
                     }}
                   >
                     מחק
@@ -216,11 +215,11 @@ export default function CampaignsPage() {
       <Sheet
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
-        title={form.id ? 'עריכת קמפיין' : 'קמפיין חדש'}
+        title="עריכת סבב"
         footer={
           <div className="flex gap-2">
             <Button size="lg" busy={busy === 'save'} onClick={submit} className="grow" disabled={!form.name.trim()}>
-              {form.id ? 'שמור שינויים' : 'צור קמפיין'}
+              שמור שינויים
             </Button>
             <Button variant="secondary" size="lg" onClick={() => setEditorOpen(false)}>
               ביטול
@@ -245,7 +244,7 @@ export default function CampaignsPage() {
               ))}
             </datalist>
           </Field>
-          <Field label="שם הקמפיין" hint="כך הוא יופיע בלוח הבקרה ובהיסטוריה">
+          <Field label="שם הסבב" hint="כך הוא יופיע בלוח הבקרה ובהיסטוריה">
             <input
               className={inputClass}
               value={form.name}

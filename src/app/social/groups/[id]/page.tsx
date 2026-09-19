@@ -241,14 +241,14 @@ export default function GroupProfilePage() {
         </Card>
 
         {stats.campaignIds.length > 0 && (
-          <Card title="קמפיינים שהשתמשו בקבוצה">
+          <Card title="סבבי פרסום שהשתמשו בקבוצה">
             <ul className="flex flex-wrap gap-2">
               {stats.campaignIds.map((cid) => {
                 const c = campaigns.find((x) => x.id === cid);
                 return (
                   <li key={cid}>
                     <Link href={`/social/campaigns/${cid}`} className="inline-flex min-h-9 items-center rounded-full bg-ink-800 px-3 text-sm font-bold text-brand-400">
-                      {c?.name ?? 'קמפיין'}
+                      {c?.name ?? 'סבב'}
                     </Link>
                   </li>
                 );

@@ -158,14 +158,14 @@ export function LiveCampaignHero({
   const now = useTick(Boolean(state.nextAt));
 
   return (
-    <HeroPanel ariaLabel="הקמפיין הפעיל">
+    <HeroPanel ariaLabel="הסבב הפעיל">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <Link href={`/social/campaigns/${campaign.id}`} dir="auto" className="block truncate py-0.5 text-lg font-extrabold text-mist-100">
             {campaign.name}
           </Link>
           <p dir="auto" className="truncate text-xs text-mist-500">
-            {[campaign.service, campaign.city].filter(Boolean).join(' · ') || 'קמפיין'}
+            {[campaign.service, campaign.city].filter(Boolean).join(' · ') || 'סבב'}
           </p>
         </div>
         <StatePill label={RUN_STATE_LABEL[state.state]} live={running} />
@@ -181,7 +181,7 @@ export function LiveCampaignHero({
           aria-valuenow={pct}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label="התקדמות הקמפיין"
+          aria-label="התקדמות הסבב"
           className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-800"
         >
           <div className="h-full rounded-full bg-brand-500 transition-[width] duration-500" style={{ width: `${pct}%` }} />
@@ -193,14 +193,14 @@ export function LiveCampaignHero({
       <div className="mt-3 flex gap-2">
         {paused ? (
           <Button className="grow" busy={busy} onClick={onResume}>
-            המשך קמפיין
+            המשך סבב
           </Button>
         ) : (
           <Button variant="secondary" className="grow" busy={busy} onClick={onPause}>
             השהה
           </Button>
         )}
-        <ButtonLink href={`/social/campaigns/${campaign.id}`} className="grow">צפה בקמפיין</ButtonLink>
+        <ButtonLink href={`/social/campaigns/${campaign.id}`} className="grow">צפה בסבב</ButtonLink>
       </div>
     </HeroPanel>
   );
@@ -246,7 +246,7 @@ export function LiveQueueHero({
           <p className="truncate text-lg font-extrabold text-mist-100">
             {scheduled > 0 ? `${scheduled} פרסומים בתור` : 'אין פרסומים בתור'}
           </p>
-          <p className="truncate text-xs text-mist-500">התור הפעיל — לא משויך לקמפיין</p>
+          <p className="truncate text-xs text-mist-500">התור הפעיל — לא משויך לסבב</p>
         </div>
         <StatePill label={paused ? 'מושהה' : scheduled > 0 ? 'פעיל' : 'ממתין'} live={live} />
       </div>

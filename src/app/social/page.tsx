@@ -137,7 +137,7 @@ export default function SocialDashboard() {
   async function discardQueue(alsoPause: boolean) {
     const ok = await confirm.ask({
       title: pending ? `למחוק ${pending} פרסומים מהתור?` : 'למחוק את התור?',
-      body: `הפרסומים שממתינים — בכל הקמפיינים — יבוטלו ולא יצאו.${
+      body: `הפרסומים שממתינים — בכל סבבי הפרסום — יבוטלו ולא יצאו.${
         alsoPause ? ' המערכת גם תושהה.' : ''
       } מה שכבר פורסם נשאר בהיסטוריה. אי אפשר לבטל את הפעולה.`,
       confirmLabel: 'מחק',
@@ -306,8 +306,8 @@ export default function SocialDashboard() {
               campaign={featured.campaign}
               state={featured.state}
               busy={busy?.startsWith('camp')}
-              onPause={() => act('camp-pause', () => pauseCampaign(featured.campaign.id, true), 'הקמפיין הושהה.')}
-              onResume={() => act('camp-resume', () => pauseCampaign(featured.campaign.id, false), 'הקמפיין ממשיך.')}
+              onPause={() => act('camp-pause', () => pauseCampaign(featured.campaign.id, true), 'הסבב הושהה.')}
+              onResume={() => act('camp-resume', () => pauseCampaign(featured.campaign.id, false), 'הסבב ממשיך.')}
               nextTarget={featuredNext ? { name: featuredNext.name, image_url: featuredNext.image_url ?? undefined } : null}
               onTune={() => setTunerOpen(true)}
             />
@@ -331,10 +331,10 @@ export default function SocialDashboard() {
           ) : (
             <EmptyState
               icon={<MegaphoneIcon className="h-5 w-5" />}
-              title="אין קמפיין פעיל"
+              title="אין סבב פעיל"
               description="צרו פוסט, בחרו קבוצות ותזמנו — ההתקדמות תופיע כאן, עם השעה של כל פרסום."
               action={
-                <ButtonLink href="/social/posts/new" size="lg">התחל קמפיין</ButtonLink>
+                <ButtonLink href="/social/posts/new" size="lg">התחל סבב</ButtonLink>
               }
             />
           )}

@@ -105,7 +105,7 @@ export default function CampaignControlCenter() {
   async function onStop() {
     const pending = state ? state.progress.scheduled + state.progress.running + state.progress.manual : 0;
     const ok = await confirm.ask({
-      title: 'לעצור את הקמפיין?',
+      title: 'לעצור את הסבב?',
       body: (
         <>
           <p>
@@ -115,10 +115,10 @@ export default function CampaignControlCenter() {
           <p className="mt-2 font-bold">אי אפשר לבטל את הפעולה הזו.</p>
         </>
       ),
-      confirmLabel: 'עצור קמפיין',
+      confirmLabel: 'עצור סבב',
       danger: true,
     });
-    if (ok) await act('stop', () => stopCampaign(id), 'הקמפיין נעצר.');
+    if (ok) await act('stop', () => stopCampaign(id), 'הסבב נעצר.');
   }
 
   const queueActions = {
@@ -140,7 +140,7 @@ export default function CampaignControlCenter() {
 
   if (!campaign && !error && !loaded) {
     return (
-      <SocialShell title="קמפיין">
+      <SocialShell title="סבב">
         <Loading />
       </SocialShell>
     );
@@ -151,16 +151,16 @@ export default function CampaignControlCenter() {
        plainly and offer the way back, rather than a red banner or a spinner
        that never resolves. */
     return (
-      <SocialShell title="קמפיין">
+      <SocialShell title="סבב">
         {error ? (
           <Notice tone="error">{error}</Notice>
         ) : (
           <EmptyState
             icon={<SearchIcon className="h-5 w-5" />}
-            title="הקמפיין הזה לא קיים"
+            title="הסבב הזה לא קיים"
             description="ייתכן שהוא נמחק, או שהקישור ישן."
             action={
-              <ButtonLink href="/social/campaigns" size="lg">לכל הקמפיינים</ButtonLink>
+              <ButtonLink href="/social/campaigns" size="lg">לכל סבבי הפרסום</ButtonLink>
             }
           />
         )}
@@ -225,12 +225,12 @@ export default function CampaignControlCenter() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             {paused ? (
-              <Button busy={busy === 'resume'} onClick={() => act('resume', () => pauseCampaign(id, false), 'הקמפיין ממשיך מהמקום שבו נעצר.')}>
-                המשך קמפיין
+              <Button busy={busy === 'resume'} onClick={() => act('resume', () => pauseCampaign(id, false), 'הסבב ממשיך מהמקום שבו נעצר.')}>
+                המשך סבב
               </Button>
             ) : (
               !closed && (
-                <Button variant="secondary" busy={busy === 'pause'} onClick={() => act('pause', () => pauseCampaign(id, true), 'הקמפיין הושהה. התור נשמר.')}>
+                <Button variant="secondary" busy={busy === 'pause'} onClick={() => act('pause', () => pauseCampaign(id, true), 'הסבב הושהה. התור נשמר.')}>
                   השהה
                 </Button>
               )
@@ -241,7 +241,7 @@ export default function CampaignControlCenter() {
               </Button>
             )}
             <Link href="/social/campaigns" className="ms-auto inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
-              לכל הקמפיינים
+              לכל סבבי הפרסום
             </Link>
           </div>
           {paused && (
@@ -283,10 +283,10 @@ export default function CampaignControlCenter() {
           {rows && rows.length === 0 && (
             <EmptyState
               icon={<CalendarIcon className="h-5 w-5" />}
-              title="לקמפיין הזה אין עדיין פרסומים"
-              description="צרו פוסט בקמפיין, בחרו קבוצות ותזמנו — כל פרסום יופיע כאן עם השעה שלו."
+              title="לסבב הזה אין עדיין פרסומים"
+              description="צרו פוסט בסבב, בחרו קבוצות ותזמנו — כל פרסום יופיע כאן עם השעה שלו."
               action={
-                <ButtonLink href={`/social/posts/new?campaign=${campaign.id}`}>צור פוסט לקמפיין</ButtonLink>
+                <ButtonLink href={`/social/posts/new?campaign=${campaign.id}`}>צור פוסט לסבב</ButtonLink>
               }
             />
           )}
@@ -294,9 +294,9 @@ export default function CampaignControlCenter() {
           {rows && rows.length > 0 && tab === 'timeline' && <Timeline rows={state?.upcoming ?? []} limit={12} />}
         </Card>
 
-        <Card title={`פוסטים בקמפיין (${posts.length})`}>
+        <Card title={`פוסטים בסבב (${posts.length})`}>
           {posts.length === 0 ? (
-            <EmptyState icon={<ClipboardListIcon className="h-5 w-5" />} title="אין פוסטים" description="קמפיין הוא המסגרת; הפוסטים הם מה שמתפרסם בפועל." />
+            <EmptyState icon={<ClipboardListIcon className="h-5 w-5" />} title="אין פוסטים" description="סבב הוא המסגרת; הפוסטים הם מה שמתפרסם בפועל." />
           ) : (
             <ul className="divide-y divide-ink-700">
               {posts.map((p) => (

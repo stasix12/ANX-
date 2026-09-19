@@ -95,7 +95,7 @@ async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: Work
    * into queue rows publishes nothing — it only writes down what is going to
    * go out — so a paused or rate-limited queue should still fill up. Doing it
    * the other way round meant that launching a campaign while publishing was
-   * paused left the dashboard on "מתוזמנים 0 / אין קמפיין פעיל": the schedule
+   * paused left the dashboard on "מתוזמנים 0 / אין סבב פעיל": the schedule
    * existed, but nothing had turned it into anything the owner could see, and
    * pressing "המשך" had nothing to resume.
    */

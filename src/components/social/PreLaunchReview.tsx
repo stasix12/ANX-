@@ -70,7 +70,7 @@ export function PreLaunchReview({
           </Notice>
         ))}
 
-        <Row label="קמפיין">{campaignName || 'ללא קמפיין'}</Row>
+        <Row label="סבב">{campaignName || 'ללא סבב'}</Row>
         <Row label="פוסט">{postTitle || 'ללא כותרת'}</Row>
 
         <section>

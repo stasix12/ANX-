@@ -151,7 +151,7 @@ export default function PostsPage() {
                       <div className="min-w-0 grow">
                         <p dir="auto" className="truncate font-bold text-mist-100">{p.title || p.base_text.slice(0, 60) || 'ללא כותרת'}</p>
                         <p className="truncate text-[11px] text-mist-500">
-                          {campaignName(p.campaign_id) ?? 'ללא קמפיין'} · {p.language === 'ru' ? 'רוסית' : 'עברית'}
+                          {campaignName(p.campaign_id) ?? 'ללא סבב'} · {p.language === 'ru' ? 'רוסית' : 'עברית'}
                           {media.length ? ` · ${media.length} מדיה` : ''} · {formatDateTimeHe(p.updated_at)}
                         </p>
                       </div>

@@ -484,7 +484,7 @@ interface ToastItem {
 
 const ToastContext = createContext<(text: string, tone?: ToastTone) => void>(() => undefined);
 
-/** `const toast = useToast(); toast('הקמפיין נוצר')` from anywhere under the shell. */
+/** `const toast = useToast(); toast('הסבב נוצר')` from anywhere under the shell. */
 export const useToast = () => useContext(ToastContext);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {

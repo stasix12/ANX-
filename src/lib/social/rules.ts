@@ -55,8 +55,8 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   const campaignId = item.campaign_id ?? post.campaign_id;
   if (campaignId) {
     const { data: campaign } = await db.from('social_campaigns').select('status').eq('id', campaignId).maybeSingle();
-    if (campaign?.status === 'paused') return { action: 'wait', reason: 'הקמפיין מושהה.' };
-    if (campaign?.status === 'archived') return { action: 'skip', reason: 'הקמפיין נעצר.' };
+    if (campaign?.status === 'paused') return { action: 'wait', reason: 'הסבב מושהה.' };
+    if (campaign?.status === 'archived') return { action: 'skip', reason: 'הסבב נעצר.' };
   }
 
   const dayStart = startOfZonedDay(now).toISOString();
@@ -70,7 +70,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   if (campaignId && ctx.browser?.maxPerCampaignPerDay) {
     const todayCampaign = await countPublished(db, (q) => q.eq('campaign_id', campaignId).gte('published_at', dayStart));
     if (todayCampaign >= ctx.browser.maxPerCampaignPerDay)
-      return { action: 'skip', reason: `הגעת למכסה היומית של הקמפיין (${ctx.browser.maxPerCampaignPerDay}).` };
+      return { action: 'skip', reason: `הגעת למכסה היומית של הסבב (${ctx.browser.maxPerCampaignPerDay}).` };
   }
 
   // Same post already went to this target (any variant) → never twice.

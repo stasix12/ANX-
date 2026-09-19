@@ -117,7 +117,7 @@ export function BrowserStatusCard({ onChanged }: { onChanged?: () => void }) {
         </Button>
         {needsHuman && (
           <Button variant="secondary" busy={busy === 'resume'} onClick={() => send('resume')}>
-            המשך קמפיין
+            המשך סבב
           </Button>
         )}
         <Button

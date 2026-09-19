@@ -147,7 +147,7 @@ function HistoryScreen() {
           <input
             type="search"
             className={inputClass}
-            placeholder="חיפוש לפי קבוצה, קמפיין, פוסט או טקסט…"
+            placeholder="חיפוש לפי קבוצה, סבב, פוסט או טקסט…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="חיפוש בהיסטוריה"

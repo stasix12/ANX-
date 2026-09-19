@@ -24,7 +24,7 @@ import {
   useToast,
   type MenuAction,
 } from '@/components/social/ui';
-import { archivePost, duplicatePost, getBusiness, savePost, saveCampaign } from '@/lib/social/client';
+import { archivePost, duplicatePost, getBusiness, savePost } from '@/lib/social/client';
 import {
   LIBRARY_USAGE_LIMIT,
   deleteCategory,
@@ -91,8 +91,6 @@ export default function LibraryPage() {
   const [newCategory, setNewCategory] = useState('');
   const [renames, setRenames] = useState<Record<string, string>>({});
   const [assignOpen, setAssignOpen] = useState(false);
-  const [campaignOpen, setCampaignOpen] = useState(false);
-  const [campaignName, setCampaignName] = useState('');
   const [previewItem, setPreviewItem] = useState<LibraryPost | null>(null);
   const [businessName, setBusinessName] = useState('');
 
@@ -267,27 +265,6 @@ export default function LibraryPage() {
     ];
   }
 
-  /** Attaches the selection to a brand-new campaign, using the existing campaign_id. */
-  async function createCampaignFromSelection() {
-    const name = campaignName.trim();
-    if (!name) return;
-    setCampaignOpen(false);
-    await act(
-      'campaign',
-      async () => {
-        const campaign = await saveCampaign({ name });
-        for (const id of selected) {
-          const found = all.find((it) => it.post.id === id);
-          if (!found) continue;
-          const { id: postId, created_at: _c, updated_at: _u, ...rest } = found.post;
-          await savePost({ ...rest, id: postId, campaign_id: campaign.id });
-        }
-        setSelected([]);
-        setCampaignName('');
-      },
-      `נוצר קמפיין "${name}" והפוסטים שויכו אליו.`,
-    );
-  }
 
   return (
     <SocialShell
@@ -485,16 +462,6 @@ export default function LibraryPage() {
         <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl bg-ink-850 p-2.5 shadow-2xl ring-1 ring-ink-600">
             <Badge tone="brand">נבחרו {selected.length}</Badge>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                setCampaignName('');
-                setCampaignOpen(true);
-              }}
-            >
-              צור קמפיין
-            </Button>
             <Button size="sm" variant="secondary" onClick={() => setAssignOpen(true)}>
               קטגוריה
             </Button>
@@ -683,24 +650,6 @@ export default function LibraryPage() {
         </ul>
       </Sheet>
 
-      {/* A campaign from the selection, using the existing campaign system. */}
-      <Sheet
-        open={campaignOpen}
-        onClose={() => setCampaignOpen(false)}
-        title={`קמפיין מ${selected.length === 1 ? 'פוסט אחד' : `-${selected.length} פוסטים`}`}
-        footer={
-          <Button size="lg" className="w-full" busy={busy === 'campaign'} disabled={!campaignName.trim()} onClick={createCampaignFromSelection}>
-            צור קמפיין ושייך
-          </Button>
-        }
-      >
-        <Field label="שם הקמפיין" hint="הקמפיין הוא המסגרת שבה רואים את ההתקדמות של כל הפוסטים האלה יחד.">
-          <input className={inputClass} value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder="ניקוי ספות — אוקטובר" />
-        </Field>
-        <p className="mt-3 text-xs text-mist-500">
-          הפוסטים ישויכו לקמפיין החדש. פוסט שהיה משויך לקמפיין אחר יעבור לקמפיין הזה.
-        </p>
-      </Sheet>
 
       {/* How the post will look in the feed — the editor's own preview component,
           so the two screens cannot show two different things. */}

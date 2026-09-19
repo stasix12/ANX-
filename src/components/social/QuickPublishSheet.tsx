@@ -550,7 +550,7 @@ export function QuickPublishSheet({
 
                 {plan.overCampaignCapToday > 0 && (
                   <Notice tone="warn">
-                    לקמפיין של הפוסט הזה הגדרתם תקרה של {plan.maxPerCampaignPerDay} פרסומים ביום, ולפי התוכנית {plan.overCampaignCapToday} מהפרסומים של היום חורגים ממנה. גם הם ידולגו עם סיבה ברורה בהיסטוריה, ולא יידחו למחר.
+                    לסבב של הפוסט הזה הגדרתם תקרה של {plan.maxPerCampaignPerDay} פרסומים ביום, ולפי התוכנית {plan.overCampaignCapToday} מהפרסומים של היום חורגים ממנה. גם הם ידולגו עם סיבה ברורה בהיסטוריה, ולא יידחו למחר.
                   </Notice>
                 )}
 

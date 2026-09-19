@@ -274,7 +274,7 @@ export function PostEditor({ postId }: { postId?: string }) {
       if (schedule.mode === 'now' || schedule.mode === 'drip') {
         const r = await callSocialApi<{ ran: boolean; planned: number; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
         if (r.ran) {
-          toast('הקמפיין התחיל. עקבו אחרי ההתקדמות למטה.');
+          toast('הסבב התחיל. עקבו אחרי ההתקדמות למטה.');
           setMessage({
             tone: 'success',
             text: `דפים: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.deferred} נדחו, ${r.failed} נכשלו. קבוצות מתפרסמות דרך ה-worker המקומי — ההתקדמות למטה.`,
@@ -341,21 +341,13 @@ export function PostEditor({ postId }: { postId?: string }) {
       <div className="grid gap-5 lg:grid-cols-[1fr_380px] [&>*]:min-w-0">
         <div className="min-w-0 space-y-5">
           <Card title="תוכן הפוסט">
-            <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
-              <Field label="שם פנימי" hint="לזיהוי בלוח הבקרה, לא מתפרסם">
-                <input className={inputClass} value={post.title} onChange={(e) => update('title', e.target.value)} placeholder="למשל: ניקוי ספות באר שבע — ספטמבר" />
-              </Field>
-              <Field label="קמפיין">
-                <select className={inputClass} value={post.campaign_id ?? ''} onChange={(e) => update('campaign_id', e.target.value || null)}>
-                  <option value="">ללא קמפיין</option>
-                  {campaigns.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
+            {/* No run picker: a run is created for the post on its first launch
+                and reused after that (library.ts quickPublish). Choosing a
+                container before you may publish is the step the owner called
+                confusing, and it is not a decision the post needs. */}
+            <Field label="שם פנימי" hint="לזיהוי בלוח הבקרה, לא מתפרסם">
+              <input className={inputClass} value={post.title} onChange={(e) => update('title', e.target.value)} placeholder="למשל: ניקוי ספות באר שבע — ספטמבר" />
+            </Field>
             <div className="mt-4">
               <Field label="טקסט בסיסי" hint="הטקסט שיתפרסם כשאין גרסאות. הטלפון וקישור ה-WhatsApp מצורפים אוטומטית בסוף.">
                 <textarea className={`${inputClass} min-h-36`} value={post.base_text} onChange={(e) => update('base_text', e.target.value)} dir="auto" />

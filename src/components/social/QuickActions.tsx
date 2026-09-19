@@ -29,7 +29,7 @@ export function QuickActions({ onRunNow, running }: { onRunNow: () => void; runn
         <span aria-hidden className="grid h-8 w-8 place-items-center sm:h-9 sm:w-9 rounded-full bg-violet-500/10 text-violet-700">
           <CalendarIcon className="h-5 w-5" />
         </span>
-        תזמן קמפיין
+        תזמן סבב
       </Link>
       <button type="button" onClick={onRunNow} disabled={running} className={`${tile} disabled:opacity-60`}>
         <span aria-hidden className="grid h-8 w-8 place-items-center sm:h-9 sm:w-9 rounded-full bg-emerald-500/10 text-emerald-700">

@@ -9,7 +9,7 @@ import type { CampaignProgress } from '@/lib/social/types';
  */
 export function CampaignProgressBar({ progress }: { progress: CampaignProgress }) {
   const { total, published, failed, skipped, scheduled, running, manual, done } = progress;
-  if (!total) return <p className="text-sm text-mist-500">עוד לא נוצרו פרסומים לקמפיין הזה.</p>;
+  if (!total) return <p className="text-sm text-mist-500">עוד לא נוצרו פרסומים לסבב הזה.</p>;
   const pct = (n: number) => `${(n / total) * 100}%`;
 
   return (

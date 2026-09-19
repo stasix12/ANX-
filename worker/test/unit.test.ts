@@ -336,6 +336,22 @@ console.log('unit tests OK');
   assert.ok(localPlanAt > 0 && localPauseAt > 0, 'the local worker must both plan and honour the pause switch');
   assert.ok(localPlanAt < localPauseAt, 'the local worker must plan even while the queue is paused');
 
+  // 4. ...and a stopped campaign stays stopped. The two writes race: "עצור"
+  //    cancels what is waiting while a planner run that already read the
+  //    schedules is still inserting, and the campaign comes back with a queue
+  //    and a countdown to a publication that would only be skipped.
+  assert.ok(plan.includes('async function stoppedCampaigns'), 'planning must know which campaigns were stopped');
+  assert.ok(plan.includes("eq('status', 'archived')"), 'a stopped campaign is an archived one');
+  assert.equal(
+    (plan.match(/stopped\.has\(post\.campaign_id\)/g) ?? []).length,
+    2,
+    'both planner branches must refuse to plan for a stopped campaign',
+  );
+  const sweep = plan.slice(plan.indexOf('async function stoppedCampaigns'), plan.indexOf('async function planDrip'));
+  assert.ok(sweep.includes("'skipped'"), 'rows that slipped through must be cancelled, not left counting down');
+  assert.ok(!sweep.includes("'published'"), 'the sweep must never touch what already went out');
+  assert.ok(!sweep.includes("'paused',\n") || sweep.includes("'paused'"), 'sweep status list is explicit');
+
   console.log('planner-reachability tests OK');
 }
 

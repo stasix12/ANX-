@@ -53,13 +53,15 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
   // should not silently drop the morning post.
   const from = new Date(now.getTime() - 15 * 60_000);
 
+  const stopped = await stoppedCampaigns(db, note);
+
   const { data: schedules, error } = await db.from('social_schedules').select('*').eq('active', true);
   if (error) throw new Error(error.message);
   let created = 0;
 
   for (const schedule of (schedules ?? []) as Schedule[]) {
     if (schedule.mode === 'drip') {
-      created += await planDrip(db, schedule, now, note);
+      created += await planDrip(db, schedule, now, note, stopped);
       continue;
     }
     const slots = slotsFor(schedule, from, until);
@@ -73,6 +75,10 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
 
     const { data: post } = await db.from('social_posts').select('*').eq('id', schedule.post_id).maybeSingle();
     if (!post || post.status === 'archived') continue;
+    if (post.campaign_id && stopped.has(post.campaign_id)) {
+      await db.from('social_schedules').update({ active: false }).eq('id', schedule.id);
+      continue;
+    }
     const { data: variants } = await db
       .from('social_variants')
       .select('*')
@@ -165,18 +171,53 @@ async function occupiedSlots(db: SupabaseClient, postId: string): Promise<Set<st
 const slotKey = (targetId: string, at: string | Date) => `${targetId}|${new Date(at).toISOString()}`;
 
 /**
+ * Campaigns the owner has stopped, and a sweep of anything they still hold.
+ *
+ * "Stop campaign" archives the campaign, deactivates its schedules and cancels
+ * everything waiting — but a planner run that had already read the schedule
+ * list writes its rows afterwards, and the stopped campaign comes back with a
+ * queue and a countdown to a publication that rules.ts will only skip. So
+ * planning both refuses to plan for a stopped campaign (retiring the schedule
+ * instead) and clears whatever slipped through, which also heals a campaign
+ * stopped before this existed.
+ *
+ * Only an archived campaign is swept: a paused one keeps its queue by design,
+ * which is exactly what lets "המשך" resume it.
+ */
+async function stoppedCampaigns(db: SupabaseClient, note: PlanLogger): Promise<Set<string>> {
+  const { data } = await db.from('social_campaigns').select('id').eq('status', 'archived');
+  const ids = (data ?? []).map((c) => c.id as string);
+  if (!ids.length) return new Set();
+
+  const { data: stale } = await db
+    .from('social_queue')
+    .update({ status: 'skipped', step: '', skip_reason: 'הקמפיין נעצר' })
+    .in('campaign_id', ids)
+    .in('status', ['scheduled', 'paused', 'awaiting_confirmation'])
+    .select('id');
+  if (stale?.length) {
+    await note('warn', 'stopped_campaign_swept', `${stale.length} פרסומים של קמפיין שנעצר בוטלו`, { cancelled: stale.length });
+  }
+  return new Set(ids);
+}
+
+/**
  * Drip: every target gets its own slot — N per day inside the daily window,
  * in the order the targets were selected — so 40 groups become a calm
  * multi-day campaign instead of a burst. Planned once, then the schedule
  * retires (the queue rows carry the plan).
  */
-async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note: PlanLogger): Promise<number> {
+async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note: PlanLogger, stopped: Set<string>): Promise<number> {
   if (schedule.planned_until) {
     await db.from('social_schedules').update({ active: false }).eq('id', schedule.id);
     return 0;
   }
   const { data: post } = await db.from('social_posts').select('*').eq('id', schedule.post_id).maybeSingle();
   if (!post || post.status === 'archived') return 0;
+  if (post.campaign_id && stopped.has(post.campaign_id)) {
+    await db.from('social_schedules').update({ active: false }).eq('id', schedule.id);
+    return 0;
+  }
   const { data: variants } = await db
     .from('social_variants')
     .select('*')

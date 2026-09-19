@@ -405,7 +405,7 @@ export default function SocialDashboard() {
                  was a ceiling presented as a fact. */
               subtitle={summary.queued ? `${summary.queued} ממתינים בתור` : undefined}
               action={
-                <Link href="/social/history" className="text-sm font-bold text-brand-400">
+                <Link href="/social/history" className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
                   הכל
                 </Link>
               }
@@ -424,7 +424,7 @@ export default function SocialDashboard() {
               title={`ממתינים לפרסום ידני (${data.manual.length})`}
               subtitle="יעדים שאין להם פרסום אוטומטי — הכול מוכן, נשאר להדביק"
               action={
-                <Link href={`/social/manual/${data.manual[0].id}`} className="text-sm font-bold text-warning-400">
+                <Link href={`/social/manual/${data.manual[0].id}`} className="inline-flex min-h-11 items-center text-sm font-bold text-warning-400">
                   התחל ←
                 </Link>
               }
@@ -451,7 +451,7 @@ export default function SocialDashboard() {
           <Card
             title="יומן פעילות"
             action={
-              <Link href="/social/history" className="text-sm font-bold text-brand-400">
+              <Link href="/social/history" className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
                 להיסטוריה
               </Link>
             }

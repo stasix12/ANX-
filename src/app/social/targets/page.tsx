@@ -218,7 +218,7 @@ function TargetsScreen() {
           title={`קבוצות (${groups.length})`}
           subtitle="מתפרסמות בסיוע דפדפן מקומי — לא דרך API רשמי"
           action={
-            <Link href="/social/groups" className="text-sm font-bold text-brand-400">
+            <Link href="/social/groups" className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
               ניהול ←
             </Link>
           }

@@ -106,7 +106,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
       title="פרסום בזמן אמת"
       subtitle="מתעדכן לבד כל 4 שניות"
       action={
-        <Link href="/social/history" className="text-sm font-bold text-brand-400">
+        <Link href="/social/history" className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
           היסטוריה
         </Link>
       }

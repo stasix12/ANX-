@@ -466,7 +466,7 @@ export function PostEditor({ postId }: { postId?: string }) {
             id="post-targets"
             title={`יעדי פרסום${selectedObjects.length ? ` · ${selectedObjects.length} נבחרו` : ''}`}
             action={
-              <Link href="/social/groups" className="text-sm font-bold text-brand-400">
+              <Link href="/social/groups" className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
                 ניהול קבוצות
               </Link>
             }

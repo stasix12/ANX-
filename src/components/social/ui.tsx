@@ -132,6 +132,13 @@ export function Card({
 }: {
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
+  /**
+   * The card's header control. Whatever goes here is a tap target, so it needs
+   * the 44px floor itself — the header is `items-start`, so the row will not
+   * stretch it. A bare `<Link className="text-sm font-bold …">` measures 21px
+   * tall in the browser; `inline-flex min-h-11 items-center` is the shape the
+   * call sites use, and `SectionHeader` is the same control with it built in.
+   */
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
@@ -385,12 +392,14 @@ export function SegmentedControl<T extends string>({
             } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-800`}
           >
             {o.label}
-            {/* Dimming the count on an active chip put it at 3.7:1 on the
-                blue fill. It stays at full strength and is set apart by
-                weight instead. */}
-            {o.count !== undefined && (
-              <span className={`ms-1 tabular-nums ${active ? 'font-normal' : 'opacity-70'}`}>{o.count}</span>
-            )}
+            {/* Dimming the count put it below AA on BOTH chips: 3.7:1 on the
+                blue fill when active, and 4.26:1 for mist-300 at 70% over the
+                ink-800 track when not (measured in the browser, 12px text, so
+                4.5 is the floor). It is a real filter count, not decoration —
+                it stays at full strength on either chip and is set apart by
+                weight instead, which costs nothing. mist-300 on ink-800 is
+                7.07:1. */}
+            {o.count !== undefined && <span className="ms-1 font-normal tabular-nums">{o.count}</span>}
           </button>
         );
       })}

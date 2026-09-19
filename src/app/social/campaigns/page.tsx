@@ -182,17 +182,23 @@ export default function CampaignsPage() {
                   <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}>
                     שכפל
                   </button>
+                  {/* Every control in this row is the same size: "ערוך" and
+                      "שכפל" above already carry the 44px floor, and these three
+                      were measuring 16px tall in the browser — a 16px target
+                      sitting a few pixels from a 44px one, with delete among
+                      them. A Link is inline, so it needs the flex box too for
+                      min-height to apply at all. */}
                   {state.state === 'stopped' && (
-                    <button type="button" className="text-brand-400" onClick={() => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הסבב נפתח מחדש.')}>
+                    <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הסבב נפתח מחדש.')}>
                       פתח מחדש
                     </button>
                   )}
-                  <Link href={`/social/posts/new?campaign=${c.id}`} className="text-brand-400">
+                  <Link href={`/social/posts/new?campaign=${c.id}`} className="inline-flex min-h-11 items-center px-1 text-brand-400">
                     + פוסט
                   </Link>
                   <button
                     type="button"
-                    className="ms-auto text-error-400"
+                    className="ms-auto min-h-11 px-1 text-error-400"
                     onClick={async () => {
                       const ok = await confirm.ask({
                         title: 'למחוק את הסבב?',

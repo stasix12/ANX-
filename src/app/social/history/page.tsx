@@ -18,18 +18,25 @@ import {
 } from '@/components/social/ui';
 import { cancelQueueItem, listCampaigns, listQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
 import { zonedToUtc } from '@/lib/social/time';
+import { AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES, NEEDS_HUMAN_STATUSES } from '@/lib/social/status';
 import { type PublishMethod, type QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { InboxIcon } from '@/components/icons';
 
-/** Coarse buckets people actually filter by, mapped onto the real statuses. */
+/**
+ * Coarse buckets people actually filter by, built from the single
+ * classification (status.ts) so that a dashboard tile showing N opens a list
+ * of exactly those N rows. "ממתינים" is what moves on its own; "ידניים" is
+ * what waits for a person — awaiting_confirmation belongs to the second, which
+ * is where the queue list has always put it.
+ */
 const STATUS_GROUPS: { value: string; label: string; statuses: QueueStatus[] }[] = [
   { value: '', label: 'הכל', statuses: [] },
   { value: 'published', label: 'פורסמו', statuses: ['published'] },
-  { value: 'pending', label: 'ממתינים', statuses: ['scheduled', 'publishing', 'awaiting_confirmation', 'paused'] },
+  { value: 'pending', label: 'ממתינים', statuses: [...AUTOMATIC_WAITING_STATUSES, ...IN_FLIGHT_STATUSES] },
   { value: 'failed', label: 'נכשלו', statuses: ['failed'] },
   { value: 'skipped', label: 'דולגו', statuses: ['skipped'] },
-  { value: 'manual', label: 'ידניים', statuses: ['manual_pending', 'needs_attention'] },
+  { value: 'manual', label: 'ידניים', statuses: NEEDS_HUMAN_STATUSES },
 ];
 
 const RANGES: { value: string; label: string; days: number | null }[] = [

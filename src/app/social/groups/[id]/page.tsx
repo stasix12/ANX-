@@ -34,6 +34,7 @@ import {
   updateTarget,
   type QueueRow,
 } from '@/lib/social/client';
+import { isOpen } from '@/lib/social/status';
 import { KNOWN_CITIES, OTHER_CITY, detectCity, sortCities } from '@/lib/social/cities';
 import { formatDateTimeHe } from '@/lib/social/time';
 import { CHANNEL_LABEL, type Campaign, type SocialTarget } from '@/lib/social/types';
@@ -87,7 +88,10 @@ export default function GroupProfilePage() {
       published: published.length,
       failed: list.filter((r) => r.status === 'failed').length,
       skipped: list.filter((r) => r.status === 'skipped').length,
-      pending: list.filter((r) => r.status === 'scheduled').length,
+      // Every row that has not finished, not only the auto-scheduled ones: a
+      // group whose queue was entirely needs_attention used to read
+      // "ממתינים: 0" while the dashboard called those same rows stuck.
+      pending: list.filter((r) => isOpen(r.status)).length,
       last: published.map((r) => r.published_at).filter(Boolean).sort().reverse()[0] ?? null,
       campaignIds: Array.from(new Set(list.map((r) => r.campaign_id).filter(Boolean) as string[])),
     };

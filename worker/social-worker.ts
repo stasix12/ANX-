@@ -411,7 +411,10 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     return;
   }
   if (decision.action === 'wait') {
-    await finish({ status: 'scheduled', step: 'pending' });
+    // Parked, not attempted — see the same branch in server/worker.ts. Without
+    // the new instant this row is due again on the next 5-second poll, and the
+    // claim has already spent one of its attempts.
+    await finish({ status: 'scheduled', step: 'pending', scheduled_at: decision.until, attempts: item.attempts });
     console.log(`[worker] ⏸ "${t?.name ?? item.target_id}": ${decision.reason}`);
     return;
   }

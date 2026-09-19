@@ -16,7 +16,6 @@ import {
   callSocialApi,
   campaignStates,
   cancelAllScheduled,
-  countByStatus,
   countPublishedBetween,
   countPublishedSince,
   getControl,
@@ -26,17 +25,28 @@ import {
   listQueue,
   listTargets,
   pauseCampaign,
+  queueSummary,
   setPaused,
   stopCampaign,
   type QueueRow,
 } from '@/lib/social/client';
-import { percentDone, type CampaignState } from '@/lib/social/campaign';
+import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
+import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, type QueueSummary } from '@/lib/social/status';
 import { addDaysISO, formatDateTimeHe, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 
+/**
+ * How many upcoming rows the timeline reads. The card's subtitle prints the
+ * EXACT queue count beside it rather than this array's length, so a ceiling is
+ * never shown as a total.
+ */
+const UPCOMING_LIMIT = 40;
+
 interface DashboardData {
   counts: Record<QueueStatus, number>;
+  /** The same counts rolled up through the one classification (status.ts). */
+  summary: QueueSummary;
   today: number;
   week: number;
   upcoming: QueueRow[];
@@ -73,8 +83,8 @@ export default function SocialDashboard() {
       // Only a live campaign can be the one running right now, so the rollup
       // read stays proportional to what the hero can actually show.
       const liveIds = campaigns.filter((c) => c.status !== 'archived').map((c) => c.id);
-      const [counts, today, week, limits, control, targets, manual, log, states, upcoming] = await Promise.all([
-        countByStatus(),
+      const [queue, today, week, limits, control, targets, manual, log, states, upcoming] = await Promise.all([
+        queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         countPublishedBetween(zonedToUtc(weekStartISO, '00:00').toISOString()),
         getLimits(),
@@ -83,14 +93,18 @@ export default function SocialDashboard() {
         listQueue({ status: ['manual_pending'], limit: 20 }),
         listActivity(30),
         campaignStates(liveIds),
-        listQueue({ status: ['scheduled'], limit: 40 }),
+        // Ascending, because the limit is applied after the sort: read
+        // newest-first, these 40 would be the FURTHEST-OUT rows in the queue
+        // and "הפרסומים הקרובים" would be showing the last publications while
+        // calling the first of them the next one.
+        listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' }),
       ]);
       setData({
-        counts,
+        counts: queue.counts,
+        summary: queue.summary,
         today,
         week,
-        // listQueue sorts newest-first; the soonest publication is last.
-        upcoming: [...upcoming].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)),
+        upcoming,
         limits,
         control,
         activeTargets: targets.filter((t) => t.enabled).length,
@@ -124,8 +138,14 @@ export default function SocialDashboard() {
     }
   }
 
-  /** Everything still waiting to go out, across every campaign. */
-  const pending = data ? data.counts.scheduled + data.counts.needs_attention + data.counts.manual_pending : 0;
+  /**
+   * Exactly what "delete everything waiting" will cancel, across every
+   * campaign — the same list cancelAllScheduled() matches on (status.ts), so
+   * the number in the question is the number the write delivers. It used to be
+   * a third list that was neither a subset nor a superset of either.
+   */
+  const summary = data?.summary ?? EMPTY_QUEUE_SUMMARY;
+  const pending = summary.cancellable;
 
   /**
    * Clears the queue. One implementation behind two entry points: beside
@@ -169,7 +189,9 @@ export default function SocialDashboard() {
    * (library.ts quickPublish).
    */
   async function resetRun(id: string, name: string, state: CampaignState) {
-    const waiting = state.progress.scheduled + state.progress.running + state.progress.manual;
+    // Exactly what stopCampaign() will cancel — a publication already in
+    // flight is left to finish, so it is not part of the promise.
+    const waiting = cancellableRows(state.progress);
     const ok = await confirm.ask({
       title: 'לסיים את הסבב?',
       body:
@@ -210,7 +232,7 @@ export default function SocialDashboard() {
           const rank = (s: CampaignState) => (s.state === 'running' ? 0 : s.state === 'needs_attention' ? 1 : s.state === 'paused' ? 2 : s.state === 'not_started' ? 3 : 4);
           const d = rank(a.state) - rank(b.state);
           if (d) return d;
-          return percentDone(a.state.progress) - percentDone(b.state.progress);
+          return percentFinished(a.state.progress) - percentFinished(b.state.progress);
         })[0] ?? null)
     : null;
 
@@ -223,7 +245,7 @@ export default function SocialDashboard() {
   const featuredNext = featured?.state.upcoming.find((r) => r.status === 'scheduled')?.target ?? null;
 
   /* Work in flight that belongs to no campaign — still the subject of the screen. */
-  const liveQueue = Boolean(data && (data.counts.scheduled > 0 || data.upcoming.length > 0));
+  const liveQueue = Boolean(data && (summary.queued > 0 || data.upcoming.length > 0));
 
   /*
    * Greeting by time of day, in the app's own timezone. Cosmetic, but it is
@@ -273,11 +295,14 @@ export default function SocialDashboard() {
           {data.control.rateLimitedUntil && new Date(data.control.rateLimitedUntil) > new Date() && (
             <AlertBar tone="warn" title="Meta ביקשה להאט" body={`הפרסום יתחדש אוטומטית ב-${formatDateTimeHe(data.control.rateLimitedUntil)}.`} />
           )}
-          {data.counts.needs_attention > 0 && (
+          {/* The number and the list behind the link are the same set — the
+              alert used to count needs_attention alone and open a list that
+              also held the manual and confirmation rows. */}
+          {summary.needsHuman > 0 && (
             <AlertBar
               tone="bad"
-              title={`${data.counts.needs_attention} פרסומים תקועים וממתינים לכם`}
-              body="בדרך כלל פייסבוק ביקשה אימות בחלון של ה-worker."
+              title={`${summary.needsHuman} פרסומים ממתינים לכם`}
+              body="בדרך כלל פייסבוק ביקשה אימות בחלון של ה-worker, או שהפרסום מחכה לאישור שלכם."
               actionLabel="הצג"
               href="/social/history?status=needs_attention"
             />
@@ -295,28 +320,32 @@ export default function SocialDashboard() {
                 sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`}
                 href="/social/history"
               />
+              {/* Tiles 2 and 3 together are every row that has not finished,
+                  each counted once (status.ts): what moves on its own, and
+                  what will not move until the owner acts. They used to leave
+                  publishing, awaiting_confirmation and paused out of both. */}
               <StatCard
                 icon={<CalendarIcon className="h-4.5 w-4.5" />}
                 tone="brand"
-                label="מתוזמנים"
-                value={data.counts.scheduled}
-                sub="ממתינים להפעלה"
+                label="ממתינים בתור"
+                value={summary.queued}
+                sub="יוצאים לבד בזמנם"
                 href="/social/history?status=scheduled"
               />
               <StatCard
                 icon={<ClockIcon className="h-4.5 w-4.5" />}
-                tone={data.counts.manual_pending + data.counts.needs_attention ? 'warn' : 'neutral'}
-                label="דורשים פעולה"
-                value={data.counts.manual_pending + data.counts.needs_attention}
+                tone={summary.needsHuman ? 'warn' : 'neutral'}
+                label="דורשים אתכם"
+                value={summary.needsHuman}
                 sub={`${data.activeTargets} יעדים פעילים`}
                 href="/social/history?status=needs_attention"
               />
               <StatCard
                 icon={<XCircleIcon className="h-4.5 w-4.5" />}
-                tone={data.counts.failed ? 'bad' : 'neutral'}
+                tone={summary.failed ? 'bad' : 'neutral'}
                 label="נכשלו"
-                value={data.counts.failed}
-                sub="סך הכול"
+                value={summary.failed}
+                sub={summary.skipped ? `ועוד ${summary.skipped} דולגו` : 'סך הכול'}
                 href="/social/history?status=failed"
               />
             </div>
@@ -343,7 +372,7 @@ export default function SocialDashboard() {
                "no active campaign" while two dozen of them are going out
                hides the very thing this screen is for. */
             <LiveQueueHero
-              scheduled={data.counts.scheduled}
+              scheduled={summary.queued}
               publishedToday={data.today}
               dailyTarget={data.limits.maxPerDay}
               paused={data.control.paused}
@@ -369,7 +398,10 @@ export default function SocialDashboard() {
           <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
             <Card
               title="הפרסומים הקרובים"
-              subtitle={data.upcoming.length ? `${data.upcoming.length} ממתינים בתור` : undefined}
+              /* The exact queue count, not this array's length: the array is
+                 capped at UPCOMING_LIMIT and printing its length as a total
+                 was a ceiling presented as a fact. */
+              subtitle={summary.queued ? `${summary.queued} ממתינים בתור` : undefined}
               action={
                 <Link href="/social/history" className="text-sm font-bold text-brand-400">
                   הכל

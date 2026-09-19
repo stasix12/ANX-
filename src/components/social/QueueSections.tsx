@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import type { QueueRow } from '@/lib/social/client';
 import { PublicationItem, type PublicationActions } from './PublicationItem';
 import { EmptyState } from './ui';
+import { AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES, NEEDS_HUMAN_STATUSES, TERMINAL_STATUSES } from '@/lib/social/status';
 import { SendIcon } from '@/components/icons';
 
 /**
@@ -14,9 +15,12 @@ import { SendIcon } from '@/components/icons';
  * moves until the owner acts.
  */
 
-const NEEDS_HUMAN = ['awaiting_confirmation', 'needs_attention', 'manual_pending'];
-const IN_FLIGHT = ['publishing'];
-const FINISHED = ['published', 'failed', 'skipped'];
+/* The one classification, so a section heading and a tile counting the same
+   rows cannot disagree about what those rows are. */
+const NEEDS_HUMAN: string[] = NEEDS_HUMAN_STATUSES;
+const IN_FLIGHT: string[] = IN_FLIGHT_STATUSES;
+const FINISHED: string[] = TERMINAL_STATUSES;
+const NEXT_UP: string[] = AUTOMATIC_WAITING_STATUSES;
 
 export function QueueSections({
   rows,
@@ -40,7 +44,7 @@ export function QueueSections({
     return {
       attention: byTime.filter((r) => NEEDS_HUMAN.includes(r.status)),
       now: byTime.filter((r) => IN_FLIGHT.includes(r.status)),
-      next: byTime.filter((r) => r.status === 'scheduled' || r.status === 'paused'),
+      next: byTime.filter((r) => NEXT_UP.includes(r.status)),
       done: [...rows]
         .filter((r) => FINISHED.includes(r.status))
         .sort((a, b) => (b.published_at ?? b.scheduled_at).localeCompare(a.published_at ?? a.scheduled_at)),

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BellIcon } from '@/components/icons';
-import { countByStatus, listActivity } from '@/lib/social/client';
+import { listActivity, queueSummary } from '@/lib/social/client';
 import { relativeHe } from '@/lib/social/time';
 import type { ActivityEntry } from '@/lib/social/types';
 
@@ -32,10 +32,13 @@ export function NotificationBell() {
   useEffect(() => {
     setSeen(readSeen());
     const load = () =>
-      Promise.all([listActivity(25), countByStatus()])
-        .then(([log, counts]) => {
+      Promise.all([listActivity(25), queueSummary()])
+        .then(([log, queue]) => {
           setItems(log.filter((e) => NOTABLE.has(e.event) || e.level !== 'info'));
-          setAttention(counts.needs_attention + counts.manual_pending);
+          // The same arithmetic as the dashboard's "דורשים אתכם" tile, from the
+          // same rollup — two different formulas for one badge is how the same
+          // screen printed two numbers for the same thing.
+          setAttention(queue.summary.needsHuman);
         })
         .catch(() => undefined);
     load();

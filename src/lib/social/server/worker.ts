@@ -200,7 +200,13 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
     return 'deferred';
   }
   if (decision.action === 'wait') {
-    await db.from('social_queue').update({ status: 'scheduled', step: 'pending' }).eq('id', item.id);
+    // Parked, not attempted: the instant moves forward so the row is not
+    // immediately due again, and the attempt the claim just counted is given
+    // back. Nothing was tried, so nothing should be spent.
+    await db
+      .from('social_queue')
+      .update({ status: 'scheduled', step: 'pending', scheduled_at: decision.until, attempts: Math.max(0, item.attempts - 1) })
+      .eq('id', item.id);
     return 'deferred';
   }
   // From here on target/post are non-null (the rules skip otherwise).

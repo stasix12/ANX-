@@ -6,7 +6,33 @@ import { zonedToUtc } from '@/lib/social/time';
 import { parseGroupUrl, type Variant } from '@/lib/social/types';
 import { pickVariant, previewAssignment } from '@/lib/social/variants';
 import { detectCity, sortCities } from '@/lib/social/cities';
-import { campaignState, percentDone, type CampaignQueueRow } from '@/lib/social/campaign';
+import {
+  campaignHeadline,
+  campaignState,
+  openRows,
+  percentFinished,
+  percentPublished,
+  unpublishedNote,
+  RUN_STATE_LABEL,
+  type CampaignQueueRow,
+  type CampaignState,
+} from '@/lib/social/campaign';
+import { checkCampaignInvariants, checkQueueInvariants, resetInvariantReports, takeUnreported } from '@/lib/social/invariants';
+import {
+  ALL_QUEUE_STATUSES,
+  AUTOMATIC_WAITING_STATUSES,
+  CANCELLABLE_STATUSES,
+  IN_FLIGHT_STATUSES,
+  NEEDS_HUMAN_STATUSES,
+  OPEN_STATUSES,
+  QUEUE_LIFECYCLE,
+  TERMINAL_STATUSES,
+  WAITING_STATUSES as WAITING_LIST,
+  isOpen,
+  isTerminal,
+  summarizeQueue,
+} from '@/lib/social/status';
+import type { QueueStatus } from '@/lib/social/types';
 import { countdownTo } from '@/lib/social/countdown';
 import { friendlyMessage, GENERIC_ERROR } from '@/lib/social/errors';
 
@@ -105,7 +131,8 @@ assert.equal(blank.state, 'not_started');
 assert.equal(blank.startedAt, null);
 assert.equal(blank.estimatedCompletionAt, null);
 assert.equal(blank.nextAt, null);
-assert.equal(percentDone(blank.progress), 0);
+assert.equal(percentPublished(blank.progress), 0);
+assert.equal(percentFinished(blank.progress), 0);
 
 const rows: CampaignQueueRow[] = [
   row({ id: '1', status: 'published', published_at: '2026-09-20T15:05:00.000Z', scheduled_at: '2026-09-20T15:00:00.000Z' }),
@@ -122,8 +149,11 @@ assert.equal(live.progress.published, 2);
 assert.equal(live.progress.failed, 1);
 assert.equal(live.progress.running, 1);
 assert.equal(live.progress.scheduled, 2);
-assert.equal(live.progress.done, 3);
-assert.equal(percentDone(live.progress), 50);
+// `finished` is what will not change again; `published` is what succeeded.
+// They are two numbers and the screens print two different sentences.
+assert.equal(live.progress.finished, 3);
+assert.equal(percentFinished(live.progress), 50);
+assert.equal(percentPublished(live.progress), 33);
 // started = the FIRST real publication, not the first scheduled slot
 assert.equal(live.startedAt, '2026-09-20T15:05:00.000Z');
 // next / last come from the remaining scheduled rows only
@@ -151,7 +181,8 @@ const finished = campaignState(
 );
 assert.equal(finished.state, 'completed');
 assert.equal(finished.estimatedCompletionAt, null);
-assert.equal(percentDone(finished.progress), 100);
+assert.equal(percentPublished(finished.progress), 100);
+assert.equal(percentFinished(finished.progress), 100);
 
 console.log('unit tests OK');
 
@@ -275,13 +306,19 @@ console.log('unit tests OK');
   // And must record what they just planned, or a run plans the same slot twice.
   assert.equal((planner.match(/taken\.add\(slotKey\(/g) ?? []).length, 2, 'both branches must record the slot they took');
 
-  // Terminal rows are excluded on purpose: a skipped or failed row may replan.
+  /*
+   * Terminal rows are excluded on purpose: a skipped or failed row may replan.
+   * The planner now names the shared lists instead of repeating a literal
+   * array, so the assertion is on the lists themselves — which is the stronger
+   * test, because it is what the query actually sends.
+   */
   const occ = planner.slice(planner.indexOf('async function occupiedSlots'), planner.indexOf('const slotKey'));
-  for (const status of ['scheduled', 'publishing', 'published', 'awaiting_confirmation']) {
-    assert.ok(occ.includes(`'${status}'`), `occupancy must count ${status}`);
+  assert.ok(occ.includes("'published', ...OPEN_STATUSES"), 'occupancy must be built from the shared classification');
+  for (const status of ['scheduled', 'publishing', 'awaiting_confirmation'] as QueueStatus[]) {
+    assert.ok(OPEN_STATUSES.includes(status), `occupancy must count ${status}`);
   }
-  assert.ok(!occ.includes("'skipped'"), 'a skipped row must not block replanning');
-  assert.ok(!occ.includes("'failed'"), 'a failed row must not block replanning');
+  assert.ok(!OPEN_STATUSES.includes('skipped'), 'a skipped row must not block replanning');
+  assert.ok(!OPEN_STATUSES.includes('failed'), 'a failed row must not block replanning');
 
   // The launch guard has to see a schedule that exists but has not planned yet.
   const guard = client.slice(client.indexOf('export async function hasPendingQueue'), client.indexOf('export async function listSchedules'));
@@ -729,3 +766,569 @@ console.log('unit tests OK');
 
   console.log('content-library tests OK');
 }
+
+/* ==================================================================== */
+/* ONE CLASSIFICATION, AND THE COUNTS THAT COME OUT OF IT               */
+/*                                                                      */
+/* Everything below runs in this process against the real modules. It   */
+/* is a SIMULATION: there is no Supabase credential in this checkout,   */
+/* so no test here touches a database and no campaign was run. The      */
+/* queue is an in-memory table whose claim and status writes mirror the */
+/* two workers' (pinned to their source at the end of this file), and   */
+/* the view model is computed by the real campaignState().              */
+/* ==================================================================== */
+{
+  // --- every status belongs to exactly one lifecycle, and the sublists agree
+  assert.equal(ALL_QUEUE_STATUSES.length, 9, 'the CHECK constraint allows nine statuses');
+  assert.equal(new Set(ALL_QUEUE_STATUSES).size, 9, 'no status listed twice');
+  for (const s of ALL_QUEUE_STATUSES) {
+    const lifecycles = [TERMINAL_STATUSES, WAITING_LIST, IN_FLIGHT_STATUSES].filter((l) => l.includes(s));
+    assert.equal(lifecycles.length, 1, `${s} must belong to exactly one lifecycle, not ${lifecycles.length}`);
+    assert.ok(QUEUE_LIFECYCLE[s], `${s} must have a lifecycle`);
+  }
+  assert.deepEqual(TERMINAL_STATUSES, ['published', 'failed', 'skipped']);
+  assert.deepEqual(IN_FLIGHT_STATUSES, ['publishing']);
+  // A row a person must touch is waiting, not running: calling it "running"
+  // is what let a run read "רץ" for ever with a bar that could never fill.
+  for (const s of NEEDS_HUMAN_STATUSES) assert.ok(isOpen(s) && !isTerminal(s), `${s} is not finished`);
+  assert.ok(!IN_FLIGHT_STATUSES.includes('awaiting_confirmation'), 'awaiting_confirmation waits for a person');
+  // Cancel acts on exactly what "waiting" means, so a dialog cannot promise a
+  // number the write will not deliver.
+  assert.deepEqual([...CANCELLABLE_STATUSES].sort(), [...WAITING_LIST].sort());
+  assert.ok(!CANCELLABLE_STATUSES.includes('publishing'), 'a job already running is left to finish');
+  for (const s of ['scheduled', 'paused', 'manual_pending', 'needs_attention', 'awaiting_confirmation'] as QueueStatus[]) {
+    assert.ok(CANCELLABLE_STATUSES.includes(s), `${s} must be cancellable — manual_pending used to survive every cancel path`);
+  }
+  assert.deepEqual([...OPEN_STATUSES].sort(), [...WAITING_LIST, ...IN_FLIGHT_STATUSES].sort());
+
+  // --- summarizeQueue partitions the table exactly once
+  const counts = Object.fromEntries(ALL_QUEUE_STATUSES.map((s, i) => [s, i + 1])) as Record<QueueStatus, number>;
+  const sum = summarizeQueue(counts);
+  assert.equal(sum.total, 45);
+  assert.equal(sum.terminal + sum.waiting + sum.inFlight, sum.total, 'the three lifecycles must cover every row');
+  assert.equal(sum.queued + sum.needsHuman, sum.open, 'the two open tiles must cover every unfinished row');
+  assert.equal(sum.cancellable, sum.waiting);
+  assert.deepEqual(checkQueueInvariants(counts, sum).map((v) => v.code), ['unclaimable_waiting_rows']);
+  const clean = { ...counts, paused: 0 };
+  assert.deepEqual(checkQueueInvariants(clean), [], 'a queue with no phantom rows raises nothing');
+
+  console.log('classification tests OK');
+}
+
+/* ------------------------------------------------ "הושלמו" vs "פורסמו" */
+{
+  const at = (m: number) => new Date(Date.UTC(2026, 8, 20, 12, m)).toISOString();
+  const make = (statuses: QueueStatus[]): CampaignQueueRow[] =>
+    statuses.map((status, i) => ({
+      id: `r${i}`,
+      status,
+      scheduled_at: at(i),
+      published_at: status === 'published' ? at(i) : null,
+      target_id: `t${i}`,
+      post_id: 'p1',
+      target: { id: `t${i}`, name: `קבוצה ${i}` },
+    }));
+
+  // The owner's evening: 112 claimed, nothing published, everything skipped.
+  const skippedOnly = campaignState(make(Array(112).fill('skipped')), { status: 'active' });
+  assert.equal(skippedOnly.progress.published, 0);
+  assert.equal(skippedOnly.progress.finished, 112);
+  assert.equal(percentPublished(skippedOnly.progress), 0, 'a run that published nothing is not 100% anything');
+  assert.equal(percentFinished(skippedOnly.progress), 100, 'but it HAS ended — that is a different number');
+  assert.equal(campaignHeadline(skippedOnly), '0 מתוך 112 פורסמו · 112 דולגו');
+  assert.ok(!campaignHeadline(skippedOnly).includes('הושלמו'), '"הושלמו" must not stand for "skipped"');
+  assert.equal(skippedOnly.state, 'completed', 'the run did end — it just published nothing');
+
+  const failedOnly = campaignState(make(Array(40).fill('failed')), { status: 'active' });
+  assert.equal(percentPublished(failedOnly.progress), 0);
+  assert.equal(campaignHeadline(failedOnly), '0 מתוך 40 פורסמו · 40 נכשלו');
+
+  // Mixed, which is the case every string has to stay true for.
+  const mixed = campaignState(
+    make([...Array(6).fill('published'), ...Array(3).fill('skipped'), 'failed']),
+    { status: 'active' },
+  );
+  assert.equal(campaignHeadline(mixed), '6 מתוך 10 פורסמו · 3 דולגו · 1 נכשלו');
+  assert.equal(percentPublished(mixed.progress), 60);
+  assert.equal(percentFinished(mixed.progress), 100);
+  assert.equal(unpublishedNote(mixed.progress), '3 דולגו · 1 נכשלו');
+  // All published: nothing to add, and no invented zero.
+  const allGood = campaignState(make(Array(5).fill('published')), { status: 'active' });
+  assert.equal(unpublishedNote(allGood.progress), '');
+  assert.equal(campaignHeadline(allGood), '5 מתוך 5 פורסמו');
+
+  console.log('headline tests OK');
+}
+
+/* --------------------------------------------- resolveState, exhaustively */
+{
+  const at = (m: number) => new Date(Date.UTC(2026, 8, 20, 12, m)).toISOString();
+  const state = (statuses: QueueStatus[], campaign: 'active' | 'paused' | 'archived') =>
+    campaignState(
+      statuses.map((status, i) => ({
+        id: `r${i}`,
+        status,
+        scheduled_at: at(i),
+        published_at: status === 'published' ? at(i) : null,
+        target_id: `t${i}`,
+        post_id: 'p1',
+        target: { id: `t${i}`, name: `קבוצה ${i}` },
+      })),
+      { status: campaign },
+    );
+
+  // Defect (B): every row terminal on a campaign record still marked paused.
+  for (const rows of [['published', 'published'], ['skipped', 'skipped'], ['published', 'skipped', 'failed']] as QueueStatus[][]) {
+    const s = state(rows, 'paused');
+    assert.equal(s.state, 'completed', `nothing is being held back — ${rows.join('+')} must not read "מושהה"`);
+    assert.equal(RUN_STATE_LABEL[s.state], 'הושלם');
+    assert.equal(openRows(s.progress), 0);
+    assert.deepEqual(checkCampaignInvariants(s, { campaignId: 'c1' }), [], 'and the invariants agree');
+  }
+  // Paused is still paused while rows are genuinely waiting — this is the one
+  // honest paused case and the resume button really can act on it.
+  const heldBack = state(['published', 'scheduled', 'scheduled'], 'paused');
+  assert.equal(heldBack.state, 'paused');
+  assert.equal(heldBack.progress.scheduled, 2);
+  // A pause cannot hold back a job already in flight, nor a row waiting for a
+  // person, so neither puts the card in 'paused' with a dead resume button.
+  assert.equal(state(['published', 'publishing'], 'paused').state, 'running');
+  assert.equal(state(['published', 'manual_pending'], 'paused').state, 'needs_attention');
+  assert.equal(state(['published', 'awaiting_confirmation'], 'paused').state, 'needs_attention');
+  // Archived always wins; an empty run has not started.
+  assert.equal(state(['scheduled'], 'archived').state, 'stopped');
+  assert.equal(campaignState([], { status: 'paused' }).state, 'not_started');
+  // In flight is in flight, not finished.
+  assert.equal(state(['published', 'publishing'], 'active').state, 'running');
+  assert.equal(state(['scheduled', 'scheduled'], 'active').state, 'not_started');
+
+  console.log('run-state tests OK');
+}
+
+/* ------------------------------------------------------ invariant checks */
+{
+  resetInvariantReports();
+  const row = (id: string, status: QueueStatus): CampaignQueueRow => ({
+    id,
+    status,
+    scheduled_at: '2026-09-20T12:00:00.000Z',
+    published_at: null,
+    target_id: `t-${id}`,
+    post_id: 'p1',
+    target: { id: `t-${id}`, name: id },
+  });
+
+  // I1 — a terminal row listed as upcoming.
+  const broken = {
+    progress: { total: 2, published: 1, failed: 0, skipped: 0, scheduled: 1, running: 0, manual: 0, finished: 1 },
+    state: 'running' as const,
+    upcoming: [row('q9', 'published')],
+  };
+  const v1 = checkCampaignInvariants(broken, { campaignId: 'c1' });
+  assert.deepEqual(v1.map((v) => v.code), ['terminal_row_listed_as_upcoming']);
+  assert.deepEqual(v1[0].meta.rowIds, ['q9'], 'the violation names the row');
+  assert.deepEqual(v1[0].meta.statuses, ['published'], 'and the statuses involved');
+  assert.equal(v1[0].meta.campaignId, 'c1', 'and the campaign');
+  assert.ok(/[֐-׿]/.test(v1[0].message) && !/[A-Za-z]{4,}/.test(v1[0].message), 'Hebrew, never a raw error');
+
+  // I2 — the buckets must add up to the total.
+  const notPartitioned = {
+    progress: { total: 10, published: 1, failed: 0, skipped: 0, scheduled: 1, running: 0, manual: 0, finished: 1 },
+    state: 'running' as const,
+    upcoming: [row('q1', 'scheduled')],
+  };
+  assert.ok(checkCampaignInvariants(notPartitioned).some((v) => v.code === 'counts_do_not_partition_total'));
+
+  // I3 — paused with nothing waiting. I4 — completed with rows still open.
+  const pausedEmpty = {
+    progress: { total: 3, published: 3, failed: 0, skipped: 0, scheduled: 0, running: 0, manual: 0, finished: 3 },
+    state: 'paused' as const,
+    upcoming: [],
+  };
+  assert.deepEqual(checkCampaignInvariants(pausedEmpty).map((v) => v.code), ['paused_with_nothing_waiting']);
+  const doneButOpen = {
+    progress: { total: 3, published: 2, failed: 0, skipped: 0, scheduled: 1, running: 0, manual: 0, finished: 2 },
+    state: 'completed' as const,
+    upcoming: [row('q3', 'scheduled')],
+  };
+  const v4 = checkCampaignInvariants(doneButOpen, { campaignId: 'c9' });
+  assert.deepEqual(v4.map((v) => v.code), ['completed_with_open_rows']);
+  assert.deepEqual(v4[0].meta.rowIds, ['q3']);
+
+  // I5 — a waiting row no worker can ever claim is named, not counted silently.
+  const phantom = {
+    progress: { total: 1, published: 0, failed: 0, skipped: 0, scheduled: 1, running: 0, manual: 0, finished: 0 },
+    state: 'not_started' as const,
+    upcoming: [row('q7', 'paused')],
+  };
+  assert.deepEqual(checkCampaignInvariants(phantom).map((v) => v.code), ['unclaimable_waiting_rows']);
+
+  // Reported once per subject, so a 5-second poll cannot flood the owner's log.
+  resetInvariantReports();
+  assert.equal(takeUnreported(checkCampaignInvariants(pausedEmpty), 'campaign:c1').length, 1);
+  assert.equal(takeUnreported(checkCampaignInvariants(pausedEmpty), 'campaign:c1').length, 0);
+  assert.equal(takeUnreported(checkCampaignInvariants(pausedEmpty), 'campaign:c2').length, 1, 'a different run is a different subject');
+
+  console.log('invariant tests OK');
+}
+
+/* ==================================================================== */
+/* A 28-PUBLICATION RUN, END TO END                                     */
+/*                                                                      */
+/* Deterministic and in-process. The queue below is an in-memory table;  */
+/* its claim is the same compare-and-set both workers issue             */
+/* (UPDATE … SET status='publishing' WHERE id=? AND status='scheduled'),*/
+/* and every outcome write is one the real workers make. NOTHING HERE   */
+/* TALKS TO A DATABASE — there is no Supabase credential in this        */
+/* checkout, so this reproduces the bookkeeping, not a real run. The    */
+/* view model on top is the real campaignState(); the tiles are the     */
+/* real summarizeQueue().                                               */
+/* ==================================================================== */
+
+interface SimRow {
+  id: string;
+  status: QueueStatus;
+  scheduled_at: string;
+  published_at: string | null;
+  target_id: string;
+  post_id: string;
+  attempts: number;
+  worker_id: string | null;
+}
+
+class SimQueue {
+  rows: SimRow[] = [];
+
+  constructor(n: number) {
+    for (let i = 0; i < n; i += 1) {
+      this.rows.push({
+        id: `q${String(i + 1).padStart(2, '0')}`,
+        status: 'scheduled',
+        scheduled_at: new Date(Date.UTC(2026, 8, 20, 9, i * 20)).toISOString(),
+        published_at: null,
+        target_id: `t${i + 1}`,
+        post_id: 'p1',
+        attempts: 0,
+        worker_id: null,
+      });
+    }
+  }
+
+  get(id: string): SimRow {
+    const row = this.rows.find((r) => r.id === id);
+    assert.ok(row, `no such row ${id}`);
+    return row;
+  }
+
+  /** The workers' atomic claim: it moves the row only if it is still scheduled. */
+  claim(id: string, workerId: string | null): boolean {
+    const row = this.get(id);
+    if (row.status !== 'scheduled') return false;
+    row.status = 'publishing';
+    row.attempts += 1;
+    row.worker_id = workerId;
+    return true;
+  }
+
+  patch(id: string, p: Partial<SimRow>): void {
+    Object.assign(this.get(id), p);
+  }
+
+  /** worker/social-worker.ts recovers the rows IT left behind, on startup. */
+  recover(workerId: string): string[] {
+    const hit = this.rows.filter((r) => r.worker_id === workerId && (r.status === 'publishing' || r.status === 'awaiting_confirmation'));
+    for (const r of hit) r.status = 'needs_attention';
+    return hit.map((r) => r.id);
+  }
+
+  /** client.ts retryQueueItem: guarded, and it clears the worker that held it. */
+  retry(id: string): boolean {
+    const row = this.get(id);
+    if (!['failed', 'skipped', 'needs_attention', 'scheduled', 'paused'].includes(row.status)) return false;
+    row.status = 'scheduled';
+    row.worker_id = null;
+    return true;
+  }
+
+  /** What campaignStates()/campaignQueue() hand the card. `order` is the read's. */
+  read(order: 'asc' | 'desc' = 'asc'): CampaignQueueRow[] {
+    const copy = this.rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      scheduled_at: r.scheduled_at,
+      published_at: r.published_at,
+      target_id: r.target_id,
+      post_id: r.post_id,
+      target: { id: r.target_id, name: `קבוצה ${r.target_id}` },
+    }));
+    copy.sort((a, b) => (order === 'asc' ? 1 : -1) * a.scheduled_at.localeCompare(b.scheduled_at));
+    return copy;
+  }
+
+  /** countByStatus(), exactly: one number per status, over the whole table. */
+  counts(): Record<QueueStatus, number> {
+    const out = Object.fromEntries(ALL_QUEUE_STATUSES.map((s) => [s, 0])) as Record<QueueStatus, number>;
+    for (const r of this.rows) out[r.status] += 1;
+    return out;
+  }
+}
+
+/** One publication, as the workers write it. */
+function simPublish(q: SimQueue, id: string, minute: number): void {
+  assert.ok(q.claim(id, 'worker-pc'), `${id} must be claimable`);
+  q.patch(id, { status: 'published', published_at: new Date(Date.UTC(2026, 8, 20, 10, minute)).toISOString(), worker_id: null });
+}
+
+/** What the run card and the dashboard both say, from one set of rows. */
+function screen(q: SimQueue, campaign: 'active' | 'paused' | 'archived' = 'active') {
+  const state = campaignState(q.read('asc'), { status: campaign });
+  const summary = summarizeQueue(q.counts());
+  return {
+    headline: campaignHeadline(state),
+    percentPublished: percentPublished(state.progress),
+    percentFinished: percentFinished(state.progress),
+    runState: RUN_STATE_LABEL[state.state],
+    cardPublished: state.progress.published,
+    cardOpen: openRows(state.progress),
+    cardUpcoming: state.upcoming.length,
+    tileQueued: summary.queued,
+    tileNeedsYou: summary.needsHuman,
+    tileFailed: summary.failed,
+    state,
+    summary,
+  };
+}
+
+const scenario: { step: string; line: string }[] = [];
+{
+  resetInvariantReports();
+  const q = new SimQueue(28);
+  const note = (step: string, s: ReturnType<typeof screen>) => {
+    scenario.push({
+      step,
+      line: `${s.runState.padEnd(10)} | ${s.headline.padEnd(42)} | פורסמו ${String(s.cardPublished).padStart(2)} | ${String(s.percentPublished).padStart(3)}% פורסמו | ${String(s.percentFinished).padStart(3)}% הסתיימו | פתוחים ${String(s.cardOpen).padStart(2)} | קרובים ${String(s.cardUpcoming).padStart(2)} | אריח-בתור ${String(s.tileQueued).padStart(2)} | אריח-דורשים ${s.tileNeedsYou}`,
+    });
+  };
+  /** After every step: the card and the tiles must be describing one queue. */
+  const agree = (s: ReturnType<typeof screen>, where: string) => {
+    assert.deepEqual(checkCampaignInvariants(s.state, { campaignId: 'c-28' }), [], `${where}: campaign invariants`);
+    assert.deepEqual(checkQueueInvariants(q.counts()), [], `${where}: queue invariants`);
+    // The card's open rows and the dashboard's two open tiles are the same rows.
+    assert.equal(s.cardOpen, s.tileQueued + s.tileNeedsYou, `${where}: the card and the tiles must count the same unfinished rows`);
+    assert.equal(s.cardUpcoming, s.cardOpen, `${where}: "upcoming" is exactly what has not finished`);
+    // A terminal row is never in a pending or upcoming result.
+    for (const r of s.state.upcoming) assert.ok(!isTerminal(r.status), `${where}: ${r.id} is finished and must not be listed as upcoming`);
+    // The buckets partition the total, once.
+    const p = s.state.progress;
+    assert.equal(p.published + p.failed + p.skipped + p.scheduled + p.running + p.manual, p.total, `${where}: partition`);
+  };
+
+  // --- 1. before anything runs
+  let s = screen(q);
+  assert.equal(s.runState, 'טרם התחיל');
+  assert.equal(s.percentPublished, 0);
+  assert.equal(s.cardOpen, 28);
+  assert.equal(s.tileQueued, 28);
+  agree(s, 'step 1');
+  note('1. לפני ההפעלה', s);
+
+  // --- 2. ten publications go out
+  for (let i = 1; i <= 10; i += 1) simPublish(q, `q${String(i).padStart(2, '0')}`, i);
+  s = screen(q);
+  assert.equal(s.cardPublished, 10);
+  assert.equal(s.runState, 'רץ');
+  assert.equal(s.percentPublished, 36);
+  agree(s, 'step 2');
+  note('2. עשרה פורסמו', s);
+
+  // --- 3. three are skipped by the rules engine (already published there)
+  for (const id of ['q11', 'q12', 'q13']) {
+    assert.ok(q.claim(id, 'worker-pc'));
+    q.patch(id, { status: 'skipped', worker_id: null });
+  }
+  s = screen(q);
+  assert.equal(s.state.progress.finished, 13, 'thirteen rows have ended');
+  assert.equal(s.cardPublished, 10, 'but only ten published');
+  assert.ok(s.headline.startsWith('10 מתוך 28 פורסמו'), `headline must not call a skip a publication: ${s.headline}`);
+  assert.ok(s.headline.includes('3 דולגו'));
+  assert.equal(s.percentPublished, 36);
+  assert.equal(s.percentFinished, 46);
+  agree(s, 'step 3');
+  note('3. שלושה דולגו', s);
+
+  // --- 4. the PC worker claims a row and dies mid-publication
+  assert.ok(q.claim('q14', 'worker-pc'));
+  s = screen(q);
+  assert.equal(s.state.progress.running, 1, 'the claimed row is in flight');
+  assert.equal(s.runState, 'רץ');
+  assert.notEqual(s.runState, 'הושלם');
+  assert.ok(s.state.upcoming.some((r) => r.id === 'q14'), 'an in-flight row has not finished');
+  agree(s, 'step 4 (worker died mid-row)');
+  note('4. ה-worker נפל באמצע', s);
+
+  // --- 4b. a second worker cannot take the same row — no double publication
+  assert.equal(q.claim('q14', 'worker-vercel'), false, 'a claimed row is not claimable again');
+  assert.equal(q.get('q14').status, 'publishing');
+  assert.equal(q.get('q14').attempts, 1, 'a refused claim spends no attempt');
+
+  // --- 5. the worker restarts and recovers what IT left behind
+  assert.deepEqual(q.recover('worker-pc'), ['q14']);
+  s = screen(q);
+  assert.equal(q.get('q14').status, 'needs_attention');
+  assert.equal(s.state.progress.running, 0);
+  assert.equal(s.state.progress.manual, 1);
+  assert.equal(s.tileNeedsYou, 1, 'the dashboard shows the recovered row as needing a person');
+  assert.notEqual(s.runState, 'הושלם');
+  agree(s, 'step 5 (worker restarted)');
+  note('5. ה-worker עלה מחדש', s);
+
+  // --- 6. the same rows re-read in the opposite database order: same screen
+  const asc = campaignState(q.read('asc'), { status: 'active' });
+  const desc = campaignState(q.read('desc'), { status: 'active' });
+  assert.deepEqual(desc.progress, asc.progress, 'a page refresh must not change a single number');
+  assert.equal(desc.state, asc.state);
+  assert.deepEqual(desc.upcoming.map((r) => r.id), asc.upcoming.map((r) => r.id), 'and upcoming stays soonest-first whatever order the read returned');
+  assert.equal(desc.nextAt, asc.nextAt);
+  note('6. רענון הדף (אותן שורות)', screen(q));
+
+  // --- 7. the owner retries the recovered row; it publishes exactly once
+  assert.ok(q.retry('q14'));
+  assert.equal(q.get('q14').status, 'scheduled');
+  simPublish(q, 'q14', 14);
+  assert.equal(q.get('q14').status, 'published');
+  assert.equal(q.claim('q14', 'worker-pc'), false, 'a published row can never be claimed again');
+  assert.equal(q.rows.filter((r) => r.id === 'q14' && r.status === 'published').length, 1, 'one row, one publication');
+  s = screen(q);
+  assert.equal(s.cardPublished, 11);
+  agree(s, 'step 7 (retry after a crash)');
+  note('7. ניסיון חוזר אחרי נפילה', s);
+
+  // --- 8. one row fails for good; one fails and is retried into a publication
+  for (const id of ['q15', 'q16']) {
+    assert.ok(q.claim(id, 'worker-pc'));
+    q.patch(id, { status: 'failed', worker_id: null });
+  }
+  s = screen(q);
+  assert.equal(s.tileFailed, 2);
+  assert.ok(s.headline.includes('2 נכשלו'));
+  agree(s, 'step 8 (two failures)');
+  note('8. שניים נכשלו', s);
+
+  assert.ok(q.retry('q16'));
+  simPublish(q, 'q16', 16);
+  s = screen(q);
+  assert.equal(s.tileFailed, 1, 'a retried failure stops being a failure');
+  assert.equal(s.cardPublished, 12);
+  agree(s, 'step 9 (retry after failure)');
+  note('9. ניסיון חוזר אחרי כישלון', s);
+
+  // --- 9. the rest go out
+  for (let i = 17; i <= 28; i += 1) simPublish(q, `q${i}`, i);
+  s = screen(q);
+
+  // --- 10. the finished run: nothing may read as pending, anywhere
+  assert.equal(s.state.progress.total, 28);
+  assert.equal(s.state.progress.published, 24);
+  assert.equal(s.state.progress.skipped, 3);
+  assert.equal(s.state.progress.failed, 1);
+  assert.equal(s.state.progress.finished, 28);
+  assert.equal(openRows(s.state.progress), 0);
+  assert.equal(s.cardUpcoming, 0, 'a completed run lists nothing as upcoming');
+  assert.equal(s.tileQueued, 0, 'and the dashboard counts nothing as queued');
+  assert.equal(s.tileNeedsYou, 0);
+  assert.equal(s.summary.cancellable, 0, 'and "delete everything waiting" would delete nothing');
+  assert.equal(s.runState, 'הושלם');
+  assert.equal(s.percentFinished, 100);
+  assert.equal(s.percentPublished, 86, 'the bar shows publications, and 4 of 28 never published');
+  assert.equal(s.headline, '24 מתוך 28 פורסמו · 3 דולגו · 1 נכשלו');
+  agree(s, 'step 10 (finished)');
+  note('10. אחרי השורה האחרונה', s);
+
+  // The same finished run on a campaign record still marked paused — defect (B).
+  const stale = screen(q, 'paused');
+  assert.equal(stale.runState, 'הושלם', 'a run with nothing waiting is never "מושהה"');
+  assert.deepEqual(checkCampaignInvariants(stale.state, { campaignId: 'c-28' }), []);
+  // And re-reading it, in either order, says the same thing.
+  assert.deepEqual(campaignState(q.read('desc'), { status: 'paused' }).progress, stale.state.progress);
+
+  console.log('28-publication campaign tests OK');
+}
+
+/* --------------------------------------------------- truncated reads */
+{
+  // campaignStates() caps its read and orders by scheduled_at ASC, so what is
+  // dropped is the still-scheduled future — a capped read makes a run look
+  // MORE finished than it is. It must not be presented as a total.
+  const rows: CampaignQueueRow[] = Array.from({ length: 14 }, (_, i) => ({
+    id: `q${i}`,
+    status: 'published' as QueueStatus,
+    scheduled_at: new Date(Date.UTC(2026, 8, 20, 9, i)).toISOString(),
+    published_at: new Date(Date.UTC(2026, 8, 20, 9, i)).toISOString(),
+    target_id: `t${i}`,
+    post_id: 'p1',
+    target: { id: `t${i}`, name: `קבוצה ${i}` },
+  }));
+  const capped = campaignState(rows, { status: 'active' }, { truncated: true });
+  assert.equal(capped.truncated, true, 'the state carries the flag the screen renders');
+  assert.equal(percentPublished(capped.progress), 100, 'of the rows it read — which is why the screen must say so');
+  const whole = campaignState(rows, { status: 'active' });
+  assert.equal(whole.truncated, false, 'an untruncated read is not flagged');
+
+  // The screens that draw it must disclose it rather than print a bare total.
+  const hero = readFileSync('src/components/social/LiveCampaignHero.tsx', 'utf8');
+  assert.ok(hero.includes('state.truncated'), 'the hero must disclose a capped read');
+  const runPage = readFileSync('src/app/social/campaigns/[id]/page.tsx', 'utf8');
+  assert.ok(runPage.includes('state?.truncated'), 'the run page must disclose a capped read');
+  const client = readFileSync('src/lib/social/client.ts', 'utf8');
+  assert.ok(client.includes('const truncated = rows.length >= CAMPAIGN_ROLLUP_LIMIT;'), 'campaignStates must detect its own ceiling');
+  assert.ok(client.includes('truncated: rows.length >= CAMPAIGN_QUEUE_LIMIT'), 'campaignQueue must report its ceiling');
+  // countByStatus stopped being truncatable at all: exact head counts, no rows.
+  assert.ok(client.includes("select('id', { count: 'exact', head: true }).eq('status', status)"), 'the tiles must use exact counts');
+  assert.ok(!/from\('social_queue'\)\.select\('status'\)/.test(client), 'the old unbounded select(status) must be gone');
+
+  console.log('truncation tests OK');
+}
+
+/* ------------------------- the app still reads the one classification */
+{
+  const pin = (what: string, src: string, needle: string) =>
+    assert.ok(src.includes(needle), `${what} drifted from the single classification: ${needle}`);
+
+  const dash = readFileSync('src/app/social/page.tsx', 'utf8');
+  // The "next publications" list is read ascending: the limit is applied after
+  // the sort, so descending returned the FURTHEST-OUT rows.
+  pin('dashboard upcoming', dash, "listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' })");
+  pin('dashboard tiles', dash, 'value={summary.queued}');
+  pin('dashboard tiles', dash, 'value={summary.needsHuman}');
+  // The cap is never printed as a total.
+  pin('upcoming subtitle', dash, 'subtitle={summary.queued ? `${summary.queued} ממתינים בתור` : undefined}');
+  assert.ok(!dash.includes('data.upcoming.length} ממתינים'), 'a capped array length must not be printed as the queue');
+
+  const client = readFileSync('src/lib/social/client.ts', 'utf8');
+  pin('cancel lists', client, "const CANCELLABLE: QueueItem['status'][] = CANCELLABLE_STATUSES;");
+  pin('bulk cancel', client, ".update({ status: 'skipped', step: '', skip_reason: 'בוטל — עצירת כל התורים' })\n      .in('status', CANCELLABLE)");
+
+  const campaign = readFileSync('src/lib/social/campaign.ts', 'utf8');
+  pin('progress buckets', campaign, 'progress.finished = progress.published + progress.failed + progress.skipped;');
+  pin('terminal before paused', campaign, "if (openRows(p) === 0) return 'completed';");
+  assert.ok(!campaign.includes('progress.done'), '"done" meant two things and must not come back');
+
+  const lib = readFileSync('src/lib/social/library.ts', 'utf8');
+  pin('library pending', lib, "const USAGE_PENDING: QueueItem['status'][] = OPEN_STATUSES;");
+  pin('library counts every row', lib, ".in('status', ALL_QUEUE_STATUSES)");
+
+  // Both workers park a waiting row on a new instant instead of re-reading it
+  // every poll with the attempt already spent.
+  const pcWorker = readFileSync('worker/social-worker.ts', 'utf8');
+  pin('local worker wait', pcWorker, "scheduled_at: decision.until, attempts: item.attempts");
+  const srvWorker = readFileSync('src/lib/social/server/worker.ts', 'utf8');
+  pin('server worker wait', srvWorker, "scheduled_at: decision.until, attempts: Math.max(0, item.attempts - 1)");
+
+  console.log('source-alignment tests OK');
+}
+
+/* ----------------------------------------- the 28-publication scenario */
+console.log('');
+console.log('=== 28-publication run, step by step (simulation — no database) ===');
+for (const { step, line } of scenario) console.log(`${step.padEnd(26)} ${line}`);
+console.log('');

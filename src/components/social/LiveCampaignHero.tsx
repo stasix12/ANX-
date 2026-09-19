@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ChevronIcon } from '@/components/icons';
-import { RUN_STATE_LABEL, percentDone, type CampaignState } from '@/lib/social/campaign';
+import { RUN_STATE_LABEL, openRows, percentPublished, unpublishedNote, type CampaignState } from '@/lib/social/campaign';
 import { countdownTo } from '@/lib/social/countdown';
 import { formatTimeHe } from '@/lib/social/time';
 import type { Campaign, SocialTarget } from '@/lib/social/types';
@@ -156,7 +156,17 @@ export function LiveCampaignHero({
 }) {
   const running = state.state === 'running';
   const paused = state.state === 'paused';
-  const pct = percentDone(state.progress);
+  const { progress } = state;
+  // The bar is publications over the whole run. It used to be
+  // published + failed + skipped, so a run that published nothing filled the
+  // bar to 100% and called it "הושלמו" — the owner lost an evening to a run
+  // that read 80% complete having published zero.
+  const pct = percentPublished(progress);
+  const open = openRows(progress);
+  const unpublished = unpublishedNote(progress);
+  // A button is offered only when it can act: nothing is left to pause once
+  // every row has finished, and nothing is left to resume either.
+  const canPause = open > 0 && state.state !== 'stopped';
   const now = useTick(Boolean(state.nextAt));
 
   return (
@@ -177,7 +187,7 @@ export function LiveCampaignHero({
 
       <div className="mt-3">
         <div className="flex items-baseline justify-between gap-2">
-          <Ratio done={state.progress.done} total={state.progress.total} suffix="הושלמו" />
+          <Ratio done={progress.published} total={progress.total} suffix="פורסמו" />
           <p className="text-lg font-extrabold tabular-nums text-brand-500">{pct}%</p>
         </div>
         <div
@@ -185,11 +195,24 @@ export function LiveCampaignHero({
           aria-valuenow={pct}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label="התקדמות הסבב"
+          aria-label={`${progress.published} מתוך ${progress.total} פורסמו`}
           className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-800"
         >
           <div className="h-full rounded-full bg-brand-500 transition-[width] duration-500" style={{ width: `${pct}%` }} />
         </div>
+        {/* What became of the rest, in the same breath as the bar — one word
+            per outcome instead of one word covering three. Nothing is printed
+            when there is nothing to print; a zero here would be noise. */}
+        {(unpublished || open > 0) && (
+          <p className="mt-1.5 text-xs text-mist-500">
+            {[unpublished, open > 0 ? `${open} עוד ממתינים` : ''].filter(Boolean).join(' · ')}
+          </p>
+        )}
+        {state.truncated && (
+          <p className="mt-1.5 text-xs text-amber-700">
+            הסבב גדול מכדי לספור אותו כאן במלואו — המספרים למעלה הם של הפרסומים הראשונים בלבד. הרשימה המלאה בעמוד הסבב.
+          </p>
+        )}
       </div>
 
       {state.nextAt && <NextUp at={state.nextAt} targetName={state.nextTargetName} now={now} target={nextTarget} onOpen={onTune} />}
@@ -200,9 +223,11 @@ export function LiveCampaignHero({
             המשך סבב
           </Button>
         ) : (
-          <Button variant="secondary" className="grow" busy={busy} onClick={onPause}>
-            השהה
-          </Button>
+          canPause && (
+            <Button variant="secondary" className="grow" busy={busy} onClick={onPause}>
+              השהה
+            </Button>
+          )
         )}
         <ButtonLink href={`/social/campaigns/${campaign.id}`} className="grow">צפה בסבב</ButtonLink>
       </div>

@@ -52,7 +52,14 @@ export function ContentCard({
    */
   const groups = item.publishedTargetIds.length;
   const times = item.publishCount === 1 ? 'פורסם פעם אחת' : `פורסם ${item.publishCount} פעמים`;
-  const published = item.publishCount === 0 ? 'טרם פורסם' : groups > 1 ? `${times} ב-${groups} קבוצות` : times;
+  /*
+   * A post can have a full run behind it and still have published nothing —
+   * the library used not to fetch skipped or failed rows at all, so it read
+   * "טרם פורסם" about the same 84 rows the run card was counting. Now it says
+   * which it was.
+   */
+  const nothingYet = item.skippedCount > 0 ? `טרם פורסם · ${item.skippedCount} דולגו` : 'טרם פורסם';
+  const published = item.publishCount === 0 ? nothingYet : groups > 1 ? `${times} ב-${groups} קבוצות` : times;
 
   return (
     <li className="relative">

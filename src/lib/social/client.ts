@@ -5,6 +5,15 @@ import { campaignState, type CampaignQueueRow, type CampaignState } from './camp
 import { detectCity } from './cities';
 import { dedupeKey } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
+import { checkCampaignInvariants, checkQueueInvariants, takeUnreported, type InvariantViolation } from './invariants';
+import {
+  ALL_QUEUE_STATUSES,
+  AUTOMATIC_WAITING_STATUSES,
+  CANCELLABLE_STATUSES,
+  OPEN_STATUSES,
+  summarizeQueue,
+  type QueueSummary,
+} from './status';
 import {
   DEFAULT_BROWSER,
   DEFAULT_BUSINESS,
@@ -25,6 +34,7 @@ import {
   type SocialAccount,
   type SocialTarget,
   type SocialWorker,
+  type QueueStatus,
   type Variant,
   type WorkerCommand,
   type WorkerCommandName,
@@ -362,8 +372,22 @@ export interface QueueRow extends QueueItem {
 const QUEUE_SELECT =
   '*, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
 
-export async function listQueue(opts: { status?: QueueItem['status'][]; since?: string; until?: string; limit?: number } = {}): Promise<QueueRow[]> {
-  let q = db().from('social_queue').select(QUEUE_SELECT).order('scheduled_at', { ascending: false }).limit(opts.limit ?? 200);
+/**
+ * `order` matters more than it looks: the limit is applied AFTER the sort, so
+ * a descending read with a limit returns the FURTHEST-OUT rows. The dashboard
+ * asked for 40 rows to show "the next publications" and got the last 40 in the
+ * queue — the soonest ones were not in the array at all. Callers that want
+ * what happens next pass 'asc'; the history, which wants the newest first,
+ * keeps the default.
+ */
+export async function listQueue(
+  opts: { status?: QueueItem['status'][]; since?: string; until?: string; limit?: number; order?: 'asc' | 'desc' } = {},
+): Promise<QueueRow[]> {
+  let q = db()
+    .from('social_queue')
+    .select(QUEUE_SELECT)
+    .order('scheduled_at', { ascending: opts.order === 'asc' })
+    .limit(opts.limit ?? 200);
   if (opts.status?.length) q = q.in('status', opts.status);
   if (opts.since) q = q.gte('scheduled_at', opts.since);
   if (opts.until) q = q.lte('scheduled_at', opts.until);
@@ -391,7 +415,14 @@ export async function updateQueueItem(id: string, patch: Partial<QueueItem>): Pr
  * The write simply matches nothing and the caller reloads the real state.
  */
 const RETRYABLE: QueueItem['status'][] = ['failed', 'skipped', 'needs_attention', 'scheduled', 'paused'];
-const CANCELLABLE: QueueItem['status'][] = ['scheduled', 'awaiting_confirmation', 'needs_attention', 'paused', 'manual_pending'];
+/**
+ * One list for one row and for the whole queue, straight from status.ts, so
+ * the number in a confirmation dialog is the number the write delivers. It
+ * used to differ in both directions at once: the dialog counted manual_pending
+ * (which the write could not touch) and the write cancelled awaiting_confirmation
+ * and paused (which the dialog never counted).
+ */
+const CANCELLABLE: QueueItem['status'][] = CANCELLABLE_STATUSES;
 
 async function guardedUpdate(id: string, allowed: QueueItem['status'][], patch: Partial<QueueItem>): Promise<boolean> {
   const rows = unwrap<{ id: string }[]>(await db().from('social_queue').update(patch).eq('id', id).in('status', allowed).select('id'));
@@ -431,7 +462,10 @@ export async function listLiveQueue(): Promise<QueueRow[]> {
     await db()
       .from('social_queue')
       .select(QUEUE_SELECT)
-      .or(`status.in.(scheduled,publishing,awaiting_confirmation,needs_attention,paused),and(status.in.(published,failed),updated_at.gte.${since})`)
+      // Every open row (status.ts), not a hand-written subset: manual_pending
+      // was missing, so the board's "דורשים אתכם" section — whose whole point
+      // is "nothing moves until you act" — could never show one.
+      .or(`status.in.(${OPEN_STATUSES.join(',')}),and(status.in.(published,failed),updated_at.gte.${since})`)
       .order('scheduled_at', { ascending: true })
       .limit(200),
   );
@@ -469,7 +503,7 @@ export async function stopCampaign(id: string): Promise<number> {
       .from('social_queue')
       .update({ status: 'skipped', step: '', skip_reason: 'הסבב נעצר' })
       .eq('campaign_id', id)
-      .in('status', ['scheduled', 'awaiting_confirmation', 'needs_attention', 'paused'])
+      .in('status', CANCELLABLE)
       .select('id'),
   );
   await logClientActivity('warn', 'campaign_stopped', `הסבב "${campaign?.name ?? ''}" נעצר — ${rows.length} פרסומים שטרם התחילו בוטלו`, {
@@ -521,8 +555,23 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
     if (list) list.push(row);
     else grouped.set(row.campaign_id, [row]);
   }
+  // The ceiling is shared by every live campaign and the read is ordered by
+  // scheduled_at ascending, so what gets dropped is the furthest-out rows —
+  // precisely the ones that have not happened yet. A truncated read therefore
+  // makes a run look MORE finished than it is, which is how a card could say
+  // "הושלם · 100%" beside rows the dashboard still counted as waiting. We
+  // cannot tell which campaign lost rows, so every state built from a capped
+  // read is marked, and the card stops presenting its numbers as totals.
+  const truncated = rows.length >= CAMPAIGN_ROLLUP_LIMIT;
   const out: Record<string, CampaignState> = {};
-  for (const [id, list] of grouped) out[id] = campaignState(list, byId.get(id) ?? null);
+  for (const [id, list] of grouped) {
+    const campaign = byId.get(id) ?? null;
+    const state = campaignState(list, campaign, { truncated });
+    out[id] = state;
+    if (!truncated) {
+      await reportViolations(checkCampaignInvariants(state, { campaignId: id, campaignName: campaign?.name ?? null }), `campaign:${id}`);
+    }
+  }
   return out;
 }
 
@@ -536,11 +585,24 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
   return unwrap<Campaign | null>(await db().from('social_campaigns').select('*').eq('id', id).maybeSingle());
 }
 
-/** Every queue row of one campaign, with its target — the control centre's feed. */
-export async function campaignQueue(campaignId: string): Promise<QueueRow[]> {
-  return unwrap<QueueRow[]>(
-    await db().from('social_queue').select(QUEUE_SELECT).eq('campaign_id', campaignId).order('scheduled_at').limit(1000),
+/** Ceiling for one campaign's own feed. Exported so the screen can disclose it. */
+export const CAMPAIGN_QUEUE_LIMIT = 1000;
+
+/**
+ * Every queue row of one campaign, with its target — the control centre's feed,
+ * plus whether the read hit its ceiling. Same reason postUsage() and
+ * liveQueuePlan() report truncation: past the limit the rows dropped are the
+ * furthest-out ones, so the numbers would read as a finished run.
+ */
+export async function campaignQueueWithStats(campaignId: string): Promise<{ rows: QueueRow[]; truncated: boolean }> {
+  const rows = unwrap<QueueRow[]>(
+    await db().from('social_queue').select(QUEUE_SELECT).eq('campaign_id', campaignId).order('scheduled_at').limit(CAMPAIGN_QUEUE_LIMIT),
   );
+  return { rows, truncated: rows.length >= CAMPAIGN_QUEUE_LIMIT };
+}
+
+export async function campaignQueue(campaignId: string): Promise<QueueRow[]> {
+  return (await campaignQueueWithStats(campaignId)).rows;
 }
 
 /**
@@ -628,7 +690,7 @@ export async function cancelAllScheduled(): Promise<number> {
     await db()
       .from('social_queue')
       .update({ status: 'skipped', step: '', skip_reason: 'בוטל — עצירת כל התורים' })
-      .in('status', ['scheduled', 'awaiting_confirmation', 'needs_attention', 'paused'])
+      .in('status', CANCELLABLE)
       .select('id'),
   );
   return rows.length;
@@ -640,11 +702,49 @@ export async function countPublishedSince(sinceISO: string): Promise<number> {
   return res.count ?? 0;
 }
 
-export async function countByStatus(): Promise<Record<QueueItem['status'], number>> {
-  const rows = unwrap<{ status: QueueItem['status'] }[]>(await db().from('social_queue').select('status'));
-  const out: Record<QueueItem['status'], number> = { scheduled: 0, publishing: 0, published: 0, failed: 0, skipped: 0, manual_pending: 0, needs_attention: 0, awaiting_confirmation: 0, paused: 0 };
-  for (const r of rows) out[r.status] += 1;
-  return out;
+/**
+ * The four dashboard tiles, exactly.
+ *
+ * This used to be `select('status')` with no limit and no order: it pulled
+ * every row in the table onto a phone to count nine integers, and PostgREST's
+ * own `db-max-rows` (1000 by default on Supabase) silently capped it — so past
+ * a thousand rows the largest numbers on the screen were a ceiling printed as
+ * a fact, with no way to tell. Nine `head: true, count: 'exact'` queries
+ * return the real totals and transfer no rows at all.
+ */
+export async function countByStatus(): Promise<Record<QueueStatus, number>> {
+  const results = await Promise.all(
+    ALL_QUEUE_STATUSES.map(async (status) => {
+      const res = await db().from('social_queue').select('id', { count: 'exact', head: true }).eq('status', status);
+      if (res.error) throw friendlyError(res.error);
+      return [status, res.count ?? 0] as const;
+    }),
+  );
+  return Object.fromEntries(results) as Record<QueueStatus, number>;
+}
+
+/**
+ * The same counts, rolled up through the single classification, plus the
+ * invariant check on them. Every tile and every confirmation dialog on the
+ * dashboard reads from this, so they cannot drift apart again.
+ */
+export async function queueSummary(): Promise<{ counts: Record<QueueStatus, number>; summary: QueueSummary }> {
+  const counts = await countByStatus();
+  const summary = summarizeQueue(counts);
+  await reportViolations(checkQueueInvariants(counts, summary), 'queue');
+  return { counts, summary };
+}
+
+/**
+ * Invariant violations reach the owner the way everything else does — as a
+ * Hebrew line in the activity log, never as an error on screen. Best-effort:
+ * a log that cannot be written must not break the screen it was describing.
+ */
+async function reportViolations(violations: InvariantViolation[], subject: string): Promise<void> {
+  const fresh = takeUnreported(violations, subject);
+  for (const v of fresh) {
+    await logClientActivity('warn', `invariant_${v.code}`, `אי-התאמה בספירת הפרסומים — ${v.message}`, v.meta);
+  }
 }
 
 /* ------------------------------------------------------------------ log */
@@ -721,8 +821,12 @@ export interface LiveQueuePlan {
   truncated: boolean;
 }
 
-/** Pending statuses — a row that has not begun and can still be re-timed. */
-const PENDING: QueueItem['status'][] = ['scheduled', 'paused'];
+/**
+ * Re-timeable rows: waiting on the clock rather than on a worker or a person.
+ * From the single classification, so "pending" here means what it means
+ * everywhere else in the module.
+ */
+const PENDING: QueueItem['status'][] = AUTOMATIC_WAITING_STATUSES;
 
 /** A hard ceiling so one screen can never pull an unbounded table. */
 const LIVE_QUEUE_LIMIT = 500;

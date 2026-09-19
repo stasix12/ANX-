@@ -26,6 +26,7 @@ import {
   type ScheduleInput,
 } from './client';
 import { friendlyError } from './errors';
+import { ALL_QUEUE_STATUSES, OPEN_STATUSES, isOpen } from './status';
 import { dripSlots, slotsFor } from './slots';
 import { startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
 import {
@@ -116,6 +117,13 @@ export interface LibraryPost {
    * labelled differently ("פורסם 12 פעמים ב-9 קבוצות").
    */
   publishedTargetIds: string[];
+  /**
+   * Finished without publishing. A post can be "0 published, 0 pending" and
+   * still have 84 rows behind it; without these the card shows nothing at all
+   * where the run card shows a full run.
+   */
+  skippedCount: number;
+  failedCount: number;
 }
 
 export interface LibraryFilter {
@@ -184,20 +192,25 @@ export interface PostUsage {
   pending: number;
   /** Which groups already have it (deduped, published rows only). */
   targetIds: string[];
+  /**
+   * Finished without publishing. The library used not to fetch these rows at
+   * all, so a post whose every attempt was skipped read "טרם פורסם · 0 בתור"
+   * — invisible — while the run card called the same rows "הושלמו". Counted
+   * here so the two screens describe the same rows the same way.
+   */
+  skipped: number;
+  failed: number;
 }
 
 /** Mirrors CAMPAIGN_ROLLUP_LIMIT (client.ts) — one screen never pulls an unbounded table. */
 export const LIBRARY_USAGE_LIMIT = 5000;
 
-/** Anything that has not happened yet but is meant to. */
-const USAGE_PENDING: QueueItem['status'][] = [
-  'scheduled',
-  'publishing',
-  'awaiting_confirmation',
-  'paused',
-  'manual_pending',
-  'needs_attention',
-];
+/**
+ * Anything that has not happened yet but is meant to — from the single
+ * classification, so "ממתין" on a content card means exactly what "ממתינים"
+ * means on the run card and on the dashboard.
+ */
+const USAGE_PENDING: QueueItem['status'][] = OPEN_STATUSES;
 
 export interface LibraryUsage {
   byPost: Record<string, PostUsage>;
@@ -225,7 +238,7 @@ export async function postUsage(): Promise<LibraryUsage> {
     await db()
       .from('social_queue')
       .select('post_id, status, published_at, target_id')
-      .in('status', ['published', ...USAGE_PENDING])
+      .in('status', ALL_QUEUE_STATUSES)
       // published_at is null on every row that has not published yet (the worker
       // writes it on success), so nulls go last rather than crowding the top.
       .order('published_at', { ascending: false, nullsFirst: false })
@@ -234,12 +247,16 @@ export async function postUsage(): Promise<LibraryUsage> {
 
   const byPost: Record<string, PostUsage> = {};
   for (const r of rows) {
-    const u = (byPost[r.post_id] ??= { published: 0, lastPublishedAt: null, pending: 0, targetIds: [] });
+    const u = (byPost[r.post_id] ??= { published: 0, lastPublishedAt: null, pending: 0, targetIds: [], skipped: 0, failed: 0 });
     if (r.status === 'published') {
       u.published += 1;
       if (r.published_at && (!u.lastPublishedAt || r.published_at > u.lastPublishedAt)) u.lastPublishedAt = r.published_at;
       if (!u.targetIds.includes(r.target_id)) u.targetIds.push(r.target_id);
-    } else {
+    } else if (r.status === 'skipped') {
+      u.skipped += 1;
+    } else if (r.status === 'failed') {
+      u.failed += 1;
+    } else if (isOpen(r.status)) {
       u.pending += 1;
     }
   }
@@ -258,6 +275,8 @@ function toLibraryPost(post: Post, usage: PostUsage | undefined): LibraryPost {
     publishCount: usage?.published ?? 0,
     lastPublishedAt: usage?.lastPublishedAt ?? null,
     pendingCount: usage?.pending ?? 0,
+    skippedCount: usage?.skipped ?? 0,
+    failedCount: usage?.failed ?? 0,
     publishedTargetIds: usage?.targetIds ?? [],
   };
 }

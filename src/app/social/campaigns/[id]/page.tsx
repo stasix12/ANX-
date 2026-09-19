@@ -22,7 +22,7 @@ import {
   ButtonLink,
 } from '@/components/social/ui';
 import {
-  campaignQueue,
+  campaignQueueWithStats,
   cancelQueueItem,
   confirmQueueItem,
   getCampaign,
@@ -33,7 +33,17 @@ import {
   stopCampaign,
   type QueueRow,
 } from '@/lib/social/client';
-import { RUN_STATE_LABEL, RUN_STATE_TONE, campaignState, percentDone, type CampaignState } from '@/lib/social/campaign';
+import {
+  RUN_STATE_LABEL,
+  RUN_STATE_TONE,
+  campaignState,
+  cancellableRows,
+  openRows,
+  percentPublished,
+  type CampaignState,
+} from '@/lib/social/campaign';
+import { checkCampaignInvariants, takeUnreported } from '@/lib/social/invariants';
+import { logClientActivity } from '@/lib/social/client';
 import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import type { Campaign, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -70,11 +80,19 @@ export default function CampaignControlCenter() {
 
   const load = useCallback(async () => {
     try {
-      const [c, q, p] = await Promise.all([getCampaign(id), campaignQueue(id), listPosts()]);
+      const [c, q, p] = await Promise.all([getCampaign(id), campaignQueueWithStats(id), listPosts()]);
       setCampaign(c);
-      setRows(q);
+      setRows(q.rows);
       setPosts(p.filter((x) => x.campaign_id === id));
-      setState(campaignState(q, c));
+      const next = campaignState(q.rows, c, { truncated: q.truncated });
+      setState(next);
+      // A count that disagrees with itself is reported in Hebrew through the
+      // activity log the owner already reads — never as an error on screen.
+      if (!q.truncated) {
+        for (const v of takeUnreported(checkCampaignInvariants(next, { campaignId: id, campaignName: c?.name ?? null }), `campaign:${id}`)) {
+          void logClientActivity('warn', `invariant_${v.code}`, `אי-התאמה בספירת הפרסומים — ${v.message}`, v.meta);
+        }
+      }
       setError(null);
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
@@ -103,7 +121,7 @@ export default function CampaignControlCenter() {
   }
 
   async function onStop() {
-    const pending = state ? state.progress.scheduled + state.progress.running + state.progress.manual : 0;
+    const pending = state ? cancellableRows(state.progress) : 0;
     const ok = await confirm.ask({
       title: 'לעצור את הסבב?',
       body: (
@@ -170,6 +188,8 @@ export default function CampaignControlCenter() {
 
   const paused = state?.state === 'paused';
   const closed = state?.state === 'completed' || state?.state === 'stopped';
+  /* Pause can only hold back rows that have not gone out yet. */
+  const canPause = Boolean(state) && openRows(state!.progress) > 0;
 
   return (
     <SocialShell
@@ -201,9 +221,9 @@ export default function CampaignControlCenter() {
           {state && (
             <div className="mt-4 flex flex-wrap items-center justify-center gap-5 sm:justify-start">
               <ProgressRing
-                percent={percentDone(state.progress)}
-                label={`${percentDone(state.progress)}%`}
-                sub={`${state.progress.done} / ${state.progress.total}`}
+                percent={percentPublished(state.progress)}
+                label={`${percentPublished(state.progress)}%`}
+                sub={`${state.progress.published} / ${state.progress.total} פורסמו`}
               />
               <dl className="grid min-w-0 flex-1 grid-cols-2 gap-2 [&>*]:min-w-0">
                 <Counter label="פורסמו" value={state.progress.published} tone="text-emerald-600" />
@@ -212,6 +232,12 @@ export default function CampaignControlCenter() {
                 <Counter label="דילוגים" value={state.progress.skipped} tone="text-mist-500" />
               </dl>
             </div>
+          )}
+
+          {state?.truncated && (
+            <Notice tone="warn">
+              בסבב הזה יותר פרסומים ממה שאפשר להציג בבת אחת, והמספרים כאן הם של {state.progress.total} הפרסומים הראשונים בלבד — לא של הסבב כולו.
+            </Notice>
           )}
 
           <div className="mt-4">{state && <CampaignProgressBar progress={state.progress} />}</div>
@@ -229,7 +255,8 @@ export default function CampaignControlCenter() {
                 המשך סבב
               </Button>
             ) : (
-              !closed && (
+              !closed &&
+              canPause && (
                 <Button variant="secondary" busy={busy === 'pause'} onClick={() => act('pause', () => pauseCampaign(id, true), 'הסבב הושהה. התור נשמר.')}>
                   השהה
                 </Button>

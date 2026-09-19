@@ -222,16 +222,30 @@ export const METHOD_LABEL: Record<PublishMethod, string> = {
 };
 
 /** Per-campaign rollup used by the campaigns screen and the dashboard. */
+/**
+ * One campaign's rows, counted once each. The buckets come from the single
+ * classification in status.ts, so this partitions `total` exactly:
+ *
+ *   total = published + failed + skipped + scheduled + running + manual
+ *
+ * There is deliberately no field called "done". That word was doing two jobs —
+ * "finished" and "succeeded" — and the screens rendered the first as if it
+ * meant the second, so a run that skipped everything read "84 מתוך 84 הושלמו".
+ * `published` is what succeeded; `finished` is what will not change again.
+ */
 export interface CampaignProgress {
   total: number;
   published: number;
   failed: number;
   skipped: number;
+  /** Waiting on the clock: 'scheduled' (and legacy 'paused'). */
   scheduled: number;
+  /** In flight: a worker is holding it right now. */
   running: number;
+  /** Waiting on a person: awaiting_confirmation, manual_pending, needs_attention. */
   manual: number;
   /** published + failed + skipped — everything that will not change again. */
-  done: number;
+  finished: number;
 }
 
 export const EMPTY_PROGRESS: CampaignProgress = {
@@ -242,7 +256,7 @@ export const EMPTY_PROGRESS: CampaignProgress = {
   scheduled: 0,
   running: 0,
   manual: 0,
-  done: 0,
+  finished: 0,
 };
 
 export type WorkerStatus = 'online' | 'needs_attention' | 'offline';

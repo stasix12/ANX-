@@ -10,7 +10,7 @@ import type { BrowserSettings, LimitsSettings, Post, QueueItem, SocialTarget, Va
  *   publish  — go ahead
  *   skip     — drop with a reason the owner sees in the history
  *   defer    — put back in the queue for `until` (too soon after the last post)
- *   wait     — leave untouched (campaign paused / worker not ready)
+ *   wait     — park until `until` (campaign paused / worker not ready)
  *
  * No network calls to Meta here; purely queue bookkeeping in Supabase.
  */
@@ -19,7 +19,7 @@ export type RuleDecision =
   | { action: 'publish' }
   | { action: 'skip'; reason: string }
   | { action: 'defer'; until: string; reason: string }
-  | { action: 'wait'; reason: string };
+  | { action: 'wait'; until: string; reason: string };
 
 export interface RuleContext {
   item: QueueItem;
@@ -32,6 +32,19 @@ export interface RuleContext {
 }
 
 const MAX_DEFERRALS = 40;
+
+/**
+ * How far ahead a parked row is pushed.
+ *
+ * 'wait' used to leave scheduled_at untouched, so a paused campaign's soonest
+ * row was due again the instant it was written back — and the claim that
+ * picked it up a poll later (5 s by default) had already incremented
+ * `attempts`. The head row therefore burned ~12 attempts a minute for as long
+ * as the pause lasted, and `attempts > MAX_DEFERRALS` turns a row into a
+ * permanent skip with a reason about spacing that describes nothing that
+ * happened. Pushing the instant forward makes waiting cost nothing.
+ */
+export const WAIT_MINUTES = 1;
 
 async function countPublished(db: SupabaseClient, filter: (q: any) => any): Promise<number> {
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
@@ -55,7 +68,9 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   const campaignId = item.campaign_id ?? post.campaign_id;
   if (campaignId) {
     const { data: campaign } = await db.from('social_campaigns').select('status').eq('id', campaignId).maybeSingle();
-    if (campaign?.status === 'paused') return { action: 'wait', reason: 'הסבב מושהה.' };
+    if (campaign?.status === 'paused') {
+      return { action: 'wait', until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(), reason: 'הסבב מושהה.' };
+    }
     if (campaign?.status === 'archived') return { action: 'skip', reason: 'הסבב נעצר.' };
   }
 

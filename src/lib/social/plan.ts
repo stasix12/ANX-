@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { dedupeKey, renderPostText } from './compose';
 import { dripSlots, slotsFor } from './slots';
+import { CANCELLABLE_STATUSES, OPEN_STATUSES } from './status';
 import type { MediaItem, Post, Schedule, Variant } from './types';
 import { pickVariant } from './variants';
 
@@ -168,7 +169,7 @@ async function occupiedSlots(db: SupabaseClient, postId: string): Promise<Set<st
     .from('social_queue')
     .select('target_id, scheduled_at')
     .eq('post_id', postId)
-    .in('status', ['scheduled', 'publishing', 'published', 'manual_pending', 'needs_attention', 'awaiting_confirmation', 'paused']);
+    .in('status', ['published', ...OPEN_STATUSES]);
   return new Set((data ?? []).map((r) => slotKey(r.target_id as string, r.scheduled_at as string)));
 }
 
@@ -199,7 +200,7 @@ async function plannedTargets(db: SupabaseClient, postId: string): Promise<Set<s
     .from('social_queue')
     .select('target_id')
     .eq('post_id', postId)
-    .in('status', ['scheduled', 'publishing', 'manual_pending', 'needs_attention', 'awaiting_confirmation', 'paused']);
+    .in('status', OPEN_STATUSES);
   return new Set((data ?? []).map((r) => r.target_id as string));
 }
 
@@ -226,7 +227,10 @@ async function stoppedCampaigns(db: SupabaseClient, note: PlanLogger): Promise<S
     .from('social_queue')
     .update({ status: 'skipped', step: '', skip_reason: 'הסבב נעצר' })
     .in('campaign_id', ids)
-    .in('status', ['scheduled', 'paused', 'awaiting_confirmation'])
+    // The same list stopCampaign() uses. It used to omit manual_pending and
+    // needs_attention, so a stopped run went on handing the owner work while
+    // its own card read "נעצר" — a stop that did not stop everything.
+    .in('status', CANCELLABLE_STATUSES)
     .select('id');
   if (stale?.length) {
     await note('warn', 'stopped_campaign_swept', `${stale.length} פרסומים של סבב שנעצר בוטלו`, { cancelled: stale.length });

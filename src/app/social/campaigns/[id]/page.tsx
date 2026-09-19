@@ -19,6 +19,7 @@ import {
   Tile,
   useConfirm,
   useToast,
+  ButtonLink,
 } from '@/components/social/ui';
 import {
   campaignQueue,
@@ -158,9 +159,7 @@ export default function CampaignControlCenter() {
             title="הקמפיין הזה לא קיים"
             description="ייתכן שהוא נמחק, או שהקישור ישן."
             action={
-              <Link href="/social/campaigns">
-                <Button size="lg">לכל הקמפיינים</Button>
-              </Link>
+              <ButtonLink href="/social/campaigns" size="lg">לכל הקמפיינים</ButtonLink>
             }
           />
         )}
@@ -286,9 +285,7 @@ export default function CampaignControlCenter() {
               title="לקמפיין הזה אין עדיין פרסומים"
               description="צרו פוסט בקמפיין, בחרו קבוצות ותזמנו — כל פרסום יופיע כאן עם השעה שלו."
               action={
-                <Link href={`/social/posts/new?campaign=${campaign.id}`}>
-                  <Button>צור פוסט לקמפיין</Button>
-                </Link>
+                <ButtonLink href={`/social/posts/new?campaign=${campaign.id}`}>צור פוסט לקמפיין</ButtonLink>
               }
             />
           )}

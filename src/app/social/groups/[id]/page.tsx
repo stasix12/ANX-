@@ -20,6 +20,7 @@ import {
   inputClass,
   useConfirm,
   useToast,
+  ButtonLink,
 } from '@/components/social/ui';
 import {
   bulkDeleteTargets,
@@ -124,9 +125,7 @@ export default function GroupProfilePage() {
             title="הקבוצה הזו לא קיימת"
             description="ייתכן שהיא הוסרה מרשימת היעדים, או שהקישור ישן."
             action={
-              <Link href="/social/groups">
-                <Button size="lg">לכל הקבוצות</Button>
-              </Link>
+              <ButtonLink href="/social/groups" size="lg">לכל הקבוצות</ButtonLink>
             }
           />
         )}
@@ -265,9 +264,7 @@ export default function GroupProfilePage() {
               title="עוד לא פרסמנו לקבוצה הזו"
               description="ברגע שתתזמנו פוסט אליה, כל פרסום יופיע כאן עם הסטטוס והשעה."
               action={
-                <Link href={`/social/posts/new?targets=${group.id}`}>
-                  <Button>צור פוסט לקבוצה</Button>
-                </Link>
+                <ButtonLink href={`/social/posts/new?targets=${group.id}`}>צור פוסט לקבוצה</ButtonLink>
               }
             />
           )}

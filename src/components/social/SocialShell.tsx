@@ -10,6 +10,7 @@ import {
   HomeIcon,
   MenuIcon,
   MegaphoneIcon,
+  SparklesIcon,
   SpinnerIcon,
   TargetIcon,
   UsersIcon,
@@ -42,12 +43,16 @@ const MOBILE_TABS = ['/social', '/social/campaigns', '/social/groups', '/social/
 export function SocialShell({
   title,
   subtitle,
+  lede,
   headerAction,
   children,
 }: {
   title: string;
-  /** Replaces the fixed product line above the title, for a screen that wants to greet. */
+  /** Replaces the product line in the identity bar. */
   subtitle?: string;
+  /** One line under the page title saying what this screen is for. */
+  lede?: string;
+  /** The screen's primary action, beside its title. */
   headerAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -78,16 +83,28 @@ export function SocialShell({
 
   return (
     <div className="min-h-dvh bg-ink-950 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-10">
-      <header className="sticky top-0 z-40 bg-gradient-to-l from-indigo-700 via-blue-600 to-sky-500 pt-[env(safe-area-inset-top)] shadow-md shadow-blue-900/25">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pb-2 pt-3 md:pb-2">
-          <div className="min-w-0">
-            <p dir="auto" className="truncate text-[11px] font-bold uppercase tracking-wider text-white/70">
-              {subtitle ?? 'הפתרון המבריק · פרסום'}
-            </p>
-            <h1 dir="auto" className="truncate text-xl font-extrabold tracking-tight text-white drop-shadow-sm">{title}</h1>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {headerAction}
+      {/*
+        A quiet, white identity bar. The previous header was a full-width
+        indigo-to-sky gradient carrying the screen title and a white pill
+        button — a lot of colour and height spent on chrome, which is what
+        made the product read as a template. The identity lives here; the
+        screen's own title and its primary action belong to the page, where
+        they can be sized against the content.
+      */}
+      <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5">
+          <Link href="/social" className="flex min-w-0 items-center gap-2.5">
+            <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500 text-white">
+              <SparklesIcon className="h-5 w-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-extrabold leading-tight text-mist-100">הפתרון המבריק</span>
+              <span dir="auto" className="block truncate text-[11px] leading-tight text-mist-500">
+                {subtitle ?? 'ניהול פרסומים בפייסבוק'}
+              </span>
+            </span>
+          </Link>
+          <div className="flex shrink-0 items-center gap-1">
             <NotificationBell />
           </div>
         </div>
@@ -101,8 +118,8 @@ export function SocialShell({
                   <Link
                     href={href}
                     aria-current={active ? 'page' : undefined}
-                    className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-bold transition-colors ${
-                      active ? 'bg-white text-blue-700 shadow-sm' : 'text-white/85 hover:bg-white/15'
+                    className={`flex min-h-10 items-center gap-1.5 rounded-xl px-3.5 text-sm font-bold transition-colors ${
+                      active ? 'bg-brand-500/10 text-brand-500' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -123,7 +140,24 @@ export function SocialShell({
         column shrink in the first place. Sheets are portalled to <body>, so
         nothing that must escape the page is clipped by this.
       */}
-      <main className="crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">{children}</main>
+      <main className="crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">
+        {/* The screen's own title, sized against the content rather than
+            squeezed into a coloured bar, with its primary action beside it. */}
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 dir="auto" className="truncate text-2xl font-extrabold tracking-tight text-mist-100">
+              {title}
+            </h1>
+            {lede && (
+              <p dir="auto" className="mt-0.5 truncate text-sm text-mist-500">
+                {lede}
+              </p>
+            )}
+          </div>
+          {headerAction && <div className="shrink-0">{headerAction}</div>}
+        </div>
+        {children}
+      </main>
 
       {/* Phone: iOS-style bottom tab bar, thumb-reachable. */}
       <nav

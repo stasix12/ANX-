@@ -603,3 +603,35 @@ export function BellIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Points along the inline axis. Rendered pointing right, flipped by the `rtl:`
+ * variant where it is used — a chevron is directional, so it follows text
+ * direction rather than staying put.
+ */
+export function ChevronIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
+/** Paper plane — "published". */
+export function SendIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M22 2 11 13" />
+      <path d="M22 2 15 22l-4-9-9-4Z" />
+    </svg>
+  );
+}
+
+/** Filled dot, for a status marker in a list. */
+export function DotIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props} fill="currentColor" stroke="none">
+      <circle cx="12" cy="12" r="5" />
+    </svg>
+  );
+}

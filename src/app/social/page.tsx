@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { PlusIcon } from '@/components/icons';
+import { CalendarIcon, ClockIcon, PlusIcon, SendIcon, XCircleIcon } from '@/components/icons';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { LiveCampaignHero, LiveQueueHero } from '@/components/social/LiveCampaignHero';
@@ -10,7 +10,7 @@ import { LiveBoard } from '@/components/social/LiveBoard';
 import { QuickActions } from '@/components/social/QuickActions';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
-import { Button, Card, EmptyState, Loading, Notice, SkeletonTiles, Tile, useConfirm, useToast } from '@/components/social/ui';
+import { AlertBar, Button, Card, EmptyState, Loading, Notice, SectionHeader, SkeletonTiles, StatCard, useConfirm, useToast, ButtonLink} from '@/components/social/ui';
 import {
   callSocialApi,
   campaignStates,
@@ -187,10 +187,11 @@ export default function SocialDashboard() {
     <SocialShell
       title="לוח בקרה"
       subtitle={greeting}
+      lede="סקירת הפעילות שלך היום"
       headerAction={
-        <Link href="/social/posts/new" className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-white px-3.5 text-sm font-bold text-blue-700 shadow-sm">
-          <PlusIcon className="h-4 w-4" strokeWidth={2.4} /> פוסט
-        </Link>
+        <ButtonLink href="/social/posts/new">
+            <PlusIcon className="h-4 w-4" strokeWidth={2.4} /> פוסט חדש
+          </ButtonLink>
       }
     >
       {error && <Notice tone="error">{error}</Notice>}
@@ -202,42 +203,67 @@ export default function SocialDashboard() {
       )}
       {data && (
         <div className="space-y-5">
+          {/* Compact alerts, ordered by how much they block the queue. */}
           {data.control.paused && (
-            <Notice tone="warn">
-              <strong>כל הפרסומים מושהים.</strong> שום דבר לא יצא עד שתפעילו מחדש.{' '}
-              <button type="button" className="font-extrabold underline" onClick={() => act('resume', () => setPaused(false), 'הפרסום חודש.')}>
-                הפעל עכשיו
-              </button>
-            </Notice>
+            <AlertBar
+              tone="warn"
+              title="כל הפרסומים מושהים"
+              body="שום דבר לא יוצא עד שתפעילו מחדש."
+              actionLabel="הפעל"
+              onAction={() => act('resume', () => setPaused(false), 'הפרסום חודש.')}
+            />
           )}
           {data.control.rateLimitedUntil && new Date(data.control.rateLimitedUntil) > new Date() && (
-            <Notice tone="warn">Meta ביקשה להאט — הפרסום יתחדש אוטומטית ב-{formatDateTimeHe(data.control.rateLimitedUntil)}.</Notice>
+            <AlertBar tone="warn" title="Meta ביקשה להאט" body={`הפרסום יתחדש אוטומטית ב-${formatDateTimeHe(data.control.rateLimitedUntil)}.`} />
           )}
           {data.counts.needs_attention > 0 && (
-            <Notice tone="error">
-              <strong>{data.counts.needs_attention} פרסומים תקועים</strong> וממתינים לכם. בדרך כלל פייסבוק ביקשה אימות בחלון של ה-worker.
-            </Notice>
+            <AlertBar
+              tone="bad"
+              title={`${data.counts.needs_attention} פרסומים תקועים וממתינים לכם`}
+              body="בדרך כלל פייסבוק ביקשה אימות בחלון של ה-worker."
+              actionLabel="הצג"
+              href="/social/history?status=needs_attention"
+            />
           )}
 
-          {/* 1 — the numbers first. The owner opens this screen to see where
-              the day stands before anything else, so the tiles lead. */}
+          {/* 1 — where the day stands. White cards; colour marks the status,
+              not the card. */}
           <section>
-            <h2 className="mb-2 text-sm font-extrabold uppercase tracking-wide text-mist-500">סטטיסטיקה</h2>
-            <div className="grid grid-cols-3 gap-2 md:grid-cols-6 [&>*]:min-w-0">
-              <Tile tinted label="פורסמו היום" value={data.today} tone={data.today ? 'good' : 'default'} sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`} />
-              <Tile tinted label="השבוע" value={data.week} tone="good" sub="מיום ראשון" />
-              <Tile tinted label="מתוזמנים" value={data.counts.scheduled} href="/social/history?status=scheduled" />
-              <Tile tinted label="הצליחו" value={data.counts.published} tone="good" sub="סך הכול" />
-              <Tile tinted label="נכשלו" value={data.counts.failed} tone={data.counts.failed ? 'bad' : 'default'} href="/social/history?status=failed" />
-              <Tile
-                tinted
+            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 [&>*]:min-w-0">
+              <StatCard
+                icon={<SendIcon className="h-4.5 w-4.5" />}
+                tone={data.today ? 'good' : 'neutral'}
+                label="פורסמו היום"
+                value={data.today}
+                sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`}
+                href="/social/history"
+              />
+              <StatCard
+                icon={<CalendarIcon className="h-4.5 w-4.5" />}
+                tone="brand"
+                label="מתוזמנים"
+                value={data.counts.scheduled}
+                sub="ממתינים להפעלה"
+                href="/social/history?status=scheduled"
+              />
+              <StatCard
+                icon={<ClockIcon className="h-4.5 w-4.5" />}
+                tone={data.counts.manual_pending + data.counts.needs_attention ? 'warn' : 'neutral'}
                 label="דורשים פעולה"
                 value={data.counts.manual_pending + data.counts.needs_attention}
-                tone={data.counts.manual_pending + data.counts.needs_attention ? 'warn' : 'default'}
                 sub={`${data.activeTargets} יעדים פעילים`}
+                href="/social/history?status=needs_attention"
+              />
+              <StatCard
+                icon={<XCircleIcon className="h-4.5 w-4.5" />}
+                tone={data.counts.failed ? 'bad' : 'neutral'}
+                label="נכשלו"
+                value={data.counts.failed}
+                sub="סך הכול"
+                href="/social/history?status=failed"
               />
             </div>
-            <p className="mt-1.5 text-[11px] text-mist-500">
+            <p className="mt-2 text-[11px] text-mist-500">
               המגבלה היומית ({data.limits.maxPerDay}) היא מספר שאתם קובעים בהגדרות — היא לא מכסה רשמית של פייסבוק.
             </p>
           </section>
@@ -272,9 +298,7 @@ export default function SocialDashboard() {
               title="אין קמפיין פעיל"
               description="צרו פוסט, בחרו קבוצות ותזמנו — ההתקדמות תופיע כאן, עם השעה של כל פרסום."
               action={
-                <Link href="/social/posts/new">
-                  <Button size="lg">התחל קמפיין</Button>
-                </Link>
+                <ButtonLink href="/social/posts/new" size="lg">התחל קמפיין</ButtonLink>
               }
             />
           )}

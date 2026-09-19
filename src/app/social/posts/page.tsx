@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlusIcon } from '@/components/icons';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Badge, Button, Card, EmptyState, Notice, OverflowMenu, SegmentedControl, SkeletonList, inputClass, useConfirm, useToast } from '@/components/social/ui';
+import { Badge, Button, Card, EmptyState, Notice, OverflowMenu, SegmentedControl, SkeletonList, inputClass, useConfirm, useToast, ButtonLink} from '@/components/social/ui';
 import { archivePost, duplicatePost, listCampaigns, listPosts } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, Post } from '@/lib/social/types';
@@ -121,9 +121,7 @@ export default function PostsPage() {
             title="אין עדיין פוסטים"
             description="פוסט הוא הטקסט והתמונות שיוצאים לקבוצות ולדפים. אפשר ליצור גם כמה גרסאות שלו, כדי שאותו נוסח לא יחזור שוב ושוב."
             action={
-              <Link href="/social/posts/new">
-                <Button size="lg">צור פוסט ראשון</Button>
-              </Link>
+              <ButtonLink href="/social/posts/new" size="lg">צור פוסט ראשון</ButtonLink>
             }
           />
         )}

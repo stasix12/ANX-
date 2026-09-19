@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircleIcon, CloseIcon, SpinnerIcon, XCircleIcon } from '@/components/icons';
+import { CheckCircleIcon, ChevronIcon, CloseIcon, DotIcon, SpinnerIcon, XCircleIcon } from '@/components/icons';
 import { QUEUE_STATUS_LABEL, type PublishMethod, type QueueStatus } from '@/lib/social/types';
 
 /**
@@ -112,11 +112,38 @@ export function Button({
       type="button"
       {...props}
       disabled={props.disabled || busy}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl font-bold transition-[background-color,transform,box-shadow] duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 ${buttonClass[variant]} ${buttonSize[size]} ${className}`}
+      className={`${BUTTON_BASE} ${buttonClass[variant]} ${buttonSize[size]} ${className}`}
     >
       {busy && <SpinnerIcon className="h-4 w-4 animate-spin" />}
       {children}
     </button>
+  );
+}
+
+/** The shared shape, so a link that looks like a button really matches one. */
+const BUTTON_BASE =
+  'inline-flex items-center justify-center gap-2 rounded-xl font-bold transition-[background-color,transform,box-shadow] duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50';
+
+/**
+ * A link that looks like a button.
+ *
+ * Exists because <Link><Button/></Link> nests a <button> inside an <a>, which
+ * is invalid HTML: the anchor collapses to an inline box with no height, so
+ * the thing measures as a 24px target even though the button inside it is 44,
+ * and assistive technology is handed two nested controls for one action.
+ */
+export function ButtonLink({
+  href,
+  variant = 'primary',
+  size = 'md',
+  className = '',
+  children,
+  ...props
+}: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string; variant?: ButtonVariant; size?: ButtonSize }) {
+  return (
+    <Link href={href} {...props} className={`${BUTTON_BASE} ${buttonClass[variant]} ${buttonSize[size]} ${className}`}>
+      {children}
+    </Link>
   );
 }
 
@@ -743,5 +770,230 @@ export function OverflowMenu({ label, actions, className = '' }: { label: string
         </ul>
       </Sheet>
     </>
+  );
+}
+
+/* =============================================================== surfaces */
+
+/**
+ * The design language, in four rules, so screens stop inventing their own:
+ *
+ *   surface   one white card style — hairline border, soft shadow, r-2xl
+ *   section   a heading and an optional "show all", never a card in a card
+ *   stat      a figure with an icon chip; colour marks the status, not the card
+ *   row       a compact list line: image, name, meta, status, menu
+ *
+ * Colour is reserved for state. A card is white; a number can be green, red or
+ * amber; nothing else is tinted. That is what separates a product from an
+ * admin template, and it is cheap to hold once it lives in one file.
+ */
+export const CARD = 'rounded-2xl border border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(13,38,76,0.04),0_8px_24px_-16px_rgba(13,38,76,0.18)]';
+
+type Tone = 'brand' | 'good' | 'bad' | 'warn' | 'neutral';
+
+/** Icon chip colours. The chip is tinted; the card never is. */
+const CHIP: Record<Tone, string> = {
+  brand: 'bg-brand-500/10 text-brand-500',
+  good: 'bg-emerald-500/10 text-emerald-600',
+  bad: 'bg-rose-500/10 text-rose-600',
+  warn: 'bg-amber-500/12 text-amber-600',
+  neutral: 'bg-ink-800 text-mist-500',
+};
+
+/** The figure's colour. Neutral by default: not every number is a status. */
+const FIGURE: Record<Tone, string> = {
+  brand: 'text-brand-500',
+  good: 'text-emerald-600',
+  bad: 'text-rose-600',
+  warn: 'text-amber-600',
+  neutral: 'text-mist-100',
+};
+
+/**
+ * A section heading with an optional link to the full list. Sections are
+ * separated by a heading and space, not by nesting another card.
+ */
+export function SectionHeader({ title, href, linkLabel = 'הצג הכל' }: { title: string; href?: string; linkLabel?: string }) {
+  return (
+    <div className="mb-2.5 flex items-baseline justify-between gap-3">
+      <h2 className="text-base font-extrabold tracking-tight text-mist-100">{title}</h2>
+      {href && (
+        <Link href={href} className="inline-flex min-h-10 items-center gap-0.5 text-sm font-bold text-brand-500">
+          {linkLabel}
+          <ChevronIcon className="h-4 w-4 rtl:rotate-180" />
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One statistic. The number is the element; the icon chip carries the tone and
+ * the chevron appears only when there is somewhere to go.
+ */
+export function StatCard({
+  label,
+  value,
+  sub,
+  icon,
+  tone = 'neutral',
+  href,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ReactNode;
+  tone?: Tone;
+  href?: string;
+}) {
+  const body = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <span aria-hidden className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${CHIP[tone]}`}>
+          {icon}
+        </span>
+        {href && <ChevronIcon aria-hidden className="mt-1 h-4 w-4 shrink-0 text-mist-500 rtl:rotate-180" />}
+      </div>
+      <p dir="auto" className="mt-2 truncate text-xs font-bold text-mist-500">
+        {label}
+      </p>
+      <p className={`text-[26px] font-extrabold leading-none tabular-nums ${FIGURE[tone]}`}>{value}</p>
+      {sub && (
+        <p dir="auto" className="mt-1 truncate text-[11px] text-mist-500">
+          {sub}
+        </p>
+      )}
+    </>
+  );
+  const cls = `${CARD} block min-w-0 p-3.5 text-start`;
+  return href ? (
+    <Link href={href} className={`${cls} transition-transform active:scale-[0.985]`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
+  );
+}
+
+/**
+ * A compact alert. One line of what happened, one of what it means, and the
+ * way to act on it — never a full-width banner that pushes the screen down.
+ */
+export function AlertBar({
+  tone = 'bad',
+  title,
+  body,
+  actionLabel,
+  href,
+  onAction,
+}: {
+  tone?: 'bad' | 'warn' | 'info';
+  title: string;
+  body?: string;
+  actionLabel?: string;
+  href?: string;
+  onAction?: () => void;
+}) {
+  const skin = {
+    bad: 'border-rose-500/25 bg-rose-500/[0.06]',
+    warn: 'border-amber-500/30 bg-amber-500/[0.07]',
+    info: 'border-brand-500/25 bg-brand-500/[0.06]',
+  }[tone];
+  const mark = { bad: 'bg-rose-500 text-white', warn: 'bg-amber-500 text-white', info: 'bg-brand-500 text-white' }[tone];
+  const link = { bad: 'text-rose-700 border-rose-500/30', warn: 'text-amber-700 border-amber-500/30', info: 'text-brand-500 border-brand-500/30' }[tone];
+
+  return (
+    <div className={`flex items-center gap-3 rounded-2xl border px-3 py-2.5 ${skin}`}>
+      <span aria-hidden className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-extrabold ${mark}`}>
+        !
+      </span>
+      <div className="min-w-0 grow">
+        <p dir="auto" className="truncate text-sm font-extrabold text-mist-100">
+          {title}
+        </p>
+        {body && (
+          <p dir="auto" className="truncate text-xs text-mist-500">
+            {body}
+          </p>
+        )}
+      </div>
+      {actionLabel &&
+        (href ? (
+          <Link href={href} className={`inline-flex min-h-10 shrink-0 items-center gap-0.5 rounded-xl border bg-ink-850 px-2.5 text-sm font-bold ${link}`}>
+            {actionLabel}
+            <ChevronIcon className="h-4 w-4 rtl:rotate-180" />
+          </Link>
+        ) : (
+          <button type="button" onClick={onAction} className={`inline-flex min-h-10 shrink-0 items-center gap-0.5 rounded-xl border bg-ink-850 px-2.5 text-sm font-bold ${link}`}>
+            {actionLabel}
+            <ChevronIcon className="h-4 w-4 rtl:rotate-180" />
+          </button>
+        ))}
+    </div>
+  );
+}
+
+/** The colour of a status dot in a list row. */
+export const DOT_TONE: Record<Tone, string> = {
+  brand: 'text-brand-500',
+  good: 'text-emerald-500',
+  bad: 'text-rose-500',
+  warn: 'text-amber-500',
+  neutral: 'text-mist-500',
+};
+
+/**
+ * A line in a compact list: picture, name, one line of context, a time, a
+ * status dot and an overflow menu. Deliberately not a card — a screenful of
+ * cards reads as a template.
+ */
+export function ListRow({
+  media,
+  title,
+  subtitle,
+  meta,
+  tone = 'neutral',
+  href,
+  actions,
+  menuLabel,
+}: {
+  media?: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  meta?: string;
+  tone?: Tone;
+  href?: string;
+  actions?: MenuAction[];
+  menuLabel?: string;
+}) {
+  const inner = (
+    <>
+      {media && <span className="shrink-0">{media}</span>}
+      <span className="min-w-0 grow text-start">
+        <span dir="auto" className="block truncate text-sm font-bold text-mist-100">
+          {title}
+        </span>
+        {subtitle && (
+          <span dir="auto" className="mt-0.5 block truncate text-xs text-mist-500">
+            {subtitle}
+          </span>
+        )}
+      </span>
+      {meta && <span className="shrink-0 tabular-nums text-sm font-bold text-mist-300">{meta}</span>}
+      <DotIcon aria-hidden className={`h-2.5 w-2.5 shrink-0 ${DOT_TONE[tone]}`} />
+    </>
+  );
+
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      {href ? (
+        <Link href={href} className="flex min-h-11 min-w-0 grow items-center gap-3">
+          {inner}
+        </Link>
+      ) : (
+        <span className="flex min-h-11 min-w-0 grow items-center gap-3">{inner}</span>
+      )}
+      {actions && actions.length > 0 && <OverflowMenu label={menuLabel ?? `פעולות עבור ${title}`} actions={actions} />}
+    </li>
   );
 }

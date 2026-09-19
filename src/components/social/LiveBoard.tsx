@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { cancelQueueItem, confirmQueueItem, listLiveQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
 import { QueueSections } from './QueueSections';
-import { Button, Card, Notice, SkeletonList, useConfirm, useToast } from './ui';
+import { Button, Card, Notice, SkeletonList, useConfirm, useToast, ButtonLink} from './ui';
 import { friendlyMessage } from '@/lib/social/errors';
 
 /**
@@ -92,9 +92,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
           rows={rows}
           actions={actions}
           emptyAction={
-            <Link href="/social/posts/new">
-              <Button>צרו פוסט ראשון</Button>
-            </Link>
+            <ButtonLink href="/social/posts/new">צרו פוסט ראשון</ButtonLink>
           }
         />
       )}

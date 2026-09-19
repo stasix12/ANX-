@@ -20,6 +20,7 @@ import {
   inputClass,
   useConfirm,
   useToast,
+  ButtonLink,
 } from '@/components/social/ui';
 import {
   addGroup,
@@ -415,9 +416,7 @@ export default function GroupsPage() {
         <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl bg-ink-850 p-2.5 shadow-2xl ring-1 ring-ink-600">
             <Badge tone="brand">נבחרו {selected.length}</Badge>
-            <Link href={`/social/posts/new?targets=${selected.join(',')}`}>
-              <Button size="sm">צור פוסט</Button>
-            </Link>
+            <ButtonLink href={`/social/posts/new?targets=${selected.join(',')}`} size="sm">צור פוסט</ButtonLink>
             <Button size="sm" variant="secondary" busy={busy === 'bulk-on'} onClick={() => act('bulk-on', () => bulkUpdateTargets(selected, { enabled: true }), 'הופעלו.')}>
               הפעל
             </Button>

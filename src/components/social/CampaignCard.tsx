@@ -5,7 +5,7 @@ import { RUN_STATE_LABEL, RUN_STATE_TONE, type CampaignState } from '@/lib/socia
 import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem } from '@/lib/social/types';
-import { PlayIcon } from '@/components/icons';
+import { PlayIcon, PlusIcon } from '@/components/icons';
 import { CampaignProgressBar } from './CampaignProgressBar';
 import { TargetAvatar } from './TargetAvatar';
 import { Badge, Button } from './ui';
@@ -29,6 +29,7 @@ export function CampaignCard({
   compact = false,
   media = null,
   nextTargetImage = null,
+  hasPost = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status'>;
   state: CampaignState;
@@ -36,6 +37,8 @@ export function CampaignCard({
   media?: MediaItem | null;
   /** The next group's picture, when the queue has one waiting. */
   nextTargetImage?: string | null;
+  /** Whether the run has a post at all — an empty run gets no media slot. */
+  hasPost?: boolean;
   onPause?: () => void;
   onResume?: () => void;
   busy?: boolean;
@@ -51,6 +54,19 @@ export function CampaignCard({
       <header className="flex items-start justify-between gap-3">
         {/* What is going out, not just its name. A run card without the picture
             makes the owner open the post to remember which one this is. */}
+        {!media && hasPost && (
+          /* The post has nothing attached. An empty corner reads as a picture
+             that failed to load, so say what is missing — and make it the way
+             to fix it, since the answer is always "open the post and add one". */
+          <Link
+            href={link}
+            aria-label="לפוסט אין תמונה או סרטון — הוספת מדיה"
+            className="flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-ink-600 bg-ink-900 text-ink-500 transition-colors hover:border-brand-500 hover:text-brand-400"
+          >
+            <PlusIcon aria-hidden className="h-4 w-4" />
+            <span className="text-[9px] font-bold leading-none">מדיה</span>
+          </Link>
+        )}
         {media && (
           <Link href={link} className="relative block h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-ink-700 bg-ink-900">
             {media.kind === 'video' ? (

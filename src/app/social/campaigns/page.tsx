@@ -174,6 +174,7 @@ export default function CampaignsPage() {
                      picture — both already loaded, neither was being shown. */
                   media={mine.find((p) => p.media?.length)?.media?.[0] ?? null}
                   nextTargetImage={state.upcoming.find((r) => r.target?.image_url)?.target?.image_url ?? null}
+                  hasPost={mine.length > 0}
                   busy={busy === `pause-${c.id}` || busy === `resume-${c.id}`}
                   onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הסבב הושהה.')}
                   onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הסבב ממשיך.')}

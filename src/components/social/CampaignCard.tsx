@@ -33,8 +33,8 @@ export function CampaignCard({
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status'>;
   state: CampaignState;
-  /** The cover of the post this run publishes — what is actually going out. */
-  media?: MediaItem | null;
+  /** The media of the post this run publishes — cover picked as the library does. */
+  media?: MediaItem[] | null;
   /** The next group's picture, when the queue has one waiting. */
   nextTargetImage?: string | null;
   /** Whether the run has a post at all — an empty run gets no media slot. */
@@ -46,6 +46,10 @@ export function CampaignCard({
   compact?: boolean;
 }) {
   const link = href ?? `/social/campaigns/${campaign.id}`;
+  /* Same rule as the library card: the first IMAGE, and failing that whatever
+     media exists — picking media[0] blindly leaves a post whose first item is
+     a video looking different here than it does in the library. */
+  const cover = (media ?? []).find((m) => m.kind === 'image') ?? (media ?? [])[0] ?? null;
   const running = state.state === 'running';
   const paused = state.state === 'paused';
 
@@ -54,7 +58,7 @@ export function CampaignCard({
       <header className="flex items-start justify-between gap-3">
         {/* What is going out, not just its name. A run card without the picture
             makes the owner open the post to remember which one this is. */}
-        {!media && hasPost && (
+        {!cover && hasPost && (
           /* The post has nothing attached. An empty corner reads as a picture
              that failed to load, so say what is missing — and make it the way
              to fix it, since the answer is always "open the post and add one". */
@@ -67,17 +71,27 @@ export function CampaignCard({
             <span className="text-[9px] font-bold leading-none">מדיה</span>
           </Link>
         )}
-        {media && (
-          <Link href={link} className="relative block h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-ink-700 bg-ink-900">
-            {media.kind === 'video' ? (
+        {cover && (
+          <Link href={link} className="relative block h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-ink-800">
+            {cover.kind === 'image' && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={cover.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+            )}
+            {cover.kind === 'video' && (
               <>
-                <video src={`${media.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                <span className="absolute inset-0 flex items-center justify-center bg-ink-950/40">
-                  <PlayIcon aria-hidden className="h-5 w-5 text-mist-100" />
+                {/* Same treatment as the library card: the poster frame, not the
+                    film. preload="metadata" fetches the header only and #t=0.1
+                    is what makes iOS Safari paint a frame instead of a black
+                    box. If it does not paint, the neutral tile and the play mark
+                    remain — never a stock image standing in for their video. */}
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video src={`${cover.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                <span aria-hidden className="absolute inset-0 grid place-items-center">
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-ink-950/60 text-mist-100">
+                    <PlayIcon className="h-3.5 w-3.5" />
+                  </span>
                 </span>
               </>
-            ) : (
-              <img src={media.url} alt="" loading="lazy" className="h-full w-full object-cover" />
             )}
           </Link>
         )}

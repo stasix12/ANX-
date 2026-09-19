@@ -172,7 +172,7 @@ export default function CampaignsPage() {
                   state={state}
                   /* The cover of the run's post, and the next group's own
                      picture — both already loaded, neither was being shown. */
-                  media={mine.find((p) => p.media?.length)?.media?.[0] ?? null}
+                  media={mine.find((p) => p.media?.length)?.media ?? null}
                   nextTargetImage={state.upcoming.find((r) => r.target?.image_url)?.target?.image_url ?? null}
                   hasPost={mine.length > 0}
                   busy={busy === `pause-${c.id}` || busy === `resume-${c.id}`}

@@ -36,6 +36,7 @@ import { formatDayMonthHe } from '@/lib/social/time';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
+import { SearchIcon, UsersIcon } from '@/components/icons';
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent';
 type View = 'grid' | 'list';
@@ -206,10 +207,11 @@ export default function GroupsPage() {
   return (
     <SocialShell
       title="קבוצות"
+      lede="היעדים שאליהם המערכת מפרסמת"
       headerAction={
-        <button type="button" onClick={() => setAddOpen(true)} className="inline-flex min-h-10 items-center rounded-full bg-white px-3.5 text-sm font-bold text-blue-700 shadow-sm">
+        <Button onClick={() => setAddOpen(true)}>
           + הוסף
-        </button>
+        </Button>
       }
     >
       <div className="space-y-4 pb-20">
@@ -296,7 +298,7 @@ export default function GroupsPage() {
 
         {groups && all.length === 0 && (
           <EmptyState
-            icon="👥"
+            icon={<UsersIcon className="h-5 w-5" />}
             title="אין עדיין קבוצות"
             description="הדביקו קישור לקבוצת פייסבוק שאתם חברים בה ומותר לכם לפרסם בה. אפשר גם להדביק עשרות קישורים בבת אחת."
             action={<Button onClick={() => setAddOpen(true)}>הוסף קבוצה ראשונה</Button>}
@@ -305,7 +307,7 @@ export default function GroupsPage() {
 
         {groups && all.length > 0 && visible.length === 0 && (
           <EmptyState
-            icon="🔎"
+            icon={<SearchIcon className="h-5 w-5" />}
             title="אין קבוצות שמתאימות לסינון"
             description="נסו לנקות את החיפוש או לבחור 'הכל'."
             action={

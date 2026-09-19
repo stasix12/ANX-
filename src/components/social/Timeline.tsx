@@ -4,6 +4,7 @@ import type { QueueRow } from '@/lib/social/client';
 import { formatDateHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { TargetAvatar } from './TargetAvatar';
 import { EmptyState } from './ui';
+import { CalendarIcon } from '@/components/icons';
 
 /**
  * What is about to happen, as a vertical strip you can read in a second:
@@ -29,7 +30,7 @@ const DOT: Record<string, string> = {
 export function Timeline({ rows, limit = 8 }: { rows: QueueRow[]; limit?: number }) {
   const items = rows.slice(0, limit);
   if (!items.length) {
-    return <EmptyState icon="🗓️" title="אין פרסום מתוכנן" description="כשתתזמנו קמפיין, סדר הפרסומים יופיע כאן לפי שעות." />;
+    return <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="אין פרסום מתוכנן" description="כשתתזמנו קמפיין, סדר הפרסומים יופיע כאן לפי שעות." />;
   }
 
   const today = zonedDateISO(new Date());

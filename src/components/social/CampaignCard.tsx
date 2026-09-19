@@ -93,12 +93,12 @@ export function CampaignCard({
       <div className="mt-3.5 flex flex-wrap gap-2">
         {paused && onResume && (
           <Button busy={busy} onClick={onResume}>
-            ▶ המשך קמפיין
+            המשך קמפיין
           </Button>
         )}
         {!paused && state.state !== 'completed' && state.state !== 'stopped' && onPause && (
           <Button variant="secondary" busy={busy} onClick={onPause}>
-            ⏸ השהה
+            השהה
           </Button>
         )}
         <Link href={link} className="ms-auto inline-flex min-h-11 items-center rounded-xl bg-ink-800 px-4 text-sm font-bold text-mist-100">

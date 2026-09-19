@@ -20,6 +20,7 @@ import { cancelQueueItem, listCampaigns, listQueue, retryQueueItem, screenshotUr
 import { zonedToUtc } from '@/lib/social/time';
 import { type PublishMethod, type QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
+import { InboxIcon } from '@/components/icons';
 
 /** Coarse buckets people actually filter by, mapped onto the real statuses. */
 const STATUS_GROUPS: { value: string; label: string; statuses: QueueStatus[] }[] = [
@@ -45,7 +46,7 @@ export default function HistoryPage() {
   return (
     <Suspense
       fallback={
-        <SocialShell title="היסטוריה">
+        <SocialShell title="היסטוריה" lede="כל מה שיצא, ומה שנכשל">
           <Loading />
         </SocialShell>
       }
@@ -138,7 +139,7 @@ function HistoryScreen() {
   };
 
   return (
-    <SocialShell title="היסטוריה">
+    <SocialShell title="היסטוריה" lede="כל מה שיצא, ומה שנכשל">
       <div className="space-y-4">
         {error && <Notice tone="error">{error}</Notice>}
 
@@ -206,7 +207,7 @@ function HistoryScreen() {
           {!rows && <SkeletonList rows={6} />}
           {rows && filtered.length === 0 && (
             <EmptyState
-              icon="🗂️"
+              icon={<InboxIcon className="h-5 w-5" />}
               title="אין רשומות בסינון הזה"
               description="נסו טווח תאריכים רחב יותר, או נקו את החיפוש."
               action={

@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { CopyIcon } from '@/components/icons';
+import { CheckCircleIcon, CopyIcon } from '@/components/icons';
 import { PostPreview } from '@/components/social/PostPreview';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Badge, Button, Card, EmptyState, Field, Loading, Notice, ProgressBar, inputClass, useToast } from '@/components/social/ui';
@@ -110,7 +110,7 @@ export default function ManualKitPage() {
           the link is stale — so say that, and offer the way on. */}
       {loaded && !item && !error && (
         <EmptyState
-          icon="✅"
+          icon={<CheckCircleIcon className="h-5 w-5" />}
           title="הפריט הזה כבר לא ממתין"
           description="הוא כנראה כבר פורסם, דולג או הוסר. אפשר להמשיך לפריט הבא בתור."
           action={

@@ -88,7 +88,7 @@ export function PublicationItem({
       ? { label: 'נסה שוב', icon: '🔁', onSelect: () => actions.onRetry?.(row) }
       : null,
     actions.onRunNow && row.status === 'scheduled' && new Date(row.scheduled_at).getTime() > Date.now() + 60_000
-      ? { label: 'הרץ עכשיו', icon: '🚀', onSelect: () => actions.onRunNow?.(row) }
+      ? { label: 'הרץ עכשיו', onSelect: () => actions.onRunNow?.(row) }
       : null,
     row.target?.url ? { label: 'פתח את הקבוצה', icon: '↗', onSelect: () => window.open(row.target?.url, '_blank', 'noreferrer') } : null,
     row.permalink ? { label: 'פתח את הפוסט שפורסם', icon: '🔗', onSelect: () => window.open(row.permalink as string, '_blank', 'noreferrer') } : null,

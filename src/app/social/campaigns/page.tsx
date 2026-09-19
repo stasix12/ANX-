@@ -31,6 +31,7 @@ import {
 import { campaignState, type CampaignState } from '@/lib/social/campaign';
 import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
+import { MegaphoneIcon } from '@/components/icons';
 
 const blank = { name: '', service: '', city: '', language: 'he' as Campaign['language'], notes: '' };
 
@@ -121,10 +122,11 @@ export default function CampaignsPage() {
   return (
     <SocialShell
       title="קמפיינים"
+      lede="נהלו את הקמפיינים שלכם"
       headerAction={
-        <button type="button" onClick={() => openEditor()} className="inline-flex min-h-10 items-center rounded-full bg-white px-3.5 text-sm font-bold text-blue-700 shadow-sm">
+        <Button onClick={() => openEditor()}>
           + קמפיין
-        </button>
+        </Button>
       }
     >
       <div className="space-y-4">
@@ -149,7 +151,7 @@ export default function CampaignsPage() {
 
         {campaigns && visible.length === 0 && (
           <EmptyState
-            icon="📣"
+            icon={<MegaphoneIcon className="h-5 w-5" />}
             title={counts.all === 0 ? 'אין עדיין קמפיינים' : 'אין קמפיינים בסינון הזה'}
             description={
               counts.all === 0

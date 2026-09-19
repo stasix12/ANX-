@@ -316,7 +316,7 @@ export function PostEditor({ postId }: { postId?: string }) {
     <SocialShell
       title={postId ? post.title || 'עריכת פוסט' : 'פוסט חדש'}
       headerAction={
-        <Button variant="secondary" busy={busy === 'save'} onClick={onSave} className="!bg-white !text-blue-700">
+        <Button variant="secondary" busy={busy === 'save'} onClick={onSave}>
           שמור
         </Button>
       }

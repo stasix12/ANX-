@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import type { QueueRow } from '@/lib/social/client';
 import { PublicationItem, type PublicationActions } from './PublicationItem';
 import { EmptyState } from './ui';
+import { SendIcon } from '@/components/icons';
 
 /**
  * The live queue in the three states a person actually asks about: what is
@@ -47,7 +48,7 @@ export function QueueSections({
   }, [rows]);
 
   if (!rows.length) {
-    return <EmptyState icon="🚀" title={emptyTitle} description={emptyDescription} action={emptyAction} />;
+    return <EmptyState icon={<SendIcon className="h-5 w-5" />} title={emptyTitle} description={emptyDescription} action={emptyAction} />;
   }
 
   return (

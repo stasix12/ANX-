@@ -55,7 +55,7 @@ export function PreLaunchReview({
       footer={
         <div className="flex gap-2">
           <Button size="lg" className="grow" busy={busy} onClick={onStart} disabled={!targets.length}>
-            🚀 התחל פרסום
+            התחל פרסום
           </Button>
           <Button size="lg" variant="secondary" onClick={onClose}>
             חזור

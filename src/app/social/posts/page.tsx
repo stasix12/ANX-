@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlusIcon } from '@/components/icons';
+import { ClipboardListIcon, PlusIcon, SearchIcon } from '@/components/icons';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Badge, Button, Card, EmptyState, Notice, OverflowMenu, SegmentedControl, SkeletonList, inputClass, useConfirm, useToast, ButtonLink} from '@/components/social/ui';
 import { archivePost, duplicatePost, listCampaigns, listPosts } from '@/lib/social/client';
@@ -82,10 +82,11 @@ export default function PostsPage() {
   return (
     <SocialShell
       title="פוסטים"
+      lede="התוכן שמוכן לפרסום"
       headerAction={
-        <Link href="/social/posts/new" className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-white px-3.5 text-sm font-bold text-blue-700 shadow-sm">
+        <ButtonLink href="/social/posts/new">
           <PlusIcon className="h-4 w-4" strokeWidth={2.4} /> חדש
-        </Link>
+        </ButtonLink>
       }
     >
       <div className="space-y-4">
@@ -117,7 +118,7 @@ export default function PostsPage() {
 
         {posts && posts.length === 0 && (
           <EmptyState
-            icon="📝"
+            icon={<ClipboardListIcon className="h-5 w-5" />}
             title="אין עדיין פוסטים"
             description="פוסט הוא הטקסט והתמונות שיוצאים לקבוצות ולדפים. אפשר ליצור גם כמה גרסאות שלו, כדי שאותו נוסח לא יחזור שוב ושוב."
             action={
@@ -127,7 +128,7 @@ export default function PostsPage() {
         )}
 
         {posts && posts.length > 0 && visible.length === 0 && (
-          <EmptyState icon="🔎" title="אין פוסטים בסינון הזה" action={<Button variant="secondary" onClick={() => { setQuery(''); setFilter('all'); }}>נקה סינון</Button>} />
+          <EmptyState icon={<SearchIcon className="h-5 w-5" />} title="אין פוסטים בסינון הזה" action={<Button variant="secondary" onClick={() => { setQuery(''); setFilter('all'); }}>נקה סינון</Button>} />
         )}
 
         {visible.length > 0 && (

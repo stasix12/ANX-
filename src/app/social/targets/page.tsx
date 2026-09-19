@@ -21,6 +21,7 @@ import { callSocialApi, listTargets, updateTarget } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import { PERMISSION_LABEL, REQUIRED_SCOPES, type SocialAccount, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
+import { TagIcon } from '@/components/icons';
 
 interface Status {
   configured: { facebookApp: boolean; serviceRole: boolean; encryptionKey: boolean; cronSecret: boolean };
@@ -29,7 +30,7 @@ interface Status {
 
 export default function TargetsPage() {
   return (
-    <Suspense fallback={<SocialShell title="דפי פייסבוק"><Loading /></SocialShell>}>
+    <Suspense fallback={<SocialShell title="דפי פייסבוק" lede="דפים שמפרסמים דרך ה-API הרשמי"><Loading /></SocialShell>}>
       <TargetsScreen />
     </Suspense>
   );
@@ -100,7 +101,7 @@ function TargetsScreen() {
   const groups = (targets ?? []).filter((t) => t.channel === 'facebook_group' || t.channel === 'facebook_group_manual');
 
   return (
-    <SocialShell title="דפי פייסבוק">
+    <SocialShell title="דפי פייסבוק" lede="דפים שמפרסמים דרך ה-API הרשמי">
       <div className="space-y-5">
         {flash && <Notice tone="info">{flash}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
@@ -180,7 +181,7 @@ function TargetsScreen() {
           {targets === null && <SkeletonList rows={2} />}
           {targets && pages.length === 0 && (
             <EmptyState
-              icon="🏷️"
+              icon={<TagIcon className="h-5 w-5" />}
               title="אין דפים מחוברים"
               description='התחברו לפייסבוק ולחצו "סנכרן". מוצגים רק דפים שאתם מנהלים ושנתתם להם הרשאת פרסום.'
             />

@@ -61,8 +61,9 @@ export default function SettingsPage() {
   return (
     <SocialShell
       title="הגדרות"
+      lede="קצב, מגבלות ופרטי העסק"
       headerAction={
-        <Button busy={busy} onClick={save} className="!min-h-10 !bg-white !text-blue-700">
+        <Button busy={busy} onClick={save}>
           שמור
         </Button>
       }

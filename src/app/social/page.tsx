@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarIcon, ClockIcon, PlusIcon, SendIcon, XCircleIcon } from '@/components/icons';
+import { CalendarIcon, ClockIcon, MegaphoneIcon, PlusIcon, SendIcon, XCircleIcon } from '@/components/icons';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { LiveCampaignHero, LiveQueueHero } from '@/components/social/LiveCampaignHero';
@@ -294,7 +294,7 @@ export default function SocialDashboard() {
             />
           ) : (
             <EmptyState
-              icon="📣"
+              icon={<MegaphoneIcon className="h-5 w-5" />}
               title="אין קמפיין פעיל"
               description="צרו פוסט, בחרו קבוצות ותזמנו — ההתקדמות תופיע כאן, עם השעה של כל פרסום."
               action={

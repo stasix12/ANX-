@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { CalendarIcon, PlusIcon, UsersIcon } from '@/components/icons';
+import { CalendarIcon, PlusIcon, SendIcon, SpinnerIcon, UsersIcon } from '@/components/icons';
 
 /**
  * The four things the owner does on a normal morning, one tap each. Sits
@@ -33,7 +33,7 @@ export function QuickActions({ onRunNow, running }: { onRunNow: () => void; runn
       </Link>
       <button type="button" onClick={onRunNow} disabled={running} className={`${tile} disabled:opacity-60`}>
         <span aria-hidden className="grid h-8 w-8 place-items-center sm:h-9 sm:w-9 rounded-full bg-emerald-500/10 text-emerald-700">
-          {running ? '⏳' : '🚀'}
+          {running ? <SpinnerIcon className="h-4.5 w-4.5 animate-spin" /> : <SendIcon className="h-4.5 w-4.5" />}
         </span>
         {running ? 'רץ…' : 'פרסם עכשיו'}
       </button>

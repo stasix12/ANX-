@@ -38,6 +38,7 @@ import { KNOWN_CITIES, OTHER_CITY, detectCity, sortCities } from '@/lib/social/c
 import { formatDateTimeHe } from '@/lib/social/time';
 import { CHANNEL_LABEL, type Campaign, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
+import { ClockIcon, SearchIcon } from '@/components/icons';
 
 /**
  * One group's whole story: how it is configured, how many times we published
@@ -121,7 +122,7 @@ export default function GroupProfilePage() {
           <Notice tone="error">{error}</Notice>
         ) : (
           <EmptyState
-            icon="🔍"
+            icon={<SearchIcon className="h-5 w-5" />}
             title="הקבוצה הזו לא קיימת"
             description="ייתכן שהיא הוסרה מרשימת היעדים, או שהקישור ישן."
             action={
@@ -141,9 +142,9 @@ export default function GroupProfilePage() {
     <SocialShell
       title={group.name}
       headerAction={
-        <Link href={`/social/posts/new?targets=${group.id}`} className="inline-flex min-h-10 items-center rounded-full bg-white px-3.5 text-sm font-bold text-blue-700 shadow-sm">
+        <ButtonLink href={`/social/posts/new?targets=${group.id}`}>
           + פוסט
-        </Link>
+        </ButtonLink>
       }
     >
       <div className="space-y-5">
@@ -260,7 +261,7 @@ export default function GroupProfilePage() {
           {!rows && <Loading />}
           {rows && rows.length === 0 && (
             <EmptyState
-              icon="🕓"
+              icon={<ClockIcon className="h-5 w-5" />}
               title="עוד לא פרסמנו לקבוצה הזו"
               description="ברגע שתתזמנו פוסט אליה, כל פרסום יופיע כאן עם הסטטוס והשעה."
               action={

@@ -37,6 +37,7 @@ import { RUN_STATE_LABEL, RUN_STATE_TONE, campaignState, percentDone, type Campa
 import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import type { Campaign, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
+import { CalendarIcon, ClipboardListIcon, SearchIcon } from '@/components/icons';
 
 /**
  * The campaign control centre — the screen the owner keeps open while a
@@ -155,7 +156,7 @@ export default function CampaignControlCenter() {
           <Notice tone="error">{error}</Notice>
         ) : (
           <EmptyState
-            icon="🔍"
+            icon={<SearchIcon className="h-5 w-5" />}
             title="הקמפיין הזה לא קיים"
             description="ייתכן שהוא נמחק, או שהקישור ישן."
             action={
@@ -174,9 +175,9 @@ export default function CampaignControlCenter() {
     <SocialShell
       title={campaign.name}
       headerAction={
-        <Link href={`/social/posts/new?campaign=${campaign.id}`} className="inline-flex min-h-10 items-center rounded-full bg-white px-3.5 text-sm font-bold text-blue-700 shadow-sm">
+        <ButtonLink href={`/social/posts/new?campaign=${campaign.id}`}>
           + פוסט
-        </Link>
+        </ButtonLink>
       }
     >
       <div className="space-y-5">
@@ -225,12 +226,12 @@ export default function CampaignControlCenter() {
           <div className="mt-4 flex flex-wrap gap-2">
             {paused ? (
               <Button busy={busy === 'resume'} onClick={() => act('resume', () => pauseCampaign(id, false), 'הקמפיין ממשיך מהמקום שבו נעצר.')}>
-                ▶ המשך קמפיין
+                המשך קמפיין
               </Button>
             ) : (
               !closed && (
                 <Button variant="secondary" busy={busy === 'pause'} onClick={() => act('pause', () => pauseCampaign(id, true), 'הקמפיין הושהה. התור נשמר.')}>
-                  ⏸ השהה
+                  השהה
                 </Button>
               )
             )}
@@ -281,7 +282,7 @@ export default function CampaignControlCenter() {
           {!rows && <Loading />}
           {rows && rows.length === 0 && (
             <EmptyState
-              icon="🗓️"
+              icon={<CalendarIcon className="h-5 w-5" />}
               title="לקמפיין הזה אין עדיין פרסומים"
               description="צרו פוסט בקמפיין, בחרו קבוצות ותזמנו — כל פרסום יופיע כאן עם השעה שלו."
               action={
@@ -295,7 +296,7 @@ export default function CampaignControlCenter() {
 
         <Card title={`פוסטים בקמפיין (${posts.length})`}>
           {posts.length === 0 ? (
-            <EmptyState icon="📝" title="אין פוסטים" description="קמפיין הוא המסגרת; הפוסטים הם מה שמתפרסם בפועל." />
+            <EmptyState icon={<ClipboardListIcon className="h-5 w-5" />} title="אין פוסטים" description="קמפיין הוא המסגרת; הפוסטים הם מה שמתפרסם בפועל." />
           ) : (
             <ul className="divide-y divide-ink-700">
               {posts.map((p) => (

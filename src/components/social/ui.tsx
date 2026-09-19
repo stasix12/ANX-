@@ -406,24 +406,29 @@ export function Empty({ children }: { children: React.ReactNode }) {
  * never a blank panel. The action is optional but strongly encouraged.
  */
 export function EmptyState({
-  icon = '📭',
+  icon,
   title,
   description,
   action,
 }: {
+  /** An SVG icon. Emoji read as placeholder art in a product this size. */
   icon?: React.ReactNode;
   title: string;
   description?: string;
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-ink-600 px-5 py-9 text-center">
-      <span aria-hidden className="text-3xl leading-none opacity-80">
-        {icon}
-      </span>
+    // Compact on purpose: "nothing here yet" should not take most of a phone
+    // screen. The dashed edge says the space is waiting to be filled.
+    <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-dashed border-ink-600 px-5 py-6 text-center">
+      {icon && (
+        <span aria-hidden className="mb-0.5 grid h-11 w-11 place-items-center rounded-full bg-brand-500/10 text-brand-500">
+          {icon}
+        </span>
+      )}
       <p className="text-base font-extrabold text-mist-100">{title}</p>
-      {description && <p className="max-w-md text-sm leading-relaxed text-mist-500">{description}</p>}
-      {action && <div className="mt-2">{action}</div>}
+      {description && <p className="max-w-sm text-sm leading-relaxed text-mist-500">{description}</p>}
+      {action && <div className="mt-2.5">{action}</div>}
     </div>
   );
 }

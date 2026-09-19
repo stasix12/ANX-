@@ -170,6 +170,10 @@ export default function CampaignsPage() {
                 <CampaignCard
                   campaign={c}
                   state={state}
+                  /* The cover of the run's post, and the next group's own
+                     picture — both already loaded, neither was being shown. */
+                  media={mine.find((p) => p.media?.length)?.media?.[0] ?? null}
+                  nextTargetImage={state.upcoming.find((r) => r.target?.image_url)?.target?.image_url ?? null}
                   busy={busy === `pause-${c.id}` || busy === `resume-${c.id}`}
                   onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הסבב הושהה.')}
                   onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הסבב ממשיך.')}

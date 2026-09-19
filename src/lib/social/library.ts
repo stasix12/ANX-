@@ -797,15 +797,19 @@ export async function quickPublish(
   if (ctx.browser.testMode && groupCount > 1) {
     throw new Error('TEST MODE פעיל — אפשר לבחור קבוצה אחת בלבד. כבו אותו בהגדרות אחרי שהבדיקה הראשונה עברה.');
   }
-  // plan.ts stoppedCampaigns() sweeps an archived campaign's rows to 'skipped'
-  // within 60 seconds. Queueing into one would look like it worked and then undo
-  // itself with nothing on screen to explain it.
-  if (post.campaign_id) {
-    const campaign = await getCampaign(post.campaign_id);
-    if (campaign?.status === 'archived') {
-      throw new Error(`הסבב "${campaign.name}" נעצר, ולכן פרסומים שלו מבוטלים אוטומטית. פתחו אותו מחדש או נתקו את הפוסט מהסבב.`);
-    }
-  }
+  /*
+   * A stopped run ENDS. plan.ts stoppedCampaigns() sweeps its rows to 'skipped'
+   * within 60 seconds, so queueing into one would look like it worked and then
+   * undo itself with nothing on screen to explain it.
+   *
+   * The old behaviour was to refuse and tell the owner to reopen it, which is
+   * backwards: pressing "עצור" and then publishing again is how a person says
+   * "that round is over, start a new one". So a stopped run is simply not
+   * reused - the launch below opens a fresh one, and its counter starts at
+   * zero instead of carrying the finished round's totals forever.
+   */
+  const previousRun = post.campaign_id ? await getCampaign(post.campaign_id) : null;
+  const runEnded = previousRun?.status === 'archived';
 
   const slots = slotsForDraft(draft, now);
   const startAt = slots[0]?.toISOString() ?? draft.startAt;
@@ -824,7 +828,7 @@ export async function quickPublish(
    * the same post reuses it, which is what makes "פורסם 12 פעמים" and the
    * progress bar accumulate across rounds instead of resetting.
    */
-  let runId = post.campaign_id;
+  let runId = runEnded ? null : post.campaign_id;
   if (!runId) {
     // service/city/language/notes carry their column defaults: they describe a
     // campaign the owner planned, and nothing plans this one.

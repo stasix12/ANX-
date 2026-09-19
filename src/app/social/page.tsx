@@ -27,6 +27,7 @@ import {
   listTargets,
   pauseCampaign,
   setPaused,
+  stopCampaign,
   type QueueRow,
 } from '@/lib/social/client';
 import { percentDone, type CampaignState } from '@/lib/social/campaign';
@@ -155,6 +156,30 @@ export default function SocialDashboard() {
     } finally {
       setBusy(null);
     }
+  }
+
+  /**
+   * Ends the featured run and clears its counter.
+   *
+   * The card's "84 / 84" is every publication this run ever had, and a run is
+   * reused by every launch of its post - so stopping one and launching again
+   * kept adding to a number the owner could not explain. Closing the run is
+   * the honest reset: what already published stays in the history, and the
+   * next launch of that post opens a new run whose count starts at zero
+   * (library.ts quickPublish).
+   */
+  async function resetRun(id: string, name: string, state: CampaignState) {
+    const waiting = state.progress.scheduled + state.progress.running + state.progress.manual;
+    const ok = await confirm.ask({
+      title: 'לסיים את הסבב?',
+      body:
+        waiting > 0
+          ? `${waiting === 1 ? 'פרסום אחד שטרם יצא יבוטל' : `${waiting} פרסומים שטרם יצאו יבוטלו`}. מה שכבר פורסם נשאר בהיסטוריה, והמונה יתחיל מאפס בפעם הבאה שתפרסמו את הפוסט הזה.`
+          : 'שום דבר לא ממתין לצאת. מה שכבר פורסם נשאר בהיסטוריה, והמונה יתחיל מאפס בפעם הבאה שתפרסמו את הפוסט הזה.',
+      confirmLabel: 'סיים ואפס',
+      danger: true,
+    });
+    if (ok) await act('reset-run', () => stopCampaign(id), `הסבב "${name}" הסתיים. המונה יתחיל מאפס.`);
   }
 
   async function runNow() {
@@ -310,6 +335,7 @@ export default function SocialDashboard() {
               onResume={() => act('camp-resume', () => pauseCampaign(featured.campaign.id, false), 'הסבב ממשיך.')}
               nextTarget={featuredNext ? { name: featuredNext.name, image_url: featuredNext.image_url ?? undefined } : null}
               onTune={() => setTunerOpen(true)}
+              onReset={() => resetRun(featured.campaign.id, featured.campaign.name, featured.state)}
             />
           ) : liveQueue ? (
             /* No campaign, but publications are queued: a post scheduled

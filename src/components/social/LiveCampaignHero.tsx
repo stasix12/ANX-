@@ -143,11 +143,13 @@ export function LiveCampaignHero({
   busy,
   nextTarget,
   onTune,
+  onReset,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city'>;
   state: CampaignState;
   onPause?: () => void;
   onResume?: () => void;
+  onReset?: () => void;
   busy?: boolean;
   nextTarget?: Pick<SocialTarget, 'name' | 'image_url'> | null;
   onTune?: () => void;
@@ -164,9 +166,11 @@ export function LiveCampaignHero({
           <Link href={`/social/campaigns/${campaign.id}`} dir="auto" className="block truncate py-0.5 text-lg font-extrabold text-mist-100">
             {campaign.name}
           </Link>
-          <p dir="auto" className="truncate text-xs text-mist-500">
-            {[campaign.service, campaign.city].filter(Boolean).join(' · ') || 'סבב'}
-          </p>
+          {[campaign.service, campaign.city].filter(Boolean).length > 0 && (
+            <p dir="auto" className="truncate text-xs text-mist-500">
+              {[campaign.service, campaign.city].filter(Boolean).join(' · ')}
+            </p>
+          )}
         </div>
         <StatePill label={RUN_STATE_LABEL[state.state]} live={running} />
       </div>
@@ -202,6 +206,21 @@ export function LiveCampaignHero({
         )}
         <ButtonLink href={`/social/campaigns/${campaign.id}`} className="grow">צפה בסבב</ButtonLink>
       </div>
+
+      {/* The counter belongs to this run, and this run is what the card is
+          about. Closing it is how the owner says "that round is done" - the
+          next launch of the post opens a fresh run counting from zero, instead
+          of adding to a total that only ever grows. */}
+      {onReset && (
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={busy}
+          className="mt-2 min-h-11 w-full rounded-xl text-sm font-bold text-mist-500 transition-colors hover:bg-ink-900 hover:text-mist-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:opacity-40"
+        >
+          סיים את הסבב ואפס את המונה
+        </button>
+      )}
     </HeroPanel>
   );
 }

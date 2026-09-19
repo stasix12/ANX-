@@ -243,8 +243,8 @@ export function SchedulePicker({
 
       {value.mode === 'once' && (
         <div className="grid min-w-0 grid-cols-2 gap-3 [&>*]:min-w-0">
-          <input type="date" className={inputClass} value={value.date} onChange={(e) => set({ date: e.target.value })} />
-          <input type="time" className={inputClass} value={value.time} onChange={(e) => set({ time: e.target.value })} />
+          <input type="date" aria-label="תאריך הפרסום" className={inputClass} value={value.date} onChange={(e) => set({ date: e.target.value })} />
+          <input type="time" aria-label="שעת הפרסום" className={inputClass} value={value.time} onChange={(e) => set({ time: e.target.value })} />
         </div>
       )}
 
@@ -270,6 +270,7 @@ export function SchedulePicker({
                   <span key={i} className="inline-flex items-center gap-1">
                     <input
                       type="time"
+                      aria-label={`שעה ${i + 1} ביום ${name}`}
                       className="rounded-lg border border-ink-600 bg-ink-850 px-2 py-1 text-sm text-mist-100"
                       value={t}
                       onChange={(e) => setTimes(day, times.map((x, j) => (j === i ? e.target.value : x)))}

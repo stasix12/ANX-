@@ -120,7 +120,7 @@ export default function ManualKitPage() {
               >
                 {/* Step 1 */}
                 <Step n={1} title="העתיקו את הטקסט" done={copied}>
-                  <textarea readOnly dir="auto" className={`${inputClass} min-h-40`} value={item.rendered_text} onFocus={(e) => e.currentTarget.select()} />
+                  <textarea readOnly dir="auto" aria-label="הטקסט לפרסום" className={`${inputClass} min-h-40`} value={item.rendered_text} onFocus={(e) => e.currentTarget.select()} />
                   <Button size="lg" className="mt-2 w-full" variant={copied ? 'secondary' : 'primary'} onClick={copyText}>
                     <CopyIcon className="h-4 w-4" /> {copied ? '✓ הועתק' : 'העתק טקסט'}
                   </Button>

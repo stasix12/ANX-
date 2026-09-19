@@ -11,9 +11,9 @@
  * background, and amber sits nowhere near WhatsApp's green, so the order
  * button still reads as the one thing to press.
  *
- * Every text/background pair passes WCAG AA: mist-500 (fine print) sits at
- * 4.74:1 against the page background, on-brand (dark text on the amber fill)
- * at 7.44:1.
+ * Every text/background pair passes WCAG AA, measured rather than assumed.
+ * The tightest are mist-500 (fine print) at 4.66:1 on a card and 5.48:1 on
+ * the page; on-brand (dark text on the amber fill) sits at 7.44:1.
  */
 @theme {
   --color-ink-950: #17191c;
@@ -31,7 +31,7 @@
 
   --color-mist-100: #f0ede6;
   --color-mist-300: #b8b2a6;
-  --color-mist-500: #8a8478;
+  --color-mist-500: #958f82;
 
   /* Text and marks sitting on a brand-filled element. Its own token because a
      bright accent needs dark text on it and a deep one needs light — the two
@@ -97,9 +97,10 @@
  * class inverts without touching markup. The storefront keeps its dark amber
  * theme untouched.
  *
- * Contrast: white on brand-500 (#0284c7) ≈ 4.6:1; brand-400 (#0369a1) is
- * the text-accent step at ≈ 6.6:1 on white; mist-500 (#64748b) fine print
- * ≈ 4.8:1.
+ * Contrast, measured: white on brand-500 (#027cbb) is 4.56:1 — brand-500 was
+ * #0284c7, which put the most-pressed control in the product at 4.10:1, under
+ * AA. brand-400 is the text-accent step at 8.45:1 on a card, and mist-500
+ * (fine print) at 5.40:1 on a card, 4.85:1 on the page.
  */
 .crm-theme {
   /* Inherited text color must be re-declared HERE: body sets its color from
@@ -131,7 +132,7 @@
      chart-highlight step so a selected column pops. */
   --color-brand-300: #075985;
   --color-brand-400: #2b479c;
-  --color-brand-500: #0284c7;
+  --color-brand-500: #027cbb;
   --color-brand-600: #026da5;
   --color-brand-700: #075985;
   --color-on-brand: #ffffff;
@@ -169,7 +170,7 @@
 /* Segmented controls: the active segment floats on a brand-tinted shadow —
    one rule upgrades every view/range toggle in the app. */
 .crm-theme [role='group'] > [aria-pressed='true'] {
-  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.35);
+  box-shadow: 0 2px 10px rgba(2, 124, 187, 0.35);
 }
 
 /*

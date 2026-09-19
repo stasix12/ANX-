@@ -404,11 +404,13 @@ export function PostEditor({ postId }: { postId?: string }) {
                   <li key={v.key} className={`rounded-xl border p-3 ${v.approval === 'approved' ? 'border-emerald-300 bg-emerald-50/40' : v.approval === 'rejected' ? 'border-rose-200 opacity-60' : 'border-ink-600'}`}>
                     <div className="flex flex-wrap items-center gap-2">
                       <input
+                        aria-label="שם הגרסה"
                         className="w-40 rounded-lg border border-ink-600 bg-ink-850 px-2 py-1 text-sm font-bold text-mist-100"
                         value={v.label}
                         onChange={(e) => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, label: e.target.value } : x)))}
                       />
                       <select
+                        aria-label={`שפת הגרסה ${v.label}`}
                         className="rounded-lg border border-ink-600 bg-ink-850 px-2 py-1 text-sm text-mist-100"
                         value={v.language}
                         onChange={(e) => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, language: e.target.value as Language } : x)))}
@@ -440,6 +442,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                     </div>
                     <textarea
                       dir="auto"
+                      aria-label={`טקסט הגרסה ${v.label}`}
                       className={`${inputClass} mt-2 min-h-24 text-sm`}
                       value={v.text}
                       onChange={(e) => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, text: e.target.value } : x)))}
@@ -576,7 +579,7 @@ export function PostEditor({ postId }: { postId?: string }) {
         <aside className="min-w-0 space-y-3 lg:sticky lg:top-28 lg:self-start">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-extrabold text-mist-100">תצוגה מקדימה</h2>
-            <select className="rounded-lg border border-ink-600 bg-ink-850 px-2 py-1 text-sm text-mist-100" value={previewKey} onChange={(e) => setPreviewKey(e.target.value)}>
+            <select aria-label="גרסה לתצוגה מקדימה" className="rounded-lg border border-ink-600 bg-ink-850 px-2 py-1 text-sm text-mist-100" value={previewKey} onChange={(e) => setPreviewKey(e.target.value)}>
               <option value="base">טקסט בסיסי</option>
               {variants.map((v) => (
                 <option key={v.key} value={v.key}>

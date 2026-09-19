@@ -20,6 +20,7 @@ import path from 'node:path';
  *   - a name that can arrive in Latin script carries dir="auto"
  *   - no raw exception text reaches the screen
  *   - the compact control sizes still clear a 40px tap target
+ *   - every form control has an accessible name
  */
 const ROOTS = ['src/app/social', 'src/components/social'];
 
@@ -100,6 +101,31 @@ assert.deepEqual(
   rawErrorOffenders,
   [],
   `raw exception text shown to the user — route it through friendlyMessage():\n  ${rawErrorOffenders.join('\n  ')}`,
+);
+
+/*
+ * Every input, textarea and select needs an accessible name: wrapped in a
+ * <Field>/<label>, or carrying aria-label / placeholder / id. Without one a
+ * screen reader announces "edit text, blank" and the field is unusable.
+ * Elements marked `hidden` are not in the accessibility tree, so they are
+ * exempt — the media uploader's file input is one, opened by a labelled button.
+ */
+const unlabelled: string[] = [];
+for (const file of files) {
+  const lines = readFileSync(file, 'utf8').split('\n');
+  lines.forEach((line, i) => {
+    if (!/<(input|textarea|select)\b/.test(line)) return;
+    const chunk = lines.slice(i, i + 6).join('\n');
+    if (/\bhidden\b/.test(chunk)) return;
+    const named = /aria-label|aria-labelledby|placeholder|id=/.test(chunk);
+    const wrapped = /<Field|<label/.test(lines.slice(Math.max(0, i - 4), i).join('\n'));
+    if (!named && !wrapped) unlabelled.push(`${file}:${i + 1} ${line.trim().slice(0, 70)}`);
+  });
+}
+assert.deepEqual(
+  unlabelled,
+  [],
+  `form controls with no accessible name:\n  ${unlabelled.join('\n  ')}`,
 );
 
 const shell = readFileSync('src/components/social/SocialShell.tsx', 'utf8');

@@ -9,12 +9,13 @@ import { MediaUploader } from '@/components/social/MediaUploader';
 import { TargetPicker } from '@/components/social/TargetPicker';
 import { PostPreview } from '@/components/social/PostPreview';
 import { PreLaunchReview } from '@/components/social/PreLaunchReview';
-import { SchedulePicker, planFor, type ScheduleDraft, scheduleDraftToInput } from '@/components/social/SchedulePicker';
+import { SchedulePicker, planFor, targetsLabel, type ScheduleDraft, scheduleDraftToInput } from '@/components/social/SchedulePicker';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, inputClass, useConfirm, useToast } from '@/components/social/ui';
 import {
   archivePost,
   callSocialApi,
+  countPublishedSince,
   createSchedule,
   ensureRunForPost,
   getBrowserSettings,
@@ -32,6 +33,7 @@ import {
   type PostInput,
 } from '@/lib/social/client';
 import { generateVariantSeeds, renderPostText, whatsappUrlFor } from '@/lib/social/compose';
+import { startOfZonedDay, zonedDateISO } from '@/lib/social/time';
 import { stampText } from './DateTime';
 import {
   CTA_OPTIONS,
@@ -72,6 +74,16 @@ const emptyPost: PostInput = {
  * pick targets → schedule. The preview on the side always shows the
  * currently selected variant rendered exactly as the worker will send it.
  */
+
+/**
+ * Where the owner actually finds the "test mode" switch.
+ *
+ * The toggle's label on the settings screen is "מצב בדיקה" and it lives on the
+ * third tab, "פרסום בקבוצות". Saying "TEST MODE … אפשר לכבות בהגדרות" sent
+ * them hunting for a name that is not written anywhere on that screen.
+ */
+const TEST_MODE_PATH = 'הגדרות ← פרסום בקבוצות ← "מצב בדיקה"';
+
 export function PostEditor({ postId }: { postId?: string }) {
   const router = useRouter();
   const [post, setPost] = useState<PostInput>(emptyPost);
@@ -99,13 +111,28 @@ export function PostEditor({ postId }: { postId?: string }) {
   const [message, setMessage] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [savedId, setSavedId] = useState<string | undefined>(postId);
   const [reviewOpen, setReviewOpen] = useState(false);
+  /*
+   * How many publications have already gone out today. Needed to say anything
+   * true about the daily cap: rules.ts counts what has been published today
+   * against maxPerDay, so a warning computed from this launch alone would
+   * understate it by exactly that number.
+   */
+  const [publishedToday, setPublishedToday] = useState(0);
   const toast = useToast();
   const confirm = useConfirm();
 
   const load = useCallback(async () => {
     if (loadedFor.current === postId) return;
     loadedFor.current = postId;
-    const [c, t, b, br, lim] = await Promise.all([listCampaigns(), listTargets(), getBusiness(), getBrowserSettings(), getLimits()]);
+    const [c, t, b, br, lim, doneToday] = await Promise.all([
+      listCampaigns(),
+      listTargets(),
+      getBusiness(),
+      getBrowserSettings(),
+      getLimits(),
+      countPublishedSince(startOfZonedDay(new Date()).toISOString()),
+    ]);
+    setPublishedToday(doneToday);
     /*
      * Targets the post was last scheduled to. Reopening a post used to fall
      * back to "every enabled Page", and an account with no Pages — which is
@@ -134,12 +161,23 @@ export function PostEditor({ postId }: { postId?: string }) {
       setPost({ ...emptyPost, phone: b.phone, whatsapp_url: whatsappUrlFor(b.whatsapp), campaign_id: presetCampaign && c.some((x) => x.id === presetCampaign) ? presetCampaign : null });
     }
     const presetTargets = presets.current.targets.split(',').filter((id) => t.some((x) => x.id === id));
-    const defaultPages = t.filter((x) => x.enabled && x.channel === 'facebook_page').map((x) => x.id);
+    /*
+     * Nothing is ticked unless the owner asked for it.
+     *
+     * The last fallback used to be `defaultPages` — every enabled Facebook
+     * Page. Measured: opening /social/posts/new cold and touching nothing, the
+     * plan panel already read "1 יעדים — נכנסים לתור מיד". Pages publish
+     * server-side through the official Graph API, so they go out immediately
+     * and need no worker: a customer who came to post to GROUPS, typed their
+     * text and hit the big CTA had published to their business Page without
+     * ever choosing it. A preset from the URL or the post's own last targets
+     * are real choices and still apply; "there happens to be a Page connected"
+     * is not one.
+     */
     setSelectedTargets((prev) => {
       if (prev.length) return prev;
       if (presetTargets.length) return presetTargets;
-      if (lastTargets.length) return lastTargets;
-      return defaultPages;
+      return lastTargets;
     });
     setLoading(false);
   }, [postId]);
@@ -167,6 +205,38 @@ export function PostEditor({ postId }: { postId?: string }) {
     () => planFor(schedule, selectedObjects.length, new Date(), spacingMinutes),
     [schedule, selectedObjects.length, spacingMinutes],
   );
+  /**
+   * How many of this launch's publications the daily cap will simply DISCARD.
+   *
+   * rules.ts returns {action:'skip'} on maxPerDay — not 'defer'. The row is
+   * finished, permanently, with "הגעת למכסה היומית". It does not roll to
+   * tomorrow. With the shipped default of 6 a 28-group launch from this
+   * editor publishes 6 and skips roughly 16 (the rest land on tomorrow's
+   * slots), and nothing on this screen said so: the quick-publish sheet
+   * already computes exactly this number (library.ts overDailyCap /
+   * overCapTotal) and shows it, while the editor — the path with the
+   * "התחל פרסום" button — did not.
+   *
+   * Counted per LOCAL day, because that is the window rules.ts counts, and
+   * with today's existing publications subtracted from today's budget.
+   */
+  const capOverflow = useMemo(() => {
+    const cap = Math.max(0, Math.round(limits.maxPerDay ?? 0));
+    if (!cap || !plan.slots.length) return 0;
+    const perDay = new Map<string, number>();
+    for (const slot of plan.slots) {
+      const day = zonedDateISO(slot);
+      perDay.set(day, (perDay.get(day) ?? 0) + 1);
+    }
+    const todayISO = zonedDateISO(new Date());
+    let over = 0;
+    for (const [day, count] of perDay) {
+      const budget = Math.max(0, cap - (day === todayISO ? publishedToday : 0));
+      over += Math.max(0, count - budget);
+    }
+    return over;
+  }, [plan.slots, limits.maxPerDay, publishedToday]);
+
   const previewVariant = variants.find((v) => v.key === previewKey) ?? null;
   const previewText = useMemo(() => renderPostText(post, previewVariant), [post, previewVariant]);
   const approvedCount = variants.filter((v) => v.approval === 'approved').length;
@@ -226,7 +296,18 @@ export function PostEditor({ postId }: { postId?: string }) {
     if (variants.length && approvedCount === 0) return 'יש גרסאות אך אף אחת לא אושרה. אשרו לפחות גרסה אחת (או מחקו את כולן כדי לפרסם את הטקסט הבסיסי).';
     if (!selectedTargets.length) return 'בחרו לפחות יעד אחד.';
     const groupCount = selectedTargets.filter((id) => targets.find((t) => t.id === id)?.channel === 'facebook_group').length;
-    if (browser.testMode && groupCount > 1) return 'TEST MODE פעיל — אפשר לבחור קבוצה אחת בלבד. כבו אותו בהגדרות אחרי שהבדיקה הראשונה עברה.';
+    /*
+     * "מצב בדיקה", not "TEST MODE".
+     *
+     * The setting's on-screen name in הגדרות is "מצב בדיקה", on the third tab.
+     * Four places in the product told the owner that "TEST MODE" was on and to
+     * turn it off in settings — a name that appears nowhere on the settings
+     * screen. It ships ON (DEFAULT_BROWSER.testMode), capping every publish at
+     * one group, so turning it off is the literal first thing a new customer
+     * has to do, and they were sent looking for a label that does not exist.
+     * The path is now spelled out.
+     */
+    if (browser.testMode && groupCount > 1) return `מצב בדיקה פעיל — אפשר לבחור קבוצה אחת בלבד. כדי לכבות: ${TEST_MODE_PATH}.`;
     if (schedule.mode === 'once' && (!schedule.date || !schedule.time)) return 'בחרו תאריך ושעה.';
     if (schedule.mode === 'weekly' && !Object.values(schedule.weekly).some((t) => t.length)) return 'בחרו לפחות יום ושעה אחת.';
     if (schedule.mode === 'interval' && (!schedule.date || !schedule.intervalDays)) return 'הגדירו תאריך התחלה ותדירות.';
@@ -297,7 +378,7 @@ export function PostEditor({ postId }: { postId?: string }) {
           toast('הסבב התחיל. עקבו אחרי ההתקדמות למטה.');
           setMessage({
             tone: 'success',
-            text: `דפים: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.deferred} נדחו, ${r.failed} נכשלו. קבוצות מתפרסמות דרך ה-worker המקומי — ההתקדמות למטה.`,
+            text: `דפים: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.deferred} נדחו, ${r.failed} נכשלו. קבוצות מתפרסמות דרך התוכנה שעל המחשב שלכם — ההתקדמות למטה.`,
           });
         } else {
           // The queue was still built (planning runs even when publishing is
@@ -507,7 +588,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                 variantMap={variantMap}
                 onVariantMap={setVariantMap}
                 maxSelectable={browser.testMode ? 1 : undefined}
-                note={browser.testMode ? 'TEST MODE: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. אפשר לכבות בהגדרות.' : undefined}
+                note={browser.testMode ? `מצב בדיקה: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. כדי לכבות: ${TEST_MODE_PATH}.` : undefined}
               />
             )}
             {approvedCount > 1 && (
@@ -536,7 +617,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                 <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-brand-300" checked={requireConfirmation || browser.testMode} disabled={browser.testMode} onChange={(e) => setRequireConfirmation(e.target.checked)} />
                 <span className="min-w-0">
                   <span className="font-bold">בקש אישור לפני כל פרסום</span>
-                  <span className="block text-xs text-mist-500">ה-worker יעצור לפני הלחיצה האחרונה, יצלם מסך, ויחכה לאישור שלכם בלוח הבקרה.</span>
+                  <span className="block text-xs text-mist-500">התוכנה שבמחשב תעצור לפני הלחיצה האחרונה, תצלם מסך, ותחכה לאישור שלכם בלוח הבקרה.</span>
                 </span>
               </label>
             )}
@@ -557,7 +638,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                 {selectedObjects.length === 0
                   ? 'בחרו יעדים כדי להתחיל'
                   : schedule.mode === 'now' || schedule.mode === 'drip'
-                    ? `בדוק והתחל (${selectedObjects.length} יעדים)`
+                    ? `בדוק והתחל (${targetsLabel(selectedObjects.length)})`
                     : 'בדוק ושמור תזמון'}
               </Button>
               <Button variant="secondary" busy={busy === 'save'} onClick={onSave}>
@@ -574,7 +655,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                 {schedules.filter((s) => s.active).map((s) => (
                   <li key={s.id} className="flex items-center justify-between gap-3 py-2">
                     <span className="text-mist-100">
-                      {describeSchedule(s)} · {s.target_ids.length} יעדים
+                      {describeSchedule(s)} · {targetsLabel(s.target_ids.length)}
                     </span>
                     <button type="button" className="min-h-11 px-2 text-xs font-bold text-error-400" onClick={() => setScheduleActive(s.id, false).then(() => listSchedules(s.post_id).then(setSchedules))}>
                       בטל תזמון
@@ -596,7 +677,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                     .filter((s) => !s.active)
                     .map((s) => (
                       <li key={s.id}>
-                        {describeSchedule(s)} · {s.target_ids.length} יעדים
+                        {describeSchedule(s)} · {targetsLabel(s.target_ids.length)}
                       </li>
                     ))}
                 </ul>
@@ -644,9 +725,12 @@ export function PostEditor({ postId }: { postId?: string }) {
         requireConfirmation={requireConfirmation || browser.testMode}
         warnings={[
           browser.testMode && selectedObjects.some((t) => t.channel === 'facebook_group')
-            ? 'TEST MODE פעיל: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. אפשר לכבות בהגדרות.'
+            ? `מצב בדיקה פעיל: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. כדי לכבות: ${TEST_MODE_PATH}.`
             : '',
           approvedCount === 0 && variants.length > 0 ? 'אין גרסה מאושרת — יצא הטקסט הבסיסי.' : '',
+          capOverflow > 0
+            ? `${capOverflow} מתוך ${plan.slots.length} הפרסומים חורגים מהמכסה היומית שהגדרתם (${limits.maxPerDay} ליום) — הם יסומנו כ"דולגו" ולא יצאו כלל, גם לא מחר. אפשר להעלות את המכסה בהגדרות, או לפרוס את הפרסום על פני יותר ימים.`
+            : '',
         ].filter(Boolean)}
       />
       {confirm.dialog}

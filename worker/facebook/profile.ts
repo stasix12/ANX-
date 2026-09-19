@@ -1,4 +1,5 @@
 import type { Page } from 'playwright-core';
+import { parseGroupUrl } from '@/lib/social/types';
 import { patterns } from './selectors';
 import { classifyPage } from './session';
 
@@ -13,7 +14,11 @@ export interface GroupProfile {
 }
 
 export async function readGroupProfile(page: Page, groupUrl: string): Promise<GroupProfile | null> {
-  await page.goto(groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  // Same guard, same reason as publishToGroup(): this page holds a live
+  // Facebook login and the address comes out of a database column.
+  const group = parseGroupUrl(groupUrl);
+  if (!group) throw new Error('כתובת הקבוצה אינה כתובת קבוצת פייסבוק תקינה.');
+  await page.goto(group.url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.waitForTimeout(2500);
   const kind = await classifyPage(page);
   if (kind !== 'ok') return null;

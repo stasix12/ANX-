@@ -28,8 +28,9 @@ import {
   pauseCampaign,
   reopenCampaign,
   saveCampaign,
+  stopCampaign,
 } from '@/lib/social/client';
-import { campaignState, type CampaignState } from '@/lib/social/campaign';
+import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { MegaphoneIcon } from '@/components/icons';
@@ -110,6 +111,51 @@ export default function CampaignsPage() {
     }
   }
 
+  /**
+   * Delete a run — and stop it on the way out.
+   *
+   * Deleting the campaign row sets social_queue.campaign_id to NULL (the FK is
+   * `on delete set null`), and rules.ts only honours a pause or a stop when a
+   * row HAS a campaign id: `if (campaignId)`. So a deleted run's publications
+   * lose the only guard that could hold them and keep going out — with no run
+   * card left anywhere to pause them from. The owner deletes a round precisely
+   * to stop it, and watches posts land in groups for hours afterwards.
+   *
+   * The old confirmation mentioned the posts and the history and never the
+   * queue, and carried no number at all. This one counts exactly what will be
+   * cancelled — cancellableRows(), the same list stopCampaign() acts on, so
+   * the number in the question is the number the write delivers — and then
+   * cancels it before deleting. A publication already in flight is left to
+   * finish, which is why it is not in the count.
+   */
+  async function removeCampaign(c: Campaign, state: CampaignState) {
+    const waiting = cancellableRows(state.progress);
+    const ok = await confirm.ask({
+      title: 'למחוק את הסבב?',
+      body: (
+        <>
+          {waiting > 0
+            ? `${waiting === 1 ? 'פרסום אחד שטרם יצא יבוטל' : `${waiting} פרסומים שטרם יצאו יבוטלו`} — מחיקה בלי לבטל הייתה משאירה אותם יוצאים לבד, בלי שום מקום לעצור אותם. `
+            : 'שום פרסום לא ממתין לצאת. '}
+          הפוסטים עצמם יישארו במערכת ללא שיוך לסבב, והיסטוריית הפרסומים לא נמחקת. אי אפשר לבטל את הפעולה.
+        </>
+      ),
+      confirmLabel: waiting > 0 ? 'בטל ומחק' : 'מחק',
+      danger: true,
+    });
+    if (!ok) return;
+    await act(
+      `del-${c.id}`,
+      async () => {
+        // Order matters: once the campaign row is gone the queue rows are
+        // orphaned and stopCampaign() can no longer find them.
+        if (waiting > 0) await stopCampaign(c.id);
+        await deleteCampaign(c.id);
+      },
+      waiting > 0 ? `הסבב נמחק ו-${waiting} פרסומים בוטלו.` : 'הסבב נמחק.',
+    );
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
@@ -131,14 +177,20 @@ export default function CampaignsPage() {
       <div className="space-y-4">
         {error && <Notice tone="error">{error}</Notice>}
 
+        {/* The counts are omitted, not zeroed, until the list is known.
+            These chips render above the skeleton, so offline or on a schema
+            error the owner saw "פעילים 0 · הסתיימו 0 · הכל 0" sitting under
+            the error banner — three numbers that came from a useMemo over an
+            empty array, not from the database. House rule 1: a number on
+            screen is read from the database or it does not exist. */}
         <SegmentedControl
           label="סינון סבבי פרסום"
           value={filter}
           onChange={setFilter}
           options={[
-            { value: 'live', label: 'פעילים', count: counts.live },
-            { value: 'done', label: 'הסתיימו', count: counts.done },
-            { value: 'all', label: 'הכל', count: counts.all },
+            { value: 'live', label: 'פעילים', count: campaigns ? counts.live : undefined },
+            { value: 'done', label: 'הסתיימו', count: campaigns ? counts.done : undefined },
+            { value: 'all', label: 'הכל', count: campaigns ? counts.all : undefined },
           ]}
         />
 
@@ -204,15 +256,7 @@ export default function CampaignsPage() {
                   <button
                     type="button"
                     className="ms-auto min-h-11 px-1 text-error-400"
-                    onClick={async () => {
-                      const ok = await confirm.ask({
-                        title: 'למחוק את הסבב?',
-                        body: 'הפוסטים עצמם יישארו במערכת ללא שיוך לסבב. היסטוריית הפרסומים לא נמחקת.',
-                        confirmLabel: 'מחק',
-                        danger: true,
-                      });
-                      if (ok) await act(`del-${c.id}`, () => deleteCampaign(c.id), 'הסבב נמחק.');
-                    }}
+                    onClick={() => removeCampaign(c, state)}
                   >
                     מחק
                   </button>

@@ -121,8 +121,15 @@ export function PreLaunchReview({
           <SchedulePlanPreview plan={plan} names={targets.map((t) => t.name)} />
           {plan.lastAt && (
             <p className="mt-1.5 text-xs text-mist-500">
-              סיום משוער: <strong className="text-mist-300"><Stamp iso={plan.lastAt} /></strong> — לפי המרווח שהגדרתם. מכסות ומרווחים
-              בהגדרות עשויים לדחות פרסומים ולהאריך את הטווח.
+              {/* This used to say quotas "עשויים לדחות" — may POSTPONE —
+                  publications. They do not. rules.ts returns {action:'skip'}
+                  on maxPerDay, maxPerTargetPerDay and maxPerCampaignPerDay:
+                  the row is finished permanently and never runs. Only the
+                  minimum-gap rule defers. Telling the owner their work would
+                  be postponed when it is in fact discarded is the difference
+                  between a delay and 16 groups that never hear from them. */}
+              סיום משוער: <strong className="text-mist-300"><Stamp iso={plan.lastAt} /></strong> — לפי המרווח שהגדרתם. המרווח בין
+              פרסומים עשוי לדחות פרסומים ולהאריך את הטווח; חריגה מהמכסות שהגדרתם בהגדרות לא נדחית למחר אלא מסומנת כ"דולג".
             </p>
           )}
         </section>

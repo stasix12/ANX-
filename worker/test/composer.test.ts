@@ -3,6 +3,8 @@ import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
+import type { SocialTarget } from '@/lib/social/types';
+import { FacebookGroupBrowserAdapter } from '../adapters/facebookGroupBrowser';
 import { PublishError, publishToGroup } from '../facebook/composer';
 import { SessionError } from '../facebook/session';
 
@@ -34,7 +36,53 @@ function findChromium(): string | undefined {
   return undefined;
 }
 
+/**
+ * The adapter refuses an address that is not a Facebook group, BEFORE a page
+ * carrying the owner's live Facebook session exists.
+ *
+ * social_targets.url is a column, and every RLS policy in
+ * supabase/social-schema.sql is `to authenticated using (true)`, so it can be
+ * written over PostgREST with no screen involved. Nothing used to re-check it:
+ * the worker navigated straight to whatever it said — file:// included — and
+ * the failure path screenshots the page it landed on and uploads it.
+ *
+ * The stub session fails loudly if it is ever asked for a page, which is how
+ * this proves the order rather than only the outcome.
+ */
+async function adapterRefusesNonGroupUrls() {
+  let pagesOpened = 0;
+  const session = {
+    newPage: async () => {
+      pagesOpened += 1;
+      throw new Error('the adapter opened a browser page for an address it should have refused');
+    },
+  };
+  const adapter = new FacebookGroupBrowserAdapter(session as never);
+
+  for (const url of ['file:///C:/Users/owner/.env.local', 'https://notfacebook.com/groups/1', 'https://evil.example/pretend', '']) {
+    const target = { id: 't1', name: 'קבוצה', channel: 'facebook_group', url, external_id: '1' } as unknown as SocialTarget;
+    await assert.rejects(
+      () =>
+        adapter.publish({
+          queueId: 'q1',
+          target,
+          text: 'טקסט',
+          media: [],
+          campaignId: null,
+          variantId: null,
+          headless: true,
+          onStep: async () => undefined,
+        }),
+      (err: unknown) => err instanceof PublishError && err.kind === 'cannot_post' && /קבוצת פייסבוק/.test(err.message),
+      `${url || '(empty)'} must be refused with a Hebrew reason, not opened`,
+    );
+  }
+  assert.equal(pagesOpened, 0, 'no browser page may be created for a refused address');
+  console.log('✓ adapter refuses any address that is not a Facebook group, before opening a page');
+}
+
 async function main() {
+  await adapterRefusesNonGroupUrls();
   const executablePath = findChromium();
   const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : { channel: process.env.SOCIAL_BROWSER_CHANNEL as 'chrome' | undefined }) });
   const context = await browser.newContext({ locale: 'he-IL' });

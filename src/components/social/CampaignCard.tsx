@@ -73,7 +73,11 @@ export function CampaignCard({
           </Link>
         )}
         {cover && (
-          <Link href={link} className="block shrink-0">
+          /* aria-hidden + tabIndex -1: the title link beside it goes to the
+             same place and carries the name. Without this the card offered
+             assistive technology two links to one destination, the second of
+             them nameless (PostCover's img is alt=""). */
+          <Link href={link} aria-hidden tabIndex={-1} className="block shrink-0">
             <PostCover media={media} />
           </Link>
         )}

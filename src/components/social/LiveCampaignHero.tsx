@@ -3,13 +3,13 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ChevronIcon } from '@/components/icons';
-import { RUN_STATE_LABEL, openRows, percentPublished, unpublishedNote, type CampaignState } from '@/lib/social/campaign';
+import { RUN_STATE_LABEL, RUN_STATE_TONE, openRows, percentPublished, unpublishedNote, type CampaignState } from '@/lib/social/campaign';
 import { countdownTo } from '@/lib/social/countdown';
-import { formatTimeHe } from '@/lib/social/time';
+import { formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
 import { PostCover } from './PostCover';
 import { TargetAvatar } from './TargetAvatar';
-import { Button, ButtonLink, CARD, TONE_TEXT, TONE_TINT } from './ui';
+import { Button, ButtonLink, CARD, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
 
 /**
  * What is going out right now — the one thing the owner opens this app to see.
@@ -35,19 +35,34 @@ function HeroPanel({ children, ariaLabel }: { children: React.ReactNode; ariaLab
   );
 }
 
-/** The status pill: a dot while something is genuinely in flight. */
-function StatePill({ label, live }: { label: string; live: boolean }) {
+/**
+ * The status pill: a dot while something is genuinely in flight.
+ *
+ * The tone comes from RUN_STATE_TONE (campaign.ts), which is the designated
+ * one definition of what a run state looks like. This pill used to paint
+ * `running` green out of a local map while the campaign list and the campaign
+ * screen painted the same word blue out of the shared one — the owner tapped
+ * from the dashboard into the run and watched the badge change colour, so the
+ * colour carried no meaning. Same class of bug as the inline status lists,
+ * one layer up.
+ */
+function StatePill({ tone, label, live }: { tone: Tone; label: string; live: boolean }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
-        live ? `${TONE_TINT.good} ${TONE_TEXT.good}` : 'bg-ink-800 text-mist-300'
-      }`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${TONE_TINT[tone]} ${TONE_TEXT[tone]}`}
     >
-      {live && <span aria-hidden className="pulse-dot h-1.5 w-1.5 rounded-full bg-success-400" />}
+      {live && <span aria-hidden className={`pulse-dot h-1.5 w-1.5 rounded-full ${TONE_FILL[tone]}`} />}
       {label}
     </span>
   );
 }
+
+/**
+ * RUN_STATE_TONE speaks campaign.ts's vocabulary, which still carries `info`
+ * as a legacy name for the same blue `brand` resolves to (Badge does the same
+ * collapse). One place to fold it, so the pill cannot pick a fifth hue.
+ */
+const toneOf = (t: (typeof RUN_STATE_TONE)[keyof typeof RUN_STATE_TONE]): Tone => (t === 'info' ? 'brand' : t);
 
 /** "18 / 125" is digits around a neutral slash, which an RTL line reorders. */
 function Ratio({ done, total, suffix }: { done: number; total: number; suffix: string }) {
@@ -79,26 +94,66 @@ function NextUp({
   now,
   target,
   onOpen,
+  /** A row is genuinely in flight — a worker is holding it right now. */
+  inFlight = false,
+  /** A worker has sent a heartbeat recently. Undefined means "not known here". */
+  workerOnline,
 }: {
   at: string;
   targetName: string | null;
   now: number;
   target?: Pick<SocialTarget, 'name' | 'image_url'> | null;
   onOpen?: () => void;
+  inFlight?: boolean;
+  workerOnline?: boolean;
 }) {
   const left = countdownTo(at, now);
   if (!left) return null;
   const name = target?.name ?? targetName;
 
+  /*
+   * Three states, not two, and this is the whole point of the change.
+   *
+   * "הפרסום הבא — מתבצע כעת" used to appear the moment scheduled_at passed,
+   * because that is all `due` means. Measured with the worker offline for six
+   * hours and nothing in flight: the card read "רץ", the headline read
+   * "happening right now", and the list directly beneath it said "לפני 6
+   * שעות" six times over. That is automation being presented as happening
+   * when it did not happen — and a laptop that went to sleep is the single
+   * most common real-world state of this product.
+   *
+   * So "now" must be EARNED: either a row is actually in flight, or a worker
+   * has at least sent a heartbeat. `overdue` (countdown.ts) is the shared
+   * definition of "far enough past that nothing is plausibly mid-flight" —
+   * deriving a second threshold here is how two screens start disagreeing
+   * about the same row, so this reads it rather than re-inventing it.
+   */
+  const late = left.overdue && !inFlight;
+  const publishingNow = left.due && !late && (inFlight || workerOnline === true);
+  const headline = late ? 'הפרסום הבא — באיחור' : publishingNow ? 'הפרסום הבא — מתבצע כעת' : left.due ? 'הפרסום הבא — אמור לצאת עכשיו' : 'הפרסום הבא בעוד';
+
   const body = (
     <>
       {/* shrink-0: the countdown is the subject here, so it is the group beside it that gives way. */}
       <div className="shrink-0 text-start">
-        <p className="text-[11px] font-bold text-mist-500">{left.due ? 'הפרסום הבא — מתבצע כעת' : 'הפרסום הבא בעוד'}</p>
+        <p className={`text-[11px] font-bold ${late ? TONE_TEXT.warn : 'text-mist-500'}`}>{headline}</p>
         {/* mm:ss around a neutral colon, which an RTL line reorders. */}
-        <p className="text-[28px] font-extrabold leading-none text-mist-100">
+        <p className={`text-[28px] font-extrabold leading-none ${late ? TONE_TEXT.warn : 'text-mist-100'}`}>
           <span dir="ltr" className="inline-block tabular-nums">{left.due ? formatTimeHe(at) : left.label}</span>
         </p>
+        {/* The time above is a clock time with no date on it, so on its own it
+            reads as "in a moment" however long ago it was. This says which.
+
+            Condition is `left.overdue`, NOT `late`. `late` is suppressed the
+            moment ANY row is in flight — but the row this card names is a
+            different row, and it can still be hours behind. Measured on the
+            default fixtures with a live worker and two rows publishing: the
+            card read "הפרסום הבא — מתבצע כעת · 23:03" with no date, while the
+            list 60px below showed that same row as "לפני 3 שעות". Same row,
+            two screens, two stories — the defect class this whole card was
+            rebuilt to end. The stamp is a fact either way, so it is shown
+            whenever the instant has really passed. */}
+        {left.overdue && <p className="text-[11px] font-bold text-mist-500">{relativeHe(at)}</p>}
       </div>
       {name && (
         <div className="flex min-w-0 items-center gap-2">
@@ -148,9 +203,15 @@ export function LiveCampaignHero({
   onTune,
   onReset,
   media = null,
+  workerOnline,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city'>;
   state: CampaignState;
+  /**
+   * Whether a worker has sent a heartbeat recently. Only a real heartbeat or a
+   * real in-flight row may put the word "now" on this card — see NextUp.
+   */
+  workerOnline?: boolean;
   onPause?: () => void;
   onResume?: () => void;
   onReset?: () => void;
@@ -192,7 +253,7 @@ export function LiveCampaignHero({
             </p>
           )}
         </div>
-        <StatePill label={RUN_STATE_LABEL[state.state]} live={running} />
+        <StatePill tone={toneOf(RUN_STATE_TONE[state.state])} label={RUN_STATE_LABEL[state.state]} live={running && progress.running > 0} />
       </div>
 
       <div className="mt-3">
@@ -225,7 +286,17 @@ export function LiveCampaignHero({
         )}
       </div>
 
-      {state.nextAt && <NextUp at={state.nextAt} targetName={state.nextTargetName} now={now} target={nextTarget} onOpen={onTune} />}
+      {state.nextAt && (
+        <NextUp
+          at={state.nextAt}
+          targetName={state.nextTargetName}
+          now={now}
+          target={nextTarget}
+          onOpen={onTune}
+          inFlight={progress.running > 0}
+          workerOnline={workerOnline}
+        />
+      )}
 
       <div className="mt-3 flex gap-2">
         {paused ? (
@@ -233,9 +304,12 @@ export function LiveCampaignHero({
             המשך סבב
           </Button>
         ) : (
+          /* "השהה סבב" — this pauses THIS round. The header's global toggle,
+             visible on the same screen, pauses EVERYTHING and used to carry
+             the identical word. */
           canPause && (
             <Button variant="secondary" size="lg" className="grow" busy={busy} onClick={onPause}>
-              השהה
+              השהה סבב
             </Button>
           )
         )}
@@ -279,6 +353,8 @@ export function LiveQueueHero({
   nextTarget,
   onTune,
   media = null,
+  inFlight = 0,
+  workerOnline,
 }: {
   scheduled: number;
   publishedToday: number;
@@ -291,9 +367,18 @@ export function LiveQueueHero({
   nextTarget?: Pick<SocialTarget, 'name' | 'image_url'> | null;
   onTune?: () => void;
   media?: MediaItem[] | null;
+  /** Rows a worker is holding right now (summary.inFlight). */
+  inFlight?: number;
+  workerOnline?: boolean;
 }) {
   const now = useTick(Boolean(nextAt) && !paused);
-  const live = !paused && scheduled > 0;
+  /*
+   * "Live" is a claim about a machine, so it is made from a machine fact: a
+   * row in flight, or a worker heartbeat. `scheduled > 0` only ever said that
+   * rows exist — which is equally true of a queue that has been stuck since
+   * Friday.
+   */
+  const live = !paused && (inFlight > 0 || workerOnline === true);
 
   return (
     <HeroPanel ariaLabel="מצב התור">
@@ -305,14 +390,28 @@ export function LiveQueueHero({
           </p>
           <p className="truncate text-xs text-mist-500">התור הפעיל — לא משויך לסבב</p>
         </div>
-        <StatePill label={paused ? 'מושהה' : scheduled > 0 ? 'פעיל' : 'ממתין'} live={live} />
+        <StatePill
+          tone={paused ? 'warn' : live ? 'good' : 'neutral'}
+          label={paused ? 'מושהה' : live ? 'פעיל' : scheduled > 0 ? 'ממתין' : 'ריק'}
+          live={live}
+        />
       </div>
 
       <div className="mt-3">
         <Ratio done={publishedToday} total={dailyTarget} suffix="פורסמו היום, מתוך התקרה שהגדרתם" />
       </div>
 
-      {nextAt && !paused && <NextUp at={nextAt} targetName={nextTargetName} now={now} target={nextTarget} onOpen={onTune} />}
+      {nextAt && !paused && (
+        <NextUp
+          at={nextAt}
+          targetName={nextTargetName}
+          now={now}
+          target={nextTarget}
+          onOpen={onTune}
+          inFlight={inFlight > 0}
+          workerOnline={workerOnline}
+        />
+      )}
 
       <div className="mt-3 flex gap-2">
         {onRunNow && (

@@ -228,7 +228,11 @@ export function TargetPicker({
             >
               {/* The label covers the identity only — the variant select sits
                   outside it, or clicking the dropdown would toggle the row. */}
-              <label className="flex min-w-0 grow cursor-pointer items-center gap-2.5">
+              {/* min-h-11: this row is tapped once per group when choosing
+                  targets, and it measured 287x42.5 around a 20x20 checkbox —
+                  1.5px under the floor, while GroupCard and the library card
+                  wrap the identical checkbox in a full 44x44 label. */}
+              <label className="flex min-h-11 min-w-0 grow cursor-pointer items-center gap-2.5">
                 <input
                   type="checkbox"
                   className="h-5 w-5 shrink-0 accent-brand-300"

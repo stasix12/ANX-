@@ -13,6 +13,7 @@ import {
   type QueueItem,
   type SocialTarget,
   type Variant,
+  WORKER_OFFLINE_AFTER_SECONDS,
 } from '../types';
 import { getSetting, serviceDb, setSetting } from './db';
 import { GraphError } from './graph';
@@ -101,6 +102,15 @@ async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: Work
    */
   report.planned = await planQueue();
 
+  /*
+   * Recovering a wedged row is bookkeeping, not publishing, so it runs here —
+   * before the pause and rate-limit checks, for the same reason planning does.
+   * It used to sit below them, which meant that while publishing was paused
+   * (the state an owner puts the system into precisely BECAUSE something looks
+   * wrong) nothing was ever recovered.
+   */
+  await sweepStuck(db);
+
   if (control.paused) {
     report.reason = 'התורים מושהים';
     return report;
@@ -112,17 +122,6 @@ async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: Work
   if (control.rateLimitedUntil) await setSetting('control', { ...control, rateLimitedUntil: null });
 
   report.ran = true;
-
-  // Rows this worker left in "publishing" (a crashed run) are failed so they
-  // can be retried by hand. Browser-worker rows carry a worker_id and are
-  // recovered by that worker itself.
-  const stuckBefore = new Date(Date.now() - STUCK_MINUTES * 60_000).toISOString();
-  await db
-    .from('social_queue')
-    .update({ status: 'failed', error: 'הריצה נקטעה באמצע הפרסום — אפשר לנסות שוב.' })
-    .eq('status', 'publishing')
-    .is('worker_id', null)
-    .lt('claimed_at', stuckBefore);
 
   const limits = await getSetting<LimitsSettings>('limits', DEFAULT_LIMITS);
   const browser = await getSetting<BrowserSettings>('browser', DEFAULT_BROWSER);
@@ -167,6 +166,76 @@ async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: Work
     await logActivity('info', 'worker_run', `ריצה (${trigger === 'cron' ? 'מתוזמנת' : 'ידנית'}): ${report.published} פורסמו, ${report.manual} ידניים, ${report.skipped} דולגו, ${report.failed} נכשלו`, { ...report });
   }
   return report;
+}
+
+/**
+ * Rows nobody is coming back for.
+ *
+ * Two separate cases, and they are recovered differently:
+ *
+ *   • worker_id null — this (server) worker crashed mid-publish. Failed, so it
+ *     can be retried by hand. Unchanged behaviour.
+ *
+ *   • worker_id set, and that worker has not heartbeat in a long time — a PC
+ *     worker that was renamed, moved to another machine, or simply never came
+ *     back. Nothing used to touch these AT ALL: the local worker's own recovery
+ *     sweep filters on `worker_id = its own id` (worker/social-worker.ts) and
+ *     the id comes from an upsert on the machine's hostname, so renaming the PC
+ *     or setting SOCIAL_WORKER_NAME orphaned every row the old id was holding.
+ *     They stayed 'publishing' or 'awaiting_confirmation' for ever: counted in
+ *     the dashboard's in-flight tile, enough to keep resolveState() returning
+ *     'running', so a run card pulsed "רץ" on a campaign where nothing had
+ *     happened for days.
+ *
+ * The orphans become needs_attention rather than failed or scheduled, which is
+ * the only safe direction: the browser may well have clicked Post before the
+ * machine went away, so a person looks in the group and decides. Nothing
+ * re-claims them in the meantime — both claims filter on status = 'scheduled'.
+ *
+ * ORPHAN_MINUTES is deliberately far longer than STUCK_MINUTES: a group
+ * publication can legitimately hold a page for a 15-minute video upload, and
+ * the confirmation gate waits 15 minutes for a person.
+ */
+const ORPHAN_MINUTES = 45;
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+async function sweepStuck(db: any): Promise<void> {
+  const stuckBefore = new Date(Date.now() - STUCK_MINUTES * 60_000).toISOString();
+  await db
+    .from('social_queue')
+    .update({ status: 'failed', error: 'הריצה נקטעה באמצע הפרסום — אפשר לנסות שוב.' })
+    .eq('status', 'publishing')
+    .is('worker_id', null)
+    .lt('claimed_at', stuckBefore);
+
+  try {
+    const { data: workers } = await db.from('social_workers').select('id, last_seen_at');
+    const cutoff = Date.now() - WORKER_OFFLINE_AFTER_SECONDS * 1000;
+    const gone = ((workers ?? []) as { id: string; last_seen_at: string | null }[])
+      .filter((w) => !w.last_seen_at || new Date(w.last_seen_at).getTime() < cutoff)
+      .map((w) => w.id);
+    if (!gone.length) return;
+    const orphanBefore = new Date(Date.now() - ORPHAN_MINUTES * 60_000).toISOString();
+    const { data: freed } = await db
+      .from('social_queue')
+      .update({
+        status: 'needs_attention',
+        step: 'needs_attention',
+        error: 'המחשב שמפרסם לקבוצות הפסיק לדווח באמצע העבודה. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".',
+      })
+      .in('worker_id', gone)
+      .in('status', ['publishing', 'awaiting_confirmation'])
+      .lt('claimed_at', orphanBefore)
+      .select('id');
+    if (freed?.length) {
+      await logActivity('warn', 'stuck_rows_released', `${freed.length} פרסומים נתקעו אצל worker שאינו מדווח והועברו ל"דורשים אתכם"`, {
+        released: freed.length,
+      });
+    }
+  } catch {
+    // social_workers is a v2 table; an install that has not run
+    // supabase/social-schema-v2.sql simply has no browser workers to sweep.
+  }
 }
 
 type Outcome = 'published' | 'manual' | 'skipped' | 'failed' | 'deferred';

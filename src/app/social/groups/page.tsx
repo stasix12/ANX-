@@ -37,7 +37,7 @@ import { formatDayMonthHe } from '@/lib/social/time';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { SearchIcon, UsersIcon } from '@/components/icons';
+import { ChartIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent';
 type View = 'grid' | 'list';
@@ -51,6 +51,16 @@ const RECENT_DAYS = 14;
  * the drawing is incremental.
  */
 const CHUNK = 60;
+
+/**
+ * The one sentence every "remove a group" confirmation uses.
+ *
+ * It was written out three times (single, bulk, and the group profile) and the
+ * three copies all made the same false promise. One constant so a correction
+ * lands everywhere at once — the same reason status.ts exists.
+ */
+const DELETE_GROUP_WARNING =
+  'הסרה מוחקת גם את כל היסטוריית הפרסומים לקבוצה הזו — כולל מה שכבר פורסם בהצלחה — ולכן המספרים ב"פורסמו היום", בהיסטוריה ובסבבי הפרסום ירדו בהתאם. אי אפשר לבטל. אם רק לא רוצים לפרסם אליה יותר, עדיף "השהה קבוצה".';
 
 /**
  * /social/groups — the Facebook Groups the owner may post in, built for
@@ -180,23 +190,47 @@ export default function GroupsPage() {
   const parsed = parseGroupUrl(form.url);
   const toggleSelect = (id: string, on: boolean) => setSelected((s) => (on ? [...new Set([...s, id])] : s.filter((x) => x !== id)));
 
+  /*
+   * The overflow menu, in ONE visual language.
+   *
+   * Opened on a phone it was seven rows in three: a hairline ↗, a full-colour
+   * 📊, a full-colour 📝, a hairline ☆, a tiny ⏸, a green 🔄 and a red 🗑 —
+   * the emoji optically larger and heavier than the glyphs beside them, in
+   * Apple's colours rather than the product's tokens. Every one of these had
+   * an SVG equivalent sitting unused in icons.tsx.
+   */
   function menuFor(g: SocialTarget) {
+    const mk = 'h-4.5 w-4.5';
     return [
-      { label: 'פתח את הקבוצה בפייסבוק', icon: '↗', onSelect: () => window.open(g.url, '_blank', 'noreferrer') },
-      { label: 'פרופיל והיסטוריה', icon: '📊', onSelect: () => router.push(`/social/groups/${g.id}`) },
-      { label: 'צור פוסט לקבוצה הזו', icon: '📝', onSelect: () => router.push(`/social/posts/new?targets=${g.id}`) },
-      { label: g.favorite ? 'הסר מהמועדפות' : 'הוסף למועדפות', icon: g.favorite ? '☆' : '⭐', onSelect: () => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite })) },
-      { label: g.enabled ? 'השהה קבוצה' : 'הפעל קבוצה', icon: g.enabled ? '⏸' : '▶', onSelect: () => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: !g.enabled }), g.enabled ? 'הקבוצה הושהתה.' : 'הקבוצה הופעלה.') },
-      { label: 'רענן שם ותמונה', icon: '🔄', onSelect: () => act(`sync-${g.id}`, () => requestGroupRefresh([g.id]), 'ה-worker ימשוך מחדש כשיהיה פנוי.') },
+      { label: 'פתח את הקבוצה בפייסבוק', icon: <UsersIcon className={mk} />, onSelect: () => window.open(g.url, '_blank', 'noreferrer') },
+      { label: 'פרופיל והיסטוריה', icon: <ChartIcon className={mk} />, onSelect: () => router.push(`/social/groups/${g.id}`) },
+      { label: 'צור פוסט לקבוצה הזו', icon: <PencilIcon className={mk} />, onSelect: () => router.push(`/social/posts/new?targets=${g.id}`) },
+      { label: g.favorite ? 'הסר מהמועדפות' : 'הוסף למועדפות', icon: <StarIcon className={mk} />, onSelect: () => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite })) },
+      { label: g.enabled ? 'השהה קבוצה' : 'הפעל קבוצה', icon: g.enabled ? <PauseIcon className={mk} /> : <PlayIcon className={mk} />, onSelect: () => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: !g.enabled }), g.enabled ? 'הקבוצה הושהתה.' : 'הקבוצה הופעלה.') },
+      { label: 'רענן שם ותמונה', icon: <RepeatIcon className={mk} />, onSelect: () => act(`sync-${g.id}`, () => requestGroupRefresh([g.id]), 'התוכנה במחשב תמשוך מחדש כשתהיה פנויה.') },
       {
         label: 'הסר מהרשימה',
-        icon: '🗑',
+        icon: <TrashIcon className={mk} />,
         danger: true,
         onSelect: async () => {
+          /*
+           * This dialog used to say the opposite of what happens.
+           *
+           * "היסטוריית הפרסומים אליה נשמרת" — the publication history is kept.
+           * It is not: social_queue.target_id is `on delete cascade`
+           * (social-schema.sql:184) and the delete is a plain DELETE, so every
+           * queue row for the group is destroyed, PUBLISHED rows included. An
+           * owner tidying ten dead groups watched "פורסמו היום", the history
+           * and every campaign total silently drop, with no undo and a
+           * confirmation that had promised it could not happen.
+           *
+           * The wording below states the real cost and points at the action
+           * that does what the owner usually meant.
+           */
           const ok = await confirm.ask({
             title: `להסיר את "${g.name}"?`,
-            body: 'הקבוצה תוסר מרשימת היעדים. היסטוריית הפרסומים אליה נשמרת.',
-            confirmLabel: 'הסר',
+            body: DELETE_GROUP_WARNING,
+            confirmLabel: 'הסר ומחק היסטוריה',
             danger: true,
           });
           if (ok) await act(`del-${g.id}`, () => bulkDeleteTargets([g.id]), 'הקבוצה הוסרה.');
@@ -219,7 +253,12 @@ export default function GroupsPage() {
         {error && <Notice tone="error">{error}</Notice>}
         {workerOnline === false && (
           <Notice tone="warn">
-            ה-worker המקומי לא רץ. קבוצות מתפרסמות רק כשהוא פועל על המחשב שלכם: <code dir="ltr">npm run social-worker</code>
+            {/* This used to end in `npm run social-worker` — a terminal command
+                handed to a cleaning-business owner on a phone. The file below
+                is the one they were given, and it is what the rest of the
+                product already tells them to double-click. */}
+            התוכנה שמפרסמת לקבוצות לא רצה כרגע, ולכן שום פרסום לקבוצה לא ייצא. במחשב שבו מותקנת המערכת, לחצו פעמיים על{' '}
+            <code dir="ltr">start-worker.cmd</code> והשאירו את החלון פתוח.
           </Notice>
         )}
 
@@ -239,12 +278,18 @@ export default function GroupsPage() {
               label="סטטוס"
               value={status}
               onChange={setStatus}
+              /* Counts omitted, not zeroed, until the list is known — these
+                 chips render above the skeleton, so offline the owner was
+                 shown "הכל 0 · פעילות 0 · ⭐ 0" for a database holding 42
+                 groups. And the favourites chip was labelled with a bare ⭐,
+                 whose entire accessible name was the emoji: VoiceOver read
+                 the filter out as "white medium star". */
               options={[
-                { value: 'all', label: 'הכל', count: statusCounts.all },
-                { value: 'active', label: 'פעילות', count: statusCounts.active },
-                { value: 'favorites', label: '⭐', count: statusCounts.favorites },
-                { value: 'recent', label: 'פורסם לאחרונה', count: statusCounts.recent },
-                { value: 'paused', label: 'מושהות', count: statusCounts.paused },
+                { value: 'all', label: 'הכל', count: groups ? statusCounts.all : undefined },
+                { value: 'active', label: 'פעילות', count: groups ? statusCounts.active : undefined },
+                { value: 'favorites', label: 'מועדפות', count: groups ? statusCounts.favorites : undefined },
+                { value: 'recent', label: 'פורסם לאחרונה', count: groups ? statusCounts.recent : undefined },
+                { value: 'paused', label: 'מושהות', count: groups ? statusCounts.paused : undefined },
               ]}
               className="min-w-max"
             />
@@ -445,8 +490,8 @@ export default function GroupsPage() {
               onClick={async () => {
                 const ok = await confirm.ask({
                   title: `להסיר ${selected.length} קבוצות?`,
-                  body: 'הן יוסרו מרשימת היעדים. היסטוריית הפרסומים נשמרת.',
-                  confirmLabel: 'הסר',
+                  body: DELETE_GROUP_WARNING,
+                  confirmLabel: 'הסר ומחק היסטוריה',
                   danger: true,
                 });
                 if (ok) await act('bulk-del', () => bulkDeleteTargets(selected).then(() => setSelected([])), 'הוסרו.');

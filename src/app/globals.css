@@ -1301,8 +1301,20 @@ html:has(.social-theme) {
 
 /* Segmented controls: the active chip is a solid blue fill, a white label AND
    a blue drop shadow lifting it off the track. Three changes at once is what
-   makes "which filter am I on" answerable at a glance instead of a squint. */
-.social-theme [role='group'] > [aria-pressed='true'] {
+   makes "which filter am I on" answerable at a glance instead of a squint.
+
+   `:not(:focus-visible)` is load-bearing, not tidiness. Tailwind v4 composes
+   the focus ring INTO box-shadow, so this bare declaration overwrote it
+   wholesale — on the selected chip, and only there. Measured settled (reading
+   mid-transition gives a false answer): an unselected chip focused showed two
+   ring layers at 4.1:1 against the track, while the selected chip showed one
+   layer, this drop shadow, at 1.08:1 — and `outline` is `none 0px` because
+   every control here carries `focus-visible:outline-none`. A keyboard user
+   arriving in a filter row lands on the selected chip first, which was the
+   one chip in the product with no visible focus indicator at all (WCAG
+   2.4.7). Dropping the lift for the moment the chip is focused costs nothing:
+   the solid fill and the white label still say which one is on. */
+.social-theme [role='group'] > [aria-pressed='true']:not(:focus-visible) {
   box-shadow: 0 2px 10px rgba(11, 111, 212, 0.45);
 }
 

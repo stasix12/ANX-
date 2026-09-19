@@ -99,9 +99,13 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     const taken = await occupiedSlots(db, post.id);
     const waiting = await plannedTargets(db, post.id);
 
+    const dropped: string[] = [];
     for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
       // This post is already waiting for this group — see plannedTargets().
-      if (waiting.has(targetId)) continue;
+      if (waiting.has(targetId)) {
+        dropped.push(targetId);
+        continue;
+      }
       const { count } = await db
         .from('social_queue')
         .select('id', { count: 'exact', head: true })
@@ -150,6 +154,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
       }
     }
 
+    await noteDropped(db, note, schedule.id, dropped);
     await db.from('social_schedules').update({ planned_until: until.toISOString() }).eq('id', schedule.id);
     if (schedule.mode === 'now' || schedule.mode === 'once') {
       await db.from('social_schedules').update({ active: false }).eq('id', schedule.id);
@@ -224,6 +229,37 @@ async function plannedTargets(db: SupabaseClient, postId: string): Promise<Set<s
 }
 
 /**
+ * Says out loud which groups a launch quietly left out.
+ *
+ * plannedTargets() is right to skip a group this post is already waiting for —
+ * a second row could never publish (rules.ts refuses a post that has gone to a
+ * target once) and would only make the queue longer than the truth. But the
+ * skip was completely silent, and for a 'now' or 'once' schedule the schedule
+ * then retires itself at the end of the pass. Relaunching a post to 28 groups
+ * while group #7 still sits in needs_attention from the previous round produced
+ * 27 rows, no row for #7 ever, and nothing anywhere naming #7.
+ *
+ * It goes in the activity log, which is where every other thing the two workers
+ * decide on the owner's behalf is written, and it names the groups rather than
+ * counting them — "27 of 28" is not something anybody can act on.
+ */
+const DROPPED_NAMES_SHOWN = 8;
+
+async function noteDropped(db: SupabaseClient, note: PlanLogger, scheduleId: string, targetIds: string[]): Promise<void> {
+  if (!targetIds.length) return;
+  const { data } = await db.from('social_targets').select('name').in('id', targetIds.slice(0, DROPPED_NAMES_SHOWN));
+  const names = ((data ?? []) as { name: string | null }[]).map((t) => t.name).filter(Boolean);
+  const rest = targetIds.length - names.length;
+  const list = names.length ? `: ${names.join(', ')}${rest > 0 ? ` ועוד ${rest}` : ''}` : '';
+  await note(
+    'warn',
+    'plan_targets_skipped',
+    `${targetIds.length} קבוצות לא נכנסו לתור בהפעלה הזו כי הפוסט כבר ממתין אליהן מסבב קודם${list}`,
+    { scheduleId, skipped: targetIds.length, targetIds },
+  );
+}
+
+/**
  * Campaigns the owner has stopped, and a sweep of anything they still hold.
  *
  * "Stop campaign" archives the campaign, deactivates its schedules and cancels
@@ -289,12 +325,16 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   let created = 0;
   let last = now;
 
+  const dropped: string[] = [];
   for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
     const at = slots[targetIndex];
     if (!at) continue;
     if (at > last) last = at;
     // This post is already waiting for this group — see plannedTargets().
-    if (waiting.has(targetId)) continue;
+    if (waiting.has(targetId)) {
+      dropped.push(targetId);
+      continue;
+    }
     // Already planned for this post by some other schedule.
     if (taken.has(slotKey(targetId, at))) continue;
     const variant = pickVariant(approved, schedule, targetId, targetIndex, 0);
@@ -329,6 +369,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
       created += 1;
     }
   }
+  await noteDropped(db, note, schedule.id, dropped);
   await db.from('social_schedules').update({ planned_until: last.toISOString(), active: false }).eq('id', schedule.id);
   if (created) await note('info', 'drip_planned', `הפצה הדרגתית: ${created} פרסומים תוכננו עד ${last.toISOString()}`, { created });
   return created;

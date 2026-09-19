@@ -88,6 +88,21 @@ export async function syncAccount(accountId: string): Promise<{ pages: number; g
   return { pages: pages.length, granted: permissions.granted, declined: permissions.declined };
 }
 
+/**
+ * The connected Facebook account, with its two array columns guaranteed to BE
+ * arrays.
+ *
+ * `granted_scopes` and `declined_scopes` are `not null default '{}'` in
+ * supabase/social-schema.sql, but a row written before those columns existed —
+ * or any future read that narrows the select — hands back undefined, and the
+ * targets screen does `account.granted_scopes.filter(...)` on it. That is not a
+ * Hebrew error message: it is Next's own English "This page couldn't load" over
+ * an RTL app, on the one screen an owner goes to when Facebook is already not
+ * working, and reloading re-reads the same row and crashes again.
+ *
+ * The type has always promised arrays here; this is the read keeping the
+ * promise.
+ */
 export async function activeAccount(): Promise<SocialAccount | null> {
   const { data } = await serviceDb()
     .from('social_accounts')
@@ -96,7 +111,13 @@ export async function activeAccount(): Promise<SocialAccount | null> {
     .order('connected_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as SocialAccount | null) ?? null;
+  const account = (data as SocialAccount | null) ?? null;
+  if (!account) return null;
+  return {
+    ...account,
+    granted_scopes: Array.isArray(account.granted_scopes) ? account.granted_scopes : [],
+    declined_scopes: Array.isArray(account.declined_scopes) ? account.declined_scopes : [],
+  };
 }
 
 /** Logout: ask Meta to drop the grant, then erase every stored token. */

@@ -19,6 +19,16 @@ import { friendlyMessage } from '@/lib/social/errors';
 export function LiveBoard({ postId, compact = false }: { postId?: string; compact?: boolean }) {
   const [rows, setRows] = useState<QueueRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * Which row is mid-write. "אשר" was the one control in this flow with
+   * neither `busy` nor `disabled`, and it is the control that releases a
+   * publication to Facebook: measured at 1 200ms write latency and 120ms
+   * between taps, two taps produced two PATCHes. The row is also up to four
+   * seconds stale, so the button can still be on screen for a row that has
+   * already moved on — `run()` reports that honestly, but it should not be
+   * possible to ask twice while the first answer is still coming.
+   */
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -32,19 +42,49 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
     }
   }, [postId]);
 
+  /*
+   * Four seconds, with an in-flight guard and a pause while the tab is
+   * hidden. Measured with each response held 7s and no guard: four concurrent
+   * live-queue requests, two still outstanding at the end of the window, and
+   * the trace climbing +1 +2 +2 +3 +4 — on a bad cell that compounds, because
+   * more in flight means slower responses means more stacking. Out-of-order
+   * landings could also redraw the board with state older than it already had.
+   */
   useEffect(() => {
-    load();
-    const id = setInterval(load, 4000);
-    return () => clearInterval(id);
+    let alive = true;
+    let running = false;
+    const tick = async () => {
+      if (!alive || running || document.visibilityState === 'hidden') return;
+      running = true;
+      try {
+        await load();
+      } finally {
+        running = false;
+      }
+    };
+    tick();
+    const id = setInterval(tick, 4000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      alive = false;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [load]);
 
   /** Wraps a queue write: it reports whether it matched, so a no-op is explained. */
-  async function run(fn: () => Promise<boolean>, ok: string, stale: string) {
+  async function run(fn: () => Promise<boolean>, ok: string, stale: string, rowId?: string) {
+    if (rowId) {
+      if (rowBusy) return;
+      setRowBusy(rowId);
+    }
     try {
       const changed = await fn();
       toast(changed ? ok : stale, changed ? 'success' : 'info');
     } catch (err) {
       toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
+    } finally {
+      if (rowId) setRowBusy(null);
     }
     await load();
   }
@@ -61,14 +101,25 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
       });
       if (ok) await run(() => cancelQueueItem(row.id), 'הפרסום בוטל.', 'הפריט כבר השתנה.');
     },
+    /*
+     * The boolean comes straight through, like every other write on this
+     * board.
+     *
+     * confirmQueueItem() is guarded (client.ts): it only stamps a row that is
+     * still 'awaiting_confirmation', and returns false when it matched
+     * nothing. This wrapper used to swallow that and `return true`, so a tap
+     * on a row that had already moved on — and this list is up to four seconds
+     * stale, which is exactly why the guard exists — answered "אושר" for an
+     * approval that approved nothing. That is the house rule about never
+     * presenting automation that did not happen, on the one button that
+     * releases a post to a real group.
+     */
     onConfirm: (row: QueueRow) =>
       run(
-        async () => {
-          await confirmQueueItem(row.id);
-          return true;
-        },
-        'אושר — ה-worker ימשיך לפרסום.',
-        '',
+        () => confirmQueueItem(row.id),
+        'אושר — התוכנה במחשב תמשיך לפרסום.',
+        'הפרסום הזה כבר לא ממתין לאישור — רועננו את המסך.',
+        row.id,
       ),
     onScreenshot: (row: QueueRow) => {
       if (!row.screenshot_path) return;
@@ -91,6 +142,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
         <QueueSections
           rows={rows}
           actions={actions}
+          busyRowId={rowBusy}
           emptyAction={
             <ButtonLink href="/social/posts/new">צרו פוסט ראשון</ButtonLink>
           }

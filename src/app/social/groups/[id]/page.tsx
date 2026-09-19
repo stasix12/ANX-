@@ -180,17 +180,22 @@ export default function GroupProfilePage() {
             <Button variant="secondary" busy={busy === 'fav'} onClick={() => act('fav', () => updateTarget(group.id, { favorite: !group.favorite }))}>
               {group.favorite ? '☆ הסר ממועדפות' : '⭐ הוסף למועדפות'}
             </Button>
-            <Button variant="secondary" busy={busy === 'sync'} onClick={() => act('sync', () => requestGroupRefresh([group.id]), 'ה-worker ימשוך שם ותמונה מחדש.')}>
+            <Button variant="secondary" busy={busy === 'sync'} onClick={() => act('sync', () => requestGroupRefresh([group.id]), 'התוכנה שבמחשב תמשוך שם ותמונה מחדש.')}>
               🔄 רענן פרטים
             </Button>
           </div>
         </Card>
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
-          <Tile label="סך פרסומים" value={stats.published} tone={stats.published ? 'good' : 'default'} />
-          <Tile label="ממתינים" value={stats.pending} />
-          <Tile label="נכשלו" value={stats.failed} tone={stats.failed ? 'bad' : 'default'} />
-          <Tile label="דולגו" value={stats.skipped} />
+          <Tile label="סך פרסומים" value={stats.published} tone={stats.published ? 'good' : 'neutral'} />
+          <Tile label="ממתינים" value={stats.pending} tone="brand" />
+          <Tile label="נכשלו" value={stats.failed} tone={stats.failed ? 'bad' : 'neutral'} />
+          {/* "ממתינים" and "דולגו" were both blue — two numbers meaning
+              opposite things in one hue — because Tile's `default` tone
+              resolved to brand and there was no `neutral` in its union at
+              all. Skipped is neutral everywhere else in the product
+              (STATUS_TONE), so it is neutral here too. */}
+          <Tile label="דולגו" value={stats.skipped} tone="neutral" />
         </div>
 
         <Card title="פרטים">
@@ -298,10 +303,18 @@ export default function GroupProfilePage() {
             className="text-error-400"
             busy={busy === 'delete'}
             onClick={async () => {
+              /* Same false promise as the list screen's dialog, same fix —
+                 and here the owner is looking straight at the history the
+                 delete is about to destroy. social_queue.target_id is
+                 `on delete cascade`, so the count in "היסטוריית פרסומים"
+                 above goes with it. */
               const ok = await confirm.ask({
                 title: `להסיר את "${group.name}"?`,
-                body: 'הקבוצה תוסר מרשימת היעדים ולא תקבל עוד פרסומים. היסטוריית הפרסומים נשמרת.',
-                confirmLabel: 'הסר קבוצה',
+                body:
+                  stats.total > 0
+                    ? `${stats.total === 1 ? 'רשומת הפרסום האחת' : `כל ${stats.total} רשומות הפרסום`} של הקבוצה הזו יימחקו יחד איתה — כולל ${stats.published} שכבר פורסמו — והמספרים בלוח הבקרה ובהיסטוריה ירדו בהתאם. אי אפשר לבטל. אם רק לא רוצים לפרסם אליה יותר, עדיף להשהות את הקבוצה.`
+                    : 'הקבוצה תוסר מרשימת היעדים ולא תקבל עוד פרסומים. אין לה רשומות פרסום שיימחקו.',
+                confirmLabel: stats.total > 0 ? 'הסר ומחק היסטוריה' : 'הסר קבוצה',
                 danger: true,
               });
               if (!ok) return;

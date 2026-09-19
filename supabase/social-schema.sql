@@ -284,8 +284,19 @@ create policy "social media admin delete"
   using (bucket_id = 'social-media');
 
 -- Default anti-spam settings (only inserted when missing).
+--
+-- 'business' is seeded EMPTY on purpose. The phone number and WhatsApp link in
+-- this row are appended to the text of every published post (see
+-- renderPostText in src/lib/social/compose.ts), so a seeded number belongs to
+-- whoever wrote the seed and not to whoever runs the install. This file used to
+-- carry one business's real contact details, which every fresh install then
+-- published under its own name. Fill these in on the settings screen
+-- (/social/settings → "פרטי העסק") before the first publish; an empty phone or
+-- WhatsApp is simply left off the post.
+--
+-- `on conflict do nothing` means an existing deployment keeps whatever it has.
 insert into public.social_settings (key, value) values
   ('limits', '{"maxPerDay": 6, "maxPerTargetPerDay": 2, "minGapMinutes": 45, "dedupeDays": 14}'::jsonb),
   ('control', '{"paused": false, "rateLimitedUntil": null}'::jsonb),
-  ('business', '{"name": "הפתרון המבריק", "phone": "053-5257250", "whatsapp": "972535257250", "cities": ["באר שבע", "ערד"], "services": ["ניקוי ספות וריפודים", "ניקוי מזגנים"]}'::jsonb)
+  ('business', '{"name": "", "phone": "", "whatsapp": "", "cities": [], "services": []}'::jsonb)
 on conflict (key) do nothing;

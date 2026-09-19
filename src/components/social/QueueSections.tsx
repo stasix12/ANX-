@@ -30,9 +30,12 @@ export function QueueSections({
   emptyTitle = 'אין פרסומים פעילים',
   emptyDescription = 'צרו פוסט, בחרו קבוצות ולחצו "התחל פרסום" — התור יופיע כאן בזמן אמת.',
   emptyAction,
+  busyRowId = null,
 }: {
   rows: QueueRow[];
   actions?: PublicationActions;
+  /** The row whose write is in flight — its confirm button shows a spinner. */
+  busyRowId?: string | null;
   doneLimit?: number;
   nextLimit?: number;
   emptyTitle?: string;
@@ -57,10 +60,10 @@ export function QueueSections({
 
   return (
     <div className="space-y-4">
-      <Group title="דורשים אתכם" tone="text-warning-400" items={attention} actions={actions} />
-      <Group title="מפרסם עכשיו" tone="text-brand-400" items={now} actions={actions} pulse />
-      <Group title="הבאים בתור" tone="text-brand-400" items={next.slice(0, nextLimit)} actions={actions} showDate more={next.length - nextLimit} />
-      <Group title="הושלמו" tone="text-success-400" items={done.slice(0, doneLimit)} actions={actions} more={done.length - doneLimit} />
+      <Group title="דורשים אתכם" tone="text-warning-400" items={attention} actions={actions} busyRowId={busyRowId} />
+      <Group title="מפרסם עכשיו" tone="text-brand-400" items={now} actions={actions} busyRowId={busyRowId} pulse />
+      <Group title="הבאים בתור" tone="text-brand-400" items={next.slice(0, nextLimit)} actions={actions} busyRowId={busyRowId} showDate more={next.length - nextLimit} />
+      <Group title="הושלמו" tone="text-success-400" items={done.slice(0, doneLimit)} actions={actions} busyRowId={busyRowId} more={done.length - doneLimit} />
     </div>
   );
 }
@@ -73,6 +76,7 @@ function Group({
   showDate,
   more = 0,
   pulse = false,
+  busyRowId = null,
 }: {
   title: string;
   tone: string;
@@ -81,6 +85,7 @@ function Group({
   showDate?: boolean;
   more?: number;
   pulse?: boolean;
+  busyRowId?: string | null;
 }) {
   if (!items.length) return null;
   return (
@@ -92,7 +97,7 @@ function Group({
       </h3>
       <ul className="divide-y divide-ink-700">
         {items.map((row) => (
-          <PublicationItem key={row.id} row={row} actions={actions} showDate={showDate} />
+          <PublicationItem key={row.id} row={row} actions={actions} showDate={showDate} busy={row.id === busyRowId} />
         ))}
       </ul>
       {more > 0 && <p className="pt-1.5 text-xs text-mist-500">ועוד {more}</p>}

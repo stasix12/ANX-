@@ -5,6 +5,7 @@ import type { QueueRow } from '@/lib/social/client';
 import { formatDayMonthHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { CANCELLABLE_STATUSES } from '@/lib/social/status';
 import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
+import { CalendarIcon, ClipboardListIcon, EyeIcon, RepeatIcon, SendIcon, UsersIcon, XCircleIcon } from '@/components/icons';
 import { Stamp } from './DateTime';
 import { ErrorDetail } from './ErrorDetail';
 import { TargetAvatar } from './TargetAvatar';
@@ -59,10 +60,13 @@ export function PublicationItem({
   row,
   actions = {},
   showDate = false,
+  busy = false,
 }: {
   row: QueueRow;
   actions?: PublicationActions;
   showDate?: boolean;
+  /** A write on this row is in flight — the confirm button locks and spins. */
+  busy?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const line = statusLine(row);
@@ -85,19 +89,28 @@ export function PublicationItem({
         ? line.text
         : `${formatDayMonthHe(at)} · ${line.text}`;
 
+  /*
+   * The menu's marks are SVG, from the product's own set.
+   *
+   * They were 🔁 ↗ 🔗 🖼 ℹ️ 🚫 — one hairline arrow beside five full-colour
+   * Apple glyphs, optically larger and heavier than every other icon on the
+   * screen and in nobody's palette. ui.tsx's own docstring says it: "Emoji
+   * read as placeholder art in a product this size."
+   */
+  const icon = 'h-4.5 w-4.5';
   const menu = [
     actions.onRetry && (row.status === 'failed' || row.status === 'skipped' || row.status === 'needs_attention')
-      ? { label: 'נסה שוב', icon: '🔁', onSelect: () => actions.onRetry?.(row) }
+      ? { label: 'נסה שוב', icon: <RepeatIcon className={icon} />, onSelect: () => actions.onRetry?.(row) }
       : null,
     actions.onRunNow && row.status === 'scheduled' && new Date(row.scheduled_at).getTime() > Date.now() + 60_000
-      ? { label: 'הרץ עכשיו', onSelect: () => actions.onRunNow?.(row) }
+      ? { label: 'הרץ עכשיו', icon: <SendIcon className={icon} />, onSelect: () => actions.onRunNow?.(row) }
       : null,
-    row.target?.url ? { label: 'פתח את הקבוצה', icon: '↗', onSelect: () => window.open(row.target?.url, '_blank', 'noreferrer') } : null,
-    row.permalink ? { label: 'פתח את הפוסט שפורסם', icon: '🔗', onSelect: () => window.open(row.permalink as string, '_blank', 'noreferrer') } : null,
-    actions.onScreenshot && row.screenshot_path ? { label: 'צילום מסך של התקלה', icon: '🖼', onSelect: () => actions.onScreenshot?.(row) } : null,
-    { label: 'פרטי הפרסום', icon: 'ℹ️', onSelect: () => setOpen(true) },
+    row.target?.url ? { label: 'פתח את הקבוצה', icon: <UsersIcon className={icon} />, onSelect: () => window.open(row.target?.url, '_blank', 'noreferrer') } : null,
+    row.permalink ? { label: 'פתח את הפוסט שפורסם', icon: <ClipboardListIcon className={icon} />, onSelect: () => window.open(row.permalink as string, '_blank', 'noreferrer') } : null,
+    actions.onScreenshot && row.screenshot_path ? { label: 'צילום מסך של התקלה', icon: <EyeIcon className={icon} />, onSelect: () => actions.onScreenshot?.(row) } : null,
+    { label: 'פרטי הפרסום', icon: <CalendarIcon className={icon} />, onSelect: () => setOpen(true) },
     actions.onCancel && CANCELLABLE_STATUSES.includes(row.status)
-      ? { label: 'בטל פרסום', icon: '🚫', onSelect: () => actions.onCancel?.(row), danger: true }
+      ? { label: 'בטל פרסום', icon: <XCircleIcon className={icon} />, onSelect: () => actions.onCancel?.(row), danger: true }
       : null,
   ].filter(Boolean) as { label: string; icon?: React.ReactNode; onSelect: () => void; danger?: boolean }[];
 
@@ -110,7 +123,11 @@ export function PublicationItem({
       </button>
 
       {row.status === 'awaiting_confirmation' && actions.onConfirm ? (
-        <Button size="sm" onClick={() => actions.onConfirm?.(row)}>
+        /* `busy` is the whole point: this button releases a publication to a
+           real Facebook group, and it was the one control in the flow with
+           neither busy nor disabled. size="md" for the 44px floor — it was
+           measuring 48x40 in a dense row beside a 44px overflow menu. */
+        <Button busy={busy} onClick={() => actions.onConfirm?.(row)}>
           אשר
         </Button>
       ) : (

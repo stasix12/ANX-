@@ -1,6 +1,6 @@
 import type { Page } from 'playwright-core';
-import type { MediaItem, SocialTarget } from '@/lib/social/types';
-import { publishToGroup, type ComposeResult, type ComposerStep } from '../facebook/composer';
+import { parseGroupUrl, type MediaItem, type SocialTarget } from '@/lib/social/types';
+import { PublishError, publishToGroup, type ComposeResult, type ComposerStep } from '../facebook/composer';
 import type { BrowserSession } from '../facebook/session';
 import { cleanupMedia, downloadMedia, type LocalMedia } from '../media';
 
@@ -40,13 +40,33 @@ export class FacebookGroupBrowserAdapter {
   constructor(private session: BrowserSession) {}
 
   async publish(input: GroupPublishInput): Promise<ComposeResult> {
+    /*
+     * The address is re-parsed here, never trusted, because THIS is where it
+     * crosses from the database into a real browser holding the owner's live
+     * Facebook session.
+     *
+     * parseGroupUrl guards the screen that adds a group, but nothing guarded
+     * this: social_targets.url is a column, and under the single shared RLS
+     * policy (supabase/social-schema.sql — every policy is `using (true)`) any
+     * authenticated session can write it over PostgREST with no screen
+     * involved. A row pointed at file:///…/.env.local, or at any page at all,
+     * was opened by that browser — and if the job then failed, the failure
+     * path screenshots whatever it landed on and uploads it to storage.
+     *
+     * parseGroupUrl only ever returns https://www.facebook.com/groups/<id>, so
+     * the round trip is both the check and the normalisation.
+     */
+    const group = parseGroupUrl(input.target.url);
+    if (!group) {
+      throw new PublishError('cannot_post', `הכתובת של "${input.target.name}" אינה כתובת של קבוצת פייסבוק. תקנו אותה במסך הקבוצות.`);
+    }
     let local: LocalMedia | null = null;
     const page = await this.session.newPage(input.headless);
     input.onPage?.(page);
     try {
       local = input.media.length ? await downloadMedia(input.queueId, input.media) : null;
       return await publishToGroup(page, {
-        groupUrl: input.target.url,
+        groupUrl: group.url,
         text: input.text,
         images: local?.images ?? [],
         video: local?.video ?? null,

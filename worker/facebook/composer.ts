@@ -46,6 +46,17 @@ const VIDEO_UPLOAD_TIMEOUT = 15 * 60_000;
 
 export async function publishToGroup(page: Page, input: ComposeInput): Promise<ComposeResult> {
   // 1. Open the group ------------------------------------------------------
+  /*
+   * `groupUrl` must already have been through parseGroupUrl — the adapter does
+   * it (worker/adapters/facebookGroupBrowser.ts), because the adapter is where
+   * the address crosses over from the database into this browser. Do not accept
+   * a raw social_targets.url here: this page carries the owner's live Facebook
+   * session and the failure path screenshots whatever it landed on.
+   *
+   * The check lives one layer up rather than here so worker/test/composer.test.ts
+   * can still drive this choreography against its local mock-group.html fixture,
+   * which is the whole reason the composer takes a URL instead of a target.
+   */
   await input.onStep('opening');
   await page.goto(input.groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.waitForTimeout(3000);

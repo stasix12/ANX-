@@ -48,7 +48,7 @@ import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/
 import { ltr } from '@/components/social/DateTime';
 import type { Campaign, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { CalendarIcon, ClipboardListIcon, SearchIcon } from '@/components/icons';
+import { CalendarIcon, ClipboardListIcon, PauseIcon, SearchIcon } from '@/components/icons';
 
 /**
  * The campaign control centre — the screen the owner keeps open while a
@@ -102,17 +102,66 @@ export default function CampaignControlCenter() {
     }
   }, [id]);
 
+  /*
+   * Five seconds, guarded.
+   *
+   * This is the screen an owner naturally leaves open to watch a run, and it
+   * was the most expensive thing in the product: measured in a PRODUCTION
+   * build against a 5 000-row queue, 83 requests and 12.81 MB of JSON in a
+   * 63-second window — 0.94 MB every five seconds, re-reading up to
+   * CAMPAIGN_QUEUE_LIMIT rows with three joins so that a handful of them
+   * could change. An hour of watching is roughly 730 MB on a metered Israeli
+   * mobile plan.
+   *
+   * The in-flight guard stops the reads stacking on a slow connection, and
+   * pausing while the tab is hidden stops the whole thing entirely when
+   * nobody is looking; returning to the tab reads immediately, so what the
+   * owner sees on return is current. Making the read itself narrower is a
+   * data-layer change and is flagged rather than attempted here.
+   */
   useEffect(() => {
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
+    let alive = true;
+    let running = false;
+    const tick = async () => {
+      if (!alive || running || document.visibilityState === 'hidden') return;
+      running = true;
+      try {
+        await load();
+      } finally {
+        running = false;
+      }
+    };
+    tick();
+    const t = setInterval(tick, 5000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [load]);
 
-  async function act(key: string, fn: () => Promise<unknown>, done: string) {
+  /**
+   * A write, and an honest answer about whether it landed.
+   *
+   * The three queue writes below — retryQueueItem, cancelQueueItem and
+   * confirmQueueItem — are all guarded in client.ts: each filters on the
+   * statuses the action is valid from and returns FALSE when it matched no
+   * row. This screen polls every five seconds, so a row on it can be that
+   * stale, and the guard is what stops a tap on a stale row from stamping a
+   * publication that has since gone out or been cancelled.
+   *
+   * This used to discard that boolean and toast `done` unconditionally, so a
+   * write that deliberately changed nothing still reported "אושר לפרסום" —
+   * automation presented as having happened. `false` now gets `stale` instead,
+   * and the reload right after shows the owner the real state.
+   */
+  async function act(key: string, fn: () => Promise<unknown>, done: string, stale = 'הפרסום כבר השתנה — רועננו את המסך.') {
     setBusy(key);
     try {
-      await fn();
-      toast(done);
+      const result = await fn();
+      // Only an explicit `false` is a no-op; every other write returns void.
+      toast(result === false ? stale : done, result === false ? 'info' : 'success');
       await load();
     } catch (err) {
       toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
@@ -216,9 +265,9 @@ export default function CampaignControlCenter() {
             </div>
           </div>
 
-          {/* The headline: the ring carries the percentage, and the counters
-              beside it break that number down. Every figure is a count of real
-              queue rows. */}
+          {/* The headline. The ring carries the percentage; the tile grid
+              further down carries the figures behind it. Every number on this
+              screen is a count of real queue rows. */}
           {state && (
             <div className="mt-4 flex flex-wrap items-center justify-center gap-5 sm:justify-start">
               <ProgressRing
@@ -226,12 +275,23 @@ export default function CampaignControlCenter() {
                 label={`${percentPublished(state.progress)}%`}
                 sub={`${state.progress.published} / ${state.progress.total} פורסמו`}
               />
-              <dl className="grid min-w-0 flex-1 grid-cols-2 gap-2 [&>*]:min-w-0">
-                <Counter label="פורסמו" value={state.progress.published} tone="text-success-400" />
-                <Counter label="ממתינים" value={state.progress.scheduled} tone="text-brand-400" />
-                <Counter label="נכשלו" value={state.progress.failed} tone={state.progress.failed ? 'text-error-400' : 'text-mist-500'} />
-                <Counter label="דילוגים" value={state.progress.skipped} tone="text-mist-500" />
-              </dl>
+              {/*
+                The four-figure <dl> that used to sit here is gone.
+                
+                This screen printed the same breakdown THREE times inside about
+                700px: this row, the progress bar's legend below it, and the
+                six-tile grid under that — three visual languages for one set
+                of numbers, on a phone. Two of them disagreed with each other:
+                this row called `skipped` "דילוגים" in grey while the tile
+                called it "דולגו" in blue, because Counter took a raw class
+                string (`tone: string`) and was the one place in /social that
+                bypassed Tone/TONE_TEXT entirely — it even invented a fifth
+                value, text-mist-500, which is not in TONE_TEXT at all.
+                
+                What is left is the ring (the headline percentage), the bar
+                (the proportions) and the tile grid (the figures). Each says
+                something the others do not.
+              */}
             </div>
           )}
 
@@ -263,9 +323,12 @@ export default function CampaignControlCenter() {
                 </Button>
               )
             )}
+            {/* No ⏹. This is the destructive control on the run screen and it
+                wore a full-colour emoji beside three hairline-glyph buttons. */}
             {!closed && (
               <Button variant="danger" busy={busy === 'stop'} onClick={onStop}>
-                ⏹ עצור
+                <PauseIcon className="h-4 w-4" />
+                עצור
               </Button>
             )}
             <Link href="/social/campaigns" className="ms-auto inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
@@ -283,11 +346,20 @@ export default function CampaignControlCenter() {
         {state && (
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 [&>*]:min-w-0">
             <Tile label="פורסמו" value={state.progress.published} tone="good" />
-            <Tile label="ממתינים" value={state.progress.scheduled} />
-            <Tile label="רצים" value={state.progress.running} tone={state.progress.running ? 'warn' : 'default'} />
-            <Tile label="נכשלו" value={state.progress.failed} tone={state.progress.failed ? 'bad' : 'default'} />
-            <Tile label="דולגו" value={state.progress.skipped} />
-            <Tile label="דורשים פעולה" value={state.progress.manual} tone={state.progress.manual ? 'warn' : 'default'} />
+            <Tile label="ממתינים" value={state.progress.scheduled} tone="brand" />
+            {/* Blue, not amber. `progress.running` is exactly IN_FLIGHT_STATUSES,
+                and STATUS_TONE.publishing is 'brand' with the comment "a
+                publication going out on its own is not a warning" — the
+                StatusPills for these very rows, lower on this same page,
+                render blue. A healthy run was reading as a problem. */}
+            <Tile label="רצים" value={state.progress.running} tone="brand" />
+            {/* Zero failures is not an action: a 0 here used to render in the
+                brand colour because `'default'` resolved to brand. */}
+            <Tile label="נכשלו" value={state.progress.failed} tone={state.progress.failed ? 'bad' : 'neutral'} />
+            {/* Skipped is neutral, the same as STATUS_TONE says and the same as
+                the Counter above renders it. */}
+            <Tile label="דולגו" value={state.progress.skipped} tone="neutral" />
+            <Tile label="דורשים פעולה" value={state.progress.manual} tone={state.progress.manual ? 'warn' : 'neutral'} />
           </div>
         )}
 
@@ -345,16 +417,6 @@ export default function CampaignControlCenter() {
       </div>
       {confirm.dialog}
     </SocialShell>
-  );
-}
-
-/** One breakdown figure beside the ring. */
-function Counter({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <div className="rounded-xl border border-ink-700 px-3 py-2">
-      <dt className="text-[11px] font-bold text-mist-500">{label}</dt>
-      <dd className={`text-xl font-extrabold tabular-nums ${tone}`}>{value}</dd>
-    </div>
   );
 }
 

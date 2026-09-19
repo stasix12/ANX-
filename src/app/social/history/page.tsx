@@ -77,7 +77,20 @@ function HistoryScreen() {
   const [rows, setRows] = useState<QueueRow[] | null>(null);
   const [group, setGroup] = useState<string>(mapIncomingStatus(params.get('status')));
   const [method, setMethod] = useState<PublishMethod | ''>('');
-  const [range, setRange] = useState('30');
+  /*
+   * "All" when the owner arrived from a dashboard tile, 30 days otherwise.
+   *
+   * Every tile on the dashboard is an ALL-TIME head count (countByStatus) and
+   * every one of them links here with ?status=. This screen then defaulted to
+   * a 30-day window filtered on scheduled_at, so "נכשלו 47" opened a list of
+   * 12, and the "N פרסומים ממתינים לכם" alert bar opened EMPTY whenever the
+   * rows in question belonged to a run launched more than a month ago — which
+   * is exactly the case where rows sit in needs_attention.
+   *
+   * The count is not clamped to match the list; the list is widened to hold
+   * the count. The range chips are still right there to narrow it again.
+   */
+  const [range, setRange] = useState(() => (params.get('status') ? 'all' : '30'));
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
   const [query, setQuery] = useState('');

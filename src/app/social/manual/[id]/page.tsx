@@ -151,7 +151,19 @@ export default function ManualKitPage() {
                     <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
                       {media.map((m) => (
                         <li key={m.url}>
-                          <a href={m.url} download target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-ink-700 bg-ink-900">
+                          {/* The <img> inside is alt="", so with no label on
+                              the link VoiceOver fell back to the href and read
+                              the whole Supabase storage URL aloud — in the
+                              manual-publish fallback flow, which is where
+                              someone is already having a bad time. */}
+                          <a
+                            href={m.url}
+                            download
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={m.kind === 'image' ? 'הורדת התמונה' : 'הורדת הסרטון'}
+                            className="block overflow-hidden rounded-xl border border-ink-700 bg-ink-900"
+                          >
                             {m.kind === 'image' ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={m.url} alt="" loading="lazy" className="aspect-square w-full object-cover" />

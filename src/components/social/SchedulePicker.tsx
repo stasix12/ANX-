@@ -65,6 +65,16 @@ export interface SchedulePlan {
   days: number;
 }
 
+/**
+ * "יעד אחד" / "3 יעדים". Hebrew has no bare-numeral singular, so `${n} יעדים`
+ * renders "1 יעדים" — and with TEST MODE on (which is how the product SHIPS,
+ * capped at one group per publish) that is the normal case, sitting on the
+ * primary call to action: "בדוק והתחל (1 יעדים)".
+ */
+export function targetsLabel(n: number): string {
+  return n === 1 ? 'יעד אחד' : `${n} יעדים`;
+}
+
 export function planFor(draft: ScheduleDraft, targetCount: number, now = new Date(), spacingMinutes = 0): SchedulePlan {
   const count = Math.max(0, targetCount);
   const empty: SchedulePlan = { slots: [], simultaneous: true, summary: '', firstAt: null, lastAt: null, days: 0 };
@@ -88,13 +98,39 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
     return finish(slots, false, `${count} פרסומים, אחד כל ${draft.dripGapMinutes} דקות, כל יום בשעות ${draft.dripStart}–${draft.dripEnd}`);
   }
 
+  /*
+   * `now` and `once` are staggered here too, and that is not cosmetic.
+   *
+   * plan.ts applies staggerAt(rawSlot, targetIndex, spacingMinutes) to EVERY
+   * non-drip mode. The weekly/interval branch below already did the same
+   * arithmetic; these two returned a single instant with simultaneous: true,
+   * so the preview said "28 יעדים — נכנסים לתור מיד" with an estimated finish
+   * of now, while the planner wrote the last of those 28 rows 29.3 hours
+   * later. Measured against the real slotsFor + staggerAt with 28 groups and
+   * the shipped 45+20 spacing: preview first == preview last == 06:00;
+   * planner first 06:00, planner last 11:15 the NEXT day.
+   *
+   * These are the two modes behind the main launch button, so it was the last
+   * screen before committing that got it wrong — which is exactly what the
+   * comment at PostEditor.tsx says must not happen.
+   */
   if (draft.mode === 'now') {
-    return finish([now], true, `${count} יעדים — נכנסים לתור מיד`);
+    const slots = staggeredSlots([now], count, spacingMinutes);
+    return finish(
+      slots,
+      !spacingMinutes,
+      spacingMinutes ? `${targetsLabel(count)} — הראשון מיד, אחר כך אחד כל ${spacingMinutes} דק׳` : `${targetsLabel(count)} — נכנסים לתור מיד`,
+    );
   }
 
   if (draft.mode === 'once') {
     if (!draft.date || !draft.time) return { ...empty, summary: 'בחרו תאריך ושעה.' };
-    return finish([zonedToUtc(draft.date, draft.time)], true, `${count} יעדים, כולם ב-${draft.time}`);
+    const slots = staggeredSlots([zonedToUtc(draft.date, draft.time)], count, spacingMinutes);
+    return finish(
+      slots,
+      !spacingMinutes,
+      spacingMinutes ? `${targetsLabel(count)} — הראשון ב-${draft.time}, אחר כך אחד כל ${spacingMinutes} דק׳` : `${targetsLabel(count)}, כולם ב-${draft.time}`,
+    );
   }
 
   // weekly / interval: show the next occurrences inside a two-week horizon.
@@ -122,8 +158,8 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
    */
   const spread = staggeredSlots(slots, count, spacingMinutes);
   const summary = spacingMinutes
-    ? `${count} יעדים בכל מועד, אחד כל ${spacingMinutes} דק׳ · ${slots.length} מועדים בשבועיים הקרובים`
-    : `${count} יעדים בכל מועד · ${slots.length} מועדים בשבועיים הקרובים`;
+    ? `${targetsLabel(count)} בכל מועד, אחד כל ${spacingMinutes} דק׳ · ${slots.length} מועדים בשבועיים הקרובים`
+    : `${targetsLabel(count)} בכל מועד · ${slots.length} מועדים בשבועיים הקרובים`;
   return finish(spread, !spacingMinutes, summary);
 }
 
@@ -370,7 +406,7 @@ export function SchedulePicker({
 
       {value.mode === 'now' && (
         <Notice tone="info">
-          הפרסומים נכנסים לתור מיד. קבוצות יוצאות דרך ה-worker שעל המחשב, בזו אחר זו ובכפוף למרווח ולמכסות שהגדרתם.
+          הפרסומים נכנסים לתור מיד. קבוצות יוצאות דרך התוכנה שעל המחשב שלכם, בזו אחר זו ובכפוף למרווח ולמכסות שהגדרתם.
         </Notice>
       )}
 

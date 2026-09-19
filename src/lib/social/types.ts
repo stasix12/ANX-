@@ -345,12 +345,29 @@ export const DEFAULT_LIMITS: LimitsSettings = {
   dedupeDays: 14,
 };
 
+/**
+ * The FALLBACK business details — what `getBusiness()` returns for a key the
+ * stored settings row does not carry. Every field here is blank on purpose.
+ *
+ * getSetting() merges `{ ...fallback, ...row.value }`, so anything left in this
+ * object is published under the owner's name whenever their own row is missing
+ * that key. It used to hold one specific business's real phone number and
+ * WhatsApp link, which meant a settings row saved with a phone but no whatsapp
+ * (or a fresh install that had not been through the settings screen) sent posts
+ * out carrying one business's phone beside another's WhatsApp — two different
+ * businesses on one Facebook post, with no way to notice from the editor.
+ *
+ * A contact detail nobody typed is invented data, so there is none here.
+ * renderPostText() (./compose.ts) already omits an empty phone or WhatsApp
+ * line, so a blank fallback publishes the body alone rather than someone
+ * else's number, and the settings screen is where real values come from.
+ */
 export const DEFAULT_BUSINESS: BusinessSettings = {
-  name: 'הפתרון המבריק',
-  phone: '053-5257250',
-  whatsapp: '972535257250',
-  cities: ['באר שבע', 'ערד'],
-  services: ['ניקוי ספות וריפודים', 'ניקוי מזגנים'],
+  name: '',
+  phone: '',
+  whatsapp: '',
+  cities: [],
+  services: [],
 };
 
 export const QUEUE_STATUS_LABEL: Record<QueueStatus, string> = {

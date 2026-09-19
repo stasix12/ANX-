@@ -19,7 +19,7 @@ import {
 } from '@/lib/social/types';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { FacebookGroupBrowserAdapter } from './adapters/facebookGroupBrowser';
-import { logActivity, unwrap, workerDb } from './db';
+import { logActivity, safeError, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
 import { readGroupProfile } from './facebook/profile';
@@ -222,7 +222,29 @@ async function tick(state: WorkerState): Promise<void> {
 
   const jobs = (due as (QueueItem & { target: unknown })[]).map(({ target: _t, ...item }) => item);
   const concurrency = Math.max(1, Math.min(3, browser.concurrentJobs || 1));
-  await Promise.all(jobs.slice(0, concurrency).map((item) => runJob(state, item, { limits, browser, headless })));
+  /*
+   * ONE AT A TIME, always — `concurrentJobs` decides how many rows this tick
+   * takes, never how many run together.
+   *
+   * These used to go out under Promise.all, and that quietly disabled every
+   * limit in rules.ts. Each of the rules is a COUNT taken before any of the
+   * batch has written its outcome: three jobs starting together all read the
+   * same "published today" number, the same last published_at and the same
+   * "has this post gone to this group already" — and then hold a Facebook page
+   * open for 30-60 seconds each. So maxPerDay was exceeded by up to
+   * concurrency - 1, minGapMinutes (65 by default) was honoured as seconds,
+   * and two rows for the same post and group — which the planner can produce
+   * when both planners run at once — became two identical posts in one group.
+   *
+   * Sequentially, each job's outcome is already written when the next one is
+   * evaluated, which is what every one of those counts assumes. It costs
+   * nothing: there is one browser profile and one Facebook session here, so
+   * the jobs were never really parallel in the place it mattered.
+   */
+  for (const item of jobs.slice(0, concurrency)) {
+    if (stopping) break;
+    await runJob(state, item, { limits, browser, headless });
+  }
 }
 
 /**
@@ -396,6 +418,20 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     await db.from('social_queue').update({ ...patch, step_at: new Date().toISOString() }).eq('id', item.id);
     state.currentJob = null;
   };
+  /**
+   * finish(), but it THROWS when the write did not land.
+   *
+   * supabase-js resolves with `{ error }` instead of rejecting, so an awaited
+   * update tells you nothing unless you look. That is fine for the failure
+   * paths — a lost error message costs an error message — but the "published"
+   * write is the one the whole no-double-post guarantee rests on, so it has to
+   * be able to report that it failed.
+   */
+  const finishChecked = async (patch: Partial<QueueItem> & Record<string, unknown>) => {
+    const { error } = await db.from('social_queue').update({ ...patch, step_at: new Date().toISOString() }).eq('id', item.id);
+    if (error) throw new Error(error.message);
+    state.currentJob = null;
+  };
 
   const decision = await evaluateQueueItem(db, { item: { ...item, attempts }, target: t, post: p, variant: v, limits: jobEnv.limits, browser: jobEnv.browser });
   if (decision.action === 'skip') {
@@ -428,8 +464,24 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   let failureShot: string | null = null;
   console.log(`[worker] ▶ "${tt.name}" — ${pp.title || 'פוסט'}${v ? ` (גרסה ${v.label})` : ''}`);
 
+  /*
+   * The publish call is the ONLY thing inside this try.
+   *
+   * The outcome write used to sit inside it too, and that is a double-post: if
+   * the Supabase write failed after Facebook had already accepted the post —
+   * a dropped connection, a JWT that expired during a 40-second upload — the
+   * failure landed in the catch below as a generic error, `attempts < 3` put
+   * the row back on the queue, and on the next claim rules.ts found no
+   * published row for this post and target (its own outcome had never been
+   * recorded) and published the same text to the same group a second time.
+   *
+   * Now a write failure after a successful publish can only leave the row on
+   * 'publishing' — visible, recoverable by hand, and never re-claimed, because
+   * both claims filter on status = 'scheduled'.
+   */
+  let result: Awaited<ReturnType<typeof adapter.publish>>;
   try {
-    const result = await adapter.publish({
+    result = await adapter.publish({
       queueId: item.id,
       target: tt,
       text,
@@ -450,42 +502,33 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       },
       confirm: requireConfirmation ? (page) => waitForConfirmation(item.id, page) : undefined,
     });
-
-    if (result.outcome === 'cancelled') {
-      await finish({ status: 'skipped', step: '', skip_reason: 'לא אושר לפני הפרסום הסופי.' });
-      await logActivity('warn', 'cancelled', `"${tt.name}": הפרסום בוטל לפני הלחיצה הסופית`, { queueId: item.id });
-      return;
-    }
-
-    const note = [
-      result.pendingApproval ? 'הפוסט ממתין לאישור מנהל הקבוצה.' : '',
-      result.verified ? '' : 'לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.',
-    ]
-      .filter(Boolean)
-      .join(' ');
-    await finish({ status: 'published', step: 'published', published_at: new Date().toISOString(), error: note || null, rendered_text: text });
-    const targetPatch: Record<string, unknown> = { last_published_at: new Date().toISOString(), last_status: result.pendingApproval ? 'pending_approval' : 'published', last_error: '' };
-    if (result.groupTitle && (tt.name === tt.external_id || !tt.name)) targetPatch.name = result.groupTitle;
-    await db.from('social_targets').update(targetPatch).eq('id', tt.id);
-    await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified });
-    console.log(`[worker] ✔ פורסם ל-"${tt.name}"${note ? ` (${note})` : ''}`);
   } catch (err) {
     const screenshot = failureShot ?? (await captureScreenshot(livePage, item.id, lastStep));
+    /*
+     * One shape for everything that reaches a column the dashboard renders:
+     * token-scrubbed, and Hebrew. `err.message` went in raw before, so
+     * social_queue.error and social_targets.last_error — the two fields
+     * ErrorDetail.tsx prints verbatim — were the only writes TOKEN_RE never
+     * saw, and a Playwright timeout arrived in English inside an RTL sentence.
+     * The untouched text stays on `meta.detail` for the activity log, which
+     * scrubs it and does not put it on screen.
+     */
+    const raw = err instanceof Error ? err.message : String(err);
+    const message = safeError(err);
     if (err instanceof SessionError) {
-      state.attention = err.message;
+      state.attention = message;
       state.browserState = 'needs_auth';
-      await finish({ status: 'needs_attention', step: 'needs_attention', error: err.message, screenshot_path: screenshot });
-      await db.from('social_targets').update({ last_status: 'needs_attention', last_error: err.message }).eq('id', tt.id);
+      await finish({ status: 'needs_attention', step: 'needs_attention', error: message, screenshot_path: screenshot });
+      await db.from('social_targets').update({ last_status: 'needs_attention', last_error: message }).eq('id', tt.id);
       await heartbeat(state, 'needs_attention', jobEnv.browser.debugMode, 'needs_auth');
-      await logActivity('error', 'needs_attention', `Facebook דורש פעולה ידנית (${tt.name}): ${err.message}`, { queueId: item.id, kind: err.kind });
-      console.log(`[worker] ⚠ ${err.message}`);
+      await logActivity('error', 'needs_attention', `Facebook דורש פעולה ידנית (${tt.name}): ${message}`, { queueId: item.id, kind: err.kind, detail: raw });
+      console.log(`[worker] ⚠ ${raw}`);
       return;
     }
-    const message = err instanceof Error ? err.message : String(err);
     if (err instanceof PublishError && err.kind === 'cannot_post') {
       await finish({ status: 'skipped', step: '', skip_reason: message, screenshot_path: screenshot });
       await db.from('social_targets').update({ last_status: 'cannot_post', last_error: message }).eq('id', tt.id);
-      await logActivity('warn', 'skipped', `${tt.name}: ${message}`, { queueId: item.id });
+      await logActivity('warn', 'skipped', `${tt.name}: ${message}`, { queueId: item.id, detail: raw });
       return;
     }
     const afterSubmit = err instanceof PublishError && err.afterSubmit;
@@ -493,29 +536,96 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       // Never retry automatically once "Post" was clicked — the owner checks the group first.
       await finish({ status: 'needs_attention', step: 'needs_attention', error: message, screenshot_path: screenshot });
       await db.from('social_targets').update({ last_status: 'needs_attention', last_error: message }).eq('id', tt.id);
-      await logActivity('error', 'needs_attention', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep });
-      console.log(`[worker] ⚠ ${message}`);
+      await logActivity('error', 'needs_attention', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep, detail: raw });
+      console.log(`[worker] ⚠ ${raw}`);
       return;
     }
     if (attempts < MAX_PRE_SUBMIT_ATTEMPTS) {
       const retryAt = new Date(Date.now() + 10 * 60_000 * attempts).toISOString();
-      await finish({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: message, screenshot_path: screenshot });
-      await logActivity('warn', 'retry', `${tt.name}: ניסיון ${attempts} נכשל בשלב ${lastStep}, ינסה שוב ב-${retryAt}: ${message}`, { queueId: item.id });
-      console.log(`[worker] ✖ ${message} (ינסה שוב)`);
+      // confirmed_at is cleared with every other per-attempt field: a stamp
+      // left from this round would let the next one skip asking (see
+      // waitForConfirmation).
+      await finish({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: message, screenshot_path: screenshot, confirmed_at: null });
+      await logActivity('warn', 'retry', `${tt.name}: ניסיון ${attempts} נכשל בשלב ${lastStep}, ינסה שוב ב-${retryAt}: ${message}`, { queueId: item.id, detail: raw });
+      console.log(`[worker] ✖ ${raw} (ינסה שוב)`);
       return;
     }
     await finish({ status: 'failed', step: 'failed', error: message, screenshot_path: screenshot });
     await db.from('social_targets').update({ last_status: 'failed', last_error: message }).eq('id', tt.id);
-    await logActivity('error', 'publish_failed', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep });
-    console.log(`[worker] ✖ ${message}`);
+    await logActivity('error', 'publish_failed', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep, detail: raw });
+    console.log(`[worker] ✖ ${raw}`);
+    return;
   }
+
+  if (result.outcome === 'cancelled') {
+    await finish({ status: 'skipped', step: '', skip_reason: 'לא אושר לפני הפרסום הסופי.' });
+    await logActivity('warn', 'cancelled', `"${tt.name}": הפרסום בוטל לפני הלחיצה הסופית`, { queueId: item.id });
+    return;
+  }
+
+  const note = [
+    result.pendingApproval ? 'הפוסט ממתין לאישור מנהל הקבוצה.' : '',
+    result.verified ? '' : 'לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  /*
+   * The post exists on Facebook from here on, so this write is retried rather
+   * than allowed to fail once. If it still will not land the row is LEFT on
+   * 'publishing' on purpose — a human sees it stuck and decides, which is the
+   * only outcome that cannot post the same thing twice.
+   */
+  const recorded = await persist(() =>
+    finishChecked({ status: 'published', step: 'published', published_at: new Date().toISOString(), error: note || null, rendered_text: text }),
+  );
+  if (!recorded) {
+    state.currentJob = null;
+    await logActivity('error', 'publish_unrecorded', `פורסם ל-"${tt.name}" אבל לא הצלחתי לרשום את התוצאה. הפרסום קיים בפייסבוק — סמנו את השורה ידנית.`, { queueId: item.id });
+    console.error(`[worker] ⚠ פורסם ל-"${tt.name}" אבל רישום התוצאה נכשל — השורה נשארת "מפרסם" ודורשת בדיקה ידנית.`);
+    return;
+  }
+
+  const targetPatch: Record<string, unknown> = { last_published_at: new Date().toISOString(), last_status: result.pendingApproval ? 'pending_approval' : 'published', last_error: '' };
+  if (result.groupTitle && (tt.name === tt.external_id || !tt.name)) targetPatch.name = result.groupTitle;
+  await db.from('social_targets').update(targetPatch).eq('id', tt.id).then(() => undefined, () => undefined);
+  await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified });
+  console.log(`[worker] ✔ פורסם ל-"${tt.name}"${note ? ` (${note})` : ''}`);
+}
+
+/** Three tries with a short backoff, for a write that must not be lost. */
+async function persist(write: () => Promise<unknown>): Promise<boolean> {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await write();
+      return true;
+    } catch (err) {
+      console.error(`[worker] רישום התוצאה נכשל (ניסיון ${attempt}/3):`, err instanceof Error ? err.message : err);
+      if (attempt < 3) await sleep(2000 * attempt);
+    }
+  }
+  return false;
 }
 
 /** Parks the job as awaiting_confirmation with a screenshot and polls for the owner's click. */
 async function waitForConfirmation(queueId: string, page: Page): Promise<'confirmed' | 'cancelled' | 'timeout'> {
   const db = await workerDb();
   const screenshot = await captureScreenshot(page, queueId, 'ready_to_publish');
-  await db.from('social_queue').update({ status: 'awaiting_confirmation', screenshot_path: screenshot, step: 'ready_to_publish', step_at: new Date().toISOString() }).eq('id', queueId);
+  /*
+   * confirmed_at: null is the whole gate.
+   *
+   * Nothing used to clear this column once it was stamped, and every path that
+   * puts a row back in the queue — the pre-submit retry below, "נסה שוב",
+   * resumeNeedsAttention — left it set. The next time the same row reached
+   * this point the first poll, under three seconds later, read the stamp from
+   * the PREVIOUS round and returned 'confirmed': the Post button was clicked
+   * without anybody being asked. The owner is told "המערכת תעצור ותחכה לאישור
+   * שלכם", so this must be a question every single time.
+   */
+  await db
+    .from('social_queue')
+    .update({ status: 'awaiting_confirmation', confirmed_at: null, screenshot_path: screenshot, step: 'ready_to_publish', step_at: new Date().toISOString() })
+    .eq('id', queueId);
   console.log('[worker]    ממתין לאישור סופי בלוח הבקרה…');
   const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
   while (Date.now() < deadline) {

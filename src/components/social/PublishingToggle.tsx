@@ -78,7 +78,12 @@ export function PublishingToggle() {
       ) : (
         <PauseIcon className="h-4 w-4" />
       )}
-      <span>{paused ? 'המשך' : 'השהה'}</span>
+      {/* "הכול", not a bare "השהה". This control stops EVERY round in the
+          product, and it sits in the sticky header a few hundred pixels above
+          a run card whose own pause button — which stops one round — read
+          exactly the same word. Two buttons on one screen, the same label,
+          wildly different blast radius. */}
+      <span>{paused ? 'המשך הכול' : 'השהה הכול'}</span>
     </button>
   );
 }

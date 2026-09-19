@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircleIcon, ChevronIcon, CloseIcon, DotIcon, SpinnerIcon, XCircleIcon } from '@/components/icons';
 import { QUEUE_STATUS_LABEL, type PublishMethod, type QueueStatus } from '@/lib/social/types';
@@ -500,20 +500,37 @@ export function Tile({
   label,
   value,
   sub,
-  tone = 'default',
+  tone = 'neutral',
   href,
   tinted = false,
 }: {
   label: string;
   value: string | number;
   sub?: string;
-  tone?: 'default' | 'good' | 'bad' | 'warn';
+  /*
+   * The full Tone vocabulary, and `neutral` is the default.
+   *
+   * There used to be no `neutral` in this union at all, and the default was
+   * named `default` and resolved to BRAND. So a "דולגו" tile — a status
+   * STATUS_TONE explicitly calls neutral, because skipping is the scheduler
+   * declining a slot and not a failure — came out in the waiting blue, beside
+   * a "ממתינים" tile in the same blue meaning the opposite thing. On the
+   * campaign screen the Counter 200px above it rendered the very same figure
+   * in grey. And `tone={n ? 'bad' : 'default'}` painted a ZERO failure count
+   * in the action colour.
+   *
+   * `default` is kept as an accepted value so nothing breaks, and folds to
+   * `brand` for any call site that meant "the action colour".
+   */
+  tone?: Tone | 'default';
   href?: string;
   /** Paints the tile in its tone instead of plain white. */
   tinted?: boolean;
 }) {
-  const t: Tone = { default: 'brand', good: 'good', bad: 'bad', warn: 'warn' }[tone] as Tone;
-  const color = TONE_TEXT[t];
+  const t: Tone = tone === 'default' ? 'brand' : tone;
+  // Neutral takes mist-100, the same exception StatCard's FIGURE map makes:
+  // this is the number being read, and mist-300 makes it look disabled.
+  const color = t === 'neutral' ? 'text-mist-100' : TONE_TEXT[t];
   /*
    * Tinted tiles carry their meaning in the surface, not only in the number,
    * so a red "failed" count is visible at a glance instead of having to be
@@ -758,16 +775,105 @@ export function Sheet({
    */
   const anchor = useRef<HTMLSpanElement>(null);
   const [themeClass, setThemeClass] = useState('');
-  useEffect(() => {
+  /*
+   * useLayoutEffect, not useEffect — this runs BEFORE paint.
+   *
+   * As an effect it ran after, so every sheet came up in the storefront's
+   * charcoal for its first two frames and then recoloured, while the
+   * `sheet-in` slide-up was already running: a grey panel sliding into place
+   * and changing colour mid-flight. Measured with a per-frame sampler on
+   * /social/groups — f0 +0.1ms and f1 +10.9ms at rgb(43,47,51), f2 +14.5ms at
+   * rgb(20,45,74). State is per-Sheet-instance, so each sheet in the product
+   * did it once per page load; on a throttled phone it is longer than 14ms.
+   */
+  useLayoutEffect(() => {
     if (!open) return;
     const host = anchor.current?.closest<HTMLElement>('[class*="-theme"]');
     setThemeClass(host ? host.className : '');
   }, [open]);
 
+  /*
+   * The panel, and where the keyboard is allowed to go while it is open.
+   *
+   * `aria-modal="true"` was set, which is enough for iOS VoiceOver and does
+   * nothing at all about Tab. Measured on eight sheets: focus after opening
+   * stayed on the trigger OUTSIDE the dialog 8/8, and 27-194 tabbable
+   * elements stayed reachable behind the overlay. Three Tab presses from the
+   * open "עריכת סבב" sheet reached delete-this-campaign — focusable, and
+   * activatable, with the sheet still covering it. Escape closed the sheet
+   * but left focus wherever the walk had stopped.
+   */
+  const panel = useRef<HTMLDivElement>(null);
+  const restoreTo = useRef<HTMLElement | null>(null);
+
+  /*
+   * onClose goes through a ref, and that is the whole reason this sheet is
+   * usable at all.
+   *
+   * The effect below MOVES FOCUS. It must therefore run once per opening and
+   * never again — but `onClose` was in its dependency array, and every call
+   * site in this product passes an inline arrow (`onClose={() => setAddOpen(false)}`,
+   * seventeen of them), so the prop is a new function on every parent render.
+   * A sheet with a controlled input re-renders its parent on every keystroke,
+   * which re-ran this effect, which called panel.focus() and took the caret
+   * out of the field. Measured on /social/groups → "הוספת קבוצות": typing
+   * `https://www.facebook.com/groups/12345` left the input holding "h", with
+   * document.activeElement on the dialog DIV. Adding a Facebook group — the
+   * only way groups enter this product — was impossible.
+   *
+   * The ref keeps the latest handler for Escape without making the identity of
+   * that handler a reason to re-run the focus move.
+   */
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
-    if (!open) return;
+    // `mounted` is a dependency, not decoration. The portal only renders once
+    // the component has mounted, so on a Sheet that is created already-open —
+    // which is every useConfirm() dialog — the first pass of this effect ran
+    // while `panel.current` was still null and the focus move was silently
+    // lost. Measured: the confirm sheet opened with focus still on the button
+    // that triggered it.
+    if (!open || !mounted) return;
+    restoreTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const tabbable = () =>
+      Array.from(
+        panel.current?.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+
+    // Focus the panel itself rather than its first control: on a bottom sheet
+    // that would scroll a long body to whatever happens to be first, and the
+    // title is what the person needs to read.
+    panel.current?.focus({ preventScroll: true });
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = tabbable();
+      if (!items.length) {
+        e.preventDefault();
+        panel.current?.focus({ preventScroll: true });
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || !panel.current?.contains(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
     // Freeze the page behind the sheet so a scroll gesture moves the sheet.
@@ -776,8 +882,14 @@ export function Sheet({
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
+      // Back to the control that opened it — closing a dialog should never
+      // leave the keyboard stranded at the top of the document.
+      restoreTo.current?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+    // onClose is deliberately NOT a dependency — see onCloseRef above. Adding
+    // it back re-runs the focus move on every parent render and empties every
+    // input in the product.
+  }, [open, mounted]);
 
   /*
    * Portalled to <body>, and that is not a nicety — it is the fix.
@@ -834,9 +946,12 @@ export function Sheet({
         onClick={onClose}
       />
       <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        // -1 so the panel can hold focus on open without joining the tab order.
+        tabIndex={-1}
         /*
          * ink-800, one step above the card behind it — a sheet has to read as
          * a layer on top, and on a dark ground a black drop shadow does none

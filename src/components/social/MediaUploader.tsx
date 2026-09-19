@@ -62,8 +62,11 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
             </button>
           </div>
         ))}
+        {/* This is the ONLY way to attach a photo to a post, and it is
+            icon-only: with no aria-label VoiceOver announced it as "button". */}
         <button
           type="button"
+          aria-label={busy ? 'מעלה קבצים…' : 'הוספת תמונה או סרטון'}
           onClick={() => inputRef.current?.click()}
           disabled={busy}
           className="grid aspect-square place-items-center rounded-xl border-2 border-dashed border-ink-600 text-mist-500 hover:border-brand-300 hover:text-brand-400 disabled:opacity-50"

@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarIcon, ClockIcon, MegaphoneIcon, PlusIcon, SendIcon, XCircleIcon } from '@/components/icons';
+import { CalendarIcon, ClockIcon, MegaphoneIcon, MoonIcon, PlusIcon, SendIcon, SunIcon, SunsetIcon, XCircleIcon } from '@/components/icons';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { LiveCampaignHero, LiveQueueHero } from '@/components/social/LiveCampaignHero';
 import { LiveBoard } from '@/components/social/LiveBoard';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { QuickActions } from '@/components/social/QuickActions';
+import { SetupChecklist } from '@/components/social/SetupChecklist';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
 import { AlertBar, Button, Card, EmptyState, Loading, Notice, SectionHeader, SkeletonTiles, StatCard, useConfirm, useToast, ButtonLink} from '@/components/social/ui';
@@ -24,6 +25,7 @@ import {
   listCampaigns,
   listQueue,
   listTargets,
+  listWorkers,
   pauseCampaign,
   queueSummary,
   setPaused,
@@ -31,6 +33,7 @@ import {
   type QueueRow,
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
+import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, type QueueSummary } from '@/lib/social/status';
 import { addDaysISO, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
@@ -58,6 +61,15 @@ interface DashboardData {
   log: ActivityEntry[];
   campaigns: Campaign[];
   states: Record<string, CampaignState>;
+  /**
+   * Whether any worker has sent a heartbeat inside its offline window.
+   *
+   * The dashboard reads this for one reason: no screen in this product may say
+   * a publication is "happening now" unless a machine is actually there to
+   * make it happen. It is the same read BrowserStatusCard already does, from
+   * the same table — not a second source of truth.
+   */
+  workerOnline: boolean;
 }
 
 /**
@@ -84,7 +96,7 @@ export default function SocialDashboard() {
       // Only a live campaign can be the one running right now, so the rollup
       // read stays proportional to what the hero can actually show.
       const liveIds = campaigns.filter((c) => c.status !== 'archived').map((c) => c.id);
-      const [queue, today, week, limits, control, targets, manual, log, states, upcoming] = await Promise.all([
+      const [queue, today, week, limits, control, targets, manual, log, states, upcoming, workers] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         countPublishedBetween(zonedToUtc(weekStartISO, '00:00').toISOString()),
@@ -99,6 +111,7 @@ export default function SocialDashboard() {
         // and "הפרסומים הקרובים" would be showing the last publications while
         // calling the first of them the next one.
         listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' }),
+        listWorkers(),
       ]);
       setData({
         counts: queue.counts,
@@ -113,6 +126,7 @@ export default function SocialDashboard() {
         log,
         campaigns,
         states,
+        workerOnline: workers.some((w) => w.online),
       });
       setError(null);
     } catch (err) {
@@ -120,10 +134,40 @@ export default function SocialDashboard() {
     }
   }, []);
 
+  /*
+   * The 30-second refresh, with the two guards every poller in this module
+   * needs and none of them had.
+   *
+   * 1. An in-flight guard. `setInterval` fires whether or not the previous
+   *    read came back, and this screen's read is the heaviest in the product
+   *    (measured in a production build against a 5 000-row queue: 7.8 MB and
+   *    144 requests a minute). On a slow cell the reads stacked, which made
+   *    them slower, which stacked more.
+   * 2. A visibility guard. A dashboard left open in a background tab kept
+   *    pulling megabytes on a metered Israeli mobile plan to redraw a screen
+   *    nobody was looking at. Coming back to the tab reads immediately, so
+   *    what the owner sees on return is fresh, not stale-then-refreshed.
+   */
   useEffect(() => {
-    load();
-    const id = setInterval(load, 30_000);
-    return () => clearInterval(id);
+    let alive = true;
+    let running = false;
+    const tick = async () => {
+      if (!alive || running || document.visibilityState === 'hidden') return;
+      running = true;
+      try {
+        await load();
+      } finally {
+        running = false;
+      }
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      alive = false;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [load]);
 
   async function act(key: string, fn: () => Promise<unknown>, done: string) {
@@ -205,7 +249,31 @@ export default function SocialDashboard() {
     if (ok) await act('reset-run', () => stopCampaign(id), `הסבב "${name}" הסתיים. המונה יתחיל מאפס.`);
   }
 
+  /**
+   * One tap that posts to Facebook, so it asks first — and the question says
+   * what the tap really does.
+   *
+   * Every other consequential action in this module is confirmed with a real
+   * number; this one, arguably the most consequential, went straight to
+   * /api/social/run. It was also mislabelled: it does not publish everything
+   * now, it runs one worker tick over rows whose time has ALREADY come, and
+   * only Pages can go out that way (server/worker.ts restricts the server
+   * runtime to facebook_page and facebook_group_manual). Groups still wait for
+   * the worker on the owner's PC. Nothing is brought forward.
+   */
   async function runNow() {
+    const ok = await confirm.ask({
+      title: 'להריץ את הפרסום עכשיו?',
+      body: (
+        <>
+          המערכת תעבור על הפרסומים שכבר הגיע זמנם ותוציא את אלה שמיועדים לדפי פייסבוק, דרך ה-API הרשמי.
+          {' '}פרסומים לקבוצות ימשיכו לחכות ל-worker שרץ במחשב שלכם.
+          {' '}פרסומים שעדיין לא הגיע זמנם לא יוקדמו.
+        </>
+      ),
+      confirmLabel: 'הרץ',
+    });
+    if (!ok) return;
     setBusy('run');
     try {
       const r = await callSocialApi<{ ran: boolean; planned: number; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
@@ -248,22 +316,67 @@ export default function SocialDashboard() {
   /* Work in flight that belongs to no campaign — still the subject of the screen. */
   const liveQueue = Boolean(data && (summary.queued > 0 || data.upcoming.length > 0));
 
+  /**
+   * The publication that should already have gone out, when nothing is there
+   * to send it.
+   *
+   * `data.upcoming` is the real queue, ascending, so its first row is the next
+   * instant due. If that instant has passed and no worker has sent a heartbeat,
+   * nothing is going to move it — and this is the product's most common
+   * real-world state, because the machine that publishes to groups is a laptop
+   * that goes to sleep.
+   *
+   * Deliberately NO count. The upcoming read is capped at UPCOMING_LIMIT, so
+   * any total taken from it would be a ceiling presented as a fact — the thing
+   * this screen exists not to do. The instant is a fact, and it is enough.
+   *
+   * The threshold is OVERDUE_AFTER_SECONDS (countdown.ts) — the same one the
+   * hero card 200px below this bar uses to decide the word "באיחור". It was a
+   * local 90_000 here, and two thresholds for one idea is how the screens
+   * started contradicting each other in the first place: between 90 and 120
+   * seconds past due this bar said "הפרסום עומד — המחשב לא מחובר" while the
+   * card under it still read "אמור לצאת עכשיו".
+   */
+  const stalledSince =
+    data &&
+    !data.workerOnline &&
+    !data.control.paused &&
+    data.upcoming[0] &&
+    new Date(data.upcoming[0].scheduled_at).getTime() < Date.now() - OVERDUE_AFTER_SECONDS * 1000
+      ? data.upcoming[0].scheduled_at
+      : null;
+
   /*
    * Greeting by time of day, in the app's own timezone. Cosmetic, but it is
    * what makes the header read as a product rather than an admin panel.
    */
   const greeting = (() => {
     const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Asia/Jerusalem' }).format(new Date()));
-    if (hour < 5) return 'לילה טוב 🌙';
-    if (hour < 12) return 'בוקר טוב ☀️';
+    if (hour < 5) return 'לילה טוב';
+    if (hour < 12) return 'בוקר טוב';
     if (hour < 17) return 'צהריים טובים';
-    return 'ערב טוב 🌆';
+    return 'ערב טוב';
+  })();
+  /*
+   * The greeting's mark, as an SVG from the product's own icon set.
+   *
+   * It was 🌙 / ☀️ / 🌆 — Apple's colours, at Apple's optical weight, beside
+   * 64 monochrome hairline glyphs — and the midday branch had no emoji at
+   * all, so the line was inconsistent with itself four hours a day. These
+   * three icons already existed in icons.tsx and were simply not being used.
+   */
+  const GreetingIcon = (() => {
+    const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Asia/Jerusalem' }).format(new Date()));
+    if (hour < 5) return MoonIcon;
+    if (hour < 17) return SunIcon;
+    return SunsetIcon;
   })();
 
   return (
     <SocialShell
       title="לוח בקרה"
       subtitle={greeting}
+
       lede="סקירת הפעילות שלך היום"
       headerAction={
         <ButtonLink href="/social/posts/new">
@@ -293,21 +406,50 @@ export default function SocialDashboard() {
               busy={busy === 'discard'}
             />
           )}
+          {/* The single most useful sentence on this screen when it is true, and
+              it used to be 117 text-lines down inside the worker card, far
+              below the fold, while the hero above announced a publication
+              "happening right now". Publishing to groups needs the PC; when
+              the PC is not there, that is the headline. */}
+          {stalledSince && (
+            <AlertBar
+              tone="warn"
+              title="הפרסום עומד — המחשב לא מחובר"
+              body={`הפרסום הבא היה אמור לצאת ב-${stampText(stalledSince)} ואף אחד לא לקח אותו. פרסום לקבוצות יוצא רק כשהתוכנה פועלת על המחשב שלכם.`}
+              actionLabel="מה לעשות"
+              href="#browser-status"
+            />
+          )}
           {data.control.rateLimitedUntil && new Date(data.control.rateLimitedUntil) > new Date() && (
             <AlertBar tone="warn" title="Meta ביקשה להאט" body={`הפרסום יתחדש אוטומטית ב-${stampText(data.control.rateLimitedUntil)}.`} />
           )}
           {/* The number and the list behind the link are the same set — the
               alert used to count needs_attention alone and open a list that
               also held the manual and confirmation rows. */}
+          {/* Amber, not red. The house rule is amber = a person is needed, red =
+              something failed, and STATUS_TONE already calls all three
+              needs-human statuses `warn`. This bar was red while the tile 200px
+              below it — showing the SAME number, from the same field — was
+              amber, so the owner could not tell whether something had broken or
+              merely needed a tap. */}
           {summary.needsHuman > 0 && (
             <AlertBar
-              tone="bad"
+              tone="warn"
               title={`${summary.needsHuman} פרסומים ממתינים לכם`}
-              body="בדרך כלל פייסבוק ביקשה אימות בחלון של ה-worker, או שהפרסום מחכה לאישור שלכם."
+              body="בדרך כלל פייסבוק ביקשה אימות בחלון הדפדפן שבמחשב, או שהפרסום מחכה לאישור שלכם."
               actionLabel="הצג"
               href="/social/history?status=needs_attention"
             />
           )}
+
+          {/* 0 — only on a brand-new install, and only until the first
+              publication exists: the three prerequisites, in order. It reads
+              its own done/not-done from the same data the tiles below use. */}
+          <SetupChecklist
+            hasTargets={data.activeTargets > 0}
+            workerOnline={data.workerOnline}
+            hasPublications={summary.total > 0}
+          />
 
           {/* 1 — where the day stands. One flat card surface; colour marks the
               status, not the card. A tile whose value is 0 goes neutral — a red
@@ -347,7 +489,11 @@ export default function SocialDashboard() {
                 tone={summary.needsHuman ? 'warn' : 'neutral'}
                 label="דורשים אתכם"
                 value={summary.needsHuman}
-                sub={`${data.activeTargets} יעדים פעילים`}
+                /* Every other tile's sub-line describes its OWN figure. This
+                   one used to print the number of active targets, which has
+                   nothing to do with the count above it — "6" over "43 יעדים
+                   פעילים" reads as "6 of 43". */
+                sub={summary.needsHuman ? 'לא יזוזו עד שתטפלו' : 'אין מה לעשות כרגע'}
                 href="/social/history?status=needs_attention"
               />
             </div>
@@ -367,6 +513,9 @@ export default function SocialDashboard() {
               nextTarget={featuredNext ? { name: featuredNext.name, image_url: featuredNext.image_url ?? undefined } : null}
               onTune={() => setTunerOpen(true)}
               onReset={() => resetRun(featured.campaign.id, featured.campaign.name, featured.state)}
+              /* "Now" on that card is a claim about a machine, so it is made
+                 from a machine fact rather than from the clock. */
+              workerOnline={data.workerOnline}
               /* The post this run publishes. listQueue already selects the post
                  with its media, so the cover costs no extra read. */
               media={data.upcoming.find((r) => r.campaign_id === featured.campaign.id)?.post?.media ?? null}
@@ -388,6 +537,8 @@ export default function SocialDashboard() {
               nextTarget={data.upcoming[0]?.target ?? null}
               onTune={() => setTunerOpen(true)}
               media={data.upcoming[0]?.post?.media ?? null}
+              inFlight={summary.inFlight}
+              workerOnline={data.workerOnline}
             />
           ) : (
             <EmptyState
@@ -419,7 +570,7 @@ export default function SocialDashboard() {
 
             <div className="space-y-5">
               <QuickActions onRunNow={runNow} running={busy === 'run'} />
-              <BrowserStatusCard onChanged={load} />
+              <BrowserStatusCard id="browser-status" onChanged={load} />
             </div>
           </div>
 
@@ -464,7 +615,10 @@ export default function SocialDashboard() {
           </Card>
 
           <div className="flex justify-center pb-2">
-            <Button variant="ghost" size="sm" busy={busy === 'stop'} onClick={() => discardQueue(true)} className="text-error-400">
+            {/* size="md" for the 44px floor. This is the panic button — it
+                pauses everything and cancels the whole queue — and it was the
+                one destructive control in the product measuring 40px. */}
+            <Button variant="ghost" busy={busy === 'stop'} onClick={() => discardQueue(true)} className="text-error-400">
               עצור ומחק את כל הפרסומים
             </Button>
           </div>

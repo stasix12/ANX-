@@ -66,6 +66,13 @@ export function ContentCard({
    */
   const nothingYet = item.skippedCount > 0 ? `טרם פורסם · ${item.skippedCount} דולגו` : 'טרם פורסם';
   const published = item.publishCount === 0 ? nothingYet : groups > 1 ? `${times} ב-${groups} קבוצות` : times;
+  /*
+   * What the third line would say, or nothing. It is dropped when it repeats
+   * the title above it or the text already filling the cover tile — the two
+   * ways this card had of saying the same thing twice.
+   */
+  const body = post.base_text.trim();
+  const subtitle = !body ? (cover ? '' : 'בלי טקסט — מדיה בלבד') : body === title.trim() || !cover ? '' : body;
 
   return (
     <li className="relative">
@@ -112,9 +119,24 @@ export function ContentCard({
           <span dir="auto" className="mt-2 line-clamp-2 block px-0.5 text-sm font-bold leading-snug text-mist-100">
             {title}
           </span>
-          <span dir="auto" className="mt-0.5 line-clamp-2 block px-0.5 text-[11px] leading-snug text-mist-500">
-            {post.base_text || 'בלי טקסט — מדיה בלבד'}
-          </span>
+          {/*
+            The subtitle only when it ADDS something.
+            
+            A text-only post has no cover image, so the tile itself already
+            renders base_text, and an untitled post derives its title from the
+            same base_text — the card printed one identical sentence three
+            times, in three sizes. Measured on the library: for the untitled
+            Russian post all three spans returned byte-identical strings, and
+            for titled posts two of the three did. 25 of 26 fixture posts are
+            text-only, which is the normal case for group publishing, so the
+            screen built for FINDING "the sofa post" on a phone made every card
+            look the same.
+          */}
+          {subtitle && (
+            <span dir="auto" className="mt-0.5 line-clamp-2 block px-0.5 text-[11px] leading-snug text-mist-500">
+              {subtitle}
+            </span>
+          )}
         </button>
 
         <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1 px-0.5">

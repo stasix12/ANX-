@@ -17,6 +17,17 @@ function isOurs(message: string): boolean {
   return /[֐-׿]/.test(message);
 }
 
+/**
+ * The migration file an owner has to run when the schema is behind.
+ *
+ * The message used to say "קובץ העדכון של מסד הנתונים" — "the database update
+ * file" — with fourteen .sql files in supabase/ and no way to tell which. Only
+ * the content-library screen ever named one. One constant, named in the one
+ * sentence every screen shows, so it also cannot drift: bump it here when a
+ * newer migration lands.
+ */
+export const LATEST_SCHEMA_FILE = 'supabase/social-schema-v8.sql';
+
 type Rule = { match: RegExp; text: string };
 
 const RULES: Rule[] = [
@@ -36,7 +47,7 @@ const RULES: Rule[] = [
   { match: /check constraint|invalid input syntax|out of range/i, text: 'אחד הערכים שהוזנו אינו תקין. בדקו את השדות ונסו שוב.' },
 
   // Missing schema — the owner has not run the SQL migration yet.
-  { match: /(relation|table|column).*does not exist|schema cache/i, text: 'מבנה הנתונים לא מעודכן. יש להריץ את קובץ העדכון של מסד הנתונים.' },
+  { match: /(relation|table|column).*does not exist|schema cache/i, text: `מבנה הנתונים לא מעודכן. צריך להריץ פעם אחת את ${LATEST_SCHEMA_FILE} ב-SQL Editor של Supabase.` },
 
   // Storage.
   { match: /payload too large|413|exceeded the maximum|file size/i, text: 'הקובץ גדול מדי. נסו קובץ קטן יותר.' },

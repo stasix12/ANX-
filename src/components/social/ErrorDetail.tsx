@@ -22,7 +22,7 @@ export function explainFailure(row: Pick<QueueRow, 'status' | 'error' | 'skip_re
     if (/אימות|בדיקת אבטחה|חסימה|להתחבר/.test(text)) {
       return {
         headline: 'פייסבוק ביקשה אימות',
-        advice: 'פתחו את הדפדפן של ה-worker, אשרו את מה שפייסבוק מבקשת, ואז "בדוק שוב" בלוח הבקרה.',
+        advice: 'פתחו את חלון הדפדפן שנפתח במחשב, אשרו את מה שפייסבוק מבקשת, ואז "בדוק שוב" בלוח הבקרה.',
         canRetry: false,
         needsOwner: true,
       };
@@ -45,7 +45,19 @@ export function explainFailure(row: Pick<QueueRow, 'status' | 'error' | 'skip_re
     return { headline: 'אין הרשאת פרסום בקבוצה', advice: 'פתחו את הקבוצה ובדקו שאתם חברים ושמותר לפרסם בה. אם לא — כבו אותה ברשימת הקבוצות.', canRetry: false, needsOwner: true };
   }
   if (/תיבת "כתבו משהו|לא מצאתי/.test(text)) {
-    return { headline: 'לא נמצא חלון הפוסט בקבוצה', advice: 'ייתכן שפייסבוק שינתה את המסך בקבוצה הזו. צפו בצילום התקלה ושלחו אותו לתמיכה.', canRetry: true, needsOwner: false };
+    /*
+     * This used to end "…ושלחו אותו לתמיכה" — send it to support. There is no
+     * support address, link or phone anywhere in /social, so the one sentence
+     * the owner reads at the exact moment they are stuck pointed at a door
+     * that does not exist. Until there is a support channel to name, the
+     * advice is the thing they can actually do by themselves.
+     */
+    return {
+      headline: 'לא נמצא חלון הפוסט בקבוצה',
+      advice: 'ייתכן שפייסבוק שינתה את המסך בקבוצה הזו, או שאין לכם הרשאת פרסום בה. פתחו את הקבוצה ובדקו שאפשר לכתוב בה פוסט, ואז נסו שוב. צילום התקלה בתפריט של השורה מראה מה הדפדפן ראה.',
+      canRetry: true,
+      needsOwner: false,
+    };
   }
   if (/קצב|rate|הגבילה/.test(text)) {
     return { headline: 'פייסבוק ביקשה להאט', advice: 'המערכת ממתינה ותנסה שוב לבד. לא נדרשת פעולה.', canRetry: false, needsOwner: false };
@@ -56,7 +68,7 @@ export function explainFailure(row: Pick<QueueRow, 'status' | 'error' | 'skip_re
   if (row.status === 'skipped') {
     return { headline: 'הפרסום דולג', advice: row.skip_reason || 'הפריט לא נשלח.', canRetry: true, needsOwner: false };
   }
-  return { headline: 'הפרסום נכשל', advice: 'אפשר לנסות שוב. אם זה חוזר, צפו בצילום התקלה.', canRetry: true, needsOwner: false };
+  return { headline: 'הפרסום נכשל', advice: 'אפשר לנסות שוב. אם זה חוזר, פתחו את צילום התקלה מהתפריט של השורה כדי לראות מה הדפדפן ראה.', canRetry: true, needsOwner: false };
 }
 
 export function ErrorDetail({ row, technical = false }: { row: QueueRow; technical?: boolean }) {

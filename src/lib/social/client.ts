@@ -77,10 +77,32 @@ export async function callSocialApi<T = any>(path: string, init: { method?: stri
     // fetch itself rejects only on a transport failure — no server, no signal.
     throw friendlyError(err, 'אין חיבור לשרת. בדקו את האינטרנט ונסו שוב.');
   }
-  const body = await res.json().catch(() => ({}));
+  /*
+   * Every route under /api/social answers with JSON, so a body that will not
+   * parse did not come from this app: a hotel or airport captive portal, a CDN
+   * interstitial or an SSO page, all of which answer 200 with HTML. This used
+   * to parse the body with an empty-object fallback, so that HTML became an
+   * empty object — `res.ok`
+   * was true, nothing threw, and the caller dereferenced fields of an object
+   * that had none. On /social/targets that put a raw English TypeError on a
+   * Hebrew phone screen with no way forward.
+   *
+   * Unparseable now fails like any other failure: one Hebrew sentence, through
+   * the same classifier.
+   */
+  const raw = await res.text().catch(() => '');
+  let body: any = null;
+  let parsed = false;
+  try {
+    body = raw ? JSON.parse(raw) : {};
+    parsed = true;
+  } catch {
+    parsed = false;
+  }
   // A route may hand back a raw backend message; it never reaches the screen
   // unclassified.
-  if (!res.ok) throw friendlyError(body?.error ?? `HTTP ${res.status}`, `הבקשה נכשלה (${res.status}).`);
+  if (!res.ok) throw friendlyError(parsed ? (body?.error ?? `HTTP ${res.status}`) : `HTTP ${res.status}`, `הבקשה נכשלה (${res.status}).`);
+  if (!parsed) throw new Error('החיבור לאינטרנט מחזיר דף אחר במקום את המערכת. בדקו את הרשת (רשת אורחים / הזדהות ב-WiFi) ונסו שוב.');
   return body as T;
 }
 
@@ -239,8 +261,46 @@ export async function ensureRunForPost(post: Pick<Post, 'id' | 'title' | 'campai
   return run.id;
 }
 
-export async function deleteCampaign(id: string): Promise<void> {
+/**
+ * Delete a run — and stop it first.
+ *
+ * social_queue.campaign_id is `on delete set null` (supabase/social-schema-v2.sql)
+ * and social_posts.campaign_id is too, so deleting the row alone used to leave
+ * every publication of that run in the queue with a null campaign. rules.ts
+ * only consults the campaign when a row HAS one (`if (campaignId)`), so those
+ * orphans sailed past the pause/stop check and kept publishing to Facebook for
+ * hours — with no run card left anywhere to pause them, because the card was
+ * the thing that had just been deleted. The owner deleted a round to stop it
+ * and watched it keep going.
+ *
+ * So delete now does what stop does first: schedules off, everything that has
+ * not gone out cancelled (CANCELLABLE — a job already running is left to finish
+ * safely), and only then the row itself. Returns how many publications were
+ * cancelled, so the screen can say it.
+ */
+export async function deleteCampaign(id: string): Promise<number> {
+  const { data: campaign } = await db().from('social_campaigns').select('name').eq('id', id).maybeSingle();
+  const name = (campaign as { name?: string } | null)?.name ?? '';
+
+  const posts = unwrap<{ id: string }[]>(await db().from('social_posts').select('id').eq('campaign_id', id));
+  const postIds = posts.map((p) => p.id);
+  if (postIds.length) unwrap(await db().from('social_schedules').update({ active: false }).in('post_id', postIds));
+
+  const rows = unwrap<{ id: string }[]>(
+    await db()
+      .from('social_queue')
+      .update({ status: 'skipped', step: '', skip_reason: 'הסבב נמחק' })
+      .eq('campaign_id', id)
+      .in('status', CANCELLABLE)
+      .select('id'),
+  );
+
   unwrap(await db().from('social_campaigns').delete().eq('id', id));
+  await logClientActivity('warn', 'campaign_deleted', `הסבב "${name}" נמחק — ${rows.length} פרסומים שטרם יצאו בוטלו`, {
+    campaignId: id,
+    cancelled: rows.length,
+  });
+  return rows.length;
 }
 
 /* ---------------------------------------------------------------- posts */
@@ -302,10 +362,28 @@ export async function duplicateCampaign(id: string): Promise<Campaign> {
   );
 }
 
+/**
+ * Archive: the post leaves the library, its schedules stop, and every
+ * publication that has not gone out yet is cancelled.
+ *
+ * "Not gone out yet" is CANCELLABLE_STATUSES, not 'scheduled'. It used to be
+ * `.eq('status', 'scheduled')`, so manual_pending, needs_attention,
+ * awaiting_confirmation and paused rows all survived the archive — they stayed
+ * in "דורשים אתכם" on the dashboard for a post that no longer exists in the
+ * library, and tapping "אשר" on one published an archived post to Facebook.
+ * The dialog has always said "פרסומים שטרם יצאו ידולגו"; this is the write
+ * finally matching the promise.
+ */
 export async function archivePost(id: string): Promise<void> {
   unwrap(await db().from('social_posts').update({ status: 'archived' }).eq('id', id));
   unwrap(await db().from('social_schedules').update({ active: false }).eq('post_id', id));
-  unwrap(await db().from('social_queue').update({ status: 'skipped', skip_reason: 'הפוסט הועבר לארכיון' }).eq('post_id', id).eq('status', 'scheduled'));
+  unwrap(
+    await db()
+      .from('social_queue')
+      .update({ status: 'skipped', step: '', skip_reason: 'הפוסט הועבר לארכיון' })
+      .eq('post_id', id)
+      .in('status', CANCELLABLE),
+  );
 }
 
 export async function listVariants(postId: string): Promise<Variant[]> {
@@ -339,15 +417,72 @@ export async function saveVariants(postId: string, variants: Partial<Variant>[])
 
 /* ---------------------------------------------------------------- media */
 
+/**
+ * What the social-media bucket is allowed to serve, and under which name.
+ *
+ * The bucket is PUBLIC by design — Meta fetches photos and videos by URL
+ * (supabase/social-schema.sql) — so whatever Content-Type is stored is what
+ * *.supabase.co serves to anyone with the link. The upload used to pass
+ * `file.type` and an extension taken from `file.name`, both of which the caller
+ * chooses freely: a programmatic File could store arbitrary bytes as
+ * `text/html` under the business's own storage domain, i.e. host a page there.
+ *
+ * So the type is resolved against this table instead of trusted, and the
+ * extension is derived from the resolved type rather than from the file name,
+ * which keeps the two agreeing.
+ */
+const MEDIA_TYPES: Record<string, { ext: string; kind: MediaItem['kind'] }> = {
+  'image/jpeg': { ext: 'jpg', kind: 'image' },
+  'image/png': { ext: 'png', kind: 'image' },
+  'image/gif': { ext: 'gif', kind: 'image' },
+  'image/webp': { ext: 'webp', kind: 'image' },
+  'image/avif': { ext: 'avif', kind: 'image' },
+  'image/bmp': { ext: 'bmp', kind: 'image' },
+  'image/tiff': { ext: 'tiff', kind: 'image' },
+  'image/heic': { ext: 'heic', kind: 'image' },
+  'image/heif': { ext: 'heif', kind: 'image' },
+  'video/mp4': { ext: 'mp4', kind: 'video' },
+  'video/quicktime': { ext: 'mov', kind: 'video' },
+  'video/webm': { ext: 'webm', kind: 'video' },
+};
+
+/** Same table, keyed by the extension an iPhone or a camera actually hands us. */
+const MEDIA_BY_EXT: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  bmp: 'image/bmp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  mov: 'video/quicktime',
+  webm: 'video/webm',
+};
+
 export async function uploadMedia(file: File): Promise<MediaItem> {
   const client = db();
-  const kind: MediaItem['kind'] = file.type.startsWith('video/') ? 'video' : 'image';
-  const ext = (file.name.split('.').pop() ?? (kind === 'video' ? 'mp4' : 'jpg')).toLowerCase();
-  const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${ext}`;
-  const { error } = await client.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false });
+  const declared = (file.type || '').toLowerCase().split(';')[0].trim();
+  const nameExt = (file.name.split('.').pop() ?? '').toLowerCase();
+  // The browser's own type first, then the file name, and only then a refusal —
+  // iOS sometimes hands over an empty type for a photo picked from the library.
+  const contentType = MEDIA_TYPES[declared] ? declared : MEDIA_BY_EXT[nameExt];
+  const resolved = contentType ? MEDIA_TYPES[contentType] : undefined;
+  if (!resolved) {
+    // SVG is deliberately absent: it is a document that can carry script, and
+    // this bucket is served publicly.
+    throw new Error('אפשר להעלות תמונות (JPG, PNG, GIF, WEBP, HEIC) או סרטונים (MP4, MOV, WEBM) בלבד.');
+  }
+  const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${resolved.ext}`;
+  const { error } = await client.storage.from('social-media').upload(path, file, { contentType, upsert: false });
   if (error) throw friendlyError(error);
   const { data } = client.storage.from('social-media').getPublicUrl(path);
-  return { kind, url: data.publicUrl, path, name: file.name };
+  return { kind: resolved.kind, url: data.publicUrl, path, name: file.name };
 }
 
 export async function removeMedia(item: MediaItem): Promise<void> {
@@ -375,7 +510,14 @@ export async function createSchedule(input: ScheduleInput): Promise<Schedule> {
  */
 export async function hasPendingQueue(postId: string): Promise<number> {
   const [rows, schedules] = await Promise.all([
-    db().from('social_queue').select('id', { count: 'exact', head: true }).eq('post_id', postId).in('status', ['scheduled', 'publishing', 'awaiting_confirmation']),
+    // Every row that has not finished, from the single classification — the
+    // same set plannedTargets() (plan.ts) treats as blocking. A hand-written
+    // ['scheduled','publishing','awaiting_confirmation'] left out
+    // manual_pending, needs_attention and paused, so a post whose rows were all
+    // parked after a worker hiccup counted as 0 pending: the owner got no
+    // "already on its way out" prompt, relaunched, and the planner then skipped
+    // every target — a launch that reported success and queued nothing.
+    db().from('social_queue').select('id', { count: 'exact', head: true }).eq('post_id', postId).in('status', OPEN_STATUSES),
     // `planned_until is null` is the point: a schedule that has never been
     // materialised is a launch still in flight. A recurring weekly or daily
     // schedule stays active for good — counting those would make every launch
@@ -401,12 +543,16 @@ export async function listSchedules(postId?: string): Promise<Schedule[]> {
 export async function setScheduleActive(id: string, active: boolean): Promise<void> {
   unwrap(await db().from('social_schedules').update({ active }).eq('id', id));
   if (!active) {
+    // Same list as every other cancel in this file — see archivePost(). A row
+    // parked on manual_pending / needs_attention / awaiting_confirmation has
+    // not gone out either, and leaving it behind kept an owner being asked to
+    // finish publications for a schedule they had just switched off.
     unwrap(
       await db()
         .from('social_queue')
-        .update({ status: 'skipped', skip_reason: 'התזמון בוטל' })
+        .update({ status: 'skipped', step: '', skip_reason: 'התזמון בוטל' })
         .eq('schedule_id', id)
-        .eq('status', 'scheduled'),
+        .in('status', CANCELLABLE),
     );
   }
 }
@@ -479,6 +625,24 @@ async function guardedUpdate(id: string, allowed: QueueItem['status'][], patch: 
   return rows.length > 0;
 }
 
+/**
+ * "נסה שוב": the row goes back to the front of the queue as if it had never
+ * run.
+ *
+ * `attempts: 0` and `confirmed_at: null` are part of that, and both were
+ * missing:
+ *
+ *   • attempts — rules.ts skips permanently once `attempts > 40` ("נדחה יותר
+ *     מדי פעמים בגלל מרווח הזמן בין פרסומים"), and the local worker stops
+ *     retrying a pre-submit failure at 3. A row retried by hand carried its old
+ *     counter, so the very next claim skipped or failed it again with the same
+ *     sentence, and there was no way to recover it from the screen at all.
+ *   • confirmed_at — the worker's confirmation gate polls this column, so a
+ *     stale stamp from a PREVIOUS round made the next "stop and ask me before
+ *     the Post click" return 'confirmed' on its first poll, without asking.
+ *
+ * Both are per-attempt state; a retry is a new attempt.
+ */
 export async function retryQueueItem(id: string): Promise<boolean> {
   return guardedUpdate(id, RETRYABLE, {
     status: 'scheduled',
@@ -486,6 +650,8 @@ export async function retryQueueItem(id: string): Promise<boolean> {
     scheduled_at: new Date().toISOString(),
     error: null,
     skip_reason: null,
+    attempts: 0,
+    confirmed_at: null,
   });
 }
 
@@ -493,13 +659,31 @@ export async function cancelQueueItem(id: string): Promise<boolean> {
   return guardedUpdate(id, CANCELLABLE, { status: 'skipped', step: '', skip_reason: 'בוטל ידנית' });
 }
 
-export async function confirmQueueItem(id: string): Promise<void> {
-  await updateQueueItem(id, { confirmed_at: new Date().toISOString() });
+/**
+ * Releases a publication the worker has parked at "ready to publish".
+ *
+ * Guarded like retry and cancel, and for the same reason: this button sits in a
+ * list the dashboard refreshes every four seconds, so by the time it is tapped
+ * the row may already be publishing, published or cancelled — and this was the
+ * one queue write in the file that went through updateQueueItem() with no
+ * status filter, so a second tap (or a tap on a stale row) stamped confirmed_at
+ * onto whatever was there. Returns false when the row was no longer waiting for
+ * an answer, so the screen can reload instead of reporting an approval that
+ * approved nothing.
+ */
+export async function confirmQueueItem(id: string): Promise<boolean> {
+  return guardedUpdate(id, ['awaiting_confirmation'], { confirmed_at: new Date().toISOString() });
 }
 
 /** Rows a browser worker parked because Facebook asked for a human. */
 export async function resumeNeedsAttention(postId?: string): Promise<number> {
-  let q = db().from('social_queue').update({ status: 'scheduled', step: 'pending', error: null, scheduled_at: new Date().toISOString() }).eq('status', 'needs_attention');
+  // attempts and confirmed_at are cleared for the same reason retryQueueItem()
+  // clears them — this is a fresh attempt, and a confirmation stamp left over
+  // from the previous one would let the worker skip asking.
+  let q = db()
+    .from('social_queue')
+    .update({ status: 'scheduled', step: 'pending', error: null, scheduled_at: new Date().toISOString(), attempts: 0, confirmed_at: null })
+    .eq('status', 'needs_attention');
   if (postId) q = q.eq('post_id', postId);
   const rows = unwrap<{ id: string }[]>(await q.select('id'));
   return rows.length;
@@ -1289,6 +1473,29 @@ export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?
   if (!template) throw new Error('לא נמצא פרסום קיים להעתיק ממנו את התוכן.');
 
   const already = new Set(plan.rows.filter((r) => r.post_id === plan.postId).map((r) => r.target_id));
+  /*
+   * The plan above was read before the gap and the template were worked out, so
+   * it is already a little old. This second, narrow read is taken as late as
+   * possible and covers every unfinished status rather than only the two the
+   * tuner re-times — a row that moved to manual_pending or needs_attention in
+   * the meantime is still this post waiting for this group.
+   *
+   * It narrows the double-tap window; it does not close it. These rows carry
+   * schedule_id null, and the unique index is (schedule_id, target_id,
+   * scheduled_at) with NULLs distinct, so the database cannot refuse a twin —
+   * two calls that both read before either insert lands would still compute the
+   * same instant for the same group. Closing it properly needs a partial unique
+   * index on (post_id, target_id) for open rows, which is a migration, not a
+   * change here. Publishing is not at risk either way: the workers run one job
+   * at a time and rules.ts refuses a post that has already gone to a target.
+   */
+  const { data: openRows } = await db()
+    .from('social_queue')
+    .select('target_id')
+    .eq('post_id', plan.postId)
+    .in('target_id', wanted)
+    .in('status', OPEN_STATUSES);
+  for (const row of (openRows ?? []) as { target_id: string }[]) already.add(row.target_id);
   const fresh = wanted.filter((id) => !already.has(id));
   // Skipping instead of double-booking: a second row for the same group and the
   // same post would be skipped by rules.ts anyway ("הפוסט הזה כבר פורסם ל-…").

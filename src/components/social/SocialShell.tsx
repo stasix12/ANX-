@@ -8,6 +8,7 @@ import {
   ClipboardListIcon,
   GearIcon,
   HomeIcon,
+  LogOutIcon,
   MenuIcon,
   MegaphoneIcon,
   SparklesIcon,
@@ -15,11 +16,11 @@ import {
   TargetIcon,
   UsersIcon,
 } from '@/components/icons';
-import { useAdminSession } from '@/lib/adminAuth';
+import { signOut, useAdminSession } from '@/lib/adminAuth';
 import { NotificationBell } from './NotificationBell';
 import { PublishingToggle } from './PublishingToggle';
 import { UpdateBanner } from './UpdateBanner';
-import { Sheet } from './ui';
+import { Sheet, useConfirm } from './ui';
 
 const nav = [
   { href: '/social', label: 'ראשי', icon: HomeIcon, exact: true },
@@ -62,6 +63,8 @@ export function SocialShell({
   const router = useRouter();
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const confirm = useConfirm();
 
   // A tap through the sheet navigates; make sure it never stays open behind
   // the new screen.
@@ -254,13 +257,50 @@ export function SocialShell({
             </Link>
           </li>
         </ul>
+        {/*
+          The way out.
+          
+          There was none. signOut() exists in adminAuth and is called from
+          /admin/settings and /crm, neither of which a customer who lives on
+          /social ever opens — and the session is persisted to localStorage
+          with an auto-refreshing refresh token, so in practice it does not end
+          until somebody presses this. A lost phone, a shared phone, an
+          ex-employee: no exit. It belongs here, under "עוד", where the rest of
+          the account-level items already are.
+        */}
+        <div className="mt-2 border-t border-ink-700 pt-2">
+          <button
+            type="button"
+            disabled={leaving}
+            onClick={async () => {
+              const ok = await confirm.ask({
+                title: 'לצאת מהחשבון?',
+                body: 'הפרסומים המתוזמנים ימשיכו לצאת כרגיל — יציאה מהחשבון לא עוצרת כלום. תצטרכו להתחבר שוב כדי לראות את לוח הבקרה.',
+                confirmLabel: 'צא',
+                danger: true,
+              });
+              if (!ok) return;
+              setLeaving(true);
+              setMoreOpen(false);
+              await signOut();
+              // A full load, not router.replace: the client cache still holds
+              // the screens of the account being left.
+              window.location.href = '/crm/login';
+            }}
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3.5 text-start text-base font-bold text-error-400 hover:bg-error-300/12 disabled:text-ink-600"
+          >
+            <LogOutIcon className="h-5 w-5" />
+            {leaving ? 'יוצא…' : 'יציאה מהחשבון'}
+          </button>
+        </div>
         {/* Which build the phone is actually running. Two taps from any screen:
             if this does not change after a deploy, the browser is serving a
             cached copy and a refresh is what is needed — not another fix. */}
-        <p className="pb-2 text-center text-[11px] text-mist-500">
+        <p className="pb-2 pt-2 text-center text-[11px] text-mist-500">
           גרסת המערכת: <span dir="ltr" className="font-mono">{process.env.NEXT_PUBLIC_BUILD_STAMP || '—'}</span>
         </p>
       </Sheet>
+      {confirm.dialog}
     </div>
   );
 }

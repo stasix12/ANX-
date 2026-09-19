@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { staggeredSlots } from '../../src/lib/social/slots';
 import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { zonedToUtc } from '@/lib/social/time';
-import { parseGroupUrl, type Variant } from '@/lib/social/types';
+import { DEFAULT_BUSINESS, parseGroupUrl, type Variant } from '@/lib/social/types';
 import { pickVariant, previewAssignment } from '@/lib/social/variants';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import {
@@ -34,8 +34,11 @@ import {
   summarizeQueue,
 } from '@/lib/social/status';
 import type { QueueStatus } from '@/lib/social/types';
-import { countdownTo } from '@/lib/social/countdown';
-import { friendlyMessage, GENERIC_ERROR } from '@/lib/social/errors';
+import { countdownTo, OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
+import { friendlyMessage, GENERIC_ERROR, LATEST_SCHEMA_FILE } from '@/lib/social/errors';
+import { renderPostText } from '@/lib/social/compose';
+import { safeError } from '../db';
+import { PublishError } from '../facebook/composer';
 
 /** Pure helpers shared by the dashboard, the server worker and the local worker. */
 
@@ -198,12 +201,31 @@ console.log('unit tests OK');
     'relation "social_queue" does not exist',
     'Error: connect ETIMEDOUT 10.0.0.1:5432\n    at TCPConnectWrap.afterConnect',
   ];
+  /*
+   * The ONE piece of Latin text a classified message may carry, and it is not
+   * backend text: the name of the migration file the owner has to run, plus
+   * where to run it. Seven of the eight screens used to say "the database
+   * update file" with fourteen .sql files in supabase/ and no way to tell
+   * which, so errors.ts now names it — from a constant, which is what this
+   * allowlist is pinned to, so the exception cannot be widened into a licence
+   * for arbitrary English.
+   */
+  const ALLOWED_LATIN = [LATEST_SCHEMA_FILE, 'SQL Editor', 'Supabase'];
+  const withoutAllowed = (text: string) => ALLOWED_LATIN.reduce((acc, allowed) => acc.split(allowed).join(''), text);
   for (const r of raw) {
     const out = friendlyMessage(new Error(r));
-    assert.ok(!/[A-Za-z]{4,}/.test(out.replace(/[֐-׿\s.,—–…!?()״׳]/g, '')), `leaked English/raw text: ${out}`);
+    assert.ok(
+      !/[A-Za-z]{4,}/.test(withoutAllowed(out).replace(/[֐-׿\s.,—–…!?()״׳]/g, '')),
+      `leaked English/raw text: ${out}`,
+    );
     assert.ok(!out.includes('at '), `leaked a stack frame: ${out}`);
     assert.ok(/[֐-׿]/.test(out), `not Hebrew: ${out}`);
   }
+
+  // ...and the schema message really does name the file, on every screen that
+  // shows it, not only the content library.
+  const schemaMessage = friendlyMessage(new Error('relation "social_queue" does not exist'));
+  assert.ok(schemaMessage.includes(LATEST_SCHEMA_FILE), `the schema error must name the file to run: ${schemaMessage}`);
 
   // Each known shape gets its own sentence, not the catch-all.
   assert.notEqual(friendlyMessage(new Error('Failed to fetch')), GENERIC_ERROR);
@@ -273,6 +295,26 @@ console.log('unit tests OK');
   assert.equal(past?.seconds, 0);
   assert.equal(past?.label, '00:00');
   assert.equal(past?.due, true, 'a passed instant reads as due, never as a negative clock');
+
+  /*
+   * ...but "its moment has just come" and "its moment was six hours ago" are
+   * not the same fact, and Math.max(0, …) flattened them into one. A dashboard
+   * reading `due` as "publishing right now" therefore said exactly that about a
+   * queue whose PC had been off all weekend — automation presented as happening
+   * that was not happening. `late` is the real distance; `overdue` is it being
+   * far enough past that nothing is plausibly mid-flight.
+   */
+  assert.equal(past?.late, 90, 'a passed instant knows how far past it is');
+  assert.equal(past?.overdue, false, `90s late is inside the ${OVERDUE_AFTER_SECONDS}s grace — polls and rules.ts's one-minute park live in there`);
+
+  const ahead = countdownTo(new Date(t0 + 60_000).toISOString(), t0);
+  assert.equal(ahead?.late, 0, 'an instant still ahead is not late at all');
+  assert.equal(ahead?.overdue, false);
+
+  const stale = countdownTo(new Date(t0 - 6 * 3600_000).toISOString(), t0);
+  assert.equal(stale?.due, true);
+  assert.equal(stale?.late, 6 * 3600, 'six hours late is six hours late');
+  assert.equal(stale?.overdue, true, 'the PC-is-switched-off state must be distinguishable from "publishing now"');
 
   console.log('countdown tests OK');
 }
@@ -641,7 +683,24 @@ console.log('unit tests OK');
     2,
     'both planner branches must check which groups are already waiting',
   );
-  assert.equal((planner.match(/if \(waiting\.has\(targetId\)\) continue;/g) ?? []).length, 2, 'both branches must skip a group already waiting');
+  /*
+   * Updated with the fix that made the skip audible: the shape this pinned was
+   * a bare `if (waiting.has(targetId)) continue;`, which was correct and
+   * completely silent. Relaunching a post to 28 groups while one of them still
+   * sat in needs_attention from the previous round produced 27 rows, never a
+   * 28th, and nothing anywhere named the group that had been left out — and for
+   * a 'now'/'once' schedule the schedule then retired itself, so it never would.
+   * The skip itself is unchanged and still pinned; what is pinned in addition is
+   * that the group is collected and reported.
+   */
+  assert.equal(
+    (planner.match(/if \(waiting\.has\(targetId\)\) \{\s*dropped\.push\(targetId\);\s*continue;\s*\}/g) ?? []).length,
+    2,
+    'both branches must skip a group already waiting — and remember which one',
+  );
+  assert.equal((planner.match(/await noteDropped\(/g) ?? []).length, 2, 'both branches must report the groups they left out');
+  const dropNote = planner.slice(planner.indexOf('async function noteDropped'), planner.indexOf('async function stoppedCampaigns'));
+  assert.ok(dropNote.includes("from('social_targets')"), 'the report must name the groups, not count them');
   assert.equal((planner.match(/waiting\.add\(targetId\);/g) ?? []).length, 2, 'both branches must record the group they just planned');
   const planned = planner.slice(planner.indexOf('async function plannedTargets'), planner.indexOf('async function stoppedCampaigns'));
   assert.ok(!planned.includes("'skipped'"), 'a cancelled row must not block replanning');
@@ -1408,6 +1467,140 @@ const scenario: { step: string; line: string }[] = [];
   pin('server worker wait', srvWorker, "scheduled_at: decision.until, attempts: Math.max(0, item.attempts - 1)");
 
   console.log('source-alignment tests OK');
+}
+
+/* ============================================================================
+ * Regression guards for the audit fixes. Every one of these is a behaviour a
+ * customer could see going wrong, pinned so it cannot come back quietly.
+ * ==========================================================================*/
+{
+  const client = readFileSync('src/lib/social/client.ts', 'utf8');
+  const pcWorker = readFileSync('worker/social-worker.ts', 'utf8');
+  const server = readFileSync('src/lib/social/server/worker.ts', 'utf8');
+  const adapter = readFileSync('worker/adapters/facebookGroupBrowser.ts', 'utf8');
+  const types = readFileSync('src/lib/social/types.ts', 'utf8');
+  const slice = (src: string, from: string, to: string) => src.slice(src.indexOf(from), src.indexOf(to));
+
+  /* --- no business's contact details are invented for another business ----- */
+  assert.equal(DEFAULT_BUSINESS.phone, '', 'the fallback phone must be empty — it is appended to every published post');
+  assert.equal(DEFAULT_BUSINESS.whatsapp, '', 'the fallback WhatsApp must be empty for the same reason');
+  assert.ok(!/05\d-?\d{7}|9725\d{8}/.test(types), 'no real phone number may sit in the shared library as a default');
+  const seed = readFileSync('supabase/social-schema.sql', 'utf8');
+  assert.ok(!/05\d-?\d{7}|9725\d{8}/.test(seed), 'a fresh install must not be seeded with somebody else\u2019s phone number');
+  // ...and an empty one is simply left off the post rather than printed blank.
+  assert.equal(renderPostText({ base_text: 'טקסט', phone: '', whatsapp_url: '' }), 'טקסט');
+  assert.equal(
+    renderPostText({ base_text: 'טקסט', phone: '050-1112222', whatsapp_url: '' }),
+    'טקסט\n\n📞 050-1112222',
+    'only the fields that were actually filled in go out',
+  );
+
+  /* --- cancel means the same set of statuses everywhere ------------------- */
+  const archive = slice(client, 'export async function archivePost', 'export async function listVariants');
+  assert.ok(archive.includes(".in('status', CANCELLABLE)"), 'archiving a post must cancel every row that has not gone out, not only the scheduled ones');
+  assert.ok(!archive.includes("eq('status', 'scheduled')"), 'the inline status list must not come back');
+  const deactivate = slice(client, 'export async function setScheduleActive', '/* ---------------------------------------------------------------- queue */');
+  assert.ok(deactivate.includes(".in('status', CANCELLABLE)"), 'switching a schedule off must cancel the same set');
+  assert.ok(!deactivate.includes("eq('status', 'scheduled')"), 'the inline status list must not come back');
+
+  /* --- deleting a run stops it first -------------------------------------- */
+  const del = slice(client, 'export async function deleteCampaign', '/* ---------------------------------------------------------------- posts */');
+  assert.ok(del.includes(".in('status', CANCELLABLE)"), 'deleting a run must cancel what it still holds');
+  assert.ok(
+    del.indexOf(".in('status', CANCELLABLE)") < del.indexOf("from('social_campaigns').delete()"),
+    'the rows must be cancelled BEFORE the campaign row goes — campaign_id is ON DELETE SET NULL, and rules.ts only honours pause/stop for a row that still has a campaign',
+  );
+  assert.ok(del.includes("update({ active: false })"), 'its schedules must stop too, or the planner re-creates the rows');
+
+  /* --- the launch guard sees every unfinished row -------------------------- */
+  const guard2 = slice(client, 'export async function hasPendingQueue', 'export async function listSchedules');
+  assert.ok(guard2.includes("in('status', OPEN_STATUSES)"), 'the duplicate-launch guard must use the single classification');
+  for (const status of ['manual_pending', 'needs_attention', 'paused'] as QueueStatus[]) {
+    assert.ok(OPEN_STATUSES.includes(status), `${status} is unfinished and must block a second launch`);
+  }
+
+  /* --- "ask me before every Post click" must ask EVERY time ---------------- */
+  // confirmed_at is per-attempt state. Every path that puts a row back in the
+  // queue clears it, and the gate itself clears it as it parks the row — so a
+  // stamp from a previous round can never answer the next question.
+  const retry = slice(client, 'export async function retryQueueItem', 'export async function cancelQueueItem');
+  assert.ok(retry.includes('confirmed_at: null'), 'retry must clear the confirmation stamp');
+  assert.ok(retry.includes('attempts: 0'), 'retry must clear the attempt counter, or rules.ts skips the row again instantly');
+  const resume = slice(client, 'export async function resumeNeedsAttention', '/** Live view');
+  assert.ok(resume.includes('confirmed_at: null') && resume.includes('attempts: 0'), 'resuming a parked row is a fresh attempt');
+  const gate = slice(pcWorker, 'async function waitForConfirmation', '/* ------------------------------------------------------------ helpers */');
+  assert.ok(gate.includes('confirmed_at: null'), 'the confirmation gate must clear the stamp when it parks the row');
+  assert.ok(
+    gate.indexOf('confirmed_at: null') < gate.indexOf('if (data.confirmed_at)'),
+    'the stamp has to be cleared before the first poll reads it',
+  );
+  assert.ok(pcWorker.includes("status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: message, screenshot_path: screenshot, confirmed_at: null"), "the worker's own retry must clear it too");
+
+  /* --- confirm is a guarded write, like retry and cancel ------------------- */
+  const confirm = slice(client, 'export async function confirmQueueItem', '/** Rows a browser worker parked');
+  assert.ok(confirm.includes("guardedUpdate(id, ['awaiting_confirmation']"), 'confirming must only touch a row that is actually waiting to be confirmed');
+  assert.ok(!confirm.includes('updateQueueItem('), 'the unguarded write must not come back');
+
+  /* --- one publication at a time ------------------------------------------ */
+  assert.ok(!/Promise\.all\([^)]*runJob/.test(pcWorker), 'jobs must not run concurrently: every limit in rules.ts is a count taken before the batch writes its outcome');
+  assert.ok(/for \(const item of jobs\.slice\(0, concurrency\)\) \{/.test(pcWorker), 'the batch is claimed together and published one after another');
+
+  /* --- a publication is never recorded twice, and never published twice ---- */
+  const job = slice(pcWorker, 'async function runJob', '/** Three tries with a short backoff');
+  const publishTry = job.slice(job.indexOf('  try {\n    result = await adapter.publish('), job.indexOf('  } catch (err) {'));
+  assert.ok(publishTry.includes('adapter.publish('), 'sanity: found the publish try block');
+  assert.ok(
+    !publishTry.includes("status: 'published'"),
+    'the outcome write must sit OUTSIDE the try — inside it, a dropped Supabase write after Facebook accepted the post is caught as a failure, rescheduled, and published a second time',
+  );
+  assert.ok(job.includes('await persist(() =>') && job.includes('finishChecked({ status: \'published\''), 'the published write is retried, and it can tell that it failed');
+  assert.ok(job.includes('if (!recorded)'), 'a publish that could not be recorded leaves the row alone for a person to resolve');
+
+  /* --- nothing raw reaches a column the dashboard prints ------------------- */
+  assert.ok(!/last_error: err\.message|error: err\.message/.test(pcWorker), 'a caught exception must not be written to the database unscrubbed');
+  assert.ok(job.includes('const message = safeError(err);'), 'failures are stored scrubbed and in Hebrew');
+  assert.equal(
+    safeError(new Error('TimeoutError: page.waitForSelector: Timeout 30000ms exceeded')),
+    'השרת לא הגיב בזמן. נסו שוב בעוד רגע.',
+    'a Playwright timeout must not land in English inside an RTL sentence',
+  );
+  assert.ok(!safeError(new Error('failed for c_user=100001234567890')).includes('100001234567890'), 'a session cookie must never survive into a stored error');
+  assert.equal(safeError(new PublishError('composer', 'לא מצאתי את תיבת הכתיבה.')), 'לא מצאתי את תיבת הכתיבה.', 'our own Hebrew is passed through untouched');
+
+  /* --- the browser is never pointed anywhere but a Facebook group --------- */
+  assert.ok(adapter.includes('const group = parseGroupUrl(input.target.url);'), 'the address from the database is re-parsed at the boundary');
+  assert.ok(adapter.includes('groupUrl: group.url'), 'and the normalised one is what gets opened');
+  assert.ok(
+    adapter.indexOf('parseGroupUrl(input.target.url)') < adapter.indexOf('this.session.newPage'),
+    'the check has to happen before a page carrying the live Facebook session exists',
+  );
+  for (const hostile of ['file:///C:/Users/x/.env.local', 'https://notfacebook.com/groups/1', 'javascript:alert(1)', 'https://evil.example/groups/1']) {
+    assert.equal(parseGroupUrl(hostile), null, `${hostile} must not resolve to a group`);
+  }
+
+  /* --- a row nobody is coming back for is released ------------------------ */
+  assert.ok(server.includes('await sweepStuck(db);'), 'the stuck-row sweep must run');
+  assert.ok(
+    server.indexOf('await sweepStuck(db);') < server.indexOf("report.reason = 'התורים מושהים';"),
+    'and it must run before the pause check — pausing is what an owner does BECAUSE something looks stuck',
+  );
+  const sweep = slice(server, 'async function sweepStuck', "type Outcome =");
+  assert.ok(sweep.includes("status: 'needs_attention'"), 'an orphan of an offline worker goes to a person, never straight back to the queue: the Post button may already have been clicked');
+  assert.ok(sweep.includes("in('worker_id', gone)"), "rows of a worker that stopped reporting are the ones nothing else was ever sweeping");
+
+  /* --- a public bucket only ever serves media ----------------------------- */
+  const upload = slice(client, 'const MEDIA_TYPES', 'export async function removeMedia');
+  assert.ok(!upload.includes('svg'), 'SVG is a scriptable document and this bucket is world-readable');
+  assert.ok(!upload.includes('contentType: file.type'), 'the caller must not choose what *.supabase.co serves');
+  assert.ok(upload.includes('MEDIA_TYPES[declared]'), 'the stored type comes from the allowlist');
+
+  /* --- a captive portal is not a successful response ---------------------- */
+  const api = slice(client, 'export async function callSocialApi', "/* ------------------------------------------------------------- settings */");
+  assert.ok(!/const body = await res\.json\(\)/.test(api), 'a 200 that is not JSON must not become an empty object the caller then dereferences');
+  assert.ok(api.includes('JSON.parse(raw)'), 'the body is parsed deliberately, so an unparseable one is visible');
+  assert.ok(api.includes('if (!parsed) throw'), 'it fails like any other failure, in one Hebrew sentence');
+
+  console.log('audit-fix regression tests OK');
 }
 
 /* ----------------------------------------- the 28-publication scenario */

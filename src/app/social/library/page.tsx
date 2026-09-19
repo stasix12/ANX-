@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ClipboardListIcon, PlusIcon, SearchIcon, TagIcon } from '@/components/icons';
+import { BoxIcon, ClipboardListIcon, CopyIcon, EyeIcon, PencilIcon, PlusIcon, SearchIcon, TagIcon } from '@/components/icons';
 import { ContentCard } from '@/components/social/ContentCard';
 import { PostPreview } from '@/components/social/PostPreview';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
@@ -223,11 +223,11 @@ export default function LibraryPage() {
   function menuFor(it: LibraryPost): MenuAction[] {
     const p = it.post;
     return [
-      { label: 'תצוגה מקדימה', icon: '👁', onSelect: () => setPreviewItem(it) },
-      { label: 'ערוך ותזמן בעורך', icon: '✏️', onSelect: () => router.push(`/social/posts/${p.id}`) },
+      { label: 'תצוגה מקדימה', icon: <EyeIcon className="h-4.5 w-4.5" />, onSelect: () => setPreviewItem(it) },
+      { label: 'ערוך ותזמן בעורך', icon: <PencilIcon className="h-4.5 w-4.5" />, onSelect: () => router.push(`/social/posts/${p.id}`) },
       {
         label: 'שכפל לפוסט חדש',
-        icon: '⧉',
+        icon: <CopyIcon className="h-4.5 w-4.5" />,
         disabled: busy === `dup-${p.id}`,
         onSelect: async () => {
           setBusy(`dup-${p.id}`);
@@ -243,7 +243,7 @@ export default function LibraryPage() {
       },
       {
         label: 'שנה קטגוריית תוכן',
-        icon: '🏷',
+        icon: <TagIcon className="h-4.5 w-4.5" />,
         onSelect: () => {
           setSelected([p.id]);
           setAssignOpen(true);
@@ -251,7 +251,7 @@ export default function LibraryPage() {
       },
       {
         label: 'העבר לארכיון',
-        icon: '🗄',
+        icon: <BoxIcon className="h-4.5 w-4.5" />,
         danger: true,
         onSelect: async () => {
           const ok = await confirm.ask({

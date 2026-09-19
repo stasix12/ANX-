@@ -6,10 +6,27 @@ import type { BusinessSettings, Post, Variant } from './types';
  * user sees before approving is byte-for-byte what gets published.
  */
 export function renderPostText(post: Pick<Post, 'base_text' | 'phone' | 'whatsapp_url'>, variant?: Pick<Variant, 'text'> | null): string {
-  const body = (variant?.text?.trim() || post.base_text).trim();
+  /*
+   * Every field is read defensively, and that is not belt-and-braces.
+   *
+   * This function is called from FOUR places, and two of them are the planner
+   * (plan.ts, in both runtimes) — so a single post row that hands back
+   * undefined for one of these columns does not break one preview, it throws
+   * inside planQueue() and stops planning for EVERY schedule and every post,
+   * on every worker tick, with nothing publishing and no error on any screen.
+   * The third is the publish path itself. The schema has `phone` and
+   * `whatsapp_url` as `not null default ''`, so a well-formed row is safe; a
+   * narrowed select, a row from an install whose table predates a column
+   * (`create table if not exists` never adds one), or a caller passing a
+   * partial post is not. The cost of being wrong here is the whole product
+   * silently stopping, and the cost of the guard is nothing.
+   */
+  const body = ((variant?.text ?? '').trim() || (post.base_text ?? '')).trim();
   const tail: string[] = [];
-  if (post.phone.trim()) tail.push(`📞 ${post.phone.trim()}`);
-  if (post.whatsapp_url.trim()) tail.push(`💬 WhatsApp: ${post.whatsapp_url.trim()}`);
+  const phone = (post.phone ?? '').trim();
+  const whatsapp = (post.whatsapp_url ?? '').trim();
+  if (phone) tail.push(`📞 ${phone}`);
+  if (whatsapp) tail.push(`💬 WhatsApp: ${whatsapp}`);
   return tail.length ? `${body}\n\n${tail.join('\n')}` : body;
 }
 

@@ -35,6 +35,16 @@ const QUICK_GAPS = [10, 20, 30, 45, 60, 90];
  * disagree. Nothing at all is written until the button at the bottom is pressed,
  * which is the shape PostEditor's pre-launch review has.
  */
+
+/**
+ * Where the owner actually finds the "test mode" switch.
+ *
+ * The toggle's label on the settings screen is "מצב בדיקה" and it lives on the
+ * third tab, "פרסום בקבוצות". Saying "TEST MODE … אפשר לכבות בהגדרות" sent
+ * them hunting for a name that is not written anywhere on that screen.
+ */
+const TEST_MODE_PATH = 'הגדרות ← פרסום בקבוצות ← "מצב בדיקה"';
+
 export function QuickPublishSheet({
   open,
   onClose,
@@ -197,7 +207,9 @@ export function QuickPublishSheet({
     if (variantProblem) return variantProblem;
     if (!selectedIds.length) return 'בחרו לפחות יעד אחד.';
     if (ctx?.browser.testMode && groupCount > 1)
-      return 'TEST MODE פעיל — אפשר לבחור קבוצה אחת בלבד. כבו אותו בהגדרות אחרי שהבדיקה הראשונה עברה.';
+      // See TEST_MODE_PATH: the setting is called "מצב בדיקה" on the screen
+      // the owner is being sent to, and "TEST MODE" appears nowhere there.
+      return `מצב בדיקה פעיל — אפשר לבחור קבוצה אחת בלבד. כדי לכבות: ${TEST_MODE_PATH}.`;
     if (mode === 'schedule' && (!date || !time)) return 'בחרו תאריך ושעה.';
     return null;
   }
@@ -313,7 +325,7 @@ export function QuickPublishSheet({
                different thing from "nothing to build", and saying the wrong one
                sends the owner looking for a problem that is not there. */
             <Notice tone="warn">
-              התזמון נשמר, אבל התור עדיין לא נבנה כי הריצה לא יצאה לדרך. הוא ייבנה ברגע שהיא תשוחרר, או בסבב הבא של ה-worker שעל המחשב.
+              התזמון נשמר, אבל התור עדיין לא נבנה כי הריצה לא יצאה לדרך. הוא ייבנה ברגע שהיא תשוחרר, או בסבב הבא של התוכנה שעל המחשב.
             </Notice>
           ) : result.pendingAtLaunch > 0 ? (
             <Notice tone="warn">
@@ -349,7 +361,7 @@ export function QuickPublishSheet({
           {/* The run's real numbers, not a summary of intent. */}
           {result.ran ? (
             <Notice tone="info">
-              דפים: {result.published} פורסמו, {result.skipped} דולגו, {result.deferred} נדחו, {result.failed} נכשלו. קבוצות מתפרסמות דרך ה-worker המקומי שעל המחשב.
+              דפים: {result.published} פורסמו, {result.skipped} דולגו, {result.deferred} נדחו, {result.failed} נכשלו. קבוצות מתפרסמות דרך התוכנה שעל המחשב שלכם.
             </Notice>
           ) : (
             <Notice tone="warn">
@@ -368,7 +380,7 @@ export function QuickPublishSheet({
 
           {workerOnline === false && groupCount > 0 && (
             <Notice tone="warn">
-              ה-worker המקומי לא רץ. קבוצות מתפרסמות רק כשהוא פועל על המחשב שלכם: <code dir="ltr" className="break-all">npm run social-worker</code>
+              התוכנה שמפרסמת לקבוצות לא רצה כרגע. במחשב שבו מותקנת המערכת, לחצו פעמיים על <code dir="ltr" className="break-all">start-worker.cmd</code> והשאירו את החלון פתוח.
             </Notice>
           )}
 
@@ -408,13 +420,13 @@ export function QuickPublishSheet({
 
           {workerOnline === false && (
             <Notice tone="warn">
-              ה-worker המקומי לא רץ. קבוצות מתפרסמות רק כשהוא פועל על המחשב שלכם: <code dir="ltr" className="break-all">npm run social-worker</code>
+              התוכנה שמפרסמת לקבוצות לא רצה כרגע. במחשב שבו מותקנת המערכת, לחצו פעמיים על <code dir="ltr" className="break-all">start-worker.cmd</code> והשאירו את החלון פתוח.
             </Notice>
           )}
 
           {ctx.browser.testMode && (
             <Notice tone="info">
-              TEST MODE פעיל — אפשר לבחור קבוצה אחת בלבד, והפרסום יעצור לאישור לפני הלחיצה האחרונה. כבו אותו בהגדרות אחרי שהבדיקה הראשונה עברה.
+              מצב בדיקה פעיל — אפשר לבחור קבוצה אחת בלבד, והפרסום יעצור לאישור לפני הלחיצה האחרונה. כדי לכבות: {TEST_MODE_PATH}.
             </Notice>
           )}
 

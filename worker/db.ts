@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { friendlyMessage } from '@/lib/social/errors';
 import { env } from './env';
 
 /**
@@ -39,6 +40,29 @@ export function scrub(value: unknown): unknown {
     return out;
   }
   return value;
+}
+
+/**
+ * The one shape in which a caught exception may be stored or shown.
+ *
+ * Two problems it solves at once. First, scrub(): TOKEN_RE only ever ran inside
+ * logActivity, so the columns most likely to carry a cookie or an access token
+ * — social_queue.error and social_targets.last_error, which are written
+ * straight from `err.message` — were the ones it never covered. Second,
+ * friendlyMessage(): those same columns are rendered verbatim by
+ * src/components/social/ErrorDetail.tsx, so a Playwright `TimeoutError:
+ * page.waitForSelector: Timeout 30000ms exceeded` landed in English, LTR, in
+ * the middle of a Hebrew sentence. The server worker has always passed its
+ * failures through friendlyMessage (src/lib/social/server/worker.ts); this is
+ * the local worker doing the same.
+ *
+ * Our own errors (PublishError, SessionError) are written in Hebrew and
+ * friendlyMessage passes those through untouched, so this only rewrites text
+ * that came from somewhere else.
+ */
+export function safeError(err: unknown, fallback?: string): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return friendlyMessage(scrub(raw) as string, fallback ?? 'הפרסום נכשל. פתחו את פרטי התקלה ונסו שוב.');
 }
 
 export async function logActivity(level: 'info' | 'warn' | 'error', event: string, message: string, meta: Record<string, unknown> = {}): Promise<void> {

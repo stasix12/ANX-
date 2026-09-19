@@ -28,6 +28,28 @@ interface Status {
   account: SocialAccount | null;
 }
 
+/**
+ * Every field below is read defensively, and that is not paranoia.
+ *
+ * `callSocialApi` treats any 200 as a success and falls back to `{}` when the
+ * body will not parse — a captive-portal page, a CDN interstitial or an SSO
+ * page on hotel wifi all arrive that way. `status.configured.facebookApp` then
+ * threw, and the whole screen was replaced by Next's English error frame
+ * inside an RTL Hebrew product, with reloading re-fetching the same response.
+ * `granted_scopes` has the same shape of problem from the other end: an
+ * account row written before the column existed comes back without it.
+ *
+ * A missing field now reads as "not configured" / "not granted", which is the
+ * truthful reading of "the server did not tell us it was", and the screen
+ * stays usable.
+ */
+const CONFIGURED_FALLBACK: Status['configured'] = {
+  facebookApp: false,
+  serviceRole: false,
+  encryptionKey: false,
+  cronSecret: false,
+};
+
 export default function TargetsPage() {
   return (
     <Suspense fallback={<SocialShell title="דפי פייסבוק" lede="דפים שמפרסמים דרך ה-API הרשמי"><Loading /></SocialShell>}>
@@ -87,13 +109,15 @@ function TargetsScreen() {
   }
 
   const account = status?.account ?? null;
-  const missing = account ? REQUIRED_SCOPES.filter((s) => !account.granted_scopes.includes(s)) : [];
+  const configured = status?.configured ?? CONFIGURED_FALLBACK;
+  const grantedScopes: string[] = Array.isArray(account?.granted_scopes) ? account.granted_scopes : [];
+  const missing = account ? REQUIRED_SCOPES.filter((s) => !grantedScopes.includes(s)) : [];
   const envMissing = status
     ? [
-        !status.configured.facebookApp && 'FACEBOOK_APP_ID / FACEBOOK_APP_SECRET',
-        !status.configured.serviceRole && 'SUPABASE_SERVICE_ROLE_KEY',
-        !status.configured.encryptionKey && 'SOCIAL_ENCRYPTION_KEY',
-        !status.configured.cronSecret && 'SOCIAL_CRON_SECRET',
+        !configured.facebookApp && 'FACEBOOK_APP_ID / FACEBOOK_APP_SECRET',
+        !configured.serviceRole && 'SUPABASE_SERVICE_ROLE_KEY',
+        !configured.encryptionKey && 'SOCIAL_ENCRYPTION_KEY',
+        !configured.cronSecret && 'SOCIAL_CRON_SECRET',
       ].filter(Boolean)
     : [];
 
@@ -119,7 +143,7 @@ function TargetsScreen() {
                 ההתחברות היא דרך Facebook Login הרשמי של Meta. המערכת לא רואה ולא שומרת סיסמה — רק טוקן גישה מוצפן, בצד השרת, עם ההרשאות המינימליות:{' '}
                 <code dir="ltr">{REQUIRED_SCOPES.join(', ')}</code>.
               </p>
-              <Button busy={busy === 'connect'} onClick={connect} disabled={!status.configured.facebookApp}>
+              <Button busy={busy === 'connect'} onClick={connect} disabled={!configured.facebookApp}>
                 התחבר עם פייסבוק
               </Button>
             </div>
@@ -139,7 +163,7 @@ function TargetsScreen() {
                 <p>
                   <span className="text-mist-500">הרשאות:</span>{' '}
                   {REQUIRED_SCOPES.map((s) => (
-                    <span key={s} dir="ltr" className={`me-1 inline-block rounded px-1.5 text-xs font-bold ${account.granted_scopes.includes(s) ? 'bg-success-400/12 text-success-400' : 'bg-error-300/12 text-error-400'}`}>
+                    <span key={s} dir="ltr" className={`me-1 inline-block rounded px-1.5 text-xs font-bold ${grantedScopes.includes(s) ? 'bg-success-400/12 text-success-400' : 'bg-error-300/12 text-error-400'}`}>
                       {s}
                     </span>
                   ))}

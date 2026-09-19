@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { type SocialTarget, type Variant } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
@@ -15,6 +15,13 @@ import { Badge, Button, MethodBadge, SegmentedControl, inputClass } from './ui';
  * Test mode caps the number of groups; the cap is enforced here and stated
  * rather than silently swallowing taps.
  */
+/*
+ * How many target rows are drawn at once. Selection, the quick sets and the
+ * counts all work over the whole filtered list; only the drawing is capped,
+ * so a few hundred groups do not turn the post editor sluggish.
+ */
+const CHUNK = 60;
+
 export function TargetPicker({
   targets,
   selected,
@@ -39,6 +46,7 @@ export function TargetPicker({
   const [channel, setChannel] = useState<'all' | 'facebook_page' | 'facebook_group'>('all');
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('');
+  const [shown, setShown] = useState(CHUNK);
 
   const cityOf = (t: SocialTarget) => t.city || detectCity(t.name);
   const cities = useMemo(() => sortCities(targets.filter((t) => t.channel === 'facebook_group').map(cityOf)), [targets]);
@@ -58,6 +66,14 @@ export function TargetPicker({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targets, query, channel, city, category]);
+
+  /* Drawn slice. `visible` stays the real filtered set everything else uses. */
+  const page = useMemo(() => visible.slice(0, shown), [visible, shown]);
+
+  /* A new filter means a new list, so start from the top again. */
+  useEffect(() => {
+    setShown(CHUNK);
+  }, [query, channel, city, category]);
 
   const approved = variants.filter((v) => v.approval === 'approved');
   // 125 identical "בסיוע דפדפן" chips say nothing; the badge earns its place
@@ -200,7 +216,7 @@ export function TargetPicker({
       {visible.length === 0 && <p className="text-sm text-mist-500">אין יעדים תואמים לסינון.</p>}
 
       <ul className="grid max-h-96 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
-        {visible.map((t) => {
+        {page.map((t) => {
           const on = selected.includes(t.id);
           const blocked = !on && atCap && t.channel === 'facebook_group';
           return (
@@ -261,6 +277,17 @@ export function TargetPicker({
           );
         })}
       </ul>
+
+      {visible.length > page.length && (
+        <div className="flex flex-col items-center gap-1">
+          <Button size="sm" variant="secondary" onClick={() => setShown((n) => n + CHUNK)}>
+            הצג עוד {Math.min(CHUNK, visible.length - page.length)}
+          </Button>
+          <p className="text-[11px] text-mist-500">
+            מוצגים {page.length} מתוך {visible.length}. &quot;רק…&quot; ו-&quot;+&quot; פועלים על כל {visible.length}.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

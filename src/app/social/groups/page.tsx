@@ -40,6 +40,14 @@ type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent';
 type View = 'grid' | 'list';
 
 const RECENT_DAYS = 14;
+/*
+ * How many group cards are put on the page at once. Each card carries an
+ * avatar, badges and its own menu — roughly 25 elements — so rendering a
+ * thousand of them at once is tens of thousands of nodes and a visibly slow
+ * screen. Filtering and bulk selection still work across the whole list; only
+ * the drawing is incremental.
+ */
+const CHUNK = 60;
 
 /**
  * /social/groups — the Facebook Groups the owner may post in, built for
@@ -66,6 +74,7 @@ export default function GroupsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState('');
+  const [shown, setShown] = useState(CHUNK);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
@@ -119,9 +128,25 @@ export default function GroupsPage() {
 
   const cities = useMemo(() => sortCities(all.map(cityOf)), [all, cityOf]);
   const categories = useMemo(() => Array.from(new Set(all.map((g) => g.category).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'he')), [all]);
+  /* Only this slice is drawn; `visible` remains the real filtered set. */
+  const page = useMemo(() => visible.slice(0, shown), [visible, shown]);
+
+  /* A new filter means a new list, so start from the top again. */
+  useEffect(() => {
+    setShown(CHUNK);
+  }, [query, cityFilter, categoryFilter, status]);
+
   const sections = useMemo(
-    () => cities.map((c) => ({ city: c, items: visible.filter((g) => cityOf(g) === c) })).filter((s) => s.items.length),
-    [cities, visible, cityOf],
+    () =>
+      cities
+        .map((c) => {
+          const inCity = visible.filter((g) => cityOf(g) === c);
+          // items = what is drawn, ids = every match in this city, so the
+          // "select all" here is not limited to what happens to be on screen.
+          return { city: c, items: page.filter((g) => cityOf(g) === c), total: inCity.length, ids: inCity.map((g) => g.id) };
+        })
+        .filter((s) => s.items.length),
+    [cities, page, visible, cityOf],
   );
 
   const statusCounts = useMemo(
@@ -301,20 +326,20 @@ export default function GroupsPage() {
         {visible.length > 0 && view === 'grid' && (
           <div className="space-y-5">
             {sections.map((section) => {
-              const ids = section.items.map((g) => g.id);
+              const ids = section.ids;
               const allOn = ids.every((id) => selected.includes(id));
               return (
                 <section key={section.city}>
                   <header className="mb-2 flex items-center justify-between gap-2">
                     <h3 className="text-base font-extrabold text-mist-100">
-                      {section.city} <span className="text-sm font-semibold text-mist-500">({section.items.length})</span>
+                      {section.city} <span className="text-sm font-semibold text-mist-500">({section.total})</span>
                     </h3>
                     <button
                       type="button"
                       className="min-h-9 text-xs font-bold text-brand-400"
                       onClick={() => setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])]))}
                     >
-                      {allOn ? 'בטל בחירה' : `בחר את כל ${section.items.length}`}
+                      {allOn ? 'בטל בחירה' : `בחר את כל ${section.total}`}
                     </button>
                   </header>
                   <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 [&>*]:min-w-0">
@@ -339,7 +364,7 @@ export default function GroupsPage() {
         {visible.length > 0 && view === 'list' && (
           <Card padded={false}>
             <ul className="divide-y divide-ink-700">
-              {visible.map((g) => (
+              {page.map((g) => (
                 <li key={g.id} className="flex items-center gap-2.5 px-3 py-2.5">
                   <input
                     type="checkbox"
@@ -366,6 +391,19 @@ export default function GroupsPage() {
               ))}
             </ul>
           </Card>
+        )}
+
+        {/* The rest of the matches are one tap away. The count is of the real
+            filtered set, so it says how many are actually left. */}
+        {visible.length > page.length && (
+          <div className="flex flex-col items-center gap-1.5 pt-1">
+            <Button variant="secondary" onClick={() => setShown((n) => n + CHUNK)}>
+              הצג עוד {Math.min(CHUNK, visible.length - page.length)}
+            </Button>
+            <p className="text-[11px] text-mist-500">
+              מוצגות {page.length} מתוך {visible.length}. הסינון והבחירה עובדים על כולן.
+            </p>
+          </div>
         )}
       </div>
 

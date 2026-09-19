@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PlusIcon } from '@/components/icons';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
-import { LiveCampaignHero } from '@/components/social/LiveCampaignHero';
+import { LiveCampaignHero, LiveQueueHero } from '@/components/social/LiveCampaignHero';
 import { LiveBoard } from '@/components/social/LiveBoard';
 import { QuickActions } from '@/components/social/QuickActions';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -168,6 +168,9 @@ export default function SocialDashboard() {
         })[0] ?? null)
     : null;
 
+  /* Work in flight that belongs to no campaign — still the subject of the screen. */
+  const liveQueue = Boolean(data && (data.counts.scheduled > 0 || data.upcoming.length > 0));
+
   /*
    * Greeting by time of day, in the app's own timezone. Cosmetic, but it is
    * what makes the header read as a product rather than an admin panel.
@@ -247,6 +250,21 @@ export default function SocialDashboard() {
               busy={busy?.startsWith('camp')}
               onPause={() => act('camp-pause', () => pauseCampaign(featured.campaign.id, true), 'הקמפיין הושהה.')}
               onResume={() => act('camp-resume', () => pauseCampaign(featured.campaign.id, false), 'הקמפיין ממשיך.')}
+            />
+          ) : liveQueue ? (
+            /* No campaign, but publications are queued: a post scheduled
+               straight from the editor carries no campaign_id, and saying
+               "no active campaign" while two dozen of them are going out
+               hides the very thing this screen is for. */
+            <LiveQueueHero
+              scheduled={data.counts.scheduled}
+              publishedToday={data.today}
+              dailyTarget={data.limits.maxPerDay}
+              paused={data.control.paused}
+              nextAt={data.upcoming[0]?.scheduled_at ?? null}
+              nextTargetName={data.upcoming[0]?.target?.name ?? null}
+              onRunNow={runNow}
+              busy={busy === 'run'}
             />
           ) : (
             <EmptyState

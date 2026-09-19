@@ -315,12 +315,19 @@ export async function createSchedule(input: ScheduleInput): Promise<Schedule> {
 export async function hasPendingQueue(postId: string): Promise<number> {
   const [rows, schedules] = await Promise.all([
     db().from('social_queue').select('id', { count: 'exact', head: true }).eq('post_id', postId).in('status', ['scheduled', 'publishing', 'awaiting_confirmation']),
-    db().from('social_schedules').select('id', { count: 'exact', head: true }).eq('post_id', postId).eq('active', true),
+    // `planned_until is null` is the point: a schedule that has never been
+    // materialised is a launch still in flight. A recurring weekly or daily
+    // schedule stays active for good — counting those would make every launch
+    // of the post look like a repeat and block it behind a prompt.
+    db()
+      .from('social_schedules')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', postId)
+      .eq('active', true)
+      .is('planned_until', null),
   ]);
   if (rows.error) throw friendlyError(rows.error);
   if (schedules.error) throw friendlyError(schedules.error);
-  // A schedule that has not been planned yet still means "already launched",
-  // even though it has produced no rows to count.
   return (rows.count ?? 0) || (schedules.count ?? 0);
 }
 

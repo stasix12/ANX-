@@ -246,9 +246,11 @@ export function PostEditor({ postId }: { postId?: string }) {
       if (pending > 0) {
         // A second round on a post that is still going out is almost always a
         // double-tap rather than an intention.
+        // The count can come from queue rows or from a launch that has not been
+        // materialised yet, so the wording has to hold for both.
         const again = await confirm.ask({
-          title: 'לפוסט הזה כבר יש פרסומים בתור',
-          body: `${pending} פרסומים של הפוסט הזה עדיין ממתינים ויצאו לבד. להוסיף סבב נוסף על גביהם?`,
+          title: 'הפוסט הזה כבר בדרך החוצה',
+          body: `${pending} פרסומים של הפוסט הזה כבר ממתינים ויצאו לבד. להוסיף סבב נוסף על גביהם?`,
           confirmLabel: 'הוסף סבב',
           cancelLabel: 'לא, השאר כמו שהוא',
         });

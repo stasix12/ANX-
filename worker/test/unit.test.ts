@@ -286,6 +286,13 @@ console.log('unit tests OK');
   const guard = client.slice(client.indexOf('export async function hasPendingQueue'), client.indexOf('export async function listSchedules'));
   assert.ok(guard.includes('social_schedules'), 'the launch guard must count active schedules too');
   assert.ok(guard.includes("eq('active', true)"), 'only schedules still active count as pending');
+  /*
+   * ...and only ones never materialised. A weekly or daily schedule stays
+   * active for good by design, so counting those made every launch of that
+   * post look like a repeat: the owner got a "already on its way" prompt every
+   * time, and declining it scheduled nothing at all.
+   */
+  assert.ok(guard.includes("is('planned_until', null)"), 'an already-planned recurring schedule must not count as a launch in flight');
 
   console.log('duplicate-launch tests OK');
 }

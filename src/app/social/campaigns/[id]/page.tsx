@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { CampaignProgressBar } from '@/components/social/CampaignProgressBar';
+import { ProgressRing } from '@/components/social/ProgressRing';
 import { QueueSections } from '@/components/social/QueueSections';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
@@ -192,10 +193,28 @@ export default function CampaignControlCenter() {
                 {[campaign.service, campaign.city].filter(Boolean).join(' · ')}
               </span>
             </div>
-            {state && <span className="text-2xl font-extrabold tabular-nums text-brand-400">{percentDone(state.progress)}%</span>}
           </div>
 
-          <div className="mt-3">{state && <CampaignProgressBar progress={state.progress} />}</div>
+          {/* The headline: the ring carries the percentage, and the counters
+              beside it break that number down. Every figure is a count of real
+              queue rows. */}
+          {state && (
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-5 sm:justify-start">
+              <ProgressRing
+                percent={percentDone(state.progress)}
+                label={`${percentDone(state.progress)}%`}
+                sub={`${state.progress.done} / ${state.progress.total}`}
+              />
+              <dl className="grid min-w-0 flex-1 grid-cols-2 gap-2 [&>*]:min-w-0">
+                <Counter label="פורסמו" value={state.progress.published} tone="text-emerald-600" />
+                <Counter label="ממתינים" value={state.progress.scheduled} tone="text-sky-700" />
+                <Counter label="נכשלו" value={state.progress.failed} tone={state.progress.failed ? 'text-rose-600' : 'text-mist-500'} />
+                <Counter label="דילוגים" value={state.progress.skipped} tone="text-mist-500" />
+              </dl>
+            </div>
+          )}
+
+          <div className="mt-4">{state && <CampaignProgressBar progress={state.progress} />}</div>
 
           <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
             <Fact label="התחיל" value={state?.startedAt ? when(state.startedAt) : null} fallback="טרם התחיל" />
@@ -300,6 +319,16 @@ export default function CampaignControlCenter() {
       </div>
       {confirm.dialog}
     </SocialShell>
+  );
+}
+
+/** One breakdown figure beside the ring. */
+function Counter({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="rounded-xl border border-ink-600 px-3 py-2">
+      <dt className="text-[11px] font-bold text-mist-500">{label}</dt>
+      <dd className={`text-xl font-extrabold tabular-nums ${tone}`}>{value}</dd>
+    </div>
   );
 }
 

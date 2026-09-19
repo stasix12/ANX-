@@ -41,10 +41,13 @@ const MOBILE_TABS = ['/social', '/social/campaigns', '/social/groups', '/social/
  */
 export function SocialShell({
   title,
+  subtitle,
   headerAction,
   children,
 }: {
   title: string;
+  /** Replaces the fixed product line above the title, for a screen that wants to greet. */
+  subtitle?: string;
   headerAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -78,7 +81,9 @@ export function SocialShell({
       <header className="sticky top-0 z-40 bg-gradient-to-l from-indigo-700 via-blue-600 to-sky-500 pt-[env(safe-area-inset-top)] shadow-md shadow-blue-900/25">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pb-2 pt-3 md:pb-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-white/70">הפתרון המבריק · פרסום</p>
+            <p dir="auto" className="truncate text-[11px] font-bold uppercase tracking-wider text-white/70">
+              {subtitle ?? 'הפתרון המבריק · פרסום'}
+            </p>
             <h1 dir="auto" className="truncate text-xl font-extrabold tracking-tight text-white drop-shadow-sm">{title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-2">

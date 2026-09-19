@@ -6,6 +6,7 @@ import { parseGroupUrl, type Variant } from '@/lib/social/types';
 import { pickVariant, previewAssignment } from '@/lib/social/variants';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { campaignState, percentDone, type CampaignQueueRow } from '@/lib/social/campaign';
+import { countdownTo } from '@/lib/social/countdown';
 import { friendlyMessage, GENERIC_ERROR } from '@/lib/social/errors';
 
 /** Pure helpers shared by the dashboard, the server worker and the local worker. */
@@ -217,4 +218,28 @@ console.log('unit tests OK');
   assert.equal((src.match(/await releaseProfile\(\)/g) ?? []).length, 1, 'exactly one recovery attempt');
 
   console.log('profile-lock recovery tests OK');
+}
+
+/* ------------------------------------------------------------- countdown */
+{
+  const t0 = Date.parse('2026-09-19T18:00:00Z');
+
+  assert.equal(countdownTo(null, t0), null, 'nothing scheduled means no clock at all');
+  assert.equal(countdownTo(undefined, t0), null);
+  assert.equal(countdownTo('not-a-date', t0), null, 'an unparseable instant must not render NaN');
+
+  const in402 = countdownTo(new Date(t0 + 402_000).toISOString(), t0);
+  assert.equal(in402?.label, '06:42', 'under an hour shows mm:ss');
+  assert.equal(in402?.due, false);
+
+  const inHours = countdownTo(new Date(t0 + 3600_000 + 125_000).toISOString(), t0);
+  assert.equal(inHours?.label, '1:02:05', 'an hour or more gains the hours field');
+
+  // A row whose time has passed is due, not negative.
+  const past = countdownTo(new Date(t0 - 90_000).toISOString(), t0);
+  assert.equal(past?.seconds, 0);
+  assert.equal(past?.label, '00:00');
+  assert.equal(past?.due, true, 'a passed instant reads as due, never as a negative clock');
+
+  console.log('countdown tests OK');
 }

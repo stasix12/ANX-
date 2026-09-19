@@ -305,14 +305,28 @@ export function Tile({
   sub,
   tone = 'default',
   href,
+  tinted = false,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   tone?: 'default' | 'good' | 'bad' | 'warn';
   href?: string;
+  /** Paints the tile in its tone instead of plain white. */
+  tinted?: boolean;
 }) {
   const color = { default: 'text-brand-400', good: 'text-emerald-600', bad: 'text-rose-600', warn: 'text-amber-600' }[tone];
+  /*
+   * Tinted tiles carry their meaning in the surface, not only in the number,
+   * so a red "failed" count is visible at a glance instead of having to be
+   * read. The tint is faint enough that the figure keeps its contrast.
+   */
+  const tint = {
+    default: 'bg-brand-500/[0.06] border-brand-500/20',
+    good: 'bg-emerald-500/[0.07] border-emerald-500/25',
+    bad: 'bg-rose-500/[0.07] border-rose-500/25',
+    warn: 'bg-amber-500/[0.09] border-amber-500/30',
+  }[tone];
   const body = (
     <>
       <p dir="auto" className="truncate text-[11px] font-bold text-mist-500 sm:text-xs">{label}</p>
@@ -320,7 +334,7 @@ export function Tile({
       {sub && <p dir="auto" className="truncate text-[11px] text-mist-300 sm:mt-0.5 sm:text-xs">{sub}</p>}
     </>
   );
-  const cls = 'surface block rounded-2xl border border-ink-700 px-3 py-2.5 text-start sm:p-3.5';
+  const cls = `block rounded-2xl border px-3 py-2.5 text-start sm:p-3.5 ${tinted ? tint : 'surface border-ink-700'}`;
   if (href) {
     return (
       <Link href={href} className={`${cls} transition-transform active:scale-[0.98]`}>

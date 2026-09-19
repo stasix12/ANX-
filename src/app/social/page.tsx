@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PlusIcon } from '@/components/icons';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
-import { CampaignCard } from '@/components/social/CampaignCard';
+import { LiveCampaignHero } from '@/components/social/LiveCampaignHero';
 import { LiveBoard } from '@/components/social/LiveBoard';
 import { QuickActions } from '@/components/social/QuickActions';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -168,9 +168,22 @@ export default function SocialDashboard() {
         })[0] ?? null)
     : null;
 
+  /*
+   * Greeting by time of day, in the app's own timezone. Cosmetic, but it is
+   * what makes the header read as a product rather than an admin panel.
+   */
+  const greeting = (() => {
+    const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Asia/Jerusalem' }).format(new Date()));
+    if (hour < 5) return 'לילה טוב 🌙';
+    if (hour < 12) return 'בוקר טוב ☀️';
+    if (hour < 17) return 'צהריים טובים';
+    return 'ערב טוב 🌆';
+  })();
+
   return (
     <SocialShell
       title="לוח בקרה"
+      subtitle={greeting}
       headerAction={
         <Link href="/social/posts/new" className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-white px-3.5 text-sm font-bold text-blue-700 shadow-sm">
           <PlusIcon className="h-4 w-4" strokeWidth={2.4} /> פוסט
@@ -208,12 +221,13 @@ export default function SocialDashboard() {
           <section>
             <h2 className="mb-2 text-sm font-extrabold uppercase tracking-wide text-mist-500">סטטיסטיקה</h2>
             <div className="grid grid-cols-3 gap-2 md:grid-cols-6 [&>*]:min-w-0">
-              <Tile label="פורסמו היום" value={data.today} tone={data.today ? 'good' : 'default'} sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`} />
-              <Tile label="השבוע" value={data.week} tone="good" sub="מיום ראשון" />
-              <Tile label="מתוזמנים" value={data.counts.scheduled} href="/social/history?status=scheduled" />
-              <Tile label="הצליחו" value={data.counts.published} tone="good" sub="סך הכול" />
-              <Tile label="נכשלו" value={data.counts.failed} tone={data.counts.failed ? 'bad' : 'default'} href="/social/history?status=failed" />
+              <Tile tinted label="פורסמו היום" value={data.today} tone={data.today ? 'good' : 'default'} sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`} />
+              <Tile tinted label="השבוע" value={data.week} tone="good" sub="מיום ראשון" />
+              <Tile tinted label="מתוזמנים" value={data.counts.scheduled} href="/social/history?status=scheduled" />
+              <Tile tinted label="הצליחו" value={data.counts.published} tone="good" sub="סך הכול" />
+              <Tile tinted label="נכשלו" value={data.counts.failed} tone={data.counts.failed ? 'bad' : 'default'} href="/social/history?status=failed" />
               <Tile
+                tinted
                 label="דורשים פעולה"
                 value={data.counts.manual_pending + data.counts.needs_attention}
                 tone={data.counts.manual_pending + data.counts.needs_attention ? 'warn' : 'default'}
@@ -225,9 +239,9 @@ export default function SocialDashboard() {
             </p>
           </section>
 
-          {/* 2 — what is running right now. */}
+          {/* 2 — what is running right now, as the subject of the screen. */}
           {featured ? (
-            <CampaignCard
+            <LiveCampaignHero
               campaign={featured.campaign}
               state={featured.state}
               busy={busy?.startsWith('camp')}

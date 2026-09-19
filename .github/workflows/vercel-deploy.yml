@@ -1,0 +1,57 @@
+# Deploys the publishing app by calling Vercel directly, instead of relying on
+# Vercel's own GitHub webhook.
+#
+# Why this exists: that webhook silently skipped commits. On 19/09 two of
+# nineteen pushes never appeared in the Vercel deployment list at all — not
+# failed, not queued, absent — while every other commit built in about thirty
+# seconds. Each time, the fix was to push something else so a later webhook
+# carried the earlier work along, which is not something anyone should have to
+# notice or do.
+#
+# A deploy hook is a plain URL that Vercel builds the branch head from. GitHub
+# Actions calls it on every push, so a deployment depends on this run rather
+# than on a webhook nobody can see or retry.
+#
+# One-time setup, done once by the repository owner:
+#   1. Vercel → the project → Settings → Git → Deploy Hooks. Create one for
+#      branch claude/facebook-content-manager-gqtv66 and copy its URL.
+#   2. GitHub → this repo → Settings → Secrets and variables → Actions → New
+#      repository secret, named VERCEL_DEPLOY_HOOK, holding that URL.
+#
+# Until the secret exists this workflow does nothing and says so; it never
+# fails a push over a setup step that has not happened yet.
+name: Deploy publishing app to Vercel
+
+on:
+  push:
+    branches: [claude/facebook-content-manager-gqtv66]
+  # Lets a deployment be forced from the Actions tab with no code change.
+  workflow_dispatch:
+
+# A newer commit supersedes an older one, so cancel a run still waiting.
+concurrency:
+  group: vercel-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask Vercel to build this branch
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          set -u
+          if [ -z "${HOOK}" ]; then
+            echo "VERCEL_DEPLOY_HOOK is not set — nothing to call."
+            echo "Add it under Settings → Secrets and variables → Actions to turn this on."
+            exit 0
+          fi
+          status=$(curl -sS --max-time 30 -o response.json -w '%{http_code}' -X POST "${HOOK}")
+          echo "Vercel answered HTTP ${status}"
+          cat response.json || true
+          echo
+          case "${status}" in
+            2??) echo "Deployment requested." ;;
+            *) echo "The deploy hook was rejected. Check that the secret still matches the hook in Vercel."; exit 1 ;;
+          esac

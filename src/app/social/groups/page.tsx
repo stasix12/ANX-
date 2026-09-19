@@ -525,8 +525,13 @@ export default function GroupsPage() {
 
         <div className="mt-5 border-t border-ink-700 pt-4">
           <p className="mb-2 text-sm font-extrabold text-mist-100">הוספה של הרבה קבוצות</p>
+          {/* No text-sm: it beats inputClass's text-base (Tailwind orders
+              .text-sm after .text-base, so className order does not decide it)
+              and lands the box at 14px, which is what makes iOS Safari zoom the
+              whole page the moment this is tapped. font-mono is the part that
+              was wanted here; the 16px floor stays. */}
           <textarea
-            className={`${inputClass} min-h-32 font-mono text-sm`}
+            className={`${inputClass} min-h-32 font-mono`}
             dir="ltr"
             placeholder={'קישור בכל שורה:\nhttps://www.facebook.com/groups/…\nhttps://www.facebook.com/groups/…'}
             value={bulk}

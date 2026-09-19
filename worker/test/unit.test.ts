@@ -426,7 +426,43 @@ console.log('unit tests OK');
   // Zero spacing must stay stacked rather than silently inventing a gap.
   assert.equal(staggeredSlots([base], 3, 0).every((d) => d.getTime() === base.getTime()), true, 'no spacing means no stagger');
 
+  // And the preview the owner confirms on must carry the same spacing. The
+  // pre-launch sheet renders the SAME SchedulePlanPreview as the picker, so a
+  // plan built without it shows 28 publications at 09:00 for a schedule the
+  // planner spreads across a day and a half — the lie at the last moment
+  // before they commit.
+  const editorSrc = readFileSync(new URL('../../src/components/social/PostEditor.tsx', import.meta.url), 'utf8');
+  assert.ok(/planFor\(schedule, selectedObjects\.length, new Date\(\), spacingMinutes\)/.test(editorSrc),
+    'the pre-launch plan must be built with the real spacing');
+  assert.ok(editorSrc.includes('spacingMinutes={spacingMinutes}'), 'the picker and the review must share one spacing value');
+
   console.log('weekly-stagger tests OK');
+}
+
+/* ------------------------------ every launch belongs to a run */
+{
+  const clientSrc = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+  const editorSrc = readFileSync(new URL('../../src/components/social/PostEditor.tsx', import.meta.url), 'utf8');
+  const librarySrc = readFileSync(new URL('../../src/lib/social/library.ts', import.meta.url), 'utf8');
+
+  /*
+   * A run is what "pause this" and "stop this" act on and what the dashboard's
+   * progress card is scoped by. Quick publish opened one; scheduling from the
+   * editor did not, so a weekly schedule set up there queued rows with
+   * campaign_id null and the owner found "סבבי פרסום" empty while the
+   * publications were real. Both paths go through one helper now.
+   */
+  assert.ok(clientSrc.includes('export async function ensureRunForPost'), 'there must be one place a run is opened');
+  assert.ok(editorSrc.includes('await ensureRunForPost('), 'scheduling from the editor must attach its launch to a run');
+  assert.ok(librarySrc.includes('await ensureRunForPost('), 'quick publish must use the same helper, not its own copy');
+
+  // A stopped run is finished: the next launch opens a fresh one, so the
+  // counter starts at zero instead of carrying a closed round's totals.
+  const helper = clientSrc.slice(clientSrc.indexOf('export async function ensureRunForPost'), clientSrc.indexOf('export async function deleteCampaign'));
+  assert.ok(helper.includes("status !== 'archived'"), 'a stopped run must not be reused');
+  assert.ok(helper.includes("update({ campaign_id:"), 'the post must be attached to the run it just opened');
+
+  console.log('run-attachment tests OK');
 }
 
 /* --------------------------------------- the PC worker cannot go stale quietly */

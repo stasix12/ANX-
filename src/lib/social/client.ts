@@ -189,6 +189,31 @@ export async function saveCampaign(input: Partial<Campaign> & { name: string }):
   return unwrap<Campaign>(await db().from('social_campaigns').insert(rest).select('*').single());
 }
 
+/**
+ * The run a post's publications belong to, creating it on first launch.
+ *
+ * A run (social_campaigns) is what "pause this" and "stop this" act on, and
+ * what the dashboard scopes its progress card by. Quick publish already opened
+ * one per post; scheduling from the editor did not, so a weekly schedule set up
+ * there produced queue rows with campaign_id null — they published, but the
+ * owner went to "סבבי פרסום" to watch them and found nothing, because there was
+ * nothing to find. Both paths now go through here.
+ *
+ * One run per post, reused on every later launch: that is what makes the
+ * progress bar and "פורסם N פעמים" accumulate across rounds instead of
+ * resetting. A run the owner STOPPED is finished and is not reused - the next
+ * launch opens a fresh one, counting from zero.
+ */
+export async function ensureRunForPost(post: Pick<Post, 'id' | 'title' | 'campaign_id'>): Promise<string> {
+  if (post.campaign_id) {
+    const existing = await getCampaign(post.campaign_id);
+    if (existing && existing.status !== 'archived') return existing.id;
+  }
+  const run = await saveCampaign({ name: post.title.trim() || 'סבב פרסום', status: 'active' });
+  unwrap(await db().from('social_posts').update({ campaign_id: run.id }).eq('id', post.id));
+  return run.id;
+}
+
 export async function deleteCampaign(id: string): Promise<void> {
   unwrap(await db().from('social_campaigns').delete().eq('id', id));
 }

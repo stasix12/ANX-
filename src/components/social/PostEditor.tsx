@@ -16,6 +16,7 @@ import {
   archivePost,
   callSocialApi,
   createSchedule,
+  ensureRunForPost,
   getBrowserSettings,
   getLimits,
   getBusiness,
@@ -154,7 +155,18 @@ export function PostEditor({ postId }: { postId?: string }) {
     () => selectedTargets.map((id) => targets.find((t) => t.id === id)).filter((t): t is SocialTarget => Boolean(t)),
     [selectedTargets, targets],
   );
-  const plan = useMemo(() => planFor(schedule, selectedObjects.length), [schedule, selectedObjects.length]);
+  /*
+   * The spacing the planner will apply (plan.ts enforcedSpacing). It has to
+   * reach BOTH the picker and this plan — the pre-launch review renders the
+   * same SchedulePlanPreview, and a review that shows 28 publications at 09:00
+   * for a schedule the planner spreads over a day and a half is the preview
+   * lying at the last possible moment before the owner commits.
+   */
+  const spacingMinutes = limits.minGapMinutes + browser.groupMinGapMinutes;
+  const plan = useMemo(
+    () => planFor(schedule, selectedObjects.length, new Date(), spacingMinutes),
+    [schedule, selectedObjects.length, spacingMinutes],
+  );
   const previewVariant = variants.find((v) => v.key === previewKey) ?? null;
   const previewText = useMemo(() => renderPostText(post, previewVariant), [post, previewVariant]);
   const approvedCount = variants.filter((v) => v.approval === 'approved').length;
@@ -268,6 +280,9 @@ export function PostEditor({ postId }: { postId?: string }) {
           return;
         }
       }
+      // Attach this launch to a run, so it shows up under "סבבי פרסום" with a
+      // pause, a stop and a progress bar - the same thing quick publish does.
+      await ensureRunForPost({ id, title: post.title, campaign_id: post.campaign_id });
       await createSchedule({
         ...scheduleDraftToInput(schedule, id, selectedTargets),
         variant_strategy: variantStrategy,
@@ -449,10 +464,13 @@ export function PostEditor({ postId }: { postId?: string }) {
                         <TrashIcon className="h-4 w-4" />
                       </button>
                     </div>
+                    {/* No text-sm override: it beats inputClass's text-base and
+                        measured 14px, and iOS Safari zooms the whole page on
+                        focus for any control under 16. */}
                     <textarea
                       dir="auto"
                       aria-label={`טקסט הגרסה ${v.label}`}
-                      className={`${inputClass} mt-2 min-h-24 text-sm`}
+                      className={`${inputClass} mt-2 min-h-24`}
                       value={v.text}
                       onChange={(e) => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, text: e.target.value } : x)))}
                     />
@@ -532,7 +550,7 @@ export function PostEditor({ postId }: { postId?: string }) {
               onChange={setSchedule}
               targetCount={selectedObjects.length}
               targetNames={selectedObjects.map((t) => t.name)}
-              spacingMinutes={limits.minGapMinutes + browser.groupMinGapMinutes}
+              spacingMinutes={spacingMinutes}
             />
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Button size="lg" busy={busy === 'schedule'} onClick={openReview}>

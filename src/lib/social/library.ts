@@ -18,7 +18,7 @@ import {
   listVariants,
   logClientActivity,
   postQueue,
-  saveCampaign,
+  ensureRunForPost,
   savePost,
   countPublishedSince,
   type GapSplit,
@@ -847,13 +847,8 @@ export async function quickPublish(
    * the same post reuses it, which is what makes "פורסם 12 פעמים" and the
    * progress bar accumulate across rounds instead of resetting.
    */
-  let runId = runEnded ? null : post.campaign_id;
-  if (!runId) {
-    // service/city/language/notes carry their column defaults: they describe a
-    // campaign the owner planned, and nothing plans this one.
-    const run = await saveCampaign({ name: post.title.trim() || 'סבב פרסום', status: 'active' });
-    runId = run.id;
-  }
+  // One helper for both launch paths - see ensureRunForPost in ./client.
+  const runId = await ensureRunForPost({ id: post.id, title: post.title, campaign_id: runEnded ? null : post.campaign_id });
 
   // Only when something actually changed: an untouched post keeps its
   // updated_at, so publishing does not silently re-sort the library's "newest".

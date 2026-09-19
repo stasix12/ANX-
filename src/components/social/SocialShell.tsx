@@ -18,6 +18,7 @@ import {
 import { useAdminSession } from '@/lib/adminAuth';
 import { NotificationBell } from './NotificationBell';
 import { PublishingToggle } from './PublishingToggle';
+import { UpdateBanner } from './UpdateBanner';
 import { Sheet } from './ui';
 
 const nav = [
@@ -92,6 +93,10 @@ export function SocialShell({
         screen's own title and its primary action belong to the page, where
         they can be sized against the content.
       */}
+      {/* Above the header, so a stale page says so before anything else on it
+          is read. Renders nothing when the build in front of the owner is the
+          one that is deployed. */}
+      <UpdateBanner />
       <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5">
           <Link href="/social" className="flex min-w-0 items-center gap-2.5">

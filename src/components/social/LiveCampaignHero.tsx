@@ -174,7 +174,10 @@ export function LiveCampaignHero({
     <HeroPanel ariaLabel="הסבב הפעיל">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <Link href={`/social/campaigns/${campaign.id}`} dir="auto" className="block truncate py-0.5 text-lg font-extrabold text-mist-100">
+          {/* py-1.5, the same as CampaignCard's title link: this is the same
+              control on a different screen and it was measuring 32px tall here
+              against 40px there. */}
+          <Link href={`/social/campaigns/${campaign.id}`} dir="auto" className="block truncate py-1.5 text-lg font-extrabold text-mist-100">
             {campaign.name}
           </Link>
           {[campaign.service, campaign.city].filter(Boolean).length > 0 && (

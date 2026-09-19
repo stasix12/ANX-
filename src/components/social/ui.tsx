@@ -891,6 +891,9 @@ export function AlertBar({
   actionLabel,
   href,
   onAction,
+  dangerLabel,
+  onDanger,
+  busy = false,
 }: {
   tone?: 'bad' | 'warn' | 'info';
   title: string;
@@ -898,6 +901,10 @@ export function AlertBar({
   actionLabel?: string;
   href?: string;
   onAction?: () => void;
+  /** A destructive second choice, shown beside the main one. */
+  dangerLabel?: string;
+  onDanger?: () => void;
+  busy?: boolean;
 }) {
   const skin = {
     bad: 'border-rose-500/25 bg-rose-500/[0.06]',
@@ -908,20 +915,34 @@ export function AlertBar({
   const link = { bad: 'text-rose-700 border-rose-500/30', warn: 'text-amber-700 border-amber-500/30', info: 'text-brand-500 border-brand-500/30' }[tone];
 
   return (
-    <div className={`flex items-center gap-3 rounded-2xl border px-3 py-2.5 ${skin}`}>
+    // Wraps rather than truncates: on a 320px screen an alert with two actions
+    // had no room left for its own title, and an alert whose text is cut off is
+    // not an alert. The actions drop to their own line instead.
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border px-3 py-2.5 ${skin}`}>
       <span aria-hidden className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm font-extrabold ${mark}`}>
         !
       </span>
-      <div className="min-w-0 grow">
-        <p dir="auto" className="truncate text-sm font-extrabold text-mist-100">
+      <div className="min-w-0 grow basis-40">
+        <p dir="auto" className="text-sm font-extrabold leading-snug text-mist-100">
           {title}
         </p>
         {body && (
-          <p dir="auto" className="truncate text-xs text-mist-500">
+          <p dir="auto" className="text-xs leading-snug text-mist-500">
             {body}
           </p>
         )}
       </div>
+      <span className="ms-auto flex shrink-0 items-center gap-1">
+      {dangerLabel && onDanger && (
+        <button
+          type="button"
+          onClick={onDanger}
+          disabled={busy}
+          className="inline-flex min-h-10 shrink-0 items-center rounded-xl px-2 text-sm font-bold text-rose-700 disabled:opacity-60"
+        >
+          {dangerLabel}
+        </button>
+      )}
       {actionLabel &&
         (href ? (
           <Link href={href} className={`inline-flex min-h-10 shrink-0 items-center gap-0.5 rounded-xl border bg-ink-850 px-2.5 text-sm font-bold ${link}`}>
@@ -934,6 +955,7 @@ export function AlertBar({
             <ChevronIcon className="h-4 w-4 rtl:rotate-180" />
           </button>
         ))}
+      </span>
     </div>
   );
 }

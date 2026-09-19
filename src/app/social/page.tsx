@@ -120,23 +120,38 @@ export default function SocialDashboard() {
     }
   }
 
-  async function stopEverything() {
+  /** Everything still waiting to go out, across every campaign. */
+  const pending = data ? data.counts.scheduled + data.counts.needs_attention + data.counts.manual_pending : 0;
+
+  /**
+   * Clears the queue. One implementation behind two entry points: beside
+   * "resume" once publishing is paused, and as the panic button at the foot of
+   * the screen, which pauses on the way so nothing restarts behind it.
+   *
+   * The count in the question is the real one, because "delete everything
+   * waiting" means nothing without knowing how much that is.
+   */
+  async function discardQueue(alsoPause: boolean) {
     const ok = await confirm.ask({
-      title: 'לעצור את כל הפרסומים?',
-      body: 'כל הפרסומים המתוזמנים — בכל הקמפיינים — יבוטלו, והמערכת תושהה. מה שכבר פורסם נשאר בהיסטוריה. אי אפשר לבטל את הפעולה.',
-      confirmLabel: 'עצור הכל',
+      title: pending ? `למחוק ${pending} פרסומים מהתור?` : 'למחוק את התור?',
+      body: `הפרסומים שממתינים — בכל הקמפיינים — יבוטלו ולא יצאו.${
+        alsoPause ? ' המערכת גם תושהה.' : ''
+      } מה שכבר פורסם נשאר בהיסטוריה. אי אפשר לבטל את הפעולה.`,
+      confirmLabel: 'מחק',
       danger: true,
     });
     if (!ok) return;
-    await act(
-      'stop',
-      async () => {
-        await setPaused(true);
-        const n = await cancelAllScheduled();
-        toast(`הושהה. ${n} פרסומים בוטלו.`, 'info');
-      },
-      'המערכת הושהתה.',
-    );
+    setBusy(alsoPause ? 'stop' : 'discard');
+    try {
+      if (alsoPause) await setPaused(true);
+      const n = await cancelAllScheduled();
+      toast(n ? `${n} פרסומים בוטלו.` : 'לא היו פרסומים בתור.', 'info');
+      await load();
+    } catch (err) {
+      toast(friendlyMessage(err, 'המחיקה נכשלה.'), 'error');
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function runNow() {
@@ -208,9 +223,12 @@ export default function SocialDashboard() {
             <AlertBar
               tone="warn"
               title="כל הפרסומים מושהים"
-              body="שום דבר לא יוצא עד שתפעילו מחדש."
+              body={pending ? `${pending} פרסומים ממתינים בתור.` : 'שום דבר לא יוצא עד שתפעילו מחדש.'}
               actionLabel="הפעל"
               onAction={() => act('resume', () => setPaused(false), 'הפרסום חודש.')}
+              dangerLabel={pending ? 'מחק' : undefined}
+              onDanger={() => discardQueue(false)}
+              busy={busy === 'discard'}
             />
           )}
           {data.control.rateLimitedUntil && new Date(data.control.rateLimitedUntil) > new Date() && (
@@ -364,8 +382,8 @@ export default function SocialDashboard() {
           </Card>
 
           <div className="flex justify-center pb-2">
-            <Button variant="ghost" size="sm" busy={busy === 'stop'} onClick={stopEverything} className="text-rose-600">
-              עצור את כל הפרסומים
+            <Button variant="ghost" size="sm" busy={busy === 'stop'} onClick={() => discardQueue(true)} className="text-rose-600">
+              עצור ומחק את כל הפרסומים
             </Button>
           </div>
         </div>

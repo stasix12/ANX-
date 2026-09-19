@@ -5,8 +5,9 @@ import { RUN_STATE_LABEL, RUN_STATE_TONE, type CampaignState } from '@/lib/socia
 import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem } from '@/lib/social/types';
-import { PlayIcon, PlusIcon } from '@/components/icons';
+import { PlusIcon } from '@/components/icons';
 import { CampaignProgressBar } from './CampaignProgressBar';
+import { PostCover } from './PostCover';
 import { TargetAvatar } from './TargetAvatar';
 import { Badge, Button } from './ui';
 
@@ -65,34 +66,15 @@ export function CampaignCard({
           <Link
             href={link}
             aria-label="לפוסט אין תמונה או סרטון — הוספת מדיה"
-            className="flex h-[72px] w-[72px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-ink-600 bg-ink-900 text-ink-500 transition-colors hover:border-brand-500 hover:text-brand-400"
+            className="flex h-28 w-28 shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-ink-600 bg-ink-900 text-ink-500 transition-colors hover:border-brand-500 hover:text-brand-400"
           >
-            <PlusIcon aria-hidden className="h-4 w-4" />
-            <span className="text-[9px] font-bold leading-none">מדיה</span>
+            <PlusIcon aria-hidden className="h-5 w-5" />
+            <span className="text-[11px] font-bold leading-none">מדיה</span>
           </Link>
         )}
         {cover && (
-          <Link href={link} className="relative block h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl bg-ink-800">
-            {cover.kind === 'image' && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={cover.url} alt="" loading="lazy" className="h-full w-full object-cover" />
-            )}
-            {cover.kind === 'video' && (
-              <>
-                {/* Same treatment as the library card: the poster frame, not the
-                    film. preload="metadata" fetches the header only and #t=0.1
-                    is what makes iOS Safari paint a frame instead of a black
-                    box. If it does not paint, the neutral tile and the play mark
-                    remain — never a stock image standing in for their video. */}
-                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                <video src={`${cover.url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                <span aria-hidden className="absolute inset-0 grid place-items-center">
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-ink-950/60 text-mist-100">
-                    <PlayIcon className="h-4 w-4" />
-                  </span>
-                </span>
-              </>
-            )}
+          <Link href={link} className="block shrink-0">
+            <PostCover media={media} />
           </Link>
         )}
         <div className="min-w-0 grow">

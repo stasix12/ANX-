@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { CopyIcon } from '@/components/icons';
 import { PostPreview } from '@/components/social/PostPreview';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Badge, Button, Card, Field, Loading, Notice, ProgressBar, inputClass, useToast } from '@/components/social/ui';
+import { Badge, Button, Card, EmptyState, Field, Loading, Notice, ProgressBar, inputClass, useToast } from '@/components/social/ui';
 import { cancelQueueItem, getPost, getQueueItem, manualQueue, markManualPublished, type QueueRow } from '@/lib/social/client';
 import type { MediaItem, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -30,19 +30,23 @@ export default function ManualKitPage() {
   const [error, setError] = useState<string | null>(null);
   const [queue, setQueue] = useState<QueueRow[]>([]);
   const [busy, setBusy] = useState(false);
+  /* Distinct from `item`: a finished fetch that found nothing is not loading. */
+  const [loaded, setLoaded] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
     setCopied(false);
     setOpened(false);
     setPermalink('');
+    setLoaded(false);
     Promise.all([getQueueItem(id), manualQueue()])
       .then(async ([q, all]) => {
         setItem(q);
         setQueue(all);
         if (q) setPost(await getPost(q.post_id));
       })
-      .catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
+      .catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')))
+      .finally(() => setLoaded(true));
   }, [id]);
 
   const position = queue.findIndex((q) => q.id === id);
@@ -100,7 +104,22 @@ export default function ManualKitPage() {
       }
     >
       {error && <Notice tone="error">{error}</Notice>}
-      {!item && !error && <Loading />}
+      {!loaded && !error && <Loading />}
+      {/* A finished fetch that found nothing used to leave the spinner turning
+          forever. The row is gone when it was already published, cancelled, or
+          the link is stale — so say that, and offer the way on. */}
+      {loaded && !item && !error && (
+        <EmptyState
+          icon="✅"
+          title="הפריט הזה כבר לא ממתין"
+          description="הוא כנראה כבר פורסם, דולג או הוסר. אפשר להמשיך לפריט הבא בתור."
+          action={
+            <Button size="lg" onClick={goNext}>
+              {remaining.length ? 'לפריט הבא' : 'חזרה ללוח הבקרה'}
+            </Button>
+          }
+        />
+      )}
       {item && (
         <div className="space-y-4">
           {queue.length > 1 && (

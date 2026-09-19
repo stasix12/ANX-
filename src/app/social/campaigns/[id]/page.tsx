@@ -60,6 +60,8 @@ export default function CampaignControlCenter() {
   const [tab, setTab] = useState<'queue' | 'timeline'>('queue');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* Distinct from `campaign`: a finished fetch that found nothing is not loading. */
+  const [loaded, setLoaded] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -73,6 +75,8 @@ export default function CampaignControlCenter() {
       setError(null);
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
+    } finally {
+      setLoaded(true);
     }
   }, [id]);
 
@@ -131,7 +135,7 @@ export default function CampaignControlCenter() {
       row.screenshot_path && screenshotUrl(row.screenshot_path).then((u) => u && window.open(u, '_blank', 'noreferrer')),
   };
 
-  if (!campaign && !error) {
+  if (!campaign && !error && !loaded) {
     return (
       <SocialShell title="קמפיין">
         <Loading />
@@ -140,9 +144,25 @@ export default function CampaignControlCenter() {
   }
 
   if (!campaign) {
+    /* A campaign that is simply gone is not an error the owner caused — say so
+       plainly and offer the way back, rather than a red banner or a spinner
+       that never resolves. */
     return (
       <SocialShell title="קמפיין">
-        <Notice tone="error">{error ?? 'הקמפיין לא נמצא.'}</Notice>
+        {error ? (
+          <Notice tone="error">{error}</Notice>
+        ) : (
+          <EmptyState
+            icon="🔍"
+            title="הקמפיין הזה לא קיים"
+            description="ייתכן שהוא נמחק, או שהקישור ישן."
+            action={
+              <Link href="/social/campaigns">
+                <Button size="lg">לכל הקמפיינים</Button>
+              </Link>
+            }
+          />
+        )}
       </SocialShell>
     );
   }

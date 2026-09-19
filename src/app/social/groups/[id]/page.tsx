@@ -55,6 +55,8 @@ export default function GroupProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
+  /* Distinct from `group`: a finished fetch that found nothing is not loading. */
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +68,8 @@ export default function GroupProfilePage() {
       setError(null);
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
+    } finally {
+      setLoaded(true);
     }
   }, [id]);
 
@@ -100,7 +104,7 @@ export default function GroupProfilePage() {
     }
   }
 
-  if (!group && !error) {
+  if (!group && !error && !loaded) {
     return (
       <SocialShell title="קבוצה">
         <Loading />
@@ -108,9 +112,24 @@ export default function GroupProfilePage() {
     );
   }
   if (!group) {
+    /* A group that is simply gone is not an error the owner caused — say so
+       plainly and offer the way back, rather than a red banner. */
     return (
       <SocialShell title="קבוצה">
-        <Notice tone="error">{error ?? 'הקבוצה לא נמצאה.'}</Notice>
+        {error ? (
+          <Notice tone="error">{error}</Notice>
+        ) : (
+          <EmptyState
+            icon="🔍"
+            title="הקבוצה הזו לא קיימת"
+            description="ייתכן שהיא הוסרה מרשימת היעדים, או שהקישור ישן."
+            action={
+              <Link href="/social/groups">
+                <Button size="lg">לכל הקבוצות</Button>
+              </Link>
+            }
+          />
+        )}
       </SocialShell>
     );
   }

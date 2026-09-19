@@ -17,6 +17,7 @@ import {
 } from '@/components/icons';
 import { useAdminSession } from '@/lib/adminAuth';
 import { NotificationBell } from './NotificationBell';
+import { PublishingToggle } from './PublishingToggle';
 import { Sheet } from './ui';
 
 const nav = [
@@ -104,7 +105,10 @@ export function SocialShell({
               </span>
             </span>
           </Link>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* Stopping everything must be reachable from wherever you are when
+                you realise you need to, not only from the dashboard. */}
+            <PublishingToggle />
             <NotificationBell />
           </div>
         </div>

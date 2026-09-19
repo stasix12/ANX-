@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { listRecentCommands, listWorkers, resumeNeedsAttention, sendWorkerCommand } from '@/lib/social/client';
 import { formatDateTimeHe } from '@/lib/social/time';
 import type { SocialWorker, WorkerCommand, WorkerCommandName } from '@/lib/social/types';
+import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { Button, Card, Notice, useConfirm } from './ui';
 import { friendlyMessage } from '@/lib/social/errors';
 
@@ -66,6 +67,13 @@ export function BrowserStatusCard({ onChanged }: { onChanged?: () => void }) {
   }
 
   const needsHuman = worker?.online && (worker.status === 'needs_attention' || worker.browser_state === 'needs_auth');
+  /*
+   * A worker on an older build looks perfectly healthy — green light, fresh
+   * heartbeat, posts going out — while a fix that lives in worker/ sits on the
+   * machine unused. Say so here, where the light is, rather than leaving it in
+   * a line of terminal output.
+   */
+  const stale = Boolean(worker?.online && worker.version && worker.version !== WORKER_VERSION);
 
   return (
     <Card title="Facebook Browser (קבוצות)">
@@ -85,6 +93,14 @@ export function BrowserStatusCard({ onChanged }: { onChanged?: () => void }) {
           </>
         )}
       </p>
+      {stale && (
+        <div className="mt-3">
+          <Notice tone="warn">
+            <strong>ה-worker במחשב מריץ גרסה ישנה</strong> (<span dir="ltr">{worker?.version}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>).
+            {' '}סגרו את החלון השחור והפעילו שוב את <code dir="ltr">start-worker.cmd</code> — הוא מתעדכן לבד.
+          </Notice>
+        </div>
+      )}
       {needsHuman && (
         <div className="mt-3">
           <Notice tone="warn">

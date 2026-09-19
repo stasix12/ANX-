@@ -25,8 +25,7 @@ echo.
 
 where node >nul 2>&1
 if errorlevel 1 goto nonode
-if not exist node_modules goto install
-goto ready
+goto update
 
 :nonode
 echo   [!] לא מצאתי Node.js על המחשב.
@@ -34,6 +33,50 @@ echo       התקינו מהאתר https://nodejs.org ואז הריצו את ה�
 echo.
 pause
 exit /b 1
+
+rem Pull the latest version before starting. Forgetting to run
+rem update-social.cmd first is not a mistake the owner should be able to make:
+rem the worker ran happily on an old build while the fix sat in the repository,
+rem and the only clue was a version number in a line of log. An update that
+rem fails (no internet, a diverged branch) is reported and then ignored - the
+rem worker still starts on the version already on disk, because not publishing
+rem is worse than publishing from yesterday's code.
+:update
+where git >nul 2>&1
+if errorlevel 1 goto deps
+echo   בודק אם יש גרסה חדשה...
+set BEFORE=
+set AFTER=
+for /f %%i in ('git rev-parse HEAD 2^>nul') do set BEFORE=%%i
+rem next dev rewrites AGENTS.md and CLAUDE.md, and both are tracked, so park
+rem local changes instead of letting the pull refuse. -u leaves .env.local be.
+git diff --quiet
+if errorlevel 1 git stash push -u -m "auto-stash before worker start" >nul 2>&1
+git pull --ff-only >nul 2>&1
+if errorlevel 1 goto updatefailed
+for /f %%i in ('git rev-parse HEAD 2^>nul') do set AFTER=%%i
+if "%BEFORE%"=="%AFTER%" goto uptodate
+echo   ירדה גרסה חדשה. מתקין רכיבים...
+echo.
+call npm.cmd install
+if errorlevel 1 goto installfailed
+goto version
+
+:uptodate
+echo   הגרסה מעודכנת.
+goto version
+
+:updatefailed
+echo   [i] לא הצלחתי לבדוק עדכון - ממשיך עם הגרסה שכבר במחשב.
+goto version
+
+:version
+for /f %%i in ('git rev-parse --short HEAD 2^>nul') do echo   גרסה: %%i
+echo.
+
+:deps
+if not exist node_modules goto install
+goto ready
 
 :install
 echo   מתקין רכיבים בפעם הראשונה. זה לוקח כמה דקות...

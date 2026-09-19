@@ -338,3 +338,37 @@ console.log('unit tests OK');
 
   console.log('planner-reachability tests OK');
 }
+
+/* --------------------------------------- the PC worker cannot go stale quietly */
+{
+  const launcher = readFileSync(new URL('../../start-worker.cmd', import.meta.url), 'utf8');
+  const localWorker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const card = readFileSync(new URL('../../src/components/social/BrowserStatusCard.tsx', import.meta.url), 'utf8');
+
+  /*
+   * A worker on an older build heartbeats, shows a green light and publishes —
+   * just without whatever was fixed. It happened: the launcher was started
+   * without running update-social.cmd first, and the only evidence was a
+   * version number in a line of terminal output.
+   */
+
+  // 1. Starting the worker updates it, so there is no second step to forget.
+  const update = launcher.slice(launcher.indexOf(':update'), launcher.indexOf(':deps'));
+  assert.ok(update.includes('git pull --ff-only'), 'the launcher must pull before it starts the worker');
+  assert.ok(update.includes('git stash push'), 'a tracked file the dev server rewrote must not block the pull');
+  assert.ok(update.includes('goto updatefailed'), 'a failed update must be handled, not ignored');
+  assert.ok(
+    /:updatefailed[\s\S]*?goto version/.test(launcher),
+    'a failed update must fall through to starting the worker — stale code beats no publishing',
+  );
+  assert.ok(!/:updatefailed[\s\S]*?exit \/b 1/.test(launcher.slice(launcher.indexOf(':updatefailed'), launcher.indexOf(':version'))),
+    'a failed update must never abort the launcher');
+
+  // 2. Both sides read one version, so the comparison cannot drift.
+  assert.ok(localWorker.includes("from '@/lib/social/worker-version'"), 'the worker must report the shared version');
+  assert.ok(localWorker.includes('const VERSION = WORKER_VERSION'), 'the worker must not keep its own copy of the number');
+  assert.ok(card.includes("from '@/lib/social/worker-version'"), 'the dashboard must compare against the same constant');
+  assert.ok(card.includes('worker.version !== WORKER_VERSION'), 'the dashboard must notice an out-of-date worker');
+
+  console.log('worker-freshness tests OK');
+}

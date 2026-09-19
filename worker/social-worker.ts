@@ -17,6 +17,7 @@ import {
   type Variant,
   type WorkerCommand,
 } from '@/lib/social/types';
+import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { FacebookGroupBrowserAdapter } from './adapters/facebookGroupBrowser';
 import { logActivity, unwrap, workerDb } from './db';
 import { env } from './env';
@@ -43,7 +44,7 @@ import { captureScreenshot } from './screenshots';
  * else runs until the owner handles it and presses "בדוק שוב".
  */
 
-const VERSION = '2.1.0';
+const VERSION = WORKER_VERSION;
 const CONFIRM_TIMEOUT_MS = 15 * 60_000;
 const PLAN_EVERY_MS = 60_000;
 const MAX_PRE_SUBMIT_ATTEMPTS = 3;

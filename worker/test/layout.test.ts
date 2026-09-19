@@ -139,6 +139,16 @@ assert.ok(ui.includes('createPortal'), 'Sheet must render through a portal, outs
 assert.ok(ui.includes('document.body'), 'Sheet must portal to document.body');
 
 /*
+ * ...and must carry its theme across. Palettes are scoped class overrides, so
+ * portalling to <body> leaves the scope: every sheet in this light-themed
+ * product rendered with the storefront's dark tokens until the wrapper below
+ * was added. Measured: the dialog resolved --color-ink-850 to #24272b while
+ * the card behind it resolved the same token to #fff.
+ */
+assert.ok(/\[class\*="-theme"\]/.test(ui), 'Sheet must find the theme it is portalling out of');
+assert.ok(/createPortal\(\s*<div className=\{themeClass\}>/.test(ui), 'the portal must be wrapped in that theme class');
+
+/*
  * Compact controls are still tapped with a thumb. Every one of these measured
  * 24-36px on a 390px screen before; 40px is the floor.
  */

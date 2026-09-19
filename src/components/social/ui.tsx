@@ -501,6 +501,27 @@ export function Sheet({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  /*
+   * The theme the sheet escaped from.
+   *
+   * Palettes here are scoped class overrides — .crm-theme re-resolves the
+   * ink/mist/brand tokens to the light set, and /social renders inside it.
+   * Portalling to <body> leaves that scope, so the sheet fell back to the
+   * storefront's dark tokens: every sheet in a light-themed product came up
+   * charcoal. Measured on the real markup — the dialog resolved --color-ink-850
+   * to #24272b while the card behind it resolved the same token to #fff.
+   *
+   * So carry the class across rather than hardcoding one: the anchor below
+   * stays in the tree, and whatever theme wraps it wraps the portal too.
+   */
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [themeClass, setThemeClass] = useState('');
+  useEffect(() => {
+    if (!open) return;
+    const host = anchor.current?.closest<HTMLElement>('[class*="-theme"]');
+    setThemeClass(host ? host.className : '');
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -537,9 +558,18 @@ export function Sheet({
    * Outside the page's DOM none of it can reach the sheet, whatever a screen
    * does to its own children.
    */
-  if (!open || !mounted) return null;
-  return createPortal(
+  // Rendered in place even when closed: it is what locates the theme, and it
+  // draws nothing.
+  const themeAnchor = <span ref={anchor} hidden aria-hidden />;
+
+  if (!open || !mounted) {
+    return themeAnchor;
+  }
+  return (
     <>
+      {themeAnchor}
+      {createPortal(
+        <div className={themeClass}>
       {/*
        * The panel is `fixed … bottom-0` in its own right, NOT absolutely
        * positioned inside a full-screen overlay.
@@ -585,8 +615,10 @@ export function Sheet({
           <footer className="shrink-0 border-t border-ink-700 bg-ink-850 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{footer}</footer>
         )}
       </div>
-    </>,
-    document.body,
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 

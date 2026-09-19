@@ -462,6 +462,17 @@ console.log('unit tests OK');
   assert.ok(helper.includes("status !== 'archived'"), 'a stopped run must not be reused');
   assert.ok(helper.includes("update({ campaign_id:"), 'the post must be attached to the run it just opened');
 
+  /*
+   * plan.ts stamps campaign_id from the post when a row is CREATED, so rows
+   * queued before the post had a run keep null for ever — they publish on time
+   * and stay invisible on the screen built to watch them. Opening a run adopts
+   * them. Only orphans, and only unfinished ones: a row from an earlier run is
+   * that run's history.
+   */
+  assert.ok(helper.includes("is('campaign_id', null)"), 'only orphaned rows may be adopted, never another run\'s');
+  assert.ok(helper.includes('OPEN_STATUSES'), 'only unfinished rows may be adopted — published history does not move');
+  assert.ok(!/\.in\('status', TERMINAL/.test(helper), 'a terminal row is never re-homed');
+
   console.log('run-attachment tests OK');
 }
 

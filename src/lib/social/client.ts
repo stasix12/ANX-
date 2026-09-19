@@ -211,6 +211,31 @@ export async function ensureRunForPost(post: Pick<Post, 'id' | 'title' | 'campai
   }
   const run = await saveCampaign({ name: post.title.trim() || 'סבב פרסום', status: 'active' });
   unwrap(await db().from('social_posts').update({ campaign_id: run.id }).eq('id', post.id));
+
+  /*
+   * Adopt what is already waiting. plan.ts stamps campaign_id from the post at
+   * the moment a row is created, so publications queued before the post had a
+   * run keep null for ever: they publish on time and stay invisible on the
+   * screen built to watch them, with no way to pause or stop them as a group.
+   *
+   * Only orphans, and only rows that have not finished — a row belonging to an
+   * earlier run is that run's history and is never moved.
+   */
+  const adopted = unwrap<{ id: string }[]>(
+    await db()
+      .from('social_queue')
+      .update({ campaign_id: run.id })
+      .eq('post_id', post.id)
+      .is('campaign_id', null)
+      .in('status', OPEN_STATUSES)
+      .select('id'),
+  );
+  if (adopted.length) {
+    await logClientActivity('info', 'run_adopted_queue', `${adopted.length} פרסומים שכבר המתינו בתור צורפו לסבב "${run.name}"`, {
+      campaignId: run.id,
+      adopted: adopted.length,
+    });
+  }
   return run.id;
 }
 

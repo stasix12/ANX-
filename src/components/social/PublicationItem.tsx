@@ -135,7 +135,7 @@ export function PublicationItem({
           {row.rendered_text && (
             <div>
               <p className="mb-1 text-xs font-bold text-mist-500">הטקסט שיוצא / יצא</p>
-              <p dir="auto" className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl border border-ink-600 bg-ink-900 p-3 text-sm leading-relaxed text-mist-100">
+              <p dir="auto" className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl border border-ink-700 bg-ink-900 p-3 text-sm leading-relaxed text-mist-100">
                 {row.rendered_text}
               </p>
             </div>

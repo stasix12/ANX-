@@ -1,6 +1,7 @@
 'use client';
 
-import { formatDateTimeHe, relativeHe } from '@/lib/social/time';
+import { relativeHe } from '@/lib/social/time';
+import { stampText } from './DateTime';
 import type { ActivityEntry } from '@/lib/social/types';
 import { Empty } from './ui';
 
@@ -42,7 +43,7 @@ export function ActivityFeed({ entries, limit = 12 }: { entries: ActivityEntry[]
           </span>
           <div className="min-w-0 grow">
             <p className={`text-sm leading-snug ${e.level === 'error' ? 'text-error-400' : 'text-mist-100'}`}>{e.message}</p>
-            <p className="text-[11px] text-mist-500" title={formatDateTimeHe(e.at)}>
+            <p className="text-[11px] text-mist-500" title={stampText(e.at)}>
               {relativeHe(e.at)}
             </p>
           </div>

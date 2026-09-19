@@ -223,7 +223,7 @@ export function TargetPicker({
             <li
               key={t.id}
               className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-colors ${
-                on ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'
+                on ? 'border-brand-300 bg-brand-300/8' : 'border-ink-600'
               } ${!t.enabled || blocked ? 'opacity-50' : ''}`}
             >
               {/* The label covers the identity only — the variant select sits
@@ -231,7 +231,7 @@ export function TargetPicker({
               <label className="flex min-w-0 grow cursor-pointer items-center gap-2.5">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 shrink-0 accent-brand-500"
+                  className="h-5 w-5 shrink-0 accent-brand-300"
                   checked={on}
                   disabled={blocked}
                   onChange={(e) => toggle(t.id, e.target.checked)}
@@ -256,7 +256,9 @@ export function TargetPicker({
               {on && onVariantMap && approved.length > 0 && (
                 <select
                   aria-label={`גרסה עבור ${t.name}`}
-                  className="max-w-24 shrink-0 rounded-lg border border-ink-600 bg-ink-850 px-1.5 py-1 text-xs text-mist-100"
+                  /* Was ~26px tall at text-xs: under the tap floor, and small
+                     enough text that iOS Safari zooms the page on focus. */
+                  className="min-h-11 max-w-28 shrink-0 rounded-xl border border-ink-600 bg-ink-900 px-2 py-1 text-base text-mist-100"
                   value={variantMap[t.id] ?? ''}
                   onChange={(e) => {
                     const next = { ...variantMap };

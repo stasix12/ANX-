@@ -176,10 +176,10 @@ export default function CampaignsPage() {
                 />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs font-bold">
                   <span className="text-mist-500">{mine.length} פוסטים</span>
-                  <button type="button" className="min-h-10 px-1 text-brand-400" onClick={() => openEditor(c)}>
+                  <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => openEditor(c)}>
                     ערוך
                   </button>
-                  <button type="button" className="min-h-10 px-1 text-brand-400" onClick={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}>
+                  <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}>
                     שכפל
                   </button>
                   {state.state === 'stopped' && (

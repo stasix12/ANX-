@@ -97,7 +97,7 @@ export default function ManualKitPage() {
       title="פרסום בעזרת המערכת"
       headerAction={
         queue.length > 1 ? (
-          <span className="rounded-full bg-white/20 px-3 py-1.5 text-xs font-bold text-white">
+          <span className="rounded-full bg-brand-300/14 px-3 py-1.5 text-xs font-bold text-brand-400">
             {stepNumber} מתוך {queue.length}
           </span>
         ) : undefined
@@ -208,7 +208,7 @@ export default function ManualKitPage() {
                   {remaining.length > 0 && (
                     <div className="mt-2.5 flex items-center justify-between gap-2 text-xs">
                       <span className="text-mist-500">הבאה בתור: {remaining[0].target?.name ?? '—'}</span>
-                      <button type="button" onClick={goNext} className="min-h-9 font-bold text-brand-400">
+                      <button type="button" onClick={goNext} className="min-h-11 px-1 font-bold text-brand-400">
                         עבור לבא בלי לשנות →
                       </button>
                     </div>
@@ -235,7 +235,7 @@ function Step({ n, title, done, children }: { n: number; title: string; done?: b
     <section className="border-t border-ink-700 pt-3 first:border-0 first:pt-0 [&+&]:mt-3">
       <h3 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-mist-100">
         <span
-          className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-extrabold ${done ? 'bg-success-400 text-white' : 'bg-brand-500/15 text-brand-400'}`}
+          className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-extrabold ${done ? 'bg-success-400 text-ink-950' : 'bg-brand-300/12 text-brand-400'}`}
         >
           {done ? '✓' : n}
         </span>

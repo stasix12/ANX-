@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { RUN_STATE_LABEL, RUN_STATE_TONE, type CampaignState } from '@/lib/social/campaign';
 import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import { ltr } from './DateTime';
 import type { Campaign } from '@/lib/social/types';
 import { CampaignProgressBar } from './CampaignProgressBar';
 import { Badge, Button } from './ui';
@@ -111,7 +112,7 @@ export function CampaignCard({
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-xl border border-ink-600 px-3 py-2">
+    <div className="min-w-0 rounded-xl border border-ink-700 px-3 py-2">
       <dt className="text-[11px] font-bold text-mist-500">{label}</dt>
       <dd dir="auto" className="truncate text-sm font-bold text-mist-100">{children}</dd>
     </div>
@@ -120,5 +121,5 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 /** Today shows a bare time; another day needs its date to mean anything. */
 function whenLabel(iso: string): string {
-  return zonedDateISO(new Date(iso)) === zonedDateISO(new Date()) ? formatTimeHe(iso) : formatDateTimeHe(iso);
+  return ltr(zonedDateISO(new Date(iso)) === zonedDateISO(new Date()) ? formatTimeHe(iso) : formatDateTimeHe(iso));
 }

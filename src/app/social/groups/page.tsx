@@ -375,7 +375,7 @@ export default function GroupsPage() {
                     aria-label={`בחר את ${g.name}`}
                     checked={selected.includes(g.id)}
                     onChange={(e) => toggleSelect(g.id, e.target.checked)}
-                    className="h-4 w-4 shrink-0 accent-brand-500"
+                    className="h-5 w-5 shrink-0 accent-brand-300"
                   />
                   <Link href={`/social/groups/${g.id}`} className="flex min-w-0 grow items-center gap-2.5">
                     <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={40} />

@@ -36,7 +36,7 @@ import {
 } from '@/lib/social/client';
 import { isOpen } from '@/lib/social/status';
 import { KNOWN_CITIES, OTHER_CITY, detectCity, sortCities } from '@/lib/social/cities';
-import { formatDateTimeHe } from '@/lib/social/time';
+import { Stamp } from '@/components/social/DateTime';
 import { CHANNEL_LABEL, type Campaign, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { ClockIcon, SearchIcon } from '@/components/icons';
@@ -195,9 +195,9 @@ export default function GroupProfilePage() {
 
         <Card title="פרטים">
           <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2 [&>*]:min-w-0">
-            <Row label="פרסום אחרון">{stats.last ? formatDateTimeHe(stats.last) : 'טרם פורסם'}</Row>
-            <Row label="נוספה למערכת">{formatDateTimeHe(group.created_at)}</Row>
-            <Row label="עודכנה מפייסבוק">{group.last_synced_at ? formatDateTimeHe(group.last_synced_at) : 'טרם'}</Row>
+            <Row label="פרסום אחרון">{stats.last ? <Stamp iso={stats.last} /> : 'טרם פורסם'}</Row>
+            <Row label="נוספה למערכת"><Stamp iso={group.created_at} /></Row>
+            <Row label="עודכנה מפייסבוק">{group.last_synced_at ? <Stamp iso={group.last_synced_at} /> : 'טרם'}</Row>
             <Row label="מזהה בפייסבוק">
               <span dir="ltr" className="font-mono text-xs">
                 {group.external_id || '—'}
@@ -251,7 +251,7 @@ export default function GroupProfilePage() {
                 const c = campaigns.find((x) => x.id === cid);
                 return (
                   <li key={cid}>
-                    <Link href={`/social/campaigns/${cid}`} className="inline-flex min-h-9 items-center rounded-full bg-ink-800 px-3 text-sm font-bold text-brand-400">
+                    <Link href={`/social/campaigns/${cid}`} className="inline-flex min-h-11 items-center rounded-full bg-ink-800 px-3 text-sm font-bold text-brand-400">
                       {c?.name ?? 'סבב'}
                     </Link>
                   </li>

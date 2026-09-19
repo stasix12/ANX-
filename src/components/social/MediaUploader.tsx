@@ -56,7 +56,7 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
               type="button"
               onClick={() => remove(item)}
               aria-label="הסר"
-              className="absolute end-1.5 top-1.5 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white"
+              className="absolute end-1 top-1 grid h-11 w-11 place-items-center rounded-full bg-ink-950/70 text-mist-100 ring-1 ring-ink-600 backdrop-blur-sm"
             >
               <TrashIcon className="h-3.5 w-3.5" />
             </button>
@@ -66,7 +66,7 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={busy}
-          className="grid aspect-square place-items-center rounded-xl border-2 border-dashed border-ink-600 text-mist-500 hover:border-brand-500 hover:text-brand-400 disabled:opacity-60"
+          className="grid aspect-square place-items-center rounded-xl border-2 border-dashed border-ink-600 text-mist-500 hover:border-brand-300 hover:text-brand-400 disabled:opacity-50"
         >
           {busy ? <SpinnerIcon className="h-6 w-6 animate-spin" /> : <PlusIcon className="h-7 w-7" />}
         </button>

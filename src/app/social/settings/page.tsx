@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { getBrowserSettings, getBusiness, getControl, getLimits, saveSetting } from '@/lib/social/client';
@@ -111,7 +112,7 @@ export default function SettingsPage() {
               </Card>
 
               <Card title="עצירת חירום">
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-ink-600 px-3 py-3">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-ink-700 px-3 py-3">
                   <div className="min-w-0">
                     <p className="font-bold text-mist-100">השהיית כל הפרסומים</p>
                     <p className="text-xs text-mist-500">כשמופעל, שום דבר לא יוצא — כולל "פרסם עכשיו". התור נשמר.</p>
@@ -120,8 +121,8 @@ export default function SettingsPage() {
                 </div>
                 {control.rateLimitedUntil && (
                   <p className="mt-2 text-xs text-warning-400">
-                    Meta ביקשה להאט — הפרסום מושהה עד {control.rateLimitedUntil}.{' '}
-                    <button type="button" className="min-h-9 font-bold underline" onClick={() => setControl({ ...control, rateLimitedUntil: null })}>
+                    Meta ביקשה להאט — הפרסום מושהה עד <Stamp iso={control.rateLimitedUntil} />.{' '}
+                    <button type="button" className="min-h-11 px-1 font-bold underline" onClick={() => setControl({ ...control, rateLimitedUntil: null })}>
                       נקה
                     </button>
                   </p>
@@ -149,7 +150,7 @@ export default function SettingsPage() {
                       ['debugMode', 'חלון דפדפן גלוי', 'Playwright רץ עם חלון פתוח כדי שתראו בדיוק מה קורה. כבו לריצה שקטה ברקע.'],
                     ] as const
                   ).map(([key, label, hint]) => (
-                    <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-ink-600 px-3 py-2.5">
+                    <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-ink-700 px-3 py-2.5">
                       <div className="min-w-0">
                         <p className="font-bold text-mist-100">{label}</p>
                         <p className="text-xs leading-snug text-mist-500">{hint}</p>

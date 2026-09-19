@@ -110,7 +110,7 @@ function Stepper({ label, onClick, disabled, children }: { label: string; onClic
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-ink-800 text-mist-100 transition-transform active:scale-[0.94] disabled:opacity-40"
+      className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-ink-800 text-mist-100 transition-transform active:scale-[0.94] disabled:text-ink-600"
     >
       {children}
     </button>
@@ -478,7 +478,7 @@ export function QueueTunerSheet({
           <section aria-label="מרווח בין פרסומים" className="space-y-3">
             <h3 className="text-sm font-extrabold uppercase tracking-wide text-mist-500">מרווח בין פרסומים</h3>
 
-            <div className="flex items-center justify-center gap-4 rounded-2xl bg-ink-900 px-3 py-4">
+            <div className="flex items-center justify-center gap-4 rounded-xl bg-ink-900 px-3 py-4">
               <Stepper label={`הפחת ${STEP} דקות`} onClick={() => setGapTo(gap - STEP)} disabled={working || gap <= MIN_GAP}>
                 <MinusIcon className="h-6 w-6" />
               </Stepper>
@@ -501,7 +501,7 @@ export function QueueTunerSheet({
                   onClick={() => setGapTo(p)}
                   disabled={working}
                   aria-pressed={gap === p}
-                  className={`min-h-11 min-w-14 rounded-xl px-3 text-sm font-bold tabular-nums transition-colors disabled:opacity-40 ${
+                  className={`min-h-11 min-w-14 rounded-xl px-3 text-sm font-bold tabular-nums transition-colors disabled:opacity-50 ${
                     gap === p ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'
                   }`}
                 >
@@ -621,12 +621,12 @@ export function QueueTunerSheet({
                           <li key={t.id}>
                             <label
                               className={`flex min-h-11 min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-colors ${
-                                on ? 'border-brand-500 bg-brand-500/5' : 'border-ink-600'
+                                on ? 'border-brand-300 bg-brand-300/8' : 'border-ink-600'
                               }`}
                             >
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 shrink-0 accent-brand-500"
+                                className="h-5 w-5 shrink-0 accent-brand-300"
                                 checked={on}
                                 disabled={working}
                                 aria-label={t.name}

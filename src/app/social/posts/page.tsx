@@ -7,7 +7,7 @@ import { ClipboardListIcon, PlusIcon, SearchIcon } from '@/components/icons';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Badge, Button, Card, EmptyState, Notice, OverflowMenu, SegmentedControl, SkeletonList, inputClass, useConfirm, useToast, ButtonLink} from '@/components/social/ui';
 import { archivePost, duplicatePost, listCampaigns, listPosts } from '@/lib/social/client';
-import { formatDateTimeHe } from '@/lib/social/time';
+import { Stamp } from '@/components/social/DateTime';
 import type { Campaign, MediaItem, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 
@@ -152,7 +152,7 @@ export default function PostsPage() {
                         <p dir="auto" className="truncate font-bold text-mist-100">{p.title || p.base_text.slice(0, 60) || 'ללא כותרת'}</p>
                         <p className="truncate text-[11px] text-mist-500">
                           {campaignName(p.campaign_id) ?? 'ללא סבב'} · {p.language === 'ru' ? 'רוסית' : 'עברית'}
-                          {media.length ? ` · ${media.length} מדיה` : ''} · {formatDateTimeHe(p.updated_at)}
+                          {media.length ? ` · ${media.length} מדיה` : ''} · <Stamp iso={p.updated_at} />
                         </p>
                       </div>
                       <Badge tone={p.status === 'ready' ? 'good' : 'neutral'}>{p.status === 'ready' ? 'מוכן' : 'טיוטה'}</Badge>

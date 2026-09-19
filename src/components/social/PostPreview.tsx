@@ -6,6 +6,13 @@ import { CTA_OPTIONS, type CtaType, type MediaItem } from '@/lib/social/types';
  * A faithful-enough rendition of how the post will look in the Facebook
  * feed: page header, text with Facebook's "see more" fold, the media grid
  * (1 / 2 / 3+ layouts), a link card and the CTA button. Purely visual.
+ *
+ * This is the ONE place in /social that stays light on purpose. Its white
+ * card and slate text are not app chrome that forgot the theme — they are
+ * Facebook's chrome, and repainting them navy would make the preview lie
+ * about what the owner is about to publish. To stop it reading as a panel
+ * that missed the re-theme, it sits in a dark bezel with a caption saying
+ * what it is: a screenshot inside the app rather than part of it.
  */
 export function PostPreview({
   pageName,
@@ -26,7 +33,9 @@ export function PostPreview({
   const host = safeHost(link);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm" dir="auto">
+    <div className="rounded-card border border-ink-700 bg-ink-800 p-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)]">
+      <p className="px-1 pb-2 text-[11px] font-bold text-mist-500">כך זה ייראה בפייסבוק</p>
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900" dir="auto">
       <div className="flex items-center gap-3 px-4 pt-4">
         <div className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-blue-600 to-sky-400 text-sm font-extrabold text-white">
           {pageName.slice(0, 1) || 'פ'}
@@ -59,7 +68,7 @@ export function PostPreview({
       )}
 
       {!video && images.length > 0 && (
-        <div className={`grid gap-0.5 ${images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div className={`grid gap-0.5 [&>*]:min-w-0 ${images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {images.slice(0, 4).map((img, i) => (
             <div key={img.url} className={`relative bg-slate-100 ${images.length === 3 && i === 0 ? 'col-span-2 aspect-[2/1]' : 'aspect-square'}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -90,6 +99,7 @@ export function PostPreview({
         <span>👍 אהבתי</span>
         <span>💬 תגובה</span>
         <span>↗ שיתוף</span>
+      </div>
       </div>
     </div>
   );

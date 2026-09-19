@@ -30,7 +30,7 @@ import {
   type PostInput,
 } from '@/lib/social/client';
 import { generateVariantSeeds, renderPostText, whatsappUrlFor } from '@/lib/social/compose';
-import { formatDateTimeHe } from '@/lib/social/time';
+import { stampText } from './DateTime';
 import {
   CTA_OPTIONS,
   DEFAULT_BROWSER,
@@ -423,7 +423,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                         <option value="ru">Русский</option>
                       </select>
                       <span className="grow" />
-                      <button type="button" onClick={() => setPreviewKey(v.key)} className={`min-h-10 rounded-lg px-2.5 text-xs font-bold ${previewKey === v.key ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>
+                      <button type="button" onClick={() => setPreviewKey(v.key)} className={`min-h-11 rounded-lg px-2.5 text-xs font-bold ${previewKey === v.key ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}>
                         תצוגה מקדימה
                       </button>
                       <button
@@ -488,7 +488,7 @@ export function PostEditor({ postId }: { postId?: string }) {
               />
             )}
             {approvedCount > 1 && (
-              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-ink-600 px-3 py-2.5">
+              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-ink-700 px-3 py-2.5">
                 <span className="text-sm font-bold text-mist-100">חלוקת גרסאות:</span>
                 <div role="group" className="flex rounded-xl bg-ink-800 p-0.5 text-xs font-bold">
                   {(
@@ -498,7 +498,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                       ['fixed', 'רק הקצאה ידנית'],
                     ] as const
                   ).map(([v, label]) => (
-                    <button key={v} type="button" aria-pressed={variantStrategy === v} onClick={() => setVariantStrategy(v)} className={`min-h-10 rounded-lg px-2.5 ${variantStrategy === v ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
+                    <button key={v} type="button" aria-pressed={variantStrategy === v} onClick={() => setVariantStrategy(v)} className={`min-h-11 rounded-lg px-2.5 ${variantStrategy === v ? 'bg-brand-500 text-on-brand' : 'text-mist-300'}`}>
                       {label}
                     </button>
                   ))}
@@ -509,8 +509,8 @@ export function PostEditor({ postId }: { postId?: string }) {
               </div>
             )}
             {selectedTargets.some((id) => targets.find((t) => t.id === id)?.channel === 'facebook_group') && (
-              <label className="mt-3 flex items-start gap-2.5 rounded-xl border border-ink-600 px-3 py-2.5 text-sm text-mist-100">
-                <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-brand-500" checked={requireConfirmation || browser.testMode} disabled={browser.testMode} onChange={(e) => setRequireConfirmation(e.target.checked)} />
+              <label className="mt-3 flex items-start gap-2.5 rounded-xl border border-ink-700 px-3 py-2.5 text-sm text-mist-100">
+                <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-brand-300" checked={requireConfirmation || browser.testMode} disabled={browser.testMode} onChange={(e) => setRequireConfirmation(e.target.checked)} />
                 <span className="min-w-0">
                   <span className="font-bold">בקש אישור לפני כל פרסום</span>
                   <span className="block text-xs text-mist-500">ה-worker יעצור לפני הלחיצה האחרונה, יצלם מסך, ויחכה לאישור שלכם בלוח הבקרה.</span>
@@ -624,10 +624,10 @@ export function PostEditor({ postId }: { postId?: string }) {
 }
 
 function describeSchedule(s: Schedule): string {
-  if (s.mode === 'now') return `פורסם מיד (${formatDateTimeHe(s.run_at)})`;
-  if (s.mode === 'once') return `פעם אחת ב-${formatDateTimeHe(s.run_at)}`;
-  if (s.mode === 'interval') return `כל ${s.interval_days} ימים ב-${s.interval_time} החל מ-${formatDateTimeHe(s.run_at)}`;
-  if (s.mode === 'drip') return `הפצה הדרגתית: כל ${s.drip_gap_minutes ?? 20} דק׳${s.drip_per_day ? `, עד ${s.drip_per_day} ביום` : ''}, ${s.drip_window_start}–${s.drip_window_end}, מ-${formatDateTimeHe(s.run_at)}`;
+  if (s.mode === 'now') return `פורסם מיד (${stampText(s.run_at)})`;
+  if (s.mode === 'once') return `פעם אחת ב-${stampText(s.run_at)}`;
+  if (s.mode === 'interval') return `כל ${s.interval_days} ימים ב-${s.interval_time} החל מ-${stampText(s.run_at)}`;
+  if (s.mode === 'drip') return `הפצה הדרגתית: כל ${s.drip_gap_minutes ?? 20} דק׳${s.drip_per_day ? `, עד ${s.drip_per_day} ביום` : ''}, ${s.drip_window_start}–${s.drip_window_end}, מ-${stampText(s.run_at)}`;
   const days = Object.entries(s.weekly)
     .filter(([, t]) => t.length)
     .map(([d, t]) => `${['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'][Number(d)]} ${t.join('/')}`)

@@ -45,6 +45,7 @@ import {
 import { checkCampaignInvariants, takeUnreported } from '@/lib/social/invariants';
 import { logClientActivity } from '@/lib/social/client';
 import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import { ltr } from '@/components/social/DateTime';
 import type { Campaign, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { CalendarIcon, ClipboardListIcon, SearchIcon } from '@/components/icons';
@@ -350,7 +351,7 @@ export default function CampaignControlCenter() {
 /** One breakdown figure beside the ring. */
 function Counter({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className="rounded-xl border border-ink-600 px-3 py-2">
+    <div className="rounded-xl border border-ink-700 px-3 py-2">
       <dt className="text-[11px] font-bold text-mist-500">{label}</dt>
       <dd className={`text-xl font-extrabold tabular-nums ${tone}`}>{value}</dd>
     </div>
@@ -359,7 +360,7 @@ function Counter({ label, value, tone }: { label: string; value: number; tone: s
 
 function Fact({ label, value, fallback, hint }: { label: string; value: string | null; fallback: string; hint?: string }) {
   return (
-    <div className="min-w-0 rounded-xl border border-ink-600 px-3 py-2">
+    <div className="min-w-0 rounded-xl border border-ink-700 px-3 py-2">
       <dt className="text-[11px] font-bold text-mist-500">{label}</dt>
       <dd dir="auto" className={`truncate text-sm font-bold tabular-nums ${value ? 'text-mist-100' : 'text-mist-500'}`}>
         {value ?? fallback}
@@ -370,5 +371,7 @@ function Fact({ label, value, fallback, hint }: { label: string; value: string |
 }
 
 function when(iso: string): string {
-  return zonedDateISO(new Date(iso)) === zonedDateISO(new Date()) ? formatTimeHe(iso) : formatDateTimeHe(iso);
+  // Isolated: both branches are digit runs that the RTL line around them
+  // would otherwise reorder.
+  return ltr(zonedDateISO(new Date(iso)) === zonedDateISO(new Date()) ? formatTimeHe(iso) : formatDateTimeHe(iso));
 }

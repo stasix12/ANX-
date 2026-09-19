@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDateTimeHe } from '@/lib/social/time';
+import { Stamp } from './DateTime';
 import type { MediaItem, SocialTarget } from '@/lib/social/types';
 import { SchedulePlanPreview, type SchedulePlan } from './SchedulePicker';
 import { TargetAvatar } from './TargetAvatar';
@@ -75,7 +75,7 @@ export function PreLaunchReview({
 
         <section>
           <p className="mb-1.5 text-xs font-extrabold uppercase tracking-wide text-mist-500">הטקסט שיוצא</p>
-          <div className="flex gap-2.5 rounded-xl border border-ink-600 bg-ink-900 p-3">
+          <div className="flex gap-2.5 rounded-xl border border-ink-700 bg-ink-900 p-3">
             {cover && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={cover.url} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
@@ -121,7 +121,7 @@ export function PreLaunchReview({
           <SchedulePlanPreview plan={plan} names={targets.map((t) => t.name)} />
           {plan.lastAt && (
             <p className="mt-1.5 text-xs text-mist-500">
-              סיום משוער: <strong className="text-mist-300">{formatDateTimeHe(plan.lastAt)}</strong> — לפי המרווח שהגדרתם. מכסות ומרווחים
+              סיום משוער: <strong className="text-mist-300"><Stamp iso={plan.lastAt} /></strong> — לפי המרווח שהגדרתם. מכסות ומרווחים
               בהגדרות עשויים לדחות פרסומים ולהאריך את הטווח.
             </p>
           )}

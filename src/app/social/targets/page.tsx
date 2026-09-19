@@ -18,7 +18,7 @@ import {
   useToast,
 } from '@/components/social/ui';
 import { callSocialApi, listTargets, updateTarget } from '@/lib/social/client';
-import { formatDateTimeHe } from '@/lib/social/time';
+import { Stamp } from '@/components/social/DateTime';
 import { PERMISSION_LABEL, REQUIRED_SCOPES, type SocialAccount, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { TagIcon } from '@/components/icons';
@@ -131,10 +131,10 @@ function TargetsScreen() {
                   <span className="text-mist-500">מחובר בתור:</span> <strong className="text-mist-100">{account.name}</strong>
                 </p>
                 <p>
-                  <span className="text-mist-500">תוקף הטוקן:</span> <strong className="text-mist-100">{account.token_expires_at ? formatDateTimeHe(account.token_expires_at) : 'ללא תפוגה'}</strong>
+                  <span className="text-mist-500">תוקף הטוקן:</span> <strong className="text-mist-100">{account.token_expires_at ? <Stamp iso={account.token_expires_at} /> : 'ללא תפוגה'}</strong>
                 </p>
                 <p>
-                  <span className="text-mist-500">סנכרון אחרון:</span> <strong className="text-mist-100">{formatDateTimeHe(account.last_synced_at)}</strong>
+                  <span className="text-mist-500">סנכרון אחרון:</span> <strong className="text-mist-100"><Stamp iso={account.last_synced_at} /></strong>
                 </p>
                 <p>
                   <span className="text-mist-500">הרשאות:</span>{' '}

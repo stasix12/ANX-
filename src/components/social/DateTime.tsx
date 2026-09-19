@@ -19,8 +19,8 @@ import { formatDateTimeHe } from '@/lib/social/time';
  */
 
 /** U+2066 LEFT-TO-RIGHT ISOLATE … U+2069 POP DIRECTIONAL ISOLATE. */
-const LRI = '⁦';
-const PDI = '⁩';
+const LRI = '\u2066';
+const PDI = '\u2069';
 
 /**
  * The character-level equivalent of `dir="ltr"`, for the places a timestamp

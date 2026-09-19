@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { listRecentCommands, listWorkers, resumeNeedsAttention, sendWorkerCommand } from '@/lib/social/client';
-import { formatDateTimeHe } from '@/lib/social/time';
+import { Stamp } from './DateTime';
 import type { SocialWorker, WorkerCommand, WorkerCommandName } from '@/lib/social/types';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { Button, Card, Notice, useConfirm } from './ui';
@@ -84,7 +84,7 @@ export function BrowserStatusCard({ onChanged }: { onChanged?: () => void }) {
       <p className="mt-1 text-xs text-mist-500">
         {worker ? (
           <>
-            {worker.name} · {worker.host || '—'} · נראה לאחרונה {formatDateTimeHe(worker.last_seen_at)}
+            {worker.name} · {worker.host || '—'} · נראה לאחרונה <Stamp iso={worker.last_seen_at} />
             {worker.debug_mode && ' · Debug (חלון גלוי)'}
           </>
         ) : (

@@ -13,7 +13,8 @@ import {
   type QuickPublishPlan,
   type QuickPublishResult,
 } from '@/lib/social/library';
-import { formatDateTimeHe, formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { Stamp } from './DateTime';
 import type { MediaItem } from '@/lib/social/types';
 import { SchedulePlanPreview, type SchedulePlan } from './SchedulePicker';
 import { TargetPicker } from './TargetPicker';
@@ -263,7 +264,7 @@ export function QuickPublishSheet({
       }
     >
       {/* What is going out, so nobody schedules the wrong post. */}
-      <div className="flex min-w-0 items-center gap-3 rounded-xl border border-ink-600 bg-ink-900/40 p-2.5">
+      <div className="flex min-w-0 items-center gap-3 rounded-xl border border-ink-700 bg-ink-900 p-2.5">
         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-ink-800">
           {cover?.kind === 'image' && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -493,7 +494,7 @@ export function QuickPublishSheet({
                     key={m}
                     type="button"
                     onClick={() => setGap(m)}
-                    className={`min-h-10 rounded-full px-2.5 ${gap === m ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}
+                    className={`min-h-11 rounded-full px-2.5 ${gap === m ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}
                   >
                     {m} דק׳
                   </button>
@@ -519,14 +520,14 @@ export function QuickPublishSheet({
                 {plan.rows.length > 6 && (
                   <button
                     type="button"
-                    className="min-h-10 px-1 text-xs font-bold text-brand-400"
+                    className="min-h-11 px-1 text-xs font-bold text-brand-400"
                     onClick={() => setShowAllRows((v) => !v)}
                   >
                     {showAllRows ? 'הסתר את הרשימה המלאה' : `הצג את כל ${plan.rows.length} הפרסומים`}
                   </button>
                 )}
                 {showAllRows && (
-                  <ul className="max-h-64 min-w-0 space-y-1 overflow-y-auto rounded-xl border border-ink-600 p-2">
+                  <ul className="max-h-64 min-w-0 space-y-1 overflow-y-auto rounded-xl border border-ink-700 p-2">
                     {plan.rows.map((r, i) => (
                       <li key={`${r.targetId}-${i}`} className="flex items-center gap-2 text-xs">
                         <span className="w-12 shrink-0 font-extrabold tabular-nums text-brand-400">{formatTimeHe(r.at)}</span>
@@ -544,7 +545,7 @@ export function QuickPublishSheet({
                 )}
                 {plan.days > 1 && (
                   <p className="text-xs text-mist-500">
-                    מה שלא נכנס היום ממשיך מחר באותה שעה. ההפצה נמשכת על פני {plan.days} ימים ומסתיימת ב-{formatDateTimeHe(plan.endAt ?? plan.startAt)}.
+                    מה שלא נכנס היום ממשיך מחר באותה שעה. ההפצה נמשכת על פני {plan.days} ימים ומסתיימת ב-<Stamp iso={plan.endAt ?? plan.startAt} />.
                   </p>
                 )}
 

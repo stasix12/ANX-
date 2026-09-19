@@ -45,7 +45,7 @@ export function ProgressRing({
           fill="none"
           strokeWidth={stroke}
           strokeLinecap="round"
-          className="stroke-brand-500 transition-[stroke-dashoffset] duration-700"
+          className="stroke-brand-300 transition-[stroke-dashoffset] duration-700"
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - pct / 100)}
         />

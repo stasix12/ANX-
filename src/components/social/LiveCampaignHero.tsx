@@ -117,7 +117,7 @@ function NextUp({
     <button
       type="button"
       onClick={onOpen}
-      className={`${NEXT_UP_BOX} text-start transition-colors hover:bg-ink-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300`}
+      className={`${NEXT_UP_BOX} text-start transition-colors hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850`}
     >
       {body}
       <span className="sr-only">— שינוי המרווח בין הפרסומים והקבוצות בתור</span>
@@ -242,7 +242,7 @@ export function LiveCampaignHero({
           type="button"
           onClick={onReset}
           disabled={busy}
-          className="mt-2 min-h-11 w-full rounded-xl text-sm font-bold text-mist-500 transition-colors hover:bg-ink-900 hover:text-mist-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 disabled:text-ink-600"
+          className="mt-2 min-h-11 w-full rounded-xl text-sm font-bold text-mist-500 transition-colors hover:bg-ink-900 hover:text-mist-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850 disabled:text-ink-600"
         >
           סיים את הסבב ואפס את המונה
         </button>

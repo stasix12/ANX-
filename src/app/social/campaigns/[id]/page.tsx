@@ -208,7 +208,7 @@ export default function CampaignControlCenter() {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              {state?.state === 'running' && <span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-success-400" />}
+              {state?.state === 'running' && <span aria-hidden className="pulse-dot h-2 w-2 rounded-full bg-success-400" />}
               <Badge tone={RUN_STATE_TONE[state?.state ?? 'not_started']}>{RUN_STATE_LABEL[state?.state ?? 'not_started']}</Badge>
               <span className="text-xs text-mist-500">
                 {[campaign.service, campaign.city].filter(Boolean).join(' · ')}

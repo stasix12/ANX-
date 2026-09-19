@@ -633,11 +633,18 @@ export function SkeletonList({ rows = 4 }: { rows?: number }) {
   );
 }
 
-export function SkeletonTiles({ count = 6 }: { count?: number }) {
+/**
+ * The stat row while it loads. Grid, gap, count and radius all match the real
+ * row in StatCard — a placeholder that is the wrong shape is worse than none,
+ * because the page jumps when the numbers land. The height is the tile's own:
+ * p-4 + a 36px chip + the label + a 34px figure + the sub line, and one step
+ * taller from `sm`, where the figure goes to 40.
+ */
+export function SkeletonTiles({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
+    <div className="grid grid-cols-2 gap-3 sm:gap-3.5 md:grid-cols-4 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
       {Array.from({ length: count }).map((_, i) => (
-        <Skeleton key={i} className="h-[74px] rounded-2xl" />
+        <Skeleton key={i} className="h-[145px] rounded-tile sm:h-[151px]" />
       ))}
     </div>
   );
@@ -969,7 +976,7 @@ export function OverflowMenu({ label, actions, className = '' }: { label: string
 /**
  * The design language, in four rules, so screens stop inventing their own:
  *
- *   surface   one white card style — hairline border, soft shadow, r-2xl
+ *   surface   one card style — hairline border, soft drop shadow, r-card
  *   section   a heading and an optional "show all", never a card in a card
  *   stat      a figure with an icon chip; colour marks the status, not the card
  *   row       a compact list line: image, name, meta, status, menu

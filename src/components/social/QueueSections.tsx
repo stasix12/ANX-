@@ -86,7 +86,7 @@ function Group({
   return (
     <section>
       <h3 className={`mb-1 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-wide ${tone}`}>
-        {pulse && <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
+        {pulse && <span aria-hidden className="pulse-dot h-1.5 w-1.5 rounded-full bg-current" />}
         {title}
         <span className="text-mist-500">({items.length + Math.max(0, more)})</span>
       </h3>

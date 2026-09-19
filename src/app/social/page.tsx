@@ -274,7 +274,7 @@ export default function SocialDashboard() {
       {error && <Notice tone="error">{error}</Notice>}
       {!data && !error && (
         <div className="space-y-5">
-          <SkeletonTiles count={6} />
+          <SkeletonTiles count={4} />
           <Loading />
         </div>
       )}
@@ -309,8 +309,9 @@ export default function SocialDashboard() {
             />
           )}
 
-          {/* 1 — where the day stands. White cards; colour marks the status,
-              not the card. */}
+          {/* 1 — where the day stands. One flat card surface; colour marks the
+              status, not the card. A tile whose value is 0 goes neutral — a red
+              zero is noise, not a warning. */}
           <section>
             <div className="grid grid-cols-2 gap-3 sm:gap-3.5 md:grid-cols-4 [&>*]:min-w-0">
               <StatCard

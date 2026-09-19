@@ -50,7 +50,7 @@ export function CampaignCard({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {running && <span aria-hidden className="h-2 w-2 animate-pulse rounded-full bg-success-400" />}
+          {running && <span aria-hidden className="pulse-dot h-2 w-2 rounded-full bg-success-400" />}
           <Badge tone={RUN_STATE_TONE[state.state]}>{RUN_STATE_LABEL[state.state]}</Badge>
         </div>
       </header>

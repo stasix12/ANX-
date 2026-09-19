@@ -325,18 +325,22 @@ export function QuickPublishSheet({
             </Notice>
           )}
 
+          {/* ink-900, not ink-800: a sheet's own panel IS ink-800, so an inset
+              painted in it has nothing to sit against and the three boxes
+              disappear. Inside a sheet the recess is one step darker, the same
+              step the hero's countdown box uses inside a card. */}
           <dl className="grid grid-cols-3 gap-2 text-center [&>*]:min-w-0">
-            <div className="rounded-lg bg-ink-800 py-2">
+            <div className="rounded-lg bg-ink-900 py-2">
               <dt className="text-[10px] font-bold text-mist-500">מתחיל</dt>
               <dd className="text-sm font-extrabold tabular-nums text-mist-100">{formatTimeHe(result.startAt)}</dd>
               <p className="text-[10px] font-bold tabular-nums text-brand-400">{formatDayMonthHe(result.startAt)}</p>
             </div>
-            <div className="rounded-lg bg-ink-800 py-2">
+            <div className="rounded-lg bg-ink-900 py-2">
               <dt className="text-[10px] font-bold text-mist-500">צפוי להסתיים</dt>
               <dd className="text-sm font-extrabold tabular-nums text-mist-100">{result.endAt ? formatTimeHe(result.endAt) : '—'}</dd>
               {result.endAt && <p className="text-[10px] font-bold tabular-nums text-brand-400">{formatDayMonthHe(result.endAt)}</p>}
             </div>
-            <div className="rounded-lg bg-ink-800 py-2">
+            <div className="rounded-lg bg-ink-900 py-2">
               <dt className="text-[10px] font-bold text-mist-500">יעדים</dt>
               <dd className="text-sm font-extrabold tabular-nums text-mist-100">{result.targetCount}</dd>
             </div>
@@ -436,7 +440,7 @@ export function QuickPublishSheet({
 
           <section className="min-w-0 space-y-3">
             <h3 className="text-sm font-extrabold text-mist-100">מתי</h3>
-            <div role="group" aria-label="מתי לפרסם" className="flex min-w-0 gap-1.5 rounded-xl bg-ink-800 p-1">
+            <div role="group" aria-label="מתי לפרסם" className="flex min-w-0 gap-1.5 rounded-xl bg-ink-900 p-1">
               {(
                 [
                   { value: 'now', label: 'פרסם עכשיו' },
@@ -494,7 +498,7 @@ export function QuickPublishSheet({
                     key={m}
                     type="button"
                     onClick={() => setGap(m)}
-                    className={`min-h-11 rounded-full px-2.5 ${gap === m ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'}`}
+                    className={`min-h-11 rounded-full px-2.5 ${gap === m ? 'bg-brand-500 text-on-brand' : 'bg-ink-900 text-mist-300'}`}
                   >
                     {m} דק׳
                   </button>

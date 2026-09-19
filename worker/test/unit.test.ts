@@ -387,6 +387,29 @@ console.log('unit tests OK');
   assert.ok(card.includes("from '@/lib/social/worker-version'"), 'the dashboard must compare against the same constant');
   assert.ok(card.includes('worker.version !== WORKER_VERSION'), 'the dashboard must notice an out-of-date worker');
 
+  // 3. One worker per name. Two windows share the social_workers row (the upsert
+  //    is by name, so both get the same id), the heartbeat and the Chrome
+  //    profile: the second one's releaseProfile() kills a Chrome that is
+  //    mid-publish, and the crash sweep then moves that job to needs_attention.
+  const guard = localWorker.slice(localWorker.indexOf('async function main('), localWorker.indexOf('.upsert('));
+  assert.ok(guard.includes("eq('name', env.workerName)"), 'startup must look for a worker already running under this name');
+  assert.ok(guard.includes('LIVE_WORKER_MS'), 'liveness must be judged by how recently it heartbeat, not by status alone');
+  assert.ok(guard.includes('EXIT_ALREADY_RUNNING'), 'a second instance must stand down with its own exit code');
+  assert.ok(
+    localWorker.indexOf('process.exit(EXIT_ALREADY_RUNNING)') < localWorker.indexOf('.upsert('),
+    'it must stand down BEFORE claiming the row, the profile or the in-flight job',
+  );
+  // The launcher must not restart it: nothing is broken, and a restart loop
+  // would only fight the window that is publishing.
+  assert.ok(/if "%EXITCODE%"=="3" goto alreadyrunning/.test(launcher), 'the launcher must recognise the stand-down exit code');
+  assert.ok(/set EXITCODE=%errorlevel%/.test(launcher), 'errorlevel must be captured before any for /f resets it');
+  // ...and its restart delay must outlast the liveness window, or a worker that
+  // really did crash gets mistaken for the window that is still open.
+  const liveMs = Number(/const LIVE_WORKER_MS = ([\d_]+)/.exec(localWorker)?.[1].replace(/_/g, '') ?? 0);
+  const restartSec = Number(/timeout \/t (\d+) >nul\s*\r?\ngoto run/.exec(launcher)?.[1] ?? 0);
+  assert.ok(liveMs > 0 && restartSec > 0, 'both the liveness window and the restart delay must be readable');
+  assert.ok(restartSec * 1000 > liveMs, `restart delay (${restartSec}s) must outlast the liveness window (${liveMs}ms)`);
+
   console.log('worker-freshness tests OK');
 }
 

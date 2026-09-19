@@ -47,6 +47,16 @@ import { captureScreenshot } from './screenshots';
 const VERSION = WORKER_VERSION;
 const CONFIRM_TIMEOUT_MS = 15 * 60_000;
 const PLAN_EVERY_MS = 60_000;
+/*
+ * How recently another worker of this name must have been seen for it to count
+ * as still running. A live worker heartbeats once a tick (5s), so anything
+ * inside this window is a sibling, not a corpse — and start-worker.cmd waits
+ * longer than this before restarting a crashed one, so a real restart is never
+ * mistaken for a double launch.
+ */
+const LIVE_WORKER_MS = 20_000;
+/** Exit code that tells start-worker.cmd not to restart: nothing is wrong. */
+const EXIT_ALREADY_RUNNING = 3;
 const MAX_PRE_SUBMIT_ATTEMPTS = 3;
 
 interface WorkerState {
@@ -66,6 +76,33 @@ let stopping = false;
 async function main(): Promise<void> {
   console.log(`[worker] הפתרון המבריק — social worker v${VERSION} (${env.workerName})`);
   const db = await workerDb();
+
+  /*
+   * One worker per name, and the reason is not tidiness.
+   *
+   * Two windows left open share everything: the same social_workers row (the
+   * upsert is by name, so both get the SAME id), the same heartbeat, and the
+   * same Chrome profile directory. The second one to start then does two
+   * destructive things on the first one's behalf — releaseProfile() kills the
+   * Chrome that is mid-publish, reading its live lock as a stale one, and the
+   * crash-recovery sweep below moves whatever that Chrome was publishing to
+   * needs_attention. The owner sees a post abandoned halfway with no idea why.
+   *
+   * So a second instance stands down instead, and says which window to close.
+   */
+  const { data: existing } = await db
+    .from('social_workers')
+    .select('status, last_seen_at, host')
+    .eq('name', env.workerName)
+    .maybeSingle();
+  const seenAt = existing?.last_seen_at ? new Date(existing.last_seen_at).getTime() : 0;
+  const seenAgo = Date.now() - seenAt;
+  if (existing && existing.status !== 'offline' && seenAt > 0 && seenAgo < LIVE_WORKER_MS) {
+    console.error(`\n[worker] כבר רץ worker בשם "${env.workerName}" (נראה לפני ${Math.max(1, Math.round(seenAgo / 1000))} שניות).`);
+    console.error('[worker] שני חלונות יפריעו זה לזה ויעצרו פרסום באמצע — סגרו את החלון השני והשאירו רק אחד.');
+    console.error('[worker] אם החלון השני כבר סגור, המתינו 20 שניות ונסו שוב.\n');
+    process.exit(EXIT_ALREADY_RUNNING);
+  }
 
   const { data: worker } = await db
     .from('social_workers')

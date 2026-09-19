@@ -107,18 +107,33 @@ set RAN=0
 for /f %%i in ('powershell -NoProfile -Command "[int]((Get-Date).ToFileTimeUtc()/10000000)" 2^>nul') do set T0=%%i
 
 call npm.cmd run social-worker
+rem Captured before anything else: a `for /f` resets errorlevel.
+set EXITCODE=%errorlevel%
 
 for /f %%i in ('powershell -NoProfile -Command "[int]((Get-Date).ToFileTimeUtc()/10000000)" 2^>nul') do set T1=%%i
 set /a RAN=%T1%-%T0%
+
+rem The worker stood down because another window is already running it.
+rem Nothing is broken, so restarting would only fight the live one.
+if "%EXITCODE%"=="3" goto alreadyrunning
 
 if %RAN% GEQ 60 set FAILS=0
 set /a FAILS=%FAILS%+1
 if %FAILS% GEQ 5 goto giveup
 
+rem Longer than LIVE_WORKER_MS in worker/social-worker.ts, so a worker that
+rem really did crash is not mistaken for the window that is still open.
 echo.
-echo   ה-worker נעצר. מפעיל אותו מחדש בעוד 10 שניות...
-timeout /t 10 >nul
+echo   ה-worker נעצר. מפעיל אותו מחדש בעוד 30 שניות...
+timeout /t 30 >nul
 goto run
+
+:alreadyrunning
+echo.
+echo   אפשר לסגור את החלון הזה - הפרסום ממשיך בחלון השני.
+echo.
+pause
+exit /b 0
 
 :giveup
 echo.

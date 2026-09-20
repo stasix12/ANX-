@@ -1,51 +1,62 @@
 'use client';
 
 import Link from 'next/link';
-import { CalendarIcon, PlusIcon, SendIcon, SpinnerIcon, UsersIcon } from '@/components/icons';
+import { CalendarIcon, ClipboardListIcon, GearIcon, UsersIcon } from '@/components/icons';
 
 /**
- * The four things the owner does on a normal morning, one tap each. Sits
- * directly under the stat tiles so the dashboard answers "what now?" without
- * a trip through the menu.
+ * Four taps, compact, under the answers rather than instead of them.
  *
- * Every label here names what the destination can actually do. Two of them
- * used not to: "תזמן סבב" ("schedule a round") went to a LIST of rounds,
- * which cannot schedule anything — from there the owner still had to open the
- * library, add a post, pick groups and set a time. And "פרסם עכשיו"
- * ("publish everything now") runs one worker tick over rows whose time has
- * already come, for Pages only; it neither publishes everything nor brings
- * anything forward. A label that promises more than the tap delivers is the
- * same defect as a number that is not in the database.
+ * Every label here names what the destination can actually do, and every
+ * destination exists. The owner's reference mockup lists
+ * statistics / groups / library / settings — and there is no /social/stats in
+ * this product (it returns 404, verified). History IS the reports screen here:
+ * it is where "what went out last night" is answered and where every failure
+ * ends up, and it is already the destination of four other links on this
+ * screen. So the statistics tile becomes היסטוריה rather than a tile that
+ * leads nowhere, and it keeps the one name the bottom nav already uses for
+ * that route — two names for one destination is its own defect.
+ *
+ * Two tiles left this row:
+ *   - "פוסט חדש" is the system card's primary button now. A third copy here
+ *     (it was also in the page header and in the "עוד" sheet) spent a quarter
+ *     of the row on the least frequent task in this business.
+ *   - "הרץ עכשיו" moved onto the system card, and only appears there when a
+ *     row is actually due. It runs one worker tick over rows whose time has
+ *     ALREADY come, for Pages only; as a permanent tile it was a button that
+ *     did nothing for 99% of the day.
  */
-export function QuickActions({ onRunNow, running }: { onRunNow: () => void; running: boolean }) {
+export function QuickActions() {
   const tile =
-    'flex flex-col items-center justify-center gap-1 rounded-tile border border-ink-700 bg-ink-850 px-2 py-3 text-center text-[11px] font-bold leading-tight text-mist-100 transition-[transform,box-shadow] active:scale-[0.98] hover:border-brand-300 sm:gap-1.5 sm:px-3 sm:py-4 sm:text-sm';
+    'flex min-h-16 flex-col items-center justify-center gap-1 rounded-tile border border-ink-700 bg-ink-850 px-1 py-2 text-center text-[11px] font-bold leading-[13px] text-mist-100 transition-[transform,box-shadow] duration-150 active:scale-[0.98] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 sm:gap-1.5 sm:px-3 sm:py-3 sm:text-sm';
+  const puck = 'grid h-7 w-7 place-items-center rounded-full bg-brand-300/12 text-brand-400 sm:h-9 sm:w-9';
   return (
     <div className="grid grid-cols-4 gap-2 sm:gap-2.5 [&>*]:min-w-0">
-      <Link href="/social/posts/new" className={tile}>
-        <span aria-hidden className="grid h-8 w-8 place-items-center sm:h-9 sm:w-9 rounded-full bg-brand-300/12 text-brand-400">
-          <PlusIcon className="h-5 w-5" strokeWidth={2.4} />
+      <Link href="/social/history" className={tile}>
+        <span aria-hidden className={puck}>
+          <CalendarIcon className="h-4.5 w-4.5" />
         </span>
-        פוסט חדש
+        היסטוריה
       </Link>
       <Link href="/social/groups" className={tile}>
-        <span aria-hidden className="grid h-8 w-8 place-items-center sm:h-9 sm:w-9 rounded-full bg-brand-300/12 text-brand-400">
-          <UsersIcon className="h-5 w-5" />
+        <span aria-hidden className={puck}>
+          <UsersIcon className="h-4.5 w-4.5" />
         </span>
-        הוסף קבוצות
+        קבוצות
       </Link>
-      <Link href="/social/campaigns" className={tile}>
-        <span aria-hidden className="grid h-8 w-8 place-items-center sm:h-9 sm:w-9 rounded-full bg-brand-300/12 text-brand-400">
-          <CalendarIcon className="h-5 w-5" />
+      {/* "ספרייה", not "ספריית תוכן": at text-[11px] in a 79px tile the longer
+          label wraps to two lines and breaks the row's height parity. */}
+      <Link href="/social/library" className={tile}>
+        <span aria-hidden className={puck}>
+          <ClipboardListIcon className="h-4.5 w-4.5" />
         </span>
-        סבבי פרסום
+        ספרייה
       </Link>
-      <button type="button" onClick={onRunNow} disabled={running} className={`${tile} disabled:opacity-50`}>
-        <span aria-hidden className="grid h-8 w-8 place-items-center sm:h-9 sm:w-9 rounded-full bg-success-400/12 text-success-400">
-          {running ? <SpinnerIcon className="h-4.5 w-4.5 animate-spin" /> : <SendIcon className="h-4.5 w-4.5" />}
+      <Link href="/social/settings" className={tile}>
+        <span aria-hidden className={puck}>
+          <GearIcon className="h-4.5 w-4.5" />
         </span>
-        {running ? 'רץ…' : 'הרץ עכשיו'}
-      </button>
+        הגדרות
+      </Link>
     </div>
   );
 }

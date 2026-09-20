@@ -48,6 +48,9 @@ export function SocialShell({
   subtitle,
   lede,
   headerAction,
+  hideTitle = false,
+  paused,
+  onControlChanged,
   children,
 }: {
   title: string;
@@ -57,6 +60,27 @@ export function SocialShell({
   lede?: string;
   /** The screen's primary action, beside its title. */
   headerAction?: React.ReactNode;
+  /**
+   * Drops the page-title block and keeps the heading for screen readers only.
+   *
+   * The dashboard is the one screen where it earns nothing: "לוח בקרה" over
+   * "סקירת הפעילות שלך היום" is 89px of the first 154px of a phone screen
+   * telling the owner the name of the screen they just opened, above a
+   * duplicate of a button the system card now carries. Every other screen
+   * still shows its title, so this is a prop rather than a deletion.
+   */
+  hideTitle?: boolean;
+  /**
+   * The global pause state, when the screen already reads it.
+   *
+   * PublishingToggle polls getControl() every 20s of its own; the dashboard
+   * reads the same row every 30s. Two reads of one fact on two clocks is the
+   * defect class this module keeps fixing, one layer up — so a screen that
+   * already holds the value hands it over, and gets told when the button
+   * changes it.
+   */
+  paused?: boolean | null;
+  onControlChanged?: () => void;
   children: React.ReactNode;
 }) {
   const { session, loading } = useAdminSession();
@@ -104,13 +128,20 @@ export function SocialShell({
           one that is deployed. */}
       <UpdateBanner />
       <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5">
-          <Link href="/social" className="flex min-w-0 items-center gap-2.5">
-            <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500 text-on-brand">
-              <SparklesIcon className="h-5 w-5" />
+        {/* py-1, not py-2.5: the three controls in this row are already 44px
+            tall, so the padding was dead space above and below a target that
+            was tall enough without it. Measured at 375: the row is 52px and
+            the header 53, against 65 before, and the notification badge at
+            y=2 inside the row still clears the top edge. */}
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-1">
+          {/* min-h-11: this measured 140x36 — the one sub-44px tap target in
+              the header, and it is the link home. */}
+          <Link href="/social" className="flex min-h-11 min-w-0 items-center gap-2.5">
+            <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand-500 text-on-brand">
+              <SparklesIcon className="h-4.5 w-4.5" />
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-sm font-extrabold leading-tight text-mist-100">הפתרון המבריק</span>
+              <span className="block truncate text-[13px] font-extrabold leading-4 text-mist-100">הפתרון המבריק</span>
               <span dir="auto" className="block truncate text-[11px] leading-tight text-mist-500">
                 {subtitle ?? 'ניהול פרסומים בפייסבוק'}
               </span>
@@ -119,7 +150,7 @@ export function SocialShell({
           <div className="flex shrink-0 items-center gap-1.5">
             {/* Stopping everything must be reachable from wherever you are when
                 you realise you need to, not only from the dashboard. */}
-            <PublishingToggle />
+            <PublishingToggle paused={paused} onChanged={onControlChanged} />
             <NotificationBell />
           </div>
         </div>
@@ -162,22 +193,29 @@ export function SocialShell({
         column shrink in the first place. Sheets are portalled to <body>, so
         nothing that must escape the page is clipped by this.
       */}
-      <main className="crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">
+      <main className={`crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 ${hideTitle ? 'pb-5 pt-3' : 'py-5'}`}>
         {/* The screen's own title, sized against the content rather than
-            squeezed into a coloured bar, with its primary action beside it. */}
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 dir="auto" className="truncate text-2xl font-extrabold leading-tight tracking-tight text-mist-100">
-              {title}
-            </h1>
-            {lede && (
-              <p dir="auto" className="mt-1 truncate text-sm leading-snug text-mist-500">
-                {lede}
-              </p>
-            )}
+            squeezed into a coloured bar, with its primary action beside it.
+            Hidden on the dashboard, where the first card carries the heading —
+            but the document still needs an h1, so it becomes sr-only rather
+            than disappearing from the heading tree. */}
+        {hideTitle ? (
+          <h1 className="sr-only">{title}</h1>
+        ) : (
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 dir="auto" className="truncate text-2xl font-extrabold leading-tight tracking-tight text-mist-100">
+                {title}
+              </h1>
+              {lede && (
+                <p dir="auto" className="mt-1 truncate text-sm leading-snug text-mist-500">
+                  {lede}
+                </p>
+              )}
+            </div>
+            {headerAction && <div className="shrink-0">{headerAction}</div>}
           </div>
-          {headerAction && <div className="shrink-0">{headerAction}</div>}
-        </div>
+        )}
         {children}
       </main>
 

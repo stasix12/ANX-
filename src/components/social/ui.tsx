@@ -580,7 +580,7 @@ export function ProgressBar({
       {segments
         .filter((s) => s.value > 0)
         .map((s, i) => (
-          <span key={i} className={`${s.className} transition-[width] duration-500 ease-out`} style={{ width: `${(s.value / safe) * 100}%` }} />
+          <span key={i} className={`${s.className} transition-[width] duration-200 ease-out`} style={{ width: `${(s.value / safe) * 100}%` }} />
         ))}
     </div>
   );
@@ -663,14 +663,14 @@ export function SkeletonList({ rows = 4 }: { rows?: number }) {
  * The stat row while it loads. Grid, gap, count and radius all match the real
  * row in StatCard — a placeholder that is the wrong shape is worse than none,
  * because the page jumps when the numbers land. The height is the tile's own:
- * p-4 + a 36px chip + the label + a 34px figure + the sub line, and one step
- * taller from `sm`, where the figure goes to 40.
+ * p-3 + the label + a 30px figure + the sub line, and one step taller from
+ * `sm`, where the figure goes to 34.
  */
 export function SkeletonTiles({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-3.5 md:grid-cols-4 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
+    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
       {Array.from({ length: count }).map((_, i) => (
-        <Skeleton key={i} className="h-[145px] rounded-tile sm:h-[151px]" />
+        <Skeleton key={i} className="h-[93px] rounded-tile sm:h-[101px]" />
       ))}
     </div>
   );
@@ -1169,48 +1169,61 @@ export function SectionHeader({ title, href, linkLabel = 'הצג הכל' }: { ti
 }
 
 /**
- * One statistic. The number is the element; the icon chip carries the tone and
- * the chevron appears only when there is somewhere to go.
+ * One statistic, and nothing else.
+ *
+ * It used to carry a 36px tinted icon chip AND a chevron — both chrome around
+ * the one thing being read — which took the tile to 147px and pushed the four
+ * of them to 347px, 44% of a 375x812 phone's first screen, to deliver four
+ * integers. Stripped to label / figure / sub-line the tile measures 93px and
+ * the figure is larger IN EFFECT at 30px than it was at 34 inside all that
+ * decoration. The whole tile is still the link, so the tap target is the 93px
+ * block rather than a chevron.
+ *
+ * `chipLabel` replaces the sub-line (it does not stack under it) with a call
+ * to action in the tile's own tone. It is a <span>, never a nested <a>: an
+ * anchor inside an anchor is invalid HTML and collapses to a 24px target —
+ * the same bug ButtonLink's doc comment above records.
  */
 export function StatCard({
   label,
   value,
   sub,
-  icon,
+  chipLabel,
   tone = 'neutral',
   href,
 }: {
   label: string;
   value: string | number;
   sub?: string;
-  icon: React.ReactNode;
+  /** A call to action in place of the sub-line, inside the tile's own link. */
+  chipLabel?: string;
   tone?: Tone;
   href?: string;
 }) {
   const body = (
     <>
-      <div className="flex items-start justify-between gap-2">
-        <span aria-hidden className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${CHIP[tone]}`}>
-          {icon}
-        </span>
-        {href && <ChevronIcon aria-hidden className="mt-1 h-4 w-4 shrink-0 text-mist-500 rtl:rotate-180" />}
-      </div>
-      <p dir="auto" className="mt-2.5 truncate text-xs font-bold leading-tight text-mist-500">
+      <p dir="auto" className="truncate text-xs font-bold leading-[15px] text-mist-500">
         {label}
       </p>
-      {/* 34px on a phone, 40 from sm. This one step is most of what makes the
-          numbers the subject of the screen rather than a caption on an icon:
-          at 34/800 the widest realistic figure is ~86px inside a half-width
-          tile on a 360px viewport, so it fits without truncating. */}
-      <p className={`text-[34px] font-extrabold leading-none tabular-nums sm:text-[40px] ${FIGURE[tone]}`}>{value}</p>
-      {sub && (
-        <p dir="auto" className="mt-1 truncate text-[11px] leading-tight text-mist-500">
-          {sub}
-        </p>
+      {/* 30px on a phone, 34 from sm. Deliberately below the system card's
+          headline: this row answers "how many", the card above answers
+          "is it working", and the sizes have to say which outranks which. */}
+      <p className={`mt-0.5 text-[30px] font-extrabold leading-[34px] tabular-nums transition-colors duration-150 sm:text-[34px] ${FIGURE[tone]}`}>{value}</p>
+      {chipLabel ? (
+        <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-extrabold leading-[15px] ${TONE_TINT[tone]} ${TONE_TEXT[tone]}`}>
+          {chipLabel}
+          <ChevronIcon aria-hidden className="h-3 w-3 rtl:rotate-180" />
+        </span>
+      ) : (
+        sub && (
+          <p dir="auto" className="mt-0.5 truncate text-[11px] leading-[14px] text-mist-500">
+            {sub}
+          </p>
+        )
       )}
     </>
   );
-  const cls = `${TILE} block min-w-0 p-4 text-start`;
+  const cls = `${TILE} block min-w-0 p-3 text-start`;
   return href ? (
     <Link
       href={href}
@@ -1288,19 +1301,19 @@ export function AlertBar({
           type="button"
           onClick={onDanger}
           disabled={busy}
-          className="inline-flex min-h-10 shrink-0 items-center rounded-xl px-2 text-sm font-bold text-error-400 disabled:pointer-events-none disabled:text-ink-600"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-xl px-2 text-sm font-bold text-error-400 disabled:pointer-events-none disabled:text-ink-600"
         >
           {dangerLabel}
         </button>
       )}
       {actionLabel &&
         (href ? (
-          <Link href={href} className={`inline-flex min-h-10 shrink-0 items-center gap-0.5 rounded-xl border bg-ink-850 px-2.5 text-sm font-bold ${link}`}>
+          <Link href={href} className={`inline-flex min-h-11 shrink-0 items-center gap-0.5 rounded-xl border bg-ink-850 px-2.5 text-sm font-bold ${link}`}>
             {actionLabel}
             <ChevronIcon className="h-4 w-4 rtl:rotate-180" />
           </Link>
         ) : (
-          <button type="button" onClick={onAction} className={`inline-flex min-h-10 shrink-0 items-center gap-0.5 rounded-xl border bg-ink-850 px-2.5 text-sm font-bold ${link}`}>
+          <button type="button" onClick={onAction} className={`inline-flex min-h-11 shrink-0 items-center gap-0.5 rounded-xl border bg-ink-850 px-2.5 text-sm font-bold ${link}`}>
             {actionLabel}
             <ChevronIcon className="h-4 w-4 rtl:rotate-180" />
           </button>

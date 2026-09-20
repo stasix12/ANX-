@@ -747,13 +747,34 @@ console.log('unit tests OK');
    * Reachability. The whole feature is one tap on the countdown box; if that box
    * stops being a button, everything above is code nobody can run.
    */
-  assert.ok(hero.includes('onClick={onOpen}'), 'the "next publication" box must be a real button when the dashboard hands it an action');
+  assert.ok(hero.includes('onClick={onTune}'), 'the "next publication" box must be a real button when the dashboard hands it an action');
   assert.ok(/<span className="sr-only">[^<]{5,}<\/span>/.test(hero), 'that button needs an accessible name saying what it does, not just a countdown');
   assert.ok(hero.includes('<TargetAvatar'), 'the next group must be shown by its own picture');
-  assert.ok(hero.includes('min-h-11'), 'the countdown box is tapped with a thumb — 44px floor');
-  assert.equal((hero.match(/onOpen={onTune}/g) ?? []).length, 2, 'both heroes must pass the action down to NextUp');
+  assert.ok(hero.includes('min-h-11'), 'the run card\'s title link is tapped with a thumb — 44px floor');
+  /*
+   * ONE countdown, ONE tuner entry point — and this count going from 2 to 1 is
+   * the assertion carrying a change of truth rather than being weakened.
+   *
+   * The two heroes used to be mutually exclusive branches of a ternary, so
+   * each could own a countdown and each needed the action passed down. The
+   * dashboard now renders the system card AND the run card together, and their
+   * "next publication" comes from different rows: the system card from
+   * data.upcoming[0] (the whole queue, any campaign or none), the run card
+   * from that run's first 'scheduled' row. Two countdowns 200px apart showing
+   * two different instants is the contradiction class this module exists to
+   * prevent, so the run card no longer has one. The tuner is reachable from
+   * the one box that remains.
+   */
+  assert.equal((hero.match(/onClick={onTune}/g) ?? []).length, 1, 'exactly one countdown box on the screen opens the tuner');
+  assert.ok(!/<NextUpBoxes/.test(hero.slice(hero.indexOf('export function LiveCampaignHero'), hero.indexOf('export function LiveQueueHero'))), 'the run card must not carry a second countdown');
   assert.ok(page.includes('<QueueTunerSheet'), 'the dashboard must render the tuner');
-  assert.equal((page.match(/onTune=\{\(\) => setTunerOpen\(true\)\}/g) ?? []).length, 2, 'both heroes on the dashboard must open it');
+  assert.equal((page.match(/onTune=\{\(\) => setTunerOpen\(true\)\}/g) ?? []).length, 1, 'the system card on the dashboard must open it');
+  /*
+   * ...scoped to the campaign of the row the countdown was actually derived
+   * from. It used to be scoped to the FEATURED run, whose rows need not be the
+   * row on screen at all.
+   */
+  assert.ok(page.includes('campaignId={data?.upcoming[0]?.campaign_id ?? undefined}'), 'the tuner opens on the queue the countdown came from');
 
   /*
    * Honesty, in the two forms this module keeps having to re-learn: no invented
@@ -1601,6 +1622,129 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(api.includes('if (!parsed) throw'), 'it fails like any other failure, in one Hebrew sentence');
 
   console.log('audit-fix regression tests OK');
+}
+
+/* ============================================================================
+ * THE DASHBOARD'S CROSS-SCOPE INVARIANT
+ *
+ * The rebuilt screen puts three rollups of DIFFERENT scopes within 400px of
+ * each other, and that adjacency is the new contradiction risk:
+ *
+ *   system card  data.today / limits.maxPerDay   — the whole product, TODAY
+ *   KPI row      summary.*                       — the whole queue, ALL TIME
+ *   run card     state.progress.*                — ONE run, all time
+ *
+ * They are not parts of one ratio and must never be rendered as if they were.
+ * What DOES hold between them is containment, and that is what is asserted
+ * here — against the real pure functions, from an in-memory queue, with no
+ * database and no React.
+ * ==========================================================================*/
+{
+  const DAY_START = Date.UTC(2026, 8, 20, 21, 0, 0); // Asia/Jerusalem midnight
+  type Row = CampaignQueueRow & { campaign_id: string | null };
+
+  /** A queue spanning two days, three campaigns and every lifecycle. */
+  const rows: Row[] = [];
+  const push = (status: QueueStatus, campaign_id: string | null, publishedToday: boolean) =>
+    rows.push({
+      id: `q${rows.length}`,
+      status,
+      scheduled_at: new Date(DAY_START + rows.length * 60_000).toISOString(),
+      published_at: status === 'published' ? new Date(publishedToday ? DAY_START + 3600_000 : DAY_START - 86_400_000).toISOString() : null,
+      target_id: `t${rows.length % 7}`,
+      post_id: 'p1',
+      campaign_id,
+    });
+  for (let i = 0; i < 9; i += 1) push('published', 'c1', true);
+  for (let i = 0; i < 12; i += 1) push('published', 'c1', false); // yesterday's
+  for (let i = 0; i < 4; i += 1) push('published', 'c2', true);
+  for (let i = 0; i < 5; i += 1) push('scheduled', 'c1', false);
+  for (let i = 0; i < 3; i += 1) push('awaiting_confirmation', 'c1', false);
+  for (let i = 0; i < 2; i += 1) push('manual_pending', null, false);
+  push('needs_attention', 'c2', false);
+  push('publishing', 'c1', false);
+  push('failed', 'c1', false);
+  push('skipped', 'c3', false);
+  push('paused', null, false); // the status no worker can claim
+
+  const counts = Object.fromEntries(ALL_QUEUE_STATUSES.map((st) => [st, rows.filter((r) => r.status === st).length])) as Record<QueueStatus, number>;
+  const summary = summarizeQueue(counts);
+  // The same filter countPublishedSince() applies: status published AND
+  // published_at at or after the local day's start.
+  const today = rows.filter((r) => r.status === 'published' && r.published_at && new Date(r.published_at).getTime() >= DAY_START).length;
+  const run = campaignState(rows.filter((r) => r.campaign_id === 'c1'), { status: 'active' });
+
+  /* --- I-1/I-2: the KPI row covers every open row exactly once ------------ */
+  assert.deepEqual(checkQueueInvariants(counts, summary).map((v) => v.code), ['unclaimable_waiting_rows'], 'the only violation in this fixture is the deliberate unclaimable row');
+  assert.equal(summary.queued + summary.needsHuman, summary.open, 'tile 2 + tile 3 are every open row, each counted once');
+  assert.equal(summary.terminal + summary.waiting + summary.inFlight, summary.total, 'and the three lifecycles partition the queue');
+  // The tile is LABELLED "דורשים טיפול", which invites narrowing it to
+  // counts.needs_attention. That would hide awaiting_confirmation and
+  // manual_pending from the control centre and break the line above.
+  assert.equal(summary.needsHuman, counts.awaiting_confirmation + counts.manual_pending + counts.needs_attention);
+  assert.notEqual(summary.needsHuman, counts.needs_attention, 'the fixture proves the narrowing would change the number');
+
+  /* --- I-6: containment across the three scopes --------------------------- */
+  assert.ok(today <= summary.published, `the day's count is a subset of the queue's publications (${today} <= ${summary.published})`);
+  assert.ok(run.progress.published <= summary.published, `one run's publications are a subset of the queue's (${run.progress.published} <= ${summary.published})`);
+  assert.ok(run.progress.total <= summary.total, 'one run is a subset of the queue');
+  // ...and they are genuinely different numbers here, so a screen that divided
+  // one by the other would be caught rather than accidentally agreeing.
+  assert.equal(today, 13);
+  assert.equal(summary.published, 25);
+  assert.equal(run.progress.published, 21);
+
+  /* --- I-3: the bar can never say "complete" beside waiting rows ---------- */
+  assert.ok(percentPublished(run.progress) < 100, 'the run has open rows, so its bar cannot be full');
+  assert.ok(openRows(run.progress) > 0);
+  assert.ok(
+    percentPublished(run.progress) !== 100 || openRows(run.progress) === 0,
+    'THE REPORTED CONTRADICTION: 100% published implies nothing is open — it follows from the partition, and only while the bar stays percentPublished',
+  );
+
+  /* --- I-7: the daily bar clamps its WIDTH and never its NUMBER ----------- */
+  // Exactly what the system card computes: ProgressBar divides by
+  // Math.max(1, total), and the card passes Math.min(today, cap) as the fill.
+  const barPct = (todayN: number, cap: number) => (Math.min(todayN, cap) / Math.max(1, cap)) * 100;
+  assert.equal(barPct(24, 100), 24);
+  // Reachable in real data: markManualPublished() and publishNow() go round the
+  // rules engine, and the owner can lower maxPerDay in settings after publishing.
+  assert.equal(barPct(30, 24), 100, 'the fill is bounded');
+  assert.equal(barPct(0, 0), 0, 'a ceiling of 0 must not divide');
+  assert.equal(barPct(5, 0), 0);
+
+  /* --- source drift: the screen still reads these fields ------------------ */
+  const dash = readFileSync('src/app/social/page.tsx', 'utf8');
+  const cards = readFileSync('src/components/social/LiveCampaignHero.tsx', 'utf8');
+  const pin = (what: string, src: string, needle: string) => assert.ok(src.includes(needle), `${what} drifted: ${needle}`);
+
+  pin('the day figure', dash, 'publishedToday={data.today}');
+  pin('the ceiling is the owner\'s setting', dash, 'dailyTarget={data.limits.maxPerDay}');
+  pin('and the screen says so, beside the bar', cards, 'היא לא מכסה רשמית של פייסבוק');
+  pin('the bar clamps its width only', cards, 'Math.min(publishedToday, dailyTarget)');
+  pin('the run card counts open rows through campaign.ts', cards, 'openRows(progress)');
+  pin('the run card bar counts publications', cards, 'percentPublished(progress)');
+  pin('the system state is decided once, by the page', dash, 'const systemState: SystemState =');
+  pin('...and the card only renders it', cards, 'SYSTEM_STATE_LABEL[systemState]');
+
+  /*
+   * NO COMPONENT MAY RE-DECLARE A STATUS LIST. An inline list is how the same
+   * rows got counted two ways and "100% complete" appeared beside 28 waiting
+   * publications. The cards read summarizeQueue()/campaignState() fields and
+   * nothing else.
+   */
+  for (const status of ['scheduled', 'publishing', 'awaiting_confirmation', 'manual_pending', 'needs_attention'] as QueueStatus[]) {
+    assert.ok(!cards.includes(`'${status}'`), `the dashboard cards must not name the queue status '${status}' — read status.ts instead`);
+  }
+
+  /*
+   * A failed row is TERMINAL and its count has no date filter, so it must not
+   * decide the system state: one failure last March would pin the dot for ever.
+   */
+  assert.ok(!/systemState[\s\S]{0,400}summary\.failed/.test(dash), 'summary.failed must not appear in the system-state ladder');
+  assert.ok(dash.includes("tone={summary.failed ? 'bad' : 'neutral'}"), 'it is reported by its own tile');
+
+  console.log('dashboard cross-scope invariant tests OK');
 }
 
 /* ----------------------------------------- the 28-publication scenario */

@@ -33,7 +33,28 @@ const RING: Record<Tone, string> = {
   neutral: 'ring-mist-500/20',
 };
 
-export function Timeline({ rows, limit = 8 }: { rows: QueueRow[]; limit?: number }) {
+export function Timeline({
+  rows,
+  limit = 8,
+  total,
+}: {
+  rows: QueueRow[];
+  limit?: number;
+  /**
+   * The TRUE number of rows this list is a window onto, when the caller knows
+   * it exactly.
+   *
+   * Without it the footer printed `rows.length - shown`, and `rows` is a
+   * capped read: measured on the dashboard with 61 rows queued, the card said
+   * "6 shown, ועוד 34 פרסומים אחריהם" — 6 + 34 = 40 = UPCOMING_LIMIT, while
+   * the real remainder was 55. A read ceiling presented as a total is the
+   * exact defect this screen exists not to commit. Given `total` (the
+   * dashboard passes summary.queued, the same exact count as its subtitle)
+   * the remainder is real; the array's own length is only used as a fallback
+   * for callers that have no exact count.
+   */
+  total?: number;
+}) {
   const items = rows.slice(0, limit);
   if (!items.length) {
     return <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="אין פרסום מתוכנן" description="כשתתזמנו סבב, סדר הפרסומים יופיע כאן לפי שעות." />;
@@ -69,8 +90,8 @@ export function Timeline({ rows, limit = 8 }: { rows: QueueRow[]; limit?: number
           </li>
         );
       })}
-      {rows.length > items.length && (
-        <li className="ps-6 pt-1.5 text-xs text-mist-500">ועוד {rows.length - items.length} פרסומים אחריהם</li>
+      {(total ?? rows.length) > items.length && (
+        <li className="ps-6 pt-1.5 text-xs text-mist-500">ועוד {(total ?? rows.length) - items.length} פרסומים אחריהם</li>
       )}
     </ol>
   );

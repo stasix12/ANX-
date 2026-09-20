@@ -171,6 +171,42 @@ export default function SettingsPage() {
                     <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.dedupeDays} onChange={num('dedupeDays')} />
                   </Field>
                 </div>
+
+                {/*
+                  The one rule in the product that had no time window and no
+                  switch: rules.ts refused a post at a group it had ever
+                  reached, so an owner republishing the same monthly offer
+                  watched every row skip with a reason that read like a bug.
+                  It is a judgement, so it is presented as one — and the
+                  consequence of switching it off is stated on the screen
+                  rather than discovered on Facebook.
+                */}
+                <div className="mt-4 rounded-xl border border-ink-700 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-mist-100">לא לשלוח את אותו פוסט פעמיים לאותה קבוצה</p>
+                      <p className="text-xs text-mist-500">
+                        כשמופעל, פוסט שכבר פורסם לקבוצה לא יצא אליה שוב — לעולם, בלי קשר לכמה זמן עבר. זו הסיבה שמופיעה בהיסטוריה כ״הפוסט
+                        הזה כבר פורסם ל…״.
+                      </p>
+                    </div>
+                    <Toggle
+                      checked={limits.blockRepeatToSameTarget !== false}
+                      onChange={(v) => setLimits({ ...limits, blockRepeatToSameTarget: v })}
+                      label="מניעת פרסום חוזר לאותה קבוצה"
+                    />
+                  </div>
+                  {limits.blockRepeatToSameTarget === false && (
+                    <div className="mt-2.5">
+                      <Notice tone="warn">
+                        כיביתם את ההגנה. מעכשיו אותו פוסט יכול לצאת שוב ושוב לאותה קבוצה, ומה שימנע חזרה מיידית זה רק ״מניעת כפילות״ למעלה
+                        ({limits.dedupeDays} ימים), שבודקת טקסט ומדיה זהים. פרסום לקבוצות יוצא מחשבון הפייסבוק שלכם דרך הדפדפן שעל המחשב, ולא
+                        דרך API, ולכן תוכן חוזר לאותה קבוצה מסכן את החשבון האישי שלכם. אם אתם מפרסמים מבצע חוזר — עדיף לשנות את הנוסח בין
+                        סבב לסבב.
+                      </Notice>
+                    </div>
+                  )}
+                </div>
               </Card>
 
               <Card title="עצירת חירום">

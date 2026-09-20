@@ -332,6 +332,22 @@ export interface LimitsSettings {
   maxPerTargetPerDay: number;
   minGapMinutes: number;
   dedupeDays: number;
+  /**
+   * Whether one post may reach the same group only once, ever.
+   *
+   * rules.ts has always enforced this with no time window at all: a post that
+   * published to a group in 2025 is refused there forever. That is the right
+   * default — republishing identical content to the same group is exactly what
+   * Facebook's spam detection looks for, and group publishing runs through the
+   * owner's own browser session, so the account at risk is theirs. But it is a
+   * judgement, not a law, and an owner who reworks the same seasonal offer
+   * every month had no way to say so.
+   *
+   * Off leaves `dedupeDays` as the only guard, which IS time-boxed and still
+   * catches an unchanged text. Defaulted true so every existing settings row,
+   * which has no such key, keeps the behaviour it has today.
+   */
+  blockRepeatToSameTarget: boolean;
 }
 
 export interface ControlSettings {
@@ -352,6 +368,7 @@ export const DEFAULT_LIMITS: LimitsSettings = {
   maxPerTargetPerDay: 2,
   minGapMinutes: 45,
   dedupeDays: 14,
+  blockRepeatToSameTarget: true,
 };
 
 /**

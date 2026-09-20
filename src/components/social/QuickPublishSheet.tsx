@@ -442,10 +442,21 @@ export function QuickPublishSheet({
               onChange={setSelectedIds}
               maxSelectable={ctx.browser.testMode ? 1 : undefined}
             />
+            {/*
+              Two different sentences about the same groups, because the rule
+              they describe is now the owner's switch (limits.blockRepeatToSameTarget).
+              With it ON these rows will be skipped and saying so is the whole
+              point of the warning. With it OFF they will publish, and the old
+              wording promised a skip that is not going to happen — so what is
+              left is the fact itself, stated once, with no verdict attached.
+            */}
             {overlap.length > 0 && (
               <div className="mt-2">
-                <Notice tone="warn">
-                  {overlap.length} {agree(overlap.length, 'מהיעדים שבחרתם כבר קיבל', 'מהיעדים שבחרתם כבר קיבלו')} את הפוסט הזה. המערכת לא שולחת את אותו פוסט פעמיים לאותה קבוצה, ולכן הפרסומים האלה ידולגו. בחרו קבוצות אחרות, או שכפלו את הפוסט לנוסח חדש.
+                <Notice tone={ctx.limits.blockRepeatToSameTarget === false ? 'info' : 'warn'}>
+                  {overlap.length} {agree(overlap.length, 'מהיעדים שבחרתם כבר קיבל', 'מהיעדים שבחרתם כבר קיבלו')} את הפוסט הזה.{' '}
+                  {ctx.limits.blockRepeatToSameTarget === false
+                    ? 'כיביתם בהגדרות את מניעת הפרסום החוזר, ולכן הפוסט יצא אליהם שוב. שקלו לשנות את הנוסח — תוכן זהה שחוזר לאותה קבוצה הוא מה שפייסבוק מזהה כספאם.'
+                    : 'המערכת לא שולחת את אותו פוסט פעמיים לאותה קבוצה, ולכן הפרסומים האלה ידולגו. בחרו קבוצות אחרות, שכפלו את הפוסט לנוסח חדש, או כבו את הכלל בהגדרות.'}
                 </Notice>
               </div>
             )}

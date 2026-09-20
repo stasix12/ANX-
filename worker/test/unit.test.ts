@@ -1804,6 +1804,67 @@ const scenario: { step: string; line: string }[] = [];
   console.log('dashboard cross-scope invariant tests OK');
 }
 
+/* ----------------------------------------- the repeat-to-same-group switch */
+{
+  const rules = readFileSync(new URL('../../src/lib/social/rules.ts', import.meta.url), 'utf8');
+  const types = readFileSync(new URL('../../src/lib/social/types.ts', import.meta.url), 'utf8');
+  const settings = readFileSync(new URL('../../src/app/social/settings/page.tsx', import.meta.url), 'utf8');
+  const sheet = readFileSync(new URL('../../src/components/social/QuickPublishSheet.tsx', import.meta.url), 'utf8');
+  const campaignSrc = readFileSync(new URL('../../src/lib/social/campaign.ts', import.meta.url), 'utf8');
+
+  /*
+   * "Never twice to the same group" is the only publishing rule with no time
+   * window, and it is now the owner's to switch off. Three things have to stay
+   * true together, or the switch is worse than not having one.
+   */
+
+  // 1. ON by default, and a settings row written before the key existed keeps
+  //    the old behaviour. `!== false` is what makes `undefined` mean "on".
+  assert.ok(
+    /blockRepeatToSameTarget:\s*true/.test(types),
+    'DEFAULT_LIMITS must default blockRepeatToSameTarget to true — the protection is opt-out, never opt-in',
+  );
+  assert.ok(
+    rules.includes('if (limits.blockRepeatToSameTarget !== false) {'),
+    'rules.ts must gate the same-post check on `!== false`, so an older settings row without the key still blocks',
+  );
+
+  // 2. The rule itself is unchanged inside the gate: same statuses, same
+  //    columns. A gate that also loosened the query would be a second change
+  //    hiding inside the first.
+  const gated = rules.slice(rules.indexOf('if (limits.blockRepeatToSameTarget !== false) {'));
+  for (const needle of ["eq('status', 'published')", "eq('post_id', post.id)", "eq('target_id', target.id)"]) {
+    assert.ok(gated.includes(needle), `the gated check must still match on ${needle}`);
+  }
+
+  // 3. The owner is told what switching it off costs, on the screen that
+  //    switches it off — and the quick-publish warning stops promising a skip
+  //    that will no longer happen.
+  assert.ok(settings.includes('blockRepeatToSameTarget'), 'the settings screen must expose the switch');
+  assert.ok(
+    /blockRepeatToSameTarget === false[\s\S]{0,600}Notice tone="warn"/.test(settings),
+    'turning it off must raise a warning on the settings screen, not switch silently',
+  );
+  assert.ok(
+    sheet.includes('ctx.limits.blockRepeatToSameTarget === false'),
+    'the quick-publish overlap notice must read the switch — with the rule off, "ידולגו" is a promise it cannot keep',
+  );
+
+  /*
+   * And the badge this switch makes reachable: a run whose every attempted row
+   * was skipped has finished > 0 with nothing published, which resolveState
+   * correctly refuses to call 'running'. "טרם התחיל" over a bar reading 18% is
+   * the contradiction, so the label carries the truth instead.
+   */
+  assert.ok(
+    /state\.state === 'not_started' && p\.finished > 0/.test(campaignSrc),
+    'runBadge must not print "טרם התחיל" for a run that has already handled rows',
+  );
+  assert.ok(campaignSrc.includes("label: 'התחיל — טרם פורסם'"), 'and the replacement must say what actually happened');
+
+  console.log('repeat-to-same-group switch tests OK');
+}
+
 /* ----------------------------------------- the 28-publication scenario */
 console.log('');
 console.log('=== 28-publication run, step by step (simulation — no database) ===');

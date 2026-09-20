@@ -385,6 +385,19 @@ export function runBadge(
    * The information is right here on CampaignProgress, and the badge is the
    * only place it is rendered differently.
    */
+  /*
+   * "טרם התחיל" beside "5 / 28 טופלו · 18%".
+   *
+   * resolveState() is right to withhold 'running': nothing has published, so
+   * there is no startedAt and no worker holding a row. But five rows HAVE been
+   * decided — skipped on arrival, which is what a re-run of a post its groups
+   * already have looks like — and a badge reading "not started" over a bar
+   * reading 18% is the contradiction this module exists to prevent. The label
+   * says the true thing instead: it began, and nothing has gone out.
+   */
+  if (state.state === 'not_started' && p.finished > 0) {
+    return { label: 'התחיל — טרם פורסם', tone: 'warn', live: false };
+  }
   if (state.state === 'completed' && (p.failed > 0 || p.skipped > 0)) {
     const label =
       p.failed > 0 ? 'הסתיים עם כשלים' : p.published === 0 ? 'הסתיים בלי פרסומים' : 'הסתיים — חלק דולגו';

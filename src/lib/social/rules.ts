@@ -88,15 +88,30 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
       return { action: 'skip', reason: `הגעת למכסה היומית של הסבב (${ctx.browser.maxPerCampaignPerDay}).` };
   }
 
-  // Same post already went to this target (any variant) → never twice.
-  const { count: samePost } = await db
-    .from('social_queue')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'published')
-    .eq('post_id', post.id)
-    .eq('target_id', target.id)
-    .neq('id', item.id);
-  if ((samePost ?? 0) > 0) return { action: 'skip', reason: `הפוסט הזה כבר פורסם ל-"${target.name}".` };
+  /*
+   * Same post already went to this target (any variant) → never twice.
+   *
+   * There is no time window here on purpose: this is "ever", not "recently".
+   * It is now the owner's switch rather than a law, because an owner who
+   * republishes the same seasonal offer every month had no way to say so and
+   * simply watched every row skip. Turning it off leaves dedupeDays below as
+   * the guard, which IS time-boxed. The default stays on: group publishing
+   * runs through the owner's own browser session, so repeating identical
+   * content to one group risks THEIR account, not a service's.
+   *
+   * `!== false` rather than a truthy test, so a settings row written before
+   * this key existed keeps the old behaviour instead of silently losing it.
+   */
+  if (limits.blockRepeatToSameTarget !== false) {
+    const { count: samePost } = await db
+      .from('social_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'published')
+      .eq('post_id', post.id)
+      .eq('target_id', target.id)
+      .neq('id', item.id);
+    if ((samePost ?? 0) > 0) return { action: 'skip', reason: `הפוסט הזה כבר פורסם ל-"${target.name}".` };
+  }
 
   // Same content hash to this target inside the dedupe window (catches copies).
   if (item.dedupe_hash) {

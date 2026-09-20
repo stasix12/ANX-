@@ -61,9 +61,25 @@ export function Timeline({
   rows,
   limit = 8,
   total,
+  scrollable = false,
 }: {
   rows: QueueRow[];
   limit?: number;
+  /**
+   * Put the stops in a box of their own that scrolls, instead of cutting the
+   * list off at `limit` and counting the rest in a footer.
+   *
+   * The dashboard drew six of twenty-six and said "ועוד 20 פרסומים אחריהם",
+   * so the only way to see the seventh was to leave the screen. The card is
+   * the right size — the list inside it was simply not reachable. With this
+   * on, every row that was READ is rendered and the box holds about six and a
+   * half of them: the half is the affordance, since a row clipped mid-height
+   * says "there is more below" better than any hint could.
+   *
+   * The footer stays OUTSIDE the box, because it is about rows that were
+   * never read and therefore can never be scrolled to.
+   */
+  scrollable?: boolean;
   /**
    * The TRUE number of rows this list is a window onto, when the caller knows
    * it exactly.
@@ -90,7 +106,8 @@ export function Timeline({
   }
 
   const today = zonedDateISO(new Date());
-  return (
+  const rest = (total ?? rows.length) - items.length;
+  const list = (
     <ol className="relative space-y-0.5">
       {items.map((row, i) => {
         const day = zonedDateISO(new Date(row.scheduled_at));
@@ -127,16 +144,51 @@ export function Timeline({
           </li>
         );
       })}
-      {(total ?? rows.length) > items.length && (
-        /* The trailing word agrees too: "ועוד פרסום אחד אחריו", never
-           "ועוד 1 פרסומים אחריהם". At a window of six this line reads 1 as
-           soon as a seventh row is waiting, which on the dashboard is the
-           common case rather than the edge one. */
-        <li className="ps-6 pt-1.5 text-xs text-mist-500">
-          ועוד {counted((total ?? rows.length) - items.length, 'פרסום אחד', 'פרסומים', 'שני פרסומים')}{' '}
-          {agree((total ?? rows.length) - items.length, 'אחריו', 'אחריהם')}
-        </li>
-      )}
     </ol>
+  );
+
+  /* The trailing word agrees too: "ועוד פרסום אחד אחריו", never
+     "ועוד 1 פרסומים אחריהם". */
+  const footer =
+    rest > 0 ? (
+      <p className="ps-6 pt-1.5 text-xs text-mist-500">
+        ועוד {counted(rest, 'פרסום אחד', 'פרסומים', 'שני פרסומים')} {agree(rest, 'אחריו', 'אחריהם')}
+      </p>
+    ) : null;
+
+  if (!scrollable) {
+    return (
+      <>
+        {list}
+        {footer}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {/*
+        21rem is about six and a half stops (a stop is ~52px: a 30px avatar or
+        two text lines inside py-2, plus the 2px the list puts between them).
+        The half is deliberate — a row cut through the middle is what tells a
+        thumb there is more below.
+
+        No `overscroll-contain`: when the list reaches its end the gesture
+        should carry on scrolling the page, which is what a reader expects and
+        what stops the box feeling like a trap.
+
+        tabIndex/role/aria-label: a scrollable region that is not focusable is
+        unreachable with a keyboard, and the rows themselves are not links.
+      */}
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label="הפרסומים הקרובים — רשימה נגללת"
+        className="max-h-[21rem] overflow-y-auto rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
+      >
+        {list}
+      </div>
+      {footer}
+    </>
   );
 }

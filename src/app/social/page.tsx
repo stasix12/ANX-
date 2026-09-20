@@ -767,7 +767,11 @@ export default function SocialDashboard() {
                   is the capped read, and with 61 queued that said "ועוד 34"
                   where the real remainder was 55 — 6 + 34 being exactly
                   UPCOMING_LIMIT. */}
-              <Timeline rows={data.upcoming} limit={6} total={summary.automaticWaiting} />
+              {/* Every row that was read, in a box that scrolls: the card used
+                  to draw six of twenty-six and send the owner to another
+                  screen for the seventh. UPCOMING_LIMIT is the read ceiling,
+                  so the footer below the box still counts anything past it. */}
+              <Timeline rows={data.upcoming} limit={UPCOMING_LIMIT} scrollable total={summary.automaticWaiting} />
             </Card>
 
             <BrowserStatusCard id="browser-status" onChanged={load} />

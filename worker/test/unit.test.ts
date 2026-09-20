@@ -1804,6 +1804,44 @@ const scenario: { step: string; line: string }[] = [];
   console.log('dashboard cross-scope invariant tests OK');
 }
 
+/* ----------------------------------------- the upcoming list scrolls */
+{
+  const timeline = readFileSync(new URL('../../src/components/social/Timeline.tsx', import.meta.url), 'utf8');
+  const dash = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
+
+  // The dashboard must hand the strip every row it READ, not a window onto it.
+  assert.ok(
+    /<Timeline rows=\{data\.upcoming\} limit=\{UPCOMING_LIMIT\} scrollable/.test(dash),
+    'the dashboard timeline must render the whole read and scroll, not cut off at six with the rest in a footer',
+  );
+
+  /*
+   * The footer counts rows that were NEVER READ — past UPCOMING_LIMIT — so it
+   * can never be scrolled to. Inside the scrolling box it would be a line the
+   * owner has to scroll down to in order to be told that scrolling will not
+   * reach what it names.
+   */
+  const scrollBox = timeline.slice(timeline.indexOf('max-h-[21rem]'));
+  assert.ok(scrollBox.includes('{list}'), 'the scroll box wraps the list');
+  assert.ok(
+    scrollBox.indexOf('</div>') < scrollBox.indexOf('{footer}'),
+    'the "ועוד N" footer must sit OUTSIDE the scroll box — it counts rows the scroll can never reach',
+  );
+  /* On the classNames, not on the file: the comment above the box explains
+     why overscroll-contain is absent, and a whole-file search matched that
+     explanation and failed on it. */
+  assert.ok(
+    !/className="[^"]*overscroll-contain/.test(timeline),
+    'no overscroll-contain: at the end of the list the gesture should carry on scrolling the page, not stop dead',
+  );
+  assert.ok(
+    /tabIndex=\{0\}[\s\S]{0,200}aria-label="הפרסומים הקרובים/.test(timeline),
+    'a scrollable region must be focusable and named, or it is unreachable with a keyboard',
+  );
+
+  console.log('upcoming-list scroll tests OK');
+}
+
 /* ----------------------------------------- the repeat-to-same-group switch */
 {
   const rules = readFileSync(new URL('../../src/lib/social/rules.ts', import.meta.url), 'utf8');

@@ -744,12 +744,24 @@ console.log('unit tests OK');
   }
 
   /*
-   * Reachability. The whole feature is one tap on the countdown box; if that box
-   * stops being a button, everything above is code nobody can run.
+   * Reachability. If nothing calls onTune, everything above is code nobody can
+   * run.
+   *
+   * This used to also require an sr-only name, because the only entry was the
+   * countdown box: a button whose entire content was "00:14:32" announces a
+   * number and no purpose. The entry is now a button that SAYS what it does,
+   * so its visible text is its accessible name and a hidden duplicate would be
+   * announced twice. The rule — the way in must be named — is unchanged; what
+   * changed is that the name is now on screen, which is strictly better.
    */
-  assert.ok(hero.includes('onClick={onTune}'), 'the "next publication" box must be a real button when the dashboard hands it an action');
-  assert.ok(/<span className="sr-only">[^<]{5,}<\/span>/.test(hero), 'that button needs an accessible name saying what it does, not just a countdown');
-  assert.ok(hero.includes('<TargetAvatar'), 'the next group must be shown by its own picture');
+  assert.ok(hero.includes('onClick={onTune}'), 'the tuner must be reachable from this card');
+  assert.ok(/onClick=\{onTune\}[\s\S]{0,400}ערוך מועד/.test(hero), 'and that control must carry a Hebrew name, not just an icon or a countdown');
+  /* The rule — a waiting publication names its group with that group's own
+     picture, never a placeholder — moved with the countdown. "הפרסומים
+     הקרובים" now shows every waiting row, each with its avatar, so the guard
+     follows it there rather than being dropped. */
+  const timelineSrc = readFileSync(new URL('../../src/components/social/Timeline.tsx', import.meta.url), 'utf8');
+  assert.ok(timelineSrc.includes('<TargetAvatar'), 'each upcoming publication must be shown with its own group picture');
   assert.ok(hero.includes('min-h-11'), 'the run card\'s title link is tapped with a thumb — 44px floor');
   /*
    * ONE countdown, ONE tuner entry point — and this count going from 2 to 1 is
@@ -773,26 +785,33 @@ console.log('unit tests OK');
    * forward: the only entry point vanished at the moment it was needed. So the
    * assertion counts COUNTDOWN BOXES, which is what the rule was always about.
    */
-  assert.equal(
-    (hero.match(/<NextUpBoxes\b/g) ?? []).length,
-    2,
-    'one countdown, rendered by exactly two mutually exclusive branches (with and without the tuner action)',
-  );
-  const tunerBranch = hero.slice(hero.indexOf('{onTune ? ('), hero.indexOf('{/*\n            "הרץ עכשיו"'));
-  assert.equal((tunerBranch.match(/<NextUpBoxes\b/g) ?? []).length, 2, 'both branches are the SAME box — one wrapped in a button, one bare');
-  assert.ok(hero.includes('ערוך מועד ומרווח'), 'the run card needs a tuner entry that does not depend on a countdown being drawn');
-  assert.ok(!/<NextUpBoxes/.test(hero.slice(hero.indexOf('export function LiveCampaignHero'), hero.indexOf('export function LiveQueueHero'))), 'the run card must not carry a second countdown');
+  /*
+   * ZERO countdown boxes on this screen now, and that is the rule holding
+   * rather than loosening.
+   *
+   * The rule was never "there must be a countdown" — it was "two countdowns
+   * 200px apart, derived from different rows, may not disagree". The system
+   * card's box came from data.upcoming[0] (any run, or none) and the run
+   * card's would have come from that run's first scheduled row.
+   *
+   * "הפרסומים הקרובים" below now lists EVERY waiting row with its own live
+   * countdown beside the group it belongs to, which is the same fact told
+   * once, in full, and in the place that can show which row it is about. So
+   * the box is gone from both cards, and the guard checks that neither grew
+   * one back.
+   */
+  assert.equal((hero.match(/<NextUpBoxes\b/g) ?? []).length, 0, 'neither card may carry a countdown — the upcoming list owns that now, row by row');
+  assert.ok(hero.includes('ערוך מועד'), 'the run card needs a tuner entry that does not depend on a countdown being drawn');
   assert.ok(page.includes('<QueueTunerSheet'), 'the dashboard must render the tuner');
   /*
-   * TWO entry points now, and that is the change rather than a loosened test:
-   * the system card's countdown, and the run card's explicit button. They open
-   * the SAME sheet on the same state, so there is still one tuner — what there
-   * is no longer is a single doorway that disappears before a run starts.
+   * ONE entry point again, on the run card, and it is the one that survives a
+   * run that has not started. The system card no longer opens the tuner
+   * because it no longer shows an instant to tune.
    */
   assert.equal(
     (page.match(/onTune=\{\(\) => setTunerOpen\(true\)\}/g) ?? []).length,
-    2,
-    'both the system card and the run card open the one tuner',
+    1,
+    'the run card opens the one tuner',
   );
   assert.equal((page.match(/<QueueTunerSheet/g) ?? []).length, 1, 'and there is only ever one tuner to open');
   /*

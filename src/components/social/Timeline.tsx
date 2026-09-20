@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import type { QueueRow } from '@/lib/social/client';
+import { countdownTo } from '@/lib/social/countdown';
 import { isInFlight, needsHuman } from '@/lib/social/status';
 import { agree, counted, formatDateHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import type { QueueStatus } from '@/lib/social/types';
@@ -50,12 +52,59 @@ const RING: Record<Tone, string> = {
  * A status that is absent here (scheduled, paused, and anything terminal) has
  * nothing to add: its time and its countdown already say everything.
  */
+/**
+ * One second, for the countdowns below.
+ *
+ * The strip used to print a static `relativeHe`, so the only live clock on the
+ * dashboard was the system card's one box. That box is gone — this list shows
+ * every waiting row, so the countdown belongs beside the row it is about, and
+ * there is no longer any way for two clocks on one screen to disagree.
+ */
+function useTick(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return now;
+}
+
 const STATUS_LINE: Partial<Record<QueueStatus, string>> = {
   publishing: 'מפרסם עכשיו',
   awaiting_confirmation: 'מוכן — ממתין לאישור שלכם',
   manual_pending: 'ממתין לפרסום ידני',
   needs_attention: 'דורש טיפול שלכם',
 };
+
+/**
+ * A waiting row's own clock, and the three things it can honestly say.
+ *
+ * This is the logic the system card's "הפרסום הבא" box used to carry, moved to
+ * where the rows are. `overdue` reads ONLY this row's instant: a publication
+ * hours behind because the PC is asleep must not be described as imminent
+ * merely because the page is still polling. The two minutes between `due` and
+ * `overdue` say "אמור לצאת עכשיו", because a slot that has just passed is not
+ * yet a problem — it is the worker's next tick.
+ */
+function Countdown({ at, now }: { at: string; now: number }) {
+  const left = countdownTo(at, now);
+  if (!left) return null;
+  if (left.overdue) {
+    return (
+      <p className="text-[11px] font-bold leading-[14px] text-warning-400">
+        באיחור · {relativeHe(at)}
+      </p>
+    );
+  }
+  if (left.due) return <p className="text-[11px] font-bold leading-[14px] text-mist-300">אמור לצאת עכשיו</p>;
+  return (
+    <p className="text-[11px] leading-[14px] text-mist-500">
+      {/* mm:ss around a neutral colon reorders inside an RTL line. */}
+      בעוד <span dir="ltr" className="inline-block tabular-nums">{left.label}</span>
+    </p>
+  );
+}
 
 export function Timeline({
   rows,
@@ -101,6 +150,9 @@ export function Timeline({
   total?: number;
 }) {
   const items = rows.slice(0, limit);
+  /* Before the early return: a hook may not sit behind a condition. Ticking
+     only while something is actually waiting keeps an idle screen idle. */
+  const now = useTick(items.some((r) => r.status === 'scheduled'));
   if (!items.length) {
     return <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="אין פרסום מתוכנן" description="כשתתזמנו סבב, סדר הפרסומים יופיע כאן לפי שעות." />;
   }
@@ -136,7 +188,7 @@ export function Timeline({
                 <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
                 <div className="min-w-0 grow">
                   <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
-                  {row.status === 'scheduled' && <p className="text-[11px] text-mist-500">{relativeHe(row.scheduled_at)}</p>}
+                  {row.status === 'scheduled' && <Countdown at={row.scheduled_at} now={now} />}
                   {line && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{line}</p>}
                 </div>
               </div>

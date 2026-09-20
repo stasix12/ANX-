@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronIcon } from '@/components/icons';
+import { CalendarIcon, ChevronIcon, PauseIcon } from '@/components/icons';
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
 import { countdownTo } from '@/lib/social/countdown';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
@@ -140,104 +140,6 @@ const FOOT_BOX = 'min-w-0 rounded-xl bg-ink-900 px-3 py-2.5';
  * from; when the worker has not copied one yet TargetAvatar draws its lettered
  * fallback rather than a broken image.
  */
-function NextUpBoxes({
-  at,
-  targetName,
-  now,
-  target,
-  inFlight = false,
-  workerOnline,
-}: {
-  at: string;
-  targetName: string | null;
-  now: number;
-  target?: Pick<SocialTarget, 'name' | 'image_url'> | null;
-  /** A row is genuinely in flight — a worker is holding it right now. */
-  inFlight?: boolean;
-  /** A worker has sent a heartbeat recently. Undefined means "not known here". */
-  workerOnline?: boolean;
-}) {
-  const left = countdownTo(at, now);
-  if (!left) return null;
-  const name = target?.name ?? targetName;
-
-  /*
-   * Three states, not two, and this is the whole point of the change.
-   *
-   * "הפרסום הבא — מתבצע כעת" used to appear the moment scheduled_at passed,
-   * because that is all `due` means. Measured with the worker offline for six
-   * hours and nothing in flight: the card read "רץ", the headline read
-   * "happening right now", and the list directly beneath it said "לפני 6
-   * שעות" six times over. That is automation being presented as happening
-   * when it did not happen — and a laptop that went to sleep is the single
-   * most common real-world state of this product.
-   *
-   * `late` reads ONLY this row's own instant. It used to be suppressed while
-   * any row was in flight — but the row in flight is a DIFFERENT row, so a
-   * publication six hours behind was announced as "מתבצע כעת" because
-   * something else was mid-publish. Measured, single-variable: worker
-   * heartbeat 6h old, this row 6h overdue, one unrelated row publishing →
-   * "מתבצע כעת" printed directly under "הפרסום עומד — המחשב לא מחובר".
-   */
-  const late = left.overdue;
-  const publishingNow = left.due && !late && (inFlight || workerOnline === true);
-  /*
-   * Short, because this label lives in a 103px column beside the group name
-   * and "הפרסום הבא — באיחור" truncated to "הפרסום הבא — ב…" — a state word
-   * cut in half is worse than no state word. The box's subject is already
-   * established by the "הקבוצה הבאה" box beside it, and it wraps rather than
-   * truncating if a translation ever gets longer.
-   */
-  const headline = late ? 'באיחור' : publishingNow ? 'מתבצע כעת' : left.due ? 'אמור לצאת עכשיו' : 'הפרסום הבא בעוד';
-
-  return (
-    /*
-     * 2 : 3, not 1 : 1. The countdown's widest real value is "1:04:22" — about
-     * 91px at 22px/800 tabular — so an even split spent 60px of the name's
-     * measure on air. Measured at 375: the group name went from 81px (18% of a
-     * 451px name, the most truncated text on the page) to 93px on an even
-     * split, to ~137px here.
-     */
-    <div className="grid grid-cols-5 gap-2 [&>*]:min-w-0">
-      <div className={`col-span-2 ${FOOT_BOX}`}>
-        <p className={`text-[11px] font-bold leading-[14px] ${late ? TONE_TEXT.warn : 'text-mist-500'}`}>{headline}</p>
-        {/* mm:ss around a neutral colon, which an RTL line reorders. */}
-        <p className={`text-[22px] font-extrabold leading-[26px] ${late ? TONE_TEXT.warn : 'text-mist-100'}`}>
-          <span dir="ltr" className="inline-block tabular-nums">{left.due ? formatTimeHe(at) : left.label}</span>
-        </p>
-        {/* The time above is a clock time with no date on it, so on its own it
-            reads as "in a moment" however long ago it was. This says which.
-
-            The condition is `left.due`, not `left.overdue`: for the first two
-            minutes past a missed slot the figure stops moving and there was
-            nothing at all beside it saying why, which reads as a frozen
-            countdown rather than a passed instant. */}
-        {left.due && <p className="text-[11px] font-bold leading-[14px] text-mist-500">{relativeHe(at)}</p>}
-      </div>
-      <div className={`col-span-3 ${FOOT_BOX}`}>
-        <p className="truncate text-[11px] font-bold leading-[14px] text-mist-500">הקבוצה הבאה</p>
-        {name ? (
-          /* Two lines, not an ellipsis. Measured: the name had 124px of the
-             356 it needs, so the one question this box exists to answer -
-             which group is next - was the one the screen could not answer.
-             Group names here run long and Cyrillic ("АРАД НАШ ДОМ И РЕШАТЬ
-             НАМ"), and the first twelve characters of those are not an answer. */
-          <div className="flex min-w-0 items-start gap-2 pt-1">
-            <TargetAvatar name={name} imageUrl={target?.image_url} size={26} />
-            <p dir="auto" className="line-clamp-2 min-w-0 text-[13px] font-bold leading-[15px] text-mist-100">
-              {name}
-            </p>
-          </div>
-        ) : (
-          // The row exists but its target did not come back with it. A dash is
-          // the honest answer; a placeholder name is an invented one.
-          <p className="text-[22px] font-extrabold leading-[26px] text-mist-500">—</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function LiveCampaignHero({
   campaign,
   state,
@@ -393,39 +295,43 @@ export function LiveCampaignHero({
         )}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 [&>*]:min-w-0">
+      {/*
+        One row of three: what the run is doing, where to look at it, and when
+        it goes out. They were a two-up grid with the tuner on a line of its
+        own underneath, which read as an afterthought — and it is the control
+        the owner reaches for most, because it is the one that moves a round
+        forward. Three across at 375px leaves ~108px each, so these are `md`
+        rather than `lg`: still a 44px target, with room for the words.
+      */}
+      <div className="mt-3 grid grid-cols-3 gap-2 [&>*]:min-w-0">
+        <ButtonLink href={`/social/campaigns/${campaign.id}`} variant="secondary" size="md" className="justify-center">
+          {/* "פתח סבב", the same words the runs list uses for the same URL. */}
+          פתח סבב
+        </ButtonLink>
         {showResume ? (
-          <Button size="lg" busy={busy} onClick={onResume}>
+          <Button size="md" busy={busy} onClick={onResume} className="justify-center">
             המשך סבב
           </Button>
         ) : showPause ? (
           /* "השהה סבב" — this pauses THIS round. The header's global toggle,
              visible on the same screen, pauses EVERYTHING and used to carry
              the identical word. */
-          <Button variant="secondary" size="lg" busy={busy} onClick={onPause}>
+          <Button variant="secondary" size="md" busy={busy} onClick={onPause} className="justify-center gap-1.5">
+            <PauseIcon aria-hidden className="h-4 w-4" />
             השהה סבב
           </Button>
         ) : (
           <span />
         )}
-        {/* "פתח סבב", the same words the runs list uses for the same URL. It
-            said "צפה בתור" here, so one destination had two names and neither
-            of them said it was the run's own screen. */}
-        <ButtonLink href={`/social/campaigns/${campaign.id}`} variant="secondary" size="lg">פתח סבב</ButtonLink>
+        {onTune ? (
+          <Button variant="secondary" size="md" onClick={onTune} className="justify-center gap-1.5">
+            <CalendarIcon aria-hidden className="h-4 w-4" />
+            ערוך מועד
+          </Button>
+        ) : (
+          <span />
+        )}
       </div>
-
-      {/* The tuner used to be reachable only by tapping the countdown box, and
-          that box is not drawn before a run has started - which is exactly when
-          the owner wants to bring it forward. An explicit way in. */}
-      {onTune && (
-        <button
-          type="button"
-          onClick={onTune}
-          className="mt-2 min-h-11 w-full rounded-xl text-sm font-bold text-brand-300 transition-colors hover:bg-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850"
-        >
-          ערוך מועד ומרווח
-        </button>
-      )}
 
       {/* The counter belongs to this run, and this run is what the card is
           about. Closing it is how the owner says "that round is done" - the
@@ -465,7 +371,6 @@ export function LiveQueueHero({
   busy,
   resumeBusy,
   nextTarget,
-  onTune,
   onDue,
   inFlight = 0,
   workerOnline,
@@ -483,7 +388,6 @@ export function LiveQueueHero({
   busy?: boolean;
   resumeBusy?: boolean;
   nextTarget?: Pick<SocialTarget, 'name' | 'image_url'> | null;
-  onTune?: () => void;
   /**
    * Fired ONCE when the countdown reaches this row's instant, so the screen
    * can re-read the queue instead of describing the slot from the last poll.
@@ -540,18 +444,45 @@ export function LiveQueueHero({
 
   return (
     <HeroPanel ariaLabel="מצב המערכת">
+      {/*
+        The status line, and the one fact that decides whether it can be true.
+
+        "+ פוסט חדש" used to live here. It moved up into the pair of primary
+        actions above this panel, so the screen offers it once. What replaced
+        it is the connection state: groups are published by the copy of this
+        app on the owner's PC, so "המערכת פעילה" is only meaningful next to
+        whether that machine is actually there. It links to the card that can
+        fix it rather than restating the diagnosis.
+      */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full transition-colors duration-150 ${TONE_FILL[tone]} ${live ? 'pulse-dot' : ''}`} />
-          <h2 dir="auto" className="min-w-0 truncate text-[17px] font-extrabold leading-[22px] text-mist-100">
-            {SYSTEM_STATE_LABEL[systemState]}
-          </h2>
+          <div className="min-w-0">
+            <h2 dir="auto" className="min-w-0 truncate text-[17px] font-extrabold leading-[22px] text-mist-100">
+              {SYSTEM_STATE_LABEL[systemState]}
+            </h2>
+            <p dir="auto" className="mt-0.5 truncate text-xs leading-4 text-mist-500">
+              {systemState === 'active'
+                ? live
+                  ? 'מפרסם כעת לקבוצות פייסבוק'
+                  : 'התור מלא — ממתין לתורו של הפרסום הבא'
+                : systemState === 'paused'
+                  ? 'שום דבר לא יוצא עד שתפעילו'
+                  : systemState === 'empty'
+                    ? 'אין פרסום מתוזמן'
+                    : (intervention?.title ?? 'נדרשת פעולה שלכם')}
+            </p>
+          </div>
         </div>
-        {/* The one filled blue button on the screen — except while paused,
-            where resuming outranks writing a post and takes the fill. */}
-        <ButtonLink href="/social/posts/new" variant={paused ? 'secondary' : 'primary'} className="shrink-0">
-          + פוסט חדש
-        </ButtonLink>
+        <Link
+          href="#browser-status"
+          className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-extrabold ${
+            workerOnline ? 'bg-success-400/12 text-success-400' : 'bg-warning-400/12 text-warning-400'
+          }`}
+        >
+          {workerOnline ? 'מחובר' : 'לא מחובר'}
+          <ChevronIcon aria-hidden className="h-4 w-4 rtl:rotate-180" />
+        </Link>
       </div>
 
       <div className="mt-3.5">
@@ -617,33 +548,24 @@ export function LiveQueueHero({
         </div>
       )}
 
-      {nextAt && !paused && systemState !== 'empty' && (
-        <div className="mt-3">
-          {onTune ? (
-            <button
-              type="button"
-              onClick={onTune}
-              className="block w-full rounded-xl text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850"
-            >
-              <NextUpBoxes at={nextAt} targetName={nextTargetName} now={now} target={nextTarget} inFlight={inFlight > 0} workerOnline={workerOnline} />
-              <span className="sr-only">— שינוי המרווח בין הפרסומים והקבוצות בתור</span>
-            </button>
-          ) : (
-            <NextUpBoxes at={nextAt} targetName={nextTargetName} now={now} target={nextTarget} inFlight={inFlight > 0} workerOnline={workerOnline} />
-          )}
-          {/*
-            "הרץ עכשיו" appears only when it can do something.
-            It runs one worker tick over rows whose time has ALREADY come, so
-            for the 99% of the day when the next slot is still ahead it is a
-            permanently visible button that does nothing — a quieter version of
-            a tile pointing at a route that does not exist.
-          */}
-          {due && onRunNow && (
-            <Button variant="secondary" size="md" className="mt-2 w-full" busy={busy} onClick={onRunNow}>
-              הרץ עכשיו
-            </Button>
-          )}
-        </div>
+      {/*
+        THE COUNTDOWN BOX IS GONE FROM HERE, THE GUARANTEE BEHIND IT IS NOT.
+
+        "הפרסומים הקרובים" below now lists every waiting row with its own live
+        countdown, and the run card carries the tuner, so this box was a third
+        copy of the next publication on one screen. What it also carried was
+        `onDue` — the effect above that re-reads the queue the instant a slot
+        arrives, so what replaces a finished countdown is READ rather than
+        assumed. That effect stays; it simply has no picture any more.
+
+        "הרץ עכשיו" is kept, because nothing else on the screen can do it: it
+        runs one worker tick over rows whose time has already come, and it
+        appears only in the minutes when there is such a row.
+      */}
+      {due && onRunNow && !paused && systemState !== 'empty' && (
+        <Button variant="secondary" size="md" className="mt-3 w-full" busy={busy} onClick={onRunNow}>
+          הרץ עכשיו
+        </Button>
       )}
     </HeroPanel>
   );

@@ -10,7 +10,7 @@ import {
   HomeIcon,
   LogOutIcon,
   MenuIcon,
-  MegaphoneIcon,
+  RepeatIcon,
   SparklesIcon,
   SpinnerIcon,
   TargetIcon,
@@ -24,10 +24,12 @@ import { Sheet, useConfirm } from './ui';
 
 const nav = [
   { href: '/social', label: 'ראשי', icon: HomeIcon, exact: true },
-  { href: '/social/campaigns', label: 'סבבים', icon: MegaphoneIcon, exact: false },
+  // A round of publications is a cycle, not an announcement: the megaphone
+  // said "advertising" where the screen is about a repeating run.
+  { href: '/social/campaigns', label: 'סבבים', icon: RepeatIcon, exact: false },
   { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false },
   { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false },
-  { href: '/social/library', label: 'ספריית תוכן', icon: ClipboardListIcon, exact: false },
+  { href: '/social/library', label: 'ספרייה', icon: ClipboardListIcon, exact: false },
   { href: '/social/targets', label: 'דפי פייסבוק', icon: TargetIcon, exact: false },
   { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false },
 ];
@@ -36,7 +38,7 @@ const nav = [
  * Four tabs plus "עוד". Five is where a thumb still lands accurately on a
  * phone; the rest of the product is one tap deeper rather than crammed in.
  */
-const MOBILE_TABS = ['/social', '/social/campaigns', '/social/groups', '/social/history'];
+const MOBILE_TABS = ['/social', '/social/campaigns', '/social/groups', '/social/library'];
 
 /**
  * Frame for every /social screen: the same Supabase session as the CRM
@@ -170,7 +172,7 @@ export function SocialShell({
             <span className="min-w-0">
               <span className="block truncate text-[13px] font-extrabold leading-4 text-mist-100">הפתרון המבריק</span>
               <span dir="auto" className="block truncate text-[11px] leading-tight text-mist-500">
-                {subtitle ?? 'ניהול פרסומים בפייסבוק'}
+                {subtitle ?? 'פרסום חכם לקבוצות פייסבוק'}
               </span>
             </span>
           </Link>

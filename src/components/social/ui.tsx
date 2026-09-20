@@ -1347,26 +1347,53 @@ export function StatCard({
   value,
   sub,
   chipLabel,
+  icon,
   tone = 'neutral',
   href,
+  dense = false,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   /** A call to action in place of the sub-line, inside the tile's own link. */
   chipLabel?: string;
+  /**
+   * A mark for the status, under the label. It is decoration — the figure and
+   * the label already say everything — so it is aria-hidden by its caller and
+   * never the only carrier of meaning.
+   */
+  icon?: React.ReactNode;
   tone?: Tone;
   href?: string;
+  /**
+   * Four tiles across a phone instead of two.
+   *
+   * At 375px four tiles are ~78px wide, so the figure comes down from 30px and
+   * everything centres: a left-aligned 11px label in a 78px box wraps into a
+   * ragged two lines that read as broken rather than dense. The two-across
+   * layout keeps the bigger figure and the start alignment, because it has the
+   * room for them.
+   */
+  dense?: boolean;
 }) {
   const body = (
     <>
-      <p dir="auto" className="truncate text-xs font-bold leading-[15px] text-mist-500">
+      {/* The figure leads in the dense layout. Four narrow tiles are scanned
+          as a row of numbers — the label is what you read second, to find out
+          which number you just looked at. */}
+      {dense && (
+        <p className={`text-[26px] font-extrabold leading-[30px] tabular-nums transition-colors duration-150 ${FIGURE[tone]}`}>{value}</p>
+      )}
+      <p dir="auto" className={`text-xs font-bold leading-[15px] text-mist-500 ${dense ? 'mt-0.5 line-clamp-2' : 'truncate'}`}>
         {label}
       </p>
       {/* 30px on a phone, 34 from sm. Deliberately below the system card's
           headline: this row answers "how many", the card above answers
           "is it working", and the sizes have to say which outranks which. */}
-      <p className={`mt-0.5 text-[30px] font-extrabold leading-[34px] tabular-nums transition-colors duration-150 sm:text-[34px] ${FIGURE[tone]}`}>{value}</p>
+      {!dense && (
+        <p className={`mt-0.5 text-[30px] font-extrabold leading-[34px] tabular-nums transition-colors duration-150 sm:text-[34px] ${FIGURE[tone]}`}>{value}</p>
+      )}
+      {icon && <span className={`mt-1.5 inline-flex ${TONE_TEXT[tone]}`}>{icon}</span>}
       {chipLabel ? (
         <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-extrabold leading-[15px] ${TONE_TINT[tone]} ${TONE_TEXT[tone]}`}>
           {chipLabel}
@@ -1374,14 +1401,14 @@ export function StatCard({
         </span>
       ) : (
         sub && (
-          <p dir="auto" className="mt-0.5 truncate text-[11px] leading-[14px] text-mist-500">
+          <p dir="auto" className={`mt-0.5 text-[11px] leading-[14px] text-mist-500 ${dense ? 'line-clamp-2' : 'truncate'}`}>
             {sub}
           </p>
         )
       )}
     </>
   );
-  const cls = `${TILE} block min-w-0 p-3 text-start`;
+  const cls = `${TILE} block min-w-0 p-3 ${dense ? 'flex flex-col items-center text-center' : 'text-start'}`;
   return href ? (
     <Link
       href={href}

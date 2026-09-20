@@ -10,7 +10,7 @@ import { QuickActions } from '@/components/social/QuickActions';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
-import { AlertBar, Button, Card, ErrorState, Freshness, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
+import { AlertBar, Button, ButtonLink, Card, ErrorState, Freshness, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
 import {
   callSocialApi,
   campaignStates,
@@ -37,7 +37,7 @@ import { agree, counted, startOfZonedDay } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { RepeatIcon } from '@/components/icons';
+import { AlertTriangleIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, UsersIcon } from '@/components/icons';
 
 /**
  * How many upcoming rows the timeline reads. The card's subtitle prints the
@@ -588,6 +588,48 @@ export default function SocialDashboard() {
             hasPublications={summary.total > 0}
           />
 
+          {/*
+            THE TWO THINGS THE OWNER OPENS THIS SCREEN TO DO.
+
+            Writing a post was a small button inside the system panel, and
+            pausing everything was a 13px control in the header — the two
+            highest-intent actions on the product, both of them incidental.
+            They are one row of two now, at the top, where a thumb lands.
+
+            The pause here and the one in the header are the SAME switch and
+            render the same value: this screen hands its `control.paused` to
+            SocialShell (see `paused=` below), so the two cannot disagree the
+            way two independent polls would.
+          */}
+          <div className="grid grid-cols-2 gap-2.5 [&>*]:min-w-0">
+            <ButtonLink href="/social/posts/new" size="lg" variant={data.control.paused ? 'secondary' : 'primary'} className="flex-col !items-start gap-0 py-3">
+              <span className="flex items-center gap-1.5 text-[15px] font-extrabold leading-5">
+                <PlusIcon aria-hidden className="h-4 w-4" />
+                פוסט חדש
+              </span>
+              <span className="text-[11px] font-semibold leading-[15px] opacity-80">צור ותזמן פוסט לקבוצות</span>
+            </ButtonLink>
+            <Button
+              size="lg"
+              variant={data.control.paused ? 'primary' : 'secondary'}
+              busy={busy === 'pause-all' || busy === 'resume'}
+              className="flex-col !items-start gap-0 py-3"
+              onClick={() =>
+                data.control.paused
+                  ? act('resume', () => setPaused(false), 'הפרסום חודש.')
+                  : act('pause-all', () => setPaused(true), 'הפרסום הושהה. התור נשמר.')
+              }
+            >
+              <span className="flex items-center gap-1.5 text-[15px] font-extrabold leading-5">
+                {data.control.paused ? <PlayIcon aria-hidden className="h-4 w-4" /> : <PauseIcon aria-hidden className="h-4 w-4" />}
+                {data.control.paused ? 'הפעל פרסום' : 'השהה פרסום'}
+              </span>
+              <span className="text-[11px] font-semibold leading-[15px] opacity-80">
+                {data.control.paused ? 'המשך את התור מהמקום שנעצר' : 'עצור זמנית את המערכת'}
+              </span>
+            </Button>
+          </div>
+
           {/* 1 — IS IT WORKING, how much of today's own ceiling has gone out,
               when is the next one and to which group. Unconditional: it used
               to be the else-branch of a ternary, so on a morning with an empty
@@ -607,7 +649,6 @@ export default function SocialDashboard() {
             onResume={() => act('resume', () => setPaused(false), 'הפרסום חודש.')}
             busy={busy === 'run'}
             resumeBusy={busy === 'resume'}
-            onTune={() => setTunerOpen(true)}
           />
 
           {/*
@@ -653,8 +694,13 @@ export default function SocialDashboard() {
               status, not the tile. A tile whose value is 0 goes neutral — a
               red zero is noise, not a warning. */}
           <section>
-            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 [&>*]:min-w-0">
+            {/* Four across on a phone, not two. The row is scanned as one
+                line of numbers, and halving its height is what let the two
+                primary actions above it sit above the fold. */}
+            <div className="grid grid-cols-4 gap-2 md:gap-2.5 [&>*]:min-w-0">
               <StatCard
+                dense
+                icon={<SendIcon aria-hidden className="h-4 w-4" />}
                 tone={data.today ? 'good' : 'neutral'}
                 label="פורסמו היום"
                 value={data.today}
@@ -677,6 +723,8 @@ export default function SocialDashboard() {
                   from the control centre and break the invariant that
                   queued + needsHuman === open (invariants.ts). */}
               <StatCard
+                dense
+                icon={<UsersIcon aria-hidden className="h-4 w-4" />}
                 tone={summary.queued ? 'brand' : 'neutral'}
                 label="ממתינים בתור"
                 value={summary.queued}
@@ -684,17 +732,8 @@ export default function SocialDashboard() {
                 href="/social/history?status=scheduled"
               />
               <StatCard
-                tone={summary.needsHuman ? 'warn' : 'neutral'}
-                label="דורשים טיפול"
-                value={summary.needsHuman}
-                /* Every other tile's sub-line describes its OWN figure. This
-                   one used to print the number of active targets, which has
-                   nothing to do with the count above it — "6" over "43 יעדים
-                   פעילים" reads as "6 of 43". */
-                sub={summary.needsHuman ? 'לא יזוזו עד שתטפלו' : 'אין מה לעשות כרגע'}
-                href="/social/history?status=needs_attention"
-              />
-              <StatCard
+                dense
+                icon={<AlertTriangleIcon aria-hidden className="h-4 w-4" />}
                 tone={summary.failed ? 'bad' : 'neutral'}
                 label="נכשלו"
                 value={summary.failed}
@@ -705,6 +744,19 @@ export default function SocialDashboard() {
                 chipLabel={summary.failed ? 'טפל עכשיו' : undefined}
                 sub={summary.skipped ? `ועוד ${summary.skipped} ${agree(summary.skipped, 'דולג', 'דולגו')}` : 'סך הכול'}
                 href="/social/history?status=failed"
+              />
+              <StatCard
+                dense
+                icon={<GearIcon aria-hidden className="h-4 w-4" />}
+                tone={summary.needsHuman ? 'warn' : 'neutral'}
+                label="דורשים טיפול"
+                value={summary.needsHuman}
+                /* Every other tile's sub-line describes its OWN figure. This
+                   one used to print the number of active targets, which has
+                   nothing to do with the count above it — "6" over "43 יעדים
+                   פעילים" reads as "6 of 43". */
+                sub={summary.needsHuman ? 'לא יזוזו עד שתטפלו' : 'אין מה לעשות כרגע'}
+                href="/social/history?status=needs_attention"
               />
             </div>
           </section>

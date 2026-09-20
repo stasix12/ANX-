@@ -368,6 +368,7 @@ export function LiveQueueHero({
   nextTargetName,
   onRunNow,
   onTune,
+  fbAccount = null,
   onRefresh,
   refreshing = false,
   updatedAt = null,
@@ -430,6 +431,15 @@ export function LiveQueueHero({
   onRefresh?: () => void;
   refreshing?: boolean;
   updatedAt?: Date | null;
+  /**
+   * The Facebook account the PC's browser is signed in as.
+   *
+   * `workerOnline` says the machine is there; this says WHOSE session it is
+   * publishing with — every group post goes out under this name, and on a
+   * shared computer those are two different questions. Null when no worker has
+   * reported one, in which case the chip says only what it knows.
+   */
+  fbAccount?: { name: string; avatar: string } | null;
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
   workerOnline?: boolean;
@@ -515,13 +525,38 @@ export function LiveQueueHero({
               <RepeatIcon aria-hidden className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
           )}
+        {/*
+          TWO FACTS, ONE CHIP, AND THEY ARE NOT THE SAME FACT.
+
+          The colour is about the MACHINE — whether the PC that publishes to
+          groups has sent a heartbeat. The face and the name are about the
+          ACCOUNT its browser is signed in as, which is what every group post
+          goes out under. A shared computer, or somebody signing in as the
+          wrong person, makes those two answers diverge, and the chip used to
+          be able to say only the first.
+
+          With no account reported the chip is exactly what it was. It never
+          fills that gap with a placeholder face or a guessed name.
+        */}
         <Link
           href="#browser-status"
-          className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-extrabold ${
+          className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl ps-1.5 pe-2 text-[13px] font-extrabold ${
             workerOnline ? 'bg-success-400/12 text-success-400' : 'bg-warning-400/12 text-warning-400'
           }`}
         >
-          {workerOnline ? 'מחובר' : 'לא מחובר'}
+          {fbAccount ? (
+            <>
+              {fbAccount.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={fbAccount.avatar} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
+              ) : (
+                <TargetAvatar name={fbAccount.name} size={24} />
+              )}
+              <span dir="auto" className="max-w-[7.5rem] truncate">{fbAccount.name}</span>
+            </>
+          ) : (
+            <span className="ps-1">{workerOnline ? 'מחובר' : 'לא מחובר'}</span>
+          )}
           <ChevronIcon aria-hidden className="h-4 w-4 rtl:rotate-180" />
         </Link>
         </div>

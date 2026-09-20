@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
+import { readAccountProfile, type AccountProfile } from './account';
 import { env } from '../env';
 import { CHECKPOINT_PATHS, LOGIN_PATHS, fb, patterns } from './selectors';
 
@@ -176,7 +177,7 @@ export class BrowserSession {
    * Opens facebook.com and reports the session state without touching
    * anything. Used by "בדוק חיבור" and before every batch of jobs.
    */
-  async checkLogin(headless: boolean): Promise<{ state: 'connected' | 'needs_auth'; detail: string }> {
+  async checkLogin(headless: boolean): Promise<{ state: 'connected' | 'needs_auth'; detail: string; account?: AccountProfile | null }> {
     if (!this.hasProfile()) return { state: 'needs_auth', detail: 'אין עדיין פרופיל דפדפן — לחצו "התחבר לפייסבוק".' };
     const page = await this.newPage(headless);
     try {
@@ -185,7 +186,17 @@ export class BrowserSession {
       const kind = await classifyPage(page);
       if (kind === 'checkpoint') return { state: 'needs_auth', detail: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.' };
       if (kind === 'login' || !(await this.hasLoginCookie())) return { state: 'needs_auth', detail: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".' };
-      return { state: 'connected', detail: 'מחובר לפייסבוק.' };
+      /*
+       * WHO is signed in, read here because here is the one moment the worker
+       * already has facebook.com open in its own profile. A separate page load
+       * for this would be a second visit per check, for a fact that cannot
+       * change without this very check noticing.
+       *
+       * Best-effort: a failure returns null and the login is still connected.
+       * Knowing the session works matters more than knowing whose it is.
+       */
+      const account = await readAccountProfile(page).catch(() => null);
+      return { state: 'connected', detail: 'מחובר לפייסבוק.', account };
     } finally {
       await page.close().catch(() => undefined);
     }

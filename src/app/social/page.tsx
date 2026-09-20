@@ -84,6 +84,15 @@ interface DashboardData {
    * here while BrowserStatusCard showed it 1500px further down.
    */
   workerNeedsAuth: boolean;
+  /**
+   * The Facebook account the PC's browser profile is signed in as.
+   *
+   * A different fact from `workerOnline`, which only says the machine is
+   * there. Every group publication goes out under this name, so on a shared
+   * computer it is the one worth showing beside the connection state. Null
+   * when no worker has reported one yet — never a placeholder.
+   */
+  fbAccount: { name: string; avatar: string } | null;
 }
 
 /**
@@ -180,6 +189,13 @@ export default function SocialDashboard() {
         states,
         workerOnline: workers.some((w) => w.online),
         workerNeedsAuth: workers.some((w) => w.online && (w.status === 'needs_attention' || w.browser_state === 'needs_auth')),
+        /* The live worker's account first; failing that, the most recent one
+           that ever reported a name — which is still true about the machine,
+           just not confirmed this minute. */
+        fbAccount: (() => {
+          const w = workers.find((x) => x.online && x.fb_user_name) ?? workers.find((x) => x.fb_user_name);
+          return w?.fb_user_name ? { name: w.fb_user_name, avatar: w.fb_avatar_url ?? '' } : null;
+        })(),
       });
       setUpdatedAt(new Date());
       setError(null);
@@ -654,6 +670,7 @@ export default function SocialDashboard() {
             nextTarget={data.upcoming[0]?.target ?? null}
             inFlight={summary.inFlight}
             workerOnline={data.workerOnline}
+            fbAccount={data.fbAccount}
             intervention={intervention}
             onRunNow={runNow}
             onTune={() => setTuner({ campaignId: data.upcoming[0]?.campaign_id ?? undefined })}

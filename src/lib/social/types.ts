@@ -276,6 +276,18 @@ export interface SocialWorker {
   version: string;
   host: string;
   last_seen_at: string | null;
+  /*
+   * The Facebook account this worker's browser profile is signed in as.
+   *
+   * `browser_state` says the session WORKS; these say WHOSE it is, which on a
+   * shared machine is a different question with a different answer. The id
+   * comes from the c_user cookie and is reliable; the name and avatar are read
+   * from the page and are empty when it did not yield them — the screen shows
+   * what is there and never fills a gap with a guess.
+   */
+  fb_user_id?: string;
+  fb_user_name?: string;
+  fb_avatar_url?: string;
 }
 
 export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume';

@@ -1876,6 +1876,57 @@ const scenario: { step: string; line: string }[] = [];
   console.log('dashboard cross-scope invariant tests OK');
 }
 
+/* ----------------------------------------- which Facebook account is signed in */
+{
+  const account = readFileSync(new URL('../facebook/account.ts', import.meta.url), 'utf8');
+  const hero = readFileSync(new URL('../../src/components/social/LiveCampaignHero.tsx', import.meta.url), 'utf8');
+  const localWorker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+
+  /*
+   * THE ID COMES FROM THE COOKIE, THE LABEL FROM THE PAGE.
+   *
+   * c_user is authoritative and the same in every language; matching "Your
+   * profile" or "הפרופיל שלך" would break for any owner whose Facebook is set
+   * to a language nobody here anticipated. The profile link is therefore found
+   * by that id, never by a label.
+   */
+  assert.ok(account.includes("c.name === 'c_user'"), 'the signed-in id must come from the cookie, not the markup');
+  assert.ok(/href\.includes\(userId\)/.test(account), 'the profile link is matched by that id');
+  /* Comments stripped first: the note above the code explains WHY those
+     labels are not matched, and a whole-file search found that explanation
+     and failed on it — the same way the overscroll guard did. */
+  const accountCode = account.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  assert.ok(
+    !/Your profile|הפרופיל שלך|aria-label="Account"/.test(accountCode),
+    'no English or Hebrew label matching — the account picks the language, not us',
+  );
+
+  /* Best-effort, and it may never fail the login check it rides along with:
+     knowing the session works matters more than knowing whose it is. */
+  assert.ok(/readAccountProfile\(page\)\.catch\(\(\) => null\)/.test(
+    readFileSync(new URL('../facebook/session.ts', import.meta.url), 'utf8'),
+  ), 'reading the account must never fail the login check');
+
+  /*
+   * A field is written only when it was READ. A layout change that hides the
+   * name must leave the last known name standing rather than blanking it —
+   * "unreadable this minute" is not "nobody is signed in", and browser_state
+   * already carries the second one.
+   */
+  assert.ok(/if \(account\.name\) patch\.fb_user_name = account\.name;/.test(localWorker), 'a name is written only when one was read');
+  assert.ok(/upsert: true/.test(localWorker) && /fb_avatar_url.*publicUrl.*\?v=/.test(localWorker), 'the avatar is copied and cache-busted, never hotlinked');
+
+  /*
+   * ON SCREEN: the colour is the MACHINE, the face is the ACCOUNT. With no
+   * account reported the chip must say exactly what it always said, and must
+   * not invent a face or a name to fill the space.
+   */
+  assert.ok(/fbAccount \?/.test(hero), 'the chip renders the account only when there is one');
+  assert.ok(/'מחובר' : 'לא מחובר'/.test(hero), 'and falls back to the machine state when there is not');
+
+  console.log('signed-in-account tests OK');
+}
+
 /* ----------------------------------------- assigning a group to a city */
 {
   const groupsPage = readFileSync(new URL('../../src/app/social/groups/page.tsx', import.meta.url), 'utf8');

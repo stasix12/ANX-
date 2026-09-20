@@ -24,6 +24,7 @@ import { logActivity, safeError, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
 import { readGroupProfile } from './facebook/profile';
+import type { AccountProfile } from './facebook/account';
 import { BrowserSession, SessionError } from './facebook/session';
 import { captureScreenshot } from './screenshots';
 
@@ -138,6 +139,7 @@ async function main(): Promise<void> {
       const check = await session.checkLogin(!browser.debugMode);
       state.browserState = check.state;
       state.lastCheckAt = Date.now();
+      await recordAccount(state, check.account);
       if (check.state !== 'connected') state.attention = check.detail;
       await heartbeat(state, state.attention ? 'needs_attention' : 'online', browser.debugMode);
       console.log(`[worker] בדיקת חיבור לפייסבוק: ${check.detail}`);
@@ -224,6 +226,7 @@ async function tick(state: WorkerState): Promise<void> {
     const check = await session.checkLogin(headless);
     state.lastCheckAt = Date.now();
     state.browserState = check.state;
+    await recordAccount(state, check.account);
     if (check.state !== 'connected') {
       state.attention = check.detail;
       await logActivity('warn', 'browser_needs_auth', check.detail);
@@ -372,12 +375,19 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
         const r = await session.interactiveLogin();
         state.browserState = r.state;
         state.lastCheckAt = Date.now();
-        if (r.state === 'connected') state.attention = '';
+        if (r.state === 'connected') {
+          state.attention = '';
+          /* A fresh login is the one moment the account may have CHANGED, so
+             it is re-read rather than left on whoever was signed in before. */
+          const who = await session.checkLogin(headless).catch(() => null);
+          await recordAccount(state, who?.account);
+        }
         result = r.detail;
       } else if (cmd.command === 'check') {
         const r = await session.checkLogin(headless);
         state.browserState = r.state;
         state.lastCheckAt = Date.now();
+        await recordAccount(state, r.account);
         if (r.state === 'connected') state.attention = '';
         else state.attention = r.detail;
         result = r.detail;
@@ -676,6 +686,38 @@ async function waitForConfirmation(queueId: string, page: Page): Promise<'confir
   }
   await db.from('social_queue').update({ status: 'publishing' }).eq('id', queueId);
   return 'timeout';
+}
+
+/* ----------------------------------------------------- signed-in account */
+
+/**
+ * Record WHO the browser is signed in as.
+ *
+ * Called after every login check that came back connected. The avatar is
+ * uploaded rather than linked: Facebook's CDN URLs expire and are
+ * hotlink-protected, so a stored link would be a broken image on the
+ * dashboard within the hour — the same reason group pictures are copied.
+ *
+ * Every field is written only when it was actually read. A layout change that
+ * hides the name leaves the previous name in place rather than blanking it,
+ * because "we could not read it this minute" is not the same fact as "there
+ * is nobody signed in" — and browser_state already carries the second one.
+ */
+async function recordAccount(state: WorkerState, account: AccountProfile | null | undefined): Promise<void> {
+  if (!account?.id) return;
+  const db = await workerDb();
+  const patch: Record<string, string> = { fb_user_id: account.id };
+  if (account.name) patch.fb_user_name = account.name;
+  if (account.image) {
+    const objectPath = `workers/${state.id}.png`;
+    const { error } = await db.storage
+      .from('social-media')
+      .upload(objectPath, account.image.bytes, { contentType: account.image.contentType, upsert: true });
+    // The cache-buster matters: the object path is stable, so without it the
+    // dashboard keeps showing the previous owner's face after a re-login.
+    if (!error) patch.fb_avatar_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
+  }
+  await db.from('social_workers').update(patch).eq('id', state.id);
 }
 
 /* ------------------------------------------------------------ helpers */

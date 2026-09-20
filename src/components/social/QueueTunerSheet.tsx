@@ -128,7 +128,15 @@ const minutes = (n: number) => counted(n, 'דקה אחת', 'דקות', 'שתי �
 
 const MIN_GAP = 1;
 const MAX_GAP = 720;
-const STEP = 5;
+/*
+ * One minute, not five.
+ *
+ * The stepper moved in fives and the presets jumped 20 → 30 → 45, so 7 or 23
+ * minutes were not reachable by any control on the screen — the owner asked
+ * for exactly that. The presets stay for the big moves; these two buttons are
+ * now the fine adjustment, and the figure between them can be typed into.
+ */
+const STEP = 1;
 const PRESETS = [20, 30, 45, 65, 90, 120];
 /** Anything longer than this and the list gets a search box instead of a scroll. */
 const ADD_LIST_LIMIT = 30;
@@ -170,6 +178,8 @@ export function QueueTunerSheet({
 
   const [gap, setGap] = useState(0);
   const [gapDirty, setGapDirty] = useState(false);
+  /* The raw text while the figure is being typed into; null when it is not. */
+  const [draft, setDraft] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
 
@@ -194,6 +204,9 @@ export function QueueTunerSheet({
         if (!keepGapDraft) {
           setGap(plan.effectiveGapMinutes);
           setGapDirty(false);
+          /* A half-typed number from a previous opening must not come back as
+             the value of a queue the owner has not looked at yet. */
+          setDraft(null);
         }
       } catch (err) {
         setError(friendlyMessage(err));
@@ -446,6 +459,17 @@ export function QueueTunerSheet({
     setGapDirty(true);
   };
 
+  /*
+   * The typed value, committed. Anything that is not a number in range leaves
+   * the gap exactly as it was — a blur on an empty field must not silently
+   * choose 1 minute for a queue of 28 groups.
+   */
+  const commitDraft = () => {
+    const n = Number(draft);
+    if (draft !== null && draft !== '' && Number.isFinite(n)) setGapTo(Math.round(n));
+    setDraft(null);
+  };
+
   /* ---------------------------------------------------------------- view */
 
   const hasQueue = rows.length > 0;
@@ -569,16 +593,52 @@ export function QueueTunerSheet({
             <h3 className="text-sm font-extrabold uppercase tracking-wide text-mist-500">מרווח בין פרסומים</h3>
 
             <div className="flex items-center justify-center gap-4 rounded-xl bg-ink-900 px-3 py-4">
-              <Stepper label={`הפחת ${STEP} דקות`} onClick={() => setGapTo(gap - STEP)} disabled={working || gap <= MIN_GAP}>
+              <Stepper label={`הפחת ${minutes(STEP)}`} onClick={() => setGapTo(gap - STEP)} disabled={working || gap <= MIN_GAP}>
                 <MinusIcon className="h-6 w-6" />
               </Stepper>
               <div className="min-w-0 text-center">
-                <span dir="ltr" className="block tabular-nums text-[42px] font-extrabold leading-none text-mist-100">
-                  {gap}
-                </span>
+                {/*
+                  THE FIGURE IS THE INPUT.
+
+                  Presets and a stepper cannot reach every number, and adding a
+                  separate field beside the big number would put two controls
+                  on screen for one value — the class of thing this file keeps
+                  removing. So the number the owner is looking at is the number
+                  they type into.
+
+                  `draft` is what makes it typable. A controlled input that
+                  clamps on every keystroke cannot be cleared: emptying it
+                  gives NaN, the clamp turns that into MIN_GAP, and the field
+                  refills with "1" under the cursor. So while it is being
+                  edited the raw text is held as-is and only committed on blur
+                  or Enter; an empty or nonsense entry falls back to the value
+                  that was there before rather than to a number nobody chose.
+                */}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  aria-label={`מרווח בדקות, בין ${MIN_GAP} ל-${MAX_GAP}`}
+                  disabled={working}
+                  dir="ltr"
+                  value={draft ?? String(gap)}
+                  onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+                  onFocus={(e) => {
+                    setDraft(String(gap));
+                    e.target.select();
+                  }}
+                  onBlur={commitDraft}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  className="block w-24 rounded-lg bg-transparent text-center tabular-nums text-[42px] font-extrabold leading-none text-mist-100 focus:bg-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:opacity-50"
+                />
                 <span className="mt-1 block text-xs font-bold text-mist-500">דקות בין פרסום לפרסום</span>
               </div>
-              <Stepper label={`הוסף ${STEP} דקות`} onClick={() => setGapTo(gap + STEP)} disabled={working || gap >= MAX_GAP}>
+              <Stepper label={`הוסף ${minutes(STEP)}`} onClick={() => setGapTo(gap + STEP)} disabled={working || gap >= MAX_GAP}>
                 <PlusIcon className="h-6 w-6" />
               </Stepper>
             </div>

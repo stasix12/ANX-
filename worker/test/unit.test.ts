@@ -864,6 +864,30 @@ console.log('unit tests OK');
   }
   assert.ok(sheet.includes('לא הופך שום דבר'), 'the gap control must carry its disclaimer, in the owner\'s language');
 
+  /*
+   * EVERY MINUTE MUST BE REACHABLE.
+   *
+   * The stepper moved in fives and the presets jump 20 → 30 → 45, so 7 or 23
+   * were not reachable by any control on the sheet. The figure is the input
+   * now, and the stepper is the fine adjustment.
+   */
+  const tuner = readFileSync(new URL('../../src/components/social/QueueTunerSheet.tsx', import.meta.url), 'utf8');
+  assert.ok(/const STEP = 1;/.test(tuner), 'the stepper must move one minute at a time');
+  assert.ok(/inputMode="numeric"[\s\S]{0,1400}דקות בין פרסום לפרסום/.test(tuner), 'the gap figure itself must be typable');
+  /*
+   * And it must be typable in practice. A controlled input clamped on every
+   * keystroke cannot be cleared — emptying it yields NaN, the clamp makes that
+   * MIN_GAP, and "1" reappears under the cursor. The raw text is held while
+   * editing and committed on blur; an empty entry keeps the previous value
+   * rather than silently choosing one minute for a 28-group queue.
+   */
+  assert.ok(tuner.includes('value={draft ?? String(gap)}'), 'the field shows the raw text while it is being edited');
+  assert.ok(tuner.includes('onBlur={commitDraft}'), 'and commits on blur');
+  assert.ok(
+    /const commitDraft[\s\S]{0,300}draft !== ''[\s\S]{0,120}setGapTo/.test(tuner),
+    'an empty or nonsense entry must leave the gap untouched',
+  );
+
   console.log('queue-tuner tests OK');
 }
 

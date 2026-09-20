@@ -17,7 +17,6 @@ import {
   WORKER_OFFLINE_AFTER_SECONDS,
 } from '../types';
 import { getSetting, serviceDb, setSetting } from './db';
-import { GraphError } from './graph';
 import { logActivity } from './log';
 import { planQueue } from './planner';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -42,7 +41,15 @@ const MAX_PER_RUN = 5;
 const MAX_ATTEMPTS = 4;
 const STUCK_MINUTES = 15;
 /** Channels this (server) worker publishes. Everything else belongs to another worker. */
-const SERVER_CHANNELS = ['facebook_page', 'facebook_group_manual'];
+/*
+ * The server publishes exactly one channel now.
+ *
+ * It used to own Facebook Pages through the Graph API as well. Pages are gone
+ * from this product — never used, zero connected — so what the server has left
+ * is the manual hand-off: a group the browser worker could not finish, parked
+ * for a person to post by hand.
+ */
+const SERVER_CHANNELS = ['facebook_group_manual'];
 
 export interface WorkerReport {
   ran: boolean;
@@ -288,10 +295,11 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
   const pp = p as Post;
   const text = item.rendered_text || renderPostText(pp, v);
 
+  /* The API-permission gate lived here. Every adapter left is
+     `apiPublishing: false`, so it could never fire again — and its message
+     told the owner to reconnect a Facebook account this product no longer
+     has. A check that cannot run, advising a screen that does not exist. */
   const adapter = adapterFor(tt.channel);
-  if (adapter.apiPublishing && !tt.can_api_publish) {
-    return skip(`ליעד "${tt.name}" אין הרשאת פרסום דרך API (${tt.permission_status}). סנכרנו יעדים או התחברו מחדש.`);
-  }
 
   try {
     const result = await adapter.publish({
@@ -329,37 +337,14 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
     });
     return 'published';
   } catch (err) {
-    if (err instanceof GraphError) {
-      if (err.kind === 'duplicate') return skip(err.message);
-      if (err.kind === 'rate_limit' || err.kind === 'blocked') {
-        // Cooldown already recorded by the graph client; put the row back.
-        const retryAt = new Date(now.getTime() + (err.retryAfterMinutes ?? 60) * 60_000).toISOString();
-        await db.from('social_queue').update({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: err.message }).eq('id', item.id);
-        return 'deferred';
-      }
-      if (err.kind === 'auth' || err.kind === 'permission') {
-        await db
-          .from('social_targets')
-          .update({ permission_status: err.kind === 'auth' ? 'revoked' : 'missing_permissions', can_api_publish: false })
-          .eq('id', tt.id);
-      }
-      if (err.kind === 'unknown' && item.attempts < MAX_ATTEMPTS) {
-        const retryAt = new Date(now.getTime() + 10 * 60_000 * item.attempts).toISOString();
-        await db.from('social_queue').update({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: err.message }).eq('id', item.id);
-        /*
-         * This line is what the owner reads in the notification bell, days
-         * after it was written. An ISO instant is not a sentence and a
-         * relative phrase goes stale in the row, so the retry is stated as an
-         * absolute time, isolated so the stamp reads left-to-right inside the
-         * Hebrew.
-         */
-        await logActivity('warn', 'retry', `ניסיון ${item.attempts} לפרסום נכשל. ${err.message} המערכת תנסה שוב ב-${stampText(retryAt)}.`, {
-          queueId: item.id,
-          retryAt,
-        });
-        return 'deferred';
-      }
-    }
+    /*
+     * The GraphError taxonomy lived here — duplicate, rate_limit, blocked,
+     * auth, permission, and a retry on `unknown`. Every one of those was a
+     * code Meta returns from the Graph API, which only Pages ever called. The
+     * manual channel never threw a GraphError, so it never took any of those
+     * branches: removing them changes nothing about what this function does
+     * with the one channel it still has.
+     */
     await db.from('social_targets').update({ last_status: 'failed', last_error: friendlyMessage(err, 'failed') }).eq('id', tt.id);
     throw err;
   }

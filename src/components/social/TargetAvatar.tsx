@@ -28,12 +28,12 @@ export function TargetAvatar({
   className?: string;
 }) {
   const style = { width: size, height: size };
-  const shape = channel === 'facebook_page' ? 'rounded-full' : 'rounded-xl';
+  const shape = 'rounded-xl';
   if (imageUrl) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={imageUrl} alt="" style={style} className={`shrink-0 ${shape} object-cover object-center ring-1 ring-ink-700 ${className}`} />;
   }
-  const tone = channel === 'facebook_page' ? 'bg-success-500 text-on-state' : 'bg-brand-500 text-on-brand';
+  const tone = 'bg-brand-500 text-on-brand';
   return (
     <span style={style} className={`grid shrink-0 place-items-center ${shape} ${tone} text-sm font-extrabold ${className}`}>
       {initial(name)}

@@ -13,7 +13,6 @@ import {
   RepeatIcon,
   SparklesIcon,
   SpinnerIcon,
-  TargetIcon,
   UsersIcon,
 } from '@/components/icons';
 import { signOut, useAdminSession } from '@/lib/adminAuth';
@@ -30,7 +29,6 @@ const nav = [
   { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false },
   { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false },
   { href: '/social/library', label: 'ספרייה', icon: ClipboardListIcon, exact: false },
-  { href: '/social/targets', label: 'דפי פייסבוק', icon: TargetIcon, exact: false },
   { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false },
 ];
 

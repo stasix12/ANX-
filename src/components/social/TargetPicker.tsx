@@ -45,7 +45,7 @@ export function TargetPicker({
   note?: string;
 }) {
   const [query, setQuery] = useState('');
-  const [channel, setChannel] = useState<'all' | 'facebook_page' | 'facebook_group'>('all');
+  const [channel, setChannel] = useState<'all' | 'facebook_group'>('all');
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('');
   const [shown, setShown] = useState(CHUNK);
@@ -120,7 +120,6 @@ export function TargetPicker({
   const quickSets: { label: string; icon?: React.ReactNode; items: SocialTarget[] }[] = [
     { label: city || 'כל המוצגים', items: visible },
     { label: 'מועדפות', icon: <StarIcon className="h-3.5 w-3.5" fill="currentColor" />, items: targets.filter((t) => t.favorite) },
-    { label: 'דפים', items: targets.filter((t) => t.channel === 'facebook_page') },
   ].filter((s) => s.items.length > 0);
 
   return (
@@ -136,7 +135,6 @@ export function TargetPicker({
           className="min-w-max"
           options={[
             { value: 'all', label: 'הכל', count: targets.length },
-            { value: 'facebook_page', label: 'דפים', count: targets.filter((t) => t.channel === 'facebook_page').length },
             { value: 'facebook_group', label: 'קבוצות', count: targets.filter((t) => t.channel === 'facebook_group').length },
           ]}
         />
@@ -273,7 +271,6 @@ export function TargetPicker({
                   <div className="mt-0.5 flex flex-wrap items-center gap-1">
                     {mixedChannels && <MethodBadge channel={t.channel} />}
                     {!t.enabled && <Badge tone="neutral">כבוי</Badge>}
-                    {t.channel === 'facebook_page' && !t.can_api_publish && <Badge tone="warn">אין הרשאה</Badge>}
                   </div>
                 </div>
               </label>

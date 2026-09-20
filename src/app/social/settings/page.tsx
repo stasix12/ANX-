@@ -227,7 +227,7 @@ export default function SettingsPage() {
                         <strong>הכיבוי עדיין לא תקף לקבוצות.</strong> התוכנה שעל המחשב מריצה גרסה{' '}
                         <span dir="ltr">{workerVersion}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>, והיא זו שמפרסמת לקבוצות —
                         גרסה ישנה לא מכירה את המתג הזה ותמשיך לדלג. סגרו את חלון התוכנה במחשב ולחצו פעמיים על{' '}
-                        <code dir="ltr">start-worker.cmd</code> כדי לעדכן אותה. פרסום לדפי פייסבוק כבר עובד לפי המתג.
+                        <code dir="ltr">start-worker.cmd</code> כדי לעדכן אותה.
                       </Notice>
                     </div>
                   )}

@@ -9,22 +9,16 @@ export const TIMEZONE = 'Asia/Jerusalem';
 
 /** Extension point: add 'instagram' etc. by implementing a Channel adapter. */
 /** facebook_group = published by the local Playwright worker (no Meta API exists). */
-export type Channel = 'facebook_page' | 'facebook_group' | 'facebook_group_manual' | 'instagram';
+/*
+ * Facebook Pages are no longer a channel here. The business never connected
+ * one and never published to one, and carrying the type kept a second
+ * publishing path alive across a dozen files — a "pages vs groups" split on
+ * every screen that showed a target. Groups are the product.
+ */
+export type Channel = 'facebook_group' | 'facebook_group_manual' | 'instagram';
 
 export type PermissionStatus = 'ok' | 'missing_permissions' | 'manual_only' | 'revoked' | 'browser';
 
-export interface SocialAccount {
-  id: string;
-  provider: 'facebook';
-  provider_user_id: string;
-  name: string;
-  granted_scopes: string[];
-  declined_scopes: string[];
-  token_expires_at: string | null;
-  connected_at: string;
-  revoked_at: string | null;
-  last_synced_at: string | null;
-}
 
 export interface SocialTarget {
   id: string;
@@ -417,7 +411,6 @@ export const PERMISSION_LABEL: Record<PermissionStatus, string> = {
 };
 
 export const CHANNEL_LABEL: Record<Channel, string> = {
-  facebook_page: 'דף פייסבוק',
   facebook_group: 'קבוצת פייסבוק',
   facebook_group_manual: 'קבוצת פייסבוק (ידני)',
   instagram: 'Instagram',
@@ -436,7 +429,6 @@ export const CTA_OPTIONS: { value: CtaType; label: string }[] = [
 ];
 
 /** The minimal Meta permission set the module asks for. */
-export const REQUIRED_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'] as const;
 
 export const WEEKDAYS_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 

@@ -17,11 +17,23 @@ function chooseTargets(opts: {
   const exists = (id: string) => targets.some((t) => t.id === id);
   const recent = isExistingPost ? (schedules.find((s) => s.active) ?? schedules[0]) : undefined;
   const lastTargets = (recent?.target_ids ?? []).filter(exists);
-  const defaultPages = targets.filter((t) => t.enabled && t.channel === 'facebook_page').map((t) => t.id);
+  /*
+   * NO FALLBACK, and that is the rule this file exists to hold.
+   *
+   * The last branch used to be `defaultPages` — every enabled Facebook Page —
+   * and PostEditor removed it deliberately: Pages published server-side and
+   * went out immediately, so an owner who came to post to GROUPS, typed their
+   * text and pressed the CTA had published to their business Page without ever
+   * choosing it. Nothing is ticked unless the owner asked for it.
+   *
+   * Pages are gone from the product now, so the branch has nothing left to
+   * name. It is NOT re-pointed at groups: that would re-create the very
+   * behaviour it was deleted for, one channel over, on the fifty-seven groups
+   * this owner has. The model mirrors PostEditor's three real branches.
+   */
   if (previous.length) return previous;
   if (presetIds.length) return presetIds;
-  if (lastTargets.length) return lastTargets;
-  return defaultPages;
+  return lastTargets;
 }
 
 const groups = Array.from({ length: 27 }, (_, i) => ({ id: `g${i}`, enabled: true, channel: 'facebook_group' as const }));

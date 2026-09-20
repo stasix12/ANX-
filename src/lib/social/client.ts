@@ -31,7 +31,6 @@ import {
   type Post,
   type QueueItem,
   type Schedule,
-  type SocialAccount,
   type SocialTarget,
   type SocialWorker,
   type QueueStatus,
@@ -191,12 +190,6 @@ export async function bulkDeleteTargets(ids: string[]): Promise<void> {
 
 export async function deleteTarget(id: string): Promise<void> {
   unwrap(await db().from('social_targets').delete().eq('id', id));
-}
-
-export async function getAccount(): Promise<SocialAccount | null> {
-  return unwrap<SocialAccount | null>(
-    await db().from('social_accounts').select('*').is('revoked_at', null).order('connected_at', { ascending: false }).limit(1).maybeSingle(),
-  );
 }
 
 /* ------------------------------------------------------------ campaigns */

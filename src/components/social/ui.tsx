@@ -530,7 +530,7 @@ export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'bran
  * official integration and this badge never pretends otherwise.
  */
 export function MethodBadge({ method, channel }: { method?: PublishMethod; channel?: string }) {
-  const resolved: PublishMethod = method || (channel === 'facebook_page' ? 'api' : channel ? 'browser' : '');
+  const resolved: PublishMethod = method || (channel ? 'browser' : '');
   if (!resolved) return null;
   if (resolved === 'api') return <Badge tone="good">API רשמי</Badge>;
   if (resolved === 'browser') return <Badge tone="info">בסיוע דפדפן</Badge>;

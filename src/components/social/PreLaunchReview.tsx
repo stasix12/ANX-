@@ -43,8 +43,7 @@ export function PreLaunchReview({
   warnings?: string[];
   requireConfirmation: boolean;
 }) {
-  const pages = targets.filter((t) => t.channel === 'facebook_page');
-  const groups = targets.filter((t) => t.channel !== 'facebook_page');
+  const groups = targets;
   const cover = media.find((m) => m.kind === 'image');
 
   return (
@@ -94,12 +93,10 @@ export function PreLaunchReview({
 
         <section>
           <p className="mb-1.5 text-xs font-extrabold uppercase tracking-wide text-mist-500">יעדים ({targets.length})</p>
+{/* One line, because there is one kind of target and one way it goes
+              out. The row used to be two badges splitting the launch into
+              Pages via the API and groups via the browser. */}
           <div className="mb-2 flex flex-wrap gap-1.5">
-            {pages.length > 0 && (
-              <Badge tone="good">
-                {counted(pages.length, 'דף אחד', 'דפים', 'שני דפים')} · <MethodBadge method="api" />
-              </Badge>
-            )}
             {groups.length > 0 && (
               <Badge tone="info">
                 {counted(groups.length, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')} · <MethodBadge method="browser" />

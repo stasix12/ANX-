@@ -314,7 +314,10 @@ export function PostEditor({ postId }: { postId?: string }) {
   const previewVariant = variants.find((v) => v.key === previewKey) ?? null;
   const previewText = useMemo(() => renderPostText(post, previewVariant), [post, previewVariant]);
   const approvedCount = variants.filter((v) => v.approval === 'approved').length;
-  const pageName = targets.find((t) => t.channel === 'facebook_page')?.name || business.name;
+  /* The name the preview signs the post with. It used to prefer a connected
+     Facebook Page's name; with Pages gone, the business's own name is the
+     only answer — and it always was, for an account with no Pages. */
+  const pageName = business.name;
 
   function update<K extends keyof PostInput>(key: K, value: PostInput[K]) {
     setPost((p) => ({ ...p, [key]: value }));

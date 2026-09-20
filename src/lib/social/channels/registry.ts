@@ -1,15 +1,19 @@
 import 'server-only';
 import type { Channel } from '../types';
-import { facebookPageChannel } from './facebookPage';
 import { manualGroupChannel } from './manualGroup';
 import type { ChannelAdapter } from './types';
 
 /**
- * All channel adapters, keyed by target.channel. Instagram will slot in here
- * once the Instagram Graph API (content publishing) adapter exists.
+ * All channel adapters, keyed by target.channel.
+ *
+ * Facebook Pages are gone. This product publishes to GROUPS, and groups have
+ * had no Meta API since April 2024 — they go through the browser on the
+ * owner's own machine. The Pages path was the other half of a two-channel
+ * design that the business never used: zero Pages connected, zero published.
+ * What is left here is the one channel the server still owns, the manual
+ * hand-off for a group the browser could not finish on its own.
  */
 const adapters: Partial<Record<Channel, ChannelAdapter>> = {
-  facebook_page: facebookPageChannel,
   facebook_group_manual: manualGroupChannel,
 };
 

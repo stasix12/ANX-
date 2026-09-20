@@ -367,6 +367,7 @@ export function LiveQueueHero({
   nextAt,
   nextTargetName,
   onRunNow,
+  onTune,
   onResume,
   busy,
   resumeBusy,
@@ -401,6 +402,16 @@ export function LiveQueueHero({
    * thing repeated: the system card owns the dot and the daily bar, the run
    * card owns the thumbnail and the per-run bar, and neither owns both.
    */
+  /**
+   * Opens the queue tuner for the row this panel is about.
+   *
+   * It used to be reachable only by tapping the countdown box. That box is
+   * gone, and for one commit the ONLY way into the tuner was the run card —
+   * which renders only when a run is featured, so a queue with no featured run
+   * had no way at all to change its interval or bring it forward. A control
+   * the owner can use must not depend on another card being on screen.
+   */
+  onTune?: () => void;
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
   workerOnline?: boolean;
@@ -562,8 +573,15 @@ export function LiveQueueHero({
         runs one worker tick over rows whose time has already come, and it
         appears only in the minutes when there is such a row.
       */}
+      {nextAt && onTune && !paused && systemState !== 'empty' && (
+        <Button variant="secondary" size="md" className="mt-3 w-full justify-center gap-1.5" onClick={onTune}>
+          <CalendarIcon aria-hidden className="h-4 w-4" />
+          ערוך מועד ומרווח
+        </Button>
+      )}
+
       {due && onRunNow && !paused && systemState !== 'empty' && (
-        <Button variant="secondary" size="md" className="mt-3 w-full" busy={busy} onClick={onRunNow}>
+        <Button variant="secondary" size="md" className="mt-2 w-full" busy={busy} onClick={onRunNow}>
           הרץ עכשיו
         </Button>
       )}

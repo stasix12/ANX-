@@ -804,22 +804,51 @@ console.log('unit tests OK');
   assert.ok(hero.includes('ערוך מועד'), 'the run card needs a tuner entry that does not depend on a countdown being drawn');
   assert.ok(page.includes('<QueueTunerSheet'), 'the dashboard must render the tuner');
   /*
-   * ONE entry point again, on the run card, and it is the one that survives a
-   * run that has not started. The system card no longer opens the tuner
-   * because it no longer shows an instant to tune.
+   * TWO doorways, ONE sheet — and each doorway must name its own queue.
+   *
+   * For one commit the run card was the only way in, and the run card renders
+   * only when a run is featured: a queue with no featured run had no way at
+   * all to change its interval or bring it forward. A control the owner can
+   * use must never depend on another card being on screen.
+   *
+   * And the scope has to travel with the tap. The sheet used to compute
+   * `campaignId` itself from data.upcoming[0], which is the system panel's
+   * subject — so opening it from the RUN CARD tuned whatever queue happened
+   * to hold the soonest row, which need not be that run at all.
    */
   assert.equal(
-    (page.match(/onTune=\{\(\) => setTunerOpen\(true\)\}/g) ?? []).length,
-    1,
-    'the run card opens the one tuner',
+    (page.match(/onTune=\{\(\) => setTuner\(\{/g) ?? []).length,
+    2,
+    'both the system panel and the run card must open the tuner — the run card alone disappears with the run',
+  );
+  assert.ok(
+    page.includes('onTune={() => setTuner({ campaignId: featured.campaign.id })}'),
+    'the run card tunes ITS OWN run',
+  );
+  assert.ok(
+    page.includes("onTune={() => setTuner({ campaignId: data.upcoming[0]?.campaign_id ?? undefined })}"),
+    'and the system panel tunes the queue it is actually about',
+  );
+  assert.ok(
+    page.includes('campaignId={tuner?.campaignId}'),
+    'the sheet takes the scope it was opened with and never re-derives one',
   );
   assert.equal((page.match(/<QueueTunerSheet/g) ?? []).length, 1, 'and there is only ever one tuner to open');
   /*
-   * ...scoped to the campaign of the row the countdown was actually derived
-   * from. It used to be scoped to the FEATURED run, whose rows need not be the
-   * row on screen at all.
+   * The rule this line used to hold — "the tuner opens on the queue the tap
+   * was about" — is now asserted three times just above, once per doorway
+   * plus one for the sheet not re-deriving a scope of its own.
+   *
+   * What it pinned was the IMPLEMENTATION of that rule from when there was a
+   * single doorway: the sheet reading data.upcoming[0] for itself. With two
+   * doorways that spelling became the bug — tapping the run card tuned
+   * whatever queue held the soonest row. So the assertion is replaced by ones
+   * that state the rule directly, not relaxed.
    */
-  assert.ok(page.includes('campaignId={data?.upcoming[0]?.campaign_id ?? undefined}'), 'the tuner opens on the queue the countdown came from');
+  assert.ok(
+    !page.includes('campaignId={data?.upcoming[0]?.campaign_id ?? undefined}'),
+    'the sheet must not compute its own scope — it belongs to whichever card was tapped',
+  );
 
   /*
    * Honesty, in the two forms this module keeps having to re-learn: no invented

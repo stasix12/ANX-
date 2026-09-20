@@ -96,8 +96,18 @@ export default function SocialDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  /* The queue tuner, opened from the "next publication" box of either hero. */
-  const [tunerOpen, setTunerOpen] = useState(false);
+  /*
+   * The queue tuner, and WHICH queue it is about.
+   *
+   * A bare boolean was enough while there was one doorway. With two — the
+   * system panel, which is about data.upcoming[0], and the run card, which is
+   * about the featured run — a single `campaignId` computed at the render of
+   * the SHEET tuned whichever of those the expression happened to name,
+   * regardless of which card was tapped. Those are different queues whenever
+   * the soonest waiting row belongs to another run, so the scope travels with
+   * the tap that opened it.
+   */
+  const [tuner, setTuner] = useState<{ campaignId?: string } | null>(null);
   /* The featured run's cover. Read on its own, and only when a run is
      featured: the queue rows carry their post, but only while something is
      still scheduled - a finished run would lose its picture exactly when the
@@ -646,6 +656,7 @@ export default function SocialDashboard() {
             workerOnline={data.workerOnline}
             intervention={intervention}
             onRunNow={runNow}
+            onTune={() => setTuner({ campaignId: data.upcoming[0]?.campaign_id ?? undefined })}
             onResume={() => act('resume', () => setPaused(false), 'הפרסום חודש.')}
             busy={busy === 'run'}
             resumeBusy={busy === 'resume'}
@@ -773,7 +784,7 @@ export default function SocialDashboard() {
               onPause={() => act('camp-pause', () => pauseCampaign(featured.campaign.id, true), 'הסבב הושהה.')}
               onResume={() => act('camp-resume', () => pauseCampaign(featured.campaign.id, false), 'הסבב ממשיך.')}
               onReset={() => resetRun(featured.campaign.id, featured.campaign.name, featured.state)}
-              onTune={() => setTunerOpen(true)}
+              onTune={() => setTuner({ campaignId: featured.campaign.id })}
               /* "Now" on that card is a claim about a machine, so it is made
                  from a machine fact rather than from the clock. */
               workerOnline={data.workerOnline}
@@ -895,15 +906,12 @@ export default function SocialDashboard() {
           )}
         </div>
       )}
+      {/* Scope comes from the doorway, never re-derived here: the panel that
+          was tapped is the queue the owner meant. */}
       <QueueTunerSheet
-        open={tunerOpen}
-        onClose={() => setTunerOpen(false)}
-        /* The campaign of the row the countdown was actually derived from —
-           not the featured run's. The system card counts down to
-           data.upcoming[0], which may belong to another campaign or to none,
-           and scoping the sheet to `featured` tuned a queue the owner was not
-           looking at. */
-        campaignId={data?.upcoming[0]?.campaign_id ?? undefined}
+        open={tuner !== null}
+        onClose={() => setTuner(null)}
+        campaignId={tuner?.campaignId}
         onChanged={load}
       />
       {confirm.dialog}

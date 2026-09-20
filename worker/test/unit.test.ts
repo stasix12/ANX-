@@ -1924,6 +1924,25 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/fbAccount \?/.test(hero), 'the chip renders the account only when there is one');
   assert.ok(/'מחובר' : 'לא מחובר'/.test(hero), 'and falls back to the machine state when there is not');
 
+  /*
+   * AND THE CONSEQUENCE OF REMOVING PAGES.
+   *
+   * `stalledSince` only fires once a publication is actually past due, which
+   * was right while Pages existed: the server published those through the
+   * Graph API with no PC involved, so a sleeping machine slowed the queue
+   * rather than stopping it. Every publication now goes out through that
+   * machine's browser, so an offline worker with rows waiting is an
+   * intervention on its own — the screen must not read "המערכת פעילה" over a
+   * queue that cannot advance.
+   */
+  const dashSrc = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
+  assert.ok(
+    /\(!data\.workerOnline && summary\.queued > 0\) \|\|[\s\S]{0,80}stalledSince/.test(dashSrc),
+    'an offline PC with rows waiting must be needs_intervention before anything is late',
+  );
+  assert.ok(dashSrc.includes("title: 'התוכנה במחשב לא פועלת'"), 'and it must say which thing is not running');
+  assert.ok(/start-worker\.cmd/.test(dashSrc), 'naming the one action that fixes it');
+
   console.log('signed-in-account tests OK');
 }
 

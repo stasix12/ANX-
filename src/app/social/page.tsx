@@ -493,7 +493,24 @@ export default function SocialDashboard() {
     ? 'empty'
     : data.control.paused
       ? 'paused'
-      : stalledSince || summary.needsHuman > 0 || data.workerNeedsAuth || data.counts.paused > 0
+      : /*
+         * THE PC BEING OFF IS NOW AN INTERVENTION IN ITSELF, not only once a
+         * publication is already late.
+         *
+         * `stalledSince` waits for a row to go past due, and that was right
+         * while Facebook Pages existed: the server published those through the
+         * Graph API with no PC involved, so a sleeping machine slowed the
+         * queue rather than stopping it. Pages are gone. EVERY publication this
+         * product makes now goes out through the browser on that machine, so
+         * with it off nothing will move — and the screen was still reading
+         * "המערכת פעילה" over a queue that could not advance, right up until
+         * the first row was two minutes late.
+         */
+        (!data.workerOnline && summary.queued > 0) ||
+        stalledSince ||
+        summary.needsHuman > 0 ||
+        data.workerNeedsAuth ||
+        data.counts.paused > 0
         ? 'needs_intervention'
         : summary.queued === 0 && data.upcoming.length === 0
           ? 'empty'
@@ -519,7 +536,14 @@ export default function SocialDashboard() {
             actionLabel: 'מה לעשות',
             href: '#browser-status',
           }
-        : data.workerNeedsAuth
+        : !data.workerOnline && summary.queued > 0
+          ? {
+              title: 'התוכנה במחשב לא פועלת',
+              body: `${counted(summary.queued, 'פרסום אחד ממתין בתור', 'פרסומים ממתינים בתור', 'שני פרסומים ממתינים בתור')} ואף אחד מהם לא יֵצא: הפרסום לקבוצות נעשה מהדפדפן שעל המחשב שלכם. פתחו את התיקייה ולחצו פעמיים על start-worker.cmd, והשאירו את החלון פתוח.`,
+              actionLabel: 'מה לעשות',
+              href: '#browser-status',
+            }
+          : data.workerNeedsAuth
           ? {
               title: 'פייסבוק מבקשת אימות במחשב',
               body: 'התוכנה במחשב פועלת, אבל חלון הדפדפן שלה מחכה שתתחברו לפייסבוק. עד אז פרסום לקבוצות לא יצא.',

@@ -10,7 +10,7 @@ import { QuickActions } from '@/components/social/QuickActions';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
-import { AlertBar, Button, ButtonLink, Card, ErrorState, Freshness, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
+import { AlertBar, Button, ButtonLink, Card, ErrorState, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
 import {
   callSocialApi,
   campaignStates,
@@ -657,48 +657,22 @@ export default function SocialDashboard() {
             intervention={intervention}
             onRunNow={runNow}
             onTune={() => setTuner({ campaignId: data.upcoming[0]?.campaign_id ?? undefined })}
+            updatedAt={updatedAt}
+            refreshing={refreshing}
+            onRefresh={async () => {
+              if (refreshing) return;
+              setRefreshing(true);
+              setError(null);
+              try {
+                await load();
+              } finally {
+                setRefreshing(false);
+              }
+            }}
             onResume={() => act('resume', () => setPaused(false), 'הפרסום חודש.')}
             busy={busy === 'run'}
             resumeBusy={busy === 'resume'}
           />
-
-          {/*
-            HOW OLD IS WHAT YOU ARE LOOKING AT, and the way to ask again.
-
-            Nothing in this module said when its numbers last landed. The
-            dashboard stops polling while the tab is hidden — correct for a
-            metered plan — so the screen an owner returns to after locking the
-            phone looked exactly like one a second old. `updatedAt` is set on
-            SUCCESS only, so a failed refresh leaves the older stamp standing
-            rather than resetting the clock on data that did not arrive.
-
-            No pull-to-refresh: the page scrolls inside the document, two
-            fixed overlays (the tab bar and the selection bars) sit at the
-            bottom of that scroll, and a touch handler on the document would
-            have to fight Safari's own rubber-banding at the top. An explicit
-            control costs one 44px row and cannot misfire mid-scroll.
-          */}
-          <div className="flex items-center justify-center gap-2">
-            <Freshness at={updatedAt} />
-            <button
-              type="button"
-              disabled={refreshing}
-              onClick={async () => {
-                if (refreshing) return;
-                setRefreshing(true);
-                setError(null);
-                try {
-                  await load();
-                } finally {
-                  setRefreshing(false);
-                }
-              }}
-              className="inline-flex min-h-11 items-center gap-1.5 px-2 text-[11px] font-bold text-brand-400 disabled:opacity-60"
-            >
-              <RepeatIcon aria-hidden className="h-3.5 w-3.5" />
-              רענן עכשיו
-            </button>
-          </div>
 
           {/* 2 — how many. The card above answers yes/no; this row answers how
               much, and that split is the whole hierarchy. Colour marks the

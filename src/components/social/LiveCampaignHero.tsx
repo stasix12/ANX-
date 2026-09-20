@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { CalendarIcon, ChevronIcon, PauseIcon } from '@/components/icons';
+import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
 import { countdownTo } from '@/lib/social/countdown';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
@@ -368,6 +368,9 @@ export function LiveQueueHero({
   nextTargetName,
   onRunNow,
   onTune,
+  onRefresh,
+  refreshing = false,
+  updatedAt = null,
   onResume,
   busy,
   resumeBusy,
@@ -412,6 +415,21 @@ export function LiveQueueHero({
    * the owner can use must not depend on another card being on screen.
    */
   onTune?: () => void;
+  /**
+   * Ask for fresh numbers, and say how old the ones on screen are.
+   *
+   * This pair used to be a centred row of its own between two cards, and it
+   * read as a status bar the product does not otherwise have — the owner's
+   * words were "it just sits there irritating the eye". The CONTROL cannot go:
+   * the dashboard stops polling while the tab is hidden, so a screen returned
+   * to after locking the phone needs a way to ask again. It moves into this
+   * card's corner as an icon, and the age it used to print in the middle of
+   * the page is now the button's accessible name, where it informs the people
+   * who need it and interrupts nobody.
+   */
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  updatedAt?: Date | null;
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
   workerOnline?: boolean;
@@ -485,6 +503,18 @@ export function LiveQueueHero({
             </p>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {onRefresh && (
+            <button
+              type="button"
+              disabled={refreshing}
+              onClick={onRefresh}
+              aria-label={updatedAt ? `רענן עכשיו — הנתונים עודכנו ${relativeHe(updatedAt.toISOString())}` : 'רענן עכשיו'}
+              className="grid h-11 w-11 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-ink-900 hover:text-mist-300 disabled:opacity-60"
+            >
+              <RepeatIcon aria-hidden className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
         <Link
           href="#browser-status"
           className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-extrabold ${
@@ -494,6 +524,7 @@ export function LiveQueueHero({
           {workerOnline ? 'מחובר' : 'לא מחובר'}
           <ChevronIcon aria-hidden className="h-4 w-4 rtl:rotate-180" />
         </Link>
+        </div>
       </div>
 
       <div className="mt-3.5">

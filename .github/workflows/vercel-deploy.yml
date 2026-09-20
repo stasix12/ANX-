@@ -55,3 +55,38 @@ jobs:
             2??) echo "Deployment requested." ;;
             *) echo "The deploy hook was rejected. Check that the secret still matches the hook in Vercel."; exit 1 ;;
           esac
+
+      # WHY THIS STEP EXISTS.
+      #
+      # The hook returns 201 and {"state":"PENDING"} the moment Vercel accepts
+      # the request. It says nothing about whether the build then succeeded, so
+      # this job went green for e33f49c and 290907c while production stayed on
+      # 5a11493 — the owner reloaded, saw the old screen, and had no way to
+      # tell a fix that did not ship from a fix that did not work. That is the
+      # same class of silence /api/version was added to end, one layer up.
+      #
+      # So: ask production what it is running until it says the commit we just
+      # pushed. A build that never lands now fails the job loudly instead of
+      # reporting success.
+      - name: Wait for production to report this commit
+        env:
+          SITE: ${{ vars.PRODUCTION_URL || 'https://anx-ggyo.vercel.app' }}
+          EXPECTED: ${{ github.sha }}
+        run: |
+          set -u
+          short="${EXPECTED:0:7}"
+          echo "Waiting for ${SITE} to report build ${short}"
+          live=''
+          # 30 x 20s = 10 minutes. A normal build lands in well under two.
+          for i in $(seq 1 30); do
+            body=$(curl -sS --max-time 15 "${SITE}/api/version" || true)
+            live=$(printf '%s' "${body}" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')
+            echo "attempt ${i}: production reports '${live}'"
+            if [ "${live}" = "${short}" ]; then
+              echo "Production is on ${short}."
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::Production is still on '${live}' after 10 minutes, not '${short}'. The deploy hook was accepted but the build did not reach production — open the Vercel dashboard, find the newest deployment for this branch and read why it failed."
+          exit 1

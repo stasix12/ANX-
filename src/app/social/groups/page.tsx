@@ -37,10 +37,10 @@ import {
   updateTarget,
 } from '@/lib/social/client';
 import { formatDayMonthHe } from '@/lib/social/time';
-import { detectCity, sortCities } from '@/lib/social/cities';
+import { KNOWN_CITIES, detectCity, sortCities } from '@/lib/social/cities';
 import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { ChartIcon, CloseIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
+import { ChartIcon, CloseIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent';
 type View = 'grid' | 'list';
@@ -101,6 +101,16 @@ export default function GroupsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState('');
+  /*
+   * Which groups the city sheet is about.
+   *
+   * One sheet, two doorways: a single group's "⋯" and the selection bar. It
+   * holds IDS rather than a mode flag, so the sheet never has to ask which of
+   * the two opened it — and a single group cannot be mistaken for the
+   * selection that happens to be active behind it.
+   */
+  const [cityFor, setCityFor] = useState<string[] | null>(null);
+  const [cityDraft, setCityDraft] = useState('');
   const [shown, setShown] = useState(CHUNK);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +150,13 @@ export default function GroupsPage() {
 
   const cityOf = useCallback((g: SocialTarget) => g.city || detectCity(g.name), []);
   const all = useMemo(() => groups ?? [], [groups]);
+  /* Every city already in use, plus the ones detectCity knows — so a group in
+     "אחר" can be given a real city without typing it. */
+  const cityChoices = useMemo(
+    () => sortCities(Array.from(new Set([...KNOWN_CITIES, ...all.map((g) => g.city).filter(Boolean) as string[]]))),
+    [all],
+  );
+
 
   const recentCutoff = useMemo(() => new Date(Date.now() - RECENT_DAYS * 86_400_000).toISOString(), []);
 
@@ -232,6 +249,7 @@ export default function GroupsPage() {
       { label: 'פתח את הקבוצה בפייסבוק', icon: <UsersIcon className={mk} />, onSelect: () => window.open(g.url, '_blank', 'noreferrer') },
       { label: 'פרופיל והיסטוריה', icon: <ChartIcon className={mk} />, onSelect: () => router.push(`/social/groups/${g.id}`) },
       { label: 'צור פוסט לקבוצה הזו', icon: <PencilIcon className={mk} />, onSelect: () => router.push(`/social/posts/new?targets=${g.id}`) },
+      { label: 'שייך לעיר', icon: <MapPinIcon className={mk} />, onSelect: () => setCityFor([g.id]) },
       { label: g.favorite ? 'הסר מהמועדפות' : 'הוסף למועדפות', icon: <StarIcon className={mk} />, onSelect: () => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite })) },
       { label: g.enabled ? 'השהה קבוצה' : 'הפעל קבוצה', icon: g.enabled ? <PauseIcon className={mk} /> : <PlayIcon className={mk} />, onSelect: () => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: !g.enabled }), g.enabled ? 'הקבוצה הושהתה.' : 'הקבוצה הופעלה.') },
       { label: 'רענן שם ותמונה', icon: <RepeatIcon className={mk} />, onSelect: () => act(`sync-${g.id}`, () => requestGroupRefresh([g.id]), 'התוכנה במחשב תמשוך מחדש כשתהיה פנויה.') },
@@ -281,6 +299,7 @@ export default function GroupsPage() {
     { label: 'הפעל', icon: <PlayIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-on', () => bulkUpdateTargets(selected, { enabled: true }), 'הופעלו.') },
     { label: 'השהה', icon: <PauseIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-off', () => bulkUpdateTargets(selected, { enabled: false }), 'הושהו.') },
     { label: 'סמן כמועדפות', icon: <StarIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-fav', () => bulkUpdateTargets(selected, { favorite: true }), 'סומנו כמועדפות.') },
+    { label: 'שייך לעיר', icon: <MapPinIcon className={mk} />, disabled: selected.length === 0, onSelect: () => setCityFor(selected) },
     { label: 'שייך לקטגוריה', icon: <TagIcon className={mk} />, disabled: selected.length === 0, onSelect: () => { setCategoryDraft(''); setCategoryOpen(true); } },
     {
       label: 'הסר מהרשימה',
@@ -491,6 +510,7 @@ export default function GroupsPage() {
                         onToggleFavorite={() => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite }))}
                         actions={menuFor(g)}
                         nextAt={nextByTarget[g.id]}
+                        cityLabel={cityOf(g)}
                       />
                     ))}
                   </ul>
@@ -585,6 +605,88 @@ export default function GroupsPage() {
           </div>
         </div>
       )}
+
+      {/*
+        CITY ASSIGNMENT — one tap per group, or one tap for fifty.
+
+        detectCity() reads the group's NAME, and 57 of these groups are named
+        things it cannot read, so they all pile into "אחר" and the owner has no
+        way to sort them. This is that way: the cities already in use plus the
+        ones the detector knows, as buttons — no typing for the common case,
+        and a free field for a city nobody has used yet.
+
+        It writes `city`, which is what cityOf() prefers over the guess, so the
+        group moves into its section and the card's chip turns brand-coloured
+        the moment this closes.
+      */}
+      <Sheet
+        open={cityFor !== null}
+        onClose={() => setCityFor(null)}
+        title={cityFor?.length === 1 ? 'שיוך לעיר' : `שיוך לעיר של ${cityFor?.length ?? 0} קבוצות`}
+      >
+        <p className="mb-3 text-sm text-mist-500">
+          {cityFor?.length === 1
+            ? 'בחרו עיר לקבוצה הזו. הקבוצה תעבור לקטע של אותה עיר, והסינון לפי עיר יכלול אותה.'
+            : 'בחרו עיר לכל הקבוצות שסימנתם. הן יעברו לקטע של אותה עיר יחד.'}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {cityChoices.map((c) => (
+            <button
+              key={c}
+              type="button"
+              disabled={busy === 'bulk-city'}
+              onClick={() => {
+                const ids = cityFor ?? [];
+                setCityFor(null);
+                act('bulk-city', () => bulkUpdateTargets(ids, { city: c }), ids.length === 1 ? `שויכה ל${c}.` : `${ids.length} קבוצות שויכו ל${c}.`);
+              }}
+              className="min-h-11 rounded-xl bg-ink-800 px-3.5 text-sm font-bold text-mist-100 transition-colors hover:bg-ink-700 disabled:opacity-50"
+            >
+              <span dir="auto">{c}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 border-t border-ink-700 pt-4">
+          <Field label="עיר אחרת" hint="נשמרת ותופיע ברשימה למעלה בפעם הבאה.">
+            <input
+              className={inputClass}
+              value={cityDraft}
+              onChange={(e) => setCityDraft(e.target.value)}
+              placeholder="שם העיר"
+            />
+          </Field>
+          <Button
+            className="mt-2 w-full"
+            size="lg"
+            disabled={!cityDraft.trim()}
+            busy={busy === 'bulk-city'}
+            onClick={() => {
+              const ids = cityFor ?? [];
+              const c = cityDraft.trim();
+              setCityFor(null);
+              setCityDraft('');
+              act('bulk-city', () => bulkUpdateTargets(ids, { city: c }), ids.length === 1 ? `שויכה ל${c}.` : `${ids.length} קבוצות שויכו ל${c}.`);
+            }}
+          >
+            שמור עיר
+          </Button>
+          {/* Clearing it is not the same as choosing "אחר": it hands the group
+              back to the detector, which is the right answer when a city was
+              set by mistake on a group whose name does say where it is. */}
+          <button
+            type="button"
+            className="mt-2 min-h-11 w-full text-xs font-bold text-mist-500 underline"
+            onClick={() => {
+              const ids = cityFor ?? [];
+              setCityFor(null);
+              act('bulk-city', () => bulkUpdateTargets(ids, { city: '' }), 'השיוך נוקה — העיר תיקבע לפי שם הקבוצה.');
+            }}
+          >
+            נקה שיוך וחזור לזיהוי לפי השם
+          </button>
+        </div>
+      </Sheet>
 
       {/* Category assignment for the whole selection. */}
       <Sheet

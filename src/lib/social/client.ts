@@ -179,7 +179,7 @@ export async function requestGroupRefresh(ids?: string[]): Promise<void> {
   unwrap(await q);
 }
 
-export async function bulkUpdateTargets(ids: string[], patch: Partial<Pick<SocialTarget, 'enabled' | 'favorite' | 'category'>>): Promise<void> {
+export async function bulkUpdateTargets(ids: string[], patch: Partial<Pick<SocialTarget, 'enabled' | 'favorite' | 'category' | 'city'>>): Promise<void> {
   if (!ids.length) return;
   unwrap(await db().from('social_targets').update(patch).in('id', ids));
 }

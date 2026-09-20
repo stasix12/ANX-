@@ -41,6 +41,7 @@ export function GroupCard({
   onToggleFavorite,
   actions,
   nextAt,
+  cityLabel,
 }: {
   group: SocialTarget;
   /** True only while the screen is in selection mode — see the note above. */
@@ -50,6 +51,13 @@ export function GroupCard({
   onToggleFavorite: () => void;
   actions: MenuAction[];
   nextAt?: string;
+  /**
+   * The city to print: `group.city` when the owner set one, otherwise what
+   * detectCity() guessed from the name. The page computes it, because the page
+   * is what groups the grid by it — two answers to "which city" is the defect
+   * this product keeps removing.
+   */
+  cityLabel?: string;
 }) {
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -69,19 +77,36 @@ export function GroupCard({
 
   const body = (
     <>
-      <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={72} />
+      {/* 56, not 72. At 72 the picture was most of the tile and the owner
+          reading a wall of them was reading pictures, not names — and it is
+          the NAME that says which group this is. The name gets the room. */}
+      <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={56} />
       <p dir="auto" className="mt-1.5 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={group.name}>
         {group.name}
       </p>
-      {/* No city badge, and nothing is lost by that: the grid on /social/groups
-          is always grouped into city sections, and a section's heading is
-          `cityOf(g)` — `g.city` when it is set, which is exactly the string
-          this badge printed. Every card in "באר שבע" carried a "באר שבע"
-          chip. The row is also conditional as a whole rather than only its
-          child, because an empty flex row still spent its top margin. */}
-      {group.category && (
-        <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
-          <Badge tone="brand"><span dir="auto" className="block max-w-[6.5rem] truncate">{group.category}</span></Badge>
+      {/*
+        THE CITY IS BACK ON THE CARD, and it now says something the section
+        heading above it does not.
+
+        It was taken off because every card under "באר שבע" carried a
+        "באר שבע" chip — true, and it stayed true right up until 57 groups
+        landed in "אחר". There the heading says only that the city is unknown,
+        and the one thing the owner needs to see per card is whether THIS one
+        has been given a city or is still guessed from its name. So the chip
+        distinguishes the two: a set city is brand-coloured and certain, a
+        guess is neutral and marked as one. That is not a repeat of the
+        heading; it is the difference between a fact and a guess.
+      */}
+      {(cityLabel || group.category) && (
+        <div className="mt-1 flex w-full flex-wrap items-center justify-center gap-1">
+          {cityLabel && (
+            <Badge tone={group.city ? 'brand' : 'neutral'}>
+              <span dir="auto" className="block max-w-[6.5rem] truncate">{group.city ? cityLabel : `${cityLabel}?`}</span>
+            </Badge>
+          )}
+          {group.category && (
+            <Badge tone="neutral"><span dir="auto" className="block max-w-[6.5rem] truncate">{group.category}</span></Badge>
+          )}
         </div>
       )}
       {/* One meta line, not two. "פורסם 18.09" and "הבא: 20.09" were separate

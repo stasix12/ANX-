@@ -1876,6 +1876,44 @@ const scenario: { step: string; line: string }[] = [];
   console.log('dashboard cross-scope invariant tests OK');
 }
 
+/* ----------------------------------------- assigning a group to a city */
+{
+  const groupsPage = readFileSync(new URL('../../src/app/social/groups/page.tsx', import.meta.url), 'utf8');
+  const card = readFileSync(new URL('../../src/components/social/GroupCard.tsx', import.meta.url), 'utf8');
+
+  /*
+   * detectCity() reads the group's NAME, so a group named something it cannot
+   * read lands in "אחר" — 57 of them did — and nothing on the screen could
+   * move it out. The sheet is that way out, and it must be reachable BOTH for
+   * one group and for a selection, or sorting 57 of them is 57 trips.
+   */
+  assert.ok(/'שייך לעיר'[\s\S]{0,120}setCityFor\(\[g\.id\]\)/.test(groupsPage), 'a single group must be assignable from its own menu');
+  assert.ok(/'שייך לעיר'[\s\S]{0,200}setCityFor\(selected\)/.test(groupsPage), 'and a whole selection at once');
+  assert.equal((groupsPage.match(/open=\{cityFor !== null\}/g) ?? []).length, 1, 'one sheet serves both doorways');
+
+  /*
+   * It must write `city`, the field cityOf() prefers over the guess — writing
+   * anything else would leave the group in "אחר" with a chip claiming
+   * otherwise.
+   */
+  assert.ok(groupsPage.includes("bulkUpdateTargets(ids, { city: c })"), 'the sheet writes the city field itself');
+  assert.ok(
+    groupsPage.includes("const cityOf = useCallback((g: SocialTarget) => g.city || detectCity(g.name), [])"),
+    'and a set city still outranks the guess',
+  );
+  assert.ok(groupsPage.includes('cityLabel={cityOf(g)}'), 'the card is told the city by the page, so the grid and the chip cannot disagree');
+
+  /*
+   * A guess and a fact must not look the same. The chip is brand-coloured
+   * when the owner set the city and neutral with a "?" when it was inferred
+   * — otherwise the card asserts something the product does not know.
+   */
+  assert.ok(/tone=\{group\.city \? 'brand' : 'neutral'\}/.test(card), 'a set city and a guessed one must be told apart');
+  assert.ok(card.includes('`${cityLabel}?`'), 'and the guess must say it is one');
+
+  console.log('city-assignment tests OK');
+}
+
 /* ----------------------------------------- the upcoming list scrolls */
 {
   const timeline = readFileSync(new URL('../../src/components/social/Timeline.tsx', import.meta.url), 'utf8');

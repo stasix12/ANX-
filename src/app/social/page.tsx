@@ -37,7 +37,7 @@ import { agree, counted, startOfZonedDay } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { AlertTriangleIcon, GearIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, UsersIcon } from '@/components/icons';
+import { AlertTriangleIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, UsersIcon, WrenchIcon } from '@/components/icons';
 
 /**
  * How many upcoming rows the timeline reads. The card's subtitle prints the
@@ -732,7 +732,7 @@ export default function SocialDashboard() {
               />
               <StatCard
                 dense
-                icon={<GearIcon aria-hidden className="h-4 w-4" />}
+                icon={<WrenchIcon aria-hidden className="h-4 w-4" />}
                 tone={summary.needsHuman ? 'warn' : 'neutral'}
                 label="דורשים טיפול"
                 value={summary.needsHuman}

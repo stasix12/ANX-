@@ -1943,6 +1943,25 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(dashSrc.includes("title: 'התוכנה במחשב לא פועלת'"), 'and it must say which thing is not running');
   assert.ok(/start-worker\.cmd/.test(dashSrc), 'naming the one action that fixes it');
 
+  /*
+   * NO SILENT FAILURE. Three things can stop the name reaching the dashboard —
+   * the page not yielding one, the upload failing, and the v9 columns not
+   * existing — and from the outside all three looked identical: a chip saying
+   * "מחובר" with no name. supabase-js returns errors rather than throwing, so
+   * ignoring an update's result is a decision not to know.
+   */
+  assert.ok(
+    /const \{ error \} = await db\.from\('social_workers'\)\.update\(patch\)/.test(localWorker),
+    'the account write must check its own result',
+  );
+  assert.ok(/'account_save_failed'/.test(localWorker), 'and a failed write must reach the activity log, not only a terminal');
+  assert.ok(/social-schema-v9\.sql/.test(localWorker), 'naming the fix, since that is the likely cause');
+
+  /* The fallback: /me's title is the signed-in user's name, and it is as
+     locale-independent as the cookie. Without it an unreadable home layout
+     left the feature silently doing nothing. */
+  assert.ok(/facebook\.com\/me/.test(account), 'a name unreadable on the home layout falls back to the profile page');
+
   console.log('signed-in-account tests OK');
 }
 

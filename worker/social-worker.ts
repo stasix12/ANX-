@@ -704,10 +704,27 @@ async function waitForConfirmation(queueId: string, page: Page): Promise<'confir
  * is nobody signed in" — and browser_state already carries the second one.
  */
 async function recordAccount(state: WorkerState, account: AccountProfile | null | undefined): Promise<void> {
-  if (!account?.id) return;
+  /*
+   * NOTHING HERE FAILS QUIETLY, and the first version of it did.
+   *
+   * Three different things can stop the owner's name reaching the dashboard —
+   * the page not yielding one, the storage upload failing, and the columns not
+   * existing yet because v9 has not been run — and all three used to look
+   * exactly alike from the outside: a chip that said "מחובר" and no name, with
+   * nothing written anywhere to say which. supabase-js returns errors rather
+   * than throwing, so ignoring the result of an update is a decision to not
+   * know. Each case now names itself in the terminal, and the one the owner
+   * can actually fix reaches the activity log too.
+   */
+  if (!account?.id) {
+    console.log('[worker] ℹ לא זוהה חשבון פייסבוק מחובר (אין עוגיית c_user).');
+    return;
+  }
   const db = await workerDb();
   const patch: Record<string, string> = { fb_user_id: account.id };
   if (account.name) patch.fb_user_name = account.name;
+  else console.log('[worker] ℹ זוהה חשבון פייסבוק אבל לא נקרא ממנו שם — הדשבורד יציג "מחובר" בלבד.');
+
   if (account.image) {
     const objectPath = `workers/${state.id}.png`;
     const { error } = await db.storage
@@ -715,9 +732,27 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
       .upload(objectPath, account.image.bytes, { contentType: account.image.contentType, upsert: true });
     // The cache-buster matters: the object path is stable, so without it the
     // dashboard keeps showing the previous owner's face after a re-login.
-    if (!error) patch.fb_avatar_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
+    if (error) console.error('[worker] ✗ העלאת תמונת הפרופיל נכשלה:', error.message);
+    else patch.fb_avatar_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
   }
-  await db.from('social_workers').update(patch).eq('id', state.id);
+
+  const { error } = await db.from('social_workers').update(patch).eq('id', state.id);
+  if (error) {
+    /*
+     * The overwhelmingly likely cause is v9 not having been run, and that is
+     * something the owner can fix in a minute — so it goes where they read,
+     * not only into a terminal they do not watch.
+     */
+    console.error('[worker] ✗ שמירת פרטי החשבון נכשלה:', error.message);
+    await logActivity(
+      'warn',
+      'account_save_failed',
+      'לא הצלחנו לשמור את פרטי חשבון הפייסבוק המחובר. סביר שצריך להריץ את social-schema-v9.sql ב-Supabase.',
+      { detail: error.message },
+    );
+    return;
+  }
+  console.log(`[worker] ✓ חשבון פייסבוק מחובר: ${patch.fb_user_name || account.id}`);
 }
 
 /* ------------------------------------------------------------ helpers */

@@ -1,4 +1,5 @@
 import type { Page } from 'playwright-core';
+import { patterns } from './selectors';
 
 /**
  * WHO is signed in, read from the browser the worker actually publishes with.
@@ -54,7 +55,55 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
     }, id)
     .catch(() => null);
 
-  if (!found) return { id, name: '', image: null };
+  /*
+   * FALLBACK: the profile page's own title.
+   *
+   * The rail link above is the cheap read — it is already on screen. But the
+   * home layout is not guaranteed to carry it, and when it does not, the first
+   * version of this returned an id with no name and the dashboard had nothing
+   * to show: a feature that worked or silently did not, with no way to tell
+   * which. /me redirects to the signed-in user's profile and its <title> is
+   * their name, which is as locale-independent as the cookie was.
+   */
+  if (!found) {
+    try {
+      await page.goto('https://www.facebook.com/me', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await page.waitForTimeout(2000);
+      const title = (await page.title().catch(() => '')).replace(/^\(\d+\)\s*/, '').replace(patterns.titleSuffix, '').trim();
+      const name = title.slice(0, 80);
+      const box = await page
+        .evaluate(() => {
+          const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[];
+          const round = imgs
+            .map((img) => {
+              const r = img.getBoundingClientRect();
+              return { x: r.left, y: r.top, w: r.width, h: r.height, round: /50%|9999/.test(getComputedStyle(img).borderRadius) };
+            })
+            .filter((b) => b.round && b.w >= 60 && b.w <= 200 && b.y >= 0 && b.y < 900)
+            .sort((a, b) => b.w - a.w);
+          return round[0] ?? null;
+        })
+        .catch(() => null);
+      let image: AccountProfile['image'] = null;
+      if (box) {
+        try {
+          image = {
+            bytes: await page.screenshot({
+              clip: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.w), height: Math.round(box.h) },
+              type: 'png',
+              timeout: 10_000,
+            }),
+            contentType: 'image/png',
+          };
+        } catch {
+          image = null;
+        }
+      }
+      return { id, name, image };
+    } catch {
+      return { id, name: '', image: null };
+    }
+  }
 
   let image: AccountProfile['image'] = null;
   if (found.box.w >= 16 && found.box.y >= 0) {

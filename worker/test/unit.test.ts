@@ -1037,10 +1037,17 @@ console.log('unit tests OK');
     make([...Array(6).fill('published'), ...Array(3).fill('skipped'), 'failed']),
     { status: 'active' },
   );
-  assert.equal(campaignHeadline(mixed), '6 מתוך 10 פורסמו · 3 דולגו · 1 נכשלו');
+  /*
+   * RE-POINTED, not weakened. These two pinned "1 נכשלו" — Hebrew puts one in
+   * the singular, so that string was the defect ("לפני 1 שעות" is the same
+   * bug, and it is the one the owner reported). The assertions still pin the
+   * exact sentence, at the grammar campaign.ts now produces; three and above
+   * are unchanged, so the plural branch is still covered on the same line.
+   */
+  assert.equal(campaignHeadline(mixed), '6 מתוך 10 פורסמו · 3 דולגו · פרסום אחד נכשל');
   assert.equal(percentPublished(mixed.progress), 60);
   assert.equal(percentFinished(mixed.progress), 100);
-  assert.equal(unpublishedNote(mixed.progress), '3 דולגו · 1 נכשלו');
+  assert.equal(unpublishedNote(mixed.progress), '3 דולגו · פרסום אחד נכשל');
   // All published: nothing to add, and no invented zero.
   const allGood = campaignState(make(Array(5).fill('published')), { status: 'active' });
   assert.equal(unpublishedNote(allGood.progress), '');
@@ -1429,7 +1436,8 @@ const scenario: { step: string; line: string }[] = [];
   assert.equal(s.runState, 'הושלם');
   assert.equal(s.percentFinished, 100);
   assert.equal(s.percentPublished, 86, 'the bar shows publications, and 4 of 28 never published');
-  assert.equal(s.headline, '24 מתוך 28 פורסמו · 3 דולגו · 1 נכשלו');
+  // RE-POINTED with the two above: one failure is "פרסום אחד נכשל" now.
+  assert.equal(s.headline, '24 מתוך 28 פורסמו · 3 דולגו · פרסום אחד נכשל');
   agree(s, 'step 10 (finished)');
   note('10. אחרי השורה האחרונה', s);
 

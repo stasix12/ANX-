@@ -40,24 +40,31 @@ export default function SettingsPage() {
   }, []);
 
   /**
-   * WHY 'control' IS NOT IN THIS LIST.
+   * Save what this form edits, onto the rows as they are NOW.
    *
    * saveSetting() upserts the WHOLE jsonb value, so writing back a copy read
-   * at mount silently reverts anything written into that row since. The three
-   * keys below are this form's alone — nothing but this screen writes them.
-   * 'control' is not: graph.ts writes `rateLimitedUntil` when Meta asks us to
-   * slow down, worker.ts clears it when the cooldown expires, and the header's
-   * own button writes `paused` from any screen. A form that sat open for ten
-   * minutes and then pressed שמור un-paused the account and erased a live
-   * cooldown, with no way for the owner to know it had.
+   * at mount reverts anything written into that row since — and these rows do
+   * get written elsewhere. graph.ts sets `control.rateLimitedUntil` when Meta
+   * asks us to slow down, worker.ts clears it, the header's pause button
+   * writes `control.paused` from any screen, and the dashboard's queue tuner
+   * writes `limits.minGapMinutes` and `browser.groupMinGapMinutes` through
+   * applyGapSettings(). A form left open for ten minutes and then saved
+   * un-paused the account, erased a live cooldown and undid a gap the owner
+   * had just tuned, with no way for them to know it had.
    *
-   * So the two controls on that row write themselves, each merging onto the
-   * row as it is at the moment of the tap — see togglePause / clearRateLimit.
+   * So: re-read, then spread this form's fields over what came back. `control`
+   * is not here at all — its two controls write themselves on the tap, since a
+   * stop that waits for a second tap on שמור is not a stop.
    */
   async function save() {
     setBusy(true);
     try {
-      await Promise.all([saveSetting('limits', limits), saveSetting('business', business), saveSetting('browser', browser)]);
+      const [curLimits, curBrowser, curBusiness] = await Promise.all([getLimits(), getBrowserSettings(), getBusiness()]);
+      await Promise.all([
+        saveSetting('limits', { ...curLimits, ...limits }),
+        saveSetting('business', { ...curBusiness, ...business }),
+        saveSetting('browser', { ...curBrowser, ...browser }),
+      ]);
       toast('ההגדרות נשמרו.');
     } catch (err) {
       toast(friendlyMessage(err, 'השמירה נכשלה.'), 'error');
@@ -174,6 +181,9 @@ export default function SettingsPage() {
                   </div>
                   <Toggle checked={control.paused} onChange={togglePause} label="השהיה" />
                 </div>
+                {/* Two save models on one screen, so say which one this card
+                    uses. Everything above needs שמור; this switch does not. */}
+                <p className="mt-2 text-xs text-mist-500">ההשהיה נשמרת מיד — אין צורך ללחוץ "שמור".</p>
                 {control.rateLimitedUntil && (
                   <p className="mt-2 text-xs text-warning-400">
                     Meta ביקשה להאט — הפרסום מושהה עד <Stamp iso={control.rateLimitedUntil} />.{' '}

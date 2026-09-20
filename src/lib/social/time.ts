@@ -110,6 +110,66 @@ export function formatDayMonthHe(iso: string | Date, tz = TIMEZONE): string {
   }).format(d);
 }
 
+/*
+ * U+2066 LEFT-TO-RIGHT ISOLATE … U+2069 POP DIRECTIONAL ISOLATE.
+ *
+ * `formatDateTimeHe` returns "19.09.2026, 14:05" — two European-number runs
+ * around a neutral comma. Inside an RTL paragraph the bidi algorithm renders
+ * that as "14:05 ,19.09.2026": the time jumps in front of the date. `dir`
+ * cannot help a string that has no strong character, and a <span> cannot be
+ * put inside a string, so the isolate goes in as characters.
+ *
+ * These lived in DateTime.tsx, which is a client component. They are needed on
+ * the server too — graph.ts and the workers build Hebrew sentences that are
+ * STORED and read back in the activity feed — so the definition moved here and
+ * DateTime.tsx re-exports it. One definition, both sides.
+ */
+const LRI = '\u2066';
+const PDI = '\u2069';
+
+/**
+ * The character-level equivalent of `dir="ltr"`, for the places a timestamp
+ * has to stay a plain string: an `aria-label`, a `title=`, a prop typed
+ * `string`, or a row written to the database.
+ */
+export function ltr(text: string): string {
+  return `${LRI}${text}${PDI}`;
+}
+
+/** The same, for a full date-and-time that is built into a Hebrew sentence. */
+export function stampText(iso: string | Date | null | undefined): string {
+  return ltr(formatDateTimeHe(iso));
+}
+
+/**
+ * A counted noun in Hebrew. One takes the singular ("פרסום אחד", not
+ * "1 פרסומים"), and a handful of nouns have a real dual that no rule derives
+ * from the plural — two days is יומיים, never "2 ימים"; two groups is
+ * "שתי קבוצות", not "2 קבוצות". The caller passes whole forms rather than a
+ * noun to pluralise, because in Hebrew the verb after the noun agrees too.
+ *
+ * Only the `many` branch carries the digit. That is deliberate: the singular
+ * and the dual spell the number out, so no caller has to interpolate one.
+ *
+ * Same three-argument shape as the local copy in src/app/social/page.tsx, so
+ * that one can import this and be deleted.
+ */
+export function counted(n: number, one: string, many: string, two?: string): string {
+  if (n === 1) return one;
+  if (n === 2 && two !== undefined) return two;
+  return `${n} ${many}`;
+}
+
+/**
+ * The verb (or adjective) that agrees with a count, for the sentences where
+ * the number sits somewhere other than right before it — "1 מתוך 29 טופלו"
+ * is the same defect as "לפני 1 שעות", but counted() cannot serve it because
+ * counted() owns where the digit goes and here it goes before "מתוך".
+ */
+export function agree(n: number, singular: string, plural: string): string {
+  return n === 1 ? singular : plural;
+}
+
 /** Relative wording for the dashboard's "next publication" tile. */
 export function relativeHe(iso: string): string {
   const diff = new Date(iso).getTime() - Date.now();
@@ -123,22 +183,9 @@ export function relativeHe(iso: string): string {
     min < 1
       ? 'פחות מדקה'
       : min < 60
-        ? min === 1
-          ? 'דקה'
-          : min === 2
-            ? 'שתי דקות'
-            : `${min} דק׳`
+        ? counted(min, 'דקה', 'דק׳', 'שתי דקות')
         : min < 60 * 48
-          ? hours === 1
-            ? 'שעה'
-            : hours === 2
-              ? 'שעתיים'
-              : `${hours} שעות`
-          : days === 1
-            ? 'יום'
-            // Hebrew has a dual: two days is יומיים, never "2 ימים".
-            : days === 2
-              ? 'יומיים'
-              : `${days} ימים`;
+          ? counted(hours, 'שעה', 'שעות', 'שעתיים')
+          : counted(days, 'יום', 'ימים', 'יומיים');
   return diff >= 0 ? `בעוד ${label}` : `לפני ${label}`;
 }

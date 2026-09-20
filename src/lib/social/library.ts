@@ -14,6 +14,7 @@ import {
   getPost,
   hasPendingQueue,
   listPosts,
+  listQueue,
   listTargets,
   listVariants,
   logClientActivity,
@@ -26,7 +27,7 @@ import {
   type ScheduleInput,
 } from './client';
 import { friendlyError } from './errors';
-import { ALL_QUEUE_STATUSES, OPEN_STATUSES, isOpen } from './status';
+import { ALL_QUEUE_STATUSES, AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES, OPEN_STATUSES, isOpen } from './status';
 import { dripSlots, slotsFor } from './slots';
 import { startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
 import {
@@ -479,6 +480,17 @@ export interface QuickPublishContext {
   browser: BrowserSettings;
   /** Publications that already went out today, local time. Read, never assumed. */
   publishedToday: number;
+  /**
+   * Publications ALREADY waiting in the queue, counted per local day.
+   *
+   * maxPerDay is a ceiling on what goes out on a DAY, not on what one launch
+   * adds to it, so a launch landing on a day the queue has already filled is
+   * over the ceiling before it contributes a single slot. Without this the
+   * sheet forecast 0 for exactly that case and the rows were skipped in
+   * silence — and PostEditor, forecasting the same thing about the same rows,
+   * gave a different number. Same shape, same read, same answer.
+   */
+  queuedByDay: Map<string, number>;
   /** limits.minGapMinutes + browser.groupMinGapMinutes — what rules.ts demands now. */
   effectiveGapMinutes: number;
   /** The campaign this post belongs to, if any — the per-campaign ceiling applies only then. */
@@ -496,20 +508,39 @@ export interface QuickPublishContext {
 export async function quickPublishContext(campaignId?: string | null): Promise<QuickPublishContext> {
   const dayStart = startOfZonedDay(new Date()).toISOString();
   const [targets, limits, browser] = await Promise.all([listTargets(), getLimits(), getBrowserSettings()]);
-  const [publishedToday, campaignPublishedToday] = await Promise.all([
+  const [publishedToday, campaignPublishedToday, waiting] = await Promise.all([
     countPublishedSince(dayStart),
     campaignId ? countCampaignPublishedSince(campaignId, dayStart) : Promise.resolve(0),
+    listQueue({ status: CAP_CONSUMING_STATUSES, since: dayStart, limit: CAP_SCAN_LIMIT, order: 'asc' }),
   ]);
+  /* Ascending, so a queue deeper than the scan limit loses rows from the FAR
+     days — the ones a launch composed today is least likely to land on. The
+     forecast under-counts rather than inventing, and the copy says צפויים. */
+  const queuedByDay = new Map<string, number>();
+  for (const row of waiting) {
+    const day = zonedDateISO(new Date(row.scheduled_at), TIMEZONE);
+    queuedByDay.set(day, (queuedByDay.get(day) ?? 0) + 1);
+  }
   return {
     targets,
     limits,
     browser,
     publishedToday,
+    queuedByDay,
     effectiveGapMinutes: effectiveGroupGap(limits, browser),
     campaignId: campaignId ?? null,
     campaignPublishedToday,
   };
 }
+
+/**
+ * The statuses that consume a day's budget: everything still on its way out.
+ * Same set PostEditor reads, so the two forecasts cannot disagree.
+ */
+const CAP_CONSUMING_STATUSES = [...AUTOMATIC_WAITING_STATUSES, ...IN_FLIGHT_STATUSES];
+
+/** How many waiting rows the forecast reads, once, per sheet open. */
+const CAP_SCAN_LIMIT = 500;
 
 /** One head count — the campaign's own publications since `sinceISO`. */
 async function countCampaignPublishedSince(campaignId: string, sinceISO: string): Promise<number> {
@@ -666,7 +697,9 @@ export function planQuickPublish(ctx: QuickPublishContext, input: QuickPublishIn
   let overDailyCap = 0;
   let overCapTotal = 0;
   for (const [day, count] of perDay) {
-    const used = day === todayISO ? ctx.publishedToday : 0;
+    // What that day has already spent: today's publications, and — on every
+    // day alike — the rows already waiting in the queue for it.
+    const used = (day === todayISO ? ctx.publishedToday : 0) + (ctx.queuedByDay.get(day) ?? 0);
     const over = Math.max(0, count - Math.max(0, ctx.limits.maxPerDay - used));
     overCapTotal += over;
     if (day === todayISO) overDailyCap = over;

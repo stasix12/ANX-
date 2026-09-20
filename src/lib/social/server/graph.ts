@@ -2,7 +2,7 @@ import 'server-only';
 import { createHmac } from 'node:crypto';
 import { logActivity } from './log';
 import { getSetting, setSetting } from './db';
-import { relativeHe } from '../time';
+import { stampText } from '../time';
 import type { ControlSettings } from '../types';
 
 /**
@@ -36,6 +36,17 @@ export class GraphError extends Error {
     public code: number | null,
     public subcode: number | null,
     public retryAfterMinutes: number | null = null,
+    /**
+     * The Hebrew sentence WITHOUT Meta's English parenthetical.
+     *
+     * `message` deliberately carries "(Meta: …)" — a developer reading a
+     * failed queue row needs Meta's own words. But setCooldown() passes its
+     * `reason` straight into the activity log, which the owner reads in the
+     * notification bell with no filter at all, so that one path needs the
+     * sentence alone. Defaults to `message` for the callers that never had a
+     * parenthetical to strip.
+     */
+    public hebrew: string = message,
   ) {
     super(message);
   }
@@ -59,24 +70,33 @@ function classify(body: any): GraphError {
   const subcode: number | null = typeof err.error_subcode === 'number' ? err.error_subcode : null;
   const raw = err.message ? ` (Meta: ${err.message})` : '';
 
-  if (code === 190 || code === 102) return new GraphError(`הטוקן פג תוקף או בוטל — יש להתחבר מחדש לפייסבוק.${raw}`, 'auth', code, subcode);
-  if (code === 10 || code === 200 || code === 294 || (code !== null && code >= 200 && code <= 299))
-    return new GraphError(`חסרות הרשאות לפעולה הזו (pages_manage_posts / תפקיד בדף).${raw}`, 'permission', code, subcode);
-  if (code === 4 || code === 17 || code === 32 || code === 613 || code === 80001)
-    return new GraphError(`Meta הגבילה זמנית את קצב הקריאות — המערכת תנסה שוב מאוחר יותר.${raw}`, 'rate_limit', code, subcode, 60);
-  if (code === 506) return new GraphError(`פייסבוק זיהה פוסט זהה שפורסם לאחרונה ודחה אותו.${raw}`, 'duplicate', code, subcode);
-  if (code === 368 || code === 1349125)
-    return new GraphError(`החשבון/הדף חסום זמנית לפרסום על ידי Meta (מדיניות ספאם). התור הושהה.${raw}`, 'blocked', code, subcode, 24 * 60);
-  if (code === 100 || code === 1500) return new GraphError(`Meta דחתה את הפרמטרים של הפוסט.${raw}`, 'invalid', code, subcode);
   /*
-   * Every branch above is a Hebrew sentence with Meta's own English appended
-   * in parentheses. This one used to return `err.message` alone, so the one
-   * case we do NOT recognise — the case most likely to reach the owner — was
-   * the case that put raw English in front of her, as the whole message, in
-   * the activity feed and in ErrorDetail. Same shape as the rest: the raw
-   * text is still there, it is just no longer the sentence.
+   * One constructor for all eight branches, so the Hebrew sentence and the
+   * "(Meta: …)" parenthetical can never drift apart again.
+   *
+   * `message` keeps both — a developer reading social_queue.error needs Meta's
+   * own words. `hebrew` is the sentence alone, and it is what setCooldown()
+   * writes to the activity log, because the notification bell renders that
+   * text with no filter and the owner does not read English.
    */
-  return new GraphError(`קריאה ל-Meta נכשלה.${raw}`, 'unknown', code, subcode);
+  const he = (sentence: string, kind: GraphErrorKind, retryAfterMinutes: number | null = null) =>
+    new GraphError(`${sentence}${raw}`, kind, code, subcode, retryAfterMinutes, sentence);
+
+  if (code === 190 || code === 102) return he('הטוקן פג תוקף או בוטל — יש להתחבר מחדש לפייסבוק.', 'auth');
+  if (code === 10 || code === 200 || code === 294 || (code !== null && code >= 200 && code <= 299))
+    return he('חסרות הרשאות לפעולה הזו (pages_manage_posts / תפקיד בדף).', 'permission');
+  if (code === 4 || code === 17 || code === 32 || code === 613 || code === 80001)
+    return he('Meta הגבילה זמנית את קצב הקריאות — המערכת תנסה שוב מאוחר יותר.', 'rate_limit', 60);
+  if (code === 506) return he('פייסבוק זיהה פוסט זהה שפורסם לאחרונה ודחה אותו.', 'duplicate');
+  if (code === 368 || code === 1349125)
+    return he('החשבון/הדף חסום זמנית לפרסום על ידי Meta (מדיניות ספאם). התור הושהה.', 'blocked', 24 * 60);
+  if (code === 100 || code === 1500) return he('Meta דחתה את הפרמטרים של הפוסט.', 'invalid');
+  /*
+   * This one used to return `err.message` alone, so the one case we do NOT
+   * recognise — the case most likely to reach the owner — was the case that
+   * put raw English in front of her as the whole message.
+   */
+  return he('קריאה ל-Meta נכשלה.', 'unknown');
 }
 
 /** Records a cooldown if Meta's usage headers say we are near the ceiling. */
@@ -119,12 +139,16 @@ export async function setCooldown(minutes: number, reason: string): Promise<void
   if (control.rateLimitedUntil && control.rateLimitedUntil > until) return;
   await setSetting('control', { ...control, rateLimitedUntil: until });
   /*
-   * `until` is an ISO instant. This line is read in the notification bell and
-   * in /social/history, so the wait is said in words (time.ts already gets
-   * the Hebrew dual right) and the exact instant moves to meta, where a
-   * developer still has it.
+   * An ABSOLUTE instant, not "בעוד יום".
+   *
+   * This sentence is stored in social_activity_log and read back for days,
+   * while the row's own timestamp beside it is rendered live. A relative
+   * phrase frozen at write time therefore ends up as "יתחדש בעוד יום" sitting
+   * on top of "לפני 3 ימים" — a line that is simply false by the time anyone
+   * reads it. stampText() wraps the stamp in LTR isolates so the date and the
+   * time do not swap places inside the Hebrew sentence.
    */
-  await logActivity('warn', 'rate_limit', `${reason} — הפרסום מושהה ויתחדש ${relativeHe(until)}.`, { minutes, until });
+  await logActivity('warn', 'rate_limit', `${reason} — הפרסום מושהה ויתחדש ב-${stampText(until)}.`, { minutes, until });
 }
 
 interface CallOptions {
@@ -161,7 +185,7 @@ export async function graph<T = any>(path: string, opts: CallOptions): Promise<T
   if (!response.ok || body?.error) {
     const err = classify(body);
     if (err.kind === 'rate_limit' || err.kind === 'blocked') {
-      await setCooldown(err.retryAfterMinutes ?? 60, err.message);
+      await setCooldown(err.retryAfterMinutes ?? 60, err.hebrew);
     }
     throw err;
   }

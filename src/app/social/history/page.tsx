@@ -17,7 +17,7 @@ import {
   useToast,
 } from '@/components/social/ui';
 import { cancelQueueItem, listCampaigns, listQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
-import { startOfZonedDay, zonedToUtc } from '@/lib/social/time';
+import { counted, startOfZonedDay, zonedToUtc } from '@/lib/social/time';
 import { AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES, NEEDS_HUMAN_STATUSES } from '@/lib/social/status';
 import { type PublishMethod, type QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -256,7 +256,7 @@ function HistoryScreen() {
             rows
               ? rows.length >= 500
                 ? `מוצגות ${page.length} מתוך 500 הרשומות האחרונות בטווח`
-                : `${filtered.length} רשומות${filtered.length > page.length ? ` · מוצגות ${page.length}` : ''}`
+                : `${counted(filtered.length, 'רשומה אחת', 'רשומות', 'שתי רשומות')}${filtered.length > page.length ? ` · מוצגות ${page.length}` : ''}`
               : undefined
           }
           action={rows ? <Badge tone="neutral">{rows.length >= 500 ? '500+ אחרונים' : `${rows.length} בטווח`}</Badge> : undefined}

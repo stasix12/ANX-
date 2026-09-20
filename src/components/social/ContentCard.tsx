@@ -2,7 +2,7 @@
 
 import { PlayIcon } from '@/components/icons';
 import type { LibraryPost } from '@/lib/social/library';
-import { formatDayMonthHe } from '@/lib/social/time';
+import { agree, formatDayMonthHe } from '@/lib/social/time';
 import type { MediaItem } from '@/lib/social/types';
 import { Badge, Button, OverflowMenu, type MenuAction } from './ui';
 
@@ -64,7 +64,7 @@ export function ContentCard({
    * "טרם פורסם" about the same 84 rows the run card was counting. Now it says
    * which it was.
    */
-  const nothingYet = item.skippedCount > 0 ? `טרם פורסם · ${item.skippedCount} דולגו` : 'טרם פורסם';
+  const nothingYet = item.skippedCount > 0 ? `טרם פורסם · ${item.skippedCount} ${agree(item.skippedCount, 'דולג', 'דולגו')}` : 'טרם פורסם';
   const published = item.publishCount === 0 ? nothingYet : groups > 1 ? `${times} ב-${groups} קבוצות` : times;
   /*
    * What the third line would say, or nothing. It is dropped when it repeats

@@ -4,6 +4,7 @@ import {
   TERMINAL_STATUSES,
   isTerminal,
 } from './status';
+import { agree, counted } from './time';
 import { EMPTY_PROGRESS, type Campaign, type CampaignProgress, type QueueItem } from './types';
 
 /**
@@ -213,7 +214,9 @@ function resolveState(
 export function campaignHeadline(state: CampaignState): string {
   const { progress } = state;
   if (!progress.total) return 'אין פרסומים מתוכננים';
-  const head = `${progress.published} מתוך ${progress.total} פורסמו`;
+  // "1 מתוך 84 פורסמו" — the verb has to follow the count, and the count is 1
+  // exactly when the owner is watching hardest: the run's first success.
+  const head = `${progress.published} מתוך ${progress.total} ${agree(progress.published, 'פורסם', 'פורסמו')}`;
   const rest = unpublishedNote(progress);
   return rest ? `${head} · ${rest}` : head;
 }
@@ -224,8 +227,8 @@ export function campaignHeadline(state: CampaignState): string {
  */
 export function unpublishedNote(progress: CampaignProgress): string {
   const parts: string[] = [];
-  if (progress.skipped > 0) parts.push(`${progress.skipped} דולגו`);
-  if (progress.failed > 0) parts.push(`${progress.failed} נכשלו`);
+  if (progress.skipped > 0) parts.push(counted(progress.skipped, 'פרסום אחד דולג', 'דולגו'));
+  if (progress.failed > 0) parts.push(counted(progress.failed, 'פרסום אחד נכשל', 'נכשלו'));
   return parts.join(' · ');
 }
 
@@ -310,7 +313,7 @@ export interface RunProgressView {
 export function runProgress(progress: CampaignProgress): RunProgressView {
   const { total, published, finished } = progress;
   const percent = percentFinished(progress);
-  const handledLabel = total ? `${finished} מתוך ${total} טופלו` : 'אין פרסומים מתוכננים';
+  const handledLabel = total ? `${finished} מתוך ${total} ${agree(finished, 'טופל', 'טופלו')}` : 'אין פרסומים מתוכננים';
   return {
     total,
     handled: finished,
@@ -319,7 +322,7 @@ export function runProgress(progress: CampaignProgress): RunProgressView {
     percent,
     percentPublished: percentPublished(progress),
     handledLabel,
-    publishedLabel: total ? `${published} מתוך ${total} פורסמו` : 'אין פרסומים מתוכננים',
+    publishedLabel: total ? `${published} מתוך ${total} ${agree(published, 'פורסם', 'פורסמו')}` : 'אין פרסומים מתוכננים',
     note: unpublishedNote(progress),
     ariaLabel: total ? `${percent}% — ${handledLabel}` : handledLabel,
   };

@@ -33,7 +33,7 @@ import {
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, type QueueSummary } from '@/lib/social/status';
-import { startOfZonedDay } from '@/lib/social/time';
+import { agree, counted, startOfZonedDay } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -45,20 +45,6 @@ import { RepeatIcon } from '@/components/icons';
  * never shown as a total.
  */
 const UPCOMING_LIMIT = 40;
-
-/**
- * "פרסום אחד" / "7 פרסומים", with the verb that goes with it.
- *
- * Hebrew has no bare-numeral singular, so `${n} פרסומים` prints "1 פרסומים" —
- * and on the two lines that matter most here, one waiting confirmation and one
- * cancelled publication, 1 is the commonest value there is. The verb has to
- * agree too ("פרסום אחד ממתין", not "ממתינים"), so the caller passes both
- * whole forms rather than a noun to pluralise.
- *
- * SchedulePicker.tsx already carries this shape as targetsLabel(); one shared
- * helper belongs beside it, which is not this file.
- */
-const counted = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`);
 
 interface DashboardData {
   counts: Record<QueueStatus, number>;
@@ -354,9 +340,11 @@ export default function SocialDashboard() {
       const r = await callSocialApi<{ ran: boolean; planned: number; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
       // Planning happens even when publishing is held, so a run that published
       // nothing may still have filled the queue — say so rather than "לא רץ".
-      const queued = r.planned ? `${r.planned} פרסומים נכנסו לתור. ` : '';
+      const queued = r.planned ? `${counted(r.planned, 'פרסום אחד נכנס', 'פרסומים נכנסו', 'שני פרסומים נכנסו')} לתור. ` : '';
       toast(
-        r.ran ? `${queued}הריצה הסתיימה: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.failed} נכשלו.` : `${queued}הפרסום מושהה: ${r.reason}`,
+        r.ran
+          ? `${queued}הריצה הסתיימה: ${r.published} ${agree(r.published, 'פורסם', 'פורסמו')}, ${r.skipped} ${agree(r.skipped, 'דולג', 'דולגו')}, ${r.failed} ${agree(r.failed, 'נכשל', 'נכשלו')}.`
+          : `${queued}הפרסום מושהה: ${r.reason}`,
         r.ran ? 'success' : 'info',
       );
       await load();
@@ -715,7 +703,7 @@ export default function SocialDashboard() {
                    with it — CSS grid keeps the pair level. It is a <span>
                    inside the tile's own link, never a nested anchor. */
                 chipLabel={summary.failed ? 'טפל עכשיו' : undefined}
-                sub={summary.skipped ? `ועוד ${summary.skipped} דולגו` : 'סך הכול'}
+                sub={summary.skipped ? `ועוד ${summary.skipped} ${agree(summary.skipped, 'דולג', 'דולגו')}` : 'סך הכול'}
                 href="/social/history?status=failed"
               />
             </div>
@@ -768,11 +756,18 @@ export default function SocialDashboard() {
                 </Link>
               }
             >
-              {/* `total` is the same exact count as the subtitle. The footer
-                  used to print `rows.length - shown`, and rows is the capped
-                  read: with 61 queued it said "ועוד 34" where the real
-                  remainder was 55 — 6 + 34 being exactly UPCOMING_LIMIT. */}
-              <Timeline rows={data.upcoming} limit={6} total={summary.queued} />
+              {/* `total` counts the SAME SET as the rows: this list is read
+                  with AUTOMATIC_WAITING_STATUSES, so its total is
+                  summary.automaticWaiting. summary.queued adds the in-flight
+                  row on top, and the footer then promised a publication the
+                  list could never show. (The subtitle above stays on
+                  summary.queued — it describes the whole queue, the same
+                  number as the "בתור" tile, not this window onto it.)
+                  The footer must also never print `rows.length - shown`: rows
+                  is the capped read, and with 61 queued that said "ועוד 34"
+                  where the real remainder was 55 — 6 + 34 being exactly
+                  UPCOMING_LIMIT. */}
+              <Timeline rows={data.upcoming} limit={6} total={summary.automaticWaiting} />
             </Card>
 
             <BrowserStatusCard id="browser-status" onChanged={load} />

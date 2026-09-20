@@ -4,7 +4,7 @@ import { detectCity } from '@/lib/social/cities';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { evaluateQueueItem } from '@/lib/social/rules';
-import { relativeHe } from '@/lib/social/time';
+import { stampText } from '@/lib/social/time';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
@@ -463,7 +463,10 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   }
   if (decision.action === 'defer') {
     await finish({ status: 'scheduled', step: 'pending', scheduled_at: decision.until });
-    await logActivity('info', 'deferred', `${decision.reason} (עד ${decision.until})`, { queueId: item.id });
+    /* Same as the server worker's copy of this line: decision.reason is
+       already a whole Hebrew sentence, and the ISO instant that used to be
+       bracketed onto it is not. The bell reads this; meta keeps the stamp. */
+    await logActivity('info', 'deferred', decision.reason, { queueId: item.id, until: decision.until });
     console.log(`[worker] ⏲ "${t?.name ?? item.target_id}": ${decision.reason} (${decision.until})`);
     return;
   }
@@ -573,7 +576,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
        * and in /social/history. Both move to meta — nothing is lost, it just
        * stops being the thing on screen.
        */
-      await logActivity('warn', 'retry', `${tt.name}: ניסיון ${attempts} לפרסום נכשל. ${message} המערכת תנסה שוב ${relativeHe(retryAt)}.`, {
+      await logActivity('warn', 'retry', `${tt.name}: ניסיון ${attempts} לפרסום נכשל. ${message} המערכת תנסה שוב ב-${stampText(retryAt)}.`, {
         queueId: item.id,
         step: lastStep,
         retryAt,

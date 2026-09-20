@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { PlusIcon, SpinnerIcon, TrashIcon } from '@/components/icons';
+import { PlayIcon, PlusIcon, SpinnerIcon, TrashIcon } from '@/components/icons';
 import { removeMedia, uploadMedia } from '@/lib/social/client';
 import type { MediaItem } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -47,7 +47,16 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
         {media.map((item) => (
           <div key={item.url} className="relative aspect-square overflow-hidden rounded-xl border border-ink-700 bg-ink-900">
             {item.kind === 'video' ? (
-              <div className="grid h-full w-full place-items-center text-xs font-bold text-mist-300">🎬 {item.name}</div>
+              /* The video tile has no thumbnail to show, so it names itself.
+                 The clapper emoji stood in for the icon set everything else on
+                 this screen draws from, and VoiceOver read it out as "clapper
+                 board" before the file name. */
+              <div className="grid h-full w-full place-items-center gap-1 px-1 text-center text-[11px] font-bold text-mist-300">
+                <PlayIcon className="h-5 w-5" />
+                <span dir="auto" className="w-full break-words">
+                  {item.name}
+                </span>
+              </div>
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={item.url} alt="" className="h-full w-full object-cover" />
@@ -55,7 +64,7 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
             <button
               type="button"
               onClick={() => remove(item)}
-              aria-label="הסר"
+              aria-label={item.kind === 'video' ? 'הסרת הסרטון' : 'הסרת התמונה'}
               className="absolute end-1 top-1 grid h-11 w-11 place-items-center rounded-full bg-ink-950/70 text-mist-100 ring-1 ring-ink-600 backdrop-blur-sm"
             >
               <TrashIcon className="h-3.5 w-3.5" />

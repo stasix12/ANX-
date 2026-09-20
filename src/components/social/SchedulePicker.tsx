@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { ScheduleInput } from '@/lib/social/client';
 import { dripSlots, slotsFor, staggeredSlots } from '@/lib/social/slots';
-import { formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { counted, formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { Stamp } from './DateTime';
 import { TIMEZONE, WEEKDAYS_HE, type ScheduleMode, type WeeklyPlan } from '@/lib/social/types';
 import { Notice, inputClass } from './ui';
@@ -72,7 +72,9 @@ export interface SchedulePlan {
  * primary call to action: "בדוק והתחל (1 יעדים)".
  */
 export function targetsLabel(n: number): string {
-  return n === 1 ? 'יעד אחד' : `${n} יעדים`;
+  /* Was a third hand-rolled copy of this rule. counted() has the same
+     contract plus the dual, so "שני יעדים" comes for free. */
+  return counted(n, 'יעד אחד', 'יעדים', 'שני יעדים');
 }
 
 export function planFor(draft: ScheduleDraft, targetCount: number, now = new Date(), spacingMinutes = 0): SchedulePlan {
@@ -95,7 +97,11 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
     );
     // The window is a DAILY window: say so, or "בין 22:00 ל-23:59" reads as
     // if the whole campaign ends tonight when it actually spans days.
-    return finish(slots, false, `${count} פרסומים, אחד כל ${draft.dripGapMinutes} דקות, כל יום בשעות ${draft.dripStart}–${draft.dripEnd}`);
+    return finish(
+      slots,
+      false,
+      `${counted(count, 'פרסום אחד', 'פרסומים', 'שני פרסומים')}, אחד כל ${counted(draft.dripGapMinutes, 'דקה', 'דקות', 'שתי דקות')}, כל יום בשעות ${draft.dripStart}–${draft.dripEnd}`,
+    );
   }
 
   /*

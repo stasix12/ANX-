@@ -36,7 +36,28 @@ export function TargetAvatar({
   const tone = channel === 'facebook_page' ? 'bg-success-500 text-on-state' : 'bg-brand-500 text-on-brand';
   return (
     <span style={style} className={`grid shrink-0 place-items-center ${shape} ${tone} text-sm font-extrabold ${className}`}>
-      {(name || '?').trim().slice(0, 1)}
+      {initial(name)}
     </span>
   );
+}
+
+/**
+ * The one character on the fallback tile.
+ *
+ * `slice(0, 1)` takes one UTF-16 unit, and a great many group names open with
+ * an emoji — "🏠 נדל״ן באר שבע". An emoji is a surrogate pair, so half of one
+ * was being rendered and every tile for that group drew a U+FFFD box.
+ *
+ * Skipping to the first letter or digit also reads better than the emoji
+ * would: the tile is meant to say WHICH group, and the star or house at the
+ * front of a name is the part every such name shares. A name made only of
+ * symbols keeps its first WHOLE code point, so that case shows the symbol
+ * rather than nothing.
+ */
+function initial(name: string): string {
+  const trimmed = (name ?? '').trim();
+  if (!trimmed) return '?';
+  const letter = trimmed.match(/[\p{L}\p{N}]/u);
+  if (letter) return letter[0];
+  return Array.from(trimmed)[0] ?? '?';
 }

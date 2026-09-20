@@ -442,12 +442,22 @@ function invWaitingAgreement(step: string, v: { card: CardView; dash: DashboardV
  * campaign.ts:70 sums published + failed + skipped into progress.done, and
  * both the headline and percentDone() are driven from it.
  */
-/** What campaignHeadline() must produce: publications, then what the rest became. */
+/**
+ * What campaignHeadline() must produce: publications, then what the rest became.
+ *
+ * RE-POINTED at the Hebrew, not weakened — still an independent re-spelling of
+ * the sentence, byte for byte, written here rather than imported. Hebrew puts
+ * a count of one in the singular and agrees the verb with it, so "1 נכשלו" was
+ * the old expectation pinning a defect. Two and above are untouched.
+ */
 function expectedHeadline(c: CardView): string {
-  const rest = [c.skippedReally ? `${c.skippedReally} דולגו` : '', c.failedReally ? `${c.failedReally} נכשלו` : '']
+  const rest = [
+    c.skippedReally ? (c.skippedReally === 1 ? 'פרסום אחד דולג' : `${c.skippedReally} דולגו`) : '',
+    c.failedReally ? (c.failedReally === 1 ? 'פרסום אחד נכשל' : `${c.failedReally} נכשלו`) : '',
+  ]
     .filter(Boolean)
     .join(' · ');
-  const head = `${c.publishedReally} מתוך ${c.total} פורסמו`;
+  const head = `${c.publishedReally} מתוך ${c.total} ${c.publishedReally === 1 ? 'פורסם' : 'פורסמו'}`;
   return rest ? `${head} · ${rest}` : head;
 }
 
@@ -494,8 +504,8 @@ function invCompletedMeansPublished(step: string, v: { card: CardView }): void {
     { percentHandled: c.percentHandled, handled: c.handledLabel, published: c.publishedLabel },
     {
       percentHandled: !c.total ? 0 : handled >= c.total ? 100 : Math.min(99, Math.round((handled / c.total) * 100)),
-      handled: c.total ? `${handled} מתוך ${c.total} טופלו` : 'אין פרסומים מתוכננים',
-      published: c.total ? `${c.publishedReally} מתוך ${c.total} פורסמו` : 'אין פרסומים מתוכננים',
+      handled: c.total ? `${handled} מתוך ${c.total} ${handled === 1 ? 'טופל' : 'טופלו'}` : 'אין פרסומים מתוכננים',
+      published: c.total ? `${c.publishedReally} מתוך ${c.total} ${c.publishedReally === 1 ? 'פורסם' : 'פורסמו'}` : 'אין פרסומים מתוכננים',
     },
     NONE,
   );
@@ -853,7 +863,16 @@ async function main(): Promise<void> {
    * wait on a person. They now read campaign.ts's two predicates: pause is
    * about the ROWS, resume is about the RECORD.
    */
-  pin('LiveCampaignHero ratio counts handled rows', hero, '<Ratio done={view.handled} total={view.total} suffix="טופלו" />');
+  /*
+   * RE-POINTED a second time, and only at the part of the line that carries
+   * the rule. The needle held the whole element including suffix="טופלו"; the
+   * suffix is now `agree(view.handled, 'טופל', 'טופלו')`, because one handled
+   * row printed "1 / 29 טופלו". The rule this pin exists for — the big figure
+   * on the run card is the HANDLED count, not the publications count — lives
+   * entirely in `done={view.handled}`, which is what the needle now reads.
+   * INV-2d above still pins both full sentences, grammar included.
+   */
+  pin('LiveCampaignHero ratio counts handled rows', hero, '<Ratio done={view.handled} total={view.total}');
   pin('LiveCampaignHero still prints the publications figure', hero, 'view.publishedLabel');
   pin('LiveCampaignHero resume follows the campaign record', hero, 'const showResume = canResumeRun(progress, campaign.status);');
   pin('LiveCampaignHero pause is offered only when it can act', hero, 'const showPause = canPauseRun(progress, campaign.status);');

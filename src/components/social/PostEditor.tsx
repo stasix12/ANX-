@@ -24,6 +24,7 @@ import {
   getPost,
   hasPendingQueue,
   listCampaigns,
+  listQueue,
   listSchedules,
   listTargets,
   listVariants,
@@ -33,7 +34,8 @@ import {
   type PostInput,
 } from '@/lib/social/client';
 import { generateVariantSeeds, renderPostText, whatsappUrlFor } from '@/lib/social/compose';
-import { startOfZonedDay, zonedDateISO } from '@/lib/social/time';
+import { AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES } from '@/lib/social/status';
+import { agree, counted, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
 import { stampText } from './DateTime';
 import {
   CTA_OPTIONS,
@@ -47,6 +49,7 @@ import {
   type CtaType,
   type Language,
   type MediaItem,
+  type QueueStatus,
   type Schedule,
   type SocialTarget,
   type Variant,
@@ -84,6 +87,28 @@ const emptyPost: PostInput = {
  */
 const TEST_MODE_PATH = 'הגדרות ← פרסום בקבוצות ← "מצב בדיקה"';
 
+/**
+ * Rows that will eat a day's budget on their own, for the cap forecast below.
+ *
+ * rules.ts counts PUBLISHED rows against maxPerDay, so what matters for a day
+ * still ahead is what is going to publish on it: the rows waiting on the clock
+ * plus the one a worker is holding this second. Human-waiting rows
+ * (awaiting_confirmation, manual_pending, needs_attention) are deliberately
+ * out — nothing moves them until a person acts, and counting them as certain
+ * traffic would overstate the warning.
+ */
+const CAP_CONSUMING_STATUSES: QueueStatus[] = [...AUTOMATIC_WAITING_STATUSES, ...IN_FLIGHT_STATUSES];
+
+/**
+ * How many waiting rows that forecast reads, once, at load.
+ *
+ * The read is ascending, so a queue deeper than this can only lose rows from
+ * the FAR days — the ones a launch composed today is least likely to land on.
+ * The effect is a warning that under-counts rather than one that invents: the
+ * copy says "צפויים", and every number in it still comes from rows that exist.
+ */
+const CAP_SCAN_LIMIT = 500;
+
 export function PostEditor({ postId }: { postId?: string }) {
   const router = useRouter();
   const [post, setPost] = useState<PostInput>(emptyPost);
@@ -118,21 +143,41 @@ export function PostEditor({ postId }: { postId?: string }) {
    * understate it by exactly that number.
    */
   const [publishedToday, setPublishedToday] = useState(0);
+  /*
+   * Publications ALREADY in the queue for the days ahead, counted per local
+   * day. The other half of the same truth: the cap is a ceiling on what goes
+   * out on a day, so a launch landing on a day the queue has already filled is
+   * over the ceiling before it adds a single slot. Counting only
+   * `publishedToday` forecast 0 for exactly that case, and the rows were then
+   * skipped without a word.
+   *
+   * One snapshot at load, like the quick-publish sheet (library.ts
+   * quickPublishContext); the arithmetic re-runs locally on every keystroke.
+   */
+  const [queuedByDay, setQueuedByDay] = useState<Map<string, number>>(new Map());
   const toast = useToast();
   const confirm = useConfirm();
 
   const load = useCallback(async () => {
     if (loadedFor.current === postId) return;
     loadedFor.current = postId;
-    const [c, t, b, br, lim, doneToday] = await Promise.all([
+    const dayStart = startOfZonedDay(new Date()).toISOString();
+    const [c, t, b, br, lim, doneToday, waiting] = await Promise.all([
       listCampaigns(),
       listTargets(),
       getBusiness(),
       getBrowserSettings(),
       getLimits(),
-      countPublishedSince(startOfZonedDay(new Date()).toISOString()),
+      countPublishedSince(dayStart),
+      listQueue({ status: CAP_CONSUMING_STATUSES, since: dayStart, limit: CAP_SCAN_LIMIT, order: 'asc' }),
     ]);
     setPublishedToday(doneToday);
+    const byDay = new Map<string, number>();
+    for (const row of waiting) {
+      const day = zonedDateISO(new Date(row.scheduled_at));
+      byDay.set(day, (byDay.get(day) ?? 0) + 1);
+    }
+    setQueuedByDay(byDay);
     /*
      * Targets the post was last scheduled to. Reopening a post used to fall
      * back to "every enabled Page", and an account with no Pages — which is
@@ -218,7 +263,11 @@ export function PostEditor({ postId }: { postId?: string }) {
    * "התחל פרסום" button — did not.
    *
    * Counted per LOCAL day, because that is the window rules.ts counts, and
-   * with today's existing publications subtracted from today's budget.
+   * against what each of those days has already spent: today's publications,
+   * and — on every day alike — the rows already waiting in the queue for it.
+   * Without that second half a SECOND launch onto a day the queue had already
+   * filled forecast 0 and then skipped in silence, which is the same defect
+   * one level deeper.
    */
   const capOverflow = useMemo(() => {
     const cap = Math.max(0, Math.round(limits.maxPerDay ?? 0));
@@ -231,11 +280,36 @@ export function PostEditor({ postId }: { postId?: string }) {
     const todayISO = zonedDateISO(new Date());
     let over = 0;
     for (const [day, count] of perDay) {
-      const budget = Math.max(0, cap - (day === todayISO ? publishedToday : 0));
+      const spent = (day === todayISO ? publishedToday : 0) + (queuedByDay.get(day) ?? 0);
+      const budget = Math.max(0, cap - spent);
       over += Math.max(0, count - budget);
     }
     return over;
-  }, [plan.slots, limits.maxPerDay, publishedToday]);
+  }, [plan.slots, limits.maxPerDay, publishedToday, queuedByDay]);
+
+  /**
+   * The same number, said as the forecast it is.
+   *
+   * It used to promise an outcome — "הם יסומנו כ'דולגו' ולא יצאו כלל, גם לא
+   * מחר" — about slots hours or days away, computed from a ceiling the owner
+   * sets themselves in ההגדרות and from a queue that keeps changing until the
+   * slot arrives. The one part that is NOT a forecast is the consequence:
+   * rules.ts returns {action:'skip'}, so a publication that loses its slot is
+   * finished, not postponed. That stays flat, and the number stays a
+   * projection with the two levers that move it named.
+   */
+  const capWarning = (() => {
+    if (capOverflow <= 0) return '';
+    // One publication is "הפרסום", not "1 מתוך 1"; one out of many takes the
+    // singular verb. Same rule the time labels follow (time.ts relativeHe).
+    const howMany =
+      plan.slots.length === 1
+        ? 'צפוי שהפרסום הזה יידלג'
+        : capOverflow === 1
+          ? `צפוי שפרסום אחד מתוך ${plan.slots.length} יידלג`
+          : `צפויים ${capOverflow} מתוך ${plan.slots.length} הפרסומים להידלג`;
+    return `לפי המכסה היומית שהגדרתם (${limits.maxPerDay} ליום), וכולל מה שכבר יצא היום ומה שכבר ממתין בתור לאותם ימים, ${howMany}. פרסום שדולג לא נדחה למחר — הוא פשוט לא יוצא, והסיבה נרשמת בהיסטוריה. כדי שזה לא יקרה: העלו את המכסה בהגדרות, פרסו את הפרסום על פני יותר ימים, או בחרו פחות יעדים.`;
+  })();
 
   const previewVariant = variants.find((v) => v.key === previewKey) ?? null;
   const previewText = useMemo(() => renderPostText(post, previewVariant), [post, previewVariant]);
@@ -378,13 +452,13 @@ export function PostEditor({ postId }: { postId?: string }) {
           toast('הסבב התחיל. עקבו אחרי ההתקדמות למטה.');
           setMessage({
             tone: 'success',
-            text: `דפים: ${r.published} פורסמו, ${r.skipped} דולגו, ${r.deferred} נדחו, ${r.failed} נכשלו. קבוצות מתפרסמות דרך התוכנה שעל המחשב שלכם — ההתקדמות למטה.`,
+            text: `דפים: ${r.published} ${agree(r.published, 'פורסם', 'פורסמו')}, ${r.skipped} ${agree(r.skipped, 'דולג', 'דולגו')}, ${r.deferred} ${agree(r.deferred, 'נדחה', 'נדחו')}, ${r.failed} ${agree(r.failed, 'נכשל', 'נכשלו')}. קבוצות מתפרסמות דרך התוכנה שעל המחשב שלכם — ההתקדמות למטה.`,
           });
         } else {
           // The queue was still built (planning runs even when publishing is
           // held), so say what is waiting and what releases it — not just why
           // nothing came out.
-          const queued = r.planned ? `${r.planned} פרסומים נכנסו לתור. ` : '';
+          const queued = r.planned ? `${counted(r.planned, 'פרסום אחד נכנס', 'פרסומים נכנסו', 'שני פרסומים נכנסו')} לתור. ` : '';
           toast(`${queued}הפרסום עצמו מושהה: ${r.reason}`, 'info');
           setMessage({ tone: 'info', text: `${queued}הפרסום עצמו לא רץ — ${r.reason}. לחצו "המשך" בראש הדף כדי לשחרר את התור.` });
         }
@@ -530,14 +604,18 @@ export function PostEditor({ postId }: { postId?: string }) {
                       <button
                         type="button"
                         onClick={() => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, approval: x.approval === 'approved' ? 'pending' : 'approved' } : x)))}
-                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold ${v.approval === 'approved' ? 'bg-success-500 text-on-state' : 'bg-ink-800 text-mist-300'}`}
+                        /* min-h-11, like "תצוגה מקדימה" on the same row: py-1
+                           on text-xs measured 24px between two 44px siblings,
+                           and approving a variant is the tap that decides what
+                           goes out. */
+                        className={`inline-flex min-h-11 items-center gap-1 rounded-lg px-2.5 text-xs font-bold ${v.approval === 'approved' ? 'bg-success-500 text-on-state' : 'bg-ink-800 text-mist-300'}`}
                       >
                         <CheckIcon className="h-3.5 w-3.5" /> {v.approval === 'approved' ? 'מאושר' : 'אשר'}
                       </button>
                       <button
                         type="button"
                         onClick={() => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, approval: x.approval === 'rejected' ? 'pending' : 'rejected' } : x)))}
-                        className="rounded-lg bg-ink-800 px-2.5 py-1 text-xs font-bold text-mist-300"
+                        className="min-h-11 rounded-lg bg-ink-800 px-2.5 text-xs font-bold text-mist-300"
                       >
                         {v.approval === 'rejected' ? 'בטל דחייה' : 'דחה'}
                       </button>
@@ -563,7 +641,7 @@ export function PostEditor({ postId }: { postId?: string }) {
 
           <Card
             id="post-targets"
-            title={`יעדי פרסום${selectedObjects.length ? ` · ${selectedObjects.length} נבחרו` : ''}`}
+            title={`יעדי פרסום${selectedObjects.length ? ` · ${counted(selectedObjects.length, 'יעד אחד נבחר', 'יעדים נבחרו', 'שני יעדים נבחרו')}` : ''}`}
             action={
               <Link href="/social/groups" className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
                 ניהול קבוצות
@@ -728,9 +806,7 @@ export function PostEditor({ postId }: { postId?: string }) {
             ? `מצב בדיקה פעיל: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. כדי לכבות: ${TEST_MODE_PATH}.`
             : '',
           approvedCount === 0 && variants.length > 0 ? 'אין גרסה מאושרת — יצא הטקסט הבסיסי.' : '',
-          capOverflow > 0
-            ? `${capOverflow} מתוך ${plan.slots.length} הפרסומים חורגים מהמכסה היומית שהגדרתם (${limits.maxPerDay} ליום) — הם יסומנו כ"דולגו" ולא יצאו כלל, גם לא מחר. אפשר להעלות את המכסה בהגדרות, או לפרוס את הפרסום על פני יותר ימים.`
-            : '',
+          capWarning,
         ].filter(Boolean)}
       />
       {confirm.dialog}

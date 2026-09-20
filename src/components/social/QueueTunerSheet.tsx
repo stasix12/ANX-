@@ -14,7 +14,7 @@ import {
   type LiveQueuePlan,
 } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
-import { formatDayMonthHe, formatTimeHe, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
+import { agree, counted, formatDayMonthHe, formatTimeHe, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
 import type { BrowserSettings, LimitsSettings, SocialTarget } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, EmptyState, Field, IconButton, inputClass, Loading, Notice, Sheet, useConfirm, useToast } from './ui';
@@ -116,6 +116,15 @@ function Stepper({ label, onClick, disabled, children }: { label: string; onClic
     </button>
   );
 }
+
+/*
+ * The two counted nouns this sheet keeps repeating. Hebrew gives one a
+ * singular and two a dual, and a fixed plural beside an interpolated number
+ * produced "1 פרסומים הוסרו מהתור." on the single-group removal the owner
+ * uses most.
+ */
+const posts = (n: number) => counted(n, 'פרסום אחד', 'פרסומים', 'שני פרסומים');
+const minutes = (n: number) => counted(n, 'דקה אחת', 'דקות', 'שתי דקות');
 
 const MIN_GAP = 1;
 const MAX_GAP = 720;
@@ -274,7 +283,7 @@ export function QueueTunerSheet({
     }
     if (overPerTarget > 0) {
       out.push(
-        `${overPerTarget} פרסומים בתור יגיעו לאותה קבוצה באותו יום מעבר לתקרה שהגדרתם ליעד (${limits.maxPerTargetPerDay} ליום), ולכן ידולגו.`,
+        `${counted(overPerTarget, 'פרסום אחד בתור יגיע', 'פרסומים בתור יגיעו', 'שני פרסומים בתור יגיעו')} לאותה קבוצה באותו יום מעבר לתקרה שהגדרתם ליעד (${limits.maxPerTargetPerDay} ליום), ולכן ${agree(overPerTarget, 'ידולג', 'ידולגו')}.`,
       );
     }
     if (p.campaignId && campaignToday > browser.maxPerCampaignPerDay) {
@@ -386,7 +395,7 @@ export function QueueTunerSheet({
     run('respace', async () => {
       setStartOverride(null);
       const moved = await respaceQueue(gap, { ...(campaignId ? { campaignId } : {}), ...(anchor !== null ? { startAt: new Date(anchor).toISOString() } : {}) });
-      return `${moved} פרסומים תוזמנו מחדש, מרווח של ${gap} דקות ביניהם.`;
+      return `${posts(moved)} ${agree(moved, 'תוזמן', 'תוזמנו')} מחדש, מרווח של ${minutes(gap)} ביניהם.`;
     });
 
   const removeTarget = async (targetId: string, name: string, pending: number) => {
@@ -398,8 +407,17 @@ export function QueueTunerSheet({
             {name}
           </p>
           <p className="mt-1">
-            יבוטלו <Num>{pending}</Num> פרסומים שממתינים לקבוצה הזו, והקבוצה תוסר גם מהתזמון הפעיל שיצר אותם — אחרת היא הייתה חוזרת
-            לתור תוך דקה. אי אפשר להחזיר אותם — אפשר רק להוסיף את הקבוצה שוב לתור.
+            {pending === 1 ? (
+              <>
+                יבוטל פרסום אחד שממתין לקבוצה הזו, והקבוצה תוסר גם מהתזמון הפעיל שיצר אותו — אחרת היא הייתה חוזרת לתור תוך דקה. אי
+                אפשר להחזיר אותו — אפשר רק להוסיף את הקבוצה שוב לתור.
+              </>
+            ) : (
+              <>
+                יבוטלו <Num>{pending}</Num> פרסומים שממתינים לקבוצה הזו, והקבוצה תוסר גם מהתזמון הפעיל שיצר אותם — אחרת היא הייתה
+                חוזרת לתור תוך דקה. אי אפשר להחזיר אותם — אפשר רק להוסיף את הקבוצה שוב לתור.
+              </>
+            )}
           </p>
         </>
       ),
@@ -409,7 +427,7 @@ export function QueueTunerSheet({
     if (!ok) return;
     await run(`remove:${targetId}`, async () => {
       const removed = await removeTargetFromQueue(targetId, scope);
-      return `${removed} פרסומים הוסרו מהתור.`;
+      return `${posts(removed)} ${agree(removed, 'הוסר', 'הוסרו')} מהתור.`;
     });
   };
 
@@ -420,7 +438,7 @@ export function QueueTunerSheet({
       // addTargetsToQueue skips a group that already has a row waiting for this
       // post, so "0 נוספו" is a real outcome and needs its own sentence rather
       // than a success message with a zero in it.
-      return added ? `${added} פרסומים נוספו לסוף התור.` : 'לא נוסף כלום — הקבוצות שבחרתם כבר ממתינות לפוסט הזה.';
+      return added ? `${posts(added)} ${agree(added, 'נוסף', 'נוספו')} לסוף התור.` : 'לא נוסף כלום — הקבוצות שבחרתם כבר ממתינות לפוסט הזה.';
     });
 
   const setGapTo = (value: number) => {
@@ -432,6 +450,9 @@ export function QueueTunerSheet({
 
   const hasQueue = rows.length > 0;
   const working = busy !== null;
+  // "ל-" takes the hyphen before a digit only; the singular and the dual spell
+  // the number out, so they attach straight to the prefix ("לדקה אחת").
+  const gapLabel = gap <= 2 ? `ל${minutes(gap)}` : `ל-${minutes(gap)}`;
 
   const footer =
     !loading && !error && hasQueue ? (
@@ -440,7 +461,7 @@ export function QueueTunerSheet({
           ? 'עדכן את מועד ההתחלה והמרווח'
           : startDirty
             ? 'הזז את התור למועד החדש'
-            : `עדכן מרווח ל-${gap} דקות`}
+            : `עדכן מרווח ${gapLabel}`}
       </Button>
     ) : undefined;
 
@@ -589,8 +610,14 @@ export function QueueTunerSheet({
             {splitNote && <Notice tone="info">{splitNote}</Notice>}
             {otherChannels.length > 0 && (
               <Notice tone="warn">
-                בתור ממתינים גם <Num>{otherChannels.length}</Num> יעדים שאינם קבוצת פייסבוק רגילה. המספר למעלה הוא המרווח שנאכף בין
-                פרסומים לקבוצות; ליעדים האחרים ההגדרות ידרשו <Num>{nextGlobalGap}</Num> דק׳ בלבד.
+                {otherChannels.length === 1 ? (
+                  'בתור ממתין גם יעד אחד שאינו קבוצת פייסבוק רגילה.'
+                ) : (
+                  <>
+                    בתור ממתינים גם <Num>{otherChannels.length}</Num> יעדים שאינם קבוצת פייסבוק רגילה.
+                  </>
+                )}{' '}
+                המספר למעלה הוא המרווח שנאכף בין פרסומים לקבוצות; ליעדים האחרים ההגדרות ידרשו <Num>{nextGlobalGap}</Num> דק׳ בלבד.
               </Notice>
             )}
 
@@ -721,9 +748,21 @@ export function QueueTunerSheet({
 
                 {picked.length > 0 && addFirstISO && addLastISO && (
                   <Notice tone="info">
-                    <Num>{picked.length}</Num> פרסומים חדשים ייכנסו אחרי האחרון שבתור, אחד כל <Num>{addGap}</Num> דק׳: הראשון ב-
-                    <Clock iso={addFirstISO} withDay={!sameLocalDay(new Date(addFirstISO), new Date(snap!.at))} /> והאחרון ב-
-                    <Clock iso={addLastISO} withDay={!sameLocalDay(new Date(addLastISO), new Date(snap!.at))} />.
+                    {/* One row has no "first and last" — with a single pick
+                        addFirstISO and addLastISO are the same instant, and
+                        the two-clock sentence read as two publications. */}
+                    {picked.length === 1 ? (
+                      <>
+                        פרסום אחד חדש ייכנס אחרי האחרון שבתור, ב-
+                        <Clock iso={addFirstISO} withDay={!sameLocalDay(new Date(addFirstISO), new Date(snap!.at))} />.
+                      </>
+                    ) : (
+                      <>
+                        <Num>{picked.length}</Num> פרסומים חדשים ייכנסו אחרי האחרון שבתור, אחד כל <Num>{addGap}</Num> דק׳: הראשון ב-
+                        <Clock iso={addFirstISO} withDay={!sameLocalDay(new Date(addFirstISO), new Date(snap!.at))} /> והאחרון ב-
+                        <Clock iso={addLastISO} withDay={!sameLocalDay(new Date(addLastISO), new Date(snap!.at))} />.
+                      </>
+                    )}
                     {gapDirty && ' החישוב לפי המרווח שיש בתור כרגע; המרווח החדש שבחרתם עוד לא נשמר.'}
                   </Notice>
                 )}
@@ -735,7 +774,7 @@ export function QueueTunerSheet({
                   disabled={working || picked.length === 0}
                   onClick={addPicked}
                 >
-                  {picked.length > 0 ? `הוסף ${picked.length} קבוצות לתור` : 'בחרו קבוצות להוספה'}
+                  {picked.length > 0 ? `הוסף ${counted(picked.length, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')} לתור` : 'בחרו קבוצות להוספה'}
                 </Button>
               </>
             )}

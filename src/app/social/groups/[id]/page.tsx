@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RepeatIcon, StarIcon } from '@/components/icons';
 import { PublicationItem } from '@/components/social/PublicationItem';
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
@@ -159,7 +160,14 @@ export default function GroupProfilePage() {
             <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={72} />
             <div className="min-w-0 grow">
               <h2 dir="auto" className="text-lg font-extrabold leading-tight text-mist-100">
-                {group.favorite && <span aria-hidden>⭐ </span>}
+                {group.favorite && (
+                  <>
+                    {/* Silent before: an aria-hidden star meant the heading
+                        never said the group was a favourite. */}
+                    <span className="sr-only">מועדפת. </span>
+                    <StarIcon className="me-1 inline h-4 w-4 align-[-2px] text-warning-400" fill="currentColor" aria-hidden />
+                  </>
+                )}
                 {group.name}
               </h2>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -178,10 +186,14 @@ export default function GroupProfilePage() {
               פתח בפייסבוק ↗
             </a>
             <Button variant="secondary" busy={busy === 'fav'} onClick={() => act('fav', () => updateTarget(group.id, { favorite: !group.favorite }))}>
-              {group.favorite ? '☆ הסר ממועדפות' : '⭐ הוסף למועדפות'}
+              {/* The star is filled when the tap would MAKE it a favourite
+                  and hollow when the tap would undo that — the same pairing
+                  the two emoji carried. */}
+              <StarIcon className="h-4 w-4" {...(group.favorite ? {} : { fill: 'currentColor' })} />
+              {group.favorite ? 'הסר ממועדפות' : 'הוסף למועדפות'}
             </Button>
             <Button variant="secondary" busy={busy === 'sync'} onClick={() => act('sync', () => requestGroupRefresh([group.id]), 'התוכנה שבמחשב תמשוך שם ותמונה מחדש.')}>
-              🔄 רענן פרטים
+              <RepeatIcon className="h-4 w-4" /> רענן פרטים
             </Button>
           </div>
         </Card>

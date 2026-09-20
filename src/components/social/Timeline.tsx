@@ -1,7 +1,9 @@
 'use client';
 
 import type { QueueRow } from '@/lib/social/client';
-import { formatDateHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import { isInFlight, needsHuman } from '@/lib/social/status';
+import { agree, counted, formatDateHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import type { QueueStatus } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
 import { EmptyState, STATUS_TONE, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
 import { CalendarIcon } from '@/components/icons';
@@ -33,6 +35,28 @@ const RING: Record<Tone, string> = {
   neutral: 'ring-mist-500/20',
 };
 
+/**
+ * The one sentence a stop may carry beyond its time.
+ *
+ * status.ts is the classification, and by it `publishing` is the ONLY status a
+ * worker is actually holding; `awaiting_confirmation` is WAITING — parked until
+ * a person taps confirm. This strip used to lump the two together and print
+ * "מפרסם עכשיו" on both, while PublicationItem called that very same row
+ * "מוכן — ממתין לאישור שלכם" one card away. One row cannot be publishing on one
+ * screen and waiting for you on the next, so only `publishing` says it is
+ * happening now, and the human-waiting statuses say what they are waiting for —
+ * in the same words the queue list uses.
+ *
+ * A status that is absent here (scheduled, paused, and anything terminal) has
+ * nothing to add: its time and its countdown already say everything.
+ */
+const STATUS_LINE: Partial<Record<QueueStatus, string>> = {
+  publishing: 'מפרסם עכשיו',
+  awaiting_confirmation: 'מוכן — ממתין לאישור שלכם',
+  manual_pending: 'ממתין לפרסום ידני',
+  needs_attention: 'דורש טיפול שלכם',
+};
+
 export function Timeline({
   rows,
   limit = 8,
@@ -48,10 +72,15 @@ export function Timeline({
    * capped read: measured on the dashboard with 61 rows queued, the card said
    * "6 shown, ועוד 34 פרסומים אחריהם" — 6 + 34 = 40 = UPCOMING_LIMIT, while
    * the real remainder was 55. A read ceiling presented as a total is the
-   * exact defect this screen exists not to commit. Given `total` (the
-   * dashboard passes summary.queued, the same exact count as its subtitle)
-   * the remainder is real; the array's own length is only used as a fallback
-   * for callers that have no exact count.
+   * exact defect this screen exists not to commit. Given `total` the remainder
+   * is real; the array's own length is only used as a fallback for callers
+   * that have no exact count.
+   *
+   * It must count the SAME SET the rows were read with, not merely a number
+   * about the queue. The dashboard reads AUTOMATIC_WAITING_STATUSES and passed
+   * summary.queued, which adds the in-flight row on top — so the footer
+   * promised one publication this list could never reach. status.ts keeps
+   * `automaticWaiting` for exactly this.
    */
   total?: number;
 }) {
@@ -66,7 +95,15 @@ export function Timeline({
       {items.map((row, i) => {
         const day = zonedDateISO(new Date(row.scheduled_at));
         const showDay = day !== today && (i === 0 || zonedDateISO(new Date(items[i - 1].scheduled_at)) !== day);
-        const active = row.status === 'publishing' || row.status === 'awaiting_confirmation';
+        /*
+         * The halo and the tint mark the stop the run is standing on: the row a
+         * worker holds right now, and the row that has stopped the run by
+         * waiting for a person. Both mean "nothing moves past here" — which is
+         * why they share the emphasis, and exactly why they may not share the
+         * sentence below.
+         */
+        const standing = isInFlight(row.status) || needsHuman(row.status);
+        const line = STATUS_LINE[row.status];
         const tone = STATUS_TONE[row.status];
         return (
           <li key={row.id}>
@@ -74,16 +111,16 @@ export function Timeline({
             <div className="flex items-stretch gap-3">
               {/* The rail: a dot per stop, a line between them. */}
               <div className="flex w-3 shrink-0 flex-col items-center pt-3.5">
-                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${TONE_FILL[tone]} ${active ? 'ring-4' : ''} ${active ? RING[tone] : ''}`} />
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${TONE_FILL[tone]} ${standing ? 'ring-4' : ''} ${standing ? RING[tone] : ''}`} />
                 {i < items.length - 1 && <span aria-hidden className="w-px grow bg-ink-700" />}
               </div>
-              <div className={`flex min-w-0 grow items-center gap-2.5 rounded-xl px-2 py-2 ${active ? TONE_TINT[tone] : ''}`}>
+              <div className={`flex min-w-0 grow items-center gap-2.5 rounded-xl px-2 py-2 ${standing ? TONE_TINT[tone] : ''}`}>
                 <span className="w-12 shrink-0 text-sm font-extrabold tabular-nums text-brand-400">{formatTimeHe(row.scheduled_at)}</span>
                 <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
                 <div className="min-w-0 grow">
                   <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
                   {row.status === 'scheduled' && <p className="text-[11px] text-mist-500">{relativeHe(row.scheduled_at)}</p>}
-                  {active && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>מפרסם עכשיו</p>}
+                  {line && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{line}</p>}
                 </div>
               </div>
             </div>
@@ -91,7 +128,14 @@ export function Timeline({
         );
       })}
       {(total ?? rows.length) > items.length && (
-        <li className="ps-6 pt-1.5 text-xs text-mist-500">ועוד {(total ?? rows.length) - items.length} פרסומים אחריהם</li>
+        /* The trailing word agrees too: "ועוד פרסום אחד אחריו", never
+           "ועוד 1 פרסומים אחריהם". At a window of six this line reads 1 as
+           soon as a seventh row is waiting, which on the dashboard is the
+           common case rather than the edge one. */
+        <li className="ps-6 pt-1.5 text-xs text-mist-500">
+          ועוד {counted((total ?? rows.length) - items.length, 'פרסום אחד', 'פרסומים', 'שני פרסומים')}{' '}
+          {agree((total ?? rows.length) - items.length, 'אחריו', 'אחריהם')}
+        </li>
       )}
     </ol>
   );

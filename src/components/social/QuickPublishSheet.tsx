@@ -13,7 +13,7 @@ import {
   type QuickPublishPlan,
   type QuickPublishResult,
 } from '@/lib/social/library';
-import { formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { agree, counted, formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { Stamp } from './DateTime';
 import type { MediaItem } from '@/lib/social/types';
 import { SchedulePlanPreview, type SchedulePlan } from './SchedulePicker';
@@ -318,7 +318,7 @@ export function QuickPublishSheet({
             <Notice tone="success">
               {result.queued === 1
                 ? `פרסום אחד נכנס לתור עבור ${result.targetCount === 1 ? 'יעד אחד' : `${result.targetCount} יעדים`}.`
-                : `${result.queued} פרסומים נכנסו לתור עבור ${result.targetCount === 1 ? 'יעד אחד' : `${result.targetCount} יעדים`}.`}
+                : `${counted(result.queued, 'פרסום אחד נכנס', 'פרסומים נכנסו', 'שני פרסומים נכנסו')} לתור עבור ${counted(result.targetCount, 'יעד אחד', 'יעדים', 'שני יעדים')}.`}
             </Notice>
           ) : !result.ran ? (
             /* The run did not happen, so the queue was never built — that is a
@@ -361,7 +361,8 @@ export function QuickPublishSheet({
           {/* The run's real numbers, not a summary of intent. */}
           {result.ran ? (
             <Notice tone="info">
-              דפים: {result.published} פורסמו, {result.skipped} דולגו, {result.deferred} נדחו, {result.failed} נכשלו. קבוצות מתפרסמות דרך התוכנה שעל המחשב שלכם.
+              דפים: {result.published} {agree(result.published, 'פורסם', 'פורסמו')}, {result.skipped} {agree(result.skipped, 'דולג', 'דולגו')},{' '}
+              {result.deferred} {agree(result.deferred, 'נדחה', 'נדחו')}, {result.failed} {agree(result.failed, 'נכשל', 'נכשלו')}. קבוצות מתפרסמות דרך התוכנה שעל המחשב שלכם.
             </Notice>
           ) : (
             <Notice tone="warn">
@@ -433,7 +434,7 @@ export function QuickPublishSheet({
           <section className="min-w-0">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h3 className="text-sm font-extrabold text-mist-100">לאן מפרסמים</h3>
-              <Badge tone="brand">נבחרו {selectedIds.length}</Badge>
+              <Badge tone="brand">{counted(selectedIds.length, 'נבחר יעד אחד', 'נבחרו', 'נבחרו שניים')}</Badge>
             </div>
             <TargetPicker
               targets={ctx.targets}
@@ -444,7 +445,7 @@ export function QuickPublishSheet({
             {overlap.length > 0 && (
               <div className="mt-2">
                 <Notice tone="warn">
-                  {overlap.length} מהיעדים שבחרתם כבר קיבלו את הפוסט הזה. המערכת לא שולחת את אותו פוסט פעמיים לאותה קבוצה, ולכן הפרסומים האלה ידולגו. בחרו קבוצות אחרות, או שכפלו את הפוסט לנוסח חדש.
+                  {overlap.length} {agree(overlap.length, 'מהיעדים שבחרתם כבר קיבל', 'מהיעדים שבחרתם כבר קיבלו')} את הפוסט הזה. המערכת לא שולחת את אותו פוסט פעמיים לאותה קבוצה, ולכן הפרסומים האלה ידולגו. בחרו קבוצות אחרות, או שכפלו את הפוסט לנוסח חדש.
                 </Notice>
               </div>
             )}
@@ -567,7 +568,8 @@ export function QuickPublishSheet({
 
                 {plan.overCampaignCapToday > 0 && (
                   <Notice tone="warn">
-                    לסבב של הפוסט הזה הגדרתם תקרה של {plan.maxPerCampaignPerDay} פרסומים ביום, ולפי התוכנית {plan.overCampaignCapToday} מהפרסומים של היום חורגים ממנה. גם הם ידולגו עם סיבה ברורה בהיסטוריה, ולא יידחו למחר.
+                    לסבב של הפוסט הזה הגדרתם תקרה של {counted(plan.maxPerCampaignPerDay, 'פרסום אחד', 'פרסומים', 'שני פרסומים')} ביום, ולפי התוכנית{' '}
+                    {plan.overCampaignCapToday} {agree(plan.overCampaignCapToday, 'מהפרסומים של היום חורג', 'מהפרסומים של היום חורגים')} ממנה. גם הם ידולגו עם סיבה ברורה בהיסטוריה, ולא יידחו למחר.
                   </Notice>
                 )}
 

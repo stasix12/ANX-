@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { StarIcon } from '@/components/icons';
 import { detectCity, sortCities } from '@/lib/social/cities';
+import { agree, counted } from '@/lib/social/time';
 import { type SocialTarget, type Variant } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
 import { Badge, Button, MethodBadge, SegmentedControl, inputClass } from './ui';
@@ -109,9 +111,15 @@ export function TargetPicker({
    */
   const hiddenSelected = selected.filter((id) => !visible.some((t) => t.id === id));
 
-  const quickSets = [
+  /*
+   * `label` is the accessible name of the "+" button beside each set, so it
+   * has to be words: with the star inside it VoiceOver announced the
+   * favourites set as "white medium star מועדפות". The mark is an icon now,
+   * and it is drawn, not spoken.
+   */
+  const quickSets: { label: string; icon?: React.ReactNode; items: SocialTarget[] }[] = [
     { label: city || 'כל המוצגים', items: visible },
-    { label: '⭐ מועדפות', items: targets.filter((t) => t.favorite) },
+    { label: 'מועדפות', icon: <StarIcon className="h-3.5 w-3.5" fill="currentColor" />, items: targets.filter((t) => t.favorite) },
     { label: 'דפים', items: targets.filter((t) => t.channel === 'facebook_page') },
   ].filter((s) => s.items.length > 0);
 
@@ -161,7 +169,7 @@ export function TargetPicker({
         {quickSets.map((q) => (
           <span key={q.label} className="inline-flex overflow-hidden rounded-xl">
             <Button size="sm" variant="secondary" className="!rounded-none" onClick={() => only(q.items)}>
-              רק {q.label} ({q.items.length})
+              {q.icon}רק {q.label} ({q.items.length})
             </Button>
             {selected.length > 0 && (
               <Button
@@ -183,14 +191,17 @@ export function TargetPicker({
           </Button>
         )}
         <span className="ms-auto">
-          <Badge tone={selected.length ? 'brand' : 'neutral'}>נבחרו {selected.length}</Badge>
+          <Badge tone={selected.length ? 'brand' : 'neutral'}>
+            {agree(selected.length, 'נבחר', 'נבחרו')} {selected.length}
+          </Badge>
         </span>
       </div>
 
       {hiddenSelected.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warning-400/30 bg-warning-400/12 px-3 py-2">
           <span className="text-xs font-bold text-warning-400">
-            {hiddenSelected.length} יעדים נבחרים לא מוצגים בסינון הנוכחי
+            {counted(hiddenSelected.length, 'יעד אחד שנבחר אינו מוצג', 'יעדים נבחרים לא מוצגים', 'שני יעדים נבחרים לא מוצגים')} בסינון
+            הנוכחי
           </span>
           <Button
             size="sm"
@@ -247,7 +258,16 @@ export function TargetPicker({
                       end; inside an RTL box it was being clipped at the START, which
                       made every Russian group render as the same "…и Негев". */}
                   <p dir="auto" className="truncate text-sm font-bold text-mist-100">
-                    {t.favorite && <span aria-hidden>⭐ </span>}
+                    {t.favorite && (
+                      <>
+                        {/* The checkbox beside this row carries the name as
+                            its accessible name, so the mark has to say itself
+                            — an aria-hidden star was silent on the one flag
+                            that changes how the list is used. */}
+                        <span className="sr-only">מועדפת. </span>
+                        <StarIcon className="me-1 inline h-3.5 w-3.5 align-[-1px] text-warning-400" fill="currentColor" aria-hidden />
+                      </>
+                    )}
                     {t.name}
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1">

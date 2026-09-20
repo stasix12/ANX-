@@ -21,6 +21,7 @@ import {
 } from '@/components/social/ui';
 import { callSocialApi, listTargets, updateTarget } from '@/lib/social/client';
 import { Stamp } from '@/components/social/DateTime';
+import { counted } from '@/lib/social/time';
 import { PERMISSION_LABEL, REQUIRED_SCOPES, type SocialAccount, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { TagIcon } from '@/components/icons';
@@ -92,7 +93,7 @@ function TargetsScreen() {
   useEffect(() => {
     load().catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
     const connect = params.get('connect');
-    if (connect === 'ok') setFlash(`פייסבוק חובר בהצלחה. סונכרנו ${params.get('pages') ?? '0'} דפים.`);
+    if (connect === 'ok') setFlash(`פייסבוק חובר בהצלחה. סונכרנו ${counted(Number(params.get('pages') ?? 0), 'דף אחד', 'דפים', 'שני דפים')}.`);
     if (connect === 'declined') setFlash('ההתחברות בוטלה בפייסבוק — לא ניתנו הרשאות.');
     if (connect === 'state') setFlash('בדיקת האבטחה (state) נכשלה. נסו להתחבר שוב מהדפדפן הזה.');
     if (connect === 'error') setFlash(`ההתחברות נכשלה: ${params.get('message') ?? ''}`);
@@ -237,8 +238,15 @@ function TargetsScreen() {
                         line of text beside it — the one sub-44px target here.
                         The name keeps its own box so `truncate` still has a
                         block container to ellipsise inside. */}
-                    <a href={t.url || undefined} target="_blank" rel="noreferrer" dir="auto" className="flex min-h-11 items-center font-bold text-mist-100 hover:text-brand-400">
-                      <span className="truncate">{t.name}</span>
+                    <a href={t.url || undefined} target="_blank" rel="noreferrer" className="flex min-h-11 items-center font-bold text-mist-100 hover:text-brand-400">
+                      {/* dir="auto" belongs on the element that truncates, not
+                          on its parent. The ellipsis side is decided by the
+                          box's own resolved direction, so "Сабрина Клининг"
+                          inside an RTL row clipped at its head — the first
+                          letters — rather than its tail. The anchor carried
+                          the attribute and the span did not, which is exactly
+                          what layout.test.ts scans for. */}
+                      <span dir="auto" className="truncate">{t.name}</span>
                     </a>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <MethodBadge method="api" />

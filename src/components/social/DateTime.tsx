@@ -1,4 +1,6 @@
-import { formatDateTimeHe } from '@/lib/social/time';
+import { formatDateTimeHe, ltr, stampText } from '@/lib/social/time';
+
+export { ltr, stampText };
 
 /**
  * Timestamps, rendered so the bidi algorithm leaves them alone.
@@ -17,24 +19,6 @@ import { formatDateTimeHe } from '@/lib/social/time';
  * Formatting itself is untouched: nothing here decides what a timestamp says,
  * only which way round it is read.
  */
-
-/** U+2066 LEFT-TO-RIGHT ISOLATE … U+2069 POP DIRECTIONAL ISOLATE. */
-const LRI = '\u2066';
-const PDI = '\u2069';
-
-/**
- * The character-level equivalent of `dir="ltr"`, for the places a timestamp
- * has to stay a plain string: an `aria-label`, a `title=`, or a prop typed
- * `string` such as AlertBar's `body`. You cannot put a <span> inside a string.
- */
-export function ltr(text: string): string {
-  return `${LRI}${text}${PDI}`;
-}
-
-/** The same, for a full date-and-time that is built into a Hebrew sentence. */
-export function stampText(iso: string | Date | null | undefined): string {
-  return ltr(formatDateTimeHe(iso));
-}
 
 /** A full timestamp as an element, for the ordinary JSX case. */
 export function Stamp({

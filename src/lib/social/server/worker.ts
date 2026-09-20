@@ -2,7 +2,7 @@ import 'server-only';
 import { adapterFor } from '../channels/registry';
 import { renderPostText } from '../compose';
 import { evaluateQueueItem } from '../rules';
-import { relativeHe } from '../time';
+import { stampText } from '../time';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
@@ -266,7 +266,11 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
   if (decision.action === 'skip') return skip(decision.reason);
   if (decision.action === 'defer') {
     await db.from('social_queue').update({ status: 'scheduled', step: 'pending', scheduled_at: decision.until }).eq('id', item.id);
-    await logActivity('info', 'deferred', `${decision.reason} (עד ${decision.until})`, { queueId: item.id });
+    /* decision.reason is already a whole Hebrew sentence ("הסבב מושהה.",
+       "המרווח המינימלי בין פרסומים."). The ISO instant that used to be
+       bracketed onto the end of it is not a sentence, and this line is read in
+       the notification bell; it belongs in meta. */
+    await logActivity('info', 'deferred', decision.reason, { queueId: item.id, until: decision.until });
     return 'deferred';
   }
   if (decision.action === 'wait') {
@@ -343,11 +347,13 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
         const retryAt = new Date(now.getTime() + 10 * 60_000 * item.attempts).toISOString();
         await db.from('social_queue').update({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: err.message }).eq('id', item.id);
         /*
-         * This line is what the owner reads in the notification bell. An ISO
-         * instant is not a sentence, so the wait is said in words and the
-         * exact stamp moves to meta for whoever debugs the retry.
+         * This line is what the owner reads in the notification bell, days
+         * after it was written. An ISO instant is not a sentence and a
+         * relative phrase goes stale in the row, so the retry is stated as an
+         * absolute time, isolated so the stamp reads left-to-right inside the
+         * Hebrew.
          */
-        await logActivity('warn', 'retry', `ניסיון ${item.attempts} לפרסום נכשל. ${err.message} המערכת תנסה שוב ${relativeHe(retryAt)}.`, {
+        await logActivity('warn', 'retry', `ניסיון ${item.attempts} לפרסום נכשל. ${err.message} המערכת תנסה שוב ב-${stampText(retryAt)}.`, {
           queueId: item.id,
           retryAt,
         });

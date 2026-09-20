@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronIcon } from '@/components/icons';
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
 import { countdownTo } from '@/lib/social/countdown';
-import { formatTimeHe, relativeHe } from '@/lib/social/time';
+import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
 import { PostCover } from './PostCover';
 import { TargetAvatar } from './TargetAvatar';
@@ -340,7 +340,7 @@ export function LiveCampaignHero({
                 into an ellipsis — decoration crowding out the two things the
                 owner asked this line for. They are on the run's own screen,
                 one tap away. */}
-            {[startedAt ? `התחיל ${relativeHe(startedAt)}` : 'טרם יצא פרסום', targetCount && !state.truncated ? `${targetCount} קבוצות` : '']
+            {[startedAt ? `התחיל ${relativeHe(startedAt)}` : 'טרם יצא פרסום', targetCount && !state.truncated ? counted(targetCount, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות') : '']
               .filter(Boolean)
               .join(' · ')}
           </p>
@@ -349,7 +349,7 @@ export function LiveCampaignHero({
 
       <div className="mt-3">
         <div className="flex items-baseline justify-between gap-2">
-          <Ratio done={view.handled} total={view.total} suffix="טופלו" />
+          <Ratio done={view.handled} total={view.total} suffix={agree(view.handled, 'טופל', 'טופלו')} />
           <p className="text-lg font-extrabold tabular-nums text-brand-400">{view.percent}%</p>
         </div>
         {/* Segmented, and that is forced by the figure above it: a single
@@ -555,7 +555,7 @@ export function LiveQueueHero({
       </div>
 
       <div className="mt-3.5">
-        <Ratio done={publishedToday} total={dailyTarget} suffix="פורסמו היום, מתוך התקרה שהגדרתם" />
+        <Ratio done={publishedToday} total={dailyTarget} suffix={`${agree(publishedToday, 'פורסם', 'פורסמו')} היום, מתוך התקרה שהגדרתם`} />
         {/*
           The bar CLAMPS ITS WIDTH AND NEVER ITS NUMBER. `today > maxPerDay` is
           reachable in real data — markManualPublished() and publishNow() go
@@ -568,7 +568,7 @@ export function LiveQueueHero({
           <ProgressBar
             segments={[{ value: Math.min(publishedToday, dailyTarget), className: paused ? 'bg-mist-500' : 'bg-success-400' }]}
             total={dailyTarget}
-            ariaLabel={`${publishedToday} מתוך ${dailyTarget} פורסמו היום`}
+            ariaLabel={`${publishedToday} מתוך ${dailyTarget} ${agree(publishedToday, 'פורסם', 'פורסמו')} היום`}
             height="h-2.5"
           />
         </div>
@@ -590,7 +590,9 @@ export function LiveQueueHero({
             הפעל פרסום
           </Button>
           <p className="mt-1.5 text-center text-xs text-mist-500">
-            {pendingCancellable > 0 ? `${pendingCancellable} פרסומים לא יצאו עד שתפעילו.` : 'שום דבר לא ממתין בתור.'}
+            {pendingCancellable > 0
+              ? `${counted(pendingCancellable, 'פרסום אחד', 'פרסומים', 'שני פרסומים')} ${agree(pendingCancellable, 'לא יצא', 'לא יצאו')} עד שתפעילו.`
+              : 'שום דבר לא ממתין בתור.'}
           </p>
         </div>
       )}

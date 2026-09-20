@@ -1,6 +1,7 @@
 'use client';
 
 import { Stamp } from './DateTime';
+import { counted } from '@/lib/social/time';
 import type { MediaItem, SocialTarget } from '@/lib/social/types';
 import { SchedulePlanPreview, type SchedulePlan } from './SchedulePicker';
 import { TargetAvatar } from './TargetAvatar';
@@ -96,12 +97,12 @@ export function PreLaunchReview({
           <div className="mb-2 flex flex-wrap gap-1.5">
             {pages.length > 0 && (
               <Badge tone="good">
-                {pages.length} דפים · <MethodBadge method="api" />
+                {counted(pages.length, 'דף אחד', 'דפים', 'שני דפים')} · <MethodBadge method="api" />
               </Badge>
             )}
             {groups.length > 0 && (
               <Badge tone="info">
-                {groups.length} קבוצות · <MethodBadge method="browser" />
+                {counted(groups.length, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')} · <MethodBadge method="browser" />
               </Badge>
             )}
           </div>

@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { CheckCircleIcon, CopyIcon } from '@/components/icons';
+import { CheckCircleIcon, CheckIcon, CopyIcon, PlayIcon } from '@/components/icons';
 import { PostPreview } from '@/components/social/PostPreview';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Badge, Button, Card, EmptyState, Field, Loading, Notice, ProgressBar, inputClass, useToast } from '@/components/social/ui';
@@ -141,7 +141,7 @@ export default function ManualKitPage() {
                 <Step n={1} title="העתיקו את הטקסט" done={copied}>
                   <textarea readOnly dir="auto" aria-label="הטקסט לפרסום" className={`${inputClass} min-h-40`} value={item.rendered_text} onFocus={(e) => e.currentTarget.select()} />
                   <Button size="lg" className="mt-2 w-full" variant={copied ? 'secondary' : 'primary'} onClick={copyText}>
-                    <CopyIcon className="h-4 w-4" /> {copied ? '✓ הועתק' : 'העתק טקסט'}
+                    {copied ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />} {copied ? 'הועתק' : 'העתק טקסט'}
                   </Button>
                 </Step>
 
@@ -168,7 +168,10 @@ export default function ManualKitPage() {
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={m.url} alt="" loading="lazy" className="aspect-square w-full object-cover" />
                             ) : (
-                              <div className="grid aspect-square place-items-center text-xs font-bold text-mist-300">🎬 סרטון</div>
+                              <div className="grid aspect-square place-items-center gap-1 text-xs font-bold text-mist-300">
+                                <PlayIcon className="h-6 w-6" />
+                                סרטון
+                              </div>
                             )}
                           </a>
                         </li>
@@ -211,7 +214,7 @@ export default function ManualKitPage() {
                   </Field>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
                     <Button size="lg" busy={busy} onClick={() => finish('published')}>
-                      ✅ פורסם{remaining.length > 0 ? ' — לבא' : ''}
+                      <CheckIcon className="h-4 w-4" /> פורסם{remaining.length > 0 ? ' — לבא' : ''}
                     </Button>
                     <Button size="lg" variant="secondary" busy={busy} onClick={() => finish('skip')}>
                       דלג על הקבוצה
@@ -249,8 +252,12 @@ function Step({ n, title, done, children }: { n: number; title: string; done?: b
         <span
           className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-extrabold ${done ? 'bg-success-400 text-ink-950' : 'bg-brand-300/12 text-brand-400'}`}
         >
-          {done ? '✓' : n}
+          {done ? <CheckIcon className="h-3.5 w-3.5" /> : n}
         </span>
+        {/* The tick used to be a literal "✓", which VoiceOver read as "check
+            mark" in the middle of the heading. The icon is silent, so the
+            state it carries says itself. */}
+        {done && <span className="sr-only">בוצע: </span>}
         {title}
       </h3>
       {children}

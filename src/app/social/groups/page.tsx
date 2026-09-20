@@ -590,7 +590,9 @@ export default function GroupsPage() {
       <Sheet
         open={categoryOpen}
         onClose={() => setCategoryOpen(false)}
-        title={`קטגוריה ל-${selected.length} קבוצות`}
+        /* The same ל-/ל split the rest of this file already uses: "קטגוריה
+           לקבוצה אחת", never "קטגוריה ל-1 קבוצות". */
+        title={selected.length === 1 ? 'קטגוריה לקבוצה אחת' : `קטגוריה ל-${selected.length} קבוצות`}
         footer={
           <Button
             size="lg"

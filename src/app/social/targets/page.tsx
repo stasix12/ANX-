@@ -9,9 +9,11 @@ import {
   Button,
   Card,
   EmptyState,
+  ErrorState,
   Loading,
   MethodBadge,
   Notice,
+  Skeleton,
   SkeletonList,
   Toggle,
   useConfirm,
@@ -74,6 +76,19 @@ function TargetsScreen() {
     setStatus(s);
   }, []);
 
+  /**
+   * A failed first read left a red banner over skeletons that shimmered for
+   * ever, and the only way forward on a phone was a browser reload. Retry
+   * drops back to "not known yet" — so the counts below go back to skeletons
+   * rather than showing the previous attempt's numbers as if they were fresh.
+   */
+  const retry = useCallback(() => {
+    setError(null);
+    setTargets(null);
+    setStatus(null);
+    load().catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
+  }, [load]);
+
   useEffect(() => {
     load().catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
     const connect = params.get('connect');
@@ -128,7 +143,7 @@ function TargetsScreen() {
     <SocialShell title="דפי פייסבוק" lede="דפים שמפרסמים דרך ה-API הרשמי">
       <div className="space-y-5">
         {flash && <Notice tone="info">{flash}</Notice>}
-        {error && <Notice tone="error">{error}</Notice>}
+        {error && <ErrorState message={error} onRetry={retry} />}
         {envMissing.length > 0 && (
           <Notice tone="warn">
             חסרים משתני סביבה בשרת: <code dir="ltr">{envMissing.join(', ')}</code>. ראו docs/SOCIAL.md.
@@ -136,7 +151,7 @@ function TargetsScreen() {
         )}
 
         <Card title="חשבון פייסבוק">
-          {!status && <Loading />}
+          {!status && !error && <Loading />}
           {status && !account && (
             <div className="space-y-3">
               <p className="text-sm text-mist-300">
@@ -201,8 +216,11 @@ function TargetsScreen() {
           )}
         </Card>
 
-        <Card title={`דפים שאתם מנהלים (${pages.length})`} subtitle="מתפרסמים דרך Graph API הרשמי של Meta">
-          {targets === null && <SkeletonList rows={2} />}
+        {/* The count is in the title, so the title cannot carry one until the
+            read has landed: "דפים שאתם מנהלים (0)" over a skeleton told the
+            owner they have no pages at the exact moment we did not know. */}
+        <Card title={targets === null ? 'דפים שאתם מנהלים' : `דפים שאתם מנהלים (${pages.length})`} subtitle="מתפרסמים דרך Graph API הרשמי של Meta">
+          {targets === null && !error && <SkeletonList rows={2} />}
           {targets && pages.length === 0 && (
             <EmptyState
               icon={<TagIcon className="h-5 w-5" />}
@@ -215,8 +233,12 @@ function TargetsScreen() {
               {pages.map((t) => (
                 <li key={t.id} className="flex items-center gap-3 py-3">
                   <div className="min-w-0 grow">
-                    <a href={t.url || undefined} target="_blank" rel="noreferrer" dir="auto" className="block truncate font-bold text-mist-100 hover:text-brand-400">
-                      {t.name}
+                    {/* min-h-11: the row's Toggle is 44px and this was a 24px
+                        line of text beside it — the one sub-44px target here.
+                        The name keeps its own box so `truncate` still has a
+                        block container to ellipsise inside. */}
+                    <a href={t.url || undefined} target="_blank" rel="noreferrer" dir="auto" className="flex min-h-11 items-center font-bold text-mist-100 hover:text-brand-400">
+                      <span className="truncate">{t.name}</span>
                     </a>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <MethodBadge method="api" />
@@ -239,7 +261,7 @@ function TargetsScreen() {
         </Card>
 
         <Card
-          title={`קבוצות (${groups.length})`}
+          title={targets === null ? 'קבוצות' : `קבוצות (${groups.length})`}
           subtitle="מתפרסמות בסיוע דפדפן מקומי — לא דרך API רשמי"
           action={
             <Link href="/social/groups" className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
@@ -249,7 +271,8 @@ function TargetsScreen() {
         >
           <div className="flex flex-wrap items-center gap-1.5">
             <MethodBadge method="browser" />
-            <Badge tone="neutral">{groups.filter((g) => g.enabled).length} פעילות</Badge>
+            {targets !== null && <Badge tone="neutral">{activeGroupsHe(groups.filter((g) => g.enabled).length)}</Badge>}
+            {targets === null && !error && <Skeleton className="h-5 w-28 rounded-full" />}
           </div>
           <p className="mt-2 text-sm leading-relaxed text-mist-300">
             Meta ביטלה את ה-Groups API באפריל 2024. לכן קבוצות מתפרסמות דרך חלון Chrome על המחשב שלכם, מהחשבון שלכם — לא דרך אינטגרציה
@@ -260,4 +283,16 @@ function TargetsScreen() {
       {confirm.dialog}
     </SocialShell>
   );
+}
+
+/**
+ * Hebrew counts one and two differently, so "1 פעילות" and "2 פעילות" are the
+ * lines that tell an owner nobody read the screen. Same forms as the duals in
+ * src/lib/social/time.ts; קבוצה is feminine, hence אחת / שתי.
+ */
+function activeGroupsHe(n: number): string {
+  if (n === 0) return 'אין קבוצות פעילות';
+  if (n === 1) return 'קבוצה אחת פעילה';
+  if (n === 2) return 'שתי קבוצות פעילות';
+  return `${n} קבוצות פעילות`;
 }

@@ -29,21 +29,67 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState('');
 
+  /**
+   * This bell is in the header of EVERY screen, so its poll is the module's
+   * single most-repeated read: listActivity(25) plus queueSummary(), and
+   * queueSummary() is nine exact-count queries on social_queue, not one. At
+   * 20s that was ~30 reads a minute from a phone sitting on a table.
+   *
+   * Three guards, in the order they matter:
+   *
+   * - IN-FLIGHT. A plain closure flag, not React state: state does not update
+   *   until the render after, which is far too late for a flag the very next
+   *   tick has to read. On a slow connection the 20s tick fired again before
+   *   the previous pair resolved, so the requests stacked and each one made
+   *   the next slower. A tick that finds one in the air skips.
+   * - VISIBILITY. A backgrounded tab kept paying the whole bill for a screen
+   *   nobody could see. It also refreshes once on becoming visible again, so
+   *   the badge the owner actually looks at is never the one from before the
+   *   phone was locked — skipping the poll must not mean showing stale news.
+   * - INTERVAL, 60s. The hosted planner ticks every 5 minutes, so most
+   *   notable events cannot appear faster than that; but the local browser
+   *   worker runs continuously, and "התוכנה מחכה לכם" during a group run is
+   *   exactly the notice the owner is sitting there waiting for. A minute is
+   *   short enough that the badge is never misleadingly old in that case, and
+   *   it is a third of the previous cost.
+   */
   useEffect(() => {
     setSeen(readSeen());
-    const load = () =>
+    let stopped = false;
+    let inFlight = false;
+
+    const load = () => {
+      if (inFlight) return;
+      inFlight = true;
       Promise.all([listActivity(25), queueSummary()])
         .then(([log, queue]) => {
+          if (stopped) return;
           setItems(log.filter((e) => NOTABLE.has(e.event) || e.level !== 'info'));
           // The same arithmetic as the dashboard's "דורשים אתכם" tile, from the
           // same rollup — two different formulas for one badge is how the same
           // screen printed two numbers for the same thing.
           setAttention(queue.summary.needsHuman);
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => {
+          inFlight = false;
+        });
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+
     load();
-    const id = setInterval(load, 20_000);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') load();
+    }, 60_000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const unread = items.filter((e) => !seen || e.at > seen).length;

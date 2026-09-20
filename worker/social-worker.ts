@@ -4,6 +4,7 @@ import { detectCity } from '@/lib/social/cities';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { evaluateQueueItem } from '@/lib/social/rules';
+import { relativeHe } from '@/lib/social/time';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
@@ -141,14 +142,21 @@ async function main(): Promise<void> {
       await heartbeat(state, state.attention ? 'needs_attention' : 'online', browser.debugMode);
       console.log(`[worker] בדיקת חיבור לפייסבוק: ${check.detail}`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('[worker] בדיקת החיבור נכשלה:', message);
+      const raw = err instanceof Error ? err.message : String(err);
+      console.error('[worker] בדיקת החיבור נכשלה:', raw);
+      /*
+       * Playwright and Chrome fail in English. Both places this text goes are
+       * read by the owner — state.attention on the dashboard card, the log
+       * line in the notification bell — so both get the Hebrew sentence, and
+       * the original stays on meta.detail for whoever debugs it.
+       */
+      const message = safeError(err, 'בדיקת החיבור לפייסבוק נכשלה. פתחו את חלון הדפדפן של התוכנה והתחברו מחדש.').split('\n')[0];
       // Surface it on the dashboard too, so the card explains itself instead
       // of sitting on "not checked yet" while the terminal holds the reason.
-      state.attention = message.split('\n')[0];
+      state.attention = message;
       state.browserState = 'needs_auth';
       await heartbeat(state, 'needs_attention', false);
-      await logActivity('error', 'browser_start_failed', message.split('\n')[0]);
+      await logActivity('error', 'browser_start_failed', message, { detail: raw });
     }
   }
 
@@ -164,8 +172,12 @@ async function main(): Promise<void> {
     try {
       await tick(state);
     } catch (err) {
-      console.error('[worker] שגיאה בלולאה:', err instanceof Error ? err.message : err);
-      await logActivity('error', 'worker_error', err instanceof Error ? err.message : String(err));
+      const raw = err instanceof Error ? err.message : String(err);
+      console.error('[worker] שגיאה בלולאה:', raw);
+      // Anything at all can land here — a Supabase error, a DNS failure — and
+      // the bell prints this message as written. Hebrew on screen, original
+      // on meta.detail.
+      await logActivity('error', 'worker_error', safeError(err, 'אירעה תקלה בתוכנת הפרסום. היא ממשיכה לנסות בעצמה.'), { detail: raw });
     }
     await sleep(env.pollMs);
   }
@@ -323,7 +335,12 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
       await db.from('social_targets').update(patch).eq('id', target.id);
       console.log(`[worker] ℹ פרטי קבוצה: "${patch.name ?? target.name}"${profile.image ? ' + תמונה' : ''}`);
     } catch (err) {
-      await db.from('social_targets').update({ last_synced_at: new Date().toISOString(), last_error: `משיכת פרטים נכשלה: ${err instanceof Error ? err.message : err}` }).eq('id', target.id);
+      // last_error is printed verbatim on the groups screen, so it gets the
+      // same scrubbed Hebrew treatment as every other stored failure.
+      await db
+        .from('social_targets')
+        .update({ last_synced_at: new Date().toISOString(), last_error: `משיכת פרטים נכשלה: ${safeError(err, 'לא הצלחנו לקרוא את פרטי הקבוצה.')}` })
+        .eq('id', target.id);
     } finally {
       await page.close().catch(() => undefined);
     }
@@ -347,6 +364,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     if (!claimed?.length) continue;
     console.log(`[worker] פקודה: ${cmd.command}`);
     let result = '';
+    let raw = '';
     let ok = true;
     try {
       if (cmd.command === 'login') {
@@ -375,11 +393,14 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
       }
     } catch (err) {
       ok = false;
-      result = err instanceof Error ? err.message : String(err);
+      // `result` is echoed back on the dashboard and into the activity log, so
+      // it carries the Hebrew sentence; `raw` stays for the console and meta.
+      raw = err instanceof Error ? err.message : String(err);
+      result = safeError(err, 'הפקודה נכשלה. נסו שוב בעוד רגע.');
     }
     await db.from('social_worker_commands').update({ status: ok ? 'done' : 'failed', result, finished_at: new Date().toISOString() }).eq('id', cmd.id);
-    await logActivity(ok ? 'info' : 'error', `worker_${cmd.command}`, result);
-    console.log(`[worker] ${cmd.command}: ${result}`);
+    await logActivity(ok ? 'info' : 'error', `worker_${cmd.command}`, result, raw ? { detail: raw } : {});
+    console.log(`[worker] ${cmd.command}: ${raw || result}`);
   }
 }
 
@@ -546,7 +567,18 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       // left from this round would let the next one skip asking (see
       // waitForConfirmation).
       await finish({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: message, screenshot_path: screenshot, confirmed_at: null });
-      await logActivity('warn', 'retry', `${tt.name}: ניסיון ${attempts} נכשל בשלב ${lastStep}, ינסה שוב ב-${retryAt}: ${message}`, { queueId: item.id, detail: raw });
+      /*
+       * `lastStep` is an internal id ("composer", "submit") and `retryAt` is an
+       * ISO instant; neither is a sentence, and this line is read in the bell
+       * and in /social/history. Both move to meta — nothing is lost, it just
+       * stops being the thing on screen.
+       */
+      await logActivity('warn', 'retry', `${tt.name}: ניסיון ${attempts} לפרסום נכשל. ${message} המערכת תנסה שוב ${relativeHe(retryAt)}.`, {
+        queueId: item.id,
+        step: lastStep,
+        retryAt,
+        detail: raw,
+      });
       console.log(`[worker] ✖ ${raw} (ינסה שוב)`);
       return;
     }

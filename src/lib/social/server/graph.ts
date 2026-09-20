@@ -2,6 +2,7 @@ import 'server-only';
 import { createHmac } from 'node:crypto';
 import { logActivity } from './log';
 import { getSetting, setSetting } from './db';
+import { relativeHe } from '../time';
 import type { ControlSettings } from '../types';
 
 /**
@@ -67,7 +68,15 @@ function classify(body: any): GraphError {
   if (code === 368 || code === 1349125)
     return new GraphError(`החשבון/הדף חסום זמנית לפרסום על ידי Meta (מדיניות ספאם). התור הושהה.${raw}`, 'blocked', code, subcode, 24 * 60);
   if (code === 100 || code === 1500) return new GraphError(`Meta דחתה את הפרמטרים של הפוסט.${raw}`, 'invalid', code, subcode);
-  return new GraphError(err.message ?? 'קריאה ל-Meta נכשלה.', 'unknown', code, subcode);
+  /*
+   * Every branch above is a Hebrew sentence with Meta's own English appended
+   * in parentheses. This one used to return `err.message` alone, so the one
+   * case we do NOT recognise — the case most likely to reach the owner — was
+   * the case that put raw English in front of her, as the whole message, in
+   * the activity feed and in ErrorDetail. Same shape as the rest: the raw
+   * text is still there, it is just no longer the sentence.
+   */
+  return new GraphError(`קריאה ל-Meta נכשלה.${raw}`, 'unknown', code, subcode);
 }
 
 /** Records a cooldown if Meta's usage headers say we are near the ceiling. */
@@ -109,7 +118,13 @@ export async function setCooldown(minutes: number, reason: string): Promise<void
   const until = new Date(Date.now() + minutes * 60_000).toISOString();
   if (control.rateLimitedUntil && control.rateLimitedUntil > until) return;
   await setSetting('control', { ...control, rateLimitedUntil: until });
-  await logActivity('warn', 'rate_limit', `${reason} — הפרסום מושהה עד ${until}`, { minutes });
+  /*
+   * `until` is an ISO instant. This line is read in the notification bell and
+   * in /social/history, so the wait is said in words (time.ts already gets
+   * the Hebrew dual right) and the exact instant moves to meta, where a
+   * developer still has it.
+   */
+  await logActivity('warn', 'rate_limit', `${reason} — הפרסום מושהה ויתחדש ${relativeHe(until)}.`, { minutes, until });
 }
 
 interface CallOptions {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
-import { getBrowserSettings, getBusiness, getControl, getLimits, saveSetting } from '@/lib/social/client';
+import { getBrowserSettings, getBusiness, getControl, getLimits, saveSetting, setPaused } from '@/lib/social/client';
 import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type BrowserSettings, type BusinessSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 
@@ -39,15 +39,25 @@ export default function SettingsPage() {
       .catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
   }, []);
 
+  /**
+   * WHY 'control' IS NOT IN THIS LIST.
+   *
+   * saveSetting() upserts the WHOLE jsonb value, so writing back a copy read
+   * at mount silently reverts anything written into that row since. The three
+   * keys below are this form's alone — nothing but this screen writes them.
+   * 'control' is not: graph.ts writes `rateLimitedUntil` when Meta asks us to
+   * slow down, worker.ts clears it when the cooldown expires, and the header's
+   * own button writes `paused` from any screen. A form that sat open for ten
+   * minutes and then pressed שמור un-paused the account and erased a live
+   * cooldown, with no way for the owner to know it had.
+   *
+   * So the two controls on that row write themselves, each merging onto the
+   * row as it is at the moment of the tap — see togglePause / clearRateLimit.
+   */
   async function save() {
     setBusy(true);
     try {
-      await Promise.all([
-        saveSetting('limits', limits),
-        saveSetting('control', control),
-        saveSetting('business', business),
-        saveSetting('browser', browser),
-      ]);
+      await Promise.all([saveSetting('limits', limits), saveSetting('business', business), saveSetting('browser', browser)]);
       toast('ההגדרות נשמרו.');
     } catch (err) {
       toast(friendlyMessage(err, 'השמירה נכשלה.'), 'error');
@@ -56,13 +66,58 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * The emergency stop writes on the tap, like the identical button in the
+   * header does — it is the same switch, and a stop that waits for a second
+   * tap on שמור is not a stop. setPaused() re-reads the row and merges, so a
+   * cooldown Meta set a second ago survives.
+   */
+  async function togglePause(next: boolean) {
+    const previous = control.paused;
+    setControl((c) => ({ ...c, paused: next }));
+    try {
+      await setPaused(next);
+      toast(next ? 'הפרסום הושהה. התור נשמר.' : 'הפרסום חודש.');
+    } catch (err) {
+      setControl((c) => ({ ...c, paused: previous }));
+      toast(friendlyMessage(err, 'לא הצלחנו לשנות את מצב הפרסום.'), 'error');
+    }
+  }
+
+  /** Same merge, for the one server-written field this screen may clear. */
+  async function clearRateLimit() {
+    const previous = control.rateLimitedUntil;
+    setControl((c) => ({ ...c, rateLimitedUntil: null }));
+    try {
+      const current = await getControl();
+      await saveSetting('control', { ...current, rateLimitedUntil: null });
+      toast('ההמתנה בוטלה. הפרסום יימשך בתור הרגיל.');
+    } catch (err) {
+      setControl((c) => ({ ...c, rateLimitedUntil: previous }));
+      toast(friendlyMessage(err, 'לא הצלחנו לבטל את ההמתנה.'), 'error');
+    }
+  }
+
+  /** The header button just wrote `paused`; re-read so this screen agrees. */
+  function refreshControl() {
+    getControl()
+      .then(setControl)
+      .catch(() => undefined);
+  }
+
   const num = (key: keyof LimitsSettings) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setLimits({ ...limits, [key]: Math.max(0, Number(e.target.value) || 0) });
 
   return (
+    // `paused` / `onControlChanged`: this screen already holds the pause state,
+    // so the header's button renders THIS value instead of polling
+    // social_settings on a clock of its own — which is what let the header and
+    // the switch a few hundred pixels below it show opposite states at once.
     <SocialShell
       title="הגדרות"
       lede="קצב, מגבלות ופרטי העסק"
+      paused={loaded ? control.paused : null}
+      onControlChanged={refreshControl}
       headerAction={
         <Button busy={busy} onClick={save}>
           שמור
@@ -117,12 +172,12 @@ export default function SettingsPage() {
                     <p className="font-bold text-mist-100">השהיית כל הפרסומים</p>
                     <p className="text-xs text-mist-500">כשמופעל, שום דבר לא יוצא — כולל "פרסם עכשיו". התור נשמר.</p>
                   </div>
-                  <Toggle checked={control.paused} onChange={(v) => setControl({ ...control, paused: v })} label="השהיה" />
+                  <Toggle checked={control.paused} onChange={togglePause} label="השהיה" />
                 </div>
                 {control.rateLimitedUntil && (
                   <p className="mt-2 text-xs text-warning-400">
                     Meta ביקשה להאט — הפרסום מושהה עד <Stamp iso={control.rateLimitedUntil} />.{' '}
-                    <button type="button" className="min-h-11 px-1 font-bold underline" onClick={() => setControl({ ...control, rateLimitedUntil: null })}>
+                    <button type="button" className="min-h-11 px-1 font-bold underline" onClick={clearRateLimit}>
                       נקה
                     </button>
                   </p>

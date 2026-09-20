@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { CalendarIcon, ClipboardListIcon, GearIcon, UsersIcon } from '@/components/icons';
+import { ClipboardListIcon, GearIcon, TargetIcon, UsersIcon } from '@/components/icons';
 
 /**
  * Four taps, compact, under the answers rather than instead of them.
@@ -9,12 +9,15 @@ import { CalendarIcon, ClipboardListIcon, GearIcon, UsersIcon } from '@/componen
  * Every label here names what the destination can actually do, and every
  * destination exists. The owner's reference mockup lists
  * statistics / groups / library / settings — and there is no /social/stats in
- * this product (it returns 404, verified). History IS the reports screen here:
- * it is where "what went out last night" is answered and where every failure
- * ends up, and it is already the destination of four other links on this
- * screen. So the statistics tile becomes היסטוריה rather than a tile that
- * leads nowhere, and it keeps the one name the bottom nav already uses for
- * that route — two names for one destination is its own defect.
+ * this product (it returns 404, verified).
+ *
+ * The first tile was היסטוריה, which made four links to /social/history from
+ * one dashboard: two card actions, the bottom-nav tab, and this. A shortcut
+ * row is worth its quarter of the screen only for somewhere you cannot
+ * already get to, so it now points at דפי פייסבוק — the screen that holds the
+ * Facebook connection, the granted permissions and the page sync, and the one
+ * place on this dashboard's map that was reachable only by opening "עוד" and
+ * reading a list. Same name the bottom sheet and the shell nav use for it.
  *
  * Two tiles left this row:
  *   - "פוסט חדש" is the system card's primary button now. A third copy here
@@ -31,11 +34,11 @@ export function QuickActions() {
   const puck = 'grid h-7 w-7 place-items-center rounded-full bg-brand-300/12 text-brand-400 sm:h-9 sm:w-9';
   return (
     <div className="grid grid-cols-4 gap-2 sm:gap-2.5 [&>*]:min-w-0">
-      <Link href="/social/history" className={tile}>
+      <Link href="/social/targets" className={tile}>
         <span aria-hidden className={puck}>
-          <CalendarIcon className="h-4.5 w-4.5" />
+          <TargetIcon className="h-4.5 w-4.5" />
         </span>
-        היסטוריה
+        דפי פייסבוק
       </Link>
       <Link href="/social/groups" className={tile}>
         <span aria-hidden className={puck}>

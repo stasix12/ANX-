@@ -79,7 +79,13 @@ export function ErrorDetail({ row, technical = false }: { row: QueueRow; technic
       <p className="mt-0.5 text-mist-300">{info.advice}</p>
       {technical && (row.error || row.skip_reason) && (
         <details className="mt-1">
-          <summary className="cursor-pointer text-mist-500">פרטים טכניים</summary>
+          {/*
+            * This is a tap target on a phone: one line of text-xs made it 16px
+            * tall, a third of the 44px floor the rest of the product uses.
+            * min-h-11 + the padding that fills it; the display stays list-item
+            * so the native disclosure triangle survives.
+            */}
+          <summary className="min-h-11 cursor-pointer py-3.5 text-mist-500">פרטים טכניים</summary>
           <p className="mt-1 break-words text-mist-500">{row.error || row.skip_reason}</p>
         </details>
       )}

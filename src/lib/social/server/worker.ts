@@ -2,6 +2,7 @@ import 'server-only';
 import { adapterFor } from '../channels/registry';
 import { renderPostText } from '../compose';
 import { evaluateQueueItem } from '../rules';
+import { relativeHe } from '../time';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
@@ -341,7 +342,15 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
       if (err.kind === 'unknown' && item.attempts < MAX_ATTEMPTS) {
         const retryAt = new Date(now.getTime() + 10 * 60_000 * item.attempts).toISOString();
         await db.from('social_queue').update({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: err.message }).eq('id', item.id);
-        await logActivity('warn', 'retry', `ניסיון ${item.attempts} נכשל, ינסה שוב ב-${retryAt}: ${err.message}`, { queueId: item.id });
+        /*
+         * This line is what the owner reads in the notification bell. An ISO
+         * instant is not a sentence, so the wait is said in words and the
+         * exact stamp moves to meta for whoever debugs the retry.
+         */
+        await logActivity('warn', 'retry', `ניסיון ${item.attempts} לפרסום נכשל. ${err.message} המערכת תנסה שוב ${relativeHe(retryAt)}.`, {
+          queueId: item.id,
+          retryAt,
+        });
         return 'deferred';
       }
     }

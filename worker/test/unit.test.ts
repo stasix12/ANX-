@@ -764,11 +764,37 @@ console.log('unit tests OK');
    * two different instants is the contradiction class this module exists to
    * prevent, so the run card no longer has one. The tuner is reachable from
    * the one box that remains.
+   *
+   * The MECHANISM below changed with this commit, not the rule. It used to
+   * count onClick={onTune}, which conflated "one countdown" with "one way into
+   * the tuner" — and those are different things. The run card now carries an
+   * explicit "ערוך מועד ומרווח" button, because the countdown box is not drawn
+   * before a run has started, which is exactly when the owner wants to bring it
+   * forward: the only entry point vanished at the moment it was needed. So the
+   * assertion counts COUNTDOWN BOXES, which is what the rule was always about.
    */
-  assert.equal((hero.match(/onClick={onTune}/g) ?? []).length, 1, 'exactly one countdown box on the screen opens the tuner');
+  assert.equal(
+    (hero.match(/<NextUpBoxes\b/g) ?? []).length,
+    2,
+    'one countdown, rendered by exactly two mutually exclusive branches (with and without the tuner action)',
+  );
+  const tunerBranch = hero.slice(hero.indexOf('{onTune ? ('), hero.indexOf('{/*\n            "הרץ עכשיו"'));
+  assert.equal((tunerBranch.match(/<NextUpBoxes\b/g) ?? []).length, 2, 'both branches are the SAME box — one wrapped in a button, one bare');
+  assert.ok(hero.includes('ערוך מועד ומרווח'), 'the run card needs a tuner entry that does not depend on a countdown being drawn');
   assert.ok(!/<NextUpBoxes/.test(hero.slice(hero.indexOf('export function LiveCampaignHero'), hero.indexOf('export function LiveQueueHero'))), 'the run card must not carry a second countdown');
   assert.ok(page.includes('<QueueTunerSheet'), 'the dashboard must render the tuner');
-  assert.equal((page.match(/onTune=\{\(\) => setTunerOpen\(true\)\}/g) ?? []).length, 1, 'the system card on the dashboard must open it');
+  /*
+   * TWO entry points now, and that is the change rather than a loosened test:
+   * the system card's countdown, and the run card's explicit button. They open
+   * the SAME sheet on the same state, so there is still one tuner — what there
+   * is no longer is a single doorway that disappears before a run starts.
+   */
+  assert.equal(
+    (page.match(/onTune=\{\(\) => setTunerOpen\(true\)\}/g) ?? []).length,
+    2,
+    'both the system card and the run card open the one tuner',
+  );
+  assert.equal((page.match(/<QueueTunerSheet/g) ?? []).length, 1, 'and there is only ever one tuner to open');
   /*
    * ...scoped to the campaign of the row the countdown was actually derived
    * from. It used to be scoped to the FEATURED run, whose rows need not be the

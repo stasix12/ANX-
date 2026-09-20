@@ -213,10 +213,25 @@ export function QueueTunerSheet({
    * a lie with a countdown on it. A first row whose instant has already passed
    * is anchored at "now": the worker would claim it on its next tick anyway.
    */
-  const anchor = useMemo(() => {
+  /*
+   * `null` means "wherever the queue already starts". The owner can move it -
+   * bringing a run forward is the thing they asked for most often, and the
+   * only lever here used to be the gap, which stretches the tail without
+   * touching the head.
+   */
+  const [startOverride, setStartOverride] = useState<number | null>(null);
+  const naturalAnchor = useMemo(() => {
     if (!snap || rows.length === 0) return null;
     return Math.max(new Date(rows[0].scheduled_at).getTime(), snap.at);
   }, [snap, rows]);
+  // Never into the past: the worker claims a due row on its next tick, so a
+  // past instant is just "now" with a misleading label on it.
+  const anchor = useMemo(() => {
+    if (naturalAnchor === null) return null;
+    if (startOverride === null) return naturalAnchor;
+    return Math.max(startOverride, (snap?.at ?? Date.now()) + 60_000);
+  }, [naturalAnchor, startOverride, snap]);
+  const startDirty = startOverride !== null && anchor !== naturalAnchor;
 
   const instantAt = useCallback((i: number) => (anchor === null ? 0 : anchor + i * gap * 60_000), [anchor, gap]);
 
@@ -369,6 +384,7 @@ export function QueueTunerSheet({
 
   const commitGap = () =>
     run('respace', async () => {
+      setStartOverride(null);
       const moved = await respaceQueue(gap, { ...(campaignId ? { campaignId } : {}), ...(anchor !== null ? { startAt: new Date(anchor).toISOString() } : {}) });
       return `${moved} פרסומים תוזמנו מחדש, מרווח של ${gap} דקות ביניהם.`;
     });
@@ -419,8 +435,12 @@ export function QueueTunerSheet({
 
   const footer =
     !loading && !error && hasQueue ? (
-      <Button size="lg" className="w-full" busy={busy === 'respace'} disabled={working || !gapDirty} onClick={commitGap}>
-        עדכן מרווח ל-{gap} דקות
+      <Button size="lg" className="w-full" busy={busy === 'respace'} disabled={working || (!gapDirty && !startDirty)} onClick={commitGap}>
+        {startDirty && gapDirty
+          ? 'עדכן את מועד ההתחלה והמרווח'
+          : startDirty
+            ? 'הזז את התור למועד החדש'
+            : `עדכן מרווח ל-${gap} דקות`}
       </Button>
     ) : undefined;
 
@@ -475,6 +495,55 @@ export function QueueTunerSheet({
           </section>
 
           {/* ------------------------------------------------ 2. the number */}
+          {/* ------------------------------------------------ when it starts */}
+          <section aria-label="מועד ההתחלה" className="space-y-2">
+            <h3 className="text-sm font-extrabold uppercase tracking-wide text-mist-500">מתי מתחיל</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={working}
+                onClick={() => setStartOverride((snap?.at ?? Date.now()) + 60_000)}
+                className="min-h-11 rounded-xl bg-ink-900 px-3 text-sm font-bold text-mist-100 transition-colors hover:bg-ink-800 disabled:opacity-40"
+              >
+                התחל עכשיו
+              </button>
+              {[15, 60].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={working}
+                  onClick={() => setStartOverride((snap?.at ?? Date.now()) + m * 60_000)}
+                  className="min-h-11 rounded-xl bg-ink-900 px-3 text-sm font-bold text-mist-100 transition-colors hover:bg-ink-800 disabled:opacity-40"
+                >
+                  בעוד <span dir="ltr">{m}</span> דק׳
+                </button>
+              ))}
+              {startDirty && (
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => setStartOverride(null)}
+                  className="min-h-11 rounded-xl px-3 text-sm font-bold text-mist-500 underline transition-colors hover:text-mist-300 disabled:opacity-40"
+                >
+                  בטל שינוי
+                </button>
+              )}
+            </div>
+            {anchor !== null && (
+              <p className="text-xs text-mist-500">
+                {startDirty ? 'הפרסום הראשון יצא ב-' : 'הפרסום הראשון יוצא ב-'}
+                <Clock iso={new Date(anchor).toISOString()} />
+                {startDirty && naturalAnchor !== null && (
+                  <>
+                    {' במקום ב-'}
+                    <Clock iso={new Date(naturalAnchor).toISOString()} />
+                  </>
+                )}
+                . כל השאר זזים איתו, באותו מרווח.
+              </p>
+            )}
+          </section>
+
           <section aria-label="מרווח בין פרסומים" className="space-y-3">
             <h3 className="text-sm font-extrabold uppercase tracking-wide text-mist-500">מרווח בין פרסומים</h3>
 

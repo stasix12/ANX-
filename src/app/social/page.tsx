@@ -652,6 +652,7 @@ export default function SocialDashboard() {
               onPause={() => act('camp-pause', () => pauseCampaign(featured.campaign.id, true), 'הסבב הושהה.')}
               onResume={() => act('camp-resume', () => pauseCampaign(featured.campaign.id, false), 'הסבב ממשיך.')}
               onReset={() => resetRun(featured.campaign.id, featured.campaign.name, featured.state)}
+              onTune={() => setTunerOpen(true)}
               /* "Now" on that card is a claim about a machine, so it is made
                  from a machine fact rather than from the clock. */
               workerOnline={data.workerOnline}

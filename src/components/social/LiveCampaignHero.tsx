@@ -245,6 +245,7 @@ export function LiveCampaignHero({
   onResume,
   busy,
   onReset,
+  onTune,
   media = null,
   workerOnline,
   globalPaused = false,
@@ -268,6 +269,8 @@ export function LiveCampaignHero({
    * paused has no credibility left for anything else on the page.
    */
   globalPaused?: boolean;
+  /** Opens the queue tuner for this run: when it starts, and the interval. */
+  onTune?: () => void;
   onPause?: () => void;
   onResume?: () => void;
   onReset?: () => void;
@@ -391,6 +394,19 @@ export function LiveCampaignHero({
         )}
         <ButtonLink href={`/social/campaigns/${campaign.id}`} variant="secondary" size="lg">צפה בתור</ButtonLink>
       </div>
+
+      {/* The tuner used to be reachable only by tapping the countdown box, and
+          that box is not drawn before a run has started - which is exactly when
+          the owner wants to bring it forward. An explicit way in. */}
+      {onTune && (
+        <button
+          type="button"
+          onClick={onTune}
+          className="mt-2 min-h-11 w-full rounded-xl text-sm font-bold text-brand-300 transition-colors hover:bg-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850"
+        >
+          ערוך מועד ומרווח
+        </button>
+      )}
 
       {/* The counter belongs to this run, and this run is what the card is
           about. Closing it is how the owner says "that round is done" - the

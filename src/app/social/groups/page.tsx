@@ -499,7 +499,9 @@ export default function GroupsPage() {
                       </button>
                     )}
                   </header>
-                  <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 [&>*]:min-w-0">
+                  {/* Four across a phone, which is what the owner asked for and what the
+                      card was resized to fit: ~80px each at 375px. */}
+                  <ul className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 [&>*]:min-w-0">
                     {section.items.map((g) => (
                       <GroupCard
                         key={g.id}
@@ -507,7 +509,6 @@ export default function GroupsPage() {
                         selectionMode={picking}
                         selected={selected.includes(g.id)}
                         onSelect={(on) => toggleSelect(g.id, on)}
-                        onToggleFavorite={() => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite }))}
                         actions={menuFor(g)}
                         nextAt={nextByTarget[g.id]}
                         cityLabel={cityOf(g)}

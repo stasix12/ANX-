@@ -5,7 +5,7 @@ import { formatDayMonthHe } from '@/lib/social/time';
 import type { SocialTarget } from '@/lib/social/types';
 import { CheckIcon, StarIcon } from '@/components/icons';
 import { TargetAvatar } from './TargetAvatar';
-import { Badge, OverflowMenu, type MenuAction } from './ui';
+import { OverflowMenu, type MenuAction } from './ui';
 
 /**
  * A group, reduced to what identifies it: picture, name, where it belongs,
@@ -38,7 +38,6 @@ export function GroupCard({
   selectionMode,
   selected,
   onSelect,
-  onToggleFavorite,
   actions,
   nextAt,
   cityLabel,
@@ -48,7 +47,6 @@ export function GroupCard({
   selectionMode: boolean;
   selected: boolean;
   onSelect: (on: boolean) => void;
-  onToggleFavorite: () => void;
   actions: MenuAction[];
   nextAt?: string;
   /**
@@ -71,17 +69,24 @@ export function GroupCard({
    * it was propped up by the dark puck that has just been removed. 12% is
    * TONE_TINT.brand, not a new opacity; the ring is what actually reads.
    */
-  const skin = `surface flex h-full flex-col items-center rounded-tile border p-2.5 text-center transition-[border-color,transform] active:scale-[0.98] ${
+  const skin = `surface flex h-full flex-col items-center rounded-tile border p-2 pt-1 text-center transition-[border-color,transform] active:scale-[0.98] ${
     selected ? 'border-brand-300 bg-brand-300/12 ring-2 ring-brand-300' : 'border-ink-700'
   } ${group.enabled ? '' : 'opacity-55'}`;
 
   const body = (
     <>
-      {/* 56, not 72. At 72 the picture was most of the tile and the owner
-          reading a wall of them was reading pictures, not names — and it is
-          the NAME that says which group this is. The name gets the room. */}
-      <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={56} />
-      <p dir="auto" className="mt-1.5 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={group.name}>
+      {/*
+        48px, and the arithmetic is the whole reason.
+
+        Four across a 375px screen is (375 − 32 page gutter − 3 × 8 gaps) ÷ 4 =
+        ~80px of card, and p-2 leaves 64px inside it. 72 did not fit at all, 56
+        left four pixels of air. 48 leaves room for the name to breathe, which
+        is the point: at this size the picture cannot identify a group anyway —
+        six of these are a blue-and-white city photo — and the NAME is what the
+        owner is actually reading.
+      */}
+      <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={48} />
+      <p dir="auto" className="mt-1 line-clamp-2 w-full text-[11px] font-bold leading-[14px] text-mist-100" title={group.name}>
         {group.name}
       </p>
       {/*
@@ -97,24 +102,25 @@ export function GroupCard({
         guess is neutral and marked as one. That is not a repeat of the
         heading; it is the difference between a fact and a guess.
       */}
-      {(cityLabel || group.category) && (
-        <div className="mt-1 flex w-full flex-wrap items-center justify-center gap-1">
-          {cityLabel && (
-            <Badge tone={group.city ? 'brand' : 'neutral'}>
-              <span dir="auto" className="block max-w-[6.5rem] truncate">{group.city ? cityLabel : `${cityLabel}?`}</span>
-            </Badge>
-          )}
-          {group.category && (
-            <Badge tone="neutral"><span dir="auto" className="block max-w-[6.5rem] truncate">{group.category}</span></Badge>
-          )}
-        </div>
+      {/* Text, not a chip. A Badge on a 64px card is mostly its own padding,
+          and the two things this line has to say — which city, and whether
+          that is known or guessed — are carried by the colour and the "?". */}
+      {cityLabel && (
+        <p dir="auto" className={`mt-0.5 w-full truncate text-[11px] font-bold leading-[14px] ${group.city ? 'text-brand-400' : 'text-mist-500'}`}>
+          {group.city ? cityLabel : `${cityLabel}?`}
+        </p>
+      )}
+      {group.category && (
+        <p dir="auto" className="w-full truncate text-[11px] leading-[14px] text-mist-500">
+          {group.category}
+        </p>
       )}
       {/* One meta line, not two. "פורסם 18.09" and "הבא: 20.09" were separate
           paragraphs, so a group with a slot booked was 14px taller than one
           without and the grid rows stopped agreeing. No dir="ltr" island is
           needed here: "18.09" is a single number run under UAX#9 W4, and the
           two dates never touch — the word "הבא" sits between them. */}
-      <p className="mt-1 text-[11px] leading-tight text-mist-500">
+      <p className="mt-0.5 w-full truncate text-[11px] leading-[14px] text-mist-500">
         {!group.last_synced_at
           ? 'מושך פרטים…'
           : group.last_published_at
@@ -137,13 +143,16 @@ export function GroupCard({
         </Link>
       )}
 
-      {/* The dot sits inside the star's 44px hit box, so it must not swallow
-          the tap that belongs to the control underneath it. */}
-      <span
-        aria-hidden
-        title={group.enabled ? 'פעילה' : 'מושהית'}
-        className={`pointer-events-none absolute start-1 top-1 z-10 block h-2 w-2 rounded-full ${group.enabled ? 'bg-success-400' : 'bg-mist-500'}`}
-      />
+      {/* Paused is the state worth marking; active is the norm and a dot on
+          every one of fifty cards is noise. It sits below the favourite star
+          so the two never share a pixel. */}
+      {!group.enabled && (
+        <span
+          aria-hidden
+          title="מושהית"
+          className={`pointer-events-none absolute start-1 z-10 block h-2 w-2 rounded-full bg-mist-500 ${group.favorite ? 'top-6' : 'top-1.5'}`}
+        />
+      )}
 
       {selectionMode ? (
         /* 28px, 8px in from the top-end corner. At the mark's own height the
@@ -159,25 +168,30 @@ export function GroupCard({
         </span>
       ) : (
         <>
-          {/* Controls float above the link so the tile stays one big target.
-              start-0 / end-0 rather than start-2 / end-1: a 44px box pushed
-              fully into the corner is what clears the avatar, and clearing it
-              is what paid for the shorter card. */}
-          <button
-            type="button"
-            aria-label={group.favorite ? `הסר את ${group.name} מהמועדפות` : `הוסף את ${group.name} למועדפות`}
-            aria-pressed={Boolean(group.favorite)}
-            onClick={(e) => {
-              stop(e);
-              onToggleFavorite();
-            }}
-            /* ⭐/☆ were a full-colour Apple emoji and a hairline text glyph
-               doing the on and off states of one control, beside an otherwise
-               all-SVG card. One icon, filled or not. */
-            className={`absolute start-0 top-0 grid h-11 w-11 place-items-center ${group.favorite ? 'text-warning-400' : 'text-mist-500'}`}
-          >
-            <StarIcon className="h-4.5 w-4.5" fill={group.favorite ? 'currentColor' : 'none'} />
-          </button>
+          {/*
+            ONE control in the corners, not two — this is arithmetic, not taste.
+
+            Four cards across a 375px screen is ~80px each. Two 44px hit boxes
+            pushed into opposite corners need 88px, so they overlapped in the
+            middle of every card and whichever sat on top quietly ate the other
+            one's taps. The favourite toggle is the one that goes, because it
+            is the one that already exists somewhere else: "הוסף למועדפות" is
+            the fourth row of this very menu. The capability is unchanged; it
+            is one tap deeper.
+
+            What stays on the face is the STATE — a filled star when the group
+            is a favourite — because that is what the owner scans a wall of
+            these for, and a mark is not a target.
+          */}
+          {group.favorite && (
+            <span
+              aria-hidden
+              title="מועדפת"
+              className="pointer-events-none absolute start-1 top-1 z-10 text-warning-400"
+            >
+              <StarIcon className="h-3.5 w-3.5" fill="currentColor" />
+            </span>
+          )}
 
           <div className="absolute end-0 top-0" onClick={stop}>
             <OverflowMenu label={group.name} actions={actions} />

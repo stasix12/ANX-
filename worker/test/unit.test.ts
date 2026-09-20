@@ -1908,8 +1908,31 @@ const scenario: { step: string; line: string }[] = [];
    * when the owner set the city and neutral with a "?" when it was inferred
    * — otherwise the card asserts something the product does not know.
    */
-  assert.ok(/tone=\{group\.city \? 'brand' : 'neutral'\}/.test(card), 'a set city and a guessed one must be told apart');
+  /* The RULE is unchanged; the mechanism is not. A Badge on an 80px card is
+     mostly its own padding, so the chip became a line of text and the
+     brand/muted distinction moved from `tone` to the text colour. */
+  assert.ok(/group\.city \? 'text-brand-400' : 'text-mist-500'/.test(card), 'a set city and a guessed one must be told apart');
   assert.ok(card.includes('`${cityLabel}?`'), 'and the guess must say it is one');
+
+  /*
+   * FOUR ACROSS IS AN ARITHMETIC CONSTRAINT, not a style.
+   *
+   * ~80px of card at 375px cannot hold two 44px hit boxes pushed into
+   * opposite corners — they overlap in the middle and one silently eats the
+   * other's taps. So exactly one interactive control may sit on the card
+   * face, and the favourite toggle is the one that moved into the menu it was
+   * already in. The star that remains is a MARK: aria-hidden and
+   * pointer-events-none, so it cannot take a tap from the menu beside it.
+   */
+  assert.ok(/grid-cols-4 gap-2/.test(groupsPage), 'the phone grid is four across');
+  assert.ok(!/<button[\s\S]{0,400}onToggleFavorite/.test(card), 'the favourite toggle must not sit on the card face at this width');
+  assert.ok(/'הוסף למועדפות'/.test(groupsPage), 'the capability stays, one tap deeper, in the overflow menu');
+  assert.ok(/pointer-events-none[\s\S]{0,160}StarIcon/.test(card), 'the favourite star that remains is a mark, not a target');
+  assert.equal(
+    (card.match(/grid h-11 w-11|h-11 w-11 place-items-center/g) ?? []).length,
+    0,
+    'no second 44px corner box on the card face',
+  );
 
   console.log('city-assignment tests OK');
 }

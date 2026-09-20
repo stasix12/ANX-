@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
-import { getBrowserSettings, getBusiness, getControl, getLimits, saveSetting, setPaused } from '@/lib/social/client';
+import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, saveSetting, setPaused } from '@/lib/social/client';
+import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type BrowserSettings, type BusinessSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 
@@ -27,13 +28,28 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
 
+  /*
+   * The version the PC is actually running.
+   *
+   * Some settings on this screen are enforced on the SERVER (Pages, Graph API)
+   * and take effect the moment they are saved. The repeat-to-same-group switch
+   * is not one of them: groups are published by the copy of this codebase
+   * running on the owner's own machine, and an older copy does not know the
+   * key exists — it reads the same settings row, ignores the new field, and
+   * goes on skipping. Saving the switch then looks like it did nothing, which
+   * is exactly the kind of silence this product keeps removing.
+   */
+  const [workerVersion, setWorkerVersion] = useState<string | null>(null);
+
   useEffect(() => {
-    Promise.all([getLimits(), getControl(), getBusiness(), getBrowserSettings()])
-      .then(([l, c, b, br]) => {
+    Promise.all([getLimits(), getControl(), getBusiness(), getBrowserSettings(), listWorkers().catch(() => [])])
+      .then(([l, c, b, br, workers]) => {
         setLimits(l);
         setControl(c);
         setBusiness(b);
         setBrowser(br);
+        const live = workers.find((w) => w.online) ?? workers[0] ?? null;
+        setWorkerVersion(live?.version ?? null);
         setLoaded(true);
       })
       .catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
@@ -196,6 +212,25 @@ export default function SettingsPage() {
                       label="מניעת פרסום חוזר לאותה קבוצה"
                     />
                   </div>
+                  {/*
+                    The switch is enforced in rules.ts, which runs in TWO
+                    places: on the server for Pages, and on the owner's own PC
+                    for groups. An older copy on that PC does not know this key
+                    exists — it reads the same settings row, ignores the field
+                    and goes on skipping — so saving the switch looks like it
+                    did nothing at all. Groups are almost everything this owner
+                    publishes, so that silence is the whole feature failing.
+                  */}
+                  {limits.blockRepeatToSameTarget === false && workerVersion && workerVersion !== WORKER_VERSION && (
+                    <div className="mt-2.5">
+                      <Notice tone="error">
+                        <strong>הכיבוי עדיין לא תקף לקבוצות.</strong> התוכנה שעל המחשב מריצה גרסה{' '}
+                        <span dir="ltr">{workerVersion}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>, והיא זו שמפרסמת לקבוצות —
+                        גרסה ישנה לא מכירה את המתג הזה ותמשיך לדלג. סגרו את חלון התוכנה במחשב ולחצו פעמיים על{' '}
+                        <code dir="ltr">start-worker.cmd</code> כדי לעדכן אותה. פרסום לדפי פייסבוק כבר עובד לפי המתג.
+                      </Notice>
+                    </div>
+                  )}
                   {limits.blockRepeatToSameTarget === false && (
                     <div className="mt-2.5">
                       <Notice tone="warn">

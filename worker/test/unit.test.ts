@@ -1862,6 +1862,26 @@ const scenario: { step: string; line: string }[] = [];
   );
   assert.ok(campaignSrc.includes("label: 'התחיל — טרם פורסם'"), 'and the replacement must say what actually happened');
 
+  /*
+   * The switch is enforced in rules.ts, and rules.ts runs on the owner's PC
+   * too. A copy there that predates the key ignores it and goes on skipping,
+   * so the switch must announce that rather than appear to have worked —
+   * groups are nearly everything this owner publishes.
+   */
+  assert.ok(
+    /workerVersion !== WORKER_VERSION/.test(settings),
+    'the settings screen must compare the PC worker version, or turning the switch off silently does nothing for groups',
+  );
+  assert.ok(
+    /blockRepeatToSameTarget === false && workerVersion[\s\S]{0,400}Notice tone="error"/.test(settings),
+    'and it must say so loudly — a warn tone is for the risk of the setting, an error tone for the setting not being in force',
+  );
+  const workerVersionSrc = readFileSync(new URL('../../src/lib/social/worker-version.ts', import.meta.url), 'utf8');
+  assert.ok(
+    !workerVersionSrc.includes("'2.6.0'"),
+    'WORKER_VERSION must be bumped past 2.6.0: rules.ts changed, and that change only reaches groups when the PC copy updates',
+  );
+
   console.log('repeat-to-same-group switch tests OK');
 }
 

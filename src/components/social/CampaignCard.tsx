@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { RUN_STATE_LABEL, RUN_STATE_TONE, type CampaignState } from '@/lib/social/campaign';
+import { canPauseRun, canResumeRun, runBadge, type CampaignState } from '@/lib/social/campaign';
 import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem } from '@/lib/social/types';
@@ -9,16 +9,26 @@ import { PlusIcon } from '@/components/icons';
 import { CampaignProgressBar } from './CampaignProgressBar';
 import { PostCover } from './PostCover';
 import { TargetAvatar } from './TargetAvatar';
-import { Badge, Button } from './ui';
+import { Badge, Button, TONE_FILL, type Tone } from './ui';
 
 /**
- * The campaign as a control surface: who it is, how far it has got, and the
- * two facts that decide whether the owner needs to do anything — when the
- * next publication goes out and to which group.
+ * The campaign as a control surface, in the order the owner reads it: what is
+ * going out, what it is called, what state it is in, how far it has got, what
+ * became of the rest, and the two facts that decide whether he needs to do
+ * anything — when the next publication goes out and to which group.
  *
  * Both of those come straight from the queue's own rows. When there is no
  * next row (paused, finished, stopped) the card says that instead of showing
  * a filler time.
+ *
+ * WHAT IS NOT HERE ANY MORE. "התחיל" and "סיום משוער" were a second full row
+ * of boxes that pushed the two buttons below the fold on a 375px phone, for
+ * two facts nobody acts on from a list; they are on the run's own screen
+ * (campaigns/[id]/page.tsx renders both, with "לפי התזמון שהוגדר" on the
+ * estimate), so nothing was lost, only moved. The service·city subtitle went
+ * the same way, and is at the top of that screen. The `compact` prop went
+ * with them: no caller ever passed it, and all it did was hide the two Facts
+ * that are still here.
  */
 export function CampaignCard({
   campaign,
@@ -27,10 +37,11 @@ export function CampaignCard({
   onResume,
   busy,
   href,
-  compact = false,
   media = null,
   nextTargetImage = null,
   hasPost = false,
+  globalPaused = false,
+  workerOnline,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status'>;
   state: CampaignState;
@@ -40,19 +51,37 @@ export function CampaignCard({
   nextTargetImage?: string | null;
   /** Whether the run has a post at all — an empty run gets no media slot. */
   hasPost?: boolean;
+  /**
+   * Whether ALL publishing is held from the header toggle, and whether the PC
+   * that does the publishing has sent a heartbeat. Both are read by the page
+   * and handed over; runBadge() decides what they mean. Without them this card
+   * showed a green pulsing "רץ" under a header reading "המשך הכול", and kept
+   * pulsing for a run whose laptop had been asleep since yesterday.
+   */
+  globalPaused?: boolean;
+  workerOnline?: boolean;
   onPause?: () => void;
   onResume?: () => void;
   busy?: boolean;
   href?: string;
-  compact?: boolean;
 }) {
   const link = href ?? `/social/campaigns/${campaign.id}`;
   /* Same rule as the library card: the first IMAGE, and failing that whatever
      media exists — picking media[0] blindly leaves a post whose first item is
      a video looking different here than it does in the library. */
   const cover = (media ?? []).find((m) => m.kind === 'image') ?? (media ?? [])[0] ?? null;
-  const running = state.state === 'running';
-  const paused = state.state === 'paused';
+  /* One opinion about the run's state, from campaign.ts, for the label, the
+     colour AND the dot. This card used to compute its own: `state.state ===
+     'running'` lit a hard-coded green dot beside a badge the shared tone map
+     painted blue — two colours for one fact, on the element whose whole job is
+     to be read at a glance. */
+  const badge = runBadge(state, { globalPaused, workerOnline });
+  const badgeTone: Tone = badge.tone === 'info' ? 'brand' : badge.tone;
+  /* A button is offered only when it can act. "השהה" used to be gated on the
+     state NAME, so a run with nothing to hold back still offered it and
+     toasted "הסבב הושהה." over a write that could not move a row. */
+  const showPause = canPauseRun(state.progress, campaign.status);
+  const showResume = canResumeRun(state.progress, campaign.status);
 
   return (
     <div className="surface rounded-card border border-ink-700 p-4">
@@ -82,16 +111,16 @@ export function CampaignCard({
           </Link>
         )}
         <div className="min-w-0 grow">
-          <Link href={link} dir="auto" className="block truncate py-1.5 text-lg font-extrabold text-mist-100 hover:text-brand-400">
+          {/* min-h-11: this is the primary way into a run from the list, and it
+              measured 40px against the product's 44px floor — the identical
+              control on the dashboard hero was given the floor for this reason. */}
+          <Link href={link} dir="auto" className="block min-h-11 truncate py-1.5 text-lg font-extrabold text-mist-100 hover:text-brand-400">
             {campaign.name}
           </Link>
-          <p className="mt-0.5 truncate text-xs text-mist-500">
-            {[campaign.service, campaign.city].filter(Boolean).join(' · ') || 'סבב'}
-          </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {running && <span aria-hidden className="pulse-dot h-2 w-2 rounded-full bg-success-400" />}
-          <Badge tone={RUN_STATE_TONE[state.state]}>{RUN_STATE_LABEL[state.state]}</Badge>
+          {badge.live && <span aria-hidden className={`pulse-dot h-2 w-2 rounded-full ${TONE_FILL[badgeTone]}`} />}
+          <Badge tone={badge.tone}>{badge.label}</Badge>
         </div>
       </header>
 
@@ -99,50 +128,43 @@ export function CampaignCard({
         <CampaignProgressBar progress={state.progress} />
       </div>
 
-      {!compact && (
-        <dl className="mt-3 grid grid-cols-2 gap-2 [&>*]:min-w-0">
-          <Fact label="הפרסום הבא">
-            {state.nextAt ? (
-              <>
-                <span className="tabular-nums">{whenLabel(state.nextAt)}</span>
-                <span className="block text-[11px] font-semibold text-mist-500">{relativeHe(state.nextAt)}</span>
-              </>
-            ) : (
-              <span className="text-mist-500">{paused ? 'מושהה' : 'אין פרסום ממתין'}</span>
-            )}
-          </Fact>
-          <Fact label="הקבוצה הבאה">
-            {state.nextTargetName ? (
-              <span className="flex items-center gap-1.5">
-                <TargetAvatar name={state.nextTargetName} imageUrl={nextTargetImage} size={20} />
-                <span dir="auto" className="min-w-0 truncate">
-                  {state.nextTargetName}
-                </span>
+      <dl className="mt-3 grid grid-cols-2 gap-2 [&>*]:min-w-0">
+        <Fact label="הפרסום הבא">
+          {state.nextAt ? (
+            <>
+              <span className="tabular-nums">{whenLabel(state.nextAt)}</span>
+              <span className="block text-[11px] font-semibold text-mist-500">{relativeHe(state.nextAt)}</span>
+            </>
+          ) : (
+            <span className="text-mist-500">{showResume ? 'מושהה' : 'אין פרסום ממתין'}</span>
+          )}
+        </Fact>
+        <Fact label="הקבוצה הבאה">
+          {state.nextTargetName ? (
+            <span className="flex items-center gap-1.5">
+              <TargetAvatar name={state.nextTargetName} imageUrl={nextTargetImage} size={20} />
+              <span dir="auto" className="min-w-0 truncate">
+                {state.nextTargetName}
               </span>
-            ) : (
-              <span className="text-mist-500">—</span>
-            )}
-          </Fact>
-          <Fact label="התחיל">{state.startedAt ? <span className="tabular-nums">{whenLabel(state.startedAt)}</span> : <span className="text-mist-500">טרם התחיל</span>}</Fact>
-          <Fact label="סיום משוער">
-            {state.estimatedCompletionAt ? (
-              <span className="tabular-nums">{whenLabel(state.estimatedCompletionAt)}</span>
-            ) : (
-              <span className="text-mist-500">{state.state === 'completed' ? 'הסתיים' : '—'}</span>
-            )}
-          </Fact>
-        </dl>
-      )}
+            </span>
+          ) : (
+            <span className="text-mist-500">—</span>
+          )}
+        </Fact>
+      </dl>
 
       <div className="mt-3.5 flex flex-wrap gap-2">
-        {paused && onResume && (
+        {showResume && onResume && (
           <Button busy={busy} onClick={onResume}>
             המשך סבב
           </Button>
         )}
-        {!paused && state.state !== 'completed' && state.state !== 'stopped' && onPause && (
+        {/* "השהה סבב" — this pauses THIS round. The header's global toggle,
+            visible on the same screen, pauses EVERYTHING and carried the
+            identical word. */}
+        {showPause && onPause && (
           <Button variant="secondary" busy={busy} onClick={onPause}>
-            השהה
+            השהה סבב
           </Button>
         )}
         <Link href={link} className="ms-auto inline-flex min-h-11 items-center rounded-xl bg-ink-800 px-4 text-sm font-bold text-mist-100">

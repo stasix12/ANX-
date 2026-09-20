@@ -128,6 +128,15 @@ export interface QueueSummary {
   inFlight: number;
   /** Nothing moves on these until a person acts (a subset of `waiting`). */
   needsHuman: number;
+  /**
+   * Waiting on the clock only — exactly the rows a read filtered to
+   * AUTOMATIC_WAITING_STATUSES returns, and therefore the only figure a list
+   * built from such a read may print as its total. `queued` adds the in-flight
+   * row on top, so the upcoming-publications card counted one more row than
+   * its own list could ever hold and promised "ועוד 1 פרסומים אחריהם" about a
+   * publication that was not waiting at all.
+   */
+  automaticWaiting: number;
   /** Open rows that will move on their own: automatic waiting plus in flight. */
   queued: number;
   /** Everything not finished — queued + needsHuman. */
@@ -146,6 +155,7 @@ export const EMPTY_QUEUE_SUMMARY: QueueSummary = {
   waiting: 0,
   inFlight: 0,
   needsHuman: 0,
+  automaticWaiting: 0,
   queued: 0,
   open: 0,
   cancellable: 0,
@@ -156,6 +166,7 @@ export function summarizeQueue(counts: Record<QueueStatus, number>): QueueSummar
   const waiting = sum(WAITING_STATUSES);
   const inFlight = sum(IN_FLIGHT_STATUSES);
   const needs = sum(NEEDS_HUMAN_STATUSES);
+  const automaticWaiting = sum(AUTOMATIC_WAITING_STATUSES);
   return {
     total: sum(ALL_QUEUE_STATUSES),
     published: counts.published ?? 0,
@@ -165,7 +176,8 @@ export function summarizeQueue(counts: Record<QueueStatus, number>): QueueSummar
     waiting,
     inFlight,
     needsHuman: needs,
-    queued: sum(AUTOMATIC_WAITING_STATUSES) + inFlight,
+    automaticWaiting,
+    queued: automaticWaiting + inFlight,
     open: waiting + inFlight,
     cancellable: sum(CANCELLABLE_STATUSES),
   };

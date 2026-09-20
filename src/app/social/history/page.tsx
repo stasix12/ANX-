@@ -9,15 +9,15 @@ import {
   Button,
   Card,
   EmptyState,
+  ErrorState,
   Loading,
-  Notice,
   SegmentedControl,
   SkeletonList,
   inputClass,
   useToast,
 } from '@/components/social/ui';
 import { cancelQueueItem, listCampaigns, listQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
-import { zonedToUtc } from '@/lib/social/time';
+import { startOfZonedDay, zonedToUtc } from '@/lib/social/time';
 import { AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES, NEEDS_HUMAN_STATUSES } from '@/lib/social/status';
 import { type PublishMethod, type QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -33,6 +33,16 @@ import { InboxIcon } from '@/components/icons';
 const STATUS_GROUPS: { value: string; label: string; statuses: QueueStatus[] }[] = [
   { value: '', label: 'הכל', statuses: [] },
   { value: 'published', label: 'פורסמו', statuses: ['published'] },
+  /*
+   * 'תקועים' before 'ממתינים', and that order is the whole point:
+   * mapIncomingStatus() takes the FIRST group whose list contains the incoming
+   * status, so the dashboard's "N פרסומים תקועים" intervention — which links
+   * here with ?status=paused — used to land on 'ממתינים', a bucket dominated
+   * by perfectly healthy scheduled rows, with no way to find the stuck ones.
+   * 'paused' is the status no worker claims (CLAIMABLE_STATUSES is
+   * ['scheduled'] alone), so on its own it is exactly that intervention's list.
+   */
+  { value: 'stuck', label: 'תקועים', statuses: ['paused'] },
   { value: 'pending', label: 'ממתינים', statuses: [...AUTOMATIC_WAITING_STATUSES, ...IN_FLIGHT_STATUSES] },
   { value: 'failed', label: 'נכשלו', statuses: ['failed'] },
   { value: 'skipped', label: 'דולגו', statuses: ['skipped'] },
@@ -89,8 +99,16 @@ function HistoryScreen() {
    *
    * The count is not clamped to match the list; the list is widened to hold
    * the count. The range chips are still right there to narrow it again.
+   *
+   * ...unless the link names its own window. "פורסמו היום" is the one tile
+   * that is NOT an all-time count, and it arrives with &range=1, so the list
+   * it opens holds exactly the rows behind the number the owner tapped.
    */
-  const [range, setRange] = useState(() => (params.get('status') ? 'all' : '30'));
+  const [range, setRange] = useState(() => {
+    const asked = params.get('range');
+    if (asked && RANGES.some((r) => r.value === asked)) return asked;
+    return params.get('status') ? 'all' : '30';
+  });
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
   const [query, setQuery] = useState('');
@@ -109,6 +127,12 @@ function HistoryScreen() {
       if (range === 'custom') {
         fromISO = since ? zonedToUtc(since, '00:00').toISOString() : undefined;
         toISO = until ? zonedToUtc(until, '23:59').toISOString() : undefined;
+      } else if (range === '1') {
+        /* "היום" is the calendar day in the app's timezone, not the last 24
+           hours: the dashboard's "פורסמו היום" tile counts from
+           startOfZonedDay and links here, and a rolling window would list
+           last night's publications beside a number that excludes them. */
+        fromISO = startOfZonedDay(new Date()).toISOString();
       } else if (days !== null && days !== undefined) {
         fromISO = new Date(Date.now() - Math.max(days, 1) * 86_400_000).toISOString();
       }
@@ -161,7 +185,10 @@ function HistoryScreen() {
   return (
     <SocialShell title="היסטוריה" lede="כל מה שיצא, ומה שנכשל">
       <div className="space-y-4">
-        {error && <Notice tone="error">{error}</Notice>}
+        {/* A failed first read used to leave `rows` null for ever: the banner
+            sat above a skeleton that shimmered indefinitely, and the only way
+            out on a phone was a browser reload. */}
+        {error && <ErrorState message={error} onRetry={load} />}
 
         <Card padded={false} className="p-3">
           <input
@@ -221,10 +248,20 @@ function HistoryScreen() {
 
         <Card
           title="פרסומים"
-          subtitle={rows ? `${filtered.length} רשומות${filtered.length > page.length ? ` · מוצגות ${page.length}` : ''}` : undefined}
+          /* The read is capped at 500 (load()), so `filtered.length` is a
+             ceiling, not a total — and the badge beside it already said "500+".
+             One header cannot carry two numbers about the same rows that
+             disagree, so at the cap the subtitle stops claiming a total too. */
+          subtitle={
+            rows
+              ? rows.length >= 500
+                ? `מוצגות ${page.length} מתוך 500 הרשומות האחרונות בטווח`
+                : `${filtered.length} רשומות${filtered.length > page.length ? ` · מוצגות ${page.length}` : ''}`
+              : undefined
+          }
           action={rows ? <Badge tone="neutral">{rows.length >= 500 ? '500+ אחרונים' : `${rows.length} בטווח`}</Badge> : undefined}
         >
-          {!rows && <SkeletonList rows={6} />}
+          {!rows && !error && <SkeletonList rows={6} />}
           {rows && filtered.length === 0 && (
             <EmptyState
               icon={<InboxIcon className="h-5 w-5" />}

@@ -12,8 +12,10 @@ import {
   Button,
   Card,
   EmptyState,
+  ErrorState,
   Field,
   Notice,
+  OverflowMenu,
   SegmentedControl,
   Sheet,
   SkeletonList,
@@ -22,6 +24,7 @@ import {
   useConfirm,
   useToast,
   ButtonLink,
+  type MenuAction,
 } from '@/components/social/ui';
 import {
   addGroup,
@@ -37,7 +40,7 @@ import { formatDayMonthHe } from '@/lib/social/time';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { ChartIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TrashIcon, UsersIcon } from '@/components/icons';
+import { ChartIcon, CloseIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent';
 type View = 'grid' | 'list';
@@ -76,6 +79,17 @@ export default function GroupsPage() {
   const [groups, setGroups] = useState<SocialTarget[] | null>(null);
   const [workerOnline, setWorkerOnline] = useState<boolean | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  /*
+   * Selection is a mode, not an always-on affordance.
+   *
+   * Every card used to carry a checkbox whether or not anyone was selecting,
+   * which is what put a dark puck on 125 group pictures. Browsing and picking
+   * are now two states of one screen: `picking` decides whether the cards are
+   * links or toggles, whether the list rows show a checkbox, and whether the
+   * floating action bar exists at all. Leaving the mode drops the selection —
+   * a selection you cannot see is a selection you will act on by accident.
+   */
+  const [picking, setPicking] = useState(false);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [view, setView] = useState<View>('grid');
@@ -108,9 +122,21 @@ export default function GroupsPage() {
     setNextByTarget(next);
   }, []);
 
-  useEffect(() => {
+  /* One entry point for the first read and for the retry button, so a failed
+     load is never a dead end: the banner carries the way out of it. */
+  const reload = useCallback(() => {
+    setError(null);
     load().catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
   }, [load]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const exitPicking = useCallback(() => {
+    setPicking(false);
+    setSelected([]);
+  }, []);
 
   const cityOf = useCallback((g: SocialTarget) => g.city || detectCity(g.name), []);
   const all = useMemo(() => groups ?? [], [groups]);
@@ -199,8 +225,9 @@ export default function GroupsPage() {
    * Apple's colours rather than the product's tokens. Every one of these had
    * an SVG equivalent sitting unused in icons.tsx.
    */
+  const mk = 'h-4.5 w-4.5';
+
   function menuFor(g: SocialTarget) {
-    const mk = 'h-4.5 w-4.5';
     return [
       { label: 'פתח את הקבוצה בפייסבוק', icon: <UsersIcon className={mk} />, onSelect: () => window.open(g.url, '_blank', 'noreferrer') },
       { label: 'פרופיל והיסטוריה', icon: <ChartIcon className={mk} />, onSelect: () => router.push(`/social/groups/${g.id}`) },
@@ -239,6 +266,39 @@ export default function GroupsPage() {
     ];
   }
 
+  /* Hebrew has no bare-numeral singular, so `${n} קבוצות` reads "1 קבוצות" —
+     and 1 is the commonest value here. */
+  const selectionLabel =
+    selected.length === 0 ? 'לא נבחרו קבוצות' : selected.length === 1 ? 'נבחרה קבוצה אחת' : `נבחרו ${selected.length} קבוצות`;
+
+  const bulkActions: MenuAction[] = [
+    {
+      label: `בחר את כל ${visible.length} התואמות`,
+      icon: <UsersIcon className={mk} />,
+      onSelect: () => setSelected(visible.map((g) => g.id)),
+    },
+    { label: 'נקה בחירה', icon: <CloseIcon className={mk} />, disabled: selected.length === 0, onSelect: () => setSelected([]) },
+    { label: 'הפעל', icon: <PlayIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-on', () => bulkUpdateTargets(selected, { enabled: true }), 'הופעלו.') },
+    { label: 'השהה', icon: <PauseIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-off', () => bulkUpdateTargets(selected, { enabled: false }), 'הושהו.') },
+    { label: 'סמן כמועדפות', icon: <StarIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-fav', () => bulkUpdateTargets(selected, { favorite: true }), 'סומנו כמועדפות.') },
+    { label: 'שייך לקטגוריה', icon: <TagIcon className={mk} />, disabled: selected.length === 0, onSelect: () => { setCategoryDraft(''); setCategoryOpen(true); } },
+    {
+      label: 'הסר מהרשימה',
+      icon: <TrashIcon className={mk} />,
+      danger: true,
+      disabled: selected.length === 0,
+      onSelect: async () => {
+        const ok = await confirm.ask({
+          title: selected.length === 1 ? 'להסיר קבוצה אחת?' : `להסיר ${selected.length} קבוצות?`,
+          body: DELETE_GROUP_WARNING,
+          confirmLabel: 'הסר ומחק היסטוריה',
+          danger: true,
+        });
+        if (ok) await act('bulk-del', () => bulkDeleteTargets(selected).then(() => setSelected([])), 'הוסרו.');
+      },
+    },
+  ];
+
   return (
     <SocialShell
       title="קבוצות"
@@ -249,8 +309,12 @@ export default function GroupsPage() {
         </Button>
       }
     >
-      <div className="space-y-4 pb-20">
-        {error && <Notice tone="error">{error}</Notice>}
+      {/* No pb-* here: the shell already reserves the tab bar's height plus the
+          safe-area inset, and the selection bar has its own conditional
+          spacer below. The 80px this used to add on top of both was half a
+          card row of nothing on the screen the owner calls cramped. */}
+      <div className="space-y-4">
+        {error && <ErrorState message={error} onRetry={reload} />}
         {workerOnline === false && (
           <Notice tone="warn">
             {/* This used to end in `npm run social-worker` — a terminal command
@@ -262,8 +326,21 @@ export default function GroupsPage() {
           </Notice>
         )}
 
-        {/* Search + the three filter dimensions. */}
-        <Card padded={false} className="p-3">
+        {/*
+          Search + the filter dimensions, at about half the height they cost
+          before.
+
+          The input itself is untouched on purpose: min-h-11 is the tap floor
+          and its text-base is what stops iOS Safari zooming the whole page
+          when it is focused, so "slightly shorter" is bought from the card
+          around it (p-3 → px-3 py-2.5) and from the rows below, not from the
+          field. The three chip rows used to be `track` SegmentedControls —
+          48px each, wrapping to 96 when a city list was long — sharing ONE
+          horizontal scroller, so dragging the status chips dragged the city
+          chips with them. Each is now its own 44px `chips` row with its own
+          scroll.
+        */}
+        <Card padded={false} className="px-3 py-2.5">
           <input
             className={inputClass}
             placeholder="חיפוש קבוצה…"
@@ -272,9 +349,9 @@ export default function GroupsPage() {
             onChange={(e) => setQuery(e.target.value)}
             aria-label="חיפוש קבוצה"
           />
-          <div className="mt-2.5 min-w-0 space-y-2 overflow-x-auto scrollbar-none">
+          <div className="mt-2 space-y-1.5">
             <SegmentedControl
-              size="sm"
+              variant="chips"
               label="סטטוס"
               value={status}
               onChange={setStatus}
@@ -291,40 +368,42 @@ export default function GroupsPage() {
                 { value: 'recent', label: 'פורסם לאחרונה', count: groups ? statusCounts.recent : undefined },
                 { value: 'paused', label: 'מושהות', count: groups ? statusCounts.paused : undefined },
               ]}
-              className="min-w-max"
             />
             <SegmentedControl
-              size="sm"
+              variant="chips"
               label="עיר"
               value={cityFilter}
               onChange={setCityFilter}
               options={[{ value: '', label: 'כל הערים' }, ...cities.map((c) => ({ value: c, label: c, count: all.filter((g) => cityOf(g) === c).length }))]}
-              className="min-w-max"
             />
             {categories.length > 0 && (
               <SegmentedControl
-                size="sm"
+                variant="chips"
                 label="קטגוריה"
                 value={categoryFilter}
                 onChange={setCategoryFilter}
                 options={[{ value: '', label: 'כל הקטגוריות' }, ...categories.map((c) => ({ value: c, label: c, count: all.filter((g) => g.category === c).length }))]}
-                className="min-w-max"
               />
             )}
           </div>
-          <div className="mt-2.5 flex items-center justify-between gap-2">
-            <div className="flex gap-3 text-xs font-bold">
-              <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => setSelected(visible.map((g) => g.id))}>
-                בחר את כל {visible.length} המוצגות
-              </button>
-              {selected.length > 0 && (
-                <button type="button" className="min-h-11 px-1 text-mist-500" onClick={() => setSelected([])}>
-                  נקה
-                </button>
-              )}
-            </div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            {/* The one door into selection mode, and the one door out of it.
+                "בחר את כל …" used to live here and claimed to select what was
+                "מוצגות" while selecting every match — it has moved into the
+                selection bar's menu, where it is only reachable once picking
+                has actually started, and it says what it does. */}
+            <button
+              type="button"
+              aria-pressed={picking}
+              onClick={() => (picking ? exitPicking() : setPicking(true))}
+              className={`inline-flex min-h-11 shrink-0 items-center rounded-full px-3.5 text-xs font-bold transition-colors ${
+                picking ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'
+              }`}
+            >
+              {picking ? 'סיום בחירה' : 'בחר'}
+            </button>
             <SegmentedControl
-              size="sm"
+              variant="chips"
               label="תצוגה"
               value={view}
               onChange={setView}
@@ -336,7 +415,7 @@ export default function GroupsPage() {
           </div>
         </Card>
 
-        {groups === null && (
+        {groups === null && !error && (
           <Card>
             <SkeletonList rows={5} />
           </Card>
@@ -380,22 +459,33 @@ export default function GroupsPage() {
               return (
                 <section key={section.city}>
                   <header className="mb-2 flex items-center justify-between gap-2">
+                    {/* The bracketed figure used to be every match in this city
+                        while the grid under it held only the ones on the
+                        current page — the owner counted 8 tiles under "(29)"
+                        and had no way to tell which number was lying. It now
+                        says both, and only when they differ. */}
                     <h3 className="text-base font-extrabold text-mist-100">
-                      {section.city} <span className="text-sm font-semibold text-mist-500">({section.total})</span>
+                      {section.city}{' '}
+                      <span className="text-sm font-semibold text-mist-500">
+                        ({section.items.length < section.total ? `${section.items.length} מתוך ${section.total}` : section.total})
+                      </span>
                     </h3>
-                    <button
-                      type="button"
-                      className="min-h-11 text-xs font-bold text-brand-400"
-                      onClick={() => setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])]))}
-                    >
-                      {allOn ? 'בטל בחירה' : `בחר את כל ${section.total}`}
-                    </button>
+                    {picking && (
+                      <button
+                        type="button"
+                        className="min-h-11 shrink-0 text-xs font-bold text-brand-400"
+                        onClick={() => setSelected((s) => (allOn ? s.filter((id) => !ids.includes(id)) : [...new Set([...s, ...ids])]))}
+                      >
+                        {allOn ? 'בטל בחירה' : `בחר את כל ${section.total}`}
+                      </button>
+                    )}
                   </header>
                   <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 [&>*]:min-w-0">
                     {section.items.map((g) => (
                       <GroupCard
                         key={g.id}
                         group={g}
+                        selectionMode={picking}
                         selected={selected.includes(g.id)}
                         onSelect={(on) => toggleSelect(g.id, on)}
                         onToggleFavorite={() => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite }))}
@@ -415,18 +505,28 @@ export default function GroupsPage() {
             <ul className="divide-y divide-ink-700">
               {page.map((g) => (
                 <li key={g.id} className="flex items-center gap-2.5 px-3 py-2.5">
-                  <input
-                    type="checkbox"
-                    aria-label={`בחר את ${g.name}`}
-                    checked={selected.includes(g.id)}
-                    onChange={(e) => toggleSelect(g.id, e.target.checked)}
-                    className="h-5 w-5 shrink-0 accent-brand-300"
-                  />
+                  {/* The bare 20px input was the one control on this screen a
+                      thumb genuinely missed; the label around it is the 44px
+                      target every other checkbox in the module already has.
+                      Like the card's, it exists only while picking. */}
+                  {picking && (
+                    <label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center">
+                      <input
+                        type="checkbox"
+                        aria-label={`בחר את ${g.name}`}
+                        checked={selected.includes(g.id)}
+                        onChange={(e) => toggleSelect(g.id, e.target.checked)}
+                        className="h-5 w-5 accent-brand-300"
+                      />
+                    </label>
+                  )}
                   <Link href={`/social/groups/${g.id}`} className="flex min-w-0 grow items-center gap-2.5">
                     <TargetAvatar name={g.name} imageUrl={g.image_url} channel={g.channel} size={40} />
                     <div className="min-w-0">
-                      <p dir="auto" className={`truncate text-sm font-bold ${g.enabled ? 'text-mist-100' : 'text-mist-500'}`}>
-                        {g.favorite && <span aria-hidden>⭐ </span>}
+                      {/* line-clamp-2, matching the card: switching views used
+                          to change how much of a group's name was readable. */}
+                      <p dir="auto" className={`line-clamp-2 text-sm font-bold ${g.enabled ? 'text-mist-100' : 'text-mist-500'}`}>
+                        {g.favorite && <StarIcon aria-hidden className="me-1 inline h-3.5 w-3.5 align-[-0.15em] text-warning-400" fill="currentColor" />}
                         {g.name}
                       </p>
                       <p dir="auto" className="truncate text-[11px] text-mist-500">
@@ -456,50 +556,30 @@ export default function GroupsPage() {
         )}
       </div>
 
-      {/* This bar wraps to three rows on a phone and floats inside the clearance
-          the page reserves for the tab bar, so the last few group rows sat under
-          it with no way to scroll clear. The spacer is its height, and it is
-          present only while the bar is. */}
-      {selected.length > 0 && <div aria-hidden className="h-40 sm:h-24" />}
+      {/* The bar is 64px on one row now, so the spacer is one height instead of
+          two guesses. It is present exactly while the bar is. */}
+      {picking && <div aria-hidden className="h-24" />}
 
-      {/* Selection bar: sticky above the tab bar, so it is reachable with a thumb.
+      {/* Selection bar: fixed above the tab bar, so it is reachable with a thumb.
           data-overlay keeps the page's entrance animation off it — that animation
           sets a transform, and a transformed element is the containing block for
-          anything positioned fixed inside it. */}
-      {selected.length > 0 && (
+          anything positioned fixed inside it.
+
+          It used to carry eight controls in a flex-wrap row that collapsed to
+          three lines on a phone and needed a 160px spacer under the list. One
+          primary action and one way out stay on the bar; everything else — the
+          two select-alls, enable, pause, favourite, category and the
+          destructive remove, all of them still here — moved into the "⋯",
+          which is the same sheet the cards use and gives every one of them a
+          Hebrew name (the favourite action's whole accessible name used to be
+          "⭐", read out as "white medium star"). */}
+      {picking && (
         <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
-          <div className={`mx-auto flex max-w-3xl flex-wrap items-center gap-2 p-2.5 ${CARD_ELEVATED}`}>
-            <Badge tone="brand">נבחרו {selected.length}</Badge>
-            <ButtonLink href={`/social/posts/new?targets=${selected.join(',')}`} size="sm">צור פוסט</ButtonLink>
-            <Button size="sm" variant="secondary" busy={busy === 'bulk-on'} onClick={() => act('bulk-on', () => bulkUpdateTargets(selected, { enabled: true }), 'הופעלו.')}>
-              הפעל
-            </Button>
-            <Button size="sm" variant="secondary" busy={busy === 'bulk-off'} onClick={() => act('bulk-off', () => bulkUpdateTargets(selected, { enabled: false }), 'הושהו.')}>
-              השהה
-            </Button>
-            <Button size="sm" variant="secondary" busy={busy === 'bulk-fav'} onClick={() => act('bulk-fav', () => bulkUpdateTargets(selected, { favorite: true }), 'סומנו כמועדפות.')}>
-              ⭐
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => { setCategoryDraft(''); setCategoryOpen(true); }}>
-              קטגוריה
-            </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              busy={busy === 'bulk-del'}
-              onClick={async () => {
-                const ok = await confirm.ask({
-                  title: `להסיר ${selected.length} קבוצות?`,
-                  body: DELETE_GROUP_WARNING,
-                  confirmLabel: 'הסר ומחק היסטוריה',
-                  danger: true,
-                });
-                if (ok) await act('bulk-del', () => bulkDeleteTargets(selected).then(() => setSelected([])), 'הוסרו.');
-              }}
-            >
-              הסר
-            </Button>
-            <button type="button" className="ms-auto min-h-11 px-3 text-xs font-bold text-mist-500" onClick={() => setSelected([])}>
+          <div className={`mx-auto flex max-w-3xl items-center gap-2 p-2.5 ${CARD_ELEVATED}`}>
+            <Badge tone="brand">{selectionLabel}</Badge>
+            {selected.length > 0 && <ButtonLink href={`/social/posts/new?targets=${selected.join(',')}`}>צור פוסט</ButtonLink>}
+            <OverflowMenu label="פעולות על הבחירה" actions={bulkActions} />
+            <button type="button" className="ms-auto min-h-11 shrink-0 px-3 text-xs font-bold text-mist-500" onClick={exitPicking}>
               בטל
             </button>
           </div>

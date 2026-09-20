@@ -15,13 +15,24 @@ import { QUEUE_STATUS_LABEL, type PublishMethod, type QueueStatus } from '@/lib/
  * new screen needs a size that is not in them, the right move is to pick the
  * nearest one, not to add a new one.
  *
- *   spacing     gap-2 (8px) · gap-3 (12px) · gap-4 (16px) · gap-5 (20px)
- *   radius      lg (8px, chips) · xl (12px, controls) · 2xl (16px, tiles)
- *               · rounded-card (20px, panels) · full (pills, avatars)
- *   type        11px meta · 13-14px body · 16px input (never smaller on iOS,
- *               or Safari zooms the page on focus) · 18-24px numbers
- *   controls    h-11 (44px) is the minimum touch target; compact variants
- *               (h-9) are for desktop toolbars only
+ *   spacing     gap-1 / gap-1.5 / gap-2 / gap-2.5 inside a control · gap-3
+ *               between the rows of a list · gap-4 / gap-5 between a page's
+ *               top-level blocks. Counted, not wished for: those seven steps
+ *               are every gap in the module.
+ *   radius      lg (8px, chips) · xl (12px, controls) · rounded-tile (18px,
+ *               tiles) · rounded-card (20px, panels) · rounded-sheet (22px)
+ *               · full (pills, avatars). `2xl` is not used anywhere in the
+ *               module; a hand-typed radius such as rounded-[14px] is drift,
+ *               not a step, and belongs on the nearest one above.
+ *   type        11px meta (the floor — 10px Hebrew on a phone is a squint) ·
+ *               13-14px body · 16px input (never smaller on iOS, or Safari
+ *               zooms the page on focus) · 18-34px numbers
+ *   controls    h-11 (44px) is the minimum touch target. The `sm` size is
+ *               40px and is used on phones; it is under the floor and
+ *               worker/test/layout.test.ts currently pins that 40px in
+ *               source, so raising it means re-pointing the guard in the
+ *               same change. `variant="chips"` on SegmentedControl is the
+ *               compact filter row that keeps the full 44px.
  *   colour      four hues, and the Hebrew label carries any distinction the
  *               hue no longer does:
  *                 BLUE   actions, navigation, and WAITING
@@ -358,6 +369,7 @@ export function SegmentedControl<T extends string>({
   options,
   label,
   size = 'md',
+  variant = 'track',
   className = '',
 }: {
   value: T;
@@ -365,11 +377,65 @@ export function SegmentedControl<T extends string>({
   options: { value: T; label: React.ReactNode; count?: number }[];
   label?: string;
   size?: 'sm' | 'md';
+  /**
+   * `track` is the original and stays the default, so no existing call site
+   * changes. `chips` is the phone filter row — see the comment on the branch
+   * below for what it buys and why it is a variant rather than a new
+   * component.
+   */
+  variant?: 'track' | 'chips';
   className?: string;
 }) {
   // Height is a floor, not padding: these are filter chips people tap on a
   // phone, and they measured 28px before.
   const pad = size === 'sm' ? 'min-h-10 px-3 text-xs' : 'min-h-11 px-3.5 text-sm';
+
+  /*
+   * The compact filter row, for screens where the filters cost more of the
+   * phone than the results do.
+   *
+   * Three stacked `track` rows on /social/groups measure 48px each — a 40px
+   * chip plus the rail's own 4px above and below — and a row with more
+   * options than fit wraps to a second line, so a long city list costs 96.
+   * This branch drops the rail (each chip carries its own fill, so it still
+   * has an edge), pins every chip at the 44px floor whatever `size` says,
+   * and scrolls sideways instead of wrapping: one row is 44px whether it
+   * holds three cities or thirty.
+   *
+   * `min-w-0` on the scroller is load-bearing, not tidiness. A flex child
+   * cannot shrink below its content, so without it the chips widen the
+   * whole page sideways instead of scrolling inside their own row — the bug
+   * worker/test/layout.test.ts exists to catch. Note the guard reads plain
+   * string classNames only, so it cannot see this one: it is here because it
+   * is required, not because it is checked.
+   *
+   * The count stays inline and at full strength for the same reason it does
+   * on the track below — it is a real filter count, not decoration.
+   */
+  if (variant === 'chips') {
+    return (
+      <div role="group" aria-label={label} className={`flex min-w-0 items-center gap-1.5 overflow-x-auto scrollbar-none ${className}`}>
+        {options.map((o) => {
+          const active = o.value === value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(o.value)}
+              className={`inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-xs transition-colors ${
+                active ? 'bg-brand-500 font-extrabold text-on-brand' : 'bg-ink-800 font-bold text-mist-300 hover:text-mist-100'
+              } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950`}
+            >
+              {o.label}
+              {o.count !== undefined && <span className="ms-1 font-normal tabular-nums">{o.count}</span>}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div role="group" aria-label={label} className={`flex flex-wrap gap-1 rounded-xl bg-ink-800 p-1 ${className}`}>
       {options.map((o) => {
@@ -489,6 +555,95 @@ export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warn' | '
       {children}
     </div>
   );
+}
+
+/**
+ * A failed read, with the one control that gets out of it.
+ *
+ * `Notice` takes children and has no action slot, so every screen that lost
+ * its first read was left with a red banner over a skeleton that shimmered
+ * for ever and no way forward but a browser reload — on a phone, for an owner
+ * who is not technical. This is that banner plus the retry, so a screen needs
+ * one element instead of hand-rolling the pair.
+ *
+ * `message` is already-Hebrew prose: pass `friendlyMessage(err, …)` from
+ * lib/social/errors.ts, never the exception. Nothing here inspects, formats
+ * or falls back to an error object — a raw exception must not be able to
+ * reach a screen through this component either.
+ */
+export function ErrorState({
+  message,
+  onRetry,
+  retryLabel = 'נסו שוב',
+}: {
+  message: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+}) {
+  return (
+    // role="alert" so the failure is announced when it appears, rather than
+    // only being found by someone already scanning the screen.
+    <div role="alert" className={`rounded-card border px-3.5 py-3 ${TONE_BORDER.bad} ${TONE_TINT.bad}`}>
+      <p dir="auto" className={`text-sm leading-relaxed ${TONE_TEXT.bad}`}>
+        {message}
+      </p>
+      {onRetry && (
+        <Button variant="secondary" onClick={onRetry} className="mt-3">
+          {retryLabel}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * How old the numbers above this line are, in Hebrew, counting up live.
+ *
+ * Every screen in the module polls on a timer and none of them say when the
+ * last read actually landed, so a dashboard returned to after a locked phone
+ * looks exactly like one a second old.
+ *
+ * Deliberately dumb: it takes an instant and re-renders itself. It never
+ * fetches, never polls and never decides anything is stale — the screen owns
+ * its reads and passes the moment one of them SUCCEEDED. Before the first
+ * success `at` is null and the line is not drawn at all, because a freshness
+ * claim with nothing behind it is an invented number.
+ *
+ * No dir="ltr" island: the string is one number between two Hebrew words,
+ * with no neutral separator between two digit runs, so there is nothing for
+ * the bidi algorithm to reorder. The islands in DateTime.tsx are for
+ * "19.09.2026, 14:05", which is a different shape.
+ */
+function agoHe(ms: number): string {
+  const sec = Math.max(0, Math.round(ms / 1000));
+  if (sec < 5) return 'זה עתה';
+  // The duals are not decoration: "לפני 2 דקות" is the kind of line that tells
+  // an owner nobody read the screen. Same forms relativeHe() uses.
+  if (sec < 60) return sec === 1 ? 'לפני שנייה' : sec === 2 ? 'לפני שתי שניות' : `לפני ${sec} שניות`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return min === 1 ? 'לפני דקה' : min === 2 ? 'לפני שתי דקות' : `לפני ${min} דקות`;
+  const hours = Math.round(min / 60);
+  return hours === 1 ? 'לפני שעה' : hours === 2 ? 'לפני שעתיים' : `לפני ${hours} שעות`;
+}
+
+export function Freshness({ at, className = '' }: { at: Date | string | number | null | undefined; className?: string }) {
+  const ms = at === null || at === undefined ? NaN : new Date(at).getTime();
+  const [now, setNow] = useState(() => Date.now());
+  const live = !Number.isNaN(ms);
+  useEffect(() => {
+    if (!live) return;
+    // A second is the right beat for a counter someone can watch tick, and
+    // the visibility check is the same guard every other timer in the module
+    // carries: a backgrounded tab should not be re-rendering a label nobody
+    // is looking at.
+    const id = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(id);
+  }, [live]);
+  if (!live) return null;
+  return <p className={`text-[11px] leading-tight text-mist-500 ${className}`}>עודכן {agoHe(now - ms)}</p>;
 }
 
 /**
@@ -1159,7 +1314,10 @@ export function SectionHeader({ title, href, linkLabel = 'הצג הכל' }: { ti
       {href && (
         // brand-400, not brand-500: this is a link, and brand-500 is the
         // button surface — as ink on a card it measures 3.09 and fails.
-        <Link href={href} className="inline-flex min-h-10 items-center gap-0.5 text-sm font-bold text-brand-400">
+        // min-h-11, not the 40px it was: this is the "show all" on every
+        // section in the product, and 44px is the floor. The row is
+        // items-baseline, so the link has to carry its own height.
+        <Link href={href} className="inline-flex min-h-11 items-center gap-0.5 text-sm font-bold text-brand-400">
           {linkLabel}
           <ChevronIcon className="h-4 w-4 rtl:rotate-180" />
         </Link>

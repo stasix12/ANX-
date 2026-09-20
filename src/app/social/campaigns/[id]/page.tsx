@@ -17,16 +17,20 @@ import {
   Notice,
   SegmentedControl,
   Tile,
+  TONE_FILL,
   useConfirm,
   useToast,
   ButtonLink,
+  type Tone,
 } from '@/components/social/ui';
 import {
   campaignQueueWithStats,
   cancelQueueItem,
   confirmQueueItem,
   getCampaign,
-  listPosts,
+  getControl,
+  listPostsForCampaign,
+  listWorkers,
   pauseCampaign,
   retryQueueItem,
   screenshotUrl,
@@ -35,18 +39,19 @@ import {
 } from '@/lib/social/client';
 import {
   RUN_STATE_LABEL,
-  RUN_STATE_TONE,
   campaignState,
+  canPauseRun,
+  canResumeRun,
   cancellableRows,
-  openRows,
-  percentPublished,
+  runBadge,
+  runProgress,
   type CampaignState,
 } from '@/lib/social/campaign';
 import { checkCampaignInvariants, takeUnreported } from '@/lib/social/invariants';
 import { logClientActivity } from '@/lib/social/client';
 import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from '@/components/social/DateTime';
-import type { Campaign, Post } from '@/lib/social/types';
+import type { Campaign, ControlSettings, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { CalendarIcon, ClipboardListIcon, PauseIcon, SearchIcon } from '@/components/icons';
 
@@ -71,6 +76,20 @@ export default function CampaignControlCenter() {
   const [rows, setRows] = useState<QueueRow[] | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [state, setState] = useState<CampaignState<QueueRow> | null>(null);
+  /* The global pause. This screen never read it, so the run badge said "רץ"
+     with a live dot directly under its own header's amber "מושהה" toggle. */
+  const [control, setControl] = useState<ControlSettings | null>(null);
+  /*
+   * Whether the PC that publishes to groups is connected.
+   *
+   * runBadge() takes this and turns "רץ" into "לא רץ — המחשב לא מחובר", and
+   * the dashboard and the runs list both hand it over. This screen did not, so
+   * one run wore two different badges depending on which screen the owner
+   * happened to be looking at — the exact class of contradiction the rest of
+   * this module exists to prevent. `null` until the first read, so the badge
+   * never claims the PC is off merely because nothing has answered yet.
+   */
+  const [workerOnline, setWorkerOnline] = useState<boolean | null>(null);
   const [tab, setTab] = useState<'queue' | 'timeline'>('queue');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,10 +100,18 @@ export default function CampaignControlCenter() {
 
   const load = useCallback(async () => {
     try {
-      const [c, q, p] = await Promise.all([getCampaign(id), campaignQueueWithStats(id), listPosts()]);
+      const [c, q, p, ctrl, workers] = await Promise.all([
+        getCampaign(id),
+        campaignQueueWithStats(id),
+        listPostsForCampaign(id),
+        getControl(),
+        listWorkers().catch(() => null),
+      ]);
       setCampaign(c);
       setRows(q.rows);
-      setPosts(p.filter((x) => x.campaign_id === id));
+      setPosts(p);
+      setControl(ctrl);
+      if (workers) setWorkerOnline(workers.some((w) => w.online));
       const next = campaignState(q.rows, c, { truncated: q.truncated });
       setState(next);
       // A count that disagrees with itself is reported in Hebrew through the
@@ -236,10 +263,18 @@ export default function CampaignControlCenter() {
     );
   }
 
-  const paused = state?.state === 'paused';
   const closed = state?.state === 'completed' || state?.state === 'stopped';
-  /* Pause can only hold back rows that have not gone out yet. */
-  const canPause = Boolean(state) && openRows(state!.progress) > 0;
+  /* One opinion about the run, from campaign.ts: the badge's label, colour and
+     whether its dot may pulse, and which of the two buttons can actually act.
+     Pause is about the ROWS (is anything left to hold back); resume is about
+     the RECORD (is it the pause flag that is holding them) — derived from the
+     state NAME, resume vanished on a genuinely paused run whose remaining rows
+     are all manual, which resolves to 'needs_attention'. */
+  const badge = state ? runBadge(state, { globalPaused: control?.paused, workerOnline: workerOnline ?? undefined }) : null;
+  const badgeTone: Tone | undefined = badge ? (badge.tone === 'info' ? 'brand' : badge.tone) : undefined;
+  const showPause = Boolean(state) && canPauseRun(state!.progress, campaign.status);
+  const showResume = Boolean(state) && canResumeRun(state!.progress, campaign.status);
+  const view = state ? runProgress(state.progress) : null;
 
   return (
     <SocialShell
@@ -249,6 +284,8 @@ export default function CampaignControlCenter() {
           + פוסט
         </ButtonLink>
       }
+      paused={control?.paused ?? null}
+      onControlChanged={load}
     >
       <div className="space-y-5">
         {error && <Notice tone="error">{error}</Notice>}
@@ -257,8 +294,13 @@ export default function CampaignControlCenter() {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              {state?.state === 'running' && <span aria-hidden className="pulse-dot h-2 w-2 rounded-full bg-success-400" />}
-              <Badge tone={RUN_STATE_TONE[state?.state ?? 'not_started']}>{RUN_STATE_LABEL[state?.state ?? 'not_started']}</Badge>
+              {/* The dot used to be hard-coded green beside a badge the shared
+                  tone map paints blue, and it pulsed on the state NAME alone —
+                  so a run whose laptop had been asleep since yesterday pulsed
+                  as if it were publishing right now. Both now come from
+                  runBadge(), which requires a row a worker is actually holding. */}
+              {badge?.live && badgeTone && <span aria-hidden className={`pulse-dot h-2 w-2 rounded-full ${TONE_FILL[badgeTone]}`} />}
+              <Badge tone={badge?.tone ?? 'neutral'}>{badge?.label ?? RUN_STATE_LABEL.not_started}</Badge>
               <span className="text-xs text-mist-500">
                 {[campaign.service, campaign.city].filter(Boolean).join(' · ')}
               </span>
@@ -268,13 +310,26 @@ export default function CampaignControlCenter() {
           {/* The headline. The ring carries the percentage; the tile grid
               further down carries the figures behind it. Every number on this
               screen is a count of real queue rows. */}
-          {state && (
+          {state && view && (
             <div className="mt-4 flex flex-wrap items-center justify-center gap-5 sm:justify-start">
-              <ProgressRing
-                percent={percentPublished(state.progress)}
-                label={`${percentPublished(state.progress)}%`}
-                sub={`${state.progress.published} / ${state.progress.total} פורסמו`}
-              />
+              {/*
+                The ring is ROUND PROGRESS — handled rows over the total. It
+                was publications, so a run where 13 of 28 rows had ended but
+                none had published drew an empty ring and printed "0%".
+                The publications figure is still on the screen twice, labelled
+                as itself: in the bar's legend below and in the "פורסמו" tile.
+
+                role="img" with the label on the WRAPPER, because ProgressRing
+                hard-codes aria-label={`${pct}% הושלמו`} — and "הושלמו" is the
+                word reserved for publications, so announcing it over the
+                handled figure would re-introduce the contradiction in the one
+                layer nobody looks at. A role="img" element's descendants are
+                presentational, so this is the label that is read out.
+                ProgressRing should take it as a prop; see the report.
+              */}
+              <div role="img" aria-label={view.ariaLabel}>
+                <ProgressRing percent={view.percent} label={`${view.percent}%`} sub={`${view.handled} / ${view.total} טופלו`} />
+              </div>
               {/*
                 The four-figure <dl> that used to sit here is gone.
                 
@@ -306,20 +361,22 @@ export default function CampaignControlCenter() {
           <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
             <Fact label="התחיל" value={state?.startedAt ? when(state.startedAt) : null} fallback="טרם התחיל" />
             <Fact label="סיום משוער" value={state?.estimatedCompletionAt ? when(state.estimatedCompletionAt) : null} fallback={closed ? 'הסתיים' : '—'} hint={state?.estimatedCompletionAt ? 'לפי התזמון שהוגדר' : undefined} />
-            <Fact label="הפרסום הבא" value={state?.nextAt ? when(state.nextAt) : null} fallback={paused ? 'מושהה' : 'אין'} hint={state?.nextAt ? relativeHe(state.nextAt) : undefined} />
+            <Fact label="הפרסום הבא" value={state?.nextAt ? when(state.nextAt) : null} fallback={showResume ? 'מושהה' : 'אין'} hint={state?.nextAt ? relativeHe(state.nextAt) : undefined} />
             <Fact label="הקבוצה הבאה" value={state?.nextTargetName ?? null} fallback="—" />
           </dl>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {paused ? (
+            {showResume ? (
               <Button busy={busy === 'resume'} onClick={() => act('resume', () => pauseCampaign(id, false), 'הסבב ממשיך מהמקום שבו נעצר.')}>
                 המשך סבב
               </Button>
             ) : (
-              !closed &&
-              canPause && (
+              showPause && (
+                /* "השהה סבב" — this pauses THIS round. The header's global
+                   toggle, on this very screen, pauses EVERYTHING and carried
+                   the identical word. */
                 <Button variant="secondary" busy={busy === 'pause'} onClick={() => act('pause', () => pauseCampaign(id, true), 'הסבב הושהה. התור נשמר.')}>
-                  השהה
+                  השהה סבב
                 </Button>
               )
             )}
@@ -335,7 +392,7 @@ export default function CampaignControlCenter() {
               לכל סבבי הפרסום
             </Link>
           </div>
-          {paused && (
+          {showResume && (
             <p className="mt-2 text-xs text-mist-500">
               השהיה לא מוחקת דבר — כל הפרסומים שומרים על השעה שלהם וימשיכו ברגע שתלחצו "המשך".
             </p>

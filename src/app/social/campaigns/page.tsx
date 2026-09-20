@@ -9,8 +9,8 @@ import {
   Card,
   ButtonLink,
   EmptyState,
+  ErrorState,
   Field,
-  Notice,
   SegmentedControl,
   Sheet,
   SkeletonList,
@@ -23,15 +23,17 @@ import {
   deleteCampaign,
   duplicateCampaign,
   getBusiness,
+  getControl,
   listCampaigns,
   listPosts,
+  listWorkers,
   pauseCampaign,
   reopenCampaign,
   saveCampaign,
   stopCampaign,
 } from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
-import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type Post } from '@/lib/social/types';
+import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type ControlSettings, type Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { MegaphoneIcon } from '@/components/icons';
 
@@ -53,6 +55,16 @@ export default function CampaignsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [states, setStates] = useState<Record<string, CampaignState>>({});
   const [business, setBusiness] = useState<BusinessSettings>(DEFAULT_BUSINESS);
+  /*
+   * The two machine facts every run badge on this screen depends on, and this
+   * page read neither. Without the control row the cards showed a green
+   * pulsing "רץ" while the PublishingToggle in the header of the same viewport
+   * was amber "מושהה"; without the heartbeat a run whose laptop had been
+   * asleep since yesterday pulsed as if it were publishing right now.
+   * runBadge() in campaign.ts decides what they mean — the cards only render it.
+   */
+  const [control, setControl] = useState<ControlSettings | null>(null);
+  const [workerOnline, setWorkerOnline] = useState<boolean | undefined>(undefined);
   const [form, setForm] = useState<typeof blank & { id?: string }>(blank);
   const [editorOpen, setEditorOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('live');
@@ -63,11 +75,20 @@ export default function CampaignsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [c, p, b, st] = await Promise.all([listCampaigns(), listPosts(), getBusiness(), campaignStates()]);
+      const [c, p, b, st, ctrl, workers] = await Promise.all([
+        listCampaigns(),
+        listPosts(),
+        getBusiness(),
+        campaignStates(),
+        getControl(),
+        listWorkers(),
+      ]);
       setCampaigns(c);
       setPosts(p);
       setBusiness(b);
       setStates(st);
+      setControl(ctrl);
+      setWorkerOnline(workers.some((w) => w.online));
       setError(null);
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
@@ -86,11 +107,33 @@ export default function CampaignsPage() {
     return { all: list.length, done, live: list.length - done };
   }, [campaigns, stateOf]);
 
+  /*
+   * Sorted, not just filtered.
+   *
+   * listCampaigns() orders by created_at DESC and this list rendered them in
+   * that order, so a run publishing RIGHT NOW could sit below a run that has
+   * never started — and "פעילים" mixes רץ / מושהה / טרם התחיל / דורש טיפול
+   * into one stack of identically-sized cards whose only live signal is a
+   * badge in the corner of each. The run a worker is actually holding goes
+   * first, then whatever goes out soonest. No new field: both come out of
+   * `states`, which the page already has.
+   */
   const visible = useMemo(() => {
     const list = campaigns ?? [];
-    if (filter === 'all') return list;
     const finished = (c: Campaign) => ['completed', 'stopped'].includes(stateOf(c).state);
-    return filter === 'done' ? list.filter(finished) : list.filter((c) => !finished(c));
+    const picked = filter === 'all' ? [...list] : filter === 'done' ? list.filter(finished) : list.filter((c) => !finished(c));
+    return picked.sort((a, b) => {
+      const sa = stateOf(a);
+      const sb = stateOf(b);
+      const live = Number(sb.progress.running > 0) - Number(sa.progress.running > 0);
+      if (live) return live;
+      // A run with nothing scheduled has no next instant; it sorts after the
+      // ones that do rather than ahead of them.
+      if (sa.nextAt && sb.nextAt) return sa.nextAt.localeCompare(sb.nextAt);
+      if (sa.nextAt) return -1;
+      if (sb.nextAt) return 1;
+      return 0;
+    });
   }, [campaigns, filter, stateOf]);
 
   function openEditor(c?: Campaign) {
@@ -173,9 +216,14 @@ export default function CampaignsPage() {
       /* No "new run" action: a run is created by publishing a post, so the
          useful thing to offer here is the way back to the posts. */
       headerAction={<ButtonLink href="/social/library">ספריית תוכן</ButtonLink>}
+      paused={control?.paused ?? null}
+      onControlChanged={load}
     >
       <div className="space-y-4">
-        {error && <Notice tone="error">{error}</Notice>}
+        {/* A failed read used to leave a red banner above a skeleton that
+            shimmered for ever, with no way out but a browser reload — on a
+            phone, for an owner who is not technical. */}
+        {error && <ErrorState message={error} onRetry={load} />}
 
         {/* The counts are omitted, not zeroed, until the list is known.
             These chips render above the skeleton, so offline or on a schema
@@ -194,7 +242,7 @@ export default function CampaignsPage() {
           ]}
         />
 
-        {!campaigns && (
+        {!campaigns && !error && (
           <Card>
             <SkeletonList rows={3} />
           </Card>
@@ -227,12 +275,16 @@ export default function CampaignsPage() {
                   media={mine.find((p) => p.media?.length)?.media ?? null}
                   nextTargetImage={state.upcoming.find((r) => r.target?.image_url)?.target?.image_url ?? null}
                   hasPost={mine.length > 0}
+                  globalPaused={control?.paused ?? false}
+                  workerOnline={workerOnline}
                   busy={busy === `pause-${c.id}` || busy === `resume-${c.id}`}
                   onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הסבב הושהה.')}
                   onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הסבב ממשיך.')}
                 />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs font-bold">
-                  <span className="text-mist-500">{mine.length} פוסטים</span>
+                  {/* Hebrew has no bare-numeral singular, so a fixed plural
+                      prints "1 פוסטים" — and 1 is the commonest value here. */}
+                  <span className="text-mist-500">{mine.length === 1 ? 'פוסט אחד' : `${mine.length} פוסטים`}</span>
                   <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => openEditor(c)}>
                     ערוך
                   </button>
@@ -246,8 +298,8 @@ export default function CampaignsPage() {
                       them. A Link is inline, so it needs the flex box too for
                       min-height to apply at all. */}
                   {state.state === 'stopped' && (
-                    <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הסבב נפתח מחדש.')}>
-                      פתח מחדש
+                    <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הסבב חזר לפעילות.')}>
+                      החזר לפעילות
                     </button>
                   )}
                   <Link href={`/social/posts/new?campaign=${c.id}`} className="inline-flex min-h-11 items-center px-1 text-brand-400">

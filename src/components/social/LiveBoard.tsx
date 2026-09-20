@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { cancelQueueItem, confirmQueueItem, listLiveQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
 import { QueueSections } from './QueueSections';
-import { Button, Card, Notice, SkeletonList, useConfirm, useToast, ButtonLink} from './ui';
+import { Card, ErrorState, Freshness, SkeletonList, useConfirm, useToast, ButtonLink } from './ui';
 import { friendlyMessage } from '@/lib/social/errors';
 
 /**
@@ -29,6 +29,10 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
    * possible to ask twice while the first answer is still coming.
    */
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  /* The instant the last read SUCCEEDED. The card's subtitle promises a
+     four-second beat, which is a claim about a timer; this is the reading
+     behind it, so a board that has quietly stopped landing says so. */
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -36,6 +40,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
     try {
       const all = await listLiveQueue();
       setRows(postId ? all.filter((r) => r.post_id === postId) : all);
+      setUpdatedAt(new Date());
       setError(null);
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
@@ -134,7 +139,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
     <>
       {error && (
         <div className="mb-3">
-          <Notice tone="error">{error}</Notice>
+          <ErrorState message={error} onRetry={load} />
         </div>
       )}
       {!rows && !error && <SkeletonList rows={3} />}
@@ -148,6 +153,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
           }
         />
       )}
+      <Freshness at={updatedAt} className="mt-2.5" />
       {confirm.dialog}
     </>
   );

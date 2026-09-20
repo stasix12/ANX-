@@ -309,6 +309,22 @@ export async function listPosts(): Promise<Post[]> {
   return unwrap<Post[]>(await db().from('social_posts').select('*').neq('status', 'archived').order('updated_at', { ascending: false }));
 }
 
+/**
+ * The posts of ONE run.
+ *
+ * The campaign control centre polls every five seconds and used to call
+ * listPosts() — every non-archived post in the account, base_text and media
+ * included — only to run `.filter((x) => x.campaign_id === id)` on the result
+ * and keep, almost always, exactly one of them. An owner with two hundred
+ * drafts paid for all of them twelve times a minute for the life of the screen.
+ * The filter now happens in Postgres.
+ */
+export async function listPostsForCampaign(campaignId: string): Promise<Post[]> {
+  return unwrap<Post[]>(
+    await db().from('social_posts').select('*').eq('campaign_id', campaignId).neq('status', 'archived').order('updated_at', { ascending: false }),
+  );
+}
+
 export async function getPost(id: string): Promise<Post | null> {
   return unwrap<Post | null>(await db().from('social_posts').select('*').eq('id', id).maybeSingle());
 }

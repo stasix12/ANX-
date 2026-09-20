@@ -1,4 +1,4 @@
-import { openRows, type CampaignState } from './campaign';
+import { openRows, percentFinished, percentPublished, type CampaignState } from './campaign';
 import { CLAIMABLE_STATUSES, isTerminal, summarizeQueue, type QueueSummary } from './status';
 import type { QueueStatus } from './types';
 
@@ -35,6 +35,9 @@ const SAMPLE = 10;
  *  I4  'completed' means nothing is open
  *  I5  a waiting row that no worker can ever claim is reported, not counted
  *      silently as if it were going to go out
+ *  I6  'running' is never claimed without a machine fact behind it — a row a
+ *      worker is holding, or a publication that really went out
+ *  I7  no percentage reads 100 while a row is still open
  */
 export function checkCampaignInvariants(
   state: Pick<CampaignState, 'progress' | 'state' | 'upcoming'>,
@@ -84,6 +87,32 @@ export function checkCampaignInvariants(
         rowIds: state.upcoming.slice(0, SAMPLE).map((r) => r.id),
         statuses: unique(state.upcoming.map((r) => r.status)),
       },
+    });
+  }
+
+  /*
+   * The reported "● רץ" beside "התחיל: טרם התחיל". resolveState() can no
+   * longer produce it, so this is what catches a state assembled anywhere
+   * else: running means a worker is holding a row, or something published.
+   */
+  if (state.state === 'running' && p.running === 0 && p.published === 0) {
+    out.push({
+      code: 'running_without_a_machine_fact',
+      message: 'הסבב מסומן כרץ, אך אף פרסום לא יצא ואף פרסום לא נמצא כרגע בעבודה',
+      meta: { ...base, progress: { ...p } },
+    });
+  }
+
+  /*
+   * Rounding is the other way a full bar appeared beside waiting rows: 249 of
+   * 250 rounds to 100. campaign.ts clamps both ratios at 99 unless the count
+   * is exact; this re-checks the result against the rows it was built from.
+   */
+  if (open > 0 && (percentFinished(p) === 100 || percentPublished(p) === 100)) {
+    out.push({
+      code: 'progress_full_with_open_rows',
+      message: `הסבב מציג 100% אך ${open} פרסומים עדיין לא יצאו`,
+      meta: { ...base, open, percentFinished: percentFinished(p), percentPublished: percentPublished(p), progress: { ...p } },
     });
   }
 

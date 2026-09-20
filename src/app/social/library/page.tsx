@@ -15,6 +15,7 @@ import {
   ButtonLink,
   Card,
   EmptyState,
+  ErrorState,
   Field,
   Notice,
   SegmentedControl,
@@ -277,15 +278,12 @@ export default function LibraryPage() {
         </ButtonLink>
       }
     >
-      <div className="space-y-4 pb-20">
-        {error && (
-          <div className="space-y-2">
-            <Notice tone="error">{error}</Notice>
-            <Button variant="secondary" onClick={load}>
-              נסו שוב
-            </Button>
-          </div>
-        )}
+      {/* No page-level bottom padding: SocialShell already reserves the tab
+          bar's clearance for every screen, and the selection bar has its own
+          spacer at the foot of this one. The 80px here was a third reserve on
+          top of both. */}
+      <div className="space-y-4">
+        {error && <ErrorState message={error} onRetry={load} />}
         {categoriesError && <Notice tone="warn">{categoriesError}</Notice>}
         {categorySchemaMissing && (
           <Notice tone="warn">
@@ -393,8 +391,11 @@ export default function LibraryPage() {
           </Card>
         )}
 
-        {/* Loading: cards, not a spinner, so the grid does not jump when it fills. */}
-        {!items && (
+        {/* Loading: cards, not a spinner, so the grid does not jump when it
+            fills — and only while the read can still land. A failed first read
+            leaves `items` null, and the grid used to shimmer under the error
+            banner with no way out but a browser reload. */}
+        {!items && !error && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-60 rounded-tile" />

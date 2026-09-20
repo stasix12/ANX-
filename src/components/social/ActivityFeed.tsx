@@ -65,6 +65,27 @@ const LEVEL_MARK: Record<string, { icon: React.ComponentType<{ className?: strin
   info: { icon: DotIcon, tone: 'neutral' },
 };
 
+/**
+ * THE LAST LINE OF DEFENCE AGAINST A RAW EXCEPTION ON SCREEN.
+ *
+ * Every sentence in this log is written in Hebrew at its source — except three
+ * sites on the browser worker (social-worker.ts: the startup check, the main
+ * loop and the command result) and two on the server worker, which log
+ * `err.message` directly. Those land here verbatim, so the feed on the Hebrew
+ * dashboard can read "browserType.launchPersistentContext: Executable doesn't
+ * exist at /root/.cache/ms-playwright/…". The real fix is at those five log
+ * calls (worker/db.ts already exports `safeError` for exactly this, and the
+ * job path uses it); this stops the leak reaching an owner in the meantime.
+ *
+ * Deliberately a script test and NOT friendlyMessage(): friendlyMessage maps
+ * by keyword, and a Playwright "Timeout 30000ms exceeded" would come back as
+ * "השרת לא הגיב בזמן" — a sentence about the server, about a failure in a
+ * browser on the owner's own PC. A message with no Hebrew in it is not
+ * rewritten into a guess; it is replaced by what is actually known.
+ */
+const HEBREW = /[֐-׿]/;
+const TECHNICAL = 'תקלה טכנית. הפרטים המלאים נשמרו ביומן במערכת.';
+
 export function ActivityFeed({ entries, limit = 12 }: { entries: ActivityEntry[]; limit?: number }) {
   if (!entries.length) return <Empty>עדיין אין פעילות. כשתתחילו לפרסם, כל פעולה תופיע כאן.</Empty>;
   return (
@@ -78,7 +99,9 @@ export function ActivityFeed({ entries, limit = 12 }: { entries: ActivityEntry[]
               <Icon className="h-4 w-4" />
             </span>
             <div className="min-w-0 grow">
-              <p dir="auto" className={`text-sm leading-snug ${e.level === 'error' ? 'text-error-400' : 'text-mist-100'}`}>{e.message}</p>
+              <p dir="auto" className={`text-sm leading-snug ${e.level === 'error' ? 'text-error-400' : 'text-mist-100'}`}>
+                {HEBREW.test(e.message) ? e.message : TECHNICAL}
+              </p>
               <p className="text-[11px] text-mist-500" title={stampText(e.at)}>
                 {relativeHe(e.at)}
               </p>

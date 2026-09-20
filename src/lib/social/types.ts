@@ -169,18 +169,27 @@ export type QueueStep =
   | 'failed'
   | 'needs_attention';
 
+/**
+ * Hebrew only. This string is the live status line of a publication in flight,
+ * and it is rendered as plain text — so every glyph in it was also part of the
+ * row's accessible name, and a screen reader read a row out as "hourglass with
+ * flowing sand, מפרסם". The colour is carried independently by the row's tone
+ * class and the status pill's dot, so the emoji were decoration inside a
+ * sentence. Four other legends in this module had the same set removed for the
+ * same reason; this one was missed.
+ */
 export const QUEUE_STEP_LABEL: Record<QueueStep, string> = {
   '': '',
-  pending: '🕐 ממתין',
-  opening: '🌐 פותח את הקבוצה',
-  composer_opened: '📝 חלון הפוסט נפתח',
-  uploading_media: '📤 מעלה מדיה',
-  ready_to_publish: '✅ מוכן לפרסום',
-  publishing: '⏳ מפרסם',
-  verifying: '🔎 מאמת',
-  published: '✅ פורסם',
-  failed: '❌ נכשל',
-  needs_attention: '⚠️ דורש טיפול',
+  pending: 'ממתין',
+  opening: 'פותח את הקבוצה',
+  composer_opened: 'חלון הפוסט נפתח',
+  uploading_media: 'מעלה מדיה',
+  ready_to_publish: 'מוכן לפרסום',
+  publishing: 'מפרסם',
+  verifying: 'מאמת',
+  published: 'פורסם',
+  failed: 'נכשל',
+  needs_attention: 'דורש טיפול',
 };
 
 export interface QueueItem {

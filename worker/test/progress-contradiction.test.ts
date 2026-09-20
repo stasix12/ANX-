@@ -5,7 +5,9 @@ import {
   campaignHeadline,
   campaignState,
   openRows,
+  percentFinished,
   percentPublished,
+  runProgress,
   type CampaignQueueRow,
   type CampaignState,
 } from '@/lib/social/campaign';
@@ -344,7 +346,13 @@ interface CardView {
   /** The number the card prints beside "פורסמו". */
   completedShown: number;
   total: number;
+  /** The SUCCESS ratio — publications over the total. */
   percent: number;
+  /** The PROGRESS ratio the bar is actually drawn at — handled over total. */
+  percentHandled: number;
+  /** The two sentences runProgress() writes, exactly as the card renders them. */
+  handledLabel: string;
+  publishedLabel: string;
   /** The state was built from a capped read, so the card must say so. */
   truncated: boolean;
   stateLabel: string;
@@ -364,6 +372,9 @@ function card(state: CampaignState<Row> | undefined): CardView {
     completedShown: s.progress.published,
     total: s.progress.total,
     percent: percentPublished(s.progress),
+    percentHandled: percentFinished(s.progress),
+    handledLabel: runProgress(s.progress).handledLabel,
+    publishedLabel: runProgress(s.progress).publishedLabel,
     truncated: s.truncated,
     stateLabel: RUN_STATE_LABEL[s.state],
     resumeOffered: s.state === 'paused',
@@ -450,15 +461,43 @@ function invCompletedMeansPublished(step: string, v: { card: CardView }): void {
     { shown: c.publishedReally, headline: c.total ? expectedHeadline(c) : 'אין פרסומים מתוכננים' },
     c.completedShown === c.publishedReally ? NONE : '(A) campaign.ts progress.done = published + failed + skipped',
   );
+  /*
+   * RE-LABELLED, not weakened: the assertion below is byte-for-byte the same
+   * computation it always made. What changed is what it is ABOUT. The bar the
+   * card draws is now the handled ratio (INV-2d), and this figure is the
+   * success ratio that must stay separately available and separately correct.
+   */
   expect(
     step,
     'INV-2b',
-    'the progress bar is published / total',
+    'the publications figure is published / total, whatever the bar is drawn at',
     c.percent,
     c.total ? Math.round((c.publishedReally / c.total) * 100) : 0,
     c.percent === (c.total ? Math.round((c.publishedReally / c.total) * 100) : 0)
       ? NONE
       : '(A) campaign.ts:117 percentDone() reads the same conflated progress.done',
+  );
+  /*
+   * INV-2d — the bar's own figure, added when the bar moved to handled rows.
+   *
+   * The bar is the round's PROGRESS now, so a run with one of 29 rows failed
+   * is no longer drawn at 0%. What must not come back is the bar's figure
+   * standing in for the run's success, so this pins both sentences at once:
+   * the percentage is over handled rows, and the publications figure is
+   * printed beside it in words, always, including when it is zero.
+   */
+  const handled = c.publishedReally + c.failedReally + c.skippedReally;
+  expect(
+    step,
+    'INV-2d',
+    'the bar is drawn at the HANDLED ratio, with the publications figure printed beside it in its own sentence',
+    { percentHandled: c.percentHandled, handled: c.handledLabel, published: c.publishedLabel },
+    {
+      percentHandled: !c.total ? 0 : handled >= c.total ? 100 : Math.min(99, Math.round((handled / c.total) * 100)),
+      handled: c.total ? `${handled} מתוך ${c.total} טופלו` : 'אין פרסומים מתוכננים',
+      published: c.total ? `${c.publishedReally} מתוך ${c.total} פורסמו` : 'אין פרסומים מתוכננים',
+    },
+    NONE,
   );
 }
 
@@ -795,13 +834,42 @@ async function main(): Promise<void> {
   pin('page.tsx needs-you tile', page, 'value={summary.needsHuman}');
   pin('page.tsx pending figure is the cancellable count', page, 'const pending = summary.cancellable;');
   pin('page.tsx resetRun quotes what a stop can cancel', page, 'const waiting = cancellableRows(state.progress);');
-  pin('LiveCampaignHero ratio counts publications', hero, '<Ratio done={progress.published} total={progress.total} suffix="פורסמו" />');
-  pin('LiveCampaignHero paused button', hero, "const paused = state.state === 'paused';");
-  pin('LiveCampaignHero pause is offered only when it can act', hero, 'const canPause = open > 0');
+  /*
+   * RE-POINTED, not weakened — all three, each at the rule that replaced the
+   * one it pinned.
+   *
+   * The ratio pinned `<Ratio done={progress.published} … suffix="פורסמו" />`:
+   * the big figure on the run card is the publications count, and the bar
+   * beside it therefore the publications ratio. That is the defect — one of 29
+   * rows failed and the card drew 0% and printed "0%". The big figure is the
+   * round's progress now, and the publications figure is a labelled sentence
+   * directly under the bar, pinned on the next line so this move can never
+   * quietly become "the successes were dropped".
+   *
+   * The two button pins read the state NAME, and were wrong in opposite
+   * directions: "השהה" was offered on a run with nothing left to hold back
+   * (and toasted "הסבב הושהה" over a write that could not move a row), and
+   * "המשך סבב" vanished on a genuinely paused run whose remaining rows all
+   * wait on a person. They now read campaign.ts's two predicates: pause is
+   * about the ROWS, resume is about the RECORD.
+   */
+  pin('LiveCampaignHero ratio counts handled rows', hero, '<Ratio done={view.handled} total={view.total} suffix="טופלו" />');
+  pin('LiveCampaignHero still prints the publications figure', hero, 'view.publishedLabel');
+  pin('LiveCampaignHero resume follows the campaign record', hero, 'const showResume = canResumeRun(progress, campaign.status);');
+  pin('LiveCampaignHero pause is offered only when it can act', hero, 'const showPause = canPauseRun(progress, campaign.status);');
   pin('LiveCampaignHero resume label', hero, 'המשך סבב');
   pin('campaign.ts finished = published+failed+skipped', campaignSrc, 'progress.finished = progress.published + progress.failed + progress.skipped;');
   pin('campaign.ts terminal check before paused', campaignSrc, "if (openRows(p) === 0) return 'completed';");
-  pin('campaign.ts bar counts publications', campaignSrc, 'return Math.round((progress.published / progress.total) * 100);');
+  /*
+   * RE-POINTED. This pinned the literal old BODY of percentPublished. That
+   * body is gone — both percentages go through one clamped ratio() now — but
+   * the rule it protected is not: publications are still their own figure, and
+   * rounding may no longer round a run up to 100 while a publication is still
+   * waiting (249 of 250 printed "100%"). The needle moves to the two lines
+   * that carry those rules.
+   */
+  pin('campaign.ts publications are their own ratio', campaignSrc, 'return ratio(progress.published, progress.total);');
+  pin('campaign.ts 100% is reserved for the exact count', campaignSrc, 'if (part >= total) return 100;');
   pin('pc worker crash recovery', pcWorker, ".in('status', ['publishing', 'awaiting_confirmation']);");
   pin('server worker leaves browser rows alone', srvWorker, ".is('worker_id', null)");
 

@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronIcon } from '@/components/icons';
-import { RUN_STATE_LABEL, RUN_STATE_TONE, openRows, percentPublished, unpublishedNote, type CampaignState } from '@/lib/social/campaign';
+import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
 import { countdownTo } from '@/lib/social/countdown';
 import { formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
@@ -72,11 +72,11 @@ function StatePill({ tone, label, live }: { tone: Tone; label: string; live: boo
 }
 
 /**
- * RUN_STATE_TONE speaks campaign.ts's vocabulary, which still carries `info`
- * as a legacy name for the same blue `brand` resolves to (Badge does the same
- * collapse). One place to fold it, so the pill cannot pick a fifth hue.
+ * campaign.ts's tone vocabulary still carries `info` as a legacy name for the
+ * same blue `brand` resolves to (Badge does the same collapse). One place to
+ * fold it, so the pill cannot pick a fifth hue.
  */
-const toneOf = (t: (typeof RUN_STATE_TONE)[keyof typeof RUN_STATE_TONE]): Tone => (t === 'info' ? 'brand' : t);
+const toneOf = (t: RunTone): Tone => (t === 'info' ? 'brand' : t);
 
 /** "18 / 125" is digits around a neutral slash, which an RTL line reorders. */
 function Ratio({ done, total, suffix }: { done: number; total: number; suffix: string }) {
@@ -125,7 +125,7 @@ const SYSTEM_STATE_TONE: Record<SystemState, Tone> = {
 };
 
 /** One row of the card's foot: a recessed box with a label over a value. */
-const FOOT_BOX = 'min-w-0 rounded-[14px] bg-ink-900 px-3 py-2.5';
+const FOOT_BOX = 'min-w-0 rounded-xl bg-ink-900 px-3 py-2.5';
 
 /**
  * "הפרסום הבא בעוד 00:20" and the group it belongs to, side by side.
@@ -252,7 +252,7 @@ export function LiveCampaignHero({
   targetCount = null,
   startedAt = null,
 }: {
-  campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city'>;
+  campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status'>;
   state: CampaignState;
   /**
    * Whether a worker has sent a heartbeat recently. Only a real heartbeat or a
@@ -289,23 +289,34 @@ export function LiveCampaignHero({
   /** First real publication (state.startedAt). Null until something went out. */
   startedAt?: string | null;
 }) {
-  const running = state.state === 'running';
-  const paused = state.state === 'paused';
   const { progress } = state;
-  // The bar is publications over the whole run. It used to be
-  // published + failed + skipped, so a run that published nothing filled the
-  // bar to 100% and called it "הושלמו" — the owner lost an evening to a run
-  // that read 80% complete having published zero.
-  const pct = percentPublished(progress);
+  /*
+   * TWO NUMBERS, AND THEY ARE NOT THE SAME NUMBER.
+   *
+   * The bar was publications over the whole run, so a run with one of 29 rows
+   * already FAILED drew a 0%-wide bar and printed "0%" — nothing had
+   * succeeded, but something had certainly happened, and the card said the
+   * round had not moved. `view.percent` and `view.handledLabel` are the
+   * round's PROGRESS (published + failed + skipped); `view.publishedLabel` is
+   * its SUCCESS, on its own line under the bar and never folded in.
+   */
+  const view = runProgress(progress);
   const open = openRows(progress);
-  const unpublished = unpublishedNote(progress);
+  /*
+   * One opinion about the state — the label, the colour, and whether the dot
+   * may pulse — including what the global pause and a missing heartbeat mean.
+   * `workerOnline` was accepted by this card and then read by nothing in its
+   * body, so with the PC asleep for six hours the pill still said "רץ".
+   */
+  const badge = runBadge(state, { globalPaused, workerOnline });
+  const pillTone: Tone = toneOf(badge.tone);
   // A button is offered only when it can act: nothing is left to pause once
-  // every row has finished, and nothing is left to resume either.
-  const canPause = open > 0 && state.state !== 'stopped';
-  // While everything is held, the run is not running whatever its own rows
-  // say, and the pill must not claim otherwise.
-  const pillTone: Tone = globalPaused ? 'warn' : toneOf(RUN_STATE_TONE[state.state]);
-  const pillLabel = globalPaused ? RUN_STATE_LABEL.paused : RUN_STATE_LABEL[state.state];
+  // every row has finished, and "המשך סבב" belongs to the RECORD's pause flag,
+  // not to a state name — a paused run whose remaining rows all wait on a
+  // person resolves to the needs-a-person state, and had no way out of the
+  // pause at all.
+  const showPause = canPauseRun(progress, campaign.status);
+  const showResume = canResumeRun(progress, campaign.status);
 
   return (
     <HeroPanel ariaLabel="הסבב הפעיל" className="p-3.5">
@@ -316,7 +327,7 @@ export function LiveCampaignHero({
             <Link href={`/social/campaigns/${campaign.id}`} dir="auto" className="block min-h-11 min-w-0 truncate py-1.5 text-[15px] font-extrabold leading-5 text-mist-100">
               {campaign.name}
             </Link>
-            <StatePill tone={pillTone} label={pillLabel} live={!globalPaused && running && progress.running > 0} />
+            <StatePill tone={pillTone} label={badge.label} live={badge.live} />
           </div>
           {/* When the run started, and how many GROUPS it publishes to — both
               facts the card loaded and never showed. `startedAt` is null until
@@ -338,33 +349,40 @@ export function LiveCampaignHero({
 
       <div className="mt-3">
         <div className="flex items-baseline justify-between gap-2">
-          <Ratio done={progress.published} total={progress.total} suffix="פורסמו" />
-          <p className="text-lg font-extrabold tabular-nums text-brand-400">{pct}%</p>
+          <Ratio done={view.handled} total={view.total} suffix="טופלו" />
+          <p className="text-lg font-extrabold tabular-nums text-brand-400">{view.percent}%</p>
         </div>
-        <div
-          role="progressbar"
-          aria-valuenow={pct}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`${progress.published} מתוך ${progress.total} פורסמו`}
-          className="mt-2 h-2.5 overflow-hidden rounded-full bg-ink-700"
-        >
-          <div className="h-full rounded-full bg-success-400 transition-[width] duration-200 ease-out" style={{ width: `${pct}%` }} />
+        {/* Segmented, and that is forced by the figure above it: a single
+            green fill drawn at the HANDLED ratio would paint a failed row
+            green. The same three segments the runs list draws, from the same
+            tone maps, so the two bars now mean the same thing on both
+            screens. Their total width is view.percent by construction. */}
+        <div className="mt-2">
+          <ProgressBar
+            segments={[
+              { value: progress.published, className: TONE_FILL.good },
+              { value: progress.failed, className: TONE_FILL.bad },
+              { value: progress.skipped, className: TONE_FILL.neutral },
+            ]}
+            total={progress.total}
+            ariaLabel={view.ariaLabel}
+            height="h-2.5"
+          />
         </div>
-        {/* What became of the rest, in the same breath as the bar — one word
-            per outcome instead of one word covering three. Nothing is printed
-            when there is nothing to print; a zero here would be noise.
+        {/* What the run actually produced, and what became of the rest — one
+            word per outcome instead of one word covering three. This line is
+            deliberately directly under the bar: the bar says how far the round
+            has got, and the owner's next question is always how much of that
+            was a publication.
 
             "עוד לא יצאו", not "עוד ממתינים": the KPI tile 200px above owns the
             words "ממתינים בתור" for a different rollup (summary.queued, the
             whole queue), and this is openRows() for one run. Two correct
             numbers under one phrase is how the screen started arguing with
             itself. */}
-        {(unpublished || open > 0) && (
-          <p className="mt-1.5 text-xs text-mist-500">
-            {[unpublished, open > 0 ? `${open} עוד לא יצאו` : ''].filter(Boolean).join(' · ')}
-          </p>
-        )}
+        <p className="mt-1.5 text-xs text-mist-500">
+          {[view.publishedLabel, view.note, open > 0 ? `${open} עוד לא יצאו` : ''].filter(Boolean).join(' · ')}
+        </p>
         {state.truncated && (
           <p className="mt-1.5 text-xs text-warning-400">
             הסבב גדול מכדי לספור אותו כאן במלואו — המספרים למעלה הם של הפרסומים הראשונים בלבד. הרשימה המלאה בעמוד הסבב.
@@ -376,23 +394,24 @@ export function LiveCampaignHero({
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 [&>*]:min-w-0">
-        {paused ? (
+        {showResume ? (
           <Button size="lg" busy={busy} onClick={onResume}>
             המשך סבב
           </Button>
-        ) : (
+        ) : showPause ? (
           /* "השהה סבב" — this pauses THIS round. The header's global toggle,
              visible on the same screen, pauses EVERYTHING and used to carry
              the identical word. */
-          canPause ? (
-            <Button variant="secondary" size="lg" busy={busy} onClick={onPause}>
-              השהה סבב
-            </Button>
-          ) : (
-            <span />
-          )
+          <Button variant="secondary" size="lg" busy={busy} onClick={onPause}>
+            השהה סבב
+          </Button>
+        ) : (
+          <span />
         )}
-        <ButtonLink href={`/social/campaigns/${campaign.id}`} variant="secondary" size="lg">צפה בתור</ButtonLink>
+        {/* "פתח סבב", the same words the runs list uses for the same URL. It
+            said "צפה בתור" here, so one destination had two names and neither
+            of them said it was the run's own screen. */}
+        <ButtonLink href={`/social/campaigns/${campaign.id}`} variant="secondary" size="lg">פתח סבב</ButtonLink>
       </div>
 
       {/* The tuner used to be reachable only by tapping the countdown box, and
@@ -447,6 +466,7 @@ export function LiveQueueHero({
   resumeBusy,
   nextTarget,
   onTune,
+  onDue,
   inFlight = 0,
   workerOnline,
   intervention = null,
@@ -464,6 +484,11 @@ export function LiveQueueHero({
   resumeBusy?: boolean;
   nextTarget?: Pick<SocialTarget, 'name' | 'image_url'> | null;
   onTune?: () => void;
+  /**
+   * Fired ONCE when the countdown reaches this row's instant, so the screen
+   * can re-read the queue instead of describing the slot from the last poll.
+   */
+  onDue?: () => void;
   /*
    * No `media`. The system card carried the post's cover too, and measured at
    * 375 it cost the status headline 50px — "נדרשת התערבות" truncated to
@@ -495,6 +520,23 @@ export function LiveQueueHero({
    */
   const ceilingReached = dailyTarget > 0 && publishedToday >= dailyTarget;
   const due = Boolean(nextAt) && !paused && new Date(nextAt as string).getTime() <= now;
+  /*
+   * AT ZERO, THE DATABASE DECIDES WHAT COMES NEXT.
+   *
+   * The countdown is a local clock: it reached 00:00 and the card then
+   * described the slot from the PREVIOUS poll's numbers — an inFlight count up
+   * to 30s old and a heartbeat up to 90s old. It never claimed the publication
+   * had succeeded (there is no "פורסם" path here, by design), but it was an
+   * unverified claim about automation in progress. This fires once per
+   * instant, and the screen above re-reads the queue; what replaces the
+   * countdown is then read rather than assumed.
+   */
+  const dueSignalled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!due || !nextAt || dueSignalled.current === nextAt) return;
+    dueSignalled.current = nextAt;
+    onDue?.();
+  }, [due, nextAt, onDue]);
 
   return (
     <HeroPanel ariaLabel="מצב המערכת">
@@ -554,7 +596,7 @@ export function LiveQueueHero({
       )}
 
       {systemState === 'needs_intervention' && intervention && (
-        <div className="mt-3 rounded-[14px] border border-warning-400/30 bg-warning-400/12 px-3 py-2.5">
+        <div className="mt-3 rounded-xl border border-warning-400/30 bg-warning-400/12 px-3 py-2.5">
           <p dir="auto" className="text-[13px] font-extrabold leading-[17px] text-warning-400">{intervention.title}</p>
           <p dir="auto" className="mt-0.5 text-xs leading-4 text-mist-300">{intervention.body}</p>
           <Link href={intervention.href} className="mt-1 inline-flex min-h-11 min-w-11 items-center gap-0.5 text-[13px] font-extrabold text-warning-400">
@@ -565,7 +607,7 @@ export function LiveQueueHero({
       )}
 
       {systemState === 'empty' && (
-        <div className="mt-3 rounded-[14px] bg-ink-900 px-3 py-3.5 text-center">
+        <div className="mt-3 rounded-xl bg-ink-900 px-3 py-3.5 text-center">
           {/* No clock, no 00:00, no group name. The + פוסט חדש button above is
               the action; a second one here would just be louder. */}
           <p className="text-[13px] leading-[18px] text-mist-300">התור ריק — אין פרסום מתוזמן.</p>
@@ -579,7 +621,7 @@ export function LiveQueueHero({
             <button
               type="button"
               onClick={onTune}
-              className="block w-full rounded-[14px] text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850"
+              className="block w-full rounded-xl text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850"
             >
               <NextUpBoxes at={nextAt} targetName={nextTargetName} now={now} target={nextTarget} inFlight={inFlight > 0} workerOnline={workerOnline} />
               <span className="sr-only">— שינוי המרווח בין הפרסומים והקבוצות בתור</span>

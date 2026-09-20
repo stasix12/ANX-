@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { formatDayMonthHe } from '@/lib/social/time';
 import type { SocialTarget } from '@/lib/social/types';
+import { CheckIcon, StarIcon } from '@/components/icons';
 import { TargetAvatar } from './TargetAvatar';
 import { Badge, OverflowMenu, type MenuAction } from './ui';
 
@@ -12,11 +13,29 @@ import { Badge, OverflowMenu, type MenuAction } from './ui';
  * favourite, category, history, remove — lives behind the "⋯", because a
  * hundred cards each carrying six controls is a wall, not a list.
  *
- * The whole tile is a link to the group's profile; the checkbox, the star
- * and the menu stop the event so they never navigate by accident.
+ * Two modes, and they are why the card is the shape it is.
+ *
+ * Browsing: the tile is a link to the group's profile, and the only things
+ * floating over it are the status dot, the favourite star and the "⋯". All
+ * three now sit in the 44px corners, clear of the centred 72px avatar — at
+ * 375px the avatar spans x 47-119 and the two hit boxes stop at 44 and start
+ * at 122. That is what lets the top padding be 10px instead of 32: `pt-8`
+ * existed only to push the picture below a control row, and did not clear it
+ * anyway (the star's glyph sat on the avatar's edge). There is no checkbox on
+ * the card at all in this mode — the 44px near-opaque `bg-ink-950/70` puck
+ * pinned over the avatar's top-left, the "big dark circle on the picture", is
+ * gone.
+ *
+ * Picking: the tile stops being a link and becomes one big toggle, with a
+ * 28px mark in the free top-end corner. Tapping anywhere on the card selects
+ * it, which is the only way a multi-select is usable with a thumb; the mark
+ * is aria-hidden because the button itself carries the name and aria-pressed,
+ * and a real checkbox element nested inside a button is neither valid markup
+ * nor announced once.
  */
 export function GroupCard({
   group,
+  selectionMode,
   selected,
   onSelect,
   onToggleFavorite,
@@ -24,6 +43,8 @@ export function GroupCard({
   nextAt,
 }: {
   group: SocialTarget;
+  /** True only while the screen is in selection mode — see the note above. */
+  selectionMode: boolean;
   selected: boolean;
   onSelect: (on: boolean) => void;
   onToggleFavorite: () => void;
@@ -35,70 +56,109 @@ export function GroupCard({
     e.stopPropagation();
   };
 
+  /*
+   * The selected skin leans on the ring rather than the wash. A 12% brand
+   * tint over this card is a few percent of luminance — fine beside an
+   * unselected neighbour, invisible on its own at arm's length, and until now
+   * it was propped up by the dark puck that has just been removed. 12% is
+   * TONE_TINT.brand, not a new opacity; the ring is what actually reads.
+   */
+  const skin = `surface flex h-full flex-col items-center rounded-tile border p-2.5 text-center transition-[border-color,transform] active:scale-[0.98] ${
+    selected ? 'border-brand-300 bg-brand-300/12 ring-2 ring-brand-300' : 'border-ink-700'
+  } ${group.enabled ? '' : 'opacity-55'}`;
+
+  const body = (
+    <>
+      <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={72} />
+      <p dir="auto" className="mt-1.5 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={group.name}>
+        {group.name}
+      </p>
+      {/* No city badge, and nothing is lost by that: the grid on /social/groups
+          is always grouped into city sections, and a section's heading is
+          `cityOf(g)` — `g.city` when it is set, which is exactly the string
+          this badge printed. Every card in "באר שבע" carried a "באר שבע"
+          chip. The row is also conditional as a whole rather than only its
+          child, because an empty flex row still spent its top margin. */}
+      {group.category && (
+        <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
+          <Badge tone="brand"><span dir="auto" className="block max-w-[6.5rem] truncate">{group.category}</span></Badge>
+        </div>
+      )}
+      {/* One meta line, not two. "פורסם 18.09" and "הבא: 20.09" were separate
+          paragraphs, so a group with a slot booked was 14px taller than one
+          without and the grid rows stopped agreeing. No dir="ltr" island is
+          needed here: "18.09" is a single number run under UAX#9 W4, and the
+          two dates never touch — the word "הבא" sits between them. */}
+      <p className="mt-1 text-[11px] leading-tight text-mist-500">
+        {!group.last_synced_at
+          ? 'מושך פרטים…'
+          : group.last_published_at
+            ? `פורסם ${formatDayMonthHe(group.last_published_at)}`
+            : 'טרם פורסם'}
+        {nextAt && <span className="font-bold text-brand-400"> · הבא {formatDayMonthHe(nextAt)}</span>}
+      </p>
+    </>
+  );
+
   return (
     <li className="relative">
-      <Link
-        href={`/social/groups/${group.id}`}
-        className={`surface flex h-full flex-col items-center rounded-tile border p-3 pt-8 text-center transition-[border-color,transform] active:scale-[0.98] ${
-          selected ? 'border-brand-300 bg-brand-300/8' : 'border-ink-700'
-        } ${group.enabled ? '' : 'opacity-55'}`}
-      >
-        <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={72} />
-        <p dir="auto" className="mt-2 line-clamp-2 w-full text-sm font-bold leading-tight text-mist-100" title={group.name}>
-          {group.name}
-        </p>
-        <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
-          {group.city && <Badge tone="neutral"><span dir="auto" className="block max-w-[6.5rem] truncate">{group.city}</span></Badge>}
-          {group.category && <Badge tone="brand"><span dir="auto" className="block max-w-[6.5rem] truncate">{group.category}</span></Badge>}
-        </div>
-        <p className="mt-1.5 text-[11px] leading-tight text-mist-500">
-          {!group.last_synced_at
-            ? 'מושך פרטים…'
-            : group.last_published_at
-              ? `פורסם ${formatDayMonthHe(group.last_published_at)}`
-              : 'טרם פורסם'}
-        </p>
-        {nextAt && <p className="text-[11px] font-bold leading-tight text-brand-400">הבא: {formatDayMonthHe(nextAt)}</p>}
-      </Link>
+      {selectionMode ? (
+        <button type="button" aria-pressed={selected} aria-label={`בחר את ${group.name}`} onClick={() => onSelect(!selected)} className={`w-full ${skin}`}>
+          {body}
+        </button>
+      ) : (
+        <Link href={`/social/groups/${group.id}`} className={skin}>
+          {body}
+        </Link>
+      )}
 
-      {/* Controls float above the link so the tile stays one big target. */}
-      <div className="absolute start-2 top-2 flex items-center gap-1">
+      {/* The dot sits inside the star's 44px hit box, so it must not swallow
+          the tap that belongs to the control underneath it. */}
+      <span
+        aria-hidden
+        title={group.enabled ? 'פעילה' : 'מושהית'}
+        className={`pointer-events-none absolute start-1 top-1 z-10 block h-2 w-2 rounded-full ${group.enabled ? 'bg-success-400' : 'bg-mist-500'}`}
+      />
+
+      {selectionMode ? (
+        /* 28px, 8px in from the top-end corner. At the mark's own height the
+           avatar circle has narrowed to x 56-110 on a 166px card and the mark
+           starts at 130, so it never lands on the picture. */
         <span
           aria-hidden
-          title={group.enabled ? 'פעילה' : 'מושהית'}
-          className={`block h-2.5 w-2.5 rounded-full ${group.enabled ? 'bg-success-400' : 'bg-mist-500'}`}
-        />
-        <button
-          type="button"
-          aria-label={group.favorite ? `הסר את ${group.name} מהמועדפות` : `הוסף את ${group.name} למועדפות`}
-          onClick={(e) => {
-            stop(e);
-            onToggleFavorite();
-          }}
-          className="grid h-11 w-11 place-items-center text-sm leading-none"
+          className={`absolute end-2 top-2 grid h-7 w-7 place-items-center rounded-full border-2 ${
+            selected ? 'border-brand-500 bg-brand-500 text-on-brand' : 'border-mist-500 bg-ink-900'
+          }`}
         >
-          {group.favorite ? '⭐' : '☆'}
-        </button>
-      </div>
+          {selected && <CheckIcon className="h-4 w-4" />}
+        </span>
+      ) : (
+        <>
+          {/* Controls float above the link so the tile stays one big target.
+              start-0 / end-0 rather than start-2 / end-1: a 44px box pushed
+              fully into the corner is what clears the avatar, and clearing it
+              is what paid for the shorter card. */}
+          <button
+            type="button"
+            aria-label={group.favorite ? `הסר את ${group.name} מהמועדפות` : `הוסף את ${group.name} למועדפות`}
+            aria-pressed={Boolean(group.favorite)}
+            onClick={(e) => {
+              stop(e);
+              onToggleFavorite();
+            }}
+            /* ⭐/☆ were a full-colour Apple emoji and a hairline text glyph
+               doing the on and off states of one control, beside an otherwise
+               all-SVG card. One icon, filled or not. */
+            className={`absolute start-0 top-0 grid h-11 w-11 place-items-center ${group.favorite ? 'text-warning-400' : 'text-mist-500'}`}
+          >
+            <StarIcon className="h-4.5 w-4.5" fill={group.favorite ? 'currentColor' : 'none'} />
+          </button>
 
-      <label
-        className={`absolute end-12 top-1 grid h-11 w-11 cursor-pointer place-items-center rounded-full bg-ink-950/70 ring-1 backdrop-blur-sm ${
-          selected ? 'ring-brand-300' : 'ring-ink-600'
-        }`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <input
-          type="checkbox"
-          aria-label={`בחר את ${group.name}`}
-          checked={selected}
-          onChange={(e) => onSelect(e.target.checked)}
-          className="h-5 w-5 accent-brand-300"
-        />
-      </label>
-
-      <div className="absolute end-1 top-1" onClick={stop}>
-        <OverflowMenu label={group.name} actions={actions} />
-      </div>
+          <div className="absolute end-0 top-0" onClick={stop}>
+            <OverflowMenu label={group.name} actions={actions} />
+          </div>
+        </>
+      )}
     </li>
   );
 }

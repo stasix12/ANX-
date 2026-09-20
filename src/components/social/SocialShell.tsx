@@ -111,9 +111,29 @@ export function SocialShell({
   }
 
   const isActive = (href: string, exact: boolean) => (exact ? pathname === href : Boolean(pathname?.startsWith(href)));
+  /*
+   * "עוד" is the active tab on six of the eleven routes (library, targets,
+   * settings, posts/new, posts/[id], manual/[id]), and it used to show only
+   * half the active state the four real tabs show — blue text, but no pill
+   * behind the icon. So the bar looked like a different bar depending on
+   * which screen you were on. One condition, read by both the text colour
+   * and the pill.
+   */
+  const moreActive = moreOpen || !MOBILE_TABS.some((h) => isActive(h, h === '/social'));
 
+  /*
+   * The bottom reserve below is the tab bar's real height plus the inset, not
+   * a round number. Measured from the classes on the <nav> at the foot of this
+   * file: pt-2 (8) + the 28px icon puck + gap-0.5 (2) + an 11px label at
+   * line-height 1.5 (16.5) + pb-1.5 (6) + the 1px top border = 61.5px, and the
+   * inset is already padded inside the bar itself. 5.5rem (88px) reserved 26px
+   * that nothing occupies, which is why the last card on every screen floated
+   * well clear of the bar. 4.5rem is 61.5px of bar plus ~10px of air — and it
+   * is the same constant the floating selection bars are anchored to, so the
+   * bottom of the product is one number.
+   */
   return (
-    <div className="min-h-dvh bg-ink-950 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-10">
+    <div className="min-h-dvh bg-ink-950 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-10">
       {/*
         A quiet identity bar. The previous header was a full-width indigo-to-sky
         gradient carrying the screen title and a white pill button — a lot of
@@ -127,13 +147,20 @@ export function SocialShell({
           is read. Renders nothing when the build in front of the owner is the
           one that is deployed. */}
       <UpdateBanner />
-      <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-        {/* py-1, not py-2.5: the three controls in this row are already 44px
-            tall, so the padding was dead space above and below a target that
-            was tall enough without it. Measured at 375: the row is 52px and
-            the header 53, against 65 before, and the notification badge at
-            y=2 inside the row still clears the top edge. */}
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-1">
+      {/* max(inset, 2px), not a bare inset: the notification badge hangs 2px
+          above its 44px button (NotificationBell's -top-0.5), so the row needs
+          2px of something above it or the badge is clipped by the viewport on
+          a phone with no notch, where the inset resolves to 0. Giving that
+          2px to the header's own top padding — which the inset already owns —
+          is what lets the row itself drop to zero padding. */}
+      <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/90 pt-[max(env(safe-area-inset-top),2px)] backdrop-blur-xl">
+        {/* No vertical padding at all: all three children of this row are
+            pinned at the 44px touch floor (the home link, PublishingToggle
+            and NotificationBell are each min-h-11), so every pixel of py was
+            dead space around targets that were already tall enough. Measured
+            below the safe area: the row is 44px and the header 45, against
+            52/53 before — 15% shorter with no target touched. */}
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4">
           {/* min-h-11: this measured 140x36 — the one sub-44px tap target in
               the header, and it is the link home. */}
           <Link href="/social" className="flex min-h-11 min-w-0 items-center gap-2.5">
@@ -172,7 +199,7 @@ export function SocialShell({
                      * behind a word is a fill, not a word.
                      */
                     className={`flex min-h-10 items-center gap-1.5 rounded-xl px-3.5 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850 ${
-                      active ? 'bg-brand-300/14 text-brand-400' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
+                      active ? 'bg-brand-300/12 text-brand-400' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -239,7 +266,7 @@ export function SocialShell({
                     aria-current={active ? 'page' : undefined}
                     className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ${active ? 'text-brand-400' : 'text-mist-500'}`}
                   >
-                    <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${active ? 'scale-105 bg-brand-300/14' : ''}`}>
+                    <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${active ? 'scale-105 bg-brand-300/12' : ''}`}>
                       <Icon className="h-5.5 w-5.5" />
                     </span>
                     {label}
@@ -253,10 +280,10 @@ export function SocialShell({
               onClick={() => setMoreOpen(true)}
               aria-expanded={moreOpen}
               className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ${
-                moreOpen || !MOBILE_TABS.some((h) => isActive(h, h === '/social')) ? 'text-brand-400' : 'text-mist-500'
+                moreActive ? 'text-brand-400' : 'text-mist-500'
               }`}
             >
-              <span className="grid h-7 w-13 place-items-center rounded-full">
+              <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${moreActive ? 'scale-105 bg-brand-300/12' : ''}`}>
                 <MenuIcon className="h-5.5 w-5.5" />
               </span>
               עוד
@@ -276,7 +303,7 @@ export function SocialShell({
                   href={href}
                   onClick={() => setMoreOpen(false)}
                   className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-3.5 text-base font-bold ${
-                    isActive(href, exact) ? 'bg-brand-300/14 text-brand-400' : 'text-mist-100 hover:bg-ink-900'
+                    isActive(href, exact) ? 'bg-brand-300/12 text-brand-400' : 'text-mist-100 hover:bg-ink-900'
                   }`}
                 >
                   <Icon className="h-5 w-5" />
@@ -288,7 +315,7 @@ export function SocialShell({
             <Link
               href="/social/posts/new"
               onClick={() => setMoreOpen(false)}
-              className="mt-1 flex min-h-11 items-center gap-3 rounded-xl bg-brand-300/14 px-3 py-3.5 text-base font-bold text-brand-400"
+              className="mt-1 flex min-h-11 items-center gap-3 rounded-xl bg-brand-300/12 px-3 py-3.5 text-base font-bold text-brand-400"
             >
               <ClipboardListIcon className="h-5 w-5" />
               פוסט חדש

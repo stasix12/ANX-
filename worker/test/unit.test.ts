@@ -1725,7 +1725,17 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(openRows(run.progress) > 0);
   assert.ok(
     percentPublished(run.progress) !== 100 || openRows(run.progress) === 0,
-    'THE REPORTED CONTRADICTION: 100% published implies nothing is open — it follows from the partition, and only while the bar stays percentPublished',
+    'THE REPORTED CONTRADICTION: 100% published implies nothing is open — it follows from the partition',
+  );
+  /*
+   * The bar now draws the HANDLED figure, so the same invariant is asserted
+   * over it. It still follows from the I-2 partition (finished === total means
+   * scheduled + running + manual === 0), and campaign.ts's ratio() clamp is
+   * what keeps rounding from breaking it: 249 of 250 is 99, not 100.
+   */
+  assert.ok(
+    percentFinished(run.progress) !== 100 || openRows(run.progress) === 0,
+    '...and 100% handled likewise implies nothing is open',
   );
 
   /* --- I-7: the daily bar clamps its WIDTH and never its NUMBER ----------- */
@@ -1749,7 +1759,20 @@ const scenario: { step: string; line: string }[] = [];
   pin('and the screen says so, beside the bar', cards, 'היא לא מכסה רשמית של פייסבוק');
   pin('the bar clamps its width only', cards, 'Math.min(publishedToday, dailyTarget)');
   pin('the run card counts open rows through campaign.ts', cards, 'openRows(progress)');
-  pin('the run card bar counts publications', cards, 'percentPublished(progress)');
+  /*
+   * RE-POINTED, not weakened. This pinned `percentPublished(progress)` — "the
+   * run card bar counts publications" — and that is the rule the owner
+   * reported as the defect: a run with one of 29 rows already FAILED drew a
+   * 0%-wide bar and printed "0%", because nothing had succeeded although
+   * something had certainly happened. The bar is the round's PROGRESS now,
+   * through campaign.ts's runProgress(), and the publications figure is still
+   * on the card as its own labelled line — which the second pin holds it to,
+   * so "the bar moved to handled" cannot become "the successes disappeared".
+   * The invariant the old pin protected is unchanged and is asserted above,
+   * over both figures.
+   */
+  pin('the run card bar counts handled rows through campaign.ts', cards, 'runProgress(progress)');
+  pin('...and publications stay a separate, labelled figure on the same card', cards, 'view.publishedLabel');
   pin('the system state is decided once, by the page', dash, 'const systemState: SystemState =');
   pin('...and the card only renders it', cards, 'SYSTEM_STATE_LABEL[systemState]');
 

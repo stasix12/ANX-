@@ -10,7 +10,7 @@ import { QuickActions } from '@/components/social/QuickActions';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
-import { AlertBar, Button, Card, Notice, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
+import { AlertBar, Button, Card, ErrorState, Freshness, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
 import {
   callSocialApi,
   campaignStates,
@@ -37,6 +37,7 @@ import { startOfZonedDay } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
+import { RepeatIcon } from '@/components/icons';
 
 /**
  * How many upcoming rows the timeline reads. The card's subtitle prints the
@@ -44,6 +45,20 @@ import { friendlyMessage } from '@/lib/social/errors';
  * never shown as a total.
  */
 const UPCOMING_LIMIT = 40;
+
+/**
+ * "פרסום אחד" / "7 פרסומים", with the verb that goes with it.
+ *
+ * Hebrew has no bare-numeral singular, so `${n} פרסומים` prints "1 פרסומים" —
+ * and on the two lines that matter most here, one waiting confirmation and one
+ * cancelled publication, 1 is the commonest value there is. The verb has to
+ * agree too ("פרסום אחד ממתין", not "ממתינים"), so the caller passes both
+ * whole forms rather than a noun to pluralise.
+ *
+ * SchedulePicker.tsx already carries this shape as targetsLabel(); one shared
+ * helper belongs beside it, which is not this file.
+ */
+const counted = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`);
 
 interface DashboardData {
   counts: Record<QueueStatus, number>;
@@ -53,7 +68,15 @@ interface DashboardData {
   upcoming: QueueRow[];
   limits: LimitsSettings;
   control: ControlSettings;
-  activeTargets: number;
+  /**
+   * Enabled targets, or null when the read was skipped.
+   *
+   * SetupChecklist is the only reader and it removes itself for good once
+   * anything has been published, so on an established install this number is
+   * not fetched at all — null says "not read", which is not the same fact as
+   * zero and must not be printed as one.
+   */
+  activeTargets: number | null;
   manual: QueueRow[];
   log: ActivityEntry[];
   campaigns: Campaign[];
@@ -94,8 +117,20 @@ export default function SocialDashboard() {
      still scheduled - a finished run would lose its picture exactly when the
      owner looks to see what went out. */
   const [featuredMedia, setFeaturedMedia] = useState<MediaItem[] | null>(null);
+  /* The instant the last read SUCCEEDED — not the instant a tick fired. It is
+     the only honest input to the "עודכן לפני…" line, and it stays where it was
+     when a read fails, so a failed refresh cannot make the screen look fresh. */
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  /* The manual refresh's own in-flight flag — the interval has one of its own
+     (`running` below) and a tap must not be able to stack reads on top of it. */
+  const [refreshing, setRefreshing] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
+
+  /* Latched, never unlatched: a queue that has ever held a row cannot go back
+     to holding none, so once this is true the setup checklist is gone for the
+     rest of the session and the read behind it is not worth making again. */
+  const setupDone = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -104,6 +139,16 @@ export default function SocialDashboard() {
       // Only a live campaign can be the one running right now, so the rollup
       // read stays proportional to what the hero can actually show.
       const liveIds = campaigns.filter((c) => c.status !== 'archived').map((c) => c.id);
+      /*
+       * The targets table is read for ONE boolean: whether the setup checklist
+       * still has its first step open. That card removes itself for good once
+       * anything has been published, and after that this was a full
+       * `select('*')` over every group and page — plus listTargets()'s own
+       * city-backfill UPDATEs — every 30 seconds, for a number no screen
+       * renders. Skipped from then on; on a fresh install, where the checklist
+       * IS on screen, it still reads every tick.
+       */
+      const needTargets = !setupDone.current;
       const [queue, today, limits, control, targets, manual, log, states, upcoming, workers] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
@@ -113,7 +158,7 @@ export default function SocialDashboard() {
            showed. */
         getLimits(),
         getControl(),
-        listTargets(),
+        needTargets ? listTargets() : Promise.resolve(null),
         listQueue({ status: ['manual_pending'], limit: 20 }),
         listActivity(30),
         campaignStates(liveIds),
@@ -124,6 +169,7 @@ export default function SocialDashboard() {
         listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' }),
         listWorkers(),
       ]);
+      if (queue.summary.total > 0) setupDone.current = true;
       setData({
         counts: queue.counts,
         summary: queue.summary,
@@ -131,7 +177,7 @@ export default function SocialDashboard() {
         upcoming,
         limits,
         control,
-        activeTargets: targets.filter((t) => t.enabled).length,
+        activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
         manual,
         log,
         campaigns,
@@ -139,6 +185,7 @@ export default function SocialDashboard() {
         workerOnline: workers.some((w) => w.online),
         workerNeedsAuth: workers.some((w) => w.online && (w.status === 'needs_attention' || w.browser_state === 'needs_auth')),
       });
+      setUpdatedAt(new Date());
       setError(null);
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
@@ -225,7 +272,7 @@ export default function SocialDashboard() {
    */
   async function discardQueue(alsoPause: boolean) {
     const ok = await confirm.ask({
-      title: pending ? `למחוק ${pending} פרסומים מהתור?` : 'למחוק את התור?',
+      title: pending ? `למחוק ${counted(pending, 'פרסום אחד', 'פרסומים')} מהתור?` : 'למחוק את התור?',
       body: `הפרסומים שממתינים — בכל סבבי הפרסום — יבוטלו ולא יצאו.${
         alsoPause ? ' המערכת גם תושהה.' : ''
       } מה שכבר פורסם נשאר בהיסטוריה. אי אפשר לבטל את הפעולה.`,
@@ -239,7 +286,7 @@ export default function SocialDashboard() {
     try {
       if (alsoPause) await setPaused(true);
       const n = await cancelAllScheduled();
-      toast(n ? `${n} פרסומים בוטלו.` : 'לא היו פרסומים בתור.', 'info');
+      toast(n ? counted(n, 'פרסום אחד בוטל.', 'פרסומים בוטלו.') : 'לא היו פרסומים בתור.', 'info');
       await load();
     } catch (err) {
       toast(friendlyMessage(err, 'המחיקה נכשלה.'), 'error');
@@ -467,13 +514,13 @@ export default function SocialDashboard() {
             }
           : summary.needsHuman > 0
             ? {
-                title: `${summary.needsHuman} פרסומים ממתינים לכם`,
+                title: counted(summary.needsHuman, 'פרסום אחד ממתין לכם', 'פרסומים ממתינים לכם'),
                 body: 'בדרך כלל פייסבוק ביקשה אימות בחלון הדפדפן שבמחשב, או שהפרסום מחכה לאישור שלכם.',
                 actionLabel: 'הצג',
                 href: '/social/history?status=needs_attention',
               }
             : {
-                title: `${data.counts.paused} פרסומים תקועים`,
+                title: counted(data.counts.paused, 'פרסום אחד תקוע', 'פרסומים תקועים'),
                 body: 'הם נמצאים בסטטוס שאף worker לא אוסף, כך שהם לא יצאו לבד. פתחו אותם ותזמנו מחדש.',
                 actionLabel: 'הצג',
                 href: '/social/history?status=paused',
@@ -514,16 +561,7 @@ export default function SocialDashboard() {
           carry its own way out. friendlyMessage() has already turned the
           exception into one Hebrew sentence (house rule 3); this adds the
           thing the owner can actually do about it. */}
-      {error && (
-        <div className="space-y-3">
-          <Notice tone="error">{error}</Notice>
-          <div className="flex justify-center">
-            <Button variant="secondary" onClick={() => { setError(null); load(); }}>
-              נסו שוב
-            </Button>
-          </div>
-        </div>
-      )}
+      {error && <ErrorState message={error} onRetry={() => { setError(null); load(); }} />}
       {!data && !error && (
         /* The silhouette of what is about to land, not a spinner over a
            different shape: the first block is a full-width card now, and a
@@ -557,7 +595,7 @@ export default function SocialDashboard() {
               publication exists: the three prerequisites, in order. It reads
               its own done/not-done from the same data the tiles below use. */}
           <SetupChecklist
-            hasTargets={data.activeTargets > 0}
+            hasTargets={(data.activeTargets ?? 0) > 0}
             workerOnline={data.workerOnline}
             hasPublications={summary.total > 0}
           />
@@ -584,6 +622,44 @@ export default function SocialDashboard() {
             onTune={() => setTunerOpen(true)}
           />
 
+          {/*
+            HOW OLD IS WHAT YOU ARE LOOKING AT, and the way to ask again.
+
+            Nothing in this module said when its numbers last landed. The
+            dashboard stops polling while the tab is hidden — correct for a
+            metered plan — so the screen an owner returns to after locking the
+            phone looked exactly like one a second old. `updatedAt` is set on
+            SUCCESS only, so a failed refresh leaves the older stamp standing
+            rather than resetting the clock on data that did not arrive.
+
+            No pull-to-refresh: the page scrolls inside the document, two
+            fixed overlays (the tab bar and the selection bars) sit at the
+            bottom of that scroll, and a touch handler on the document would
+            have to fight Safari's own rubber-banding at the top. An explicit
+            control costs one 44px row and cannot misfire mid-scroll.
+          */}
+          <div className="flex items-center justify-center gap-2">
+            <Freshness at={updatedAt} />
+            <button
+              type="button"
+              disabled={refreshing}
+              onClick={async () => {
+                if (refreshing) return;
+                setRefreshing(true);
+                setError(null);
+                try {
+                  await load();
+                } finally {
+                  setRefreshing(false);
+                }
+              }}
+              className="inline-flex min-h-11 items-center gap-1.5 px-2 text-[11px] font-bold text-brand-400 disabled:opacity-60"
+            >
+              <RepeatIcon aria-hidden className="h-3.5 w-3.5" />
+              רענן עכשיו
+            </button>
+          </div>
+
           {/* 2 — how many. The card above answers yes/no; this row answers how
               much, and that split is the whole hierarchy. Colour marks the
               status, not the tile. A tile whose value is 0 goes neutral — a
@@ -595,7 +671,12 @@ export default function SocialDashboard() {
                 label="פורסמו היום"
                 value={data.today}
                 sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`}
-                href="/social/history?status=published"
+                /* &range=1, because this tile alone is a TODAY count
+                   (countPublishedSince(startOfZonedDay)). The other three are
+                   all-time head counts and history opens "all" for them; this
+                   one used to do the same, so tapping "7" opened every
+                   publication ever made. */
+                href="/social/history?status=published&range=1"
               />
               {/* Tiles 2 and 3 together are every row that has not finished,
                   each counted once (status.ts): what moves on its own, and

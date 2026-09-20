@@ -30,7 +30,11 @@ export const RUN_STATE_TONE: Record<RunState, 'neutral' | 'good' | 'warn' | 'bad
   paused: 'warn',
   completed: 'good',
   stopped: 'neutral',
-  needs_attention: 'bad',
+  // Amber, not red: the KPI tile for these very rows is "דורשים טיפול" in
+  // amber, and the two sat 200px apart on the dashboard saying different
+  // things about the same publications. Red is for what failed; this is what
+  // is waiting for a person.
+  needs_attention: 'warn',
 };
 
 /** Queue rows, with just the fields this module needs from the joined target. */

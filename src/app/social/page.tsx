@@ -25,6 +25,7 @@ import {
   listWorkers,
   pauseCampaign,
   queueSummary,
+  runCoverMedia,
   setPaused,
   stopCampaign,
   type QueueRow,
@@ -34,7 +35,7 @@ import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, type QueueSummary } from '@/lib/social/status';
 import { startOfZonedDay } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
-import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, QueueStatus } from '@/lib/social/types';
+import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 
 /**
@@ -88,6 +89,11 @@ export default function SocialDashboard() {
   const [busy, setBusy] = useState<string | null>(null);
   /* The queue tuner, opened from the "next publication" box of either hero. */
   const [tunerOpen, setTunerOpen] = useState(false);
+  /* The featured run's cover. Read on its own, and only when a run is
+     featured: the queue rows carry their post, but only while something is
+     still scheduled - a finished run would lose its picture exactly when the
+     owner looks to see what went out. */
+  const [featuredMedia, setFeaturedMedia] = useState<MediaItem[] | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -327,6 +333,25 @@ export default function SocialDashboard() {
           return percentFinished(a.state.progress) - percentFinished(b.state.progress);
         })[0] ?? null)
     : null;
+
+  const featuredId = featured?.campaign.id ?? null;
+  useEffect(() => {
+    if (!featuredId) {
+      setFeaturedMedia(null);
+      return;
+    }
+    let alive = true;
+    runCoverMedia(featuredId)
+      .then((m) => {
+        if (alive) setFeaturedMedia(m);
+      })
+      // A missing cover is not worth an error on screen: the card falls back
+      // to the queue row's post, and failing that shows no tile at all.
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [featuredId]);
 
   /*
    * How many DISTINCT groups the featured run publishes to.
@@ -638,7 +663,7 @@ export default function SocialDashboard() {
               startedAt={featured.state.startedAt}
               /* The post this run publishes. listQueue already selects the post
                  with its media, so the cover costs no extra read. */
-              media={data.upcoming.find((r) => r.campaign_id === featured.campaign.id)?.post?.media ?? null}
+              media={featuredMedia ?? data.upcoming.find((r) => r.campaign_id === featured.campaign.id)?.post?.media ?? null}
             />
           )}
 

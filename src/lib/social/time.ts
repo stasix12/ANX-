@@ -115,7 +115,23 @@ export function relativeHe(iso: string): string {
   const diff = new Date(iso).getTime() - Date.now();
   const abs = Math.abs(diff);
   const min = Math.round(abs / 60000);
+  const hours = Math.round(min / 60);
+  const days = Math.round(min / 1440);
+  // Hebrew counts one differently, and "לפני 1 שעות" is the kind of line that
+  // tells a customer nobody read the screen.
   const label =
-    min < 1 ? 'פחות מדקה' : min < 60 ? `${min} דק׳` : min < 60 * 48 ? `${Math.round(min / 60)} שעות` : `${Math.round(min / 1440)} ימים`;
+    min < 1
+      ? 'פחות מדקה'
+      : min < 60
+        ? min === 1
+          ? 'דקה'
+          : `${min} דק׳`
+        : min < 60 * 48
+          ? hours === 1
+            ? 'שעה'
+            : `${hours} שעות`
+          : days === 1
+            ? 'יום'
+            : `${days} ימים`;
   return diff >= 0 ? `בעוד ${label}` : `לפני ${label}`;
 }

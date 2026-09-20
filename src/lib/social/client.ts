@@ -835,6 +835,29 @@ export async function campaignQueueWithStats(campaignId: string): Promise<{ rows
   return { rows, truncated: rows.length >= CAMPAIGN_QUEUE_LIMIT };
 }
 
+/**
+ * The media of the post a run publishes — one row, for the run card's cover.
+ *
+ * The dashboard used to take this from the upcoming queue rows, which carry
+ * their post already. That works only while something is still scheduled: a
+ * run whose rows have all finished lost its picture at exactly the moment the
+ * owner looks to see what went out. Joining media into campaignStates() would
+ * have fixed it by attaching a jsonb column to as many as 5000 rows to read
+ * one; this reads the one.
+ */
+export async function runCoverMedia(campaignId: string): Promise<MediaItem[] | null> {
+  const { data } = await db()
+    .from('social_posts')
+    .select('media')
+    .eq('campaign_id', campaignId)
+    .neq('status', 'archived')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const media = (data as { media?: MediaItem[] } | null)?.media;
+  return media && media.length ? media : null;
+}
+
 export async function campaignQueue(campaignId: string): Promise<QueueRow[]> {
   return (await campaignQueueWithStats(campaignId)).rows;
 }

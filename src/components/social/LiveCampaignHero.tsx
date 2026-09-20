@@ -217,9 +217,14 @@ function NextUpBoxes({
       <div className={`col-span-3 ${FOOT_BOX}`}>
         <p className="truncate text-[11px] font-bold leading-[14px] text-mist-500">הקבוצה הבאה</p>
         {name ? (
-          <div className="flex min-w-0 items-center gap-2 pt-1">
+          /* Two lines, not an ellipsis. Measured: the name had 124px of the
+             356 it needs, so the one question this box exists to answer -
+             which group is next - was the one the screen could not answer.
+             Group names here run long and Cyrillic ("АРАД НАШ ДОМ И РЕШАТЬ
+             НАМ"), and the first twelve characters of those are not an answer. */
+          <div className="flex min-w-0 items-start gap-2 pt-1">
             <TargetAvatar name={name} imageUrl={target?.image_url} size={26} />
-            <p dir="auto" className="min-w-0 truncate text-sm font-bold leading-[26px] text-mist-100">
+            <p dir="auto" className="line-clamp-2 min-w-0 text-[13px] font-bold leading-[15px] text-mist-100">
               {name}
             </p>
           </div>

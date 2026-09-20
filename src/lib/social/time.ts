@@ -125,13 +125,20 @@ export function relativeHe(iso: string): string {
       : min < 60
         ? min === 1
           ? 'דקה'
-          : `${min} דק׳`
+          : min === 2
+            ? 'שתי דקות'
+            : `${min} דק׳`
         : min < 60 * 48
           ? hours === 1
             ? 'שעה'
-            : `${hours} שעות`
+            : hours === 2
+              ? 'שעתיים'
+              : `${hours} שעות`
           : days === 1
             ? 'יום'
-            : `${days} ימים`;
+            // Hebrew has a dual: two days is יומיים, never "2 ימים".
+            : days === 2
+              ? 'יומיים'
+              : `${days} ימים`;
   return diff >= 0 ? `בעוד ${label}` : `לפני ${label}`;
 }

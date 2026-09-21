@@ -1,8 +1,10 @@
+import { sendHit } from '@/lib/hamavrik/beacon';
 import { analytics } from '@/lib/hamavrik/config';
 
 /**
- * Conversion events the site fires. Each one lands in three places when the
+ * Conversion events the site fires. Each one lands in four places when the
  * corresponding tag is configured in config.ts:
+ *   • the site's own counter (/api/hit → /admin) — always, on the standalone site
  *   • window.dataLayer  — always (works with Google Tag Manager as-is)
  *   • gtag('event')     — GA4 + Google Ads conversion (when a label is set)
  *   • fbq('trackCustom')— Meta Pixel, plus the standard Lead / Contact events
@@ -33,6 +35,8 @@ const META_STANDARD: Partial<Record<TrackEvent, string>> = {
 
 export function track(event: TrackEvent, params: TrackParams = {}): void {
   if (typeof window === 'undefined') return;
+
+  sendHit('event', { name: event, meta: params });
 
   window.dataLayer = window.dataLayer ?? [];
   window.dataLayer.push({ event, ...params });

@@ -4,6 +4,7 @@ import { Footer } from '@/components/hamavrik/Footer';
 import { Header } from '@/components/hamavrik/Header';
 import { JsonLd, localBusinessSchema } from '@/components/hamavrik/JsonLd';
 import { StickyCta } from '@/components/hamavrik/StickyCta';
+import { VisitBeacon } from '@/components/hamavrik/VisitBeacon';
 import { business } from '@/lib/hamavrik/config';
 import { absoluteUrl } from '@/lib/hamavrik/links';
 
@@ -73,6 +74,7 @@ export default function ShineLayout({ children }: { children: React.ReactNode })
       <Footer />
       <StickyCta />
       <AnalyticsScripts />
+      <VisitBeacon />
     </div>
   );
 }

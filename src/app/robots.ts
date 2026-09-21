@@ -5,9 +5,10 @@ import { site } from '@/lib/site';
 export const dynamic = 'force-static';
 
 export default function robots(): MetadataRoute.Robots {
-  // The cleaning site on its own domain has nothing to hide from crawlers.
+  // The cleaning site on its own domain: everything but the owner's panel
+  // and the visit counter's endpoint.
   if (STANDALONE) {
-    return { rules: { userAgent: '*', allow: '/' }, sitemap: `${SITE_ORIGIN}/sitemap.xml` };
+    return { rules: { userAgent: '*', allow: '/', disallow: ['/admin', '/api/'] }, sitemap: `${SITE_ORIGIN}/sitemap.xml` };
   }
   return {
     rules: { userAgent: '*', allow: '/', disallow: ['/admin', '/crm'] },

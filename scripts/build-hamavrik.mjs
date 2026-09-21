@@ -147,6 +147,15 @@ try {
     if (await exists(join(root, 'public', 'video', f))) await cp(join(root, 'public', 'video', f), join(dist, 'video', f));
   }
 
+  // The visit counter and the owner's /admin panel: a Pages worker that only
+  // /api/* and /admin* reach (see _routes.json); every page stays a static
+  // file. Bindings (DB, ADMIN_PASSWORD) live in the Pages project settings.
+  await cp(join(root, 'scripts', 'hamavrik-worker', '_worker.js'), join(dist, '_worker.js'));
+  await writeFile(
+    join(dist, '_routes.json'),
+    JSON.stringify({ version: 1, include: ['/api/*', '/admin', '/admin/*'], exclude: [] }, null, 2) + '\n',
+  );
+
   // Cloudflare Pages / Netlify conventions.
   await writeFile(
     join(dist, '_redirects'),

@@ -37,24 +37,48 @@ export interface AccountProfile {
 /**
  * Screenshot the signed-in user's picture off whatever page is open.
  *
- * THIS IS A CORRECTION, and the bug it fixes was visible on the dashboard: the
- * name read fine and the avatar never did, so the chip kept showing the blue
- * initial circle the app falls back to. The first version looked for an `<img>`
- * whose computed `border-radius` was `50%`, and modern Facebook satisfies
- * neither half of that — avatars are drawn as an SVG `<image>` clipped by a
- * mask, so the element is not an `<img>` at all and the roundness lives on the
- * mask rather than on the picture. Two filters, both matching nothing.
+ * TWO CORRECTIONS LIVE HERE, and the second one is the important one.
  *
- * What replaced them is shape and ownership, which are properties of the thing
- * itself rather than of this month's CSS: a square-ish box, and preferably one
- * sitting inside a link that carries the id the cookie already gave us. The
- * capture goes through an element handle instead of `page.screenshot({clip})`
- * so Playwright scrolls the element into view and reads its real box — a clip
- * is silently wrong the moment anything above it has grown.
+ * The first: this used to look for an `<img>` whose computed `border-radius`
+ * was `50%`. Modern Facebook draws avatars as an SVG `<image>` behind a mask,
+ * so the element is not an `<img>` and the roundness is not on the picture —
+ * two filters, both matching nothing, and the chip showed a real name beside
+ * the blue initial circle.
+ *
+ * The second: fixing that left a "biggest square-ish picture on the page"
+ * fallback, and on the real home feed it photographed a stranger's post and
+ * put it on the dashboard as the owner's face. That is the worse failure of
+ * the two. A wrong face is not a smaller version of a missing face; it is a
+ * confident lie about whose account is publishing, which is the single fact
+ * this whole feature exists to report.
+ *
+ * So there is no fallback any more. An element is taken ONLY when something
+ * proves it belongs to the signed-in user:
+ *
+ *   - it sits inside a link carrying the id the `c_user` cookie just gave us
+ *     (or /me, which resolves to the same person), or
+ *   - its `alt` is EXACTLY the name we already read from the page's own data.
+ *
+ * Exactly, not "contains": Facebook labels an avatar with the person's bare
+ * name, while a photo somebody posted of them is labelled with a sentence that
+ * happens to include it. `includes` would have accepted that sentence, which
+ * is how a feed photo becomes a profile picture.
+ *
+ * Neither test is linguistic, so neither breaks when the account is set to a
+ * language nobody here anticipated: one compares ids, the other compares the
+ * account's own name against itself. When neither holds there is no picture,
+ * and the dashboard falls back to an initial — which is at least true.
+ *
+ * The capture goes through an element handle rather than
+ * `page.screenshot({clip})` so Playwright scrolls the element into view and
+ * measures its real box; a clip is silently wrong the moment anything above it
+ * has grown.
  */
-async function captureAvatar(page: Page, id: string): Promise<{ image: AccountProfile['image']; reason: AccountProfile['imageNote'] }> {
+async function captureAvatar(page: Page, id: string, name: string): Promise<{ image: AccountProfile['image']; reason: AccountProfile['imageNote'] }> {
   const handle = await page
-    .evaluateHandle((userId: string) => {
+    .evaluateHandle(({ userId, fullName }: { userId: string; fullName: string }) => {
+      const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+      const wanted = norm(fullName);
       // `image` here is the SVG element, not a typo for `img`. Both are asked
       // for because either one may be carrying the face on any given layout.
       const nodes = Array.from(document.querySelectorAll('img, image'));
@@ -62,33 +86,32 @@ async function captureAvatar(page: Page, id: string): Promise<{ image: AccountPr
         .map((el) => {
           const r = el.getBoundingClientRect();
           const href = el.closest('a[href]')?.getAttribute('href') ?? '';
+          const alt = norm(el.getAttribute('alt') ?? '');
           return {
             el,
             w: r.width,
             h: r.height,
-            y: r.top,
-            // A link to the signed-in user's own profile is proof, not a hint:
-            // it is the same id the cookie named a moment ago.
-            mine: (userId !== '' && href.includes(userId)) || /\/me\/?($|\?)/.test(href),
+            byLink: (userId !== '' && href.includes(userId)) || /\/me\/?($|\?)/.test(href),
+            byAlt: wanted !== '' && alt === wanted,
           };
         })
         .filter(
           (c) =>
+            // PROOF FIRST. Everything below only narrows a set that is already
+            // known to be the owner's; nothing here can widen it.
+            (c.byLink || c.byAlt) &&
             c.w >= 24 &&
             c.w <= 400 &&
             c.h > 0 &&
-            // Square-ish. A banner, a photo in the feed and a logo strip are
-            // all ruled out by this without naming any of them.
+            // Square-ish, which rules out a cover photo without naming one.
             c.w / c.h > 0.8 &&
-            c.w / c.h < 1.25 &&
-            c.y > -200 &&
-            c.y < 1400,
+            c.w / c.h < 1.25,
         )
-        // Proven-ours first; among equals the biggest, which is the profile
-        // photo rather than a reaction icon or a story ring.
-        .sort((a, b) => Number(b.mine) - Number(a.mine) || b.w - a.w);
+        // Best-proven first — both signals beat one — then the biggest, which
+        // is the profile photo rather than a thumbnail of it.
+        .sort((a, b) => (Number(b.byLink) + Number(b.byAlt)) - (Number(a.byLink) + Number(a.byAlt)) || b.w - a.w);
       return candidates[0]?.el ?? null;
-    }, id)
+    }, { userId: id, fullName: name })
     .catch(() => null);
 
   const el = handle?.asElement() ?? null;
@@ -154,7 +177,7 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
    * carries the owner's avatar in its top bar on every layout Facebook has
    * shipped; asking for it here costs one evaluate and no page load.
    */
-  let shot = await captureAvatar(page, id);
+  let shot = await captureAvatar(page, id, fromBlob);
 
   /*
    * The profile link is found BY THE ID, never by a label.
@@ -224,7 +247,7 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
      */
     const candidate = (nameHere || heading || title).slice(0, 80);
     const name = /^facebook$/i.test(candidate) ? '' : candidate;
-    if (!shot.image) shot = await captureAvatar(page, id);
+    if (!shot.image) shot = await captureAvatar(page, id, name || nameHere);
     return { id, name, image: shot.image, imageNote: shot.reason };
   } catch {
     return { id, name: nameHere, image: shot.image, imageNote: shot.reason };

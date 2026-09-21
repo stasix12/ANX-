@@ -749,18 +749,28 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
     // dashboard keeps showing the previous owner's face after a re-login.
     if (error) console.error('[worker] ✗ העלאת תמונת הפרופיל נכשלה:', error.message);
     else patch.fb_avatar_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
+  } else if (account.imageNote === 'screenshot-failed') {
+    /*
+     * We found the owner's picture and could not photograph it. The stored one
+     * stays: this is a transient failure, and blanking a good picture over it
+     * would make the chip flicker between a face and an initial.
+     */
+    console.log('[worker] ℹ נמצאה תמונת פרופיל אבל לא הצלחנו לצלם אותה — נשארת התמונה הקודמת.');
   } else {
     /*
-     * A missing face used to be silent, and that silence cost a round trip:
-     * the dashboard showed the blue initial circle, the terminal said the
-     * account was connected, and nothing anywhere said whether the picture had
-     * not been found or had not been photographed. Two faults, one symptom.
+     * NOTHING ON THE PAGE WAS PROVABLY THE OWNER'S — so the stored picture is
+     * cleared, and that is deliberate.
+     *
+     * A previous version had a "biggest square-ish picture" fallback and it
+     * photographed a stranger's post from the feed; the dashboard then showed
+     * that as the owner's face. Writing only on success would leave that wrong
+     * face on screen forever, because the fixed version correctly finds
+     * nothing to replace it with. This is the same correction the name got,
+     * for the same reason: a stored wrong answer is worse than no answer,
+     * since the screen shows it with the same confidence as a real one.
      */
-    console.log(
-      account.imageNote === 'screenshot-failed'
-        ? '[worker] ℹ נמצאה תמונת פרופיל אבל לא הצלחנו לצלם אותה — הדשבורד יציג עיגול עם האות הראשונה.'
-        : '[worker] ℹ לא נמצאה תמונת פרופיל בעמוד פייסבוק — הדשבורד יציג עיגול עם האות הראשונה.',
-    );
+    patch.fb_avatar_url = '';
+    console.log('[worker] ℹ לא נמצאה תמונת פרופיל שאפשר לאמת שהיא שלכם — הדשבורד יציג עיגול עם האות הראשונה.');
   }
 
   const { error } = await db.from('social_workers').update(patch).eq('id', state.id);

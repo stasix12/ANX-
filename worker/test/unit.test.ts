@@ -1999,7 +1999,30 @@ const scenario: { step: string; line: string }[] = [];
    */
   assert.ok(/querySelectorAll\('img, image'\)/.test(account), 'the avatar search must include the SVG <image> Facebook masks faces with');
   assert.ok(!/borderRadius/.test(accountCode), 'and must not depend on border-radius, which the mask carries rather than the picture');
-  assert.ok(/mine: \(userId !== '' && href\.includes\(userId\)\)/.test(account), 'a link to the signed-in id is what proves the face is theirs');
+  /*
+   * AND NO FALLBACK. Fixing the search left a "biggest square-ish picture on
+   * the page" last resort, and on the real home feed it photographed a
+   * stranger's post and put it on the dashboard as the owner's face. That is
+   * the worse failure of the two: a wrong face is a confident lie about whose
+   * account is publishing, which is the one fact this feature exists to
+   * report. An element is taken only when something PROVES it is theirs.
+   */
+  assert.ok(/\(c\.byLink \|\| c\.byAlt\) &&/.test(account), 'an unproven picture must never be taken, however well it fits');
+  assert.ok(/byLink: \(userId !== '' && href\.includes\(userId\)\)/.test(account), 'a link to the signed-in id is one proof');
+  assert.ok(/byAlt: wanted !== '' && alt === wanted/.test(account), 'an alt that is exactly the name we already read is the other');
+  /* Exactly, not "contains": Facebook labels an avatar with the bare name,
+     while a photo somebody posted OF them is labelled with a sentence that
+     happens to include it — which is how a feed photo becomes a face. */
+  assert.ok(!/alt\.includes\(wanted\)/.test(accountCode), 'a name merely mentioned in an alt sentence is not proof');
+
+  /* And a wrong face already stored must be clearable, or the fixed version —
+     which correctly finds nothing — leaves the stranger's photo up forever.
+     The same correction the name got, for the same reason. */
+  assert.ok(/patch\.fb_avatar_url = '';/.test(localWorker), 'a picture that cannot be proven clears the stored one');
+  assert.ok(
+    /imageNote === 'screenshot-failed'[\s\S]{0,1600}patch\.fb_avatar_url = '';/.test(localWorker),
+    'but a failed screenshot keeps it — that is transient, not an answer',
+  );
 
   /*
    * CAPTURED THROUGH THE ELEMENT, NOT A CLIP. page.screenshot({clip}) photographs
@@ -2016,7 +2039,7 @@ const scenario: { step: string; line: string }[] = [];
    * link was missing — so on the layout where the rail link was found, no
    * picture was ever looked for at all.
    */
-  assert.ok(/let shot = await captureAvatar\(page, id\);/.test(account), 'the home page is tried first, before any second page load');
+  assert.ok(/let shot = await captureAvatar\(page, id, fromBlob\);/.test(account), 'the home page is tried first, before any second page load');
 
   /* Two faults, one symptom: nothing matched, or the match could not be
      photographed. The terminal must tell them apart — the screen must not,

@@ -93,9 +93,11 @@ export interface AvatarProbe {
   sample: string[];
   /** 'ok', or why the search could not run at all. */
   note: string;
+  /** Which page it looked at, and the owner's profile path it was given. */
+  where: string;
 }
 
-const EMPTY_PROBE: AvatarProbe = { nodes: 0, shaped: 0, sample: [], note: 'לא רצה' };
+const EMPTY_PROBE: AvatarProbe = { nodes: 0, shaped: 0, sample: [], note: 'לא רצה', where: '' };
 
 async function captureAvatar(
   page: Page,
@@ -166,7 +168,14 @@ async function captureAvatar(
             byLink:
               (userId !== '' && href.includes(userId)) ||
               /\/me\/?($|\?)/.test(href) ||
-              (path !== '' && path !== '/' && (href === path || href.startsWith(`${path}?`) || href.startsWith(`https://www.facebook.com${path}`))),
+              (path !== '' &&
+                (() => {
+                  // Same link written four ways: /name, /name/, /name?x=1 and
+                  // the absolute form. The owner's machine reported the
+                  // absolute one, which an equality check would have missed.
+                  const bare = href.replace(/^https?:\/\/(?:www\.|web\.|m\.)?facebook\.com/, '').replace(/[?#].*$/, '').replace(/\/$/, '');
+                  return bare !== '' && bare === path;
+                })()),
             /* The account's own name, compared against itself — not a label in
                any particular language. Exactly, never "contains": an avatar is
                labelled with the bare name, while a photo somebody posted OF the
@@ -210,11 +219,12 @@ async function captureAvatar(
     // The search itself could not run. That is a third outcome, and lumping it
     // in with "found nothing" would hide a broken read behind a true-sounding
     // "no picture on this page".
-    return { image: null, reason: 'no-element', probe: { ...EMPTY_PROBE, note: picked.slice(0, 160) } };
+    return { image: null, reason: 'no-element', probe: { ...EMPTY_PROBE, note: picked.slice(0, 160), where: `${page.url().slice(0, 60)} ← "${profilePath}"` } };
   }
 
   const probe: AvatarProbe = await picked
-    .evaluate((v: { nodes: number; shaped: number; sample: string[] }) => ({ nodes: v.nodes, shaped: v.shaped, sample: v.sample, note: 'ok' }))
+    .evaluate((v: { nodes: number; shaped: number; sample: string[] }) => ({ nodes: v.nodes, shaped: v.shaped, sample: v.sample, note: 'ok', where: '' }))
+    .then((v) => ({ ...v, where: `${page.url().slice(0, 60)} ← "${profilePath}"` }))
     .catch(() => ({ ...EMPTY_PROBE, note: 'הדוח לא נקרא' }));
   const el = (await picked
     .getProperty('el')
@@ -229,6 +239,24 @@ async function captureAvatar(
     return { image: null, reason: 'screenshot-failed', probe };
   } finally {
     await el.dispose().catch(() => undefined);
+  }
+}
+
+/**
+ * The path part of a facebook.com address, or '' when there is nothing useful
+ * in it. `/me` and `/` are rejected on purpose: they are where we asked to go,
+ * not where Facebook took us, and treating the question as the answer is what
+ * made the owner's own profile links fail to match.
+ */
+function profilePathOf(raw: string): string {
+  try {
+    const u = new URL(raw);
+    if (!/(^|\.)facebook\.com$/.test(u.hostname)) return '';
+    const path = u.pathname.replace(/\/$/, '');
+    if (path === '' || path === '/me') return '';
+    return path;
+  } catch {
+    return '';
   }
 }
 
@@ -320,7 +348,13 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
    * at full size — both as locale-independent as the cookie was.
    */
   try {
-    await page.goto('https://www.facebook.com/me', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    const landing = await page.goto('https://www.facebook.com/me', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    /* /me is a redirect, and the address bar can still be showing the question
+       rather than the answer when domcontentloaded fires. Wait for it to stop
+       saying /me before reading the owner's real profile path out of it. */
+    await page
+      .waitForFunction(() => !/^\/me\/?$/i.test(location.pathname), undefined, { timeout: 10_000 })
+      .catch(() => undefined);
     /*
      * WAIT FOR THE TITLE TO STOP SAYING "Facebook".
      *
@@ -359,15 +393,22 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
      * the address we land on IS their vanity path, stated by Facebook itself.
      * Matching that is still identity, not markup.
      */
-    const profilePath = (() => {
-      try {
-        const u = new URL(page.url());
-        return /facebook\.com$/.test(u.hostname.replace(/^www\./, '')) ? u.pathname : '';
-      } catch {
-        return '';
-      }
-    })();
+    const profilePath = profilePathOf(page.url()) || profilePathOf(landing?.url() ?? '');
     if (!shot.image) shot = await captureAvatar(page, id, name || nameHere, profilePath);
+    /*
+     * AND ONE LAST LOOK AT THE PAGE THE LINKS ARE ON.
+     *
+     * The owner's terminal settled this: their home page carries two 40x40
+     * avatars whose enclosing link is https://www.facebook.com/<their name> —
+     * proof, and sitting there the whole time. It went unmatched because the
+     * only place the profile path is learned is /me, and by the time we knew
+     * it we had already left the page that used it. So once Facebook has told
+     * us the address, go back and use it.
+     */
+    if (!shot.image && profilePath) {
+      await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => undefined);
+      shot = await captureAvatar(page, id, name || nameHere, profilePath);
+    }
     return { id, name, image: shot.image, imageNote: shot.reason, probe: shot.probe };
   } catch {
     return { id, name: nameHere, image: shot.image, imageNote: shot.reason, probe: shot.probe };

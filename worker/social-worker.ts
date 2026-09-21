@@ -778,7 +778,7 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
      * than guessing. Terminal only, and only on failure.
      */
     console.log(
-      `[worker]   (בעמוד ${account.probe.nodes} תמונות, מתוכן ${account.probe.shaped} בגודל מתאים · ${account.probe.note})`,
+      `[worker]   (בעמוד ${account.probe.nodes} תמונות, מתוכן ${account.probe.shaped} בגודל מתאים · ${account.probe.note} · ${account.probe.where})`,
     );
     for (const line of account.probe.sample) console.log(`[worker]   · ${line}`);
   }

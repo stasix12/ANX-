@@ -2019,7 +2019,16 @@ const scenario: { step: string; line: string }[] = [];
   /* A profile link is usually /the.persons.name, not /<id> — which is why
      matching the id alone found nothing on the owner's machine. /me redirects
      to that address, so Facebook states it rather than us guessing it. */
-  assert.ok(/const profilePath = \(\(\) =>/.test(account), 'the vanity profile path is learned from where /me lands');
+  assert.ok(
+    /const profilePath = profilePathOf\(page\.url\(\)\) \|\| profilePathOf\(landing\?\.url\(\) \?\? ''\)/.test(account),
+    'the vanity profile path is learned from where /me lands',
+  );
+  /* /me and / are rejected: they are where we asked to go, not where Facebook
+     took us, and treating the question as the answer is what left the owner's
+     own profile links unmatched. */
+  assert.ok(/if \(path === '' \|\| path === '\/me'\) return '';/.test(account), 'and the address we asked for is never mistaken for the answer');
+  /* Their links were the absolute form, which an equality check misses. */
+  assert.ok(/replace\(\/\^https\?:/.test(account), 'a profile link matches whether it is written relative or absolute');
   assert.ok(/captureAvatar\(page, id, name \|\| nameHere, profilePath\)/.test(account), 'and is then accepted as proof of ownership');
   /* Exactly, not "contains": Facebook labels an avatar with the bare name,
      while a photo somebody posted OF them is labelled with a sentence that

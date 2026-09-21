@@ -2168,17 +2168,55 @@ const scenario: { step: string; line: string }[] = [];
    * good faith, by somebody who does not know that. So it is asserted.
    */
   const accountPage = readFileSync(new URL('../../src/app/social/account/page.tsx', import.meta.url), 'utf8');
+  const clientSrc = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
   assert.ok(/href="\/social\/account"/.test(hero), 'the account chip must lead somewhere, not to an anchor on the same screen');
+
+  /*
+   * THIS RULE REPLACES "no password may be typed into this product", and the
+   * replacement is the owner's decision, made twice and for a reason: the
+   * product is to be sold, and a customer who has to walk to the machine to
+   * sign in is a customer who cannot buy it.
+   *
+   * What the old rule was protecting is unchanged and asserted below — this
+   * must never become a password store. The sign-in details travel as a
+   * ONE-TIME command payload and nothing may keep them:
+   */
   assert.ok(
-    !/type=["']password["']|autoComplete=["'](?:current|new)-password["']/.test(accountPage),
-    'no Facebook password may be typed into this product',
+    /update\(\{ status: 'running', worker_id: state\.id, payload: \{\} \}\)/.test(localWorker),
+    'claiming a command empties its payload, in the same statement',
   );
-  assert.ok(/הסיסמה/.test(accountPage) && /פייסבוק עצמה|של פייסבוק/.test(accountPage), 'and the screen must say where it IS typed, rather than leaving it a mystery');
-  /* The switch is the two commands the worker already has, in the order the
-     machine needs them: wipe the profile, then open the login window. */
+  const claimAt = localWorker.indexOf("payload: {} }");
+  const loginAt = localWorker.indexOf('session.interactiveLogin(');
+  assert.ok(claimAt > 0 && loginAt > claimAt, 'wiped BEFORE the browser opens, so a crash mid-login leaves nothing behind');
+  assert.ok(!/select\('\*'\)[\s\S]{0,120}social_worker_commands|from\('social_worker_commands'\)\.select\('\*'\)/.test(clientSrc), 'the command list must name its columns, never ask for all of them');
+  assert.ok(/const COMMAND_COLUMNS = /.test(clientSrc) && !/COMMAND_COLUMNS = '[^']*payload/.test(clientSrc), 'and that list must not include the payload');
+  /* Comments stripped first. The note above that code explains WHY nothing is
+     persisted, and a whole-file search found the explanation and failed on it
+     — the third time this file has caught itself that way. */
+  const accountCodeOnly = accountPage.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!/localStorage|sessionStorage/.test(accountCodeOnly), 'nothing typed on this screen may be persisted in the browser');
+  assert.ok(/autoComplete="off"/.test(accountPage), 'nor offered to the browser password manager as this site\'s own credential');
+  /* Typed into Facebook's own form, by attribute rather than by any word in
+     any language — the same discipline the rest of the module keeps. */
   assert.ok(
-    /sendWorkerCommand\([^;]*'logout'\);[\s\S]{0,120}sendWorkerCommand\([^;]*'login'\);/.test(accountPage),
-    'switching disconnects before it connects',
+    /input\[name="email"\]/.test(sessionSrc) && /input\[name="pass"\]/.test(sessionSrc),
+    "the worker fills Facebook's own login form, it does not forge a session",
+  );
+  /*
+   * And the screen must say the two things somebody paying for this deserves
+   * to hear from it rather than from Facebook: that automated sign-in is
+   * against Facebook's terms and can lock an account, and that a code or
+   * device approval is normal and is answered on the machine. Without the
+   * second, a half-finished login reads as a broken product.
+   */
+  assert.ok(/תנאי השימוש של פייסבוק/.test(accountPage), 'the screen states that automated sign-in is against Facebook terms');
+  assert.ok(/נעיל/.test(accountPage), 'and that an account can be locked over it');
+  assert.ok(/קוד אימות/.test(accountPage), 'and that Facebook will often ask for a code');
+  /* Signing in wipes the old session first: typed onto a live session, the new
+     details land on a page that is not asking for them. */
+  assert.ok(
+    /sendWorkerCommand\([^;]*'logout'\);[\s\S]{0,200}sendWorkerCommand\([^;]*'login'/.test(accountPage),
+    'signing in disconnects before it connects',
   );
   /*
    * And disconnecting must FORGET. The profile is wiped from the machine, but

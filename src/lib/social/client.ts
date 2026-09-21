@@ -933,12 +933,39 @@ export async function listWorkers(): Promise<(SocialWorker & { online: boolean }
   return rows.map((w) => ({ ...w, online: Boolean(w.last_seen_at && new Date(w.last_seen_at).getTime() > cutoff) }));
 }
 
-export async function sendWorkerCommand(workerId: string | null, command: WorkerCommandName): Promise<WorkerCommand> {
-  return unwrap<WorkerCommand>(await db().from('social_worker_commands').insert({ worker_id: workerId, command }).select('*').single());
+/**
+ * Queue one instruction for the local worker.
+ *
+ * `payload` is a ONE-TIME envelope, not a field. A login can carry the
+ * Facebook sign-in details the owner typed on this screen, because the
+ * product is meant to be sold — a customer enters their own details on their
+ * own phone instead of walking to the machine that publishes. The worker
+ * empties the column in the same statement that claims the command, before it
+ * opens a browser, so nothing here becomes a stored secret.
+ *
+ * It is never read back: the row is inserted and only its id is returned, and
+ * listRecentCommands names its columns rather than asking for all of them.
+ */
+export async function sendWorkerCommand(
+  workerId: string | null,
+  command: WorkerCommandName,
+  payload?: Record<string, string>,
+): Promise<{ id: string }> {
+  return unwrap<{ id: string }>(
+    await db()
+      .from('social_worker_commands')
+      .insert({ worker_id: workerId, command, ...(payload ? { payload } : {}) })
+      .select('id')
+      .single(),
+  );
 }
 
+const COMMAND_COLUMNS = 'id, worker_id, command, status, result, created_at, finished_at';
+
 export async function listRecentCommands(limit = 5): Promise<WorkerCommand[]> {
-  return unwrap<WorkerCommand[]>(await db().from('social_worker_commands').select('*').order('created_at', { ascending: false }).limit(limit));
+  /* Named columns, not '*': `payload` may hold a password for the second or
+     two before the worker claims it, and this list is rendered on screen. */
+  return unwrap<WorkerCommand[]>(await db().from('social_worker_commands').select(COMMAND_COLUMNS).order('created_at', { ascending: false }).limit(limit));
 }
 
 export async function markManualPublished(id: string, permalink: string): Promise<void> {

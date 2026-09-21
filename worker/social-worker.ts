@@ -369,9 +369,31 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     .or(`worker_id.eq.${state.id},worker_id.is.null`)
     .order('created_at')
     .limit(5);
-  for (const cmd of (data ?? []) as WorkerCommand[]) {
-    const { data: claimed } = await db.from('social_worker_commands').update({ status: 'running', worker_id: state.id }).eq('id', cmd.id).eq('status', 'pending').select('id');
+  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string } })[]) {
+    /*
+     * CLAIMING A COMMAND ALSO EMPTIES IT.
+     *
+     * A login command may carry the customer's Facebook username and password,
+     * because the whole point of selling this is that they enter their own
+     * details on their own phone rather than walking to the machine. That
+     * makes the row a one-time envelope, not a record: it is wiped in the same
+     * statement that claims the command, before a browser window even opens,
+     * and the only copy left is the local const below, which goes out of scope
+     * when this iteration ends.
+     *
+     * Wiping it here rather than after the login also means a command that
+     * crashes, or a worker that dies mid-login, does not leave anything
+     * sitting in the database waiting for the next poll.
+     */
+    const entered = cmd.payload?.user && cmd.payload?.pass ? { user: cmd.payload.user, pass: cmd.payload.pass } : null;
+    const { data: claimed } = await db
+      .from('social_worker_commands')
+      .update({ status: 'running', worker_id: state.id, payload: {} })
+      .eq('id', cmd.id)
+      .eq('status', 'pending')
+      .select('id');
     if (!claimed?.length) continue;
+    // The command NAME only. Its payload is never printed, here or anywhere.
     console.log(`[worker] פקודה: ${cmd.command}`);
     let result = '';
     let raw = '';
@@ -379,7 +401,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     try {
       if (cmd.command === 'login') {
         await heartbeat(state, 'online', browser.debugMode, 'needs_auth');
-        const r = await session.interactiveLogin();
+        const r = await session.interactiveLogin(entered);
         state.browserState = r.state;
         state.lastCheckAt = Date.now();
         if (r.state === 'connected') {

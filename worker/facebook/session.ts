@@ -227,14 +227,54 @@ export class BrowserSession {
   }
 
   /**
-   * "התחבר לפייסבוק": a headed window on the login page; the owner types
-   * their own credentials (the worker never sees them). Resolves once the
-   * login cookie appears or the timeout passes.
+   * "התחבר לפייסבוק": a headed window on Facebook's own login page.
+   *
+   * Two ways in, and the difference is only who does the typing.
+   *
+   * Without credentials the window simply opens and waits — the person at the
+   * machine signs in themselves and the worker never sees anything.
+   *
+   * With credentials, the worker fills Facebook's own form and presses its own
+   * button. That exists because this product is meant to be sold: a customer
+   * buys it, enters their details on their phone, and their account publishes
+   * to their groups, without anyone walking to the computer. The fields are
+   * matched by `name` (email / pass), which is an attribute on Facebook's form
+   * rather than a word in any language — the same discipline the rest of this
+   * module keeps.
+   *
+   * WHAT IT DOES NOT DO is decide the login worked. Facebook answers a
+   * password with two-factor codes, device approvals and security checks, and
+   * the loop below is unchanged for exactly that reason: it waits for a real
+   * session cookie on a page that is not a checkpoint, with the window left
+   * open so a person can finish what Facebook asked for. Typing the password
+   * skips a step; it does not skip Facebook.
+   *
+   * The credentials are used here and nowhere else. They are not stored, not
+   * logged, and not returned.
    */
-  async interactiveLogin(timeoutMs = 15 * 60_000): Promise<{ state: 'connected' | 'needs_auth'; detail: string }> {
+  async interactiveLogin(
+    credentials?: { user: string; pass: string } | null,
+    timeoutMs = 15 * 60_000,
+  ): Promise<{ state: 'connected' | 'needs_auth'; detail: string }> {
     const page = await this.newPage(false);
     try {
       await page.goto('https://www.facebook.com/login', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      if (credentials?.user && credentials.pass) {
+        /*
+         * Best-effort, and deliberately silent on failure: if the form is not
+         * where we expect it, the window is already open on the login page and
+         * the person can type into it. A thrown error here would turn a
+         * working manual path into a failed command.
+         */
+        try {
+          await page.fill('input[name="email"]', credentials.user, { timeout: 15_000 });
+          await page.fill('input[name="pass"]', credentials.pass, { timeout: 15_000 });
+          await page.press('input[name="pass"]', 'Enter');
+          await page.waitForLoadState('domcontentloaded', { timeout: 30_000 }).catch(() => undefined);
+        } catch {
+          /* leave the window on the login page for a person to finish */
+        }
+      }
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (page.isClosed()) break;

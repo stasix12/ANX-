@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
-import { Button, Card, Loading, Notice, useConfirm, useToast } from '@/components/social/ui';
+import { Button, Card, Field, Loading, Notice, inputClass, useConfirm, useToast } from '@/components/social/ui';
 import { listRecentCommands, listWorkers, sendWorkerCommand } from '@/lib/social/client';
 import type { SocialWorker, WorkerCommand, WorkerCommandName } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -18,21 +18,32 @@ import { friendlyMessage } from '@/lib/social/errors';
  * another one, which until now existed only as two buttons on a card inside
  * the settings screen, under a title about a "browser".
  *
- * THE PASSWORD IS NEVER TYPED HERE, and that is a design decision rather than
- * a missing feature. Switching accounts opens a real Chrome window on the PC
- * that runs the worker and lands it on Facebook's own login page. Two reasons,
- * both of which a form on this screen would break:
+ * THE DETAILS ARE TYPED HERE, because this product is meant to be sold. A
+ * customer buys it, enters their own Facebook details on their own phone, and
+ * their own account publishes to their own groups. Requiring them to walk to
+ * the machine would make the thing unsellable, and an earlier version of this
+ * screen did exactly that.
  *
- *   - This product never holds a Facebook password. There is nowhere to type
- *     one, so there is nothing to store, log, sync or leak — the browser
- *     profile on that one machine holds the session and nothing else does.
- *   - Facebook answers a login with two-factor codes, device approvals and
- *     security checks. Those need a real browser and a person looking at it.
- *     A form here would collect a password and then fail at the first
- *     challenge, which is worse than not offering one.
+ * What it is NOT is a password store, and the difference is the whole design:
  *
- * So the owner still signs in with the other account's username and password —
- * on Facebook's page, in a window this app opened for them.
+ *   - What is typed lives in component state and goes out as a ONE-TIME
+ *     command payload. The worker empties that column in the same statement
+ *     that claims the command, before it opens a browser, so nothing is left
+ *     to read a second time. No table holds it, no log receives it (scrub()
+ *     redacts any key matching /password|secret|token/), and the command list
+ *     rendered below names its columns rather than asking for all of them.
+ *   - The worker types them into FACEBOOK'S OWN login form, in a real Chrome
+ *     window on the machine that publishes. It does not talk to an API or
+ *     forge a session.
+ *   - Typing the password skips a step; it does not skip Facebook. Two-factor
+ *     codes, device approvals and security checks still happen, and the window
+ *     stays open so a person can answer them. The screen says so, because a
+ *     half-finished login looks like a broken product to somebody who was not
+ *     told to expect one.
+ *
+ * And it says plainly that automated sign-in is against Facebook's terms and
+ * can get an account locked. Somebody paying for this deserves to learn that
+ * from the screen rather than from Facebook.
  */
 export default function AccountPage() {
   const [workers, setWorkers] = useState<(SocialWorker & { online: boolean })[]>([]);
@@ -42,6 +53,12 @@ export default function AccountPage() {
   const [error, setError] = useState<string | null>(null);
   const confirm = useConfirm();
   const toast = useToast();
+  /*
+   * Held in component state and nowhere else — no localStorage, no draft
+   * saving, no query string. The component unmounts and they are gone.
+   */
+  const [user, setUser] = useState('');
+  const [secret, setSecret] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -102,6 +119,35 @@ export default function AccountPage() {
       toast(label);
     } catch (err) {
       setError(friendlyMessage(err, 'הפקודה נכשלה.'));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Sign in with what was typed on this screen.
+   *
+   * The details go to the local worker as a one-time command payload, which it
+   * empties in the same statement that claims the command — before it opens a
+   * browser. They are never stored, and this component forgets them the moment
+   * the command is away.
+   *
+   * The profile is wiped first. Signing in as somebody new on top of an
+   * existing Facebook session lands on that session rather than on a login
+   * form, so without this the new details would be typed into a page that is
+   * not asking for them.
+   */
+  async function signIn() {
+    if (!user.trim() || !secret) return;
+    setBusy('signin');
+    try {
+      await sendWorkerCommand(worker?.online ? worker.id : null, 'logout');
+      await sendWorkerCommand(worker?.online ? worker.id : null, 'login', { user: user.trim(), pass: secret });
+      setSecret('');
+      await load();
+      toast('נשלח למחשב. אם פייסבוק תבקש קוד אימות — הוא יופיע בחלון שנפתח שם.');
+    } catch (err) {
+      setError(friendlyMessage(err, 'ההתחברות נכשלה.'));
     } finally {
       setBusy(null);
     }
@@ -184,42 +230,86 @@ export default function AccountPage() {
 
           <div className="mt-3">
             <Card
-              title="החלפה לחשבון אחר"
-              subtitle="שם המשתמש והסיסמה מוקלדים בדף של פייסבוק, בחלון שנפתח על המחשב — לא במסך הזה."
+              title="התחברות לחשבון פייסבוק"
+              subtitle="מזינים כאן את פרטי החשבון. הם נשלחים למחשב לשימוש חד-פעמי ולא נשמרים בשום מקום."
             >
               {!online && (
                 <div className="mb-3">
                   <Notice tone="warn">
-                    <strong>התוכנה במחשב לא פועלת.</strong> החלפת חשבון קורית בדפדפן שעל המחשב, אז צריך שהוא יהיה פתוח. הפעילו שם את{' '}
+                    <strong>התוכנה במחשב לא פועלת.</strong> ההתחברות מתבצעת בדפדפן שעל המחשב, אז צריך שהוא יהיה פתוח. הפעילו שם את{' '}
                     <code dir="ltr">start-worker.cmd</code> ונסו שוב.
                   </Notice>
                 </div>
               )}
-              <ol className="mb-3 space-y-1.5 text-sm text-mist-400">
-                <li>1. לוחצים "נתק ופתח התחברות" — החשבון הנוכחי נמחק מהמחשב.</li>
-                <li>2. במחשב נפתח חלון Chrome על דף ההתחברות של פייסבוק.</li>
-                <li>3. מקלידים שם והסיסמה של החשבון החדש, ומאשרים אימות דו-שלבי אם פייסבוק מבקשת.</li>
-                <li>4. חוזרים לכאן — השם והתמונה של החשבון החדש יופיעו למעלה תוך כמה שניות.</li>
-              </ol>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void signIn();
+                }}
+              >
+                <Field label="אימייל או טלפון של החשבון">
+                  <input
+                    className={inputClass}
+                    dir="ltr"
+                    type="text"
+                    inputMode="email"
+                    autoComplete="off"
+                    value={user}
+                    onChange={(e) => setUser(e.target.value)}
+                    placeholder="name@example.com"
+                  />
+                </Field>
+                <div className="mt-2">
+                  <Field label="סיסמה">
+                    <input
+                      className={inputClass}
+                      dir="ltr"
+                      /* Masked and kept out of the browser's saved passwords:
+                         this field is a pass-through to one machine, not a
+                         credential this site owns. */
+                      type="password"
+                      autoComplete="off"
+                      value={secret}
+                      onChange={(e) => setSecret(e.target.value)}
+                    />
+                  </Field>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="submit" busy={busy === 'signin'} disabled={!online || !user.trim() || !secret}>
+                    התחבר לחשבון הזה
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    busy={busy === 'check'}
+                    disabled={!online}
+                    onClick={() => send('check', 'נשלחה בדיקת חיבור.')}
+                  >
+                    בדוק חיבור
+                  </Button>
+                </div>
+              </form>
+              {/*
+                Said here, not buried: Facebook answers a password with a code
+                or a device approval more often than not, and somebody who does
+                not expect that reads a half-finished login as a broken product.
+              */}
+              <p className="mt-3 text-xs text-mist-500">
+                אם פייסבוק תבקש קוד אימות או אישור מכשיר — החלון על המחשב נשאר פתוח, ושם משלימים את זה. אחרי זה החשבון מופיע כאן.
+              </p>
+              {lastCommand && (
+                <p className="mt-2 text-xs text-mist-500">
+                  פקודה אחרונה: {lastCommand.command} · {lastCommand.status}
+                  {lastCommand.result ? ` · ${lastCommand.result}` : ''}
+                </p>
+              )}
+            </Card>
+          </div>
+
+          <div className="mt-3">
+            <Card title="פעולות נוספות">
               <div className="flex flex-wrap gap-2">
-                <Button busy={busy === 'switch'} disabled={!online} onClick={switchAccount}>
-                  נתק ופתח התחברות
-                </Button>
-                <Button
-                  variant="secondary"
-                  busy={busy === 'login'}
-                  disabled={!online}
-                  onClick={() => send('login', 'נשלח למחשב. עברו לחלון Chrome שנפתח שם.')}
-                >
-                  התחבר לחשבון
-                </Button>
-                <Button
-                  variant="secondary"
-                  busy={busy === 'check'}
-                  disabled={!online}
-                  onClick={() => send('check', 'נשלחה בדיקת חיבור.')}
-                >
-                  בדוק חיבור
+                <Button variant="secondary" busy={busy === 'switch'} disabled={!online} onClick={switchAccount}>
+                  פתח חלון התחברות במחשב
                 </Button>
                 <Button
                   variant="danger"
@@ -235,29 +325,29 @@ export default function AccountPage() {
                     if (ok) send('logout', 'החשבון נותק מהמחשב.');
                   }}
                 >
-                  נתק בלבד
+                  נתק
                 </Button>
               </div>
-              {lastCommand && (
-                <p className="mt-3 text-xs text-mist-500">
-                  פקודה אחרונה: {lastCommand.command} · {lastCommand.status}
-                  {lastCommand.result ? ` · ${lastCommand.result}` : ''}
-                </p>
-              )}
+              <p className="mt-2 text-xs text-mist-500">
+                "פתח חלון התחברות" מנתק את החשבון הנוכחי ופותח במחשב חלון על דף ההתחברות של פייסבוק, בלי להזין כאן כלום — שימושי כשיושבים ליד המחשב.
+              </p>
             </Card>
           </div>
 
           {/*
-            Said plainly, because "why can't I just type it here" is the first
-            thing this screen invites somebody to ask, and an unanswered
-            question about a password is the kind that gets answered wrongly.
+            THE TWO THINGS SOMEBODY BUYING THIS DESERVES TO KNOW, and neither is
+            a detail. A password typed into a tool is a question about where it
+            goes; an automated Facebook login is a question about what Facebook
+            does back. Left unsaid, both get answered wrongly and the first
+            locked account is a surprise.
           */}
           <div className="mt-3">
-            <Card title="למה הסיסמה לא נכתבת כאן">
+            <Card title="מה קורה עם הפרטים, ומה פייסבוק עושה">
               <ul className="space-y-1.5 text-sm text-mist-400">
-                <li>· המערכת הזו לא מחזיקה סיסמת פייסבוק בשום מקום. אין איפה להקליד אותה, ולכן אין מה שיישמר, ייסנכרן או ידלוף.</li>
-                <li>· פייסבוק מגיבה להתחברות באימות דו-שלבי ובבדיקות אבטחה, שדורשות דפדפן אמיתי ואדם שמסתכל עליו. טופס כאן היה אוסף סיסמה ונתקע בשלב הראשון.</li>
-                <li>· ההתחברות נשמרת רק בפרופיל Chrome שעל המחשב הזה. ניתוק מוחק אותו משם.</li>
+                <li>· הסיסמה נשלחת למחשב פעם אחת, לצורך ההתחברות, ונמחקת באותו רגע שהמחשב לוקח אותה. היא לא נשמרת בשום טבלה ולא מופיעה בשום יומן.</li>
+                <li>· מרגע שההתחברות הצליחה, מה שנשמר הוא פרופיל Chrome על המחשב בלבד — בדיוק כמו דפדפן רגיל. "נתק" מוחק אותו.</li>
+                <li>· התחברות אוטומטית עם סיסמה היא נגד תנאי השימוש של פייסבוק, והיא עלולה לגרום לנעילת החשבון או לדרישת אימות. זה סיכון שנופל על בעל החשבון.</li>
+                <li>· פייסבוק מבקשת לעיתים קרובות קוד אימות או אישור מכשיר. אי אפשר לעקוף את זה — משלימים אותו בחלון שעל המחשב.</li>
               </ul>
             </Card>
           </div>

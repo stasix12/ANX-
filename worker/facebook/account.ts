@@ -209,7 +209,7 @@ async function captureAvatar(
             (c) =>
               `${c.tag} ${Math.round(c.w)}x${Math.round(c.h)} alt="${(c.alt || c.label).slice(0, 30)}" href="${c.href.slice(0, 40)}" src="${c.src.slice(-55)}"`,
           );
-        return { el: proven[0]?.el ?? null, nodes: nodes.length, shaped: shaped.length, sample };
+        return { el: proven[0]?.el ?? null, src: proven[0]?.src ?? '', nodes: nodes.length, shaped: shaped.length, sample };
       },
       { userId: id, fullName: name, path: profilePath },
     )
@@ -230,13 +230,69 @@ async function captureAvatar(
     .getProperty('el')
     .then((h) => h.asElement())
     .catch(() => null)) as ElementHandle<Node> | null;
+  const src = await picked
+    .getProperty('src')
+    .then((h) => h.jsonValue() as Promise<string>)
+    .catch(() => '');
   await picked.dispose().catch(() => undefined);
   if (!el) return { image: null, reason: 'no-element', probe };
+
+  /*
+   * ASK FOR THE FILE, DON'T PHOTOGRAPH THE SCREEN.
+   *
+   * The owner's machine reached this point with a proven avatar and came back
+   * "found it but could not photograph it". Screenshotting an element on
+   * facebook.com is the fragile half of this: Playwright scrolls it into view,
+   * waits for it to hold still, and requires it to still be attached — and
+   * React re-renders that top bar continuously, so the node the search chose
+   * can be gone a moment later. None of which has anything to do with reading
+   * one picture.
+   *
+   * The element has already told us its address, so fetch that instead. The
+   * request goes out of Node with the browser context's own cookies, which
+   * means no CORS, no layout, no animation, no staleness — and a full-size
+   * file rather than a 40px photograph of one. The screenshots stay as
+   * fallbacks for a blob: source, which only the page itself can resolve.
+   */
   try {
+    if (/^https?:/i.test(src)) {
+      const res = await page.context().request.get(src, { timeout: 15_000 }).catch(() => null);
+      const type = res?.headers()['content-type'] ?? '';
+      if (res?.ok() && /^image\//i.test(type)) {
+        const bytes = await res.body();
+        // A sane avatar is kilobytes. Anything past this is not one, and is
+        // not worth pushing into Storage to find out.
+        if (bytes.length > 0 && bytes.length < 8_000_000) {
+          return { image: { bytes, contentType: type.split(';')[0].trim() }, reason: 'ok', probe: { ...probe, where: `${probe.where} · קובץ` } };
+        }
+      }
+    }
+    const inline = /^data:(image\/[a-z+.-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(src);
+    if (inline) {
+      return { image: { bytes: Buffer.from(inline[2], 'base64'), contentType: inline[1] }, reason: 'ok', probe: { ...probe, where: `${probe.where} · מוטבע` } };
+    }
     const bytes = await el.screenshot({ type: 'png', timeout: 10_000 });
-    return { image: { bytes, contentType: 'image/png' }, reason: 'ok', probe };
+    return { image: { bytes, contentType: 'image/png' }, reason: 'ok', probe: { ...probe, where: `${probe.where} · צילום` } };
   } catch {
-    return { image: null, reason: 'screenshot-failed', probe };
+    /*
+     * Last resort: photograph the page clipped to where the element was. It is
+     * the weakest of the three — the numbers were measured a moment ago and
+     * the layout may have moved since — but it needs neither the node to still
+     * exist nor the picture to be fetchable, so it is the one that works when
+     * the others have not.
+     */
+    try {
+      const box = await el.boundingBox();
+      if (!box || box.width < 1 || box.height < 1) return { image: null, reason: 'screenshot-failed', probe };
+      const bytes = await page.screenshot({
+        clip: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) },
+        type: 'png',
+        timeout: 10_000,
+      });
+      return { image: { bytes, contentType: 'image/png' }, reason: 'ok', probe: { ...probe, where: `${probe.where} · חיתוך` } };
+    } catch {
+      return { image: null, reason: 'screenshot-failed', probe };
+    }
   } finally {
     await el.dispose().catch(() => undefined);
   }

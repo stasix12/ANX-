@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
@@ -36,6 +37,12 @@ function findChromium(): string | undefined {
 
 const ID = '100012345678901';
 
+/** A real 1x1 PNG, served over real HTTP so the fetch path is the real one. */
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 /**
  * A page shaped like the two things that actually matter: the owner's own
  * avatar, small and linked by their vanity path with their bare name on it;
@@ -64,6 +71,19 @@ const HOME =
  * the time it was known the page holding those links had already been left.
  */
 async function ownersLayout(browser: import('playwright-core').Browser) {
+  /*
+   * The avatar is served over real HTTP on purpose. Playwright's request API
+   * does not go through page routes, and a fake host would quietly exercise
+   * the screenshot fallback instead of the path this test is about.
+   */
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(PNG);
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  const port = (server.address() as { port: number }).port;
+  const avatarUrl = `http://127.0.0.1:${port}/avatar.png`;
+
   const context = await browser.newContext({ locale: 'he-IL' });
   await context.addCookies([{ name: 'c_user', value: ID, domain: '.facebook.com', path: '/' }]);
   const page = await context.newPage();
@@ -71,7 +91,7 @@ async function ownersLayout(browser: import('playwright-core').Browser) {
     '<html><head><title>Facebook</title></head><body>' +
     `<script>requireLazy(["CurrentUserInitialData"],function(a){a.setup({"ACCOUNT_ID":"${ID}","NAME":"Stas Terehin"})})</script>` +
     '<a href="https://www.facebook.com/stas.terehin"><svg width="40" height="40">' +
-    '<image alt="תמונת הפרופיל של Stas Terehin" width="40" height="40" href="https://scontent.test/v/t1/signed?oe=6AB6ECC4"></image>' +
+    `<image alt="תמונת הפרופיל של Stas Terehin" width="40" height="40" href="${avatarUrl}"></image>` +
     '</svg></a>' +
     '</body></html>';
   await page.route('**/*', (r) => {
@@ -113,6 +133,14 @@ async function ownersLayout(browser: import('playwright-core').Browser) {
   await context.close();
   /* And it really did have to come back for it. */
   assert.match(profile.probe.where, /facebook\.com\/ ← "\/stas\.terehin"/, 'the last look is at the home page, with the learned path in hand');
+  /*
+   * AND IT ASKED FOR THE FILE. The owner's run reached this point with a
+   * proven avatar and came back "could not photograph it" — Facebook's top bar
+   * re-renders under Playwright's feet. The element's own address needs no
+   * layout, no stillness and no node that still exists.
+   */
+  assert.match(profile.probe.where, /· קובץ$/, 'the avatar is fetched by its own address, not photographed');
+  assert.deepEqual(profile.image.bytes, PNG, 'and the bytes are the file itself');
   console.log('  ✓ absolute vanity link + signed CDN src + name-in-a-sentence label, captured on the return trip');
 }
 
@@ -172,6 +200,9 @@ async function main() {
   });
   assert.equal(decoy.w, 300, 'the decoy really is the bigger picture');
   assert.ok(profile.image.bytes.length < 40_000, 'yet the captured face is the small proven avatar, not the 300px post');
+  /* This fixture's src cannot be fetched, so the element screenshot is what
+     produced it — the fallback, still working. */
+  assert.match(profile.probe.where, /· צילום$/, 'an unfetchable source falls back to photographing the element');
 
   /* A name mentioned inside a sentence is not a label. */
   await page.route('**/*', (r) =>
@@ -195,6 +226,9 @@ async function main() {
 
   await browser.close();
   console.log('signed-in-account browser tests OK');
+  /* The fixture's HTTP server keeps the loop alive past its own close(), and a
+     suite that passes but never returns reads exactly like one that hung. */
+  process.exit(0);
 }
 
 main().catch((err) => {

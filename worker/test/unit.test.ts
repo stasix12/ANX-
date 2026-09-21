@@ -2050,8 +2050,27 @@ const scenario: { step: string; line: string }[] = [];
    * silently photograph the wrong rectangle. An element handle scrolls the thing
    * into view and reads its real box at the moment of capture.
    */
-  assert.ok(/asElement\(\)/.test(account) && /el\.screenshot\(/.test(account), 'the avatar is photographed through its element handle');
-  assert.ok(!/page\.screenshot\(/.test(accountCode), 'and never off a stale clip rectangle');
+  /*
+   * HOW IT IS CAPTURED — and this rule REPLACES "never off a clip rectangle",
+   * which was written when the clip was the only way and is now the last of
+   * three. What it was protecting against is still true and still asserted:
+   * a clip photographs coordinates measured earlier, so it may not go first.
+   *
+   * It may not be the ONLY way either. The owner's machine reached this point
+   * with a proven avatar and came back "found it but could not photograph it":
+   * an element screenshot needs the node to still be attached, to hold still
+   * and to scroll into view, and Facebook's top bar re-renders underneath all
+   * three. Asking the CDN for the file the element already names needs none of
+   * them, so that goes first; the photographs stay as fallbacks for a blob:
+   * source, which only the page can resolve.
+   */
+  const byFile = accountCode.indexOf('request.get(src');
+  const byElement = accountCode.indexOf('el.screenshot(');
+  const byClip = accountCode.indexOf('page.screenshot({');
+  assert.ok(byFile > 0, "the avatar is fetched by the element's own address");
+  assert.ok(byElement > byFile, 'photographing the element is the fallback, not the first move');
+  assert.ok(byClip > byElement, 'and a clip rectangle is the last resort of all');
+  assert.ok(/asElement\(\)/.test(account), 'the chosen element is still carried as a handle for those fallbacks');
 
   /*
    * And the face is looked for on the page that is ALREADY OPEN. It used to be

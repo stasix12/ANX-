@@ -288,9 +288,21 @@ export interface SocialWorker {
   fb_user_id?: string;
   fb_user_name?: string;
   fb_avatar_url?: string;
+  /*
+   * Facebook is mid-login and asking a person something.
+   *
+   * It exists so that person does not have to be standing at the machine. The
+   * worker photographs whatever the page is showing and puts it here; the
+   * account screen renders it through a signed URL and sends back what was
+   * typed. Empty whenever no question is open — a resolved challenge must not
+   * keep asking.
+   */
+  login_stage?: string;
+  login_shot?: string;
+  login_asked_at?: string | null;
 }
 
-export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume';
+export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume' | 'verify';
 
 export interface WorkerCommand {
   id: string;

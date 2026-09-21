@@ -5,7 +5,7 @@ import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Button, Card, Field, Loading, Notice, inputClass, useConfirm, useToast } from '@/components/social/ui';
-import { listRecentCommands, listWorkers, sendWorkerCommand } from '@/lib/social/client';
+import { listRecentCommands, listWorkers, screenshotUrl, sendWorkerCommand } from '@/lib/social/client';
 import type { SocialWorker, WorkerCommand, WorkerCommandName } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 
@@ -36,10 +36,11 @@ import { friendlyMessage } from '@/lib/social/errors';
  *     window on the machine that publishes. It does not talk to an API or
  *     forge a session.
  *   - Typing the password skips a step; it does not skip Facebook. Two-factor
- *     codes, device approvals and security checks still happen, and the window
- *     stays open so a person can answer them. The screen says so, because a
- *     half-finished login looks like a broken product to somebody who was not
- *     told to expect one.
+ *     codes, device approvals and security checks still happen — and they are
+ *     answered HERE. The worker photographs whatever Facebook is showing, this
+ *     screen renders it, and what the person types goes back the same one-time
+ *     way. Nobody has to be standing at the machine, which is the difference
+ *     between a tool its author can use and a product somebody can buy.
  *
  * And it says plainly that automated sign-in is against Facebook's terms and
  * can get an account locked. Somebody paying for this deserves to learn that
@@ -59,6 +60,11 @@ export default function AccountPage() {
    */
   const [user, setUser] = useState('');
   const [secret, setSecret] = useState('');
+  const [code, setCode] = useState('');
+  /* A signed URL for the challenge screenshot, re-fetched whenever the worker
+     publishes a new one. The bucket is private: this is a photograph of
+     somebody's Facebook mid-login, not a public asset. */
+  const [shotUrl, setShotUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -110,6 +116,45 @@ export default function AccountPage() {
      not be filled in with a placeholder. */
   const account = worker?.fb_user_name ? { name: worker.fb_user_name, avatar: worker.fb_avatar_url ?? '' } : null;
   const lastCommand = commands[0];
+  const challenge = worker?.login_stage === 'challenge';
+  const shotPath = worker?.login_shot ?? '';
+
+  /*
+   * The signed URL is fetched for the path the worker published, and dropped
+   * the moment the challenge closes — a picture of a question that has been
+   * answered is worse than no picture, because the screen goes on asking.
+   */
+  useEffect(() => {
+    if (!challenge || !shotPath) {
+      setShotUrl(null);
+      return;
+    }
+    let alive = true;
+    screenshotUrl(shotPath)
+      .then((url) => {
+        if (alive) setShotUrl(url);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [challenge, shotPath]);
+
+  /** Send back what Facebook asked for. One-time, like the password. */
+  async function sendCode() {
+    if (!code.trim()) return;
+    setBusy('verify');
+    try {
+      await sendWorkerCommand(worker?.online ? worker.id : null, 'verify', { code: code.trim() });
+      setCode('');
+      await load();
+      toast('נשלח. אם זה התקבל, ההתחברות תושלם תוך כמה שניות.');
+    } catch (err) {
+      setError(friendlyMessage(err, 'השליחה נכשלה.'));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function send(command: WorkerCommandName, label: string) {
     setBusy(command);
@@ -145,7 +190,7 @@ export default function AccountPage() {
       await sendWorkerCommand(worker?.online ? worker.id : null, 'login', { user: user.trim(), pass: secret });
       setSecret('');
       await load();
-      toast('נשלח למחשב. אם פייסבוק תבקש קוד אימות — הוא יופיע בחלון שנפתח שם.');
+      toast('מתחבר. אם פייסבוק תבקש אימות — הוא יופיע כאן במסך תוך כמה שניות.');
     } catch (err) {
       setError(friendlyMessage(err, 'ההתחברות נכשלה.'));
     } finally {
@@ -228,6 +273,57 @@ export default function AccountPage() {
             </p>
           </Card>
 
+          {/*
+            FIRST ON THE SCREEN WHEN IT IS OPEN, above everything else.
+
+            A login stops dead here until somebody answers, and the person who
+            can answer is holding a phone, not standing at the machine. That is
+            the entire reason this card exists — without it, "Facebook asked
+            for a code" is a dead end for anybody who did not build this.
+          */}
+          {challenge && (
+            <div className="mb-3">
+              <Card title="פייסבוק מבקשת אימות" subtitle="זה מה שפייסבוק מציגה עכשיו. ענו כאן — אין צורך לגשת למחשב.">
+                {shotUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={shotUrl}
+                    alt="מה שפייסבוק מציגה כרגע בחלון ההתחברות"
+                    className="mb-3 w-full rounded-xl border border-ink-700 bg-ink-900 object-contain"
+                  />
+                ) : (
+                  <p className="mb-3 text-sm text-mist-500">טוען את מה שפייסבוק מציגה…</p>
+                )}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void sendCode();
+                  }}
+                >
+                  <Field label="הקוד או התשובה שפייסבוק מבקשת">
+                    <input
+                      className={inputClass}
+                      dir="ltr"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                    />
+                  </Field>
+                  <div className="mt-3">
+                    <Button type="submit" busy={busy === 'verify'} disabled={!code.trim()}>
+                      שלח לפייסבוק
+                    </Button>
+                  </div>
+                </form>
+                <p className="mt-3 text-xs text-mist-500">
+                  התמונה מצולמת מהדפדפן שמפרסם, והיא פרטית. אם עברו כמה דקות בלי תשובה — ההתחברות נסגרת וצריך להתחיל מחדש.
+                </p>
+              </Card>
+            </div>
+          )}
+
           <div className="mt-3">
             <Card
               title="התחברות לחשבון פייסבוק"
@@ -294,7 +390,7 @@ export default function AccountPage() {
                 not expect that reads a half-finished login as a broken product.
               */}
               <p className="mt-3 text-xs text-mist-500">
-                אם פייסבוק תבקש קוד אימות או אישור מכשיר — החלון על המחשב נשאר פתוח, ושם משלימים את זה. אחרי זה החשבון מופיע כאן.
+                אם פייסבוק תבקש קוד אימות או אישור מכשיר — הוא יופיע כאן במסך הזה, עם תמונה של מה שהיא מציגה ושדה לענות בו. אין צורך לגשת למחשב.
               </p>
               {lastCommand && (
                 <p className="mt-2 text-xs text-mist-500">
@@ -347,7 +443,7 @@ export default function AccountPage() {
                 <li>· הסיסמה נשלחת למחשב פעם אחת, לצורך ההתחברות, ונמחקת באותו רגע שהמחשב לוקח אותה. היא לא נשמרת בשום טבלה ולא מופיעה בשום יומן.</li>
                 <li>· מרגע שההתחברות הצליחה, מה שנשמר הוא פרופיל Chrome על המחשב בלבד — בדיוק כמו דפדפן רגיל. "נתק" מוחק אותו.</li>
                 <li>· התחברות אוטומטית עם סיסמה היא נגד תנאי השימוש של פייסבוק, והיא עלולה לגרום לנעילת החשבון או לדרישת אימות. זה סיכון שנופל על בעל החשבון.</li>
-                <li>· פייסבוק מבקשת לעיתים קרובות קוד אימות או אישור מכשיר. אי אפשר לעקוף את זה — משלימים אותו בחלון שעל המחשב.</li>
+                <li>· פייסבוק מבקשת לעיתים קרובות קוד אימות או אישור מכשיר. אי אפשר לעקוף את זה, אבל עונים עליו מכאן — השאלה מופיעה במסך הזה עם תמונה של מה שפייסבוק מציגה.</li>
               </ul>
             </Card>
           </div>

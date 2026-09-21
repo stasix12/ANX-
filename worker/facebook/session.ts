@@ -254,6 +254,7 @@ export class BrowserSession {
    */
   async interactiveLogin(
     credentials?: { user: string; pass: string } | null,
+    hooks?: { onChallenge?: (screenshot: Buffer) => Promise<string | null> },
     timeoutMs = 15 * 60_000,
   ): Promise<{ state: 'connected' | 'needs_auth'; detail: string }> {
     const page = await this.newPage(false);
@@ -276,6 +277,7 @@ export class BrowserSession {
         }
       }
       const deadline = Date.now() + timeoutMs;
+      let asked = false;
       while (Date.now() < deadline) {
         if (page.isClosed()) break;
         if (await this.hasLoginCookie()) {
@@ -283,6 +285,33 @@ export class BrowserSession {
           if (kind !== 'checkpoint') {
             await page.waitForTimeout(1500);
             return { state: 'connected', detail: 'ההתחברות הצליחה. הפרופיל נשמר מקומית.' };
+          }
+        }
+        /*
+         * FACEBOOK IS ASKING SOMEBODY SOMETHING — AND NOBODY IS IN THE ROOM.
+         *
+         * A code, a device approval, a "was this you". Until now the answer
+         * was "go to the computer and type it", which works for one owner with
+         * the machine next door and not at all for the thing this is becoming:
+         * a customer whose browser runs on a server they will never see.
+         *
+         * So the question is carried to them. The page is photographed as it
+         * is — whatever Facebook is showing, in whatever language, without
+         * this code needing to understand a word of it — and the hook puts it
+         * on their screen and waits for what they type back. Then it is typed
+         * in here and the loop carries on waiting for a real session, exactly
+         * as before: answering the challenge is not the same as passing it.
+         *
+         * Asked once per login. A second prompt for a challenge already
+         * answered would be a screen showing a stale question.
+         */
+        if (!asked && hooks?.onChallenge) {
+          const kind = await classifyPage(page).catch(() => 'ok' as PageKind);
+          if (kind === 'checkpoint') {
+            asked = true;
+            const shot = await page.screenshot({ type: 'png', timeout: 15_000 }).catch(() => null);
+            const answer = shot ? await hooks.onChallenge(shot).catch(() => null) : null;
+            if (answer) await typeChallengeAnswer(page, answer);
           }
         }
         await page.waitForTimeout(3000);
@@ -297,6 +326,29 @@ export class BrowserSession {
   async logout(): Promise<void> {
     await this.close();
     if (existsSync(env.profileDir)) rmSync(env.profileDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Put the person's answer into whatever field Facebook is asking with.
+ *
+ * Structural, not linguistic, like every other read in this module. The
+ * classic two-factor field is `input[name="approvals_code"]`; a checkpoint
+ * that wants something else still asks with a visible text box, so the
+ * fallback is the first one on the page rather than a label in any language.
+ * Enter submits, because every one of these forms is a single field.
+ */
+async function typeChallengeAnswer(page: Page, answer: string): Promise<void> {
+  const field = page
+    .locator('input[name="approvals_code"], input[name="code"], input[type="tel"], input[type="text"]')
+    .first();
+  try {
+    await field.waitFor({ state: 'visible', timeout: 10_000 });
+    await field.fill(answer.trim());
+    await field.press('Enter');
+    await page.waitForLoadState('domcontentloaded', { timeout: 30_000 }).catch(() => undefined);
+  } catch {
+    /* The window is open on the page that asked; a person can still finish it. */
   }
 }
 

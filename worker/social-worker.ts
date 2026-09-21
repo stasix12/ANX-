@@ -401,7 +401,8 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     try {
       if (cmd.command === 'login') {
         await heartbeat(state, 'online', browser.debugMode, 'needs_auth');
-        const r = await session.interactiveLogin(entered);
+        const r = await session.interactiveLogin(entered, { onChallenge: (shot) => askOnScreen(state, shot) });
+        await clearChallenge(state);
         state.browserState = r.state;
         state.lastCheckAt = Date.now();
         if (r.state === 'connected') {
@@ -874,6 +875,94 @@ async function forgetAccount(state: WorkerState): Promise<void> {
     .eq('id', state.id);
   if (error) console.error('[worker] ✗ ניקוי פרטי החשבון נכשל:', error.message);
   else console.log('[worker] ✓ פרטי חשבון הפייסבוק נוקו.');
+}
+
+/* ------------------------------------------- Facebook's questions, on screen */
+
+/** How long a person gets to read the challenge and answer it. */
+const CHALLENGE_WAIT_MS = 6 * 60_000;
+
+/**
+ * Show what Facebook is asking, and wait for the answer from the app.
+ *
+ * This is the piece that makes a login finishable by somebody who is nowhere
+ * near the machine — which is the whole point of selling this: their browser
+ * runs on a server they will never see, and "go to the computer and type the
+ * code" is not an instruction anybody can follow.
+ *
+ * The picture goes to the PRIVATE social-debug bucket, because it is a
+ * photograph of somebody's Facebook mid-login; the app reads it through a
+ * short-lived signed URL. Nothing about the page is interpreted here — it is
+ * photographed as-is, so a challenge in any language, of any kind, reaches the
+ * person who can actually answer it.
+ *
+ * Returns the answer, or null if nobody replied in time. Null is a real
+ * outcome: the login loop simply goes on waiting for a session until its own
+ * deadline, exactly as it did before this existed.
+ */
+async function askOnScreen(state: WorkerState, shot: Buffer): Promise<string | null> {
+  const db = await workerDb();
+  const objectPath = `login/${state.id}-${Date.now()}.png`;
+  const { error: upErr } = await db.storage.from('social-debug').upload(objectPath, shot, { contentType: 'image/png', upsert: true });
+  if (upErr) console.error('[worker] ✗ העלאת צילום האימות נכשלה:', upErr.message);
+  const { error } = await db
+    .from('social_workers')
+    .update({ login_stage: 'challenge', login_shot: upErr ? '' : objectPath, login_asked_at: new Date().toISOString() })
+    .eq('id', state.id);
+  if (error) {
+    console.error('[worker] ✗ פרסום שאלת האימות נכשל:', error.message);
+    await logActivity('warn', 'login_challenge_failed', 'פייסבוק ביקשה אימות אבל לא הצלחנו להציג אותו במסך. סביר שצריך להריץ את social-schema-v12.sql ב-Supabase.', { detail: error.message });
+    return null;
+  }
+  console.log('[worker] ℹ פייסבוק מבקשת אימות — השאלה הועברה למסך, ממתין לתשובה.');
+  await logActivity('warn', 'login_challenge', 'פייסבוק מבקשת אימות כדי להשלים את ההתחברות. פתחו את מסך החשבון והזינו את מה שהיא מבקשת.');
+
+  /*
+   * Polled from inside the login rather than through the command loop, because
+   * the login command is still holding that loop. Same one-time envelope as
+   * the password: read, then emptied in the statement that claims it.
+   */
+  const deadline = Date.now() + CHALLENGE_WAIT_MS;
+  while (Date.now() < deadline) {
+    const { data } = await db
+      .from('social_worker_commands')
+      .select('id, payload')
+      .eq('status', 'pending')
+      .eq('command', 'verify')
+      .or(`worker_id.eq.${state.id},worker_id.is.null`)
+      .order('created_at')
+      .limit(1);
+    const row = (data ?? [])[0] as { id: string; payload?: { code?: string } } | undefined;
+    if (row) {
+      const code = row.payload?.code ?? '';
+      const { data: claimed } = await db
+        .from('social_worker_commands')
+        .update({ status: 'done', worker_id: state.id, payload: {}, result: 'התשובה הועברה לפייסבוק.', finished_at: new Date().toISOString() })
+        .eq('id', row.id)
+        .eq('status', 'pending')
+        .select('id');
+      if (claimed?.length && code) {
+        console.log('[worker] ✓ התקבלה תשובת אימות מהמסך.');
+        return code;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  console.log('[worker] ℹ לא התקבלה תשובת אימות בזמן.');
+  return null;
+}
+
+/**
+ * Take the question off the screen.
+ *
+ * A challenge that has been resolved — answered, abandoned or timed out — must
+ * not still be sitting on the account screen asking for a code, or the next
+ * person to look at it answers a question nobody is listening to. Called on
+ * every exit from a login, whatever its outcome.
+ */
+async function clearChallenge(state: WorkerState): Promise<void> {
+  const db = await workerDb();
+  await db.from('social_workers').update({ login_stage: '', login_shot: '', login_asked_at: null }).eq('id', state.id);
 }
 
 /* ------------------------------------------------------------ helpers */

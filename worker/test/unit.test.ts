@@ -2212,6 +2212,33 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/תנאי השימוש של פייסבוק/.test(accountPage), 'the screen states that automated sign-in is against Facebook terms');
   assert.ok(/נעיל/.test(accountPage), 'and that an account can be locked over it');
   assert.ok(/קוד אימות/.test(accountPage), 'and that Facebook will often ask for a code');
+  /*
+   * AND FACEBOOK'S QUESTION IS ANSWERED FROM THE SCREEN.
+   *
+   * This is the line between a tool its author can use and a product somebody
+   * can buy. A login stops dead when Facebook asks for a code, and the old
+   * answer — "go to the computer and type it into the window" — is not an
+   * instruction a customer can follow when the browser runs on a machine they
+   * will never see. The page is photographed as-is, so a challenge in any
+   * language of any kind reaches the person who can answer it, and nothing
+   * here has to understand a word of it.
+   */
+  assert.ok(/onChallenge/.test(sessionSrc) && /page\.screenshot/.test(sessionSrc), 'a challenge mid-login is photographed, not interpreted');
+  assert.ok(/async function askOnScreen/.test(localWorker), 'and carried to the screen');
+  assert.ok(/from\('social-debug'\)/.test(localWorker), 'into the private bucket — it is a photograph of somebody mid-login');
+  assert.ok(/screenshotUrl\(shotPath\)/.test(accountPage), 'and read back through a signed URL, never a public one');
+  /* Answered once, then taken down: a picture of a question already answered
+     is worse than none, because the screen goes on asking it. */
+  assert.ok(/async function clearChallenge/.test(localWorker), 'a resolved challenge is taken off the screen');
+  assert.ok(
+    /interactiveLogin\([\s\S]{0,120}\);\s*await clearChallenge\(state\);/.test(localWorker),
+    'on every exit from a login, whatever its outcome',
+  );
+  /* The answer travels like the password: one-time, wiped as it is claimed. */
+  assert.ok(/'verify'/.test(accountPage) && /\{ code: code\.trim\(\) \}/.test(accountPage), 'what was typed goes back as a one-time verify payload');
+  assert.ok(/payload: \{\}, result:/.test(localWorker), 'and is emptied in the statement that claims it');
+  assert.ok(!/בחלון שעל המחשב|החלון על המחשב נשאר פתוח/.test(accountPage), 'and the screen no longer tells anyone to walk to the machine');
+
   /* Signing in wipes the old session first: typed onto a live session, the new
      details land on a page that is not asking for them. */
   assert.ok(

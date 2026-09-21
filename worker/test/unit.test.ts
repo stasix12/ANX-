@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { staggeredSlots } from '../../src/lib/social/slots';
 import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { zonedToUtc } from '@/lib/social/time';
@@ -2077,6 +2077,30 @@ const scenario: { step: string; line: string }[] = [];
     'the avatar search waits for the page to have drawn pictures at all',
   );
   assert.ok(!/probe/.test(hero), 'and that description never reaches the screen');
+
+  /*
+   * THE BUG UNDER ALL OF THEM, and the reason this block kept passing while
+   * the feature did not: tsx's esbuild rewrites every `const f = () => …` into
+   * `__name(() => …, 'f')`, and a function handed to page.evaluate is shipped
+   * to the browser as SOURCE — so the call travels and the helper does not.
+   * The search died with "ReferenceError: __name is not defined" before its
+   * first statement, and every caller's `.catch(() => null)` — correct, since
+   * none may fail a login check — made that identical to "the page did not
+   * have it".
+   *
+   * Two independent defences, because this one cost four rounds: the context
+   * defines the helper in the page, and account.ts declares no named function
+   * inside an evaluate. worker/test/account.test.ts proves the second against
+   * a real browser with the first deliberately absent.
+   */
+  const sessionSrc = readFileSync(new URL('../facebook/session.ts', import.meta.url), 'utf8');
+  assert.ok(/addInitScript\(\{[\s\S]{0,120}globalThis\.__name/.test(sessionSrc), 'the page must define the helper esbuild compiles into evaluated code');
+  assert.ok(/content: 'globalThis\.__name/.test(sessionSrc), 'passed as a string — a function here would carry the same undefined call in');
+  /* The second defence is not checkable by reading source — whether a helper
+     is inside an evaluated callback or beside it is a scope question, and a
+     regex answering it would fail on the Node-side code it cannot tell apart.
+     account.test.ts answers it by running the real thing in a real page. */
+  assert.ok(existsSync(new URL('./account.test.ts', import.meta.url)), 'and a real-browser test must exist to prove the second defence');
 
   console.log('signed-in-account tests OK');
 }

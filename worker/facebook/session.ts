@@ -141,6 +141,30 @@ export class BrowserSession {
       }
     }
     this.context.setDefaultTimeout(30_000);
+    /*
+     * THE ONE LINE THAT MAKES page.evaluate WORK AT ALL HERE.
+     *
+     * This worker runs its TypeScript through tsx, whose esbuild is configured
+     * to keep function names: every `const f = () => …` compiles to
+     * `const f = __name(() => …, 'f')`, with the `__name` helper defined in the
+     * Node module. A function handed to page.evaluate is shipped to the browser
+     * as source — so the `__name` call travels with it and the helper does not,
+     * and the code dies in the page with "ReferenceError: __name is not
+     * defined" before its first statement.
+     *
+     * It cost four rounds to find, because every caller here wraps its evaluate
+     * in `.catch(() => null)` — correctly, since none of them may fail a login
+     * check — so the failure was indistinguishable from "the page did not have
+     * it". That is how a name could be read from the raw HTML while every DOM
+     * read on the very same page came back empty.
+     *
+     * Defining the helper in the page makes those calls mean what they say.
+     * Passed as a string on purpose: a function here would be compiled by the
+     * same esbuild and carry the same undefined call into the page.
+     */
+    await this.context.addInitScript({
+      content: 'globalThis.__name = globalThis.__name || function (f) { return f; };',
+    });
     this.context.on('close', () => {
       this.context = null;
     });

@@ -119,16 +119,23 @@ async function captureAvatar(
   const picked = await page
     .evaluateHandle(
       ({ userId, fullName, path }: { userId: string; fullName: string; path: string }) => {
-        const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
-        const wanted = norm(fullName);
+        /*
+         * No named helper here, deliberately. esbuild rewrites every
+         * `const f = () => …` into `__name(() => …, 'f')`, and a function
+         * handed to evaluate is shipped to the browser as source — so the call
+         * travels and the helper does not. The context now defines `__name` in
+         * the page (see session.ts), and this file also simply avoids needing
+         * it: two independent reasons for the same code to run.
+         */
+        const wanted = fullName.replace(/\s+/g, ' ').trim().toLowerCase();
         // `image` here is the SVG element, not a typo for `img`. Both are asked
         // for because either one may be carrying the face on any given layout.
         const nodes = Array.from(document.querySelectorAll('img, image'));
         const described = nodes.map((el) => {
           const r = el.getBoundingClientRect();
           const href = el.closest('a[href]')?.getAttribute('href') ?? '';
-          const alt = norm(el.getAttribute('alt') ?? '');
-          const label = norm(el.closest('[aria-label]')?.getAttribute('aria-label') ?? '');
+          const alt = (el.getAttribute('alt') ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+          const label = (el.closest('[aria-label]')?.getAttribute('aria-label') ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
           // An SVG <image> carries its source on href/xlink:href, an <img> on src.
           const src =
             el.getAttribute('src') ||

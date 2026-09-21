@@ -1,4 +1,4 @@
-import type { Page } from 'playwright-core';
+import type { ElementHandle, Page } from 'playwright-core';
 import { patterns } from './selectors';
 
 /**
@@ -32,6 +32,8 @@ export interface AccountProfile {
    * not an explanation.
    */
   imageNote: 'ok' | 'no-element' | 'screenshot-failed';
+  /** What the avatar search saw when it found nothing. Terminal only. */
+  probe: AvatarProbe;
 }
 
 /**
@@ -74,56 +76,116 @@ export interface AccountProfile {
  * measures its real box; a clip is silently wrong the moment anything above it
  * has grown.
  */
-async function captureAvatar(page: Page, id: string, name: string): Promise<{ image: AccountProfile['image']; reason: AccountProfile['imageNote'] }> {
-  const handle = await page
-    .evaluateHandle(({ userId, fullName }: { userId: string; fullName: string }) => {
-      const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
-      const wanted = norm(fullName);
-      // `image` here is the SVG element, not a typo for `img`. Both are asked
-      // for because either one may be carrying the face on any given layout.
-      const nodes = Array.from(document.querySelectorAll('img, image'));
-      const candidates = nodes
-        .map((el) => {
+/** What the search saw, for the terminal when it came back with nothing. */
+export interface AvatarProbe {
+  /** How many pictures on the page were the right shape and size at all. */
+  shaped: number;
+  /** The best few, described just enough to say why none of them qualified. */
+  sample: string[];
+}
+
+async function captureAvatar(
+  page: Page,
+  id: string,
+  name: string,
+  profilePath: string,
+): Promise<{ image: AccountProfile['image']; reason: AccountProfile['imageNote']; probe: AvatarProbe }> {
+  const picked = await page
+    .evaluateHandle(
+      ({ userId, fullName, path }: { userId: string; fullName: string; path: string }) => {
+        const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+        const wanted = norm(fullName);
+        // `image` here is the SVG element, not a typo for `img`. Both are asked
+        // for because either one may be carrying the face on any given layout.
+        const nodes = Array.from(document.querySelectorAll('img, image'));
+        const described = nodes.map((el) => {
           const r = el.getBoundingClientRect();
-          const href = el.closest('a[href]')?.getAttribute('href') ?? '';
+          const link = el.closest('a[href]');
+          const href = link?.getAttribute('href') ?? '';
           const alt = norm(el.getAttribute('alt') ?? '');
+          const label = norm(el.closest('[aria-label]')?.getAttribute('aria-label') ?? '');
+          // An SVG <image> carries its source on href/xlink:href, an <img> on src.
+          const src =
+            el.getAttribute('src') ??
+            el.getAttribute('href') ??
+            el.getAttribute('xlink:href') ??
+            (el as HTMLImageElement).currentSrc ??
+            '';
           return {
             el,
             w: r.width,
             h: r.height,
-            byLink: (userId !== '' && href.includes(userId)) || /\/me\/?($|\?)/.test(href),
-            byAlt: wanted !== '' && alt === wanted,
+            tag: el.tagName.toLowerCase(),
+            href,
+            alt,
+            src,
+            /*
+             * THE PICTURE'S OWN ADDRESS. Facebook's profile-photo files carry
+             * the account's numeric id inside the filename, so a CDN link that
+             * contains it is about this account and no other — the one proof
+             * that survives a layout with no link and no alt at all.
+             */
+            byUrl: userId !== '' && src.includes(userId),
+            /* A link to the signed-in user's own profile: by numeric id, or by
+               the vanity path Facebook itself resolved /me to. The vanity form
+               exists because a profile link is usually /name, not /id — which
+               is why matching the id alone found nothing. */
+            byLink:
+              (userId !== '' && href.includes(userId)) ||
+              /\/me\/?($|\?)/.test(href) ||
+              (path !== '' && (href === path || href.startsWith(`${path}?`) || href.startsWith(`https://www.facebook.com${path}`))),
+            /* The account's own name, compared against itself — not a label in
+               any particular language. Exactly, never "contains": an avatar is
+               labelled with the bare name, while a photo somebody posted OF the
+               owner is labelled with a sentence that happens to include it. */
+            byAlt: wanted !== '' && (alt === wanted || label === wanted),
           };
-        })
-        .filter(
-          (c) =>
-            // PROOF FIRST. Everything below only narrows a set that is already
-            // known to be the owner's; nothing here can widen it.
-            (c.byLink || c.byAlt) &&
-            c.w >= 24 &&
-            c.w <= 400 &&
-            c.h > 0 &&
-            // Square-ish, which rules out a cover photo without naming one.
-            c.w / c.h > 0.8 &&
-            c.w / c.h < 1.25,
-        )
-        // Best-proven first — both signals beat one — then the biggest, which
-        // is the profile photo rather than a thumbnail of it.
-        .sort((a, b) => (Number(b.byLink) + Number(b.byAlt)) - (Number(a.byLink) + Number(a.byAlt)) || b.w - a.w);
-      return candidates[0]?.el ?? null;
-    }, { userId: id, fullName: name })
+        });
+        const shaped = described.filter(
+          (c) => c.w >= 24 && c.w <= 400 && c.h > 0 && c.w / c.h > 0.75 && c.w / c.h < 1.35,
+        );
+        const proven = shaped
+          .filter((c) => c.byUrl || c.byLink || c.byAlt)
+          // Best-proven first, then the biggest — the photo rather than a
+          // thumbnail of it.
+          .sort(
+            (a, b) =>
+              Number(b.byUrl) + Number(b.byLink) + Number(b.byAlt) - (Number(a.byUrl) + Number(a.byLink) + Number(a.byAlt)) ||
+              b.w - a.w,
+          );
+        /*
+         * WHEN NOTHING QUALIFIES, SAY WHAT WAS THERE.
+         *
+         * Two guesses at this markup have now been wrong, and each cost a round
+         * trip to the owner's machine to find out. A search that comes back
+         * empty and describes what it rejected turns the next attempt into
+         * reading rather than guessing. Terminal only — the dashboard shows a
+         * face or an initial, never an explanation.
+         */
+        const sample = shaped
+          .sort((a, b) => b.w - a.w)
+          .slice(0, 6)
+          .map(
+            (c) =>
+              `${c.tag} ${Math.round(c.w)}x${Math.round(c.h)} alt="${c.alt.slice(0, 40)}" href="${c.href.slice(0, 50)}" src="${c.src.slice(-60)}"`,
+          );
+        return { el: proven[0]?.el ?? null, shaped: shaped.length, sample };
+      },
+      { userId: id, fullName: name, path: profilePath },
+    )
     .catch(() => null);
 
-  const el = handle?.asElement() ?? null;
-  if (!el) {
-    await handle?.dispose().catch(() => undefined);
-    return { image: null, reason: 'no-element' };
-  }
+  const probe: AvatarProbe = picked
+    ? await picked.evaluate((v: { shaped: number; sample: string[] }) => ({ shaped: v.shaped, sample: v.sample })).catch(() => ({ shaped: 0, sample: [] }))
+    : { shaped: 0, sample: [] };
+  const el = picked ? ((await picked.getProperty('el').then((h) => h.asElement()).catch(() => null)) as ElementHandle<Node> | null) : null;
+  await picked?.dispose().catch(() => undefined);
+  if (!el) return { image: null, reason: 'no-element', probe };
   try {
     const bytes = await el.screenshot({ type: 'png', timeout: 10_000 });
-    return { image: { bytes, contentType: 'image/png' }, reason: 'ok' };
+    return { image: { bytes, contentType: 'image/png' }, reason: 'ok', probe };
   } catch {
-    return { image: null, reason: 'screenshot-failed' };
+    return { image: null, reason: 'screenshot-failed', probe };
   } finally {
     await el.dispose().catch(() => undefined);
   }
@@ -177,7 +239,7 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
    * carries the owner's avatar in its top bar on every layout Facebook has
    * shipped; asking for it here costs one evaluate and no page load.
    */
-  let shot = await captureAvatar(page, id, fromBlob);
+  let shot = await captureAvatar(page, id, fromBlob, '');
 
   /*
    * The profile link is found BY THE ID, never by a label.
@@ -203,7 +265,7 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
     .catch(() => null);
 
   const nameHere = fromBlob || found?.name || '';
-  if (nameHere && shot.image) return { id, name: nameHere, image: shot.image, imageNote: shot.reason };
+  if (nameHere && shot.image) return { id, name: nameHere, image: shot.image, imageNote: shot.reason, probe: shot.probe };
 
   /*
    * FALLBACK: the profile page itself, visited only for what is still missing.
@@ -247,9 +309,26 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
      */
     const candidate = (nameHere || heading || title).slice(0, 80);
     const name = /^facebook$/i.test(candidate) ? '' : candidate;
-    if (!shot.image) shot = await captureAvatar(page, id, name || nameHere);
-    return { id, name, image: shot.image, imageNote: shot.reason };
+    /*
+     * THE PROFILE'S REAL ADDRESS, resolved by Facebook rather than guessed.
+     *
+     * A profile link is usually /the.persons.name, not /<numeric id> — which
+     * is exactly why matching the cookie's id against hrefs found nothing on
+     * the owner's machine. /me redirects to the signed-in user's profile, so
+     * the address we land on IS their vanity path, stated by Facebook itself.
+     * Matching that is still identity, not markup.
+     */
+    const profilePath = (() => {
+      try {
+        const u = new URL(page.url());
+        return /facebook\.com$/.test(u.hostname.replace(/^www\./, '')) ? u.pathname : '';
+      } catch {
+        return '';
+      }
+    })();
+    if (!shot.image) shot = await captureAvatar(page, id, name || nameHere, profilePath);
+    return { id, name, image: shot.image, imageNote: shot.reason, probe: shot.probe };
   } catch {
-    return { id, name: nameHere, image: shot.image, imageNote: shot.reason };
+    return { id, name: nameHere, image: shot.image, imageNote: shot.reason, probe: shot.probe };
   }
 }

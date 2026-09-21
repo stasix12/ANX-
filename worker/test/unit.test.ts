@@ -2007,9 +2007,20 @@ const scenario: { step: string; line: string }[] = [];
    * account is publishing, which is the one fact this feature exists to
    * report. An element is taken only when something PROVES it is theirs.
    */
-  assert.ok(/\(c\.byLink \|\| c\.byAlt\) &&/.test(account), 'an unproven picture must never be taken, however well it fits');
-  assert.ok(/byLink: \(userId !== '' && href\.includes\(userId\)\)/.test(account), 'a link to the signed-in id is one proof');
-  assert.ok(/byAlt: wanted !== '' && alt === wanted/.test(account), 'an alt that is exactly the name we already read is the other');
+  assert.ok(/\.filter\(\(c\) => c\.byUrl \|\| c\.byLink \|\| c\.byAlt\)/.test(account), 'an unproven picture must never be taken, however well it fits');
+  /*
+   * Three proofs, all about identity rather than markup — and the first is the
+   * one that survives a layout with no link and no alt at all: Facebook's
+   * profile-photo files carry the account's numeric id in the filename.
+   */
+  assert.ok(/byUrl: userId !== '' && src\.includes\(userId\)/.test(account), "the picture's own address naming the account is a proof");
+  assert.ok(/href\.includes\(userId\)/.test(account), 'a link carrying that id is another');
+  assert.ok(/byAlt: wanted !== '' && \(alt === wanted \|\| label === wanted\)/.test(account), 'and a label that is exactly the name we already read');
+  /* A profile link is usually /the.persons.name, not /<id> — which is why
+     matching the id alone found nothing on the owner's machine. /me redirects
+     to that address, so Facebook states it rather than us guessing it. */
+  assert.ok(/const profilePath = \(\(\) =>/.test(account), 'the vanity profile path is learned from where /me lands');
+  assert.ok(/captureAvatar\(page, id, name \|\| nameHere, profilePath\)/.test(account), 'and is then accepted as proof of ownership');
   /* Exactly, not "contains": Facebook labels an avatar with the bare name,
      while a photo somebody posted OF them is labelled with a sentence that
      happens to include it — which is how a feed photo becomes a face. */
@@ -2020,7 +2031,7 @@ const scenario: { step: string; line: string }[] = [];
      The same correction the name got, for the same reason. */
   assert.ok(/patch\.fb_avatar_url = '';/.test(localWorker), 'a picture that cannot be proven clears the stored one');
   assert.ok(
-    /imageNote === 'screenshot-failed'[\s\S]{0,1600}patch\.fb_avatar_url = '';/.test(localWorker),
+    /imageNote === 'screenshot-failed'[\s\S]{0,2600}patch\.fb_avatar_url = '';/.test(localWorker),
     'but a failed screenshot keeps it — that is transient, not an answer',
   );
 
@@ -2039,13 +2050,22 @@ const scenario: { step: string; line: string }[] = [];
    * link was missing — so on the layout where the rail link was found, no
    * picture was ever looked for at all.
    */
-  assert.ok(/let shot = await captureAvatar\(page, id, fromBlob\);/.test(account), 'the home page is tried first, before any second page load');
+  assert.ok(/let shot = await captureAvatar\(page, id, fromBlob, ''\);/.test(account), 'the home page is tried first, before any second page load');
 
   /* Two faults, one symptom: nothing matched, or the match could not be
      photographed. The terminal must tell them apart — the screen must not,
      it shows a face or an initial, never an explanation. */
   assert.ok(/imageNote === 'screenshot-failed'/.test(localWorker), 'a missing face must say which of the two faults it was');
   assert.ok(!/imageNote/.test(hero), 'and that reason never reaches the screen');
+
+  /*
+   * AND IT MUST REPORT WHAT IT REJECTED. Two guesses at this markup have been
+   * wrong and each cost a trip to the owner's machine to discover. A search
+   * that comes back empty and describes what it saw turns the next attempt
+   * into reading rather than guessing — in the terminal, never on screen.
+   */
+  assert.ok(/account\.probe\.sample\.length/.test(localWorker), 'an empty avatar search must describe what it rejected');
+  assert.ok(!/probe/.test(hero), 'and that description never reaches the screen');
 
   console.log('signed-in-account tests OK');
 }

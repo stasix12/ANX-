@@ -771,6 +771,16 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
      */
     patch.fb_avatar_url = '';
     console.log('[worker] ℹ לא נמצאה תמונת פרופיל שאפשר לאמת שהיא שלכם — הדשבורד יציג עיגול עם האות הראשונה.');
+    /*
+     * AND WHAT IT DID SEE. Two guesses at this markup have been wrong, and
+     * each one cost a trip to the owner's machine to discover. An empty search
+     * that describes what it rejected makes the next attempt reading rather
+     * than guessing. Terminal only, and only on failure.
+     */
+    if (account.probe.sample.length) {
+      console.log(`[worker]   (נבדקו ${account.probe.shaped} תמונות בגודל מתאים; הגדולות שבהן:)`);
+      for (const line of account.probe.sample) console.log(`[worker]   · ${line}`);
+    }
   }
 
   const { error } = await db.from('social_workers').update(patch).eq('id', state.id);

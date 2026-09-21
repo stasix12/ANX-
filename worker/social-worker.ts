@@ -749,6 +749,18 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
     // dashboard keeps showing the previous owner's face after a re-login.
     if (error) console.error('[worker] ✗ העלאת תמונת הפרופיל נכשלה:', error.message);
     else patch.fb_avatar_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
+  } else {
+    /*
+     * A missing face used to be silent, and that silence cost a round trip:
+     * the dashboard showed the blue initial circle, the terminal said the
+     * account was connected, and nothing anywhere said whether the picture had
+     * not been found or had not been photographed. Two faults, one symptom.
+     */
+    console.log(
+      account.imageNote === 'screenshot-failed'
+        ? '[worker] ℹ נמצאה תמונת פרופיל אבל לא הצלחנו לצלם אותה — הדשבורד יציג עיגול עם האות הראשונה.'
+        : '[worker] ℹ לא נמצאה תמונת פרופיל בעמוד פייסבוק — הדשבורד יציג עיגול עם האות הראשונה.',
+    );
   }
 
   const { error } = await db.from('social_workers').update(patch).eq('id', state.id);

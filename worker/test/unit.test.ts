@@ -1987,6 +1987,43 @@ const scenario: { step: string; line: string }[] = [];
     'the name is written even when empty, or a wrong value from a past version can never be cleared',
   );
 
+  /*
+   * THE FACE, AND WHY THE FIRST VERSION NEVER FOUND ONE.
+   *
+   * It looked for an `<img>` whose computed border-radius was 50%. Modern
+   * Facebook draws avatars as an SVG `<image>` behind a mask, so the element is
+   * not an `<img>` and the roundness is not on the picture — two filters, both
+   * matching nothing, which is exactly what the dashboard showed: a real name
+   * beside the blue initial circle. Shape and ownership replaced them because
+   * they belong to the thing itself rather than to this month's CSS.
+   */
+  assert.ok(/querySelectorAll\('img, image'\)/.test(account), 'the avatar search must include the SVG <image> Facebook masks faces with');
+  assert.ok(!/borderRadius/.test(accountCode), 'and must not depend on border-radius, which the mask carries rather than the picture');
+  assert.ok(/mine: \(userId !== '' && href\.includes\(userId\)\)/.test(account), 'a link to the signed-in id is what proves the face is theirs');
+
+  /*
+   * CAPTURED THROUGH THE ELEMENT, NOT A CLIP. page.screenshot({clip}) photographs
+   * coordinates measured earlier; anything that grew above them since makes it
+   * silently photograph the wrong rectangle. An element handle scrolls the thing
+   * into view and reads its real box at the moment of capture.
+   */
+  assert.ok(/asElement\(\)/.test(account) && /el\.screenshot\(/.test(account), 'the avatar is photographed through its element handle');
+  assert.ok(!/page\.screenshot\(/.test(accountCode), 'and never off a stale clip rectangle');
+
+  /*
+   * And the face is looked for on the page that is ALREADY OPEN. It used to be
+   * attempted only behind the /me navigation, which only happened when the rail
+   * link was missing — so on the layout where the rail link was found, no
+   * picture was ever looked for at all.
+   */
+  assert.ok(/let shot = await captureAvatar\(page, id\);/.test(account), 'the home page is tried first, before any second page load');
+
+  /* Two faults, one symptom: nothing matched, or the match could not be
+     photographed. The terminal must tell them apart — the screen must not,
+     it shows a face or an initial, never an explanation. */
+  assert.ok(/imageNote === 'screenshot-failed'/.test(localWorker), 'a missing face must say which of the two faults it was');
+  assert.ok(!/imageNote/.test(hero), 'and that reason never reaches the screen');
+
   console.log('signed-in-account tests OK');
 }
 

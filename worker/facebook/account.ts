@@ -22,6 +22,88 @@ export interface AccountProfile {
   name: string;
   /** Avatar bytes, screenshotted from the rendered element — CDN links expire. */
   image: { bytes: Buffer; contentType: string } | null;
+  /**
+   * Why there is no picture, for the worker's terminal only.
+   *
+   * "The avatar did not arrive" used to be one indistinguishable outcome
+   * covering two very different faults — nothing on the page matched, or the
+   * match could not be photographed — and telling them apart from the outside
+   * was impossible. Never rendered: the dashboard shows a face or an initial,
+   * not an explanation.
+   */
+  imageNote: 'ok' | 'no-element' | 'screenshot-failed';
+}
+
+/**
+ * Screenshot the signed-in user's picture off whatever page is open.
+ *
+ * THIS IS A CORRECTION, and the bug it fixes was visible on the dashboard: the
+ * name read fine and the avatar never did, so the chip kept showing the blue
+ * initial circle the app falls back to. The first version looked for an `<img>`
+ * whose computed `border-radius` was `50%`, and modern Facebook satisfies
+ * neither half of that — avatars are drawn as an SVG `<image>` clipped by a
+ * mask, so the element is not an `<img>` at all and the roundness lives on the
+ * mask rather than on the picture. Two filters, both matching nothing.
+ *
+ * What replaced them is shape and ownership, which are properties of the thing
+ * itself rather than of this month's CSS: a square-ish box, and preferably one
+ * sitting inside a link that carries the id the cookie already gave us. The
+ * capture goes through an element handle instead of `page.screenshot({clip})`
+ * so Playwright scrolls the element into view and reads its real box — a clip
+ * is silently wrong the moment anything above it has grown.
+ */
+async function captureAvatar(page: Page, id: string): Promise<{ image: AccountProfile['image']; reason: AccountProfile['imageNote'] }> {
+  const handle = await page
+    .evaluateHandle((userId: string) => {
+      // `image` here is the SVG element, not a typo for `img`. Both are asked
+      // for because either one may be carrying the face on any given layout.
+      const nodes = Array.from(document.querySelectorAll('img, image'));
+      const candidates = nodes
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          const href = el.closest('a[href]')?.getAttribute('href') ?? '';
+          return {
+            el,
+            w: r.width,
+            h: r.height,
+            y: r.top,
+            // A link to the signed-in user's own profile is proof, not a hint:
+            // it is the same id the cookie named a moment ago.
+            mine: (userId !== '' && href.includes(userId)) || /\/me\/?($|\?)/.test(href),
+          };
+        })
+        .filter(
+          (c) =>
+            c.w >= 24 &&
+            c.w <= 400 &&
+            c.h > 0 &&
+            // Square-ish. A banner, a photo in the feed and a logo strip are
+            // all ruled out by this without naming any of them.
+            c.w / c.h > 0.8 &&
+            c.w / c.h < 1.25 &&
+            c.y > -200 &&
+            c.y < 1400,
+        )
+        // Proven-ours first; among equals the biggest, which is the profile
+        // photo rather than a reaction icon or a story ring.
+        .sort((a, b) => Number(b.mine) - Number(a.mine) || b.w - a.w);
+      return candidates[0]?.el ?? null;
+    }, id)
+    .catch(() => null);
+
+  const el = handle?.asElement() ?? null;
+  if (!el) {
+    await handle?.dispose().catch(() => undefined);
+    return { image: null, reason: 'no-element' };
+  }
+  try {
+    const bytes = await el.screenshot({ type: 'png', timeout: 10_000 });
+    return { image: { bytes, contentType: 'image/png' }, reason: 'ok' };
+  } catch {
+    return { image: null, reason: 'screenshot-failed' };
+  } finally {
+    await el.dispose().catch(() => undefined);
+  }
 }
 
 export async function readAccountProfile(page: Page): Promise<AccountProfile | null> {
@@ -64,6 +146,17 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
     .catch(() => '');
 
   /*
+   * The picture is taken HERE, on the page that is already open.
+   *
+   * It used to be attempted only on the profile page, behind a navigation that
+   * only happened when the rail link was missing — so on the layout where the
+   * rail link WAS found, no picture was ever looked for at all. The home page
+   * carries the owner's avatar in its top bar on every layout Facebook has
+   * shipped; asking for it here costs one evaluate and no page load.
+   */
+  let shot = await captureAvatar(page, id);
+
+  /*
    * The profile link is found BY THE ID, never by a label.
    *
    * Facebook renders this app in whatever language the account is set to, so
@@ -78,108 +171,62 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
       for (const a of links) {
         const href = a.getAttribute('href') ?? '';
         if (!href.includes(userId) && !/\/me\/?($|\?)/.test(href)) continue;
-        const img = a.querySelector('img');
-        if (!img) continue;
-        const r = img.getBoundingClientRect();
-        if (r.width < 16 || r.width > 80) continue;
         const text = (a.textContent ?? '').trim();
-        return { name: text.slice(0, 80), box: { x: r.left, y: r.top, w: r.width, h: r.height } };
+        if (!text) continue;
+        return { name: text.slice(0, 80) };
       }
       return null;
     }, id)
     .catch(() => null);
 
-  /*
-   * FALLBACK: the profile page's own title.
-   *
-   * The rail link above is the cheap read — it is already on screen. But the
-   * home layout is not guaranteed to carry it, and when it does not, the first
-   * version of this returned an id with no name and the dashboard had nothing
-   * to show: a feature that worked or silently did not, with no way to tell
-   * which. /me redirects to the signed-in user's profile and its <title> is
-   * their name, which is as locale-independent as the cookie was.
-   */
-  if (!found) {
-    /* The blob already answered; the only thing the profile page is still
-       needed for is a picture. */
-    try {
-      await page.goto('https://www.facebook.com/me', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-      /*
-       * WAIT FOR THE TITLE TO STOP SAYING "Facebook".
-       *
-       * Measured on the owner's machine: this read came back with the name
-       * "Facebook" and wrote it to the dashboard. The profile page ships with a
-       * placeholder title and swaps in the person's name once it has rendered,
-       * so a fixed two-second pause was a race — and losing it produced a name
-       * that is worse than none, because it looks like a real answer.
-       */
-      await page
-        .waitForFunction(() => document.title && !/^\(?\d*\)?\s*facebook\s*$/i.test(document.title), undefined, { timeout: 15_000 })
-        .catch(() => undefined);
-      /*
-       * The <h1> first. On a profile page it is the person's name and nothing
-       * else; the title is the same string with decoration around it, and is
-       * the thing that carries the placeholder.
-       */
-      const heading = await page
-        .evaluate(() => (document.querySelector('h1')?.textContent ?? '').trim())
-        .catch(() => '');
-      const title = (await page.title().catch(() => '')).replace(/^\(\d+\)\s*/, '').replace(patterns.titleSuffix, '').trim();
-      /*
-       * "Facebook" is not a name. Neither is an empty string. Writing either
-       * would put a wrong answer on the dashboard, and this module's whole
-       * contract is that an unreadable name stays absent rather than guessed —
-       * the chip falls back to the machine state, which is at least true.
-       */
-      const candidate = (fromBlob || heading || title).slice(0, 80);
-      const name = /^facebook$/i.test(candidate) ? '' : candidate;
-      const box = await page
-        .evaluate(() => {
-          const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[];
-          const round = imgs
-            .map((img) => {
-              const r = img.getBoundingClientRect();
-              return { x: r.left, y: r.top, w: r.width, h: r.height, round: /50%|9999/.test(getComputedStyle(img).borderRadius) };
-            })
-            .filter((b) => b.round && b.w >= 60 && b.w <= 200 && b.y >= 0 && b.y < 900)
-            .sort((a, b) => b.w - a.w);
-          return round[0] ?? null;
-        })
-        .catch(() => null);
-      let image: AccountProfile['image'] = null;
-      if (box) {
-        try {
-          image = {
-            bytes: await page.screenshot({
-              clip: { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.w), height: Math.round(box.h) },
-              type: 'png',
-              timeout: 10_000,
-            }),
-            contentType: 'image/png',
-          };
-        } catch {
-          image = null;
-        }
-      }
-      return { id, name, image };
-    } catch {
-      return { id, name: '', image: null };
-    }
-  }
+  const nameHere = fromBlob || found?.name || '';
+  if (nameHere && shot.image) return { id, name: nameHere, image: shot.image, imageNote: shot.reason };
 
-  let image: AccountProfile['image'] = null;
-  if (found.box.w >= 16 && found.box.y >= 0) {
-    const clip = {
-      x: Math.round(found.box.x),
-      y: Math.round(found.box.y),
-      width: Math.round(found.box.w),
-      height: Math.round(found.box.h),
-    };
-    try {
-      image = { bytes: await page.screenshot({ clip, type: 'png', timeout: 10_000 }), contentType: 'image/png' };
-    } catch {
-      image = null;
-    }
+  /*
+   * FALLBACK: the profile page itself, visited only for what is still missing.
+   *
+   * The reads above are the cheap ones — the page is already open. But the home
+   * layout is not guaranteed to carry either the name or the face, and when it
+   * does not, the first version of this returned an id with nothing attached
+   * and the dashboard had nothing to show: a feature that worked or silently
+   * did not, with no way to tell which. /me redirects to the signed-in user's
+   * profile, whose <title> is their name and whose header holds their picture
+   * at full size — both as locale-independent as the cookie was.
+   */
+  try {
+    await page.goto('https://www.facebook.com/me', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    /*
+     * WAIT FOR THE TITLE TO STOP SAYING "Facebook".
+     *
+     * Measured on the owner's machine: this read came back with the name
+     * "Facebook" and wrote it to the dashboard. The profile page ships with a
+     * placeholder title and swaps in the person's name once it has rendered,
+     * so a fixed two-second pause was a race — and losing it produced a name
+     * that is worse than none, because it looks like a real answer.
+     */
+    await page
+      .waitForFunction(() => document.title && !/^\(?\d*\)?\s*facebook\s*$/i.test(document.title), undefined, { timeout: 15_000 })
+      .catch(() => undefined);
+    /*
+     * The <h1> first. On a profile page it is the person's name and nothing
+     * else; the title is the same string with decoration around it, and is
+     * the thing that carries the placeholder.
+     */
+    const heading = await page
+      .evaluate(() => (document.querySelector('h1')?.textContent ?? '').trim())
+      .catch(() => '');
+    const title = (await page.title().catch(() => '')).replace(/^\(\d+\)\s*/, '').replace(patterns.titleSuffix, '').trim();
+    /*
+     * "Facebook" is not a name. Neither is an empty string. Writing either
+     * would put a wrong answer on the dashboard, and this module's whole
+     * contract is that an unreadable name stays absent rather than guessed —
+     * the chip falls back to the machine state, which is at least true.
+     */
+    const candidate = (nameHere || heading || title).slice(0, 80);
+    const name = /^facebook$/i.test(candidate) ? '' : candidate;
+    if (!shot.image) shot = await captureAvatar(page, id);
+    return { id, name, image: shot.image, imageNote: shot.reason };
+  } catch {
+    return { id, name: nameHere, image: shot.image, imageNote: shot.reason };
   }
-  return { id, name: fromBlob || found.name, image };
 }

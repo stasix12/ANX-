@@ -2130,6 +2130,28 @@ const scenario: { step: string; line: string }[] = [];
      account.test.ts answers it by running the real thing in a real page. */
   assert.ok(existsSync(new URL('./account.test.ts', import.meta.url)), 'and a real-browser test must exist to prove the second defence');
 
+  /*
+   * AND THE LAST WALL: STORAGE COULD CREATE BUT NOT REPLACE.
+   *
+   * social-schema.sql gave the social-media bucket read, insert and delete —
+   * no update. Supabase's upsert becomes an UPDATE once the object exists, and
+   * the avatar is written to a STABLE path on purpose, so the dashboard cannot
+   * keep showing the previous owner's face. The second write is the normal
+   * case here, and it was the one the policies forbade. Group pictures sat
+   * behind the same wall, silently: a group that changed its photo could never
+   * show the new one.
+   */
+  const v10 = readFileSync(new URL('../../supabase/social-schema-v10.sql', import.meta.url), 'utf8');
+  assert.ok(/for update/.test(v10) && /bucket_id = 'social-media'/.test(v10), 'replacing a stored picture needs an update policy');
+  assert.ok(/to authenticated/.test(v10), 'and it stays limited to a signed-in user, like insert and delete');
+  assert.ok(/with check \(bucket_id = 'social-media'\)/.test(v10), 'with check as well as using, or the new row is refused');
+  assert.ok(/'avatar_upload_blocked'/.test(localWorker), 'a blocked avatar upload must reach the owner, not only the terminal');
+  assert.ok(/social-schema-v10\.sql/.test(localWorker), 'naming the fix, since that is the likely cause');
+  assert.ok(
+    /העלאת תמונת הקבוצה[\s\S]{0,60}error\.message/.test(localWorker),
+    'and a group picture that cannot be replaced must stop failing silently',
+  );
+
   console.log('signed-in-account tests OK');
 }
 

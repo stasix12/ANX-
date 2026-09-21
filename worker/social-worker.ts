@@ -333,7 +333,14 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
         const ext = profile.image.contentType.includes('png') ? 'png' : 'jpg';
         const objectPath = `groups/${target.id}.${ext}`;
         const { error } = await db.storage.from('social-media').upload(objectPath, profile.image.bytes, { contentType: profile.image.contentType, upsert: true });
-        if (!error) patch.image_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
+        /*
+         * This used to be `if (!error)` and nothing else, so the same missing
+         * UPDATE policy that blocked the avatar also quietly stopped a group
+         * from ever showing a NEW picture after its first one — a refresh that
+         * looked like it worked and changed nothing.
+         */
+        if (error) console.error(`[worker] ✗ העלאת תמונת הקבוצה "${target.name}" נכשלה:`, error.message);
+        else patch.image_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
       }
       await db.from('social_targets').update(patch).eq('id', target.id);
       console.log(`[worker] ℹ פרטי קבוצה: "${patch.name ?? target.name}"${profile.image ? ' + תמונה' : ''}`);
@@ -747,8 +754,25 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
       .upload(objectPath, account.image.bytes, { contentType: account.image.contentType, upsert: true });
     // The cache-buster matters: the object path is stable, so without it the
     // dashboard keeps showing the previous owner's face after a re-login.
-    if (error) console.error('[worker] ✗ העלאת תמונת הפרופיל נכשלה:', error.message);
-    else patch.fb_avatar_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
+    if (error) {
+      console.error('[worker] ✗ העלאת תמונת הפרופיל נכשלה:', error.message);
+      /*
+       * The overwhelmingly likely cause is the missing UPDATE policy, and the
+       * owner can fix it in a minute — so it goes where they read rather than
+       * only into a terminal they do not watch. The path is stable on purpose,
+       * so the SECOND write is the normal case here, not the exception:
+       * without that policy the avatar can be created once and never replaced,
+       * which is precisely the failure this feature exists to avoid.
+       */
+      if (/row-level security/i.test(error.message)) {
+        await logActivity(
+          'warn',
+          'avatar_upload_blocked',
+          'לא הצלחנו לשמור את תמונת הפרופיל של פייסבוק. צריך להריץ את social-schema-v10.sql ב-Supabase.',
+          { detail: error.message },
+        );
+      }
+    } else patch.fb_avatar_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
   } else if (account.imageNote === 'screenshot-failed') {
     /*
      * We found the owner's picture and could not photograph it. The stored one

@@ -7,6 +7,42 @@ import { signIn, useAdminSession } from '@/lib/adminAuth';
 
 type SkyPhase = 'dawn' | 'day' | 'dusk' | 'night';
 
+/**
+ * Where to land after sign-in: ?next=/social etc., same-origin paths only.
+ *
+ * The destination is RESOLVED against this origin and the origins compared,
+ * rather than the string being pattern-matched. The old test was
+ * `next.startsWith('/') && !next.startsWith('//')`, and a backslash walks
+ * straight through it: browsers normalise `\` to `/` inside a URL, so
+ * `?next=/\attacker.tld/x` starts with a single `/`, passes, and then resolves
+ * to `http://attacker.tld/x`. Measured in Chromium against this page: with
+ * `?next=/%5Cevil.example.com/steal` an already-signed-in session left the
+ * origin entirely and the browser ended up on evil.example.com.
+ *
+ * That matters here more than on most pages, because this IS the login page:
+ * a link to `…/crm/login?next=/\attacker.tld/crm/login` shows the owner the
+ * real sign-in screen, then hands them a copy of it to type their password
+ * into. The URL they were told to check looks right the whole way.
+ *
+ * new URL() does the normalisation the same way the browser will, so whatever
+ * it says the origin is, is what a navigation would actually reach. Anything
+ * that does not parse, or lands anywhere else, goes to /crm.
+ */
+function safeNext(): string {
+  if (typeof window === 'undefined') return '/crm';
+  const next = new URLSearchParams(window.location.search).get('next') ?? '';
+  if (!next) return '/crm';
+  try {
+    const url = new URL(next, window.location.origin);
+    if (url.origin !== window.location.origin) return '/crm';
+    // Path + query + hash only: never the absolute form, so this cannot be
+    // handed to a router as an off-origin address even by mistake.
+    return `${url.pathname}${url.search}${url.hash}` || '/crm';
+  } catch {
+    return '/crm';
+  }
+}
+
 /** The sky the user would see outside right now. */
 function skyPhaseNow(): SkyPhase {
   const hour = new Date().getHours();
@@ -43,7 +79,7 @@ export default function CrmLoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && session) router.replace('/crm');
+    if (!loading && session) router.replace(safeNext());
   }, [loading, session, router]);
 
   async function onSubmit(event: React.FormEvent) {
@@ -56,7 +92,7 @@ export default function CrmLoginPage() {
       setError(message);
       return;
     }
-    router.replace('/crm');
+    router.replace(safeNext());
   }
 
   if (loading || session) {

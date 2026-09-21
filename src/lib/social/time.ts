@@ -1,0 +1,191 @@
+import { TIMEZONE } from './types';
+
+/**
+ * Timezone helpers built on Intl only — the module runs in Asia/Jerusalem no
+ * matter where the server lives (Vercel is UTC), and Israel switches DST on
+ * dates that no fixed offset captures.
+ */
+
+function partsInZone(date: Date, tz: string) {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    weekday: 'short',
+  });
+  const map: Record<string, string> = {};
+  for (const p of fmt.formatToParts(date)) map[p.type] = p.value;
+  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(map.weekday);
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second),
+    weekday,
+  };
+}
+
+/** Offset (ms) of `tz` from UTC at the given instant. */
+function offsetAt(date: Date, tz: string): number {
+  const p = partsInZone(date, tz);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  return asUtc - Math.floor(date.getTime() / 1000) * 1000;
+}
+
+/** Local wall-clock (YYYY-MM-DD + HH:MM) in `tz` → UTC instant. */
+export function zonedToUtc(dateISO: string, timeHM: string, tz = TIMEZONE): Date {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  const [hh, mm] = timeHM.split(':').map(Number);
+  const naive = Date.UTC(y, m - 1, d, hh, mm, 0);
+  // Two passes handle the DST transition days.
+  let guess = naive - offsetAt(new Date(naive), tz);
+  guess = naive - offsetAt(new Date(guess), tz);
+  return new Date(guess);
+}
+
+/** The local calendar date (YYYY-MM-DD) of an instant in `tz`. */
+export function zonedDateISO(date: Date, tz = TIMEZONE): string {
+  const p = partsInZone(date, tz);
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+}
+
+export function zonedWeekday(date: Date, tz = TIMEZONE): number {
+  return partsInZone(date, tz).weekday;
+}
+
+export function addDaysISO(dateISO: string, days: number): string {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + days));
+  return next.toISOString().slice(0, 10);
+}
+
+/** Start of the local day containing `date`, as a UTC instant. */
+export function startOfZonedDay(date: Date, tz = TIMEZONE): Date {
+  return zonedToUtc(zonedDateISO(date, tz), '00:00', tz);
+}
+
+export function formatDateTimeHe(iso: string | Date | null | undefined, tz = TIMEZONE): string {
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  return new Intl.DateTimeFormat('he-IL', {
+    timeZone: tz,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
+export function formatDateHe(iso: string | Date, tz = TIMEZONE): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  return new Intl.DateTimeFormat('he-IL', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+}
+
+export function formatTimeHe(iso: string | Date, tz = TIMEZONE): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  return new Intl.DateTimeFormat('he-IL', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
+}
+
+/**
+ * Compact date for dense rows: "18.09" inside the current year, "18.09.25"
+ * outside it. A full dd.mm.yyyy next to a time and a relative phrase does not
+ * fit a 390px row, and the year is noise 99% of the time.
+ */
+export function formatDayMonthHe(iso: string | Date, tz = TIMEZONE): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  const sameYear = zonedDateISO(d, tz).slice(0, 4) === zonedDateISO(new Date(), tz).slice(0, 4);
+  return new Intl.DateTimeFormat('he-IL', {
+    timeZone: tz,
+    day: '2-digit',
+    month: '2-digit',
+    ...(sameYear ? {} : { year: '2-digit' }),
+  }).format(d);
+}
+
+/*
+ * U+2066 LEFT-TO-RIGHT ISOLATE … U+2069 POP DIRECTIONAL ISOLATE.
+ *
+ * `formatDateTimeHe` returns "19.09.2026, 14:05" — two European-number runs
+ * around a neutral comma. Inside an RTL paragraph the bidi algorithm renders
+ * that as "14:05 ,19.09.2026": the time jumps in front of the date. `dir`
+ * cannot help a string that has no strong character, and a <span> cannot be
+ * put inside a string, so the isolate goes in as characters.
+ *
+ * These lived in DateTime.tsx, which is a client component. They are needed on
+ * the server too — graph.ts and the workers build Hebrew sentences that are
+ * STORED and read back in the activity feed — so the definition moved here and
+ * DateTime.tsx re-exports it. One definition, both sides.
+ */
+const LRI = '\u2066';
+const PDI = '\u2069';
+
+/**
+ * The character-level equivalent of `dir="ltr"`, for the places a timestamp
+ * has to stay a plain string: an `aria-label`, a `title=`, a prop typed
+ * `string`, or a row written to the database.
+ */
+export function ltr(text: string): string {
+  return `${LRI}${text}${PDI}`;
+}
+
+/** The same, for a full date-and-time that is built into a Hebrew sentence. */
+export function stampText(iso: string | Date | null | undefined): string {
+  return ltr(formatDateTimeHe(iso));
+}
+
+/**
+ * A counted noun in Hebrew. One takes the singular ("פרסום אחד", not
+ * "1 פרסומים"), and a handful of nouns have a real dual that no rule derives
+ * from the plural — two days is יומיים, never "2 ימים"; two groups is
+ * "שתי קבוצות", not "2 קבוצות". The caller passes whole forms rather than a
+ * noun to pluralise, because in Hebrew the verb after the noun agrees too.
+ *
+ * Only the `many` branch carries the digit. That is deliberate: the singular
+ * and the dual spell the number out, so no caller has to interpolate one.
+ *
+ * Same three-argument shape as the local copy in src/app/social/page.tsx, so
+ * that one can import this and be deleted.
+ */
+export function counted(n: number, one: string, many: string, two?: string): string {
+  if (n === 1) return one;
+  if (n === 2 && two !== undefined) return two;
+  return `${n} ${many}`;
+}
+
+/**
+ * The verb (or adjective) that agrees with a count, for the sentences where
+ * the number sits somewhere other than right before it — "1 מתוך 29 טופלו"
+ * is the same defect as "לפני 1 שעות", but counted() cannot serve it because
+ * counted() owns where the digit goes and here it goes before "מתוך".
+ */
+export function agree(n: number, singular: string, plural: string): string {
+  return n === 1 ? singular : plural;
+}
+
+/** Relative wording for the dashboard's "next publication" tile. */
+export function relativeHe(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  const abs = Math.abs(diff);
+  const min = Math.round(abs / 60000);
+  const hours = Math.round(min / 60);
+  const days = Math.round(min / 1440);
+  // Hebrew counts one differently, and "לפני 1 שעות" is the kind of line that
+  // tells a customer nobody read the screen.
+  const label =
+    min < 1
+      ? 'פחות מדקה'
+      : min < 60
+        ? counted(min, 'דקה', 'דק׳', 'שתי דקות')
+        : min < 60 * 48
+          ? counted(hours, 'שעה', 'שעות', 'שעתיים')
+          : counted(days, 'יום', 'ימים', 'יומיים');
+  return diff >= 0 ? `בעוד ${label}` : `לפני ${label}`;
+}

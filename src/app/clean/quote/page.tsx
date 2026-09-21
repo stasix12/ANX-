@@ -15,6 +15,7 @@ import {
 } from '@/lib/platform/catalog';
 import { actions } from '@/lib/platform/store';
 import type { MarketingSource, UtmParams } from '@/lib/platform/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * The quote funnel — seven short steps, exactly the spec's order. Every
@@ -119,7 +120,7 @@ function QuoteFunnel() {
       });
       setDone(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'משהו השתבש, נסו שוב');
+      setError(friendlyMessage(e, 'משהו השתבש, נסו שוב'));
     } finally {
       setBusy(false);
     }

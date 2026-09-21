@@ -34,3 +34,12 @@ yarn-error.log*
 # generated preview build
 /out/
 preview.html
+
+# social browser worker — Facebook session data never enters the repo
+/.social-profile/
+/worker/.profile/
+*.storage-state.json
+/worker/screenshots/
+
+# local dev server output
+dev.log

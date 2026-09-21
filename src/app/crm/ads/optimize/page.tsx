@@ -8,6 +8,7 @@ import { InsightIcon } from '@/components/crm/InsightIcon';
 import { buildRecommendations, type RecommendationTone } from '@/lib/crm/adsOptimizer';
 import { fetchCampaignPerf, formatSpend, type CampaignPerf } from '@/lib/crm/facebookAds';
 import { getFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
+import { friendlyMessage } from '@/lib/social/errors';
 
 const currency = 'ILS';
 
@@ -16,7 +17,7 @@ const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   PAUSED: { label: 'מושהה', className: 'bg-ink-700 text-mist-300' },
   CAMPAIGN_PAUSED: { label: 'מושהה', className: 'bg-ink-700 text-mist-300' },
   ARCHIVED: { label: 'בארכיון', className: 'bg-ink-700 text-mist-500' },
-  WITH_ISSUES: { label: 'בעיה בקמפיין', className: 'bg-red-500/15 text-red-600' },
+  WITH_ISSUES: { label: 'בעיה בסבב', className: 'bg-red-500/15 text-red-600' },
 };
 
 const TONE_STYLE: Record<RecommendationTone, string> = {
@@ -87,7 +88,7 @@ export default function CrmAdsOptimizePage() {
     try {
       setCampaigns(await fetchCampaignPerf(cfg));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'שליפת נתוני הקמפיינים נכשלה.');
+      setError(friendlyMessage(err, 'שליפת נתוני סבבי הפרסום נכשלה.'));
     }
   }, []);
 
@@ -108,7 +109,7 @@ export default function CrmAdsOptimizePage() {
   );
 
   return (
-    <CrmShell title="אופטימיזציית קמפיינים">
+    <CrmShell title="אופטימיזציית סבבי פרסום">
       {!configLoaded ? null : !config ? (
         <div className="rounded-card border border-ink-700 surface p-6 text-center">
           <p aria-hidden className="text-3xl">📣</p>
@@ -140,9 +141,9 @@ export default function CrmAdsOptimizePage() {
       ) : campaigns.length === 0 ? (
         <div className="rounded-card border border-ink-700 surface p-6 text-center">
           <p aria-hidden className="text-3xl">🌱</p>
-          <p className="mt-2 text-sm font-bold">אין קמפיינים עם הוצאה ב‑30 הימים האחרונים</p>
+          <p className="mt-2 text-sm font-bold">אין סבבי פרסום עם הוצאה ב‑30 הימים האחרונים</p>
           <p className="mt-1 text-sm text-mist-500">
-            ברגע שקמפיין יתחיל לרוץ, הביצועים וההמלצות יופיעו כאן.
+            ברגע שסבב יתחיל לרוץ, הביצועים וההמלצות יופיעו כאן.
           </p>
         </div>
       ) : (
@@ -185,7 +186,7 @@ export default function CrmAdsOptimizePage() {
           </div>
 
           <div className="mt-4">
-            <h2 className="text-sm font-extrabold">📊 הקמפיינים · 30 הימים האחרונים</h2>
+            <h2 className="text-sm font-extrabold">📊 סבבי הפרסום · 30 הימים האחרונים</h2>
             <div className="mt-2 space-y-2">
               {campaigns.map((campaign) => (
                 <CampaignCard key={campaign.campaignId} campaign={campaign} />

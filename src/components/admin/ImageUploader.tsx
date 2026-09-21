@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useRef, useState } from 'react';
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, SpinnerIcon, TrashIcon } from '@/components/icons';
 import { uploadProductImage } from '@/lib/adminProducts';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * Multi-upload, reorder and delete for one product's photos. The first image
@@ -34,7 +35,7 @@ export function ImageUploader({
       }
       onChange([...images, ...uploaded]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'העלאת תמונה נכשלה.');
+      setError(friendlyMessage(err, 'העלאת תמונה נכשלה.'));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -69,7 +70,7 @@ export function ImageUploader({
                 type="button"
                 onClick={() => move(index, -1)}
                 aria-label="הזזה קדימה בתור"
-                className="grid h-7 w-7 place-items-center rounded-lg text-white"
+                className="grid h-9 w-9 place-items-center rounded-lg text-white"
               >
                 <ArrowUpIcon className="h-4 w-4" />
               </button>
@@ -77,7 +78,7 @@ export function ImageUploader({
                 type="button"
                 onClick={() => move(index, 1)}
                 aria-label="הזזה אחורה בתור"
-                className="grid h-7 w-7 place-items-center rounded-lg text-white"
+                className="grid h-9 w-9 place-items-center rounded-lg text-white"
               >
                 <ArrowDownIcon className="h-4 w-4" />
               </button>
@@ -85,7 +86,7 @@ export function ImageUploader({
                 type="button"
                 onClick={() => remove(index)}
                 aria-label="מחיקת תמונה"
-                className="grid h-7 w-7 place-items-center rounded-lg text-white"
+                className="grid h-9 w-9 place-items-center rounded-lg text-white"
               >
                 <TrashIcon className="h-4 w-4" />
               </button>

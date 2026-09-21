@@ -22,6 +22,7 @@ import {
 } from '@/lib/crm/facebookAds';
 import { todayISO, type Lead } from '@/lib/crm/leads';
 import { clearFbAdsConfig, getFbAdsConfig, saveFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
+import { friendlyMessage } from '@/lib/social/errors';
 
 const inputClass =
   'w-full rounded-xl border border-ink-600 bg-ink-850 px-4 py-3 text-base outline-none transition-colors focus:border-brand-500';
@@ -81,9 +82,9 @@ function SetupForm({
       const found = await listAdAccounts(token);
       setAccounts(found);
       if (found.length === 1) setAccountId(found[0].accountId);
-      if (found.length === 0) setError('הטוקן לא רואה אף חשבון מודעות — צור טוקן מהפרופיל שמנהל את הקמפיינים.');
+      if (found.length === 0) setError('הטוקן לא רואה אף חשבון מודעות — צור טוקן מהפרופיל שמנהל את סבבי הפרסום.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'שליפת החשבונות נכשלה.');
+      setError(friendlyMessage(err, 'שליפת החשבונות נכשלה.'));
     } finally {
       setFindingAccounts(false);
     }
@@ -119,7 +120,7 @@ function SetupForm({
       await saveFbAdsConfig(config);
       onSaved(config);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'השמירה נכשלה.');
+      setError(friendlyMessage(err, 'השמירה נכשלה.'));
       setSaving(false);
     }
   }
@@ -184,7 +185,7 @@ function SetupForm({
                       : 'border-ink-600 bg-ink-850 text-mist-100'
                   }`}
                 >
-                  <span className="truncate">{account.name || 'ללא שם'}</span>
+                  <span dir="auto" className="min-w-0 truncate">{account.name || 'ללא שם'}</span>
                   <span className="shrink-0 text-xs font-semibold tabular-nums" dir="ltr">
                     {account.accountId}
                   </span>
@@ -323,7 +324,7 @@ function AdInsights({ spend, leads }: { spend: AdSpend; leads: Lead[] }) {
       text: (
         <>
           אף ליד החודש לא תויג במקור <b>Facebook</b> — בלי תיוג אי אפשר לדעת אילו עבודות הגיעו מהפרסום.
-          מהיום: כל פנייה מהקמפיין ← בחר Facebook בטופס הליד.
+          מהיום: כל פנייה מהסבב ← בחר Facebook בטופס הליד.
         </>
       ),
     });
@@ -358,7 +359,7 @@ function AdInsights({ spend, leads }: { spend: AdSpend; leads: Lead[] }) {
           לפי הנתונים שלך (עבודה ממוצעת{' '}
           <b className="tabular-nums">₪{Math.round(avgJob).toLocaleString('he-IL')}</b>, סגירה של{' '}
           <b className="tabular-nums">{Math.round(conversion * 100)}%</b>) — ליד משתלם עד{' '}
-          <b className="tabular-nums">₪{Math.round(maxCpl).toLocaleString('he-IL')}</b>. מעל זה הקמפיין
+          <b className="tabular-nums">₪{Math.round(maxCpl).toLocaleString('he-IL')}</b>. מעל זה הסבב
           מפסיד.
         </>
       ),
@@ -403,13 +404,13 @@ function AdInsights({ spend, leads }: { spend: AdSpend; leads: Lead[] }) {
 
       <details className="mt-3 border-t border-ink-700/60 pt-3">
         <summary className="cursor-pointer text-sm font-bold text-brand-400">
-          טיפים לשיפור הקמפיינים ▾
+          טיפים לשיפור סבבי הפרסום ▾
         </summary>
         <ul className="mt-2 space-y-2 text-sm font-semibold leading-relaxed text-mist-300">
-          <li>💬 קמפיין הודעות לוואטסאפ עובד הכי טוב בתחום — הלקוח פונה בקליק ואתה סוגר בצ׳אט.</li>
+          <li>💬 סבב הודעות לוואטסאפ עובד הכי טוב בתחום — הלקוח פונה בקליק ואתה סוגר בצ׳אט.</li>
           <li>🎬 סרטון לפני/אחרי של ספה מנצח כל תמונה סטטית. רענן קריאייטיב כל 3–4 שבועות.</li>
           <li>📍 מקד גיאוגרפית רק לערים שאתה באמת מגיע אליהן — קליקים מרחוק הם כסף זרוק.</li>
-          <li>🎛️ רכז את התקציב ב-1–2 קמפיינים פעילים — פיזור על עשרות קמפיינים הורג את הלמידה של פייסבוק.</li>
+          <li>🎛️ רכז את התקציב ב-1–2 סבבי פרסום פעילים — פיזור על עשרות סבבי פרסום הורג את הלמידה של פייסבוק.</li>
           <li>📆 קבע שגרה: כל יום ראשון להשוות כאן הכנסות מול הוצאות פרסום, ולכבות מה שלא מחזיר את עצמו.</li>
         </ul>
       </details>
@@ -444,7 +445,7 @@ export function FacebookAdsSection({ leads }: { leads: Lead[] }) {
       setSpend(await fetchAdSpendManaged(cfg));
     } catch (err) {
       setSpend(null);
-      setError(err instanceof Error ? err.message : 'שליפת נתוני הפרסום נכשלה.');
+      setError(friendlyMessage(err, 'שליפת נתוני הפרסום נכשלה.'));
     } finally {
       setLoading(false);
     }

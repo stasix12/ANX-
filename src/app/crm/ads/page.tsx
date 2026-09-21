@@ -15,6 +15,7 @@ import {
 } from '@/lib/crm/facebookAds';
 import { formatDateLongHe } from '@/lib/crm/leads';
 import { getFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
+import { friendlyMessage } from '@/lib/social/errors';
 
 const MONTH_SHORT = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
 const WEEKDAY_LONG = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
@@ -176,7 +177,7 @@ export default function CrmAdsPage() {
       setMonthly(months);
       setDaily(days);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'שליפת נתוני הפרסום נכשלה.');
+      setError(friendlyMessage(err, 'שליפת נתוני הפרסום נכשלה.'));
     }
   }, []);
 
@@ -202,7 +203,7 @@ export default function CrmAdsPage() {
         setCustomIncrement(increment);
         setCustomSeries(rows);
       } catch (err) {
-        setCustomError(err instanceof Error ? err.message : 'שליפת נתוני הפרסום נכשלה.');
+        setCustomError(friendlyMessage(err, 'שליפת נתוני הפרסום נכשלה.'));
       } finally {
         setCustomLoading(false);
       }
@@ -368,7 +369,7 @@ export default function CrmAdsPage() {
       } else if (sumSpend(last7) > 0 && sumConv(last7) === 0) {
         items.push({
           emoji: '🚨',
-          text: `בשבוע האחרון הוצאת ${money(sumSpend(last7))} בלי אף פנייה — כדאי לבדוק את הקמפיין בהקדם.`,
+          text: `בשבוע האחרון הוצאת ${money(sumSpend(last7))} בלי אף פנייה — כדאי לבדוק את הסבב בהקדם.`,
         });
       }
     }
@@ -460,7 +461,14 @@ export default function CrmAdsPage() {
   const currency = 'ILS';
 
   return (
-    <CrmShell title="פרסום ממומן">
+    <CrmShell
+      title="פרסום ממומן"
+      headerAction={
+        <Link href="/social" className="rounded-full bg-white/20 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/30">
+          פוסטים אורגניים ←
+        </Link>
+      }
+    >
       {!configLoaded ? null : !config ? (
         <div className="rounded-card border border-ink-700 surface p-6 text-center">
           <p aria-hidden className="text-3xl">📣</p>
@@ -506,7 +514,7 @@ export default function CrmAdsPage() {
             className="mt-3 flex items-center justify-center gap-2 rounded-full bg-brand-500 py-2.5 text-sm font-bold text-on-brand transition-colors hover:bg-brand-400"
           >
             <TargetIcon className="h-4.5 w-4.5" />
-            אופטימיזציית קמפיינים — מה לעשות עכשיו
+            אופטימיזציית סבבי פרסום — מה לעשות עכשיו
           </Link>
 
           {mom ? (

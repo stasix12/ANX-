@@ -20,6 +20,7 @@ import {
 } from '@/components/icons';
 import { deleteProduct, duplicateProduct, setInStock, setPublished } from '@/lib/adminProducts';
 import { categories, fetchAllProductsAdmin, formatPrice, type CategoryId, type Product } from '@/lib/products';
+import { friendlyMessage } from '@/lib/social/errors';
 
 type CategoryFilter = CategoryId | 'all';
 type StockFilter = 'all' | 'in' | 'out';
@@ -62,7 +63,7 @@ export default function AdminProductsPage() {
       await action();
       await reload();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'הפעולה נכשלה.');
+      alert(friendlyMessage(err, 'הפעולה נכשלה.'));
     } finally {
       setBusyId(null);
     }
@@ -136,7 +137,7 @@ export default function AdminProductsPage() {
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-extrabold">{product.name}</p>
+                  <p dir="auto" className="truncate text-sm font-extrabold">{product.name}</p>
                   <p className="mt-0.5 text-xs text-mist-500">
                     {categories.find((c) => c.id === product.category)?.name}
                   </p>

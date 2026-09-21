@@ -103,7 +103,7 @@ function Economics() {
               </option>
             ))}
           </select>
-          <input value={spendForm.campaign} onChange={(e) => setSpendForm({ ...spendForm, campaign: e.target.value })} placeholder="קמפיין" className={inputClass} />
+          <input value={spendForm.campaign} onChange={(e) => setSpendForm({ ...spendForm, campaign: e.target.value })} placeholder="סבב" className={inputClass} />
           <input type="number" value={spendForm.amount} onChange={(e) => setSpendForm({ ...spendForm, amount: e.target.value })} placeholder="₪ סכום" className={inputClass} />
           <button
             type="button"
@@ -130,7 +130,7 @@ function Economics() {
       {/* Reactivation */}
       <div className="surface mt-5 rounded-card p-4">
         <h2 className="font-black text-mist-100">
-          💤 לקוחות רדומים ({snap.config.reactivationMonths}+ חודשים) — קמפיין Re-activation
+          💤 לקוחות רדומים ({snap.config.reactivationMonths}+ חודשים) — סבב Re-activation
         </h2>
         {stale.length === 0 ? (
           <p className="mt-2 text-sm text-mist-500">אין לקוחות רדומים כרגע.</p>

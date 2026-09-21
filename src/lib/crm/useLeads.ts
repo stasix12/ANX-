@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { listLeads, type Lead } from '@/lib/crm/leads';
+import { friendlyMessage } from '@/lib/social/errors';
 
 export interface LeadsState {
   leads: Lead[];
@@ -26,7 +27,7 @@ export function useLeads(): LeadsState {
       setLeads(await listLeads());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'טעינת הנתונים נכשלה.');
+      setError(friendlyMessage(err, 'טעינת הנתונים נכשלה.'));
     } finally {
       setLoading(false);
     }

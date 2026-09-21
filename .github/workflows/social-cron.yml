@@ -1,0 +1,47 @@
+# Ticks the social publishing worker every 5 minutes. The worker itself
+# decides what is due (Asia/Jerusalem schedules, anti-spam limits, Meta
+# cooldowns) — this job only knocks on the door with the shared secret.
+#
+# Repository secrets needed: SOCIAL_APP_URL (e.g. https://your-app.vercel.app)
+# and SOCIAL_CRON_SECRET (same value as the deployment's env var).
+#
+# GitHub may delay scheduled runs by a few minutes under load; the planner
+# tolerates slots up to 15 minutes late, so posts are never dropped.
+#
+# IMPORTANT — this tick is a backstop, not the thing the system depends on.
+# GitHub registers a `schedule:` trigger only from the repository's DEFAULT
+# branch, so while this file lives on a feature branch the cron never fires at
+# all (the workflow does not even appear in the Actions list). The planner
+# therefore also runs inside the local browser worker on the owner's PC, which
+# has to be running for groups to publish anyway — see src/lib/social/plan.ts.
+name: Social publishing tick
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: social-cron
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    if: ${{ vars.SOCIAL_CRON_ENABLED == 'true' }}
+    steps:
+      - name: Call the worker
+        env:
+          APP_URL: ${{ secrets.SOCIAL_APP_URL }}
+          SECRET: ${{ secrets.SOCIAL_CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$SECRET" ]; then
+            echo "SOCIAL_APP_URL / SOCIAL_CRON_SECRET secrets are not set"; exit 1
+          fi
+          code=$(curl -s -o /tmp/tick.json -w '%{http_code}' --max-time 90 \
+            -X POST -H "x-cron-secret: $SECRET" "$APP_URL/api/social/cron" || echo 000)
+          echo "http: $code"
+          cat /tmp/tick.json; echo
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]

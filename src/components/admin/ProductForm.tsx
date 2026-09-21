@@ -6,6 +6,7 @@ import { ImageUploader } from '@/components/admin/ImageUploader';
 import { PlusIcon, SpinnerIcon, TrashIcon } from '@/components/icons';
 import { createProduct, generateSlug, updateProduct, type ProductInput } from '@/lib/adminProducts';
 import { categories, sabrinaModels, type CategoryId, type Product, type SabrinaModel, type SpecRow, type VariantGroup } from '@/lib/products';
+import { friendlyMessage } from '@/lib/social/errors';
 
 function toBaseRelative(src: string): string {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -79,7 +80,7 @@ export function ProductForm({ product }: { product: Product | null }) {
       }
       router.push('/admin/products');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'השמירה נכשלה.');
+      setError(friendlyMessage(err, 'השמירה נכשלה.'));
       setSaving(false);
     }
   }

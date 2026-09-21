@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head><meta charset="utf-8"><title>באר שבע ביחד | Facebook</title>
+<style>
+  body{font-family:sans-serif;background:#f0f2f5;margin:0}
+  header{background:#fff;padding:12px 20px;border-bottom:1px solid #ddd}
+  main{max-width:680px;margin:20px auto}
+  .box{background:#fff;border-radius:8px;padding:12px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+  .trigger{display:block;width:100%;text-align:right;border:0;background:#f0f2f5;border-radius:20px;padding:10px 14px;color:#65676b;font-size:16px;cursor:pointer}
+  [role=dialog]{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.4)}
+  .panel{background:#fff;width:500px;border-radius:8px;padding:16px}
+  [contenteditable]{min-height:120px;font-size:18px;outline:none}
+  .preview img{width:80px;height:80px;object-fit:cover;margin:4px;border-radius:6px}
+  button.post[aria-disabled=true]{opacity:.4}
+  .feed p{white-space:pre-wrap}
+</style></head>
+<body>
+<header><strong>Facebook (mock)</strong> · <span id="user">שלום, סטס</span></header>
+<main>
+  <div class="box">
+    <h1>באר שבע ביחד</h1>
+    <p>קבוצה ציבורית · 12K חברים</p>
+  </div>
+  <div class="box" role="main">
+    <button class="trigger" id="trigger" type="button">כתבו משהו…</button>
+  </div>
+  <div class="box feed" id="feed"><h2>פוסטים</h2></div>
+</main>
+<script>
+  const feed = document.getElementById('feed');
+  // Persist posts like a real feed would survive a reload.
+  const saved = JSON.parse(localStorage.getItem('mockFeed') || '[]');
+  for (const t of saved) { const p = document.createElement('p'); p.textContent = t; feed.appendChild(p); }
+  document.getElementById('trigger').addEventListener('click', () => {
+    if (document.querySelector('[role=dialog]')) return;
+    const dlg = document.createElement('div');
+    dlg.setAttribute('role', 'dialog');
+    dlg.setAttribute('aria-label', 'יצירת פוסט');
+    dlg.innerHTML = `
+      <div class="panel">
+        <h2>יצירת פוסט</h2>
+        <div role="textbox" contenteditable="true" aria-label="כתבו משהו…" id="editor"></div>
+        <div class="preview" id="preview"></div>
+        <div style="margin:10px 0">
+          <button type="button" aria-label="תמונה/סרטון" id="photo">📷 תמונה/סרטון</button>
+          <input type="file" id="file" accept="image/*,video/*" multiple hidden>
+        </div>
+        <button type="button" class="post" id="post" aria-disabled="true">פרסום</button>
+      </div>`;
+    document.body.appendChild(dlg);
+    const editor = dlg.querySelector('#editor');
+    const post = dlg.querySelector('#post');
+    const file = dlg.querySelector('#file');
+    const preview = dlg.querySelector('#preview');
+    const refresh = () => post.setAttribute('aria-disabled', editor.innerText.trim() || preview.children.length ? 'false' : 'true');
+    editor.addEventListener('input', refresh);
+    dlg.querySelector('#photo').addEventListener('click', () => file.click());
+    file.addEventListener('change', () => {
+      // simulate a slow upload with a progress bar
+      const bar = document.createElement('div');
+      bar.setAttribute('role', 'progressbar');
+      bar.textContent = 'מעלה…';
+      preview.appendChild(bar);
+      setTimeout(() => {
+        bar.remove();
+        for (const f of file.files) {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(f);
+          preview.appendChild(img);
+        }
+        refresh();
+      }, 1500);
+    });
+    post.addEventListener('click', () => {
+      if (post.getAttribute('aria-disabled') === 'true') return;
+      const text = editor.innerText;
+      const count = preview.querySelectorAll('img').length;
+      window.__published = { text, images: count };
+      setTimeout(() => {
+        dlg.remove();
+        const p = document.createElement('p');
+        p.textContent = text + (count ? ` [${count} תמונות]` : '');
+        feed.appendChild(p);
+        saved.push(p.textContent);
+        localStorage.setItem('mockFeed', JSON.stringify(saved));
+      }, 800);
+    });
+  });
+</script>
+</body></html>

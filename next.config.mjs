@@ -11,8 +11,17 @@ const isExport = process.env.EXPORT === '1';
  */
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
+/**
+ * A build stamp the UI can show. Two rounds of "is the update live yet?" were
+ * unanswerable from a screenshot, so the Settings screen now prints this and
+ * the question becomes a glance. Vercel supplies the commit; a local build
+ * falls back to its own timestamp.
+ */
+const buildStamp = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7) || new Date().toISOString().slice(0, 16).replace('T', ' ');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: { NEXT_PUBLIC_BUILD_STAMP: buildStamp },
   // trailingSlash makes the export emit products/<slug>/index.html rather than
   // products/<slug>.html, so every page resolves as a plain directory index on
   // any static host, without relying on extensionless-URL rewriting.

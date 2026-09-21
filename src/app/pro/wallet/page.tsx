@@ -7,6 +7,7 @@ import { formatPrice, relativeTimeHe } from '@/lib/platform/catalog';
 import { paymentsAdapter } from '@/lib/platform/integrations';
 import { actions, usePlatform, useSession, walletBalance } from '@/lib/platform/store';
 import type { WalletTxType } from '@/lib/platform/types';
+import { friendlyMessage } from '@/lib/social/errors';
 
 /**
  * Wallet: the balance is a derived view of the ledger, never edited
@@ -45,7 +46,7 @@ function Wallet() {
       await actions.topUpWallet(myId, amount);
       setMessage(charge.mock ? `נטענו ${formatPrice(amount)} (סליקה מדומה — חברו ספק אמיתי ב-integrations.ts)` : `נטענו ${formatPrice(amount)}`);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'הטעינה נכשלה');
+      setMessage(friendlyMessage(e, 'הטעינה נכשלה'));
     } finally {
       setBusy(false);
     }

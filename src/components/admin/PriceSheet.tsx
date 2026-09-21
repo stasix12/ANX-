@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { CloseIcon, SpinnerIcon } from '@/components/icons';
 import { setPrice } from '@/lib/adminProducts';
 import type { Product } from '@/lib/products';
+import { friendlyMessage } from '@/lib/social/errors';
 
 export function PriceSheet({
   product,
@@ -33,7 +34,7 @@ export function PriceSheet({
       await setPrice(product.id!, priceNum, saleNum);
       onSaved(priceNum, saleNum);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'השמירה נכשלה.');
+      setError(friendlyMessage(err, 'השמירה נכשלה.'));
     } finally {
       setSaving(false);
     }

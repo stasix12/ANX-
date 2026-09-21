@@ -204,8 +204,8 @@ function NextJobCard({ lead, today, first = true }: { lead: Lead; today: string;
         </div>
         <div className="mt-2 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-xl font-extrabold">{lead.name}</p>
-            <p className="mt-0.5 truncate text-sm font-medium text-mist-300">
+            <p dir="auto" className="truncate text-xl font-extrabold">{lead.name}</p>
+            <p dir="auto" className="mt-0.5 truncate text-sm font-medium text-mist-300">
               {[lead.city || null, lead.services.join(' · ') || null].filter(Boolean).join(' · ')}
             </p>
           </div>
@@ -418,7 +418,7 @@ export default function CrmDashboardPage() {
                         <GreetingIcon className="crm-hero-icon relative h-6 w-6 text-white" />
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-2xl font-extrabold leading-tight tracking-tight text-white">
+                        <p dir="auto" className="truncate text-2xl font-extrabold leading-tight tracking-tight text-white">
                           {g.text}
                         </p>
                         <p className="mt-0.5 text-[13px] font-medium text-white/75">

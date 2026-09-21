@@ -7,9 +7,9 @@ import { STANDALONE } from '@/lib/hamavrik/config';
  *
  * No cookies: a per-tab session id (sessionStorage) says "one visit", a
  * per-browser id (localStorage) says "same person came back". The entry
- * page's referrer and query string travel with every hit so the worker can
- * name the visit's source (Google Ads, Google, Facebook, WhatsApp, direct)
- * without a join. Only the standalone site has the endpoint.
+ * page's path, referrer and query string travel with every hit so the worker
+ * can name the visit's source (Google Ads, Google, Facebook, WhatsApp,
+ * direct), campaign, keyword and landing page without a join. Only the standalone site has the endpoint.
  */
 export type HitType = 'view' | 'ping' | 'event';
 
@@ -36,6 +36,7 @@ interface Ids {
   vid: string;
   entryRef: string;
   entryQuery: string;
+  entryPath: string;
 }
 
 let ids: Ids | null = null;
@@ -49,6 +50,7 @@ function getIds(): Ids {
     vid: stored(ls, 'hv_vid', rand),
     entryRef: stored(ss, 'hv_ref', () => document.referrer || ''),
     entryQuery: stored(ss, 'hv_q', () => location.search || ''),
+    entryPath: stored(ss, 'hv_lp', () => location.pathname || '/'),
   };
   return ids;
 }
@@ -61,13 +63,14 @@ export function beaconEnabled(): boolean {
 
 export function sendHit(type: HitType, extra: { name?: string; meta?: Record<string, unknown> } = {}): void {
   if (!beaconEnabled()) return;
-  const { sid, vid, entryRef, entryQuery } = getIds();
+  const { sid, vid, entryRef, entryQuery, entryPath } = getIds();
   const body = JSON.stringify({
     t: type,
     n: extra.name,
     p: location.pathname,
     r: entryRef,
     q: entryQuery,
+    l: entryPath,
     s: sid,
     v: vid,
     w: window.innerWidth,

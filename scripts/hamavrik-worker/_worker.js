@@ -18,6 +18,11 @@
  */
 
 const LIVE_WINDOW_MS = 5 * 60 * 1000;
+/** Google Ads campaign ids (utm_campaign={campaignid}) → the names the owner knows. */
+const CAMPAIGNS = {
+  24259172357: 'ניקוי ספות באר שבע',
+  24259276055: 'ניקוי ספות ערד',
+};
 const COOKIE = 'hv_admin';
 const BOT_UA = /bot|crawl|spider|slurp|lighthouse|headless|pagespeed|gtmetrix|preview|monitor|curl|wget|python|scrapy|facebookexternalhit|whatsapp|telegram|discord|skype|embedly/i;
 
@@ -57,6 +62,13 @@ async function ensureSchema(db) {
     db.prepare('CREATE INDEX IF NOT EXISTS hits_ts ON hits(ts)'),
     db.prepare('CREATE INDEX IF NOT EXISTS hits_sid_ts ON hits(sid, ts)'),
   ]);
+  // Attribution columns added after launch: medium, campaign, keyword, ad
+  // and landing page. ALTER fails harmlessly once a column exists.
+  for (const col of ['medium', 'campaign', 'term', 'content', 'landing']) {
+    try {
+      await db.prepare(`ALTER TABLE hits ADD COLUMN ${col} TEXT`).run();
+    } catch {}
+  }
   schemaReady = true;
 }
 
@@ -81,6 +93,7 @@ async function hit(request, env) {
   if (!type || !sid) return new Response(null, { status: 400 });
 
   const cf = request.cf || {};
+  const attr = attribution(str(body.r, 500), str(body.q, 500));
   const row = {
     ts: Date.now(),
     type,
@@ -88,7 +101,12 @@ async function hit(request, env) {
     sid,
     vid: id(body.v),
     path: str(body.p, 200) || '/',
-    src: source(str(body.r, 500), str(body.q, 500)),
+    src: attr.src,
+    medium: attr.medium,
+    campaign: attr.campaign,
+    term: attr.term,
+    content: attr.content,
+    landing: str(body.l, 200),
     ref: refHost(str(body.r, 500)),
     city: str(cf.city, 60),
     country: str(cf.country, 2),
@@ -99,9 +117,10 @@ async function hit(request, env) {
   try {
     await ensureSchema(env.DB);
     await env.DB.prepare(
-      'INSERT INTO hits (ts,type,name,sid,vid,path,src,ref,city,country,device,meta) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      `INSERT INTO hits (ts,type,name,sid,vid,path,src,medium,campaign,term,content,landing,ref,city,country,device,meta)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
-      .bind(row.ts, row.type, row.name, row.sid, row.vid, row.path, row.src, row.ref, row.city, row.country, row.device, row.meta)
+      .bind(row.ts, row.type, row.name, row.sid, row.vid, row.path, row.src, row.medium, row.campaign, row.term, row.content, row.landing, row.ref, row.city, row.country, row.device, row.meta)
       .run();
   } catch (e) {
     console.warn('[hit] insert failed', e && e.message);
@@ -129,28 +148,63 @@ function device(ua, width) {
   return 'desktop';
 }
 
-/** Where the visit came from, in the words the owner uses. */
-function source(ref, query) {
+/**
+ * Where the visit came from, in the words the owner uses, plus the UTM /
+ * Google Ads details when the link carries them. Google Ads adds gclid by
+ * itself; campaign and keyword arrive only once the account's tracking
+ * template appends utm_campaign={campaignid}&utm_term={keyword}.
+ */
+function attribution(ref, query) {
   const q = new URLSearchParams(query || '');
-  if (q.get('gclid') || q.get('gad_source') || q.get('gbraid') || q.get('wbraid')) return 'google-ads';
-  const utm = (q.get('utm_source') || '').toLowerCase();
-  const medium = (q.get('utm_medium') || '').toLowerCase();
-  if (utm) {
-    if (/google/.test(utm) && /cpc|ppc|paid/.test(medium)) return 'google-ads';
-    if (/facebook|fb|instagram|ig/.test(utm)) return 'facebook';
-    if (/whatsapp|wa/.test(utm)) return 'whatsapp';
-    if (/google/.test(utm)) return 'google';
-    return utm.slice(0, 30);
-  }
-  if (q.get('fbclid')) return 'facebook';
+  const utm = (q.get('utm_source') || '').toLowerCase().slice(0, 40);
+  const medium = (q.get('utm_medium') || '').toLowerCase().slice(0, 40);
+  const out = {
+    src: null,
+    medium: medium || null,
+    campaign: str(q.get('utm_campaign'), 80),
+    term: str(q.get('utm_term'), 80),
+    content: str(q.get('utm_content'), 80),
+  };
   const host = refHost(ref) || '';
-  if (!host) return 'direct';
-  if (/google\./.test(host)) return 'google';
-  if (/facebook|instagram|fb\.com|fb\.me|l\.facebook/.test(host)) return 'facebook';
-  if (/whatsapp|wa\.me/.test(host)) return 'whatsapp';
-  if (/bing\.|yahoo\.|duckduckgo|yandex/.test(host)) return 'search-other';
-  if (/pitaron-hamavrik/.test(host)) return 'direct';
-  return host.slice(0, 30);
+
+  if (q.get('gclid') || q.get('gad_source') || q.get('gbraid') || q.get('wbraid')) {
+    out.src = 'google-ads';
+    out.medium = out.medium || 'cpc';
+  } else if (utm) {
+    if (/google/.test(utm) && /cpc|ppc|paid|ads/.test(medium)) out.src = 'google-ads';
+    else if (/google/.test(utm) && /business|gbp|gmb|maps|profile/.test(medium)) out.src = 'google-business';
+    else if (/instagram|^ig$/.test(utm)) out.src = 'instagram';
+    else if (/facebook|^fb$/.test(utm)) out.src = 'facebook';
+    else if (/whatsapp|^wa$/.test(utm)) out.src = 'whatsapp';
+    else if (/google/.test(utm)) out.src = 'google';
+    else out.src = utm;
+  } else if (q.get('fbclid')) {
+    out.src = /instagram/.test(host) ? 'instagram' : 'facebook';
+    out.medium = out.medium || 'social';
+  } else if (!host) {
+    out.src = 'direct';
+  } else if (/google\./.test(host)) {
+    out.src = 'google';
+    out.medium = out.medium || 'organic';
+  } else if (/instagram/.test(host)) {
+    out.src = 'instagram';
+    out.medium = out.medium || 'social';
+  } else if (/facebook|fb\.com|fb\.me/.test(host)) {
+    out.src = 'facebook';
+    out.medium = out.medium || 'social';
+  } else if (/whatsapp|wa\.me/.test(host)) {
+    out.src = 'whatsapp';
+    out.medium = out.medium || 'chat';
+  } else if (/bing\.|yahoo\.|duckduckgo|yandex/.test(host)) {
+    out.src = 'search-other';
+    out.medium = out.medium || 'organic';
+  } else if (/pitaron-hamavrik/.test(host)) {
+    out.src = 'direct';
+  } else {
+    out.src = host.slice(0, 40);
+    out.medium = out.medium || 'referral';
+  }
+  return out;
 }
 
 /* ── /admin ───────────────────────────────────────────────────────────── */
@@ -193,7 +247,7 @@ async function admin(request, env, url) {
 
   if (path === '/admin/api/stats') return stats(env.DB, url);
   if (path === '/admin/api/live') return live(env.DB);
-  if (path === '/admin') return html(dashboardPage(), 200);
+  if (path === '/admin') return html(dashboardPage().replace('__CAMPAIGNS__', JSON.stringify(CAMPAIGNS)), 200);
   return new Response('Not found', { status: 404 });
 }
 
@@ -233,7 +287,8 @@ async function stats(db, url) {
   if (to - from > 400 * 864e5) return json({ error: 'range too long' }, 400);
 
   const HOUR = 3600000;
-  const [totals, hours, sources, pages, cities, devices, events, leads] = await Promise.all([
+  const LEAD = `type='event' AND name IN ('whatsapp_click','phone_click','quote_completed')`;
+  const [totals, hours, sources, pages, cities, devices, events, leads, detail, landings, visitsLog] = await Promise.all([
     db
       .prepare(
         `SELECT COUNT(DISTINCT sid) AS visits, COUNT(DISTINCT vid) AS people,
@@ -250,7 +305,10 @@ async function stats(db, url) {
       .bind(from, to)
       .all(),
     db
-      .prepare(`SELECT src AS k, COUNT(DISTINCT sid) AS n FROM hits WHERE ts>=? AND ts<? GROUP BY src ORDER BY n DESC LIMIT 12`)
+      .prepare(
+        `SELECT src AS k, COUNT(DISTINCT sid) AS n, COUNT(DISTINCT CASE WHEN ${LEAD} THEN sid END) AS leads
+         FROM hits WHERE ts>=? AND ts<? GROUP BY src ORDER BY n DESC LIMIT 20`,
+      )
       .bind(from, to)
       .all(),
     db
@@ -282,6 +340,29 @@ async function stats(db, url) {
       )
       .bind(from, to)
       .all(),
+    db
+      .prepare(
+        `SELECT src, medium, campaign, term, COUNT(DISTINCT sid) AS n, COUNT(DISTINCT CASE WHEN ${LEAD} THEN sid END) AS leads
+         FROM hits WHERE ts>=? AND ts<? GROUP BY src, medium, campaign, term ORDER BY n DESC LIMIT 40`,
+      )
+      .bind(from, to)
+      .all(),
+    db
+      .prepare(
+        `SELECT COALESCE(landing, path) AS k, COUNT(DISTINCT sid) AS n, COUNT(DISTINCT CASE WHEN ${LEAD} THEN sid END) AS leads
+         FROM hits WHERE ts>=? AND ts<? GROUP BY k ORDER BY n DESC LIMIT 15`,
+      )
+      .bind(from, to)
+      .all(),
+    db
+      .prepare(
+        `SELECT sid, MIN(ts) AS start, MAX(ts) AS last, MAX(src) AS src, MAX(medium) AS medium, MAX(campaign) AS campaign, MAX(term) AS term,
+                MAX(city) AS city, MAX(device) AS device, COALESCE(MAX(landing), MIN(path)) AS landing,
+                SUM(type='view') AS pages, SUM(${LEAD}) AS leads
+         FROM hits WHERE ts>=? AND ts<? GROUP BY sid ORDER BY start DESC LIMIT 60`,
+      )
+      .bind(from, to)
+      .all(),
   ]);
 
   return json({
@@ -295,6 +376,9 @@ async function stats(db, url) {
     devices: devices.results,
     events: events.results,
     leads: leads.results.map((r) => ({ ...r, meta: safeJson(r.meta) })),
+    detail: detail.results,
+    landings: landings.results,
+    visits: visitsLog.results,
   });
 }
 
@@ -303,7 +387,7 @@ async function live(db) {
   const since = Date.now() - LIVE_WINDOW_MS;
   const rows = await db
     .prepare(
-      `SELECT h.sid, h.ts, h.path, h.city, h.device, h.src,
+      `SELECT h.sid, h.ts, h.path, h.city, h.device, h.src, h.campaign, h.term,
               (SELECT MIN(ts) FROM hits s WHERE s.sid=h.sid) AS started,
               (SELECT COUNT(*) FROM hits s WHERE s.sid=h.sid AND s.type='view') AS pages
        FROM hits h
@@ -441,10 +525,14 @@ function dashboardPage() {
 <div class="card" style="grid-column:1/-1"><h2 id="chart-title">ביקורים לפי יום</h2><div class="chart" id="chart"></div></div>
 <div class="card"><h2>באתר עכשיו</h2><ul class="live-list" id="live"><li class="empty">אין אף אחד כרגע</li></ul></div>
 <div class="card"><h2>פניות אחרונות</h2><div id="leads"><div class="empty">אין עדיין</div></div></div>
-<div class="card"><h2>מאיפה הגיעו</h2><div id="sources"></div></div>
-<div class="card"><h2>ערים</h2><div id="cities"></div></div>
+<div class="card"><h2>ערוצים – מאיפה הגיעו ומי פנה</h2><div id="channels"></div></div>
+<div class="card"><h2>מקורות</h2><div id="sources"></div></div>
+<div class="card" style="grid-column:1/-1"><h2>פירוט מקורות – מדיום, קמפיין ומילת מפתח</h2><div class="muted" style="margin:-6px 0 10px">קמפיין ומילת מפתח מגיעים מגוגל אדס דרך תבנית המעקב; קישורים מפייסבוק/וואטסאפ מזוהים לפי הפרמטרים שבקישור.</div><div id="detail"></div></div>
+<div class="card"><h2>דפי נחיתה</h2><div id="landings"></div></div>
 <div class="card"><h2>דפים</h2><div id="pages"></div></div>
+<div class="card"><h2>ערים</h2><div id="cities"></div></div>
 <div class="card"><h2>מכשירים</h2><div id="devices"></div><h2 style="margin-top:18px">פעולות</h2><div id="events"></div></div>
+<div class="card" style="grid-column:1/-1"><h2>יומן ביקורים – 60 האחרונים בתקופה</h2><div id="visits"></div></div>
 </div>
 <div class="foot"><span>מתעדכן לבד: "באתר עכשיו" כל 15 שניות, השאר כל דקה. השעות לפי השעון של המכשיר שלך.</span><span id="updated"></span></div>
 </div>
@@ -452,7 +540,11 @@ function dashboardPage() {
 (function(){
 const $=s=>document.querySelector(s);
 const fmt=n=>new Intl.NumberFormat('he-IL').format(n||0);
-const SRC={'google-ads':'גוגל אדס (ממומן)',google:'גוגל (אורגני)',facebook:'פייסבוק / אינסטגרם',whatsapp:'וואטסאפ',direct:'ישיר / קישור',"search-other":'מנוע חיפוש אחר'};
+const SRC={'google-ads':'גוגל אדס (ממומן)',google:'גוגל (אורגני)','google-business':'גוגל ביזנס / מפות',facebook:'פייסבוק',instagram:'אינסטגרם',whatsapp:'וואטסאפ',direct:'ישיר / קישור',"search-other":'מנוע חיפוש אחר'};
+const CHANNEL=k=>k==='google-ads'?'חיפוש ממומן (גוגל אדס)':(k==='google'||k==='search-other')?'חיפוש אורגני':k==='google-business'?'גוגל ביזנס / מפות':(k==='facebook'||k==='instagram')?'רשתות חברתיות':k==='whatsapp'?'וואטסאפ':k==='direct'?'ישיר (הקלידו / שמרו)':'הפניה מאתר אחר';
+const MED={cpc:'ממומן',organic:'אורגני',social:'רשת חברתית',chat:'צ׳אט',referral:'הפניה','business-profile':'פרופיל עסקי'};
+const CAMP=__CAMPAIGNS__;
+const campName=c=>c?(CAMP[c]||c):'';
 const DEV={mobile:'טלפון',desktop:'מחשב',tablet:'טאבלט','?':'לא ידוע'};
 const EV={whatsapp_click:'לחיצה על WhatsApp',phone_click:'לחיצה על טלפון',quote_completed:'הצעת מחיר נשלחה',quote_started:'התחילו טופס',service_selected:'בחרו שירות',before_after_interaction:'הזיזו לפני/אחרי'};
 const PAGE={'/':'דף הבית','/beer-sheva':'ניקוי ספות באר שבע','/arad':'ניקוי ספות ערד','/mattress-cleaning-beer-sheva':'ניקוי מזרנים','/car-upholstery-beer-sheva':'ריפודי רכב','/carpet-cleaning-beer-sheva':'ניקוי שטיחים','/gallery':'לפני ואחרי'};
@@ -519,6 +611,19 @@ async function loadStats(){
   $('#k-visits-s').textContent=period==='today'?'מאז חצות':period==='yesterday'?'אתמול':Math.round(d.totals.visits/days)+' בממוצע ליום';
   chart(d.hours,from,to,g);
   table($('#sources'),d.sources,'src',d.totals.visits,k=>esc(SRC[k]||k));
+  // channels: sources grouped, with leads and conversion rate
+  const ch=new Map();
+  for(const r of d.sources){const c=CHANNEL(r.k);const x=ch.get(c)||{k:c,n:0,leads:0};x.n+=r.n;x.leads+=r.leads||0;ch.set(c,x)}
+  const chRows=[...ch.values()].sort((a,b)=>b.n-a.n);
+  $('#channels').innerHTML=chRows.length?'<table><tr><th>ערוץ</th><th style="text-align:end">ביקורים</th><th style="text-align:end">פנו</th><th style="text-align:end">המרה</th></tr>'+chRows.map(r=>'<tr><td>'+esc(r.k)+'<div class="barline"><i style="width:'+(100*r.n/Math.max(1,chRows[0].n))+'%"></i></div></td><td class="n">'+fmt(r.n)+' <span class="muted">('+Math.round(100*r.n/Math.max(1,d.totals.visits))+'%)</span></td><td class="n">'+fmt(r.leads)+'</td><td class="n">'+(r.n?Math.round(100*r.leads/r.n)+'%':'–')+'</td></tr>').join('')+'</table>':'<div class="empty">אין נתונים</div>';
+  // source detail
+  const D=$('#detail');
+  D.innerHTML=d.detail.length?'<table><tr><th>מקור</th><th>מדיום</th><th>קמפיין</th><th>מילת מפתח / תוכן</th><th style="text-align:end">ביקורים</th><th style="text-align:end">פנו</th></tr>'+d.detail.map(r=>'<tr><td>'+esc(SRC[r.src]||r.src||'')+'</td><td class="muted">'+esc(MED[r.medium]||r.medium||'–')+'</td><td>'+esc(campName(r.campaign)||'–')+'</td><td class="muted">'+esc(r.term||'–')+'</td><td class="n">'+fmt(r.n)+'</td><td class="n">'+fmt(r.leads)+(r.n?' <span class="muted">('+Math.round(100*r.leads/r.n)+'%)</span>':'')+'</td></tr>').join('')+'</table>':'<div class="empty">אין נתונים</div>';
+  // landing pages
+  $('#landings').innerHTML=d.landings.length?'<table><tr><th>דף כניסה</th><th style="text-align:end">ביקורים</th><th style="text-align:end">פנו</th></tr>'+d.landings.map(r=>'<tr><td>'+esc(PAGE[r.k]||r.k)+'<div class="barline"><i style="width:'+(100*r.n/Math.max(1,d.landings[0].n))+'%"></i></div></td><td class="n">'+fmt(r.n)+'</td><td class="n">'+fmt(r.leads)+(r.n?' <span class="muted">('+Math.round(100*r.leads/r.n)+'%)</span>':'')+'</td></tr>').join('')+'</table>':'<div class="empty">אין נתונים</div>';
+  // visit log
+  const dur=ms=>{const m=Math.round(ms/60000);return m<1?'<1 דק׳':m+' דק׳'};
+  $('#visits').innerHTML=d.visits.length?'<div style="overflow-x:auto"><table><tr><th>מתי</th><th>מאיפה</th><th>קמפיין / מילה</th><th>דף כניסה</th><th>עיר</th><th>מכשיר</th><th style="text-align:end">דפים</th><th style="text-align:end">זמן</th><th>פנה?</th></tr>'+d.visits.map(v=>'<tr><td class="muted" style="white-space:nowrap">'+when(v.start)+'</td><td>'+esc(SRC[v.src]||v.src||'')+(v.medium&&!SRC[v.src]?' <span class="muted">('+esc(v.medium)+')</span>':'')+'</td><td class="muted">'+esc(campName(v.campaign))+(v.term?'<br>'+esc(v.term):'')+'</td><td>'+esc(PAGE[v.landing]||v.landing||'')+'</td><td class="muted">'+esc(v.city||'')+'</td><td class="muted">'+esc(DEV[v.device]||'')+'</td><td class="n">'+fmt(v.pages)+'</td><td class="n">'+dur(v.last-v.start)+'</td><td>'+(v.leads?'<span class="tag wa">כן</span>':'<span class="muted">לא</span>')+'</td></tr>').join('')+'</table></div>':'<div class="empty">אין ביקורים בתקופה</div>';
   table($('#cities'),d.cities,'city',d.totals.visits,k=>esc(k==='?'?'לא ידוע':k));
   table($('#pages'),d.pages.map(p=>({k:p.k,n:p.views})),'path',d.totals.views,k=>esc(PAGE[k]||k));
   table($('#devices'),d.devices,'device',d.totals.visits,k=>esc(DEV[k]||k));
@@ -538,7 +643,7 @@ async function loadLive(){
   $('#k-live').textContent=fmt(d.visitors.length);
   const ul=$('#live');
   if(!d.visitors.length){ul.innerHTML='<li class="empty" style="display:block">אין אף אחד כרגע</li>';return}
-  ul.innerHTML=d.visitors.map(v=>'<li><span class="dot"></span><div style="flex:1"><b>'+esc(PAGE[v.path]||v.path)+'</b> <span class="muted">· '+esc(v.city||'עיר לא ידועה')+' · '+esc(DEV[v.device]||'')+' · '+esc(SRC[v.src]||v.src||'')+'</span><div class="muted">'+v.pages+' דפים · באתר '+ago(d.now-v.started).replace('לפני ','')+' · פעיל '+ago(d.now-v.ts)+'</div></div></li>').join('');
+  ul.innerHTML=d.visitors.map(v=>'<li><span class="dot"></span><div style="flex:1"><b>'+esc(PAGE[v.path]||v.path)+'</b> <span class="muted">· '+esc(v.city||'עיר לא ידועה')+' · '+esc(DEV[v.device]||'')+' · '+esc(SRC[v.src]||v.src||'')+(v.campaign||v.term?' · '+esc(campName(v.campaign))+(v.term?' / '+esc(v.term):''):'')+'</span><div class="muted">'+v.pages+' דפים · באתר '+ago(d.now-v.started).replace('לפני ','')+' · פעיל '+ago(d.now-v.ts)+'</div></div></li>').join('');
 }
 $('#periods').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;period=b.dataset.p;[...$('#periods').querySelectorAll('button')].forEach(x=>x.classList.toggle('on',x===b));loadStats()});
 function start(){loadStats();loadLive();clearInterval(statsTimer);clearInterval(liveTimer);statsTimer=setInterval(loadStats,60000);liveTimer=setInterval(loadLive,15000)}

@@ -76,13 +76,26 @@ export interface AccountProfile {
  * measures its real box; a clip is silently wrong the moment anything above it
  * has grown.
  */
-/** What the search saw, for the terminal when it came back with nothing. */
+/**
+ * What the search saw, for the terminal when it came back without a face.
+ *
+ * The first version of this only printed when it had candidates to describe,
+ * so the one outcome it most needed to explain — "nothing on the page was even
+ * the right shape" — came out as silent as the bug it was written to diagnose.
+ * Every field here is reported unconditionally now.
+ */
 export interface AvatarProbe {
-  /** How many pictures on the page were the right shape and size at all. */
+  /** Every <img>/<image> in the document, before any filtering. */
+  nodes: number;
+  /** How many of those were the right size and shape for a face. */
   shaped: number;
-  /** The best few, described just enough to say why none of them qualified. */
+  /** The biggest few, described just enough to say why none qualified. */
   sample: string[];
+  /** 'ok', or why the search could not run at all. */
+  note: string;
 }
+
+const EMPTY_PROBE: AvatarProbe = { nodes: 0, shaped: 0, sample: [], note: 'לא רצה' };
 
 async function captureAvatar(
   page: Page,
@@ -90,6 +103,19 @@ async function captureAvatar(
   name: string,
   profilePath: string,
 ): Promise<{ image: AccountProfile['image']; reason: AccountProfile['imageNote']; probe: AvatarProbe }> {
+  /*
+   * WAIT FOR THERE TO BE PICTURES AT ALL.
+   *
+   * The name is read out of the raw HTML, which arrives long before Facebook's
+   * app draws anything — so "a real name beside an empty search" is exactly
+   * what an unrendered page produces, and that is what the owner's machine
+   * reported. Same class of race as the profile title, and the same fix: wait
+   * for the condition instead of for a number of seconds.
+   */
+  await page
+    .waitForFunction(() => document.querySelectorAll('img, image').length > 0, undefined, { timeout: 15_000 })
+    .catch(() => undefined);
+
   const picked = await page
     .evaluateHandle(
       ({ userId, fullName, path }: { userId: string; fullName: string; path: string }) => {
@@ -100,16 +126,15 @@ async function captureAvatar(
         const nodes = Array.from(document.querySelectorAll('img, image'));
         const described = nodes.map((el) => {
           const r = el.getBoundingClientRect();
-          const link = el.closest('a[href]');
-          const href = link?.getAttribute('href') ?? '';
+          const href = el.closest('a[href]')?.getAttribute('href') ?? '';
           const alt = norm(el.getAttribute('alt') ?? '');
           const label = norm(el.closest('[aria-label]')?.getAttribute('aria-label') ?? '');
           // An SVG <image> carries its source on href/xlink:href, an <img> on src.
           const src =
-            el.getAttribute('src') ??
-            el.getAttribute('href') ??
-            el.getAttribute('xlink:href') ??
-            (el as HTMLImageElement).currentSrc ??
+            el.getAttribute('src') ||
+            el.getAttribute('href') ||
+            el.getAttribute('xlink:href') ||
+            (el as HTMLImageElement).currentSrc ||
             '';
           return {
             el,
@@ -118,6 +143,7 @@ async function captureAvatar(
             tag: el.tagName.toLowerCase(),
             href,
             alt,
+            label,
             src,
             /*
              * THE PICTURE'S OWN ADDRESS. Facebook's profile-photo files carry
@@ -133,7 +159,7 @@ async function captureAvatar(
             byLink:
               (userId !== '' && href.includes(userId)) ||
               /\/me\/?($|\?)/.test(href) ||
-              (path !== '' && (href === path || href.startsWith(`${path}?`) || href.startsWith(`https://www.facebook.com${path}`))),
+              (path !== '' && path !== '/' && (href === path || href.startsWith(`${path}?`) || href.startsWith(`https://www.facebook.com${path}`))),
             /* The account's own name, compared against itself — not a label in
                any particular language. Exactly, never "contains": an avatar is
                labelled with the bare name, while a photo somebody posted OF the
@@ -142,7 +168,7 @@ async function captureAvatar(
           };
         });
         const shaped = described.filter(
-          (c) => c.w >= 24 && c.w <= 400 && c.h > 0 && c.w / c.h > 0.75 && c.w / c.h < 1.35,
+          (c) => c.w >= 20 && c.w <= 500 && c.h > 0 && c.w / c.h > 0.7 && c.w / c.h < 1.45,
         );
         const proven = shaped
           .filter((c) => c.byUrl || c.byLink || c.byAlt)
@@ -154,32 +180,40 @@ async function captureAvatar(
               b.w - a.w,
           );
         /*
-         * WHEN NOTHING QUALIFIES, SAY WHAT WAS THERE.
-         *
-         * Two guesses at this markup have now been wrong, and each cost a round
-         * trip to the owner's machine to find out. A search that comes back
-         * empty and describes what it rejected turns the next attempt into
-         * reading rather than guessing. Terminal only — the dashboard shows a
-         * face or an initial, never an explanation.
+         * WHEN NOTHING QUALIFIES, SAY WHAT WAS THERE — and when nothing was
+         * even the right shape, describe the page's pictures anyway. That case
+         * is the most informative one and the last version printed nothing for
+         * it, which is how a diagnostic becomes as silent as the bug.
          */
-        const sample = shaped
+        const sample = (shaped.length ? shaped : described)
+          .slice()
           .sort((a, b) => b.w - a.w)
-          .slice(0, 6)
+          .slice(0, 8)
           .map(
             (c) =>
-              `${c.tag} ${Math.round(c.w)}x${Math.round(c.h)} alt="${c.alt.slice(0, 40)}" href="${c.href.slice(0, 50)}" src="${c.src.slice(-60)}"`,
+              `${c.tag} ${Math.round(c.w)}x${Math.round(c.h)} alt="${(c.alt || c.label).slice(0, 30)}" href="${c.href.slice(0, 40)}" src="${c.src.slice(-55)}"`,
           );
-        return { el: proven[0]?.el ?? null, shaped: shaped.length, sample };
+        return { el: proven[0]?.el ?? null, nodes: nodes.length, shaped: shaped.length, sample };
       },
       { userId: id, fullName: name, path: profilePath },
     )
-    .catch(() => null);
+    .catch((e: unknown) => (e instanceof Error ? e.message : String(e)));
 
-  const probe: AvatarProbe = picked
-    ? await picked.evaluate((v: { shaped: number; sample: string[] }) => ({ shaped: v.shaped, sample: v.sample })).catch(() => ({ shaped: 0, sample: [] }))
-    : { shaped: 0, sample: [] };
-  const el = picked ? ((await picked.getProperty('el').then((h) => h.asElement()).catch(() => null)) as ElementHandle<Node> | null) : null;
-  await picked?.dispose().catch(() => undefined);
+  if (typeof picked === 'string') {
+    // The search itself could not run. That is a third outcome, and lumping it
+    // in with "found nothing" would hide a broken read behind a true-sounding
+    // "no picture on this page".
+    return { image: null, reason: 'no-element', probe: { ...EMPTY_PROBE, note: picked.slice(0, 160) } };
+  }
+
+  const probe: AvatarProbe = await picked
+    .evaluate((v: { nodes: number; shaped: number; sample: string[] }) => ({ nodes: v.nodes, shaped: v.shaped, sample: v.sample, note: 'ok' }))
+    .catch(() => ({ ...EMPTY_PROBE, note: 'הדוח לא נקרא' }));
+  const el = (await picked
+    .getProperty('el')
+    .then((h) => h.asElement())
+    .catch(() => null)) as ElementHandle<Node> | null;
+  await picked.dispose().catch(() => undefined);
   if (!el) return { image: null, reason: 'no-element', probe };
   try {
     const bytes = await el.screenshot({ type: 'png', timeout: 10_000 });

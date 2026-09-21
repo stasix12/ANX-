@@ -777,10 +777,10 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
      * that describes what it rejected makes the next attempt reading rather
      * than guessing. Terminal only, and only on failure.
      */
-    if (account.probe.sample.length) {
-      console.log(`[worker]   (נבדקו ${account.probe.shaped} תמונות בגודל מתאים; הגדולות שבהן:)`);
-      for (const line of account.probe.sample) console.log(`[worker]   · ${line}`);
-    }
+    console.log(
+      `[worker]   (בעמוד ${account.probe.nodes} תמונות, מתוכן ${account.probe.shaped} בגודל מתאים · ${account.probe.note})`,
+    );
+    for (const line of account.probe.sample) console.log(`[worker]   · ${line}`);
   }
 
   const { error } = await db.from('social_workers').update(patch).eq('id', state.id);

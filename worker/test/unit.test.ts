@@ -2064,7 +2064,18 @@ const scenario: { step: string; line: string }[] = [];
    * that comes back empty and describes what it saw turns the next attempt
    * into reading rather than guessing — in the terminal, never on screen.
    */
-  assert.ok(/account\.probe\.sample\.length/.test(localWorker), 'an empty avatar search must describe what it rejected');
+  /* Unconditionally: the first version printed only when it had candidates,
+     so "nothing on the page was even the right shape" — the most informative
+     outcome of all — came out as silent as the bug it was written to find. */
+  assert.ok(/account\.probe\.nodes/.test(localWorker) && /account\.probe\.shaped/.test(localWorker), 'an empty avatar search must report what was on the page');
+  assert.ok(!/if \(account\.probe\.sample\.length\)/.test(localWorker), 'and must not fall silent when it has nothing to list');
+  /* The name is read from raw HTML, which arrives long before Facebook draws
+     anything — so a real name beside an empty search is what an unrendered
+     page produces. Wait for the condition, not for a number of seconds. */
+  assert.ok(
+    /waitForFunction\(\(\) => document\.querySelectorAll\('img, image'\)\.length > 0/.test(account),
+    'the avatar search waits for the page to have drawn pictures at all',
+  );
   assert.ok(!/probe/.test(hero), 'and that description never reaches the screen');
 
   console.log('signed-in-account tests OK');

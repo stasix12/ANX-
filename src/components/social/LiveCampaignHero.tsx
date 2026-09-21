@@ -539,7 +539,7 @@ export function LiveQueueHero({
           fills that gap with a placeholder face or a guessed name.
         */}
         <Link
-          href="#browser-status"
+          href="/social/account"
           className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl ps-1.5 pe-2 text-[13px] font-extrabold ${
             workerOnline ? 'bg-success-400/12 text-success-400' : 'bg-warning-400/12 text-warning-400'
           }`}

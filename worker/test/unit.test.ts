@@ -2152,6 +2152,50 @@ const scenario: { step: string; line: string }[] = [];
     'and a group picture that cannot be replaced must stop failing silently',
   );
 
+  /*
+   * SWITCHING ACCOUNTS — and the one rule that screen exists under.
+   *
+   * The owner asked to tap the face and land somewhere they can leave this
+   * Facebook account and sign in to another "with its username and password".
+   * They get exactly that, with the typing done on Facebook's own login page
+   * in a Chrome window on the PC — never in a field here. Two reasons, and
+   * both are load-bearing: this product holds no Facebook password anywhere,
+   * so there is nothing to store or leak; and Facebook answers a login with
+   * two-factor codes and device checks that a form on a phone cannot satisfy,
+   * so it would collect a password and then fail anyway.
+   *
+   * A password field is the easiest thing in the world to add back later, in
+   * good faith, by somebody who does not know that. So it is asserted.
+   */
+  const accountPage = readFileSync(new URL('../../src/app/social/account/page.tsx', import.meta.url), 'utf8');
+  assert.ok(/href="\/social\/account"/.test(hero), 'the account chip must lead somewhere, not to an anchor on the same screen');
+  assert.ok(
+    !/type=["']password["']|autoComplete=["'](?:current|new)-password["']/.test(accountPage),
+    'no Facebook password may be typed into this product',
+  );
+  assert.ok(/הסיסמה/.test(accountPage) && /פייסבוק עצמה|של פייסבוק/.test(accountPage), 'and the screen must say where it IS typed, rather than leaving it a mystery');
+  /* The switch is the two commands the worker already has, in the order the
+     machine needs them: wipe the profile, then open the login window. */
+  assert.ok(
+    /sendWorkerCommand\([^;]*'logout'\);[\s\S]{0,120}sendWorkerCommand\([^;]*'login'\);/.test(accountPage),
+    'switching disconnects before it connects',
+  );
+  /*
+   * And disconnecting must FORGET. The profile is wiped from the machine, but
+   * the name and face live in the database — left there, somebody switching
+   * accounts would go on seeing the account they just left, beside a chip
+   * saying nothing is connected.
+   */
+  assert.ok(/async function forgetAccount/.test(localWorker), 'logout clears the stored account');
+  assert.ok(
+    /fb_user_id: '', fb_user_name: '', fb_avatar_url: ''/.test(localWorker),
+    'all three fields, or the dashboard keeps showing the previous person',
+  );
+  assert.ok(
+    /await session\.logout\(\);[\s\S]{0,900}await forgetAccount\(state\);/.test(localWorker),
+    'and it happens on the logout command, not somewhere hopeful',
+  );
+
   console.log('signed-in-account tests OK');
 }
 

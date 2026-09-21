@@ -402,6 +402,16 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
         await session.logout();
         state.browserState = 'disconnected';
         state.attention = '';
+        /*
+         * AND FORGET WHOSE SESSION IT WAS.
+         *
+         * Disconnecting wipes the Chrome profile, so the account is gone from
+         * the machine — but the name and face live in the database, and left
+         * there the dashboard goes on showing the previous person beside a
+         * chip that says nothing is connected. Somebody switching accounts
+         * would see the account they just left.
+         */
+        await forgetAccount(state);
         result = 'הפרופיל המקומי נמחק — הדפדפן מנותק מפייסבוק.';
       } else if (cmd.command === 'resume') {
         state.attention = '';
@@ -824,6 +834,24 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
     return;
   }
   console.log(`[worker] ✓ חשבון פייסבוק מחובר: ${patch.fb_user_name || account.id}`);
+}
+
+/**
+ * Clear the signed-in account from the dashboard.
+ *
+ * The mirror of recordAccount, and it exists for the same reason that one
+ * writes an empty name rather than skipping the write: a stored answer that
+ * has stopped being true is worse than none, because the screen shows it with
+ * the same confidence as a live one.
+ */
+async function forgetAccount(state: WorkerState): Promise<void> {
+  const db = await workerDb();
+  const { error } = await db
+    .from('social_workers')
+    .update({ fb_user_id: '', fb_user_name: '', fb_avatar_url: '' })
+    .eq('id', state.id);
+  if (error) console.error('[worker] ✗ ניקוי פרטי החשבון נכשל:', error.message);
+  else console.log('[worker] ✓ פרטי חשבון הפייסבוק נוקו.');
 }
 
 /* ------------------------------------------------------------ helpers */

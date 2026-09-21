@@ -722,8 +722,23 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
   }
   const db = await workerDb();
   const patch: Record<string, string> = { fb_user_id: account.id };
-  if (account.name) patch.fb_user_name = account.name;
-  else console.log('[worker] ℹ זוהה חשבון פייסבוק אבל לא נקרא ממנו שם — הדשבורד יציג "מחובר" בלבד.');
+  /*
+   * THE NAME IS WRITTEN EVEN WHEN IT IS EMPTY, and that is a correction.
+   *
+   * It used to be written only when non-empty, so a wrong value could never be
+   * undone — and one was: an early version of the profile-page fallback raced
+   * the title and stored the owner's name as "Facebook". A stored answer that
+   * is wrong and permanent is worse than no answer, because the screen shows
+   * it with the same confidence as a real one.
+   *
+   * An empty name is now a real answer rather than a gap: readAccountProfile
+   * makes two independent attempts — the rail link, then the profile page —
+   * and returns a profile object only when it actually reached a signed-in
+   * session. A blank after both means there is nothing to show, the chip falls
+   * back to the machine state, and a bad value from before is cleared.
+   */
+  patch.fb_user_name = account.name;
+  if (!account.name) console.log('[worker] ℹ זוהה חשבון פייסבוק אבל לא נקרא ממנו שם — הדשבורד יציג "מחובר" בלבד.');
 
   if (account.image) {
     const objectPath = `workers/${state.id}.png`;

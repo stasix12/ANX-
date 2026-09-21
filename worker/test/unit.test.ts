@@ -1913,7 +1913,9 @@ const scenario: { step: string; line: string }[] = [];
    * "unreadable this minute" is not "nobody is signed in", and browser_state
    * already carries the second one.
    */
-  assert.ok(/if \(account\.name\) patch\.fb_user_name = account\.name;/.test(localWorker), 'a name is written only when one was read');
+  /* This used to assert the opposite — that the name is written only when
+     non-empty — and that rule is exactly what made a wrong value permanent.
+     The new rule is asserted a few lines below, where it belongs. */
   assert.ok(/upsert: true/.test(localWorker) && /fb_avatar_url.*publicUrl.*\?v=/.test(localWorker), 'the avatar is copied and cache-busted, never hotlinked');
 
   /*
@@ -1961,6 +1963,18 @@ const scenario: { step: string; line: string }[] = [];
      locale-independent as the cookie. Without it an unreadable home layout
      left the feature silently doing nothing. */
   assert.ok(/facebook\.com\/me/.test(account), 'a name unreadable on the home layout falls back to the profile page');
+  /*
+   * "Facebook" IS NOT A NAME. The profile page ships a placeholder title and
+   * swaps in the person's name once rendered; a fixed pause raced it and this
+   * stored the owner's name as "Facebook" on their real machine. A wrong
+   * stored answer is worse than none — it is shown with the same confidence.
+   */
+  assert.ok(/waitForFunction/.test(account), 'the fallback waits for the placeholder title to be replaced');
+  assert.ok(/\/\^facebook\$\/i\.test\(candidate\)/.test(account), 'and refuses "Facebook" as a name outright');
+  assert.ok(
+    /patch\.fb_user_name = account\.name;/.test(localWorker),
+    'the name is written even when empty, or a wrong value from a past version can never be cleared',
+  );
 
   console.log('signed-in-account tests OK');
 }

@@ -68,9 +68,35 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
   if (!found) {
     try {
       await page.goto('https://www.facebook.com/me', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-      await page.waitForTimeout(2000);
+      /*
+       * WAIT FOR THE TITLE TO STOP SAYING "Facebook".
+       *
+       * Measured on the owner's machine: this read came back with the name
+       * "Facebook" and wrote it to the dashboard. The profile page ships with a
+       * placeholder title and swaps in the person's name once it has rendered,
+       * so a fixed two-second pause was a race — and losing it produced a name
+       * that is worse than none, because it looks like a real answer.
+       */
+      await page
+        .waitForFunction(() => document.title && !/^\(?\d*\)?\s*facebook\s*$/i.test(document.title), undefined, { timeout: 15_000 })
+        .catch(() => undefined);
+      /*
+       * The <h1> first. On a profile page it is the person's name and nothing
+       * else; the title is the same string with decoration around it, and is
+       * the thing that carries the placeholder.
+       */
+      const heading = await page
+        .evaluate(() => (document.querySelector('h1')?.textContent ?? '').trim())
+        .catch(() => '');
       const title = (await page.title().catch(() => '')).replace(/^\(\d+\)\s*/, '').replace(patterns.titleSuffix, '').trim();
-      const name = title.slice(0, 80);
+      /*
+       * "Facebook" is not a name. Neither is an empty string. Writing either
+       * would put a wrong answer on the dashboard, and this module's whole
+       * contract is that an unreadable name stays absent rather than guessed —
+       * the chip falls back to the machine state, which is at least true.
+       */
+      const candidate = (heading || title).slice(0, 80);
+      const name = /^facebook$/i.test(candidate) ? '' : candidate;
       const box = await page
         .evaluate(() => {
           const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[];

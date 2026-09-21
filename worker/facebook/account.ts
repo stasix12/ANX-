@@ -30,6 +30,40 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
   if (!id) return null;
 
   /*
+   * FIRST, THE PAGE'S OWN DATA — no DOM guessing and no second page load.
+   *
+   * facebook.com embeds a `CurrentUserInitialData` blob in its bootstrap
+   * script holding the signed-in user's ACCOUNT_ID and NAME. Measured on the
+   * owner's machine, both DOM attempts below came back empty on the real home
+   * layout while this blob was sitting in the HTML the whole time.
+   *
+   * It is matched next to the id we already have from the cookie, so a blob
+   * belonging to anything else cannot be mistaken for the signed-in user, and
+   * the value is unescaped through JSON.parse because Hebrew and Cyrillic
+   * arrive as \uXXXX. Structural, not linguistic: nothing here depends on the
+   * account's language.
+   */
+  const fromBlob = await page
+    .content()
+    .then((html) => {
+      const at = html.indexOf('"CurrentUserInitialData"');
+      if (at === -1) return '';
+      const window = html.slice(at, at + 4000);
+      // The blob must be about the account the COOKIE named. Without this the
+      // match is "some NAME near some key", which is a guess wearing the
+      // clothes of a fact.
+      if (!window.includes(id)) return '';
+      const named = window.match(/"NAME":"((?:[^"\\]|\\.)*)"/);
+      if (!named) return '';
+      try {
+        return (JSON.parse(`"${named[1]}"`) as string).trim().slice(0, 80);
+      } catch {
+        return '';
+      }
+    })
+    .catch(() => '');
+
+  /*
    * The profile link is found BY THE ID, never by a label.
    *
    * Facebook renders this app in whatever language the account is set to, so
@@ -66,6 +100,8 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
    * their name, which is as locale-independent as the cookie was.
    */
   if (!found) {
+    /* The blob already answered; the only thing the profile page is still
+       needed for is a picture. */
     try {
       await page.goto('https://www.facebook.com/me', { waitUntil: 'domcontentloaded', timeout: 30_000 });
       /*
@@ -95,7 +131,7 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
        * contract is that an unreadable name stays absent rather than guessed —
        * the chip falls back to the machine state, which is at least true.
        */
-      const candidate = (heading || title).slice(0, 80);
+      const candidate = (fromBlob || heading || title).slice(0, 80);
       const name = /^facebook$/i.test(candidate) ? '' : candidate;
       const box = await page
         .evaluate(() => {
@@ -145,5 +181,5 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
       image = null;
     }
   }
-  return { id, name: found.name, image };
+  return { id, name: fromBlob || found.name, image };
 }

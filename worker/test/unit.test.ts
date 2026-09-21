@@ -1969,6 +1969,17 @@ const scenario: { step: string; line: string }[] = [];
    * stored the owner's name as "Facebook" on their real machine. A wrong
    * stored answer is worse than none — it is shown with the same confidence.
    */
+  /*
+   * THE PAGE'S OWN DATA FIRST. Measured on the owner's machine: both DOM reads
+   * came back empty on the real home layout while CurrentUserInitialData was
+   * sitting in the HTML the whole time. It is structural, not linguistic, so
+   * it does not care what language the account is set to — and it must be
+   * checked against the cookie's id, or the match is "some NAME near some
+   * key", which is a guess wearing the clothes of a fact.
+   */
+  assert.ok(/CurrentUserInitialData/.test(account), 'the name is read from the page data before any DOM guessing');
+  assert.ok(/window\.includes\(id\)/.test(account), 'and only when that blob is about the account the cookie named');
+  assert.ok(/JSON\.parse\(`"\$\{named\[1\]\}"`\)/.test(account), 'unescaped properly — Hebrew and Cyrillic arrive as \\uXXXX');
   assert.ok(/waitForFunction/.test(account), 'the fallback waits for the placeholder title to be replaced');
   assert.ok(/\/\^facebook\$\/i\.test\(candidate\)/.test(account), 'and refuses "Facebook" as a name outright');
   assert.ok(

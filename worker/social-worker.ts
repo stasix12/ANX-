@@ -386,13 +386,8 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
      * sitting in the database waiting for the next poll.
      */
     const entered = cmd.payload?.user && cmd.payload?.pass ? { user: cmd.payload.user, pass: cmd.payload.pass } : null;
-    const { data: claimed } = await db
-      .from('social_worker_commands')
-      .update({ status: 'running', worker_id: state.id, payload: {} })
-      .eq('id', cmd.id)
-      .eq('status', 'pending')
-      .select('id');
-    if (!claimed?.length) continue;
+    const claimed = await claimCommand(cmd.id, state.id, { status: 'running' });
+    if (!claimed) continue;
     // The command NAME only. Its payload is never printed, here or anywhere.
     console.log(`[worker] פקודה: ${cmd.command}`);
     let result = '';
@@ -877,6 +872,57 @@ async function forgetAccount(state: WorkerState): Promise<void> {
   else console.log('[worker] ✓ פרטי חשבון הפייסבוק נוקו.');
 }
 
+/* --------------------------------------------------------- claiming a command */
+
+/**
+ * Take a command, emptying its one-time payload in the same statement.
+ *
+ * THE FALLBACK IS THE POINT, and it exists because of a real failure on the
+ * owner's machine: a command sat at "pending" forever with nothing written
+ * anywhere to say why. The claim writes `payload: {}` — correct, and the whole
+ * reason a password never becomes a stored secret — but on a database where
+ * social-schema-v11.sql has not been run that column does not exist, so the
+ * update fails, the row is never claimed, and supabase-js returns the error
+ * rather than throwing it. Discarding that result was a decision not to know,
+ * and it turned one un-run migration into a worker that silently ignored every
+ * instruction the dashboard sent it.
+ *
+ * So: try the safe form, and if the column is missing, say so where the owner
+ * reads and claim the command anyway. A missing column must not stop the
+ * product working; it must only stop it being tidy.
+ */
+async function claimCommand(id: string, workerId: string, patch: Record<string, unknown>): Promise<boolean> {
+  const db = await workerDb();
+  const attempt = async (withPayload: boolean) =>
+    db
+      .from('social_worker_commands')
+      .update({ ...patch, worker_id: workerId, ...(withPayload ? { payload: {} } : {}) })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select('id');
+
+  const { data, error } = await attempt(true);
+  if (!error) return Boolean(data?.length);
+
+  if (!/payload/i.test(error.message)) {
+    console.error('[worker] ✗ נטילת הפקודה נכשלה:', error.message);
+    return false;
+  }
+  console.error('[worker] ✗ אין עמודת payload — הפקודות לא ינוקו. הריצו את social-schema-v11.sql ב-Supabase.');
+  await logActivity(
+    'warn',
+    'commands_payload_missing',
+    'צריך להריץ את social-schema-v11.sql ב-Supabase. בלעדיו פרטי ההתחברות שנשלחים מהמסך לא נמחקים אוטומטית.',
+    { detail: error.message },
+  );
+  const retry = await attempt(false);
+  if (retry.error) {
+    console.error('[worker] ✗ נטילת הפקודה נכשלה:', retry.error.message);
+    return false;
+  }
+  return Boolean(retry.data?.length);
+}
+
 /* ------------------------------------------- Facebook's questions, on screen */
 
 /** How long a person gets to read the challenge and answer it. */
@@ -935,13 +981,12 @@ async function askOnScreen(state: WorkerState, shot: Buffer): Promise<string | n
     const row = (data ?? [])[0] as { id: string; payload?: { code?: string } } | undefined;
     if (row) {
       const code = row.payload?.code ?? '';
-      const { data: claimed } = await db
-        .from('social_worker_commands')
-        .update({ status: 'done', worker_id: state.id, payload: {}, result: 'התשובה הועברה לפייסבוק.', finished_at: new Date().toISOString() })
-        .eq('id', row.id)
-        .eq('status', 'pending')
-        .select('id');
-      if (claimed?.length && code) {
+      const claimed = await claimCommand(row.id, state.id, {
+        status: 'done',
+        result: 'התשובה הועברה לפייסבוק.',
+        finished_at: new Date().toISOString(),
+      });
+      if (claimed && code) {
         console.log('[worker] ✓ התקבלה תשובת אימות מהמסך.');
         return code;
       }

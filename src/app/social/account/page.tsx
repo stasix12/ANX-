@@ -46,6 +46,36 @@ import { friendlyMessage } from '@/lib/social/errors';
  * can get an account locked. Somebody paying for this deserves to learn that
  * from the screen rather than from Facebook.
  */
+
+/**
+ * The last instruction, as a sentence.
+ *
+ * It read "פקודה אחרונה: login · pending" — two English words from a database
+ * column, on a screen a cleaning-business owner reads on a phone. Worse, the
+ * one state that actually needs explaining is exactly the one that word hides:
+ * "pending" means NOBODY HAS PICKED IT UP, which on a machine that is not
+ * running is the whole answer and on a machine that is running is a real
+ * fault. Said in Hebrew, it tells them what to do next.
+ */
+function commandLine(cmd: WorkerCommand, online: boolean): string {
+  const what: Record<string, string> = {
+    login: 'התחברות',
+    check: 'בדיקת חיבור',
+    logout: 'ניתוק',
+    resume: 'המשך סבב',
+    verify: 'שליחת קוד אימות',
+  };
+  const name = what[cmd.command] ?? cmd.command;
+  if (cmd.status === 'pending') {
+    return online
+      ? `${name}: ממתינה — התוכנה במחשב עוד לא לקחה אותה.`
+      : `${name}: ממתינה, והתוכנה במחשב לא פועלת. הפעילו אותה שם כדי שהפעולה תתבצע.`;
+  }
+  if (cmd.status === 'running') return `${name}: מתבצעת עכשיו.`;
+  if (cmd.status === 'failed') return `${name}: נכשלה.`;
+  return `${name}: הסתיימה.`;
+}
+
 export default function AccountPage() {
   const [workers, setWorkers] = useState<(SocialWorker & { online: boolean })[]>([]);
   const [commands, setCommands] = useState<WorkerCommand[]>([]);
@@ -394,7 +424,7 @@ export default function AccountPage() {
               </p>
               {lastCommand && (
                 <p className="mt-2 text-xs text-mist-500">
-                  פקודה אחרונה: {lastCommand.command} · {lastCommand.status}
+                  {commandLine(lastCommand, online)}
                   {lastCommand.result ? ` · ${lastCommand.result}` : ''}
                 </p>
               )}

@@ -2182,10 +2182,10 @@ const scenario: { step: string; line: string }[] = [];
    * ONE-TIME command payload and nothing may keep them:
    */
   assert.ok(
-    /update\(\{ status: 'running', worker_id: state\.id, payload: \{\} \}\)/.test(localWorker),
+    /update\(\{ \.\.\.patch, worker_id: workerId, \.\.\.\(withPayload \? \{ payload: \{\} \} : \{\}\) \}\)/.test(localWorker),
     'claiming a command empties its payload, in the same statement',
   );
-  const claimAt = localWorker.indexOf("payload: {} }");
+  const claimAt = localWorker.indexOf('const claimed = await claimCommand(cmd.id');
   const loginAt = localWorker.indexOf('session.interactiveLogin(');
   assert.ok(claimAt > 0 && loginAt > claimAt, 'wiped BEFORE the browser opens, so a crash mid-login leaves nothing behind');
   assert.ok(!/select\('\*'\)[\s\S]{0,120}social_worker_commands|from\('social_worker_commands'\)\.select\('\*'\)/.test(clientSrc), 'the command list must name its columns, never ask for all of them');
@@ -2236,8 +2236,30 @@ const scenario: { step: string; line: string }[] = [];
   );
   /* The answer travels like the password: one-time, wiped as it is claimed. */
   assert.ok(/'verify'/.test(accountPage) && /\{ code: code\.trim\(\) \}/.test(accountPage), 'what was typed goes back as a one-time verify payload');
-  assert.ok(/payload: \{\}, result:/.test(localWorker), 'and is emptied in the statement that claims it');
+  assert.ok(
+    /const claimed = await claimCommand\(row\.id, state\.id, \{[\s\S]{0,140}status: 'done'/.test(localWorker),
+    'and is emptied by the same claim that every other command goes through',
+  );
   assert.ok(!/בחלון שעל המחשב|החלון על המחשב נשאר פתוח/.test(accountPage), 'and the screen no longer tells anyone to walk to the machine');
+
+  /*
+   * A MISSING MIGRATION MUST NOT MAKE THE WORKER IGNORE EVERYTHING.
+   *
+   * Emptying the payload as the command is claimed is right, and on a database
+   * where v11 has not been run that column does not exist — so the update
+   * failed, the row was never claimed, and supabase-js returned the error
+   * rather than throwing it. Discarded, that turned one un-run migration into a
+   * command stuck at "pending" forever with nothing written anywhere to say
+   * why. Observed on the owner's machine.
+   */
+  assert.ok(/async function claimCommand/.test(localWorker), 'claiming a command is one place that checks its own result');
+  assert.ok(/social-schema-v11\.sql/.test(localWorker), 'and names the migration when that is the cause');
+  assert.ok(/'commands_payload_missing'/.test(localWorker), 'where the owner reads, not only in a terminal');
+  assert.ok(/attempt\(false\)/.test(localWorker), 'then claims it anyway — a missing column stops tidiness, never the product');
+  /* And "pending" is not a word on a phone screen. The one state that needs
+     explaining was the one the English hid. */
+  assert.ok(/function commandLine/.test(accountPage), 'the last command is a Hebrew sentence, not a column value');
+  assert.ok(/ממתינה/.test(accountPage) && /לא פועלת/.test(accountPage), 'and a command nobody picked up says which thing is not running');
 
   /* Signing in wipes the old session first: typed onto a live session, the new
      details land on a page that is not asking for them. */

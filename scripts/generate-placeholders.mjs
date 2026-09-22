@@ -15,17 +15,19 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = join(root, 'public');
 
-// Matches the site's design tokens (globals.css): charcoal panels, amber
-// linework, near-white text. These are baked into the SVGs, so they have to
-// be changed and the files regenerated whenever the theme moves.
-const panel = '#24272b';
-const wash = '#1e2124';
-const line = '#3a3f44';
-const blue = '#e0940a';
-const blueDeep = '#ffcf8a';
-const blueSoft = '#ffb84d';
-const ink = '#f0ede6';
-const slate = '#b8b2a6';
+// Matches the site's design tokens (globals.css): a neutral light-gray image
+// well, hairline gray linework and charcoal text, so a placeholder sits
+// quietly in the white storefront instead of reading as a black box. These
+// are baked into the SVGs, so they have to be changed and the files
+// regenerated whenever the theme moves.
+const panel = '#f3f3f4';
+const wash = '#f7f7f8';
+const line = '#eaeaec';
+const blue = '#c8c8cd';
+const blueDeep = '#9a9aa0';
+const blueSoft = '#b4b4ba';
+const ink = '#171717';
+const slate = '#666666';
 
 const escapeXml = (value) =>
   value.replace(
@@ -44,7 +46,7 @@ const defs = (w, h) => `
       <path d="M48 0H0V48" fill="none" stroke="${line}" stroke-width="1"/>
     </pattern>
     <radialGradient id="glow" cx="50%" cy="42%" r="55%">
-      <stop offset="0%" stop-color="${blue}" stop-opacity="0.16"/>
+      <stop offset="0%" stop-color="${blue}" stop-opacity="0"/>
       <stop offset="100%" stop-color="${blue}" stop-opacity="0"/>
     </radialGradient>
   </defs>

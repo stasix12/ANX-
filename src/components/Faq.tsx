@@ -14,7 +14,7 @@ export const faqItems = [
   {
     question: 'יש הנחה בהזמנה של כמה יחידות?',
     answer:
-      'כן. מוסיפים את כל הפריטים לרשימת ההזמנה ושולחים אותה בהודעה אחת — נחזור אליכם עם מחיר לכמות. זה רלוונטי במיוחד לצוותים שמצייידים כמה עובדים, ולמי שמזמין ידיות וצינורות יחד.',
+      'כן. מוסיפים את כל הפריטים להזמנה ושולחים אותה בהודעה אחת — נחזור אליכם עם מחיר לכמות. זה רלוונטי במיוחד לצוותים שמציידים כמה עובדים, ולמי שמזמין ידיות וצינורות יחד.',
   },
   {
     question: 'כמה זמן לוקח המשלוח?',
@@ -35,7 +35,7 @@ export const faqItems = [
 
 export function Faq() {
   return (
-    <section aria-labelledby="faq-title" className="pb-16 sm:pb-20">
+    <section aria-labelledby="faq-title" className="py-14 sm:py-20">
       <div className="mx-auto max-w-3xl px-4 sm:px-6">
         <h2 id="faq-title" className="text-2xl font-extrabold tracking-tight sm:text-3xl">
           שאלות נפוצות
@@ -45,13 +45,13 @@ export function Faq() {
           {faqItems.map((item) => (
             <details
               key={item.question}
-              className="group rounded-2xl border border-ink-700 surface transition-colors duration-300 open:border-brand-500/45"
+              className="group rounded-xl border border-ink-700 bg-white transition-colors duration-200 hover:border-ink-600 open:border-ink-600"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4 text-start text-sm font-bold sm:text-base">
+              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 text-start text-[15px] font-bold sm:px-5 sm:text-base">
                 <span>{item.question}</span>
-                <ChevronDownIcon className="h-5 w-5 shrink-0 text-brand-600 transition-transform duration-300 group-open:rotate-180" />
+                <ChevronDownIcon className="h-5 w-5 shrink-0 text-mist-500 transition-transform duration-200 group-open:rotate-180" />
               </summary>
-              <p className="px-4 pb-4 text-sm leading-relaxed text-mist-300">{item.answer}</p>
+              <p className="px-4 pb-4 text-sm leading-relaxed text-mist-500 sm:px-5 sm:text-[15px]">{item.answer}</p>
             </details>
           ))}
         </div>

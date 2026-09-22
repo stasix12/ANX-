@@ -93,6 +93,17 @@ export const categories: Category[] = [
 export const categoryName = (id: CategoryId): string =>
   categories.find((c) => c.id === id)?.name ?? '';
 
+/**
+ * Up to four products to show under this one: same category first, topped up
+ * from the rest of the catalogue so the row is never a lonely one or two.
+ */
+export function relatedProducts(all: Product[], product: Product): Product[] {
+  const others = all.filter((item) => item.slug !== product.slug);
+  const same = others.filter((item) => item.category === product.category);
+  const rest = others.filter((item) => item.category !== product.category);
+  return [...same, ...rest].slice(0, 4);
+}
+
 export const formatPrice = (price: number): string => `₪${price.toLocaleString('he-IL')}`;
 
 const gallery = (slug: string): string[] => [

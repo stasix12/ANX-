@@ -57,7 +57,15 @@ const glyphs = [
   },
 ];
 
-export function Wordmark({ className = '' }: { className?: string }) {
+/** The "3D" half of the lockup — carries the brand orange in the two-tone mark. */
+const accentGlyphs = new Set(['three', 'd']);
+
+/**
+ * Two-tone by default: "ANX" in the text colour (currentColor), "3D" in the
+ * brand orange. `mono` draws every glyph in currentColor, for places a single
+ * ink is wanted.
+ */
+export function Wordmark({ className = '', mono = false }: { className?: string; mono?: boolean }) {
   return (
     <svg
       viewBox="0 0 570 100"
@@ -67,7 +75,13 @@ export function Wordmark({ className = '' }: { className?: string }) {
       fill="currentColor"
     >
       {glyphs.map(({ key, d, x, fillRule }) => (
-        <path key={key} d={d} transform={`translate(${x},0)`} fillRule={fillRule} />
+        <path
+          key={key}
+          d={d}
+          transform={`translate(${x},0)`}
+          fillRule={fillRule}
+          fill={!mono && accentGlyphs.has(key) ? 'var(--color-brand-500)' : undefined}
+        />
       ))}
     </svg>
   );

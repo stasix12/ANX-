@@ -1,6 +1,7 @@
 import { CoursePromo } from '@/components/CoursePromo';
 import { Faq, faqItems } from '@/components/Faq';
 import { Hero } from '@/components/Hero';
+import { HowToOrder } from '@/components/HowToOrder';
 import { ProductGrid } from '@/components/ProductGrid';
 import { Section } from '@/components/Section';
 import { TrustStrip } from '@/components/TrustStrip';
@@ -37,23 +38,19 @@ export default async function HomePage() {
       <Hero />
       <TrustStrip />
 
-      {/*
-        The hero above carries the h1 now, so this heading steps down to an h2.
-        It stays in the document rather than being deleted: the grid needs a
-        heading of its own for search engines and screen readers, even though
-        the page reads better without a second title on screen.
-      */}
       <Section
         id="products"
         titleAs="h2"
+        eyebrow="הקטלוג"
         title="המוצרים שלנו"
-        description="ידיות שאיבה, צינורות ומתאמים למכונות Sabrina. משלוחים לכל הארץ, הזמנות בוואטסאפ."
-        headerHidden
+        description="ידיות שאיבה, צינורות ומתאמים למכונות Sabrina. בוחרים דגם, מוסיפים להזמנה ושולחים הכל בהודעה אחת."
       >
         <ProductGrid initialProducts={products} />
       </Section>
 
       {course ? <CoursePromo course={course} /> : null}
+
+      <HowToOrder />
 
       <Faq />
 

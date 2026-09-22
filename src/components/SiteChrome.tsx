@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { Footer } from '@/components/Footer';
 import { Header } from '@/components/Header';
-import { OrderBar } from '@/components/OrderBar';
+import { OrderBar, OrderBarSpacer } from '@/components/OrderBar';
 import { OrderListProvider } from '@/components/OrderListProvider';
 
 /**
@@ -31,11 +31,11 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
   return (
     <OrderListProvider>
       <Header />
-      {/* Bottom padding clears the order bar, which is fixed over the page. */}
-      <main id="main" className="pb-24">
-        {children}
-      </main>
+      <main id="main">{children}</main>
       <Footer />
+      {/* Clears the fixed order bar — after the footer, so the bar never sits
+          over the footer's last lines, and only while the bar is showing. */}
+      <OrderBarSpacer />
       <OrderBar />
     </OrderListProvider>
   );

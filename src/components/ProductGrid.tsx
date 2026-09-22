@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ProductCard } from '@/components/ProductCard';
+import { productsLabel } from '@/lib/order';
 import { categories, fetchPublishedProducts, type CategoryId, type Product } from '@/lib/products';
 
 type Filter = CategoryId | 'all';
@@ -21,6 +22,7 @@ const filters: { id: Filter; label: string }[] = [
 export function ProductGrid({ initialProducts = [] }: { initialProducts?: Product[] }) {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [active, setActive] = useState<Filter>('all');
+  const pillRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,27 +39,54 @@ export function ProductGrid({ initialProducts = [] }: { initialProducts?: Produc
     [active, products],
   );
 
+  /*
+   * Real radio-group keyboard behaviour: one tab stop (the selected pill),
+   * arrows move and select. Right-to-left, so ArrowLeft is "next".
+   */
+  const onKeyDown = (event: React.KeyboardEvent, index: number) => {
+    const last = filters.length - 1;
+    let next: number | null = null;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next = index === last ? 0 : index + 1;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next = index === 0 ? last : index - 1;
+    if (event.key === 'Home') next = 0;
+    if (event.key === 'End') next = last;
+    if (next === null) return;
+    event.preventDefault();
+    setActive(filters[next].id);
+    pillRefs.current[next]?.focus();
+  };
+
   return (
     <div>
-      {/* Radio-group semantics so arrow keys and screen readers behave like a real filter. */}
+      {/*
+        One scrolling row on a phone rather than wrapping to two: it keeps the
+        grid higher on the screen, and the pills stay one thumb-swipe away.
+        -mx/px lets the row run to the screen edge while the first pill still
+        lines up with the page gutter.
+      */}
       <div
         role="radiogroup"
         aria-label="סינון מוצרים לפי קטגוריה"
-        className="flex flex-wrap gap-2"
+        className="scrollbar-none -mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0"
       >
-        {filters.map((filter) => {
+        {filters.map((filter, index) => {
           const selected = active === filter.id;
           return (
             <button
               key={filter.id}
+              ref={(node) => {
+                pillRefs.current[index] = node;
+              }}
               type="button"
               role="radio"
               aria-checked={selected}
+              tabIndex={selected ? 0 : -1}
               onClick={() => setActive(filter.id)}
-              className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold transition-colors duration-200 sm:px-5 sm:py-2.5 ${
+              onKeyDown={(event) => onKeyDown(event, index)}
+              className={`h-11 shrink-0 snap-start rounded-full border px-5 text-sm font-bold whitespace-nowrap transition-colors duration-200 ${
                 selected
                   ? 'border-brand-500 bg-brand-500 text-on-brand'
-                  : 'border-ink-700 text-mist-300 hover:border-brand-500/60 hover:text-mist-100'
+                  : 'border-ink-700 bg-white text-mist-300 hover:border-ink-600 hover:text-mist-100'
               }`}
             >
               {filter.label}
@@ -66,13 +95,13 @@ export function ProductGrid({ initialProducts = [] }: { initialProducts?: Produc
         })}
       </div>
 
-      <p aria-live="polite" className="mt-6 text-sm text-mist-500">
-        {visible.length} מוצרים
+      <p aria-live="polite" className="sr-only">
+        {productsLabel(visible.length)}
       </p>
 
-      <div className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
-        {visible.map((product) => (
-          <ProductCard key={product.slug} product={product} />
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-5 md:grid-cols-3 xl:grid-cols-4">
+        {visible.map((product, index) => (
+          <ProductCard key={product.slug} product={product} priority={index < 2} />
         ))}
       </div>
     </div>

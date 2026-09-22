@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { PlayIcon } from '@/components/icons';
-import { formatPrice, type Product } from '@/lib/products';
+import { Price } from '@/components/Price';
+import type { Product } from '@/lib/products';
 import { asset } from '@/lib/site';
 
 /**
@@ -14,18 +15,19 @@ export function CoursePromo({ course }: { course: Product }) {
   if (!course.video) return null;
 
   return (
-    <section className="border-y border-ink-700">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+    <section className="border-y border-ink-700 bg-ink-900">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
         <div className="mx-auto max-w-md text-center">
-          <p className="text-xs font-semibold tracking-[0.18em] text-brand-700 uppercase">
-            קורס אונליין
+          <p className="inline-flex items-center gap-2 text-sm font-bold text-brand-700">
+            <span aria-hidden className="h-0.5 w-4 rounded-full bg-brand-500" />
+            הכשרה מקצועית
           </p>
           <h2 className="mt-3 text-2xl font-extrabold tracking-tight text-balance-he sm:text-3xl">
             {course.name}
           </h2>
-          <p className="mt-3 text-base leading-relaxed text-mist-300">{course.tagline}</p>
+          <p className="mt-3 text-base leading-relaxed text-mist-500">{course.tagline}</p>
 
-          <div className="mx-auto mt-7 max-w-[280px] overflow-hidden rounded-card border border-ink-700 bg-black shadow-xl">
+          <div className="mx-auto mt-7 max-w-[280px] overflow-hidden rounded-card border border-ink-700 bg-black shadow-[0_24px_48px_-28px_rgb(0_0_0/0.35)]">
             <video
               className="block aspect-[9/16] w-full object-cover"
               controls
@@ -41,11 +43,15 @@ export function CoursePromo({ course }: { course: Product }) {
             </video>
           </div>
 
-          <p className="mt-6 text-2xl font-extrabold">{course.price !== undefined ? formatPrice(course.price) : ''}</p>
+          {course.price !== undefined ? (
+            <p className="mt-6 text-3xl font-extrabold">
+              <Price value={course.price} />
+            </p>
+          ) : null}
 
           <Link
             href={`/products/${course.slug}`}
-            className="mt-5 inline-flex items-center gap-2 rounded-full bg-brand-500 px-6 py-3 text-sm font-bold text-on-brand transition-colors duration-200 hover:bg-brand-400"
+            className="mt-5 inline-flex h-12 items-center gap-2 rounded-xl bg-brand-500 px-7 text-base font-bold text-on-brand transition-colors duration-200 hover:bg-brand-600"
           >
             <PlayIcon className="h-4 w-4" />
             לפרטים ולהרשמה

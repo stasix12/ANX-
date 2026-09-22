@@ -73,7 +73,7 @@ export function WhatsAppFallback({
           <Step number={1} title="העתיקו את ההזמנה">
             <pre
               dir="rtl"
-              className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl bg-ink-950 p-3 font-sans text-xs leading-relaxed text-mist-100"
+              className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl border border-ink-700 bg-ink-900 p-3 font-sans text-xs leading-relaxed text-mist-100"
             >
               {message}
             </pre>
@@ -111,7 +111,7 @@ export function WhatsAppFallback({
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2.5 rounded-full border border-[#1da851]/50 px-6 py-3 text-sm font-bold text-[#1a9e4f] transition-colors hover:bg-[#25D366]/10"
+            className="flex items-center justify-center gap-2.5 rounded-full border border-[#1da851]/50 px-6 py-3 text-sm font-bold text-[#157a3d] transition-colors hover:bg-[#25D366]/10"
           >
             <WhatsAppIcon className="h-4 w-4 shrink-0" />
             נסו שוב לפתוח את וואטסאפ

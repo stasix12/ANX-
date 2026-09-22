@@ -2,9 +2,10 @@
  * Registry for future local-SEO pages such as /website-building-beer-sheva.
  *
  * Both arrays are empty on purpose: the dynamic route in
- * src/app/[slug]/page.tsx builds one static page per entry in `cityPages`,
+ * src/app/_[slug]/page.tsx builds one static page per entry in `cityPages`,
  * so nothing is generated (and nothing thin is indexed) until real,
- * city-specific copy exists. Adding a city is a data-only change here.
+ * city-specific copy exists. To go live with the first city: fill `cities`
+ * and `cityPages` here, then rename `src/app/_[slug]` to `src/app/[slug]`.
  */
 
 export type ServiceSlug = 'website-building' | 'google-ads';

@@ -12,8 +12,10 @@ import { FaqAccordion } from '@/components/sections/FaqAccordion';
  * Dormant local-SEO route: /website-building-beer-sheva, /google-ads-arad …
  *
  * Builds one static page per entry in content/cities.ts `cityPages`. The
- * registry is empty today, so this generates nothing — no thin pages, nothing
- * in the sitemap — until real city-specific copy is added there.
+ * folder is prefixed with "_" (a Next private folder) so it is not routed at
+ * all while the registry is empty — an active empty catch-all would log a
+ * NoFallbackError on every unknown URL. To activate: add the first city to
+ * content/cities.ts and rename this folder from `_[slug]` to `[slug]`.
  */
 export const dynamicParams = false;
 

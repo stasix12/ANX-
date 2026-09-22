@@ -7,8 +7,8 @@ type Size = 'xs' | 'sm' | 'md' | 'lg';
 const sizeClasses: Record<Size, string> = {
   xs: 'gap-1.5 px-2.5 py-2 text-xs leading-tight',
   sm: 'gap-2 px-4 py-2.5 text-sm',
-  md: 'gap-2.5 px-5 py-3 text-[15px]',
-  lg: 'gap-3 px-7 py-4 text-lg',
+  md: 'h-12 gap-2.5 px-5 text-[15px]',
+  lg: 'h-14 gap-3 px-7 text-lg',
 };
 
 const iconSize: Record<Size, string> = {
@@ -41,13 +41,13 @@ export function WhatsAppButton({
 
   const variantClasses =
     variant === 'solid'
-      ? 'bg-[#25D366] text-mist-100 hover:bg-[#1fbe5a] shadow-lg shadow-[#25D366]/25'
-      : 'border border-[#1da851]/50 text-[#1a9e4f] hover:border-[#1da851] hover:bg-[#25D366]/10';
+      ? 'bg-[#25D366] text-mist-100 hover:bg-[#1fbe5a]'
+      : 'border border-ink-700 bg-white text-mist-100 hover:border-[#1a9e4f] hover:text-[#157a3d] [&>svg]:text-[#1a9e4f]';
 
   return (
     <WhatsAppLink
       href={href}
-      className={`inline-flex items-center justify-center rounded-full font-bold transition-colors duration-200 ${sizeClasses[size]} ${variantClasses} ${className}`}
+      className={`inline-flex items-center justify-center rounded-xl font-bold transition-colors duration-200 ${sizeClasses[size]} ${variantClasses} ${className}`}
     >
       <WhatsAppIcon className={iconSize[size]} />
       <span>{label}</span>

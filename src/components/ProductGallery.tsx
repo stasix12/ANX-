@@ -33,8 +33,9 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
   }, [showVideo]);
 
   return (
-    <div>
-      <div className="relative aspect-[3/4] overflow-hidden rounded-card border border-ink-700 bg-ink-850">
+    // min-w-0: the scrolling thumbnail row must not widen the grid column.
+    <div className="min-w-0">
+      <div className="relative aspect-square overflow-hidden rounded-card border border-ink-700 bg-ink-900">
         <Image
           key={images[imageIndex]}
           src={images[imageIndex]}
@@ -51,8 +52,8 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
           /*
            * Kept mounted rather than swapped in, so the static preview can show
            * it by toggling `hidden` instead of rebuilding the element. object-
-           * contain because the clip is 9:16 inside a 3:4 frame — covering it
-           * would cut the top and bottom off the shot.
+           * contain because the clip is 9:16 inside a square frame — covering
+           * it would cut the top and bottom off the shot.
            */
           <video
             ref={player}
@@ -75,7 +76,7 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
       </div>
 
       {images.length > 1 || video ? (
-        <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="scrollbar-none -mx-4 mt-3 flex gap-2.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0 lg:flex-wrap lg:overflow-visible">
           {video ? (
             <button
               type="button"
@@ -83,8 +84,8 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
               aria-label={`הצגת סרטון של ${productName}`}
               aria-current={showVideo}
               data-gallery-video-thumb
-              className={`relative aspect-square overflow-hidden rounded-xl border transition-colors duration-200 ${
-                showVideo ? 'border-brand-500' : 'border-ink-700 hover:border-ink-600'
+              className={`relative aspect-square w-[72px] shrink-0 overflow-hidden rounded-xl border bg-ink-900 transition-[border-color,box-shadow] duration-200 sm:w-20 ${
+                showVideo ? 'border-mist-100 ring-1 ring-mist-100' : 'border-ink-700 hover:border-ink-600'
               }`}
             >
               <Image
@@ -92,7 +93,7 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
                 alt=""
                 fill
                 loading="lazy"
-                sizes="120px"
+                sizes="80px"
                 className="object-cover"
               />
               <span className="absolute inset-0 grid place-items-center bg-black/35">
@@ -108,9 +109,9 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
               onClick={() => setActiveIndex(index)}
               aria-label={`הצגת תמונה ${index + 1} של ${productName}`}
               aria-current={index === activeIndex}
-              className={`relative aspect-square overflow-hidden rounded-xl border transition-colors duration-200 ${
+              className={`relative aspect-square w-[72px] shrink-0 overflow-hidden rounded-xl border bg-ink-900 transition-[border-color,box-shadow] duration-200 sm:w-20 ${
                 index === activeIndex
-                  ? 'border-brand-500'
+                  ? 'border-mist-100 ring-1 ring-mist-100'
                   : 'border-ink-700 hover:border-ink-600'
               }`}
             >
@@ -119,7 +120,7 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
                 alt=""
                 fill
                 loading="lazy"
-                sizes="120px"
+                sizes="80px"
                 className="object-cover"
               />
             </button>

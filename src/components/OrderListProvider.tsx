@@ -13,6 +13,9 @@ interface OrderListValue {
   clear: () => void;
   /** False until the stored list has been read, so SSR and first paint agree. */
   ready: boolean;
+  /** The order sheet is opened from the header cart and the bottom bar alike. */
+  sheetOpen: boolean;
+  setSheetOpen: (open: boolean) => void;
 }
 
 const OrderListContext = createContext<OrderListValue | null>(null);
@@ -24,6 +27,14 @@ const sameLine = (a: OrderLine, slug: string, model: string) =>
 export function OrderListProvider({ children }: { children: React.ReactNode }) {
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [ready, setReady] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  /*
+   * One persistent polite live region for "added" announcements. It lives here
+   * rather than on the button or in the bar: aria-live on a button that
+   * changes its own label announces unreliably, and the bar is not mounted
+   * until the first item is in, so a region inside it misses that first add.
+   */
+  const [announcement, setAnnouncement] = useState('');
 
   /*
    * Read on mount rather than during render: the server has no localStorage, so
@@ -53,6 +64,7 @@ export function OrderListProvider({ children }: { children: React.ReactNode }) {
   }, [lines, ready]);
 
   const add = useCallback((line: OrderLine) => {
+    setAnnouncement(`נוסף להזמנה: ${line.name}`);
     setLines((current) => {
       const index = current.findIndex((item) => sameLine(item, line.slug, line.model));
       if (index === -1) return [...current, line];
@@ -78,11 +90,18 @@ export function OrderListProvider({ children }: { children: React.ReactNode }) {
   const clear = useCallback(() => setLines([]), []);
 
   const value = useMemo(
-    () => ({ lines, add, setQuantity, remove, clear, ready }),
-    [lines, add, setQuantity, remove, clear, ready],
+    () => ({ lines, add, setQuantity, remove, clear, ready, sheetOpen, setSheetOpen }),
+    [lines, add, setQuantity, remove, clear, ready, sheetOpen],
   );
 
-  return <OrderListContext.Provider value={value}>{children}</OrderListContext.Provider>;
+  return (
+    <OrderListContext.Provider value={value}>
+      {children}
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+    </OrderListContext.Provider>
+  );
 }
 
 export function useOrderList() {

@@ -1,49 +1,52 @@
 @import 'tailwindcss';
 
 /*
- * ANX3D design tokens — charcoal with an amber accent.
+ * ANX3D design tokens — white + orange, premium industrial e-commerce.
  *
- * Chosen over a light royal-blue palette and two other builds (a warm
- * terracotta, an indigo/purple) by putting all four on the live site and
- * comparing. This one won because the shop sells professional equipment
- * rather than a soft consumer product: a dark ground makes the jungle-green
- * and black product photographs stand out instead of blending into a pale
- * background, and amber sits nowhere near WhatsApp's green, so the order
- * button still reads as the one thing to press.
+ * The storefront is mostly white: white page and cards, a near-white
+ * secondary ground for bands and image wells, charcoal text, hairline gray
+ * borders, and orange used only as an accent (primary CTAs, the "3D" of the
+ * wordmark, a few badges, focus rings). The token NAMES are the ones the
+ * dark build used — ink-* are grounds, mist-* are text, brand-* the accent —
+ * so every utility across the store re-resolves without touching markup.
+ * The /crm and platform apps scope their own values under .crm-theme /
+ * .platform-theme and are unaffected.
  *
- * Every text/background pair passes WCAG AA: mist-500 (fine print) sits at
- * 4.74:1 against the page background, on-brand (dark text on the amber fill)
- * at 7.44:1.
+ * Contrast (WCAG): mist-100 #171717 on white 17.9:1; mist-300 #404040 10.4:1;
+ * mist-500 #666666 5.7:1 on white and 5.4:1 on ink-900. brand-700 #C24E00 is
+ * the orange for TEXT on white (4.8:1) — #FF6A00 itself is only for fills and
+ * marks, never text. Filled orange buttons carry charcoal on-brand text
+ * (6.2:1; 5.2:1 on the brand-600 hover).
  */
 @theme {
-  --color-ink-950: #17191c;
-  --color-ink-900: #1e2124;
-  --color-ink-850: #24272b;
-  --color-ink-800: #2b2f33;
-  --color-ink-700: #3a3f44;
-  --color-ink-600: #4a5056;
+  /* Grounds: page → secondary band → card → subtle fill → border → strong border */
+  --color-ink-950: #ffffff;
+  --color-ink-900: #f7f7f8;
+  --color-ink-850: #ffffff;
+  --color-ink-800: #f1f1f3;
+  --color-ink-700: #e7e7e7;
+  --color-ink-600: #d4d4d8;
 
-  --color-brand-300: #ffcf8a;
-  --color-brand-400: #ffb84d;
-  --color-brand-500: #e0940a;
-  --color-brand-600: #c47c06;
-  --color-brand-700: #a56604;
+  --color-brand-300: #ffe4cf;
+  --color-brand-400: #ff8a33;
+  --color-brand-500: #ff6a00;
+  --color-brand-600: #e95f00;
+  --color-brand-700: #c24e00;
 
-  --color-mist-100: #f0ede6;
-  --color-mist-300: #b8b2a6;
-  --color-mist-500: #8a8478;
+  /* Text: primary → secondary → fine print */
+  --color-mist-100: #171717;
+  --color-mist-300: #404040;
+  --color-mist-500: #666666;
 
-  /* Text and marks sitting on a brand-filled element. Its own token because a
-     bright accent needs dark text on it and a deep one needs light — the two
-     cannot both be "white". */
-  --color-on-brand: #1a1200;
-  /* What panel shadows are cast in. Black under a light theme reads as depth;
-     under a dark one the same shadow is invisible and a lift is wanted instead. */
+  /* Text and marks on an orange fill. Charcoal, not white: white on #FF6A00
+     is 2.9:1 and fails WCAG AA; #171717 on it is 6.2:1. */
+  --color-on-brand: #171717;
+  /* What panel shadows are cast in. */
   --color-shadow: #000000;
 
   --font-sans: var(--font-heebo), 'Segoe UI', system-ui, -apple-system, sans-serif;
 
-  --radius-card: 1.25rem;
+  --radius-card: 1rem;
 
   --animate-rise: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -75,15 +78,54 @@
 
   /* Visible, high-contrast focus ring for keyboard navigation. */
   :focus-visible {
-    outline: 2px solid var(--color-brand-500);
+    outline: 2px solid var(--color-mist-100);
     outline-offset: 3px;
     border-radius: 0.375rem;
   }
 
   ::selection {
-    background-color: var(--color-brand-500);
-    color: var(--color-on-brand);
+    background-color: var(--color-brand-300);
+    color: var(--color-mist-100);
   }
+}
+
+/*
+ * Admin palette — the store's admin panel (/admin) keeps the original dark
+ * charcoal + amber look it was built and tuned in. The storefront moved to
+ * white + orange at the root; this re-resolves the same token names back to
+ * the dark values on the admin shell and login screen only, so nothing in
+ * the panel changes. Contrast: mist-500 fine print 4.74:1 on ink-950,
+ * on-brand dark text on the amber fill 7.44:1.
+ */
+.admin-theme {
+  color: var(--color-mist-100);
+  color-scheme: dark;
+
+  --color-ink-950: #17191c;
+  --color-ink-900: #1e2124;
+  --color-ink-850: #24272b;
+  --color-ink-800: #2b2f33;
+  --color-ink-700: #3a3f44;
+  --color-ink-600: #4a5056;
+
+  --color-brand-300: #ffcf8a;
+  --color-brand-400: #ffb84d;
+  --color-brand-500: #e0940a;
+  --color-brand-600: #c47c06;
+  --color-brand-700: #a56604;
+
+  --color-mist-100: #f0ede6;
+  --color-mist-300: #b8b2a6;
+  --color-mist-500: #8a8478;
+
+  --color-on-brand: #1a1200;
+}
+
+.admin-theme .surface {
+  background-color: color-mix(in oklab, var(--color-ink-850) 92%, var(--color-brand-400) 8%);
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--color-shadow) 8%, transparent),
+    0 16px 32px -20px color-mix(in oklab, var(--color-shadow) 30%, transparent);
 }
 
 /*
@@ -762,106 +804,18 @@
   transform: scale(0.97);
 }
 
-/*
- * Ambient page backdrop.
- *
- * A single fixed layer behind the whole document rather than a flat white
- * body: soft sky-blue pools of light on white, a blueprint grid that fades
- * out down the page, and a fine grain so the large light areas have texture
- * instead of reading as empty. Fixed, so it stays put while content scrolls.
- */
-.site-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: -10;
-  pointer-events: none;
-  background: var(--color-ink-950);
+/* Storefront order bar: slides up from the bottom edge the first time an item
+   goes in, instead of popping into place over the content. */
+.order-bar-in {
+  animation: order-bar-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-/*
- * The pools of light, on their own layer so they can move without dragging the
- * grid and the grain along with them.
- *
- * Negative z-index puts it behind ::before — a child would otherwise paint over
- * the grid — while still sitting above the flat ground colour.
- *
- * It drifts, slowly enough to be felt rather than watched: a minute a lap, a
- * couple of percent of travel. Anything faster on a shop page competes with the
- * product photographs, which are the thing that has to hold attention. Only
- * transform is animated, so the browser moves an already-painted layer instead
- * of re-rendering four large gradients every frame, and the layer is inset past
- * the viewport on every side so the drift never exposes an edge.
- */
-.site-backdrop-glow {
-  position: absolute;
-  inset: -14%;
-  z-index: -1;
-  will-change: transform;
-  animation: backdrop-drift 64s ease-in-out infinite;
-  background:
-    radial-gradient(58rem 40rem at 78% -8%, color-mix(in oklab, var(--color-brand-400) 34%, transparent), transparent 62%),
-    radial-gradient(46rem 34rem at 4% 22%, color-mix(in oklab, var(--color-brand-300) 30%, transparent), transparent 66%),
-    radial-gradient(52rem 40rem at 92% 68%, color-mix(in oklab, var(--color-brand-400) 26%, transparent), transparent 62%),
-    radial-gradient(44rem 32rem at 16% 98%, color-mix(in oklab, var(--color-brand-500) 20%, transparent), transparent 64%);
-}
-
-@keyframes backdrop-drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  33% {
-    transform: translate3d(-5.5%, 4%, 0) scale(1.12);
-  }
-  66% {
-    transform: translate3d(4.5%, -4.5%, 0) scale(1.06);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-}
-
-/* Blueprint grid, strongest at the top and gone by the footer. */
-.site-backdrop::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(to left, color-mix(in oklab, var(--color-brand-500) 30%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--color-brand-500) 30%, transparent) 1px, transparent 1px);
-  background-size: 64px 64px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.3) 55%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.3) 55%, transparent 100%);
-  opacity: 0.4;
-  /*
-   * The grid carries the motion, because the pools cannot: they are so soft
-   * against white that drifting them changes no pixel by more than about 7 of
-   * 255 — measurably there, invisible to anyone. Ruled lines have edges, so the
-   * same slow travel actually reads.
-   *
-   * Exactly one cell per lap, linear, so the pattern lands back on itself and
-   * the loop has no seam. Transform only: the browser slides a painted layer
-   * rather than re-rendering the rules each frame.
-   */
-  animation: grid-drift 42s linear infinite;
-}
-
-@keyframes grid-drift {
+@keyframes order-bar-in {
   from {
-    transform: translate3d(0, 0, 0);
+    transform: translateY(100%);
   }
   to {
-    transform: translate3d(64px, 64px, 0);
+    transform: none;
   }
-}
-
-/* Fine grain — keeps wide light areas from banding. */
-.site-backdrop::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.05;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
 
 /*
@@ -920,18 +874,15 @@
 
 @layer utilities {
   /*
-   * Panel surface for cards and boxes: a near-white glass tile that lets the
-   * backdrop's blue light show through at the edges, lifted off the page
-   * with a soft shadow instead of a hairline (a light theme reads depth
-   * through shadow, not through a bright top edge).
+   * Panel surface for cards and boxes: a white tile with a hairline border
+   * (set by the component) and a barely-there shadow — enough to lift it
+   * off a white page without looking like a floating widget.
    */
   .surface {
-    /* Mixed from the surface token rather than literal white, so the panels
-       follow the theme instead of staying pale under a dark one. */
-    background-color: color-mix(in oklab, var(--color-ink-850) 92%, var(--color-brand-400) 8%);
+    background-color: var(--color-ink-850);
     box-shadow:
-      0 1px 2px color-mix(in oklab, var(--color-shadow) 8%, transparent),
-      0 16px 32px -20px color-mix(in oklab, var(--color-shadow) 30%, transparent);
+      0 1px 2px color-mix(in oklab, var(--color-shadow) 4%, transparent),
+      0 6px 20px -12px color-mix(in oklab, var(--color-shadow) 12%, transparent);
   }
 
   .text-balance-he {

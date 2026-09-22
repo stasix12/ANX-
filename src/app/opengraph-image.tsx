@@ -23,36 +23,23 @@ export default function OpengraphImage() {
           flexDirection: 'column',
           justifyContent: 'center',
           padding: '90px',
-          background: 'linear-gradient(135deg, #24272b 0%, #17191c 100%)',
-          color: '#f0ede6',
+          background: '#ffffff',
+          color: '#171717',
           fontFamily: 'sans-serif',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <div
-            style={{
-              width: 92,
-              height: 92,
-              borderRadius: 26,
-              background: 'linear-gradient(135deg, #ffcf8a 0%, #e0940a 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 52,
-              fontWeight: 800,
-              color: '#1a1200',
-            }}
-          >
-            A
+          <div style={{ display: 'flex', fontSize: 84, fontWeight: 800, letterSpacing: 8 }}>
+            <span>ANX</span>
+            <span style={{ color: '#ff6a00' }}>3D</span>
           </div>
-          <div style={{ fontSize: 76, fontWeight: 800, letterSpacing: 10 }}>ANX3D</div>
         </div>
 
-        <div style={{ marginTop: 44, fontSize: 42, color: '#b8b2a6', maxWidth: 900 }}>
+        <div style={{ marginTop: 44, fontSize: 42, color: '#404040', maxWidth: 900 }}>
           Professional Cleaning Equipment
         </div>
 
-        <div style={{ marginTop: 18, fontSize: 34, color: '#ffb84d' }}>
+        <div style={{ marginTop: 18, fontSize: 34, color: '#666666' }}>
           Handles · Hoses · Adapters — built for Sabrina machines
         </div>
 
@@ -63,10 +50,10 @@ export default function OpengraphImage() {
             alignItems: 'center',
             gap: 16,
             fontSize: 28,
-            color: '#8a8478',
+            color: '#666666',
           }}
         >
-          <div style={{ width: 60, height: 4, background: '#e0940a' }} />
+          <div style={{ width: 60, height: 4, background: '#ff6a00' }} />
           <div>WhatsApp 053-5257250</div>
         </div>
       </div>

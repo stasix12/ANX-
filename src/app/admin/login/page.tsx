@@ -33,14 +33,14 @@ export default function AdminLoginPage() {
 
   if (loading || session) {
     return (
-      <div className="grid min-h-dvh place-items-center bg-ink-950">
+      <div className="admin-theme grid min-h-dvh place-items-center bg-ink-950">
         <SpinnerIcon className="h-8 w-8 animate-spin text-brand-500" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-ink-950 px-5 py-10">
+    <div className="admin-theme flex min-h-dvh flex-col items-center justify-center bg-ink-950 px-5 py-10">
       <div className="w-full max-w-sm">
         <div className="text-center">
           <p className="text-2xl font-extrabold tracking-tight">{site.name}</p>

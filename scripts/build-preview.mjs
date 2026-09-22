@@ -417,9 +417,9 @@ const routerScript = (fontClass) => `
    */
 
   /* --- category filter --- */
-  var filterMap = { 'הכל': 'all', 'ידיות שאיבה': 'handles', 'צינורות': 'hoses', 'מתאמים': 'adapters' };
-  var onClasses = ['border-brand-500', 'bg-brand-500', 'text-white'];
-  var offClasses = ['border-ink-700', 'text-mist-300', 'hover:border-brand-500/60', 'hover:text-mist-100'];
+  var filterMap = { 'הכל': 'all', 'ידיות שאיבה': 'handles', 'צינורות': 'hoses', 'מתאמים': 'adapters', 'קורסים': 'courses' };
+  var onClasses = ['border-brand-500', 'bg-brand-500', 'text-on-brand'];
+  var offClasses = ['border-ink-700', 'bg-white', 'text-mist-300', 'hover:border-ink-600', 'hover:text-mist-100'];
 
   document.addEventListener('click', function (event) {
     var button = event.target.closest('[role="radio"]');
@@ -493,7 +493,9 @@ const routerScript = (fontClass) => `
     strip.querySelectorAll('button').forEach(function (other) {
       var active = other === thumb;
       other.setAttribute('aria-current', String(active));
-      other.classList.toggle('border-brand-500', active);
+      other.classList.toggle('border-mist-100', active);
+      other.classList.toggle('ring-1', active);
+      other.classList.toggle('ring-mist-100', active);
       other.classList.toggle('border-ink-700', !active);
     });
   });

@@ -108,6 +108,36 @@ export function TruckIcon(props: IconProps) {
   );
 }
 
+export function CartIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M2.5 3.5h2.2l2.4 11.2a1.5 1.5 0 001.5 1.2h8.6a1.5 1.5 0 001.5-1.1L21 7.5H6" />
+      <circle cx="9.5" cy="19.8" r="1.3" />
+      <circle cx="17" cy="19.8" r="1.3" />
+    </svg>
+  );
+}
+
+export function HeadsetIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 14v-2a8 8 0 0116 0v2" />
+      <rect x="3" y="13.5" width="4" height="6" rx="1.5" />
+      <rect x="17" y="13.5" width="4" height="6" rx="1.5" />
+      <path d="M19 19.5c0 1.2-1.5 2-4 2h-2" />
+    </svg>
+  );
+}
+
+/** Points toward the end of the line — left, in this right-to-left site. */
+export function ArrowEndIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
 /** Solid, unlike the rest: it sits over a photograph and has to read at 28px. */
 export function PlayIcon(props: IconProps) {
   return (

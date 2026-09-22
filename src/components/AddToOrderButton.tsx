@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { useOrderList } from '@/components/OrderListProvider';
-import { CheckIcon } from '@/components/icons';
+import { CartIcon, CheckIcon } from '@/components/icons';
 import { singleLine } from '@/lib/order';
 import type { Product } from '@/lib/products';
 
 /**
- * Adds one unit to the order list, then confirms in place for a moment. The
- * confirmation matters: the list bar sits at the bottom of the screen, so
- * without feedback at the button there is nothing to show the tap registered.
+ * The store's primary action: adds one unit to the order list, then confirms
+ * in place for a moment ("✓ נוסף להזמנה"). The confirmation matters — the
+ * list lives in the header cart and the bottom bar, so without feedback at the
+ * button there is nothing where the eye is to show the tap registered. Screen
+ * readers get the same news from the provider's live region.
+ *
+ * Out-of-stock products cannot be added; the button says so instead.
  */
 export function AddToOrderButton({
   product,
@@ -31,10 +35,23 @@ export function AddToOrderButton({
 
   const scale =
     size === 'md'
-      ? 'mt-3 gap-2 px-6 py-3.5 text-base'
-      : 'mt-1.5 gap-1 px-2.5 py-1.5 text-[11px]';
+      ? 'h-13 gap-2 px-6 text-base'
+      : 'h-11 gap-1.5 px-3 text-sm';
+  const icon = size === 'md' ? 'h-5 w-5' : 'h-4 w-4';
 
   const line = singleLine(product, `מתאים ל${model}`);
+
+  if (!product.inStock) {
+    return (
+      <button
+        type="button"
+        disabled
+        className={`inline-flex w-full cursor-not-allowed items-center justify-center rounded-xl border border-ink-700 bg-ink-900 font-bold text-mist-500 ${scale}`}
+      >
+        אזל מהמלאי
+      </button>
+    );
+  }
 
   return (
     <button
@@ -43,26 +60,28 @@ export function AddToOrderButton({
         add(line);
         setAdded(true);
       }}
-      aria-live="polite"
       /*
        * The line travels in the markup so the exported static preview — where
        * React never boots — can rebuild the same list without re-deriving it
        * from product data it does not have.
        */
       data-order-line={JSON.stringify(line)}
-      className={`inline-flex w-full items-center justify-center rounded-full border font-bold transition-colors duration-200 ${scale} ${
+      className={`inline-flex w-full items-center justify-center rounded-xl border font-bold whitespace-nowrap transition-[background-color,border-color,color,transform] duration-200 active:scale-[0.98] ${scale} ${
         added
-          ? 'border-brand-500 bg-brand-500/10 text-brand-700'
-          : 'border-ink-600 text-mist-300 hover:border-brand-500 hover:text-brand-700'
+          ? 'border-brand-500 bg-white text-brand-700'
+          : 'border-brand-500 bg-brand-500 text-on-brand hover:border-brand-600 hover:bg-brand-600'
       }`}
     >
       {added ? (
         <>
-          <CheckIcon className={size === 'md' ? 'h-5 w-5' : 'h-3 w-3'} />
-          נוסף לרשימה
+          <CheckIcon className={icon} />
+          נוסף להזמנה
         </>
       ) : (
-        '+ הוספה לרשימת הזמנה'
+        <>
+          <CartIcon className={icon} />
+          הוסף להזמנה
+        </>
       )}
     </button>
   );

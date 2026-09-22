@@ -36,14 +36,14 @@ export function AdminShell({ title, children }: { title: string; children: React
 
   if (loading || !session) {
     return (
-      <div className="grid min-h-dvh place-items-center bg-ink-950">
+      <div className="admin-theme grid min-h-dvh place-items-center bg-ink-950">
         <SpinnerIcon className="h-8 w-8 animate-spin text-brand-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-ink-950 pb-20">
+    <div className="admin-theme min-h-dvh bg-ink-950 pb-20">
       <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/95 px-4 py-4 backdrop-blur-lg">
         <h1 className="text-lg font-extrabold">{title}</h1>
       </header>

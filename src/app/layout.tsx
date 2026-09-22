@@ -45,17 +45,17 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#17191c',
-  colorScheme: 'dark',
+  themeColor: '#ffffff',
+  colorScheme: 'light',
+  // Lets env(safe-area-inset-*) report real values, so the fixed order bar
+  // clears the iPhone home indicator.
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="he" dir="rtl" className={heebo.variable}>
-      <body className="min-h-dvh bg-ink-950 font-sans antialiased">
-        <div aria-hidden className="site-backdrop">
-          <span className="site-backdrop-glow" />
-        </div>
+      <body className="min-h-dvh bg-ink-950 font-sans text-mist-100 antialiased">
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:start-4 focus:z-100 focus:rounded-lg focus:bg-brand-500 focus:px-5 focus:py-3 focus:font-bold focus:text-on-brand"

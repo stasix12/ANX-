@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ProductDetail } from '@/components/ProductDetail';
-import { categoryName, fetchProductBySlug, fetchPublishedProducts } from '@/lib/products';
+import { categoryName, fetchProductBySlug, fetchPublishedProducts, relatedProducts } from '@/lib/products';
 import { site } from '@/lib/site';
 
 interface PageProps {
@@ -62,10 +62,7 @@ export default async function ProductPage({ params }: PageProps) {
     notFound();
   }
 
-  const allProducts = await fetchPublishedProducts();
-  const related = allProducts
-    .filter((item) => item.category === product.category && item.slug !== product.slug)
-    .slice(0, 3);
+  const related = relatedProducts(await fetchPublishedProducts(), product);
 
   const productJsonLd = {
     '@context': 'https://schema.org',
@@ -87,8 +84,8 @@ export default async function ProductPage({ params }: PageProps) {
   };
 
   return (
-    <article className="pb-16 sm:pb-20">
-      <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-6 sm:pt-10">
+    <article className="pb-16 sm:pb-24">
+      <div className="mx-auto max-w-7xl px-4 pt-3 sm:px-6 sm:pt-6 lg:px-8">
         <ProductDetail slug={slug} initialProduct={product} initialRelated={related} />
       </div>
 

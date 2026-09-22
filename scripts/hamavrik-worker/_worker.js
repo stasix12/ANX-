@@ -530,7 +530,7 @@ function dashboardPage() {
 <div class="card" style="grid-column:1/-1"><h2>פירוט מקורות – מדיום, קמפיין ומילת מפתח</h2><div class="muted" style="margin:-6px 0 10px">קמפיין ומילת מפתח מגיעים מגוגל אדס דרך תבנית המעקב; קישורים מפייסבוק/וואטסאפ מזוהים לפי הפרמטרים שבקישור.</div><div id="detail"></div></div>
 <div class="card"><h2>דפי נחיתה</h2><div id="landings"></div></div>
 <div class="card"><h2>דפים</h2><div id="pages"></div></div>
-<div class="card"><h2>ערים</h2><div id="cities"></div></div>
+<div class="card"><h2>ערים</h2><div class="muted" style="margin:-6px 0 10px">לפי כתובת ה-IP. בגלישה סלולרית בישראל זה לרוב מראה את מרכז הארץ (ראשון, פתח תקווה, תל אביב) גם למי שנמצא בנגב. מדויק בעיקר ב-WiFi ובמחשב.</div><div id="cities"></div></div>
 <div class="card"><h2>מכשירים</h2><div id="devices"></div><h2 style="margin-top:18px">פעולות</h2><div id="events"></div></div>
 <div class="card" style="grid-column:1/-1"><h2>יומן ביקורים – 60 האחרונים בתקופה</h2><div id="visits"></div></div>
 </div>

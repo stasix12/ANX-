@@ -9,8 +9,8 @@ import { ChevronDownIcon } from '@/components/ui/icons';
  * button[aria-expanded] + region, animated with the grid-rows trick. Answers
  * are always in the DOM (SEO + FAQPage schema); JS only toggles visibility.
  */
-export function FaqAccordion({ items }: { items: FaqItem[] }) {
-  const [openId, setOpenId] = useState<string | null>(null);
+export function FaqAccordion({ items, defaultOpen = null }: { items: FaqItem[]; defaultOpen?: string | null }) {
+  const [openId, setOpenId] = useState<string | null>(defaultOpen);
 
   return (
     <div className="divide-y divide-light-border border-y border-light-border">
@@ -29,7 +29,7 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
                 onClick={() => {
                   const next = open ? null : item.id;
                   setOpenId(next);
-                  if (next) track('faq_open', { question_id: item.id });
+                  if (next) track('faq_open', { question_id: item.id, question_text: item.q });
                 }}
                 className="flex min-h-14 w-full items-center justify-between gap-4 py-3 text-start text-[17px] font-semibold text-navy"
               >
@@ -39,7 +39,14 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
                 />
               </button>
             </h3>
-            <div id={panelId} role="region" aria-labelledby={btnId} className="acc-panel" data-open={open}>
+            <div
+              id={panelId}
+              role="region"
+              aria-labelledby={btnId}
+              className="acc-panel"
+              data-open={open}
+              inert={!open}
+            >
               <div>
                 <p className="pb-5 text-base leading-relaxed text-navy-muted">{item.a}</p>
               </div>

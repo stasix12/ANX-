@@ -7,16 +7,39 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 
+/**
+ * Production origin. Falls back to the host's production URL (Vercel) and
+ * fails the build if nothing is available — canonicals, sitemap and JSON-LD
+ * must never point at a placeholder domain.
+ */
+function resolveSiteUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, '');
+  if (raw) {
+    if (!/^https?:\/\/[^/]+$/.test(raw)) {
+      throw new Error(`[site] NEXT_PUBLIC_SITE_URL must be an origin without a path, got "${raw}"`);
+    }
+    return raw;
+  }
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+  if (vercel) return `https://${vercel}`;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[site] NEXT_PUBLIC_SITE_URL is not set. Canonicals, sitemap and JSON-LD would point at a placeholder domain. Set it (e.g. https://example.co.il) and rebuild.',
+    );
+  }
+  return 'http://localhost:3000';
+}
+
 export const site = {
   /** TODO: שם המותג כפי שיופיע בכותרת, בלוגו ובפוטר. */
   name: 'ANX Digital',
   /** TODO: שורת תיאור קצרה (מופיעה ליד הלוגו ובמטא-דאטה). */
-  tagline: 'אתרים ו-Google Ads לעסקים',
+  tagline: 'בניית אתרים וקידום בגוגל לעסקים',
   /**
    * TODO: כתובת האתר המלאה בפרודקשן, בלי סלאש בסוף.
    * משמשת ל-canonical, sitemap, OpenGraph ו-Schema.
    */
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://example.com',
+  url: resolveSiteUrl(),
 
   contact: {
     /**
@@ -91,7 +114,7 @@ export const pricing: Record<PricingTier['id'], PricingTier> = {
     price: null, // TODO: מחיר הקמה
     priceNote: '',
     monthly: null, // TODO: דמי ניהול חודשיים
-    monthlyNote: 'דמי ניהול חודשיים, לא כולל תקציב מדיה',
+    monthlyNote: 'לא כולל תקציב מדיה',
     popular: true,
   },
 };

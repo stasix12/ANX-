@@ -2,7 +2,8 @@ import { cn } from '@/lib/cn';
 
 /**
  * Eyebrow + h2 + optional intro. `tone` picks the text colours for dark or
- * light section backgrounds. `center` is reserved for the final CTA.
+ * light section backgrounds. `center` is reserved for the final CTA and the
+ * empty states. `focusable` lets CTAs move focus to the heading (mobile).
  */
 export function SectionHeading({
   id,
@@ -11,6 +12,7 @@ export function SectionHeading({
   intro,
   tone = 'dark',
   center = false,
+  focusable = false,
   className = '',
 }: {
   id: string;
@@ -19,6 +21,7 @@ export function SectionHeading({
   intro?: string;
   tone?: 'dark' | 'light';
   center?: boolean;
+  focusable?: boolean;
   className?: string;
 }) {
   const light = tone === 'light';
@@ -27,7 +30,11 @@ export function SectionHeading({
       {eyebrow ? (
         <p className={cn('eyebrow', light && 'eyebrow-light', center && 'justify-center')}>{eyebrow}</p>
       ) : null}
-      <h2 id={id} className={cn('h2 mt-4', light ? 'text-navy' : 'text-fg')}>
+      <h2
+        id={id}
+        tabIndex={focusable ? -1 : undefined}
+        className={cn('h2 mt-4 outline-none', light ? 'text-navy' : 'text-fg')}
+      >
         {title}
       </h2>
       {intro ? <p className={cn('lead mt-4', light ? 'text-navy-muted' : 'text-muted')}>{intro}</p> : null}

@@ -21,7 +21,7 @@ export function Process() {
         <ol className="relative mt-12 grid gap-8 lg:grid-cols-4 lg:gap-6">
           <span
             aria-hidden
-            className="absolute inset-y-12 start-[23px] border-s border-dashed border-light-border lg:inset-x-[12.5%] lg:inset-y-auto lg:top-6 lg:border-s-0 lg:border-t"
+            className="absolute inset-y-12 start-[23px] border-s border-dashed border-navy-subtle/40 lg:inset-x-[12.5%] lg:inset-y-auto lg:top-6 lg:border-s-0 lg:border-t"
           />
           {copy.steps.map((step, i) => (
             <Reveal as="li" key={step.n} delay={i * 60} className="relative grid grid-cols-[48px_1fr] gap-4 lg:block">
@@ -31,6 +31,9 @@ export function Process() {
               <div className="lg:mt-5">
                 <h3 className="h3 text-navy">{step.title}</h3>
                 <p className="mt-2 text-[15px] leading-relaxed text-navy-muted">{step.text}</p>
+                <p className="mt-2 text-[13px] text-navy-subtle">
+                  <span className="font-semibold">{copy.needsLabel}</span> {step.needs}
+                </p>
               </div>
             </Reveal>
           ))}

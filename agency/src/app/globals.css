@@ -76,7 +76,7 @@
 /* Below the desktop breakpoint the fixed bottom bar owns this much space. */
 @media (max-width: 1023px) {
   :root {
-    --sticky-bar-space: calc(64px + env(safe-area-inset-bottom));
+    --sticky-bar-space: calc(65px + env(safe-area-inset-bottom));
   }
 }
 
@@ -294,6 +294,28 @@
   .btn-whatsapp:hover {
     background: var(--color-whatsapp-hover);
   }
+  /* WhatsApp is the primary action on phones, secondary on desktop. */
+  .btn-whatsapp-mobile {
+    background: var(--color-whatsapp);
+    color: var(--color-navy);
+  }
+  .btn-whatsapp-mobile:hover {
+    background: var(--color-whatsapp-hover);
+  }
+  @media (min-width: 1024px) {
+    .btn-whatsapp-mobile {
+      background: transparent;
+      color: var(--color-fg);
+      border: 1px solid var(--color-border-strong);
+    }
+    .btn-whatsapp-mobile:hover {
+      border-color: var(--color-subtle);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .btn-whatsapp-mobile svg {
+      color: var(--color-whatsapp);
+    }
+  }
   .btn-lg {
     min-height: 52px;
     padding-inline: 26px;
@@ -384,6 +406,11 @@
   .check-list {
     display: grid;
     gap: 8px;
+  }
+  @media (min-width: 400px) {
+    .check-list-2 {
+      grid-template-columns: 1fr 1fr;
+    }
   }
   .check-list li {
     display: flex;
@@ -546,15 +573,20 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Radio chips: the native input is visually hidden, so the chip shows the ring. */
+  .chip-radio:has(:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
 }
 
+/* Transform only: an opacity:0 h1 is not an LCP candidate until it fades in. */
 @keyframes hero-rise {
   from {
-    opacity: 0;
     transform: translateY(12px);
   }
   to {
-    opacity: 1;
     transform: none;
   }
 }

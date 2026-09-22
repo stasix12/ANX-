@@ -12,7 +12,7 @@ export function WhyUs() {
         <Reveal>
           <SectionHeading id="why-title" eyebrow={whyUs.eyebrow} title={whyUs.title} />
         </Reveal>
-        <ul className="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="mt-10 grid grid-cols-2 gap-x-4 gap-y-8 lg:grid-cols-4 lg:gap-x-6">
           {whyUs.items.map((item, i) => {
             const Icon = icons[i];
             return (
@@ -20,8 +20,8 @@ export function WhyUs() {
                 <div className="icon-tile bg-surface-1">
                   <Icon className="h-[22px] w-[22px]" />
                 </div>
-                <h3 className="mt-4 text-lg font-semibold text-fg">{item.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{item.text}</p>
+                <h3 className="mt-4 text-base font-semibold text-fg sm:text-lg">{item.title}</h3>
+                <p className="mt-2 text-[13px] leading-relaxed text-muted sm:text-sm">{item.text}</p>
               </Reveal>
             );
           })}

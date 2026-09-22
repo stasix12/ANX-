@@ -91,7 +91,6 @@ for (const vp of viewports) {
     'process',
     'before-after',
     'why-us',
-    'portfolio',
     'roi',
     'pricing',
     'faq',
@@ -164,7 +163,8 @@ for (const vp of viewports) {
   }
 
   // FAQ accordion
-  const faqBtn = page.locator('#faq h3 button').first();
+  // The first item is open by default; exercise the second one.
+  const faqBtn = page.locator('#faq h3 button').nth(1);
   await faqBtn.scrollIntoViewIfNeeded();
   await faqBtn.click();
   await page.waitForTimeout(400);
@@ -185,7 +185,7 @@ for (const vp of viewports) {
   note(roiText.includes('25,000'), `ROI updates live (${roiText.replace(/\s+/g, ' ').trim().slice(0, 60)})`);
 
   // Pricing CTA preselects the package
-  const adsCta = page.locator('#pricing article').filter({ hasText: 'Google Ads' }).locator('a[href="#contact"]');
+  const adsCta = page.locator('#pricing article').filter({ hasText: 'Google Ads' }).locator('a[href="/#contact"]');
   await adsCta.scrollIntoViewIfNeeded();
   await adsCta.click();
   await page.waitForTimeout(600);
@@ -212,6 +212,18 @@ for (const vp of viewports) {
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${OUT}/${vp.name}-full.png`, fullPage: true });
 
+  const lcp = await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const po = new PerformanceObserver((list) => {
+          const last = list.getEntries().at(-1);
+          resolve(last?.element ? `${last.element.tagName.toLowerCase()}#${last.element.id}` : 'unknown');
+        });
+        po.observe({ type: 'largest-contentful-paint', buffered: true });
+        setTimeout(() => resolve('none'), 1500);
+      }),
+  );
+  console.log(`  ℹ LCP element: ${lcp}`);
   note(consoleErrors.length === 0, `no console errors ${consoleErrors.slice(0, 3).join(' | ')}`);
   await context.close();
 }

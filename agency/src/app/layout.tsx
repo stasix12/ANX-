@@ -3,10 +3,12 @@ import { Heebo } from 'next/font/google';
 import { noIndex, site } from '@/config/site';
 import { nav, seo } from '@/content/copy';
 import { analyticsIds } from '@/lib/analytics';
+import { brand, homeOpenGraph, homeTitle, homeTwitter } from '@/lib/metadata';
 import { Analytics, GtmNoScript } from '@/components/layout/Analytics';
 import { FloatingWhatsApp } from '@/components/layout/FloatingWhatsApp';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
+import { SectionObserver } from '@/components/layout/SectionObserver';
 import { StickyBar } from '@/components/layout/StickyBar';
 import './globals.css';
 
@@ -16,21 +18,13 @@ const heebo = Heebo({
   variable: '--font-heebo',
 });
 
-const homeTitle = `${seo.title} | ${site.name}`;
-
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
-  title: { default: homeTitle, template: `%s | ${site.name}` },
+  title: { default: homeTitle, template: brand ? `%s | ${brand}` : '%s' },
   description: seo.description,
-  applicationName: site.name,
-  openGraph: {
-    type: 'website',
-    locale: 'he_IL',
-    siteName: site.name,
-    title: seo.ogTitle,
-    description: seo.ogDescription,
-  },
-  twitter: { card: 'summary_large_image', title: seo.ogTitle, description: seo.ogDescription },
+  applicationName: brand || undefined,
+  openGraph: homeOpenGraph,
+  twitter: homeTwitter,
   robots: noIndex
     ? { index: false, follow: false }
     : {
@@ -83,6 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </div>
         <StickyBar />
         <FloatingWhatsApp />
+        <SectionObserver />
         <Analytics />
       </body>
     </html>

@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
-import { track } from '@/lib/analytics';
+import { track, type TrackEvent, type TrackParams } from '@/lib/analytics';
 import { messageFromLink, openExternal } from '@/lib/openExternal';
 import { hasWhatsApp, whatsappHref, type WhatsAppContext } from '@/lib/whatsapp';
 import { WhatsAppFallback } from '@/components/ui/WhatsAppFallback';
@@ -10,15 +11,19 @@ import { WhatsAppFallback } from '@/components/ui/WhatsAppFallback';
  * Every outbound WhatsApp link goes through here: consistent tracking and the
  * blocked-popup fallback.
  *
- * Until NEXT_PUBLIC_WHATSAPP_NUMBER is configured the same button scrolls to
- * the lead form instead, so the layout never loses its CTAs and nothing fake
- * is dialled. Set the number before launch (see .env.example).
+ * Until NEXT_PUBLIC_WHATSAPP_NUMBER is configured the same link scrolls to
+ * the lead form instead (buttons that sit next to a form CTA hide themselves
+ * via `hasWhatsApp`; inline text links use this fallback), so nothing fake is
+ * dialled. Set the number before launch (see .env.example).
  */
 export function WhatsAppLink({
   context = 'default',
   href,
   location,
   packageId,
+  label,
+  events = [],
+  extra = {},
   className = '',
   'aria-label': ariaLabel,
   children,
@@ -29,25 +34,37 @@ export function WhatsAppLink({
   /** Where on the page the click happened (analytics). */
   location: string;
   packageId?: 'website' | 'website_ads' | 'unsure';
+  /** Button text for analytics; defaults to the string children. */
+  label?: string;
+  events?: TrackEvent[];
+  extra?: TrackParams;
   className?: string;
   'aria-label'?: string;
   children: ReactNode;
 }) {
   const [blocked, setBlocked] = useState(false);
+  const text = label ?? (typeof children === 'string' ? children : ariaLabel);
 
   if (!hasWhatsApp) {
     return (
-      <a
-        href="#contact"
+      <Link
+        href="/#contact"
         className={className}
         aria-label={ariaLabel}
         data-whatsapp-unconfigured
         onClick={() =>
-          track('cta_click', { location, destination: 'form', package: packageId, note: 'whatsapp_unconfigured' })
+          track('cta_click', {
+            location,
+            label: text,
+            destination: 'form',
+            package: packageId,
+            note: 'whatsapp_unconfigured',
+            ...extra,
+          })
         }
       >
         {children}
-      </a>
+      </Link>
     );
   }
 
@@ -62,8 +79,12 @@ export function WhatsAppLink({
         aria-label={ariaLabel}
         className={className}
         onClick={(event) => {
-          track('whatsapp_click', { location, context, package: packageId });
-          track('cta_click', { location, destination: 'whatsapp', package: packageId });
+          track('whatsapp_click', { location, context, package: packageId, ...extra });
+          track('cta_click', { location, label: text, destination: 'whatsapp', package: packageId, ...extra });
+          for (const e of events) track(e, { location, destination: 'whatsapp', package: packageId, ...extra });
+          if (packageId === 'website_ads') {
+            track('google_package_cta_click', { location, destination: 'whatsapp' });
+          }
           openExternal(event, target, () => setBlocked(true));
         }}
       >

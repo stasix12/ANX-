@@ -50,7 +50,7 @@ export function ProjectCard({ project }: { project: Project }) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={copy.viewAria(project.name)}
-          onClick={() => track('portfolio_click', { project: project.name })}
+          onClick={() => track('portfolio_click', { project_name: project.name })}
           className="btn btn-outline-light btn-block mt-5"
         >
           {copy.view}

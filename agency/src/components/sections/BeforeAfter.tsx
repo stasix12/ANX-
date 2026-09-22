@@ -3,6 +3,7 @@ import { CtaLink } from '@/components/ui/CtaLink';
 import { Reveal } from '@/components/ui/Reveal';
 import { SectionHeading } from '@/components/ui/SectionHeading';
 import { CheckIcon } from '@/components/ui/icons';
+import { FakeSite } from '@/components/sections/HeroMockup';
 
 /**
  * Side-by-side on desktop, stacked on mobile. No drag slider: it hijacks
@@ -17,7 +18,7 @@ export function BeforeAfter() {
           <SectionHeading id="before-after-title" eyebrow={copy.eyebrow} title={copy.title} intro={copy.intro} />
         </Reveal>
 
-        <div className="mt-10 grid gap-4 lg:grid-cols-2 lg:gap-6">
+        <div className="mt-10 grid gap-6 lg:grid-cols-2">
           <Reveal>
             <Frame label={copy.beforeLabel} tone="before" caption={copy.beforeCaption}>
               <OldSite />
@@ -25,17 +26,19 @@ export function BeforeAfter() {
           </Reveal>
           <Reveal delay={80}>
             <Frame label={copy.afterLabel} tone="after" caption={copy.afterCaption}>
-              <NewSite />
+              <FakeSite className="aspect-[16/10]" />
             </Frame>
           </Reveal>
         </div>
 
         <Reveal delay={120}>
-          <ul className="mt-10 grid gap-3 lg:grid-cols-2 lg:gap-x-6">
-            {copy.pairs.map((pair) => (
+          <ul className="mt-10 grid divide-y divide-border border-y border-border lg:grid-cols-2 lg:gap-x-10 lg:divide-y-0">
+            {copy.pairs.map((pair, i) => (
               <li
                 key={pair.after}
-                className="grid min-w-0 gap-2 rounded-[var(--radius-md)] border border-border bg-surface-1 px-4 py-3 text-sm sm:grid-cols-2 sm:gap-4"
+                className={`grid min-w-0 grid-cols-2 gap-4 py-3 text-sm ${
+                  i < copy.pairs.length - 2 ? 'lg:border-b lg:border-border' : ''
+                }`}
               >
                 <span className="flex min-w-0 items-start gap-2 text-subtle">
                   <XMark />
@@ -111,7 +114,7 @@ function Frame({
           <i className="h-2 w-2 rounded-full bg-border-strong" />
           <i className="h-2 w-2 rounded-full bg-border-strong" />
         </div>
-        <div className="aspect-[4/3]">{children}</div>
+        {children}
       </div>
       <figcaption className={`mt-3 text-[13px] ${after ? 'text-muted' : 'text-subtle'}`}>{caption}</figcaption>
     </figure>
@@ -120,57 +123,26 @@ function Frame({
 
 function OldSite() {
   return (
-    <div className="h-full bg-[#e5e7eb] p-[6%] grayscale">
-      <div className="mx-auto flex h-[10%] w-[92%] items-center justify-center gap-2 border-b border-[#cfd3d9]">
+    <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#e5e7eb] p-[5%] grayscale">
+      <div className="mx-auto flex h-[9%] w-[92%] items-center justify-center gap-2 border-b border-[#cfd3d9]">
         <span className="h-[5px] w-[12%] rounded bg-[#9aa0aa]" />
         <span className="h-[5px] w-[12%] rounded bg-[#9aa0aa]" />
         <span className="h-[5px] w-[12%] rounded bg-[#9aa0aa]" />
         <span className="h-[5px] w-[12%] rounded bg-[#9aa0aa]" />
       </div>
-      <div className="mx-auto mt-[5%] h-[7px] w-[60%] rounded bg-[#7c8390]" />
-      <div className="mt-[5%] space-y-[6px]">
+      <div className="mx-auto mt-[4%] h-[7px] w-[60%] rounded bg-[#7c8390]" />
+      <div className="mt-[4%] space-y-[5px]">
         {Array.from({ length: 9 }).map((_, i) => (
           <span key={i} className="block h-[4px] w-full rounded bg-[#b4b9c2]" />
         ))}
       </div>
-      <span className="mx-auto mt-[6%] block h-[6px] w-[14%] rounded-[2px] bg-[#9aa0aa]" />
-    </div>
-  );
-}
-
-function NewSite() {
-  return (
-    <div className="relative h-full bg-white p-[5%]">
-      <div className="flex h-[8%] items-center justify-between border-b border-[#e8edf5]">
-        <span className="h-[6px] w-[10%] rounded-[2px] bg-[#0b1220]" />
-        <span className="h-[8px] w-[14%] rounded-full bg-[#2563eb]" />
-      </div>
-      <div className="mt-[7%] flex gap-[5%]">
-        <div className="flex-1">
-          <span className="block h-[10px] w-[80%] rounded-[3px] bg-[#0b1220]" />
-          <span className="mt-[6px] block h-[10px] w-[55%] rounded-[3px] bg-[#0b1220]" />
-          <span className="mt-[9px] block h-[5px] w-[70%] rounded-full bg-[#c9d2e3]" />
-          <span className="mt-[10px] flex gap-[6px]">
-            <i className="block h-[13px] w-[34%] rounded-[3px] bg-[#2563eb]" />
-            <i className="block h-[13px] w-[34%] rounded-[3px] bg-[#25d366]" />
-          </span>
-        </div>
-        <div className="w-[34%] rounded-[6px] bg-[#f6f8fc] p-[4%]">
-          <span className="block h-[5px] w-[70%] rounded-full bg-[#0b1220]/70" />
-          <span className="mt-[6px] block h-[9px] w-full rounded-[2px] border border-[#dce3ef] bg-white" />
-          <span className="mt-[4px] block h-[9px] w-full rounded-[2px] border border-[#dce3ef] bg-white" />
-          <span className="mt-[6px] block h-[9px] w-full rounded-[2px] bg-[#2563eb]" />
-        </div>
-      </div>
-      <div className="mt-[7%] grid grid-cols-3 gap-[3%]">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded-[6px] bg-[#f6f8fc] p-[6%]">
-            <span className="block h-[12px] w-[12px] rounded-full bg-[#dbe7fb]" />
-            <span className="mt-[5px] block h-[4px] w-[70%] rounded-full bg-[#0b1220]/70" />
-          </div>
+      <div className="mx-auto mt-[4%] h-[6px] w-[45%] rounded bg-[#9aa0aa]" />
+      <div className="mt-[3%] space-y-[5px]">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span key={i} className="block h-[4px] w-full rounded bg-[#b4b9c2]" />
         ))}
       </div>
-      <span className="absolute bottom-[5%] start-[5%] h-[12px] w-[12px] rounded-full bg-[#25d366] shadow-[0_2px_6px_rgba(37,211,102,0.5)]" />
+      <span className="mx-auto mt-[4%] block h-[6px] w-[14%] rounded-[2px] bg-[#9aa0aa]" />
     </div>
   );
 }

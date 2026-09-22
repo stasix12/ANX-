@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { site } from '@/config/site';
+import { homeOpenGraph, homeTwitter } from '@/lib/metadata';
 import { homeGraph } from '@/lib/schema';
 import { JsonLd } from '@/components/ui/JsonLd';
 import { BeforeAfter } from '@/components/sections/BeforeAfter';
@@ -16,13 +18,15 @@ import { Services } from '@/components/sections/Services';
 import { WhyUs } from '@/components/sections/WhyUs';
 
 export const metadata: Metadata = {
-  alternates: { canonical: '/' },
+  alternates: { canonical: `${site.url}/` },
+  openGraph: homeOpenGraph,
+  twitter: homeTwitter,
 };
 
 /**
  * Section order (CRO): pain → two answers → process → visual proof →
  * differentiation → work → value in ₪ → price → social proof → objections →
- * final push → form.
+ * form → last push.
  */
 export default function HomePage() {
   return (
@@ -39,8 +43,8 @@ export default function HomePage() {
       <Pricing />
       <Reviews />
       <Faq />
-      <FinalCta />
       <Contact />
+      <FinalCta />
     </>
   );
 }

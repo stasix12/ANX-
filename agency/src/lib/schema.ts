@@ -1,6 +1,7 @@
 import { pricing, site } from '@/config/site';
 import { seo, services } from '@/content/copy';
 import { faq } from '@/content/faq';
+import { homeTitle, withBrand } from '@/lib/metadata';
 
 /**
  * JSON-LD builders. Everything comes from config/content; empty values are
@@ -43,10 +44,13 @@ const ids = {
 const telephone = site.contact.phone ? `+${site.contact.phone}` : '';
 const sameAs = [site.social.facebook, site.social.instagram, site.social.linkedin].filter(Boolean);
 
+export const breadcrumbId = (path: string): string => `${site.url}${path === '/' ? '/' : path}#breadcrumb`;
+
 export function breadcrumbs(items: { name: string; path: string }[]): Json {
+  const last = items[items.length - 1]?.path ?? '/';
   return {
     '@type': 'BreadcrumbList',
-    '@id': ids.breadcrumb,
+    '@id': breadcrumbId(last),
     itemListElement: items.map((item, i) => ({
       '@type': 'ListItem',
       position: i + 1,
@@ -130,7 +134,7 @@ export function homeGraph(): Json {
       '@type': 'WebPage',
       '@id': ids.webpage,
       url: `${site.url}/`,
-      name: `${seo.title} | ${site.name}`,
+      name: homeTitle,
       isPartOf: { '@id': ids.website },
       about: { '@id': ids.business },
       inLanguage: 'he-IL',
@@ -152,10 +156,14 @@ export function legalPageGraph(name: string, path: string): Json {
       ]),
       {
         '@type': 'WebPage',
+        '@id': `${site.url}${path}#webpage`,
         url: `${site.url}${path}`,
-        name,
+        name: withBrand(name),
         isPartOf: { '@id': ids.website },
+        about: { '@id': ids.business },
         inLanguage: 'he-IL',
+        breadcrumb: { '@id': breadcrumbId(path) },
+        dateModified: site.legalPagesUpdated,
       },
     ],
   });

@@ -2,13 +2,19 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { site } from '@/config/site';
 import { analyticsIds } from '@/lib/analytics';
+import { pageOpenGraph, pageTwitter } from '@/lib/metadata';
 import { formatPhoneDisplay } from '@/lib/phone';
 import { LegalPage } from '@/components/layout/LegalPage';
 
+const title = 'מדיניות פרטיות';
+const description = `מדיניות הפרטיות של אתר ${site.name}: איזה מידע נאסף בטופס ובכלי המדידה, למה הוא משמש ומה הזכויות שלכם.`;
+
 export const metadata: Metadata = {
-  title: 'מדיניות פרטיות',
-  description: `מדיניות הפרטיות של אתר ${site.name}: איזה מידע נאסף בטופס ובכלי המדידה, למה הוא משמש ומה הזכויות שלכם.`,
+  title,
+  description,
   alternates: { canonical: '/privacy' },
+  openGraph: pageOpenGraph('/privacy', title, description),
+  twitter: pageTwitter(title, description),
 };
 
 /**
@@ -30,8 +36,9 @@ export default function PrivacyPage() {
       </p>
       <h2>איזה מידע נאסף</h2>
       <p>
-        כשאתם ממלאים טופס באתר, אנחנו מקבלים את הפרטים שמסרתם: שם, טלפון, שם העסק והאפשרות שבחרתם. כשאתם לוחצים על כפתור
-        WhatsApp, השיחה מתנהלת באפליקציית WhatsApp לפי תנאי השימוש שלה.
+        כשאתם ממלאים טופס באתר, אנחנו מקבלים את הפרטים שמסרתם: שם, טלפון, שם העסק והאפשרות שבחרתם, וכן פרטים טכניים על
+        מקור ההגעה לאתר (למשל הקמפיין או העמוד שממנו הגעתם). כשאתם לוחצים על כפתור WhatsApp, השיחה מתנהלת באפליקציית
+        WhatsApp לפי תנאי השימוש שלה.
       </p>
       <h2>למה משתמשים במידע</h2>
       <p>
@@ -62,6 +69,11 @@ export default function PrivacyPage() {
         {site.contact.phone ? (
           <li>
             טלפון: <bdi dir="ltr">{formatPhoneDisplay(site.contact.phone)}</bdi>
+          </li>
+        ) : null}
+        {site.contact.whatsapp ? (
+          <li>
+            WhatsApp: <bdi dir="ltr">{formatPhoneDisplay(site.contact.whatsapp)}</bdi>
           </li>
         ) : null}
         {site.contact.email ? (

@@ -1,12 +1,15 @@
 import Link from 'next/link';
 import { site } from '@/config/site';
-import { footer, nav } from '@/content/copy';
+import { footer } from '@/content/copy';
+import { navLinks } from '@/lib/navLinks';
 import { formatPhoneDisplay, telHref } from '@/lib/phone';
 import { hasPhone, hasWhatsApp } from '@/lib/whatsapp';
 import { Logo } from '@/components/layout/Logo';
 import { PhoneLink } from '@/components/ui/PhoneLink';
 import { WhatsAppLink } from '@/components/ui/WhatsAppLink';
 import { MailIcon, PhoneIcon, WhatsAppIcon } from '@/components/ui/icons';
+
+const linkClass = 'inline-block py-1.5 text-muted transition-colors hover:text-fg';
 
 export function Footer() {
   const year = new Date().getFullYear();
@@ -21,30 +24,32 @@ export function Footer() {
             <p className="mt-4 max-w-sm leading-relaxed text-muted">{footer.about}</p>
           </div>
 
-          <nav aria-label="ניווט בפוטר">
-            <h2 className="text-sm font-semibold text-fg">{footer.navTitle}</h2>
-            <ul className="mt-4 space-y-2.5">
-              {nav.links.map((link) => (
+          <nav aria-labelledby="footer-nav-title">
+            <p id="footer-nav-title" className="text-sm font-semibold text-fg">
+              {footer.navTitle}
+            </p>
+            <ul className="mt-3 space-y-1">
+              {navLinks.map((link) => (
                 <li key={link.href}>
-                  <Link href={`/${link.href}`} className="text-muted transition-colors hover:text-fg">
+                  <Link href={`/${link.href}`} className={linkClass}>
                     {link.label}
                   </Link>
                 </li>
               ))}
               <li>
-                <Link href="/#contact" className="text-muted transition-colors hover:text-fg">
+                <Link href="/#contact" className={linkClass}>
                   צרו קשר
                 </Link>
               </li>
             </ul>
           </nav>
 
-          <div>
-            <h2 className="text-sm font-semibold text-fg">{footer.servicesTitle}</h2>
-            <ul className="mt-4 space-y-2.5">
+          <div className="hidden md:block">
+            <p className="text-sm font-semibold text-fg">{footer.servicesTitle}</p>
+            <ul className="mt-3 space-y-1">
               {footer.services.map((s) => (
                 <li key={s.href}>
-                  <Link href={`/${s.href}`} className="text-muted transition-colors hover:text-fg">
+                  <Link href={`/${s.href}`} className={linkClass}>
                     {s.label}
                   </Link>
                 </li>
@@ -53,16 +58,16 @@ export function Footer() {
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold text-fg">{footer.contactTitle}</h2>
+            <p className="text-sm font-semibold text-fg">{footer.contactTitle}</p>
             {hasContact ? (
-              <ul className="mt-4 space-y-3">
+              <ul className="mt-3 space-y-1">
                 {hasPhone ? (
                   <li>
                     <PhoneLink
                       href={telHref(site.contact.phone)}
                       location="footer"
                       aria-label={footer.phoneAria}
-                      className="inline-flex items-center gap-2 text-muted transition-colors hover:text-fg"
+                      className={`${linkClass} inline-flex items-center gap-2`}
                     >
                       <PhoneIcon className="h-4 w-4 text-accent" />
                       <bdi dir="ltr" className="tabular">
@@ -76,7 +81,7 @@ export function Footer() {
                     <WhatsAppLink
                       location="footer"
                       aria-label={footer.whatsappAria}
-                      className="inline-flex items-center gap-2 text-muted transition-colors hover:text-fg"
+                      className={`${linkClass} inline-flex items-center gap-2`}
                     >
                       <WhatsAppIcon className="h-4 w-4 text-whatsapp" />
                       <span>WhatsApp</span>
@@ -85,10 +90,7 @@ export function Footer() {
                 ) : null}
                 {site.contact.email ? (
                   <li>
-                    <a
-                      href={`mailto:${site.contact.email}`}
-                      className="inline-flex items-center gap-2 text-muted transition-colors hover:text-fg"
-                    >
+                    <a href={`mailto:${site.contact.email}`} className={`${linkClass} inline-flex items-center gap-2`}>
                       <MailIcon className="h-4 w-4 text-accent" />
                       <bdi dir="ltr">{site.contact.email}</bdi>
                     </a>
@@ -96,7 +98,11 @@ export function Footer() {
                 ) : null}
               </ul>
             ) : (
-              <p className="mt-4 text-muted">דרך הטופס באתר.</p>
+              <p className="mt-3">
+                <Link href="/#contact" className={linkClass}>
+                  {footer.contactFallback}
+                </Link>
+              </p>
             )}
             {site.contact.areaServed || site.contact.addressLocality ? (
               <p className="mt-4 text-subtle">
@@ -113,16 +119,19 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-[13px] text-subtle sm:flex-row sm:items-center sm:justify-between">
           <p>
-            © {year} <span dir="ltr">{site.name}</span>. {footer.rights}
+            <span dir="ltr">
+              © {year} {site.name}
+            </span>
+            . {footer.rights}
           </p>
           <ul className="flex flex-wrap gap-x-5 gap-y-1">
             <li>
-              <Link href="/accessibility" className="transition-colors hover:text-fg">
+              <Link href="/accessibility" className="inline-block py-1 transition-colors hover:text-fg">
                 {footer.accessibility}
               </Link>
             </li>
             <li>
-              <Link href="/privacy" className="transition-colors hover:text-fg">
+              <Link href="/privacy" className="inline-block py-1 transition-colors hover:text-fg">
                 {footer.privacy}
               </Link>
             </li>

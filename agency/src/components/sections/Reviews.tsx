@@ -9,7 +9,7 @@ const monthFormatter = new Intl.DateTimeFormat('he-IL', { month: 'long', year: '
 
 /**
  * Google reviews. Real entries only (content/reviews.ts). With none, shows a
- * calm, honest empty state — or nothing when `showWhenEmpty` is false.
+ * calm, honest empty state on preview builds — and nothing in production.
  */
 export function Reviews() {
   const has = reviews.length > 0;
@@ -20,7 +20,12 @@ export function Reviews() {
     <section id="reviews" aria-labelledby="reviews-title" className="section pt-0 lg:pt-0">
       <div className="container-site">
         <Reveal>
-          <SectionHeading id="reviews-title" eyebrow={copy.eyebrow} title={has ? copy.titleWithReviews : copy.title} />
+          <SectionHeading
+            id="reviews-title"
+            eyebrow={copy.eyebrow}
+            title={has ? copy.titleWithReviews : copy.title}
+            center={!has}
+          />
         </Reveal>
 
         {has ? (
@@ -72,9 +77,10 @@ export function Reviews() {
           </>
         ) : (
           <Reveal delay={60}>
-            <div className="card-dark mt-10 max-w-[560px] p-8" data-placeholder="reviews-empty">
-              <QuoteIcon className="h-10 w-10 text-subtle" strokeWidth={1.5} />
-              <p className="mt-4 text-[15px] leading-relaxed text-muted">{copy.empty}</p>
+            <div className="card-dark mx-auto mt-10 max-w-[560px] p-8 text-center" data-placeholder="reviews-empty">
+              <QuoteIcon className="mx-auto h-10 w-10 text-accent" strokeWidth={1.5} />
+              <h3 className="mt-4 text-lg font-semibold text-fg">{copy.emptyTitle}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-muted">{copy.empty}</p>
               <p className="mt-2 text-sm text-subtle">{copy.emptySecondary}</p>
               {googleUrl ? (
                 <a href={googleUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline mt-5">

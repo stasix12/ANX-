@@ -1,13 +1,19 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { site } from '@/config/site';
+import { pageOpenGraph, pageTwitter } from '@/lib/metadata';
 import { formatPhoneDisplay } from '@/lib/phone';
 import { LegalPage } from '@/components/layout/LegalPage';
 
+const title = 'הצהרת נגישות';
+const description = `הצהרת הנגישות של אתר ${site.name}: מה נעשה כדי שהאתר יהיה נגיש, מגבלות ידועות ואיך לפנות אלינו.`;
+
 export const metadata: Metadata = {
-  title: 'הצהרת נגישות',
-  description: `הצהרת הנגישות של אתר ${site.name}: מה נעשה כדי שהאתר יהיה נגיש, מגבלות ידועות ואיך לפנות אלינו.`,
+  title,
+  description,
   alternates: { canonical: '/accessibility' },
+  openGraph: pageOpenGraph('/accessibility', title, description),
+  twitter: pageTwitter(title, description),
 };
 
 /**
@@ -37,7 +43,7 @@ export default function AccessibilityPage() {
         ממשיכים לשפר.
       </p>
       <h2>נתקלתם בבעיה?</h2>
-      <p>נשמח לדעת. פנו אלינו ונטפל בפנייה בהקדם:</p>
+      {hasContact ? <p>נשמח לדעת. פנו אלינו ונטפל בפנייה בהקדם:</p> : null}
       {hasContact ? (
         <ul>
           {site.contact.phone ? (
@@ -58,11 +64,11 @@ export default function AccessibilityPage() {
         </ul>
       ) : (
         <p>
-          דרך{' '}
+          נשמח לדעת. אפשר לפנות אלינו דרך{' '}
           <Link href="/#contact" className="underline hover:text-fg">
             טופס יצירת הקשר
           </Link>{' '}
-          באתר.
+          באתר ונטפל בפנייה בהקדם.
         </p>
       )}
     </LegalPage>

@@ -6,10 +6,12 @@ import { LeadForm } from '@/components/sections/LeadForm';
 export function Contact() {
   return (
     <section id="contact" aria-labelledby="contact-title" className="section">
-      <div className="container-narrow">
-        <SectionHeading id="contact-title" eyebrow={copy.eyebrow} title={copy.title} intro={copy.sub} />
-        <div className="relative mt-8">
-          <LeadForm />
+      <div className="container-site">
+        <div className="max-w-[720px]">
+          <SectionHeading id="contact-title" eyebrow={copy.eyebrow} title={copy.title} intro={copy.sub} focusable />
+          <div className="relative mt-8">
+            <LeadForm />
+          </div>
         </div>
       </div>
     </section>

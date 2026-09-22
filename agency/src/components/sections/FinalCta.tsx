@@ -1,4 +1,5 @@
 import { finalCta as copy } from '@/content/copy';
+import { hasWhatsApp } from '@/lib/whatsapp';
 import { CtaLink } from '@/components/ui/CtaLink';
 import { Reveal } from '@/components/ui/Reveal';
 import { WhatsAppLink } from '@/components/ui/WhatsAppLink';
@@ -6,7 +7,7 @@ import { WhatsAppIcon } from '@/components/ui/icons';
 
 export function FinalCta() {
   return (
-    <section id="final-cta" aria-labelledby="final-title" className="section pb-0 lg:pb-0">
+    <section id="final-cta" aria-labelledby="final-title" className="section pt-0 lg:pt-0">
       <div className="container-site">
         <Reveal>
           <div
@@ -21,10 +22,12 @@ export function FinalCta() {
               <CtaLink location="final_cta" label={copy.primary} className="btn btn-primary btn-lg">
                 {copy.primary}
               </CtaLink>
-              <WhatsAppLink location="final_cta" className="btn btn-whatsapp btn-lg">
-                <WhatsAppIcon className="h-5 w-5" />
-                {copy.whatsapp}
-              </WhatsAppLink>
+              {hasWhatsApp ? (
+                <WhatsAppLink location="final_cta" className="btn btn-whatsapp btn-lg">
+                  <WhatsAppIcon className="h-5 w-5" />
+                  {copy.whatsapp}
+                </WhatsAppLink>
+              ) : null}
             </div>
           </div>
         </Reveal>

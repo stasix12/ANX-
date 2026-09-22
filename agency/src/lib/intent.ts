@@ -7,11 +7,17 @@ export type Intent = 'website' | 'website_ads' | 'unsure';
 const KEY = 'lead_intent';
 const EVENT = 'lead-intent-change';
 
-export type IntentPayload = { intent: Intent; source: string; roiContext?: string };
+export type IntentPayload = { intent?: Intent; source: string; roiContext?: string };
 
-export function setIntent(intent: Intent, source: string, roiContext?: string): void {
+/** `intent` may be omitted: the CTA then only records itself as the latest source. */
+export function setIntent(intent: Intent | undefined, source: string, roiContext?: string): void {
   if (typeof window === 'undefined') return;
-  const payload: IntentPayload = { intent, source, roiContext };
+  const current = getIntent();
+  const payload: IntentPayload = {
+    intent: intent ?? current?.intent,
+    source,
+    roiContext: roiContext ?? current?.roiContext,
+  };
   try {
     window.sessionStorage.setItem(KEY, JSON.stringify(payload));
   } catch {
@@ -23,7 +29,7 @@ export function setIntent(intent: Intent, source: string, roiContext?: string): 
 export function setRoiContext(roiContext: string): void {
   if (typeof window === 'undefined') return;
   const current = getIntent();
-  const payload: IntentPayload = { intent: current?.intent ?? 'unsure', source: current?.source ?? 'roi', roiContext };
+  const payload: IntentPayload = { intent: current?.intent, source: 'roi', roiContext };
   try {
     window.sessionStorage.setItem(KEY, JSON.stringify(payload));
   } catch {

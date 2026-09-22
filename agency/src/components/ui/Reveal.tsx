@@ -25,12 +25,10 @@ export function Reveal({
     const el = ref.current;
     if (!el) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    el.classList.add('reveal');
+    // Measure first: content already on screen is left alone (no blink).
     const rect = el.getBoundingClientRect();
-    if (rect.top < window.innerHeight * 0.9 && rect.bottom > 0) {
-      el.classList.add('is-in');
-      return;
-    }
+    if (rect.top < window.innerHeight * 0.9 && rect.bottom > 0) return;
+    el.classList.add('reveal');
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {

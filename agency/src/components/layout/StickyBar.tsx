@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { sticky } from '@/content/copy';
+import { track } from '@/lib/analytics';
 import { cn } from '@/lib/cn';
+import { hasWhatsApp } from '@/lib/whatsapp';
 import { CtaLink } from '@/components/ui/CtaLink';
 import { WhatsAppLink } from '@/components/ui/WhatsAppLink';
 import { WhatsAppIcon } from '@/components/ui/icons';
@@ -15,6 +17,7 @@ import { WhatsAppIcon } from '@/components/ui/icons';
  */
 export function StickyBar() {
   const [hidden, setHidden] = useState(false);
+  const viewed = useRef(false);
 
   useEffect(() => {
     const form = document.getElementById('contact');
@@ -22,7 +25,15 @@ export function StickyBar() {
     let inputFocused = false;
     let menuOpen = false;
 
-    const update = () => setHidden(formInView || inputFocused || menuOpen);
+    const update = () => {
+      const next = formInView || inputFocused || menuOpen;
+      setHidden(next);
+      if (!next && !viewed.current && window.matchMedia('(max-width: 1023px)').matches) {
+        viewed.current = true;
+        track('sticky_bar_view');
+      }
+    };
+    update();
 
     const observer = form
       ? new IntersectionObserver(
@@ -72,12 +83,14 @@ export function StickyBar() {
       )}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="grid grid-cols-2 gap-3 px-4 py-2.5">
-        <WhatsAppLink location="sticky_bar" className="btn btn-whatsapp min-h-11 px-3 text-[15px]">
-          <WhatsAppIcon className="h-5 w-5" />
-          {sticky.whatsapp}
-        </WhatsAppLink>
-        <CtaLink location="sticky_bar" label={sticky.cta} className="btn btn-primary min-h-11 px-3 text-[15px]">
+      <div className={cn('grid gap-3 px-4 py-2', hasWhatsApp ? 'grid-cols-2' : 'grid-cols-1')}>
+        {hasWhatsApp ? (
+          <WhatsAppLink location="sticky_bar" className="btn btn-whatsapp min-h-12 px-3 text-[15px]">
+            <WhatsAppIcon className="h-5 w-5" />
+            {sticky.whatsapp}
+          </WhatsAppLink>
+        ) : null}
+        <CtaLink location="sticky_bar" label={sticky.cta} className="btn btn-primary min-h-12 px-3 text-[15px]">
           {sticky.cta}
         </CtaLink>
       </div>

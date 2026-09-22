@@ -32,5 +32,8 @@ export const reviews: Review[] = [
  */
 export const aggregate: { rating: number; count: number } | null = null;
 
-/** TODO: set to false before launch if `reviews` is still empty. */
-export const showWhenEmpty = true;
+/**
+ * The honest empty state is shown on dev/preview builds only; in production
+ * the section disappears until real reviews exist.
+ */
+export const showWhenEmpty = process.env.NODE_ENV !== 'production';

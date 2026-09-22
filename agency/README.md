@@ -36,7 +36,7 @@ npm run dev                  # http://localhost:3000
 
 ### לפני עלייה לאוויר
 
-1. `NEXT_PUBLIC_SITE_URL` — כתובת הדומיין (canonical, sitemap, OG).
+1. `NEXT_PUBLIC_SITE_URL` — כתובת הדומיין (canonical, sitemap, OG). **חובה** ל-`npm run build` (ב-Vercel מזוהה אוטומטית); בלי זה הבנייה נעצרת כדי שלא יישלח דומיין placeholder לגוגל.
 2. `NEXT_PUBLIC_WHATSAPP_NUMBER` — עד שהוא מוגדר, כל כפתורי ה-WhatsApp מובילים לטופס.
 3. `NEXT_PUBLIC_LEAD_ENDPOINT` — לאן נשלח הטופס (Web3Forms / Formspree / Apps Script). בלי endpoint הטופס נפתח ב-WhatsApp עם הפרטים.
 4. `showPlaceholders` ב-`portfolio.ts` ו-`showWhenEmpty` ב-`reviews.ts` — להעביר ל-`false` אם עדיין אין תוכן אמיתי.

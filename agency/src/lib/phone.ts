@@ -17,8 +17,10 @@ export function digitsOnly(input: string): string {
 export function normalizeIsraeliPhone(input: string): string | null {
   let d = digitsOnly(input);
   if (d.startsWith('00')) d = d.slice(2);
-  if (d.startsWith('972')) d = d.slice(3);
-  else if (d.startsWith('0')) d = d.slice(1);
+  if (d.startsWith('972')) {
+    d = d.slice(3);
+    if (d.startsWith('0')) d = d.slice(1);
+  } else if (d.startsWith('0')) d = d.slice(1);
   else return null;
   // Mobile 5X-XXXXXXX (9 digits), landline area codes 2/3/4/8/9 + 7 digits (8 digits),
   // and 7X (VoIP/1-800 style) 9 digits.

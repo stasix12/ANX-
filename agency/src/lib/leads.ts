@@ -25,6 +25,14 @@ export const leadEndpoint = process.env.NEXT_PUBLIC_LEAD_ENDPOINT ?? '';
 const leadAccessKey = process.env.NEXT_PUBLIC_LEAD_ACCESS_KEY ?? '';
 export const hasLeadEndpoint = leadEndpoint.length > 0;
 
+// Loud build-time warning: with neither an endpoint nor a WhatsApp number the
+// form has nowhere to send leads. Not a hard failure so previews still build.
+if (typeof window === 'undefined' && !hasLeadEndpoint && !site.contact.whatsapp) {
+  console.warn(
+    '\n[leads] ⚠ No lead destination configured: set NEXT_PUBLIC_LEAD_ENDPOINT and/or NEXT_PUBLIC_WHATSAPP_NUMBER before launch (see .env.example).\n',
+  );
+}
+
 const TIMEOUT_MS = 8000;
 
 /** POST the lead as JSON to the configured endpoint. Throws on any failure. */
@@ -51,9 +59,14 @@ export async function postLead(input: LeadInput): Promise<void> {
     // A readable subject line for e-mail based endpoints (Web3Forms / Formspree).
     body.subject = `ליד חדש מהאתר: ${body.name} — ${interestLabels[input.interest]}`;
 
+    // Google Apps Script web apps cannot answer a CORS preflight; a
+    // text/plain body is a "simple request" and still reaches doPost as JSON.
+    const appsScript = leadEndpoint.includes('script.google.com');
     const res = await fetch(leadEndpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: appsScript
+        ? { 'Content-Type': 'text/plain;charset=utf-8' }
+        : { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -67,7 +80,11 @@ export async function postLead(input: LeadInput): Promise<void> {
 export function leadWhatsAppHref(input: LeadInput): string {
   const parts = ['היי, הגעתי דרך האתר.', `שם: ${input.name.trim()}`, `טלפון: ${input.phone.trim()}`];
   if (input.business.trim()) parts.push(`עסק: ${input.business.trim()}`);
-  parts.push(`מעניין אותי: ${interestLabels[input.interest]}.`);
+  parts.push(
+    input.interest === 'unsure'
+      ? 'עדיין לא בטוח מה מתאים לי — אשמח להתייעץ.'
+      : `מעניין אותי: ${interestLabels[input.interest]}.`,
+  );
   if (input.roiContext) parts.push(`(לפי המחשבון: ${input.roiContext})`);
   return whatsappHref(parts.join('\n'));
 }

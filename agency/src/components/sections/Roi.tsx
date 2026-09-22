@@ -5,7 +5,11 @@ import { RoiCalculator } from '@/components/sections/RoiCalculator';
 
 export function Roi() {
   return (
-    <section id="roi" aria-labelledby="roi-title" className="section bg-light text-navy">
+    <section
+      id="roi"
+      aria-labelledby="roi-title"
+      className="section border-t border-light-border bg-light pt-16 text-navy lg:pt-20"
+    >
       <div className="container-site">
         <Reveal>
           <SectionHeading id="roi-title" eyebrow={copy.eyebrow} title={copy.title} intro={copy.intro} tone="light" />

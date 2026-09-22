@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
 import { site } from '@/config/site';
-import { seo } from '@/content/copy';
+import { hero, seo } from '@/content/copy';
 
 export const dynamic = 'force-static';
 export const alt = seo.ogAlt;
@@ -40,7 +40,7 @@ export default async function OpenGraphImage() {
         <div style={{ fontSize: 32, color: '#a9b4c9', maxWidth: 960, lineHeight: 1.4 }}>{seo.ogDescription}</div>
       </div>
       <div style={{ display: 'flex', gap: 36, fontSize: 24, color: '#5b9cff', fontWeight: 700 }}>
-        {['מותאם למובייל', 'מותאם לגוגל', 'WhatsApp מובנה', 'בנוי ליצירת לידים'].map((t) => (
+        {hero.trust.map((t) => (
           <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 10, height: 10, borderRadius: 99, background: '#3b82f6' }} />
             <span>{t}</span>

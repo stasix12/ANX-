@@ -17,7 +17,10 @@ export function Analytics() {
     captureAttribution();
   }, []);
 
-  const gtagIds = [ga4, gadsId].filter(Boolean);
+  // With GTM configured, GA4 / Ads / Meta are expected to live inside the
+  // container — loading them here too would double count.
+  const gtagIds = gtm ? [] : [ga4, gadsId].filter(Boolean);
+  const pixel = gtm ? '' : metaPixel;
 
   return (
     <>
@@ -38,10 +41,10 @@ export function Analytics() {
         </>
       ) : null}
 
-      {metaPixel ? (
+      {pixel ? (
         <>
           <Script id="meta-pixel" strategy="afterInteractive">
-            {`!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${metaPixel}');fbq('track','PageView');`}
+            {`!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixel}');fbq('track','PageView');`}
           </Script>
           <noscript>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -50,7 +53,7 @@ export function Analytics() {
               width="1"
               style={{ display: 'none' }}
               alt=""
-              src={`https://www.facebook.com/tr?id=${metaPixel}&ev=PageView&noscript=1`}
+              src={`https://www.facebook.com/tr?id=${pixel}&ev=PageView&noscript=1`}
             />
           </noscript>
         </>

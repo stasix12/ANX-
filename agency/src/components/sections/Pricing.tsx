@@ -50,13 +50,13 @@ export function Pricing() {
                   <>
                     <p className="tabular text-[22px] font-semibold leading-none text-fg">
                       <span className="text-base font-medium text-muted">{copy.from}</span>
-                      <bdi dir="ltr">{formatCurrency(tier.price)}</bdi>
+                      <bdi>{formatCurrency(tier.price)}</bdi>
                     </p>
                     {tier.priceNote ? <p className="mt-2 text-[13px] text-subtle">{tier.priceNote}</p> : null}
                     {typeof tier.monthly === 'number' ? (
                       <p className="mt-2 text-sm text-muted">
                         {copy.monthlyPrefix}
-                        <bdi dir="ltr" className="tabular font-semibold text-fg">
+                        <bdi className="tabular font-semibold text-fg">
                           {formatCurrency(tier.monthly)}
                         </bdi>
                         {tier.monthlyNote ? (

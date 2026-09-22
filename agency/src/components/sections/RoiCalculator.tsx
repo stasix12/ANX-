@@ -165,13 +165,13 @@ export function RoiCalculator() {
           {valid ? (
             <>
               <p className="tabular mt-2 text-4xl font-bold leading-none text-navy">
-                <bdi dir="ltr">{formatNumber(monthly)} ₪</bdi>
+                <bdi>{formatNumber(monthly)} ₪</bdi>
               </p>
               <p className="tabular mt-3 text-sm text-navy-muted">
-                {formatNumber(c)} {copy.customersUnit} × <bdi dir="ltr">{formatNumber(v)} ₪</bdi>
+                {formatNumber(c)} {copy.customersUnit} × <bdi>{formatNumber(v)} ₪</bdi>
               </p>
               <p className="tabular mt-1 text-sm text-navy-muted">
-                כ-<bdi dir="ltr">{formatNumber(yearly)} ₪</bdi> {copy.yearly}
+                כ-<bdi>{formatNumber(yearly)} ₪</bdi> {copy.yearly}
               </p>
             </>
           ) : (

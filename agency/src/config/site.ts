@@ -47,8 +47,20 @@ export const site = {
   },
 
   /** שעות פעילות לתצוגה בפוטר (טקסט חופשי). ריק = לא מוצג. */
-  openingHours: 'א׳–ה׳ 09:00–18:00',
+  openingHours: '',
+
+  /**
+   * תאריך עדכון תוכן אחרון (ISO). מזין את sitemap ואת Schema. עדכנו ידנית
+   * כשמשנים טקסטים — לא אוטומטית, כדי שגוגל יתייחס לזה ברצינות.
+   */
+  lastUpdated: '2026-09-22',
+  legalPagesUpdated: '2026-09-22',
 } as const;
+
+/** True on preview/staging builds — the site then asks not to be indexed. */
+export const noIndex =
+  process.env.NEXT_PUBLIC_NOINDEX === '1' ||
+  (Boolean(process.env.VERCEL_ENV) && process.env.VERCEL_ENV !== 'production');
 
 /**
  * חבילות ותמחור. price = null מציג "הצעת מחיר לפי אפיון".

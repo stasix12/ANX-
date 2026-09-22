@@ -13,6 +13,7 @@ export type TrackEvent =
   | 'form_start'
   | 'form_submit'
   | 'form_error'
+  | 'form_submit_error'
   | 'pricing_cta_click'
   | 'google_package_cta_click'
   | 'website_package_cta_click'

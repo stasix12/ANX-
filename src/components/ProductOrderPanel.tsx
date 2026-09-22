@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AddToOrderButton } from '@/components/AddToOrderButton';
+import { useOrderList } from '@/components/OrderListProvider';
+import { Price } from '@/components/Price';
 import { WhatsAppButton } from '@/components/WhatsAppButton';
-import { BULK_THRESHOLD } from '@/lib/order';
+import { BULK_THRESHOLD, orderItemCount } from '@/lib/order';
 import { sabrinaModels, type Product } from '@/lib/products';
 
 /**
@@ -20,6 +22,14 @@ export function ProductOrderPanel({ product }: { product: Product }) {
   const isCourse = product.category === 'courses';
   const models = product.fitsModels ?? sabrinaModels;
   const [model, setModel] = useState<string>(models[0]);
+  const orderModel = isCourse ? 'קורס 1 על 1' : model;
+  const ctaRef = useRef<HTMLDivElement>(null);
+  const showSticky = useStickyCta(ctaRef);
+  const { lines, ready } = useOrderList();
+  const barShowing = ready && orderItemCount(lines) > 0;
+  const price = product.salePrice !== undefined && product.price !== undefined && product.salePrice < product.price
+    ? product.salePrice
+    : product.price;
 
   return (
     <div data-order-scope className="mt-6">
@@ -48,8 +58,8 @@ export function ProductOrderPanel({ product }: { product: Product }) {
         </fieldset>
       )}
 
-      <div className="mt-5">
-        <AddToOrderButton product={product} model={isCourse ? 'קורס 1 על 1' : model} size="md" />
+      <div ref={ctaRef} className="mt-5">
+        <AddToOrderButton product={product} model={orderModel} size="md" />
         <WhatsAppButton
           productName={product.name}
           orderNote={isCourse ? undefined : `מתאים ל${model}`}
@@ -64,6 +74,58 @@ export function ProductOrderPanel({ product }: { product: Product }) {
         מזמינים {BULK_THRESHOLD} יחידות ומעלה? מוסיפים להזמנה ושולחים הכל בהודעה אחת — נחזור אליכם עם
         מחיר לכמות.
       </p>
+
+      {/*
+        Phones only: while the button above is off screen (the gallery pushes
+        it below the first screen), a slim bar keeps price + add one thumb
+        away. It sits above the order bar when that is showing, and steps
+        aside near the page end so it never covers the footer.
+      */}
+      {showSticky ? (
+        <div
+          className={`order-bar-in fixed inset-x-0 z-40 border-t border-ink-700 bg-white/95 px-3 py-2.5 shadow-[0_-4px_20px_rgb(0_0_0/0.06)] backdrop-blur-lg lg:hidden ${
+            barShowing ? 'bottom-[calc(4.25rem+env(safe-area-inset-bottom))]' : 'bottom-0 pb-[calc(0.625rem+env(safe-area-inset-bottom))]'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1 leading-tight">
+              <p className="truncate text-xs text-mist-500">
+                {product.name}
+                {isCourse ? '' : ` · ${model}`}
+              </p>
+              <p className="text-lg font-extrabold">
+                {price === undefined ? <span className="text-sm text-mist-500">מחיר בפנייה</span> : <Price value={price} />}
+              </p>
+            </div>
+            <div className="w-40 shrink-0">
+              <AddToOrderButton product={product} model={orderModel} />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/** True while the watched element is out of view and the page end is not near. */
+function useStickyCta(ref: React.RefObject<HTMLElement | null>) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const update = () => {
+      const element = ref.current;
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const offScreen = rect.bottom < 0 || rect.top > window.innerHeight;
+      const nearEnd = window.innerHeight + window.scrollY > document.documentElement.scrollHeight - 320;
+      setShow(offScreen && !nearEnd);
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [ref]);
+  return show;
 }

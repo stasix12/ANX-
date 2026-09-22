@@ -52,13 +52,13 @@ export function ProductDetail({
       <nav aria-label="מסלול ניווט" className="text-[13px] text-mist-500">
         <ol className="flex flex-wrap items-center gap-2">
           <li>
-            <Link href="/" className="inline-block py-2 transition-colors hover:text-mist-100">
+            <Link href="/" className="inline-flex min-h-11 items-center transition-colors hover:text-mist-100">
               דף הבית
             </Link>
           </li>
           <li aria-hidden>/</li>
           <li>
-            <Link href="/#products" className="inline-block py-2 transition-colors hover:text-mist-100">
+            <Link href="/#products" className="inline-flex min-h-11 items-center transition-colors hover:text-mist-100">
               {categoryName(product.category)}
             </Link>
           </li>

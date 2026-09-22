@@ -57,7 +57,9 @@ export function OrderBar() {
     dialog?.focus();
     // The page behind a modal sheet must not scroll under the finger.
     const previousOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -87,6 +89,7 @@ export function OrderBar() {
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = previousOverflow;
+      document.documentElement.style.overflow = previousRootOverflow;
       opener?.focus?.();
     };
   }, [open, setOpen]);
@@ -144,7 +147,7 @@ export function OrderBar() {
               </div>
             ) : (
               <>
-                <ul className="flex-1 divide-y divide-ink-700 overflow-y-auto px-5">
+                <ul className="flex-1 divide-y divide-ink-700 overflow-y-auto overscroll-contain px-5">
                   {lines.map((line) => {
                     const value = lineTotal(line);
                     return (
@@ -200,7 +203,7 @@ export function OrderBar() {
                               remove(line.slug, line.model);
                             }}
                             aria-label={`הסרת ${line.name}`}
-                            className="rounded-lg px-2 py-1.5 text-xs font-semibold text-mist-500 transition-colors hover:text-red-600"
+                            className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-mist-500 transition-colors hover:text-red-600"
                           >
                             הסרה
                           </button>
@@ -243,7 +246,7 @@ export function OrderBar() {
                     <button
                       type="button"
                       onClick={() => setOpen(false)}
-                      className="rounded-lg py-2.5 text-sm font-bold text-mist-100 transition-colors hover:text-brand-700"
+                      className="min-h-11 rounded-lg py-3 text-sm font-bold text-mist-100 transition-colors hover:text-brand-700"
                     >
                       המשך בחירת מוצרים
                     </button>
@@ -252,7 +255,7 @@ export function OrderBar() {
                       onClick={() => {
                         if (window.confirm('לרוקן את כל ההזמנה?')) clear();
                       }}
-                      className="rounded-lg py-2.5 text-xs font-semibold text-mist-500 transition-colors hover:text-red-600"
+                      className="min-h-11 rounded-lg py-3 text-xs font-semibold text-mist-500 transition-colors hover:text-red-600"
                     >
                       ריקון ההזמנה
                     </button>
@@ -323,7 +326,7 @@ function QuantityButton({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="grid h-10 w-10 place-items-center rounded-xl text-lg font-bold text-mist-100 transition-colors hover:bg-ink-800"
+      className="grid h-11 w-11 place-items-center rounded-xl text-lg font-bold text-mist-100 transition-colors hover:bg-ink-800"
     >
       {children}
     </button>

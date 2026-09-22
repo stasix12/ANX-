@@ -35,7 +35,7 @@ export function Footer() {
             <p className="text-sm font-bold text-mist-100">{site.shippingNote}</p>
             <a
               href={`tel:+${site.whatsappNumber}`}
-              className="inline-block py-2 text-sm text-mist-300 tabular-nums transition-colors duration-200 hover:text-mist-100"
+              className="inline-block py-3 text-sm text-mist-300 tabular-nums transition-colors duration-200 hover:text-mist-100"
               dir="ltr"
             >
               {site.phoneDisplay}

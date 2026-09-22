@@ -35,7 +35,7 @@ export function ProductGallery({ images, productName, video }: ProductGalleryPro
   return (
     // min-w-0: the scrolling thumbnail row must not widen the grid column.
     <div className="min-w-0">
-      <div className="relative aspect-square overflow-hidden rounded-card border border-ink-700 bg-ink-900">
+      <div className="relative aspect-[5/4] overflow-hidden rounded-card border border-ink-700 bg-ink-900 sm:aspect-square">
         <Image
           key={images[imageIndex]}
           src={images[imageIndex]}

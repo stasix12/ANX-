@@ -36,4 +36,4 @@ export const aggregate: { rating: number; count: number } | null = null;
  * The honest empty state is shown on dev/preview builds only; in production
  * the section disappears until real reviews exist.
  */
-export const showWhenEmpty = process.env.NODE_ENV !== 'production';
+export const showWhenEmpty = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_SHOW_PLACEHOLDERS === '1';

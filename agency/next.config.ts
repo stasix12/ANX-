@@ -1,6 +1,13 @@
 import type { NextConfig } from 'next';
 
+/**
+ * EXPORT=1 produces a fully static copy in out/ (used by scripts/build-preview.mjs
+ * to hand someone a preview). Response headers cannot be set on a static export.
+ */
+const isExport = process.env.EXPORT === '1';
+
 const nextConfig: NextConfig = {
+  ...(isExport ? { output: 'export', trailingSlash: false, assetPrefix: './site' } : {}),
   poweredByHeader: false,
   // This app lives inside a larger repo with its own lockfile; pin the root so
   // Turbopack does not pick the parent one.
@@ -9,6 +16,7 @@ const nextConfig: NextConfig = {
     formats: ['image/avif', 'image/webp'],
   },
   async headers() {
+    if (isExport) return [];
     return [
       {
         source: '/(.*)',

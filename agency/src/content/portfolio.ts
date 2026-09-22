@@ -39,7 +39,8 @@ export const projects: Project[] = [
  * Placeholder cards are shown on dev/preview builds only. To show them in
  * production anyway (not recommended) set this to `true`.
  */
-export const showPlaceholders = process.env.NODE_ENV !== 'production';
+export const showPlaceholders =
+  process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_SHOW_PLACEHOLDERS === '1';
 
 /** Whether the portfolio section (and its nav link) renders at all. */
 export const hasPortfolio = projects.length > 0 || showPlaceholders;

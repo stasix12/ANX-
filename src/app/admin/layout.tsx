@@ -9,6 +9,9 @@ import type { Viewport } from 'next';
 export const viewport: Viewport = {
   themeColor: '#17191c',
   colorScheme: 'dark',
+  // Next merges nested viewports, so the root's 'cover' has to be undone
+  // explicitly, not just left out.
+  viewportFit: 'auto',
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

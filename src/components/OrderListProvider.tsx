@@ -64,7 +64,10 @@ export function OrderListProvider({ children }: { children: React.ReactNode }) {
   }, [lines, ready]);
 
   const add = useCallback((line: OrderLine) => {
-    setAnnouncement(`נוסף להזמנה: ${line.name}`);
+    // Cleared first so a repeat add of the same product still changes the
+    // region's text and is announced again.
+    setAnnouncement('');
+    window.requestAnimationFrame(() => setAnnouncement(`נוסף להזמנה: ${line.name}`));
     setLines((current) => {
       const index = current.findIndex((item) => sameLine(item, line.slug, line.model));
       if (index === -1) return [...current, line];

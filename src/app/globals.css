@@ -13,8 +13,8 @@
  * .platform-theme and are unaffected.
  *
  * Contrast (WCAG): mist-100 #171717 on white 17.9:1; mist-300 #404040 10.4:1;
- * mist-500 #666666 5.7:1 on white and 5.4:1 on ink-900. brand-700 #C24E00 is
- * the orange for TEXT on white (4.8:1) — #FF6A00 itself is only for fills and
+ * mist-500 #666666 5.7:1 on white and 5.4:1 on ink-900. brand-700 #B84A00 is
+ * the orange for TEXT (5.3:1 on white, 4.9:1 on ink-900) — #FF6A00 itself is only for fills and
  * marks, never text. Filled orange buttons carry charcoal on-brand text
  * (6.2:1; 5.2:1 on the brand-600 hover).
  */
@@ -31,7 +31,7 @@
   --color-brand-400: #ff8a33;
   --color-brand-500: #ff6a00;
   --color-brand-600: #e95f00;
-  --color-brand-700: #c24e00;
+  --color-brand-700: #b84a00;
 
   /* Text: primary → secondary → fine print */
   --color-mist-100: #171717;
@@ -119,6 +119,15 @@
   --color-mist-500: #8a8478;
 
   --color-on-brand: #1a1200;
+
+  /* The storefront's cards went to 1rem; the apps keep the radius they were
+     designed with. */
+  --radius-card: 1.25rem;
+}
+
+.admin-theme ::selection {
+  background-color: var(--color-brand-500);
+  color: var(--color-on-brand);
 }
 
 .admin-theme .surface {
@@ -177,6 +186,9 @@
   --color-brand-600: #026da5;
   --color-brand-700: #075985;
   --color-on-brand: #ffffff;
+
+  /* Keeps the card radius this app was designed with (the store uses 1rem). */
+  --radius-card: 1.25rem;
 }
 
 /*
@@ -934,6 +946,9 @@
   --color-brand-600: #0b5c70;
   --color-brand-700: #094a5a;
   --color-on-brand: #ffffff;
+
+  /* Keeps the card radius this app was designed with (the store uses 1rem). */
+  --radius-card: 1.25rem;
 }
 
 .platform-theme .surface {

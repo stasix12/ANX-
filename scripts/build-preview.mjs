@@ -78,6 +78,7 @@ const productOrder = [
   ['anx-adapter-sabrina', 'adapters'],
   ['anx-adapter-quick', 'adapters'],
   ['anx-adapter-90', 'adapters'],
+  ['course-stain-removal', 'courses'],
 ];
 
 const dataUri = (buf, mime) => `data:${mime};base64,${buf.toString('base64')}`;

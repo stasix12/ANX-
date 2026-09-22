@@ -45,6 +45,7 @@ export function OrderBar() {
       previousCount.current = count;
       return () => window.clearTimeout(timer);
     }
+    setBump(false);
     previousCount.current = count;
   }, [count, ready]);
 
@@ -62,6 +63,10 @@ export function OrderBar() {
     document.documentElement.style.overflow = 'hidden';
 
     const onKeyDown = (event: KeyboardEvent) => {
+      // Only the topmost modal handles keys — the WhatsApp fallback dialog can
+      // open over this sheet, and it must keep its own Tab and Escape.
+      const modals = document.querySelectorAll('[aria-modal="true"]');
+      if (modals[modals.length - 1] !== dialog) return;
       if (event.key === 'Escape') {
         setOpen(false);
         return;
@@ -90,7 +95,13 @@ export function OrderBar() {
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = previousOverflow;
       document.documentElement.style.overflow = previousRootOverflow;
-      opener?.focus?.();
+      // The opener may be gone (the bar unmounts once the list empties) —
+      // fall back to the header cart, which is always there.
+      const target =
+        opener && document.contains(opener)
+          ? opener
+          : document.querySelector<HTMLElement>('header button[aria-label^="ההזמנה שלכם"]');
+      target?.focus?.();
     };
   }, [open, setOpen]);
 

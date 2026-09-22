@@ -13,6 +13,8 @@ import {
   orderItemCount,
   orderLink,
   orderTotal,
+  productsLabel,
+  unitsLabel,
 } from '@/lib/order';
 
 /**
@@ -53,6 +55,9 @@ export function OrderBar() {
     const opener = document.activeElement as HTMLElement | null;
     const dialog = dialogRef.current;
     dialog?.focus();
+    // The page behind a modal sheet must not scroll under the finger.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -64,6 +69,12 @@ export function OrderBar() {
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
+      // Focus fell out (e.g. the focused line was just removed) — bring it back in.
+      if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
       if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
         event.preventDefault();
         last.focus();
@@ -75,6 +86,7 @@ export function OrderBar() {
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
       opener?.focus?.();
     };
   }, [open, setOpen]);
@@ -103,7 +115,7 @@ export function OrderBar() {
           >
             <div className="flex items-center justify-between border-b border-ink-700 py-3 ps-5 pe-3">
               <h2 id="order-sheet-title" className="text-lg font-extrabold">
-                ההזמנה שלך
+                ההזמנה שלכם
               </h2>
               <button
                 type="button"
@@ -150,7 +162,7 @@ export function OrderBar() {
                           <p className="mt-0.5 text-xs text-mist-500">{line.model}</p>
                           <p className="mt-1.5 text-[15px] font-extrabold">
                             {value === undefined ? (
-                              <span className="text-xs font-semibold text-mist-500">מחיר לפי הזמנה</span>
+                              <span className="text-xs font-semibold text-mist-500">מחיר בפנייה</span>
                             ) : (
                               <Price value={value} />
                             )}
@@ -161,7 +173,10 @@ export function OrderBar() {
                           <div className="flex items-center rounded-xl border border-ink-700">
                             <QuantityButton
                               label={`הפחתת כמות של ${line.name}`}
-                              onClick={() => setQuantity(line.slug, line.model, line.quantity - 1)}
+                              onClick={() => {
+                                if (line.quantity <= 1) dialogRef.current?.focus();
+                                setQuantity(line.slug, line.model, line.quantity - 1);
+                              }}
                             >
                               −
                             </QuantityButton>
@@ -180,7 +195,10 @@ export function OrderBar() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => remove(line.slug, line.model)}
+                            onClick={() => {
+                              dialogRef.current?.focus();
+                              remove(line.slug, line.model);
+                            }}
                             aria-label={`הסרת ${line.name}`}
                             className="rounded-lg px-2 py-1.5 text-xs font-semibold text-mist-500 transition-colors hover:text-red-600"
                           >
@@ -201,11 +219,11 @@ export function OrderBar() {
 
                   <div className="flex items-baseline justify-between gap-4">
                     <span className="text-sm text-mist-500">
-                      סה״כ · {count} יחידות
+                      סה״כ · {unitsLabel(count)}
                       {complete ? '' : ' · חלק מהפריטים לתמחור'}
                     </span>
                     <span className="text-xl font-extrabold">
-                      <Price value={total} suffix={complete ? '' : '+'} />
+                      <OrderTotal total={total} complete={complete} />
                     </span>
                   </div>
 
@@ -227,14 +245,16 @@ export function OrderBar() {
                       onClick={() => setOpen(false)}
                       className="rounded-lg py-2.5 text-sm font-bold text-mist-100 transition-colors hover:text-brand-700"
                     >
-                      המשך בקנייה
+                      המשך בחירת מוצרים
                     </button>
                     <button
                       type="button"
-                      onClick={clear}
+                      onClick={() => {
+                        if (window.confirm('לרוקן את כל ההזמנה?')) clear();
+                      }}
                       className="rounded-lg py-2.5 text-xs font-semibold text-mist-500 transition-colors hover:text-red-600"
                     >
-                      ניקוי הרשימה
+                      ריקון ההזמנה
                     </button>
                   </div>
                 </div>
@@ -250,7 +270,7 @@ export function OrderBar() {
             <button
               type="button"
               onClick={() => setOpen(true)}
-              aria-label={`צפייה בהזמנה — ${count} מוצרים`}
+              aria-label={`צפייה בהזמנה — ${productsLabel(count)}`}
               className={`flex h-12 w-full items-center gap-3 rounded-xl text-start transition-transform duration-200 sm:ms-auto sm:max-w-md ${
                 bump ? 'scale-[1.02]' : ''
               }`}
@@ -259,9 +279,9 @@ export function OrderBar() {
                 <CartIcon className="h-[22px] w-[22px]" />
               </span>
               <span className="min-w-0 flex-1 leading-tight">
-                <span className="block text-sm font-bold">{count} מוצרים</span>
+                <span className="block text-sm font-bold">{productsLabel(count)}</span>
                 <span className="block text-sm font-extrabold text-mist-100">
-                  <Price value={total} suffix={complete ? '' : '+'} />
+                  <OrderTotal total={total} complete={complete} />
                 </span>
               </span>
               <span className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-bold text-on-brand transition-colors duration-200 hover:bg-brand-600">
@@ -274,6 +294,12 @@ export function OrderBar() {
       ) : null}
     </>
   );
+}
+
+/** "₪1,500" / "₪1,500+" when some lines are priced on request / no figure at all when none are priced. */
+function OrderTotal({ total, complete }: { total: number; complete: boolean }) {
+  if (total === 0 && !complete) return <span className="text-sm font-semibold text-mist-500">מחיר בפנייה</span>;
+  return <Price value={total} suffix={complete ? '' : '+'} />;
 }
 
 /** Page-end space the height of the order bar, rendered only while it shows. */

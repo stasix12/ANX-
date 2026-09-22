@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ProductCard } from '@/components/ProductCard';
+import { productsLabel } from '@/lib/order';
 import { categories, fetchPublishedProducts, type CategoryId, type Product } from '@/lib/products';
 
 type Filter = CategoryId | 'all';
@@ -66,7 +67,7 @@ export function ProductGrid({ initialProducts = [] }: { initialProducts?: Produc
       <div
         role="radiogroup"
         aria-label="סינון מוצרים לפי קטגוריה"
-        className="scrollbar-none -mx-4 flex snap-x gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0"
+        className="scrollbar-none -mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0"
       >
         {filters.map((filter, index) => {
           const selected = active === filter.id;
@@ -95,7 +96,7 @@ export function ProductGrid({ initialProducts = [] }: { initialProducts?: Produc
       </div>
 
       <p aria-live="polite" className="sr-only">
-        {visible.length} מוצרים
+        {productsLabel(visible.length)}
       </p>
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-5 md:grid-cols-3 xl:grid-cols-4">

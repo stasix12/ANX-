@@ -27,6 +27,10 @@ export function AddToOrderButton({
   const { add } = useOrderList();
   const [added, setAdded] = useState(false);
 
+  // The confirmation belongs to the model it was given for — switching the
+  // Sabrina fit must not leave "נוסף" on a choice that was never added.
+  useEffect(() => setAdded(false), [model]);
+
   useEffect(() => {
     if (!added) return;
     const timer = window.setTimeout(() => setAdded(false), 1600);

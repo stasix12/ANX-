@@ -55,7 +55,7 @@ export function ProductOrderPanel({ product }: { product: Product }) {
           orderNote={isCourse ? undefined : `מתאים ל${model}`}
           size="md"
           variant="outline"
-          label="הזמנה ישירה ב-WhatsApp"
+          label="הזמנה ישירה בוואטסאפ"
           className="mt-2.5 w-full"
         />
       </div>

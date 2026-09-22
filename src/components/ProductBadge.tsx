@@ -1,10 +1,10 @@
 /**
- * Badges are free text from the admin panel. Orange is kept for the few that
- * are genuinely news or proof ("חדש", "הנמכר ביותר", "מומלץ"); everything else
- * — "סט מלא", "סט 6 יחידות", "חוסך זמן", "מיוצר בישראל" — is a quiet white
- * label, so orange on the grid still means something when it appears.
+ * Badges are free text from the admin panel. Orange is kept for the two that
+ * are genuinely news or proof ("חדש", "הנמכר ביותר"); everything else — "סט
+ * מלא", "סט 6 יחידות", "שדרוג מומלץ", "חוסך זמן" — is a quiet white label, so
+ * orange badges do not compete with the orange buttons under them.
  */
-const loudBadges = /חדש|הנמכר|מומלץ/;
+const loudBadges = /^חדש|הנמכר/;
 
 export function ProductBadge({ label, className = '' }: { label: string; className?: string }) {
   const loud = loudBadges.test(label);

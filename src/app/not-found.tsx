@@ -16,7 +16,7 @@ export default function NotFound() {
           href="/#products"
           className="inline-flex h-12 items-center justify-center rounded-xl bg-brand-500 px-7 font-bold text-on-brand transition-colors duration-200 hover:bg-brand-600"
         >
-          לצפייה במוצרים
+          צפייה במוצרים
         </Link>
         <WhatsAppButton label="דברו איתנו בוואטסאפ" />
       </div>

@@ -5,7 +5,7 @@ import { useOrderList } from '@/components/OrderListProvider';
 import { Wordmark } from '@/components/Wordmark';
 import { CartIcon, PhoneIcon, WhatsAppIcon } from '@/components/icons';
 import { WhatsAppLink } from '@/components/WhatsAppLink';
-import { orderItemCount } from '@/lib/order';
+import { orderItemCount, productsLabel } from '@/lib/order';
 import { generalWhatsappLink, site } from '@/lib/site';
 
 const iconButton =
@@ -52,7 +52,7 @@ export function Header() {
           <button
             type="button"
             onClick={() => setSheetOpen(true)}
-            aria-label={count > 0 ? `ההזמנה שלי — ${count} מוצרים` : 'ההזמנה שלי — ריקה'}
+            aria-label={count > 0 ? `ההזמנה שלכם — ${productsLabel(count)}` : 'ההזמנה שלכם — ריקה'}
             className={iconButton}
           >
             <CartIcon className="h-[23px] w-[23px]" />

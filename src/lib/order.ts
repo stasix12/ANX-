@@ -11,6 +11,12 @@ export interface OrderLine {
   image?: string;
 }
 
+/** "מוצר אחד" / "3 מוצרים" — Hebrew does not say "1 מוצרים". */
+export const productsLabel = (count: number): string => (count === 1 ? 'מוצר אחד' : `${count} מוצרים`);
+
+/** "יחידה אחת" / "3 יחידות". */
+export const unitsLabel = (count: number): string => (count === 1 ? 'יחידה אחת' : `${count} יחידות`);
+
 /** Minimum quantity that counts as a bulk order and unlocks a price conversation. */
 export const BULK_THRESHOLD = 3;
 

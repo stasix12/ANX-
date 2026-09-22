@@ -83,7 +83,7 @@ export function ProductDetail({
             {product.category === 'courses' ? null : (
               <span className="inline-flex items-center gap-1.5 rounded-md border border-[#bbf7d0] bg-[#f0fdf4] px-2.5 py-1.5 text-xs font-bold text-[#15803d]">
                 <CheckIcon className="h-3.5 w-3.5" />
-                מתאים ל-Sabrina
+                מתאים לסברינה
               </span>
             )}
             {product.badge ? <ProductBadge label={product.badge} className="py-1.5 text-xs" /> : null}
@@ -94,7 +94,7 @@ export function ProductDetail({
 
           <p className="mt-6 flex flex-wrap items-baseline gap-x-3 text-[34px] leading-none font-extrabold sm:text-4xl">
             {product.price === undefined ? (
-              <span className="text-xl font-semibold text-mist-500">מחיר לפי הזמנה</span>
+              <span className="text-xl font-semibold text-mist-500">מחיר בפנייה</span>
             ) : hasSale ? (
               <>
                 <Price value={product.salePrice!} />
@@ -206,7 +206,7 @@ export function ProductDetail({
           לא בטוחים איזה דגם מתאים, או צריכים כמות? שולחים הודעה ומקבלים תשובה ממי שמייצר. {site.shippingNote}.
         </p>
         <div className="mt-5 flex justify-center">
-          <WhatsAppButton productName={product.name} size="md" variant="outline" label="דברו איתנו ב-WhatsApp" />
+          <WhatsAppButton productName={product.name} size="md" variant="outline" label="דברו איתנו בוואטסאפ" />
         </div>
       </div>
 

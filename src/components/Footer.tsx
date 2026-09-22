@@ -58,7 +58,7 @@ export function Footer() {
 
         <div className="mt-10 flex flex-col gap-3 border-t border-ink-700 pt-6 text-xs text-mist-500 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            © {new Date().getFullYear()} {site.name} · {site.tagline}
+            <bdi dir="ltr">© {new Date().getFullYear()} {site.name}</bdi> · ציוד מקצועי לניקוי ריפודים
           </p>
           <p>כל הזכויות שמורות · המחירים באתר כוללים מע״מ</p>
         </div>

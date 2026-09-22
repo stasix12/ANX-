@@ -29,10 +29,14 @@ export default function OpengraphImage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <div style={{ display: 'flex', fontSize: 84, fontWeight: 800, letterSpacing: 8 }}>
-            <span>ANX</span>
-            <span style={{ color: '#ff6a00' }}>3D</span>
-          </div>
+          {/* The wordmark's own path glyphs — ANX charcoal, 3D orange. */}
+          <svg width="570" height="100" viewBox="0 0 570 100">
+            <path fill="#171717" fillRule="evenodd" d="M0,100 L14,0 L76,0 L90,100 L68,100 L63,74 L27,74 L22,100 Z M32,56 L38,20 L52,20 L58,56 Z" />
+            <path fill="#171717" transform="translate(120,0)" d="M0,0 L20,0 L70,66 L70,0 L90,0 L90,100 L70,100 L20,34 L20,100 L0,100 Z" />
+            <path fill="#171717" transform="translate(240,0)" d="M0,0 L22,0 L90,100 L68,100 Z M68,0 L90,0 L22,100 L0,100 Z" />
+            <path fill="#ff6a00" transform="translate(360,0)" d="M30,0 L90,0 L90,21 L10,21 Z M70,19 H90 V41 H70 Z M34,39 H90 V61 H34 Z M70,59 H90 V81 H70 Z M10,79 L90,79 L90,100 L30,100 Z" />
+            <path fill="#ff6a00" fillRule="evenodd" transform="translate(480,0)" d="M0,0 L66,0 L90,24 L90,76 L66,100 L0,100 Z M20,20 L58,20 L70,32 L70,68 L58,80 L20,80 Z" />
+          </svg>
         </div>
 
         <div style={{ marginTop: 44, fontSize: 42, color: '#404040', maxWidth: 900 }}>

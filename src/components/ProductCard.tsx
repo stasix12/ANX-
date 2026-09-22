@@ -36,7 +36,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
         href={`/products/${product.slug}`}
         tabIndex={-1}
         aria-hidden
-        className="relative block aspect-square overflow-hidden bg-ink-900"
+        className="relative block aspect-[4/5] overflow-hidden bg-ink-900"
       >
         <Image
           src={product.images[0]}
@@ -59,14 +59,14 @@ export function ProductCard({ product, priority = false }: { product: Product; p
         <h3 className="text-[15px] leading-snug font-bold break-words text-mist-100 sm:text-base">
           <Link
             href={`/products/${product.slug}`}
-            className="line-clamp-2 rounded after:absolute after:inset-0 after:content-[''] hover:text-brand-700"
+            className="line-clamp-2 rounded after:absolute after:inset-0 after:content-[''] [@media(hover:hover)]:hover:text-brand-700"
           >
             {product.name}
           </Link>
         </h3>
 
         {product.tagline ? (
-          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-mist-500">{product.tagline}</p>
+          <p className="mt-1 line-clamp-1 text-[13px] leading-snug text-mist-500 sm:line-clamp-2">{product.tagline}</p>
         ) : null}
 
         {/*
@@ -116,7 +116,7 @@ export function ProductCard({ product, priority = false }: { product: Product; p
         <div className="relative z-10 mt-auto pt-3">
           <p className="flex flex-wrap items-baseline gap-x-2 text-xl leading-tight font-extrabold text-mist-100 sm:text-[22px]">
             {product.price === undefined ? (
-              <span className="text-sm font-semibold text-mist-500">מחיר לפי הזמנה</span>
+              <span className="text-sm font-semibold text-mist-500">מחיר בפנייה</span>
             ) : hasSale ? (
               <>
                 <Price value={product.salePrice!} />

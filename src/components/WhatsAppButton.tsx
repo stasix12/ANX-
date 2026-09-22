@@ -32,7 +32,7 @@ interface WhatsAppButtonProps {
 export function WhatsAppButton({
   productName,
   orderNote,
-  label = 'הזמנה ב-WhatsApp',
+  label = 'הזמנה בוואטסאפ',
   size = 'md',
   variant = 'solid',
   className = '',

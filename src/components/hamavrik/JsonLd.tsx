@@ -93,7 +93,10 @@ export function serviceSchema(service: Service, city?: string, description: stri
             '@type': 'Offer',
             price: String(service.priceFrom),
             priceCurrency: 'ILS',
-            priceSpecification: { '@type': 'PriceSpecification', minPrice: service.priceFrom, priceCurrency: 'ILS' },
+            priceSpecification:
+              service.priceUnit === 'למ״ר'
+                ? { '@type': 'UnitPriceSpecification', minPrice: service.priceFrom, priceCurrency: 'ILS', unitCode: 'MTK', unitText: 'מ״ר' }
+                : { '@type': 'PriceSpecification', minPrice: service.priceFrom, priceCurrency: 'ILS' },
           },
         }
       : {}),

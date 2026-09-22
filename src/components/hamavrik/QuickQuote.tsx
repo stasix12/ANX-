@@ -58,10 +58,12 @@ export function QuickQuote({
    */
   let fromTotal = 0;
   let unpriced = 0;
+  let perArea = 0;
   for (const s of chosen) {
     const pick = picks[s.id]!;
     const row = quotePriceRow(s.id, pick.variant);
-    if (row?.from) fromTotal += row.from * pick.qty;
+    if (row?.perArea) perArea += 1;
+    else if (row?.from) fromTotal += row.from * pick.qty;
     else unpriced += 1;
   }
 
@@ -233,7 +235,7 @@ export function QuickQuote({
                           {row?.from ? (
                             <>
                               החל מ-<bdi dir="rtl">{priceText(row.from)}</bdi>
-                              {pick.qty > 1 ? ' ליחידה' : ''}
+                              {row.unit ? ` ${row.unit}` : pick.qty > 1 ? ' ליחידה' : ''}
                             </>
                           ) : (
                             'לפי הצעת מחיר'
@@ -314,6 +316,11 @@ export function QuickQuote({
                 {unpriced > 0 ? (
                   <span className="mt-0.5 block text-[13px] font-bold text-mist-300">
                     {unpriced === 1 ? 'פריט אחד' : `${unpriced} פריטים`} לפי הצעת מחיר
+                  </span>
+                ) : null}
+                {perArea > 0 ? (
+                  <span className="mt-0.5 block text-[13px] font-bold text-mist-300">
+                    {perArea === 1 ? 'שטיח' : 'שטיחים'} לפי שטח – נסגור לפי המידות
                   </span>
                 ) : null}
               </p>

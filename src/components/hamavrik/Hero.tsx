@@ -25,6 +25,7 @@ export function Hero({
   kicker,
   waMessage = waAsk(),
   priceFrom = priceList[0]?.from ?? null,
+  priceUnit,
   priceLabel = 'ניקוי ספה',
 }: {
   title?: ReactNode;
@@ -36,6 +37,8 @@ export function Hero({
    *  landing page, so the first line the business reads already says both. */
   waMessage?: string;
   priceFrom?: number | null;
+  /** 'למ״ר' / 'לכיסא' – shown after the price when it is not per item. */
+  priceUnit?: string;
   priceLabel?: string;
 }) {
   return (
@@ -53,6 +56,7 @@ export function Hero({
               <span className="text-2xl font-black text-brand-400 sm:text-3xl">
                 החל מ-<bdi dir="rtl">{priceText(priceFrom)}</bdi>
               </span>
+              {priceUnit ? <span className="text-sm font-bold text-mist-500">{priceUnit}</span> : null}
             </p>
           ) : null}
 

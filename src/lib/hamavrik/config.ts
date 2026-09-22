@@ -172,6 +172,8 @@ export interface Service {
   image: string | null;
   /** Starting price in ₪, or null to show "לפי הצעת מחיר". */
   priceFrom: number | null;
+  /** What the price is per, when it is not per item: 'למ״ר', 'לכיסא'. */
+  priceUnit?: string;
   /** Featured in the quick-quote picker and the main services grid. */
   featured: boolean;
 }
@@ -216,7 +218,7 @@ export const services: Service[] = [
       'כורסה נקייה משנה את כל הסלון. אנחנו מנקים כורסאות בד מכל הסוגים, כולל ריקליינרים וכורסאות הנקה, עם התאמת חומרי הניקוי לסוג הבד.',
     scene: 'armchair',
     image: null,
-    priceFrom: null,
+    priceFrom: 99,
     featured: true,
   },
   {
@@ -230,7 +232,8 @@ export const services: Service[] = [
       'כיסאות פינת אוכל סופגים כתמי אוכל ושומן יום אחרי יום. ניקוי מקצועי מוציא את הלכלוך מתוך הריפוד ומחזיר את הצבע המקורי – לכל סט הכיסאות בביקור אחד.',
     scene: 'chair',
     image: null,
-    priceFrom: null,
+    priceFrom: 49,
+    priceUnit: 'לכיסא',
     featured: true,
   },
   {
@@ -258,7 +261,8 @@ export const services: Service[] = [
       'ניקוי עמוק לשטיחים מבד, צמר וסיבים סינתטיים – הסרת כתמים, אבק ולכלוך שהצטבר בעומק הסיבים. הכול מתבצע אצלכם בבית, בלי לגלגל ולהוביל את השטיח לשום מקום.',
     scene: 'carpet',
     image: null,
-    priceFrom: null,
+    priceFrom: 54,
+    priceUnit: 'למ״ר',
     featured: true,
   },
   {
@@ -272,7 +276,8 @@ export const services: Service[] = [
       'שטיחים מקיר לקיר צוברים לכלוך בעיקר באזורי המעבר. אנחנו מנקים את כל השטח בשיטת הזרקה-יניקה, עם דגש על הכתמים ואזורי השימוש הכבד, וללא השארת שאריות חומר.',
     scene: 'carpet',
     image: null,
-    priceFrom: null,
+    priceFrom: 54,
+    priceUnit: 'למ״ר',
     featured: false,
   },
   {
@@ -302,6 +307,10 @@ export interface PriceRow {
   label: string;
   /** Starting price in ₪; null renders "לפי הצעת מחיר". */
   from: number | null;
+  /** What the price is per, when it is not per item: 'למ״ר', 'לכיסא'. */
+  unit?: string;
+  /** Priced by area – the quote form cannot total it, it shows the rate. */
+  perArea?: boolean;
   note?: string;
   highlight?: boolean;
 }
@@ -311,9 +320,9 @@ export const priceList: PriceRow[] = [
   { label: 'ניקוי ספה פינתית', from: 350, note: 'מערכת ישיבה פינתית' },
   { label: 'ניקוי מזרן', from: 279, note: 'מזרן זוגי, צד אחד' },
   { label: 'ניקוי ריפודי רכב', from: 299, note: 'מושבים קדמיים ואחוריים' },
-  { label: 'ניקוי כורסה', from: null },
-  { label: 'ניקוי כיסאות אוכל', from: null, note: 'מחיר לסט' },
-  { label: 'ניקוי שטיחים', from: null, note: 'לפי גודל' },
+  { label: 'ניקוי כורסה', from: 99, note: 'כורסה בד, ריקליינר או כורסת הנקה' },
+  { label: 'ניקוי כיסאות אוכל', from: 49, unit: 'לכיסא', note: 'כיסא מרופד, מחיר לכיסא' },
+  { label: 'ניקוי שטיחים', from: 54, unit: 'למ״ר', perArea: true, note: 'לפי שטח השטיח, מחיר למטר רבוע' },
 ];
 
 export const priceDisclaimer =
@@ -1084,16 +1093,16 @@ export const landingPages: LandingPage[] = [
     service: 'carpet',
     city: 'באר שבע',
     video: carpetVideo,
-    title: 'ניקוי שטיחים בבאר שבע עד הבית | בלי הובלה',
+    title: 'ניקוי שטיחים בבאר שבע עד הבית | החל מ-54 ₪ למ״ר',
     h1: 'ניקוי שטיחים בבאר שבע',
     description:
-      'ניקוי שטיחים מקצועי בבאר שבע בבית הלקוח: שטיחי סלון, שטיחים מקיר לקיר ושטיחי צמר. ניקוי עמוק, הסרת כתמים וייבוש מהיר – בלי לגלגל ובלי להוביל. הצעת מחיר ב‑WhatsApp.',
+      'ניקוי שטיחים מקצועי בבאר שבע בבית הלקוח, החל מ-54 ₪ למ״ר: שטיחי סלון, שטיחים מקיר לקיר ושטיחי צמר. ניקוי עמוק, הסרת כתמים וייבוש מהיר – בלי לגלגל ובלי להוביל. הצעת מחיר ב‑WhatsApp.',
     heroSubtitle: 'לא צריך לגלגל את השטיח ולחכות שבועיים. מנקים אצלכם בבית – סלון, חדרי ילדים ומקיר לקיר.',
     faqOverrides: [
       {
         replaces: 'כמה עולה ניקוי ספה?',
         q: 'כמה עולה ניקוי שטיח?',
-        a: 'מחיר ניקוי שטיח נקבע לפי גודל השטיח וסוג הסיבים, ולכן אין לו מחיר פתיחה אחיד. שולחים תמונה ב‑WhatsApp למספר 053-5257250 עם מידות משוערות, ומקבלים מחיר שנסגר מראש לפני שאנחנו מגיעים.',
+        a: `ניקוי שטיח מתחיל ב-${priceText(54)} למטר רבוע, והמחיר הסופי נקבע לפי שטח השטיח וסוג הסיבים. שולחים תמונה ב‑WhatsApp למספר 053-5257250 עם מידות משוערות, ומקבלים מחיר שנסגר מראש לפני שאנחנו מגיעים.`,
       },
     ],
     intro:
@@ -1116,7 +1125,7 @@ export const landingPages: LandingPage[] = [
         },
         {
           title: 'איך נקבע המחיר?',
-          body: 'לפי גודל השטיח וסוג הסיבים – שטיח צמר ושטיח סינתטי מטופלים אחרת, ושטיח מקיר לקיר מתומחר לפי שטח החדר. שלחו תמונה עם מידות משוערות (אפשר למדוד בצעדים) ונחזור עם מחיר שנסגר מראש, לפני שאנחנו מגיעים.',
+          body: `לפי שטח השטיח: החל מ-${priceText(54)} למטר רבוע. שטיח סלון של 2×3 מטר, למשל, הוא 6 מ״ר. סוג הסיבים משפיע גם הוא – שטיח צמר ושטיח סינתטי מטופלים אחרת – ושטיח מקיר לקיר מתומחר לפי שטח החדר. שלחו תמונה עם מידות משוערות (אפשר למדוד בצעדים) ונחזור עם מחיר שנסגר מראש, לפני שאנחנו מגיעים.`,
         },
         {
           title: 'כתמים, ריחות ובעלי חיים',

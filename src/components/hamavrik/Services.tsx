@@ -57,6 +57,7 @@ export function ServiceCard({ service, delay = 0 }: { service: Service; delay?: 
             {service.priceFrom ? (
               <span className="text-[13px] font-black text-brand-400">
                 החל מ-<bdi dir="rtl">{priceText(service.priceFrom)}</bdi>
+                {service.priceUnit ? ` ${service.priceUnit}` : ''}
               </span>
             ) : null}
           </div>

@@ -117,6 +117,7 @@ export default async function LandingPage({ params }: PageProps) {
         subtitle={page.heroSubtitle}
         waMessage={waAsk(service.waNoun, page.city)}
         priceFrom={service.priceFrom}
+        priceUnit={service.priceUnit}
         priceLabel={service.name}
       />
       <TrustStrip />

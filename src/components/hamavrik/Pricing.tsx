@@ -34,6 +34,7 @@ export function Pricing() {
                     <span className="text-[1.7rem] font-black leading-none text-brand-400 sm:text-3xl">
                       <bdi dir="rtl">{priceText(row.from)}</bdi>
                     </span>
+                    {row.unit ? <span className="ms-1 text-[11px] font-bold text-mist-500">{row.unit}</span> : null}
                   </>
                 ) : (
                   <span className="rounded-full bg-ink-900 px-3 py-1.5 text-sm font-extrabold text-mist-300">

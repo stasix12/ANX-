@@ -86,6 +86,13 @@ export function Footer() {
                 </a>
               </li>
             ) : null}
+            {business.googleWriteReviewUrl ? (
+              <li>
+                <a href={business.googleWriteReviewUrl} target="_blank" rel="noopener noreferrer" className="block py-2 text-mist-300 hover:text-brand-400">
+                  כתבו לנו ביקורת בגוגל
+                </a>
+              </li>
+            ) : null}
           </LinkGroup>
           <LinkGroup title="השירותים שלנו">
             {services.map((s) => {

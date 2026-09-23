@@ -77,14 +77,17 @@ export const business = {
    * "Read reviews" → copy link). Until then it opens a Google search for
    * the business, which is a real, working destination rather than a dummy.
    */
-  googleReviewsUrl: 'https://www.google.com/search?q=' + encodeURIComponent('הפתרון המבריק ניקוי ספות'),
+  googleReviewsUrl: 'https://g.page/r/CfD4vap4NVwoEBM',
+
+  /** "Write a review" link of the Business Profile (Google Business Profile → "בקשת ביקורות"). */
+  googleWriteReviewUrl: 'https://g.page/r/CfD4vap4NVwoEBM/review',
 
   /**
    * The business's Google Maps / Business Profile link (Google Maps → the
    * business → Share → copy link). While empty there is no "see us on
    * Google" link anywhere and no sameAs/hasMap in the schema – never a guess.
    */
-  googleMapsUrl: '',
+  googleMapsUrl: 'https://g.page/r/CfD4vap4NVwoEBM',
 
   /** Social links. Empty string = the icon is not rendered. */
   social: {

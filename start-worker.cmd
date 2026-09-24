@@ -76,6 +76,11 @@ echo.
 
 :deps
 if not exist node_modules goto install
+rem A restart must NOT pass through :ready, which zeroes the failure counter.
+rem With every restart now going through :update, that reset would run each
+rem time round and :giveup could never be reached - a worker crashing in a
+rem loop would restart for ever instead of stopping and saying what is wrong.
+if "%RESTART%"=="1" goto run
 goto ready
 
 :install
@@ -127,6 +132,9 @@ rem FAILS is reset because a planned restart is not a crash. Without this, five
 rem updates in an evening would trip the give-up limit and stop publishing.
 if "%EXITCODE%"=="4" goto updaterestart
 
+rem Nothing else gets here without having run, so from this point the failure
+rem counter is about crashes only.
+
 if %RAN% GEQ 60 set FAILS=0
 set /a FAILS=%FAILS%+1
 if %FAILS% GEQ 5 goto giveup
@@ -134,15 +142,28 @@ if %FAILS% GEQ 5 goto giveup
 rem Longer than LIVE_WORKER_MS in worker/social-worker.ts, so a worker that
 rem really did crash is not mistaken for the window that is still open.
 echo.
-echo   ה-worker נעצר. מפעיל אותו מחדש בעוד 30 שניות...
+echo   ה-worker נעצר. בודק עדכון ומפעיל אותו מחדש בעוד 30 שניות...
 timeout /t 30 >nul
-goto run
+rem EVERY restart goes through the update step, not just a planned one.
+rem
+rem The worker checks for a newer version itself, but only from version 3.12
+rem onward - and a machine running anything older has no way to ever get it,
+rem because the code that does the updating is the code that is missing. That
+rem is a dead end reachable only by walking to the machine, which is exactly
+rem what this whole mechanism exists to avoid.
+rem
+rem Pulling on every restart closes it: any exit at all - a crash, a Facebook
+rem timeout, a reboot - picks up whatever is waiting. An update that fails is
+rem reported and ignored, same as at startup.
+set RESTART=1
+goto update
 
 :updaterestart
 echo.
 echo   ירדה גרסה חדשה. מתקין ומפעיל מחדש...
 echo.
 set FAILS=0
+set RESTART=1
 goto update
 
 :alreadyrunning

@@ -600,7 +600,10 @@ console.log('unit tests OK');
   // ...and its restart delay must outlast the liveness window, or a worker that
   // really did crash gets mistaken for the window that is still open.
   const liveMs = Number(/const LIVE_WORKER_MS = ([\d_]+)/.exec(localWorker)?.[1].replace(/_/g, '') ?? 0);
-  const restartSec = Number(/timeout \/t (\d+) >nul\s*\r?\ngoto run/.exec(launcher)?.[1] ?? 0);
+  /* Matched on the wait itself rather than on what follows it: the crash
+     restart now goes through :update rather than straight to :run, and the
+     rule being protected is about the DELAY, not about where it lands. */
+  const restartSec = Number(/timeout \/t (\d+) >nul/.exec(launcher)?.[1] ?? 0);
   assert.ok(liveMs > 0 && restartSec > 0, 'both the liveness window and the restart delay must be readable');
   assert.ok(restartSec * 1000 > liveMs, `restart delay (${restartSec}s) must outlast the liveness window (${liveMs}ms)`);
 
@@ -622,7 +625,21 @@ console.log('unit tests OK');
   /* Back to the update step, never to :run — :run would start the SAME code,
      which would stand down again, forever. */
   assert.ok(/:updaterestart[\s\S]{0,200}goto update/.test(launcher), 'a restart for an update goes through the pull, not around it');
-  assert.ok(/:updaterestart[\s\S]{0,160}set FAILS=0/.test(launcher), 'and a planned restart is not counted as a crash');
+  assert.ok(/:updaterestart[\s\S]{0,200}set FAILS=0/.test(launcher), 'and a planned restart is not counted as a crash');
+  /*
+   * AND EVERY OTHER RESTART PULLS TOO.
+   *
+   * The worker only checks for a newer version from 3.12 onward, so a machine
+   * running anything older has no way to ever get it — the code that does the
+   * updating is the code that is missing. That dead end is reachable only by
+   * walking to the machine, which is the thing this whole mechanism exists to
+   * avoid. Pulling on every exit — a crash, a timeout, a reboot — closes it.
+   */
+  assert.ok(/timeout \/t 30 >nul[\s\S]{0,900}goto update/.test(launcher), 'a crash restart pulls before it starts again');
+  /* But a restart must not pass through :ready, which zeroes the failure
+     counter — :giveup could then never be reached and a worker crashing in a
+     loop would restart for ever instead of saying what is wrong. */
+  assert.ok(/if "%RESTART%"=="1" goto run/.test(launcher), 'and a restart skips the step that resets the crash counter');
   /*
    * NEVER MID-PUBLISH. Called from the idle branch, after the queue came back
    * empty, and currentJob is checked again anyway — the cost of being wrong is

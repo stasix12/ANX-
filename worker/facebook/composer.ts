@@ -1,4 +1,5 @@
 import type { Locator, Page } from 'playwright-core';
+import { parseGroupUrl } from '@/lib/social/types';
 import { fb, firstAttached, firstVisible, patterns } from './selectors';
 import { assertUsable, classifyPage } from './session';
 
@@ -46,6 +47,20 @@ export interface ComposeResult {
   /** Group moderates posts — it exists but waits for an admin. */
   pendingApproval: boolean;
   groupTitle: string;
+  /**
+   * The post's own address, read off the feed right after publishing.
+   *
+   * THE ROOT FIX for a problem that showed up much later: commenting on a post
+   * and reading its counters both need to find it again, and a group post has
+   * no address anywhere in the database — so both were reduced to scrolling a
+   * group's feed looking for the text. Three hours of other people's posts
+   * later that stops working, which is exactly what the owner saw.
+   *
+   * Captured here because this is the one moment the post is guaranteed to be
+   * at the top of the feed. Empty when the feed did not yield one; nothing
+   * downstream may assume it is there.
+   */
+  permalink: string;
 }
 
 const IMAGE_UPLOAD_TIMEOUT = 3 * 60_000;
@@ -113,7 +128,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     const verdict = await input.confirm(page);
     if (verdict !== 'confirmed') {
       await discardComposer(page);
-      return { outcome: 'cancelled', verified: false, pendingApproval: false, groupTitle };
+      return { outcome: 'cancelled', verified: false, pendingApproval: false, groupTitle, permalink: '' };
     }
   }
 
@@ -142,7 +157,39 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   assertUsable(await classifyPage(page));
   const pendingApproval = await fb.pendingText(page).isVisible({ timeout: 1500 }).catch(() => false);
   const verified = submitted && (await verifyInFeed(page, input.groupUrl, input.text));
-  return { outcome: 'published', verified, pendingApproval, groupTitle };
+  const permalink = verified ? await readPermalink(page, input.text) : '';
+  return { outcome: 'published', verified, pendingApproval, groupTitle, permalink };
+}
+
+/**
+ * The permalink of the post we just published, from the feed.
+ *
+ * Facebook hangs it on the timestamp above every post — a link to
+ * /groups/<id>/posts/<id> or /permalink/. Read while the post is still at the
+ * top of the feed, because that is the only moment it is cheap to find.
+ *
+ * Best-effort throughout: an empty string is a fine answer and every caller
+ * has to work without one, since every post published before this existed has
+ * none.
+ */
+async function readPermalink(page: Page, postText: string): Promise<string> {
+  try {
+    const article = await findPostArticle(page, postText);
+    if (!article) return '';
+    const href = await article
+      .locator('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid="]')
+      .first()
+      .getAttribute('href')
+      .catch(() => null);
+    if (!href) return '';
+    const url = new URL(href, 'https://www.facebook.com');
+    if (!/(^|\.)facebook\.com$/.test(url.hostname)) return '';
+    /* Tracking parameters change on every render and would make the same post
+       look like a different one each time it is read. */
+    return `https://www.facebook.com${url.pathname}`;
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -220,13 +267,53 @@ export async function commentOnPost(
   comment: string,
   image: string | null,
 ): Promise<boolean> {
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-  await page.waitForTimeout(3000);
-  /* A login wall or a checkpoint means whatever is on screen is not this
-     post. Returning false leaves the row pending rather than marking a
-     comment done that is not there. */
-  if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return false;
-  return addComment(page, postText, comment, image);
+  /*
+   * WHERE TO LOOK, in the order that actually finds things.
+   *
+   * Scrolling a group's feed works for a post published minutes ago and stops
+   * working for one published this afternoon — three hours of other people's
+   * posts sit above it, and twelve scrolls do not reach. That is what failed
+   * on the owner's machine.
+   *
+   * So: the post's own address when it has one, then the GROUP'S SEARCH, which
+   * finds a post by its words however old it is and is a plain URL rather than
+   * a button in some language. The feed stays as the last resort, for a post
+   * that has only just gone up.
+   */
+  for (const where of lookupUrls(url, postText)) {
+    await page.goto(where, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => undefined);
+    await page.waitForTimeout(3000);
+    /* A login wall or a checkpoint means whatever is on screen is not this
+       post. Stop rather than comment on it. */
+    if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return false;
+    if (await addComment(page, postText, comment, image)) return true;
+  }
+  return false;
+}
+
+/**
+ * The addresses worth trying for one post, best first.
+ *
+ * Search takes the post's own opening words, which is the most distinctive
+ * thing about it that Facebook indexes. Nothing here is a label in any
+ * language — a permalink and a search URL are both structure.
+ */
+export function lookupUrls(url: string, postText: string): string[] {
+  const out: string[] = [];
+  if (/\/(posts|permalink)\//.test(url)) out.push(url);
+  const group = parseGroupUrl(url);
+  if (group) {
+    const words = postText
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.length >= 12)
+      ?.slice(0, 60);
+    if (words) out.push(`${group.url}/search/?q=${encodeURIComponent(words)}`);
+    out.push(group.url);
+  } else if (!out.length) {
+    out.push(url);
+  }
+  return out;
 }
 
 async function addComment(page: Page, postText: string, comment: string, image: string | null): Promise<boolean> {

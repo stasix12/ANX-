@@ -21,6 +21,7 @@ import {
   getLimits,
   listActivity,
   listCampaigns,
+  commentTotals,
   listCommentQueue,
   listQueue,
   listTargets,
@@ -30,6 +31,7 @@ import {
   runCoverMedia,
   setPaused,
   stopCampaign,
+  type CommentTotals,
   type QueueRow,
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
@@ -56,6 +58,7 @@ interface DashboardData {
   upcoming: QueueRow[];
   /** Publications with a comment asked for on them, across every round. */
   comments: QueueRow[];
+  commentTotals: CommentTotals;
   limits: LimitsSettings;
   control: ControlSettings;
   /**
@@ -158,7 +161,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [queue, today, limits, control, targets, manual, log, states, upcoming, workers, comments] = await Promise.all([
+      const [queue, today, limits, control, targets, manual, log, states, upcoming, workers, comments, totals] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         /* countPublishedBetween(weekStart) used to run here on every 30s poll
@@ -178,6 +181,7 @@ export default function SocialDashboard() {
         listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' }),
         listWorkers(),
         listCommentQueue(),
+        commentTotals(),
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
       setData({
@@ -186,6 +190,7 @@ export default function SocialDashboard() {
         today,
         upcoming,
         comments,
+        commentTotals: totals,
         limits,
         control,
         activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
@@ -906,7 +911,7 @@ export default function SocialDashboard() {
           {/* Above the log, because it is a thing happening now rather than a
               record of things that happened. Absent entirely when no comment
               was ever asked for. */}
-          <CommentQueueCard rows={data.comments} />
+          <CommentQueueCard rows={data.comments} totals={data.commentTotals} />
 
           <Card
             title="יומן פעילות"

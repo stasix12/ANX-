@@ -37,6 +37,7 @@ import {
   retryQueueItem,
   commentProgress,
   queueCampaignComment,
+  retryFailedComments,
   screenshotUrl,
   stopCampaign,
   type QueueRow,
@@ -529,9 +530,25 @@ export default function CampaignControlCenter() {
                         ))}
                     </ul>
                   )}
-                  <Button variant="secondary" disabled={published.length === 0} onClick={() => setCommentOpen(true)}>
-                    {p.done + p.pending + p.failed > 0 ? 'הוסף תגובה נוספת' : 'הוסף תגובה לכל הפרסומים'}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" disabled={published.length === 0} onClick={() => setCommentOpen(true)}>
+                      {p.done + p.pending + p.failed > 0 ? 'הוסף תגובה נוספת' : 'הוסף תגובה לכל הפרסומים'}
+                    </Button>
+                    {/* Its own button, because "add another" would re-mark the
+                        posts that already HAVE a comment and ask for a second
+                        one on them without the owner meaning to. */}
+                    {p.failed > 0 && (
+                      <Button
+                        variant="secondary"
+                        busy={busy === 'retry-comments'}
+                        onClick={() =>
+                          act('retry-comments', () => retryFailedComments(id), `${p.failed} ${agree(p.failed, 'פרסום חזר', 'פרסומים חזרו')} לתור.`)
+                        }
+                      >
+                        {`נסה שוב את ${p.failed} שלא הצליחו`}
+                      </Button>
+                    )}
+                  </div>
                   {published.length === 0 && (
                     <p className="mt-2 text-xs text-mist-500">בסבב הזה עוד לא יצא פרסום, ולכן אין על מה להגיב.</p>
                   )}

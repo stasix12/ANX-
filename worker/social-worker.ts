@@ -752,7 +752,17 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
    * only outcome that cannot post the same thing twice.
    */
   const recorded = await persist(() =>
-    finishChecked({ status: 'published', step: 'published', published_at: new Date().toISOString(), error: note || null, rendered_text: text }),
+    finishChecked({
+      status: 'published',
+      step: 'published',
+      published_at: new Date().toISOString(),
+      error: note || null,
+      rendered_text: text,
+      /* Written only when the feed actually yielded one. Everything that reads
+         it later has to work without it anyway — every post published before
+         this existed has none. */
+      ...(result.permalink ? { permalink: result.permalink } : {}),
+    }),
   );
   if (!recorded) {
     state.currentJob = null;

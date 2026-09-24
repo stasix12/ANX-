@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { QueueRow } from '@/lib/social/client';
+import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import { agree } from '@/lib/social/time';
 import { TargetAvatar } from './TargetAvatar';
 import { Card, TONE_FILL } from './ui';
@@ -27,12 +27,18 @@ const LABEL: Record<string, string> = {
  * Absent entirely when nothing was asked for — an empty card about a feature
  * nobody is using is just furniture.
  */
-export function CommentQueueCard({ rows }: { rows: QueueRow[] }) {
+export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: CommentTotals }) {
   if (!rows.length) return null;
 
-  const pending = rows.filter((r) => r.comment_status === 'pending').length;
-  const done = rows.filter((r) => r.comment_status === 'done').length;
-  const failed = rows.filter((r) => r.comment_status === 'failed').length;
+  /*
+   * The counts come from the database, the list from the page.
+   *
+   * They used to both come from the page, so a task over a hundred and
+   * seventeen posts announced itself as fifty-nine — the page size, stated as
+   * a fact about the work.
+   */
+  const { pending, done, failed } = totals;
+  const shownAll = rows.length >= pending + done + failed;
   const sorted = [...rows].sort(
     (a, b) => ORDER.indexOf(a.comment_status ?? '') - ORDER.indexOf(b.comment_status ?? ''),
   );
@@ -53,6 +59,9 @@ export function CommentQueueCard({ rows }: { rows: QueueRow[] }) {
             believes their comment is under it. */}
         {failed > 0 && <span className="text-warning-400">{`${done + pending > 0 ? ' · ' : ''}${failed} לא הצליחו`}</span>}
       </p>
+      {!shownAll && (
+        <p className="mb-2 text-xs text-mist-500">{`מוצגות ${rows.length} הקבוצות הראשונות מתוך ${pending + done + failed}.`}</p>
+      )}
       <ul className="max-h-72 divide-y divide-ink-700 overflow-y-auto overscroll-contain rounded-xl bg-ink-800/40">
         {sorted.map((r) => (
           <li key={r.id} className="flex min-w-0 items-center gap-2 px-3 py-2">

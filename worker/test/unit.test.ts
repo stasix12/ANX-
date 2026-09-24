@@ -1877,7 +1877,13 @@ const scenario: { step: string; line: string }[] = [];
     !publishTry.includes("status: 'published'"),
     'the outcome write must sit OUTSIDE the try — inside it, a dropped Supabase write after Facebook accepted the post is caught as a failure, rescheduled, and published a second time',
   );
-  assert.ok(job.includes('await persist(() =>') && job.includes('finishChecked({ status: \'published\''), 'the published write is retried, and it can tell that it failed');
+  /* Matched across newlines: the call gained a permalink and is now written
+     over several lines. The rule is unchanged — the published write goes
+     through persist() and its result is checked. */
+  assert.ok(
+    job.includes('await persist(() =>') && /finishChecked\(\{\s*status: 'published'/.test(job),
+    'the published write is retried, and it can tell that it failed',
+  );
   assert.ok(job.includes('if (!recorded)'), 'a publish that could not be recorded leaves the row alone for a person to resolve');
 
   /* --- nothing raw reaches a column the dashboard prints ------------------- */
@@ -2433,12 +2439,47 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/r\.target\?\.name/.test(campaignPage), 'the round lists the groups it is commenting on');
   const commentCard = readFileSync(new URL('../../src/components/social/CommentQueueCard.tsx', import.meta.url), 'utf8');
   const dashSrcComments = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
-  assert.ok(/<CommentQueueCard rows=\{data\.comments\} \/>/.test(dashSrcComments), 'and so does the main screen');
+  assert.ok(/<CommentQueueCard rows=\{data\.comments\}/.test(dashSrcComments), 'and so does the main screen');
   assert.ok(/if \(!rows\.length\) return null;/.test(commentCard), 'which stays absent when nothing was ever asked for');
   /* A missing migration is the likeliest reason the button does nothing, and
      Postgres answers it in English about relations. Say it in Hebrew, naming
      the file, or the owner is left pressing a button that says nothing. */
   assert.ok(/social-schema-v14\.sql/.test(clientForComment), 'a missing column names the file that fixes it');
+
+  /*
+   * FINDING THE POST AGAIN — the root problem, and what actually failed.
+   *
+   * A group post had no address anywhere, so commenting on it and reading its
+   * counters both came down to scrolling the group's feed looking for the
+   * text. That works for a post from minutes ago and stops working for one
+   * from this afternoon: three hours of other people's posts sit above it.
+   * The owner's first comment failed for exactly that reason.
+   *
+   * Two fixes, and the first is the root: the permalink is now captured at
+   * publish time, while the post is still at the top of the feed. The second
+   * is for the hundred and seventeen posts published before it existed —
+   * the group's own search, which finds a post by its words however old it is
+   * and is a plain URL rather than a button in some language.
+   */
+  assert.ok(/permalink: string;/.test(composerSrc), 'publishing captures the post\'s own address');
+  assert.ok(/result\.permalink \? \{ permalink: result\.permalink \} : \{\}/.test(localWorker), 'and only writes it when the feed actually yielded one');
+  assert.ok(/export function lookupUrls/.test(composerSrc), 'and a post is looked for in more than one place');
+  assert.ok(/\/search\/\?q=\$\{encodeURIComponent\(words\)\}/.test(composerSrc), "the group's search finds a post the feed has buried");
+  /* Order matters: the address first, search second, the feed last. */
+  const byUrl = composerSrc.indexOf("if (/\\/(posts|permalink)\\//.test(url)) out.push(url);");
+  const bySearch = composerSrc.indexOf('/search/?q=');
+  assert.ok(byUrl > 0 && bySearch > byUrl, 'the post\'s own address is tried before any search');
+
+  /* A failure is the one thing worth retrying alone. Pressing "add a comment"
+     again would re-mark the posts that already have one and ask for a second
+     comment on them without the owner meaning to. */
+  assert.ok(/export async function retryFailedComments/.test(clientForComment), 'failed comments can be retried on their own');
+  assert.ok(/\.eq\('comment_status', 'failed'\)/.test(clientForComment), 'and only the failed ones are touched');
+
+  /* The counts come from the database, the list from the page. They used to
+     both come from the page, so a task of 117 announced itself as 59. */
+  assert.ok(/export async function commentTotals/.test(clientForComment), 'the totals are counted where the rows are');
+  assert.ok(/const \{ pending, done, failed \} = totals;/.test(commentCard), 'and the card shows those rather than its own page size');
   /* One per tick. Twenty-eight comments inside a minute is worth nothing to
      anybody reading them and a great deal to whatever watches for bursts. */
   assert.ok(/const COMMENTS_PER_TICK = 1;/.test(localWorker), 'comments go out one at a time, not in a burst');

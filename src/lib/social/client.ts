@@ -840,6 +840,32 @@ export async function queueCampaignComment(
  * without first remembering which round they belong to. Pending first — that
  * is the part still moving.
  */
+export interface CommentTotals {
+  pending: number;
+  done: number;
+  failed: number;
+}
+
+/**
+ * The REAL totals, counted in the database rather than in the list.
+ *
+ * The card counted the rows it had loaded, so a task of a hundred and
+ * seventeen posts reported itself as fifty-nine — the page size, presented as
+ * a fact about the work. Counting where the rows are costs three head requests
+ * and cannot drift from the list it sits above.
+ */
+export async function commentTotals(): Promise<CommentTotals> {
+  const count = async (status: string) => {
+    const res = await db()
+      .from('social_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('comment_status', status);
+    return res.error ? 0 : (res.count ?? 0);
+  };
+  const [pending, done, failed] = await Promise.all([count('pending'), count('done'), count('failed')]);
+  return { pending, done, failed };
+}
+
 export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
   const res = await db()
     .from('social_queue')
@@ -852,6 +878,26 @@ export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
      with the button. */
   if (res.error) return [];
   return (res.data ?? []) as unknown as QueueRow[];
+}
+
+/**
+ * Put the round's failed comments back in the queue, and only those.
+ *
+ * Pressing "add a comment" again would re-mark every published row, including
+ * the ones that already have a comment under them — the owner would be asking
+ * for a second comment on those without meaning to. A failure is the one thing
+ * worth retrying on its own, and after a fix to how posts are found there is
+ * every reason to.
+ */
+export async function retryFailedComments(campaignId: string): Promise<number> {
+  const res = await db()
+    .from('social_queue')
+    .update({ comment_status: 'pending', comment_at: null })
+    .eq('campaign_id', campaignId)
+    .eq('comment_status', 'failed')
+    .select('id');
+  if (res.error) throw new Error(res.error.message);
+  return res.data?.length ?? 0;
 }
 
 /** How the round's comment task is going, for the screen that asked for it. */

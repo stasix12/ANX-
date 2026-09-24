@@ -38,7 +38,7 @@ import { countdownTo, OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { friendlyMessage, GENERIC_ERROR, LATEST_SCHEMA_FILE } from '@/lib/social/errors';
 import { renderPostText } from '@/lib/social/compose';
 import { safeError } from '../db';
-import { PublishError, lookupPages, searchWords } from '../facebook/composer';
+import { PublishError, lookupPages, pageProbe, searchWords } from '../facebook/composer';
 
 /** Pure helpers shared by the dashboard, the server worker and the local worker. */
 
@@ -653,7 +653,29 @@ console.log('unit tests OK');
      otherwise restart in a loop it could never get out of. */
   const selfUpdate = readFileSync(new URL('../self-update.ts', import.meta.url), 'utf8');
   assert.ok(/merge-base', '--is-ancestor'/.test(selfUpdate), 'only a checkout that is BEHIND restarts');
-  assert.ok(/catch \{\s*\n\s*return false;/.test(selfUpdate), 'and no internet means carry on publishing, not stop');
+  /* No internet still means carry on publishing — every failure path returns
+     ready:false rather than throwing, because not publishing is worse than
+     publishing yesterday's build. */
+  assert.ok(!/throw /.test(selfUpdate), 'a failed check never takes the worker down with it');
+  for (const path of selfUpdate.split('return {').slice(1)) {
+    assert.ok(/ready: (true|false)/.test(path.slice(0, 120)), 'every exit says plainly whether to restart');
+  }
+  /*
+   * AND IT SAYS WHY IT COULD NOT TELL.
+   *
+   * A boolean made "the check failed" and "nothing to install" the same
+   * answer, so a machine whose GitHub access had expired ran old code for as
+   * long as nobody compared two version numbers by hand. The owner paid for
+   * that twice: the screen said "גרסה ישנה" and the reason existed nowhere.
+   */
+  assert.ok(/problem: string;/.test(selfUpdate), 'a check that cannot run says so');
+  for (const stop of ['לא מחוברת לענף מרוחק', 'לא הצליח להתחבר ל-GitHub', 'שונתה ידנית']) {
+    assert.ok(selfUpdate.includes(stop), `${stop} is a different thing to do next, and says which`);
+  }
+  assert.ok(/'worker_update_blocked'/.test(localWorker), 'and it reaches the dashboard, not only the terminal');
+  /* Once per reason, never once per tick: this runs every ten minutes for as
+     long as the machine is on. */
+  assert.ok(/if \(state\.updateProblem !== check\.problem\)/.test(localWorker), 'said once per reason, not once per check');
   /* The screen no longer tells them to go and do it by hand as the first move. */
   assert.ok(/מתקינה אותה בעצמה/.test(card), 'the stale-version notice describes a wait, not a chore');
 
@@ -2559,10 +2581,36 @@ const scenario: { step: string; line: string }[] = [];
     'and without a signed-in id it degrades rather than building a broken address',
   );
   assert.ok(/\\p\{Letter\}/.test(composerSrc), 'and it keeps letters of any alphabet, not just ASCII');
-  assert.ok(
-    /const probe = postText[\s\S]{0,200}\?\.slice\(0, 40\)/.test(composerSrc),
-    'while the page match still uses the line as written',
+  /*
+   * AND THE PAGE PROBE IS EMOJI-FREE TOO — which the first version of this got
+   * exactly backwards.
+   *
+   * Facebook swaps emoji in post text for <img> elements, so a post written
+   * "ניקוי ספות 🧽" has a hole in its text where the emoji is. Looking for the
+   * line as written finds nothing, and nothing is indistinguishable from a
+   * deleted post. Every one of the owner's posts opens with an emoji, so every
+   * lookup failed and 117 posts that were exactly where they should be were
+   * reported missing.
+   */
+  assert.equal(
+    pageProbe('ניקוי ספות וריפודים בבאר שבע 🧽\nמקצועי, מהיר ובאחריות.'),
+    'ניקוי ספות וריפודים בבאר שבע',
+    'the probe stops at the emoji rather than carrying it into the match',
   );
+  assert.ok(!/\p{Extended_Pictographic}/u.test(pageProbe('🧽 ניקוי ספות בבאר שבע 📞 053-5257250')), 'never an emoji, wherever it sits');
+  /* A run may never cross a line break: Facebook puts each line in its own
+     element, and the text of two elements together has no space between them,
+     so a probe spanning both matches nothing. */
+  assert.ok(!pageProbe('ניקוי ספות בבאר שבע\nמקצועי ובאחריות').includes('שבעמקצועי'), 'runs stop at the line break');
+  assert.ok(!pageProbe('ניקוי ספות בבאר שבע\nמקצועי ובאחריות').includes('\n'), 'and never contain one');
+  /* The headline wins over boilerplate repeated on every post, which would
+     just as happily match the post beside ours. */
+  assert.equal(
+    pageProbe('מבצע ניקוי ספות בבאר שבע 🧽\nהפתרון המבריק — שירות מקצועי ואמין בכל הדרום'),
+    'מבצע ניקוי ספות בבאר שבע',
+    'the first distinctive line wins, not the longest one',
+  );
+  assert.equal(pageProbe('שלום 🧽\n📞📞'), '', 'and a post with nothing long enough to be distinctive yields none');
 
   /* The same lookup, for the same reason, when reading how a post did. */
   assert.ok(/function ourPostsIn/.test(localWorker), 'the counters are read off our own posts in the group too');

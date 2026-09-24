@@ -92,6 +92,8 @@ interface WorkerState {
   metricsNoticeShown?: boolean;
   /** Same, for the round-comment columns. */
   commentNoticeShown?: boolean;
+  /** The last reason the update check could not run — said once, not per tick. */
+  updateProblem?: string;
   /** When the last comment went out, and the gap drawn for the next one. */
   lastCommentAt?: number;
   commentGapMs?: number;
@@ -1206,7 +1208,24 @@ async function restartIfUpdated(state: WorkerState): Promise<void> {
   if (state.currentJob) return;
   if (Date.now() - (state.lastUpdateCheckAt ?? 0) < UPDATE_CHECK_MS) return;
   state.lastUpdateCheckAt = Date.now();
-  if (!(await updateAvailable())) return;
+  const check = await updateAvailable();
+  if (check.problem) {
+    /*
+     * SAID ONCE, AND SAID ON THE DASHBOARD — because the owner is not at this
+     * machine and the terminal is not where they look. A check that cannot run
+     * used to be indistinguishable from a machine that is already up to date,
+     * so a worker whose GitHub access had expired went on running old code for
+     * as long as nobody happened to compare two version numbers by hand.
+     */
+    if (state.updateProblem !== check.problem) {
+      state.updateProblem = check.problem;
+      console.error(`[worker] ✗ ${check.problem}${check.detail ? ` (${check.detail})` : ''}`);
+      await logActivity('warn', 'worker_update_blocked', check.problem, { detail: check.detail });
+    }
+    return;
+  }
+  state.updateProblem = '';
+  if (!check.ready) return;
 
   console.log('[worker] ↻ ירדה גרסה חדשה — מפעיל את עצמי מחדש כדי להתקין אותה.');
   await logActivity('info', 'worker_self_update', 'ירדה גרסה חדשה של התוכנה במחשב. היא מתקינה אותה ומפעילה את עצמה מחדש — אין צורך לגעת במחשב.');

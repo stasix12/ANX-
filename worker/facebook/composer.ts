@@ -211,11 +211,7 @@ async function readPermalink(page: Page, postText: string): Promise<string> {
  * scrolling, which stops the moment the post appears.
  */
 export async function findPostArticle(page: Page, postText: string): Promise<Locator | null> {
-  const probe = postText
-    .split('\n')
-    .map((l) => l.trim())
-    .find((l) => l.length >= 12)
-    ?.slice(0, 40);
+  const probe = pageProbe(postText);
   if (!probe) return null;
   const article = page.locator('[role="article"]').filter({ hasText: probe }).first();
   let lastY = -1;
@@ -408,27 +404,53 @@ export function lookupPages(groupUrl: string, postText: string, authorId: string
   return out;
 }
 
-/** The words a post is recognised by: its first real line, trimmed. */
-function probeOf(postText: string): string {
-  return (
-    postText
-      .split('\n')
-      .map((l) => l.trim())
-      .find((l) => l.length >= 12)
-      ?.slice(0, 60) ?? ''
-  );
+/**
+ * Emoji, variation selectors and joiners — everything Facebook may render as a
+ * picture instead of as text.
+ */
+const PICTURE_CHARS = /[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]+/gu;
+
+/**
+ * The words to look for a post by, IN A PAGE.
+ *
+ * NEVER CONTAINS AN EMOJI, and that is the whole point. Facebook swaps emoji in
+ * post text for <img> elements, so a post written "ניקוי ספות 🧽" has a HOLE in
+ * its text where the emoji is — the line as written is not a string the page
+ * contains. Looking for it finds nothing, and "nothing" is indistinguishable
+ * from a post that was deleted.
+ *
+ * That is not a hypothetical: every one of the owner's posts opens with an
+ * emoji, so every lookup failed, and the screen reported 117 posts that were
+ * exactly where they should be as missing.
+ *
+ * So the text is cut into runs at every emoji, LINE BY LINE — a run may never
+ * cross a line break, because Facebook's markup puts each line in its own
+ * element and the text of the two together has no space between them. The
+ * first run long enough to be distinctive wins; the longest is the fallback.
+ */
+export function pageProbe(postText: string): string {
+  const runs = postText
+    .split('\n')
+    .flatMap((line) => line.split(PICTURE_CHARS))
+    .map((run) => run.replace(/\s+/g, ' ').trim())
+    .filter((run) => run.length >= 12);
+  if (!runs.length) return '';
+  /* The headline first when it is substantial — it is what makes this post
+     this post. The longest run only when no line is distinctive on its own,
+     since boilerplate repeated across every post would match a neighbour. */
+  const headline = runs.find((run) => run.length >= 20);
+  const longest = runs.reduce((a, b) => (b.length > a.length ? b : a));
+  return (headline ?? longest).slice(0, 40);
 }
 
 /**
- * The same line, but as something a search box can use.
+ * The same words, as something a SEARCH BOX can use.
  *
- * Emoji and decoration are how these posts are written — "ניקוי ספות 🧽" — and
- * a search engine handed one either ignores it or returns nothing. Stripped
- * here rather than in probeOf, because matching the post in the PAGE wants the
- * text exactly as Facebook rendered it, emoji and all.
+ * Punctuation goes too: a search engine handed "ניקוי ספות — מבצע" treats the
+ * dash as a token and finds less than the words alone would.
  */
 export function searchWords(postText: string): string {
-  return probeOf(postText)
+  return pageProbe(postText)
     .replace(/[^\p{Letter}\p{Number}\s'"-]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -664,11 +686,7 @@ async function discardComposer(page: Page): Promise<void> {
 
 /** Look for the first line of the post in the feed — first as-is (Facebook inserts it at the top), then after a reload. Best effort. */
 async function verifyInFeed(page: Page, groupUrl: string, text: string): Promise<boolean> {
-  const probe = text
-    .split('\n')
-    .map((l) => l.trim())
-    .find((l) => l.length >= 12)
-    ?.slice(0, 40);
+  const probe = pageProbe(text);
   if (!probe) return false;
   const visible = () => page.getByText(probe, { exact: false }).first().isVisible({ timeout: 8_000 }).catch(() => false);
   if (await visible()) return true;

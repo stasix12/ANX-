@@ -54,7 +54,33 @@
     const art = document.createElement('div');
     art.setAttribute('role', 'article');
     const body = document.createElement('p');
-    body.textContent = text;
+    /*
+      EMOJI BECOME IMAGES, exactly as Facebook does it.
+
+      This is not decoration in a fixture: it is the bug. Facebook swaps emoji
+      in post text for <img> elements, so the post's textContent has a HOLE
+      where the emoji was. Code that looks for the first line of a post as it
+      was WRITTEN — "ניקוי ספות 🧽" — is looking for a string the page does not
+      contain, and reports a post that is plainly on screen as missing.
+
+      Every one of the owner's posts opens with an emoji, so every lookup
+      failed, and the screen said "לא מצאנו את הפוסט הזה בקבוצה" about 117
+      posts that were all exactly where they should be.
+    */
+    for (const piece of text.split(/([\p{Extended_Pictographic}\uFE0F\u200D]+)/u)) {
+      if (!piece) continue;
+      if (/^[\p{Extended_Pictographic}\uFE0F\u200D]+$/u.test(piece)) {
+        const img = document.createElement('img');
+        img.alt = piece;
+        img.src =
+          'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        img.width = 16;
+        img.height = 16;
+        body.appendChild(img);
+      } else {
+        body.appendChild(document.createTextNode(piece));
+      }
+    }
     art.appendChild(body);
     const open = document.createElement('button');
     open.type = 'button';

@@ -192,13 +192,16 @@ async function main() {
   const page3 = await context.newPage();
   await publishToGroup(page3, {
     groupUrl: fixture,
-    text: 'ניקוי ספות בבאר שבע — מבצע לסוף השבוע',
+    /* WITH AN EMOJI IN THE FIRST LINE, because every one of the owner's posts
+       has one and that is what broke this. Facebook renders it as an <img>,
+       so the line as written is not a string the page contains. */
+    text: 'ניקוי ספות בבאר שבע 🧽 מבצע לסוף השבוע',
     images: [],
     video: null,
     onStep: async () => undefined,
   });
   /* A separate action, taken later, exactly as the round screen takes it. */
-  const left = await commentOnPost(page3, fixture, 'ניקוי ספות בבאר שבע — מבצע לסוף השבוע', 'לפרטים: 050-0000000', null);
+  const left = await commentOnPost(page3, fixture, 'ניקוי ספות בבאר שבע 🧽 מבצע לסוף השבוע', 'לפרטים: 050-0000000', null);
   assert.equal(left.ok, true, `the comment must be left and verified, not merely attempted — got: ${left.reason}`);
   assert.equal(left.reason, '', 'a success carries no reason');
   /* No named helper inside the evaluate: tsx's esbuild rewrites one into a

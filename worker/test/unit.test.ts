@@ -2347,6 +2347,42 @@ const scenario: { step: string; line: string }[] = [];
    * A password field is the easiest thing in the world to add back later, in
    * good faith, by somebody who does not know that. So it is asserted.
    */
+  /*
+   * COMMENTING IS A DECISION, NOT A SETTING — and this rule REPLACES the one
+   * that guarded the automatic version.
+   *
+   * It used to comment in the same second each post went up, configured once
+   * in ההגדרות. The owner said plainly that both halves were wrong: WHEN is a
+   * judgement (a price list is worth adding after a post has had a few hours
+   * to be seen) and the words belong to the ROUND they are about, or last
+   * month's offer ends up under this month's posts.
+   *
+   * What the old guard protected is unchanged and asserted below: a comment is
+   * never placed on a post we have not positively identified.
+   */
+  const composerSrc = readFileSync(new URL('../facebook/composer.ts', import.meta.url), 'utf8');
+  const clientForComment = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+  const settingsSrc = readFileSync(new URL('../../src/app/social/settings/page.tsx', import.meta.url), 'utf8');
+  assert.ok(/export async function commentOnPost/.test(composerSrc), 'commenting is its own action, callable on its own');
+  assert.ok(!/firstComment/.test(composerSrc), 'and publishing no longer carries one along with it');
+  assert.ok(!/firstComment/.test(settingsSrc), 'nor does the settings screen own the words any more');
+  assert.ok(/comment_text/.test(clientForComment) && /queueCampaignComment/.test(clientForComment), 'the round owns them, and the round is what gets asked');
+  /* Only rows that can actually be commented on are marked. Marking a row with
+     no permalink leaves a task the worker can never finish, which reads on
+     screen as a machine that has stopped. */
+  assert.ok(
+    /\.eq\('status', 'published'\)[\s\S]{0,80}\.not\('permalink', 'is', null\)/.test(clientForComment),
+    'only published posts with a permalink are queued for a comment',
+  );
+  /* Four states, not a boolean: "nobody asked" and "asked and failed" are
+     opposite facts about a post that is already live. */
+  assert.ok(/'failed'/.test(localWorker) && /comment_status/.test(localWorker), 'a comment that could not be placed is recorded as failed');
+  const campaignPage = readFileSync(new URL('../../src/app/social/campaigns/[id]/page.tsx', import.meta.url), 'utf8');
+  assert.ok(/לא הצליחו/.test(campaignPage), 'and the round screen names the failures rather than folding them into the total');
+  /* One per tick. Twenty-eight comments inside a minute is worth nothing to
+     anybody reading them and a great deal to whatever watches for bursts. */
+  assert.ok(/const COMMENTS_PER_TICK = 1;/.test(localWorker), 'comments go out one at a time, not in a burst');
+
   const accountPage = readFileSync(new URL('../../src/app/social/account/page.tsx', import.meta.url), 'utf8');
   const clientSrc = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
   assert.ok(/href="\/social\/account"/.test(hero), 'the account chip must lead somewhere, not to an anchor on the same screen');

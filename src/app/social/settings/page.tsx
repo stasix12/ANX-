@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
-import { MediaUploader } from '@/components/social/MediaUploader';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, saveSetting, setPaused } from '@/lib/social/client';
@@ -334,49 +333,6 @@ export default function SettingsPage() {
                 </div>
               </Card>
 
-              {/*
-                Its own card, because it is the only setting on this screen
-                that changes what other people READ rather than when they read
-                it — and because contact details belong somewhere an owner can
-                find them, not at the bottom of a list of intervals.
-              */}
-              <Card
-                title="תגובה אוטומטית לכל פרסום"
-                subtitle="נוספת כתגובה ראשונה מיד אחרי שהפוסט עולה. השאירו ריק כדי לא להוסיף כלום."
-              >
-                <Field
-                  label="הטקסט של התגובה"
-                  hint="אפשר לכתוב {טלפון} ו-{וואטסאפ} — הם יוחלפו בפרטים של הפוסט עצמו."
-                >
-                  <textarea
-                    className={inputClass}
-                    dir="auto"
-                    rows={3}
-                    value={browser.firstComment}
-                    onChange={(e) => setBrowser({ ...browser, firstComment: e.target.value })}
-                    placeholder={'לפרטים ותיאום: {טלפון}'}
-                  />
-                </Field>
-                <div className="mt-3">
-                  {/*
-                    One image, and the limit is Facebook's rather than ours: a
-                    comment takes a single attachment. Accepting more and
-                    quietly sending one would be worse than not accepting them.
-                  */}
-                  <Field label="תמונה לתגובה (לא חובה)" hint="מחירון, לפני/אחרי — תמונה אחת, זה מה שפייסבוק מאפשרת בתגובה.">
-                    <MediaUploader
-                      media={browser.firstCommentMedia ?? []}
-                      onChange={(m) => setBrowser({ ...browser, firstCommentMedia: m.filter((x) => x.kind === 'image').slice(0, 1) })}
-                    />
-                  </Field>
-                </div>
-                <p className="mt-3 text-xs text-mist-500">
-                  למה בתגובה ולא בפוסט: מנהלי קבוצות מוחקים פוסטים שנראים כמו מודעה, וקוראים גוללים מעל מספרי טלפון באמצע טקסט. אותם פרטים שורה אחת מתחת נשארים.
-                </p>
-                <p className="mt-1.5 text-xs text-mist-500">
-                  התגובה נוספת רק לפוסט שהמערכת זיהתה בוודאות שהוא שלה. אם לא — היא לא תגיב בכלל, ותרשום את זה בהיסטוריה. אפשר טקסט בלבד, תמונה בלבד, או שניהם.
-                </p>
-              </Card>
             </>
           )}
 

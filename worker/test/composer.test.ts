@@ -5,7 +5,7 @@ import path from 'node:path';
 import { chromium } from 'playwright-core';
 import type { SocialTarget } from '@/lib/social/types';
 import { FacebookGroupBrowserAdapter } from '../adapters/facebookGroupBrowser';
-import { PublishError, publishToGroup } from '../facebook/composer';
+import { PublishError, commentOnPost, publishToGroup } from '../facebook/composer';
 import { SessionError } from '../facebook/session';
 
 /**
@@ -190,15 +190,16 @@ async function main() {
    * anybody would notice from a green test — so the decoy makes it fail here.
    */
   const page3 = await context.newPage();
-  const withComment = await publishToGroup(page3, {
+  await publishToGroup(page3, {
     groupUrl: fixture,
     text: 'ניקוי ספות בבאר שבע — מבצע לסוף השבוע',
     images: [],
     video: null,
     onStep: async () => undefined,
-    firstComment: 'לפרטים: 050-0000000',
   });
-  assert.equal(withComment.comment, 'posted', 'the comment must be left and verified, not merely attempted');
+  /* A separate action, taken later, exactly as the round screen takes it. */
+  const left = await commentOnPost(page3, fixture, 'ניקוי ספות בבאר שבע — מבצע לסוף השבוע', 'לפרטים: 050-0000000', null);
+  assert.equal(left, true, 'the comment must be left and verified, not merely attempted');
   /* No named helper inside the evaluate: tsx's esbuild rewrites one into a
      __name() call that does not exist in the page, and the read dies before
      its first statement. The same hazard the account reader was built around,
@@ -219,19 +220,11 @@ async function main() {
   /* Asked for and not achievable is its own outcome — the post is already live
      and cannot be taken back, so it is reported rather than thrown. */
   const page4 = await context.newPage();
-  await page4.goto(fixture);
-  await page4.evaluate(() => localStorage.removeItem('mockFeed'));
-  const noAnchor = await publishToGroup(page4, {
-    groupUrl: fixture,
-    text: 'קצר',
-    images: [],
-    video: null,
-    onStep: async () => undefined,
-    firstComment: 'לפרטים: 050-0000000',
-  });
-  assert.equal(noAnchor.outcome, 'published', 'a comment that cannot be left must never fail the publication');
-  assert.equal(noAnchor.comment, 'failed', 'but it must say so, because the owner believes it is there');
-  console.log('✓ an unplaceable comment is reported, not thrown and not silent');
+  const missing = await commentOnPost(page4, fixture, 'פוסט שמעולם לא פורסם כאן', 'לפרטים: 050-0000000', null);
+  assert.equal(missing, false, 'a post that is not on the page yields false — never a comment somewhere else');
+  const strayComments = await page4.evaluate(() => document.querySelectorAll('.comment').length);
+  assert.equal(strayComments, 0, 'and nothing is typed anywhere while failing');
+  console.log('✓ a post that cannot be found is reported, never guessed at');
 
   await browser.close();
   console.log('composer tests OK');

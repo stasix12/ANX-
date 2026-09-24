@@ -57,6 +57,15 @@ export interface Campaign {
   language: Language | 'mixed';
   status: 'active' | 'paused' | 'archived';
   notes: string;
+  /**
+   * A comment to leave on this round's posts, when the owner asks for it.
+   *
+   * On the ROUND rather than in settings, because it is about this round: the
+   * offer these posts carry, the price list that goes with them. A global
+   * setting would put last month's wording under this month's posts.
+   */
+  comment_text?: string;
+  comment_media?: MediaItem[];
   created_at: string;
 }
 
@@ -230,6 +239,17 @@ export interface QueueItem {
   metrics_comments?: number | null;
   metrics_shares?: number | null;
   metrics_at?: string | null;
+  /**
+   * '' | 'pending' | 'done' | 'failed' — whether a comment was ASKED FOR on
+   * this post, and what became of it.
+   *
+   * Four states, not a boolean. "Nobody asked" and "asked and could not" are
+   * opposite facts about a post that is already live and cannot be taken back,
+   * and a screen that showed them alike would have the owner believing a phone
+   * number is under a post where it is not.
+   */
+  comment_status?: string;
+  comment_at?: string | null;
   created_at: string;
 }
 
@@ -343,24 +363,6 @@ export interface BrowserSettings {
   maxPerCampaignPerDay: number;
   /** Extra spacing between two group posts, on top of the global gap. */
   groupMinGapMinutes: number;
-  /**
-   * Left as the first comment on every group post, or empty for none.
-   *
-   * Contact details in the body of a group post are what admins delete and
-   * readers scroll past; the same details one line down in a comment are
-   * neither. {טלפון} and {וואטסאפ} are filled from the post's own fields, so
-   * one sentence here serves every post without repeating a number that may
-   * change.
-   */
-  firstComment: string;
-  /**
-   * A picture to attach to that comment — the price list, the before-and-after.
-   *
-   * An array because MediaUploader speaks in arrays, but only the first image
-   * is used: Facebook takes one attachment per comment, and silently dropping
-   * the rest would be worse than never accepting them.
-   */
-  firstCommentMedia: MediaItem[];
 }
 
 export const DEFAULT_BROWSER: BrowserSettings = {
@@ -370,10 +372,6 @@ export const DEFAULT_BROWSER: BrowserSettings = {
   concurrentJobs: 1,
   maxPerCampaignPerDay: 8,
   groupMinGapMinutes: 20,
-  /* Empty by default: a comment nobody asked for, on every post, in every
-     group, is the kind of default that gets an account reported. */
-  firstComment: '',
-  firstCommentMedia: [],
 };
 
 export interface ActivityEntry {

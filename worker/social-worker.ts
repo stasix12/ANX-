@@ -26,7 +26,9 @@ import { updateAvailable } from './self-update';
 import { logActivity, safeError, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
+import { commentOnPost } from './facebook/composer';
 import { readPostMetrics } from './facebook/metrics';
+import { cleanupMedia, downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
 import { BrowserSession, SessionError } from './facebook/session';
@@ -88,6 +90,8 @@ interface WorkerState {
   lastUpdateCheckAt?: number;
   /** Said once: the metrics columns are missing. It must not become a line per tick. */
   metricsNoticeShown?: boolean;
+  /** Same, for the round-comment columns. */
+  commentNoticeShown?: boolean;
 }
 
 const session = new BrowserSession();
@@ -236,6 +240,7 @@ async function tick(state: WorkerState): Promise<void> {
     .limit(Math.max(1, Math.min(3, browser.concurrentJobs || 1)));
   if (error) throw new Error(error.message);
   if (!due?.length) {
+    await runCampaignComments(state, headless);
     await resolveShareLinks(state, headless);
     await syncGroupProfiles(state, headless);
     await syncPostMetrics(state, headless);
@@ -613,19 +618,6 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   const tt = t as SocialTarget;
   const pp = p as Post;
   const text = item.rendered_text || renderPostText(pp, v);
-  /*
-   * The first comment, with this post's own contact details filled in.
-   *
-   * One sentence in settings serves every post — the number comes from the
-   * post row, so changing it in one place changes it everywhere, and a post
-   * with no number simply leaves the placeholder out rather than commenting
-   * the word "{טלפון}" into a group.
-   */
-  const firstComment = (jobEnv.browser.firstComment ?? '')
-    .replace(/\{\s*טלפון\s*\}/g, (pp.phone ?? '').trim())
-    .replace(/\{\s*וואטסאפ\s*\}/g, (pp.whatsapp_url ?? '').trim())
-    .replace(/[ \t]+\n/g, '\n')
-    .trim();
   const requireConfirmation = Boolean(item.require_confirmation || jobEnv.browser.requireConfirmation || jobEnv.browser.testMode);
 
   let livePage: Page | null = null;
@@ -658,8 +650,6 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       campaignId: item.campaign_id ?? pp.campaign_id,
       variantId: v?.id ?? null,
       headless: jobEnv.headless,
-      firstComment,
-      firstCommentMedia: (jobEnv.browser.firstCommentMedia ?? []).filter((m) => m.kind === 'image').slice(0, 1),
       onPage: (page) => {
         livePage = page;
       },
@@ -748,13 +738,6 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   const note = [
     result.pendingApproval ? 'הפוסט ממתין לאישור מנהל הקבוצה.' : '',
     result.verified ? '' : 'לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.',
-    /*
-     * A comment that did not happen is said out loud. The post is live and the
-     * owner believes their phone number is sitting under it; silence here
-     * would be the same class of defect this file keeps removing — a feature
-     * that worked or did not, with no way to tell which.
-     */
-    result.comment === 'failed' ? 'התגובה האוטומטית לא נוספה — אפשר להוסיף אותה ידנית בפוסט.' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -778,8 +761,8 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   const targetPatch: Record<string, unknown> = { last_published_at: new Date().toISOString(), last_status: result.pendingApproval ? 'pending_approval' : 'published', last_error: '' };
   if (result.groupTitle && (tt.name === tt.external_id || !tt.name)) targetPatch.name = result.groupTitle;
   await db.from('social_targets').update(targetPatch).eq('id', tt.id).then(() => undefined, () => undefined);
-  await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified, comment: result.comment });
-  console.log(`[worker] ✔ פורסם ל-"${tt.name}"${result.comment === 'posted' ? ' + תגובה' : ''}${note ? ` (${note})` : ''}`);
+  await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified });
+  console.log(`[worker] ✔ פורסם ל-"${tt.name}"${note ? ` (${note})` : ''}`);
 }
 
 /** Three tries with a short backoff, for a write that must not be lost. */
@@ -979,6 +962,90 @@ async function forgetAccount(state: WorkerState): Promise<void> {
     .eq('id', state.id);
   if (error) console.error('[worker] ✗ ניקוי פרטי החשבון נכשל:', error.message);
   else console.log('[worker] ✓ פרטי חשבון הפייסבוק נוקו.');
+}
+
+/* ------------------------------------------- comments the owner asked for */
+
+/** Posts commented per idle tick. Deliberately small — see below. */
+const COMMENTS_PER_TICK = 1;
+
+/**
+ * Leave the round's comment on the posts the owner asked for.
+ *
+ * ONE PER TICK, and that is not caution for its own sake. Twenty-eight
+ * comments appearing across twenty-eight groups inside a minute is a pattern
+ * worth nothing to anybody reading them and worth a great deal to whatever at
+ * Facebook watches for bursts. Spread over the poll interval they arrive the
+ * way a person leaving comments arrives.
+ *
+ * Runs only when there is nothing to publish: a comment is never more urgent
+ * than a post that is due.
+ *
+ * A row that cannot be commented is marked 'failed' rather than retried
+ * forever. The post is live, the owner believes the comment is under it, and
+ * an endless retry would keep that belief alive while re-opening the same page
+ * every few seconds.
+ */
+async function runCampaignComments(state: WorkerState, headless: boolean): Promise<void> {
+  if (state.browserState !== 'connected' || !session.hasProfile()) return;
+  const db = await workerDb();
+  const { data, error } = await db
+    .from('social_queue')
+    .select('id, permalink, rendered_text, campaign_id')
+    .eq('comment_status', 'pending')
+    .not('permalink', 'is', null)
+    .order('published_at')
+    .limit(COMMENTS_PER_TICK);
+  if (error) {
+    if (/comment_status/.test(error.message) && !state.commentNoticeShown) {
+      state.commentNoticeShown = true;
+      console.error('[worker] ✗ אין עמודות תגובה — הריצו את social-schema-v14.sql ב-Supabase.');
+      await logActivity('warn', 'comment_columns_missing', 'כדי להוסיף תגובה לפרסומים של סבב צריך להריץ את social-schema-v14.sql ב-Supabase.', {
+        detail: error.message,
+      });
+    }
+    return;
+  }
+  if (!data?.length) return;
+
+  for (const row of data as { id: string; permalink: string; rendered_text: string; campaign_id: string | null }[]) {
+    if (stopping) break;
+    if (!row.campaign_id) {
+      await db.from('social_queue').update({ comment_status: 'failed', comment_at: new Date().toISOString() }).eq('id', row.id);
+      continue;
+    }
+    const { data: campaign } = await db
+      .from('social_campaigns')
+      .select('comment_text, comment_media')
+      .eq('id', row.campaign_id)
+      .maybeSingle();
+    const text = ((campaign?.comment_text as string) ?? '').trim();
+    const media = ((campaign?.comment_media as MediaItem[]) ?? []).filter((m) => m.kind === 'image').slice(0, 1);
+    if (!text && !media.length) {
+      /* The round's comment was cleared after the rows were marked. Nothing to
+         say is not a failure — it is a cancelled request. */
+      await db.from('social_queue').update({ comment_status: '', comment_at: null }).eq('id', row.id);
+      continue;
+    }
+
+    let local: LocalMedia | null = null;
+    const page = await session.newPage(headless);
+    try {
+      local = media.length ? await downloadMedia(`${row.id}-comment`, media).catch(() => null) : null;
+      const ok = await commentOnPost(page, row.permalink, row.rendered_text, text, local?.images[0] ?? null);
+      await db
+        .from('social_queue')
+        .update({ comment_status: ok ? 'done' : 'failed', comment_at: new Date().toISOString() })
+        .eq('id', row.id);
+      console.log(ok ? '[worker] 💬 נוספה תגובה לפרסום.' : '[worker] ℹ לא הצלחנו להוסיף תגובה לפרסום.');
+    } catch (err) {
+      await db.from('social_queue').update({ comment_status: 'failed', comment_at: new Date().toISOString() }).eq('id', row.id);
+      console.error('[worker] ✗ הוספת תגובה נכשלה:', err instanceof Error ? err.message.split('\n')[0] : err);
+    } finally {
+      cleanupMedia(local);
+      await page.close().catch(() => undefined);
+    }
+  }
 }
 
 /* ------------------------------------------------------------ self-update */

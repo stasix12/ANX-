@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { CampaignProgressBar } from '@/components/social/CampaignProgressBar';
+import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { CampaignReach } from '@/components/social/CampaignReach';
 import { ProgressRing } from '@/components/social/ProgressRing';
 import { QueueSections } from '@/components/social/QueueSections';
@@ -34,6 +35,8 @@ import {
   listWorkers,
   pauseCampaign,
   retryQueueItem,
+  commentProgress,
+  queueCampaignComment,
   screenshotUrl,
   stopCampaign,
   type QueueRow,
@@ -50,7 +53,7 @@ import {
 } from '@/lib/social/campaign';
 import { checkCampaignInvariants, takeUnreported } from '@/lib/social/invariants';
 import { logClientActivity } from '@/lib/social/client';
-import { formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import { agree, formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from '@/components/social/DateTime';
 import type { Campaign, ControlSettings, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -75,6 +78,7 @@ export default function CampaignControlCenter() {
   const router = useRouter();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [rows, setRows] = useState<QueueRow[] | null>(null);
+  const [commentOpen, setCommentOpen] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [state, setState] = useState<CampaignState<QueueRow> | null>(null);
   /* The global pause. This screen never read it, so the run badge said "רץ"
@@ -455,6 +459,65 @@ export default function CampaignControlCenter() {
         {/* Between the list of what went out and the posts themselves: the
             answer to "and did it do anything", which is the question the round
             was run to settle. */}
+        {/*
+          The round's own comment action. It sits with the round because that
+          is what it is about — the offer these posts carry — and behind a
+          button because WHEN is a judgement: a price list is worth adding once
+          a post has had a few hours to be seen.
+        */}
+        {rows && (
+          <Card
+            title="תגובה על הפרסומים של הסבב"
+            subtitle="מוסיפה תגובה מהחשבון שלכם לכל הפרסומים שכבר יצאו כאן — מתי שתחליטו."
+          >
+            {(() => {
+              const published = rows.filter((r) => r.status === 'published' && r.permalink);
+              const p = commentProgress(rows);
+              return (
+                <>
+                  {p.pending + p.done + p.failed > 0 && (
+                    <p className="mb-3 text-sm text-mist-400">
+                      {p.done > 0 && `${p.done} ${agree(p.done, 'פרסום קיבל', 'פרסומים קיבלו')} תגובה`}
+                      {p.pending > 0 && `${p.done > 0 ? ' · ' : ''}${p.pending} ${agree(p.pending, 'ממתין', 'ממתינים')}`}
+                      {/* Failures are named, never folded into the total. The
+                          post is live and the owner believes the comment is
+                          under it. */}
+                      {p.failed > 0 && (
+                        <span className="text-warning-400">{`${p.done + p.pending > 0 ? ' · ' : ''}${p.failed} לא הצליחו`}</span>
+                      )}
+                    </p>
+                  )}
+                  <Button variant="secondary" disabled={published.length === 0} onClick={() => setCommentOpen(true)}>
+                    {p.done + p.pending + p.failed > 0 ? 'הוסף תגובה נוספת' : 'הוסף תגובה לכל הפרסומים'}
+                  </Button>
+                  {published.length === 0 && (
+                    <p className="mt-2 text-xs text-mist-500">בסבב הזה עוד לא יצא פרסום, ולכן אין על מה להגיב.</p>
+                  )}
+                  <CampaignCommentSheet
+                    open={commentOpen}
+                    onClose={() => setCommentOpen(false)}
+                    publishedCount={published.length}
+                    initialText={campaign.comment_text ?? ''}
+                    initialMedia={campaign.comment_media ?? []}
+                    busy={busy === 'comment'}
+                    onSubmit={(text, media) =>
+                      act(
+                        'comment',
+                        async () => {
+                          const n = await queueCampaignComment(id, text, media);
+                          setCommentOpen(false);
+                          return n;
+                        },
+                        'נשלח. התגובות יתווספו אחת-אחת בדקות הקרובות.',
+                      )
+                    }
+                  />
+                </>
+              );
+            })()}
+          </Card>
+        )}
+
         {rows && <CampaignReach rows={rows} truncated={Boolean(state?.truncated)} />}
 
         <Card title={`פוסטים בסבב (${posts.length})`}>

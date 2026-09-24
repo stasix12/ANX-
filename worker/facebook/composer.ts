@@ -37,16 +37,6 @@ export interface ComposeInput {
    * of a group post are what group admins delete and what readers scroll past,
    * while the same details one line down in a comment are neither.
    */
-  firstComment?: string;
-  /**
-   * A local image file to attach to that first comment.
-   *
-   * Separate from `images` above, which belong to the POST. A picture in a
-   * comment is a different thing from a picture in the post: the price list,
-   * the before-and-after, the thing that would make the post itself look like
-   * an advert if it were up there.
-   */
-  firstCommentImage?: string | null;
 }
 
 export interface ComposeResult {
@@ -56,16 +46,6 @@ export interface ComposeResult {
   /** Group moderates posts — it exists but waits for an admin. */
   pendingApproval: boolean;
   groupTitle: string;
-  /**
-   * 'none'   — none was asked for
-   * 'posted' — left on the post
-   * 'failed' — asked for, and it did not happen
-   *
-   * Three states, not a boolean, because "we did not try" and "we tried and
-   * could not" are different things to tell the owner about a post that is
-   * already live and cannot be taken back.
-   */
-  comment: 'none' | 'posted' | 'failed';
 }
 
 const IMAGE_UPLOAD_TIMEOUT = 3 * 60_000;
@@ -133,7 +113,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     const verdict = await input.confirm(page);
     if (verdict !== 'confirmed') {
       await discardComposer(page);
-      return { outcome: 'cancelled', verified: false, pendingApproval: false, groupTitle, comment: 'none' };
+      return { outcome: 'cancelled', verified: false, pendingApproval: false, groupTitle };
     }
   }
 
@@ -162,47 +142,48 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   assertUsable(await classifyPage(page));
   const pendingApproval = await fb.pendingText(page).isVisible({ timeout: 1500 }).catch(() => false);
   const verified = submitted && (await verifyInFeed(page, input.groupUrl, input.text));
-
-  /*
-   * 8. The first comment ----------------------------------------------------
-   *
-   * ONLY ON A POST WE POSITIVELY FOUND. `verified` means our own text was
-   * located in the feed; without it we do not know which post on this page is
-   * ours, and the failure mode is not a missing comment — it is the owner's
-   * phone number appearing under a stranger's post, in a group they need to
-   * stay welcome in. So a comment is never a guess: no verification, no
-   * comment, and the result says so.
-   *
-   * It also never fails the publication. The post is already live and cannot
-   * be taken back, so a comment that did not happen is reported and left at
-   * that rather than turned into an error that invites a retry — a retry here
-   * would publish the post a second time.
-   */
-  let comment: ComposeResult['comment'] = 'none';
-  if (input.firstComment?.trim() || input.firstCommentImage) {
-    comment =
-      verified && (await addFirstComment(page, input.text, (input.firstComment ?? '').trim(), input.firstCommentImage ?? null))
-        ? 'posted'
-        : 'failed';
-  }
-  return { outcome: 'published', verified, pendingApproval, groupTitle, comment };
+  return { outcome: 'published', verified, pendingApproval, groupTitle };
 }
 
 /**
- * Leave a comment on the post whose text we just published.
+ * Leave a comment on one published post.
+ *
+ * SEPARATE FROM PUBLISHING ON PURPOSE. It used to run in the same breath as
+ * the post, off a global setting, and both halves were wrong: WHEN to comment
+ * is a decision — a price list is worth adding after a post has had a few
+ * hours to be seen, not in the same second — and the text belongs to the round
+ * it is about rather than to a setting that would put last month's offer under
+ * this month's posts. So this is an action the owner triggers, over a round,
+ * and this function does one post of it.
  *
  * Anchored to the post, never to the page. Facebook renders every post AND
  * every comment as role="article", so the container is the outermost article
- * carrying our own text — and the comment box is looked for inside it. Typing
- * into the first comment box on the page would put the owner's details under
- * whatever Facebook happened to render first.
+ * carrying the post's own text — and the comment box is looked for inside it.
+ * Typing into the first comment box on the page would put the owner's details
+ * under whatever Facebook happened to render first.
  *
  * Enter submits, which is the exact opposite of the rule in the composer above
  * (where Enter must never be pressed, because it posts). Same key, opposite
  * meaning, in two boxes that look alike — which is why openComposer refuses a
  * comment box and this refuses everything that is not one.
  */
-async function addFirstComment(page: Page, postText: string, comment: string, image: string | null): Promise<boolean> {
+export async function commentOnPost(
+  page: Page,
+  url: string,
+  postText: string,
+  comment: string,
+  image: string | null,
+): Promise<boolean> {
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await page.waitForTimeout(3000);
+  /* A login wall or a checkpoint means whatever is on screen is not this
+     post. Returning false leaves the row pending rather than marking a
+     comment done that is not there. */
+  if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return false;
+  return addComment(page, postText, comment, image);
+}
+
+async function addComment(page: Page, postText: string, comment: string, image: string | null): Promise<boolean> {
   const probe = postText
     .split('\n')
     .map((l) => l.trim())

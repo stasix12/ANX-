@@ -768,6 +768,63 @@ export async function reopenCampaign(id: string): Promise<void> {
   unwrap(await db().from('social_campaigns').update({ status: 'active', archived_at: null }).eq('id', id));
 }
 
+/**
+ * Ask for a comment on every post this round has already published.
+ *
+ * THE OWNER DECIDES WHEN, which is the whole point: a price list is worth
+ * adding once the post has had a few hours to be seen, and the first version
+ * of this commented in the same second the post went up. Pressing this is that
+ * decision, and it can be pressed again later with different words.
+ *
+ * Only rows that are PUBLISHED and carry a permalink are marked. A row still
+ * waiting to go out has nothing to comment on, and one whose permalink was
+ * never captured cannot be found again — marking either would leave a pending
+ * task the worker can never finish, which reads on screen as a machine that
+ * has stopped.
+ *
+ * Already-done rows are marked again on purpose: pressing this a second time
+ * means "say this too", not "skip the ones that worked".
+ */
+export async function queueCampaignComment(
+  campaignId: string,
+  text: string,
+  media: MediaItem[],
+): Promise<number> {
+  unwrap(
+    await db()
+      .from('social_campaigns')
+      .update({ comment_text: text, comment_media: media })
+      .eq('id', campaignId),
+  );
+  const rows = unwrap<{ id: string }[]>(
+    await db()
+      .from('social_queue')
+      .update({ comment_status: 'pending', comment_at: null })
+      .eq('campaign_id', campaignId)
+      .eq('status', 'published')
+      .not('permalink', 'is', null)
+      .select('id'),
+  );
+  return rows.length;
+}
+
+/** How the round's comment task is going, for the screen that asked for it. */
+export function commentProgress(rows: Pick<QueueRow, 'status' | 'comment_status'>[]): {
+  pending: number;
+  done: number;
+  failed: number;
+} {
+  let pending = 0;
+  let done = 0;
+  let failed = 0;
+  for (const r of rows) {
+    if (r.comment_status === 'pending') pending += 1;
+    else if (r.comment_status === 'done') done += 1;
+    else if (r.comment_status === 'failed') failed += 1;
+  }
+  return { pending, done, failed };
+}
+
 export async function screenshotUrl(path: string): Promise<string | null> {
   const { data, error } = await db().storage.from('social-debug').createSignedUrl(path, 600);
   if (error) return null;

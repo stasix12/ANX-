@@ -813,7 +813,7 @@ export async function queueCampaignComment(
    */
   if (saved.error) {
     if (/column|comment_text|comment_media|comment_gap_seconds/i.test(saved.error.message)) {
-      throw new Error('צריך להריץ את social-schema-v14.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
+      throw new Error('צריך להריץ את social-latest.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
     }
     throw new Error(saved.error.message);
   }
@@ -828,7 +828,7 @@ export async function queueCampaignComment(
     .select('id');
   if (marked.error) {
     if (/column|comment_status|comment_note/i.test(marked.error.message)) {
-      throw new Error('צריך להריץ את social-schema-v14.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
+      throw new Error('צריך להריץ את social-latest.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
     }
     throw new Error(marked.error.message);
   }

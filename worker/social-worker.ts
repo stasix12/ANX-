@@ -901,7 +901,7 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
         await logActivity(
           'warn',
           'avatar_upload_blocked',
-          'לא הצלחנו לשמור את תמונת הפרופיל של פייסבוק. צריך להריץ את social-schema-v10.sql ב-Supabase.',
+          'לא הצלחנו לשמור את תמונת הפרופיל של פייסבוק. צריך להריץ את social-latest.sql ב-Supabase.',
           { detail: error.message },
         );
       }
@@ -951,7 +951,7 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
     await logActivity(
       'warn',
       'account_save_failed',
-      'לא הצלחנו לשמור את פרטי חשבון הפייסבוק המחובר. סביר שצריך להריץ את social-schema-v9.sql ב-Supabase.',
+      'לא הצלחנו לשמור את פרטי חשבון הפייסבוק המחובר. סביר שצריך להריץ את social-latest.sql ב-Supabase.',
       { detail: error.message },
     );
     return;
@@ -1051,8 +1051,8 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
   if (error) {
     if (/comment_status/.test(error.message) && !state.commentNoticeShown) {
       state.commentNoticeShown = true;
-      console.error('[worker] ✗ אין עמודות תגובה — הריצו את social-schema-v14.sql ב-Supabase.');
-      await logActivity('warn', 'comment_columns_missing', 'כדי להוסיף תגובה לפרסומים של סבב צריך להריץ את social-schema-v14.sql ב-Supabase.', {
+      console.error('[worker] ✗ אין עמודות תגובה — הריצו את social-latest.sql ב-Supabase.');
+      await logActivity('warn', 'comment_columns_missing', 'כדי להוסיף תגובה לפרסומים של סבב צריך להריץ את social-latest.sql ב-Supabase.', {
         detail: error.message,
       });
     }
@@ -1251,8 +1251,8 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
        have, and it must not turn into a line every five seconds. */
     if (/metrics_/.test(error.message) && !state.metricsNoticeShown) {
       state.metricsNoticeShown = true;
-      console.error('[worker] ✗ אין עמודות מדדים — הריצו את social-schema-v13.sql ב-Supabase.');
-      await logActivity('warn', 'metrics_columns_missing', 'כדי לראות תגובות וצפיות על הפרסומים צריך להריץ את social-schema-v13.sql ב-Supabase.', {
+      console.error('[worker] ✗ אין עמודות מדדים — הריצו את social-latest.sql ב-Supabase.');
+      await logActivity('warn', 'metrics_columns_missing', 'כדי לראות תגובות וצפיות על הפרסומים צריך להריץ את social-latest.sql ב-Supabase.', {
         detail: error.message,
       });
     }
@@ -1307,7 +1307,7 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
  * owner's machine: a command sat at "pending" forever with nothing written
  * anywhere to say why. The claim writes `payload: {}` — correct, and the whole
  * reason a password never becomes a stored secret — but on a database where
- * social-schema-v11.sql has not been run that column does not exist, so the
+ * social-latest.sql has not been run that column does not exist, so the
  * update fails, the row is never claimed, and supabase-js returns the error
  * rather than throwing it. Discarding that result was a decision not to know,
  * and it turned one un-run migration into a worker that silently ignored every
@@ -1334,11 +1334,11 @@ async function claimCommand(id: string, workerId: string, patch: Record<string, 
     console.error('[worker] ✗ נטילת הפקודה נכשלה:', error.message);
     return false;
   }
-  console.error('[worker] ✗ אין עמודת payload — הפקודות לא ינוקו. הריצו את social-schema-v11.sql ב-Supabase.');
+  console.error('[worker] ✗ אין עמודת payload — הפקודות לא ינוקו. הריצו את social-latest.sql ב-Supabase.');
   await logActivity(
     'warn',
     'commands_payload_missing',
-    'צריך להריץ את social-schema-v11.sql ב-Supabase. בלעדיו פרטי ההתחברות שנשלחים מהמסך לא נמחקים אוטומטית.',
+    'צריך להריץ את social-latest.sql ב-Supabase. בלעדיו פרטי ההתחברות שנשלחים מהמסך לא נמחקים אוטומטית.',
     { detail: error.message },
   );
   const retry = await attempt(false);
@@ -1383,7 +1383,7 @@ async function askOnScreen(state: WorkerState, shot: Buffer): Promise<string | n
     .eq('id', state.id);
   if (error) {
     console.error('[worker] ✗ פרסום שאלת האימות נכשל:', error.message);
-    await logActivity('warn', 'login_challenge_failed', 'פייסבוק ביקשה אימות אבל לא הצלחנו להציג אותו במסך. סביר שצריך להריץ את social-schema-v12.sql ב-Supabase.', { detail: error.message });
+    await logActivity('warn', 'login_challenge_failed', 'פייסבוק ביקשה אימות אבל לא הצלחנו להציג אותו במסך. סביר שצריך להריץ את social-latest.sql ב-Supabase.', { detail: error.message });
     return null;
   }
   console.log('[worker] ℹ פייסבוק מבקשת אימות — השאלה הועברה למסך, ממתין לתשובה.');

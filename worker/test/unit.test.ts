@@ -2160,7 +2160,7 @@ const scenario: { step: string; line: string }[] = [];
     'the account write must check its own result',
   );
   assert.ok(/'account_save_failed'/.test(localWorker), 'and a failed write must reach the activity log, not only a terminal');
-  assert.ok(/social-schema-v9\.sql/.test(localWorker), 'naming the fix, since that is the likely cause');
+  assert.ok(/social-latest\.sql/.test(localWorker), 'naming the fix, since that is the likely cause');
 
   /* The fallback: /me's title is the signed-in user's name, and it is as
      locale-independent as the cookie. Without it an unreadable home layout
@@ -2349,7 +2349,44 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/to authenticated/.test(v10), 'and it stays limited to a signed-in user, like insert and delete');
   assert.ok(/with check \(bucket_id = 'social-media'\)/.test(v10), 'with check as well as using, or the new row is refused');
   assert.ok(/'avatar_upload_blocked'/.test(localWorker), 'a blocked avatar upload must reach the owner, not only the terminal');
-  assert.ok(/social-schema-v10\.sql/.test(localWorker), 'naming the fix, since that is the likely cause');
+  assert.ok(/social-latest\.sql/.test(localWorker), 'naming the fix, since that is the likely cause');
+
+  /*
+   * ONE FILE TO RUN, AND IT CANNOT FALL BEHIND.
+   *
+   * These changes arrived as v10, v11, v12, v13, v14, and every screen that
+   * hit a missing column named a different one. The owner of this app does not
+   * read SQL and does not always have a computer: being told "run v13" on
+   * Tuesday and "run v14" on Thursday is how a database ends up half-migrated,
+   * with comments that never go out and counters that never appear and no way
+   * to tell which file was missed. It happened — the screen was asking for v13
+   * while this conversation was asking for v14.
+   *
+   * So every message names social-latest.sql, and this checks two things: that
+   * no message names a numbered file any more, and that every statement in
+   * every numbered file is actually IN social-latest.sql. Without the second
+   * check, "run the one file" becomes a lie the first time a v15 is written.
+   */
+  const latest = readFileSync(new URL('../../supabase/social-latest.sql', import.meta.url), 'utf8');
+  const strip = (sql: string) =>
+    sql
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('--') && l.trim())
+      .join('\n');
+  for (const version of [9, 10, 11, 12, 13, 14]) {
+    const file = readFileSync(new URL(`../../supabase/social-schema-v${version}.sql`, import.meta.url), 'utf8');
+    for (const statement of strip(file).split(';').map((x) => x.trim()).filter((x) => x.length > 20)) {
+      assert.ok(strip(latest).includes(statement), `social-latest.sql is missing a statement from v${version}: ${statement.slice(0, 60)}…`);
+    }
+  }
+  /* v2 is the exception, and it is not the same kind of message: it CREATES
+     the tables, so naming it means "this database was never set up" rather
+     than "it is behind". Every other numbered file is now inside the one. */
+  const clientForSchema = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+  for (const src of [localWorker, clientForSchema]) {
+    const named = (src.match(/social-schema-v\d+\.sql/g) ?? []).filter((n) => n !== 'social-schema-v2.sql');
+    assert.deepEqual(named, [], 'no screen may send the owner to a numbered migration — there is one file to run');
+  }
   assert.ok(
     /העלאת תמונת הקבוצה[\s\S]{0,60}error\.message/.test(localWorker),
     'and a group picture that cannot be replaced must stop failing silently',
@@ -2444,7 +2481,7 @@ const scenario: { step: string; line: string }[] = [];
   /* A missing migration is the likeliest reason the button does nothing, and
      Postgres answers it in English about relations. Say it in Hebrew, naming
      the file, or the owner is left pressing a button that says nothing. */
-  assert.ok(/social-schema-v14\.sql/.test(clientForComment), 'a missing column names the file that fixes it');
+  assert.ok(/social-latest\.sql/.test(clientForComment), 'a missing column names the file that fixes it');
 
   /*
    * FINDING THE POST AGAIN — the root problem, and what actually failed.
@@ -2642,7 +2679,7 @@ const scenario: { step: string; line: string }[] = [];
    * why. Observed on the owner's machine.
    */
   assert.ok(/async function claimCommand/.test(localWorker), 'claiming a command is one place that checks its own result');
-  assert.ok(/social-schema-v11\.sql/.test(localWorker), 'and names the migration when that is the cause');
+  assert.ok(/social-latest\.sql/.test(localWorker), 'and names the migration when that is the cause');
   assert.ok(/'commands_payload_missing'/.test(localWorker), 'where the owner reads, not only in a terminal');
   assert.ok(/attempt\(false\)/.test(localWorker), 'then claims it anyway — a missing column stops tidiness, never the product');
   /* And "pending" is not a word on a phone screen. The one state that needs

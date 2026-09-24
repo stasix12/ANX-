@@ -22,6 +22,7 @@ import {
 } from '@/lib/social/types';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { FacebookGroupBrowserAdapter } from './adapters/facebookGroupBrowser';
+import { updateAvailable } from './self-update';
 import { logActivity, safeError, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
@@ -62,6 +63,17 @@ const PLAN_EVERY_MS = 60_000;
 const LIVE_WORKER_MS = 20_000;
 /** Exit code that tells start-worker.cmd not to restart: nothing is wrong. */
 const EXIT_ALREADY_RUNNING = 3;
+/**
+ * "A newer version is waiting — restart me."
+ *
+ * start-worker.cmd catches this one and goes back to its update step, which
+ * pulls, installs and starts again. The worker itself never runs git for
+ * anything but the comparison: the launcher already knew how to update, it
+ * just never got the chance while the worker was alive.
+ */
+const EXIT_UPDATE = 4;
+/** How often to ask. Ten minutes is far below how often anything is pushed. */
+const UPDATE_CHECK_MS = 10 * 60_000;
 const MAX_PRE_SUBMIT_ATTEMPTS = 3;
 
 interface WorkerState {
@@ -72,6 +84,8 @@ interface WorkerState {
   lastCheckAt: number;
   lastPlanAt: number;
   idleNoticeShown: boolean;
+  /** When the repository was last compared against this checkout. */
+  lastUpdateCheckAt?: number;
   /** Said once: the metrics columns are missing. It must not become a line per tick. */
   metricsNoticeShown?: boolean;
 }
@@ -225,6 +239,7 @@ async function tick(state: WorkerState): Promise<void> {
     await resolveShareLinks(state, headless);
     await syncGroupProfiles(state, headless);
     await syncPostMetrics(state, headless);
+    await restartIfUpdated(state);
     return;
   }
 
@@ -963,6 +978,37 @@ async function forgetAccount(state: WorkerState): Promise<void> {
     .eq('id', state.id);
   if (error) console.error('[worker] ✗ ניקוי פרטי החשבון נכשל:', error.message);
   else console.log('[worker] ✓ פרטי חשבון הפייסבוק נוקו.');
+}
+
+/* ------------------------------------------------------------ self-update */
+
+/**
+ * Stand down so the launcher can start a newer version.
+ *
+ * ONLY WHEN THERE IS NOTHING TO PUBLISH. This is called from the idle branch
+ * of the tick, after the queue has come back empty, so a restart can never
+ * interrupt a post mid-upload — and `currentJob` is checked again anyway,
+ * because the cost of being wrong is a post that exists on Facebook with no
+ * record of it here.
+ *
+ * The exit is the whole mechanism. start-worker.cmd already pulls, installs
+ * and starts; it simply never got the chance while this process was alive.
+ * Nothing here writes to the repository, so a bad checkout cannot be made
+ * worse by an update that goes wrong.
+ */
+async function restartIfUpdated(state: WorkerState): Promise<void> {
+  if (state.currentJob) return;
+  if (Date.now() - (state.lastUpdateCheckAt ?? 0) < UPDATE_CHECK_MS) return;
+  state.lastUpdateCheckAt = Date.now();
+  if (!(await updateAvailable())) return;
+
+  console.log('[worker] ↻ ירדה גרסה חדשה — מפעיל את עצמי מחדש כדי להתקין אותה.');
+  await logActivity('info', 'worker_self_update', 'ירדה גרסה חדשה של התוכנה במחשב. היא מתקינה אותה ומפעילה את עצמה מחדש — אין צורך לגעת במחשב.');
+  /* Offline before exiting, so the dashboard shows the gap as a restart in
+     progress rather than a machine that stopped answering. */
+  await heartbeat(state, 'offline');
+  await session.close().catch(() => undefined);
+  process.exit(EXIT_UPDATE);
 }
 
 /* ------------------------------------------------ how a published post did */

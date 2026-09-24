@@ -106,6 +106,12 @@ export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; i
    * heartbeat, posts going out — while a fix that lives in worker/ sits on the
    * machine unused. Say so here, where the light is, rather than leaving it in
    * a line of terminal output.
+   *
+   * It now resolves itself: the worker compares its checkout against the
+   * repository every ten minutes and stands down so the launcher can install
+   * the newer version. So this notice names the wait rather than a chore —
+   * the owner asked for this while away from the computer, and "go and restart
+   * it" was the wrong instruction to be giving them at all.
    */
   const stale = Boolean(worker?.online && worker.version && worker.version !== WORKER_VERSION);
 
@@ -146,7 +152,8 @@ export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; i
         <div className="mt-3">
           <Notice tone="warn">
             <strong>התוכנה במחשב מריצה גרסה ישנה</strong> (<span dir="ltr">{worker?.version}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>).
-            {' '}סגרו את החלון השחור והפעילו שוב את <code dir="ltr">start-worker.cmd</code> — הוא מתעדכן לבד.
+            {' '}היא בודקת אם ירדה גרסה חדשה כל עשר דקות ומתקינה אותה בעצמה — אין צורך לגעת במחשב. אם זה לא קרה גם אחרי חצי שעה, סגרו את החלון השחור והפעילו שוב את{' '}
+            <code dir="ltr">start-worker.cmd</code>.
           </Notice>
         </div>
       )}

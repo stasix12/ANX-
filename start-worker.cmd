@@ -117,6 +117,16 @@ rem The worker stood down because another window is already running it.
 rem Nothing is broken, so restarting would only fight the live one.
 if "%EXITCODE%"=="3" goto alreadyrunning
 
+rem The worker saw a newer version waiting and stood down so this file can
+rem install it. Back to :update, not :run - :run would start the SAME code
+rem again and the worker would stand down again, forever. This is the whole
+rem point of the exit code: the update step above already knows how to pull
+rem and install, it simply never got a chance while the worker was alive.
+rem
+rem FAILS is reset because a planned restart is not a crash. Without this, five
+rem updates in an evening would trip the give-up limit and stop publishing.
+if "%EXITCODE%"=="4" goto updaterestart
+
 if %RAN% GEQ 60 set FAILS=0
 set /a FAILS=%FAILS%+1
 if %FAILS% GEQ 5 goto giveup
@@ -127,6 +137,13 @@ echo.
 echo   ה-worker נעצר. מפעיל אותו מחדש בעוד 30 שניות...
 timeout /t 30 >nul
 goto run
+
+:updaterestart
+echo.
+echo   ירדה גרסה חדשה. מתקין ומפעיל מחדש...
+echo.
+set FAILS=0
+goto update
 
 :alreadyrunning
 echo.

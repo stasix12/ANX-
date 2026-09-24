@@ -604,6 +604,42 @@ console.log('unit tests OK');
   assert.ok(liveMs > 0 && restartSec > 0, 'both the liveness window and the restart delay must be readable');
   assert.ok(restartSec * 1000 > liveMs, `restart delay (${restartSec}s) must outlast the liveness window (${liveMs}ms)`);
 
+  /*
+   * THE MACHINE UPDATES ITSELF, because the owner is not standing next to it.
+   *
+   * Every fix that lives in worker/ has to reach the machine that publishes,
+   * and reaching it meant a person walking over, closing a window and opening
+   * it again. This was asked for from a phone, away from the computer, which
+   * is exactly the case it has to survive: the fix pushed, the machine
+   * running, and no way for the two to meet.
+   *
+   * start-worker.cmd already pulled and installed on every start. The only
+   * missing piece was a reason to start — so the worker stands down with an
+   * exit code and the launcher does what it already knew how to do.
+   */
+  assert.ok(/const EXIT_UPDATE = 4;/.test(localWorker), 'a newer version is a reason to exit, with its own code');
+  assert.ok(/if "%EXITCODE%"=="4" goto updaterestart/.test(launcher), 'and the launcher catches exactly that code');
+  /* Back to the update step, never to :run — :run would start the SAME code,
+     which would stand down again, forever. */
+  assert.ok(/:updaterestart[\s\S]{0,200}goto update/.test(launcher), 'a restart for an update goes through the pull, not around it');
+  assert.ok(/:updaterestart[\s\S]{0,160}set FAILS=0/.test(launcher), 'and a planned restart is not counted as a crash');
+  /*
+   * NEVER MID-PUBLISH. Called from the idle branch, after the queue came back
+   * empty, and currentJob is checked again anyway — the cost of being wrong is
+   * a post that exists on Facebook with no record of it here.
+   */
+  assert.ok(/if \(state\.currentJob\) return;/.test(localWorker), 'it never restarts while a post is going out');
+  const idleAt = localWorker.indexOf('if (!due?.length) {');
+  const restartAt = localWorker.indexOf('await restartIfUpdated(state);');
+  assert.ok(idleAt > 0 && restartAt > idleAt, 'and is only reached once there is nothing to publish');
+  /* Behind, not merely different: a checkout that has drifted ahead would
+     otherwise restart in a loop it could never get out of. */
+  const selfUpdate = readFileSync(new URL('../self-update.ts', import.meta.url), 'utf8');
+  assert.ok(/merge-base', '--is-ancestor'/.test(selfUpdate), 'only a checkout that is BEHIND restarts');
+  assert.ok(/catch \{\s*\n\s*return false;/.test(selfUpdate), 'and no internet means carry on publishing, not stop');
+  /* The screen no longer tells them to go and do it by hand as the first move. */
+  assert.ok(/מתקינה אותה בעצמה/.test(card), 'the stale-version notice describes a wait, not a chore');
+
   console.log('worker-freshness tests OK');
 }
 

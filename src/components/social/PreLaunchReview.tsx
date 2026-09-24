@@ -127,7 +127,7 @@ export function PreLaunchReview({
                   be postponed when it is in fact discarded is the difference
                   between a delay and 16 groups that never hear from them. */}
               סיום משוער: <strong className="text-mist-300"><Stamp iso={plan.lastAt} /></strong> — לפי המרווח שהגדרתם. המרווח בין
-              פרסומים עשוי לדחות פרסומים ולהאריך את הטווח; חריגה מהמכסות שהגדרתם בהגדרות לא נדחית למחר אלא מסומנת כ"דולג".
+              פרסומים עשוי לדחות פרסומים ולהאריך את הטווח; חריגה מהמכסות שהגדרתם בהגדרות נדחית ליום הראשון שיש בו מקום.
             </p>
           )}
         </section>

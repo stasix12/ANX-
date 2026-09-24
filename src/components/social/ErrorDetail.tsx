@@ -36,7 +36,7 @@ export function explainFailure(row: Pick<QueueRow, 'status' | 'error' | 'skip_re
   }
 
   if (/מכסה היומית/.test(text)) {
-    return { headline: 'נעצר בגלל המכסה היומית', advice: 'זה מכוון. הפרסום ימשיך מחר, או העלו את המכסה בהגדרות.', canRetry: true, needsOwner: false };
+    return { headline: 'ממתין בגלל המכסה היומית', advice: 'זה מכוון. הפרסום יצא ביום הראשון שיש בו מקום, או העלו את המכסה בהגדרות.', canRetry: true, needsOwner: false };
   }
   if (/כבר פורסם|אותו תוכן/.test(text)) {
     return { headline: 'כבר פורסם לקבוצה הזו', advice: 'ההגנה מכפילויות מנעה פרסום שני. לא נדרשת פעולה.', canRetry: false, needsOwner: false };

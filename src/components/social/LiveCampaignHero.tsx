@@ -582,7 +582,7 @@ export function LiveQueueHero({
         </div>
         {ceilingReached && (
           <p className="mt-1.5 text-[11px] font-bold leading-[15px] text-warning-400">
-            הגעתם לתקרה היומית שהגדרתם. פרסומים שזמנם יגיע היום ידולגו — אפשר להעלות את התקרה בהגדרות.
+            הגעתם לתקרה היומית שהגדרתם. פרסומים שזמנם יגיע היום ימתינו למחר — אפשר להעלות את התקרה בהגדרות.
           </p>
         )}
         {/* House rule 2, verbatim, and now directly under the ceiling it is

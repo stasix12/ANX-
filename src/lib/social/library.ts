@@ -173,10 +173,10 @@ export interface QuickPublishPlan {
   /**
    * How many of today's publications exceed the owner's PER-CAMPAIGN daily
    * ceiling (browser.maxPerCampaignPerDay), when this post belongs to a
-   * campaign. rules.ts checks this ceiling separately from maxPerDay and skips
-   * over it the same way, so it needs its own sentence — the global cap can be
-   * comfortable while this one is not. 0 when the post has no campaign or the
-   * ceiling is off.
+   * campaign. rules.ts checks this ceiling separately from maxPerDay and
+   * defers over it the same way, so it needs its own sentence — the global cap
+   * can be comfortable while this one is not. 0 when the post has no campaign
+   * or the ceiling is off.
    */
   overCampaignCapToday: number;
   /** The per-campaign ceiling itself, so the sentence can name the owner's number. */

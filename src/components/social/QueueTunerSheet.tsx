@@ -291,17 +291,17 @@ export function QueueTunerSheet({
     const remaining = Math.max(0, limits.maxPerDay - publishedToday);
     if (landingToday > remaining) {
       out.push(
-        `בתקרה היומית שהגדרתם (${limits.maxPerDay} פרסומים ליום) נשארו היום ${remaining}, ובמרווח הזה ${landingToday} מהתור אמורים לצאת היום. מה שמעבר לתקרה ידולג עם סיבה ברורה בהיסטוריה — הוא לא נדחה למחר.`,
+        `בתקרה היומית שהגדרתם (${limits.maxPerDay} פרסומים ליום) נשארו היום ${remaining}, ובמרווח הזה ${landingToday} מהתור אמורים לצאת היום. מה שמעבר לתקרה יידחה למחר.`,
       );
     }
     if (overPerTarget > 0) {
       out.push(
-        `${counted(overPerTarget, 'פרסום אחד בתור יגיע', 'פרסומים בתור יגיעו', 'שני פרסומים בתור יגיעו')} לאותה קבוצה באותו יום מעבר לתקרה שהגדרתם ליעד (${limits.maxPerTargetPerDay} ליום), ולכן ${agree(overPerTarget, 'ידולג', 'ידולגו')}.`,
+        `${counted(overPerTarget, 'פרסום אחד בתור יגיע', 'פרסומים בתור יגיעו', 'שני פרסומים בתור יגיעו')} לאותה קבוצה באותו יום מעבר לתקרה שהגדרתם ליעד (${limits.maxPerTargetPerDay} ליום), ולכן ${agree(overPerTarget, 'יידחה', 'יידחו')} למחר.`,
       );
     }
     if (p.campaignId && campaignToday > browser.maxPerCampaignPerDay) {
       out.push(
-        `לסבב הזה הגדרתם תקרה של ${browser.maxPerCampaignPerDay} פרסומים ביום, ובמרווח הזה ${campaignToday} מהם אמורים לצאת היום. העודף ידולג.`,
+        `לסבב הזה הגדרתם תקרה של ${browser.maxPerCampaignPerDay} פרסומים ביום, ובמרווח הזה ${campaignToday} מהם אמורים לצאת היום. העודף יידחה למחר.`,
       );
     }
     return out;

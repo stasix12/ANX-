@@ -46,6 +46,24 @@ const MAX_DEFERRALS = 40;
  */
 export const WAIT_MINUTES = 1;
 
+/**
+ * Midnight at the start of the next local day, as an instant.
+ *
+ * Where a row goes when a daily ceiling is full. Computed by asking what day
+ * it is 24 hours from now rather than by adding a day to a date, so the clock
+ * change in March and October cannot land it on the wrong side of midnight; if
+ * that still resolves to an instant already past — the one hour a year it
+ * could — it steps a further day rather than returning a moment in the past,
+ * which would be a row due immediately and a cap that does nothing.
+ */
+function startOfNextZonedDay(now: Date): string {
+  let next = startOfZonedDay(new Date(now.getTime() + 24 * 60 * 60_000));
+  if (next.getTime() <= now.getTime()) next = startOfZonedDay(new Date(now.getTime() + 48 * 60 * 60_000));
+  // A minute past midnight, so the count this row is waiting on is unambiguously
+  // the new day's rather than a boundary instant belonging to either.
+  return new Date(next.getTime() + 60_000).toISOString();
+}
+
 async function countPublished(db: SupabaseClient, filter: (q: any) => any): Promise<number> {
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   const base: any = db.from('social_queue').select('id', { count: 'exact', head: true }).eq('status', 'published');
@@ -74,18 +92,46 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
     if (campaign?.status === 'archived') return { action: 'skip', reason: 'הסבב נעצר.' };
   }
 
+  /*
+   * A FULL DAILY QUOTA IS "NOT TODAY". IT WAS "NEVER", AND THAT WAS WRONG.
+   *
+   * All three ceilings below used to return {action:'skip'}, which finishes
+   * the row: the publication is destroyed, not postponed. Seen on the owner's
+   * machine as six identical lines in the activity log inside sixteen minutes
+   * — six publications of a 28-group round deleted, one per poll, while the
+   * screen said the system was running.
+   *
+   * It also contradicted the product's own promise: the scheduling screen has
+   * always said "מה שלא נכנס היום ממשיך מחר". It did not.
+   *
+   * A cap the owner sets is a rate, not a verdict on a particular post. So a
+   * row that meets one now waits for the day that has room. Nothing else about
+   * it changes, it keeps its place, and the ceiling still does its job — it
+   * just stops eating the queue to do it.
+   */
   const dayStart = startOfZonedDay(now).toISOString();
+  const tomorrow = startOfNextZonedDay(now);
+
   const todayAll = await countPublished(db, (q) => q.gte('published_at', dayStart));
-  if (todayAll >= limits.maxPerDay) return { action: 'skip', reason: `הגעת למכסה היומית (${limits.maxPerDay} פרסומים).` };
+  if (todayAll >= limits.maxPerDay)
+    return { action: 'defer', until: tomorrow, reason: `מכסת הפרסומים להיום (${limits.maxPerDay}) מלאה — הפרסום ימתין למחר` };
 
   const todayTarget = await countPublished(db, (q) => q.eq('target_id', target.id).gte('published_at', dayStart));
   if (todayTarget >= limits.maxPerTargetPerDay)
-    return { action: 'skip', reason: `הגעת למכסה היומית ליעד "${target.name}" (${limits.maxPerTargetPerDay}).` };
+    return {
+      action: 'defer',
+      until: tomorrow,
+      reason: `"${target.name}" קיבלה היום את המכסה שלה (${limits.maxPerTargetPerDay}) — הפרסום ימתין למחר`,
+    };
 
   if (campaignId && ctx.browser?.maxPerCampaignPerDay) {
     const todayCampaign = await countPublished(db, (q) => q.eq('campaign_id', campaignId).gte('published_at', dayStart));
     if (todayCampaign >= ctx.browser.maxPerCampaignPerDay)
-      return { action: 'skip', reason: `הגעת למכסה היומית של הסבב (${ctx.browser.maxPerCampaignPerDay}).` };
+      return {
+        action: 'defer',
+        until: tomorrow,
+        reason: `הסבב מילא את המכסה היומית שלו (${ctx.browser.maxPerCampaignPerDay}) — הפרסום ימתין למחר`,
+      };
   }
 
   /*

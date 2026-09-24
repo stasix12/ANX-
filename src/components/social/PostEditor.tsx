@@ -251,16 +251,20 @@ export function PostEditor({ postId }: { postId?: string }) {
     [schedule, selectedObjects.length, spacingMinutes],
   );
   /**
-   * How many of this launch's publications the daily cap will simply DISCARD.
+   * How many of this launch's publications the daily cap will PUSH TO ANOTHER
+   * DAY.
    *
-   * rules.ts returns {action:'skip'} on maxPerDay — not 'defer'. The row is
-   * finished, permanently, with "הגעת למכסה היומית". It does not roll to
-   * tomorrow. With the shipped default of 6 a 28-group launch from this
-   * editor publishes 6 and skips roughly 16 (the rest land on tomorrow's
-   * slots), and nothing on this screen said so: the quick-publish sheet
-   * already computes exactly this number (library.ts overDailyCap /
-   * overCapTotal) and shows it, while the editor — the path with the
-   * "התחל פרסום" button — did not.
+   * It used to be how many it would DISCARD, and that was the honest reading
+   * of the code: rules.ts returned {action:'skip'} on a full quota, so the row
+   * was finished for good. It no longer does. A ceiling the owner sets is a
+   * rate, not a verdict on a particular post, and the scheduling screen had
+   * been promising "מה שלא נכנס היום ממשיך מחר" the whole time — so the rule
+   * was changed to match the promise rather than the promise softened to match
+   * the rule.
+   *
+   * The number still matters and is still shown: waiting is not free. It is
+   * how long this launch will take to finish, which is a thing to know before
+   * pressing the button.
    *
    * Counted per LOCAL day, because that is the window rules.ts counts, and
    * against what each of those days has already spent: today's publications,
@@ -290,13 +294,13 @@ export function PostEditor({ postId }: { postId?: string }) {
   /**
    * The same number, said as the forecast it is.
    *
-   * It used to promise an outcome — "הם יסומנו כ'דולגו' ולא יצאו כלל, גם לא
-   * מחר" — about slots hours or days away, computed from a ceiling the owner
-   * sets themselves in ההגדרות and from a queue that keeps changing until the
-   * slot arrives. The one part that is NOT a forecast is the consequence:
-   * rules.ts returns {action:'skip'}, so a publication that loses its slot is
-   * finished, not postponed. That stays flat, and the number stays a
-   * projection with the two levers that move it named.
+   * It is a projection about slots hours or days away, computed from a ceiling
+   * the owner sets themselves and from a queue that keeps changing until the
+   * slot arrives — so it is worded as one, with the levers that move it named.
+   * The consequence is no longer the alarming half: a publication that loses
+   * its slot waits for the first day with room. Saying otherwise would now be
+   * false, and it frightened people away from launches that would have
+   * finished perfectly well a day later.
    */
   const capWarning = (() => {
     if (capOverflow <= 0) return '';
@@ -304,11 +308,11 @@ export function PostEditor({ postId }: { postId?: string }) {
     // singular verb. Same rule the time labels follow (time.ts relativeHe).
     const howMany =
       plan.slots.length === 1
-        ? 'צפוי שהפרסום הזה יידלג'
+        ? 'צפוי שהפרסום הזה יידחה למחר'
         : capOverflow === 1
-          ? `צפוי שפרסום אחד מתוך ${plan.slots.length} יידלג`
-          : `צפויים ${capOverflow} מתוך ${plan.slots.length} הפרסומים להידלג`;
-    return `לפי המכסה היומית שהגדרתם (${limits.maxPerDay} ליום), וכולל מה שכבר יצא היום ומה שכבר ממתין בתור לאותם ימים, ${howMany}. פרסום שדולג לא נדחה למחר — הוא פשוט לא יוצא, והסיבה נרשמת בהיסטוריה. כדי שזה לא יקרה: העלו את המכסה בהגדרות, פרסו את הפרסום על פני יותר ימים, או בחרו פחות יעדים.`;
+          ? `צפוי שפרסום אחד מתוך ${plan.slots.length} יידחה למחר`
+          : `צפויים ${capOverflow} מתוך ${plan.slots.length} הפרסומים להידחות למחר`;
+    return `לפי המכסה היומית שהגדרתם (${limits.maxPerDay} ליום), וכולל מה שכבר יצא היום ומה שכבר ממתין בתור לאותם ימים, ${howMany}. פרסום שנדחה אינו אובד — הוא ממתין ליום הראשון שיש בו מקום. כדי שזה יצא מוקדם יותר: העלו את המכסה בהגדרות, פרסו את הפרסום על פני יותר ימים, או בחרו פחות יעדים.`;
   })();
 
   const previewVariant = variants.find((v) => v.key === previewKey) ?? null;

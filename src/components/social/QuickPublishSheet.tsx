@@ -580,13 +580,13 @@ export function QuickPublishSheet({
                 {plan.overCampaignCapToday > 0 && (
                   <Notice tone="warn">
                     לסבב של הפוסט הזה הגדרתם תקרה של {counted(plan.maxPerCampaignPerDay, 'פרסום אחד', 'פרסומים', 'שני פרסומים')} ביום, ולפי התוכנית{' '}
-                    {plan.overCampaignCapToday} {agree(plan.overCampaignCapToday, 'מהפרסומים של היום חורג', 'מהפרסומים של היום חורגים')} ממנה. גם הם ידולגו עם סיבה ברורה בהיסטוריה, ולא יידחו למחר.
+                    {plan.overCampaignCapToday} {agree(plan.overCampaignCapToday, 'מהפרסומים של היום חורג', 'מהפרסומים של היום חורגים')} ממנה. גם הם יידחו למחר.
                   </Notice>
                 )}
 
                 {plan.overCapTotal > 0 && (
                   <Notice tone="warn">
-                    {plan.overCapTotal} מתוך {plan.rows.length} הפרסומים חורגים מהתקרה היומית שהגדרתם ({plan.maxPerDay} ביום; היום כבר יצאו {plan.publishedToday}). מה שמעבר לתקרה ידולג עם סיבה ברורה בהיסטוריה — הוא לא נדחה למחר. אפשר להעלות את התקרה בהגדרות, לבחור פחות יעדים, או להתחיל מחר.
+                    {plan.overCapTotal} מתוך {plan.rows.length} הפרסומים חורגים מהתקרה היומית שהגדרתם ({plan.maxPerDay} ביום; היום כבר יצאו {plan.publishedToday}). מה שמעבר לתקרה יידחה ליום הראשון שיש בו מקום. אפשר להעלות את התקרה בהגדרות, לבחור פחות יעדים, או להתחיל מחר.
                   </Notice>
                 )}
 

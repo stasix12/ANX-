@@ -585,6 +585,54 @@ console.log('unit tests OK');
   const planner = readFileSync(new URL('../../src/lib/social/plan.ts', import.meta.url), 'utf8');
 
   /*
+   * A FULL DAILY QUOTA IS "NOT TODAY". IT USED TO BE "NEVER".
+   *
+   * All three daily ceilings returned {action:'skip'}, and a skip FINISHES the
+   * row — the publication is destroyed, not postponed. Seen on the owner's
+   * machine as six identical lines in the activity log inside sixteen minutes:
+   * six publications of a 28-group round deleted, one per poll, while the
+   * screen said the system was running and the daily tile showed room.
+   *
+   * It also contradicted the product's own promise. The scheduling screen has
+   * always said "מה שלא נכנס היום ממשיך מחר", so the rule was changed to match
+   * the promise rather than the promise softened to match the rule.
+   */
+  assert.ok(
+    /todayAll >= limits\.maxPerDay\)\s*\n\s*return \{ action: 'defer'/.test(rules),
+    'a full global quota postpones the publication, it does not destroy it',
+  );
+  assert.ok(
+    /todayTarget >= limits\.maxPerTargetPerDay\)\s*\n\s*return \{\s*\n?\s*action: 'defer'/.test(rules),
+    'and so does a group that has had its share today',
+  );
+  assert.ok(
+    /todayCampaign >= ctx\.browser\.maxPerCampaignPerDay\)\s*\n\s*return \{\s*\n?\s*action: 'defer'/.test(rules),
+    "and so does a round that has filled its own — the one the owner's queue was dying on",
+  );
+  /* Tomorrow is asked for as "what day is it in 24 hours", so the clock change
+     in March and October cannot land it on the wrong side of midnight, and a
+     result already past steps a further day rather than being due at once. */
+  assert.ok(/function startOfNextZonedDay/.test(rules), 'the day it waits for is computed, not assumed');
+  assert.ok(/48 \* 60 \* 60_000/.test(rules), 'and a DST hour cannot make it due in the past');
+  /*
+   * And no screen may still promise the old behaviour. Four of them did, in
+   * the owner's own words on the button they press.
+   */
+  for (const [name, src] of [
+    ['QueueTunerSheet', sheet],
+    ['LiveCampaignHero', hero],
+    ['PostEditor', readFileSync(new URL('../../src/components/social/PostEditor.tsx', import.meta.url), 'utf8')],
+    ['QuickPublishSheet', readFileSync(new URL('../../src/components/social/QuickPublishSheet.tsx', import.meta.url), 'utf8')],
+    ['PreLaunchReview', readFileSync(new URL('../../src/components/social/PreLaunchReview.tsx', import.meta.url), 'utf8')],
+  ] as const) {
+    const visible = src.replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(
+      !/לא נדחה למחר|לא יידחו למחר|לא נדחית למחר/.test(visible),
+      `${name} must not tell the owner a capped publication is lost`,
+    );
+  }
+
+  /*
    * A live campaign on this deployment finished 112 skipped, 0 published. The
    * rows were minutes apart while rules.ts wanted 65, so every claim deferred
    * the row and burned one of its 40 attempts until the engine gave up on it

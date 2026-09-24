@@ -555,20 +555,37 @@ async function appears(what: Locator, ms: number): Promise<boolean> {
  * attachment, and a comment submitted over one goes out without it.
  */
 async function attachPhoto(page: Page, box: Locator, article: Locator, image: string): Promise<boolean> {
-  /* The comment's own form, falling back to the article when Facebook has not
-     wrapped the box in one. */
+  /*
+   * WHERE TO LOOK FOR THE FILE INPUT, narrowest first.
+   *
+   * The comment's own form when there is one — Facebook does not always use a
+   * <form> — then the article, then the page. The page is only safe because
+   * this runs on the POST'S OWN PAGE, where the only composer is the comment
+   * box; on a group feed it would just as happily find the input belonging to
+   * "write a post", and the owner's picture would become a new POST.
+   */
+  const onPermalink = /\/(posts|permalink)\//.test(page.url());
   const form = box.locator('xpath=ancestor::form[1]');
-  const scope = (await form.count().catch(() => 0)) > 0 ? form : article;
+  const scopes: Locator[] = [];
+  if ((await form.count().catch(() => 0)) > 0) scopes.push(form);
+  scopes.push(article);
+  if (onPermalink) scopes.push(page.locator('body'));
 
-  const inputIn = (where: Locator) => where.locator('input[type="file"]').first();
-  let fileInput = inputIn(scope);
-  let have = await fileInput.count().then((n) => n > 0).catch(() => false);
+  for (const scope of scopes) {
+    if (await tryAttach(page, scope, image)) return true;
+  }
+  return false;
+}
 
-  if (!have) {
-    /* No input on the page yet: Facebook creates it when the camera control is
-       used. A file chooser may open instead, which is the same thing wearing a
-       different hat, so both are handled. */
-    const chooser = page.waitForEvent('filechooser', { timeout: 8_000 }).catch(() => null);
+/** One attempt, within one part of the page. */
+async function tryAttach(page: Page, scope: Locator, image: string): Promise<boolean> {
+  const input = scope.locator('input[type="file"]').first();
+  const before = await mediaCount(scope);
+
+  if (!(await input.count().then((n) => n > 0).catch(() => false))) {
+    /* No input yet: Facebook creates it when the camera is used, and on some
+       builds opens a native file chooser instead. Both are handled. */
+    const chooser = page.waitForEvent('filechooser', { timeout: 6_000 }).catch(() => null);
     await scope
       .getByRole('button', { name: patterns.commentPhoto })
       .first()
@@ -577,36 +594,58 @@ async function attachPhoto(page: Page, box: Locator, article: Locator, image: st
     const fc = await chooser;
     if (fc) {
       await fc.setFiles(image).catch(() => undefined);
-      return await photoLanded(scope);
+      return await photoLanded(scope, before);
     }
-    fileInput = inputIn(scope);
-    have = await fileInput.count().then((n) => n > 0).catch(() => false);
+    if (!(await input.count().then((n) => n > 0).catch(() => false))) return false;
   }
-  if (!have) return false;
 
   try {
-    await fileInput.setInputFiles(image);
+    await input.setInputFiles(image);
   } catch {
     return false;
   }
-  return await photoLanded(scope);
+  /* The file is in the box as far as the browser is concerned. If Facebook
+     then shows nothing at all, it did not take it. */
+  const held = await input
+    .evaluate((el) => (el as HTMLInputElement).files?.length ?? 0)
+    .catch(() => 0);
+  if (!held) return false;
+  return await photoLanded(scope, before);
 }
 
 /**
- * Did the picture actually arrive in the box?
+ * How much media is showing in this part of the page right now.
  *
- * Facebook shows an attachment as a thumbnail with a control to take it off
- * again, so either is proof. Waiting for proof rather than waiting a fixed
- * four seconds is the difference between a comment with a picture and a
- * comment that was submitted while the upload was still going.
+ * COUNTED, NOT MATCHED — and that correction is why this function exists.
+ * The first version looked for `img[src^="blob:"]` and a handful of "remove"
+ * labels, which is a guess about markup Facebook is free to change and did:
+ * a preview can be a background-image, an SVG, a canvas, or an <img> with an
+ * internal URL. The check said the picture had not arrived when it had, the
+ * comment was refused, and the owner watched the worker open each post, do
+ * nothing, and move on.
+ *
+ * Anything that was not there before and is there now is the attachment. That
+ * cannot be wrong about markup, because it does not know any.
  */
-async function photoLanded(scope: Locator): Promise<boolean> {
-  const preview = scope
-    .locator('img[src^="blob:"], img[src^="data:"], [aria-label*="הסר"], [aria-label*="הסרה"], [aria-label*="Remove"], [aria-label*="удалить" i]')
-    .first();
-  /* A real wait: the upload takes as long as it takes, and a glance a moment
-     after handing over the file truthfully says "not yet". */
-  return await appears(preview, 30_000);
+async function mediaCount(scope: Locator): Promise<number> {
+  return await scope
+    .locator('img, svg, video, canvas, [role="img"], [style*="background-image"]')
+    .count()
+    .catch(() => 0);
+}
+
+/**
+ * Wait until something new is showing where the comment is being written.
+ *
+ * Proof, not a timer: an upload still in flight is not an attachment, and a
+ * comment submitted over one goes out without it.
+ */
+async function photoLanded(scope: Locator, before: number): Promise<boolean> {
+  for (let waited = 0; waited < 30_000; waited += 500) {
+    if ((await mediaCount(scope)) > before) return true;
+    await scope.page().waitForTimeout(500);
+  }
+  return false;
 }
 
 /** Where the attempt stopped. Each one is a different thing to do next. */

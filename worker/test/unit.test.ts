@@ -2678,6 +2678,10 @@ const scenario: { step: string; line: string }[] = [];
   /* A missing column may never cost the status — same rule as the note, and
      for the same reason: a row stuck on 'pending' is commented on forever. */
   assert.ok(/comment_note\|comment_shot/.test(localWorker), 'and a database without the column still records what happened');
+  /* And the picture has to reach this machine first: a download that failed
+     used to leave null, and null means "no picture asked for" everywhere
+     below — so the words went out alone and the screen said "הגיב". */
+  assert.ok(/if \(media\.length && !local\?\.images\.length\)/.test(localWorker), 'a picture that would not download stops the comment too');
 
   /*
    * ===================================================================
@@ -2699,6 +2703,30 @@ const scenario: { step: string; line: string }[] = [];
   const commentsAt = localWorker.indexOf('await runCampaignComments(state, headless);');
   assert.ok(addressAt > 0 && commentsAt > addressAt, 'before the comments, not after them');
   assert.ok(/\.update\(\{ permalink: url \}\)/.test(localWorker), 'and the address is written down, so nothing searches twice');
+
+  /*
+   * A HELPER THAT CANNOT HELP MUST STAND ASIDE.
+   *
+   * The first version of this pass marked a whole group's rows 'failed' when
+   * the author page did not load — one group per tick, an entire round turned
+   * to "לא הצליח" over a page that was never essential. It was worse than the
+   * problem it was written to solve.
+   *
+   * The pass is an OPTIMISATION: it saves the address so nothing searches
+   * twice. When it cannot, the row is left exactly as it was and the comment
+   * does its own lookup, which still has the group's search and the feed.
+   */
+  const addressPass = localWorker.slice(
+    localWorker.indexOf('async function resolveAddresses'),
+    localWorker.indexOf('/** Posts commented per idle tick'),
+  );
+  assert.ok(addressPass.length > 500, 'the address pass was found');
+  assert.ok(!/comment_status: 'failed'/.test(addressPass), 'looking up an address may never fail a publication');
+  assert.ok(!/comment_note:/.test(addressPass), 'nor write a reason for a failure it did not cause');
+  /* And it asks each group once per run, or a group that yields nothing is
+     reopened every few seconds and no other group is ever reached. */
+  assert.ok(/state\.addressTried = \(state\.addressTried \?\? new Set\(\)\)\.add\(groupUrl\);/.test(addressPass), 'each group is looked up once per run');
+  assert.ok(/!state\.addressTried\?\.has\(groupUrl\)/.test(addressPass), 'and the ones already tried are skipped');
   /* Learned from the cookie, remembered from the database. A login check that
      throws would otherwise empty it and send every lookup back to hunting the
      whole group — the behaviour this replaced. */
@@ -2828,7 +2856,25 @@ const scenario: { step: string; line: string }[] = [];
   /* Proof, not a timer. An upload still in flight is not an attachment, and a
      comment submitted over one goes out without it. */
   assert.ok(/async function photoLanded/.test(composerSrc), 'the attachment is confirmed before anything is sent');
-  assert.ok(/img\[src\^="blob:"\]/.test(composerSrc), 'by the thumbnail Facebook shows for it');
+  /*
+   * COUNTED, NOT MATCHED.
+   *
+   * The first version looked for `img[src^="blob:"]` and a few "remove"
+   * labels — a guess about markup Facebook is free to change, and does: a
+   * preview can be a background-image, an SVG, a canvas, or an <img> with an
+   * internal URL. The check said the picture had not arrived when it had, the
+   * comment was refused, and the owner watched the worker open each post, do
+   * nothing and move on. Anything that was not there before and is there now
+   * is the attachment — that cannot be wrong about markup, because it does
+   * not know any.
+   */
+  assert.ok(/async function mediaCount/.test(composerSrc), 'what is showing is counted');
+  assert.ok(/\(await mediaCount\(scope\)\) > before/.test(composerSrc), 'and the proof is that there is more of it than before');
+  assert.ok(!/locator\('img\[src\^="blob:"\]/.test(composerSrc), 'never a guess at which markup Facebook used this week');
+  /* And it is looked for in more than one place, because Facebook does not
+     always wrap a comment box in a form. The page itself only on the post's
+     own page — on a feed that input belongs to "write a post". */
+  assert.ok(/const onPermalink = /.test(composerSrc) && /if \(onPermalink\) scopes\.push\(page\.locator\('body'\)\);/.test(composerSrc), 'the page is a last resort, and only where it is safe');
   assert.ok(!/await page\.waitForTimeout\(4000\);\s*\n\s*await box\.click/.test(composerSrc), 'never by waiting a fixed four seconds and hoping');
 
   /*
@@ -2846,7 +2892,8 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/async function appears\(what: Locator, ms: number\)/.test(composerSrc), 'waiting is its own thing, named');
   assert.ok(/waitFor\(\{ state: 'visible', timeout: ms \}\)/.test(composerSrc), 'and it really waits');
   for (const [what, where] of [
-    ['the picture', 'appears(preview, 30_000)'],
+    /* The picture has its own waiter — it is proved by what appeared, not by
+       one element being visible — so it is checked above, with mediaCount. */
     ['the comment box', 'appears(box, 8_000)'],
     ['the post', 'appears(article, 8_000)'],
   ] as const) {

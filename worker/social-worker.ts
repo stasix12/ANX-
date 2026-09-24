@@ -95,6 +95,14 @@ interface WorkerState {
   commentNoticeShown?: boolean;
   /** The last reason the update check could not run — said once, not per tick. */
   updateProblem?: string;
+  /**
+   * Groups whose addresses have already been looked up this run.
+   *
+   * Without it the same group is opened every few seconds forever: the rows
+   * keep no record of the attempt, so a group whose page yields nothing is
+   * asked again and again and no other group is ever reached.
+   */
+  addressTried?: Set<string>;
   /** When the last comment went out, and the gap drawn for the next one. */
   lastCommentAt?: number;
   commentGapMs?: number;
@@ -1085,39 +1093,28 @@ async function resolveAddresses(state: WorkerState, headless: boolean): Promise<
     byGroup.set(group.url, [...(byGroup.get(group.url) ?? []), row]);
   }
 
-  for (const [groupUrl, groupRows] of [...byGroup].slice(0, GROUPS_PER_TICK)) {
+  const todo = [...byGroup].filter(([groupUrl]) => !state.addressTried?.has(groupUrl));
+  for (const [groupUrl, groupRows] of todo.slice(0, GROUPS_PER_TICK)) {
     if (stopping) break;
+    /*
+     * ONCE PER GROUP PER RUN, whatever the answer.
+     *
+     * Without this the same group is opened every few seconds forever: the
+     * rows keep no record of having been looked up, so a group whose page
+     * yields nothing is asked again, and again, and no other group is ever
+     * reached.
+     */
+    state.addressTried = (state.addressTried ?? new Set()).add(groupUrl);
     const page = await session.newPage(headless);
     try {
       const posts = await ourPostsInGroup(page, groupUrl, state.accountId);
-      if (!posts.length) {
-        /*
-         * NOT "the posts are gone". The page may have been a login wall, or
-         * the group may have stopped loading. Saying which is the difference
-         * between a retry that helps and one that repeats — so the note says
-         * what we opened, and the picture shows what came back.
-         */
-        const shot = await captureScreenshot(page, groupRows[0].id, 'address');
-        for (const row of groupRows) {
-          await db
-            .from('social_queue')
-            .update({
-              comment_status: 'failed',
-              comment_at: new Date().toISOString(),
-              comment_note: 'לא הצלחנו לפתוח את רשימת הפרסומים שלכם בקבוצה הזאת. ייתכן שפייסבוק ביקשה אימות, או שאין לנו גישה לקבוצה.',
-              comment_shot: shot ?? '',
-            })
-            .eq('id', row.id)
-            .then((r) => (r.error ? console.error('[worker] ✗', r.error.message) : undefined));
-        }
-        console.error(`[worker] ✗ לא נמצאו פרסומים שלנו ב-${groupUrl}`);
-        continue;
-      }
+      const found = posts.length
+        ? matchPosts(
+            groupRows.map((r) => ({ id: r.id, text: r.rendered_text })),
+            posts,
+          )
+        : {};
 
-      const found = matchPosts(
-        groupRows.map((r) => ({ id: r.id, text: r.rendered_text })),
-        posts,
-      );
       let kept = 0;
       for (const row of groupRows) {
         const url = found[row.id];
@@ -1128,24 +1125,27 @@ async function resolveAddresses(state: WorkerState, headless: boolean): Promise<
       }
       console.log(`[worker] 🔗 ${groupUrl}: ${posts.length} פרסומים שלנו, ${kept} כתובות נשמרו.`);
 
-      /* A row we could not identify among our OWN posts is a real dead end:
-         the text no longer resembles anything there. Say so with the picture,
-         rather than leaving it pending to be tried again identically. */
-      for (const row of groupRows) {
-        if (found[row.id]) continue;
-        const shot = await captureScreenshot(page, row.id, 'address');
-        await db
-          .from('social_queue')
-          .update({
-            comment_status: 'failed',
-            comment_at: new Date().toISOString(),
-            comment_note: `מצאנו ${posts.length} פרסומים שלכם בקבוצה, אבל אף אחד מהם לא תאם לפרסום הזה. ייתכן שהוא נמחק.`,
-            comment_shot: shot ?? '',
-          })
-          .eq('id', row.id);
+      /*
+       * NOTHING IS MARKED FAILED HERE, AND THAT IS THE WHOLE RULE.
+       *
+       * This pass is an OPTIMISATION: it saves the address so nothing has to
+       * search for the post twice. When it cannot — the page did not load, the
+       * address is shaped differently on this account, Facebook asked for
+       * something — the right answer is to leave the row alone and let the
+       * comment do its own lookup, which still has the group's search and the
+       * feed behind it.
+       *
+       * The first version of this failed the row instead, and it was worse
+       * than the problem it was written to solve: one group per tick, an
+       * entire round marked "לא הצליח" over a page that was never essential.
+       * A helper that cannot help must stand aside, not take the work down
+       * with it.
+       */
+      if (kept < groupRows.length) {
+        console.log(`[worker] ℹ ${groupRows.length - kept} פרסומים בקבוצה הזאת יחופשו בדרך הרגילה.`);
       }
     } catch (err) {
-      console.error('[worker] ✗ איתור כתובות נכשל:', err instanceof Error ? err.message.split('\n')[0] : err);
+      console.error('[worker] ℹ איתור כתובות לא הצליח (ממשיכים רגיל):', err instanceof Error ? err.message.split('\n')[0] : err);
     } finally {
       await page.close().catch(() => undefined);
     }
@@ -1260,6 +1260,26 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
     const page = await session.newPage(headless);
     try {
       local = media.length ? await downloadMedia(`${row.id}-comment`, media).catch(() => null) : null;
+      /*
+       * THE PICTURE HAS TO GET AS FAR AS THIS MACHINE FIRST.
+       *
+       * A download that failed used to leave `local` null, and null means "no
+       * picture asked for" everywhere below — so the comment went out with the
+       * words alone and the screen said "הגיב". Same class of silence as every
+       * other bug in this feature: a failure that renamed itself into a
+       * different, smaller request.
+       */
+      if (media.length && !local?.images.length) {
+        await saveCommentOutcome(
+          db,
+          row.id,
+          { ok: false, reason: 'לא הצלחנו להוריד את התמונה של התגובה למחשב, ולכן לא פרסמנו אותה בלי התמונה.', permalink: '', tried: [] },
+          row.permalink,
+          null,
+        );
+        console.error('[worker] ✗ הורדת התמונה לתגובה נכשלה.');
+        continue;
+      }
       /* The permalink when there is one, the group otherwise — and for a post
          published before this version there never is one. */
       const where = row.permalink ?? groupUrlOf(row.target) ?? '';

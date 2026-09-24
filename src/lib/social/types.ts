@@ -353,6 +353,14 @@ export interface BrowserSettings {
    * change.
    */
   firstComment: string;
+  /**
+   * A picture to attach to that comment — the price list, the before-and-after.
+   *
+   * An array because MediaUploader speaks in arrays, but only the first image
+   * is used: Facebook takes one attachment per comment, and silently dropping
+   * the rest would be worse than never accepting them.
+   */
+  firstCommentMedia: MediaItem[];
 }
 
 export const DEFAULT_BROWSER: BrowserSettings = {
@@ -365,6 +373,7 @@ export const DEFAULT_BROWSER: BrowserSettings = {
   /* Empty by default: a comment nobody asked for, on every post, in every
      group, is the kind of default that gets an account reported. */
   firstComment: '',
+  firstCommentMedia: [],
 };
 
 export interface ActivityEntry {

@@ -179,6 +179,60 @@ async function main() {
   assert.ok(!(typed ?? '').includes('שורה א'), 'cancelled run must not publish');
   console.log('✓ line breaks use Shift+Enter only');
 
+  /*
+   * THE FIRST COMMENT LANDS ON OUR POST — and the decoy is how we know.
+   *
+   * The fixture's feed opens with somebody else's post, first in the DOM, with
+   * its own comment box. Every failure mode of this feature ends there: a box
+   * found by "the first one on the page", an article matched loosely, a click
+   * that revealed the wrong composer. The owner's phone number under a
+   * stranger's post, in a group they need to stay welcome in, is not a bug
+   * anybody would notice from a green test — so the decoy makes it fail here.
+   */
+  const page3 = await context.newPage();
+  const withComment = await publishToGroup(page3, {
+    groupUrl: fixture,
+    text: 'ניקוי ספות בבאר שבע — מבצע לסוף השבוע',
+    images: [],
+    video: null,
+    onStep: async () => undefined,
+    firstComment: 'לפרטים: 050-0000000',
+  });
+  assert.equal(withComment.comment, 'posted', 'the comment must be left and verified, not merely attempted');
+  /* No named helper inside the evaluate: tsx's esbuild rewrites one into a
+     __name() call that does not exist in the page, and the read dies before
+     its first statement. The same hazard the account reader was built around,
+     and this test tripped it while being written. */
+  const landed = await page3.evaluate(() => {
+    const articles = Array.from(document.querySelectorAll('[role="article"]'));
+    const decoy = articles.find((a) => a.id === 'decoy');
+    const ours = articles.find((a) => (a.textContent ?? '').includes('ניקוי ספות בבאר שבע'));
+    return {
+      onDecoy: Array.from(decoy?.querySelectorAll('.comment') ?? []).map((c) => c.textContent ?? ''),
+      onOurs: Array.from(ours?.querySelectorAll('.comment') ?? []).map((c) => c.textContent ?? ''),
+    };
+  });
+  assert.deepEqual(landed.onDecoy, [], "nothing may be commented on somebody else's post");
+  assert.deepEqual(landed.onOurs, ['לפרטים: 050-0000000'], 'and the comment belongs to the post we just published');
+  console.log('✓ the first comment lands on our post, never on the decoy beside it');
+
+  /* Asked for and not achievable is its own outcome — the post is already live
+     and cannot be taken back, so it is reported rather than thrown. */
+  const page4 = await context.newPage();
+  await page4.goto(fixture);
+  await page4.evaluate(() => localStorage.removeItem('mockFeed'));
+  const noAnchor = await publishToGroup(page4, {
+    groupUrl: fixture,
+    text: 'קצר',
+    images: [],
+    video: null,
+    onStep: async () => undefined,
+    firstComment: 'לפרטים: 050-0000000',
+  });
+  assert.equal(noAnchor.outcome, 'published', 'a comment that cannot be left must never fail the publication');
+  assert.equal(noAnchor.comment, 'failed', 'but it must say so, because the owner believes it is there');
+  console.log('✓ an unplaceable comment is reported, not thrown and not silent');
+
   await browser.close();
   console.log('composer tests OK');
 }

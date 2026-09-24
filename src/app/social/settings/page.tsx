@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
+import { MediaUploader } from '@/components/social/MediaUploader';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, saveSetting, setPaused } from '@/lib/social/client';
@@ -356,11 +357,24 @@ export default function SettingsPage() {
                     placeholder={'לפרטים ותיאום: {טלפון}'}
                   />
                 </Field>
-                <p className="mt-2 text-xs text-mist-500">
+                <div className="mt-3">
+                  {/*
+                    One image, and the limit is Facebook's rather than ours: a
+                    comment takes a single attachment. Accepting more and
+                    quietly sending one would be worse than not accepting them.
+                  */}
+                  <Field label="תמונה לתגובה (לא חובה)" hint="מחירון, לפני/אחרי — תמונה אחת, זה מה שפייסבוק מאפשרת בתגובה.">
+                    <MediaUploader
+                      media={browser.firstCommentMedia ?? []}
+                      onChange={(m) => setBrowser({ ...browser, firstCommentMedia: m.filter((x) => x.kind === 'image').slice(0, 1) })}
+                    />
+                  </Field>
+                </div>
+                <p className="mt-3 text-xs text-mist-500">
                   למה בתגובה ולא בפוסט: מנהלי קבוצות מוחקים פוסטים שנראים כמו מודעה, וקוראים גוללים מעל מספרי טלפון באמצע טקסט. אותם פרטים שורה אחת מתחת נשארים.
                 </p>
                 <p className="mt-1.5 text-xs text-mist-500">
-                  התגובה נוספת רק לפוסט שהמערכת זיהתה בוודאות שהוא שלה. אם לא — היא לא תגיב בכלל, ותרשום את זה בהיסטוריה.
+                  התגובה נוספת רק לפוסט שהמערכת זיהתה בוודאות שהוא שלה. אם לא — היא לא תגיב בכלל, ותרשום את זה בהיסטוריה. אפשר טקסט בלבד, תמונה בלבד, או שניהם.
                 </p>
               </Card>
             </>

@@ -24,6 +24,15 @@ export const patterns = {
   composerTextbox: /write something|create a public post|what'?s on your mind|share something|כאן כותב(ים|ות)?|כת(ו)?ב(\/י|י|ו)?\s*(משהו|פוסט)|יצירת פוסט|מה (תרצ[הו]|בא ל[ךכ][םן]?) לשתף|שת(ף|פי|פו)\s*משהו|מה עובר לך בראש|напишите что-нибудь|что у вас нового|поделитесь/i,
   /** Button that reveals the file input. */
   photoVideo: /photo\/video|photo or video|add photos?\/videos?|תמונה\/סרטון|תמונה או סרטון|הוספת תמונות|фото\/видео|добавить фото/i,
+  /*
+   * The camera inside a COMMENT box, which is a different control from the
+   * post composer's "תמונה/סרטון" and carries a different label. Facebook
+   * words it as attaching to a comment, so the pattern is about that rather
+   * than about photos in general — matching the composer's wording here would
+   * find the button that starts a new POST.
+   */
+  commentPhoto: /attach a photo|photo or video to your comment|comment with a photo|צרף(ו)? תמונה|הוספת תמונה|תמונה לתגובה|прикрепить фото|фото к комментарию/i,
+
   /** The final submit button. */
   postButton: /^(post|publish|פרסום|פרסם|פרסמי|פרסמו|опубликовать)$/i,
   /** Toasts / banners that mean "post did not go out". */

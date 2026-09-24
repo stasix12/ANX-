@@ -26,6 +26,8 @@ export interface GroupPublishInput {
   headless: boolean;
   /** Left as the first comment on the published post, or empty for none. */
   firstComment?: string;
+  /** A picture for that comment. At most one — Facebook takes one per comment. */
+  firstCommentMedia?: MediaItem[];
   onStep: (step: ComposerStep) => Promise<void>;
   /** Present when the run must pause before the final click. */
   confirm?: (page: Page) => Promise<'confirmed' | 'cancelled' | 'timeout'>;
@@ -63,10 +65,19 @@ export class FacebookGroupBrowserAdapter {
       throw new PublishError('cannot_post', `הכתובת של "${input.target.name}" אינה כתובת של קבוצת פייסבוק. תקנו אותה במסך הקבוצות.`);
     }
     let local: LocalMedia | null = null;
+    let commentLocal: LocalMedia | null = null;
     const page = await this.session.newPage(input.headless);
     input.onPage?.(page);
     try {
       local = input.media.length ? await downloadMedia(input.queueId, input.media) : null;
+      /*
+       * Downloaded separately from the post's own media, into its own folder,
+       * because the two are cleaned up on different paths and a comment image
+       * sharing the post's directory would be deleted underneath a retry.
+       */
+      commentLocal = input.firstCommentMedia?.length
+        ? await downloadMedia(`${input.queueId}-comment`, input.firstCommentMedia).catch(() => null)
+        : null;
       return await publishToGroup(page, {
         groupUrl: group.url,
         text: input.text,
@@ -75,6 +86,7 @@ export class FacebookGroupBrowserAdapter {
         onStep: input.onStep,
         confirm: input.confirm,
         firstComment: input.firstComment,
+        firstCommentImage: commentLocal?.images[0] ?? null,
       });
     } catch (err) {
       // Screenshot while the page still shows what went wrong.
@@ -82,6 +94,7 @@ export class FacebookGroupBrowserAdapter {
       throw err;
     } finally {
       cleanupMedia(local);
+      cleanupMedia(commentLocal);
       // Keep the page open in debug mode for a few seconds so the owner sees the result.
       if (!input.headless) await page.waitForTimeout(4000).catch(() => undefined);
       await page.close().catch(() => undefined);

@@ -38,6 +38,15 @@ export interface ComposeInput {
    * while the same details one line down in a comment are neither.
    */
   firstComment?: string;
+  /**
+   * A local image file to attach to that first comment.
+   *
+   * Separate from `images` above, which belong to the POST. A picture in a
+   * comment is a different thing from a picture in the post: the price list,
+   * the before-and-after, the thing that would make the post itself look like
+   * an advert if it were up there.
+   */
+  firstCommentImage?: string | null;
 }
 
 export interface ComposeResult {
@@ -170,8 +179,11 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * would publish the post a second time.
    */
   let comment: ComposeResult['comment'] = 'none';
-  if (input.firstComment?.trim()) {
-    comment = verified && (await addFirstComment(page, input.text, input.firstComment.trim())) ? 'posted' : 'failed';
+  if (input.firstComment?.trim() || input.firstCommentImage) {
+    comment =
+      verified && (await addFirstComment(page, input.text, (input.firstComment ?? '').trim(), input.firstCommentImage ?? null))
+        ? 'posted'
+        : 'failed';
   }
   return { outcome: 'published', verified, pendingApproval, groupTitle, comment };
 }
@@ -190,7 +202,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
  * meaning, in two boxes that look alike — which is why openComposer refuses a
  * comment box and this refuses everything that is not one.
  */
-async function addFirstComment(page: Page, postText: string, comment: string): Promise<boolean> {
+async function addFirstComment(page: Page, postText: string, comment: string, image: string | null): Promise<boolean> {
   const probe = postText
     .split('\n')
     .map((l) => l.trim())
@@ -221,9 +233,44 @@ async function addFirstComment(page: Page, postText: string, comment: string): P
     if (!patterns.commentBox.test(label)) return false;
 
     await box.click({ timeout: 5_000 });
+
+    /*
+     * The picture first, then the words.
+     *
+     * Facebook uploads a comment attachment while the box stays editable, so
+     * starting the upload before typing hides most of its latency behind the
+     * keystrokes. It also avoids the reverse order's hazard: a stray Enter
+     * while a file dialog is open goes nowhere useful.
+     *
+     * Everything here is scoped to `article`. A file input found anywhere on
+     * the page would just as happily belong to the post composer at the top of
+     * the group, and the picture would become a new POST.
+     */
+    if (image) {
+      let fileInput = article.locator('input[type="file"]').first();
+      if (!(await fileInput.count().then((n) => n > 0).catch(() => false))) {
+        const chooser = page.waitForEvent('filechooser', { timeout: 8_000 }).catch(() => null);
+        await article
+          .getByRole('button', { name: patterns.commentPhoto })
+          .first()
+          .click({ timeout: 5_000 })
+          .catch(() => undefined);
+        const fc = await chooser;
+        if (fc) await fc.setFiles(image);
+        else fileInput = article.locator('input[type="file"]').first();
+      }
+      if (await fileInput.count().then((n) => n > 0).catch(() => false)) {
+        await fileInput.setInputFiles(image).catch(() => undefined);
+      }
+      /* Give the attachment time to land. A comment submitted mid-upload goes
+         out as text alone, which looks like the picture was never asked for. */
+      await page.waitForTimeout(4000);
+      await box.click({ timeout: 5_000 }).catch(() => undefined);
+    }
+
     // Shift+Enter for line breaks, exactly as the composer does: a bare Enter
     // mid-text would submit half a comment and leave the rest orphaned.
-    const lines = comment.split('\n');
+    const lines = comment ? comment.split('\n') : [];
     for (let i = 0; i < lines.length; i += 1) {
       if (i) await page.keyboard.press('Shift+Enter');
       await page.keyboard.type(lines[i], { delay: 15 });
@@ -234,8 +281,14 @@ async function addFirstComment(page: Page, postText: string, comment: string): P
     /* Verified the same way the post is: found on the page, or it did not
        happen. An unverified comment reported as posted would have the owner
        believing their phone number is under a post where it is not. */
-    const needle = lines.find((l) => l.trim().length >= 6)?.trim().slice(0, 30) ?? comment.slice(0, 30);
-    return await article.getByText(needle, { exact: false }).first().isVisible({ timeout: 8_000 }).catch(() => false);
+    const needle = lines.find((l) => l.trim().length >= 6)?.trim().slice(0, 30) ?? '';
+    if (needle) return await article.getByText(needle, { exact: false }).first().isVisible({ timeout: 8_000 }).catch(() => false);
+    /* A picture with no words has nothing to read back, so the check is that
+       the box emptied — Facebook clears it only once the comment is away. */
+    return await box
+      .innerText()
+      .then((t) => t.trim() === '')
+      .catch(() => false);
   } catch {
     return false;
   }

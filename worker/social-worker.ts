@@ -659,6 +659,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       variantId: v?.id ?? null,
       headless: jobEnv.headless,
       firstComment,
+      firstCommentMedia: (jobEnv.browser.firstCommentMedia ?? []).filter((m) => m.kind === 'image').slice(0, 1),
       onPage: (page) => {
         livePage = page;
       },

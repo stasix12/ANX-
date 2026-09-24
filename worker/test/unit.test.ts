@@ -2425,6 +2425,20 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/'failed'/.test(localWorker) && /comment_status/.test(localWorker), 'a comment that could not be placed is recorded as failed');
   const campaignPage = readFileSync(new URL('../../src/app/social/campaigns/[id]/page.tsx', import.meta.url), 'utf8');
   assert.ok(/לא הצליחו/.test(campaignPage), 'and the round screen names the failures rather than folding them into the total');
+  /*
+   * WHICH GROUPS, not just how many — on both screens, because the owner looks
+   * at both. "3 הגיבו" says nothing about whether the one group that matters
+   * has been reached, and a failure is only actionable once it has a name.
+   */
+  assert.ok(/r\.target\?\.name/.test(campaignPage), 'the round lists the groups it is commenting on');
+  const commentCard = readFileSync(new URL('../../src/components/social/CommentQueueCard.tsx', import.meta.url), 'utf8');
+  const dashSrcComments = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
+  assert.ok(/<CommentQueueCard rows=\{data\.comments\} \/>/.test(dashSrcComments), 'and so does the main screen');
+  assert.ok(/if \(!rows\.length\) return null;/.test(commentCard), 'which stays absent when nothing was ever asked for');
+  /* A missing migration is the likeliest reason the button does nothing, and
+     Postgres answers it in English about relations. Say it in Hebrew, naming
+     the file, or the owner is left pressing a button that says nothing. */
+  assert.ok(/social-schema-v14\.sql/.test(clientForComment), 'a missing column names the file that fixes it');
   /* One per tick. Twenty-eight comments inside a minute is worth nothing to
      anybody reading them and a great deal to whatever watches for bursts. */
   assert.ok(/const COMMENTS_PER_TICK = 1;/.test(localWorker), 'comments go out one at a time, not in a burst');

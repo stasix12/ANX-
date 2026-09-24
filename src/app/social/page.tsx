@@ -8,6 +8,7 @@ import { LiveCampaignHero, LiveQueueHero, type SystemState } from '@/components/
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { QuickActions } from '@/components/social/QuickActions';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
+import { CommentQueueCard } from '@/components/social/CommentQueueCard';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
 import { AlertBar, Button, ButtonLink, Card, ErrorState, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
@@ -20,6 +21,7 @@ import {
   getLimits,
   listActivity,
   listCampaigns,
+  listCommentQueue,
   listQueue,
   listTargets,
   listWorkers,
@@ -52,6 +54,8 @@ interface DashboardData {
   summary: QueueSummary;
   today: number;
   upcoming: QueueRow[];
+  /** Publications with a comment asked for on them, across every round. */
+  comments: QueueRow[];
   limits: LimitsSettings;
   control: ControlSettings;
   /**
@@ -154,7 +158,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [queue, today, limits, control, targets, manual, log, states, upcoming, workers] = await Promise.all([
+      const [queue, today, limits, control, targets, manual, log, states, upcoming, workers, comments] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         /* countPublishedBetween(weekStart) used to run here on every 30s poll
@@ -173,6 +177,7 @@ export default function SocialDashboard() {
         // calling the first of them the next one.
         listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' }),
         listWorkers(),
+        listCommentQueue(),
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
       setData({
@@ -180,6 +185,7 @@ export default function SocialDashboard() {
         summary: queue.summary,
         today,
         upcoming,
+        comments,
         limits,
         control,
         activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
@@ -896,6 +902,11 @@ export default function SocialDashboard() {
             row by row is the reports screen's. The component still exists and
             is still used by the post editor.
           */}
+
+          {/* Above the log, because it is a thing happening now rather than a
+              record of things that happened. Absent entirely when no comment
+              was ever asked for. */}
+          <CommentQueueCard rows={data.comments} />
 
           <Card
             title="יומן פעילות"

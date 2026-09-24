@@ -795,24 +795,63 @@ export async function queueCampaignComment(
   media: MediaItem[],
   gapSeconds: number,
 ): Promise<number> {
-  unwrap(
-    await db()
-      .from('social_campaigns')
-      /* Clamped here as well as in the input, because this is the last place
-         before the database and a value out of range would be a worker pacing
-         itself by a number nobody meant. */
-      .update({ comment_text: text, comment_media: media, comment_gap_seconds: Math.max(5, Math.min(600, Math.round(gapSeconds))) })
-      .eq('id', campaignId),
-  );
-  const rows = unwrap<{ id: string }[]>(
-    await db()
-      .from('social_queue')
-      .update({ comment_status: 'pending', comment_at: null })
-      .eq('campaign_id', campaignId)
-      .eq('status', 'published')
-      .select('id'),
-  );
-  return rows.length;
+  const saved = await db()
+    .from('social_campaigns')
+    /* Clamped here as well as in the input, because this is the last place
+       before the database and a value out of range would be a worker pacing
+       itself by a number nobody meant. */
+    .update({ comment_text: text, comment_media: media, comment_gap_seconds: Math.max(5, Math.min(600, Math.round(gapSeconds))) })
+    .eq('id', campaignId);
+  /*
+   * THE MISSING MIGRATION SAYS SO, IN HEBREW, NAMING THE FILE.
+   *
+   * Without this the button read as dead: Postgres answers a missing column
+   * with an English sentence about relations, friendlyMessage has nothing to
+   * map it to, and the owner is left pressing a button that does nothing and
+   * says nothing they can act on. It is the single likeliest reason this write
+   * fails, and it takes a minute to fix once somebody knows.
+   */
+  if (saved.error) {
+    if (/column|comment_text|comment_media|comment_gap_seconds/i.test(saved.error.message)) {
+      throw new Error('צריך להריץ את social-schema-v14.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
+    }
+    throw new Error(saved.error.message);
+  }
+  const marked = await db()
+    .from('social_queue')
+    .update({ comment_status: 'pending', comment_at: null })
+    .eq('campaign_id', campaignId)
+    .eq('status', 'published')
+    .select('id');
+  if (marked.error) {
+    if (/column|comment_status/i.test(marked.error.message)) {
+      throw new Error('צריך להריץ את social-schema-v14.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
+    }
+    throw new Error(marked.error.message);
+  }
+  return marked.data?.length ?? 0;
+}
+
+/**
+ * Every publication with a comment asked for on it, across all rounds.
+ *
+ * The round's own screen shows its own list; this is what the main screen
+ * needs, because the owner asked to see which groups are being commented on
+ * without first remembering which round they belong to. Pending first — that
+ * is the part still moving.
+ */
+export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
+  const res = await db()
+    .from('social_queue')
+    .select(QUEUE_SELECT)
+    .neq('comment_status', '')
+    .order('published_at', { ascending: true })
+    .limit(limit);
+  /* A missing column is not an error worth showing here: this runs on the
+     dashboard's poll, and the screen that can actually explain it is the one
+     with the button. */
+  if (res.error) return [];
+  return (res.data ?? []) as unknown as QueueRow[];
 }
 
 /** How the round's comment task is going, for the screen that asked for it. */

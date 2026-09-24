@@ -73,6 +73,9 @@ import { CalendarIcon, ClipboardListIcon, PauseIcon, SearchIcon } from '@/compon
  *   Stop   — cancels everything that has not started (with a confirmation),
  *            lets a job already running finish, and keeps the history.
  */
+/* Pending first: it is the part still moving, and the part worth watching. */
+const COMMENT_ORDER = ['pending', 'failed', 'done'];
+
 export default function CampaignControlCenter() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -489,6 +492,42 @@ export default function CampaignControlCenter() {
                         <span className="text-warning-400">{`${p.done + p.pending > 0 ? ' · ' : ''}${p.failed} לא הצליחו`}</span>
                       )}
                     </p>
+                  )}
+                  {/*
+                    WHICH GROUPS, not just how many.
+                    
+                    A progress line is a number; the owner asked to see the
+                    list, and they are right — "3 הגיבו" tells you nothing
+                    about whether the one group that matters has been reached
+                    yet, and a failure is only actionable once it has a name.
+                    Pending first, because that is the part still moving.
+                  */}
+                  {p.pending + p.done + p.failed > 0 && (
+                    <ul className="mb-3 max-h-64 divide-y divide-ink-700 overflow-y-auto overscroll-contain rounded-xl bg-ink-800/40">
+                      {[...rows]
+                        .filter((r) => r.comment_status)
+                        .sort((a, b) => COMMENT_ORDER.indexOf(a.comment_status ?? '') - COMMENT_ORDER.indexOf(b.comment_status ?? ''))
+                        .map((r) => (
+                          <li key={r.id} className="flex min-w-0 items-center gap-2 px-3 py-2">
+                            <span
+                              aria-hidden
+                              className={`h-2 w-2 shrink-0 rounded-full ${
+                                r.comment_status === 'done'
+                                  ? TONE_FILL.good
+                                  : r.comment_status === 'failed'
+                                    ? TONE_FILL.warn
+                                    : TONE_FILL.neutral
+                              }`}
+                            />
+                            <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-200">
+                              {r.target?.name ?? '—'}
+                            </span>
+                            <span className="shrink-0 text-[11px] text-mist-500">
+                              {r.comment_status === 'done' ? 'הגיב' : r.comment_status === 'failed' ? 'לא הצליח' : 'ממתין'}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
                   )}
                   <Button variant="secondary" disabled={published.length === 0} onClick={() => setCommentOpen(true)}>
                     {p.done + p.pending + p.failed > 0 ? 'הוסף תגובה נוספת' : 'הוסף תגובה לכל הפרסומים'}

@@ -585,6 +585,58 @@ console.log('unit tests OK');
   const planner = readFileSync(new URL('../../src/lib/social/plan.ts', import.meta.url), 'utf8');
 
   /*
+   * "HOW MANY PEOPLE SAW IT" — AND THE NUMBER THAT MUST NOT BE INVENTED.
+   *
+   * This is the question a round is run to answer and the easiest place in the
+   * product to state something untrue. Facebook publishes no reach figure for
+   * a GROUP post and Meta closed the Groups API in April 2024, so the only way
+   * to produce one is to add up the member counts of the groups posted to and
+   * call that an audience — wrong by an order of magnitude, and precisely the
+   * number a paying customer would act on.
+   *
+   * So the rule is: only what Facebook itself wrote on the post.
+   */
+  const reachCard = readFileSync(new URL('../../src/components/social/CampaignReach.tsx', import.meta.url), 'utf8');
+  const metricsSrc = readFileSync(new URL('../facebook/metrics.ts', import.meta.url), 'utf8');
+  const workerSrc = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const reachCode = reachCard.replace(/\/\*[\s\S]*?\*\//g, '');
+  const metricsCode = metricsSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  assert.ok(
+    !/member|members|חברים|memberCount/i.test(reachCode) && !/member|חברים/i.test(metricsCode),
+    'a group\'s size is not an audience and may never be presented as one',
+  );
+  /* The component's own name is not a claim; a figure would be. */
+  assert.ok(
+    !/reach|impressions|חשיפה משוערת|חשיפה פוטנציאלית/i.test(reachCode.replace(/CampaignReach/g, '')),
+    'and no reach or impressions figure may appear, because none exists',
+  );
+  assert.ok(/פייסבוק לא מפרסמת מספר חשיפה/.test(reachCard), 'the screen says so itself, rather than leaving the gap unexplained');
+
+  /*
+   * NULL IS NOT ZERO, and this is the half that decides whether the card lies.
+   * A post not read yet, a post Facebook showed no "seen by" on, and a post
+   * nobody engaged with are three different facts; a 0 reports the first two
+   * as the third. Sums therefore run only over rows carrying a number, and the
+   * card states how many posts each total covers.
+   */
+  assert.ok(/typeof v === 'number'/.test(reachCard), 'a total counts only the posts that actually carry a number');
+  assert.ok(/value === null \? <span/.test(reachCard), 'and an unread figure shows a dash, never a zero');
+  assert.ok(/מתוך \$\{posts\}/.test(reachCard), 'saying how many publications the total is over');
+  assert.ok(/seen: number \| null/.test(metricsSrc), 'the reader returns null where Facebook stated nothing');
+  assert.ok(
+    /if \(kind !== 'ok'\) return null;/.test(metricsSrc),
+    'and a login wall returns nothing at all rather than recording zeros for somebody else\'s page',
+  );
+  /* The worker leaves a row untouched when the read failed, for the same
+     reason: "we could not read it" is not "it did nothing". */
+  assert.ok(/if \(!m\) \{/.test(workerSrc), 'an unreadable post leaves its row unread');
+  /* Collection is the least urgent thing the worker does and must never sit in
+     front of a publication. */
+  const dueAt = workerSrc.indexOf('if (!due?.length) {');
+  const metricsAt = workerSrc.indexOf('await syncPostMetrics(state, headless);');
+  assert.ok(dueAt > 0 && metricsAt > dueAt, 'metrics are collected only when there is nothing to publish');
+
+  /*
    * A FULL DAILY QUOTA IS "NOT TODAY". IT USED TO BE "NEVER".
    *
    * All three daily ceilings returned {action:'skip'}, and a skip FINISHES the

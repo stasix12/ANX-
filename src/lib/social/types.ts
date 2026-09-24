@@ -212,6 +212,23 @@ export interface QueueItem {
   campaign_id?: string | null;
   /** How this row was published: Graph API, local browser worker, or by hand. */
   method?: PublishMethod;
+  /*
+   * HOW THIS POST DID, read off the post's own page by the worker.
+   *
+   * Every one is NULLABLE and that is load-bearing: null means Facebook did
+   * not state it, or nobody has looked yet. Zero means it stated zero. A
+   * screen that flattens the two reports "nobody cared" about a post it simply
+   * has not read, which is the kind of number a customer acts on.
+   *
+   * There is no reach here. Facebook puts none on a group post and Meta closed
+   * the Groups API in April 2024, so an audience figure could only come from
+   * the group's member count — a guess wearing the clothes of a measurement.
+   */
+  metrics_seen?: number | null;
+  metrics_reactions?: number | null;
+  metrics_comments?: number | null;
+  metrics_shares?: number | null;
+  metrics_at?: string | null;
   created_at: string;
 }
 

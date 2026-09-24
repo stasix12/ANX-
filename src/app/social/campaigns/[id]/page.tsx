@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { CampaignProgressBar } from '@/components/social/CampaignProgressBar';
+import { CampaignReach } from '@/components/social/CampaignReach';
 import { ProgressRing } from '@/components/social/ProgressRing';
 import { QueueSections } from '@/components/social/QueueSections';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -450,6 +451,11 @@ export default function CampaignControlCenter() {
           {rows && rows.length > 0 && tab === 'queue' && <QueueSections rows={rows} actions={queueActions} />}
           {rows && rows.length > 0 && tab === 'timeline' && <Timeline rows={state?.upcoming ?? []} limit={12} />}
         </Card>
+
+        {/* Between the list of what went out and the posts themselves: the
+            answer to "and did it do anything", which is the question the round
+            was run to settle. */}
+        {rows && <CampaignReach rows={rows} truncated={Boolean(state?.truncated)} />}
 
         <Card title={`פוסטים בסבב (${posts.length})`}>
           {posts.length === 0 ? (

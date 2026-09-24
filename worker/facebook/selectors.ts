@@ -38,6 +38,22 @@ export const patterns = {
   loginPage: /log in to facebook|log into facebook|התחברות לפייסבוק|כניסה לפייסבוק|вход на facebook/i,
   /** Group page title suffix to strip when auto-naming targets. */
   titleSuffix: /\s*[|·-]\s*facebook\s*$/i,
+  /*
+   * WHAT A PUBLISHED POST DID — the only exposure figure Facebook offers on a
+   * group post, and the two engagement counts beside it.
+   *
+   * Written like every other pattern here: the label in each language the
+   * account might be set to, with the number captured on whichever side of it
+   * that language puts it. There is no reach pattern because there is no reach
+   * on the page; the group's size is not an audience and is not read as one.
+   */
+  seenBy: /(?:נצפה על ידי|נצפו על ידי)\s*([\d.,\s]+(?:K|M|אלף|מיליון)?)|seen by\s*([\d.,\s]+(?:K|M)?)|([\d.,\s]+(?:тыс|млн)?)\s*просмотрел/i,
+  /* No \b after the Hebrew and Russian words: JavaScript's word boundary is
+     defined on ASCII \w, so it never matches at the edge of a Hebrew letter
+     and the alternative silently never fires. Measured, not assumed — the
+     first version of these patterns read 0 comments on every Hebrew post. */
+  commentCount: /([\d.,\s]+(?:K|M|אלף|מיליון)?)\s*(?:תגובות|תגובה)|([\d.,\s]+(?:K|M)?)\s*comments?\b|([\d.,\s]+(?:тыс|млн)?)\s*комментар/i,
+  shareCount: /([\d.,\s]+(?:K|M|אלף|מיליון)?)\s*(?:שיתופים|שיתוף)|([\d.,\s]+(?:K|M)?)\s*shares?\b|([\d.,\s]+(?:тыс|млн)?)\s*поделил/i,
 } as const;
 
 /** URL paths that always mean "human needed". */

@@ -23,6 +23,7 @@ import { FacebookGroupBrowserAdapter } from './adapters/facebookGroupBrowser';
 import { logActivity, safeError, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
+import { readPostMetrics } from './facebook/metrics';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
 import { BrowserSession, SessionError } from './facebook/session';
@@ -69,6 +70,8 @@ interface WorkerState {
   lastCheckAt: number;
   lastPlanAt: number;
   idleNoticeShown: boolean;
+  /** Said once: the metrics columns are missing. It must not become a line per tick. */
+  metricsNoticeShown?: boolean;
 }
 
 const session = new BrowserSession();
@@ -218,6 +221,7 @@ async function tick(state: WorkerState): Promise<void> {
   if (error) throw new Error(error.message);
   if (!due?.length) {
     await syncGroupProfiles(state, headless);
+    await syncPostMetrics(state, headless);
     return;
   }
 
@@ -870,6 +874,99 @@ async function forgetAccount(state: WorkerState): Promise<void> {
     .eq('id', state.id);
   if (error) console.error('[worker] ✗ ניקוי פרטי החשבון נכשל:', error.message);
   else console.log('[worker] ✓ פרטי חשבון הפייסבוק נוקו.');
+}
+
+/* ------------------------------------------------ how a published post did */
+
+/** Posts re-read per idle tick, and how long before a post is worth re-reading. */
+const METRICS_PER_TICK = 3;
+const METRICS_STALE_HOURS = 6;
+/**
+ * After this, a post is left alone.
+ *
+ * A group post's counters stop moving long before this; past it, re-opening
+ * the page costs a Facebook page load per post per day forever and tells
+ * nobody anything new. The last reading stands, with the time it was taken.
+ */
+const METRICS_MAX_AGE_DAYS = 30;
+
+/**
+ * Re-read the counters on posts that already went out.
+ *
+ * Runs only when there is nothing to publish, on the same browser session, a
+ * few at a time — this is the least urgent thing the worker does and must
+ * never sit in front of an actual publication.
+ *
+ * WHAT IT DOES NOT COLLECT is the part worth stating. Facebook publishes no
+ * reach or impressions figure for a group post, and Meta closed the Groups API
+ * in April 2024, so the only way to produce an "exposure" number would be to
+ * take the group's member count and present it as an audience. That is the one
+ * number somebody would actually make decisions on, so it is not invented —
+ * here or anywhere above this line.
+ *
+ * A read that fails leaves the row untouched rather than writing zeros: "we
+ * could not read it" and "nobody engaged with it" are different facts, and the
+ * screen must not state the second when the first is true.
+ */
+async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<void> {
+  if (state.browserState !== 'connected' || !session.hasProfile()) return;
+  const db = await workerDb();
+  const staleBefore = new Date(Date.now() - METRICS_STALE_HOURS * 3_600_000).toISOString();
+  const publishedAfter = new Date(Date.now() - METRICS_MAX_AGE_DAYS * 86_400_000).toISOString();
+  const { data, error } = await db
+    .from('social_queue')
+    .select('id, permalink, metrics_at')
+    .eq('status', 'published')
+    .not('permalink', 'is', null)
+    .gte('published_at', publishedAfter)
+    .or(`metrics_at.is.null,metrics_at.lt.${staleBefore}`)
+    // Never read, then longest unread. Nulls first is what this ordering gives
+    // on Postgres ascending, which is the order we want anyway.
+    .order('metrics_at', { ascending: true, nullsFirst: true })
+    .limit(METRICS_PER_TICK);
+  if (error) {
+    /* v13 not run yet. Say it where the owner reads, once — this is a nice to
+       have, and it must not turn into a line every five seconds. */
+    if (/metrics_/.test(error.message) && !state.metricsNoticeShown) {
+      state.metricsNoticeShown = true;
+      console.error('[worker] ✗ אין עמודות מדדים — הריצו את social-schema-v13.sql ב-Supabase.');
+      await logActivity('warn', 'metrics_columns_missing', 'כדי לראות תגובות וצפיות על הפרסומים צריך להריץ את social-schema-v13.sql ב-Supabase.', {
+        detail: error.message,
+      });
+    }
+    return;
+  }
+  if (!data?.length) return;
+
+  for (const row of data as { id: string; permalink: string }[]) {
+    if (stopping) break;
+    const page = await session.newPage(headless);
+    try {
+      const m = await readPostMetrics(page, row.permalink);
+      if (!m) {
+        /* Login wall or checkpoint: the numbers on screen are not this post's.
+           Leave the row unread and let the job path report the session. */
+        state.lastCheckAt = 0;
+        return;
+      }
+      await db
+        .from('social_queue')
+        .update({
+          metrics_seen: m.seen,
+          metrics_reactions: m.reactions,
+          metrics_comments: m.comments,
+          metrics_shares: m.shares,
+          metrics_at: new Date().toISOString(),
+        })
+        .eq('id', row.id);
+    } catch (err) {
+      // One unreadable post must not stop the rest, and must not be recorded
+      // as a post that did nothing.
+      console.error('[worker] ℹ לא הצלחנו לקרוא מדדים מפרסום:', err instanceof Error ? err.message.split('\n')[0] : err);
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
 }
 
 /* --------------------------------------------------------- claiming a command */

@@ -107,10 +107,50 @@
         const c = document.createElement('p');
         c.className = 'comment';
         c.textContent = box.innerText;
+        if (form.querySelector('img[src^="blob:"]')) c.dataset.photo = '1';
         list.appendChild(c);
         box.innerText = '';
       });
-      art.insertBefore(box, list);
+      /*
+        THE COMMENT FORM, AND THE FILE INPUT LIVES IN IT — not in the article.
+
+        This is how Facebook builds it, and it is why attaching a picture
+        failed: the code looked for input[type=file] inside the [role=article]
+        that wraps the post, found nothing there, the camera click fell
+        through, and the comment went out with the words and no picture while
+        the screen reported success.
+
+        The camera also creates the input lazily, and the "upload" takes a
+        moment — so a comment submitted on a fixed timer goes out without it.
+      */
+      const form = document.createElement('form');
+      form.appendChild(box);
+      const camera = document.createElement('button');
+      camera.type = 'button';
+      camera.setAttribute('aria-label', 'צירוף תמונה');
+      camera.textContent = '📷';
+      const holder = document.createElement('div');
+      camera.addEventListener('click', () => {
+        if (form.querySelector('input[type=file]')) return;
+        const file = document.createElement('input');
+        file.type = 'file';
+        file.accept = 'image/*';
+        file.hidden = true;
+        file.addEventListener('change', () => {
+          if (!file.files || !file.files[0]) return;
+          /* Not instant: proof has to be waited for, not assumed. */
+          setTimeout(() => {
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file.files[0]);
+            img.width = 40;
+            holder.appendChild(img);
+          }, 2500);
+        });
+        form.appendChild(file);
+      });
+      form.appendChild(camera);
+      form.appendChild(holder);
+      art.insertBefore(form, list);
     });
     art.appendChild(open);
     art.appendChild(list);

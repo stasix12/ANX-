@@ -31,7 +31,16 @@ export const patterns = {
    * than about photos in general — matching the composer's wording here would
    * find the button that starts a new POST.
    */
-  commentPhoto: /attach a photo|photo or video to your comment|comment with a photo|צרף(ו)? תמונה|הוספת תמונה|תמונה לתגובה|прикрепить фото|фото к комментарию/i,
+  /*
+   * The camera beside a comment box, named every way Facebook names it.
+   *
+   * The narrow list missed the label the owner's Facebook actually uses, the
+   * click fell through, and the comment went out with the words and no
+   * picture. Broad on purpose: this pattern only ever runs INSIDE the comment
+   * form, so a loose match cannot reach the post composer's own camera.
+   */
+  commentPhoto:
+    /attach a photo|photo or video|comment with a photo|insert photo|add (a )?photo|camera|צרף(ו)? תמונה|צירוף תמונה|הוספת תמונה|הוסף תמונה|תמונה לתגובה|תמונה או סרטון|מצלמה|прикрепить фото|фото к комментарию|добавить фото|камера/i,
 
   /** The final submit button. */
   postButton: /^(post|publish|פרסום|פרסם|פרסמי|פרסמו|опубликовать)$/i,

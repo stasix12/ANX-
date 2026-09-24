@@ -2802,8 +2802,65 @@ const scenario: { step: string; line: string }[] = [];
    * them is worth a retry. Each stop carries its own Hebrew sentence, the
    * worker writes it beside the row, and both screens show it.
    */
+  /*
+   * ===================================================================
+   * THE PICTURE, OR NOTHING.
+   * ===================================================================
+   *
+   * The owner asks for a comment with a picture. A comment with the words and
+   * no picture is not a smaller version of that — it is a different comment,
+   * published under their name, on a post that is already live, and it cannot
+   * be taken back.
+   *
+   * Every step of attaching it used to end in `.catch(() => undefined)`, so a
+   * camera button that was not found, an input that was not there and an
+   * upload that never finished all produced the same thing: the text went out
+   * alone and the screen said "הגיב".
+   */
+  assert.ok(/if \(image && !\(await attachPhoto\(page, box, article, image\)\)\) \{[\s\S]{0,900}return 'no-photo';/.test(composerSrc), 'a picture that will not attach stops the comment');
+  const typingAt = composerSrc.indexOf('const lines = comment ? comment.split');
+  const photoAt = composerSrc.indexOf("return 'no-photo';");
+  assert.ok(photoAt > 0 && typingAt > photoAt, 'and it gives up before a word is typed, so giving up costs nothing');
+  /* The form, not the article: Facebook's comment file input frequently sits
+     outside the [role="article"] the post is wrapped in, which is why looking
+     for it there found nothing at all. */
+  assert.ok(/box\.locator\('xpath=ancestor::form\[1\]'\)/.test(composerSrc), "the input is looked for in the comment's own form");
+  /* Proof, not a timer. An upload still in flight is not an attachment, and a
+     comment submitted over one goes out without it. */
+  assert.ok(/async function photoLanded/.test(composerSrc), 'the attachment is confirmed before anything is sent');
+  assert.ok(/img\[src\^="blob:"\]/.test(composerSrc), 'by the thumbnail Facebook shows for it');
+  assert.ok(!/await page\.waitForTimeout\(4000\);\s*\n\s*await box\.click/.test(composerSrc), 'never by waiting a fixed four seconds and hoping');
+
+  /*
+   * ===================================================================
+   * isVisible({ timeout }) READS AS A WAIT AND IS NOT ONE.
+   * ===================================================================
+   *
+   * It answers about the page as it is RIGHT NOW; the timeout bounds the call,
+   * not the arrival. Every place that meant "give this a moment" and wrote
+   * isVisible was asking one moment too early — the comment box still opening,
+   * the picture still uploading, the comment Facebook had not rendered yet —
+   * and read the answer as a failure. The picture was the one that showed it:
+   * the thumbnail was provably in the form, and the check had already said no.
+   */
+  assert.ok(/async function appears\(what: Locator, ms: number\)/.test(composerSrc), 'waiting is its own thing, named');
+  assert.ok(/waitFor\(\{ state: 'visible', timeout: ms \}\)/.test(composerSrc), 'and it really waits');
+  for (const [what, where] of [
+    ['the picture', 'appears(preview, 30_000)'],
+    ['the comment box', 'appears(box, 8_000)'],
+    ['the post', 'appears(article, 8_000)'],
+  ] as const) {
+    assert.ok(composerSrc.includes(where), `${what} is waited for, not glanced at`);
+  }
+  /* Where the CURRENT state is the question, a glance is right and stays. */
+  assert.ok(/const stillThere = await box\.isVisible\(\{ timeout: 1_000 \}\)/.test(composerSrc), '"is the box still there" is a question about now');
+  const selectorsSrc = readFileSync(new URL('../facebook/selectors.ts', import.meta.url), 'utf8');
+  for (const label of ['צירוף תמונה', 'תמונה או סרטון', 'add (a )?photo']) {
+    assert.ok(selectorsSrc.includes(label), `the camera is recognised as "${label}" too`);
+  }
+
   assert.ok(/const COMMENT_REASON: Record<Exclude<CommentStep, 'ok'>, string>/.test(composerSrc), 'every way this can stop has its own sentence');
-  for (const stop of ['no-post', 'no-box', 'not-sent', 'blocked']) {
+  for (const stop of ['no-post', 'no-box', 'not-sent', 'blocked', 'no-photo']) {
     const line = composerSrc.split('\n').find((l) => l.trim().startsWith(`'${stop}':`) || l.trim().startsWith(`${stop}:`));
     assert.ok(line && /[\u0590-\u05FF]/.test(line), `${stop} must say what happened, in Hebrew`);
   }

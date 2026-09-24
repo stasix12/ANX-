@@ -292,6 +292,43 @@ async function main() {
   );
   console.log('✓ each post carries an address the worker can read once and keep');
 
+  /*
+   * THE PICTURE, OR NOTHING.
+   *
+   * The owner asks for a comment with a picture. A comment with the words and
+   * no picture is not a smaller version of that — it is a different comment,
+   * under their name, on a post that is already live, and it cannot be taken
+   * back. Every step of attaching it used to end in a swallowed error, so the
+   * text went out alone and the screen said "הגיב".
+   *
+   * The fixture builds the comment form the way Facebook does: the file input
+   * lives in the FORM, not in the article, it is created lazily by the camera,
+   * and the upload takes a moment. All three are what broke this.
+   */
+  const page7 = await context.newPage();
+  await publishToGroup(page7, {
+    groupUrl: fixture,
+    text: 'מבצע ניקוי מזרנים בבאר שבע 🛏️ החודש בלבד',
+    images: [],
+    video: null,
+    onStep: async () => undefined,
+  });
+  const withPhoto = await commentOnPost(page7, fixture, 'מבצע ניקוי מזרנים בבאר שבע 🛏️ החודש בלבד', 'לפרטים: 050-0000000', img1);
+  assert.equal(withPhoto.ok, true, `a comment with a picture must go out — got: ${withPhoto.reason}`);
+  const landedPhoto = await page7.evaluate(() => {
+    const art = Array.from(document.querySelectorAll('[role="article"]')).find((a) => (a.textContent ?? '').includes('ניקוי מזרנים'));
+    return Array.from(art?.querySelectorAll('.comment') ?? []).map((c) => ({
+      text: c.textContent ?? '',
+      photo: (c as HTMLElement).dataset.photo === '1',
+    }));
+  });
+  assert.deepEqual(
+    landedPhoto,
+    [{ text: 'לפרטים: 050-0000000', photo: true }],
+    'and the picture must be ON it — text alone is a different comment, and it cannot be taken back',
+  );
+  console.log('✓ a comment with a picture carries the picture, or is not sent at all');
+
   await browser.close();
   console.log('composer tests OK');
 }

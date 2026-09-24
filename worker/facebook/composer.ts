@@ -217,7 +217,17 @@ export async function findPostArticle(page: Page, postText: string): Promise<Loc
   const articles = page.locator('[role="article"]');
   let seen = -1;
   for (let pass = 0; pass < 20; pass += 1) {
-    if (await article.isVisible({ timeout: pass === 0 ? 6_000 : 1_000 }).catch(() => false)) return article;
+    /*
+     * The first look WAITS; the rest only glance.
+     *
+     * `isVisible()` answers about the page as it is right now — its `timeout`
+     * option bounds the call, it does not wait for anything to arrive. On a
+     * feed that is still rendering, an instant glance is a "no" about a post
+     * that was a second away. One real wait up front covers that; after it,
+     * glancing is right, because each pass has just scrolled and it is the
+     * scrolling that changes the answer.
+     */
+    if (pass === 0 ? await appears(article, 8_000) : await article.isVisible().catch(() => false)) return article;
 
     /*
      * Scrolled three ways, because no single one of them is reliable.
@@ -397,6 +407,9 @@ const COMMENT_REASON: Record<Exclude<CommentStep, 'ok'>, string> = {
   'no-box': 'אין אפשרות להגיב על הפוסט הזה — ייתכן שמנהל הקבוצה סגר תגובות.',
   'not-sent': 'כתבנו את התגובה אבל פייסבוק לא אישרה שהיא נוספה.',
   blocked: 'פייסבוק ביקשה אימות באמצע — היכנסו למסך החשבון והשלימו אותו.',
+  /* Nothing was published. A comment with the words but without the picture
+     is a different comment, and it cannot be taken back once it is up. */
+  'no-photo': 'לא הצלחנו לצרף את התמונה לתגובה, ולכן לא פרסמנו אותה בלעדיה. נסו שוב.',
 };
 
 /**
@@ -505,8 +518,99 @@ export function searchWords(postText: string): string {
     .slice(0, 50);
 }
 
+/**
+ * Wait for something to turn up, and say whether it did.
+ *
+ * EXISTS BECAUSE `isVisible({ timeout })` READS AS A WAIT AND IS NOT ONE.
+ * It answers about the page as it is right now; the timeout bounds the call,
+ * not the arrival. Every place that meant "give this a moment" and wrote
+ * isVisible was asking a question one moment too early — the comment box that
+ * was still opening, the picture still uploading, the comment Facebook had not
+ * rendered yet. Each of those read as a failure.
+ *
+ * Where the current state IS the question — "is the box still there?" — a
+ * glance is right, and those keep isVisible.
+ */
+async function appears(what: Locator, ms: number): Promise<boolean> {
+  try {
+    await what.waitFor({ state: 'visible', timeout: ms });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Put the owner's picture in the comment box, and say whether it is really there.
+ *
+ * SCOPED TO THE COMMENT FORM, not to the article. The file input Facebook uses
+ * for a comment lives in the comment composer's own form, which is frequently
+ * NOT inside the `[role="article"]` the post is wrapped in — so looking for it
+ * there found nothing, the click fell through, and the comment went out as
+ * text alone. The form is reached from the box itself, which makes it the
+ * right form by construction rather than by guessing at the page's shape.
+ *
+ * Returns false rather than throwing, and returns false when the picture
+ * cannot be CONFIRMED — an upload that is still in flight is not an
+ * attachment, and a comment submitted over one goes out without it.
+ */
+async function attachPhoto(page: Page, box: Locator, article: Locator, image: string): Promise<boolean> {
+  /* The comment's own form, falling back to the article when Facebook has not
+     wrapped the box in one. */
+  const form = box.locator('xpath=ancestor::form[1]');
+  const scope = (await form.count().catch(() => 0)) > 0 ? form : article;
+
+  const inputIn = (where: Locator) => where.locator('input[type="file"]').first();
+  let fileInput = inputIn(scope);
+  let have = await fileInput.count().then((n) => n > 0).catch(() => false);
+
+  if (!have) {
+    /* No input on the page yet: Facebook creates it when the camera control is
+       used. A file chooser may open instead, which is the same thing wearing a
+       different hat, so both are handled. */
+    const chooser = page.waitForEvent('filechooser', { timeout: 8_000 }).catch(() => null);
+    await scope
+      .getByRole('button', { name: patterns.commentPhoto })
+      .first()
+      .click({ timeout: 5_000 })
+      .catch(() => undefined);
+    const fc = await chooser;
+    if (fc) {
+      await fc.setFiles(image).catch(() => undefined);
+      return await photoLanded(scope);
+    }
+    fileInput = inputIn(scope);
+    have = await fileInput.count().then((n) => n > 0).catch(() => false);
+  }
+  if (!have) return false;
+
+  try {
+    await fileInput.setInputFiles(image);
+  } catch {
+    return false;
+  }
+  return await photoLanded(scope);
+}
+
+/**
+ * Did the picture actually arrive in the box?
+ *
+ * Facebook shows an attachment as a thumbnail with a control to take it off
+ * again, so either is proof. Waiting for proof rather than waiting a fixed
+ * four seconds is the difference between a comment with a picture and a
+ * comment that was submitted while the upload was still going.
+ */
+async function photoLanded(scope: Locator): Promise<boolean> {
+  const preview = scope
+    .locator('img[src^="blob:"], img[src^="data:"], [aria-label*="הסר"], [aria-label*="הסרה"], [aria-label*="Remove"], [aria-label*="удалить" i]')
+    .first();
+  /* A real wait: the upload takes as long as it takes, and a glance a moment
+     after handing over the file truthfully says "not yet". */
+  return await appears(preview, 30_000);
+}
+
 /** Where the attempt stopped. Each one is a different thing to do next. */
-export type CommentStep = 'ok' | 'no-post' | 'no-box' | 'not-sent' | 'blocked';
+export type CommentStep = 'ok' | 'no-post' | 'no-box' | 'not-sent' | 'blocked' | 'no-photo';
 
 async function addComment(page: Page, postText: string, comment: string, image: string | null): Promise<CommentStep> {
   const article = await findPostArticle(page, postText);
@@ -525,7 +629,8 @@ async function addComment(page: Page, postText: string, comment: string, image: 
       await page.waitForTimeout(1200);
       box = article.getByRole('textbox', { name: patterns.commentBox }).first();
     }
-    if (!(await box.isVisible({ timeout: 5_000 }).catch(() => false))) return 'no-box';
+    /* A wait, not a glance: the box is being revealed as this runs. */
+    if (!(await appears(box, 8_000))) return 'no-box';
 
     /* The name must say "comment". A composer box inside the same article
        would take this text and publish it as a second post. */
@@ -546,26 +651,19 @@ async function addComment(page: Page, postText: string, comment: string, image: 
      * the page would just as happily belong to the post composer at the top of
      * the group, and the picture would become a new POST.
      */
-    if (image) {
-      let fileInput = article.locator('input[type="file"]').first();
-      if (!(await fileInput.count().then((n) => n > 0).catch(() => false))) {
-        const chooser = page.waitForEvent('filechooser', { timeout: 8_000 }).catch(() => null);
-        await article
-          .getByRole('button', { name: patterns.commentPhoto })
-          .first()
-          .click({ timeout: 5_000 })
-          .catch(() => undefined);
-        const fc = await chooser;
-        if (fc) await fc.setFiles(image);
-        else fileInput = article.locator('input[type="file"]').first();
-      }
-      if (await fileInput.count().then((n) => n > 0).catch(() => false)) {
-        await fileInput.setInputFiles(image).catch(() => undefined);
-      }
-      /* Give the attachment time to land. A comment submitted mid-upload goes
-         out as text alone, which looks like the picture was never asked for. */
-      await page.waitForTimeout(4000);
-      await box.click({ timeout: 5_000 }).catch(() => undefined);
+    if (image && !(await attachPhoto(page, box, article, image))) {
+      /*
+       * NOTHING IS SENT. A comment with the words but without the picture is
+       * not a smaller version of what the owner asked for — it is a different
+       * comment, published under their name, on a post that is already live,
+       * and it cannot be taken back. Every failure here used to be swallowed
+       * by a .catch, so the text went out alone and the screen reported
+       * success: "הגיב", with no picture under the post.
+       *
+       * Nothing has been typed yet — the picture goes first precisely so that
+       * giving up costs nothing.
+       */
+      return 'no-photo';
     }
 
     // Shift+Enter for line breaks, exactly as the composer does: a bare Enter
@@ -603,12 +701,7 @@ async function addComment(page: Page, postText: string, comment: string, image: 
     const stillThere = await box.isVisible({ timeout: 1_000 }).catch(() => false);
     const needle = lines.find((l) => l.trim().length >= 6)?.trim().slice(0, 30) ?? '';
     if (!stillThere && needle) {
-      const shown = await page
-        .getByText(needle, { exact: false })
-        .first()
-        .isVisible({ timeout: 8_000 })
-        .catch(() => false);
-      if (shown) return 'ok';
+      if (await appears(page.getByText(needle, { exact: false }).first(), 10_000)) return 'ok';
     }
     return 'not-sent';
   } catch {
@@ -736,7 +829,7 @@ async function discardComposer(page: Page): Promise<void> {
 async function verifyInFeed(page: Page, groupUrl: string, text: string): Promise<boolean> {
   const probe = pageProbe(text);
   if (!probe) return false;
-  const visible = () => page.getByText(probe, { exact: false }).first().isVisible({ timeout: 8_000 }).catch(() => false);
+  const visible = () => appears(page.getByText(probe, { exact: false }).first(), 10_000);
   if (await visible()) return true;
   try {
     await page.goto(groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });

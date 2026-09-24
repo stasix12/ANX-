@@ -110,7 +110,22 @@
     feed.appendChild(art);
   }
 
+  /*
+    A FEED THAT HAS TO BE SCROLLED, and that does NOT scroll the window.
+
+    Facebook's group feed frequently scrolls an inner container while
+    window.scrollY sits at 0. The search used to stop the moment scrollY
+    stopped changing, which on such a page is after two passes — so a post a
+    few screens down was reported as missing while it was plainly there.
+
+    These fillers push our post below the fold inside a scrollable box, so any
+    give-up rule based on pixels fails here instead of on the owner's machine.
+  */
+  const FILLERS = 25;
+  for (let i = 0; i < FILLERS; i += 1) addArticle(`פוסט של שכן מספר ${i + 1} על משהו אחר לגמרי בשכונה`);
   for (const t of saved) addArticle(t);
+  feed.style.maxHeight = '600px';
+  feed.style.overflowY = 'auto';
   const decoyBtn = document.querySelector('#decoy button');
   const decoyList = document.querySelector('#decoy .comments');
   decoyBtn.addEventListener('click', () => {

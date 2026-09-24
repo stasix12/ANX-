@@ -214,22 +214,42 @@ export async function findPostArticle(page: Page, postText: string): Promise<Loc
   const probe = pageProbe(postText);
   if (!probe) return null;
   const article = page.locator('[role="article"]').filter({ hasText: probe }).first();
-  let lastY = -1;
-  for (let pass = 0; pass < 12; pass += 1) {
+  const articles = page.locator('[role="article"]');
+  let seen = -1;
+  for (let pass = 0; pass < 20; pass += 1) {
     if (await article.isVisible({ timeout: pass === 0 ? 6_000 : 1_000 }).catch(() => false)) return article;
-    /* Not there yet. A group's feed loads as it is scrolled, and the post we
-       want may be an hour of other people's posts down. */
-    await page.mouse.wheel(0, 2500).catch(() => undefined);
-    await page.waitForTimeout(1000);
+
     /*
-     * Stop when the page stops moving. A feed that has run out — or a page
-     * that never scrolled at all — will not produce the post no matter how
-     * many more times we ask, and eleven more rounds of asking is half a
-     * minute spent per post to reach the same answer.
+     * Scrolled three ways, because no single one of them is reliable.
+     *
+     * A wheel event goes to whatever is under the pointer, and on a page
+     * nobody has touched the pointer is at 0,0 — over the header, not the
+     * feed. `window.scrollBy` moves the window, which is the right answer only
+     * when the window is what scrolls. End moves whatever has focus. Together
+     * they cost one extra moment per pass.
      */
-    const y = await page.evaluate(() => window.scrollY).catch(() => -1);
-    if (y === lastY) break;
-    lastY = y;
+    await page.mouse.move(400, 400).catch(() => undefined);
+    await page.mouse.wheel(0, 2500).catch(() => undefined);
+    await page.evaluate(() => window.scrollBy(0, 2500)).catch(() => undefined);
+    await page.keyboard.press('End').catch(() => undefined);
+    await page.waitForTimeout(1200);
+
+    /*
+     * PROGRESS IS MEASURED IN POSTS, NOT IN PIXELS — and that correction is
+     * why this loop used to give up almost immediately.
+     *
+     * It stopped when window.scrollY stopped changing. On a Facebook feed the
+     * window frequently does not scroll at all: an inner container does, and
+     * scrollY sits at 0 forever. The first reading set the baseline, the
+     * second matched it, and the loop broke after TWO passes — then reported
+     * a post from this morning as missing.
+     *
+     * How many posts are on the page cannot lie about it: if scrolling loaded
+     * more, we are getting somewhere, whatever it was that moved.
+     */
+    const count = await articles.count().catch(() => -1);
+    if (count === seen) break;
+    seen = count;
   }
   return null;
 }
@@ -317,7 +337,7 @@ export async function commentOnPost(
     if (at !== 'no-post') {
       return at === 'ok'
         ? { ok: true, reason: '', permalink, tried }
-        : { ok: false, reason: COMMENT_REASON[at], permalink, tried };
+        : { ok: false, reason: explain(at, postText), permalink, tried };
     }
   }
 
@@ -333,7 +353,24 @@ export async function commentOnPost(
   tried.push(feed);
   const inFeed = await commentAt(page, feed, postText, comment, image);
   if (inFeed === 'ok') return { ok: true, reason: '', permalink, tried };
-  return { ok: false, reason: COMMENT_REASON[inFeed], permalink, tried };
+  return { ok: false, reason: explain(inFeed, postText), permalink, tried };
+}
+
+/**
+ * The failure, plus the words we actually looked for.
+ *
+ * "לא מצאנו את הפוסט" was true and useless: it could not tell the owner
+ * whether the post was gone or whether we had been hunting for the wrong
+ * string, and three rounds were spent guessing between those two. The words
+ * are in the sentence now, so the answer is on the screen rather than in
+ * somebody's reasoning — the owner can read the post, read the line, and see
+ * in a second whether they match.
+ */
+function explain(step: Exclude<CommentStep, 'ok'>, postText: string): string {
+  const reason = COMMENT_REASON[step];
+  if (step !== 'no-post') return reason;
+  const probe = pageProbe(postText);
+  return probe ? `${reason} (חיפשנו את השורה: «${probe}»)` : `${reason} (אין בפוסט שורת טקסט להתבסס עליה.)`;
 }
 
 /** Open a page and try to comment on our post there. */
@@ -429,18 +466,29 @@ const PICTURE_CHARS = /[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]+/gu;
  * first run long enough to be distinctive wins; the longest is the fallback.
  */
 export function pageProbe(postText: string): string {
-  const runs = postText
-    .split('\n')
-    .flatMap((line) => line.split(PICTURE_CHARS))
-    .map((run) => run.replace(/\s+/g, ' ').trim())
-    .filter((run) => run.length >= 12);
-  if (!runs.length) return '';
-  /* The headline first when it is substantial — it is what makes this post
-     this post. The longest run only when no line is distinctive on its own,
-     since boilerplate repeated across every post would match a neighbour. */
-  const headline = runs.find((run) => run.length >= 20);
-  const longest = runs.reduce((a, b) => (b.length > a.length ? b : a));
-  return (headline ?? longest).slice(0, 40);
+  const runsIn = (lines: string[]) =>
+    lines
+      .flatMap((line) => line.split(PICTURE_CHARS))
+      .map((run) => run.replace(/\s+/g, ' ').trim())
+      .filter((run) => run.length >= 12);
+
+  const lines = postText.split('\n');
+  /*
+   * THE FIRST TWO LINES, because they are the only ones certainly on screen.
+   *
+   * Facebook shows about three lines of a post and hides the rest behind
+   * "עוד…", and the hidden part is not always in the page at all. A probe
+   * taken from the middle of a long post is a string the page does not
+   * contain — the same failure as the emoji, reached from the other end.
+   *
+   * The longest of those two lines, because it is the most distinctive: the
+   * boilerplate the owner repeats on every post would match the post beside
+   * ours just as happily.
+   */
+  const opening = runsIn(lines.slice(0, 2));
+  const pool = opening.length ? opening : runsIn(lines);
+  if (!pool.length) return '';
+  return pool.reduce((a, b) => (b.length > a.length ? b : a)).slice(0, 40);
 }
 
 /**

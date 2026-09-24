@@ -2605,12 +2605,57 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(!pageProbe('ניקוי ספות בבאר שבע\nמקצועי ובאחריות').includes('\n'), 'and never contain one');
   /* The headline wins over boilerplate repeated on every post, which would
      just as happily match the post beside ours. */
-  assert.equal(
-    pageProbe('מבצע ניקוי ספות בבאר שבע 🧽\nהפתרון המבריק — שירות מקצועי ואמין בכל הדרום'),
-    'מבצע ניקוי ספות בבאר שבע',
-    'the first distinctive line wins, not the longest one',
-  );
+  /*
+   * AND IT COMES FROM THE FIRST TWO LINES, because they are the only ones
+   * certainly on screen.
+   *
+   * Facebook shows about three lines and hides the rest behind "עוד…" — often
+   * without the hidden part being in the page at all. A probe taken from the
+   * middle of a long post is a string the page does not contain: the same
+   * failure as the emoji, reached from the other end.
+   *
+   * This is the owner's real post, as it appears in •Наша Беэр-Шева•.
+   */
+  const realPost = [
+    '📣 ניקוי ספות רק ב299₪',
+    '🛋️ הגיע הזמן לשבת על ספה נקייה',
+    '🎁 מזמינים ניקוי ספה ומקבלים זרוז ייבוש במקום',
+    'הפתרון המבריק — ניקוי ריפודים בטכנולוגיה מתקדמת, באר שבע והסביבה',
+    '📞 053-5257250',
+  ].join('\n');
+  const real = pageProbe(realPost);
+  assert.ok(!/\p{Extended_Pictographic}/u.test(real), 'no emoji in the probe for the real post');
+  assert.ok(realPost.split('\n').slice(0, 2).some((line) => line.includes(real)), 'and it comes from a line Facebook always shows');
+  assert.equal(real, 'הגיע הזמן לשבת על ספה נקייה', 'the longer of the two opening lines');
   assert.equal(pageProbe('שלום 🧽\n📞📞'), '', 'and a post with nothing long enough to be distinctive yields none');
+  /* A post whose opening is all emoji still gets a probe — from further down,
+     which is better than none at all. */
+  assert.equal(pageProbe('🎉🎉\n🧽\nמבצע ניקוי ספות בבאר שבע'), 'מבצע ניקוי ספות בבאר שבע', 'an emoji-only opening falls through to the rest');
+
+  /*
+   * THE SCROLL GIVES UP ON POSTS, NOT ON PIXELS.
+   *
+   * It used to stop when window.scrollY stopped changing — and on a Facebook
+   * feed the window frequently does not scroll at all, an inner container
+   * does, so scrollY sits at 0. First reading set the baseline, second matched
+   * it, and the search ended after TWO passes before reporting a post from
+   * this morning as missing.
+   */
+  assert.ok(!/=> window\.scrollY\)/.test(composerSrc), 'pixels may not decide when to stop looking');
+  assert.ok(/const count = await articles\.count\(\)/.test(composerSrc), 'how many posts loaded is what says whether scrolling did anything');
+  assert.ok(/if \(count === seen\) break;/.test(composerSrc), 'and it stops only once no more arrive');
+  assert.ok(/window\.scrollBy/.test(composerSrc) && /mouse\.wheel/.test(composerSrc), 'scrolled more than one way, since no one way is reliable');
+
+  /*
+   * AND THE FAILURE SAYS WHAT IT LOOKED FOR.
+   *
+   * "לא מצאנו את הפוסט" is true and useless: it cannot tell the owner whether
+   * the post is gone or whether we hunted for the wrong string, and rounds
+   * were spent guessing between the two. With the line in the sentence they
+   * can read their post, read the line, and see in a second which it is.
+   */
+  assert.ok(/function explain\(step: Exclude<CommentStep, 'ok'>, postText: string\)/.test(composerSrc), 'the failure carries what was searched for');
+  assert.ok(/חיפשנו את השורה/.test(composerSrc), 'in Hebrew, on the screen the owner reads');
 
   /* The same lookup, for the same reason, when reading how a post did. */
   assert.ok(/function ourPostsIn/.test(localWorker), 'the counters are read off our own posts in the group too');

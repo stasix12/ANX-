@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { staggeredSlots } from '../../src/lib/social/slots';
 import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { zonedToUtc } from '@/lib/social/time';
-import { DEFAULT_BUSINESS, parseGroupUrl, type Variant } from '@/lib/social/types';
+import { DEFAULT_BUSINESS, isPendingShare, parseGroupShareUrl, parseGroupUrl, type Variant } from '@/lib/social/types';
 import { pickVariant, previewAssignment } from '@/lib/social/variants';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import {
@@ -44,6 +44,38 @@ import { PublishError } from '../facebook/composer';
 
 // --- group URL parsing
 assert.deepEqual(parseGroupUrl('https://www.facebook.com/groups/beersheva.together/?ref=share'), { url: 'https://www.facebook.com/groups/beersheva.together', externalId: 'beersheva.together' });
+
+/*
+ * A SHARE LINK IS ACCEPTED, BUT NEVER AS A GROUP.
+ *
+ * Facebook's app puts https://www.facebook.com/share/g/<token> on the
+ * clipboard, so refusing it means refusing the link most people actually have
+ * — which is what the owner hit: a pasted link and a dead button.
+ *
+ * parseGroupUrl still refuses it, and that is deliberate. It is the guard that
+ * keeps an arbitrary facebook.com path away from a browser carrying a live
+ * session, and a share link is exactly such a path until somebody follows it.
+ * The share form goes through its own reader and is marked pending, so no code
+ * and no query can mistake it for a group.
+ */
+assert.equal(parseGroupUrl('https://www.facebook.com/share/g/1CJvFd2bF'), null, 'a share link is not a group address');
+assert.deepEqual(parseGroupShareUrl('https://www.facebook.com/share/g/1CJvFd2bF'), {
+  url: 'https://www.facebook.com/share/g/1CJvFd2bF',
+  externalId: 'share:1CJvFd2bF',
+});
+assert.equal(parseGroupShareUrl('https://www.facebook.com/groups/beersheva.together'), null, 'and a real group is not a share link');
+assert.equal(parseGroupShareUrl('https://evil.example/share/g/1'), null, 'and neither is anything off facebook.com');
+assert.ok(isPendingShare('share:1CJvFd2bF') && !isPendingShare('beersheva.together'), 'pending is readable straight off the id');
+{
+  /* The worker follows it, and only a resolved /groups/ address is written
+     back. Anything else leaves the row pending rather than publishable. */
+  const w = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  assert.ok(/async function resolveShareLinks/.test(w), 'the worker is what follows a share link');
+  assert.ok(/const resolved = parseGroupUrl\(page\.url\(\)\);/.test(w), 'and writes back only what parseGroupUrl accepts');
+  assert.ok(/if \(!resolved\) \{[\s\S]{0,160}continue;/.test(w), 'a link that did not resolve stays pending, never half-written');
+  /* Two rows for one group would publish to it twice. */
+  assert.ok(/\.eq\('external_id', resolved\.externalId\)[\s\S]{0,120}\.neq\('id', target\.id\)/.test(w), 'and a group already on the list is not added a second time');
+}
 assert.deepEqual(parseGroupUrl('facebook.com/groups/123456789012345/permalink/1/'), { url: 'https://www.facebook.com/groups/123456789012345', externalId: '123456789012345' });
 assert.equal(parseGroupUrl('https://www.facebook.com/hapitaron'), null);
 assert.equal(parseGroupUrl('https://example.com/groups/x'), null);

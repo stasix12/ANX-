@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { formatDayMonthHe } from '@/lib/social/time';
-import type { SocialTarget } from '@/lib/social/types';
+import { isPendingShare, type SocialTarget } from '@/lib/social/types';
 import { CheckIcon, StarIcon } from '@/components/icons';
 import { TargetAvatar } from './TargetAvatar';
 import { OverflowMenu, type MenuAction } from './ui';
@@ -105,10 +105,25 @@ export function GroupCard({
       {/* Text, not a chip. A Badge on a 64px card is mostly its own padding,
           and the two things this line has to say — which city, and whether
           that is known or guessed — are carried by the colour and the "?". */}
-      {cityLabel && (
-        <p dir="auto" className={`mt-0.5 w-full truncate text-[11px] font-bold leading-[14px] ${group.city ? 'text-brand-400' : 'text-mist-500'}`}>
-          {group.city ? cityLabel : `${cityLabel}?`}
+      {/*
+        A SHARE LINK NOBODY HAS FOLLOWED YET.
+        
+        It is a real row the owner added, and it is not a group the worker can
+        publish to until it has opened the link and learned which group it is.
+        Saying so here is the difference between "waiting a minute" and "this
+        one is broken" — and without it the card would show a token instead of
+        a name and look like a bug.
+      */}
+      {isPendingShare(group.external_id) ? (
+        <p dir="auto" className="mt-0.5 w-full truncate text-[11px] font-bold leading-[14px] text-warning-400">
+          מזוהה…
         </p>
+      ) : (
+        cityLabel && (
+          <p dir="auto" className={`mt-0.5 w-full truncate text-[11px] font-bold leading-[14px] ${group.city ? 'text-brand-400' : 'text-mist-500'}`}>
+            {group.city ? cityLabel : `${cityLabel}?`}
+          </p>
+        )
       )}
       {group.category && (
         <p dir="auto" className="w-full truncate text-[11px] leading-[14px] text-mist-500">

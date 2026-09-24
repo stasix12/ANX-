@@ -8,6 +8,8 @@ import { stampText } from '@/lib/social/time';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
+  PENDING_SHARE_PREFIX,
+  parseGroupUrl,
   type BrowserSettings,
   type ControlSettings,
   type LimitsSettings,
@@ -220,6 +222,7 @@ async function tick(state: WorkerState): Promise<void> {
     .limit(Math.max(1, Math.min(3, browser.concurrentJobs || 1)));
   if (error) throw new Error(error.message);
   if (!due?.length) {
+    await resolveShareLinks(state, headless);
     await syncGroupProfiles(state, headless);
     await syncPostMetrics(state, headless);
     return;
@@ -306,6 +309,71 @@ const PROFILES_PER_TICK = 2;
  * name and picture from Facebook (read-only visit), a couple per tick so
  * 40 new groups trickle in over a few minutes.
  */
+/**
+ * Turn share links into real group addresses.
+ *
+ * Facebook's app gives https://www.facebook.com/share/g/<token> on "העתק
+ * קישור", which is a redirect rather than an address. The dashboard cannot
+ * follow it — a browser on the owner's phone cannot read facebook.com across
+ * origins — but this worker has a real browser and a real session, so it
+ * follows it here and writes back what Facebook resolved it to.
+ *
+ * Until that happens the row is not publishable, and nothing in this file has
+ * to remember that: its url is not a /groups/ address, so parseGroupUrl
+ * refuses it in the adapter exactly as it refuses any other stranger.
+ */
+async function resolveShareLinks(state: WorkerState, headless: boolean): Promise<void> {
+  if (state.browserState === 'disconnected' || !session.hasProfile()) return;
+  const db = await workerDb();
+  const { data } = await db
+    .from('social_targets')
+    .select('id, url, name, external_id')
+    .eq('channel', 'facebook_group')
+    .like('external_id', `${PENDING_SHARE_PREFIX}%`)
+    .order('created_at')
+    .limit(PROFILES_PER_TICK);
+  if (!data?.length) return;
+
+  for (const target of data as { id: string; url: string; name: string; external_id: string }[]) {
+    if (stopping) break;
+    const page = await session.newPage(headless);
+    try {
+      await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      /* The address bar can still be showing the share link when the load
+         settles — the same race /me had. Wait for it to stop saying /share/. */
+      await page
+        .waitForFunction(() => !/^\/share\//i.test(location.pathname), undefined, { timeout: 15_000 })
+        .catch(() => undefined);
+      const resolved = parseGroupUrl(page.url());
+      if (!resolved) {
+        console.log(`[worker] ℹ הקישור של "${target.name}" עוד לא נפתר לכתובת קבוצה.`);
+        continue;
+      }
+      /* Somebody may have added the same group by its real address already.
+         Two rows for one group would publish to it twice. */
+      const { data: clash } = await db
+        .from('social_targets')
+        .select('id')
+        .eq('channel', 'facebook_group')
+        .eq('external_id', resolved.externalId)
+        .neq('id', target.id)
+        .maybeSingle();
+      if (clash) {
+        await db.from('social_targets').delete().eq('id', target.id);
+        await logActivity('info', 'group_share_duplicate', `הקבוצה "${target.name}" כבר קיימת ברשימה — הקישור הכפול הוסר.`);
+        continue;
+      }
+      await db.from('social_targets').update({ external_id: resolved.externalId, url: resolved.url }).eq('id', target.id);
+      console.log(`[worker] ✓ קישור השיתוף נפתר: ${resolved.url}`);
+      await logActivity('info', 'group_share_resolved', `הקבוצה "${target.name}" מוכנה לפרסום.`, { url: resolved.url });
+    } catch (err) {
+      console.error('[worker] ℹ פתיחת קישור השיתוף נכשלה:', err instanceof Error ? err.message.split('\n')[0] : err);
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+}
+
 async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise<void> {
   if (state.browserState === 'disconnected' || !session.hasProfile()) return;
   const db = await workerDb();
@@ -530,6 +598,19 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   const tt = t as SocialTarget;
   const pp = p as Post;
   const text = item.rendered_text || renderPostText(pp, v);
+  /*
+   * The first comment, with this post's own contact details filled in.
+   *
+   * One sentence in settings serves every post — the number comes from the
+   * post row, so changing it in one place changes it everywhere, and a post
+   * with no number simply leaves the placeholder out rather than commenting
+   * the word "{טלפון}" into a group.
+   */
+  const firstComment = (jobEnv.browser.firstComment ?? '')
+    .replace(/\{\s*טלפון\s*\}/g, (pp.phone ?? '').trim())
+    .replace(/\{\s*וואטסאפ\s*\}/g, (pp.whatsapp_url ?? '').trim())
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
   const requireConfirmation = Boolean(item.require_confirmation || jobEnv.browser.requireConfirmation || jobEnv.browser.testMode);
 
   let livePage: Page | null = null;
@@ -562,6 +643,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       campaignId: item.campaign_id ?? pp.campaign_id,
       variantId: v?.id ?? null,
       headless: jobEnv.headless,
+      firstComment,
       onPage: (page) => {
         livePage = page;
       },
@@ -650,6 +732,13 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   const note = [
     result.pendingApproval ? 'הפוסט ממתין לאישור מנהל הקבוצה.' : '',
     result.verified ? '' : 'לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.',
+    /*
+     * A comment that did not happen is said out loud. The post is live and the
+     * owner believes their phone number is sitting under it; silence here
+     * would be the same class of defect this file keeps removing — a feature
+     * that worked or did not, with no way to tell which.
+     */
+    result.comment === 'failed' ? 'התגובה האוטומטית לא נוספה — אפשר להוסיף אותה ידנית בפוסט.' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -673,8 +762,8 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   const targetPatch: Record<string, unknown> = { last_published_at: new Date().toISOString(), last_status: result.pendingApproval ? 'pending_approval' : 'published', last_error: '' };
   if (result.groupTitle && (tt.name === tt.external_id || !tt.name)) targetPatch.name = result.groupTitle;
   await db.from('social_targets').update(targetPatch).eq('id', tt.id).then(() => undefined, () => undefined);
-  await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified });
-  console.log(`[worker] ✔ פורסם ל-"${tt.name}"${note ? ` (${note})` : ''}`);
+  await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified, comment: result.comment });
+  console.log(`[worker] ✔ פורסם ל-"${tt.name}"${result.comment === 'posted' ? ' + תגובה' : ''}${note ? ` (${note})` : ''}`);
 }
 
 /** Three tries with a short backoff, for a write that must not be lost. */

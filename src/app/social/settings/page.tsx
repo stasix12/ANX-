@@ -332,6 +332,37 @@ export default function SettingsPage() {
                   </Field>
                 </div>
               </Card>
+
+              {/*
+                Its own card, because it is the only setting on this screen
+                that changes what other people READ rather than when they read
+                it — and because contact details belong somewhere an owner can
+                find them, not at the bottom of a list of intervals.
+              */}
+              <Card
+                title="תגובה אוטומטית לכל פרסום"
+                subtitle="נוספת כתגובה ראשונה מיד אחרי שהפוסט עולה. השאירו ריק כדי לא להוסיף כלום."
+              >
+                <Field
+                  label="הטקסט של התגובה"
+                  hint="אפשר לכתוב {טלפון} ו-{וואטסאפ} — הם יוחלפו בפרטים של הפוסט עצמו."
+                >
+                  <textarea
+                    className={inputClass}
+                    dir="auto"
+                    rows={3}
+                    value={browser.firstComment}
+                    onChange={(e) => setBrowser({ ...browser, firstComment: e.target.value })}
+                    placeholder={'לפרטים ותיאום: {טלפון}'}
+                  />
+                </Field>
+                <p className="mt-2 text-xs text-mist-500">
+                  למה בתגובה ולא בפוסט: מנהלי קבוצות מוחקים פוסטים שנראים כמו מודעה, וקוראים גוללים מעל מספרי טלפון באמצע טקסט. אותם פרטים שורה אחת מתחת נשארים.
+                </p>
+                <p className="mt-1.5 text-xs text-mist-500">
+                  התגובה נוספת רק לפוסט שהמערכת זיהתה בוודאות שהוא שלה. אם לא — היא לא תגיב בכלל, ותרשום את זה בהיסטוריה.
+                </p>
+              </Card>
             </>
           )}
 

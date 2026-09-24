@@ -30,6 +30,14 @@ export interface ComposeInput {
   onStep: (step: ComposerStep) => Promise<void>;
   /** Called at "ready to publish" when the owner wants to approve the first runs by hand. */
   confirm?: (page: Page) => Promise<'confirmed' | 'cancelled' | 'timeout'>;
+  /**
+   * Text to leave as the FIRST COMMENT on the post that was just published.
+   *
+   * Empty or absent means none. It exists because contact details in the body
+   * of a group post are what group admins delete and what readers scroll past,
+   * while the same details one line down in a comment are neither.
+   */
+  firstComment?: string;
 }
 
 export interface ComposeResult {
@@ -39,6 +47,16 @@ export interface ComposeResult {
   /** Group moderates posts — it exists but waits for an admin. */
   pendingApproval: boolean;
   groupTitle: string;
+  /**
+   * 'none'   — none was asked for
+   * 'posted' — left on the post
+   * 'failed' — asked for, and it did not happen
+   *
+   * Three states, not a boolean, because "we did not try" and "we tried and
+   * could not" are different things to tell the owner about a post that is
+   * already live and cannot be taken back.
+   */
+  comment: 'none' | 'posted' | 'failed';
 }
 
 const IMAGE_UPLOAD_TIMEOUT = 3 * 60_000;
@@ -106,7 +124,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     const verdict = await input.confirm(page);
     if (verdict !== 'confirmed') {
       await discardComposer(page);
-      return { outcome: 'cancelled', verified: false, pendingApproval: false, groupTitle };
+      return { outcome: 'cancelled', verified: false, pendingApproval: false, groupTitle, comment: 'none' };
     }
   }
 
@@ -135,7 +153,92 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   assertUsable(await classifyPage(page));
   const pendingApproval = await fb.pendingText(page).isVisible({ timeout: 1500 }).catch(() => false);
   const verified = submitted && (await verifyInFeed(page, input.groupUrl, input.text));
-  return { outcome: 'published', verified, pendingApproval, groupTitle };
+
+  /*
+   * 8. The first comment ----------------------------------------------------
+   *
+   * ONLY ON A POST WE POSITIVELY FOUND. `verified` means our own text was
+   * located in the feed; without it we do not know which post on this page is
+   * ours, and the failure mode is not a missing comment — it is the owner's
+   * phone number appearing under a stranger's post, in a group they need to
+   * stay welcome in. So a comment is never a guess: no verification, no
+   * comment, and the result says so.
+   *
+   * It also never fails the publication. The post is already live and cannot
+   * be taken back, so a comment that did not happen is reported and left at
+   * that rather than turned into an error that invites a retry — a retry here
+   * would publish the post a second time.
+   */
+  let comment: ComposeResult['comment'] = 'none';
+  if (input.firstComment?.trim()) {
+    comment = verified && (await addFirstComment(page, input.text, input.firstComment.trim())) ? 'posted' : 'failed';
+  }
+  return { outcome: 'published', verified, pendingApproval, groupTitle, comment };
+}
+
+/**
+ * Leave a comment on the post whose text we just published.
+ *
+ * Anchored to the post, never to the page. Facebook renders every post AND
+ * every comment as role="article", so the container is the outermost article
+ * carrying our own text — and the comment box is looked for inside it. Typing
+ * into the first comment box on the page would put the owner's details under
+ * whatever Facebook happened to render first.
+ *
+ * Enter submits, which is the exact opposite of the rule in the composer above
+ * (where Enter must never be pressed, because it posts). Same key, opposite
+ * meaning, in two boxes that look alike — which is why openComposer refuses a
+ * comment box and this refuses everything that is not one.
+ */
+async function addFirstComment(page: Page, postText: string, comment: string): Promise<boolean> {
+  const probe = postText
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.length >= 12)
+    ?.slice(0, 40);
+  if (!probe) return false;
+  try {
+    const article = page.locator('[role="article"]').filter({ hasText: probe }).first();
+    if (!(await article.isVisible({ timeout: 8_000 }).catch(() => false))) return false;
+    await article.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
+
+    // The box is sometimes behind the "comment" control rather than on screen.
+    let box = article.getByRole('textbox', { name: patterns.commentBox }).first();
+    if (!(await box.isVisible({ timeout: 3_000 }).catch(() => false))) {
+      await article
+        .getByRole('button', { name: patterns.commentBox })
+        .first()
+        .click({ timeout: 5_000 })
+        .catch(() => undefined);
+      await page.waitForTimeout(1200);
+      box = article.getByRole('textbox', { name: patterns.commentBox }).first();
+    }
+    if (!(await box.isVisible({ timeout: 5_000 }).catch(() => false))) return false;
+
+    /* The name must say "comment". A composer box inside the same article
+       would take this text and publish it as a second post. */
+    const label = (await box.getAttribute('aria-label').catch(() => '')) ?? '';
+    if (!patterns.commentBox.test(label)) return false;
+
+    await box.click({ timeout: 5_000 });
+    // Shift+Enter for line breaks, exactly as the composer does: a bare Enter
+    // mid-text would submit half a comment and leave the rest orphaned.
+    const lines = comment.split('\n');
+    for (let i = 0; i < lines.length; i += 1) {
+      if (i) await page.keyboard.press('Shift+Enter');
+      await page.keyboard.type(lines[i], { delay: 15 });
+    }
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(2500);
+
+    /* Verified the same way the post is: found on the page, or it did not
+       happen. An unverified comment reported as posted would have the owner
+       believing their phone number is under a post where it is not. */
+    const needle = lines.find((l) => l.trim().length >= 6)?.trim().slice(0, 30) ?? comment.slice(0, 30);
+    return await article.getByText(needle, { exact: false }).first().isVisible({ timeout: 8_000 }).catch(() => false);
+  } catch {
+    return false;
+  }
 }
 
 /* ------------------------------------------------------------- stages */

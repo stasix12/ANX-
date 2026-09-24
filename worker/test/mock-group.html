@@ -24,13 +24,86 @@
   <div class="box" role="main">
     <button class="trigger" id="trigger" type="button">כתבו משהו…</button>
   </div>
-  <div class="box feed" id="feed"><h2>פוסטים</h2></div>
+  <div class="box feed" id="feed">
+    <h2>פוסטים</h2>
+    <!--
+      A DECOY, and it is the whole point of this fixture's feed.
+
+      Facebook renders every post as role="article" and so does every comment.
+      A comment box found by "the first one on the page" would land the owner's
+      phone number under somebody else's post, in a group they need to stay
+      welcome in. This article sits FIRST in the DOM and has its own comment
+      box, so any anchoring that is not tied to our own text fails loudly here
+      instead of quietly in production.
+    -->
+    <div role="article" id="decoy">
+      <p>פוסט של שכן מהשכונה על חתול שאבד ליד הפארק</p>
+      <button type="button" aria-label="הוספת תגובה">תגובה</button>
+      <div class="comments"></div>
+    </div>
+  </div>
 </main>
 <script>
   const feed = document.getElementById('feed');
   // Persist posts like a real feed would survive a reload.
   const saved = JSON.parse(localStorage.getItem('mockFeed') || '[]');
-  for (const t of saved) { const p = document.createElement('p'); p.textContent = t; feed.appendChild(p); }
+
+  /* A post the way Facebook builds one: an article, a comment button that
+     REVEALS the box rather than showing it, and Enter to submit. */
+  function addArticle(text) {
+    const art = document.createElement('div');
+    art.setAttribute('role', 'article');
+    const body = document.createElement('p');
+    body.textContent = text;
+    art.appendChild(body);
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.setAttribute('aria-label', 'הוספת תגובה');
+    open.textContent = 'תגובה';
+    const list = document.createElement('div');
+    list.className = 'comments';
+    open.addEventListener('click', () => {
+      if (art.querySelector('[role=textbox]')) return;
+      const box = document.createElement('div');
+      box.setAttribute('role', 'textbox');
+      box.setAttribute('contenteditable', 'true');
+      box.setAttribute('aria-label', 'כתיבת תגובה');
+      box.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' || e.shiftKey) return;
+        e.preventDefault();
+        const c = document.createElement('p');
+        c.className = 'comment';
+        c.textContent = box.innerText;
+        list.appendChild(c);
+        box.innerText = '';
+      });
+      art.insertBefore(box, list);
+    });
+    art.appendChild(open);
+    art.appendChild(list);
+    feed.appendChild(art);
+  }
+
+  for (const t of saved) addArticle(t);
+  const decoyBtn = document.querySelector('#decoy button');
+  const decoyList = document.querySelector('#decoy .comments');
+  decoyBtn.addEventListener('click', () => {
+    if (document.querySelector('#decoy [role=textbox]')) return;
+    const box = document.createElement('div');
+    box.setAttribute('role', 'textbox');
+    box.setAttribute('contenteditable', 'true');
+    box.setAttribute('aria-label', 'כתיבת תגובה');
+    box.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.shiftKey) return;
+      e.preventDefault();
+      const c = document.createElement('p');
+      c.className = 'comment';
+      c.textContent = box.innerText;
+      decoyList.appendChild(c);
+      box.innerText = '';
+    });
+    document.querySelector('#decoy').insertBefore(box, decoyList);
+  });
   document.getElementById('trigger').addEventListener('click', () => {
     if (document.querySelector('[role=dialog]')) return;
     const dlg = document.createElement('div');
@@ -78,10 +151,9 @@
       window.__published = { text, images: count };
       setTimeout(() => {
         dlg.remove();
-        const p = document.createElement('p');
-        p.textContent = text + (count ? ` [${count} תמונות]` : '');
-        feed.appendChild(p);
-        saved.push(p.textContent);
+        const line = text + (count ? ` [${count} תמונות]` : '');
+        addArticle(line);
+        saved.push(line);
         localStorage.setItem('mockFeed', JSON.stringify(saved));
       }, 800);
     });

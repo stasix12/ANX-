@@ -38,7 +38,7 @@ import {
 } from '@/lib/social/client';
 import { formatDayMonthHe } from '@/lib/social/time';
 import { KNOWN_CITIES, detectCity, sortCities } from '@/lib/social/cities';
-import { parseGroupUrl, type SocialTarget } from '@/lib/social/types';
+import { isPendingShare, parseGroupShareUrl, parseGroupUrl, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { ChartIcon, CloseIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
@@ -230,7 +230,12 @@ export default function GroupsPage() {
     }
   }
 
+  /* A share link is a real answer here, just not a finished one — the worker
+     follows it. Treating it as invalid meant rejecting the link Facebook's own
+     app puts on the clipboard. */
   const parsed = parseGroupUrl(form.url);
+  const pendingShare = parsed ? null : parseGroupShareUrl(form.url);
+  const accepted = parsed ?? pendingShare;
   const toggleSelect = (id: string, on: boolean) => setSelected((s) => (on ? [...new Set([...s, id])] : s.filter((x) => x !== id)));
 
   /*
@@ -735,20 +740,29 @@ export default function GroupsPage() {
           className="space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!parsed) {
-              toast('כתובת לא תקינה — צריך קישור בסגנון facebook.com/groups/…', 'error');
+            if (!accepted) {
+              toast('כתובת לא תקינה — צריך קישור לקבוצה מפייסבוק.', 'error');
               return;
             }
             act('add', () => addGroup(form).then(() => setForm({ url: '', name: '' })), 'הקבוצה נוספה. השם והתמונה יימשכו מפייסבוק אוטומטית.');
           }}
         >
-          <Field label="קישור לקבוצה" hint={parsed ? `זוהה: ${parsed.externalId}` : 'facebook.com/groups/…'}>
+          <Field
+            label="קישור לקבוצה"
+            hint={
+              parsed
+                ? `זוהה: ${parsed.externalId}`
+                : pendingShare
+                  ? 'קישור שיתוף — התוכנה במחשב תפתח אותו ותזהה את הקבוצה'
+                  : 'facebook.com/groups/… או קישור שיתוף מהאפליקציה'
+            }
+          >
             <input className={inputClass} dir="ltr" inputMode="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://www.facebook.com/groups/…" />
           </Field>
           <Field label="שם (רשות)">
             <input className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="באר שבע ביחד" />
           </Field>
-          <Button type="submit" size="lg" className="w-full" busy={busy === 'add'} disabled={!parsed}>
+          <Button type="submit" size="lg" className="w-full" busy={busy === 'add'} disabled={!accepted}>
             הוסף קבוצה
           </Button>
         </form>

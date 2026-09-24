@@ -343,6 +343,16 @@ export interface BrowserSettings {
   maxPerCampaignPerDay: number;
   /** Extra spacing between two group posts, on top of the global gap. */
   groupMinGapMinutes: number;
+  /**
+   * Left as the first comment on every group post, or empty for none.
+   *
+   * Contact details in the body of a group post are what admins delete and
+   * readers scroll past; the same details one line down in a comment are
+   * neither. {טלפון} and {וואטסאפ} are filled from the post's own fields, so
+   * one sentence here serves every post without repeating a number that may
+   * change.
+   */
+  firstComment: string;
 }
 
 export const DEFAULT_BROWSER: BrowserSettings = {
@@ -352,6 +362,9 @@ export const DEFAULT_BROWSER: BrowserSettings = {
   concurrentJobs: 1,
   maxPerCampaignPerDay: 8,
   groupMinGapMinutes: 20,
+  /* Empty by default: a comment nobody asked for, on every post, in every
+     group, is the kind of default that gets an account reported. */
+  firstComment: '',
 };
 
 export interface ActivityEntry {
@@ -478,6 +491,43 @@ export const WEEKDAYS_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 
 export const WORKER_OFFLINE_AFTER_SECONDS = 90;
 
 /** Parses any facebook.com/groups/… URL into its id or slug. */
+/**
+ * A group ADDRESS THAT IS NOT ONE YET.
+ *
+ * Facebook's own app, on "העתק קישור", hands back
+ * https://www.facebook.com/share/g/<token> — a redirect, not a group address.
+ * parseGroupUrl refuses it, correctly: it is the guard that stops an arbitrary
+ * facebook.com path reaching a browser carrying a live session, and loosening
+ * it would be loosening that. So the link is accepted here as a PENDING one
+ * instead, and the worker — which has a browser and can follow the redirect —
+ * turns it into a real group address before anything is ever published to it.
+ *
+ * The marker is the external_id prefix rather than a new column: a row nobody
+ * has resolved yet cannot be mistaken for a group, by this code or by a query.
+ */
+export const PENDING_SHARE_PREFIX = 'share:';
+
+export function parseGroupShareUrl(input: string): { url: string; externalId: string } | null {
+  const raw = input.trim();
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)facebook\.com$|(^|\.)fb\.com$/i.test(url.hostname)) return null;
+  const m = url.pathname.match(/^\/share\/g\/([^/?#]+)/i);
+  if (!m) return null;
+  const token = decodeURIComponent(m[1]);
+  return { url: `https://www.facebook.com/share/g/${token}`, externalId: `${PENDING_SHARE_PREFIX}${token}` };
+}
+
+/** True while a target is still a share link nobody has followed yet. */
+export function isPendingShare(externalId: string | null | undefined): boolean {
+  return Boolean(externalId?.startsWith(PENDING_SHARE_PREFIX));
+}
+
 export function parseGroupUrl(input: string): { url: string; externalId: string } | null {
   const raw = input.trim();
   if (!raw) return null;

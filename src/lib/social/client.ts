@@ -20,6 +20,7 @@ import {
   DEFAULT_LIMITS,
   WORKER_OFFLINE_AFTER_SECONDS,
   parseGroupUrl,
+  parseGroupShareUrl,
   type ActivityEntry,
   type BrowserSettings,
   type BusinessSettings,
@@ -145,8 +146,14 @@ export async function updateTarget(id: string, patch: Partial<Pick<SocialTarget,
 
 /** Adds a Facebook Group by URL. Published by the local browser worker. */
 export async function addGroup(input: { url: string; name?: string; notes?: string }): Promise<SocialTarget> {
-  const parsed = parseGroupUrl(input.url);
-  if (!parsed) throw new Error('כתובת לא תקינה — צריך קישור בסגנון facebook.com/groups/…');
+  /*
+   * A share link is accepted and resolved later, by the worker. It is what
+   * Facebook's app gives on "העתק קישור", so refusing it means refusing the
+   * link most people actually have — while parseGroupUrl stays exactly as
+   * strict as it was about what may be PUBLISHED to.
+   */
+  const parsed = parseGroupUrl(input.url) ?? parseGroupShareUrl(input.url);
+  if (!parsed) throw new Error('כתובת לא תקינה — צריך קישור לקבוצה מפייסבוק.');
   const { data: existing } = await db().from('social_targets').select('id').eq('channel', 'facebook_group').eq('external_id', parsed.externalId).maybeSingle();
   if (existing) throw new Error('הקבוצה הזו כבר קיימת ברשימה.');
   return unwrap<SocialTarget>(

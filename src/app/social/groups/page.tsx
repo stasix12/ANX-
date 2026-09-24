@@ -42,7 +42,7 @@ import { isPendingShare, parseGroupShareUrl, parseGroupUrl, type SocialTarget } 
 import { friendlyMessage } from '@/lib/social/errors';
 import { ChartIcon, CloseIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
-type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent';
+type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent' | 'new';
 type View = 'grid' | 'list';
 
 const RECENT_DAYS = 14;
@@ -159,6 +159,17 @@ export default function GroupsPage() {
 
 
   const recentCutoff = useMemo(() => new Date(Date.now() - RECENT_DAYS * 86_400_000).toISOString(), []);
+  /*
+   * "Added in the last day" — about when the GROUP joined the list, not when
+   * anything was published to it.
+   *
+   * The two are easy to confuse on this screen because "פורסם לאחרונה" sits
+   * right beside it, and they answer opposite questions: one is "where has my
+   * content been going", the other is "what did I just add and have not set up
+   * yet". Adding twenty groups in an evening and then trying to find them
+   * among a hundred and twenty-three is the case this exists for.
+   */
+  const addedCutoff = useMemo(() => new Date(Date.now() - 86_400_000).toISOString(), []);
 
   const matchesStatus = useCallback(
     (g: SocialTarget) => {
@@ -166,9 +177,10 @@ export default function GroupsPage() {
       if (status === 'paused') return !g.enabled;
       if (status === 'favorites') return Boolean(g.favorite);
       if (status === 'recent') return Boolean(g.last_published_at && g.last_published_at > recentCutoff);
+      if (status === 'new') return Boolean(g.created_at && g.created_at > addedCutoff);
       return true;
     },
-    [status, recentCutoff],
+    [status, recentCutoff, addedCutoff],
   );
 
   const visible = useMemo(() => {
@@ -212,8 +224,9 @@ export default function GroupsPage() {
       paused: all.filter((g) => !g.enabled).length,
       favorites: all.filter((g) => g.favorite).length,
       recent: all.filter((g) => g.last_published_at && g.last_published_at > recentCutoff).length,
+      added: all.filter((g) => g.created_at && g.created_at > addedCutoff).length,
     }),
-    [all, recentCutoff],
+    [all, recentCutoff, addedCutoff],
   );
 
   async function act(key: string, fn: () => Promise<unknown>, done?: string) {
@@ -388,6 +401,12 @@ export default function GroupsPage() {
               options={[
                 { value: 'all', label: 'הכל', count: groups ? statusCounts.all : undefined },
                 { value: 'active', label: 'פעילות', count: groups ? statusCounts.active : undefined },
+                /* Kept APART from "פורסם לאחרונה" rather than beside it. The
+                   two read alike and answer opposite questions — one is where
+                   the content went, the other is what was just added and not
+                   set up yet — and two chips a tap apart is how you end up
+                   looking at the wrong list without noticing. */
+                { value: 'new', label: 'נוסף לאחרונה', count: groups ? statusCounts.added : undefined },
                 { value: 'favorites', label: 'מועדפות', count: groups ? statusCounts.favorites : undefined },
                 { value: 'recent', label: 'פורסם לאחרונה', count: groups ? statusCounts.recent : undefined },
                 { value: 'paused', label: 'מושהות', count: groups ? statusCounts.paused : undefined },

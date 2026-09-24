@@ -275,7 +275,18 @@ create index if not exists social_queue_comment_idx
 -- next, and only one of them is worth retrying. The worker writes the sentence
 -- it would have said in the terminal; the screen shows it under the group.
 alter table public.social_queue
-  add column if not exists comment_note text not null default '';
+  add column if not exists comment_note text not null default '',
+  add column if not exists comment_shot text not null default '';
 
 comment on column public.social_queue.comment_note is
   'A whole Hebrew sentence saying why the comment failed. Empty when it worked, or when nothing has been tried yet.';
+
+-- And a picture of what the worker's browser was actually looking at.
+--
+-- Words were not enough. Three rounds went by on "לא מצאנו את הפוסט" while the
+-- owner was looking straight at the post on his phone; the one thing neither
+-- side could see was the page as the WORKER had it — the group, a login wall,
+-- a feed that never loaded. Same private social-debug bucket the login
+-- challenge uses, opened through a short-lived signed link.
+comment on column public.social_queue.comment_shot is
+  'Object path in the private social-debug bucket of the page when a comment failed. Empty when it worked.';

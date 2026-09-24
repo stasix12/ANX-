@@ -267,6 +267,15 @@ export interface QueueItem {
    * them is worth a retry.
    */
   comment_note?: string;
+  /**
+   * The page the worker's browser was looking at when the comment failed.
+   *
+   * A path in the private social-debug bucket, opened through a short-lived
+   * signed link. It exists because words were not enough: rounds went by on
+   * "לא מצאנו את הפוסט" while the owner looked straight at the post on his
+   * phone, and the one thing neither side could see was what the WORKER saw.
+   */
+  comment_shot?: string;
   created_at: string;
 }
 

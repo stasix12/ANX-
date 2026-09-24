@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import { agree } from '@/lib/social/time';
+import { CommentShot } from './CommentShot';
 import { TargetAvatar } from './TargetAvatar';
 import { Card, TONE_FILL } from './ui';
 
@@ -100,6 +101,14 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
                 its own is what makes a person press the same button again. */}
             {r.comment_status === 'failed' && r.comment_note && (
               <p className="mt-1 pr-4 text-[11px] leading-relaxed text-warning-400/90">{r.comment_note}</p>
+            )}
+            {/* And what the worker's browser actually had on screen. Words
+                were not enough: rounds went by on "לא מצאנו את הפוסט" while
+                the owner looked straight at the post on his phone. */}
+            {r.comment_status === 'failed' && r.comment_shot && (
+              <div className="pr-4">
+                <CommentShot path={r.comment_shot} />
+              </div>
             )}
           </li>
         ))}

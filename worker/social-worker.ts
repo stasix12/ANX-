@@ -1134,7 +1134,18 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
        * done the answer is permanent. A retry, and every later read of how the
        * post did, goes straight to the post.
        */
-      await saveCommentOutcome(db, row.id, outcome, row.permalink);
+      /*
+       * A PICTURE WHEN IT FAILS, because words have not been enough.
+       *
+       * Three rounds were spent on "לא מצאנו את הפוסט" while the owner was
+       * looking straight at the post on his phone. The one thing neither of us
+       * could see was the page as the WORKER'S browser had it — whether it was
+       * the group, a login wall, or a feed that never loaded. The screenshot
+       * ends that argument: it is the same private bucket the login challenge
+       * already uses, opened through a short-lived signed link.
+       */
+      const shot = outcome.ok ? null : await captureScreenshot(page, row.id, 'comment');
+      await saveCommentOutcome(db, row.id, outcome, row.permalink, shot);
       if (outcome.ok) console.log('[worker] 💬 נוספה תגובה לפרסום.');
       else console.log(`[worker] ℹ לא הצלחנו להוסיף תגובה: ${outcome.reason} (${outcome.tried.join(' → ') || 'לא ניסינו כתובת'})`);
       state.lastCommentAt = Date.now();
@@ -1145,7 +1156,8 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
       state.commentGapMs = Math.round(chosen * 1000 * (1 + Math.random() * COMMENT_JITTER));
     } catch (err) {
       const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
-      await saveCommentOutcome(db, row.id, { ok: false, reason: `התוכנה נתקלה בתקלה: ${detail}`, permalink: '', tried: [] }, row.permalink);
+      const shot = await captureScreenshot(page, row.id, 'comment');
+      await saveCommentOutcome(db, row.id, { ok: false, reason: `התוכנה נתקלה בתקלה: ${detail}`, permalink: '', tried: [] }, row.permalink, shot);
       console.error('[worker] ✗ הוספת תגובה נכשלה:', detail);
     } finally {
       cleanupMedia(local);
@@ -1168,6 +1180,7 @@ async function saveCommentOutcome(
   id: string,
   outcome: CommentOutcome,
   known: string | null,
+  shot: string | null,
 ): Promise<void> {
   const base: Record<string, unknown> = {
     comment_status: outcome.ok ? 'done' : 'failed',
@@ -1177,10 +1190,10 @@ async function saveCommentOutcome(
 
   const withNote = await db
     .from('social_queue')
-    .update({ ...base, comment_note: outcome.ok ? '' : outcome.reason })
+    .update({ ...base, comment_note: outcome.ok ? '' : outcome.reason, comment_shot: shot ?? '' })
     .eq('id', id);
   if (!withNote.error) return;
-  if (!/comment_note/.test(withNote.error.message)) {
+  if (!/comment_note|comment_shot/.test(withNote.error.message)) {
     console.error('[worker] ✗ לא הצלחנו לרשום את תוצאת התגובה:', withNote.error.message);
     return;
   }

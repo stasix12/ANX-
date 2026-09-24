@@ -2657,6 +2657,27 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/function explain\(step: Exclude<CommentStep, 'ok'>, postText: string\)/.test(composerSrc), 'the failure carries what was searched for');
   assert.ok(/חיפשנו את השורה/.test(composerSrc), 'in Hebrew, on the screen the owner reads');
 
+  /*
+   * AND A PICTURE OF WHAT THE WORKER SAW.
+   *
+   * Words were not enough. Rounds went by on "לא מצאנו את הפוסט" while the
+   * owner was looking straight at the post on his phone — both sides right,
+   * neither able to prove it, because the one thing nobody could see was the
+   * page as the WORKER'S browser had it: the group, a login wall, a feed that
+   * never loaded. Every fix until then was a guess.
+   */
+  assert.ok(/await captureScreenshot\(page, row\.id, 'comment'\)/.test(localWorker), 'a failed comment photographs the page it was on');
+  assert.ok(/outcome\.ok \? null : await captureScreenshot/.test(localWorker), 'and only when it failed — a success has nothing to explain');
+  const shotCard = readFileSync(new URL('../../src/components/social/CommentShot.tsx', import.meta.url), 'utf8');
+  assert.ok(/screenshotUrl\(path\)/.test(shotCard), 'the picture is opened through a signed link');
+  assert.ok(/onClick=\{async \(\) => \{/.test(shotCard), 'and only when somebody asks to see it, since the link is short-lived');
+  for (const screen of [campaignPage, commentCard]) {
+    assert.ok(/r\.comment_status === 'failed' && r\.comment_shot/.test(screen), 'both screens offer it under the group that failed');
+  }
+  /* A missing column may never cost the status — same rule as the note, and
+     for the same reason: a row stuck on 'pending' is commented on forever. */
+  assert.ok(/comment_note\|comment_shot/.test(localWorker), 'and a database without the column still records what happened');
+
   /* The same lookup, for the same reason, when reading how a post did. */
   assert.ok(/function ourPostsIn/.test(localWorker), 'the counters are read off our own posts in the group too');
   assert.ok(/if \(!accountId\) return groupUrl;/.test(localWorker), 'and it degrades to the group when the id is not known yet');
@@ -2714,7 +2735,7 @@ const scenario: { step: string; line: string }[] = [];
      comment_status did, so a database missing the one column would reject the
      whole write, leave the row 'pending', and have the worker comment again
      next tick — and again, and again. */
-  assert.ok(/if \(!\/comment_note\/\.test\(withNote\.error\.message\)\)/.test(localWorker), 'a missing note column may never block the status');
+  assert.ok(/if \(!\/comment_note\|comment_shot\/\.test\(withNote\.error\.message\)\)/.test(localWorker), 'a missing note column may never block the status');
   assert.ok(/const plain = await db\.from\('social_queue'\)\.update\(base\)\.eq\('id', id\);/.test(localWorker), 'the status is written without it instead');
   for (const screen of [campaignPage, commentCard]) {
     assert.ok(/r\.comment_status === 'failed' && r\.comment_note/.test(screen), 'both screens show the reason under the group that failed');

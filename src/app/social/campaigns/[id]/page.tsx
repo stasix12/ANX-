@@ -58,6 +58,7 @@ import { agree, formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from 
 import { ltr } from '@/components/social/DateTime';
 import type { Campaign, ControlSettings, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
+import { CommentShot } from '@/components/social/CommentShot';
 import { CalendarIcon, ClipboardListIcon, PauseIcon, SearchIcon } from '@/components/icons';
 
 /**
@@ -535,6 +536,11 @@ export default function CampaignControlCenter() {
                                 honest next to this line. */}
                             {r.comment_status === 'failed' && r.comment_note && (
                               <p className="mt-1 pr-4 text-[11px] leading-relaxed text-warning-400/90">{r.comment_note}</p>
+                            )}
+                            {r.comment_status === 'failed' && r.comment_shot && (
+                              <div className="pr-4">
+                                <CommentShot path={r.comment_shot} />
+                              </div>
                             )}
                           </li>
                         ))}

@@ -95,6 +95,14 @@ interface WorkerState {
   /** When the last comment went out, and the gap drawn for the next one. */
   lastCommentAt?: number;
   commentGapMs?: number;
+  /**
+   * The c_user id of the account the browser is signed in as.
+   *
+   * Kept here because finding one of our own posts in a group comes down to
+   * it: `/groups/<id>/user/<this>/` is the group filtered to what WE posted,
+   * which is three or four things instead of an afternoon of everybody else's.
+   */
+  accountId?: string;
 }
 
 const session = new BrowserSession();
@@ -860,6 +868,7 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
     console.log('[worker] ℹ לא זוהה חשבון פייסבוק מחובר (אין עוגיית c_user).');
     return;
   }
+  state.accountId = account.id;
   const db = await workerDb();
   const patch: Record<string, string> = { fb_user_id: account.id };
   /*
@@ -985,6 +994,23 @@ function groupUrlOf(target: { url: string } | { url: string }[] | null | undefin
   return (Array.isArray(target) ? target[0]?.url : target.url) ?? null;
 }
 
+/**
+ * The group, filtered to the posts WE put there.
+ *
+ * Falls back to the group itself when the signed-in id is not known yet, which
+ * is only true before the first login check of a run.
+ */
+function ourPostsIn(groupUrl: string | null, accountId: string | undefined): string | null {
+  if (!groupUrl) return null;
+  if (!accountId) return groupUrl;
+  /* Through parseGroupUrl rather than by string surgery: a stored address can
+     carry a trailing slash, a ?ref= or a /posts/ tail, and appending to any of
+     those produces a page that is not the group filtered to anybody. */
+  const group = parseGroupUrl(groupUrl);
+  if (!group) return groupUrl;
+  return `${group.url}/user/${accountId}/`;
+}
+
 /** Posts commented per idle tick. Deliberately small — see below. */
 const COMMENTS_PER_TICK = 1;
 /**
@@ -1097,7 +1123,7 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
          published before this version there never is one. */
       const where = row.permalink ?? groupUrlOf(row.target) ?? '';
       const outcome = where
-        ? await commentOnPost(page, where, row.rendered_text, text, local?.images[0] ?? null)
+        ? await commentOnPost(page, where, row.rendered_text, text, local?.images[0] ?? null, state.accountId ?? '')
         : { ok: false, reason: 'אין לנו כתובת לקבוצה הזאת.', permalink: '', tried: [] };
       /*
        * The address is written back whether it worked or not. Finding a group
@@ -1269,7 +1295,9 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
     if (stopping) break;
     const page = await session.newPage(headless);
     try {
-      const where = row.permalink ?? groupUrlOf(row.target) ?? '';
+      /* Same lookup problem as the comments, same answer: a group filtered to
+         our own posts loads what we published, not what the group published. */
+      const where = row.permalink ?? ourPostsIn(groupUrlOf(row.target), state.accountId) ?? '';
       const m = where ? await readPostMetrics(page, where, row.rendered_text) : null;
       if (!m) {
         /* Login wall or checkpoint: the numbers on screen are not this post's.

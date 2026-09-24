@@ -38,7 +38,7 @@ import { countdownTo, OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { friendlyMessage, GENERIC_ERROR, LATEST_SCHEMA_FILE } from '@/lib/social/errors';
 import { renderPostText } from '@/lib/social/compose';
 import { safeError } from '../db';
-import { PublishError } from '../facebook/composer';
+import { PublishError, lookupPages, searchWords } from '../facebook/composer';
 
 /** Pure helpers shared by the dashboard, the server worker and the local worker. */
 
@@ -2501,12 +2501,73 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/permalink: string;/.test(composerSrc), 'publishing captures the post\'s own address');
   assert.ok(/result\.permalink \? \{ permalink: result\.permalink \} : \{\}/.test(localWorker), 'and only writes it when the feed actually yielded one');
   assert.ok(/\/search\/\?q=\$\{encodeURIComponent\(words\)\}/.test(composerSrc), "the group's search finds a post the feed has buried");
-  /* Order matters: the address first, search second, the feed last. */
-  const byUrl = composerSrc.indexOf("let permalink = /\\/(posts|permalink)\\//.test(url) ? url : '';");
-  const bySearch = composerSrc.indexOf('/search/?q=');
-  const byFeed = composerSrc.indexOf('const feed = group?.url ?? url;');
-  assert.ok(byUrl > 0 && bySearch > byUrl, "the post's own address is tried before any search");
-  assert.ok(byFeed > bySearch, 'and the feed is the last place looked, not the first');
+
+  /*
+   * OUR OWN POSTS IN THE GROUP, FIRST — and this is the fix for what the owner
+   * actually saw: "לא מצאנו את הפוסט הזה בקבוצה" about posts that were there.
+   *
+   * `/groups/<id>/user/<our id>/` is the group filtered to one member. What
+   * loads is the three or four things WE put in that group, not an afternoon
+   * of everybody else's — so the post is on screen instead of twelve scrolls
+   * below the fold, and Facebook's group search (which misses recent posts)
+   * stops being the only way to turn words into an address.
+   */
+  const order = composerSrc.slice(composerSrc.indexOf('function lookupPages'), composerSrc.indexOf('/** The words a post is recognised by'));
+  assert.ok(/\$\{groupUrl\}\/user\/\$\{authorId\}\//.test(order), 'the group filtered to our own posts is one of the places looked');
+  const byAuthor = order.indexOf('/user/${authorId}/');
+  const bySearch = order.indexOf('/search/?q=');
+  const byFeed = order.indexOf('out.push(groupUrl)');
+  assert.ok(byAuthor > 0 && bySearch > byAuthor, 'and it is tried before the search, which misses recent posts');
+  assert.ok(byFeed > bySearch, 'with the feed last — twelve scrolls do not reach this afternoon');
+  /* The post's own address still wins over all three when we have one. */
+  assert.ok(
+    composerSrc.indexOf("let permalink = /\\/(posts|permalink)\\//.test(url) ? url : '';") <
+      composerSrc.indexOf('for (const where of lookupPages('),
+    "the post's own address is used before anything is looked up",
+  );
+
+  /*
+   * THE SEARCH BOX GETS WORDS; THE PAGE MATCH GETS THE TEXT AS WRITTEN.
+   *
+   * These posts are written with emoji — "ניקוי ספות 🧽" — and a search engine
+   * handed one either ignores it or returns nothing. But matching the post in
+   * the page wants exactly what Facebook rendered, emoji included, so the two
+   * cannot share one string.
+   */
+  assert.ok(/function searchWords/.test(composerSrc), 'the search query is stripped of decoration');
+  /* Run, not only read. The owner's posts open with an emoji, and a search
+     query carrying one is how this silently returned nothing. */
+  assert.equal(
+    searchWords('ניקוי ספות וריפודים בבאר שבע 🧽\nמקצועי, מהיר ובאחריות.'),
+    'ניקוי ספות וריפודים בבאר שבע',
+    'the emoji is gone and the Hebrew is untouched',
+  );
+  assert.equal(searchWords('Чистка диванов в Беэр-Шеве 🛋️'), 'Чистка диванов в Беэр-Шеве', 'and the same for Russian');
+  assert.equal(searchWords('📞📞📞'), '', 'a line with no words at all yields no search');
+  assert.deepEqual(
+    lookupPages('https://www.facebook.com/groups/123', 'ניקוי ספות בבאר שבע 🧽', '6100'),
+    [
+      'https://www.facebook.com/groups/123/user/6100/',
+      `https://www.facebook.com/groups/123/search/?q=${encodeURIComponent('ניקוי ספות בבאר שבע')}`,
+      'https://www.facebook.com/groups/123',
+    ],
+    'our own posts, then the search, then the feed',
+  );
+  assert.deepEqual(
+    lookupPages('https://www.facebook.com/groups/123', 'ניקוי ספות בבאר שבע', ''),
+    [`https://www.facebook.com/groups/123/search/?q=${encodeURIComponent('ניקוי ספות בבאר שבע')}`, 'https://www.facebook.com/groups/123'],
+    'and without a signed-in id it degrades rather than building a broken address',
+  );
+  assert.ok(/\\p\{Letter\}/.test(composerSrc), 'and it keeps letters of any alphabet, not just ASCII');
+  assert.ok(
+    /const probe = postText[\s\S]{0,200}\?\.slice\(0, 40\)/.test(composerSrc),
+    'while the page match still uses the line as written',
+  );
+
+  /* The same lookup, for the same reason, when reading how a post did. */
+  assert.ok(/function ourPostsIn/.test(localWorker), 'the counters are read off our own posts in the group too');
+  assert.ok(/if \(!accountId\) return groupUrl;/.test(localWorker), 'and it degrades to the group when the id is not known yet');
+  assert.ok(/state\.accountId = account\.id;/.test(localWorker), 'the signed-in id is kept where both readers can use it');
 
   /*
    * THE SEARCH TURNS WORDS INTO AN ADDRESS; THE COMMENT HAPPENS ON THE POST.

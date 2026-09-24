@@ -283,6 +283,7 @@ export async function commentOnPost(
   postText: string,
   comment: string,
   image: string | null,
+  authorId = '',
 ): Promise<CommentOutcome> {
   const tried: string[] = [];
   /*
@@ -303,15 +304,10 @@ export async function commentOnPost(
   let permalink = /\/(posts|permalink)\//.test(url) ? url : '';
   const group = parseGroupUrl(url);
   if (!permalink && group) {
-    const words = probeOf(postText);
-    if (words) {
-      const search = `${group.url}/search/?q=${encodeURIComponent(words)}`;
-      tried.push(search);
-      permalink = await findPermalinkAt(page, search, postText);
-    }
-    if (!permalink) {
-      tried.push(group.url);
-      permalink = await findPermalinkAt(page, group.url, postText);
+    for (const where of lookupPages(group.url, postText, authorId)) {
+      tried.push(where);
+      permalink = await findPermalinkAt(page, where, postText);
+      if (permalink) break;
     }
   }
 
@@ -387,6 +383,31 @@ async function findPermalinkAt(page: Page, where: string, postText: string): Pro
   }
 }
 
+/**
+ * Where to look for one of our own posts in a group, best first.
+ *
+ * 1. OUR OWN POSTS IN THIS GROUP — `/groups/<id>/user/<our id>/`. Facebook
+ *    filters the group to one member's posts, so what loads is the three or
+ *    four things WE put there rather than three hours of everybody else's.
+ *    This is the page that actually answers the question, and it is first
+ *    because the two below both failed on the owner's machine: the screen
+ *    said "לא מצאנו את הפוסט הזה בקבוצה" about posts that were plainly there.
+ * 2. THE GROUP'S SEARCH — words to an address, when we have no id to filter
+ *    by. Facebook's group search misses recent posts often enough that it
+ *    cannot be the only answer, but it costs one page load.
+ * 3. THE FEED — last, and only really useful for a post from minutes ago.
+ *    Twelve scrolls do not reach an afternoon's worth of other people's
+ *    posts, which is the whole reason the first entry exists.
+ */
+export function lookupPages(groupUrl: string, postText: string, authorId: string): string[] {
+  const out: string[] = [];
+  if (authorId) out.push(`${groupUrl}/user/${authorId}/`);
+  const words = searchWords(postText);
+  if (words) out.push(`${groupUrl}/search/?q=${encodeURIComponent(words)}`);
+  out.push(groupUrl);
+  return out;
+}
+
 /** The words a post is recognised by: its first real line, trimmed. */
 function probeOf(postText: string): string {
   return (
@@ -396,6 +417,22 @@ function probeOf(postText: string): string {
       .find((l) => l.length >= 12)
       ?.slice(0, 60) ?? ''
   );
+}
+
+/**
+ * The same line, but as something a search box can use.
+ *
+ * Emoji and decoration are how these posts are written — "ניקוי ספות 🧽" — and
+ * a search engine handed one either ignores it or returns nothing. Stripped
+ * here rather than in probeOf, because matching the post in the PAGE wants the
+ * text exactly as Facebook rendered it, emoji and all.
+ */
+export function searchWords(postText: string): string {
+  return probeOf(postText)
+    .replace(/[^\p{Letter}\p{Number}\s'"-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 50);
 }
 
 /** Where the attempt stopped. Each one is a different thing to do next. */

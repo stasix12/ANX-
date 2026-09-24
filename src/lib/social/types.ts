@@ -66,6 +66,14 @@ export interface Campaign {
    */
   comment_text?: string;
   comment_media?: MediaItem[];
+  /**
+   * Seconds between one comment and the next, chosen per round.
+   *
+   * It was a fixed 20-40s and the owner had no say. How fast is a judgement
+   * about their own account, and it is theirs to make: a hundred posts at ten
+   * seconds is twenty minutes, at sixty it is an hour and a half.
+   */
+  comment_gap_seconds?: number;
   created_at: string;
 }
 

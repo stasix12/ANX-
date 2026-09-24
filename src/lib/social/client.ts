@@ -793,11 +793,15 @@ export async function queueCampaignComment(
   campaignId: string,
   text: string,
   media: MediaItem[],
+  gapSeconds: number,
 ): Promise<number> {
   unwrap(
     await db()
       .from('social_campaigns')
-      .update({ comment_text: text, comment_media: media })
+      /* Clamped here as well as in the input, because this is the last place
+         before the database and a value out of range would be a worker pacing
+         itself by a number nobody meant. */
+      .update({ comment_text: text, comment_media: media, comment_gap_seconds: Math.max(5, Math.min(600, Math.round(gapSeconds))) })
       .eq('id', campaignId),
   );
   const rows = unwrap<{ id: string }[]>(

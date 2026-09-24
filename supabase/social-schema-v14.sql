@@ -24,12 +24,15 @@
 
 alter table public.social_campaigns
   add column if not exists comment_text text not null default '',
-  add column if not exists comment_media jsonb not null default '[]'::jsonb;
+  add column if not exists comment_media jsonb not null default '[]'::jsonb,
+  add column if not exists comment_gap_seconds integer not null default 30;
 
 comment on column public.social_campaigns.comment_text is
   'What to leave as a comment on this round''s posts. Belongs to the round, so it is about the round.';
 comment on column public.social_campaigns.comment_media is
   'One image for that comment, as a MediaItem array. Facebook takes one attachment per comment.';
+comment on column public.social_campaigns.comment_gap_seconds is
+  'Seconds between one comment and the next. The owner''s choice, per round — a hundred posts at ten seconds is twenty minutes, at sixty it is an hour and a half.';
 
 alter table public.social_queue
   add column if not exists comment_status text not null default '',

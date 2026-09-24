@@ -2404,11 +2404,22 @@ const scenario: { step: string; line: string }[] = [];
   const metricsForComment = readFileSync(new URL('../facebook/metrics.ts', import.meta.url), 'utf8');
   assert.ok(/const article = await findPostArticle\(page, postText\);/.test(metricsForComment), 'counters are read from our own post, not from the page');
   assert.ok(!/document\.body\.innerText/.test(metricsForComment), 'never from the whole feed');
-  /* Spaced, and unevenly. A hundred and twenty-two comments at a metronome's
-     pace is a shape; at uneven human intervals it is a hundred and twenty-two
-     comments. The owner asked for 20-40 seconds and that is the right range. */
-  assert.ok(/const COMMENT_GAP_MIN_MS = 20_000;/.test(localWorker) && /const COMMENT_GAP_MAX_MS = 40_000;/.test(localWorker), 'comments are spaced 20-40s apart');
-  assert.ok(/Math\.random\(\) \* \(COMMENT_GAP_MAX_MS - COMMENT_GAP_MIN_MS\)/.test(localWorker), 'and the gap is drawn fresh each time, not fixed');
+  /*
+   * THE PACE IS THE OWNER'S, PER ROUND — and this replaces the fixed 20-40s,
+   * which gave them no say. How fast to go is a judgement about their own
+   * account: a hundred posts at ten seconds is twenty minutes, at sixty it is
+   * an hour and a half, and only they know which they want.
+   */
+  assert.ok(/comment_gap_seconds/.test(localWorker), 'the worker paces itself by the round, not by a constant');
+  assert.ok(/comment_gap_seconds/.test(clientForComment), 'and the screen is what sets it');
+  /* Clamped in both places. The column is an integer anybody with database
+     access could set to zero, and the worker is the code that would then
+     hammer Facebook with it. */
+  assert.ok(/Math\.max\(5, Math\.min\(600,/.test(localWorker), 'the worker clamps the pace it was given');
+  assert.ok(/Math\.max\(5, Math\.min\(600,/.test(clientForComment), 'and so does the write that sets it');
+  /* Jitter ADDS only, so a chosen ten never becomes eight — it is there to
+     break the metronome, not to second-guess the number. */
+  assert.ok(/1 \+ Math\.random\(\) \* COMMENT_JITTER/.test(localWorker), 'the gap is never shorter than what was chosen');
   /* Four states, not a boolean: "nobody asked" and "asked and failed" are
      opposite facts about a post that is already live. */
   assert.ok(/'failed'/.test(localWorker) && /comment_status/.test(localWorker), 'a comment that could not be placed is recorded as failed');

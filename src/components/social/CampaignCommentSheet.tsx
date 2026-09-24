@@ -23,6 +23,7 @@ export function CampaignCommentSheet({
   publishedCount,
   initialText,
   initialMedia,
+  initialGapSeconds,
   busy,
   onSubmit,
 }: {
@@ -32,12 +33,26 @@ export function CampaignCommentSheet({
   publishedCount: number;
   initialText: string;
   initialMedia: MediaItem[];
+  initialGapSeconds: number;
   busy: boolean;
-  onSubmit: (text: string, media: MediaItem[]) => void;
+  onSubmit: (text: string, media: MediaItem[], gapSeconds: number) => void;
 }) {
   const [text, setText] = useState(initialText);
   const [media, setMedia] = useState<MediaItem[]>(initialMedia);
+  /*
+   * Held as text, committed on blur. A number input clamped on every keystroke
+   * cannot be cleared to type a new value — the same correction the interval
+   * field on the run editor needed, for the same reason.
+   */
+  const [gap, setGap] = useState(String(initialGapSeconds));
+  const gapSeconds = Math.max(5, Math.min(600, Number(gap) || initialGapSeconds));
   const nothing = !text.trim() && media.length === 0;
+
+  /* What the choice actually costs, in the unit a person thinks in. 117 posts
+     at ten seconds is twenty minutes; at sixty it is nearly two hours, and
+     nobody works that out in their head while choosing. */
+  const totalMinutes = Math.round((publishedCount * gapSeconds) / 60);
+  const howLong = totalMinutes < 1 ? 'פחות מדקה' : totalMinutes < 60 ? `בערך ${totalMinutes} דקות` : `בערך ${Math.round(totalMinutes / 6) / 10} שעות`;
 
   return (
     <Sheet open={open} onClose={onClose} title="הוסף תגובה לכל הפרסומים בסבב">
@@ -66,22 +81,60 @@ export function CampaignCommentSheet({
             </Field>
           </div>
 
+          <div className="mt-3">
+            <Field label="מרווח בין תגובה לתגובה (שניות)" hint="כמה זמן להמתין בין פרסום לפרסום.">
+              <input
+                className={inputClass}
+                dir="ltr"
+                type="number"
+                min={5}
+                max={600}
+                inputMode="numeric"
+                value={gap}
+                onChange={(e) => setGap(e.target.value)}
+                onBlur={() => setGap(String(gapSeconds))}
+              />
+            </Field>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {[10, 20, 30, 60].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setGap(String(s))}
+                  className={`min-h-11 rounded-xl px-3 text-[13px] font-bold ${
+                    gapSeconds === s ? 'bg-brand-300/12 text-brand-400' : 'bg-ink-800 text-mist-400'
+                  }`}
+                >
+                  {`${s} שנ׳`}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <p className="mt-3 text-sm text-mist-400">
-            התגובה תיווסף ל-{publishedCount} הפרסומים שכבר יצאו בסבב הזה, מהחשבון שלכם.
+            התגובה תיווסף ל-{publishedCount} הפרסומים שכבר יצאו בסבב הזה, מהחשבון שלכם — {howLong} בסך הכול.
           </p>
           {/*
             Said before the button, not after: the comments arrive over a while
             and somebody watching for all of them at once would think it broke.
           */}
           <p className="mt-1.5 text-xs text-mist-500">
-            הן נוספות אחת-אחת לאורך כמה דקות ולא כולן יחד, והתוכנה במחשב צריכה לפעול. אפשר לעקוב בכרטיס הסבב.
+            הן נוספות אחת-אחת ולא כולן יחד, והתוכנה במחשב צריכה לפעול לאורך כל הזמן הזה. אפשר לעקוב בכרטיס הסבב.
           </p>
+          {/* Said once, plainly, and only when it applies. It is his account
+              and his call — but a choice this fast is worth knowing about
+              before it is made, not after. */}
+          {gapSeconds < 15 && publishedCount > 20 && (
+            <p className="mt-1.5 text-xs text-warning-400">
+              מרווח קצר על הרבה פרסומים הוא הדפוס שפייסבוק מזהה הכי בקלות. 20 שניות ומעלה בטוח יותר לחשבון.
+            </p>
+          )}
           <p className="mt-1.5 text-xs text-mist-500">
             תגובה נוספת רק לפרסום שהמערכת מזהה בוודאות שהוא שלה. פרסום שלא הצליחה להגיב עליו מסומן בנפרד ולא נספר כאילו הצליח.
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button busy={busy} disabled={nothing} onClick={() => onSubmit(text.trim(), media)}>
+            <Button busy={busy} disabled={nothing} onClick={() => onSubmit(text.trim(), media, gapSeconds)}>
               {`הוסף תגובה ל-${publishedCount} פרסומים`}
             </Button>
             <Button variant="secondary" onClick={onClose}>

@@ -502,12 +502,13 @@ export default function CampaignControlCenter() {
                     publishedCount={published.length}
                     initialText={campaign.comment_text ?? ''}
                     initialMedia={campaign.comment_media ?? []}
+                    initialGapSeconds={campaign.comment_gap_seconds ?? 30}
                     busy={busy === 'comment'}
-                    onSubmit={(text, media) =>
+                    onSubmit={(text, media, gapSeconds) =>
                       act(
                         'comment',
                         async () => {
-                          const n = await queueCampaignComment(id, text, media);
+                          const n = await queueCampaignComment(id, text, media, gapSeconds);
                           setCommentOpen(false);
                           return n;
                         },

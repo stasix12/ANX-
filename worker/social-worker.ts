@@ -978,16 +978,23 @@ function groupUrlOf(target: { url: string } | { url: string }[] | null | undefin
 /** Posts commented per idle tick. Deliberately small — see below. */
 const COMMENTS_PER_TICK = 1;
 /**
- * The gap between one comment and the next, in milliseconds.
+ * The gap between one comment and the next, when the round has not said.
  *
- * Twenty to forty seconds, drawn fresh each time rather than fixed. A hundred
- * and twenty-two comments arriving at a metronome's pace is a shape; arriving
- * at uneven human intervals is a hundred and twenty-two comments. The owner
- * asked for this range and it is the right instinct — the tick alone would
- * have spaced them by the poll interval, which is a few seconds.
+ * It used to be a fixed 20-40s with no say in it. How fast to go is a
+ * judgement about the owner's own account and belongs to them, per round — a
+ * hundred posts at ten seconds is twenty minutes, at sixty it is an hour and a
+ * half. This is only the fallback for a round saved before the field existed.
  */
-const COMMENT_GAP_MIN_MS = 20_000;
-const COMMENT_GAP_MAX_MS = 40_000;
+const COMMENT_GAP_DEFAULT_SEC = 30;
+/**
+ * A quarter of the gap, added at random on top of it.
+ *
+ * Not caution — shape. A hundred and seventeen comments at an exact ten
+ * seconds is a metronome, and a metronome is the thing that is recognisable.
+ * The same comments at ten-to-twelve seconds are a hundred and seventeen
+ * comments. It only ever ADDS, so a chosen ten never becomes eight.
+ */
+const COMMENT_JITTER = 0.25;
 
 /**
  * Leave the round's comment on the posts the owner asked for.
@@ -1013,7 +1020,7 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
    * SPACED, not merely one per tick. The poll interval is a few seconds, so
    * without this the whole round's comments would land inside two minutes.
    */
-  if (Date.now() - (state.lastCommentAt ?? 0) < (state.commentGapMs ?? COMMENT_GAP_MIN_MS)) return;
+  if (Date.now() - (state.lastCommentAt ?? 0) < (state.commentGapMs ?? COMMENT_GAP_DEFAULT_SEC * 1000)) return;
 
   /*
    * NO PERMALINK REQUIRED, and that was a real bug: publishing to a group
@@ -1060,7 +1067,7 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
     }
     const { data: campaign } = await db
       .from('social_campaigns')
-      .select('comment_text, comment_media')
+      .select('comment_text, comment_media, comment_gap_seconds')
       .eq('id', row.campaign_id)
       .maybeSingle();
     const text = ((campaign?.comment_text as string) ?? '').trim();
@@ -1088,7 +1095,11 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
         .eq('id', row.id);
       console.log(ok ? '[worker] 💬 נוספה תגובה לפרסום.' : '[worker] ℹ לא הצלחנו להוסיף תגובה לפרסום.');
       state.lastCommentAt = Date.now();
-      state.commentGapMs = COMMENT_GAP_MIN_MS + Math.floor(Math.random() * (COMMENT_GAP_MAX_MS - COMMENT_GAP_MIN_MS));
+      /* Clamped again here: the column is an integer anybody with database
+         access could set to zero, and this is the code that would then hammer
+         Facebook with it. */
+      const chosen = Math.max(5, Math.min(600, Number(campaign?.comment_gap_seconds) || COMMENT_GAP_DEFAULT_SEC));
+      state.commentGapMs = Math.round(chosen * 1000 * (1 + Math.random() * COMMENT_JITTER));
     } catch (err) {
       await db.from('social_queue').update({ comment_status: 'failed', comment_at: new Date().toISOString() }).eq('id', row.id);
       console.error('[worker] ✗ הוספת תגובה נכשלה:', err instanceof Error ? err.message.split('\n')[0] : err);

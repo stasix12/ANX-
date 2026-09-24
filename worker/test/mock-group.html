@@ -82,6 +82,13 @@
       }
     }
     art.appendChild(body);
+    /* A post's own address, on its timestamp, exactly as Facebook puts it —
+       this is what the address book reads once and keeps, so nothing has to
+       hunt the group for the post's words ever again. */
+    const stamp = document.createElement('a');
+    stamp.href = `https://www.facebook.com/groups/1234567890/posts/${Date.now()}${feed.children.length}/?__cft__=tracking`;
+    stamp.textContent = 'לפני שעה';
+    art.appendChild(stamp);
     const open = document.createElement('button');
     open.type = 'button';
     open.setAttribute('aria-label', 'הוספת תגובה');

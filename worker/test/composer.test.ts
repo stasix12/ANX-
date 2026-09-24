@@ -6,6 +6,7 @@ import { chromium } from 'playwright-core';
 import type { SocialTarget } from '@/lib/social/types';
 import { FacebookGroupBrowserAdapter } from '../adapters/facebookGroupBrowser';
 import { PublishError, commentOnPost, publishToGroup } from '../facebook/composer';
+import { matchPosts, ourPostsInGroup } from '../facebook/postIndex';
 import { SessionError } from '../facebook/session';
 
 /**
@@ -244,6 +245,52 @@ async function main() {
   assert.ok(/[\u0590-\u05FF]/.test(missing.reason), 'and it is in Hebrew — it is shown to the owner');
   assert.ok(missing.tried.length > 0, 'and it records where it looked, for the terminal');
   console.log('✓ a failed comment reports a Hebrew reason and the addresses it tried');
+
+  /*
+   * THE ADDRESS BOOK, END TO END.
+   *
+   * The owner's instruction, and the correction to three rounds of guessing:
+   * read each post's own address ONCE and keep it, instead of hunting the
+   * group for the post's words every single time. This proves the reading —
+   * the address comes off the page, the tracking parameters are stripped, and
+   * the post we published is matched to the address it actually has.
+   */
+  const page5 = await context.newPage();
+  await page5.goto(fixture, { waitUntil: 'domcontentloaded' });
+  await page5.waitForTimeout(1000);
+  /* The reader navigates the page it is given, so it gets its own — and
+     file:// is not facebook.com, so it refuses every address there. That is
+     the right answer and not what this is testing: the page below proves the
+     SHAPE is on the page for the real reader to find. */
+  const page6 = await context.newPage();
+  const ours = await ourPostsInGroup(page6, fixture.replace(/\/mock-group\.html$/, ''), 'x');
+  /* url and text read TOGETHER, in one pass. Read as two lists they come
+     back misaligned the moment one post has no address — which the decoy does
+     not — and the test then compares our post's text against somebody else's
+     link. */
+  const onPage = await page5.evaluate(() =>
+    Array.from(document.querySelectorAll('[role="article"]')).map((a) => ({
+      href: (a.querySelector('a[href*="/posts/"]') as HTMLAnchorElement | null)?.href ?? '',
+      text: (a as HTMLElement).innerText ?? '',
+    })),
+  );
+  const withLinks = onPage.filter((p) => p.href);
+  assert.ok(withLinks.length > 0, 'every post carries its own address on the page');
+  assert.ok(withLinks.every((p) => p.href.includes('/posts/')), 'and it is a permalink, not a profile link');
+  assert.deepEqual(ours, [], 'while an address that is not facebook.com is refused outright');
+
+  /* And the matching, over the real shape: our post's text against the page's
+     rendering of it, with the tracking parameters already stripped. */
+  const cleaned = withLinks.map((p) => ({ url: `https://www.facebook.com${new URL(p.href).pathname}`, text: p.text }));
+  assert.ok(cleaned.every((p) => !p.url.includes('__cft__')), 'tracking parameters never reach what is stored');
+  const mine = cleaned.find((p) => p.text.includes('ניקוי ספות בבאר שבע'));
+  assert.ok(mine, 'our own post is on the page, with its address');
+  assert.deepEqual(
+    matchPosts([{ id: 'q1', text: 'ניקוי ספות בבאר שבע 🧽 מבצע לסוף השבוע' }], [mine]),
+    { q1: mine.url },
+    'and it is matched to its own address, emoji and all',
+  );
+  console.log('✓ each post carries an address the worker can read once and keep');
 
   await browser.close();
   console.log('composer tests OK');

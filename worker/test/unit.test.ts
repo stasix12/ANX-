@@ -39,6 +39,7 @@ import { friendlyMessage, GENERIC_ERROR, LATEST_SCHEMA_FILE } from '@/lib/social
 import { renderPostText } from '@/lib/social/compose';
 import { safeError } from '../db';
 import { PublishError, lookupPages, pageProbe, searchWords } from '../facebook/composer';
+import { matchPosts, normalizeForMatch } from '../facebook/postIndex';
 
 /** Pure helpers shared by the dashboard, the server worker and the local worker. */
 
@@ -2677,6 +2678,82 @@ const scenario: { step: string; line: string }[] = [];
   /* A missing column may never cost the status — same rule as the note, and
      for the same reason: a row stuck on 'pending' is commented on forever. */
   assert.ok(/comment_note\|comment_shot/.test(localWorker), 'and a database without the column still records what happened');
+
+  /*
+   * ===================================================================
+   * THE ADDRESS BOOK — find each post's own address once, and keep it.
+   * ===================================================================
+   *
+   * The owner's instruction, and they were right to give it. Everything that
+   * touches a published post used to find it by hunting the group for its own
+   * words, and that hunt failed a different way every round: text containing
+   * an emoji Facebook renders as an image, a scroll that gave up after two
+   * passes, a group search that misses recent posts. Each fix bought one
+   * round. Searching for a post by its words is a guess; a hundred and
+   * seventeen guesses fail a hundred and seventeen ways.
+   */
+  assert.ok(/async function resolveAddresses/.test(localWorker), 'addresses are resolved as their own pass');
+  assert.ok(/\.is\('permalink', null\)/.test(localWorker), 'and only for rows that do not have one yet');
+  assert.ok(/await resolveAddresses\(state, headless\);/.test(localWorker), 'it runs before anything that needs an address');
+  const addressAt = localWorker.indexOf('await resolveAddresses(state, headless);');
+  const commentsAt = localWorker.indexOf('await runCampaignComments(state, headless);');
+  assert.ok(addressAt > 0 && commentsAt > addressAt, 'before the comments, not after them');
+  assert.ok(/\.update\(\{ permalink: url \}\)/.test(localWorker), 'and the address is written down, so nothing searches twice');
+  /* Learned from the cookie, remembered from the database. A login check that
+     throws would otherwise empty it and send every lookup back to hunting the
+     whole group — the behaviour this replaced. */
+  assert.ok(/accountId: \(\(worker as \{ fb_user_id\?: string \}\)\.fb_user_id \?\? ''\) \|\| undefined/.test(localWorker), 'the id survives a restart');
+
+  const index = readFileSync(new URL('../facebook/postIndex.ts', import.meta.url), 'utf8');
+  assert.ok(/\/user\/\$\{authorId\}\//.test(index), 'the page read is the group filtered to our own posts');
+  /* The same __name hazard that has cost rounds: a named helper inside an
+     evaluate travels as source while the helper it compiles to does not. */
+  assert.ok(!/=> \{[\s\S]{0,400}const \w+ = \(/.test(index.slice(index.indexOf('page\n      .evaluate'))), 'no named helper inside the page evaluate');
+
+  /*
+   * MATCHING, tested against the owner's real posts rather than argued about.
+   */
+  const realA = '📣 ניקוי ספות רק ב299₪\n🛋️ הגיע הזמן לשבת על ספה נקייה\n🎁 מזמינים ניקוי ספה ומקבלים זרוז ייבוש במקום\n📞 053-5257250';
+  /* What Facebook's page gives back: emoji gone (they are images), the tail
+     truncated at "עוד…", the lines run together. */
+  const asRendered = 'ניקוי ספות רק ב299₪הגיע הזמן לשבת על ספה נקייהמזמינים ניקוי ספה ומקבלים זרוז ייבוש במקום… עוד';
+  assert.ok(
+    normalizeForMatch(asRendered).includes(normalizeForMatch(realA).slice(0, 60)),
+    'the page copy and our copy agree once both are stripped to letters and digits',
+  );
+  assert.deepEqual(
+    matchPosts([{ id: 'q1', text: realA }], [{ url: 'https://www.facebook.com/groups/1/posts/9/', text: asRendered }]),
+    { q1: 'https://www.facebook.com/groups/1/posts/9/' },
+    'so the row gets its address',
+  );
+
+  /* THE ORDINARY CASE, and the one that makes this work at all: one post of
+     ours in the group, one row wanting an address. Nothing to decide — no
+     text matching can fail here, however badly the page mangles the words. */
+  assert.deepEqual(
+    matchPosts([{ id: 'q1', text: 'טקסט שהעמוד עיוות עד שאי אפשר לזהות' }], [{ url: 'https://www.facebook.com/groups/1/posts/9/', text: '🧽🧽🧽' }]),
+    { q1: 'https://www.facebook.com/groups/1/posts/9/' },
+    'one of each needs no matching',
+  );
+
+  /* AND NEVER A GUESS BEYOND THAT. Two rows and two posts that the text
+     cannot tell apart are left alone: a comment under the wrong post of ours
+     is still the wrong post. */
+  assert.deepEqual(
+    matchPosts(
+      [{ id: 'q1', text: '🧽' }, { id: 'q2', text: '🎁' }],
+      [{ url: 'https://www.facebook.com/groups/1/posts/9/', text: '...' }, { url: 'https://www.facebook.com/groups/1/posts/8/', text: '...' }],
+    ),
+    {},
+    'two of each are left unresolved rather than paired by position',
+  );
+  /* One post may not be claimed by two rows. */
+  const shared = 'מבצע ניקוי ספות בבאר שבע והסביבה בהנחה';
+  const twice = matchPosts(
+    [{ id: 'q1', text: shared }, { id: 'q2', text: shared }],
+    [{ url: 'https://www.facebook.com/groups/1/posts/9/', text: shared }],
+  );
+  assert.equal(Object.keys(twice).length, 1, 'a single post answers a single row');
 
   /* The same lookup, for the same reason, when reading how a post did. */
   assert.ok(/function ourPostsIn/.test(localWorker), 'the counters are read off our own posts in the group too');

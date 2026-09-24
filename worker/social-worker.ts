@@ -27,6 +27,7 @@ import { logActivity, safeError, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
 import { commentOnPost, type CommentOutcome } from './facebook/composer';
+import { matchPosts, ourPostsInGroup } from './facebook/postIndex';
 import { readPostMetrics } from './facebook/metrics';
 import { cleanupMedia, downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
@@ -145,9 +146,20 @@ async function main(): Promise<void> {
   const { data: worker } = await db
     .from('social_workers')
     .upsert({ name: env.workerName, status: 'online', version: VERSION, host: hostname(), last_seen_at: new Date().toISOString() }, { onConflict: 'name' })
-    .select('id')
+    .select('id, fb_user_id')
     .single();
   if (!worker) throw new Error('רישום ה-worker נכשל — האם הרצתם את supabase/social-schema-v2.sql?');
+  /*
+   * REMEMBERED FROM LAST TIME, because everything that finds a post now needs
+   * it and a login check that throws would otherwise take it away.
+   *
+   * `/groups/<id>/user/<this>/` is how a post is located at all. It is learned
+   * from the c_user cookie on a successful login check — and when that check
+   * fails to run, the id would be empty and every lookup would silently fall
+   * back to hunting the whole group, which is exactly the behaviour this was
+   * written to replace. The database already has it from the last time it
+   * worked, so the failure costs nothing.
+   */
   const state: WorkerState = {
     id: worker.id,
     browserState: session.hasProfile() ? 'unknown' : 'disconnected',
@@ -156,6 +168,7 @@ async function main(): Promise<void> {
     lastCheckAt: 0,
     lastPlanAt: 0,
     idleNoticeShown: false,
+    accountId: ((worker as { fb_user_id?: string }).fb_user_id ?? '') || undefined,
   };
 
   // Jobs this worker was running when it died: never auto-retry (the post may exist).
@@ -253,6 +266,7 @@ async function tick(state: WorkerState): Promise<void> {
     .limit(Math.max(1, Math.min(3, browser.concurrentJobs || 1)));
   if (error) throw new Error(error.message);
   if (!due?.length) {
+    await resolveAddresses(state, headless);
     await runCampaignComments(state, headless);
     await resolveShareLinks(state, headless);
     await syncGroupProfiles(state, headless);
@@ -1011,6 +1025,131 @@ function ourPostsIn(groupUrl: string | null, accountId: string | undefined): str
   const group = parseGroupUrl(groupUrl);
   if (!group) return groupUrl;
   return `${group.url}/user/${accountId}/`;
+}
+
+/**
+ * How many groups to look up per tick. One, and it is not a throttle for its
+ * own sake: this opens a real Facebook page and reads it.
+ */
+const GROUPS_PER_TICK = 1;
+
+/**
+ * FIND EACH POST'S OWN ADDRESS ONCE, AND KEEP IT.
+ *
+ * This is the owner's instruction, and they were right to give it. Everything
+ * that touches a published post used to find it by hunting the group for its
+ * own words — and that hunt failed for a different reason every round: text
+ * containing an emoji that Facebook renders as an image, a scroll that gave up
+ * after two passes, a group search that misses recent posts. Each fix bought
+ * one round. The approach was the problem: searching for a post by its words
+ * is a guess, and a hundred and seventeen guesses fail a hundred and
+ * seventeen ways.
+ *
+ * So: one page per group — the group filtered to OUR posts — read once, and
+ * the addresses written down. After this, nothing searches. The comment opens
+ * the post. A retry opens the post. The counters are read off the post.
+ *
+ * Runs before the comments and before the metrics, because both of them are
+ * now allowed to assume the address is there.
+ */
+async function resolveAddresses(state: WorkerState, headless: boolean): Promise<void> {
+  if (state.browserState !== 'connected' || !session.hasProfile()) return;
+  if (!state.accountId) return;
+  const db = await workerDb();
+
+  /* Rows that WANT an address: a comment was asked for and none is stored. */
+  const { data, error } = await db
+    .from('social_queue')
+    .select('id, rendered_text, target_id, target:social_targets(url)')
+    .eq('comment_status', 'pending')
+    .is('permalink', null)
+    .order('published_at')
+    .limit(200);
+  if (error || !data?.length) return;
+
+  const rows = data as unknown as {
+    id: string;
+    rendered_text: string;
+    target_id: string;
+    target: { url: string } | { url: string }[] | null;
+  }[];
+
+  /* One group at a time, all of its rows together — which is the entire point
+     of doing this by group rather than by post. */
+  const byGroup = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const url = groupUrlOf(row.target);
+    if (!url) continue;
+    const group = parseGroupUrl(url);
+    if (!group) continue;
+    byGroup.set(group.url, [...(byGroup.get(group.url) ?? []), row]);
+  }
+
+  for (const [groupUrl, groupRows] of [...byGroup].slice(0, GROUPS_PER_TICK)) {
+    if (stopping) break;
+    const page = await session.newPage(headless);
+    try {
+      const posts = await ourPostsInGroup(page, groupUrl, state.accountId);
+      if (!posts.length) {
+        /*
+         * NOT "the posts are gone". The page may have been a login wall, or
+         * the group may have stopped loading. Saying which is the difference
+         * between a retry that helps and one that repeats — so the note says
+         * what we opened, and the picture shows what came back.
+         */
+        const shot = await captureScreenshot(page, groupRows[0].id, 'address');
+        for (const row of groupRows) {
+          await db
+            .from('social_queue')
+            .update({
+              comment_status: 'failed',
+              comment_at: new Date().toISOString(),
+              comment_note: 'לא הצלחנו לפתוח את רשימת הפרסומים שלכם בקבוצה הזאת. ייתכן שפייסבוק ביקשה אימות, או שאין לנו גישה לקבוצה.',
+              comment_shot: shot ?? '',
+            })
+            .eq('id', row.id)
+            .then((r) => (r.error ? console.error('[worker] ✗', r.error.message) : undefined));
+        }
+        console.error(`[worker] ✗ לא נמצאו פרסומים שלנו ב-${groupUrl}`);
+        continue;
+      }
+
+      const found = matchPosts(
+        groupRows.map((r) => ({ id: r.id, text: r.rendered_text })),
+        posts,
+      );
+      let kept = 0;
+      for (const row of groupRows) {
+        const url = found[row.id];
+        if (!url) continue;
+        const saved = await db.from('social_queue').update({ permalink: url }).eq('id', row.id);
+        if (saved.error) console.error('[worker] ✗ לא הצלחנו לשמור את כתובת הפוסט:', saved.error.message);
+        else kept += 1;
+      }
+      console.log(`[worker] 🔗 ${groupUrl}: ${posts.length} פרסומים שלנו, ${kept} כתובות נשמרו.`);
+
+      /* A row we could not identify among our OWN posts is a real dead end:
+         the text no longer resembles anything there. Say so with the picture,
+         rather than leaving it pending to be tried again identically. */
+      for (const row of groupRows) {
+        if (found[row.id]) continue;
+        const shot = await captureScreenshot(page, row.id, 'address');
+        await db
+          .from('social_queue')
+          .update({
+            comment_status: 'failed',
+            comment_at: new Date().toISOString(),
+            comment_note: `מצאנו ${posts.length} פרסומים שלכם בקבוצה, אבל אף אחד מהם לא תאם לפרסום הזה. ייתכן שהוא נמחק.`,
+            comment_shot: shot ?? '',
+          })
+          .eq('id', row.id);
+      }
+    } catch (err) {
+      console.error('[worker] ✗ איתור כתובות נכשל:', err instanceof Error ? err.message.split('\n')[0] : err);
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
 }
 
 /** Posts commented per idle tick. Deliberately small — see below. */

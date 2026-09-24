@@ -92,6 +92,9 @@ interface WorkerState {
   metricsNoticeShown?: boolean;
   /** Same, for the round-comment columns. */
   commentNoticeShown?: boolean;
+  /** When the last comment went out, and the gap drawn for the next one. */
+  lastCommentAt?: number;
+  commentGapMs?: number;
 }
 
 const session = new BrowserSession();
@@ -966,8 +969,25 @@ async function forgetAccount(state: WorkerState): Promise<void> {
 
 /* ------------------------------------------- comments the owner asked for */
 
+/** The group's address out of an embedded select, which may come back either way. */
+function groupUrlOf(target: { url: string } | { url: string }[] | null | undefined): string | null {
+  if (!target) return null;
+  return (Array.isArray(target) ? target[0]?.url : target.url) ?? null;
+}
+
 /** Posts commented per idle tick. Deliberately small — see below. */
 const COMMENTS_PER_TICK = 1;
+/**
+ * The gap between one comment and the next, in milliseconds.
+ *
+ * Twenty to forty seconds, drawn fresh each time rather than fixed. A hundred
+ * and twenty-two comments arriving at a metronome's pace is a shape; arriving
+ * at uneven human intervals is a hundred and twenty-two comments. The owner
+ * asked for this range and it is the right instinct — the tick alone would
+ * have spaced them by the poll interval, which is a few seconds.
+ */
+const COMMENT_GAP_MIN_MS = 20_000;
+const COMMENT_GAP_MAX_MS = 40_000;
 
 /**
  * Leave the round's comment on the posts the owner asked for.
@@ -989,11 +1009,26 @@ const COMMENTS_PER_TICK = 1;
 async function runCampaignComments(state: WorkerState, headless: boolean): Promise<void> {
   if (state.browserState !== 'connected' || !session.hasProfile()) return;
   const db = await workerDb();
+  /*
+   * SPACED, not merely one per tick. The poll interval is a few seconds, so
+   * without this the whole round's comments would land inside two minutes.
+   */
+  if (Date.now() - (state.lastCommentAt ?? 0) < (state.commentGapMs ?? COMMENT_GAP_MIN_MS)) return;
+
+  /*
+   * NO PERMALINK REQUIRED, and that was a real bug: publishing to a group
+   * never captures one — nothing in this file has ever written that column —
+   * so requiring it meant the queue matched nothing, the button stayed dead,
+   * and the owner was told their round had published nothing to comment on
+   * while a hundred and twenty-two posts sat above it on the same screen.
+   *
+   * The post is found by its own text on the group's page instead, which is
+   * the only handle a group post actually gives us.
+   */
   const { data, error } = await db
     .from('social_queue')
-    .select('id, permalink, rendered_text, campaign_id')
+    .select('id, permalink, rendered_text, campaign_id, target:social_targets(url)')
     .eq('comment_status', 'pending')
-    .not('permalink', 'is', null)
     .order('published_at')
     .limit(COMMENTS_PER_TICK);
   if (error) {
@@ -1008,7 +1043,16 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
   }
   if (!data?.length) return;
 
-  for (const row of data as { id: string; permalink: string; rendered_text: string; campaign_id: string | null }[]) {
+  for (const row of data as unknown as {
+    id: string;
+    permalink: string | null;
+    rendered_text: string;
+    campaign_id: string | null;
+    /* supabase-js types an embedded relation as an array even when the foreign
+       key makes it at most one row. Read defensively rather than asserting a
+       shape the client does not promise. */
+    target: { url: string } | { url: string }[] | null;
+  }[]) {
     if (stopping) break;
     if (!row.campaign_id) {
       await db.from('social_queue').update({ comment_status: 'failed', comment_at: new Date().toISOString() }).eq('id', row.id);
@@ -1032,12 +1076,19 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
     const page = await session.newPage(headless);
     try {
       local = media.length ? await downloadMedia(`${row.id}-comment`, media).catch(() => null) : null;
-      const ok = await commentOnPost(page, row.permalink, row.rendered_text, text, local?.images[0] ?? null);
+      /* The permalink when there is one, the group otherwise — and there
+         never is one for a group post today. */
+      const where = row.permalink ?? groupUrlOf(row.target) ?? '';
+      const ok = where
+        ? await commentOnPost(page, where, row.rendered_text, text, local?.images[0] ?? null)
+        : false;
       await db
         .from('social_queue')
         .update({ comment_status: ok ? 'done' : 'failed', comment_at: new Date().toISOString() })
         .eq('id', row.id);
       console.log(ok ? '[worker] 💬 נוספה תגובה לפרסום.' : '[worker] ℹ לא הצלחנו להוסיף תגובה לפרסום.');
+      state.lastCommentAt = Date.now();
+      state.commentGapMs = COMMENT_GAP_MIN_MS + Math.floor(Math.random() * (COMMENT_GAP_MAX_MS - COMMENT_GAP_MIN_MS));
     } catch (err) {
       await db.from('social_queue').update({ comment_status: 'failed', comment_at: new Date().toISOString() }).eq('id', row.id);
       console.error('[worker] ✗ הוספת תגובה נכשלה:', err instanceof Error ? err.message.split('\n')[0] : err);
@@ -1082,7 +1133,13 @@ async function restartIfUpdated(state: WorkerState): Promise<void> {
 /* ------------------------------------------------ how a published post did */
 
 /** Posts re-read per idle tick, and how long before a post is worth re-reading. */
-const METRICS_PER_TICK = 3;
+/*
+ * One, not three. Reading a post's counters used to be a permalink load; it is
+ * now a group page plus a scroll to find our post among other people's, which
+ * can take half a minute. Three of those would hold the tick for a minute and
+ * a half — and the comment task and the publishing queue are behind it.
+ */
+const METRICS_PER_TICK = 1;
 const METRICS_STALE_HOURS = 6;
 /**
  * After this, a post is left alone.
@@ -1116,11 +1173,12 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
   const db = await workerDb();
   const staleBefore = new Date(Date.now() - METRICS_STALE_HOURS * 3_600_000).toISOString();
   const publishedAfter = new Date(Date.now() - METRICS_MAX_AGE_DAYS * 86_400_000).toISOString();
+  /* Same correction as the comments above: a group post has no permalink, so
+     requiring one meant this collected nothing at all, quietly. */
   const { data, error } = await db
     .from('social_queue')
-    .select('id, permalink, metrics_at')
+    .select('id, permalink, rendered_text, metrics_at, target:social_targets(url)')
     .eq('status', 'published')
-    .not('permalink', 'is', null)
     .gte('published_at', publishedAfter)
     .or(`metrics_at.is.null,metrics_at.lt.${staleBefore}`)
     // Never read, then longest unread. Nulls first is what this ordering gives
@@ -1141,11 +1199,17 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
   }
   if (!data?.length) return;
 
-  for (const row of data as { id: string; permalink: string }[]) {
+  for (const row of data as unknown as {
+    id: string;
+    permalink: string | null;
+    rendered_text: string;
+    target: { url: string } | { url: string }[] | null;
+  }[]) {
     if (stopping) break;
     const page = await session.newPage(headless);
     try {
-      const m = await readPostMetrics(page, row.permalink);
+      const where = row.permalink ?? groupUrlOf(row.target) ?? '';
+      const m = where ? await readPostMetrics(page, where, row.rendered_text) : null;
       if (!m) {
         /* Login wall or checkpoint: the numbers on screen are not this post's.
            Leave the row unread and let the job path report the session. */

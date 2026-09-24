@@ -1,4 +1,5 @@
 import type { Page } from 'playwright-core';
+import { findPostArticle } from './composer';
 import { patterns } from './selectors';
 import { classifyPage } from './session';
 
@@ -68,16 +69,29 @@ function toCount(raw: string | null | undefined): number | null {
  * yields nothing all come back as nulls, because "we could not read it" must
  * not be recorded as "it did nothing".
  */
-export async function readPostMetrics(page: Page, permalink: string): Promise<PostMetrics | null> {
-  if (!/^https:\/\/(www\.|web\.|m\.)?facebook\.com\//i.test(permalink)) return null;
-  await page.goto(permalink, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+export async function readPostMetrics(page: Page, url: string, postText: string): Promise<PostMetrics | null> {
+  if (!/^https:\/\/(www\.|web\.|m\.)?facebook\.com\//i.test(url)) return null;
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   await page.waitForTimeout(2500);
   const kind = await classifyPage(page).catch(() => 'ok' as const);
   // A login wall or a checkpoint means the numbers on screen are not this
   // post's. Returning null keeps the row unread rather than recording zeros.
   if (kind !== 'ok') return null;
 
-  const text = await page.evaluate(() => document.body.innerText ?? '').catch(() => '');
+  /*
+   * SCOPED TO OUR POST, and this is a correction.
+   *
+   * It used to read document.body and match the first number it found. On a
+   * permalink page that is nearly right; on a GROUP page — which is where
+   * these actually have to be read, because publishing to a group yields no
+   * permalink — it is the neighbour's post that happens to be rendered above
+   * ours. The owner would have been shown somebody else's engagement as their
+   * own, which is the same class of lie as an invented reach number and
+   * harder to notice.
+   */
+  const article = await findPostArticle(page, postText);
+  if (!article) return null;
+  const text = await article.innerText().catch(() => '');
   if (!text) return EMPTY;
 
   const grab = (re: RegExp): number | null => {
@@ -99,11 +113,10 @@ export async function readPostMetrics(page: Page, permalink: string): Promise<Po
      * the only place the count exists as text, and left null when that is not
      * how this layout renders it.
      */
-    reactions: await page
-      .evaluate(() => {
-        const el = document.querySelector('[aria-label*="react" i], [aria-label*="תגוב" i], [aria-label*="реакц" i]');
-        return el?.getAttribute('aria-label') ?? '';
-      })
+    reactions: await article
+      .locator('[aria-label*="react" i], [aria-label*="תגוב" i], [aria-label*="реакц" i]')
+      .first()
+      .getAttribute('aria-label')
       .then((label) => toCount(label))
       .catch(() => null),
   };

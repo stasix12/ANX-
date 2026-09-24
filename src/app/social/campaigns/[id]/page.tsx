@@ -471,7 +471,10 @@ export default function CampaignControlCenter() {
             subtitle="מוסיפה תגובה מהחשבון שלכם לכל הפרסומים שכבר יצאו כאן — מתי שתחליטו."
           >
             {(() => {
-              const published = rows.filter((r) => r.status === 'published' && r.permalink);
+              /* No permalink test: a group post never has one, and requiring
+                 it is what left this button dead beside a round that had
+                 published a hundred and twenty-two times. */
+              const published = rows.filter((r) => r.status === 'published');
               const p = commentProgress(rows);
               return (
                 <>

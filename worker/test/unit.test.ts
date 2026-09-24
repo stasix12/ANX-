@@ -2384,13 +2384,31 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(!/firstComment/.test(composerSrc), 'and publishing no longer carries one along with it');
   assert.ok(!/firstComment/.test(settingsSrc), 'nor does the settings screen own the words any more');
   assert.ok(/comment_text/.test(clientForComment) && /queueCampaignComment/.test(clientForComment), 'the round owns them, and the round is what gets asked');
-  /* Only rows that can actually be commented on are marked. Marking a row with
-     no permalink leaves a task the worker can never finish, which reads on
-     screen as a machine that has stopped. */
-  assert.ok(
-    /\.eq\('status', 'published'\)[\s\S]{0,80}\.not\('permalink', 'is', null\)/.test(clientForComment),
-    'only published posts with a permalink are queued for a comment',
-  );
+  /*
+   * A GROUP POST HAS NO PERMALINK, and requiring one was a bug with a visible
+   * face: nothing in the worker has ever written that column, so the queue
+   * matched nothing, the button stayed dead, and the screen told the owner
+   * their round had published nothing to comment on while a hundred and
+   * twenty-two posts sat above it.
+   *
+   * The post is found by its own text on the group's page instead — the only
+   * handle a group post actually gives — and the same correction applies to
+   * the metrics reader, which was collecting nothing for the same reason.
+   */
+  assert.ok(!/not\('permalink', 'is', null'?\)/.test(clientForComment), 'a permalink may not be required to queue a comment');
+  assert.ok(!/not\('permalink', 'is', null\)/.test(localWorker), 'nor to read a post back, for a comment or for its counters');
+  assert.ok(/export async function findPostArticle/.test(composerSrc), 'the post is found by its own text');
+  /* And scoped to it. Reading the whole page on a GROUP feed reports the
+     neighbour's engagement as the owner's, which is the same class of lie as
+     an invented reach number and harder to notice. */
+  const metricsForComment = readFileSync(new URL('../facebook/metrics.ts', import.meta.url), 'utf8');
+  assert.ok(/const article = await findPostArticle\(page, postText\);/.test(metricsForComment), 'counters are read from our own post, not from the page');
+  assert.ok(!/document\.body\.innerText/.test(metricsForComment), 'never from the whole feed');
+  /* Spaced, and unevenly. A hundred and twenty-two comments at a metronome's
+     pace is a shape; at uneven human intervals it is a hundred and twenty-two
+     comments. The owner asked for 20-40 seconds and that is the right range. */
+  assert.ok(/const COMMENT_GAP_MIN_MS = 20_000;/.test(localWorker) && /const COMMENT_GAP_MAX_MS = 40_000;/.test(localWorker), 'comments are spaced 20-40s apart');
+  assert.ok(/Math\.random\(\) \* \(COMMENT_GAP_MAX_MS - COMMENT_GAP_MIN_MS\)/.test(localWorker), 'and the gap is drawn fresh each time, not fixed');
   /* Four states, not a boolean: "nobody asked" and "asked and failed" are
      opposite facts about a post that is already live. */
   assert.ok(/'failed'/.test(localWorker) && /comment_status/.test(localWorker), 'a comment that could not be placed is recorded as failed');

@@ -146,6 +146,52 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
 }
 
 /**
+ * The article on this page that holds OUR post, found by its own text.
+ *
+ * Exported because the comment writer and the metrics reader both need the
+ * same answer to the same question, and getting it twice in two slightly
+ * different ways is how one of them ends up reading a neighbour's post.
+ *
+ * ANCHORED TO THE TEXT, not to a position. A group publishes a permalink
+ * nowhere the worker can see, so "our post" can only ever mean "the post
+ * carrying the words we published" — and everything downstream depends on
+ * that being exactly right: a comment under a stranger's post, or a stranger's
+ * comment count reported as ours.
+ *
+ * Facebook renders every post AND every comment as role="article", so the
+ * outermost one carrying the text is the post. It also loads the feed
+ * lazily, so a post from a few hours ago may not be on screen yet — hence the
+ * scrolling, which stops the moment the post appears.
+ */
+export async function findPostArticle(page: Page, postText: string): Promise<Locator | null> {
+  const probe = postText
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.length >= 12)
+    ?.slice(0, 40);
+  if (!probe) return null;
+  const article = page.locator('[role="article"]').filter({ hasText: probe }).first();
+  let lastY = -1;
+  for (let pass = 0; pass < 12; pass += 1) {
+    if (await article.isVisible({ timeout: pass === 0 ? 6_000 : 1_000 }).catch(() => false)) return article;
+    /* Not there yet. A group's feed loads as it is scrolled, and the post we
+       want may be an hour of other people's posts down. */
+    await page.mouse.wheel(0, 2500).catch(() => undefined);
+    await page.waitForTimeout(1000);
+    /*
+     * Stop when the page stops moving. A feed that has run out — or a page
+     * that never scrolled at all — will not produce the post no matter how
+     * many more times we ask, and eleven more rounds of asking is half a
+     * minute spent per post to reach the same answer.
+     */
+    const y = await page.evaluate(() => window.scrollY).catch(() => -1);
+    if (y === lastY) break;
+    lastY = y;
+  }
+  return null;
+}
+
+/**
  * Leave a comment on one published post.
  *
  * SEPARATE FROM PUBLISHING ON PURPOSE. It used to run in the same breath as
@@ -184,15 +230,9 @@ export async function commentOnPost(
 }
 
 async function addComment(page: Page, postText: string, comment: string, image: string | null): Promise<boolean> {
-  const probe = postText
-    .split('\n')
-    .map((l) => l.trim())
-    .find((l) => l.length >= 12)
-    ?.slice(0, 40);
-  if (!probe) return false;
+  const article = await findPostArticle(page, postText);
+  if (!article) return false;
   try {
-    const article = page.locator('[role="article"]').filter({ hasText: probe }).first();
-    if (!(await article.isVisible({ timeout: 8_000 }).catch(() => false))) return false;
     await article.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
 
     // The box is sometimes behind the "comment" control rather than on screen.

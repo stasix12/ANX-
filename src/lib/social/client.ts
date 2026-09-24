@@ -776,11 +776,15 @@ export async function reopenCampaign(id: string): Promise<void> {
  * of this commented in the same second the post went up. Pressing this is that
  * decision, and it can be pressed again later with different words.
  *
- * Only rows that are PUBLISHED and carry a permalink are marked. A row still
- * waiting to go out has nothing to comment on, and one whose permalink was
- * never captured cannot be found again — marking either would leave a pending
- * task the worker can never finish, which reads on screen as a machine that
- * has stopped.
+ * Only rows that are PUBLISHED are marked — a row still waiting to go out has
+ * nothing to comment on yet.
+ *
+ * It used to require a permalink too, and that was a bug with a very visible
+ * face: publishing to a group never captures one, so nothing ever matched, the
+ * button stayed dead, and the screen told the owner their round had published
+ * nothing to comment on while a hundred and twenty-two posts sat above it. The
+ * worker finds the post by its own text on the group's page, which is the only
+ * handle a group post gives.
  *
  * Already-done rows are marked again on purpose: pressing this a second time
  * means "say this too", not "skip the ones that worked".
@@ -802,7 +806,6 @@ export async function queueCampaignComment(
       .update({ comment_status: 'pending', comment_at: null })
       .eq('campaign_id', campaignId)
       .eq('status', 'published')
-      .not('permalink', 'is', null)
       .select('id'),
   );
   return rows.length;

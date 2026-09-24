@@ -18,12 +18,21 @@ import { classifyPage } from './session';
 export interface PostMetrics {
   /** Facebook's own "seen by" count. Often absent — then null, never 0. */
   seen: number | null;
+  /**
+   * Plays on a video post — a different claim from `seen`, kept apart.
+   *
+   * A play is somebody who watched; an impression is a post that crossed a
+   * screen. Folding them into one figure would let a card label video plays
+   * "seen by", which is the sort of small dishonesty nobody notices until a
+   * customer asks what the number means.
+   */
+  views: number | null;
   reactions: number | null;
   comments: number | null;
   shares: number | null;
 }
 
-const EMPTY: PostMetrics = { seen: null, reactions: null, comments: null, shares: null };
+const EMPTY: PostMetrics = { seen: null, views: null, reactions: null, comments: null, shares: null };
 
 /**
  * Facebook writes counts the way people read them, not the way machines do:
@@ -81,6 +90,7 @@ export async function readPostMetrics(page: Page, permalink: string): Promise<Po
 
   return {
     seen: grab(patterns.seenBy),
+    views: grab(patterns.viewCount),
     comments: grab(patterns.commentCount),
     shares: grab(patterns.shareCount),
     /*

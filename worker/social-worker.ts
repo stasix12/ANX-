@@ -953,6 +953,7 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
         .from('social_queue')
         .update({
           metrics_seen: m.seen,
+          metrics_views: m.views,
           metrics_reactions: m.reactions,
           metrics_comments: m.comments,
           metrics_shares: m.shares,

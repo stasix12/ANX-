@@ -599,6 +599,7 @@ console.log('unit tests OK');
   const reachCard = readFileSync(new URL('../../src/components/social/CampaignReach.tsx', import.meta.url), 'utf8');
   const metricsSrc = readFileSync(new URL('../facebook/metrics.ts', import.meta.url), 'utf8');
   const workerSrc = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const selectorsSrc = readFileSync(new URL('../facebook/selectors.ts', import.meta.url), 'utf8');
   const reachCode = reachCard.replace(/\/\*[\s\S]*?\*\//g, '');
   const metricsCode = metricsSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   assert.ok(
@@ -623,6 +624,17 @@ console.log('unit tests OK');
   assert.ok(/value === null \? <span/.test(reachCard), 'and an unread figure shows a dash, never a zero');
   assert.ok(/מתוך \$\{posts\}/.test(reachCard), 'saying how many publications the total is over');
   assert.ok(/seen: number \| null/.test(metricsSrc), 'the reader returns null where Facebook stated nothing');
+  /*
+   * A VIDEO SAYS "צפיות", NOT "נצפה על ידי" — found on the owner's own post.
+   * Everything they publish is video, so matching "seen by" alone would have
+   * collected nothing from their entire library while looking like it worked.
+   * Kept as its own count because a play is somebody who watched and an
+   * impression is a post that crossed a screen; one column for both would let
+   * the card label the first as the second.
+   */
+  assert.ok(/viewCount:/.test(selectorsSrc) && /צפיות/.test(selectorsSrc), 'a video post reports plays, and they are read too');
+  assert.ok(/views: number \| null/.test(metricsSrc), 'and kept apart from the impressions figure');
+  assert.ok(/label="צפיות בסרטון"/.test(reachCard), 'so the tile can say which of the two it is showing');
   assert.ok(
     /if \(kind !== 'ok'\) return null;/.test(metricsSrc),
     'and a login wall returns nothing at all rather than recording zeros for somebody else\'s page',

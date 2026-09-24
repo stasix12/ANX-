@@ -225,6 +225,7 @@ export interface QueueItem {
    * the group's member count — a guess wearing the clothes of a measurement.
    */
   metrics_seen?: number | null;
+  metrics_views?: number | null;
   metrics_reactions?: number | null;
   metrics_comments?: number | null;
   metrics_shares?: number | null;

@@ -7,6 +7,11 @@
 --   metrics_seen       "נצפה על ידי N" when Facebook shows it — and it does
 --                      not always. NULL means it was not shown, which is a
 --                      different fact from 0 and must stay tellable apart.
+--   metrics_views      plays on a VIDEO post, which Facebook reports as
+--                      "N צפיות" instead. Kept apart from metrics_seen on
+--                      purpose: a play is somebody who watched, an impression
+--                      is a post that crossed a screen, and one column for
+--                      both would let a screen label the first as the second.
 --   metrics_reactions  likes and other reactions
 --   metrics_comments   comments
 --   metrics_shares     shares
@@ -26,6 +31,7 @@
 
 alter table public.social_queue
   add column if not exists metrics_seen integer,
+  add column if not exists metrics_views integer,
   add column if not exists metrics_reactions integer,
   add column if not exists metrics_comments integer,
   add column if not exists metrics_shares integer,
@@ -33,6 +39,8 @@ alter table public.social_queue
 
 comment on column public.social_queue.metrics_seen is
   'Facebook''s own "seen by" count for this group post. NULL = Facebook did not show one, which is not the same as zero.';
+comment on column public.social_queue.metrics_views is
+  'Plays on a video post ("N צפיות"). NULL = not a video, or Facebook showed no count.';
 comment on column public.social_queue.metrics_at is
   'When the counters were last read off the post. NULL = never read.';
 

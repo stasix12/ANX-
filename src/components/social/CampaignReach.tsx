@@ -47,6 +47,7 @@ export function CampaignReach({ rows, truncated = false }: { rows: QueueRow[]; t
   };
 
   const seen = sumOf((r) => r.metrics_seen);
+  const views = sumOf((r) => r.metrics_views);
   const reactions = sumOf((r) => r.metrics_reactions);
   const comments = sumOf((r) => r.metrics_comments);
   const shares = sumOf((r) => r.metrics_shares);
@@ -71,7 +72,22 @@ export function CampaignReach({ rows, truncated = false }: { rows: QueueRow[]; t
       ) : (
         <>
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
-            <Figure label="נצפה על ידי" value={seen.posts ? seen.total : null} posts={seen.posts} of={published.length} />
+            {/*
+              THE EXPOSURE TILE, and which one it is depends on what Facebook
+              actually reported. A video post says "N צפיות" — plays — and a
+              text post says "נצפה על ידי N" — impressions. They are not the
+              same claim, so the label follows the number rather than one
+              wording being stretched over both. When Facebook reported
+              neither, the tile still appears and says so with a dash: the
+              question was asked, and "Facebook does not show it" is the
+              answer.
+            */}
+            {views.posts > 0 && (
+              <Figure label="צפיות בסרטון" value={views.total} posts={views.posts} of={published.length} />
+            )}
+            {(seen.posts > 0 || views.posts === 0) && (
+              <Figure label="נצפה על ידי" value={seen.posts ? seen.total : null} posts={seen.posts} of={published.length} />
+            )}
             <Figure label="לייקים" value={reactions.posts ? reactions.total : null} posts={reactions.posts} of={published.length} />
             <Figure label="תגובות" value={comments.posts ? comments.total : null} posts={comments.posts} of={published.length} />
             <Figure label="שיתופים" value={shares.posts ? shares.total : null} posts={shares.posts} of={published.length} />
@@ -88,7 +104,7 @@ export function CampaignReach({ rows, truncated = false }: { rows: QueueRow[]; t
         more than a confident invented one.
       */}
       <p className="mt-2 text-xs text-mist-500">
-        פייסבוק לא מפרסמת מספר חשיפה לפוסט בקבוצה, ולכן אין כאן מספר כזה. "נצפה על ידי" מופיע רק בקבוצות שבהן פייסבוק עצמה מציגה אותו.
+        פייסבוק לא מפרסמת מספר חשיפה לפוסט בקבוצה, ולכן אין כאן מספר כזה. "צפיות בסרטון" מופיע על פוסטי וידאו, ו"נצפה על ידי" רק בקבוצות שבהן פייסבוק עצמה מציגה אותו.
       </p>
     </Card>
   );

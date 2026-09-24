@@ -48,6 +48,18 @@ export const patterns = {
    * on the page; the group's size is not an audience and is not read as one.
    */
   seenBy: /(?:נצפה על ידי|נצפו על ידי)\s*([\d.,\s]+(?:K|M|אלף|מיליון)?)|seen by\s*([\d.,\s]+(?:K|M)?)|([\d.,\s]+(?:тыс|млн)?)\s*просмотрел/i,
+  /*
+   * A VIDEO REPORTS "צפיות", NOT "נצפה על ידי", and that distinction was
+   * found on the owner's own post: everything they publish is video, and the
+   * only exposure figure Facebook was ever going to hand them is the one this
+   * pattern reads. Matching "seen by" alone would have collected nothing from
+   * their entire library while looking like it worked.
+   *
+   * Kept as its own count rather than folded into seenBy, because they are not
+   * the same claim — a play is a person who watched, an impression is a post
+   * that crossed a screen. The card labels each for what it is.
+   */
+  viewCount: /([\d.,\s]+(?:K|M|אלף|מיליון)?)\s*צפיות|([\d.,\s]+(?:K|M)?)\s*views?\b|([\d.,\s]+(?:тыс|млн)?)\s*просмотр/i,
   /* No \b after the Hebrew and Russian words: JavaScript's word boundary is
      defined on ASCII \w, so it never matches at the edge of a Hebrew letter
      and the alternative silently never fires. Measured, not assumed — the

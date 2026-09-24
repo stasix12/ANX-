@@ -199,7 +199,8 @@ async function main() {
   });
   /* A separate action, taken later, exactly as the round screen takes it. */
   const left = await commentOnPost(page3, fixture, 'ניקוי ספות בבאר שבע — מבצע לסוף השבוע', 'לפרטים: 050-0000000', null);
-  assert.equal(left, true, 'the comment must be left and verified, not merely attempted');
+  assert.equal(left.ok, true, `the comment must be left and verified, not merely attempted — got: ${left.reason}`);
+  assert.equal(left.reason, '', 'a success carries no reason');
   /* No named helper inside the evaluate: tsx's esbuild rewrites one into a
      __name() call that does not exist in the page, and the read dies before
      its first statement. The same hazard the account reader was built around,
@@ -221,10 +222,25 @@ async function main() {
      and cannot be taken back, so it is reported rather than thrown. */
   const page4 = await context.newPage();
   const missing = await commentOnPost(page4, fixture, 'פוסט שמעולם לא פורסם כאן', 'לפרטים: 050-0000000', null);
-  assert.equal(missing, false, 'a post that is not on the page yields false — never a comment somewhere else');
+  assert.equal(missing.ok, false, 'a post that is not on the page fails — never a comment somewhere else');
   const strayComments = await page4.evaluate(() => document.querySelectorAll('.comment').length);
   assert.equal(strayComments, 0, 'and nothing is typed anywhere while failing');
   console.log('✓ a post that cannot be found is reported, never guessed at');
+
+  /*
+   * A FAILURE SAYS WHY, IN HEBREW, ON THE SCREEN.
+   *
+   * This feature spent two rounds answering "לא הצליח" and nothing else,
+   * which is the answer that makes a person press the same button again. The
+   * sentence is not decoration: it is the difference between a post the admin
+   * deleted (nothing to retry) and a group that closed comments (nothing to
+   * retry either, but for a different reason) and a security screen (fix it
+   * and retry). So it is asserted, not merely produced.
+   */
+  assert.ok(missing.reason.length > 10, 'a failure carries a whole sentence, not a code');
+  assert.ok(/[\u0590-\u05FF]/.test(missing.reason), 'and it is in Hebrew — it is shown to the owner');
+  assert.ok(missing.tried.length > 0, 'and it records where it looked, for the terminal');
+  console.log('✓ a failed comment reports a Hebrew reason and the addresses it tried');
 
   await browser.close();
   console.log('composer tests OK');

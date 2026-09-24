@@ -64,36 +64,43 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
       )}
       <ul className="max-h-72 divide-y divide-ink-700 overflow-y-auto overscroll-contain rounded-xl bg-ink-800/40">
         {sorted.map((r) => (
-          <li key={r.id} className="flex min-w-0 items-center gap-2 px-3 py-2">
-            <span
-              aria-hidden
-              className={`h-2 w-2 shrink-0 rounded-full ${
-                r.comment_status === 'done' ? TONE_FILL.good : r.comment_status === 'failed' ? TONE_FILL.warn : TONE_FILL.neutral
-              }`}
-            />
-            {r.target?.image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={r.target.image_url} alt="" className="h-6 w-6 shrink-0 rounded-lg object-cover" />
-            ) : (
-              <TargetAvatar name={r.target?.name ?? ''} size={24} />
+          <li key={r.id} className="min-w-0 px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                aria-hidden
+                className={`h-2 w-2 shrink-0 rounded-full ${
+                  r.comment_status === 'done' ? TONE_FILL.good : r.comment_status === 'failed' ? TONE_FILL.warn : TONE_FILL.neutral
+                }`}
+              />
+              {r.target?.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={r.target.image_url} alt="" className="h-6 w-6 shrink-0 rounded-lg object-cover" />
+              ) : (
+                <TargetAvatar name={r.target?.name ?? ''} size={24} />
+              )}
+              {/* The group, tappable — a failure is worth opening. */}
+              {r.target?.url ? (
+                <Link
+                  href={r.target.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  dir="auto"
+                  className="min-w-0 flex-1 truncate text-[13px] text-mist-200"
+                >
+                  {r.target.name}
+                </Link>
+              ) : (
+                <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-200">
+                  {r.target?.name ?? '—'}
+                </span>
+              )}
+              <span className="shrink-0 text-[11px] text-mist-500">{LABEL[r.comment_status ?? ''] ?? ''}</span>
+            </div>
+            {/* The reason, and only where there is one to give. "לא הצליח" on
+                its own is what makes a person press the same button again. */}
+            {r.comment_status === 'failed' && r.comment_note && (
+              <p className="mt-1 pr-4 text-[11px] leading-relaxed text-warning-400/90">{r.comment_note}</p>
             )}
-            {/* The group, tappable — a failure is worth opening. */}
-            {r.target?.url ? (
-              <Link
-                href={r.target.url}
-                target="_blank"
-                rel="noreferrer"
-                dir="auto"
-                className="min-w-0 flex-1 truncate text-[13px] text-mist-200"
-              >
-                {r.target.name}
-              </Link>
-            ) : (
-              <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-200">
-                {r.target?.name ?? '—'}
-              </span>
-            )}
-            <span className="shrink-0 text-[11px] text-mist-500">{LABEL[r.comment_status ?? ''] ?? ''}</span>
           </li>
         ))}
       </ul>

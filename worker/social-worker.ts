@@ -26,7 +26,7 @@ import { updateAvailable } from './self-update';
 import { logActivity, safeError, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
-import { commentOnPost } from './facebook/composer';
+import { commentOnPost, type CommentOutcome } from './facebook/composer';
 import { readPostMetrics } from './facebook/metrics';
 import { cleanupMedia, downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
@@ -1093,17 +1093,22 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
     const page = await session.newPage(headless);
     try {
       local = media.length ? await downloadMedia(`${row.id}-comment`, media).catch(() => null) : null;
-      /* The permalink when there is one, the group otherwise — and there
-         never is one for a group post today. */
+      /* The permalink when there is one, the group otherwise — and for a post
+         published before this version there never is one. */
       const where = row.permalink ?? groupUrlOf(row.target) ?? '';
-      const ok = where
+      const outcome = where
         ? await commentOnPost(page, where, row.rendered_text, text, local?.images[0] ?? null)
-        : false;
-      await db
-        .from('social_queue')
-        .update({ comment_status: ok ? 'done' : 'failed', comment_at: new Date().toISOString() })
-        .eq('id', row.id);
-      console.log(ok ? '[worker] 💬 נוספה תגובה לפרסום.' : '[worker] ℹ לא הצלחנו להוסיף תגובה לפרסום.');
+        : { ok: false, reason: 'אין לנו כתובת לקבוצה הזאת.', permalink: '', tried: [] };
+      /*
+       * The address is written back whether it worked or not. Finding a group
+       * post by its own text is the slow, fragile part of this — a search, a
+       * scroll, and a guess about which article is ours — and once it has been
+       * done the answer is permanent. A retry, and every later read of how the
+       * post did, goes straight to the post.
+       */
+      await saveCommentOutcome(db, row.id, outcome, row.permalink);
+      if (outcome.ok) console.log('[worker] 💬 נוספה תגובה לפרסום.');
+      else console.log(`[worker] ℹ לא הצלחנו להוסיף תגובה: ${outcome.reason} (${outcome.tried.join(' → ') || 'לא ניסינו כתובת'})`);
       state.lastCommentAt = Date.now();
       /* Clamped again here: the column is an integer anybody with database
          access could set to zero, and this is the code that would then hammer
@@ -1111,13 +1116,48 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
       const chosen = Math.max(5, Math.min(600, Number(campaign?.comment_gap_seconds) || COMMENT_GAP_DEFAULT_SEC));
       state.commentGapMs = Math.round(chosen * 1000 * (1 + Math.random() * COMMENT_JITTER));
     } catch (err) {
-      await db.from('social_queue').update({ comment_status: 'failed', comment_at: new Date().toISOString() }).eq('id', row.id);
-      console.error('[worker] ✗ הוספת תגובה נכשלה:', err instanceof Error ? err.message.split('\n')[0] : err);
+      const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
+      await saveCommentOutcome(db, row.id, { ok: false, reason: `התוכנה נתקלה בתקלה: ${detail}`, permalink: '', tried: [] }, row.permalink);
+      console.error('[worker] ✗ הוספת תגובה נכשלה:', detail);
     } finally {
       cleanupMedia(local);
       await page.close().catch(() => undefined);
     }
   }
+}
+
+/**
+ * Write down how it went — including, on a failure, why.
+ *
+ * `comment_note` arrived after `comment_status` did, so a database that has
+ * not been updated yet would reject the whole write over the one column it is
+ * missing, and the row would stay 'pending' forever: the queue would pick it
+ * up again next tick, comment again, and fail to record that too. The status
+ * is what keeps this moving, so it is never allowed to depend on the note.
+ */
+async function saveCommentOutcome(
+  db: Awaited<ReturnType<typeof workerDb>>,
+  id: string,
+  outcome: CommentOutcome,
+  known: string | null,
+): Promise<void> {
+  const base: Record<string, unknown> = {
+    comment_status: outcome.ok ? 'done' : 'failed',
+    comment_at: new Date().toISOString(),
+  };
+  if (outcome.permalink && outcome.permalink !== known) base.permalink = outcome.permalink;
+
+  const withNote = await db
+    .from('social_queue')
+    .update({ ...base, comment_note: outcome.ok ? '' : outcome.reason })
+    .eq('id', id);
+  if (!withNote.error) return;
+  if (!/comment_note/.test(withNote.error.message)) {
+    console.error('[worker] ✗ לא הצלחנו לרשום את תוצאת התגובה:', withNote.error.message);
+    return;
+  }
+  const plain = await db.from('social_queue').update(base).eq('id', id);
+  if (plain.error) console.error('[worker] ✗ לא הצלחנו לרשום את תוצאת התגובה:', plain.error.message);
 }
 
 /* ------------------------------------------------------------ self-update */

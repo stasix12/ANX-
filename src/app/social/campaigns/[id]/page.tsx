@@ -509,23 +509,33 @@ export default function CampaignControlCenter() {
                         .filter((r) => r.comment_status)
                         .sort((a, b) => COMMENT_ORDER.indexOf(a.comment_status ?? '') - COMMENT_ORDER.indexOf(b.comment_status ?? ''))
                         .map((r) => (
-                          <li key={r.id} className="flex min-w-0 items-center gap-2 px-3 py-2">
-                            <span
-                              aria-hidden
-                              className={`h-2 w-2 shrink-0 rounded-full ${
-                                r.comment_status === 'done'
-                                  ? TONE_FILL.good
-                                  : r.comment_status === 'failed'
-                                    ? TONE_FILL.warn
-                                    : TONE_FILL.neutral
-                              }`}
-                            />
-                            <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-200">
-                              {r.target?.name ?? '—'}
-                            </span>
-                            <span className="shrink-0 text-[11px] text-mist-500">
-                              {r.comment_status === 'done' ? 'הגיב' : r.comment_status === 'failed' ? 'לא הצליח' : 'ממתין'}
-                            </span>
+                          <li key={r.id} className="min-w-0 px-3 py-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span
+                                aria-hidden
+                                className={`h-2 w-2 shrink-0 rounded-full ${
+                                  r.comment_status === 'done'
+                                    ? TONE_FILL.good
+                                    : r.comment_status === 'failed'
+                                      ? TONE_FILL.warn
+                                      : TONE_FILL.neutral
+                                }`}
+                              />
+                              <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-200">
+                                {r.target?.name ?? '—'}
+                              </span>
+                              <span className="shrink-0 text-[11px] text-mist-500">
+                                {r.comment_status === 'done' ? 'הגיב' : r.comment_status === 'failed' ? 'לא הצליח' : 'ממתין'}
+                              </span>
+                            </div>
+                            {/* Why, not just that. A post the admin deleted and
+                                a group that closed comments are two different
+                                things to do next, and only one is worth a
+                                retry — so the retry button below is only
+                                honest next to this line. */}
+                            {r.comment_status === 'failed' && r.comment_note && (
+                              <p className="mt-1 pr-4 text-[11px] leading-relaxed text-warning-400/90">{r.comment_note}</p>
+                            )}
                           </li>
                         ))}
                     </ul>

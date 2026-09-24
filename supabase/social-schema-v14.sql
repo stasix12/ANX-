@@ -45,3 +45,17 @@ comment on column public.social_queue.comment_status is
 create index if not exists social_queue_comment_idx
   on public.social_queue (comment_status, published_at)
   where comment_status = 'pending';
+
+-- ---------------------------------------------------------------------------
+-- Why a comment did not make it.
+--
+-- "לא הצליח" is the answer that makes a person press the same button again.
+-- A post that was deleted by the group's admin, a group that closed comments,
+-- and a Facebook security screen mid-round are three different things to do
+-- next, and only one of them is worth retrying. The worker writes the sentence
+-- it would have said in the terminal; the screen shows it under the group.
+alter table public.social_queue
+  add column if not exists comment_note text not null default '';
+
+comment on column public.social_queue.comment_note is
+  'A whole Hebrew sentence saying why the comment failed. Empty when it worked, or when nothing has been tried yet.';

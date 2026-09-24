@@ -239,6 +239,23 @@ export async function findPostArticle(page: Page, postText: string): Promise<Loc
 }
 
 /**
+ * What happened when we tried to comment — in Hebrew, for the owner's screen.
+ *
+ * "It did not work" is the answer this feature kept giving, twice in a row,
+ * and it is the answer that makes a person press the same button again. Each
+ * of these is a different thing to do next, so each of them says which.
+ */
+export interface CommentOutcome {
+  ok: boolean;
+  /** A whole Hebrew sentence, or '' when it worked. Shown on the screen. */
+  reason: string;
+  /** Where the post turned out to live, so nobody has to find it again. */
+  permalink: string;
+  /** For the terminal only: the addresses tried, in order. */
+  tried: string[];
+}
+
+/**
  * Leave a comment on one published post.
  *
  * SEPARATE FROM PUBLISHING ON PURPOSE. It used to run in the same breath as
@@ -266,59 +283,127 @@ export async function commentOnPost(
   postText: string,
   comment: string,
   image: string | null,
-): Promise<boolean> {
+): Promise<CommentOutcome> {
+  const tried: string[] = [];
   /*
-   * WHERE TO LOOK, in the order that actually finds things.
+   * FIND THE POST'S OWN PAGE FIRST, then comment there.
    *
-   * Scrolling a group's feed works for a post published minutes ago and stops
-   * working for one published this afternoon — three hours of other people's
-   * posts sit above it, and twelve scrolls do not reach. That is what failed
-   * on the owner's machine.
+   * The previous version commented wherever it found the post — including on
+   * a search results page, where Facebook renders a post in a condensed form
+   * whose comment control opens a dialog rather than an inline box. It found
+   * the post and then could not comment on it, which is a failure that looks
+   * exactly like not finding it.
    *
-   * So: the post's own address when it has one, then the GROUP'S SEARCH, which
-   * finds a post by its words however old it is and is a plain URL rather than
-   * a button in some language. The feed stays as the last resort, for a post
-   * that has only just gone up.
+   * So search is used for what it is good at: turning words into an address.
+   * The comment happens on the post's own page, where the box is reliably
+   * there — and the group's feed stays as the fallback below, because a
+   * markup change that hides the permalink must not take the whole feature
+   * with it.
    */
-  for (const where of lookupUrls(url, postText)) {
-    await page.goto(where, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => undefined);
-    await page.waitForTimeout(3000);
-    /* A login wall or a checkpoint means whatever is on screen is not this
-       post. Stop rather than comment on it. */
-    if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return false;
-    if (await addComment(page, postText, comment, image)) return true;
+  let permalink = /\/(posts|permalink)\//.test(url) ? url : '';
+  const group = parseGroupUrl(url);
+  if (!permalink && group) {
+    const words = probeOf(postText);
+    if (words) {
+      const search = `${group.url}/search/?q=${encodeURIComponent(words)}`;
+      tried.push(search);
+      permalink = await findPermalinkAt(page, search, postText);
+    }
+    if (!permalink) {
+      tried.push(group.url);
+      permalink = await findPermalinkAt(page, group.url, postText);
+    }
   }
-  return false;
+
+  if (permalink) {
+    tried.push(permalink);
+    const at = await commentAt(page, permalink, postText, comment, image);
+    /* 'no-post' on the post's own page means the address is stale or the post
+       is gone — worth one look at the feed. Any other stop happened WITH the
+       post in front of us, and repeating it on the feed would risk a second
+       comment on a post that already has one. */
+    if (at !== 'no-post') {
+      return at === 'ok'
+        ? { ok: true, reason: '', permalink, tried }
+        : { ok: false, reason: COMMENT_REASON[at], permalink, tried };
+    }
+  }
+
+  /*
+   * The feed, in place — where this worked before the permalink existed.
+   *
+   * A post published before this version has no address stored, and a group
+   * whose markup we failed to read gives none either. Commenting here is less
+   * reliable than on the post's own page, which is why it is second, but it is
+   * far better than a feature that stops the day a link attribute changes.
+   */
+  const feed = group?.url ?? url;
+  tried.push(feed);
+  const inFeed = await commentAt(page, feed, postText, comment, image);
+  if (inFeed === 'ok') return { ok: true, reason: '', permalink, tried };
+  return { ok: false, reason: COMMENT_REASON[inFeed], permalink, tried };
 }
 
+/** Open a page and try to comment on our post there. */
+async function commentAt(
+  page: Page,
+  where: string,
+  postText: string,
+  comment: string,
+  image: string | null,
+): Promise<CommentStep> {
+  try {
+    await page.goto(where, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  } catch {
+    return 'no-post';
+  }
+  await page.waitForTimeout(3000);
+  if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return 'blocked';
+  return await addComment(page, postText, comment, image);
+}
+
+/** Each failure mode of addComment, as something the owner can act on. */
+const COMMENT_REASON: Record<Exclude<CommentStep, 'ok'>, string> = {
+  'no-post': 'לא מצאנו את הפוסט הזה בקבוצה — ייתכן שהוא נמחק, או שמנהל הקבוצה הסיר אותו.',
+  'no-box': 'אין אפשרות להגיב על הפוסט הזה — ייתכן שמנהל הקבוצה סגר תגובות.',
+  'not-sent': 'כתבנו את התגובה אבל פייסבוק לא אישרה שהיא נוספה.',
+  blocked: 'פייסבוק ביקשה אימות באמצע — היכנסו למסך החשבון והשלימו אותו.',
+};
+
 /**
- * The addresses worth trying for one post, best first.
+ * The post's own address, found on whatever page lists it.
  *
- * Search takes the post's own opening words, which is the most distinctive
- * thing about it that Facebook indexes. Nothing here is a label in any
- * language — a permalink and a search URL are both structure.
+ * Search results and the feed both render a post with its timestamp linked to
+ * the post itself, so one reader serves both.
  */
-export function lookupUrls(url: string, postText: string): string[] {
-  const out: string[] = [];
-  if (/\/(posts|permalink)\//.test(url)) out.push(url);
-  const group = parseGroupUrl(url);
-  if (group) {
-    const words = postText
+async function findPermalinkAt(page: Page, where: string, postText: string): Promise<string> {
+  try {
+    await page.goto(where, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page.waitForTimeout(3000);
+    if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return '';
+    return await readPermalink(page, postText);
+  } catch {
+    return '';
+  }
+}
+
+/** The words a post is recognised by: its first real line, trimmed. */
+function probeOf(postText: string): string {
+  return (
+    postText
       .split('\n')
       .map((l) => l.trim())
       .find((l) => l.length >= 12)
-      ?.slice(0, 60);
-    if (words) out.push(`${group.url}/search/?q=${encodeURIComponent(words)}`);
-    out.push(group.url);
-  } else if (!out.length) {
-    out.push(url);
-  }
-  return out;
+      ?.slice(0, 60) ?? ''
+  );
 }
 
-async function addComment(page: Page, postText: string, comment: string, image: string | null): Promise<boolean> {
+/** Where the attempt stopped. Each one is a different thing to do next. */
+export type CommentStep = 'ok' | 'no-post' | 'no-box' | 'not-sent' | 'blocked';
+
+async function addComment(page: Page, postText: string, comment: string, image: string | null): Promise<CommentStep> {
   const article = await findPostArticle(page, postText);
-  if (!article) return false;
+  if (!article) return 'no-post';
   try {
     await article.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
 
@@ -333,12 +418,12 @@ async function addComment(page: Page, postText: string, comment: string, image: 
       await page.waitForTimeout(1200);
       box = article.getByRole('textbox', { name: patterns.commentBox }).first();
     }
-    if (!(await box.isVisible({ timeout: 5_000 }).catch(() => false))) return false;
+    if (!(await box.isVisible({ timeout: 5_000 }).catch(() => false))) return 'no-box';
 
     /* The name must say "comment". A composer box inside the same article
        would take this text and publish it as a second post. */
     const label = (await box.getAttribute('aria-label').catch(() => '')) ?? '';
-    if (!patterns.commentBox.test(label)) return false;
+    if (!patterns.commentBox.test(label)) return 'no-box';
 
     await box.click({ timeout: 5_000 });
 
@@ -389,16 +474,38 @@ async function addComment(page: Page, postText: string, comment: string, image: 
     /* Verified the same way the post is: found on the page, or it did not
        happen. An unverified comment reported as posted would have the owner
        believing their phone number is under a post where it is not. */
-    const needle = lines.find((l) => l.trim().length >= 6)?.trim().slice(0, 30) ?? '';
-    if (needle) return await article.getByText(needle, { exact: false }).first().isVisible({ timeout: 8_000 }).catch(() => false);
-    /* A picture with no words has nothing to read back, so the check is that
-       the box emptied — Facebook clears it only once the comment is away. */
-    return await box
+    /*
+     * The proof is the box, not the text.
+     *
+     * Looking for the words on the page is the obvious check and it is wrong:
+     * before the comment is sent, those exact words are sitting in the box, so
+     * a comment that failed reads back as one that worked. Facebook empties
+     * the box only once it has accepted the comment, so an empty box is the
+     * one signal that cannot come from our own typing — and it works for a
+     * picture with no words, which has nothing to read back at all.
+     */
+    const emptied = await box
       .innerText()
       .then((t) => t.trim() === '')
       .catch(() => false);
+    if (emptied) return 'ok';
+
+    /* The box can also be replaced outright rather than cleared, and a
+       replaced box reads as an error above. Then — and only then, with our
+       text no longer in any box — the words on the page mean what they say. */
+    const stillThere = await box.isVisible({ timeout: 1_000 }).catch(() => false);
+    const needle = lines.find((l) => l.trim().length >= 6)?.trim().slice(0, 30) ?? '';
+    if (!stillThere && needle) {
+      const shown = await page
+        .getByText(needle, { exact: false })
+        .first()
+        .isVisible({ timeout: 8_000 })
+        .catch(() => false);
+      if (shown) return 'ok';
+    }
+    return 'not-sent';
   } catch {
-    return false;
+    return 'not-sent';
   }
 }
 

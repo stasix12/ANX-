@@ -819,12 +819,15 @@ export async function queueCampaignComment(
   }
   const marked = await db()
     .from('social_queue')
-    .update({ comment_status: 'pending', comment_at: null })
+    /* The old reason is cleared with the state it explained. A row that says
+       "ממתין" under last week's "הפוסט נמחק" is a screen contradicting
+       itself. */
+    .update({ comment_status: 'pending', comment_at: null, comment_note: '' })
     .eq('campaign_id', campaignId)
     .eq('status', 'published')
     .select('id');
   if (marked.error) {
-    if (/column|comment_status/i.test(marked.error.message)) {
+    if (/column|comment_status|comment_note/i.test(marked.error.message)) {
       throw new Error('צריך להריץ את social-schema-v14.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
     }
     throw new Error(marked.error.message);
@@ -892,7 +895,7 @@ export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
 export async function retryFailedComments(campaignId: string): Promise<number> {
   const res = await db()
     .from('social_queue')
-    .update({ comment_status: 'pending', comment_at: null })
+    .update({ comment_status: 'pending', comment_at: null, comment_note: '' })
     .eq('campaign_id', campaignId)
     .eq('comment_status', 'failed')
     .select('id');

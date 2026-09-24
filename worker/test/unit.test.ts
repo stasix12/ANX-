@@ -2463,12 +2463,84 @@ const scenario: { step: string; line: string }[] = [];
    */
   assert.ok(/permalink: string;/.test(composerSrc), 'publishing captures the post\'s own address');
   assert.ok(/result\.permalink \? \{ permalink: result\.permalink \} : \{\}/.test(localWorker), 'and only writes it when the feed actually yielded one');
-  assert.ok(/export function lookupUrls/.test(composerSrc), 'and a post is looked for in more than one place');
   assert.ok(/\/search\/\?q=\$\{encodeURIComponent\(words\)\}/.test(composerSrc), "the group's search finds a post the feed has buried");
   /* Order matters: the address first, search second, the feed last. */
-  const byUrl = composerSrc.indexOf("if (/\\/(posts|permalink)\\//.test(url)) out.push(url);");
+  const byUrl = composerSrc.indexOf("let permalink = /\\/(posts|permalink)\\//.test(url) ? url : '';");
   const bySearch = composerSrc.indexOf('/search/?q=');
-  assert.ok(byUrl > 0 && bySearch > byUrl, 'the post\'s own address is tried before any search');
+  const byFeed = composerSrc.indexOf('const feed = group?.url ?? url;');
+  assert.ok(byUrl > 0 && bySearch > byUrl, "the post's own address is tried before any search");
+  assert.ok(byFeed > bySearch, 'and the feed is the last place looked, not the first');
+
+  /*
+   * THE SEARCH TURNS WORDS INTO AN ADDRESS; THE COMMENT HAPPENS ON THE POST.
+   *
+   * The version before this commented wherever it found the post, search
+   * results included — and Facebook renders a post there in a condensed form
+   * whose comment control opens a dialog rather than a box. It found the post
+   * and then could not comment on it, which reads exactly like not finding it,
+   * and that is what the owner was told twice.
+   */
+  assert.ok(/const at = await commentAt\(page, permalink, postText, comment, image\);/.test(composerSrc), 'the comment is placed on the post\'s own page when there is one');
+  /* But never ONLY there. A markup change that hides the permalink must cost
+     the better path, not the whole feature — so the feed remains, second. */
+  assert.ok(/const inFeed = await commentAt\(page, feed, postText, comment, image\);/.test(composerSrc), 'and the feed still works when no address could be read');
+  /* One retry of the feed, and only for "the post was not there". Any other
+     stop happened with the post in front of us, and repeating it would risk a
+     second comment under a post that already has one. */
+  assert.ok(/if \(at !== 'no-post'\)/.test(composerSrc), 'only a post that was not found is looked for again');
+
+  /*
+   * THE BOX IS THE PROOF, NEVER THE TEXT.
+   *
+   * Reading the words back off the page is the obvious check and it is wrong:
+   * before the comment is sent those exact words are sitting in the box, so a
+   * comment that failed verifies as one that worked — and the owner is told a
+   * phone number is under a post where it is not. Facebook empties the box
+   * only once it has accepted the comment, which is the one signal that
+   * cannot come from our own typing.
+   */
+  const emptied = composerSrc.indexOf('const emptied = await box');
+  const needle = composerSrc.indexOf('const needle = lines.find');
+  assert.ok(emptied > 0 && needle > emptied, 'the emptied box is checked before the words are looked for');
+  assert.ok(/if \(!stillThere && needle\)/.test(composerSrc), 'and the words only count once they are no longer in a box');
+
+  /*
+   * "לא הצליח" IS NOT AN ANSWER — it is what makes a person press the same
+   * button again. This feature gave exactly that answer twice in a row.
+   *
+   * A post the admin deleted, a group that closed comments and a security
+   * screen mid-round are three different things to do next, and only one of
+   * them is worth a retry. Each stop carries its own Hebrew sentence, the
+   * worker writes it beside the row, and both screens show it.
+   */
+  assert.ok(/const COMMENT_REASON: Record<Exclude<CommentStep, 'ok'>, string>/.test(composerSrc), 'every way this can stop has its own sentence');
+  for (const stop of ['no-post', 'no-box', 'not-sent', 'blocked']) {
+    const line = composerSrc.split('\n').find((l) => l.trim().startsWith(`'${stop}':`) || l.trim().startsWith(`${stop}:`));
+    assert.ok(line && /[\u0590-\u05FF]/.test(line), `${stop} must say what happened, in Hebrew`);
+  }
+  assert.ok(/comment_note: outcome\.ok \? '' : outcome\.reason/.test(localWorker), 'the worker writes the reason beside the row');
+  /* And never lets the reason cost the status. comment_note arrived after
+     comment_status did, so a database missing the one column would reject the
+     whole write, leave the row 'pending', and have the worker comment again
+     next tick — and again, and again. */
+  assert.ok(/if \(!\/comment_note\/\.test\(withNote\.error\.message\)\)/.test(localWorker), 'a missing note column may never block the status');
+  assert.ok(/const plain = await db\.from\('social_queue'\)\.update\(base\)\.eq\('id', id\);/.test(localWorker), 'the status is written without it instead');
+  for (const screen of [campaignPage, commentCard]) {
+    assert.ok(/r\.comment_status === 'failed' && r\.comment_note/.test(screen), 'both screens show the reason under the group that failed');
+  }
+  /* The old reason is cleared with the state it explained: a row reading
+     "ממתין" under last week's "הפוסט נמחק" is a screen contradicting itself. */
+  assert.ok(/comment_status: 'pending', comment_at: null, comment_note: ''/.test(clientForComment), 'and re-queueing clears it');
+
+  /*
+   * THE ADDRESS IS KEPT ONCE IT IS FOUND.
+   *
+   * Finding a group post by its own words is the slow, fragile part of this —
+   * a search, a scroll, and a judgement about which article is ours. Once it
+   * has been done the answer is permanent, and a retry should go straight to
+   * the post rather than repeat the guess.
+   */
+  assert.ok(/if \(outcome\.permalink && outcome\.permalink !== known\) base\.permalink = outcome\.permalink;/.test(localWorker), 'a discovered address is written back');
 
   /* A failure is the one thing worth retrying alone. Pressing "add a comment"
      again would re-mark the posts that already have one and ask for a second

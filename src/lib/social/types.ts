@@ -258,6 +258,15 @@ export interface QueueItem {
    */
   comment_status?: string;
   comment_at?: string | null;
+  /**
+   * Why the comment failed, as a whole Hebrew sentence — '' when it worked.
+   *
+   * "לא הצליח" on its own is what makes a person press the same button again.
+   * A post the admin deleted, a group that closed comments and a Facebook
+   * security screen are three different things to do next, and only one of
+   * them is worth a retry.
+   */
+  comment_note?: string;
   created_at: string;
 }
 

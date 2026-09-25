@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CampaignCard } from '@/components/social/CampaignCard';
+import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
 import {
   Button,
@@ -28,6 +29,7 @@ import {
   listPosts,
   listWorkers,
   pauseCampaign,
+  queueCampaignComment,
   reopenCampaign,
   saveCampaign,
   stopCampaign,
@@ -67,6 +69,11 @@ export default function CampaignsPage() {
   const [workerOnline, setWorkerOnline] = useState<boolean | undefined>(undefined);
   const [form, setForm] = useState<typeof blank & { id?: string }>(blank);
   const [editorOpen, setEditorOpen] = useState(false);
+  /*
+   * WHICH ROUND THE COMMENT SHEET IS ABOUT — and null when it is closed, so
+   * one sheet serves every card instead of one mounted per row.
+   */
+  const [commentFor, setCommentFor] = useState<Campaign | null>(null);
   const [filter, setFilter] = useState<Filter>('live');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -302,6 +309,25 @@ export default function CampaignsPage() {
                       החזר לפעילות
                     </button>
                   )}
+                  {/*
+                    THE REASON THIS LINK EXISTS, in the owner's own words:
+                    "even if two hours have passed, even if a day — I pick the
+                    round and schedule the comment on the whole thing."
+
+                    That was already possible and effectively unreachable. The
+                    path was: open the round, then scroll past the hero, six
+                    tiles and the entire publication queue — a hundred and
+                    twenty-two rows on the round they actually wanted — to a
+                    card with no hint of it above the fold. From here it is
+                    three taps: סבבים, הסתיימו, תגובה. The round list is
+                    already the "which round" picker and the filter is already
+                    "the one I ran this morning".
+                  */}
+                  {state.progress.published > 0 && (
+                    <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => setCommentFor(c)}>
+                      תגובה
+                    </button>
+                  )}
                   <Link href={`/social/posts/new?campaign=${c.id}`} className="inline-flex min-h-11 items-center px-1 text-brand-400">
                     + פוסט
                   </Link>
@@ -318,6 +344,28 @@ export default function CampaignsPage() {
           })}
         </div>
       </div>
+
+      <CampaignCommentSheet
+        open={commentFor !== null}
+        onClose={() => setCommentFor(null)}
+        publishedCount={commentFor ? stateOf(commentFor).progress.published : 0}
+        initialText={commentFor?.comment_text ?? ''}
+        initialMedia={commentFor?.comment_media ?? []}
+        initialGapSeconds={commentFor?.comment_gap_seconds ?? 30}
+        busy={busy === 'comment'}
+        onSubmit={(text, media, gapSeconds) => {
+          const round = commentFor;
+          if (!round) return;
+          void act(
+            'comment',
+            async () => {
+              await queueCampaignComment(round.id, text, media, gapSeconds);
+              setCommentFor(null);
+            },
+            'נשלח. התגובות יתווספו אחת-אחת, במרווח שבחרתם.',
+          );
+        }}
+      />
 
       <Sheet
         open={editorOpen}

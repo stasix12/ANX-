@@ -48,7 +48,7 @@ export function CommentShot({ path }: { path: string }) {
         if (signed) setUrl(signed);
         else setFailed(true);
       }}
-      className="mt-1 text-[11px] text-sky-400 underline underline-offset-2 disabled:text-mist-500 disabled:no-underline"
+      className="mt-1 text-[11px] text-brand-400 underline underline-offset-2 disabled:text-mist-500 disabled:no-underline"
     >
       {failed ? 'התמונה כבר לא זמינה.' : busy ? 'טוען…' : 'ראו מה המחשב ראה באותו רגע'}
     </button>

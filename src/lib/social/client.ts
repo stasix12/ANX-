@@ -847,6 +847,9 @@ export interface CommentTotals {
   pending: number;
   done: number;
   failed: number;
+  /* Sent, and never confirmed. Apart from `failed` because the retry acts on
+     failed and must not touch this one — the comment may already be live. */
+  unverified: number;
 }
 
 /**
@@ -865,8 +868,16 @@ export async function commentTotals(): Promise<CommentTotals> {
       .eq('comment_status', status);
     return res.error ? 0 : (res.count ?? 0);
   };
-  const [pending, done, failed] = await Promise.all([count('pending'), count('done'), count('failed')]);
-  return { pending, done, failed };
+  const [pending, claimed, done, failed, unverified] = await Promise.all([
+    count('pending'),
+    /* Held by the worker at this instant. Still waiting, from the owner's
+       side, so it is added to that number rather than shown as its own. */
+    count('commenting'),
+    count('done'),
+    count('failed'),
+    count('unverified'),
+  ]);
+  return { pending: pending + claimed, done, failed, unverified };
 }
 
 export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
@@ -897,6 +908,12 @@ export async function retryFailedComments(campaignId: string): Promise<number> {
     .from('social_queue')
     .update({ comment_status: 'pending', comment_at: null, comment_note: '' })
     .eq('campaign_id', campaignId)
+    /*
+     * AND NEVER ON 'unverified'. That state means Enter was pressed and
+     * Facebook did not confirm — the comment may be under the post right now,
+     * and this button would put a second one there, under the owner's name,
+     * permanently. Those rows say "צריך לבדוק" and wait for a person to look.
+     */
     .eq('comment_status', 'failed')
     .select('id');
   if (res.error) throw new Error(res.error.message);
@@ -908,16 +925,24 @@ export function commentProgress(rows: Pick<QueueRow, 'status' | 'comment_status'
   pending: number;
   done: number;
   failed: number;
+  unverified: number;
 } {
   let pending = 0;
   let done = 0;
   let failed = 0;
+  let unverified = 0;
   for (const r of rows) {
-    if (r.comment_status === 'pending') pending += 1;
+    /* 'commenting' is a row the worker is holding right now. It counts as
+       waiting, not as a fourth number on the screen: from the owner's side it
+       is still "this one has not got its comment yet". */
+    if (r.comment_status === 'pending' || r.comment_status === 'commenting') pending += 1;
     else if (r.comment_status === 'done') done += 1;
     else if (r.comment_status === 'failed') failed += 1;
+    /* Counted apart from 'failed' because the button below acts on 'failed'
+       and must not act on this one — the comment may already be live. */
+    else if (r.comment_status === 'unverified') unverified += 1;
   }
-  return { pending, done, failed };
+  return { pending, done, failed, unverified };
 }
 
 export async function screenshotUrl(path: string): Promise<string | null> {

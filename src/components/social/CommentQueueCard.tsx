@@ -3,18 +3,10 @@
 import Link from 'next/link';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import { agree } from '@/lib/social/time';
+import { COMMENT_LABEL, COMMENT_TONE, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
 import { CommentShot } from './CommentShot';
 import { TargetAvatar } from './TargetAvatar';
 import { Card, TONE_FILL } from './ui';
-
-/* Pending first: it is the part still moving, and the part worth watching. */
-const ORDER = ['pending', 'failed', 'done'];
-
-const LABEL: Record<string, string> = {
-  pending: 'ממתין',
-  done: 'הגיב',
-  failed: 'לא הצליח',
-};
 
 /**
  * Which groups a comment is going out to, on the main screen.
@@ -38,11 +30,13 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
    * seventeen posts announced itself as fifty-nine — the page size, stated as
    * a fact about the work.
    */
-  const { pending, done, failed } = totals;
-  const shownAll = rows.length >= pending + done + failed;
-  const sorted = [...rows].sort(
-    (a, b) => ORDER.indexOf(a.comment_status ?? '') - ORDER.indexOf(b.comment_status ?? ''),
-  );
+  const { pending, done, failed, unverified } = totals;
+  const all = pending + done + failed + unverified;
+  const shownAll = rows.length >= all;
+  /* Worst first — the rows that need a person are the only reason to open a
+     list of a hundred. One order, from comments.ts, shared with the round's
+     own screen: the two used to sort differently and label differently. */
+  const sorted = [...rows].sort((a, b) => commentRank(a.comment_status) - commentRank(b.comment_status));
 
   return (
     <Card
@@ -53,26 +47,22 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
           : 'כל התגובות שביקשתם כבר יצאו.'
       }
     >
-      <p className="mb-3 text-sm text-mist-400">
+      <p className="mb-3 text-sm text-mist-300">
         {done > 0 && `${done} ${agree(done, 'הגיב', 'הגיבו')}`}
         {pending > 0 && `${done > 0 ? ' · ' : ''}${pending} ${agree(pending, 'ממתין', 'ממתינים')}`}
         {/* Named, never folded into the total: the post is live and the owner
             believes their comment is under it. */}
         {failed > 0 && <span className="text-warning-400">{`${done + pending > 0 ? ' · ' : ''}${failed} לא הצליחו`}</span>}
+        {/* And apart from the failures, because the two need different things
+            done: one is worth a retry, this one is worth a look first. */}
+        {unverified > 0 && <span className="text-warning-400">{`${done + pending + failed > 0 ? ' · ' : ''}${unverified} צריך לבדוק`}</span>}
       </p>
-      {!shownAll && (
-        <p className="mb-2 text-xs text-mist-500">{`מוצגות ${rows.length} הקבוצות הראשונות מתוך ${pending + done + failed}.`}</p>
-      )}
-      <ul className="max-h-72 divide-y divide-ink-700 overflow-y-auto overscroll-contain rounded-xl bg-ink-800/40">
+      {!shownAll && <p className="mb-2 text-xs text-mist-500">{`מוצגות ${rows.length} הקבוצות הראשונות מתוך ${all}.`}</p>}
+      <ul className="max-h-72 min-w-0 divide-y divide-ink-700 overflow-y-auto overscroll-contain rounded-xl bg-ink-800/40">
         {sorted.map((r) => (
           <li key={r.id} className="min-w-0 px-3 py-2">
             <div className="flex min-w-0 items-center gap-2">
-              <span
-                aria-hidden
-                className={`h-2 w-2 shrink-0 rounded-full ${
-                  r.comment_status === 'done' ? TONE_FILL.good : r.comment_status === 'failed' ? TONE_FILL.warn : TONE_FILL.neutral
-                }`}
-              />
+              <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${TONE_FILL[COMMENT_TONE[r.comment_status as CommentStatus] ?? 'neutral']}`} />
               {r.target?.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={r.target.image_url} alt="" className="h-6 w-6 shrink-0 rounded-lg object-cover" />
@@ -95,18 +85,18 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
                   {r.target?.name ?? '—'}
                 </span>
               )}
-              <span className="shrink-0 text-[11px] text-mist-500">{LABEL[r.comment_status ?? ''] ?? ''}</span>
+              <span className="shrink-0 text-[11px] text-mist-500">{COMMENT_LABEL[r.comment_status as CommentStatus] ?? ''}</span>
             </div>
             {/* The reason, and only where there is one to give. "לא הצליח" on
                 its own is what makes a person press the same button again. */}
-            {r.comment_status === 'failed' && r.comment_note && (
-              <p className="mt-1 pr-4 text-[11px] leading-relaxed text-warning-400/90">{r.comment_note}</p>
+            {commentNeedsHuman(r.comment_status) && r.comment_note && (
+              <p dir="auto" className="mt-1 ps-4 text-[11px] leading-relaxed text-warning-400">{r.comment_note}</p>
             )}
             {/* And what the worker's browser actually had on screen. Words
                 were not enough: rounds went by on "לא מצאנו את הפוסט" while
                 the owner looked straight at the post on his phone. */}
-            {r.comment_status === 'failed' && r.comment_shot && (
-              <div className="pr-4">
+            {commentNeedsHuman(r.comment_status) && r.comment_shot && (
+              <div className="ps-4">
                 <CommentShot path={r.comment_shot} />
               </div>
             )}

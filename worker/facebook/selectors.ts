@@ -39,8 +39,16 @@ export const patterns = {
    * picture. Broad on purpose: this pattern only ever runs INSIDE the comment
    * form, so a loose match cannot reach the post composer's own camera.
    */
+  /*
+   * Hebrew puts words BETWEEN the verb and the noun, and the list above did
+   * not allow for any: "צירוף קובץ תמונה" and "הוספת קובץ תמונה או וידאו" are
+   * both shapes Facebook ships, and neither matched "צירוף תמונה". The verb
+   * and the noun are separated by an optional word now, and וידאו is allowed
+   * beside סרטון. Safe to loosen because, unlike the version that made this
+   * comment untrue, the pattern is no longer run against the whole page.
+   */
   commentPhoto:
-    /attach a photo|photo or video|comment with a photo|insert photo|add (a )?photo|camera|צרף(ו)? תמונה|צירוף תמונה|הוספת תמונה|הוסף תמונה|תמונה לתגובה|תמונה או סרטון|מצלמה|прикрепить фото|фото к комментарию|добавить фото|камера/i,
+    /attach (a |an )?(file |image )?photo|photo or video|comment with a photo|insert photo|add (a )?photo|camera|צרף(ו)? (קובץ )?תמונה|צירוף (קובץ )?תמונה|הוספת (קובץ )?תמונה|הוסף (קובץ )?תמונה|תמונה לתגובה|תמונה או (סרטון|וידאו)|מצלמה|прикрепить фото|фото к комментарию|добавить фото|камера/i,
 
   /** The final submit button. */
   postButton: /^(post|publish|פרסום|פרסם|פרסמי|פרסמו|опубликовать)$/i,
@@ -140,6 +148,17 @@ export const fb = {
 
   /** Uploaded media previews (an <img> with a blob: or scontent src, or a <video>). */
   mediaPreview: (dialog: Locator): Locator => dialog.locator('img[src^="blob:"], img[src*="scontent"], img[src*="fbcdn"], video'),
+  /*
+   * A LOCAL file's preview, and nothing else.
+   *
+   * A blob: URL is minted by the page for a file chosen on this machine, so
+   * it cannot come from anything Facebook merely loaded — not an avatar, not
+   * a photo in a comment somebody else left, not the feed behind a modal.
+   * That is why it, alone of the preview selectors, is safe to count inside a
+   * whole dialog: everything else in mediaPreview above matches Facebook's
+   * own CDN and would climb on its own as comments load.
+   */
+  localPreview: (scope: Locator): Locator => scope.locator('img[src^="blob:"], video[src^="blob:"]'),
   /** Multi-photo collage: Facebook shows an "Edit all" affordance instead of N separate previews. */
   collageReady: (dialog: Locator): Locator => dialog.getByText(/edit all|לערוך את הכל|עריכת הכל|редактировать все/i).first(),
 

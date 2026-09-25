@@ -1,0 +1,114 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>פוסט בקבוצה — mock permalink</title>
+<!--
+  THE POST'S OWN PAGE, AS FACEBOOK ACTUALLY BUILDS IT.
+
+  mock-group.html models the group feed, where the comment form, its file
+  input and its preview are all inside the [role=article]. That shape made the
+  attachment check look correct when it was not, because every scope it tried
+  contained the thumbnail.
+
+  A group permalink is a MODAL, and the pieces are not nested the same way:
+
+    [role=dialog]
+      [role=article]        the post
+        form                the comment box, its camera and its file input
+        #tray               where the thumbnail is mounted — OUTSIDE the form
+
+  That single difference is the bug the owner hit. The picture attached, the
+  proof was counted inside the form, the form never changed, and after thirty
+  seconds — three times over — the comment was refused with "לא הצלחנו לצרף
+  את התמונה" about a picture that was sitting on the screen.
+
+  Two more real-world shapes are modelled here on purpose:
+   - the camera is labelled "צירוף קובץ תמונה", with a word BETWEEN the verb
+     and the noun, which the old pattern could not match;
+   - the comment box gets its accessible name from aria-labelledby, so
+     aria-label is null — reading only that attribute rejected a good box.
+-->
+<style>
+  body { font-family: system-ui; margin: 0; padding: 12px; }
+  [role="dialog"] { border: 1px solid #ccc; border-radius: 12px; padding: 12px; }
+  [role="textbox"] { border: 1px solid #999; min-height: 28px; padding: 4px; }
+  .comment { margin: 4px 0; }
+</style>
+<div role="dialog" aria-label="הפוסט של Stas Terehin">
+  <div role="article" id="art">
+    <div id="body"></div>
+    <a id="stamp" href="https://www.facebook.com/groups/1234567890/posts/778899/?__cft__=tracking">לפני שעה</a>
+    <div class="comments" id="list"></div>
+  </div>
+  <div id="tray"></div>
+</div>
+<script>
+  const art = document.getElementById('art');
+  const list = document.getElementById('list');
+  const tray = document.getElementById('tray');
+
+  /* The post's words, with the emoji rendered as an <img> exactly as Facebook
+     does — so the probe that finds this post has to cope with the hole. */
+  const text = 'מבצע ניקוי ספות בבאר שבע 🛋️ החודש בלבד';
+  const body = document.getElementById('body');
+  for (const piece of text.split(/([\u{1F000}-\u{1FAFF}☀-➿]️?)/u)) {
+    if (!piece) continue;
+    if (/[\u{1F000}-\u{1FAFF}☀-➿]/u.test(piece)) {
+      const e = document.createElement('img');
+      e.alt = piece;
+      e.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+      body.appendChild(e);
+    } else {
+      body.appendChild(document.createTextNode(piece));
+    }
+  }
+
+  /* The name lives on a label element, not on aria-label. */
+  const lbl = document.createElement('span');
+  lbl.id = 'boxlbl';
+  lbl.textContent = 'כתיבת תגובה';
+  lbl.style.display = 'none';
+  art.appendChild(lbl);
+
+  const form = document.createElement('form');
+  const box = document.createElement('div');
+  box.setAttribute('role', 'textbox');
+  box.setAttribute('contenteditable', 'true');
+  box.setAttribute('aria-labelledby', 'boxlbl');
+  box.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    const c = document.createElement('p');
+    c.className = 'comment';
+    c.textContent = box.innerText;
+    /* The thumbnail is in the tray, not in the form. */
+    if (tray.querySelector('img[src^="blob:"]')) c.dataset.photo = '1';
+    list.appendChild(c);
+    box.innerText = '';
+  });
+  form.appendChild(box);
+
+  const camera = document.createElement('button');
+  camera.type = 'button';
+  camera.setAttribute('aria-label', 'צירוף קובץ תמונה');
+  camera.textContent = '📷';
+  camera.addEventListener('click', () => {
+    if (form.querySelector('input[type=file]')) return;
+    const file = document.createElement('input');
+    file.type = 'file';
+    file.accept = 'image/*';
+    file.hidden = true;
+    file.addEventListener('change', () => {
+      if (!file.files || !file.files[0]) return;
+      /* Not instant, and it lands OUTSIDE the form. */
+      setTimeout(() => {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file.files[0]);
+        img.width = 40;
+        tray.appendChild(img);
+      }, 1500);
+    });
+    form.appendChild(file);
+  });
+  form.appendChild(camera);
+  art.appendChild(form);
+</script>

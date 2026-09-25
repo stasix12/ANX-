@@ -1,4 +1,4 @@
-import type { Locator, Page } from 'playwright-core';
+import type { FileChooser, Locator, Page } from 'playwright-core';
 import { parseGroupUrl } from '@/lib/social/types';
 import { fb, firstAttached, firstVisible, patterns } from './selectors';
 import { assertUsable, classifyPage } from './session';
@@ -438,6 +438,16 @@ export interface CommentOutcome {
   permalink: string;
   /** For the terminal only: the addresses tried, in order. */
   tried: string[];
+  /*
+   * WHERE IT STOPPED, for the caller to act on — not for the screen.
+   *
+   * `reason` is prose and must stay prose; deciding what to do next by
+   * matching on a Hebrew sentence is how a copy edit becomes a bug. The one
+   * decision that actually depends on this is whether a retry is safe, and
+   * 'sent-unsure' is the answer: Enter was pressed, so the comment may be
+   * live and a second attempt would put a second one under the post.
+   */
+  step: Exclude<CommentStep, 'ok'> | 'ok';
 }
 
 /**
@@ -505,8 +515,8 @@ export async function commentOnPost(
        comment on a post that already has one. */
     if (at !== 'no-post') {
       return at === 'ok'
-        ? { ok: true, reason: '', permalink, tried }
-        : { ok: false, reason: explain(at, postText), permalink, tried };
+        ? { ok: true, reason: '', permalink, tried, step: 'ok' }
+        : { ok: false, reason: explain(at, postText), permalink, tried, step: at };
     }
   }
 
@@ -521,8 +531,8 @@ export async function commentOnPost(
   const feed = group?.url ?? url;
   tried.push(feed);
   const inFeed = await commentAt(page, feed, postText, comment, image);
-  if (inFeed === 'ok') return { ok: true, reason: '', permalink, tried };
-  return { ok: false, reason: explain(inFeed, postText), permalink, tried };
+  if (inFeed === 'ok') return { ok: true, reason: '', permalink, tried, step: 'ok' };
+  return { ok: false, reason: explain(inFeed, postText), permalink, tried, step: inFeed };
 }
 
 /**
@@ -555,7 +565,14 @@ async function commentAt(
   } catch {
     return 'no-post';
   }
-  await page.waitForTimeout(3000);
+  /*
+   * A beat, not a wait. Three seconds was a guess, and it was three seconds
+   * off the front of every comment — in a window between two publications
+   * that is only about twenty seconds wide, which is most of the reason a
+   * round's comments could not keep up. What actually has to be waited for is
+   * the post's own article, and findPostArticle below waits for it properly.
+   */
+  await page.waitForTimeout(1200);
   if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return 'blocked';
   return await addComment(page, postText, comment, image);
 }
@@ -565,10 +582,26 @@ const COMMENT_REASON: Record<Exclude<CommentStep, 'ok'>, string> = {
   'no-post': 'לא מצאנו את הפוסט הזה בקבוצה — ייתכן שהוא נמחק, או שמנהל הקבוצה הסיר אותו.',
   'no-box': 'אין אפשרות להגיב על הפוסט הזה — ייתכן שמנהל הקבוצה סגר תגובות.',
   'not-sent': 'כתבנו את התגובה אבל פייסבוק לא אישרה שהיא נוספה.',
+  /*
+   * ENTER WAS PRESSED. That is the whole difference from 'not-sent' above,
+   * and it decides whether pressing "נסה שוב" is safe: the comment may well
+   * be under the post already, and a retry would put a second one there. The
+   * owner is told to look before they act, and the bulk retry leaves this
+   * state alone.
+   */
+  'sent-unsure': 'שלחנו את התגובה אבל פייסבוק לא אישרה שהיא נוספה. בדקו בפוסט לפני שתנסו שוב — ייתכן שהיא כבר שם.',
   blocked: 'פייסבוק ביקשה אימות באמצע — היכנסו למסך החשבון והשלימו אותו.',
   /* Nothing was published. A comment with the words but without the picture
      is a different comment, and it cannot be taken back once it is up. */
   'no-photo': 'לא הצלחנו לצרף את התמונה לתגובה, ולכן לא פרסמנו אותה בלעדיה. נסו שוב.',
+  /*
+   * A different fact, and it deserves a different sentence: the file WAS
+   * handed to Facebook and the page never showed it back. Nothing was sent,
+   * for the same reason as above — but "we could not attach it" would send
+   * the owner looking for a problem with the picture, and the picture is
+   * probably fine.
+   */
+  'no-photo-unsure': 'צירפנו את התמונה אבל פייסבוק לא הציגה אותה, ולכן לא שלחנו את התגובה בלעדיה. נסו שוב.',
 };
 
 /**
@@ -702,92 +735,155 @@ async function appears(what: Locator, ms: number): Promise<boolean> {
   }
 }
 
+/** Where an attach attempt stopped. Each one is a different sentence for the owner. */
+type AttachResult = 'ok' | 'not-attached' | 'unconfirmed';
+
+/** What was showing before the picture was handed over. */
+interface MediaBefore {
+  local: number;
+  any: number;
+}
+
 /**
  * Put the owner's picture in the comment box, and say whether it is really there.
  *
- * SCOPED TO THE COMMENT FORM, not to the article. The file input Facebook uses
- * for a comment lives in the comment composer's own form, which is frequently
- * NOT inside the `[role="article"]` the post is wrapped in — so looking for it
- * there found nothing, the click fell through, and the comment went out as
- * text alone. The form is reached from the box itself, which makes it the
- * right form by construction rather than by guessing at the page's shape.
+ * THE INPUT AND THE PREVIEW ARE IN TWO DIFFERENT PLACES, and treating them as
+ * one is what broke this.
  *
- * Returns false rather than throwing, and returns false when the picture
- * cannot be CONFIRMED — an upload that is still in flight is not an
- * attachment, and a comment submitted over one goes out without it.
+ * The file input belongs to the comment composer's own form, and looking for
+ * it there is right. The THUMBNAIL is not there: Facebook renders a group
+ * permalink as a modal, and mounts the attachment preview in a container
+ * beside the form rather than inside it. So the picture attached perfectly
+ * well and the proof was being waited for in a box it was never going to
+ * appear in — thirty seconds of counting an unchanging form, three times
+ * over, and then "לא הצלחנו לצרף את התמונה" about a picture that was
+ * attached. That is the failure the owner was looking at.
+ *
+ * The input is still found narrowest-first. The evidence is looked for in the
+ * enclosing dialog, which is the smallest thing that certainly holds both.
  */
-async function attachPhoto(page: Page, box: Locator, article: Locator, image: string): Promise<boolean> {
+async function attachPhoto(page: Page, box: Locator, article: Locator, image: string): Promise<AttachResult> {
+  const onPermalink = /\/(posts|permalink)\//.test(page.url());
+  const form = box.locator('xpath=ancestor::form[1]');
+  const dialog = box.locator('xpath=ancestor::*[@role="dialog"][1]');
+  const hasForm = (await form.count().catch(() => 0)) > 0;
+  const hasDialog = (await dialog.count().catch(() => 0)) > 0;
+
+  /*
+   * WHERE THE PROOF MAY SHOW, and why it is allowed to be this wide.
+   *
+   * Only a blob: preview is counted at this scope — a URL the page mints for
+   * a file chosen on this machine — so a dialog full of other people's
+   * comments loading their avatars cannot make it move. The tight scope below
+   * keeps the markup-blind count that replaced the first version of this
+   * check, so a build that never mints a blob: still has a way to pass.
+   */
+  const evidence = hasDialog ? dialog : hasForm ? form : article;
+  const narrow = hasForm ? form : article;
+
   /*
    * WHERE TO LOOK FOR THE FILE INPUT, narrowest first.
    *
    * The comment's own form when there is one — Facebook does not always use a
-   * <form> — then the article, then the page. The page is only safe because
-   * this runs on the POST'S OWN PAGE, where the only composer is the comment
-   * box; on a group feed it would just as happily find the input belonging to
-   * "write a post", and the owner's picture would become a new POST.
+   * <form> — then the article, then the enclosing dialog. The whole page only
+   * as the last resort on the POST'S OWN PAGE, where the only composer is the
+   * comment box; on a group feed it would just as happily find the input
+   * belonging to "write a post", and the owner's picture would become a POST.
    */
-  const onPermalink = /\/(posts|permalink)\//.test(page.url());
-  const form = box.locator('xpath=ancestor::form[1]');
   const scopes: Locator[] = [];
-  if ((await form.count().catch(() => 0)) > 0) scopes.push(form);
+  if (hasForm) scopes.push(form);
   scopes.push(article);
-  if (onPermalink) scopes.push(page.locator('body'));
+  if (hasDialog) scopes.push(dialog);
+  else if (onPermalink) scopes.push(page.locator('body'));
 
   for (const scope of scopes) {
-    if (await tryAttach(page, scope, image)) return true;
+    const got = await tryAttach(page, scope, evidence, narrow, image);
+    if (got === 'ok') return 'ok';
+    /*
+     * The file went into an input and we merely could not prove it. Trying
+     * the next scope would hand Facebook the same picture a second time —
+     * two thumbnails on one comment, or a replace that leaves the count flat
+     * for ever. One attachment attempt per comment, and then an honest
+     * "we could not confirm it".
+     */
+    if (got === 'unconfirmed') return 'unconfirmed';
   }
-  return false;
+  return 'not-attached';
 }
 
 /** One attempt, within one part of the page. */
-async function tryAttach(page: Page, scope: Locator, image: string): Promise<boolean> {
+async function tryAttach(
+  page: Page,
+  scope: Locator,
+  evidence: Locator,
+  narrow: Locator,
+  image: string,
+): Promise<AttachResult> {
   const input = scope.locator('input[type="file"]').first();
-  const before = await mediaCount(scope);
+  const present = async () => (await input.count().catch(() => 0)) > 0;
+  let chosen: FileChooser | null = null;
+  let before = await mediaBefore(evidence, narrow);
 
-  if (!(await input.count().then((n) => n > 0).catch(() => false))) {
+  if (!(await present())) {
     /* No input yet: Facebook creates it when the camera is used, and on some
        builds opens a native file chooser instead. Both are handled. */
-    const chooser = page.waitForEvent('filechooser', { timeout: 6_000 }).catch(() => null);
-    await scope
-      .getByRole('button', { name: patterns.commentPhoto })
-      .first()
-      .click({ timeout: 5_000 })
-      .catch(() => undefined);
-    const fc = await chooser;
-    if (fc) {
-      await fc.setFiles(image).catch(() => undefined);
-      return await photoLanded(scope, before);
-    }
-    if (!(await input.count().then((n) => n > 0).catch(() => false))) return false;
+    const camera = scope.getByRole('button', { name: patterns.commentPhoto }).first();
+    /*
+     * Asked for explicitly, because a click that found nothing used to be
+     * indistinguishable from a click that did nothing: both fell through the
+     * same .catch and both ended as "the picture would not attach". If this
+     * part of the page has no camera it is not the comment's composer, and
+     * saying so lets the next scope be tried without a six-second wait.
+     */
+    if ((await camera.count().catch(() => 0)) === 0) return 'not-attached';
+    const waiting = page.waitForEvent('filechooser', { timeout: 6_000 }).catch(() => null);
+    await camera.click({ timeout: 5_000 }).catch(() => undefined);
+    chosen = await waiting;
+    /*
+     * RE-TAKEN AFTER THE CLICK. The camera mounts markup of its own — a
+     * spinner, a swapped icon, an attachment tray — and counting that as the
+     * picture is how an attach that never happened reported success.
+     */
+    before = await mediaBefore(evidence, narrow);
+    if (!chosen && !(await present())) return 'not-attached';
   }
 
-  try {
-    await input.setInputFiles(image);
-  } catch {
-    return false;
+  if (chosen) {
+    try {
+      await chosen.setFiles(image);
+    } catch {
+      return 'not-attached';
+    }
+  } else {
+    try {
+      await input.setInputFiles(image);
+    } catch {
+      return 'not-attached';
+    }
+    /* The file is in the box as far as the browser is concerned. If Facebook
+       then shows nothing at all, it did not take it. */
+    const held = await input
+      .evaluate((el) => (el as HTMLInputElement).files?.length ?? 0)
+      .catch(() => 0);
+    if (!held) return 'not-attached';
   }
-  /* The file is in the box as far as the browser is concerned. If Facebook
-     then shows nothing at all, it did not take it. */
-  const held = await input
-    .evaluate((el) => (el as HTMLInputElement).files?.length ?? 0)
-    .catch(() => 0);
-  if (!held) return false;
-  return await photoLanded(scope, before);
+  return (await photoLanded(evidence, narrow, before)) ? 'ok' : 'unconfirmed';
 }
 
 /**
  * How much media is showing in this part of the page right now.
  *
  * COUNTED, NOT MATCHED — and that correction is why this function exists.
- * The first version looked for `img[src^="blob:"]` and a handful of "remove"
- * labels, which is a guess about markup Facebook is free to change and did:
- * a preview can be a background-image, an SVG, a canvas, or an <img> with an
- * internal URL. The check said the picture had not arrived when it had, the
- * comment was refused, and the owner watched the worker open each post, do
- * nothing, and move on.
+ * The first version looked for one particular preview markup and a handful of
+ * "remove" labels, which is a guess about markup Facebook is free to change
+ * and did: a preview can be a background-image, an SVG, a canvas, or an <img>
+ * with an internal URL. The check said the picture had not arrived when it
+ * had, the comment was refused, and the owner watched the worker open each
+ * post, do nothing, and move on.
  *
  * Anything that was not there before and is there now is the attachment. That
- * cannot be wrong about markup, because it does not know any.
+ * cannot be wrong about markup, because it does not know any — which is also
+ * why it is kept to a scope small enough that nothing else changes in it.
  */
 async function mediaCount(scope: Locator): Promise<number> {
   return await scope
@@ -796,26 +892,71 @@ async function mediaCount(scope: Locator): Promise<number> {
     .catch(() => 0);
 }
 
+/** The two baselines, taken together so they describe the same instant. */
+async function mediaBefore(evidence: Locator, narrow: Locator): Promise<MediaBefore> {
+  return {
+    local: await fb.localPreview(evidence).count().catch(() => 0),
+    any: await mediaCount(narrow),
+  };
+}
+
 /**
- * Wait until something new is showing where the comment is being written.
+ * Wait until the picture is showing where the comment is being written.
  *
  * Proof, not a timer: an upload still in flight is not an attachment, and a
- * comment submitted over one goes out without it.
+ * comment submitted over one goes out without it — so a visible progress bar
+ * withholds the answer even when the preview is already there.
+ *
+ * Two independent proofs, because each covers the other's blind spot. A new
+ * blob: preview anywhere in the dialog is specific enough to be trusted at
+ * that distance and is what the tight scope kept missing. A rise in the tight
+ * scope's own media count knows nothing about markup and so survives a build
+ * that mints no blob: at all.
  */
-async function photoLanded(scope: Locator, before: number): Promise<boolean> {
+async function photoLanded(evidence: Locator, narrow: Locator, before: MediaBefore): Promise<boolean> {
   for (let waited = 0; waited < 30_000; waited += 500) {
-    if ((await mediaCount(scope)) > before) return true;
-    await scope.page().waitForTimeout(500);
+    const busy = (await fb.uploadProgress(evidence).count().catch(() => 0)) > 0;
+    const local = await fb.localPreview(evidence).count().catch(() => 0);
+    const any = await mediaCount(narrow);
+    if (!busy && (local > before.local || any > before.any)) return true;
+    await evidence.page().waitForTimeout(500);
   }
   return false;
 }
 
+/**
+ * Is the picture still in the box?
+ *
+ * Deliberately looser than photoLanded: that one has to distinguish a new
+ * preview from an old one and therefore counts. This one only has to answer
+ * "is there an attachment here at all", one second before Enter, so it looks
+ * for the preview itself and treats a page that will not answer as a yes —
+ * a locator that throws is not evidence that Facebook dropped anything, and
+ * refusing to send on it would turn a working comment into a failed one.
+ */
+async function stillAttached(box: Locator, article: Locator): Promise<boolean> {
+  const form = box.locator('xpath=ancestor::form[1]');
+  const dialog = box.locator('xpath=ancestor::*[@role="dialog"][1]');
+  const hasDialog = (await dialog.count().catch(() => 0)) > 0;
+  const hasForm = (await form.count().catch(() => 0)) > 0;
+  const where = hasDialog ? dialog : hasForm ? form : article;
+  const local = await fb.localPreview(where).count().catch(() => -1);
+  if (local < 0) return true;
+  if (local > 0) return true;
+  /* No blob: in this build — fall back to "something is showing in the tight
+     scope", the same markup-blind count the attach itself accepts. */
+  return (await mediaCount(hasForm ? form : article)) > 0;
+}
+
 /** Where the attempt stopped. Each one is a different thing to do next. */
-export type CommentStep = 'ok' | 'no-post' | 'no-box' | 'not-sent' | 'blocked' | 'no-photo';
+export type CommentStep = 'ok' | 'no-post' | 'no-box' | 'not-sent' | 'sent-unsure' | 'blocked' | 'no-photo' | 'no-photo-unsure';
 
 async function addComment(page: Page, postText: string, comment: string, image: string | null): Promise<CommentStep> {
   const article = await findPostArticle(page, postText);
   if (!article) return 'no-post';
+  /* Set the instant Enter is pressed and never unset: everything after it is
+     a question about a comment that may already be under the post. */
+  let pressed = false;
   try {
     await article.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
 
@@ -835,8 +976,25 @@ async function addComment(page: Page, postText: string, comment: string, image: 
 
     /* The name must say "comment". A composer box inside the same article
        would take this text and publish it as a second post. */
-    const label = (await box.getAttribute('aria-label').catch(() => '')) ?? '';
-    if (!patterns.commentBox.test(label)) return 'no-box';
+    /*
+     * THE NAME CAN BE ON ANY OF THREE ATTRIBUTES.
+     *
+     * Playwright found this box by role AND name, so it already has a name
+     * that says "comment" — but the name can come from aria-labelledby or
+     * from the element's own text, in which case aria-label is null and
+     * reading only that turned a good box into "אי אפשר להגיב על הפוסט הזה".
+     * The post composer next door already reads all three; this did not.
+     */
+    const named = (
+      await Promise.all([
+        box.getAttribute('aria-label').catch(() => ''),
+        box.getAttribute('aria-placeholder').catch(() => ''),
+        box.getAttribute('placeholder').catch(() => ''),
+      ])
+    )
+      .filter(Boolean)
+      .join(' ');
+    if (named && !patterns.commentBox.test(named)) return 'no-box';
 
     await box.click({ timeout: 5_000 });
 
@@ -852,7 +1010,8 @@ async function addComment(page: Page, postText: string, comment: string, image: 
      * the page would just as happily belong to the post composer at the top of
      * the group, and the picture would become a new POST.
      */
-    if (image && !(await attachPhoto(page, box, article, image))) {
+    const attached = image ? await attachPhoto(page, box, article, image) : 'ok';
+    if (attached !== 'ok') {
       /*
        * NOTHING IS SENT. A comment with the words but without the picture is
        * not a smaller version of what the owner asked for — it is a different
@@ -864,7 +1023,7 @@ async function addComment(page: Page, postText: string, comment: string, image: 
        * Nothing has been typed yet — the picture goes first precisely so that
        * giving up costs nothing.
        */
-      return 'no-photo';
+      return attached === 'unconfirmed' ? 'no-photo-unsure' : 'no-photo';
     }
 
     // Shift+Enter for line breaks, exactly as the composer does: a bare Enter
@@ -874,7 +1033,20 @@ async function addComment(page: Page, postText: string, comment: string, image: 
       if (i) await page.keyboard.press('Shift+Enter');
       await page.keyboard.type(lines[i], { delay: 15 });
     }
+    /*
+     * CHECKED AGAIN, HERE, because the check above is seconds old by now.
+     *
+     * The picture is confirmed before a word is typed — deliberately, so that
+     * giving up costs nothing — and then several seconds of typing happen. If
+     * Facebook drops the attachment in that window (a rejected file type, a
+     * session hiccup), Enter sends the words alone, which is the one outcome
+     * this whole path exists to prevent. Nothing has been sent yet, so
+     * stopping here is still free.
+     */
+    if (image && attached === 'ok' && !(await stillAttached(box, article))) return 'no-photo-unsure';
+
     await page.keyboard.press('Enter');
+    pressed = true;
     await page.waitForTimeout(2500);
 
     /* Verified the same way the post is: found on the page, or it did not
@@ -904,9 +1076,11 @@ async function addComment(page: Page, postText: string, comment: string, image: 
     if (!stillThere && needle) {
       if (await appears(page.getByText(needle, { exact: false }).first(), 10_000)) return 'ok';
     }
-    return 'not-sent';
+    return 'sent-unsure';
   } catch {
-    return 'not-sent';
+    /* After Enter, anything that goes wrong is a question about a comment
+       that may already be live — never a clean "nothing happened". */
+    return pressed ? 'sent-unsure' : 'not-sent';
   }
 }
 

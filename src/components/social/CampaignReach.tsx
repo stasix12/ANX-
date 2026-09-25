@@ -66,7 +66,7 @@ export function CampaignReach({ rows, truncated = false }: { rows: QueueRow[]; t
          * that is still running — and saying nothing here would read as a
          * round that achieved nothing.
          */
-        <p className="text-sm text-mist-400">
+        <p className="text-sm text-mist-300">
           עוד לא נקראו נתונים מהפרסומים. התוכנה במחשב אוספת אותם כשאין לה מה לפרסם, ומרעננת כל כמה שעות — אם היא פועלת, המספרים יופיעו כאן בקרוב.
         </p>
       ) : (

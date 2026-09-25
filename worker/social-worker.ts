@@ -116,9 +116,6 @@ interface WorkerState {
    * asked again and again and no other group is ever reached.
    */
   addressTried?: Set<string>;
-  /** When the last comment went out, and the gap drawn for the next one. */
-  lastCommentAt?: number;
-  commentGapMs?: number;
   /**
    * The c_user id of the account the browser is signed in as.
    *
@@ -199,6 +196,18 @@ async function main(): Promise<void> {
     .update({ status: 'needs_attention', step: 'needs_attention', error: 'ה-worker הופסק באמצע העבודה. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".' })
     .eq('worker_id', state.id)
     .in('status', ['publishing', 'awaiting_confirmation']);
+
+  /*
+   * Comments this worker was in the middle of leaving. Same rule as the jobs
+   * above and for the same reason: the comment may be under the post already,
+   * and the one thing that must never happen is a second one. 'unverified' is
+   * not in the pending set, so nothing picks it up again, and the bulk
+   * "נסה שוב" leaves it alone — the owner looks, then decides.
+   */
+  await db
+    .from('social_queue')
+    .update({ comment_status: 'unverified', comment_note: 'ה-worker נעצר באמצע הוספת התגובה. בדקו בפוסט אם היא נוספה לפני שתנסו שוב.' })
+    .eq('comment_status', 'commenting');
 
   await logActivity('info', 'worker_started', `ה-worker "${env.workerName}" עלה (${hostname()})`, { version: VERSION });
   console.log('[worker] מחובר ל-Supabase. ממתין לעבודות… (Ctrl+C לעצירה)');
@@ -393,7 +402,24 @@ async function tick(state: WorkerState): Promise<void> {
      * The queue is re-asked before each one. The worst case is now one chore,
      * not six.
      */
-    for (const chore of [resolveAddresses, runCampaignComments, resolveShareLinks, syncGroupProfiles, syncPostMetrics] as const) {
+    /*
+     * COMMENTS FIRST, and that ordering is the whole difference between a
+     * feature that works and one that does not.
+     *
+     * The window between two publications is what is left of the minute after
+     * the post has gone out — twenty seconds or so — and the chore standing in
+     * front of the comments was resolveAddresses, which opens a group page and
+     * scrolls it ten times: fifteen to thirty seconds on its own. It took the
+     * window every time, the loop then found the next row due and returned,
+     * and the comments were never reached at all. The owner pressed
+     * "הוסף תגובה לכל הפרסומים" and watched nothing happen, for hours.
+     *
+     * Nothing else here is urgent in the same way. An address that is resolved
+     * a minute later, a profile picture that fills in tomorrow, a view count
+     * that is six hours old — none of those is a thing the owner asked for and
+     * is waiting on. The comment is.
+     */
+    for (const chore of [runCampaignComments, resolveAddresses, resolveShareLinks, syncGroupProfiles, syncPostMetrics] as const) {
       if (stopping || (await anyDue(db))) return;
       await chore(state, headless);
     }
@@ -1338,6 +1364,22 @@ const COMMENT_GAP_DEFAULT_SEC = 30;
 const COMMENT_JITTER = 0.25;
 
 /**
+ * This comment's share of the jitter — drawn from its own id, not from a die.
+ *
+ * The spacing is read back from the database now rather than kept in memory,
+ * which is what makes it survive a restart and stay separate per round. That
+ * only works if the answer is the SAME every time it is asked: a fresh
+ * Math.random() each tick would let a comment whose draw came up low go early
+ * simply by being asked again a few seconds later, which is the metronome the
+ * jitter exists to break, inside out.
+ */
+function jitterFor(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return ((h % 1000) / 1000) * COMMENT_JITTER;
+}
+
+/**
  * Leave the round's comment on the posts the owner asked for.
  *
  * ONE PER TICK, and that is not caution for its own sake. Twenty-eight
@@ -1354,14 +1396,9 @@ const COMMENT_JITTER = 0.25;
  * an endless retry would keep that belief alive while re-opening the same page
  * every few seconds.
  */
-async function runCampaignComments(state: WorkerState, headless: boolean): Promise<void> {
-  if (state.browserState !== 'connected' || !session.hasProfile()) return;
+async function runCampaignComments(state: WorkerState, headless: boolean): Promise<boolean> {
+  if (state.browserState !== 'connected' || !session.hasProfile()) return false;
   const db = await workerDb();
-  /*
-   * SPACED, not merely one per tick. The poll interval is a few seconds, so
-   * without this the whole round's comments would land inside two minutes.
-   */
-  if (Date.now() - (state.lastCommentAt ?? 0) < (state.commentGapMs ?? COMMENT_GAP_DEFAULT_SEC * 1000)) return;
 
   /*
    * NO PERMALINK REQUIRED, and that was a real bug: publishing to a group
@@ -1373,12 +1410,31 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
    * The post is found by its own text on the group's page instead, which is
    * the only handle a group post actually gives us.
    */
-  const { data, error } = await db
-    .from('social_queue')
-    .select('id, permalink, rendered_text, campaign_id, target:social_targets(url)')
-    .eq('comment_status', 'pending')
-    .order('published_at')
-    .limit(COMMENTS_PER_TICK);
+  /*
+   * THE ONES WE ALREADY HAVE AN ADDRESS FOR, FIRST.
+   *
+   * A comment on a post whose address is known is a page load and a box: ten
+   * to twenty seconds, which fits in the window between two publications. A
+   * comment on a post whose address is NOT known has to hunt the group for
+   * the post's own words — up to three pages, each with a scrolling search —
+   * and that is minutes, holding the one browser the whole time.
+   *
+   * Both still happen. But doing the cheap ones first means a round whose
+   * posts were published by this version (which writes the address down as it
+   * publishes) drains at the owner's chosen pace, instead of being held up
+   * behind one old row that has to be excavated. The slow ones are picked up
+   * when there is nothing quick left, which is also when there is most likely
+   * to be room for them.
+   */
+  const pending = (known: boolean) => {
+    const q = db
+      .from('social_queue')
+      .select('id, permalink, rendered_text, campaign_id, target:social_targets(url)')
+      .eq('comment_status', 'pending');
+    return (known ? q.not('permalink', 'is', null) : q.is('permalink', null)).order('published_at').limit(COMMENTS_PER_TICK);
+  };
+  let { data, error } = await pending(true);
+  if (!error && !data?.length) ({ data, error } = await pending(false));
   if (error) {
     if (/comment_status/.test(error.message) && !state.commentNoticeShown) {
       state.commentNoticeShown = true;
@@ -1387,10 +1443,14 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
         detail: error.message,
       });
     }
-    return;
+    return false;
   }
-  if (!data?.length) return;
+  if (!data?.length) return false;
 
+  /* True only once the browser has actually been used: the tick's five-second
+     brake is what keeps a worker with nothing to do from spinning, and a row
+     that was merely re-labelled is not a reason to give it up. */
+  let worked = false;
   for (const row of data as unknown as {
     id: string;
     permalink: string | null;
@@ -1403,7 +1463,16 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
   }[]) {
     if (stopping) break;
     if (!row.campaign_id) {
-      await db.from('social_queue').update({ comment_status: 'failed', comment_at: new Date().toISOString() }).eq('id', row.id);
+      /* With a reason. A row that says "לא הצליח" and nothing else is the
+         exact failure comment_note was added to end. */
+      await db
+        .from('social_queue')
+        .update({
+          comment_status: 'failed',
+          comment_at: new Date().toISOString(),
+          comment_note: 'הפרסום הזה כבר לא משויך לסבב, ולכן אין ממה לקחת את נוסח התגובה.',
+        })
+        .eq('id', row.id);
       continue;
     }
     const { data: campaign } = await db
@@ -1419,6 +1488,61 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
       await db.from('social_queue').update({ comment_status: '', comment_at: null }).eq('id', row.id);
       continue;
     }
+
+    /*
+     * THE GAP, READ BACK FROM THE DATABASE AND SCOPED TO THIS ROUND.
+     *
+     * It used to be two numbers on WorkerState, and both were wrong in a way
+     * the owner could feel:
+     *
+     * - IN MEMORY. The worker updates itself and restarts; the numbers came
+     *   back as zero, and the first comment after every update went out with
+     *   no gap at all. On a machine that checks for a new version every ten
+     *   minutes that is not an edge case.
+     * - GLOBAL. One `lastCommentAt` for the whole worker, while the queue is
+     *   ordered across every round at once. Two live rounds interleaved, each
+     *   got half the rate it asked for, and the gap actually applied to one
+     *   round's comment was whatever the OTHER round had been set to.
+     * - AND IT WAS ONLY WRITTEN ON SUCCESS. A comment that failed left the
+     *   clock untouched, so the next tick — seconds later — tried again with
+     *   no gap whatsoever. The one moment slowing down matters most is right
+     *   after Facebook has refused something.
+     *
+     * `comment_at` is written on every outcome, success and failure alike, so
+     * the latest one for THIS campaign is all three fixes at once and needs no
+     * state of its own.
+     */
+    const { data: previous } = await db
+      .from('social_queue')
+      .select('comment_at')
+      .eq('campaign_id', row.campaign_id)
+      .in('comment_status', ['done', 'failed', 'unverified'])
+      .not('comment_at', 'is', null)
+      .order('comment_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const gapSec = Math.max(5, Math.min(600, Number(campaign?.comment_gap_seconds) || COMMENT_GAP_DEFAULT_SEC));
+    const waitMs = Math.round(gapSec * 1000 * (1 + jitterFor(row.id)));
+    const since = (previous as { comment_at?: string } | null)?.comment_at;
+    if (since && Date.now() - new Date(since).getTime() < waitMs) return false;
+
+    /*
+     * CLAIMED BEFORE THE BROWSER IS TOUCHED, exactly as a publication is.
+     *
+     * Without it the only thing keeping a comment from going out twice was
+     * the write that records the outcome — so a write that failed, or a
+     * machine that died mid-comment, left the row 'pending' and the next tick
+     * commented on the same live post again, and again. The claim takes the
+     * row out of the pending set first; if recording the outcome then fails,
+     * the row is visibly stuck rather than silently repeated.
+     */
+    const claimed = await db
+      .from('social_queue')
+      .update({ comment_status: 'commenting', comment_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .eq('comment_status', 'pending')
+      .select('id');
+    if (claimed.error || !claimed.data?.length) continue;
 
     let local: LocalMedia | null = null;
     const page = await session.newPage(headless);
@@ -1437,7 +1561,7 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
         await saveCommentOutcome(
           db,
           row.id,
-          { ok: false, reason: 'לא הצלחנו להוריד את התמונה של התגובה למחשב, ולכן לא פרסמנו אותה בלי התמונה.', permalink: '', tried: [] },
+          { ok: false, reason: 'לא הצלחנו להוריד את התמונה של התגובה למחשב, ולכן לא פרסמנו אותה בלי התמונה.', permalink: '', tried: [], step: 'no-photo' },
           row.permalink,
           null,
         );
@@ -1449,7 +1573,7 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
       const where = row.permalink ?? groupUrlOf(row.target) ?? '';
       const outcome = where
         ? await commentOnPost(page, where, row.rendered_text, text, local?.images[0] ?? null, state.accountId ?? '')
-        : { ok: false, reason: 'אין לנו כתובת לקבוצה הזאת.', permalink: '', tried: [] };
+        : { ok: false, reason: 'אין לנו כתובת לקבוצה הזאת.', permalink: '', tried: [], step: 'no-post' as const };
       /*
        * The address is written back whether it worked or not. Finding a group
        * post by its own text is the slow, fragile part of this — a search, a
@@ -1471,22 +1595,26 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
       await saveCommentOutcome(db, row.id, outcome, row.permalink, shot);
       if (outcome.ok) console.log('[worker] 💬 נוספה תגובה לפרסום.');
       else console.log(`[worker] ℹ לא הצלחנו להוסיף תגובה: ${outcome.reason} (${outcome.tried.join(' → ') || 'לא ניסינו כתובת'})`);
-      state.lastCommentAt = Date.now();
-      /* Clamped again here: the column is an integer anybody with database
-         access could set to zero, and this is the code that would then hammer
-         Facebook with it. */
-      const chosen = Math.max(5, Math.min(600, Number(campaign?.comment_gap_seconds) || COMMENT_GAP_DEFAULT_SEC));
-      state.commentGapMs = Math.round(chosen * 1000 * (1 + Math.random() * COMMENT_JITTER));
     } catch (err) {
       const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
       const shot = await captureScreenshot(page, row.id, 'comment');
-      await saveCommentOutcome(db, row.id, { ok: false, reason: `התוכנה נתקלה בתקלה: ${detail}`, permalink: '', tried: [] }, row.permalink, shot);
+      await saveCommentOutcome(db, row.id, { ok: false, reason: `התוכנה נתקלה בתקלה: ${detail}`, permalink: '', tried: [], step: 'not-sent' }, row.permalink, shot);
       console.error('[worker] ✗ הוספת תגובה נכשלה:', detail);
     } finally {
       cleanupMedia(local);
       await page.close().catch(() => undefined);
+      /*
+       * SAID OUT LOUD, because a comment can take most of a minute and the
+       * dashboard calls a worker disconnected after ninety seconds of silence.
+       * Nothing else in this chore speaks to social_workers at all, so a
+       * round of slow comments showed the owner "מנותק" while the machine was
+       * in the middle of doing exactly what they asked for.
+       */
+      await heartbeat(state, 'online').catch(() => undefined);
     }
+    worked = true;
   }
+  return worked;
 }
 
 /**
@@ -1505,8 +1633,18 @@ async function saveCommentOutcome(
   known: string | null,
   shot: string | null,
 ): Promise<void> {
+  /*
+   * 'failed' AND 'unverified' ARE NOT THE SAME THING, and the difference is
+   * whether pressing "נסה שוב" is safe.
+   *
+   * 'sent-unsure' means Enter was pressed and Facebook never confirmed. The
+   * comment may be under the post right now. Calling that "failed" put it in
+   * the bulk retry, and the bulk retry would have put a second comment under
+   * a post that already had one — under the owner's own name, permanently.
+   * The row says so instead, and waits for a person to look.
+   */
   const base: Record<string, unknown> = {
-    comment_status: outcome.ok ? 'done' : 'failed',
+    comment_status: outcome.ok ? 'done' : outcome.step === 'sent-unsure' ? 'unverified' : 'failed',
     comment_at: new Date().toISOString(),
   };
   if (outcome.permalink && outcome.permalink !== known) base.permalink = outcome.permalink;

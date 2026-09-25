@@ -655,9 +655,23 @@ console.log('unit tests OK');
    * now preceded by a fresh "is anything due" check and gives way to a
    * publication. The restart check is the last of them and carries its own.
    */
-  const idleAt = localWorker.indexOf('for (const chore of [resolveAddresses');
+  const idleAt = localWorker.indexOf('for (const chore of [runCampaignComments');
   const restartAt = localWorker.indexOf('await restartIfUpdated(state);');
   assert.ok(idleAt > 0 && restartAt > idleAt, 'and is only reached once there is nothing to publish');
+  /*
+   * THE COMMENTS GO FIRST, and that ordering is load-bearing.
+   *
+   * The window between two publications is what is left of the minute after
+   * the post went out — about twenty seconds. resolveAddresses opens a group
+   * page and scrolls it ten times, which is fifteen to thirty on its own, so
+   * standing in front of the comments it took the window every time: the loop
+   * then found the next row due, returned, and the comments were never
+   * reached. The owner pressed the button and watched nothing happen.
+   */
+  assert.ok(
+    localWorker.indexOf('runCampaignComments, resolveAddresses') > 0,
+    'the thing the owner asked for goes before the housekeeping',
+  );
   assert.ok(
     /if \(stopping \|\| \(await anyDue\(db\)\)\) return;/.test(localWorker),
     'each idle chore gives way to a publication that has come due — they hold the only browser',
@@ -2503,7 +2517,14 @@ const scenario: { step: string; line: string }[] = [];
    * the metrics reader, which was collecting nothing for the same reason.
    */
   assert.ok(!/not\('permalink', 'is', null'?\)/.test(clientForComment), 'a permalink may not be required to queue a comment');
-  assert.ok(!/not\('permalink', 'is', null\)/.test(localWorker), 'nor to read a post back, for a comment or for its counters');
+  /*
+   * PREFERRED, NEVER REQUIRED. A known address makes a comment ten seconds
+   * instead of minutes, so those rows go first — but a row without one is
+   * still picked up when there is nothing quick left. Requiring it is what
+   * made the queue match nothing at all.
+   */
+  assert.ok(/\(known \? q\.not\('permalink', 'is', null\) : q\.is\('permalink', null\)\)/.test(localWorker), 'an address is preferred for a comment');
+  assert.ok(/if \(!error && !data\?\.length\) \(\{ data, error \} = await pending\(false\)\);/.test(localWorker), 'and never required — a post with no address is still commented on');
   assert.ok(/export async function findPostArticle/.test(composerSrc), 'the post is found by its own text');
   /* And scoped to it. Reading the whole page on a GROUP feed reports the
      neighbour's engagement as the owner's, which is the same class of lie as
@@ -2526,7 +2547,41 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/Math\.max\(5, Math\.min\(600,/.test(clientForComment), 'and so does the write that sets it');
   /* Jitter ADDS only, so a chosen ten never becomes eight — it is there to
      break the metronome, not to second-guess the number. */
-  assert.ok(/1 \+ Math\.random\(\) \* COMMENT_JITTER/.test(localWorker), 'the gap is never shorter than what was chosen');
+  assert.ok(/1 \+ jitterFor\(row\.id\)/.test(localWorker), 'the gap is never shorter than what was chosen');
+  assert.ok(/\(\(h % 1000\) \/ 1000\) \* COMMENT_JITTER/.test(localWorker), 'and the jitter only ever adds');
+  /*
+   * DRAWN FROM THE ROW, NOT FROM A DIE. The spacing is read back out of the
+   * database now — which is what makes it survive a restart and stay separate
+   * per round — and that only works if the answer is the same every time it is
+   * asked. A fresh Math.random() per tick would let a comment whose draw came
+   * up low go early just by being asked again, which is the metronome the
+   * jitter exists to break, inside out.
+   */
+  assert.ok(!/Math\.random\(\) \* COMMENT_JITTER/.test(localWorker), 'and it is the same answer every time it is asked');
+  /*
+   * THE CLOCK IS THE DATABASE'S, AND IT IS PER ROUND.
+   *
+   * It used to be two numbers on WorkerState, and each was wrong in a way the
+   * owner could feel: memory does not survive the self-update, so the first
+   * comment after every version bump went out with no gap at all; one global
+   * clock for a queue ordered across every round meant two live rounds each
+   * got half their rate and were paced by each other's setting; and it was
+   * only written on success, so a failure was followed by an immediate retry —
+   * the one moment slowing down matters most.
+   */
+  assert.ok(/\.eq\('campaign_id', row\.campaign_id\)[\s\S]{0,400}\.order\('comment_at', \{ ascending: false \}\)/.test(localWorker), 'the gap is measured against this round, from the database');
+  /*
+   * AND THE ROW IS CLAIMED BEFORE THE BROWSER IS TOUCHED, exactly as a
+   * publication is. Without it the only thing standing between the owner and
+   * two identical comments under one live post was the write that records the
+   * outcome: a write that failed, or a machine that died mid-comment, left the
+   * row 'pending' and the next tick commented again.
+   */
+  assert.ok(/comment_status: 'commenting'[\s\S]{0,300}\.eq\('comment_status', 'pending'\)/.test(localWorker), 'a comment is claimed before it is written');
+  assert.ok(/\.eq\('comment_status', 'commenting'\)/.test(localWorker), 'and a claim the worker died holding is swept, not retried');
+  /* 'unverified' is not 'failed': Enter was pressed, so the comment may be
+     live, and the bulk retry must not put a second one under the post. */
+  assert.ok(/outcome\.step === 'sent-unsure' \? 'unverified' : 'failed'/.test(localWorker), 'a comment that may be live is never called failed');
   /* Four states, not a boolean: "nobody asked" and "asked and failed" are
      opposite facts about a post that is already live. */
   assert.ok(/'failed'/.test(localWorker) && /comment_status/.test(localWorker), 'a comment that could not be placed is recorded as failed');
@@ -2714,7 +2769,17 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/screenshotUrl\(path\)/.test(shotCard), 'the picture is opened through a signed link');
   assert.ok(/onClick=\{async \(\) => \{/.test(shotCard), 'and only when somebody asks to see it, since the link is short-lived');
   for (const screen of [campaignPage, commentCard]) {
-    assert.ok(/r\.comment_status === 'failed' && r\.comment_shot/.test(screen), 'both screens offer it under the group that failed');
+    /* Under every row that needs a person — which is 'failed' and also
+       'unverified', where the comment may be live and looking at the page the
+       worker saw is the whole way to find out. One predicate, from
+       comments.ts, so the two screens cannot drift apart again. */
+    assert.ok(/commentNeedsHuman\(r\.comment_status\) && r\.comment_shot/.test(screen), 'both screens offer it under the group that failed');
+    assert.ok(/commentNeedsHuman\(r\.comment_status\) && r\.comment_note/.test(screen), 'and the reason with it');
+    /* One label map and one order for both, for the same reason: they had
+       already drifted — different sort, different markup, and a state neither
+       of them knew about rendered as a blank word beside a grey dot. */
+    assert.ok(/COMMENT_LABEL\[r\.comment_status as CommentStatus\]/.test(screen), 'and both name the state the same way');
+    assert.ok(/commentRank\(a\.comment_status\) - commentRank\(b\.comment_status\)/.test(screen), 'and sort it the same way');
   }
   /* A missing column may never cost the status — same rule as the note, and
      for the same reason: a row stuck on 'pending' is commented on forever. */
@@ -2739,13 +2804,25 @@ const scenario: { step: string; line: string }[] = [];
    */
   assert.ok(/async function resolveAddresses/.test(localWorker), 'addresses are resolved as their own pass');
   assert.ok(/\.is\('permalink', null\)/.test(localWorker), 'and only for rows that do not have one yet');
-  /* First of the idle chores, ahead of the comment writer — which is the
-     thing that needs an address. */
+  /*
+   * IT USED TO RUN FIRST, ahead of the comment writer, because the comment
+   * writer needs an address. That was right until publishing started writing
+   * the address down as it published — and then it became the reason the
+   * feature did not work: this chore opens a group page and scrolls it ten
+   * times, fifteen to thirty seconds, and the whole window between two
+   * publications is about twenty. It took the window, the loop found the next
+   * row due and returned, and the comments were never reached at all.
+   *
+   * The comments go first now and prefer rows whose address is already known,
+   * which is every row this version published. This chore still fills in the
+   * old ones, in the windows the comments do not need.
+   */
   const choreList = localWorker.slice(localWorker.indexOf('for (const chore of ['), localWorker.indexOf('] as const)'));
   assert.ok(
-    choreList.indexOf('resolveAddresses') >= 0 && choreList.indexOf('resolveAddresses') < choreList.indexOf('runCampaignComments'),
-    'it runs before anything that needs an address',
+    choreList.indexOf('runCampaignComments') >= 0 && choreList.indexOf('runCampaignComments') < choreList.indexOf('resolveAddresses'),
+    'the thing the owner is waiting on runs before the housekeeping that feeds it',
   );
+  assert.ok(/permalink: result\.permalink/.test(localWorker), 'and publishing writes the address down, so there is usually nothing to resolve');
   /* Same fact, stated once above: the chore list is the order. */
   assert.ok(/\.update\(\{ permalink: url \}\)/.test(localWorker), 'and the address is written down, so nothing searches twice');
 
@@ -2890,10 +2967,37 @@ const scenario: { step: string; line: string }[] = [];
    * upload that never finished all produced the same thing: the text went out
    * alone and the screen said "הגיב".
    */
-  assert.ok(/if \(image && !\(await attachPhoto\(page, box, article, image\)\)\) \{[\s\S]{0,900}return 'no-photo';/.test(composerSrc), 'a picture that will not attach stops the comment');
+  assert.ok(/if \(attached !== 'ok'\) \{[\s\S]{0,900}return attached === 'unconfirmed' \? 'no-photo-unsure' : 'no-photo';/.test(composerSrc), 'a picture that will not attach stops the comment');
   const typingAt = composerSrc.indexOf('const lines = comment ? comment.split');
-  const photoAt = composerSrc.indexOf("return 'no-photo';");
+  const photoAt = composerSrc.indexOf("'no-photo-unsure' : 'no-photo';");
   assert.ok(photoAt > 0 && typingAt > photoAt, 'and it gives up before a word is typed, so giving up costs nothing');
+  /*
+   * AND THE TWO ANSWERS ARE NOT THE SAME ANSWER. "We could not attach it"
+   * sends the owner to look at the picture; "we attached it and Facebook did
+   * not show it back" sends them to press retry. Nothing is sent either way —
+   * the difference is only in what the screen tells them to do next.
+   */
+  assert.ok(/'no-photo-unsure': 'צירפנו את התמונה/.test(composerSrc), 'a file that went in but could not be seen says so');
+  /*
+   * THE PROOF IS LOOKED FOR WHERE THE PREVIEW ACTUALLY IS.
+   *
+   * Facebook renders a group permalink as a modal and mounts the thumbnail
+   * BESIDE the comment form, not inside it. The check counted the form, saw
+   * nothing change, and refused a picture that had attached — which is the
+   * failure the owner was looking at. The dialog is the smallest scope that
+   * holds both, and only a blob: preview is trusted at that distance.
+   */
+  assert.ok(/ancestor::\*\[@role="dialog"\]\[1\]/.test(composerSrc), 'the preview is looked for in the enclosing dialog');
+  assert.ok(/fb\.localPreview\(evidence\)/.test(composerSrc), 'and only a local file preview is counted that far out');
+  /* Re-taken after the camera click: the camera mounts markup of its own, and
+     counting that as the picture is how an attach that never happened passed. */
+  assert.ok(/chosen = await waiting;[\s\S]{0,600}before = await mediaBefore\(evidence, narrow\);/.test(composerSrc), 'the baseline is taken after the camera opens, not before');
+  /* One attachment attempt per comment. Walking on to the next scope with the
+     file already in an input hands Facebook the same picture twice. */
+  assert.ok(/if \(got === 'unconfirmed'\) return 'unconfirmed';/.test(composerSrc), 'a file that is already in never gets attached a second time');
+  /* Checked again at the instant of submit: the first check is seconds old by
+     then, and Enter over a dropped attachment sends the words alone. */
+  assert.ok(/if \(image && attached === 'ok' && !\(await stillAttached\(box, article\)\)\) return 'no-photo-unsure';/.test(composerSrc), 'the picture is confirmed again immediately before Enter');
   /* The form, not the article: Facebook's comment file input frequently sits
      outside the [role="article"] the post is wrapped in, which is why looking
      for it there found nothing at all. */
@@ -2914,12 +3018,12 @@ const scenario: { step: string; line: string }[] = [];
    * not know any.
    */
   assert.ok(/async function mediaCount/.test(composerSrc), 'what is showing is counted');
-  assert.ok(/\(await mediaCount\(scope\)\) > before/.test(composerSrc), 'and the proof is that there is more of it than before');
+  assert.ok(/any > before\.any/.test(composerSrc), 'and the proof is that there is more of it than before');
   assert.ok(!/locator\('img\[src\^="blob:"\]/.test(composerSrc), 'never a guess at which markup Facebook used this week');
   /* And it is looked for in more than one place, because Facebook does not
      always wrap a comment box in a form. The page itself only on the post's
      own page — on a feed that input belongs to "write a post". */
-  assert.ok(/const onPermalink = /.test(composerSrc) && /if \(onPermalink\) scopes\.push\(page\.locator\('body'\)\);/.test(composerSrc), 'the page is a last resort, and only where it is safe');
+  assert.ok(/const onPermalink = /.test(composerSrc) && /else if \(onPermalink\) scopes\.push\(page\.locator\('body'\)\);/.test(composerSrc), 'the page is a last resort, and only where it is safe');
   assert.ok(!/await page\.waitForTimeout\(4000\);\s*\n\s*await box\.click/.test(composerSrc), 'never by waiting a fixed four seconds and hoping');
 
   /*
@@ -3007,9 +3111,9 @@ const scenario: { step: string; line: string }[] = [];
      next tick — and again, and again. */
   assert.ok(/if \(!\/comment_note\|comment_shot\/\.test\(withNote\.error\.message\)\)/.test(localWorker), 'a missing note column may never block the status');
   assert.ok(/const plain = await db\.from\('social_queue'\)\.update\(base\)\.eq\('id', id\);/.test(localWorker), 'the status is written without it instead');
-  for (const screen of [campaignPage, commentCard]) {
-    assert.ok(/r\.comment_status === 'failed' && r\.comment_note/.test(screen), 'both screens show the reason under the group that failed');
-  }
+  /* Shown under every row that needs a person — 'failed' and 'unverified'
+     alike — through the one predicate both screens import. Pinned where the
+     screenshot is pinned; not repeated here. */
   /* The old reason is cleared with the state it explained: a row reading
      "ממתין" under last week's "הפוסט נמחק" is a screen contradicting itself. */
   assert.ok(/comment_status: 'pending', comment_at: null, comment_note: ''/.test(clientForComment), 'and re-queueing clears it');
@@ -3033,7 +3137,12 @@ const scenario: { step: string; line: string }[] = [];
   /* The counts come from the database, the list from the page. They used to
      both come from the page, so a task of 117 announced itself as 59. */
   assert.ok(/export async function commentTotals/.test(clientForComment), 'the totals are counted where the rows are');
-  assert.ok(/const \{ pending, done, failed \} = totals;/.test(commentCard), 'and the card shows those rather than its own page size');
+  assert.ok(/const \{ pending, done, failed, unverified \} = totals;/.test(commentCard), 'and the card shows those rather than its own page size');
+  /* 'commenting' is a row the worker is holding at this instant. It is added
+     to "waiting" rather than shown as a fourth number, because from the
+     owner's side it is still a post that has not got its comment yet — but it
+     has to be counted somewhere, or the totals stop adding up mid-round. */
+  assert.ok(/count\('commenting'\)/.test(clientForComment), 'a comment in flight is still counted as waiting');
   /* One per tick. Twenty-eight comments inside a minute is worth nothing to
      anybody reading them and a great deal to whatever watches for bursts. */
   assert.ok(/const COMMENTS_PER_TICK = 1;/.test(localWorker), 'comments go out one at a time, not in a burst');

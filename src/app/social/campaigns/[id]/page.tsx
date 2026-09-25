@@ -42,6 +42,7 @@ import {
   stopCampaign,
   type QueueRow,
 } from '@/lib/social/client';
+import { COMMENT_LABEL, COMMENT_TONE, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
 import {
   RUN_STATE_LABEL,
   campaignState,
@@ -76,7 +77,6 @@ import { CalendarIcon, ClipboardListIcon, PauseIcon, SearchIcon } from '@/compon
  *            lets a job already running finish, and keeps the history.
  */
 /* Pending first: it is the part still moving, and the part worth watching. */
-const COMMENT_ORDER = ['pending', 'failed', 'done'];
 
 export default function CampaignControlCenter() {
   const { id } = useParams<{ id: string }>();
@@ -430,6 +430,155 @@ export default function CampaignControlCenter() {
           </div>
         )}
 
+        {/*
+          THE ROUND'S COMMENT, AND IT SITS ABOVE THE QUEUE ON PURPOSE.
+
+          It used to be below it. "תור הפרסום" is unbounded — a round of a
+          hundred and twenty-two publications is a hundred and twenty-two rows
+          — so on a phone this card started somewhere past two thousand pixels
+          of scroll, with nothing above it hinting that it existed. The owner
+          could not find the feature and reasonably concluded it did not work.
+
+          This is an ACTION and the queue is REFERENCE, which is the order they
+          belong in anyway. The id is here so a link can bring somebody
+          straight to it.
+        */}
+        {rows && (
+          <Card
+            id="comments"
+            title="תגובה על הפרסומים של הסבב"
+            subtitle="מוסיפה תגובה מהחשבון שלכם לכל הפרסומים שכבר יצאו כאן — מתי שתחליטו, גם אחרי יום."
+          >
+            {(() => {
+              /* No permalink test: a group post never has one, and requiring
+                 it is what left this button dead beside a round that had
+                 published a hundred and twenty-two times. */
+              const published = rows.filter((r) => r.status === 'published');
+              const notOutYet = rows.filter((r) => r.status === 'scheduled').length;
+              const p = commentProgress(rows);
+              const known = p.pending + p.done + p.failed + p.unverified;
+              return (
+                <>
+                  {known > 0 && (
+                    <p className="mb-3 text-sm text-mist-300">
+                      {p.done > 0 && `${p.done} ${agree(p.done, 'פרסום קיבל', 'פרסומים קיבלו')} תגובה`}
+                      {p.pending > 0 && `${p.done > 0 ? ' · ' : ''}${p.pending} ${agree(p.pending, 'ממתין', 'ממתינים')}`}
+                      {/* Failures are named, never folded into the total. The
+                          post is live and the owner believes the comment is
+                          under it. */}
+                      {p.failed > 0 && (
+                        <span className="text-warning-400">{`${p.done + p.pending > 0 ? ' · ' : ''}${p.failed} לא הצליחו`}</span>
+                      )}
+                      {p.unverified > 0 && (
+                        <span className="text-warning-400">{`${p.done + p.pending + p.failed > 0 ? ' · ' : ''}${p.unverified} צריך לבדוק`}</span>
+                      )}
+                    </p>
+                  )}
+                  {/*
+                    WHICH GROUPS, not just how many.
+
+                    A progress line is a number; the owner asked to see the
+                    list, and they are right — "3 הגיבו" tells you nothing
+                    about whether the one group that matters has been reached
+                    yet, and a failure is only actionable once it has a name.
+                    Worst first, because the rows that need a person are the
+                    only reason to open a list of a hundred.
+                  */}
+                  {known > 0 && (
+                    <ul className="mb-3 max-h-64 min-w-0 divide-y divide-ink-700 overflow-y-auto overscroll-contain rounded-xl bg-ink-800/40">
+                      {[...rows]
+                        .filter((r) => r.comment_status)
+                        .sort((a, b) => commentRank(a.comment_status) - commentRank(b.comment_status))
+                        .map((r) => (
+                          <li key={r.id} className="min-w-0 px-3 py-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${TONE_FILL[COMMENT_TONE[r.comment_status as CommentStatus] ?? 'neutral']}`} />
+                              <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-100">{r.target?.name ?? '—'}</span>
+                              <span className="shrink-0 text-[11px] text-mist-500">{COMMENT_LABEL[r.comment_status as CommentStatus] ?? ''}</span>
+                            </div>
+                            {/* Why, not just that. A post the admin deleted and
+                                a group that closed comments are two different
+                                things to do next, and only one is worth a
+                                retry — so the retry button below is only
+                                honest next to this line. */}
+                            {commentNeedsHuman(r.comment_status) && r.comment_note && (
+                              <p dir="auto" className="mt-1 ps-4 text-[11px] leading-relaxed text-warning-400">{r.comment_note}</p>
+                            )}
+                            {commentNeedsHuman(r.comment_status) && r.comment_shot && (
+                              <div className="ps-4">
+                                <CommentShot path={r.comment_shot} />
+                              </div>
+                            )}
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" disabled={published.length === 0} onClick={() => setCommentOpen(true)}>
+                      {known > 0 ? 'הוסף תגובה נוספת' : 'הוסף תגובה לכל הפרסומים'}
+                    </Button>
+                    {/* Its own button, because "add another" would re-mark the
+                        posts that already HAVE a comment and ask for a second
+                        one on them without the owner meaning to. */}
+                    {p.failed > 0 && (
+                      <Button
+                        variant="secondary"
+                        busy={busy === 'retry-comments'}
+                        onClick={() =>
+                          act('retry-comments', () => retryFailedComments(id), `${p.failed} ${agree(p.failed, 'פרסום חזר', 'פרסומים חזרו')} לתור.`)
+                        }
+                      >
+                        {`נסה שוב את ${p.failed} שלא הצליחו`}
+                      </Button>
+                    )}
+                  </div>
+                  {published.length === 0 && (
+                    <p className="mt-2 text-xs text-mist-500">בסבב הזה עוד לא יצא פרסום, ולכן אין על מה להגיב.</p>
+                  )}
+                  {/*
+                    THE ONE THING THE BUTTON CANNOT DO, said where it is
+                    pressed. The marking is a snapshot of what has ALREADY
+                    published — a post that goes out an hour from now is not
+                    in it, and nothing goes back to add it. Without this line
+                    the owner presses once on a round that is still running and
+                    is left believing every group got a comment.
+                  */}
+                  {published.length > 0 && notOutYet > 0 && (
+                    <p className="mt-2 text-xs text-mist-500">
+                      {`${notOutYet} ${agree(notOutYet, 'פרסום בסבב הזה עוד לא יצא', 'פרסומים בסבב הזה עוד לא יצאו')} — התגובה תתווסף רק למה שכבר פורסם. אפשר ללחוץ שוב כשהסבב יסתיים.`}
+                    </p>
+                  )}
+                  {p.unverified > 0 && (
+                    <p className="mt-2 text-xs text-mist-500">
+                      {`${p.unverified} ${agree(p.unverified, 'תגובה נשלחה', 'תגובות נשלחו')} בלי אישור מפייסבוק. פתחו את הפוסט ובדקו לפני שתוסיפו שוב — ייתכן שהן כבר שם.`}
+                    </p>
+                  )}
+                  <CampaignCommentSheet
+                    open={commentOpen}
+                    onClose={() => setCommentOpen(false)}
+                    publishedCount={published.length}
+                    initialText={campaign.comment_text ?? ''}
+                    initialMedia={campaign.comment_media ?? []}
+                    initialGapSeconds={campaign.comment_gap_seconds ?? 30}
+                    busy={busy === 'comment'}
+                    onSubmit={(text, media, gapSeconds) =>
+                      act(
+                        'comment',
+                        async () => {
+                          const n = await queueCampaignComment(id, text, media, gapSeconds);
+                          setCommentOpen(false);
+                          return n;
+                        },
+                        'נשלח. התגובות יתווספו אחת-אחת בדקות הקרובות.',
+                      )
+                    }
+                  />
+                </>
+              );
+            })()}
+          </Card>
+        )}
+
         <Card
           title="תור הפרסום"
           subtitle="מתעדכן לבד כל 5 שניות"
@@ -464,136 +613,6 @@ export default function CampaignControlCenter() {
         {/* Between the list of what went out and the posts themselves: the
             answer to "and did it do anything", which is the question the round
             was run to settle. */}
-        {/*
-          The round's own comment action. It sits with the round because that
-          is what it is about — the offer these posts carry — and behind a
-          button because WHEN is a judgement: a price list is worth adding once
-          a post has had a few hours to be seen.
-        */}
-        {rows && (
-          <Card
-            title="תגובה על הפרסומים של הסבב"
-            subtitle="מוסיפה תגובה מהחשבון שלכם לכל הפרסומים שכבר יצאו כאן — מתי שתחליטו."
-          >
-            {(() => {
-              /* No permalink test: a group post never has one, and requiring
-                 it is what left this button dead beside a round that had
-                 published a hundred and twenty-two times. */
-              const published = rows.filter((r) => r.status === 'published');
-              const p = commentProgress(rows);
-              return (
-                <>
-                  {p.pending + p.done + p.failed > 0 && (
-                    <p className="mb-3 text-sm text-mist-400">
-                      {p.done > 0 && `${p.done} ${agree(p.done, 'פרסום קיבל', 'פרסומים קיבלו')} תגובה`}
-                      {p.pending > 0 && `${p.done > 0 ? ' · ' : ''}${p.pending} ${agree(p.pending, 'ממתין', 'ממתינים')}`}
-                      {/* Failures are named, never folded into the total. The
-                          post is live and the owner believes the comment is
-                          under it. */}
-                      {p.failed > 0 && (
-                        <span className="text-warning-400">{`${p.done + p.pending > 0 ? ' · ' : ''}${p.failed} לא הצליחו`}</span>
-                      )}
-                    </p>
-                  )}
-                  {/*
-                    WHICH GROUPS, not just how many.
-                    
-                    A progress line is a number; the owner asked to see the
-                    list, and they are right — "3 הגיבו" tells you nothing
-                    about whether the one group that matters has been reached
-                    yet, and a failure is only actionable once it has a name.
-                    Pending first, because that is the part still moving.
-                  */}
-                  {p.pending + p.done + p.failed > 0 && (
-                    <ul className="mb-3 max-h-64 divide-y divide-ink-700 overflow-y-auto overscroll-contain rounded-xl bg-ink-800/40">
-                      {[...rows]
-                        .filter((r) => r.comment_status)
-                        .sort((a, b) => COMMENT_ORDER.indexOf(a.comment_status ?? '') - COMMENT_ORDER.indexOf(b.comment_status ?? ''))
-                        .map((r) => (
-                          <li key={r.id} className="min-w-0 px-3 py-2">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <span
-                                aria-hidden
-                                className={`h-2 w-2 shrink-0 rounded-full ${
-                                  r.comment_status === 'done'
-                                    ? TONE_FILL.good
-                                    : r.comment_status === 'failed'
-                                      ? TONE_FILL.warn
-                                      : TONE_FILL.neutral
-                                }`}
-                              />
-                              <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-100">
-                                {r.target?.name ?? '—'}
-                              </span>
-                              <span className="shrink-0 text-[11px] text-mist-500">
-                                {r.comment_status === 'done' ? 'הגיב' : r.comment_status === 'failed' ? 'לא הצליח' : 'ממתין'}
-                              </span>
-                            </div>
-                            {/* Why, not just that. A post the admin deleted and
-                                a group that closed comments are two different
-                                things to do next, and only one is worth a
-                                retry — so the retry button below is only
-                                honest next to this line. */}
-                            {r.comment_status === 'failed' && r.comment_note && (
-                              <p className="mt-1 pr-4 text-[11px] leading-relaxed text-warning-400/90">{r.comment_note}</p>
-                            )}
-                            {r.comment_status === 'failed' && r.comment_shot && (
-                              <div className="pr-4">
-                                <CommentShot path={r.comment_shot} />
-                              </div>
-                            )}
-                          </li>
-                        ))}
-                    </ul>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="secondary" disabled={published.length === 0} onClick={() => setCommentOpen(true)}>
-                      {p.done + p.pending + p.failed > 0 ? 'הוסף תגובה נוספת' : 'הוסף תגובה לכל הפרסומים'}
-                    </Button>
-                    {/* Its own button, because "add another" would re-mark the
-                        posts that already HAVE a comment and ask for a second
-                        one on them without the owner meaning to. */}
-                    {p.failed > 0 && (
-                      <Button
-                        variant="secondary"
-                        busy={busy === 'retry-comments'}
-                        onClick={() =>
-                          act('retry-comments', () => retryFailedComments(id), `${p.failed} ${agree(p.failed, 'פרסום חזר', 'פרסומים חזרו')} לתור.`)
-                        }
-                      >
-                        {`נסה שוב את ${p.failed} שלא הצליחו`}
-                      </Button>
-                    )}
-                  </div>
-                  {published.length === 0 && (
-                    <p className="mt-2 text-xs text-mist-500">בסבב הזה עוד לא יצא פרסום, ולכן אין על מה להגיב.</p>
-                  )}
-                  <CampaignCommentSheet
-                    open={commentOpen}
-                    onClose={() => setCommentOpen(false)}
-                    publishedCount={published.length}
-                    initialText={campaign.comment_text ?? ''}
-                    initialMedia={campaign.comment_media ?? []}
-                    initialGapSeconds={campaign.comment_gap_seconds ?? 30}
-                    busy={busy === 'comment'}
-                    onSubmit={(text, media, gapSeconds) =>
-                      act(
-                        'comment',
-                        async () => {
-                          const n = await queueCampaignComment(id, text, media, gapSeconds);
-                          setCommentOpen(false);
-                          return n;
-                        },
-                        'נשלח. התגובות יתווספו אחת-אחת בדקות הקרובות.',
-                      )
-                    }
-                  />
-                </>
-              );
-            })()}
-          </Card>
-        )}
-
         {rows && <CampaignReach rows={rows} truncated={Boolean(state?.truncated)} />}
 
         <Card title={`פוסטים בסבב (${posts.length})`}>

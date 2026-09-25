@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { MediaItem } from '@/lib/social/types';
 import { MediaUploader } from './MediaUploader';
-import { Button, Field, Notice, Sheet, inputClass } from './ui';
+import { Button, Field, Notice, SegmentedControl, Sheet, inputClass } from './ui';
 
 /**
  * "Comment on everything this round has published" — a decision, not a setting.
@@ -17,6 +17,9 @@ import { Button, Field, Notice, Sheet, inputClass } from './ui';
  *
  * So it lives here, on the round, behind a button somebody presses.
  */
+/* The pace most rounds want, one tap away. Anything else is typed. */
+const QUICK_GAPS = ['10', '20', '30', '60'];
+
 export function CampaignCommentSheet({
   open,
   onClose,
@@ -77,7 +80,15 @@ export function CampaignCommentSheet({
                 attachment. Accepting more and quietly sending one would be
                 worse than not accepting them. */}
             <Field label="תמונה לתגובה (לא חובה)" hint="מחירון, לפני/אחרי — תמונה אחת, זה מה שפייסבוק מאפשרת בתגובה.">
-              <MediaUploader media={media} onChange={(m) => setMedia(m.filter((x) => x.kind === 'image').slice(0, 1))} />
+              {/* The uploader prints its own footer, and its default one says
+                  "תמונות (כמה שתרצו) או סרטון אחד" — the opposite of the rule
+                  above it, three centimetres away, inside the one sheet where
+                  the limit is one. */}
+              <MediaUploader
+                media={media}
+                hint="תמונה אחת. זה מה שפייסבוק מאפשרת בתגובה."
+                onChange={(m) => setMedia(m.filter((x) => x.kind === 'image').slice(0, 1))}
+              />
             </Field>
           </div>
 
@@ -95,23 +106,22 @@ export function CampaignCommentSheet({
                 onBlur={() => setGap(String(gapSeconds))}
               />
             </Field>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {[10, 20, 30, 60].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setGap(String(s))}
-                  className={`min-h-11 rounded-xl px-3 text-[13px] font-bold ${
-                    gapSeconds === s ? 'bg-brand-300/12 text-brand-400' : 'bg-ink-800 text-mist-400'
-                  }`}
-                >
-                  {`${s} שנ׳`}
-                </button>
-              ))}
+            {/* The primitive, not eleven lines of bespoke markup: it brings
+                the 44px floor, aria-pressed, the focus ring and sideways
+                scrolling with it, and it was already being reinvented here
+                with a colour token that does not exist. */}
+            <div className="mt-2">
+              <SegmentedControl
+                variant="chips"
+                label="מרווח מהיר"
+                value={String(gapSeconds)}
+                onChange={setGap}
+                options={QUICK_GAPS.map((v) => ({ value: v, label: `${v} שנ׳` }))}
+              />
             </div>
           </div>
 
-          <p className="mt-3 text-sm text-mist-400">
+          <p className="mt-3 text-sm text-mist-300">
             התגובה תיווסף ל-{publishedCount} הפרסומים שכבר יצאו בסבב הזה, מהחשבון שלכם — {howLong} בסך הכול.
           </p>
           {/*

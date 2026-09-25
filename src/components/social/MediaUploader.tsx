@@ -10,7 +10,23 @@ import { friendlyMessage } from '@/lib/social/errors';
  * Images and one video for a post, stored in the public social-media bucket
  * (Meta fetches media by URL, so the files must be publicly readable).
  */
-export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChange: (m: MediaItem[]) => void }) {
+export function MediaUploader({
+  media,
+  onChange,
+  /*
+   * WHAT THIS PARTICULAR UPLOADER ACCEPTS, when it is not the usual answer.
+   *
+   * The footer below states the rule, and the rule is not the same everywhere:
+   * a comment takes exactly one image. The comment sheet said so in its own
+   * label and this footer contradicted it three centimetres lower — two
+   * sentences, opposite claims, in the one place the limit matters.
+   */
+  hint,
+}: {
+  media: MediaItem[];
+  onChange: (m: MediaItem[]) => void;
+  hint?: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -84,7 +100,7 @@ export function MediaUploader({ media, onChange }: { media: MediaItem[]; onChang
         </button>
       </div>
       <input ref={inputRef} type="file" accept="image/*,video/mp4,video/quicktime" multiple hidden onChange={(e) => onFiles(e.target.files)} />
-      <p className="mt-1.5 text-xs text-mist-500">תמונות (כמה שתרצו) או סרטון אחד. הקבצים נשמרים ב-Supabase Storage ומשם פייסבוק מושכת אותם.</p>
+      <p className="mt-1.5 text-xs text-mist-500">{hint ?? 'תמונות (כמה שתרצו) או סרטון אחד.'} הקבצים נשמרים ב-Supabase Storage ומשם פייסבוק מושכת אותם.</p>
       {error && <p className="mt-1 text-sm text-error-400">{error}</p>}
     </div>
   );

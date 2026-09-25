@@ -329,6 +329,39 @@ async function main() {
   );
   console.log('✓ a comment with a picture carries the picture, or is not sent at all');
 
+  /*
+   * THE SAME THING ON THE POST'S OWN PAGE, WHERE IT ACTUALLY BROKE.
+   *
+   * The fixture above nests the comment form, its file input and its preview
+   * all inside the [role=article], so every scope the attach tried contained
+   * the thumbnail and the check could not be wrong. Facebook's permalink is a
+   * modal and does not nest them that way: the preview is mounted beside the
+   * form, not in it. Counting the form therefore saw nothing change, and a
+   * picture that was plainly on the screen was reported as "לא הצלחנו לצרף
+   * את התמונה" — the failure the owner sent a screenshot of.
+   *
+   * This fixture reproduces exactly that, plus the two smaller shapes that
+   * came with it: a camera labelled "צירוף קובץ תמונה" (a word between the
+   * verb and the noun, which the old pattern could not match) and a comment
+   * box named through aria-labelledby (so aria-label is null).
+   */
+  const page8 = await context.newPage();
+  const dialogFixture = `file://${path.resolve(__dirname, 'mock-post-dialog.html')}`;
+  const inDialog = await commentOnPost(page8, dialogFixture, 'מבצע ניקוי ספות בבאר שבע 🛋️ החודש בלבד', 'לפרטים: 050-0000000', img1);
+  assert.equal(inDialog.ok, true, `a preview mounted outside the comment form is still the picture — got: ${inDialog.reason}`);
+  const dialogComments = await page8.evaluate(() =>
+    Array.from(document.querySelectorAll('.comment')).map((c) => ({
+      text: c.textContent ?? '',
+      photo: (c as HTMLElement).dataset.photo === '1',
+    })),
+  );
+  assert.deepEqual(
+    dialogComments,
+    [{ text: 'לפרטים: 050-0000000', photo: true }],
+    'and it goes out once, with the picture on it',
+  );
+  console.log('✓ the picture is found where Facebook actually shows it, not only where the input is');
+
   await browser.close();
   console.log('composer tests OK');
 }

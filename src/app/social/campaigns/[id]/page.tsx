@@ -504,8 +504,8 @@ export default function CampaignControlCenter() {
                                 things to do next, and only one is worth a
                                 retry — so the retry button below is only
                                 honest next to this line. */}
-                            {commentNeedsHuman(r.comment_status) && r.comment_note && (
-                              <p dir="auto" className="mt-1 ps-4 text-[11px] leading-relaxed text-warning-400">{r.comment_note}</p>
+                            {r.comment_note && (
+                              <p dir="auto" className={`mt-1 ps-4 text-[11px] leading-relaxed ${commentNeedsHuman(r.comment_status) ? 'text-warning-400' : 'text-mist-300'}`}>{r.comment_note}</p>
                             )}
                             {commentNeedsHuman(r.comment_status) && r.comment_shot && (
                               <div className="ps-4">

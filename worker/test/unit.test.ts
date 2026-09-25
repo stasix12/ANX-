@@ -2751,7 +2751,13 @@ const scenario: { step: string; line: string }[] = [];
    * were spent guessing between the two. With the line in the sentence they
    * can read their post, read the line, and see in a second which it is.
    */
-  assert.ok(/function explain\(step: Exclude<CommentStep, 'ok'>, postText: string\)/.test(composerSrc), 'the failure carries what was searched for');
+  assert.ok(/function explain\(step: CommentFailure, postText: string\)/.test(composerSrc), 'the failure carries what was searched for');
+  /* There are TWO ways a comment can succeed now — confirmed, and sent with a
+     picture we handed over and could not see — so one function turns a step
+     into an outcome. Written out at both call sites, the feed path would
+     sooner or later recognise one and not the other, and a comment that went
+     up would be recorded as a failure. That is how a post gets two. */
+  assert.ok(/function done\(step: CommentStep, postText: string, permalink: string, tried: string\[\]\): CommentOutcome/.test(composerSrc), 'one place turns a step into an outcome');
   assert.ok(/חיפשנו את השורה/.test(composerSrc), 'in Hebrew, on the screen the owner reads');
 
   /*
@@ -2774,7 +2780,11 @@ const scenario: { step: string; line: string }[] = [];
        worker saw is the whole way to find out. One predicate, from
        comments.ts, so the two screens cannot drift apart again. */
     assert.ok(/commentNeedsHuman\(r\.comment_status\) && r\.comment_shot/.test(screen), 'both screens offer it under the group that failed');
-    assert.ok(/commentNeedsHuman\(r\.comment_status\) && r\.comment_note/.test(screen), 'and the reason with it');
+    /* The note is shown whenever there IS one — a comment can now succeed and
+       still have something worth saying: the picture went in and Facebook
+       never showed it back. The colour is what separates the two. */
+    assert.ok(/\{r\.comment_note && \(/.test(screen), 'and the reason with it');
+    assert.ok(/commentNeedsHuman\(r\.comment_status\) \? 'text-warning-400' : 'text-mist-300'/.test(screen), 'a caveat on a success is not painted as a failure');
     /* One label map and one order for both, for the same reason: they had
        already drifted — different sort, different markup, and a state neither
        of them knew about rendered as a blank word beside a grey dot. */
@@ -2967,7 +2977,19 @@ const scenario: { step: string; line: string }[] = [];
    * upload that never finished all produced the same thing: the text went out
    * alone and the screen said "הגיב".
    */
-  assert.ok(/if \(attached && attached\.result !== 'ok'\) \{[\s\S]{0,900}return attached\.result === 'unconfirmed' \? 'no-photo-unsure' : 'no-photo';/.test(composerSrc), 'a picture that will not attach stops the comment');
+  assert.ok(/if \(attached && attached\.result !== 'ok' && !\(attached\.result === 'unconfirmed' && attached\.held\)\) \{[\s\S]{0,1400}return attached\.result === 'unconfirmed' \? 'no-photo-unsure' : 'no-photo';/.test(composerSrc), 'a picture that will not attach stops the comment');
+  /*
+   * THREE STATES, NOT TWO — and collapsing them is what left the owner with
+   * nothing at all, night after night.
+   *
+   * A file that never entered Facebook, and a file sitting in the very
+   * element Facebook reads that we merely could not SEE, are not the same
+   * fact. The first is a reason to refuse. The second is a blind spot in our
+   * own selector, and a blind spot is not grounds for withholding the
+   * owner's comment — it is grounds for telling them to glance at the post.
+   */
+  assert.ok(/held: boolean;/.test(composerSrc), 'whether the file is in the input is carried, not thrown away');
+  assert.ok(/'ok-photo-unsure'/.test(composerSrc), 'a comment can succeed and still have something worth saying');
   const typingAt = composerSrc.indexOf('const lines = comment ? comment.split');
   const photoAt = composerSrc.indexOf("'no-photo-unsure' : 'no-photo';");
   assert.ok(photoAt > 0 && typingAt > photoAt, 'and it gives up before a word is typed, so giving up costs nothing');
@@ -2991,13 +3013,30 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/fb\.localPreview\(evidence\)/.test(composerSrc), 'and only a local file preview is counted that far out');
   /* Re-taken after the camera click: the camera mounts markup of its own, and
      counting that as the picture is how an attach that never happened passed. */
-  assert.ok(/chosen = await waiting;[\s\S]{0,700}before = await mediaBefore\(evidence, narrow\);/.test(composerSrc), 'the baseline is taken after the camera opens, not before');
+  assert.ok(/chosen = await waiting;[\s\S]{0,700}before = await mediaBefore\(evidence\);/.test(composerSrc), 'the baseline is taken after the camera opens, not before');
   /* One attachment attempt per comment. Walking on to the next scope with the
      file already in an input hands Facebook the same picture twice. */
-  assert.ok(/if \(got\.result === 'unconfirmed'\) return \{ result: 'unconfirmed', evidence, narrow, before \};/.test(composerSrc), 'a file that is already in never gets attached a second time');
+  assert.ok(/if \(got\.result === 'unconfirmed'\) return \{ result: 'unconfirmed', evidence, box, before, held: got\.held \};/.test(composerSrc), 'a file that is already in never gets attached a second time');
+  /*
+   * AND THE PROOF NEEDS TWO SIGNALS WHEN NEITHER IS UNFORGEABLE.
+   *
+   * "Something new is showing in the composer" is not enough. A composer
+   * mounts things of its own — an emoji strip, a sticker tray — a moment
+   * AFTER the file is handed over, which is exactly when this is watching.
+   * Accept that alone and a file Facebook silently dropped reads as a
+   * picture that landed, and the comment goes out with the words and no
+   * picture. A blob: cannot be faked that way; a cdn thumbnail can, so it
+   * has to come with a way to remove it, or with an upload seen to finish.
+   */
+  assert.ok(/local > before\.local \|\| \(grew && \(remove > before\.remove \|\| \(sawBusy && !busy\)\)\)/.test(composerSrc), 'one unforgeable signal, or two corroborating ones');
+  assert.ok(/removeAttachment:/.test(readFileSync(new URL('../facebook/selectors.ts', import.meta.url), 'utf8')), 'and the ✕ beside an attachment is one of them');
   /* Checked again at the instant of submit: the first check is seconds old by
      then, and Enter over a dropped attachment sends the words alone. */
-  assert.ok(/if \(attached && !\(await stillAttached\(attached\)\)\) return 'no-photo-unsure';/.test(composerSrc), 'the picture is confirmed again immediately before Enter');
+  /* And only for an attachment that was positively SEEN in the first place: a
+     check whose job is "is it still there" has no business answering for
+     something it never watched arrive, and letting it would re-refuse every
+     comment the decision above just allowed through. */
+  assert.ok(/if \(attached && attached\.result === 'ok' && !\(await stillAttached\(attached\)\)\) return 'no-photo-unsure';/.test(composerSrc), 'the picture is confirmed again immediately before Enter');
   /*
    * AND IT ASKS THE SAME QUESTION, against the baseline the attach measured.
    * The first version asked "is anything showing in the composer", and the
@@ -3021,14 +3060,25 @@ const scenario: { step: string; line: string }[] = [];
    * before" would be satisfied whether or not the file ever uploaded, and the
    * comment would go out without the picture while the screen said "הגיב".
    */
-  assert.ok(/const narrow = hasForm \? form : null;/.test(composerSrc), 'the blind count is only used in a scope where nothing else moves');
+  /* The blind count lives in a scope the PAGE defines, so "no form" is no
+     longer a build where the only proof is a blob: URL — which is the build
+     the owner is on, and the one that refused a picture that was on screen. */
+  assert.ok(!/const narrow = hasForm \? form : null;/.test(composerSrc), 'no build is left with only one kind of proof');
   /* A blob: URL exists the instant the file is chosen, before a byte leaves
      the machine, so a preview alone is proof of a SELECTION. */
   assert.ok(/if \(stable >= 3\) return true;/.test(composerSrc), 'and the proof has to hold, not merely appear');
   /* Once setInputFiles has not thrown, the file is in. Saying "not attached"
      sends the loop to the next scope, where the same picture is uploaded a
      second time. */
-  assert.ok(/if \(!held\) return \{ result: 'unconfirmed', before \};/.test(composerSrc), 'a file that went in is never reported as not attached');
+  /*
+   * AND IT IS READ, NEVER A VETO. Zero here means either "Facebook refused
+   * the file" or "the input is no longer there to ask", which is what a React
+   * composer does once its change handler has taken it — and returning on it
+   * skipped the whole confirmation window in precisely the case where the
+   * picture is most likely to be on the screen already.
+   */
+  assert.ok(/held =\s*\(await input/.test(composerSrc), 'a file that went in is never reported as not attached');
+  assert.ok(!/if \(!held\) return/.test(composerSrc), 'and a zero read never skips the proof');
   /* The form, not the article: Facebook's comment file input frequently sits
      outside the [role="article"] the post is wrapped in, which is why looking
      for it there found nothing at all. */
@@ -3048,8 +3098,38 @@ const scenario: { step: string; line: string }[] = [];
    * is the attachment — that cannot be wrong about markup, because it does
    * not know any.
    */
-  assert.ok(/async function mediaCount/.test(composerSrc), 'what is showing is counted');
-  assert.ok(/any > before\.any/.test(composerSrc), 'and the proof is that there is more of it than before');
+  /*
+   * THE COMPOSER IS FOUND FROM THE BOX, IN THE PAGE.
+   *
+   * Every attempt to name that container from out here has been wrong in
+   * production at least once — the form, then the article, then the dialog —
+   * and each time the picture was attached, on screen, and reported missing.
+   * The smallest ancestor of the box that also holds a file input IS the
+   * composer, whatever Facebook wraps it in this week.
+   */
+  assert.ok(/async function composerMedia/.test(composerSrc), 'what is showing in the composer is counted');
+  /*
+   * DEFINED BY SUBTRACTION, because naming it positively has been wrong in
+   * production three times running: the <form> (there often is none), the
+   * article (the box sits beside it), the ancestor holding the file input
+   * (the attachment strip is a sibling of that). Facebook renders the post
+   * and every comment as an article; everything in the dialog that is NOT in
+   * an article is the composer and its furniture — including whatever strip
+   * the thumbnail lands in this week.
+   */
+  assert.ok(/const article = n\.closest\('\[role="article"\]'\);[\s\S]{0,120}return !article \|\| article === root;/.test(composerSrc), 'the composer is everything that is not a post');
+  assert.ok(/composer > before\.composer/.test(composerSrc), 'and the proof is that there is more of it than before');
+  /* No svg. A composer is made of icons, and counting them is what left the
+     check before Enter unable to ever say no. */
+  /* And no css background either: Facebook draws emoji and every small icon
+     as sprite sheets, so [style*="background-image"] matches hundreds of
+     things that are not a photograph. */
+  assert.ok(!/\[style\*="background-image"\]/.test(composerSrc), 'css sprites are not pictures');
+  /* And the walk is thrown away if it escapes: the dialog holds the whole
+     comment thread, which renders avatars of its own. */
+  /* The lazily loading avatars that make a wide count untrustworthy are all
+     inside articles, and all excluded by the rule above. */
+  assert.ok(/querySelectorAll\('img, canvas, video'\)/.test(composerSrc), 'icons and css sprites are not pictures');
   assert.ok(/fb\.uploadProgress\(evidence\)/.test(composerSrc), 'and an upload still running is never an attachment');
   assert.ok(!/locator\('img\[src\^="blob:"\]/.test(composerSrc), 'never a guess at which markup Facebook used this week');
   /* And it is looked for in more than one place, because Facebook does not
@@ -3147,12 +3227,20 @@ const scenario: { step: string; line: string }[] = [];
     assert.ok(selectorsSrc.includes(label), `the camera is recognised as "${label}" too`);
   }
 
-  assert.ok(/const COMMENT_REASON: Record<Exclude<CommentStep, 'ok'>, string>/.test(composerSrc), 'every way this can stop has its own sentence');
+  assert.ok(/const COMMENT_REASON: Record<CommentFailure, string>/.test(composerSrc), 'every way this can stop has its own sentence');
+  /* Exhaustive over the FAILURES only — the two ways it can succeed are not
+     failures and have no place in that map. Record<> keeps it exhaustive, so
+     a new way to stop cannot be added without a Hebrew sentence for it. */
+  assert.ok(/export type CommentFailure = Exclude<CommentStep, 'ok' \| 'ok-photo-unsure'>;/.test(composerSrc), 'and success is not one of them');
   for (const stop of ['no-post', 'no-box', 'not-sent', 'blocked', 'no-photo']) {
     const line = composerSrc.split('\n').find((l) => l.trim().startsWith(`'${stop}':`) || l.trim().startsWith(`${stop}:`));
     assert.ok(line && /[\u0590-\u05FF]/.test(line), `${stop} must say what happened, in Hebrew`);
   }
-  assert.ok(/comment_note: outcome\.ok \? '' : outcome\.reason/.test(localWorker), 'the worker writes the reason beside the row');
+  /* Whether it worked or not: a comment can now succeed and still carry
+     something worth saying — the picture went in and Facebook never showed it
+     back — and blanking the note on success threw that away. It is '' on a
+     clean success, so nothing else changes. */
+  assert.ok(/comment_note: outcome\.reason/.test(localWorker), 'the worker writes the reason beside the row');
   /* And never lets the reason cost the status. comment_note arrived after
      comment_status did, so a database missing the one column would reject the
      whole write, leave the row 'pending', and have the worker comment again

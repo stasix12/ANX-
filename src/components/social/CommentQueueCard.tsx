@@ -94,8 +94,8 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
             </div>
             {/* The reason, and only where there is one to give. "לא הצליח" on
                 its own is what makes a person press the same button again. */}
-            {commentNeedsHuman(r.comment_status) && r.comment_note && (
-              <p dir="auto" className="mt-1 ps-4 text-[11px] leading-relaxed text-warning-400">{r.comment_note}</p>
+            {r.comment_note && (
+              <p dir="auto" className={`mt-1 ps-4 text-[11px] leading-relaxed ${commentNeedsHuman(r.comment_status) ? 'text-warning-400' : 'text-mist-300'}`}>{r.comment_note}</p>
             )}
             {/* And what the worker's browser actually had on screen. Words
                 were not enough: rounds went by on "לא מצאנו את הפוסט" while

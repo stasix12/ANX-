@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<meta charset="utf-8" />
+<title>פוסט בקבוצה — mock permalink (parameterised)</title>
+<!--
+  THE DIRECTORY NAME IS PART OF THE FIXTURE. This file lives under posts/
+  because commentOnPost decides it is on a post's own page with
+  /\/(posts|permalink)\//, and attachPhoto asks the same of page.url(). Move it
+  up one level and two code paths quietly stop being exercised.
+
+  THE SHAPE IS THE OWNER'S, read off the worker's own screenshot of a live
+  failure: a [role=dialog] holding the post, and BELOW the post a plain
+  composer row — avatar, "כתיבת תגובה בתור Stas", send arrow — with NO <form>
+  anywhere, and the attached thumbnail in a strip under that row carrying a ✕.
+  The preview's src is Facebook's own CDN url, not a blob:, because Facebook
+  uploads first and shows its own copy back.
+
+  Every earlier fixture wrapped the composer in a <form> and minted a blob:,
+  and that is why three outages in a row passed green.
+
+  Knobs, one axis each:
+    accept=1|0   did Facebook take the file, or drop it on the floor
+    keep=1|0     does the input still hold the file afterwards
+    noise=0|1    does the composer mount images OF ITS OWN after the change
+    preview=cdn|blob|none
+    remove=1|0   is there a ✕ beside the thumbnail
+-->
+<style>
+  body { font-family: system-ui; margin: 0; padding: 12px; background: #f0f2f5; }
+  [role="dialog"] { background: #fff; border-radius: 12px; padding: 12px; max-width: 620px; margin: auto; }
+  #row { display: flex; align-items: center; gap: 8px; border: 1px solid #ccd0d5; border-radius: 20px; padding: 6px 10px; }
+  #row [role="textbox"] { flex: 1; min-height: 24px; outline: none; }
+</style>
+<body>
+<script>
+  const Q = new URLSearchParams(location.search);
+  const P = (k, d) => Q.get(k) ?? d;
+  const DOT = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  const CDN = 'https://scontent-tlv3-1.xx.fbcdn.net/v/t39/mock_n.jpg';
+
+  /* GROUND TRUTH, and it is what the PAGE accepted — never what it is
+     showing. A fixture that reports a thumbnail as an attachment cannot fail
+     a check that mistakes a thumbnail for an attachment. */
+  let handed = 0;
+  let accepted = 0;
+  const sent = [];
+  window.__truth = () => ({ sent, handed, accepted });
+
+  const el = (t, a = {}) => {
+    const n = document.createElement(t);
+    for (const [k, v] of Object.entries(a)) (k === 'text' ? (n.textContent = v) : n.setAttribute(k, v));
+    return n;
+  };
+
+  const dialog = el('div', { role: 'dialog', 'aria-label': 'הפוסט של Stas Terehin' });
+  document.body.appendChild(dialog);
+
+  /* The post. The emoji is an <img>, exactly as Facebook renders it, so the
+     text of the page has a hole where it is — which is what pageProbe is for. */
+  const art = el('div', { role: 'article', id: 'art' });
+  const body = el('p');
+  for (const piece of 'מבצע ניקוי ספות בבאר שבע 🛋️ החודש בלבד'.split(/([\u{1F000}-\u{1FAFF}☀-➿]️?)/u)) {
+    if (!piece) continue;
+    if (/[\u{1F000}-\u{1FAFF}☀-➿]/u.test(piece)) body.appendChild(el('img', { alt: piece, src: DOT, width: 16 }));
+    else body.appendChild(document.createTextNode(piece));
+  }
+  art.appendChild(body);
+  art.appendChild(el('a', { href: 'https://www.facebook.com/groups/1234567890/posts/778899/', text: 'לפני שעה' }));
+  const thread = el('div', { id: 'list' });
+  art.appendChild(thread);
+  dialog.appendChild(art);
+
+  /* THE COMPOSER — beside the post, not inside it, and not a <form>. */
+  const row = el('div', { id: 'row' });
+  row.appendChild(el('img', { src: DOT, width: 24, class: 'me' }));
+  const lbl = el('span', { id: 'boxlbl', text: 'כתיבת תגובה בתור Stas' });
+  lbl.style.display = 'none';
+  dialog.appendChild(lbl);
+  const box = el('div', { role: 'textbox', contenteditable: 'true', 'aria-labelledby': 'boxlbl' });
+  row.appendChild(box);
+  const camera = el('button', { type: 'button', 'aria-label': 'צירוף קובץ תמונה', text: '📷' });
+  row.appendChild(camera);
+  dialog.appendChild(row);
+  const strip = el('div', { id: 'strip' });
+  dialog.appendChild(strip);
+
+  box.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    const alive = strip.querySelector('[data-preview]') !== null;
+    sent.push({ text: box.innerText, photo: accepted > 0 && alive });
+    const c = el('div', { role: 'article' });
+    c.appendChild(el('span', { text: box.innerText }));
+    thread.appendChild(c);
+    box.innerText = '';
+  });
+
+  camera.addEventListener('click', () => {
+    if (row.querySelector('input[type=file]')) return;
+    const file = el('input', { type: 'file', accept: 'image/*' });
+    file.hidden = true;
+    file.addEventListener('change', () => {
+      if (!file.files || !file.files[0]) return;
+      handed += 1;
+      /* Not kept: a composer that consumes the file and resets the element. */
+      if (P('keep', '1') === '0') file.value = '';
+      /*
+       * THE TRAP. The composer wakes up and mounts pictures of its own a
+       * moment after the file is handed over — an emoji strip, a sticker
+       * tray. Anchored to the CHANGE event on purpose: anything anchored to
+       * the click is absorbed into the baseline and proves nothing.
+       */
+      if (P('noise', '0') !== '0') {
+        setTimeout(() => {
+          row.appendChild(el('img', { src: CDN + '#emoji', width: 16 }));
+          row.appendChild(el('img', { src: CDN + '#gif', width: 16 }));
+        }, 800);
+      }
+      if (P('accept', '1') === '0') return; /* handed over, silently dropped */
+      accepted += 1;
+      setTimeout(() => {
+        const kind = P('preview', 'cdn');
+        if (kind === 'none') return;
+        const img = el('img', { src: kind === 'blob' ? URL.createObjectURL(file.files[0]) : CDN, width: 40 });
+        img.dataset.preview = '1';
+        strip.appendChild(img);
+        if (P('remove', '1') !== '0') {
+          const x = el('button', { type: 'button', 'aria-label': 'הסרה', text: '✕' });
+          x.dataset.preview = '1';
+          strip.appendChild(x);
+        }
+      }, 1200);
+    });
+    row.appendChild(file);
+  });
+</script>
+</body></html>

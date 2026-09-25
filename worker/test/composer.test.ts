@@ -362,6 +362,41 @@ async function main() {
   );
   console.log('✓ the picture is found where Facebook actually shows it, not only where the input is');
 
+  /*
+   * THE OWNER'S OWN SHAPE, read off the worker's screenshot of a live failure.
+   *
+   * No <form> anywhere; the composer is a plain row beside the post; the
+   * thumbnail is Facebook's OWN cdn image in a strip below, with a ✕. Every
+   * fixture before this one wrapped the composer in a form and minted a
+   * blob: URL, and that is exactly why three outages in a row passed green.
+   */
+  const row = (q: string) => `file://${path.resolve(__dirname, 'posts', 'comment-row.html')}?${q}`;
+  type Truth = { sent: { text: string; photo: boolean }[]; handed: number; accepted: number };
+
+  const page9 = await context.newPage();
+  const real = await commentOnPost(page9, row('preview=cdn&remove=1'), 'מבצע ניקוי ספות בבאר שבע 🛋️ החודש בלבד', 'לפרטים: 050-0000000', img1);
+  assert.equal(real.ok, true, `the owner's own composer must work — got: ${real.reason}`);
+  assert.equal(real.step, 'ok', 'and be confirmed, not merely sent in hope');
+  const realTruth = (await page9.evaluate(() => (window as unknown as { __truth: () => Truth }).__truth())) as Truth;
+  assert.deepEqual(realTruth.sent, [{ text: 'לפרטים: 050-0000000', photo: true }], 'one comment, with the picture on it');
+  assert.equal(realTruth.handed, 1, 'and the picture was handed over exactly once');
+  console.log("✓ a composer with no form and a cdn thumbnail — the owner's actual page — is confirmed");
+
+  /*
+   * THE TRAP, and the reason the confirmation needs two signals rather than
+   * one. Facebook drops the file; the composer then mounts pictures of its
+   * own — an emoji strip, a sticker tray — a moment later. "Something new is
+   * showing" would read that as the attachment landing, and a comment would
+   * go out with the words and no picture while the screen said "הגיב".
+   */
+  const page10 = await context.newPage();
+  const trap = await commentOnPost(page10, row('accept=0&keep=0&noise=1'), 'מבצע ניקוי ספות בבאר שבע 🛋️ החודש בלבד', 'לפרטים: 050-0000000', img1);
+  assert.equal(trap.ok, false, 'a file Facebook dropped is never reported as a picture that landed');
+  assert.equal(trap.step, 'no-photo-unsure', 'and it says which of the two things went wrong');
+  const trapTruth = (await page10.evaluate(() => (window as unknown as { __truth: () => Truth }).__truth())) as Truth;
+  assert.deepEqual(trapTruth.sent, [], 'and nothing at all is published');
+  console.log('✓ a composer that mounts pictures of its own never passes for an attachment');
+
   await browser.close();
   console.log('composer tests OK');
 }

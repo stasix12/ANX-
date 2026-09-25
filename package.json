@@ -14,7 +14,7 @@
     "preview": "EXPORT=1 next build && node scripts/build-preview.mjs",
     "social-worker": "tsx worker/social-worker.ts",
     "social-worker:debug": "SOCIAL_BROWSER_HEADED=1 tsx worker/social-worker.ts",
-    "test:social": "tsx worker/test/unit.test.ts && tsx worker/test/progress-contradiction.test.ts && tsx worker/test/selection.test.ts && tsx worker/test/picker.test.ts && tsx worker/test/layout.test.ts && tsx worker/test/contrast.test.ts && tsx worker/test/activity.test.ts && tsx worker/test/composer.test.ts && tsx worker/test/account.test.ts"
+    "test:social": "tsx worker/test/unit.test.ts && tsx worker/test/progress-contradiction.test.ts && tsx worker/test/selection.test.ts && tsx worker/test/picker.test.ts && tsx worker/test/layout.test.ts && tsx worker/test/contrast.test.ts && tsx worker/test/activity.test.ts && SOCIAL_PHOTO_CONFIRM_MS=8000 tsx worker/test/composer.test.ts && tsx worker/test/account.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

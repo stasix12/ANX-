@@ -1743,7 +1743,13 @@ async function saveCommentOutcome(
 
   const withNote = await db
     .from('social_queue')
-    .update({ ...base, comment_note: outcome.ok ? '' : outcome.reason, comment_shot: shot ?? '' })
+    /*
+     * The reason, whether it worked or not. A comment CAN now succeed with
+     * something worth saying — the picture went in and Facebook never showed
+     * it back — and blanking the note on success would have thrown that away.
+     * It is '' on a clean success, so nothing else changes.
+     */
+    .update({ ...base, comment_note: outcome.reason, comment_shot: shot ?? '' })
     .eq('id', id);
   if (!withNote.error) return;
   if (!/comment_note|comment_shot/.test(withNote.error.message)) {

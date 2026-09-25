@@ -159,6 +159,18 @@ export const fb = {
    * own CDN and would climb on its own as comments load.
    */
   localPreview: (scope: Locator): Locator => scope.locator('img[src^="blob:"], video[src^="blob:"]'),
+  /*
+   * THE ✕ BESIDE AN ATTACHMENT — the one control that cannot be there unless
+   * something is attached.
+   *
+   * It matters because a comment attachment's preview is often Facebook's OWN
+   * url, not a blob:, and a CDN image is indistinguishable from an avatar
+   * loading late. A picture appearing is weak evidence on its own; a picture
+   * appearing TOGETHER WITH a way to remove it is not something a composer
+   * does while idle.
+   */
+  removeAttachment: (scope: Locator): Locator =>
+    scope.getByRole('button', { name: /remove|delete|discard|הסרה|הסר|להסיר|מחיק|удалить|убрать/i }),
   /** Multi-photo collage: Facebook shows an "Edit all" affordance instead of N separate previews. */
   collageReady: (dialog: Locator): Locator => dialog.getByText(/edit all|לערוך את הכל|עריכת הכל|редактировать все/i).first(),
 

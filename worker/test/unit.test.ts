@@ -2933,9 +2933,37 @@ const scenario: { step: string; line: string }[] = [];
     'the scrolling search keeps its old defaults for the callers that hunt an older post',
   );
   assert.ok(
-    composerSrc.includes('findPostArticle(page, postText, 1, 4_000)'),
-    'and the permalink read after publishing takes one look instead of scrolling away from a post that is already on screen',
+    composerSrc.includes('findPostArticle(page, input.text, 1, 6_000)'),
+    'and the search after publishing takes one look instead of scrolling away from a post that is already on screen',
   );
+
+  /*
+   * ONE SEARCH FOR THE EVIDENCE, AND IT MAY NOT DELAY THE NEXT PUBLICATION.
+   *
+   * Two things were wrong at once and they compounded.
+   *
+   * The feed was searched TWICE — once for the text, to say the post was
+   * verified, and then again for the article carrying that same text, to read
+   * its address — each pass with its own wait and its own reload. And
+   * published_at was stamped after all of it, by the caller. The spacing rule
+   * measures the next publication's gap from that column, so the time spent
+   * checking on a post that had ALREADY gone out was charged to the gap: with
+   * the owner's gap at one minute, every single row came round early and was
+   * deferred, forever.
+   *
+   * So the instant is taken where the post actually becomes real — the dialog
+   * detached, no error banner — and the evidence is gathered once, after it.
+   */
+  assert.ok(/publishedAt: string;/.test(composerSrc), 'the composer reports when the post went live');
+  assert.ok(
+    /const publishedAt = new Date\(\)\.toISOString\(\);[\s\S]{0,1200}findPostArticle/.test(composerSrc),
+    'and takes that instant BEFORE it goes looking for the post, not after',
+  );
+  assert.ok(
+    localWorker.includes('published_at: result.publishedAt || new Date().toISOString()'),
+    'and the queue records that instant, or the verification is charged to the gap before the next row',
+  );
+  assert.ok(!composerSrc.includes('verifyInFeed'), 'there is one search for the post after publishing, not two');
   /* Where the CURRENT state is the question, a glance is right and stays. */
   assert.ok(/const stillThere = await box\.isVisible\(\{ timeout: 1_000 \}\)/.test(composerSrc), '"is the box still there" is a question about now');
   const selectorsSrc = readFileSync(new URL('../facebook/selectors.ts', import.meta.url), 'utf8');

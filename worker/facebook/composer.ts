@@ -61,6 +61,18 @@ export interface ComposeResult {
    * downstream may assume it is there.
    */
   permalink: string;
+  /**
+   * The instant the post went live — the dialog detached and Facebook raised
+   * no error — NOT the instant this function returned.
+   *
+   * The queue's spacing rule measures the gap between publications from the
+   * previous one's published_at. Stamped by the caller after this returns, it
+   * included every second spent looking for the post in the feed afterwards,
+   * so verification was charged to the gap and the next row was held back by
+   * it. On a queue set to one a minute that was most of the minute, and it
+   * showed up as an endless run of "נדחה" in the log.
+   */
+  publishedAt: string;
 }
 
 const IMAGE_UPLOAD_TIMEOUT = 3 * 60_000;
@@ -139,7 +151,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     const verdict = await input.confirm(page);
     if (verdict !== 'confirmed') {
       await discardComposer(page);
-      return { outcome: 'cancelled', verified: false, pendingApproval: false, groupTitle, permalink: '' };
+      return { outcome: 'cancelled', verified: false, pendingApproval: false, groupTitle, permalink: '', publishedAt: '' };
     }
   }
 
@@ -169,10 +181,44 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     throw new PublishError('rejected', `Facebook הודיע על כישלון: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);
   }
   assertUsable(await classifyPage(page));
+  /*
+   * THIS IS THE MOMENT THE POST EXISTS ON FACEBOOK.
+   *
+   * The dialog has detached and Facebook has not put up an error banner —
+   * everything after this line is evidence-gathering about something that has
+   * already happened. It is stamped HERE rather than left for the caller to
+   * take after all of it, because the queue's spacing rule measures the gap
+   * between publications from this instant: taken afterwards, the time spent
+   * looking for the post in the feed was charged to the gap as well, so the
+   * next row was held back by however long the verification took. The owner
+   * saw that as "נדחה" on a queue set to one a minute, and they were right.
+   */
+  const publishedAt = new Date().toISOString();
   const pendingApproval = await fb.pendingText(page).isVisible({ timeout: 1500 }).catch(() => false);
-  const verified = submitted && (await verifyInFeed(page, input.groupUrl, input.text));
-  const permalink = verified ? await readPermalink(page, input.text) : '';
-  return { outcome: 'published', verified, pendingApproval, groupTitle, permalink };
+
+  /*
+   * ONE SEARCH, NOT TWO.
+   *
+   * Verification looked for the TEXT in the feed and then the permalink read
+   * looked, separately, for the ARTICLE carrying that same text — two passes
+   * over the same feed for the same post, each with its own wait and its own
+   * reload. The article that carries our words IS the proof it published AND
+   * the thing the address hangs on, so it is found once.
+   */
+  let article = submitted ? await findPostArticle(page, input.text, 1, 6_000) : null;
+  if (submitted && !article) {
+    try {
+      await page.goto(input.groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page.waitForTimeout(1200);
+      article = await findPostArticle(page, input.text, 1, 6_000);
+    } catch {
+      /* Best effort throughout: an unverified post is reported as unverified,
+         never as a failure — it is on Facebook either way. */
+    }
+  }
+  const verified = Boolean(article);
+  const permalink = article ? await permalinkOf(article) : '';
+  return { outcome: 'published', verified, pendingApproval, groupTitle, permalink, publishedAt };
 }
 
 /**
@@ -186,22 +232,8 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
  * has to work without one, since every post published before this existed has
  * none.
  */
-async function readPermalink(page: Page, postText: string): Promise<string> {
+async function permalinkOf(article: Locator): Promise<string> {
   try {
-    /*
-     * ONE LOOK, NO SCROLLING.
-     *
-     * The default search scrolls the feed up to twenty times, because the
-     * comment writer and the metrics reader use it to find a post from hours
-     * ago that Facebook has not loaded yet. This call is different: the post
-     * went out seconds ago, it is at the TOP of the feed, and verifyInFeed has
-     * just confirmed it is on screen. Scrolling down is scrolling AWAY from
-     * it — up to half a minute of it, on the one path where the answer is
-     * already in view. The permalink is best-effort anyway: an empty string
-     * is a fine answer and every caller works without one.
-     */
-    const article = await findPostArticle(page, postText, 1, 4_000);
-    if (!article) return '';
     const href = await article
       .locator('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid="]')
       .first()
@@ -449,7 +481,10 @@ async function findPermalinkAt(page: Page, where: string, postText: string): Pro
     await page.goto(where, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await page.waitForTimeout(3000);
     if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return '';
-    return await readPermalink(page, postText);
+    /* The comment path is hunting a post from hours ago, so this one keeps
+       the full scrolling search — see findPostArticle's own comment. */
+    const article = await findPostArticle(page, postText);
+    return article ? await permalinkOf(article) : '';
   } catch {
     return '';
   }
@@ -914,21 +949,4 @@ async function discardComposer(page: Page): Promise<void> {
   if (await discard.isVisible({ timeout: 1500 }).catch(() => false)) await discard.click().catch(() => undefined);
 }
 
-/** Look for the first line of the post in the feed — first as-is (Facebook inserts it at the top), then after a reload. Best effort. */
-async function verifyInFeed(page: Page, groupUrl: string, text: string): Promise<boolean> {
-  const probe = pageProbe(text);
-  if (!probe) return false;
-  /* Six seconds, not ten: the post was published seconds ago and Facebook
-     puts it at the top of the feed immediately. If it is not there by now the
-     reload below is the thing that will find it, and waiting longer first
-     only delays that. */
-  const visible = () => appears(page.getByText(probe, { exact: false }).first(), 6_000);
-  if (await visible()) return true;
-  try {
-    await page.goto(groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    await page.waitForTimeout(2500);
-    return await visible();
-  } catch {
-    return false;
-  }
-}
+

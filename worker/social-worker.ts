@@ -811,7 +811,16 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     finishChecked({
       status: 'published',
       step: 'published',
-      published_at: new Date().toISOString(),
+      /*
+       * The instant the POST went live, not the instant we finished looking
+       * at it. The spacing rule measures the next publication's gap from this
+       * column, so stamping it after verification charged the verification to
+       * the gap — which is why a queue set to one a minute produced a "נדחה"
+       * for every row. The composer reports the moment the dialog detached
+       * with no error banner; `new Date()` remains the fallback for the
+       * cancelled path, which has no such moment.
+       */
+      published_at: result.publishedAt || new Date().toISOString(),
       error: note || null,
       rendered_text: text,
       /* Written only when the feed actually yielded one. Everything that reads

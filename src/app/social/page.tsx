@@ -197,10 +197,20 @@ export default function SocialDashboard() {
         // and "הפרסומים הקרובים" would be showing the last publications while
         // calling the first of them the next one.
         listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' }),
-        /* Today's finished rows, newest first — the strip turns them round.
-           Descending with a limit is what "the most recent" means here, which
-           is the opposite of what the line above needs. */
-        listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), limit: DONE_LIMIT }),
+        /*
+         * Today's finished rows, newest first — the strip turns them round.
+         *
+         * `until: now` is load-bearing and its absence was a bug on screen:
+         * the read is ordered by scheduled_at DESCENDING (that is what "the
+         * most recent" means for rows that are already over), and a row can
+         * be terminal while its slot is still in the FUTURE — a duplicate
+         * skipped before its turn came, a run stopped mid-flight. Without the
+         * bound those future slots sorted to the top and took every place, so
+         * the strip showed four 18:15 "דולג" rows above publications waiting
+         * at 17:40, and nothing that had actually gone out appeared at all.
+         * The same trap listQueue's own comment describes, from the other end.
+         */
+        listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: DONE_LIMIT }),
         listWorkers(),
         listCommentQueue(),
         commentTotals(),

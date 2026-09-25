@@ -201,7 +201,15 @@ export function Timeline({
    * what is next. Ordering, not counting — no number on this screen is
    * derived from it.
    */
-  const items = [...done].reverse().concat(waiting);
+  const items = [...done]
+    /*
+     * By the moment it HAPPENED, not by the slot it was given. The read can
+     * only order by scheduled_at, and a publication that went out four
+     * minutes late would otherwise sit above one that went out on time —
+     * the strip telling the afternoon out of order.
+     */
+    .sort((a, b) => new Date(a.published_at ?? a.scheduled_at).getTime() - new Date(b.published_at ?? b.scheduled_at).getTime())
+    .concat(waiting);
   /* Before the early return: a hook may not sit behind a condition. Ticking
      only while something is actually waiting keeps an idle screen idle. */
   const now = useTick(items.some((r) => r.status === 'scheduled'));

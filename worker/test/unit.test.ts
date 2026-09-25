@@ -3179,8 +3179,23 @@ const scenario: { step: string; line: string }[] = [];
    */
   assert.ok(dash.includes('done={data.doneToday}'), 'the strip must be handed the finished rows');
   assert.ok(
-    dash.includes("listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), limit: DONE_LIMIT })"),
-    'and they must be their own read, of the terminal statuses status.ts defines, bounded to today',
+    dash.includes(
+      "listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: DONE_LIMIT })",
+    ),
+    'and they must be their own read, of the terminal statuses status.ts defines, bounded to today AND to the past',
+  );
+  /*
+   * `until` is not decoration. The read is ordered by scheduled_at descending,
+   * and a row can be terminal with its slot still in the future — a duplicate
+   * skipped before its turn, a run stopped mid-flight. Unbounded, those future
+   * slots sort to the top and take every place: the strip showed four 18:15
+   * "דולג" rows above publications waiting at 17:40, and nothing that had
+   * actually gone out appeared at all.
+   */
+  const doneRead = dash.slice(dash.indexOf('status: TERMINAL_STATUSES'));
+  assert.ok(
+    doneRead.slice(0, 200).includes('until: now.toISOString()'),
+    'the finished read must be bounded to the past, or a future-slot skip outranks everything that happened',
   );
   assert.ok(
     !/status: \[[^\]]*'published'/.test(dash),

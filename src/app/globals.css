@@ -1319,6 +1319,26 @@ body:has(.social-theme) {
 }
 
 /*
+ * AND THE STOREFRONT'S BACKDROP IS NOT UNDER THIS APP AT ALL.
+ *
+ * The root layout paints .site-backdrop on every page: a FIXED, full-viewport
+ * layer holding the shop's charcoal ground, four drifting amber pools, a grid
+ * and a grain. It sits at z-index -10 — behind the content, but on top of
+ * <body> — so fixing the body colour above could not reach it. Scroll a
+ * /social screen past its end and the rubber-band gap showed it: a dark
+ * olive-brown band under a white-purple app, the shop's identity leaking into
+ * a different product.
+ *
+ * Hidden rather than recoloured. This app paints its own ground on the shell
+ * root, so the layer has nothing left to contribute here — and removing four
+ * animated radial gradients from a phone is a saving, not a loss. The
+ * storefront keeps it untouched.
+ */
+body:has(.social-theme) .site-backdrop {
+  display: none;
+}
+
+/*
  * THE CARD, which is most of what this product is.
  *
  * White on the faint purple ground, a hairline, and a two-layer shadow: a

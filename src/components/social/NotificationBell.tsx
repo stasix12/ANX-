@@ -127,7 +127,7 @@ export function NotificationBell() {
       {open && (
         <>
           <button type="button" aria-label="סגור" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-          <div className="absolute end-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-ink-700 bg-ink-800 shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)]">
+          <div className="absolute end-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-ink-700 bg-ink-800 shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)]">
             <header className="flex items-center justify-between border-b border-ink-700 px-3.5 py-2.5">
               <p className="text-sm font-extrabold text-mist-100">התראות</p>
               {attention > 0 && <span className="rounded-full bg-warning-400/12 px-2 py-0.5 text-[11px] font-bold text-warning-400">{attention} דורשים טיפול</span>}

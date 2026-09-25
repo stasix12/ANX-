@@ -33,7 +33,7 @@ export function PostPreview({
   const host = safeHost(link);
 
   return (
-    <div className="rounded-card border border-ink-700 bg-ink-800 p-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)]">
+    <div className="rounded-card border border-ink-700 bg-ink-800 p-2.5 shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)]">
       <p className="px-1 pb-2 text-[11px] font-bold text-mist-500">כך זה ייראה בפייסבוק</p>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900" dir="auto">
       <div className="flex items-center gap-3 px-4 pt-4">

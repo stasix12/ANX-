@@ -1194,59 +1194,97 @@
      unscoped mist-100, so text with no explicit class would inherit cream. */
   color: var(--color-mist-100);
 
-  /* Grounds: page → inset boxes and input fills → cards → sheets. Each step
-     is a real step, so a recessed field and a raised sheet are both legible
-     as depth without a border doing the work alone. */
-  --color-ink-950: #071426;
-  --color-ink-900: #0b1d33;
-  --color-ink-850: #102640;
-  --color-ink-800: #142d4a;
+  /*
+   * PREMIUM PURPLE, LIGHT. A theme swap, not a rebuild.
+   *
+   * The whole module already speaks in these token names — ink-* for grounds,
+   * mist-* for text, brand-* for the accent — so re-resolving them here turns
+   * the product from navy to light purple without a single component being
+   * touched. That is the point of the names: markup describes ROLE, the theme
+   * decides colour.
+   *
+   * The ratio the brief asked for — roughly 80% white surfaces, 15% purple,
+   * 5% gradient — is enforced by which tokens carry purple: the grounds are
+   * white and near-white, and purple lives in brand-*, which is what fills a
+   * button, a selected chip and an active tab. Purple is the accent; it is
+   * not the page.
+   *
+   * Every ratio below is measured, not chosen by eye — worker/test/
+   * contrast.test.ts fails the build on anything under 4.5:1.
+   */
 
-  /* The hairline stays TRANSLUCENT on purpose. One value has to read over the
-     page, over a card and over a sheet; a flattened hex is right on one of
-     the three and wrong on the other two. It composites to #192c43 / #213b59
-     / #244161 — ambient separation, not a boundary that carries meaning. */
-  --color-ink-700: rgba(120, 170, 220, 0.16);
+  /* Grounds: page → inputs → cards → sheets and tracks. Cards and inputs are
+     both pure white on purpose; the separation between them is the border and
+     the shadow, not a shade. */
+  --color-ink-950: #f7f5ff;
+  --color-ink-900: #ffffff;
+  --color-ink-850: #ffffff;
+  --color-ink-800: #f5f3ff;
+
+  /* The hairline: a real, soft line now rather than the translucent value the
+     dark theme needed. On white it is a whisper, which is what a light premium
+     surface wants — the card is lifted by its shadow, not fenced by its edge. */
+  --color-ink-700: #e7e2f3;
   /* A control's edge is the only thing telling a finger where an input is, so
-     it is a solid step: 3.66:1 on a card, 4.42 on the page, 3.34 on a sheet —
-     above the 3:1 a non-text boundary needs. The hairline above is 1.34 and
-     would leave a text field with no measurable edge at all. */
-  --color-ink-600: #5a7fa6;
+     it stays a MEASURED non-text boundary: 3.50:1 on a card, 3.25 on the page,
+     3.19 on a sheet — above the 3:1 WCAG 1.4.11 asks of a UI component. The
+     brief's softer #ded8ea sits at 1.39 and would leave a text field with no
+     measurable edge at all, so the decorative hairline above takes that job
+     and the control edge keeps this one. */
+  --color-ink-600: #8d82b5;
 
-  --color-mist-100: #f7faff;
-  --color-mist-300: #a9bad0;
-  --color-mist-500: #8ca0b8;
+  /* Text: primary near-black with a blue cast → secondary → fine print. The
+     muted step is darker than the brief's #98a2b3 (2.6:1 on white) for the
+     same reason: 11px fine print is the smallest type in the product. */
+  --color-mist-100: #172033;
+  --color-mist-300: #52607a;
+  --color-mist-500: #667085;
 
-  /* Two blues, not one, and the split is not cosmetic: white on #168bff
-     measures 3.40 and fails AA, so the bright blue cannot be a button
-     surface; and #168bff as text on a card measures 4.49 — one hundredth
-     under AA — so it cannot be text either. It is the INDICATOR blue
-     (progress fills, focus rings, the active-nav pill, dots) where 3:1
-     applies. brand-400 carries every blue word, brand-500 every blue fill a
-     white label sits on. */
-  --color-brand-300: #168bff;
-  --color-brand-400: #38b6ff;
-  --color-brand-500: #0b6fd4;
-  --color-brand-600: #0a5cb0;
-  --color-brand-700: #08488c;
+  /* The purple, split by JOB rather than by lightness — the same discipline
+     the navy theme used. brand-500 is every fill a white label sits on
+     (5.70:1). brand-400 is every purple WORD (7.10 on a card). brand-300 is
+     the indicator step — progress fills, dots, the active-nav pill, focus
+     rings — where 3:1 applies and it measures 4.23 on a card, 3.92 on the
+     page. Using the bright accent as text is exactly the mistake the split
+     exists to prevent. */
+  --color-brand-300: #8b5cf6;
+  --color-brand-400: #6d28d9;
+  --color-brand-500: #7c3aed;
+  --color-brand-600: #6d28d9;
+  --color-brand-700: #5b21b6;
   --color-on-brand: #ffffff;
 
-  /* Red needs three steps here. #ff4560 is the owner's error colour and is
-     correct as an indicator everywhere (>=3:1 on all four grounds), but as
-     TEXT it is 4.17 on a sheet and 4.11 on its own 12% tint — and a sheet is
-     exactly where a failure gets explained. So #ff7a8c carries red words
-     (6.13 card / 5.59 sheet / 5.51 on the tint) and #bd1739 is the danger
-     button under a white label. Green and amber clear 4.5 on all four
-     grounds and need no such split. */
-  --color-success-400: #16c784;
-  --color-success-500: #0e7a52;
-  --color-error-300: #ff4560;
-  --color-error-400: #ff7a8c;
-  --color-error-500: #bd1739;
-  --color-warning-400: #ffb020;
+  /* State colour for a LIGHT ground. The navy theme's values sit near 1.8:1 on
+     a white card, so each theme carries its own — and the brief's #12b76a and
+     #f5a524 are indicator greens and ambers: as TEXT on white they measure
+     2.5 and 1.9. These are their readable twins, and the bright originals stay
+     where they belong, on the dots and bar segments. */
+  --color-success-400: #067647;
+  --color-success-500: #047857;
+  --color-error-300: #f04438;
+  --color-error-400: #b42318;
+  --color-error-500: #b42318;
+  --color-warning-400: #b54708;
   --color-on-state: #ffffff;
 
-  --color-shadow: #000000;
+  /* Shadows are cast in deep violet rather than black. Black on a white-purple
+     ground reads as grey dirt; the ground's own hue, darkened, reads as depth. */
+  --color-shadow: #2e1065;
+
+  /*
+   * RADIUS, as three values rather than a dozen.
+   *
+   * 18px cards, 22px sheets and modals, 16px tiles, and — the one the brief
+   * asks for that the base scale does not give — 14px on buttons, inputs and
+   * chips, every one of which is `rounded-xl` today. Overriding the scale
+   * variable moves all of them at once, which is the whole reason they were
+   * written as a scale.
+   */
+  --radius-card: 1.125rem;
+  --radius-tile: 1rem;
+  --radius-sheet: 1.375rem;
+  --radius-xl: 0.875rem;
+  --radius-lg: 0.625rem;
 }
 
 /*
@@ -1267,23 +1305,56 @@
  * changed together.
  */
 html:has(.social-theme) {
-  background-color: #071426;
+  background-color: #f7f5ff;
 }
 
+/*
+ * THE CARD, which is most of what this product is.
+ *
+ * White on the faint purple ground, a hairline, and a two-layer shadow: a
+ * tight contact line that seats the card, and a wide soft one that lifts it.
+ * Both are cast in violet rather than black — black on a white-purple ground
+ * reads as grey dirt, the ground's own hue darkened reads as depth.
+ */
 .social-theme .surface {
   background-color: var(--color-ink-850);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 12px 32px -18px rgba(0, 0, 0, 0.7);
+    0 2px 6px rgba(40, 20, 80, 0.03),
+    0 8px 24px rgba(40, 20, 80, 0.06);
   transition:
     box-shadow 0.2s ease,
+    border-color 0.2s ease,
     transform 0.15s ease;
 }
 
+/* Only where the card is itself a control: the purple arrives on the edge and
+   under it, so "this one is pressable" is said by the same colour that says
+   "this one is chosen" everywhere else. */
 .social-theme :is(a, button).surface:hover {
-  box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.4),
-    0 18px 40px -18px rgba(0, 0, 0, 0.78);
+  border-color: rgba(124, 58, 237, 0.35);
+  box-shadow: 0 8px 30px rgba(124, 58, 237, 0.1);
+}
+
+/*
+ * THE PRIMARY GRADIENT, as one class rather than as a colour repeated in a
+ * dozen component strings.
+ *
+ * It carries the few things that are genuinely primary: the main action, a
+ * selected chip, the active tab. Kept to those on purpose — a gradient on
+ * everything is not a premium product, it is a loud one.
+ */
+.social-theme .grad-primary {
+  background-image: linear-gradient(135deg, #6d28d9 0%, #7c3aed 45%, #a855f7 100%);
+  border-color: transparent;
+}
+.social-theme :is(a, button).grad-primary:hover {
+  background-image: linear-gradient(135deg, #5b21b6 0%, #6d28d9 45%, #8b5cf6 100%);
+}
+
+/* The deeper one, for a full-width feature area. */
+.social-theme .grad-hero {
+  background-image: linear-gradient(135deg, #5b21b6 0%, #7c3aed 50%, #a855f7 100%);
+  box-shadow: 0 16px 40px rgba(124, 58, 237, 0.22);
 }
 
 /* No grey tap-flash on iOS — the scale dip below is the feedback. 150ms and
@@ -1315,14 +1386,17 @@ html:has(.social-theme) {
    2.4.7). Dropping the lift for the moment the chip is focused costs nothing:
    the solid fill and the white label still say which one is on. */
 .social-theme [role='group'] > [aria-pressed='true']:not(:focus-visible) {
-  box-shadow: 0 2px 10px rgba(11, 111, 212, 0.45);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.28);
 }
 
 /* The base focus ring is brand-500, which is a SURFACE colour here and sits
    at 3.73 on the page. brand-300 is the indicator blue: 5.43 on the page,
    4.49 on a card, 4.10 on a sheet — visible everywhere a control can be. */
+/* brand-500 is the fill colour and measures 5.70 on a card, 5.26 on the page —
+   a stronger ring on a light ground than the indicator step, which is tuned to
+   be seen ON a fill rather than against white. */
 .social-theme :focus-visible {
-  outline-color: var(--color-brand-300);
+  outline-color: var(--color-brand-500);
 }
 
 /*
@@ -1332,7 +1406,7 @@ html:has(.social-theme) {
  * present, and nowhere near a strobe.
  */
 .social-theme .skeleton-shimmer {
-  background-image: linear-gradient(100deg, #142d4a 30%, #24466f 50%, #142d4a 70%);
+  background-image: linear-gradient(100deg, #f1eefb 30%, #e4dcf7 50%, #f1eefb 70%);
 }
 
 /* A live run's dot breathes so "this is happening now" does not depend on

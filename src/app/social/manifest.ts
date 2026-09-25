@@ -28,8 +28,8 @@ export default function manifest(): MetadataRoute.Manifest {
      * ink-950 (the page) and brand-500 (the button surface), the same two the
      * viewport export already declares.
      */
-    background_color: '#071426',
-    theme_color: '#0b6fd4',
+    background_color: '#f7f5ff',
+    theme_color: '#7c3aed',
     /*
      * Still the CRM's mark (a sky-blue sofa) because this module has no icon
      * art of its own — there is nothing in public/social to point at, and

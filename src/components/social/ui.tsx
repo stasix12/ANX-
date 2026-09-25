@@ -205,10 +205,13 @@ type ButtonSize = 'sm' | 'md' | 'lg';
  * thing saying why, so every caller repeats the reason in adjacent text.
  */
 const buttonClass: Record<ButtonVariant, string> = {
+  /* `grad-primary` is the theme's one gradient (globals.css). It sits on top of
+     bg-brand-500, which stays as the fallback colour any theme without the
+     class still resolves — and as the thing `disabled:` fades. */
   primary:
-    'bg-brand-500 text-on-brand shadow-[0_2px_10px_rgba(11,111,212,0.35)] hover:bg-brand-600 active:bg-brand-700 disabled:shadow-none',
-  secondary: 'border border-ink-700 bg-ink-800 text-mist-100 hover:bg-ink-700 active:bg-ink-900',
-  danger: 'bg-error-500 text-on-state shadow-[0_2px_10px_rgba(189,23,57,0.35)] hover:bg-[#a61231] active:bg-[#93102b] disabled:shadow-none',
+    'grad-primary bg-brand-500 text-on-brand shadow-[0_7px_18px_rgba(124,58,237,0.25)] hover:bg-brand-600 active:bg-brand-700 disabled:shadow-none',
+  secondary: 'border border-ink-700 bg-ink-900 text-brand-400 hover:bg-ink-800 active:bg-ink-800',
+  danger: 'bg-error-500 text-on-state shadow-[0_7px_18px_rgba(180,35,24,0.25)] hover:bg-[#9a1e14] active:bg-[#851a11] disabled:shadow-none',
   ghost: 'text-brand-400 hover:bg-ink-800 active:bg-ink-800',
 };
 
@@ -329,7 +332,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
  * strength on the border plus a 40% halo is the visible equivalent.
  */
 export const inputClass =
-  'w-full min-h-11 rounded-xl border border-ink-600 bg-ink-900 px-3.5 py-2.5 text-base leading-normal text-mist-100 transition-colors placeholder:text-mist-500 hover:border-[#6b8db2] focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300/40 disabled:cursor-not-allowed disabled:opacity-50';
+  'w-full min-h-11 rounded-xl border border-ink-600 bg-ink-900 px-3.5 py-2.5 text-base leading-normal text-mist-100 transition-colors placeholder:text-mist-500 hover:border-[#7a6da6] focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300/40 disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
  * The switch reads as a 28px track but is tapped as 44px: the track is an
@@ -424,7 +427,7 @@ export function SegmentedControl<T extends string>({
               aria-pressed={active}
               onClick={() => onChange(o.value)}
               className={`inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-xs transition-colors ${
-                active ? 'bg-brand-500 font-extrabold text-on-brand' : 'bg-ink-800 font-bold text-mist-300 hover:text-mist-100'
+                active ? 'grad-primary bg-brand-500 font-extrabold text-on-brand' : 'bg-ink-800 font-bold text-mist-300 hover:text-mist-100'
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950`}
             >
               {o.label}
@@ -454,7 +457,7 @@ export function SegmentedControl<T extends string>({
              * at arm's length on a phone.
              */
             className={`inline-flex items-center justify-center rounded-lg transition-colors ${pad} ${
-              active ? 'bg-brand-500 font-extrabold text-on-brand' : 'font-bold text-mist-300 hover:bg-ink-900 hover:text-mist-100'
+              active ? 'grad-primary bg-brand-500 font-extrabold text-on-brand' : 'font-bold text-mist-300 hover:bg-ink-900 hover:text-mist-100'
             } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-800`}
           >
             {o.label}
@@ -870,7 +873,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
              * are the surface steps of their families and carry on-state at
              * 5.35 and 6.28. The info skin stays a raised panel.
              */
-            className={`toast-in pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-card px-4 py-3 text-sm font-bold shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)] ${
+            className={`toast-in pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-card px-4 py-3 text-sm font-bold shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)] ${
               t.tone === 'error'
                 ? 'bg-error-500 text-on-state'
                 : t.tone === 'info'
@@ -1113,7 +1116,7 @@ export function Sheet({
          * of that work. The lift is the lighter surface plus the hairline;
          * the shadow only deepens the separation. No glow.
          */
-        className={`sheet-in fixed inset-x-0 bottom-0 z-[71] mx-auto flex max-h-[85svh] flex-col rounded-t-sheet border border-ink-700 bg-ink-800 shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)] md:bottom-[8vh] md:max-h-[80svh] md:rounded-card ${
+        className={`sheet-in fixed inset-x-0 bottom-0 z-[71] mx-auto flex max-h-[85svh] flex-col rounded-t-sheet border border-ink-700 bg-ink-800 shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)] md:bottom-[8vh] md:max-h-[80svh] md:rounded-card ${
           size === 'lg' ? 'md:max-w-2xl' : 'md:max-w-lg'
         }`}
       >
@@ -1273,15 +1276,15 @@ export function OverflowMenu({ label, actions, className = '' }: { label: string
  * #071426.
  */
 export const CARD =
-  'rounded-card border border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(0,0,0,0.35),0_12px_32px_-18px_rgba(0,0,0,0.7)]';
+  'rounded-card border border-ink-700 bg-ink-850 shadow-[0_2px_6px_rgba(40,20,80,0.03),0_8px_24px_rgba(40,20,80,0.06)]';
 
 /** L2 — sheets, toasts, the floating selection bars, the notification panel. */
 export const CARD_ELEVATED =
-  'rounded-card border border-ink-700 bg-ink-800 shadow-[0_2px_8px_rgba(0,0,0,0.45),0_24px_60px_-24px_rgba(0,0,0,0.85)]';
+  'rounded-card border border-ink-700 bg-ink-800 shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)]';
 
 /** A stat tile or a media tile: the same skin as a card, one radius tighter. */
 export const TILE =
-  'rounded-tile border border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(0,0,0,0.35),0_12px_32px_-18px_rgba(0,0,0,0.7)]';
+  'rounded-tile border border-ink-700 bg-ink-850 shadow-[0_2px_6px_rgba(40,20,80,0.03),0_8px_24px_rgba(40,20,80,0.06)]';
 
 /** Icon chip colours. The chip is tinted; the card never is. */
 const CHIP: Record<Tone, string> = {

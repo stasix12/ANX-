@@ -86,12 +86,12 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
                   target="_blank"
                   rel="noreferrer"
                   dir="auto"
-                  className="min-w-0 flex-1 truncate text-[13px] text-mist-200"
+                  className="min-w-0 flex-1 truncate text-[13px] text-mist-100"
                 >
                   {r.target.name}
                 </Link>
               ) : (
-                <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-200">
+                <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-100">
                   {r.target?.name ?? '—'}
                 </span>
               )}

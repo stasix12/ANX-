@@ -153,7 +153,7 @@ export function SocialShell({
           a phone with no notch, where the inset resolves to 0. Giving that
           2px to the header's own top padding — which the inset already owns —
           is what lets the row itself drop to zero padding. */}
-      <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/90 pt-[max(env(safe-area-inset-top),2px)] backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/94 pt-[max(env(safe-area-inset-top),2px)] backdrop-blur-xl">
         {/* No vertical padding at all: all three children of this row are
             pinned at the 44px touch floor (the home link, PublishingToggle
             and NotificationBell are each min-h-11), so every pixel of py was
@@ -164,7 +164,7 @@ export function SocialShell({
           {/* min-h-11: this measured 140x36 — the one sub-44px tap target in
               the header, and it is the link home. */}
           <Link href="/social" className="flex min-h-11 min-w-0 items-center gap-2.5">
-            <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand-500 text-on-brand">
+            <span aria-hidden className="grad-primary grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand-500 text-on-brand shadow-[0_4px_12px_rgba(124,58,237,0.25)]">
               <SparklesIcon className="h-4.5 w-4.5" />
             </span>
             <span className="min-w-0">
@@ -249,10 +249,10 @@ export function SocialShell({
       {/* Phone: iOS-style bottom tab bar, thumb-reachable. */}
       <nav
         aria-label="ניווט ראשי"
-        // The shadow was cast in rgba(13,38,76,…) — a navy shade built for a
-        // white page, which on #071426 is nothing at all. On a dark ground the
-        // bar has to lift off the content with a real black gradient.
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700 bg-ink-850/92 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_28px_rgba(0,0,0,0.5)] backdrop-blur-xl md:hidden"
+        // The bar lifts off the content in the ground's own hue, darkened —
+        // a violet shade rather than black, which on a white-purple page
+        // reads as grey dirt rather than as depth.
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700 bg-ink-850/96 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_24px_rgba(46,16,101,0.08)] backdrop-blur-xl md:hidden"
       >
         <ul className="mx-auto flex max-w-lg items-stretch">
           {nav
@@ -266,7 +266,7 @@ export function SocialShell({
                     aria-current={active ? 'page' : undefined}
                     className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ${active ? 'text-brand-400' : 'text-mist-500'}`}
                   >
-                    <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${active ? 'scale-105 bg-brand-300/12' : ''}`}>
+                    <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${active ? 'scale-105 bg-brand-300/12 shadow-[0_4px_12px_rgba(124,58,237,0.18)]' : ''}`}>
                       <Icon className="h-5.5 w-5.5" />
                     </span>
                     {label}
@@ -283,7 +283,7 @@ export function SocialShell({
                 moreActive ? 'text-brand-400' : 'text-mist-500'
               }`}
             >
-              <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${moreActive ? 'scale-105 bg-brand-300/12' : ''}`}>
+              <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${moreActive ? 'scale-105 bg-brand-300/12 shadow-[0_4px_12px_rgba(124,58,237,0.18)]' : ''}`}>
                 <MenuIcon className="h-5.5 w-5.5" />
               </span>
               עוד

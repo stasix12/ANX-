@@ -522,7 +522,7 @@ export default function CampaignControlCenter() {
                                       : TONE_FILL.neutral
                                 }`}
                               />
-                              <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-200">
+                              <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-100">
                                 {r.target?.name ?? '—'}
                               </span>
                               <span className="shrink-0 text-[11px] text-mist-500">

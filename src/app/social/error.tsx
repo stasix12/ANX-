@@ -29,7 +29,7 @@ export default function SocialError({ error, reset }: { error: Error & { digest?
 
   return (
     <div className="grid min-h-dvh place-items-center bg-ink-950 px-4 py-10">
-      <div className="w-full max-w-md rounded-card border border-ink-700 bg-ink-850 p-6 text-center shadow-[0_1px_2px_rgba(0,0,0,0.35),0_12px_32px_-18px_rgba(0,0,0,0.7)]">
+      <div className="w-full max-w-md rounded-card border border-ink-700 bg-ink-850 p-6 text-center shadow-[0_2px_6px_rgba(40,20,80,0.03),0_8px_24px_rgba(40,20,80,0.06)]">
         <span aria-hidden className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-error-300/12 text-2xl font-extrabold text-error-400">
           !
         </span>

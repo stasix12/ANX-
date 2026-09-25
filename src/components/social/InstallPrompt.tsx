@@ -85,14 +85,37 @@ export function InstallPrompt() {
         <div className="min-w-0">
           <p className="text-sm font-extrabold leading-snug text-mist-100">התקינו את האפליקציה על המסך</p>
           {mode === 'ios' ? (
-            <p className="mt-1 text-[13px] leading-relaxed text-mist-300">
-              הקישו על <strong className="font-extrabold">···</strong> בסרגל של ספארי למטה, ואז על{' '}
-              <span className="inline-flex items-center gap-1 align-middle font-extrabold text-mist-100">
-                <ShareIcon aria-hidden className="h-4 w-4" />
-                הוסף למסך הבית
-              </span>
-              . אחר כך תפתחו אותה מהמסך הראשי — בלי שורת הכתובת ובלי כפתורי הדפדפן, על כל המסך.
-            </p>
+            <>
+              {/*
+                Numbered, and naming what is on the screen at each step.
+                "Add to Home Screen" is NOT in Safari's ··· menu — that menu
+                offers bookmarks and tabs — it is inside the SHARE sheet, below
+                the row of apps, and the owner has to scroll a grey list to
+                reach it. An instruction that stops at "···" leaves them
+                looking at a menu that does not contain the thing.
+              */}
+              <ol className="mt-1 space-y-0.5 text-[13px] leading-relaxed text-mist-300">
+                <li>
+                  <span className="font-extrabold text-mist-100">1.</span> הקישו על{' '}
+                  <strong className="font-extrabold text-mist-100">···</strong> בסרגל של ספארי למטה.
+                </li>
+                <li>
+                  <span className="font-extrabold text-mist-100">2.</span> בחרו{' '}
+                  <span className="inline-flex items-center gap-1 align-middle font-extrabold text-mist-100">
+                    <ShareIcon aria-hidden className="h-4 w-4" />
+                    שיתוף
+                  </span>
+                  .
+                </li>
+                <li>
+                  <span className="font-extrabold text-mist-100">3.</span> גללו למטה ברשימה ובחרו{' '}
+                  <strong className="font-extrabold text-mist-100">«הוסף למסך הבית»</strong>.
+                </li>
+              </ol>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-mist-500">
+                אחר כך פתחו אותה מהמסך הראשי — בלי שורת הכתובת ובלי כפתורי הדפדפן, על כל המסך.
+              </p>
+            </>
           ) : (
             <>
               <p className="mt-1 text-[13px] leading-relaxed text-mist-300">

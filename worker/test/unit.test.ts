@@ -2916,10 +2916,26 @@ const scenario: { step: string; line: string }[] = [];
     /* The picture has its own waiter — it is proved by what appeared, not by
        one element being visible — so it is checked above, with mediaCount. */
     ['the comment box', 'appears(box, 8_000)'],
-    ['the post', 'appears(article, 8_000)'],
+    ['the post', 'appears(article, firstWaitMs)'],
   ] as const) {
     assert.ok(composerSrc.includes(where), `${what} is waited for, not glanced at`);
   }
+  /*
+   * The post's wait became a parameter so the PUBLISH path can ask for one
+   * short look — the post it is after went out seconds ago and is at the top
+   * of the feed, and the twenty scrolling passes below are for the comment
+   * writer, which is hunting a post from hours ago. It is still a real wait;
+   * only who decides how long moved. The default is pinned so the callers
+   * that did not ask for anything keep exactly the behaviour they had.
+   */
+  assert.ok(
+    /findPostArticle\(page: Page, postText: string, passes = 20, firstWaitMs = 8_000\)/.test(composerSrc),
+    'the scrolling search keeps its old defaults for the callers that hunt an older post',
+  );
+  assert.ok(
+    composerSrc.includes('findPostArticle(page, postText, 1, 4_000)'),
+    'and the permalink read after publishing takes one look instead of scrolling away from a post that is already on screen',
+  );
   /* Where the CURRENT state is the question, a glance is right and stays. */
   assert.ok(/const stillThere = await box\.isVisible\(\{ timeout: 1_000 \}\)/.test(composerSrc), '"is the box still there" is a question about now');
   const selectorsSrc = readFileSync(new URL('../facebook/selectors.ts', import.meta.url), 'utf8');

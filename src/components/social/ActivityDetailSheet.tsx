@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { cancelQueueItem, getQueueItem, retryQueueItem, type QueueRow } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
+import { counted } from '@/lib/social/time';
 import { explainFailure } from './ErrorDetail';
 import { Stamp } from './DateTime';
 import { TargetAvatar } from './TargetAvatar';
@@ -98,6 +99,26 @@ export function ActivityDetailSheet({
                 </p>
                 <p className="text-[11px] text-mist-500">
                   <Stamp iso={row.published_at ?? row.scheduled_at} />
+                  {/*
+                    HOW LONG THE PUBLICATION ITSELF TOOK.
+                    
+                    claimed_at is the moment the worker picked the row up,
+                    published_at the moment it was done — opening the group,
+                    typing, uploading, posting and verifying, all of it. It is
+                    the only honest answer to "why is it not one a minute",
+                    and it was written to the row all along with nothing
+                    reading it. Measured, not estimated: both stamps are the
+                    database's.
+                  */}
+                  {row.claimed_at && row.published_at && (
+                    <>
+                      {' · '}
+                      {(() => {
+                        const secs = Math.round((new Date(row.published_at).getTime() - new Date(row.claimed_at).getTime()) / 1000);
+                        return secs > 0 && secs < 3600 ? `לקח ${counted(secs, 'שנייה אחת', 'שניות', 'שתי שניות')}` : null;
+                      })()}
+                    </>
+                  )}
                 </p>
               </div>
               <StatusPill status={row.status} long />

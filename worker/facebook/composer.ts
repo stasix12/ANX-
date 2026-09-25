@@ -81,7 +81,18 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    */
   await input.onStep('opening');
   await page.goto(input.groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-  await page.waitForTimeout(3000);
+  /*
+   * WAIT FOR THE PAGE, NOT FOR THE CLOCK.
+   *
+   * This was a flat three seconds, spent on every publication whether the
+   * group had rendered in 400ms or was still coming. What the next two lines
+   * actually need is for the page to have painted enough to be classified and
+   * for the composer box to exist — so the wait ends the moment the box
+   * appears, and only falls back to the old three seconds when it does not.
+   * On a fast connection that is most of three seconds back, per group, with
+   * nothing about the checks after it changed.
+   */
+  await firstVisible(fb.composerTrigger(page), 3000).catch(() => null);
   assertUsable(await classifyPage(page));
   const groupTitle = (await page.title().catch(() => '')).replace(patterns.titleSuffix, '').trim();
 
@@ -150,7 +161,10 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     }
     throw new PublishError('timeout', 'חלון הפוסט לא נסגר אחרי הלחיצה על "פרסום". בדקו בקבוצה אם הפוסט עלה לפני ניסיון נוסף.', true);
   }
-  await page.waitForTimeout(2500);
+  /* The dialog has already detached — that is the signal, and it was waited
+     for properly on the line above. This is only a beat for the feed to start
+     re-rendering before it is read; it was 2500ms. */
+  await page.waitForTimeout(800);
   if (await fb.failureText(page).isVisible({ timeout: 1500 }).catch(() => false)) {
     throw new PublishError('rejected', `Facebook הודיע על כישלון: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);
   }
@@ -174,7 +188,19 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
  */
 async function readPermalink(page: Page, postText: string): Promise<string> {
   try {
-    const article = await findPostArticle(page, postText);
+    /*
+     * ONE LOOK, NO SCROLLING.
+     *
+     * The default search scrolls the feed up to twenty times, because the
+     * comment writer and the metrics reader use it to find a post from hours
+     * ago that Facebook has not loaded yet. This call is different: the post
+     * went out seconds ago, it is at the TOP of the feed, and verifyInFeed has
+     * just confirmed it is on screen. Scrolling down is scrolling AWAY from
+     * it — up to half a minute of it, on the one path where the answer is
+     * already in view. The permalink is best-effort anyway: an empty string
+     * is a fine answer and every caller works without one.
+     */
+    const article = await findPostArticle(page, postText, 1, 4_000);
     if (!article) return '';
     const href = await article
       .locator('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid="]')
@@ -210,13 +236,13 @@ async function readPermalink(page: Page, postText: string): Promise<string> {
  * lazily, so a post from a few hours ago may not be on screen yet — hence the
  * scrolling, which stops the moment the post appears.
  */
-export async function findPostArticle(page: Page, postText: string): Promise<Locator | null> {
+export async function findPostArticle(page: Page, postText: string, passes = 20, firstWaitMs = 8_000): Promise<Locator | null> {
   const probe = pageProbe(postText);
   if (!probe) return null;
   const article = page.locator('[role="article"]').filter({ hasText: probe }).first();
   const articles = page.locator('[role="article"]');
   let seen = -1;
-  for (let pass = 0; pass < 20; pass += 1) {
+  for (let pass = 0; pass < Math.max(1, passes); pass += 1) {
     /*
      * The first look WAITS; the rest only glance.
      *
@@ -227,7 +253,7 @@ export async function findPostArticle(page: Page, postText: string): Promise<Loc
      * glancing is right, because each pass has just scrolled and it is the
      * scrolling that changes the answer.
      */
-    if (pass === 0 ? await appears(article, 8_000) : await article.isVisible().catch(() => false)) return article;
+    if (pass === 0 ? await appears(article, firstWaitMs) : await article.isVisible().catch(() => false)) return article;
 
     /*
      * Scrolled three ways, because no single one of them is reliable.
@@ -755,8 +781,11 @@ async function openComposer(page: Page): Promise<Locator | null> {
   if (!trigger) return null;
   await trigger.scrollIntoViewIfNeeded().catch(() => undefined);
   await trigger.click({ timeout: 10_000 }).catch(() => undefined);
-  // Let the dialog animate in before looking for it.
-  await page.waitForTimeout(1500);
+  /* A beat for the dialog to start animating in — not for it to finish. The
+     line below waits up to fifteen seconds for a VISIBLE dialog, so the only
+     job left here is to not read the page in the same tick as the click. This
+     was 1500ms in front of that. */
+  await page.waitForTimeout(400);
   // Only a real dialog counts. A feed comment box also has an editable
   // field, and typing there would post comments — never fall back to it.
   return firstVisible(fb.composerDialog(page), 15_000);
@@ -780,13 +809,16 @@ async function typeIntoEditor(page: Page, textbox: Locator, text: string): Promi
     throw new PublishError('composer', `זוהתה תיבת תגובה ("${label}") במקום חלון פוסט — עצרתי כדי לא לפרסם תגובות.`);
   }
   await textbox.click({ timeout: 10_000 });
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(150);
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   for (const [i, line] of lines.entries()) {
     if (line) await page.keyboard.insertText(line);
     if (i < lines.length - 1) await page.keyboard.press('Shift+Enter');
   }
-  await page.waitForTimeout(500);
+  /* Long enough for the editor to have committed the text before it is read
+     back. If it has not, the check below simply takes the fallback path and
+     types it again — which is what that path is for. */
+  await page.waitForTimeout(250);
   const probe = lines.find((l) => l.trim().length > 0)?.slice(0, 20) ?? '';
   const current = (await textbox.innerText().catch(() => '')) ?? '';
   if (probe && !current.includes(probe)) {
@@ -868,7 +900,11 @@ async function discardComposer(page: Page): Promise<void> {
 async function verifyInFeed(page: Page, groupUrl: string, text: string): Promise<boolean> {
   const probe = pageProbe(text);
   if (!probe) return false;
-  const visible = () => appears(page.getByText(probe, { exact: false }).first(), 10_000);
+  /* Six seconds, not ten: the post was published seconds ago and Facebook
+     puts it at the top of the feed immediately. If it is not there by now the
+     reload below is the thing that will find it, and waiting longer first
+     only delays that. */
+  const visible = () => appears(page.getByText(probe, { exact: false }).first(), 6_000);
   if (await visible()) return true;
   try {
     await page.goto(groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });

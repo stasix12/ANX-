@@ -66,4 +66,36 @@ export const env = {
   get locale() {
     return process.env.SOCIAL_BROWSER_LOCALE ?? 'he-IL';
   },
+  /**
+   * The clock the BROWSER reports, which is not the machine's.
+   *
+   * A container runs on UTC. The account it signs in as posts from Be'er
+   * Sheva, and the page can read its own timezone in one line — so a session
+   * that says UTC while the account has said Asia/Jerusalem for years is a
+   * difference Facebook can see for free. Defaulted rather than required:
+   * on the owner's own PC it already matches, and pinning it there changes
+   * nothing.
+   */
+  get timezone() {
+    return process.env.SOCIAL_BROWSER_TIMEZONE ?? 'Asia/Jerusalem';
+  },
+  /**
+   * An outbound proxy for the browser, when the machine's own address is the
+   * problem.
+   *
+   * Moving the worker off the owner's PC moves it to a datacenter address,
+   * and a datacenter address is the single thing most likely to turn a
+   * working session into a security check. Set these to route the browser
+   * through a residential address in the country the account actually lives
+   * in; leave them unset and nothing changes.
+   */
+  get proxy() {
+    const server = process.env.SOCIAL_BROWSER_PROXY;
+    if (!server) return undefined;
+    return {
+      server,
+      username: process.env.SOCIAL_BROWSER_PROXY_USER,
+      password: process.env.SOCIAL_BROWSER_PROXY_PASS,
+    };
+  },
 };

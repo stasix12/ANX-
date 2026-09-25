@@ -105,6 +105,11 @@ export class BrowserSession {
     const common = {
       headless: wantHeadless,
       locale: env.locale,
+      /* The clock the PAGE reports. A container runs on UTC while the account
+         has posted from Asia/Jerusalem for years, and a page can read its own
+         timezone in one line — a free difference, so it is closed. */
+      timezoneId: env.timezone,
+      ...(env.proxy ? { proxy: env.proxy } : {}),
       viewport: wantHeadless ? { width: 1280, height: 900 } : null,
       args: ['--disable-notifications'],
       ignoreDefaultArgs: ['--enable-automation'],

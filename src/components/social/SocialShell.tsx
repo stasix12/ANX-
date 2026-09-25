@@ -241,14 +241,15 @@ export function SocialShell({
    * a round number. Measured from the classes on the <nav> at the foot of this
    * file: pt-2 (8) + the 28px icon puck + gap-0.5 (2) + an 11px label at
    * line-height 1.5 (16.5) + pb-1.5 (6) + the 1px top border = 61.5px, and the
-   * inset is already padded inside the bar itself. 5.5rem (88px) reserved 26px
+   * bottom strip (--safe-b, globals.css) is already padded inside the bar
+   * itself — so it is added here too, and only here. 5.5rem (88px) reserved 26px
    * that nothing occupies, which is why the last card on every screen floated
    * well clear of the bar. 4.5rem is 61.5px of bar plus ~10px of air — and it
    * is the same constant the floating selection bars are anchored to, so the
    * bottom of the product is one number.
    */
   return (
-    <div className="min-h-dvh bg-ink-950 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-10">
+    <div className="min-h-dvh bg-ink-950 pb-[calc(4.5rem+var(--safe-b))] md:pb-10">
       {/*
         A quiet identity bar, and identity here means the OWNER's, not the
         product's. It carries a greeting by name, the state of the system in
@@ -416,7 +417,7 @@ export function SocialShell({
         // The bar lifts off the content in the ground's own hue, darkened —
         // a violet shade rather than black, which on a white-purple page
         // reads as grey dirt rather than as depth.
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700 bg-ink-850/96 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_24px_rgba(46,16,101,0.08)] backdrop-blur-xl md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-700 bg-ink-850/96 pb-[var(--safe-b)] shadow-[0_-6px_24px_rgba(46,16,101,0.08)] backdrop-blur-xl md:hidden"
       >
         <ul className="mx-auto flex max-w-lg items-stretch">
           {nav

@@ -534,7 +534,7 @@ export default function LibraryPage() {
       {/* Selection bar. data-overlay keeps the page's entrance transform off it —
           a transformed ancestor becomes the containing block for `fixed`. */}
       {selected.length > 0 && (
-        <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
+        <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+var(--safe-b))] z-40 px-3 md:bottom-4">
           <div className={`mx-auto flex max-w-3xl flex-wrap items-center gap-2 p-2.5 ${CARD_ELEVATED}`}>
             <Badge tone="brand">נבחרו {selected.length}</Badge>
             <Button size="sm" variant="secondary" onClick={() => setAssignOpen(true)}>

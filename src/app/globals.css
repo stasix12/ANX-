@@ -97,6 +97,35 @@
 }
 
 @layer base {
+  /*
+   * HOW MUCH ROOM ANYTHING PINNED TO THE BOTTOM LEAVES UNDER ITSELF.
+   *
+   * env(safe-area-inset-bottom) is the home indicator's strip — 34px on a
+   * notched iPhone. Reserving it is right in an installed app, where nothing
+   * else is down there. In a browser TAB it is wrong twice over: iOS Safari
+   * keeps reporting the inset while its own toolbar is sitting in that exact
+   * strip, so the tab bar padded itself away from an indicator the browser
+   * was already covering and floated a centimetre off the bottom of the
+   * screen — which is what it looked like next to the Facebook app, whose tab
+   * bar ends at the edge.
+   *
+   * A small floor stays in the browser case rather than zero, because Android
+   * draws a gesture pill at the bottom of a page served edge-to-edge and a
+   * label under it is a label nobody can read.
+   *
+   * Everything pinned to the bottom of the product reads this: the tab bars,
+   * the clearance the pages reserve for them, the floating selection bars,
+   * the toasts and the sheet footers. One number, so they cannot drift apart.
+   */
+  :root {
+    --safe-b: min(env(safe-area-inset-bottom), 0.625rem);
+  }
+  @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+    :root {
+      --safe-b: env(safe-area-inset-bottom);
+    }
+  }
+
   html {
     scroll-behavior: smooth;
     /* Offset anchor targets so the sticky header never covers a section title. */

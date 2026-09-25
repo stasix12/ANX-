@@ -619,7 +619,7 @@ export default function GroupsPage() {
           Hebrew name (the favourite action's whole accessible name used to be
           "⭐", read out as "white medium star"). */}
       {picking && (
-        <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
+        <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+var(--safe-b))] z-40 px-3 md:bottom-4">
           <div className={`mx-auto flex max-w-3xl items-center gap-2 p-2.5 ${CARD_ELEVATED}`}>
             <Badge tone="brand">{selectionLabel}</Badge>
             {selected.length > 0 && <ButtonLink href={`/social/posts/new?targets=${selected.join(',')}`}>צור פוסט</ButtonLink>}

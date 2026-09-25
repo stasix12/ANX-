@@ -874,7 +874,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={push}>
       {children}
       {/* Above the bottom tab bar on phones, bottom-right on desktop. */}
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 md:bottom-6 md:items-end">
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+var(--safe-b))] z-[60] flex flex-col items-center gap-2 px-4 md:bottom-6 md:items-end">
         {items.map((t) => (
           <div
             key={t.id}
@@ -1142,9 +1142,9 @@ export function Sheet({
         </header>
         {/* The safe-area inset belongs to whichever element is last, so the
             action button never sits under the home indicator. */}
-        <div className={`min-h-0 grow overflow-y-auto px-4 ${footer ? 'pb-4' : 'pb-[calc(1rem+env(safe-area-inset-bottom))]'}`}>{children}</div>
+        <div className={`min-h-0 grow overflow-y-auto px-4 ${footer ? 'pb-4' : 'pb-[calc(1rem+var(--safe-b))]'}`}>{children}</div>
         {footer && (
-          <footer className="shrink-0 border-t border-ink-700 bg-ink-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{footer}</footer>
+          <footer className="shrink-0 border-t border-ink-700 bg-ink-800 px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">{footer}</footer>
         )}
       </div>
         </div>,

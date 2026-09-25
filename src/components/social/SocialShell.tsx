@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   CalendarIcon,
   ClipboardListIcon,
+  ClockIcon,
   GearIcon,
   HomeIcon,
   LogOutIcon,
@@ -30,6 +31,10 @@ const nav = [
   { href: '/social/campaigns', label: 'סבבים', icon: RepeatIcon, exact: false },
   { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false },
   { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false },
+  /* The activity log's own screen. Two places link to it — the dashboard card
+     and the bell — but a route with no entry in the navigation is a route the
+     owner can reach and then never find again. */
+  { href: '/social/activity', label: 'פעילות', icon: ClockIcon, exact: false },
   { href: '/social/library', label: 'ספרייה', icon: ClipboardListIcon, exact: false },
   { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false },
 ];

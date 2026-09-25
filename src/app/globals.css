@@ -1177,10 +1177,40 @@
   animation: sheet-rise 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/*
+ * A line arriving in the activity log.
+ *
+ * Shorter and smaller than either of the two above, because this is the one
+ * that happens while nobody asked for it: the dashboard re-reads every 30
+ * seconds and a new publication simply appears. 6px and 0.18s is enough to
+ * catch the eye at the top of the list and not enough to be read as motion.
+ *
+ * Transform and opacity only, so nothing here re-renders layout — a row
+ * sliding in must not push the rows below it around. And a class rather than
+ * an inline style, so the reduced-motion block below can actually reach it:
+ * React re-runs the animation only for a row whose key is new, which is
+ * exactly the rows that are new.
+ */
+@keyframes log-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.log-in {
+  animation: log-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skeleton-shimmer,
   .toast-in,
-  .sheet-in {
+  .sheet-in,
+  .log-in {
     animation: none;
   }
   .skeleton-shimmer {

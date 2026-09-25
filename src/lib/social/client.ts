@@ -1210,8 +1210,25 @@ export async function countPublishedBetween(sinceISO: string, untilISO?: string)
   return res.count ?? 0;
 }
 
-export async function listActivity(limit = 40): Promise<ActivityEntry[]> {
-  return unwrap<ActivityEntry[]>(await db().from('social_activity_log').select('*').order('at', { ascending: false }).limit(limit));
+/**
+ * The activity log, newest first.
+ *
+ * `before` and `since` both filter on `at`, which is the one indexed column on
+ * this table (social_activity_log_at_idx). That is not a detail: filtering by
+ * `event` or `level` server-side would be a sequential scan of every row the
+ * product has ever written, so the surfaces that need those narrow the rows
+ * they already hold (see filterActivity() in activity.ts) rather than asking
+ * the database for them.
+ *
+ * `before` is a cursor, not a page number: it takes the `at` of the last row
+ * already on screen, so a row written while the owner is reading cannot shift
+ * the window and make a row appear twice or not at all.
+ */
+export async function listActivity(limit = 40, opts: { before?: string; since?: string } = {}): Promise<ActivityEntry[]> {
+  let q = db().from('social_activity_log').select('*').order('at', { ascending: false }).limit(limit);
+  if (opts.before) q = q.lt('at', opts.before);
+  if (opts.since) q = q.gte('at', opts.since);
+  return unwrap<ActivityEntry[]>(await q);
 }
 
 /** Creates a "publish now" schedule and kicks the worker immediately. */

@@ -149,8 +149,13 @@ export function NotificationBell() {
                 </li>
               ))}
             </ul>
-            <Link href="/social/history" onClick={() => setOpen(false)} className="block border-t border-ink-700 px-3.5 py-2.5 text-center text-sm font-bold text-brand-400">
-              לכל ההיסטוריה
+            {/* /social/activity, not /social/history: this panel lists rows
+                from the activity log, and history lists social_queue —
+                publications. The link promised "all of it" and delivered a
+                different table, so a worker that stopped or a round that was
+                planned could not be found anywhere past this popover. */}
+            <Link href="/social/activity" onClick={() => setOpen(false)} className="block border-t border-ink-700 px-3.5 py-2.5 text-center text-sm font-bold text-brand-400">
+              לכל הפעילות
             </Link>
           </div>
         </>

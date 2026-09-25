@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { LiveCampaignHero, LiveQueueHero, type SystemState } from '@/components/social/LiveCampaignHero';
+import { ActivityDetailSheet } from '@/components/social/ActivityDetailSheet';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { QuickActions } from '@/components/social/QuickActions';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
@@ -124,6 +125,9 @@ export default function SocialDashboard() {
    * the tap that opened it.
    */
   const [tuner, setTuner] = useState<{ campaignId?: string } | null>(null);
+  /* Which publication the activity card was asked about. The sheet reads that
+     one row on demand; nothing about it is fetched until it is opened. */
+  const [detail, setDetail] = useState<string | null>(null);
   /* The featured run's cover. Read on its own, and only when a run is
      featured: the queue rows carry their post, but only while something is
      still scheduled - a finished run would lose its picture exactly when the
@@ -818,6 +822,33 @@ export default function SocialDashboard() {
             />
           )}
 
+          {/*
+            3b — what the system has just been doing, directly under the round
+            it has been doing it for.
+
+            This card is not new and this is not a second feed: it is the
+            "יומן פעילות" card that used to sit at the foot of a 2600px scroll,
+            below the comment queue, where the one screen that answers "what is
+            happening right now" kept its answer out of sight. Same rows, same
+            read (data.log, fetched once by load()), five of them instead of
+            six — moved to where the question is asked.
+
+            It carries no counter and no clock of its own. The numbers are on
+            the tiles above it and the countdowns are beside their own rows in
+            "הפרסומים הקרובים" below; a second copy of either here is exactly
+            the contradiction this module keeps being rebuilt to prevent.
+          */}
+          <Card
+            title="פעילות אחרונה"
+            action={
+              <Link href="/social/activity" className="inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-sm font-bold text-brand-400">
+                הצג הכל
+              </Link>
+            }
+          >
+            <ActivityFeed entries={data.log} limit={5} onChanged={load} onOpen={(id) => setDetail(id)} />
+          </Card>
+
           {/* 4 — four taps, compact. The mockup's "statistics" tile points at
               /social/history, because /social/stats does not exist and
               history IS the reports screen in this product. */}
@@ -905,17 +936,6 @@ export default function SocialDashboard() {
               was ever asked for. */}
           <CommentQueueCard rows={data.comments} totals={data.commentTotals} />
 
-          <Card
-            title="יומן פעילות"
-            action={
-              <Link href="/social/history" className="inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-sm font-bold text-brand-400">
-                להיסטוריה
-              </Link>
-            }
-          >
-            <ActivityFeed entries={data.log} limit={6} />
-          </Card>
-
           {/* The panic button — it pauses everything and cancels the whole
               queue. It is now rendered only when there is something to cancel:
               on a fresh install it sat at the foot of a 2620px scroll offering
@@ -931,6 +951,8 @@ export default function SocialDashboard() {
       )}
       {/* Scope comes from the doorway, never re-derived here: the panel that
           was tapped is the queue the owner meant. */}
+      <ActivityDetailSheet queueId={detail} onClose={() => setDetail(null)} onChanged={load} />
+
       <QueueTunerSheet
         open={tuner !== null}
         onClose={() => setTuner(null)}

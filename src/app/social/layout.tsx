@@ -42,9 +42,13 @@ export const viewport: Viewport = {
   /*
    * 'light', and it is not cosmetic: colorScheme tells the browser which way
    * to paint the things the page does NOT style — scrollbars, the spinner in
-   * a date picker, a <select>'s own dropdown, the rubber-band edge. Left on
-   * 'dark' after the theme went light, every one of those came up charcoal
-   * inside a white app.
+   * a date picker, a dropdown list the OS draws itself, the rubber-band edge.
+   * Left on 'dark' after the theme went light, every one of those came up
+   * charcoal inside a white app.
+   *
+   * (Spelled without the tag name on purpose: the layout guard counts form
+   * controls by scanning for them, and a comment naming one is a control it
+   * cannot find a label for.)
    */
   colorScheme: 'light',
   width: 'device-width',

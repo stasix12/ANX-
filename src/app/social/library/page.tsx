@@ -42,7 +42,6 @@ import { friendlyMessage } from '@/lib/social/errors';
 
 type MediaFilter = '' | 'image' | 'video' | 'text';
 type PublishedFilter = '' | 'yes' | 'no';
-type Sort = 'newest' | 'oldest' | 'most' | 'recent';
 
 /** All = '', uncategorised = this sentinel, otherwise a category id (a uuid). */
 const UNCATEGORISED = 'none';
@@ -79,7 +78,6 @@ export default function LibraryPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('');
   const [publishedFilter, setPublishedFilter] = useState<PublishedFilter>('');
-  const [sort, setSort] = useState<Sort>('newest');
   const [selected, setSelected] = useState<string[]>([]);
   /*
    * The two filters the phone does not lead with.
@@ -160,17 +158,25 @@ export default function LibraryPage() {
         ...categoryPart,
         ...(mediaFilter ? { media: mediaFilter } : {}),
         ...(publishedFilter ? { published: publishedFilter } : {}),
-        sort,
+        /*
+         * Newest first, always. The order used to be a fourth row of chips
+         * (חדשים / הכי מפורסמים / פורסמו לאחרונה / ישנים) and the owner asked
+         * for it gone: four ways to order a library you scan by picture is a
+         * row of controls answering a question nobody was asking. The value is
+         * spelled out rather than left to filterLibrary()'s default, so the
+         * order this screen shows is stated in the screen.
+         */
+        sort: 'newest',
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [all, query, categoryFilter, mediaFilter, publishedFilter, sort],
+    [all, query, categoryFilter, mediaFilter, publishedFilter],
   );
 
   const page = useMemo(() => visible.slice(0, shown), [visible, shown]);
 
   useEffect(() => {
     setShown(CHUNK);
-  }, [query, categoryFilter, mediaFilter, publishedFilter, sort]);
+  }, [query, categoryFilter, mediaFilter, publishedFilter]);
 
   /*
    * Every count on this screen is counted from the rows that are loaded, by the
@@ -381,19 +387,6 @@ export default function LibraryPage() {
                   ),
                   count: mediaCounts.text,
                 },
-              ]}
-            />
-
-            <SegmentedControl
-              variant="chips"
-              label="סדר"
-              value={sort}
-              onChange={setSort}
-              options={[
-                { value: 'newest', label: 'חדשים' },
-                { value: 'most', label: 'הכי מפורסמים' },
-                { value: 'recent', label: 'פורסמו לאחרונה' },
-                { value: 'oldest', label: 'ישנים' },
               ]}
             />
 

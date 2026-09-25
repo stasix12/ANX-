@@ -37,7 +37,7 @@ import {
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
-import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, type QueueSummary } from '@/lib/social/status';
+import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
 import { agree, counted, startOfZonedDay } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
@@ -51,12 +51,26 @@ import { AlertTriangleIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon,
  */
 const UPCOMING_LIMIT = 40;
 
+/**
+ * How many of TODAY's finished publications the upcoming strip keeps above
+ * the waiting ones.
+ *
+ * Six, not forty: this is the tail of the afternoon, not the history screen.
+ * It is read separately from the waiting rows and counted by nothing — the
+ * card's subtitle and its footer both describe the queue, and neither may
+ * start describing a set this array is a window onto.
+ */
+const DONE_LIMIT = 6;
+
 interface DashboardData {
   counts: Record<QueueStatus, number>;
   /** The same counts rolled up through the one classification (status.ts). */
   summary: QueueSummary;
   today: number;
   upcoming: QueueRow[];
+  /** Today's finished publications, newest first. Its own read, counted by
+      nothing — the queue's numbers describe the queue, not this window. */
+  doneToday: QueueRow[];
   /** Publications with a comment asked for on them, across every round. */
   comments: QueueRow[];
   commentTotals: CommentTotals;
@@ -165,7 +179,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [queue, today, limits, control, targets, manual, log, states, upcoming, workers, comments, totals] = await Promise.all([
+      const [queue, today, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, totals] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         /* countPublishedBetween(weekStart) used to run here on every 30s poll
@@ -183,6 +197,10 @@ export default function SocialDashboard() {
         // and "הפרסומים הקרובים" would be showing the last publications while
         // calling the first of them the next one.
         listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' }),
+        /* Today's finished rows, newest first — the strip turns them round.
+           Descending with a limit is what "the most recent" means here, which
+           is the opposite of what the line above needs. */
+        listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), limit: DONE_LIMIT }),
         listWorkers(),
         listCommentQueue(),
         commentTotals(),
@@ -193,6 +211,7 @@ export default function SocialDashboard() {
         summary: queue.summary,
         today,
         upcoming,
+        doneToday,
         comments,
         commentTotals: totals,
         limits,
@@ -887,7 +906,16 @@ export default function SocialDashboard() {
                   to draw six of twenty-six and send the owner to another
                   screen for the seventh. UPCOMING_LIMIT is the read ceiling,
                   so the footer below the box still counts anything past it. */}
-              <Timeline rows={data.upcoming} limit={UPCOMING_LIMIT} scrollable total={summary.automaticWaiting} />
+              {/* `done` is a SECOND read, above the waiting rows on the same
+                  rail: a row used to leave this list the moment it published,
+                  so the one place that shows the run in order never showed a
+                  single thing it had done. It stays, with its outcome. It is
+                  not merged into `rows` — that array is the queue, and the
+                  subtitle and footer both count it. */}
+              {/* One line, and it stays one line: worker/test/unit.test.ts
+                  matches these three props together to hold "every row that
+                  was read is rendered, in a box that scrolls". */}
+              <Timeline rows={data.upcoming} limit={UPCOMING_LIMIT} scrollable total={summary.automaticWaiting} done={data.doneToday} onOpen={(row) => setDetail(row.id)} />
             </Card>
 
             <BrowserStatusCard id="browser-status" onChanged={load} />

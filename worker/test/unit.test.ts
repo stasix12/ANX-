@@ -3162,6 +3162,37 @@ const scenario: { step: string; line: string }[] = [];
   );
 
   /*
+   * WHAT ALREADY WENT OUT STAYS ON THE RAIL — as a SECOND read.
+   *
+   * A row used to leave this list the instant it published: on screen with a
+   * countdown at 17:49, gone at 17:50, so the one card that shows the run in
+   * order never showed a single thing the run had done. It stays now, with
+   * its outcome.
+   *
+   * It may not be merged into `upcoming`. That array is read with
+   * AUTOMATIC_WAITING_STATUSES and BOTH the card's subtitle (summary.queued)
+   * and its footer (summary.automaticWaiting) count that same set — a
+   * finished row inside it would put the list and every number about it into
+   * disagreement, which is the defect this file has the most tests for. So:
+   * its own read, its own statuses, from status.ts rather than an inline
+   * list, and the waiting read left exactly as it was.
+   */
+  assert.ok(dash.includes('done={data.doneToday}'), 'the strip must be handed the finished rows');
+  assert.ok(
+    dash.includes("listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), limit: DONE_LIMIT })"),
+    'and they must be their own read, of the terminal statuses status.ts defines, bounded to today',
+  );
+  assert.ok(
+    !/status: \[[^\]]*'published'/.test(dash),
+    'no inline status list on the dashboard — TERMINAL_STATUSES is the shared one',
+  );
+  const strip = readFileSync('src/components/social/Timeline.tsx', 'utf8');
+  assert.ok(
+    strip.includes('const rest = (total ?? rows.length) - waiting.length;'),
+    'the footer still counts the WAITING window only — the finished rows have no remainder to promise',
+  );
+
+  /*
    * The footer counts rows that were NEVER READ — past UPCOMING_LIMIT — so it
    * can never be scrolled to. Inside the scrolling box it would be a line the
    * owner has to scroll down to in order to be told that scrolling will not

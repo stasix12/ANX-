@@ -37,6 +37,17 @@ const RING: Record<Tone, string> = {
   neutral: 'ring-mist-500/20',
 };
 
+/* A finished stop's dot: the card's own surface with the outcome's colour as
+   its edge. Hollow reads as "behind us" without a second shape or a second
+   size — the filled dots below it are what is still coming. */
+const RING_DONE: Record<Tone, string> = {
+  brand: 'ring-brand-300',
+  good: 'ring-success-400',
+  bad: 'ring-error-400',
+  warn: 'ring-warning-400',
+  neutral: 'ring-ink-600',
+};
+
 /**
  * The one sentence a stop may carry beyond its time.
  *
@@ -78,6 +89,21 @@ const STATUS_LINE: Partial<Record<QueueStatus, string>> = {
 };
 
 /**
+ * What a stop says once it is behind us.
+ *
+ * A row used to leave this list the moment it finished — it was here with a
+ * countdown at 17:49 and simply gone at 17:50, so the one place that shows
+ * the run in order never showed a single thing it had actually done. These
+ * are the same three words the status pills use everywhere else in the
+ * product; the outcome is not given a second vocabulary here.
+ */
+const DONE_LINE: Partial<Record<QueueStatus, string>> = {
+  published: 'פורסם',
+  failed: 'נכשל',
+  skipped: 'דולג',
+};
+
+/**
  * A waiting row's own clock, and the three things it can honestly say.
  *
  * This is the logic the system card's "הפרסום הבא" box used to carry, moved to
@@ -111,9 +137,27 @@ export function Timeline({
   limit = 8,
   total,
   scrollable = false,
+  done = [],
+  onOpen,
 }: {
   rows: QueueRow[];
   limit?: number;
+  /**
+   * What already happened today, oldest first, above the rows still waiting.
+   *
+   * A SEPARATE list, and it has to be: `rows` is read with
+   * AUTOMATIC_WAITING_STATUSES and the card's subtitle and footer both count
+   * that same set. Mixing finished rows into it would make the list and every
+   * number about it disagree — which is the defect this screen has the most
+   * tests for. So the two are read separately, counted separately, and drawn
+   * as one rail, because on the rail they are one afternoon.
+   */
+  done?: QueueRow[];
+  /**
+   * Opens a stop. Absent = the rows are not clickable, which is the honest
+   * state on a caller that has nowhere to send them.
+   */
+  onOpen?: (row: QueueRow) => void;
   /**
    * Put the stops in a box of their own that scrolls, instead of cutting the
    * list off at `limit` and counting the rest in a footer.
@@ -149,7 +193,15 @@ export function Timeline({
    */
   total?: number;
 }) {
-  const items = rows.slice(0, limit);
+  const waiting = rows.slice(0, limit);
+  /*
+   * One rail, two reads. `done` arrives newest-first (the caller asks the
+   * database for the most recent finished rows) and is turned round here so
+   * the column runs forwards in time from top to bottom: what went out, then
+   * what is next. Ordering, not counting — no number on this screen is
+   * derived from it.
+   */
+  const items = [...done].reverse().concat(waiting);
   /* Before the early return: a hook may not sit behind a condition. Ticking
      only while something is actually waiting keeps an idle screen idle. */
   const now = useTick(items.some((r) => r.status === 'scheduled'));
@@ -158,11 +210,19 @@ export function Timeline({
   }
 
   const today = zonedDateISO(new Date());
-  const rest = (total ?? rows.length) - items.length;
+  /* The footer counts the WAITING window only — `done` is its own small read
+     with no remainder to promise. */
+  const rest = (total ?? rows.length) - waiting.length;
   const list = (
     <ol className="relative space-y-0.5">
       {items.map((row, i) => {
-        const day = zonedDateISO(new Date(row.scheduled_at));
+        const doneLine = DONE_LINE[row.status];
+        /* A finished stop is placed at the moment it actually happened, not
+           at the slot it was given: a row that went out four minutes late
+           sitting above one that went out on time would be the list telling
+           the afternoon out of order. */
+        const at = doneLine ? (row.published_at ?? row.scheduled_at) : row.scheduled_at;
+        const day = zonedDateISO(new Date(at));
         const showDay = day !== today && (i === 0 || zonedDateISO(new Date(items[i - 1].scheduled_at)) !== day);
         /*
          * The halo and the tint mark the stop the run is standing on: the row a
@@ -174,24 +234,46 @@ export function Timeline({
         const standing = isInFlight(row.status) || needsHuman(row.status);
         const line = STATUS_LINE[row.status];
         const tone = STATUS_TONE[row.status];
+        const body = (
+          <>
+            {/* The finished stops' hour is dimmed, the waiting ones' is the
+                accent: same column, and which half of the afternoon you are
+                looking at is readable without reading a word of it. */}
+            <span className={`w-12 shrink-0 text-sm font-extrabold tabular-nums ${doneLine ? 'text-mist-500' : 'text-brand-400'}`}>
+              {formatTimeHe(at)}
+            </span>
+            <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
+            <div className="min-w-0 grow">
+              <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
+              {row.status === 'scheduled' && <Countdown at={row.scheduled_at} now={now} />}
+              {line && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{line}</p>}
+              {doneLine && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{doneLine}</p>}
+            </div>
+          </>
+        );
+        const inner = `flex min-w-0 grow items-center gap-2.5 rounded-xl px-2 py-2 text-start ${standing ? TONE_TINT[tone] : ''}`;
         return (
           <li key={row.id}>
-            {showDay && <p className="mb-1 mt-3 text-[11px] font-extrabold uppercase tracking-wide text-mist-500">{formatDateHe(row.scheduled_at)}</p>}
+            {showDay && <p className="mb-1 mt-3 text-[11px] font-extrabold uppercase tracking-wide text-mist-500">{formatDateHe(at)}</p>}
             <div className="flex items-stretch gap-3">
-              {/* The rail: a dot per stop, a line between them. */}
+              {/* The rail: a dot per stop, a line between them. A finished
+                  stop's dot is hollow — it is behind us, and the filled ones
+                  are what is still coming. */}
               <div className="flex w-3 shrink-0 flex-col items-center pt-3.5">
-                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${TONE_FILL[tone]} ${standing ? 'ring-4' : ''} ${standing ? RING[tone] : ''}`} />
+                <span
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                    doneLine ? `bg-ink-850 ring-2 ${RING_DONE[tone]}` : TONE_FILL[tone]
+                  } ${standing ? `ring-4 ${RING[tone]}` : ''}`}
+                />
                 {i < items.length - 1 && <span aria-hidden className="w-px grow bg-ink-700" />}
               </div>
-              <div className={`flex min-w-0 grow items-center gap-2.5 rounded-xl px-2 py-2 ${standing ? TONE_TINT[tone] : ''}`}>
-                <span className="w-12 shrink-0 text-sm font-extrabold tabular-nums text-brand-400">{formatTimeHe(row.scheduled_at)}</span>
-                <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
-                <div className="min-w-0 grow">
-                  <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
-                  {row.status === 'scheduled' && <Countdown at={row.scheduled_at} now={now} />}
-                  {line && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{line}</p>}
-                </div>
-              </div>
+              {onOpen ? (
+                <button type="button" onClick={() => onOpen(row)} className={inner}>
+                  {body}
+                </button>
+              ) : (
+                <div className={inner}>{body}</div>
+              )}
             </div>
           </li>
         );

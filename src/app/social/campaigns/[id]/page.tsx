@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { CampaignProgressBar } from '@/components/social/CampaignProgressBar';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
+import { CommentState } from '@/components/social/CommentState';
 import { CampaignReach } from '@/components/social/CampaignReach';
 import { ProgressRing } from '@/components/social/ProgressRing';
 import { QueueSections } from '@/components/social/QueueSections';
@@ -42,7 +43,7 @@ import {
   stopCampaign,
   type QueueRow,
 } from '@/lib/social/client';
-import { COMMENT_TONE, commentLabel, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
+import { COMMENT_TONE, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
 import {
   RUN_STATE_LABEL,
   campaignState,
@@ -497,7 +498,7 @@ export default function CampaignControlCenter() {
                             <div className="flex min-w-0 items-center gap-2">
                               <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${TONE_FILL[COMMENT_TONE[r.comment_status as CommentStatus] ?? 'neutral']}`} />
                               <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-100">{r.target?.name ?? '—'}</span>
-                              <span className="shrink-0 text-[11px] text-mist-500">{commentLabel(r.comment_status)}</span>
+                              <CommentState status={r.comment_status} permalink={r.permalink} />
                             </div>
                             {/* Why, not just that. A post the admin deleted and
                                 a group that closed comments are two different

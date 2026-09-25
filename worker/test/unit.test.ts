@@ -2788,7 +2788,15 @@ const scenario: { step: string; line: string }[] = [];
     /* One label map and one order for both, for the same reason: they had
        already drifted — different sort, different markup, and a state neither
        of them knew about rendered as a blank word beside a grey dot. */
-    assert.ok(/commentLabel\(r\.comment_status\)/.test(screen), 'and both name the state the same way');
+    /*
+     * ONE COMPONENT FOR THE STATE, on both screens — and it carries the way
+     * to go and look. The owner asked for proof that a comment is really
+     * there; a link to the post is better proof than a photograph of it, it
+     * costs no storage, and it cannot go stale. The two cards had already
+     * drifted into different labels, different sorts and different markup;
+     * this is the third thing each would have grown on its own.
+     */
+    assert.ok(/<CommentState status=\{r\.comment_status\} permalink=\{r\.permalink\} \/>/.test(screen), 'and both name the state the same way');
     assert.ok(/commentRank\(a\.comment_status\) - commentRank\(b\.comment_status\)/.test(screen), 'and sort it the same way');
   }
   /* A missing column may never cost the status — same rule as the note, and
@@ -3107,6 +3115,13 @@ const scenario: { step: string; line: string }[] = [];
    * The smallest ancestor of the box that also holds a file input IS the
    * composer, whatever Facebook wraps it in this week.
    */
+  /* A row with no address is plain text, never a link that does nothing: a
+     word that looks tappable and is not is worse than one that does not. */
+  const stateCard = readFileSync(new URL('../../src/components/social/CommentState.tsx', import.meta.url), 'utf8');
+  assert.ok(/if \(!permalink\) return <span/.test(stateCard), 'a comment with no address is not a dead link');
+  assert.ok(/target="_blank"[\s\S]{0,60}rel="noreferrer"/.test(stateCard), 'and Facebook opens beside the dashboard, not over it');
+  assert.ok(/min-h-11/.test(stateCard), 'and it is a 44px target, like every other control');
+
   assert.ok(/async function composerMedia/.test(composerSrc), 'what is showing in the composer is counted');
   /*
    * DEFINED BY SUBTRACTION, because naming it positively has been wrong in

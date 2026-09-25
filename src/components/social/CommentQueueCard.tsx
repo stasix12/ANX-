@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import { agree } from '@/lib/social/time';
-import { COMMENT_TONE, commentLabel, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
+import { COMMENT_TONE, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
 import { CommentShot } from './CommentShot';
+import { CommentState } from './CommentState';
 import { TargetAvatar } from './TargetAvatar';
 import { Card, TONE_FILL } from './ui';
 
@@ -90,7 +91,7 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
                   {r.target?.name ?? '—'}
                 </span>
               )}
-              <span className="shrink-0 text-[11px] text-mist-500">{commentLabel(r.comment_status)}</span>
+              <CommentState status={r.comment_status} permalink={r.permalink} />
             </div>
             {/* The reason, and only where there is one to give. "לא הצליח" on
                 its own is what makes a person press the same button again. */}

@@ -5,12 +5,18 @@ export const metadata: Metadata = {
   title: 'הפתרון המבריק — ניהול פרסום',
   description: 'ניהול ופרסום תוכן לפייסבוק: פוסטים, קבוצות, הפצה ומעקב.',
   robots: { index: false, follow: false },
-  icons: { apple: '/crm/apple-touch-icon.png' },
+  icons: { apple: '/social/apple-touch-icon.png', icon: '/social/icon-192.png' },
   manifest: '/social/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     title: 'פרסום',
-    statusBarStyle: 'black-translucent',
+    /*
+     * 'default' = dark status-bar text, which is what a LIGHT app needs.
+     * 'black-translucent' draws white glyphs over the page — correct while
+     * this app was navy, and unreadable the moment it became white-purple:
+     * the clock and battery vanished into the header.
+     */
+    statusBarStyle: 'default',
   },
   /*
    * Stated here rather than inherited. The root layout's Open Graph block is
@@ -33,7 +39,14 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#f7f5ff',
-  colorScheme: 'dark',
+  /*
+   * 'light', and it is not cosmetic: colorScheme tells the browser which way
+   * to paint the things the page does NOT style — scrollbars, the spinner in
+   * a date picker, a <select>'s own dropdown, the rubber-band edge. Left on
+   * 'dark' after the theme went light, every one of those came up charcoal
+   * inside a white app.
+   */
+  colorScheme: 'light',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',

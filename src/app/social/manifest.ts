@@ -31,16 +31,18 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: '#f7f5ff',
     theme_color: '#7c3aed',
     /*
-     * Still the CRM's mark (a sky-blue sofa) because this module has no icon
-     * art of its own — there is nothing in public/social to point at, and
-     * drawing a brand mark is not something to improvise. The two colours
-     * above are fixed; the artwork is a PRE-LAUNCH REQUIREMENT, not a bug
-     * that can be fixed in code.
+     * The app's own mark at last: a megaphone on the brand gradient. It was
+     * the CRM's sky-blue sofa until now — the code said so and called it a
+     * pre-launch requirement rather than a bug, which was right, and this is
+     * that requirement met.
+     *
+     * Flat white geometry on purpose. An icon is read at 48px on a home
+     * screen, where anything detailed turns to mush; a silhouette survives.
      */
     icons: [
-      { src: '/crm/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/crm/icon-512.png', sizes: '512x512', type: 'image/png' },
-      { src: '/crm/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      { src: '/social/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/social/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/social/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   };
 }

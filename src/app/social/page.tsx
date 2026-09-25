@@ -575,21 +575,9 @@ export default function SocialDashboard() {
                 href: '/social/history?status=paused',
               };
 
-  /*
-   * Greeting by time of day, in the app's own timezone. Cosmetic, but it is
-   * what makes the header read as a product rather than an admin panel.
-   */
-  const greeting = (() => {
-    const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Asia/Jerusalem' }).format(new Date()));
-    if (hour < 5) return 'לילה טוב';
-    if (hour < 12) return 'בוקר טוב';
-    if (hour < 17) return 'צהריים טובים';
-    return 'ערב טוב';
-  })();
   return (
     <SocialShell
       title="לוח בקרה"
-      subtitle={greeting}
       /*
        * No lede, no headerAction, no title block on THIS screen.
        *
@@ -604,6 +592,10 @@ export default function SocialDashboard() {
       /* One reading of the pause flag, shared by the header button and the
          system card's dot, instead of two polls 10 seconds out of step. */
       paused={data?.control.paused ?? null}
+      /* The bar greets the owner by name; this screen has already read the
+         worker row for its system card, so it hands the same object over
+         rather than making the bar fetch it again. */
+      account={data?.fbAccount ?? null}
       onControlChanged={load}
     >
       {/* A failed read leaves the screen with nothing on it, so it has to

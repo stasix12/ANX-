@@ -56,13 +56,19 @@
    *   400  TEXT and icons.
    *   500  a solid surface carrying an `on-state` label.
    * Red needs all three because a single red cannot be both a 3:1 indicator on
-   * a dark sheet and a 4.5:1 label; green and amber need two.
+   * a dark sheet and a 4.5:1 label; green and amber gained their 300 step when
+   * the header started printing the system state as a dot beside its label —
+   * the dot is a mark and wants the bright hue, the words beside it are text
+   * and want the readable one. Both values clear 3:1 on every ground in this
+   * file, so they are declared once here rather than per theme.
    */
+  --color-success-300: #16a34a;
   --color-success-400: #34d399;
   --color-success-500: #047857;
   --color-error-300: #f43f5e;
   --color-error-400: #fb7185;
   --color-error-500: #be123c;
+  --color-warning-300: #f59e0b;
   --color-warning-400: #fbbf24;
   /* Label on a success-500 / error-500 fill — the state twin of on-brand. */
   --color-on-state: #ffffff;

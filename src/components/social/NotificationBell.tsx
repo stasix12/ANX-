@@ -114,7 +114,15 @@ export function NotificationBell() {
         onClick={toggle}
         aria-label={unread ? `${unread} התראות חדשות` : 'התראות'}
         aria-expanded={open}
-        className="relative grid h-11 w-11 place-items-center rounded-full bg-ink-800 text-mist-300 transition-colors hover:bg-ink-700 hover:text-mist-100"
+        /* The bell is the one coloured mark in the identity bar: it is the
+           only control there that ever has something to say. Its two
+           neighbours (stop-everything, settings) are quiet until touched, so
+           a filled grey puck around all three turned the corner into a row of
+           identical buttons and the bell stopped reading as an alert at all.
+           brand-700 on the bar measures 8.9:1. */
+        className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full text-brand-700 transition-colors ${
+          unread > 0 ? 'bg-brand-300/12' : 'hover:bg-ink-800'
+        }`}
       >
         <BellIcon className="h-5 w-5" />
         {unread > 0 && (

@@ -34,7 +34,8 @@ export function PublishingToggle({
    */
   paused: external,
   onChanged,
-}: { paused?: boolean | null; onChanged?: () => void } = {}) {
+  compact = false,
+}: { paused?: boolean | null; onChanged?: () => void; compact?: boolean } = {}) {
   const [paused, setPausedState] = useState<boolean | null>(external ?? null);
   const [busy, setBusy] = useState(false);
   /*
@@ -119,9 +120,23 @@ export function PublishingToggle({
       disabled={busy}
       aria-pressed={paused}
       aria-label={paused ? 'המשך את כל הפרסומים' : 'השהה את כל הפרסומים'}
-      className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-sm font-bold transition-colors disabled:text-ink-600 ${
-        paused ? 'bg-warning-400/12 text-warning-400' : 'bg-ink-800 text-mist-500 hover:text-mist-100'
-      }`}
+      /*
+       * `compact` is the same button with its label taken off, for the
+       * identity bar: three 44px round controls beside a name and a status
+       * line is what fits a 375px phone, where the labelled form left the
+       * greeting 79px and cut it mid-word. Nothing else about the control
+       * changes — same handler, same optimistic flip, same aria-label, which
+       * is what a screen reader announces in both forms.
+       */
+      className={
+        compact
+          ? `grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors disabled:text-ink-600 ${
+              paused ? 'bg-warning-400/12 text-warning-400' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
+            }`
+          : `inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-sm font-bold transition-colors disabled:text-ink-600 ${
+              paused ? 'bg-warning-400/12 text-warning-400' : 'bg-ink-800 text-mist-500 hover:text-mist-100'
+            }`
+      }
     >
       {busy ? (
         <SpinnerIcon className="h-4 w-4 animate-spin" />
@@ -135,7 +150,7 @@ export function PublishingToggle({
           a run card whose own pause button — which stops one round — read
           exactly the same word. Two buttons on one screen, the same label,
           wildly different blast radius. */}
-      <span>{paused ? 'המשך הכול' : 'השהה הכול'}</span>
+      {!compact && <span>{paused ? 'המשך הכול' : 'השהה הכול'}</span>}
     </button>
   );
 }

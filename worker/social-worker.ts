@@ -835,6 +835,11 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
          gate above decides WHETHER to claim, rules.ts decides when the click
          may land, and only one of them may own that number. */
       notBefore: decision.notBefore ?? null,
+      /* The hold can be most of a minute; the dashboard calls a worker
+         offline after ninety seconds of silence. Keep saying we are here. */
+      onHold: async () => {
+        await heartbeat(state, 'online');
+      },
       onPage: (page) => {
         livePage = page;
       },

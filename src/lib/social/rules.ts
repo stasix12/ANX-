@@ -215,7 +215,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
     .maybeSingle();
   if (last?.published_at) {
     const extra = target.channel === 'facebook_group' ? (ctx.browser?.groupMinGapMinutes ?? 0) : 0;
-    const gapMs = (limits.minGapMinutes + extra) * 60_000;
+    const gapMs = Math.max(0, (limits.minGapMinutes ?? 0) + extra) * 60_000;
     const sinceLast = now.getTime() - new Date(last.published_at).getTime();
     if (sinceLast < gapMs) {
       /*

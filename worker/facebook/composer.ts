@@ -41,6 +41,8 @@ export interface ComposeInput {
    * another. Null means the gap is already open and nothing is held.
    */
   notBefore?: string | null;
+  /** Called every few seconds while the post is held for `notBefore`. */
+  onHold?: () => Promise<void>;
   /**
    * Text to leave as the FIRST COMMENT on the post that was just published.
    *
@@ -187,10 +189,31 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * The wait is bounded by the caller: the worker only claims this early when
    * the remaining gap is short (PREP_LEAD_MS), so a composer is never left
    * open for long.
+   *
+   * ONE WORKER AT A TIME. The instant is global — it is derived from the last
+   * publication of all — so two workers signed into the same account would
+   * each prepare a different row and then hold for the SAME instant, and
+   * click together. The claim UPDATE keeps them off one another's rows; it
+   * cannot space two rows that are both waiting on one clock. Before the
+   * hold existed the preparation itself staggered them by accident. It does
+   * not any more, so running a second copy is now a way to publish twice at
+   * once rather than merely twice as often.
    */
   if (input.notBefore) {
-    const left = new Date(input.notBefore).getTime() - Date.now();
-    if (left > 0) await page.waitForTimeout(Math.min(left, PREP_HOLD_CAP_MS));
+    /*
+     * Held in short slices, with a beat between them.
+     *
+     * The worker is judged offline after 90 seconds of silence, and a single
+     * sleep through most of a minute — on top of the page load and the upload
+     * before it — is enough to cross that while a publication is plainly in
+     * progress. The dashboard would show "מנותק" mid-post. Each slice hands
+     * control back so the caller can say it is still alive.
+     */
+    const until = Math.min(new Date(input.notBefore).getTime(), Date.now() + PREP_HOLD_CAP_MS);
+    while (Date.now() < until) {
+      await page.waitForTimeout(Math.min(15_000, until - Date.now()));
+      await input.onHold?.();
+    }
   }
   await input.onStep('publishing');
   assertUsable(await classifyPage(page));
@@ -240,6 +263,31 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * the thing the address hangs on, so it is found once.
    */
   let article = await findPostArticle(page, input.text, 1, 6_000);
+
+  /*
+   * THE LATE REJECTION — looked for HERE, and only here.
+   *
+   * The first look is ~1.9s after the dialog detaches, which is too narrow: a
+   * refusal Facebook renders a moment later was recorded as a successful
+   * publication, and that is the one outcome that must always reach a person.
+   * This second look costs nothing — the six seconds spent failing to find
+   * the post have already passed — and not finding it is exactly when a
+   * refusal is the likely reason.
+   *
+   * BEFORE the reload below, deliberately, and this is the part that matters:
+   * fb.failureText matches "something went wrong" across the WHOLE PAGE, and
+   * that is precisely what Facebook renders for any feed unit that fails to
+   * load. Run after a fresh group page had been fetched, a broken sidebar
+   * module would let us declare a perfectly good post rejected and park it
+   * for a human. On the page we submitted from, the only thing that string
+   * can be about is the submission — and a transient error toast would not
+   * have survived the reload anyway, so the later position bought nothing to
+   * pay for that risk with.
+   */
+  if (!article && (await fb.failureText(page).isVisible({ timeout: 1000 }).catch(() => false))) {
+    throw new PublishError('rejected', `Facebook הודיע על כישלון: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);
+  }
+
   if (!article) {
     try {
       await page.goto(input.groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
@@ -249,21 +297,6 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
       /* Best effort throughout: an unverified post is reported as unverified,
          never as a failure — it is on Facebook either way. */
     }
-  }
-
-  /*
-   * THE LATE REJECTION, CAUGHT WHERE THERE IS TIME TO CATCH IT.
-   *
-   * The banner is looked for twice: once straight after the dialog detaches,
-   * and again HERE, seconds later, after the feed has been searched. The
-   * first check alone was a ~1.9s window — a rejection Facebook renders later
-   * than that was recorded as a successful publication, which is the one
-   * outcome that must always reach a person. This second look costs nothing:
-   * the time has already been spent looking for the post, and not finding it
-   * is exactly when a rejection is most likely to be the reason.
-   */
-  if (!article && (await fb.failureText(page).isVisible({ timeout: 1000 }).catch(() => false))) {
-    throw new PublishError('rejected', `Facebook הודיע על כישלון: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);
   }
 
   /*

@@ -271,6 +271,25 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
 
   const decision = await evaluateQueueItem(db, { item, target: t, post: p, variant: v, limits, browser, now });
   if (decision.action === 'skip') return skip(decision.reason);
+  /*
+   * `publish` can carry `notBefore`: the spacing gap has not closed yet, and
+   * the caller is expected to prepare the post and hold the final submit for
+   * that instant. The local browser worker does exactly that. THIS worker has
+   * no such moment — its only adapter parks the row for a human — so it may
+   * not treat a conditional yes as a yes. It waits instead, which is the same
+   * answer the rule would have given before the lead existed.
+   *
+   * Unreachable today (SERVER_CHANNELS is manual-only, so this path always
+   * ends in manual_pending), and here so that it stays correct if an
+   * api-publishing adapter is ever registered again.
+   */
+  if (decision.action === 'publish' && decision.notBefore) {
+    await db
+      .from('social_queue')
+      .update({ status: 'scheduled', step: 'pending', scheduled_at: decision.notBefore, attempts: Math.max(0, item.attempts - 1) })
+      .eq('id', item.id);
+    return 'deferred';
+  }
   if (decision.action === 'defer') {
     /* The attempt goes back, exactly as it does for a parked row below:
        nothing was tried, so nothing should be spent. Without this a row

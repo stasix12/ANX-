@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { listRecentCommands, listWorkers, resumeNeedsAttention, sendWorkerCommand } from '@/lib/social/client';
+import { ChevronDownIcon } from '@/components/icons';
 import { Stamp } from './DateTime';
 import type { SocialWorker, WorkerCommand, WorkerCommandName } from '@/lib/social/types';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
@@ -39,6 +40,12 @@ export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; i
   const [commands, setCommands] = useState<WorkerCommand[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * Opened by hand. Nothing else sets it: whether the card is open is decided
+   * below by whether it has anything to say, and this is only the override
+   * for "I want to look anyway".
+   */
+  const [opened, setOpened] = useState(false);
   const confirm = useConfirm();
 
   async function load() {
@@ -52,6 +59,49 @@ export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; i
     }
   }
 
+  const worker = workers.find((w) => w.online) ?? workers[0];
+  const light = lightFor(worker);
+  const lastCommand = commands[0];
+  const needsHuman = Boolean(worker?.online && (worker.status === 'needs_attention' || worker.browser_state === 'needs_auth'));
+  /*
+   * A worker on an older build looks perfectly healthy — green light, fresh
+   * heartbeat, posts going out — while a fix that lives in worker/ sits on the
+   * machine unused. Say so here, where the light is, rather than leaving it in
+   * a line of terminal output.
+   *
+   * It now resolves itself: the worker compares its checkout against the
+   * repository every ten minutes and stands down so the launcher can install
+   * the newer version. So this notice names the wait rather than a chore —
+   * the owner asked for this while away from the computer, and "go and restart
+   * it" was the wrong instruction to be giving them at all.
+   */
+  const stale = Boolean(worker?.online && worker.version && worker.version !== WORKER_VERSION);
+
+  /*
+   * IS THERE ANYTHING TO SAY?
+   *
+   * This card is the only place in the product with "התחבר לפייסבוק", "בדוק
+   * חיבור" and "נתק", and every "needs you" link on the dashboard points at
+   * it — so it cannot be removed. But when the computer is running, signed in
+   * and up to date, all of that is recovery equipment for a problem nobody
+   * has: three buttons, a paragraph explaining what a worker is, a disclaimer
+   * about passwords and a line of command output, roughly 350px of a phone
+   * spent saying "yes".
+   *
+   * So the card is sized by its own state. Plainly fine collapses to one
+   * line — the light, and when the computer was last heard from. Anything
+   * else (offline, not signed in, Facebook asking for a human, an old build
+   * on the machine, a failed read) opens the whole thing and cannot be
+   * closed, because that is exactly when the buttons are the point.
+   *
+   * `light.tone` rather than a second reading of the same fields: the sentence
+   * at the top of the card and this decision must not be able to disagree.
+   */
+  const settled = light.tone === 'good' && !needsHuman && !stale && !error;
+  const expanded = !settled || opened;
+  /* The fast poll belongs to the flow that needs it, not to the card. */
+  const watching = expanded || !settled;
+
   /*
    * Four seconds, but never two reads at once and never while the tab is
    * hidden. Without the in-flight guard this poller stacked on a slow
@@ -59,6 +109,15 @@ export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; i
    * requests in flight, two still outstanding when the window closed, and
    * responses landing out of order so the card could show state older than it
    * already had.
+   *
+   * Four seconds is the CONNECT FLOW's cadence: the owner presses "התחבר
+   * לפייסבוק", a window opens on a PC in another room, and this card is how
+   * they watch it land. It is not the cadence of the sentence "it is running",
+   * which is true for weeks at a time — and this card polls two endpoints, so
+   * a healthy dashboard left open on a phone was spending 30 reads a minute
+   * to keep saying yes. Collapsed and healthy it drops to the 30s the page
+   * around it already uses; anything that is not plainly fine, or the card
+   * being open at all, puts it straight back to four.
    */
   useEffect(() => {
     let alive = true;
@@ -73,18 +132,14 @@ export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; i
       }
     };
     tick();
-    const timer = setInterval(tick, 4000);
+    const timer = setInterval(tick, watching ? 4000 : 30000);
     document.addEventListener('visibilitychange', tick);
     return () => {
       alive = false;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', tick);
     };
-  }, []);
-
-  const worker = workers.find((w) => w.online) ?? workers[0];
-  const light = lightFor(worker);
-  const lastCommand = commands[0];
+  }, [watching]);
 
   async function send(command: WorkerCommandName) {
     setBusy(command);
@@ -100,24 +155,47 @@ export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; i
     }
   }
 
-  const needsHuman = worker?.online && (worker.status === 'needs_attention' || worker.browser_state === 'needs_auth');
-  /*
-   * A worker on an older build looks perfectly healthy — green light, fresh
-   * heartbeat, posts going out — while a fix that lives in worker/ sits on the
-   * machine unused. Say so here, where the light is, rather than leaving it in
-   * a line of terminal output.
-   *
-   * It now resolves itself: the worker compares its checkout against the
-   * repository every ten minutes and stands down so the launcher can install
-   * the newer version. So this notice names the wait rather than a chore —
-   * the owner asked for this while away from the computer, and "go and restart
-   * it" was the wrong instruction to be giving them at all.
-   */
-  const stale = Boolean(worker?.online && worker.version && worker.version !== WORKER_VERSION);
+  if (!expanded) {
+    /*
+     * The quiet form. Same anchor id, because every "needs you" link on the
+     * dashboard scrolls to it — and a link that lands here has, by
+     * definition, nothing left to do, since anything wrong would have opened
+     * the card before the tap.
+     */
+    return (
+      <button
+        type="button"
+        id={id}
+        onClick={() => setOpened(true)}
+        aria-expanded={false}
+        className="surface flex min-h-14 w-full min-w-0 items-center gap-2.5 rounded-card border border-ink-700 px-3.5 py-2 text-start"
+      >
+        <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full ${TONE_FILL[light.tone]}`} />
+        <span className="min-w-0 grow">
+          <span className="block truncate text-sm font-extrabold text-mist-100">התוכנה במחשב פועלת ומחוברת</span>
+          <span className="block truncate text-[11px] text-mist-500">
+            נראה לאחרונה <Stamp iso={worker?.last_seen_at} />
+            {worker?.debug_mode && ' · חלון גלוי'}
+          </span>
+        </span>
+        <ChevronDownIcon aria-hidden className="h-4 w-4 shrink-0 text-mist-500" />
+      </button>
+    );
+  }
 
   return (
     <Card
       id={id}
+      /* Only when it opened because somebody asked. While something is wrong
+         there is nowhere to fold it back to. */
+      action={
+        settled ? (
+          <button type="button" onClick={() => setOpened(false)} aria-expanded className="inline-flex min-h-11 items-center gap-1 px-2 text-sm font-bold text-brand-400">
+            צמצם
+            <ChevronDownIcon aria-hidden className="h-4 w-4 rotate-180" />
+          </button>
+        ) : undefined
+      }
       title="פרסום בקבוצות — התוכנה שרצה במחשב"
       /* "worker" is a developer's word and it was the title of this card, on a
          screen a cleaning-business owner reads on a phone. The thing it names

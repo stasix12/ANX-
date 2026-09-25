@@ -223,24 +223,35 @@ export function SocialShell({
   const moreActive = moreOpen || !MOBILE_TABS.some((h) => isActive(h, h === '/social'));
 
   /*
-   * The state line under the greeting.
+   * THE BAR SAYS SOMETHING ONLY WHEN THERE IS SOMETHING TO SAY.
    *
-   * Three states, and the third is the honest one: until the flag has been
-   * read the bar says it is checking rather than picking a side. A status
-   * line that guesses "פעיל" while loading is worse than no line at all —
-   * "nothing is going out" is precisely the thing the owner must never
-   * discover by accident.
+   * It used to print "המערכת פעילה" under the greeting on every screen, and
+   * that was two defects wearing one sentence.
+   *
+   * It was a DUPLICATE. The dashboard's system card says the same words
+   * 300px below, bigger, with the day's count and the next action under
+   * them — so the owner read the same fact twice before reaching anything
+   * they did not already know.
+   *
+   * And it was a LIE waiting to happen. The card's sentence comes from the
+   * whole system-state ladder — paused, the PC not running, Meta slowing us
+   * down, the queue empty, publishing now. This line only ever knew the pause
+   * flag. With the PC switched off the card read "התוכנה במחשב לא פועלת"
+   * while the bar above it still read "המערכת פעילה", which is exactly the
+   * two-correct-computations-of-different-things contradiction this module
+   * keeps being rebuilt to prevent — and on the other ten screens, where the
+   * card is not there to correct it, nothing would have caught it.
+   *
+   * So the line now states the one fact it actually holds, and only in the
+   * state worth interrupting for: everything stopped. Running is the normal
+   * case and needs no announcement; the pause button beside it is the
+   * affordance, and the dashboard card is where the full state lives.
    *
    * The dot takes the -300 indicator step and the words the -400 text step,
-   * per the token convention: the bright green reads as a light on a white
-   * bar and measures 2.9:1 as type, so it is never the type.
+   * per the token convention: the bright amber reads as a light on a white
+   * bar and is not legible as type.
    */
-  const status =
-    control === null
-      ? { label: 'בודק מצב…', dot: 'bg-ink-600', text: 'text-mist-500' }
-      : control
-        ? { label: 'המערכת מושהית', dot: 'bg-warning-300 ring-warning-300/25', text: 'text-warning-400' }
-        : { label: 'המערכת פעילה', dot: 'bg-success-300 ring-success-300/25', text: 'text-success-400' };
+  const publishingStopped = control === true;
 
   /*
    * The bottom reserve below is the tab bar's real height plus the inset, not
@@ -312,12 +323,14 @@ export function SocialShell({
                 {greetingNow()}
                 {who ? `, ${firstName(who.name)}` : ''} 👋
               </span>
-              <span className="mt-0.5 flex items-center gap-1.5">
-                <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ring-2 ${status.dot}`} />
-                <span dir="auto" className={`truncate text-[11.5px] font-bold leading-[14px] ${status.text}`}>
-                  {status.label}
+              {publishingStopped && (
+                <span className="mt-0.5 flex items-center gap-1.5">
+                  <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-warning-300 ring-2 ring-warning-300/25" />
+                  <span dir="auto" className="truncate text-[11.5px] font-bold leading-[14px] text-warning-400">
+                    הפרסום מושהה
+                  </span>
                 </span>
-              </span>
+              )}
             </span>
           </Link>
           <div className="flex shrink-0 items-center gap-0.5">

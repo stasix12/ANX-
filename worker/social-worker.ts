@@ -84,6 +84,16 @@ interface WorkerState {
   browserState: 'connected' | 'needs_auth' | 'disconnected' | 'unknown';
   attention: string;
   currentJob: string | null;
+  /**
+   * A publication ran on this tick.
+   *
+   * The loop sleeps `pollMs` after every tick, idle or not, so a row that
+   * finished publishing waited up to another five seconds before the next one
+   * was even looked at. On a queue the owner has set to one a minute that is
+   * most of a tenth of the interval, spent doing nothing. When a job ran,
+   * the loop goes straight round; when nothing did, it sleeps as before.
+   */
+  worked?: boolean;
   lastCheckAt: number;
   lastPlanAt: number;
   idleNoticeShown: boolean;
@@ -228,6 +238,7 @@ async function main(): Promise<void> {
   });
 
   while (!stopping) {
+    state.worked = false;
     try {
       await tick(state);
     } catch (err) {
@@ -238,7 +249,11 @@ async function main(): Promise<void> {
       // on meta.detail.
       await logActivity('error', 'worker_error', safeError(err, 'אירעה תקלה בתוכנת הפרסום. היא ממשיכה לנסות בעצמה.'), { detail: raw });
     }
-    await sleep(env.pollMs);
+    /* Straight round again when a row was just handled — see `worked`. The
+       pace is the queue's to set, and it already sets it: the next row is
+       claimed only if its own instant has come and the spacing rule lets it
+       through. This sleep was only ever meant for an idle worker. */
+    if (!state.worked) await sleep(env.pollMs);
   }
   await heartbeat(state, 'offline');
   await session.close();
@@ -320,6 +335,7 @@ async function tick(state: WorkerState): Promise<void> {
    */
   for (const item of jobs.slice(0, concurrency)) {
     if (stopping) break;
+    state.worked = true;
     await runJob(state, item, { limits, browser, headless });
   }
 }

@@ -164,7 +164,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   /* The dialog has already detached — that is the signal, and it was waited
      for properly on the line above. This is only a beat for the feed to start
      re-rendering before it is read; it was 2500ms. */
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(400);
   if (await fb.failureText(page).isVisible({ timeout: 1500 }).catch(() => false)) {
     throw new PublishError('rejected', `Facebook הודיע על כישלון: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);
   }
@@ -861,7 +861,22 @@ async function waitForUploads(dialog: Locator, expected: number, timeout: number
     // Several photos → Facebook collapses them into a collage with "Edit all";
     // that, with no progress bar, means every file is in.
     const collage = expected > 1 && (await fb.collageReady(dialog).isVisible({ timeout: 200 }).catch(() => false));
-    const done = !busy && (previews >= expected || collage || (expected > 1 && previews >= 1 && Date.now() - stableSince > 8000 && stableSince > 0));
+    /*
+     * COUNTED IN, OR GUESSED IN — and only the guess needs a settling period.
+     *
+     * Every file has its own preview and no progress bar is left: that is the
+     * upload finished, counted, and there is nothing a further wait can tell
+     * us. The 1500ms settling window below (plus the poll it lands on) was
+     * being charged to that certain case too — measured against a 1x1 PNG on
+     * a local page, where the upload itself costs nothing, this function took
+     * 3.1 of the publication's 6.1 seconds. It is now what it was written to
+     * be: patience for the branches that INFER completion — Facebook's
+     * collage, and the "one preview and nothing moving" fallback for a batch
+     * it renders as a single tile.
+     */
+    const counted = !busy && previews >= expected;
+    if (counted) return;
+    const done = !busy && (collage || (expected > 1 && previews >= 1 && Date.now() - stableSince > 8000 && stableSince > 0));
     if (done) {
       if (!stableSince) stableSince = Date.now();
       if (Date.now() - stableSince > 1500) return;
@@ -871,7 +886,10 @@ async function waitForUploads(dialog: Locator, expected: number, timeout: number
     } else {
       stableSince = 0;
     }
-    await new Promise((r) => setTimeout(r, 500));
+    /* 250ms, not 500: the loop's own cost is two cheap counts, and on the
+       common path this interval IS the latency of noticing the upload
+       finished. */
+    await new Promise((r) => setTimeout(r, 250));
   }
   throw new PublishError('upload', `ההעלאה לא הסתיימה בזמן (${expected} קבצים).`);
 }

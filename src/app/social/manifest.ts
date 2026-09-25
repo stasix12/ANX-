@@ -14,7 +14,16 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'ניהול ופרסום תוכן לפייסבוק: פוסטים, קבוצות, הפצה ומעקב.',
     id: '/social',
     start_url: '/social',
-    scope: '/social',
+    /*
+     * The scope is the whole site, not /social, even though the app starts
+     * and lives there. Scope decides what stays INSIDE the installed window:
+     * anything outside it opens in a browser overlay. The one link out of
+     * this app is the login screen — SocialShell sends you to /crm/login when
+     * the session ends and when you sign out — so a scope of '/social' meant
+     * signing out dropped the owner into Safari and signing back in left them
+     * there, in the browser they had just installed their way out of.
+     */
+    scope: '/',
     display: 'standalone',
     orientation: 'portrait',
     dir: 'rtl',

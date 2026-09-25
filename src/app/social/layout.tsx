@@ -19,6 +19,14 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
   },
   /*
+   * The legacy twin of the meta above, spelled out because Next stopped
+   * emitting it: `appleWebApp.capable` now renders only the modern
+   * `mobile-web-app-capable`, which iOS did not honour before 17.4. Without
+   * one of the two, a home-screen icon opens in Safari with the address bar
+   * — the app installed, and still wearing a browser.
+   */
+  other: { 'apple-mobile-web-app-capable': 'yes' },
+  /*
    * Stated here rather than inherited. The root layout's Open Graph block is
    * the storefront's — vacuum handles for Sabrina machines — and /social
    * inherited every field of it, so sending a link to this dashboard over

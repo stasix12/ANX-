@@ -17,6 +17,7 @@ import {
 } from '@/components/icons';
 import { signOut, useAdminSession } from '@/lib/adminAuth';
 import { getControl, listWorkers } from '@/lib/social/client';
+import { InstallPrompt } from './InstallPrompt';
 import { NotificationBell } from './NotificationBell';
 import { PublishingToggle } from './PublishingToggle';
 import { UpdateBanner } from './UpdateBanner';
@@ -391,6 +392,11 @@ export function SocialShell({
             Hidden on the dashboard, where the first card carries the heading —
             but the document still needs an h1, so it becomes sr-only rather
             than disappearing from the heading tree. */}
+        {/* On the home screen only, and once: the app is a full PWA and
+            installing it is what takes the browser's own bar off the bottom
+            of the product. Nagging about it from eleven screens would be a
+            second browser bar of its own. */}
+        {pathname === '/social' && <InstallPrompt />}
         {hideTitle ? (
           <h1 className="sr-only">{title}</h1>
         ) : (

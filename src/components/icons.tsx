@@ -141,6 +141,16 @@ export function VideoIcon(props: IconProps) {
   );
 }
 
+/** iOS's share mark: a box with an arrow leaving the top of it. */
+export function ShareIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 3.5v11M12 3.5L8.5 7M12 3.5L15.5 7" />
+      <path d="M6.5 11H5.5a1.5 1.5 0 00-1.5 1.5v6A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5v-6A1.5 1.5 0 0018.5 11h-1" />
+    </svg>
+  );
+}
+
 export function TextIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

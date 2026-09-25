@@ -825,6 +825,21 @@ export async function queueCampaignComment(
     .update({ comment_status: 'pending', comment_at: null, comment_note: '' })
     .eq('campaign_id', campaignId)
     .eq('status', 'published')
+    /*
+     * EXCEPT THE ONE THE WORKER IS HOLDING RIGHT NOW.
+     *
+     * 'commenting' is a claim: the browser is open on that post and a comment
+     * is being typed into it. Pushing it back to 'pending' from here takes it
+     * out of the claim it is standing in, and if the worker's write of the
+     * outcome then fails for any reason, the next tick picks the row up and
+     * comments on the same live post a second time — under the owner's name,
+     * permanently. Exactly the thing the claim was added to prevent, arriving
+     * through the screen instead of through a crash.
+     *
+     * One post out of the round misses this particular re-queue. It gets the
+     * comment it was already being given.
+     */
+    .neq('comment_status', 'commenting')
     .select('id');
   if (marked.error) {
     if (/column|comment_status|comment_note/i.test(marked.error.message)) {

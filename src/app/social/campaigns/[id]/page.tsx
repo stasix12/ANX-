@@ -42,7 +42,7 @@ import {
   stopCampaign,
   type QueueRow,
 } from '@/lib/social/client';
-import { COMMENT_LABEL, COMMENT_TONE, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
+import { COMMENT_TONE, commentLabel, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
 import {
   RUN_STATE_LABEL,
   campaignState,
@@ -454,7 +454,10 @@ export default function CampaignControlCenter() {
                  it is what left this button dead beside a round that had
                  published a hundred and twenty-two times. */
               const published = rows.filter((r) => r.status === 'published');
-              const notOutYet = rows.filter((r) => r.status === 'scheduled').length;
+              /* Everything that has not published, not only what is waiting
+                 its turn: a row parked for a person or still going out is just
+                 as absent from the marking as one scheduled for tonight. */
+              const notOutYet = rows.length - published.length;
               const p = commentProgress(rows);
               const known = p.pending + p.done + p.failed + p.unverified;
               return (
@@ -494,7 +497,7 @@ export default function CampaignControlCenter() {
                             <div className="flex min-w-0 items-center gap-2">
                               <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${TONE_FILL[COMMENT_TONE[r.comment_status as CommentStatus] ?? 'neutral']}`} />
                               <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-100">{r.target?.name ?? '—'}</span>
-                              <span className="shrink-0 text-[11px] text-mist-500">{COMMENT_LABEL[r.comment_status as CommentStatus] ?? ''}</span>
+                              <span className="shrink-0 text-[11px] text-mist-500">{commentLabel(r.comment_status)}</span>
                             </div>
                             {/* Why, not just that. A post the admin deleted and
                                 a group that closed comments are two different
@@ -553,7 +556,11 @@ export default function CampaignControlCenter() {
                       {`${p.unverified} ${agree(p.unverified, 'תגובה נשלחה', 'תגובות נשלחו')} בלי אישור מפייסבוק. פתחו את הפוסט ובדקו לפני שתוסיפו שוב — ייתכן שהן כבר שם.`}
                     </p>
                   )}
+                  {/* Keyed on what it was seeded with: the sheet holds its
+                      own copy from first mount, so after a save it would go on
+                      showing the values from before it. */}
                   <CampaignCommentSheet
+                    key={`${campaign.comment_text ?? ''}|${campaign.comment_gap_seconds ?? 30}`}
                     open={commentOpen}
                     onClose={() => setCommentOpen(false)}
                     publishedCount={published.length}

@@ -2778,7 +2778,7 @@ const scenario: { step: string; line: string }[] = [];
     /* One label map and one order for both, for the same reason: they had
        already drifted — different sort, different markup, and a state neither
        of them knew about rendered as a blank word beside a grey dot. */
-    assert.ok(/COMMENT_LABEL\[r\.comment_status as CommentStatus\]/.test(screen), 'and both name the state the same way');
+    assert.ok(/commentLabel\(r\.comment_status\)/.test(screen), 'and both name the state the same way');
     assert.ok(/commentRank\(a\.comment_status\) - commentRank\(b\.comment_status\)/.test(screen), 'and sort it the same way');
   }
   /* A missing column may never cost the status — same rule as the note, and
@@ -2967,7 +2967,7 @@ const scenario: { step: string; line: string }[] = [];
    * upload that never finished all produced the same thing: the text went out
    * alone and the screen said "הגיב".
    */
-  assert.ok(/if \(attached !== 'ok'\) \{[\s\S]{0,900}return attached === 'unconfirmed' \? 'no-photo-unsure' : 'no-photo';/.test(composerSrc), 'a picture that will not attach stops the comment');
+  assert.ok(/if \(attached && attached\.result !== 'ok'\) \{[\s\S]{0,900}return attached\.result === 'unconfirmed' \? 'no-photo-unsure' : 'no-photo';/.test(composerSrc), 'a picture that will not attach stops the comment');
   const typingAt = composerSrc.indexOf('const lines = comment ? comment.split');
   const photoAt = composerSrc.indexOf("'no-photo-unsure' : 'no-photo';");
   assert.ok(photoAt > 0 && typingAt > photoAt, 'and it gives up before a word is typed, so giving up costs nothing');
@@ -2991,13 +2991,44 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/fb\.localPreview\(evidence\)/.test(composerSrc), 'and only a local file preview is counted that far out');
   /* Re-taken after the camera click: the camera mounts markup of its own, and
      counting that as the picture is how an attach that never happened passed. */
-  assert.ok(/chosen = await waiting;[\s\S]{0,600}before = await mediaBefore\(evidence, narrow\);/.test(composerSrc), 'the baseline is taken after the camera opens, not before');
+  assert.ok(/chosen = await waiting;[\s\S]{0,700}before = await mediaBefore\(evidence, narrow\);/.test(composerSrc), 'the baseline is taken after the camera opens, not before');
   /* One attachment attempt per comment. Walking on to the next scope with the
      file already in an input hands Facebook the same picture twice. */
-  assert.ok(/if \(got === 'unconfirmed'\) return 'unconfirmed';/.test(composerSrc), 'a file that is already in never gets attached a second time');
+  assert.ok(/if \(got\.result === 'unconfirmed'\) return \{ result: 'unconfirmed', evidence, narrow, before \};/.test(composerSrc), 'a file that is already in never gets attached a second time');
   /* Checked again at the instant of submit: the first check is seconds old by
      then, and Enter over a dropped attachment sends the words alone. */
-  assert.ok(/if \(image && attached === 'ok' && !\(await stillAttached\(box, article\)\)\) return 'no-photo-unsure';/.test(composerSrc), 'the picture is confirmed again immediately before Enter');
+  assert.ok(/if \(attached && !\(await stillAttached\(attached\)\)\) return 'no-photo-unsure';/.test(composerSrc), 'the picture is confirmed again immediately before Enter');
+  /*
+   * AND IT ASKS THE SAME QUESTION, against the baseline the attach measured.
+   * The first version asked "is anything showing in the composer", and the
+   * answer to that is yes in every state Facebook can be in: mediaCount
+   * counts <svg>, and the camera button this code has just clicked is an
+   * <svg>. It could not return false, so it could not do its job.
+   */
+  assert.ok(/local > a\.before\.local/.test(composerSrc), 'the check before Enter compares against what was there before');
+  /*
+   * A NEW progress bar, not any progress bar. The evidence scope is the whole
+   * post modal, and a comment thread still rendering or a video buffering puts
+   * one in it that has nothing to do with us — which held every comment for
+   * the full thirty seconds and then refused it. That is the owner's original
+   * symptom, arriving through a wider scope.
+   */
+  assert.ok(/\)\.count\(\)\.catch\(\(\) => 0\)\) > before\.busy/.test(composerSrc), 'only an upload that started after we handed the file over counts as busy');
+  /*
+   * And the markup-blind count is dropped entirely when there is no form to
+   * scope it to. The article is the post PLUS its comment thread, which
+   * lazily renders avatars and reaction icons for seconds — "more than
+   * before" would be satisfied whether or not the file ever uploaded, and the
+   * comment would go out without the picture while the screen said "הגיב".
+   */
+  assert.ok(/const narrow = hasForm \? form : null;/.test(composerSrc), 'the blind count is only used in a scope where nothing else moves');
+  /* A blob: URL exists the instant the file is chosen, before a byte leaves
+     the machine, so a preview alone is proof of a SELECTION. */
+  assert.ok(/if \(stable >= 3\) return true;/.test(composerSrc), 'and the proof has to hold, not merely appear');
+  /* Once setInputFiles has not thrown, the file is in. Saying "not attached"
+     sends the loop to the next scope, where the same picture is uploaded a
+     second time. */
+  assert.ok(/if \(!held\) return \{ result: 'unconfirmed', before \};/.test(composerSrc), 'a file that went in is never reported as not attached');
   /* The form, not the article: Facebook's comment file input frequently sits
      outside the [role="article"] the post is wrapped in, which is why looking
      for it there found nothing at all. */
@@ -3019,6 +3050,7 @@ const scenario: { step: string; line: string }[] = [];
    */
   assert.ok(/async function mediaCount/.test(composerSrc), 'what is showing is counted');
   assert.ok(/any > before\.any/.test(composerSrc), 'and the proof is that there is more of it than before');
+  assert.ok(/fb\.uploadProgress\(evidence\)/.test(composerSrc), 'and an upload still running is never an attachment');
   assert.ok(!/locator\('img\[src\^="blob:"\]/.test(composerSrc), 'never a guess at which markup Facebook used this week');
   /* And it is looked for in more than one place, because Facebook does not
      always wrap a comment box in a form. The page itself only on the post's
@@ -3595,13 +3627,23 @@ const scenario: { step: string; line: string }[] = [];
   /* 3 — the idle chores give way to a publication. Pinned above with anyDue. */
   assert.ok(/async function anyDue\(/.test(worker), 'there is a cheap "is anything due" check for the chores to use');
 
-  /* 4 — only a publication counts as work. */
-  const workedAt = worker.indexOf('state.worked = true;');
-  assert.ok(workedAt > 0, 'the loop still knows when it worked');
+  /*
+   * 4 — in the PUBLISH path, only a publication counts as work.
+   *
+   * Read from the defer branch forwards on purpose: the idle chores set the
+   * same flag when one of them actually did something (a comment that ran is
+   * work, and leaving the loop on its five-second brake after it would mean
+   * one comment per five seconds of dead waiting). That line sits earlier in
+   * the file, so a bare indexOf finds it and proves nothing about this.
+   */
+  const deferAt = worker.indexOf("if (decision.action === 'defer')");
+  const workedAt = worker.indexOf('state.worked = true;', deferAt);
+  assert.ok(deferAt > 0 && workedAt > 0, 'the loop still knows when it worked');
   assert.ok(
-    workedAt > worker.indexOf("if (decision.action === 'defer')"),
+    workedAt > deferAt,
     'and a deferral is not work — set before the rules ran, every gap boundary became a burst with no brake',
   );
+  assert.ok(/if \(await chore\(state, headless\)\) state\.worked = true;/.test(worker), 'an idle chore that did something is work too');
 
   /* 5 — the upload safety regression, fixed. A blob: preview exists the
          instant the file is chosen; only the progress bar proves an upload. */

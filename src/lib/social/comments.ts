@@ -64,3 +64,16 @@ export function commentRank(status: string | null | undefined): number {
 export function commentNeedsHuman(status: string | null | undefined): boolean {
   return status === 'failed' || status === 'unverified';
 }
+
+/**
+ * The word for a state, and the state itself when there is no word for it.
+ *
+ * A value this file has not heard of used to render as a blank label beside a
+ * grey dot — a row that said nothing at all, which is the failure this module
+ * exists to end. Showing the raw value is ugly and it is honest: somebody can
+ * read it out and it can be looked up.
+ */
+export function commentLabel(status: string | null | undefined): string {
+  if (!status) return '';
+  return COMMENT_LABEL[status as CommentStatus] ?? status;
+}

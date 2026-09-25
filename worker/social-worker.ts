@@ -204,10 +204,7 @@ async function main(): Promise<void> {
    * not in the pending set, so nothing picks it up again, and the bulk
    * "נסה שוב" leaves it alone — the owner looks, then decides.
    */
-  await db
-    .from('social_queue')
-    .update({ comment_status: 'unverified', comment_note: 'ה-worker נעצר באמצע הוספת התגובה. בדקו בפוסט אם היא נוספה לפני שתנסו שוב.' })
-    .eq('comment_status', 'commenting');
+  await sweepStuckComments(db);
 
   await logActivity('info', 'worker_started', `ה-worker "${env.workerName}" עלה (${hostname()})`, { version: VERSION });
   console.log('[worker] מחובר ל-Supabase. ממתין לעבודות… (Ctrl+C לעצירה)');
@@ -421,7 +418,10 @@ async function tick(state: WorkerState): Promise<void> {
      */
     for (const chore of [runCampaignComments, resolveAddresses, resolveShareLinks, syncGroupProfiles, syncPostMetrics] as const) {
       if (stopping || (await anyDue(db))) return;
-      await chore(state, headless);
+      /* A chore that says it did something is work, and work is what keeps
+         the loop off its five-second brake. Discarding the answer meant a
+         round of comments ran at one every five seconds of dead waiting. */
+      if (await chore(state, headless)) state.worked = true;
     }
     if (!(await anyDue(db))) await restartIfUpdated(state);
     return;
@@ -1345,6 +1345,42 @@ async function resolveAddresses(state: WorkerState, headless: boolean): Promise<
 /** Posts commented per idle tick. Deliberately small — see below. */
 const COMMENTS_PER_TICK = 1;
 /**
+ * How many pending rows to LOOK at to find one that is due.
+ *
+ * Still one comment per tick. The window exists because the pick is global
+ * and the gap is per round: with a single candidate, one round whose gap had
+ * not elapsed stopped the chore outright and a second live round got nothing
+ * at all until the first had drained. Looking a little further along the
+ * queue lets the second round's turn come round.
+ */
+const COMMENT_CANDIDATES = 5;
+/**
+ * After this long, a row still marked 'commenting' is not in flight.
+ *
+ * The slowest honest path — no stored address, three lookup pages, each a
+ * page load and a scrolling search — is minutes, not a quarter of an hour.
+ * Anything older belongs to a worker that died, and the age is what makes
+ * this safe to run while another worker is alive: it cannot reach a claim
+ * that was taken since that worker started.
+ */
+const COMMENT_CLAIM_STALE_MS = 15 * 60_000;
+
+/**
+ * Rows left claimed by a worker that never came back.
+ *
+ * 'unverified' rather than 'pending', and that is the whole point: nobody
+ * knows whether the comment went up before the machine stopped, and the one
+ * outcome that must never happen is a second comment under a live post. The
+ * row asks for a person instead, and the bulk retry leaves it alone.
+ */
+async function sweepStuckComments(db: SupabaseClient): Promise<void> {
+  await db
+    .from('social_queue')
+    .update({ comment_status: 'unverified', comment_note: 'ה-worker נעצר באמצע הוספת התגובה. בדקו בפוסט אם היא נוספה לפני שתנסו שוב.' })
+    .eq('comment_status', 'commenting')
+    .lt('comment_at', new Date(Date.now() - COMMENT_CLAIM_STALE_MS).toISOString());
+}
+/**
  * The gap between one comment and the next, when the round has not said.
  *
  * It used to be a fixed 20-40s with no say in it. How fast to go is a
@@ -1426,12 +1462,23 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
    * when there is nothing quick left, which is also when there is most likely
    * to be room for them.
    */
+  /*
+   * A CLAIM NOBODY IS HOLDING, cleared here rather than only at startup.
+   *
+   * The startup sweep covers a crash, because start-worker.cmd restarts. It
+   * does not cover a worker that has been up for days and lost one row to a
+   * write that failed: that row is claimed, invisible to the retry button
+   * (which only sees 'failed'), and counted as "ממתין" on the screen for ever
+   * — a post that reads as waiting for a comment it will never get.
+   */
+  await sweepStuckComments(db);
+
   const pending = (known: boolean) => {
     const q = db
       .from('social_queue')
       .select('id, permalink, rendered_text, campaign_id, target:social_targets(url)')
       .eq('comment_status', 'pending');
-    return (known ? q.not('permalink', 'is', null) : q.is('permalink', null)).order('published_at').limit(COMMENTS_PER_TICK);
+    return (known ? q.not('permalink', 'is', null) : q.is('permalink', null)).order('published_at').limit(COMMENT_CANDIDATES);
   };
   let { data, error } = await pending(true);
   if (!error && !data?.length) ({ data, error } = await pending(false));
@@ -1524,7 +1571,16 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
     const gapSec = Math.max(5, Math.min(600, Number(campaign?.comment_gap_seconds) || COMMENT_GAP_DEFAULT_SEC));
     const waitMs = Math.round(gapSec * 1000 * (1 + jitterFor(row.id)));
     const since = (previous as { comment_at?: string } | null)?.comment_at;
-    if (since && Date.now() - new Date(since).getTime() < waitMs) return false;
+    /*
+     * PAST THIS ROUND, NOT OUT OF THE CHORE.
+     *
+     * The pick is global and ordered by publication time; the gap is per
+     * round. Returning here stopped everything on the first row whose round
+     * was not due, so a second live round waited for the first to drain
+     * completely — which is the behaviour the per-round clock was supposed to
+     * end. The next candidate may belong to a round whose turn it is.
+     */
+    if (since && Date.now() - new Date(since).getTime() < waitMs) continue;
 
     /*
      * CLAIMED BEFORE THE BROWSER IS TOUCHED, exactly as a publication is.
@@ -1542,11 +1598,39 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
       .eq('id', row.id)
       .eq('comment_status', 'pending')
       .select('id');
-    if (claimed.error || !claimed.data?.length) continue;
+    if (claimed.error) {
+      /*
+       * SAID, not swallowed. A claim the database refuses — a policy on the
+       * worker's role, a column a migration never created — fails the same
+       * way for every row, every tick, for ever. Discarding it left the
+       * terminal silent, the log silent, and every post reading "ממתין"
+       * while nothing whatsoever was happening.
+       */
+      if (!state.commentNoticeShown) {
+        state.commentNoticeShown = true;
+        console.error('[worker] ✗ לא הצלחנו לסמן תגובה לכתיבה:', claimed.error.message);
+        await logActivity('warn', 'comment_claim_failed', 'לא הצלחנו לסמן פרסום לכתיבת תגובה. ייתכן שצריך להריץ את social-latest.sql ב-Supabase.', {
+          detail: claimed.error.message,
+        });
+      }
+      return false;
+    }
+    /* Somebody else took it between the read and the write. Normal. */
+    if (!claimed.data?.length) continue;
 
     let local: LocalMedia | null = null;
-    const page = await session.newPage(headless);
+    /*
+     * INSIDE THE TRY, because the row is already claimed by this point.
+     *
+     * Opening a page can fail — a profile that will not start, a browser that
+     * died — and thrown from out here it escaped the chore entirely and left
+     * the claim standing with no outcome written. The sweep above eventually
+     * frees it, but only after fifteen minutes of the post reading "ממתין".
+     * Inside, the catch records a real failure the owner can act on.
+     */
+    let page: Page | null = null;
     try {
+      page = await session.newPage(headless);
       local = media.length ? await downloadMedia(`${row.id}-comment`, media).catch(() => null) : null;
       /*
        * THE PICTURE HAS TO GET AS FAR AS THIS MACHINE FIRST.
@@ -1597,22 +1681,30 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
       else console.log(`[worker] ℹ לא הצלחנו להוסיף תגובה: ${outcome.reason} (${outcome.tried.join(' → ') || 'לא ניסינו כתובת'})`);
     } catch (err) {
       const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
-      const shot = await captureScreenshot(page, row.id, 'comment');
+      const shot = page ? await captureScreenshot(page, row.id, 'comment') : null;
       await saveCommentOutcome(db, row.id, { ok: false, reason: `התוכנה נתקלה בתקלה: ${detail}`, permalink: '', tried: [], step: 'not-sent' }, row.permalink, shot);
       console.error('[worker] ✗ הוספת תגובה נכשלה:', detail);
     } finally {
       cleanupMedia(local);
-      await page.close().catch(() => undefined);
+      await page?.close().catch(() => undefined);
       /*
        * SAID OUT LOUD, because a comment can take most of a minute and the
        * dashboard calls a worker disconnected after ninety seconds of silence.
        * Nothing else in this chore speaks to social_workers at all, so a
        * round of slow comments showed the owner "מנותק" while the machine was
        * in the middle of doing exactly what they asked for.
+       *
+       * `!headless` is passed along rather than left to default: the third
+       * argument is debug_mode, and omitting it wrote `false` after every
+       * comment — the dashboard's "חלון גלוי" flickering off and back on for
+       * an owner running the browser headed.
        */
-      await heartbeat(state, 'online').catch(() => undefined);
+      await heartbeat(state, 'online', !headless).catch(() => undefined);
     }
+    /* One comment per pass. The candidate window above is for FINDING a row
+       whose round is due, never for doing several in a breath. */
     worked = true;
+    break;
   }
   return worked;
 }

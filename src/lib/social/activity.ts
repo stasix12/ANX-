@@ -73,6 +73,7 @@ const KIND: Record<string, ActivityKind> = {
   login_challenge: 'system',
   group_share_duplicate: 'system',
   comment_columns_missing: 'system',
+  comment_claim_failed: 'system',
   metrics_columns_missing: 'system',
   commands_payload_missing: 'system',
 };

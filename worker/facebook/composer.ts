@@ -742,6 +742,34 @@ type AttachResult = 'ok' | 'not-attached' | 'unconfirmed';
 interface MediaBefore {
   local: number;
   any: number;
+  /*
+   * PROGRESS BARS THAT WERE ALREADY THERE.
+   *
+   * Counted rather than merely detected, because the scope this is measured
+   * over is the whole post modal: a comment thread still rendering or a video
+   * buffering puts a [role="progressbar"] in it that has nothing to do with
+   * us. Treating any bar as our upload held every comment for the full thirty
+   * seconds and then refused it — which is the owner's original symptom,
+   * reintroduced through a wider scope. Only a bar that was NOT there before
+   * is ours.
+   */
+  busy: number;
+}
+
+/**
+ * One attempt at putting the picture in, and everything needed to ask again.
+ *
+ * The scopes and the baseline travel with the result because the check before
+ * Enter has to ask the SAME question this did. Asking a weaker one — "is
+ * anything showing in the composer" — answers yes in every state, including
+ * the one it was written to catch: the camera button is an <svg>, and
+ * mediaCount counts svg.
+ */
+interface Attachment {
+  result: AttachResult;
+  evidence: Locator;
+  narrow: Locator | null;
+  before: MediaBefore;
 }
 
 /**
@@ -762,7 +790,7 @@ interface MediaBefore {
  * The input is still found narrowest-first. The evidence is looked for in the
  * enclosing dialog, which is the smallest thing that certainly holds both.
  */
-async function attachPhoto(page: Page, box: Locator, article: Locator, image: string): Promise<AttachResult> {
+async function attachPhoto(page: Page, box: Locator, article: Locator, image: string): Promise<Attachment> {
   const onPermalink = /\/(posts|permalink)\//.test(page.url());
   const form = box.locator('xpath=ancestor::form[1]');
   const dialog = box.locator('xpath=ancestor::*[@role="dialog"][1]');
@@ -779,7 +807,21 @@ async function attachPhoto(page: Page, box: Locator, article: Locator, image: st
    * check, so a build that never mints a blob: still has a way to pass.
    */
   const evidence = hasDialog ? dialog : hasForm ? form : article;
-  const narrow = hasForm ? form : article;
+  /*
+   * AND NOTHING AT ALL WHEN THERE IS NO FORM.
+   *
+   * The markup-blind count is only sound in a scope small enough that nothing
+   * else in it changes. The comment's own form is that; the ARTICLE is not —
+   * it is the post plus its comment thread, and that thread lazily renders
+   * avatars, reaction icons and background-image chips for seconds after the
+   * page settles. Used as the tight scope it would satisfy "more than before"
+   * within a second or two whether or not the file ever uploaded, and the
+   * comment would go out without the picture while the screen said "הגיב".
+   *
+   * So a build with no form gets the blob: proof alone. If that build also
+   * mints no blob:, the answer is "could not confirm" — which is the safe one.
+   */
+  const narrow = hasForm ? form : null;
 
   /*
    * WHERE TO LOOK FOR THE FILE INPUT, narrowest first.
@@ -796,9 +838,11 @@ async function attachPhoto(page: Page, box: Locator, article: Locator, image: st
   if (hasDialog) scopes.push(dialog);
   else if (onPermalink) scopes.push(page.locator('body'));
 
+  let before: MediaBefore = { local: 0, any: 0, busy: 0 };
   for (const scope of scopes) {
     const got = await tryAttach(page, scope, evidence, narrow, image);
-    if (got === 'ok') return 'ok';
+    before = got.before;
+    if (got.result === 'ok') return { result: 'ok', evidence, narrow, before };
     /*
      * The file went into an input and we merely could not prove it. Trying
      * the next scope would hand Facebook the same picture a second time —
@@ -806,9 +850,9 @@ async function attachPhoto(page: Page, box: Locator, article: Locator, image: st
      * for ever. One attachment attempt per comment, and then an honest
      * "we could not confirm it".
      */
-    if (got === 'unconfirmed') return 'unconfirmed';
+    if (got.result === 'unconfirmed') return { result: 'unconfirmed', evidence, narrow, before };
   }
-  return 'not-attached';
+  return { result: 'not-attached', evidence, narrow, before };
 }
 
 /** One attempt, within one part of the page. */
@@ -816,9 +860,9 @@ async function tryAttach(
   page: Page,
   scope: Locator,
   evidence: Locator,
-  narrow: Locator,
+  narrow: Locator | null,
   image: string,
-): Promise<AttachResult> {
+): Promise<{ result: AttachResult; before: MediaBefore }> {
   const input = scope.locator('input[type="file"]').first();
   const present = async () => (await input.count().catch(() => 0)) > 0;
   let chosen: FileChooser | null = null;
@@ -835,7 +879,7 @@ async function tryAttach(
      * part of the page has no camera it is not the comment's composer, and
      * saying so lets the next scope be tried without a six-second wait.
      */
-    if ((await camera.count().catch(() => 0)) === 0) return 'not-attached';
+    if ((await camera.count().catch(() => 0)) === 0) return { result: 'not-attached', before };
     const waiting = page.waitForEvent('filechooser', { timeout: 6_000 }).catch(() => null);
     await camera.click({ timeout: 5_000 }).catch(() => undefined);
     chosen = await waiting;
@@ -845,29 +889,42 @@ async function tryAttach(
      * picture is how an attach that never happened reported success.
      */
     before = await mediaBefore(evidence, narrow);
-    if (!chosen && !(await present())) return 'not-attached';
+    if (!chosen && !(await present())) return { result: 'not-attached', before };
   }
 
   if (chosen) {
     try {
       await chosen.setFiles(image);
     } catch {
-      return 'not-attached';
+      return { result: 'not-attached', before };
     }
   } else {
     try {
       await input.setInputFiles(image);
     } catch {
-      return 'not-attached';
+      return { result: 'not-attached', before };
     }
-    /* The file is in the box as far as the browser is concerned. If Facebook
-       then shows nothing at all, it did not take it. */
+    /*
+     * ONCE THE FILE HAS GONE IN, "not attached" IS NO LONGER AN AVAILABLE
+     * ANSWER.
+     *
+     * This read is zero in two different situations: Facebook refused the
+     * file, and the input is simply no longer there to ask — which is exactly
+     * what a React composer does after its change handler has taken the file.
+     * The catch erased that difference, and 'not-attached' sends the loop on
+     * to the next scope, where the input resolves again and the SAME picture
+     * is uploaded a second time. Two thumbnails on one comment, under the
+     * owner's name.
+     *
+     * setInputFiles did not throw, so the file was handed over. The honest
+     * answer from here on is "we could not confirm it", never "it is not in".
+     */
     const held = await input
       .evaluate((el) => (el as HTMLInputElement).files?.length ?? 0)
       .catch(() => 0);
-    if (!held) return 'not-attached';
+    if (!held) return { result: 'unconfirmed', before };
   }
-  return (await photoLanded(evidence, narrow, before)) ? 'ok' : 'unconfirmed';
+  return { result: (await photoLanded(evidence, narrow, before)) ? 'ok' : 'unconfirmed', before };
 }
 
 /**
@@ -892,11 +949,12 @@ async function mediaCount(scope: Locator): Promise<number> {
     .catch(() => 0);
 }
 
-/** The two baselines, taken together so they describe the same instant. */
-async function mediaBefore(evidence: Locator, narrow: Locator): Promise<MediaBefore> {
+/** The baselines, taken together so they describe the same instant. */
+async function mediaBefore(evidence: Locator, narrow: Locator | null): Promise<MediaBefore> {
   return {
     local: await fb.localPreview(evidence).count().catch(() => 0),
-    any: await mediaCount(narrow),
+    any: narrow ? await mediaCount(narrow) : 0,
+    busy: await fb.uploadProgress(evidence).count().catch(() => 0),
   };
 }
 
@@ -913,39 +971,52 @@ async function mediaBefore(evidence: Locator, narrow: Locator): Promise<MediaBef
  * scope's own media count knows nothing about markup and so survives a build
  * that mints no blob: at all.
  */
-async function photoLanded(evidence: Locator, narrow: Locator, before: MediaBefore): Promise<boolean> {
+async function photoLanded(evidence: Locator, narrow: Locator | null, before: MediaBefore): Promise<boolean> {
+  let stable = 0;
   for (let waited = 0; waited < 30_000; waited += 500) {
-    const busy = (await fb.uploadProgress(evidence).count().catch(() => 0)) > 0;
+    /* A NEW bar, not any bar — see MediaBefore.busy. */
+    const busy = (await fb.uploadProgress(evidence).count().catch(() => 0)) > before.busy;
     const local = await fb.localPreview(evidence).count().catch(() => 0);
-    const any = await mediaCount(narrow);
-    if (!busy && (local > before.local || any > before.any)) return true;
+    const any = narrow ? await mediaCount(narrow) : 0;
+    const showing = local > before.local || (narrow !== null && any > before.any);
+    /*
+     * AND HELD FOR A BEAT AND A HALF.
+     *
+     * A blob: URL exists the instant the file is chosen — before a byte has
+     * left the machine — so a preview on its own proves a file was SELECTED,
+     * not that it arrived. Three consecutive polls with no progress bar that
+     * was not there before is what turns the one into the other. It is the
+     * same discipline waitForUploads applies to a post, and it is there for
+     * the same reason: the button was being pressed over a half-finished
+     * upload.
+     */
+    stable = !busy && showing ? stable + 1 : 0;
+    if (stable >= 3) return true;
     await evidence.page().waitForTimeout(500);
   }
   return false;
 }
 
 /**
- * Is the picture still in the box?
+ * Is the picture still in the box, one second before Enter?
  *
- * Deliberately looser than photoLanded: that one has to distinguish a new
- * preview from an old one and therefore counts. This one only has to answer
- * "is there an attachment here at all", one second before Enter, so it looks
- * for the preview itself and treats a page that will not answer as a yes —
- * a locator that throws is not evidence that Facebook dropped anything, and
- * refusing to send on it would turn a working comment into a failed one.
+ * THE SAME QUESTION attachPhoto ASKED, against the same baseline — and that
+ * is the whole of it. The first version asked a weaker one, "is anything
+ * showing in the composer", and the answer to that is yes in every state
+ * Facebook can be in: mediaCount counts <svg>, and the camera button this
+ * code has just clicked is an <svg>. It could not return false, so it could
+ * not do the job it was added for.
+ *
+ * A locator that throws still reads as a yes. That is not generosity: an
+ * exception is not evidence that Facebook dropped the attachment, and
+ * refusing to send on it would turn working comments into failed ones. A
+ * count of zero, which is evidence, now reads as a no.
  */
-async function stillAttached(box: Locator, article: Locator): Promise<boolean> {
-  const form = box.locator('xpath=ancestor::form[1]');
-  const dialog = box.locator('xpath=ancestor::*[@role="dialog"][1]');
-  const hasDialog = (await dialog.count().catch(() => 0)) > 0;
-  const hasForm = (await form.count().catch(() => 0)) > 0;
-  const where = hasDialog ? dialog : hasForm ? form : article;
-  const local = await fb.localPreview(where).count().catch(() => -1);
-  if (local < 0) return true;
-  if (local > 0) return true;
-  /* No blob: in this build — fall back to "something is showing in the tight
-     scope", the same markup-blind count the attach itself accepts. */
-  return (await mediaCount(hasForm ? form : article)) > 0;
+async function stillAttached(a: Attachment): Promise<boolean> {
+  const local = await fb.localPreview(a.evidence).count().catch(() => a.before.local + 1);
+  if (local > a.before.local) return true;
+  if (a.narrow && (await mediaCount(a.narrow)) > a.before.any) return true;
+  return false;
 }
 
 /** Where the attempt stopped. Each one is a different thing to do next. */
@@ -1010,8 +1081,8 @@ async function addComment(page: Page, postText: string, comment: string, image: 
      * the page would just as happily belong to the post composer at the top of
      * the group, and the picture would become a new POST.
      */
-    const attached = image ? await attachPhoto(page, box, article, image) : 'ok';
-    if (attached !== 'ok') {
+    const attached = image ? await attachPhoto(page, box, article, image) : null;
+    if (attached && attached.result !== 'ok') {
       /*
        * NOTHING IS SENT. A comment with the words but without the picture is
        * not a smaller version of what the owner asked for — it is a different
@@ -1023,7 +1094,7 @@ async function addComment(page: Page, postText: string, comment: string, image: 
        * Nothing has been typed yet — the picture goes first precisely so that
        * giving up costs nothing.
        */
-      return attached === 'unconfirmed' ? 'no-photo-unsure' : 'no-photo';
+      return attached.result === 'unconfirmed' ? 'no-photo-unsure' : 'no-photo';
     }
 
     // Shift+Enter for line breaks, exactly as the composer does: a bare Enter
@@ -1043,7 +1114,7 @@ async function addComment(page: Page, postText: string, comment: string, image: 
      * this whole path exists to prevent. Nothing has been sent yet, so
      * stopping here is still free.
      */
-    if (image && attached === 'ok' && !(await stillAttached(box, article))) return 'no-photo-unsure';
+    if (attached && !(await stillAttached(attached))) return 'no-photo-unsure';
 
     await page.keyboard.press('Enter');
     pressed = true;

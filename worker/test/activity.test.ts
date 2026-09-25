@@ -44,6 +44,9 @@ const SYSTEM_BY_DESIGN = new Set([
   'group_share_duplicate',
   'group_share_resolved',
   'comment_columns_missing',
+  /* The database refusing to let a comment be claimed. Same family as the
+     missing column above: it is about the installation, not about a post. */
+  'comment_claim_failed',
   'metrics_columns_missing',
   'commands_payload_missing',
   'avatar_upload_blocked',

@@ -345,7 +345,22 @@ export default function CampaignsPage() {
         </div>
       </div>
 
+      {/*
+        KEYED BY THE ROUND, and this is not a nicety.
+
+        The sheet keeps its own text, picture and gap in useState, seeded from
+        props on FIRST MOUNT. Mounted unconditionally it mounted once, at page
+        load, with commentFor still null — so it opened empty for a round that
+        already had a comment saved, and worse, opening it for a second round
+        showed the FIRST round's text and picture while the title, the count
+        and the button all said the second. Sending then wrote round A's
+        comment onto every published post of round B.
+
+        The key remounts it per round, which is what makes the props the
+        source of the values on screen.
+      */}
       <CampaignCommentSheet
+        key={commentFor?.id ?? 'none'}
         open={commentFor !== null}
         onClose={() => setCommentFor(null)}
         publishedCount={commentFor ? stateOf(commentFor).progress.published : 0}

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import { agree } from '@/lib/social/time';
-import { COMMENT_LABEL, COMMENT_TONE, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
+import { COMMENT_TONE, commentLabel, commentNeedsHuman, commentRank, type CommentStatus } from '@/lib/social/comments';
 import { CommentShot } from './CommentShot';
 import { TargetAvatar } from './TargetAvatar';
 import { Card, TONE_FILL } from './ui';
@@ -44,7 +44,12 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
       subtitle={
         pending > 0
           ? `${pending} ${agree(pending, 'קבוצה ממתינה', 'קבוצות ממתינות')} לתגובה. הן נוספות אחת-אחת.`
-          : 'כל התגובות שביקשתם כבר יצאו.'
+          : /* "everything went out" is not true while the body of this very
+               card lists three that did not. The unfinished ones are named
+               instead, since they are the only reason to read further. */
+            failed + unverified > 0
+            ? `${failed + unverified} ${agree(failed + unverified, 'פרסום לא קיבל', 'פרסומים לא קיבלו')} את התגובה. פתחו אותם כדי לראות למה.`
+            : 'כל התגובות שביקשתם כבר יצאו.'
       }
     >
       <p className="mb-3 text-sm text-mist-300">
@@ -85,7 +90,7 @@ export function CommentQueueCard({ rows, totals }: { rows: QueueRow[]; totals: C
                   {r.target?.name ?? '—'}
                 </span>
               )}
-              <span className="shrink-0 text-[11px] text-mist-500">{COMMENT_LABEL[r.comment_status as CommentStatus] ?? ''}</span>
+              <span className="shrink-0 text-[11px] text-mist-500">{commentLabel(r.comment_status)}</span>
             </div>
             {/* The reason, and only where there is one to give. "לא הצליח" on
                 its own is what makes a person press the same button again. */}

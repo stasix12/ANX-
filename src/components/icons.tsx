@@ -117,6 +117,38 @@ export function PlayIcon(props: IconProps) {
   );
 }
 
+/*
+ * Content kinds, for the library's filter chips and card badges. Same
+ * line-drawing style and the same 24-box as the rest of the set — the module
+ * has no icon library and does not gain one for three glyphs.
+ */
+export function ImageIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <circle cx="8.5" cy="10" r="1.6" />
+      <path d="M3.5 17l4.6-4.3a2 2 0 012.7 0L15 17M14 14.2l1.7-1.5a2 2 0 012.7 0l2.1 1.9" />
+    </svg>
+  );
+}
+
+export function VideoIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2.5" y="5.5" width="13" height="13" rx="2.5" />
+      <path d="M15.5 10.5l4.3-2.6a.8.8 0 011.2.7v6.8a.8.8 0 01-1.2.7l-4.3-2.6z" />
+    </svg>
+  );
+}
+
+export function TextIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4.5 6.5h15M4.5 11h15M4.5 15.5h10M4.5 20h6" />
+    </svg>
+  );
+}
+
 /* --- Admin panel icons: same line-drawing style as the set above. --- */
 
 export function PlusIcon(props: IconProps) {

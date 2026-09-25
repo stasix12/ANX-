@@ -426,8 +426,19 @@ export function SegmentedControl<T extends string>({
               type="button"
               aria-pressed={active}
               onClick={() => onChange(o.value)}
-              className={`inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-xs transition-colors ${
-                active ? 'grad-primary bg-brand-500 font-extrabold text-on-brand' : 'bg-ink-800 font-bold text-mist-300 hover:text-mist-100'
+              /*
+               * A chip is a card, not a pill: white with its own hairline,
+               * at the card radius. The tinted-pill form had no edge of its
+               * own — on a white-purple page ink-800 is a whisker off the
+               * ground, so a row of inactive filters read as text floating on
+               * the page and the only thing with a shape was whichever one
+               * was on. The active chip keeps the gradient and gains the same
+               * violet lift the rest of the module's pressed controls have.
+               */
+              className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-3.5 text-xs transition-[background-color,border-color,box-shadow] ${
+                active
+                  ? 'grad-primary border-transparent bg-brand-500 font-extrabold text-on-brand shadow-[0_5px_14px_rgba(124,58,237,0.2)]'
+                  : 'border-ink-700 bg-ink-900 font-bold text-mist-300 hover:border-brand-300/40 hover:text-mist-100'
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950`}
             >
               {o.label}

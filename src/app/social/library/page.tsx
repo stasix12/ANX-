@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { BoxIcon, ClipboardListIcon, CopyIcon, EyeIcon, PencilIcon, PlusIcon, SearchIcon, TagIcon } from '@/components/icons';
+import { BoxIcon, ChevronDownIcon, ClipboardListIcon, CopyIcon, EyeIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TagIcon, TextIcon, VideoIcon } from '@/components/icons';
 import { ContentCard } from '@/components/social/ContentCard';
 import { PostPreview } from '@/components/social/PostPreview';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
@@ -13,7 +13,6 @@ import {
   CARD_ELEVATED,
   Button,
   ButtonLink,
-  Card,
   EmptyState,
   ErrorState,
   Field,
@@ -82,6 +81,18 @@ export default function LibraryPage() {
   const [publishedFilter, setPublishedFilter] = useState<PublishedFilter>('');
   const [sort, setSort] = useState<Sort>('newest');
   const [selected, setSelected] = useState<string[]>([]);
+  /*
+   * The two filters the phone does not lead with.
+   *
+   * Content type and order answer "what am I looking at" and "what comes
+   * first" and stay on screen; category and published-state are narrower
+   * questions, and four filter rows above the grid was most of a phone spent
+   * on controls before a single post appeared. Nothing is removed — this is
+   * one boolean deciding whether two existing rows are drawn, and it opens
+   * itself whenever one of them is actually in effect, so an active filter is
+   * never hidden behind it.
+   */
+  const [moreFilters, setMoreFilters] = useState(false);
   const [shown, setShown] = useState(CHUNK);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -209,6 +220,10 @@ export default function LibraryPage() {
   const toggleSelect = (id: string, on: boolean) =>
     setSelected((s) => (on ? [...new Set([...s, id])] : s.filter((x) => x !== id)));
 
+  /* An active narrow filter always shows its own row: a chip that is doing
+     something may never be hidden behind a disclosure. */
+  const showMoreFilters = moreFilters || categoryFilter !== '' || publishedFilter !== '';
+
   const clearFilters = () => {
     setQuery('');
     setCategoryFilter('');
@@ -271,10 +286,13 @@ export default function LibraryPage() {
   return (
     <SocialShell
       title="ספריית תוכן"
-      lede="פוסטים מוכנים לפרסום בלחיצה אחת"
+      lede="בחר פוסט מוכן לפרסום"
       headerAction={
-        <ButtonLink href="/social/posts/new">
-          <PlusIcon className="h-4 w-4" strokeWidth={2.4} /> פוסט חדש
+        /* The one filled control on the screen, and it is the one that makes
+           content. 52px and the card radius, so it reads as a peer of the
+           cards below rather than as a toolbar button. */
+        <ButtonLink href="/social/posts/new" className="min-h-13 rounded-2xl px-4 text-[15px]">
+          <PlusIcon className="h-4.5 w-4.5" strokeWidth={2.4} /> פוסט חדש
         </ButtonLink>
       }
     >
@@ -297,88 +315,112 @@ export default function LibraryPage() {
           </Notice>
         )}
 
-        {all.length > 0 && (
-          <Card padded={false} className="p-3">
-            <input
-              type="search"
-              className={inputClass}
-              placeholder="חיפוש פוסט…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label="חיפוש פוסט"
-            />
+        {/*
+          FILTERS, WITHOUT THE BOX AROUND THEM.
 
-            <div className="mt-2.5 min-w-0 space-y-2 overflow-x-auto scrollbar-none">
-              <SegmentedControl
-                size="sm"
-                label="קטגוריית תוכן"
-                value={categoryFilter}
-                onChange={setCategoryFilter}
-                className="min-w-max"
-                options={[
-                  { value: '', label: 'הכל', count: categoryCounts[''] },
-                  ...categories.map((c) => ({
-                    value: c.id,
-                    label: <span dir="auto">{c.name}</span>,
-                    count: categoryCounts[c.id] ?? 0,
-                  })),
-                  { value: UNCATEGORISED, label: 'ללא קטגוריה', count: categoryCounts[UNCATEGORISED] ?? 0 },
-                ]}
-              />
-              <SegmentedControl
-                size="sm"
-                label="סוג תוכן"
-                value={mediaFilter}
-                onChange={setMediaFilter}
-                className="min-w-max"
-                options={[
-                  { value: '', label: 'הכל', count: mediaCounts[''] },
-                  { value: 'image', label: 'תמונות', count: mediaCounts.image },
-                  { value: 'video', label: 'סרטונים', count: mediaCounts.video },
-                  { value: 'text', label: 'טקסט בלבד', count: mediaCounts.text },
-                ]}
-              />
-              <SegmentedControl
-                size="sm"
-                label="פרסום"
-                value={publishedFilter}
-                onChange={setPublishedFilter}
-                className="min-w-max"
-                options={[
-                  { value: '', label: 'הכל', count: publishedCounts[''] },
-                  { value: 'yes', label: 'כבר פורסמו', count: publishedCounts.yes },
-                  { value: 'no', label: 'טרם פורסמו', count: publishedCounts.no },
-                ]}
-              />
-              <SegmentedControl
-                size="sm"
-                label="סדר"
-                value={sort}
-                onChange={setSort}
-                className="min-w-max"
-                options={[
-                  { value: 'newest', label: 'חדשים' },
-                  { value: 'oldest', label: 'ישנים' },
-                  { value: 'most', label: 'הכי מפורסמים' },
-                  { value: 'recent', label: 'פורסמו לאחרונה' },
-                ]}
+          These four controls used to sit inside a card of their own: a
+          bordered panel with its own padding, holding a text field and four
+          segmented RAILS — each rail a 40px chip inside a 48px track, each
+          one wrapping to a second line when its options did not fit. Measured
+          on a 390px phone that panel was ~300px, so the library opened on its
+          own filters and the first post began below the fold. The controls
+          are the same controls and every one of them still works the same
+          way; what is gone is the container, the rails and two of the rows.
+        */}
+        {all.length > 0 && (
+          <div className="space-y-2">
+            <div className="relative">
+              {/* start-, not left-: the glyph belongs at the beginning of the
+                  field, which in Hebrew is the right-hand side. */}
+              <SearchIcon aria-hidden className="pointer-events-none absolute inset-y-0 start-4 my-auto h-5 w-5 text-mist-500" />
+              {/* The border stays ink-600 rather than the softer hairline the
+                  cards use: an input's edge is the only thing telling a finger
+                  where the field is, and it is held to 3:1 as a UI component
+                  (globals.css says the same about this token). */}
+              <input
+                type="search"
+                className={`${inputClass} min-h-14 rounded-2xl ps-11 text-[15px]`}
+                placeholder="חיפוש פוסט, נושא או טקסט…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="חיפוש פוסט"
               />
             </div>
 
-            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
-              <div className="flex flex-wrap gap-3">
-                <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => setSelected(visible.map((it) => it.post.id))}>
-                  {visible.length === 1 ? 'בחר את הפוסט המוצג' : `בחר את כל ${visible.length} המוצגים`}
-                </button>
-                {selected.length > 0 && (
-                  <button type="button" className="min-h-11 px-1 text-mist-500" onClick={() => setSelected([])}>
-                    נקה בחירה
-                  </button>
-                )}
-              </div>
+            <SegmentedControl
+              variant="chips"
+              label="סוג תוכן"
+              value={mediaFilter}
+              onChange={setMediaFilter}
+              options={[
+                { value: '', label: 'הכל', count: mediaCounts[''] },
+                {
+                  value: 'image',
+                  label: (
+                    <>
+                      <ImageIcon className="h-4 w-4" /> תמונות
+                    </>
+                  ),
+                  count: mediaCounts.image,
+                },
+                {
+                  value: 'video',
+                  label: (
+                    <>
+                      <VideoIcon className="h-4 w-4" /> סרטונים
+                    </>
+                  ),
+                  count: mediaCounts.video,
+                },
+                {
+                  value: 'text',
+                  label: (
+                    <>
+                      <TextIcon className="h-4 w-4" /> טקסט
+                    </>
+                  ),
+                  count: mediaCounts.text,
+                },
+              ]}
+            />
+
+            <SegmentedControl
+              variant="chips"
+              label="סדר"
+              value={sort}
+              onChange={setSort}
+              options={[
+                { value: 'newest', label: 'חדשים' },
+                { value: 'most', label: 'הכי מפורסמים' },
+                { value: 'recent', label: 'פורסמו לאחרונה' },
+                { value: 'oldest', label: 'ישנים' },
+              ]}
+            />
+
+            {/* The thin utility line. Everything on it was already here; it is
+                text rather than another row of chips because none of it is a
+                filter you scan — it is a thing you go and do. */}
+            <div className="flex flex-wrap items-center gap-x-3 px-0.5 text-xs font-bold">
               <button
                 type="button"
-                className="inline-flex min-h-11 items-center gap-1.5 px-1 text-brand-400"
+                aria-expanded={showMoreFilters}
+                className="inline-flex min-h-11 items-center gap-1 px-1 text-brand-400"
+                onClick={() => setMoreFilters((v) => !v)}
+              >
+                עוד סינון
+                <ChevronDownIcon className={`h-4 w-4 transition-transform ${showMoreFilters ? 'rotate-180' : ''}`} />
+              </button>
+              <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => setSelected(visible.map((it) => it.post.id))}>
+                {visible.length === 1 ? 'בחר את הפוסט המוצג' : `בחר את כל ${visible.length}`}
+              </button>
+              {selected.length > 0 && (
+                <button type="button" className="min-h-11 px-1 text-mist-500" onClick={() => setSelected([])}>
+                  נקה בחירה
+                </button>
+              )}
+              <button
+                type="button"
+                className="inline-flex min-h-11 items-center gap-1.5 px-1 text-brand-400 ms-auto"
                 onClick={() => {
                   setRenames({});
                   setNewCategory('');
@@ -388,7 +430,40 @@ export default function LibraryPage() {
                 <TagIcon className="h-4 w-4" /> נהל קטגוריות
               </button>
             </div>
-          </Card>
+
+            {showMoreFilters && (
+              <div className="space-y-2">
+                {categories.length > 0 && (
+                  <SegmentedControl
+                    variant="chips"
+                    label="קטגוריית תוכן"
+                    value={categoryFilter}
+                    onChange={setCategoryFilter}
+                    options={[
+                      { value: '', label: 'כל הקטגוריות', count: categoryCounts[''] },
+                      ...categories.map((c) => ({
+                        value: c.id,
+                        label: <span dir="auto">{c.name}</span>,
+                        count: categoryCounts[c.id] ?? 0,
+                      })),
+                      { value: UNCATEGORISED, label: 'ללא קטגוריה', count: categoryCounts[UNCATEGORISED] ?? 0 },
+                    ]}
+                  />
+                )}
+                <SegmentedControl
+                  variant="chips"
+                  label="פרסום"
+                  value={publishedFilter}
+                  onChange={setPublishedFilter}
+                  options={[
+                    { value: '', label: 'פורסמו וגם לא', count: publishedCounts[''] },
+                    { value: 'yes', label: 'כבר פורסמו', count: publishedCounts.yes },
+                    { value: 'no', label: 'טרם פורסמו', count: publishedCounts.no },
+                  ]}
+                />
+              </div>
+            )}
+          </div>
         )}
 
         {/* Loading: cards, not a spinner, so the grid does not jump when it
@@ -398,7 +473,7 @@ export default function LibraryPage() {
         {!items && !error && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
             {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-60 rounded-tile" />
+              <Skeleton key={i} className="h-72 rounded-card" />
             ))}
           </div>
         )}

@@ -1296,15 +1296,25 @@
  * softer drop — never from a glow.
  */
 /*
- * iOS rubber-band overscroll paints the DOCUMENT background, and the document
- * sits outside this scope — SiteChrome renders a bare <main>, so <body> keeps
- * the storefront's charcoal. A pull past the top or bottom of a /social screen
- * flashed #17191c at the edge of an otherwise navy app. The literal is the
- * same value as --color-ink-950 below, spelled out because a custom property
- * declared on .social-theme cannot be read by its own ancestor; the two are
- * changed together.
+ * THE DOCUMENT ITSELF, not just the themed element — and BOTH of them.
+ *
+ * .social-theme is a div inside <body>, and <body> takes its background from
+ * the storefront's unscoped ink-950: charcoal. Everything the app does not
+ * cover with its own element therefore paints charcoal — the strip behind the
+ * status bar under `viewport-fit: cover`, the area behind Safari's toolbar,
+ * and the rubber-band gap on an overscroll. On a navy app that read as a dark
+ * edge on a dark app and went unnoticed; on a white-purple one it is two black
+ * bands, top and bottom, around the product.
+ *
+ * html alone was not enough, because <body> is painted over it.
+ *
+ * The literal is spelled out rather than referenced: a custom property
+ * declared on .social-theme cannot be read by its own ancestors. It is the
+ * same value as --color-ink-950 in the block above, and the two change
+ * together.
  */
-html:has(.social-theme) {
+html:has(.social-theme),
+body:has(.social-theme) {
   background-color: #f7f5ff;
 }
 

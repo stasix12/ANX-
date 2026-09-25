@@ -101,13 +101,16 @@ export function ActivityDetailSheet({
                   <Stamp iso={row.published_at ?? row.scheduled_at} />
                   {/*
                     HOW LONG THE PUBLICATION ITSELF TOOK.
-                    
-                    claimed_at is the moment the worker picked the row up,
-                    published_at the moment it was done — opening the group,
-                    typing, uploading, posting and verifying, all of it. It is
-                    the only honest answer to "why is it not one a minute",
-                    and it was written to the row all along with nothing
-                    reading it. Measured, not estimated: both stamps are the
+
+                    claimed_at is the moment the worker picked the row up;
+                    published_at is the moment the post went LIVE — the
+                    composer's dialog closed with no error banner. So this
+                    covers opening the group, typing, uploading and posting,
+                    and it deliberately does NOT cover what happens after the
+                    post exists: finding it in the feed, reading its address.
+                    Those used to be inside this number and inside the spacing
+                    gap; they are now outside both. It is the honest answer to
+                    "why is it not one a minute", and both stamps are the
                     database's.
                   */}
                   {row.claimed_at && row.published_at && (

@@ -1,9 +1,10 @@
 import { hostname } from 'node:os';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Page } from 'playwright-core';
 import { detectCity } from '@/lib/social/cities';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
-import { evaluateQueueItem } from '@/lib/social/rules';
+import { PREP_LEAD_MS, evaluateQueueItem } from '@/lib/social/rules';
 import { stampText } from '@/lib/social/time';
 import {
   DEFAULT_BROWSER,
@@ -94,6 +95,8 @@ interface WorkerState {
    * the loop goes straight round; when nothing did, it sleeps as before.
    */
   worked?: boolean;
+  /** When the "waiting for the gap" line was last written. See spacingGate(). */
+  spacingNoticeAt: number;
   lastCheckAt: number;
   lastPlanAt: number;
   idleNoticeShown: boolean;
@@ -185,6 +188,7 @@ async function main(): Promise<void> {
     currentJob: null,
     lastCheckAt: 0,
     lastPlanAt: 0,
+    spacingNoticeAt: 0,
     idleNoticeShown: false,
     accountId: ((worker as { fb_user_id?: string }).fb_user_id ?? '') || undefined,
   };
@@ -261,6 +265,64 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
+/**
+ * Is there a group publication due right now?
+ *
+ * Deliberately the SAME SHAPE as the claim query below — same table, same
+ * filters, same embedded inner join — with `limit(1)` instead of a count.
+ * An exact count over an embedded `!inner` relation is a combination this
+ * codebase uses nowhere else, and this answer decides whether a chore that
+ * holds the only browser for half a minute gets to start: wrong in one
+ * direction the chores never run again, wrong in the other they never give
+ * way. A one-row read cannot be wrong about the thing the claim will see,
+ * because it is the same read.
+ */
+async function anyDue(db: SupabaseClient): Promise<boolean> {
+  const { data } = await db
+    .from('social_queue')
+    .select('id, target:social_targets!inner(channel)')
+    .eq('status', 'scheduled')
+    .eq('target.channel', 'facebook_group')
+    .lte('scheduled_at', new Date().toISOString())
+    .limit(1);
+  return Boolean(data?.length);
+}
+
+/**
+ * When the next publication is allowed out, asked once per tick.
+ *
+ * The same question rules.ts asks per row, and the same answer for all of
+ * them: the rule reads ONE global instant — the most recent publication —
+ * so asking it thirty times to hear it thirty times was thirty claims, thirty
+ * rule bursts and thirty log lines for one fact.
+ *
+ * rules.ts keeps its own copy and remains the authority: this is a gate on
+ * claiming, not a replacement for the rule. Every other reason a row can be
+ * held back is per row and is still decided there.
+ */
+async function spacingGate(
+  db: SupabaseClient,
+  limits: LimitsSettings,
+  browser: BrowserSettings,
+): Promise<{ open: boolean; waitMs: number; gapMs: number; gapMinutes: number; nextAt: string | null }> {
+  const gapMinutes = Math.max(0, (limits.minGapMinutes ?? 0) + (browser.groupMinGapMinutes ?? 0));
+  const gapMs = gapMinutes * 60_000;
+  if (!gapMs) return { open: true, waitMs: 0, gapMs: 0, gapMinutes, nextAt: null };
+  const { data: last } = await db
+    .from('social_queue')
+    .select('published_at')
+    .eq('status', 'published')
+    .not('published_at', 'is', null)
+    .order('published_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const at = (last as { published_at?: string } | null)?.published_at;
+  if (!at) return { open: true, waitMs: 0, gapMs, gapMinutes, nextAt: null };
+  const nextMs = new Date(at).getTime() + gapMs;
+  const waitMs = nextMs - Date.now();
+  return { open: waitMs <= 0, waitMs, gapMs, gapMinutes, nextAt: new Date(nextMs).toISOString() };
+}
+
 /* --------------------------------------------------------------- tick */
 
 async function tick(state: WorkerState): Promise<void> {
@@ -288,13 +350,54 @@ async function tick(state: WorkerState): Promise<void> {
     .order('scheduled_at')
     .limit(Math.max(1, Math.min(3, browser.concurrentJobs || 1)));
   if (error) throw new Error(error.message);
-  if (!due?.length) {
-    await resolveAddresses(state, headless);
-    await runCampaignComments(state, headless);
-    await resolveShareLinks(state, headless);
-    await syncGroupProfiles(state, headless);
-    await syncPostMetrics(state, headless);
-    await restartIfUpdated(state);
+
+  /*
+   * THE SPACING GATE, ASKED ONCE — BEFORE ANYTHING IS CLAIMED.
+   *
+   * It used to be asked per row, inside the job, after the claim. So every
+   * due row behind one closed gap paid a full claim UPDATE, a heartbeat,
+   * three entity reads, seven rule queries, a write-back and an activity
+   * INSERT — about thirteen round trips — purely to be told "not yet", and
+   * wrote a "נדחה" line for the owner to read. With a queue denser than the
+   * gap that is a burst of hundreds of round trips at every gap boundary and
+   * a log nobody can use. The answer is the same for all of them, because the
+   * rule reads one global instant: the last publication's.
+   *
+   * So it is asked once, here, and when the gap is not open this tick claims
+   * nothing at all. Every OTHER reason a row can be deferred — the daily
+   * caps, a paused run, the duplicate rules — is per row and stays in
+   * rules.ts, which still runs for real.
+   */
+  const gate = await spacingGate(db, limits, browser);
+  if (due?.length && !gate.open && gate.waitMs > PREP_LEAD_MS) {
+    /* Not yet, and not close enough to start preparing. Say so once per gap,
+       not once per row per tick. */
+    if (Date.now() - state.spacingNoticeAt > gate.gapMs / 2) {
+      state.spacingNoticeAt = Date.now();
+      await logActivity('info', 'deferred', `ממתין למרווח של ${gate.gapMinutes} דק׳ בין פרסומים`, { until: gate.nextAt });
+    }
+    return;
+  }
+
+  if (!due?.length || (!gate.open && gate.waitMs > PREP_LEAD_MS)) {
+    /*
+     * IDLE CHORES — and they must give way the moment a row comes due.
+     *
+     * These six hold the single browser for tens of seconds each (a metrics
+     * read scrolls a feed twenty times; a comment can take minutes), and they
+     * run in exactly the window between two publications — because right
+     * after a publication the queue is always momentarily empty. A row whose
+     * turn arrived mid-chain was not even looked at until the whole chain
+     * finished, which is most of the minute the owner was missing.
+     *
+     * The queue is re-asked before each one. The worst case is now one chore,
+     * not six.
+     */
+    for (const chore of [resolveAddresses, runCampaignComments, resolveShareLinks, syncGroupProfiles, syncPostMetrics] as const) {
+      if (stopping || (await anyDue(db))) return;
+      await chore(state, headless);
+    }
+    if (!(await anyDue(db))) await restartIfUpdated(state);
     return;
   }
 
@@ -335,7 +438,15 @@ async function tick(state: WorkerState): Promise<void> {
    */
   for (const item of jobs.slice(0, concurrency)) {
     if (stopping) break;
-    state.worked = true;
+    /*
+     * `notBefore` is what makes a one-minute gap mean one publication a
+     * minute. The gate above let this row through up to PREP_LEAD_MS early,
+     * so the browser work — opening the group, typing, uploading — happens
+     * INSIDE the remaining wait instead of after it, and the composer holds
+     * the final click until the instant itself. Before this, the gap and the
+     * preparation ran one after the other and the true interval was always
+     * gap + preparation, never gap.
+     */
     await runJob(state, item, { limits, browser, headless });
   }
 }
@@ -682,6 +793,17 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   let livePage: Page | null = null;
   let lastStep = 'opening';
   let failureShot: string | null = null;
+  /*
+   * A PUBLICATION is work; being told "not yet" is not.
+   *
+   * The loop skips its five-second sleep when a tick worked, so it can go
+   * straight on to the next row instead of idling between publications. Set
+   * before the rules ran, a row that merely deferred also counted — and at a
+   * gap boundary that turned the whole due set into a back-to-back burst of
+   * claims and log lines with no brake at all. It is set here, past every
+   * branch that does not publish.
+   */
+  state.worked = true;
   console.log(`[worker] ▶ "${tt.name}" — ${pp.title || 'פוסט'}${v ? ` (גרסה ${v.label})` : ''}`);
 
   /*
@@ -709,6 +831,10 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       campaignId: item.campaign_id ?? pp.campaign_id,
       variantId: v?.id ?? null,
       headless: jobEnv.headless,
+      /* The rule's own instant, not a second reading of the same column: the
+         gate above decides WHETHER to claim, rules.ts decides when the click
+         may land, and only one of them may own that number. */
+      notBefore: decision.notBefore ?? null,
       onPage: (page) => {
         livePage = page;
       },

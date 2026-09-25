@@ -32,6 +32,16 @@ export interface ComposeInput {
   /** Called at "ready to publish" when the owner wants to approve the first runs by hand. */
   confirm?: (page: Page) => Promise<'confirmed' | 'cancelled' | 'timeout'>;
   /**
+   * The earliest instant this post may be SUBMITTED — the spacing gap's own
+   * moment, when the worker claimed this row before it had closed.
+   *
+   * Everything up to the final click happens regardless. Only the click
+   * waits, and it waits with the post already written and the picture already
+   * uploaded, so the gap and the preparation overlap instead of following one
+   * another. Null means the gap is already open and nothing is held.
+   */
+  notBefore?: string | null;
+  /**
    * Text to leave as the FIRST COMMENT on the post that was just published.
    *
    * Empty or absent means none. It exists because contact details in the body
@@ -74,6 +84,14 @@ export interface ComposeResult {
    */
   publishedAt: string;
 }
+
+/**
+ * The longest the composer will sit on a prepared post waiting for the
+ * spacing gap. A ceiling, not a target: the worker decides how early to claim
+ * and never claims more than PREP_LEAD_MS early, so this only ever catches a
+ * clock that moved or a setting that changed under a job in flight.
+ */
+const PREP_HOLD_CAP_MS = 3 * 60_000;
 
 const IMAGE_UPLOAD_TIMEOUT = 3 * 60_000;
 const VIDEO_UPLOAD_TIMEOUT = 15 * 60_000;
@@ -156,10 +174,27 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   }
 
   // 6. Publish -------------------------------------------------------------
+  /*
+   * THE GAP IS SERVED HERE, WITH EVERYTHING ALREADY PREPARED.
+   *
+   * The post is written, the picture is in and the button is live; all that
+   * is left is the click. Holding it here is what turns "a minute between
+   * publications" into a publication a minute: the queue used to satisfy the
+   * gap BEFORE claiming the row, and then spend the whole preparation — page
+   * load, typing, upload — on top of it, so the real interval was always the
+   * gap plus a publication rather than the larger of the two.
+   *
+   * The wait is bounded by the caller: the worker only claims this early when
+   * the remaining gap is short (PREP_LEAD_MS), so a composer is never left
+   * open for long.
+   */
+  if (input.notBefore) {
+    const left = new Date(input.notBefore).getTime() - Date.now();
+    if (left > 0) await page.waitForTimeout(Math.min(left, PREP_HOLD_CAP_MS));
+  }
   await input.onStep('publishing');
   assertUsable(await classifyPage(page));
   await postButton.click();
-  let submitted = true;
 
   // 7. Verify --------------------------------------------------------------
   await input.onStep('verifying');
@@ -168,7 +203,6 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   } catch {
     // Still open: either an error banner or a slow upload.
     if (await fb.failureText(page).isVisible({ timeout: 1000 }).catch(() => false)) {
-      submitted = false;
       throw new PublishError('rejected', `Facebook דחה את הפוסט: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);
     }
     throw new PublishError('timeout', 'חלון הפוסט לא נסגר אחרי הלחיצה על "פרסום". בדקו בקבוצה אם הפוסט עלה לפני ניסיון נוסף.', true);
@@ -205,8 +239,8 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * reload. The article that carries our words IS the proof it published AND
    * the thing the address hangs on, so it is found once.
    */
-  let article = submitted ? await findPostArticle(page, input.text, 1, 6_000) : null;
-  if (submitted && !article) {
+  let article = await findPostArticle(page, input.text, 1, 6_000);
+  if (!article) {
     try {
       await page.goto(input.groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
       await page.waitForTimeout(1200);
@@ -216,7 +250,36 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
          never as a failure — it is on Facebook either way. */
     }
   }
-  const verified = Boolean(article);
+
+  /*
+   * THE LATE REJECTION, CAUGHT WHERE THERE IS TIME TO CATCH IT.
+   *
+   * The banner is looked for twice: once straight after the dialog detaches,
+   * and again HERE, seconds later, after the feed has been searched. The
+   * first check alone was a ~1.9s window — a rejection Facebook renders later
+   * than that was recorded as a successful publication, which is the one
+   * outcome that must always reach a person. This second look costs nothing:
+   * the time has already been spent looking for the post, and not finding it
+   * is exactly when a rejection is most likely to be the reason.
+   */
+  if (!article && (await fb.failureText(page).isVisible({ timeout: 1000 }).catch(() => false))) {
+    throw new PublishError('rejected', `Facebook הודיע על כישלון: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);
+  }
+
+  /*
+   * VERIFIED IS A QUESTION ABOUT THE WORDS, NOT ABOUT THE MARKUP.
+   *
+   * The article search is strictly narrower than the text search it replaced:
+   * it needs our words INSIDE a [role="article"] node. Facebook renders a
+   * just-posted item in a transient wrapper often enough that the narrower
+   * test reports "we could not verify the post" about a post that is plainly
+   * on the page — a false alarm to the owner about the one thing they care
+   * about. So the article is what the ADDRESS needs, and the words on the
+   * page are what VERIFIED means; the fallback runs only when the article was
+   * not found, which is the only case where the two can differ.
+   */
+  const probe = pageProbe(input.text);
+  const verified = Boolean(article) || (Boolean(probe) && (await page.getByText(probe, { exact: false }).first().isVisible().catch(() => false)));
   const permalink = article ? await permalinkOf(article) : '';
   return { outcome: 'published', verified, pendingApproval, groupTitle, permalink, publishedAt };
 }
@@ -286,6 +349,11 @@ export async function findPostArticle(page: Page, postText: string, passes = 20,
      * scrolling that changes the answer.
      */
     if (pass === 0 ? await appears(article, firstWaitMs) : await article.isVisible().catch(() => false)) return article;
+    /* One pass means one look. Scrolling and then sleeping 1200ms on the way
+       out is a second and a half added to every publication whose post was
+       not in the first screenful — in the caller that asked for one look
+       precisely because it has nowhere to scroll to. */
+    if (passes <= 1) return null;
 
     /*
      * Scrolled three ways, because no single one of them is reliable.
@@ -890,6 +958,10 @@ async function attachFiles(page: Page, dialog: Locator, files: string[]): Promis
 async function waitForUploads(dialog: Locator, expected: number, timeout: number): Promise<void> {
   const deadline = Date.now() + timeout;
   let stableSince = 0;
+  /* Whether Facebook's own progress bar was ever seen. See the comment below:
+     it is the difference between knowing the upload happened and inferring it
+     from a preview the browser could have drawn from the local file. */
+  let sawProgress = false;
   while (Date.now() < deadline) {
     const previews = await fb.mediaPreview(dialog).count().catch(() => 0);
     const busy = (await fb.uploadProgress(dialog).count().catch(() => 0)) > 0;
@@ -897,21 +969,29 @@ async function waitForUploads(dialog: Locator, expected: number, timeout: number
     // that, with no progress bar, means every file is in.
     const collage = expected > 1 && (await fb.collageReady(dialog).isVisible({ timeout: 200 }).catch(() => false));
     /*
-     * COUNTED IN, OR GUESSED IN — and only the guess needs a settling period.
+     * A PREVIEW IS NOT A COMPLETED UPLOAD.
      *
-     * Every file has its own preview and no progress bar is left: that is the
-     * upload finished, counted, and there is nothing a further wait can tell
-     * us. The 1500ms settling window below (plus the poll it lands on) was
-     * being charged to that certain case too — measured against a 1x1 PNG on
-     * a local page, where the upload itself costs nothing, this function took
-     * 3.1 of the publication's 6.1 seconds. It is now what it was written to
-     * be: patience for the branches that INFER completion — Facebook's
-     * collage, and the "one preview and nothing moving" fallback for a batch
-     * it renders as a single tile.
+     * This is the correction to a fix that was nearly a disaster. The count of
+     * previews reaching `expected` was briefly treated as certainty and
+     * returned on the spot, to save the settling period below. But
+     * selectors.ts counts `img[src^="blob:"]` as a preview, and a blob URL is
+     * created by the BROWSER the instant setInputFiles lands — before a single
+     * byte has left the machine. The only thing between that and an immediate
+     * return was Facebook's progress bar having already mounted, which within
+     * 250ms it frequently has not. The settling window was what made that race
+     * unobservable. Without it the next steps can click "פרסום" on a photo
+     * that is still uploading, and the post goes out with a broken image.
+     *
+     * So certainty needs EVIDENCE OF THE UPLOAD ITSELF, not of a preview: we
+     * must have SEEN the progress bar and seen it go. That is instant when it
+     * happens, which is the common case on a real connection and the whole of
+     * the saving. A preview count with a progress bar that never appeared at
+     * all is a guess like the others, and keeps their settling period.
      */
-    const counted = !busy && previews >= expected;
+    if (busy) sawProgress = true;
+    const counted = !busy && previews >= expected && sawProgress;
     if (counted) return;
-    const done = !busy && (collage || (expected > 1 && previews >= 1 && Date.now() - stableSince > 8000 && stableSince > 0));
+    const done = !busy && (collage || (previews >= expected) || (expected > 1 && previews >= 1 && Date.now() - stableSince > 8000 && stableSince > 0));
     if (done) {
       if (!stableSince) stableSince = Date.now();
       if (Date.now() - stableSince > 1500) return;

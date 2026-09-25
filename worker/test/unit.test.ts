@@ -647,9 +647,25 @@ console.log('unit tests OK');
    * a post that exists on Facebook with no record of it here.
    */
   assert.ok(/if \(state\.currentJob\) return;/.test(localWorker), 'it never restarts while a post is going out');
-  const idleAt = localWorker.indexOf('if (!due?.length) {');
+  /*
+   * The idle branch is no longer "the queue came back empty" alone — it is
+   * also entered when the spacing gap is still far off, because that is the
+   * only moment these chores have. Whichever way it is entered, the chores
+   * hold the single browser for tens of seconds each, so every one of them is
+   * now preceded by a fresh "is anything due" check and gives way to a
+   * publication. The restart check is the last of them and carries its own.
+   */
+  const idleAt = localWorker.indexOf('for (const chore of [resolveAddresses');
   const restartAt = localWorker.indexOf('await restartIfUpdated(state);');
   assert.ok(idleAt > 0 && restartAt > idleAt, 'and is only reached once there is nothing to publish');
+  assert.ok(
+    /if \(stopping \|\| \(await anyDue\(db\)\)\) return;/.test(localWorker),
+    'each idle chore gives way to a publication that has come due — they hold the only browser',
+  );
+  assert.ok(
+    /if \(!\(await anyDue\(db\)\)\) await restartIfUpdated\(state\);/.test(localWorker),
+    'and so does the update check, which blocks on git',
+  );
   /* Behind, not merely different: a checkout that has drifted ahead would
      otherwise restart in a loop it could never get out of. */
   const selfUpdate = readFileSync(new URL('../self-update.ts', import.meta.url), 'utf8');
@@ -752,9 +768,13 @@ console.log('unit tests OK');
   assert.ok(/if \(!m\) \{/.test(workerSrc), 'an unreadable post leaves its row unread');
   /* Collection is the least urgent thing the worker does and must never sit in
      front of a publication. */
-  const dueAt = workerSrc.indexOf('if (!due?.length) {');
-  const metricsAt = workerSrc.indexOf('await syncPostMetrics(state, headless);');
+  const dueAt = workerSrc.indexOf('const { data: due, error }');
+  const metricsAt = workerSrc.indexOf('syncPostMetrics] as const');
   assert.ok(dueAt > 0 && metricsAt > dueAt, 'metrics are collected only when there is nothing to publish');
+  /* And it is the LAST of the chores, because it is the most expensive of
+     them: a metrics read scrolls a feed twenty times looking for one post. */
+  const chores = workerSrc.slice(workerSrc.indexOf('for (const chore of ['), workerSrc.indexOf('] as const)'));
+  assert.ok(chores.lastIndexOf('syncPostMetrics') > chores.indexOf('resolveAddresses'), 'and it goes last of the idle chores');
 
   /*
    * A FULL DAILY QUOTA IS "NOT TODAY". IT USED TO BE "NEVER".
@@ -2719,10 +2739,14 @@ const scenario: { step: string; line: string }[] = [];
    */
   assert.ok(/async function resolveAddresses/.test(localWorker), 'addresses are resolved as their own pass');
   assert.ok(/\.is\('permalink', null\)/.test(localWorker), 'and only for rows that do not have one yet');
-  assert.ok(/await resolveAddresses\(state, headless\);/.test(localWorker), 'it runs before anything that needs an address');
-  const addressAt = localWorker.indexOf('await resolveAddresses(state, headless);');
-  const commentsAt = localWorker.indexOf('await runCampaignComments(state, headless);');
-  assert.ok(addressAt > 0 && commentsAt > addressAt, 'before the comments, not after them');
+  /* First of the idle chores, ahead of the comment writer — which is the
+     thing that needs an address. */
+  const choreList = localWorker.slice(localWorker.indexOf('for (const chore of ['), localWorker.indexOf('] as const)'));
+  assert.ok(
+    choreList.indexOf('resolveAddresses') >= 0 && choreList.indexOf('resolveAddresses') < choreList.indexOf('runCampaignComments'),
+    'it runs before anything that needs an address',
+  );
+  /* Same fact, stated once above: the chore list is the order. */
   assert.ok(/\.update\(\{ permalink: url \}\)/.test(localWorker), 'and the address is written down, so nothing searches twice');
 
   /*
@@ -3409,6 +3433,85 @@ const scenario: { step: string; line: string }[] = [];
   );
 
   console.log('deferral-accounting tests OK');
+}
+
+/* ------------------- one publication per gap, not one per gap+publication */
+{
+  /*
+   * THE OWNER ASKED FOR ONE A MINUTE AND GOT ONE EVERY TWO.
+   *
+   * Four separate things were doing it, and three of them were invisible:
+   *
+   *  1. The gap was satisfied BEFORE the row was claimed, so the whole
+   *     preparation — group page load, typing, upload — was spent on top of a
+   *     gap that had already elapsed. The interval was gap + publication,
+   *     structurally, and no amount of shaving milliseconds could reach it.
+   *  2. Every due row behind a closed gap paid a full claim and rule burst
+   *     (~13 round trips) to be told "not yet", and wrote a "נדחה" line for
+   *     it. At a gap boundary that is hundreds of round trips and a log the
+   *     owner cannot read.
+   *  3. Right after each publication the queue is momentarily empty, so the
+   *     worker went off and did its idle chores — six of them, holding the
+   *     one browser for tens of seconds each, in exactly the window where the
+   *     next row was becoming due.
+   *  4. A tick that merely DEFERRED counted as work and skipped the loop's
+   *     brake, turning each boundary into a burst.
+   */
+  const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const rules = readFileSync(new URL('../../src/lib/social/rules.ts', import.meta.url), 'utf8');
+  const composer = readFileSync(new URL('../facebook/composer.ts', import.meta.url), 'utf8');
+
+  /* 1 — the row is let through early and the CLICK waits, so the gap and the
+         preparation overlap instead of following one another. */
+  assert.ok(/export const PREP_LEAD_MS = /.test(rules), 'how early a row may start is one named number');
+  assert.ok(
+    /if \(wait <= PREP_LEAD_MS\) return \{ action: 'publish', notBefore:/.test(rules),
+    'within that lead the rule lets the row through with the instant attached, instead of deferring it',
+  );
+  assert.ok(/\{ action: 'publish'; notBefore\?: string \}/.test(rules), 'and the decision type carries it');
+  assert.ok(
+    composer.indexOf('if (input.notBefore) {') < composer.indexOf("await input.onStep('publishing')"),
+    'the composer holds the final click for that instant — after the post is written and the picture is in',
+  );
+  assert.ok(/notBefore: decision\.notBefore \?\? null/.test(worker), "and the worker passes the rule's own instant, not a second reading of it");
+
+  /* 2 — the gate is asked once per tick, before anything is claimed. */
+  assert.ok(/async function spacingGate\(/.test(worker), 'the spacing question is asked once per tick');
+  assert.ok(
+    worker.indexOf('const gate = await spacingGate(db') < worker.indexOf('for (const item of jobs.slice(0, concurrency))'),
+    'and it is asked BEFORE any row is claimed, or the claim burst is back',
+  );
+  assert.ok(/state\.spacingNoticeAt/.test(worker), 'the waiting line is said once per gap, not once per row per tick');
+
+  /* 3 — the idle chores give way to a publication. Pinned above with anyDue. */
+  assert.ok(/async function anyDue\(/.test(worker), 'there is a cheap "is anything due" check for the chores to use');
+
+  /* 4 — only a publication counts as work. */
+  const workedAt = worker.indexOf('state.worked = true;');
+  assert.ok(workedAt > 0, 'the loop still knows when it worked');
+  assert.ok(
+    workedAt > worker.indexOf("if (decision.action === 'defer')"),
+    'and a deferral is not work — set before the rules ran, every gap boundary became a burst with no brake',
+  );
+
+  /* 5 — the upload safety regression, fixed. A blob: preview exists the
+         instant the file is chosen; only the progress bar proves an upload. */
+  assert.ok(/let sawProgress = false;/.test(composer), 'the upload wait remembers whether it ever saw progress');
+  assert.ok(
+    /const counted = !busy && previews >= expected && sawProgress;/.test(composer),
+    'and only calls the upload certain when it did — a preview alone can be a local blob, and clicking Post on it publishes a broken photo',
+  );
+
+  /* 6 — one look means one look. */
+  assert.ok(/if \(passes <= 1\) return null;/.test(composer), 'a single-pass search does not scroll and sleep on its way out');
+
+  /* 7 — a rejection that renders late is still caught. */
+  assert.ok(
+    /if \(!article && \(await fb\.failureText\(page\)\.isVisible/.test(composer),
+    'the failure banner is looked for again after the feed search, where there has been time for it to render',
+  );
+
+  console.log('publication-cadence tests OK');
 }
 
 /* ----------------------------------------- the 28-publication scenario */

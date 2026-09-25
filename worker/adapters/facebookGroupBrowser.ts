@@ -24,6 +24,8 @@ export interface GroupPublishInput {
   campaignId: string | null;
   variantId: string | null;
   headless: boolean;
+  /** The earliest instant the post may be SUBMITTED. Passed straight through. */
+  notBefore?: string | null;
   onStep: (step: ComposerStep) => Promise<void>;
   /** Present when the run must pause before the final click. */
   confirm?: (page: Page) => Promise<'confirmed' | 'cancelled' | 'timeout'>;
@@ -72,6 +74,7 @@ export class FacebookGroupBrowserAdapter {
         video: local?.video ?? null,
         onStep: input.onStep,
         confirm: input.confirm,
+        notBefore: input.notBefore ?? null,
       });
     } catch (err) {
       // Screenshot while the page still shows what went wrong.

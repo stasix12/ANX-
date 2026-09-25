@@ -16,7 +16,12 @@ import type { BrowserSettings, LimitsSettings, Post, QueueItem, SocialTarget, Va
  */
 
 export type RuleDecision =
-  | { action: 'publish' }
+  /**
+   * `notBefore` is the spacing gap's own instant, present when this row was
+   * claimed while the gap was still closing. Everything up to the final click
+   * may proceed; the click waits for it. See PREP_LEAD_MS.
+   */
+  | { action: 'publish'; notBefore?: string }
   | { action: 'skip'; reason: string }
   | { action: 'defer'; until: string; reason: string }
   | { action: 'wait'; until: string; reason: string };
@@ -45,6 +50,26 @@ const MAX_DEFERRALS = 40;
  * so it is one poll of the worker, which is the real granularity anyway.
  */
 const DEFER_CUSHION_MS = 5_000;
+
+/**
+ * HOW EARLY A ROW MAY BE LET THROUGH BEFORE ITS GAP CLOSES.
+ *
+ * The gap used to be satisfied before the browser was opened, and the whole
+ * preparation — the group page load, the typing, the upload — was then spent
+ * on top of it. So the real interval between two publications was the gap
+ * PLUS a publication, never the gap: an owner who asked for one a minute got
+ * one every two, and a "נדחה" line for every row in between.
+ *
+ * Let through this early, the preparation happens INSIDE the remaining wait
+ * and the composer holds the final click until the instant itself, so the
+ * interval becomes the gap or the length of a publication, whichever is
+ * larger. Seventy-five seconds is comfortably longer than a measured
+ * publication and short enough that a prepared post is never left sitting.
+ *
+ * Exported because the worker uses the same number to decide when to claim,
+ * and the two must not drift.
+ */
+export const PREP_LEAD_MS = 75_000;
 
 /**
  * How far ahead a parked row is pushed.
@@ -207,6 +232,14 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
        * genuinely failing on every claim, which is worth stopping.
        */
       if (item.attempts > MAX_DEFERRALS) return { action: 'skip', reason: 'הפרסום נכשל שוב ושוב ולכן הופסק.' };
+      /*
+       * Close enough to start: let it through with the instant attached. The
+       * caller prepares the post and holds the click — see PREP_LEAD_MS. This
+       * is the branch that makes a one-minute gap mean a publication a
+       * minute rather than a publication every minute-and-a-publication.
+       */
+      const wait = gapMs - sinceLast;
+      if (wait <= PREP_LEAD_MS) return { action: 'publish', notBefore: new Date(new Date(last.published_at).getTime() + gapMs).toISOString() };
       const until = new Date(new Date(last.published_at).getTime() + gapMs + DEFER_CUSHION_MS).toISOString();
       return { action: 'defer', until, reason: `נדחה כדי לשמור מרווח של ${limits.minGapMinutes + extra} דק׳ בין פרסומים` };
     }

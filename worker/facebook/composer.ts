@@ -580,7 +580,7 @@ async function commentAt(
 /** Each failure mode of addComment, as something the owner can act on. */
 const COMMENT_REASON: Record<Exclude<CommentStep, 'ok'>, string> = {
   'no-post': 'לא מצאנו את הפוסט הזה בקבוצה — ייתכן שהוא נמחק, או שמנהל הקבוצה הסיר אותו.',
-  'no-box': 'אין אפשרות להגיב על הפוסט הזה — ייתכן שמנהל הקבוצה סגר תגובות.',
+  'no-box': 'לא מצאנו תיבת תגובה על הפוסט הזה — ייתכן שמנהל הקבוצה סגר תגובות.',
   'not-sent': 'כתבנו את התגובה אבל פייסבוק לא אישרה שהיא נוספה.',
   /*
    * ENTER WAS PRESSED. That is the whole difference from 'not-sent' above,
@@ -1022,6 +1022,52 @@ async function stillAttached(a: Attachment): Promise<boolean> {
 /** Where the attempt stopped. Each one is a different thing to do next. */
 export type CommentStep = 'ok' | 'no-post' | 'no-box' | 'not-sent' | 'sent-unsure' | 'blocked' | 'no-photo' | 'no-photo-unsure';
 
+/**
+ * The box this post is commented in — which is not always inside the post.
+ *
+ * IT WAS LOOKED FOR IN THE [role="article"] ONLY, and on the page that
+ * matters most it is not there. Facebook renders a group permalink as a
+ * modal: the post is the article, and the composer — "כתיבת תגובה בתור
+ * <name>" — sits at the BOTTOM of the dialog, beside the article rather than
+ * in it. So the worker opened the post, had the box on screen in its own
+ * screenshot, and reported "אין אפשרות להגיב על הפוסט הזה — ייתכן שמנהל
+ * הקבוצה סגר תגובות" about a group that had done nothing of the kind.
+ *
+ * The scopes widen from the post to the enclosing dialog AND NO FURTHER. On
+ * a group feed the first textbox on the page is "write a post", and typing a
+ * comment into it publishes a second POST — which is why this has never been
+ * allowed to fall back to the page, and still is not.
+ *
+ * Within a scope, first and last are both tried: a permalink's top-level
+ * composer is below the comments and a feed's is above them, and neither
+ * ordering is worth guessing at when asking costs a second.
+ */
+async function findCommentBox(page: Page, article: Locator): Promise<Locator | null> {
+  const dialog = article.locator('xpath=ancestor::*[@role="dialog"][1]');
+  const scopes: Locator[] = [article];
+  if ((await dialog.count().catch(() => 0)) > 0) scopes.push(dialog);
+
+  for (const scope of scopes) {
+    const boxes = scope.getByRole('textbox', { name: patterns.commentBox });
+    for (const wait of [2_000, 6_000]) {
+      for (const candidate of [boxes.first(), boxes.last()]) {
+        if (await appears(candidate, wait)) return candidate;
+      }
+      /* Not on screen yet: it is often behind the "comment" control. Clicked
+         once per scope, between the quick look and the patient one. */
+      if (wait === 2_000) {
+        await scope
+          .getByRole('button', { name: patterns.commentBox })
+          .first()
+          .click({ timeout: 3_000 })
+          .catch(() => undefined);
+        await page.waitForTimeout(1200);
+      }
+    }
+  }
+  return null;
+}
+
 async function addComment(page: Page, postText: string, comment: string, image: string | null): Promise<CommentStep> {
   const article = await findPostArticle(page, postText);
   if (!article) return 'no-post';
@@ -1031,19 +1077,8 @@ async function addComment(page: Page, postText: string, comment: string, image: 
   try {
     await article.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
 
-    // The box is sometimes behind the "comment" control rather than on screen.
-    let box = article.getByRole('textbox', { name: patterns.commentBox }).first();
-    if (!(await box.isVisible({ timeout: 3_000 }).catch(() => false))) {
-      await article
-        .getByRole('button', { name: patterns.commentBox })
-        .first()
-        .click({ timeout: 5_000 })
-        .catch(() => undefined);
-      await page.waitForTimeout(1200);
-      box = article.getByRole('textbox', { name: patterns.commentBox }).first();
-    }
-    /* A wait, not a glance: the box is being revealed as this runs. */
-    if (!(await appears(box, 8_000))) return 'no-box';
+    const box = await findCommentBox(page, article);
+    if (!box) return 'no-box';
 
     /* The name must say "comment". A composer box inside the same article
        would take this text and publish it as a second post. */

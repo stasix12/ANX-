@@ -3071,11 +3071,27 @@ const scenario: { step: string; line: string }[] = [];
    * the thumbnail was provably in the form, and the check had already said no.
    */
   assert.ok(/async function appears\(what: Locator, ms: number\)/.test(composerSrc), 'waiting is its own thing, named');
+  /*
+   * AND THE BOX IS LOOKED FOR BESIDE THE POST, NOT ONLY INSIDE IT.
+   *
+   * Facebook renders a group permalink as a modal: the post is the article
+   * and the composer — "כתיבת תגובה בתור <name>" — sits at the bottom of the
+   * DIALOG, beside the article rather than in it. Searching the article alone
+   * reported "אין אפשרות להגיב על הפוסט הזה" about a box that was on screen
+   * in the worker's own screenshot. mock-post-dialog.html now builds that
+   * shape, and the old code fails it with exactly that sentence.
+   *
+   * And no further than the dialog: on a group feed the first textbox on the
+   * page is "write a post", and a comment typed into it becomes a POST.
+   */
+  assert.ok(/async function findCommentBox/.test(composerSrc), 'the comment box is looked for in more than one place');
+  assert.ok(/const scopes: Locator\[\] = \[article\];[\s\S]{0,200}scopes\.push\(dialog\)/.test(composerSrc), 'the post first, then the dialog around it');
+  assert.ok(!/findCommentBox[\s\S]{0,1200}page\.locator\('body'\)/.test(composerSrc), 'and never the whole page, where the first textbox writes a POST');
   assert.ok(/waitFor\(\{ state: 'visible', timeout: ms \}\)/.test(composerSrc), 'and it really waits');
   for (const [what, where] of [
     /* The picture has its own waiter — it is proved by what appeared, not by
        one element being visible — so it is checked above, with mediaCount. */
-    ['the comment box', 'appears(box, 8_000)'],
+    ['the comment box', 'appears(candidate, wait)'],
     ['the post', 'appears(article, firstWaitMs)'],
   ] as const) {
     assert.ok(composerSrc.includes(where), `${what} is waited for, not glanced at`);

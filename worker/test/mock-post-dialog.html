@@ -12,9 +12,15 @@
   A group permalink is a MODAL, and the pieces are not nested the same way:
 
     [role=dialog]
-      [role=article]        the post
-        form                the comment box, its camera and its file input
-        #tray               where the thumbnail is mounted — OUTSIDE the form
+      [role=article]        the post, and NOTHING ELSE
+      form                  the comment box, its camera and its file input
+      #tray                 where the thumbnail is mounted — OUTSIDE the form
+
+  Both of those nestings are the bug. The comment box was looked for inside
+  the [role=article] and is not there, so the worker reported "אין אפשרות
+  להגיב על הפוסט הזה" while its own screenshot showed the box on screen. And
+  the attachment was proved by counting inside the form, where the thumbnail
+  never appears.
 
   That single difference is the bug the owner hit. The picture attached, the
   proof was counted inside the form, the form never changed, and after thirty
@@ -62,12 +68,15 @@
     }
   }
 
-  /* The name lives on a label element, not on aria-label. */
+  const dialog = document.querySelector('[role="dialog"]');
+
+  /* The name lives on a label element, not on aria-label — and Facebook words
+     it with the account in it: "כתיבת תגובה בתור Stas". */
   const lbl = document.createElement('span');
   lbl.id = 'boxlbl';
-  lbl.textContent = 'כתיבת תגובה';
+  lbl.textContent = 'כתיבת תגובה בתור Stas';
   lbl.style.display = 'none';
-  art.appendChild(lbl);
+  dialog.appendChild(lbl);
 
   const form = document.createElement('form');
   const box = document.createElement('div');
@@ -110,5 +119,6 @@
     form.appendChild(file);
   });
   form.appendChild(camera);
-  art.appendChild(form);
+  /* BESIDE the post, not inside it — this is the whole point of the fixture. */
+  dialog.insertBefore(form, tray);
 </script>

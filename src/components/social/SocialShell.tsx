@@ -18,11 +18,26 @@ import {
 } from '@/components/icons';
 import { signOut, useAdminSession } from '@/lib/adminAuth';
 import { getControl, listWorkers } from '@/lib/social/client';
+import { SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, type SystemState } from './systemState';
 import { InstallPrompt } from './InstallPrompt';
 import { NotificationBell } from './NotificationBell';
 import { PublishingToggle } from './PublishingToggle';
 import { UpdateBanner } from './UpdateBanner';
-import { Sheet, useConfirm } from './ui';
+import { Sheet, TONE_TEXT, useConfirm, type Tone } from './ui';
+
+/*
+ * The dot beside the status line, in the INDICATOR step of each tone rather
+ * than the text step: a 8px mark is held to 3:1, not 4.5, and the bright hue
+ * is what reads as a light on a white bar. TONE_FILL in ui.tsx is the
+ * equivalent map for the -300 steps the rest of the module's dots use.
+ */
+const DOT_FILL: Record<Tone, string> = {
+  good: 'bg-success-300 ring-2 ring-success-300/25',
+  warn: 'bg-warning-300 ring-2 ring-warning-300/25',
+  bad: 'bg-error-300 ring-2 ring-error-300/25',
+  brand: 'bg-brand-300 ring-2 ring-brand-300/25',
+  neutral: 'bg-ink-600',
+};
 
 const nav = [
   { href: '/social', label: 'ראשי', icon: HomeIcon, exact: true },
@@ -88,6 +103,7 @@ export function SocialShell({
   hideTitle = false,
   paused,
   account,
+  systemState,
   onControlChanged,
   children,
 }: {
@@ -125,6 +141,21 @@ export function SocialShell({
    * the bar's own one-shot read.
    */
   account?: FbAccount | null;
+  /**
+   * What the system is doing, when the screen has worked it out.
+   *
+   * Only the dashboard can: the ladder reads the pause flag, the PC's
+   * heartbeat, Meta's rate limit, how many rows need a person and whether
+   * anything is queued at all — the whole of its load(). So it hands the
+   * answer up rather than the bar guessing at a smaller version of it, which
+   * is exactly what the bar used to do: it knew the pause flag alone, and
+   * with the PC switched off it read "המערכת פעילה" over a card that read
+   * "התוכנה במחשב לא פועלת".
+   *
+   * Without it the bar says only what it can stand behind — that everything
+   * is stopped, when it is.
+   */
+  systemState?: SystemState;
   onControlChanged?: () => void;
   children: React.ReactNode;
 }) {
@@ -252,6 +283,17 @@ export function SocialShell({
    * bar and is not legible as type.
    */
   const publishingStopped = control === true;
+  /*
+   * The bar's one status line. The screen's own reading wins; failing that,
+   * the only thing the bar itself holds is the pause flag, and it speaks up
+   * only when that flag is on — "everything is stopped" must never be
+   * discovered by accident, and "everything is fine" needs no announcement.
+   */
+  const state = systemState
+    ? { label: SYSTEM_STATE_LABEL[systemState], tone: SYSTEM_STATE_TONE[systemState] }
+    : publishingStopped
+      ? { label: 'הפרסום מושהה', tone: 'warn' as const }
+      : null;
 
   /*
    * The bottom reserve below is the tab bar's real height plus the inset, not
@@ -323,11 +365,11 @@ export function SocialShell({
                 {greetingNow()}
                 {who ? `, ${firstName(who.name)}` : ''} 👋
               </span>
-              {publishingStopped && (
+              {state && (
                 <span className="mt-0.5 flex items-center gap-1.5">
-                  <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-warning-300 ring-2 ring-warning-300/25" />
-                  <span dir="auto" className="truncate text-[11.5px] font-bold leading-[14px] text-warning-400">
-                    הפרסום מושהה
+                  <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${DOT_FILL[state.tone]}`} />
+                  <span dir="auto" className={`truncate text-[11.5px] font-bold leading-[14px] ${TONE_TEXT[state.tone]}`}>
+                    {state.label}
                   </span>
                 </span>
               )}

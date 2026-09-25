@@ -2058,6 +2058,7 @@ const scenario: { step: string; line: string }[] = [];
   /* --- source drift: the screen still reads these fields ------------------ */
   const dash = readFileSync('src/app/social/page.tsx', 'utf8');
   const cards = readFileSync('src/components/social/LiveCampaignHero.tsx', 'utf8');
+  const shell = readFileSync('src/components/social/SocialShell.tsx', 'utf8');
   const pin = (what: string, src: string, needle: string) => assert.ok(src.includes(needle), `${what} drifted: ${needle}`);
 
   pin('the day figure', dash, 'publishedToday={data.today}');
@@ -2080,7 +2081,27 @@ const scenario: { step: string; line: string }[] = [];
   pin('the run card bar counts handled rows through campaign.ts', cards, 'runProgress(progress)');
   pin('...and publications stay a separate, labelled figure on the same card', cards, 'view.publishedLabel');
   pin('the system state is decided once, by the page', dash, 'const systemState: SystemState =');
-  pin('...and the card only renders it', cards, 'SYSTEM_STATE_LABEL[systemState]');
+  /*
+   * ...and is RENDERED once, now by the identity bar rather than by the card.
+   *
+   * The rule is unchanged — one decider, everyone else renders — but the
+   * renderer moved. The bar sits on all eleven screens and the system card on
+   * one, and for two commits both printed the same sentence 300px apart on
+   * that one; the owner's words were "it already says at the top that the
+   * system is connected, why do I need this as well". So the state is in the
+   * bar and the card says what the system is DOING, which is a different
+   * fact.
+   *
+   * Three pins hold that split in place: the page still hands the value to
+   * the bar, the bar still renders the label from the shared map, and the
+   * card may no longer print the label at all.
+   */
+  pin('the page hands the state to the bar', dash, 'systemState={data ? systemState : undefined}');
+  pin('...and the bar renders it', shell, 'SYSTEM_STATE_LABEL[systemState]');
+  assert.ok(
+    !cards.includes('SYSTEM_STATE_LABEL'),
+    'the system card must not print the state label again — the identity bar above it already does',
+  );
 
   /*
    * NO COMPONENT MAY RE-DECLARE A STATUS LIST. An inline list is how the same

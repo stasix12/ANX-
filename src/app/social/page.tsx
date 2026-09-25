@@ -600,6 +600,10 @@ export default function SocialDashboard() {
          worker row for its system card, so it hands the same object over
          rather than making the bar fetch it again. */
       account={data?.fbAccount ?? null}
+      /* The state is decided here, once, and rendered by whoever shows it —
+         the bar at the top of every screen, now, instead of a card 300px
+         below the bar saying the same words. */
+      systemState={data ? systemState : undefined}
       onControlChanged={load}
     >
       {/* A failed read leaves the screen with nothing on it, so it has to

@@ -10,6 +10,7 @@ import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
 import { PostCover } from './PostCover';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
+import { SYSTEM_STATE_TONE, type SystemState } from './systemState';
 
 /**
  * The two cards the dashboard opens with.
@@ -102,27 +103,11 @@ function useTick(active: boolean): number {
   return now;
 }
 
-/** The four system states, decided once by the dashboard and passed down. */
-export type SystemState = 'active' | 'paused' | 'needs_intervention' | 'empty';
-
-export const SYSTEM_STATE_LABEL: Record<SystemState, string> = {
-  active: 'המערכת פעילה',
-  paused: 'המערכת מושהית',
-  needs_intervention: 'נדרשת התערבות',
-  // NOT "פעילה". Claiming the system is working while nothing is queued is
-  // the same lie as an invented number, and it is the state a brand-new
-  // install spends its first hour in.
-  empty: 'אין מה לפרסם כרגע',
-};
-
-const SYSTEM_STATE_TONE: Record<SystemState, Tone> = {
-  active: 'good',
-  // Paused is a deliberate act by the owner, not an alarm. Amber here cries
-  // wolf on the one state they caused themselves.
-  paused: 'neutral',
-  needs_intervention: 'warn',
-  empty: 'neutral',
-};
+/* The four states moved to ./systemState, so the identity bar — which is on
+   all eleven screens — can read them without dragging this dashboard card
+   into every bundle. Re-exported here because the dashboard has always
+   imported the type from this file. */
+export { type SystemState } from './systemState';
 
 /** One row of the card's foot: a recessed box with a label over a value. */
 const FOOT_BOX = 'min-w-0 rounded-xl bg-ink-900 px-3 py-2.5';
@@ -484,23 +469,27 @@ export function LiveQueueHero({
   return (
     <HeroPanel ariaLabel="מצב המערכת">
       {/*
-        The status line, and the one fact that decides whether it can be true.
+        WHAT IT IS DOING — not what state it is in.
 
-        "+ פוסט חדש" used to live here. It moved up into the pair of primary
-        actions above this panel, so the screen offers it once. What replaced
-        it is the connection state: groups are published by the copy of this
-        app on the owner's PC, so "המערכת פעילה" is only meaningful next to
-        whether that machine is actually there. It links to the card that can
-        fix it rather than restating the diagnosis.
+        This line used to be the state itself ("המערכת פעילה") with the
+        activity underneath it in grey. The identity bar at the top of every
+        screen now carries the state, from the same value this card was
+        handed, so printing it again 300px lower was the same sentence twice
+        before the owner reached anything they did not already know — which
+        is what they said, in those words.
+
+        The state and the activity are different facts and the split is the
+        point: the bar says whether the system is running, this says what it
+        is running ON right now. The dot went with the label, for the same
+        reason — the bar has one, in the same tone, from the same state.
+
+        "+ פוסט חדש" used to live here too. It moved up into the pair of
+        primary actions above this panel, so the screen offers it once.
       */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full transition-colors duration-150 ${TONE_FILL[tone]} ${live ? 'pulse-dot' : ''}`} />
           <div className="min-w-0">
             <h2 dir="auto" className="min-w-0 truncate text-[17px] font-extrabold leading-[22px] text-mist-100">
-              {SYSTEM_STATE_LABEL[systemState]}
-            </h2>
-            <p dir="auto" className="mt-0.5 truncate text-xs leading-4 text-mist-500">
               {systemState === 'active'
                 ? live
                   ? 'מפרסם כעת לקבוצות פייסבוק'
@@ -510,7 +499,7 @@ export function LiveQueueHero({
                   : systemState === 'empty'
                     ? 'אין פרסום מתוזמן'
                     : (intervention?.title ?? 'נדרשת פעולה שלכם')}
-            </p>
+            </h2>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">

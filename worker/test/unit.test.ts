@@ -3315,6 +3315,58 @@ const scenario: { step: string; line: string }[] = [];
   console.log('repeat-to-same-group switch tests OK');
 }
 
+/* -------------------------------- waiting in line is not failing */
+{
+  /*
+   * A ROW THAT WAITS FOR THE GAP MUST NOT BE CHARGED FOR WAITING.
+   *
+   * The claim increments `attempts` before the rules are consulted, and
+   * `attempts > MAX_DEFERRALS` turns a row into a permanent skip. The 'wait'
+   * branch has always handed that attempt back — "nothing was tried, so
+   * nothing should be spent" — and the 'defer' branch did not. So with the
+   * gap set to one minute and a queue denser than a minute, every row in the
+   * tail burned forty attempts inside an hour and was thrown away, under a
+   * reason that described nothing that had gone wrong. The queue was
+   * destroying its own tail in proportion to how full it was.
+   *
+   * Pinned in both workers, because groups publish through the copy on the
+   * owner's PC and the hosted one runs the same decision.
+   */
+  const local = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const hosted = readFileSync(new URL('../../src/lib/social/server/worker.ts', import.meta.url), 'utf8');
+
+  const localDefer = local.slice(local.indexOf("decision.action === 'defer'"), local.indexOf("decision.action === 'wait'"));
+  assert.ok(
+    localDefer.includes('attempts: item.attempts'),
+    'the PC worker must hand the attempt back when it defers for the gap — otherwise waiting its turn eventually deletes the row',
+  );
+  const hostedDefer = hosted.slice(hosted.indexOf("decision.action === 'defer'"), hosted.indexOf("decision.action === 'wait'"));
+  assert.ok(
+    /attempts: Math\.max\(0, item\.attempts - 1\)/.test(hostedDefer),
+    'and so must the hosted worker',
+  );
+
+  /*
+   * And the cushion on top of the gap must stay small enough that the owner's
+   * number means what it says. At thirty seconds a gap of one minute produced
+   * a publication every ninety — forty an hour where the setting promised
+   * sixty — with nothing on any screen to explain the difference.
+   */
+  const rulesSrc = readFileSync(new URL('../../src/lib/social/rules.ts', import.meta.url), 'utf8');
+  const cushion = /const DEFER_CUSHION_MS = ([0-9_]+);/.exec(rulesSrc);
+  assert.ok(cushion, 'the deferral cushion must be a named constant');
+  assert.ok(
+    Number((cushion as RegExpExecArray)[1].replace(/_/g, '')) <= 10_000,
+    'the cushion may not be a meaningful slice of the smallest gap an owner can set',
+  );
+  assert.ok(
+    rulesSrc.includes('gapMs + DEFER_CUSHION_MS'),
+    'and it must be what the deferral actually adds',
+  );
+
+  console.log('deferral-accounting tests OK');
+}
+
 /* ----------------------------------------- the 28-publication scenario */
 console.log('');
 console.log('=== 28-publication run, step by step (simulation — no database) ===');

@@ -34,6 +34,19 @@ export interface RuleContext {
 const MAX_DEFERRALS = 40;
 
 /**
+ * How far past the gap a deferred row is pushed.
+ *
+ * It was thirty seconds, and thirty seconds is not a rounding error when the
+ * owner has set the gap to one minute: every publication came out 90 seconds
+ * after the last one, so a setting that says "a minute" delivered forty
+ * publications an hour instead of sixty and the owner had no way to see why.
+ * The cushion exists only so the row is not due at the exact instant the gap
+ * closes — a hair of clock skew there and it defers once more for nothing —
+ * so it is one poll of the worker, which is the real granularity anyway.
+ */
+const DEFER_CUSHION_MS = 5_000;
+
+/**
  * How far ahead a parked row is pushed.
  *
  * 'wait' used to leave scheduled_at untouched, so a paused campaign's soonest
@@ -180,8 +193,21 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
     const gapMs = (limits.minGapMinutes + extra) * 60_000;
     const sinceLast = now.getTime() - new Date(last.published_at).getTime();
     if (sinceLast < gapMs) {
-      if (item.attempts > MAX_DEFERRALS) return { action: 'skip', reason: 'נדחה יותר מדי פעמים בגלל מרווח הזמן בין פרסומים.' };
-      const until = new Date(new Date(last.published_at).getTime() + gapMs + 30_000).toISOString();
+      /*
+       * The belt, and it is only a belt now.
+       *
+       * Waiting for the gap no longer spends an attempt — both workers hand
+       * it back, exactly as they already did for a parked row — so a row can
+       * queue behind a hundred others without being thrown away for its
+       * patience. That was the previous behaviour and it was silently
+       * destroying publications: with the gap set to a minute and a queue
+       * denser than a minute, a row burned forty deferrals in under an hour
+       * and became a permanent "דולג" whose stated reason described nothing
+       * that had gone wrong. What can still reach this line is a row that is
+       * genuinely failing on every claim, which is worth stopping.
+       */
+      if (item.attempts > MAX_DEFERRALS) return { action: 'skip', reason: 'הפרסום נכשל שוב ושוב ולכן הופסק.' };
+      const until = new Date(new Date(last.published_at).getTime() + gapMs + DEFER_CUSHION_MS).toISOString();
       return { action: 'defer', until, reason: `נדחה כדי לשמור מרווח של ${limits.minGapMinutes + extra} דק׳ בין פרסומים` };
     }
   }

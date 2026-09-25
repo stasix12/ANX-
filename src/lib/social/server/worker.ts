@@ -272,7 +272,14 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
   const decision = await evaluateQueueItem(db, { item, target: t, post: p, variant: v, limits, browser, now });
   if (decision.action === 'skip') return skip(decision.reason);
   if (decision.action === 'defer') {
-    await db.from('social_queue').update({ status: 'scheduled', step: 'pending', scheduled_at: decision.until }).eq('id', item.id);
+    /* The attempt goes back, exactly as it does for a parked row below:
+       nothing was tried, so nothing should be spent. Without this a row
+       waiting its turn for the spacing gap burned an attempt every time it
+       came round, and at forty it became a permanent skip. */
+    await db
+      .from('social_queue')
+      .update({ status: 'scheduled', step: 'pending', scheduled_at: decision.until, attempts: Math.max(0, item.attempts - 1) })
+      .eq('id', item.id);
     /* decision.reason is already a whole Hebrew sentence ("הסבב מושהה.",
        "המרווח המינימלי בין פרסומים."). The ISO instant that used to be
        bracketed onto the end of it is not a sentence, and this line is read in

@@ -634,7 +634,15 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     return;
   }
   if (decision.action === 'defer') {
-    await finish({ status: 'scheduled', step: 'pending', scheduled_at: decision.until });
+    /*
+     * The attempt goes back, exactly as it does for a parked row two branches
+     * down: nothing was tried, so nothing should be spent. Without this a row
+     * waiting its turn for the spacing gap burned an attempt every time it
+     * came round, and at forty it became a permanent skip — so a queue denser
+     * than the owner's own gap quietly destroyed its own tail. `item.attempts`
+     * is the value before the claim incremented it.
+     */
+    await finish({ status: 'scheduled', step: 'pending', scheduled_at: decision.until, attempts: item.attempts });
     /* Same as the server worker's copy of this line: decision.reason is
        already a whole Hebrew sentence, and the ISO instant that used to be
        bracketed onto it is not. The bell reads this; meta keeps the stamp. */

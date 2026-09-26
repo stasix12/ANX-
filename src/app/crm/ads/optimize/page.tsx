@@ -8,10 +8,14 @@ import { InsightIcon } from '@/components/crm/InsightIcon';
 import { buildRecommendations, type RecommendationTone } from '@/lib/crm/adsOptimizer';
 import {
   duplicateCampaign,
+  fetchCampaignDetail,
   fetchCampaignPerf,
   formatSpend,
+  setAdSetDailyBudget,
+  setAdStatus,
   setCampaignDailyBudget,
   setCampaignStatus,
+  type CampaignDetail,
   type CampaignPerf,
 } from '@/lib/crm/facebookAds';
 import { getFbAdsConfig, type FbAdsConfig } from '@/lib/crm/settings';
@@ -62,6 +66,31 @@ function CampaignCard({
   const [budgetDraft, setBudgetDraft] = useState(
     campaign.dailyBudget !== null ? String(campaign.dailyBudget) : '',
   );
+  const [detail, setDetail] = useState<CampaignDetail | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  async function loadDetail() {
+    setDetailLoading(true);
+    setActionError(null);
+    try {
+      setDetail(await fetchCampaignDetail(config, campaign.campaignId));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'שליפת המודעות נכשלה.');
+      setDetailOpen(false);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function toggleDetail() {
+    if (detailOpen) {
+      setDetailOpen(false);
+      return;
+    }
+    setDetailOpen(true);
+    if (!detail) void loadDetail();
+  }
 
   async function run(kind: 'status' | 'budget' | 'copy', action: () => Promise<void>) {
     setBusy(kind);
@@ -133,6 +162,13 @@ function CampaignCard({
           {busy === 'copy' ? <SpinnerIcon className="h-3.5 w-3.5 animate-spin" /> : null}
           שכפול
         </button>
+        <button
+          type="button"
+          onClick={toggleDetail}
+          className="flex items-center gap-1 rounded-full border border-ink-600 bg-ink-850 px-4 py-2 text-xs font-bold text-brand-400 transition-colors hover:border-ink-500"
+        >
+          מודעות {detailOpen ? '▴' : '▾'}
+        </button>
         {campaign.dailyBudget !== null ? (
           <span className="ms-auto flex items-center gap-1.5">
             <input
@@ -171,9 +207,182 @@ function CampaignCard({
           </span>
         )}
       </div>
+      {detailOpen ? (
+        <div className="mt-2.5 border-t border-ink-700 pt-2.5">
+          {detailLoading || !detail ? (
+            <div className="grid place-items-center py-4">
+              <SpinnerIcon className="h-5 w-5 animate-spin text-brand-500" />
+            </div>
+          ) : (
+            <>
+              {/* Ad-set budgets — editable when the campaign budgets there. */}
+              {campaign.dailyBudget === null && detail.adsets.some((a) => a.dailyBudget !== null) ? (
+                <div className="space-y-2">
+                  {detail.adsets.map((adset) => (
+                    <AdSetRow
+                      key={adset.adsetId}
+                      adset={adset}
+                      config={config}
+                      disabled={busy !== null}
+                      onChanged={() => void loadDetail()}
+                    />
+                  ))}
+                </div>
+              ) : null}
+
+              {detail.ads.length === 0 ? (
+                <p className="py-3 text-center text-xs font-semibold text-mist-500">
+                  אין מודעות בקמפיין הזה.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  {detail.ads.map((ad) => (
+                    <AdRow
+                      key={ad.adId}
+                      ad={ad}
+                      config={config}
+                      onChanged={() => void loadDetail()}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : null}
       {actionError ? (
         <p role="alert" className="mt-2 rounded-lg bg-red-600/10 px-3 py-2 text-xs font-semibold text-red-600">
           {actionError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** One ad inside the drill-down: thumbnail, results, and its own toggle. */
+function AdRow({
+  ad,
+  config,
+  onChanged,
+}: {
+  ad: import('@/lib/crm/facebookAds').AdInfo;
+  config: FbAdsConfig;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isActive = ad.status === 'ACTIVE';
+  return (
+    <div className="rounded-xl border border-ink-700 bg-ink-900/60 p-2">
+      <div className="flex items-center gap-2.5">
+        {ad.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={ad.thumbnailUrl}
+            alt=""
+            className="h-12 w-12 shrink-0 rounded-lg border border-ink-700 object-cover"
+          />
+        ) : (
+          <span aria-hidden className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-ink-800 text-lg">
+            🖼️
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-bold">{ad.name}</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-mist-500">
+            {formatSpend(ad.spend, currency)} · {ad.conversations} פניות
+            {ad.conversations > 0 ? ` · ${formatSpend(ad.spend / ad.conversations, currency)} לפנייה` : ''}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            if (isActive && !window.confirm(`להשהות את המודעה "${ad.name}"?`)) return;
+            if (!isActive && !window.confirm(`להפעיל את המודעה "${ad.name}"? היא תתחיל להוציא כסף.`)) return;
+            setBusy(true);
+            setError(null);
+            try {
+              await setAdStatus(config, ad.adId, !isActive);
+              onChanged();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'הפעולה נכשלה.');
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-50 ${
+            isActive
+              ? 'border border-ink-600 bg-ink-850 text-mist-300'
+              : 'bg-emerald-600 text-white hover:bg-emerald-700'
+          }`}
+        >
+          {busy ? '···' : isActive ? '⏸ השהה' : '▶ הפעל'}
+        </button>
+      </div>
+      {error ? (
+        <p role="alert" className="mt-1.5 text-[11px] font-semibold text-red-600">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** An ad set's budget line, editable in place. */
+function AdSetRow({
+  adset,
+  config,
+  disabled,
+  onChanged,
+}: {
+  adset: import('@/lib/crm/facebookAds').AdSetInfo;
+  config: FbAdsConfig;
+  disabled: boolean;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState(adset.dailyBudget !== null ? String(adset.dailyBudget) : '');
+  if (adset.dailyBudget === null) return null;
+  return (
+    <div className="rounded-xl border border-ink-700 bg-ink-900/60 p-2">
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 truncate text-xs font-bold">סט: {adset.name}</p>
+        <input
+          type="number"
+          inputMode="decimal"
+          min="1"
+          aria-label={`תקציב יומי לסט ${adset.name}`}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          className="w-20 rounded-lg border border-ink-600 bg-ink-850 px-2 py-1.5 text-sm font-bold tabular-nums outline-none focus:border-brand-500"
+          dir="ltr"
+        />
+        <span className="text-[11px] font-bold text-mist-500">₪/יום</span>
+        <button
+          type="button"
+          disabled={disabled || busy || !draft || Number(draft) <= 0 || Number(draft) === adset.dailyBudget}
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              await setAdSetDailyBudget(config, adset.adsetId, Number(draft));
+              onChanged();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'הפעולה נכשלה.');
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="shrink-0 rounded-full bg-brand-500 px-3 py-1.5 text-[11px] font-bold text-on-brand transition-colors hover:bg-brand-400 disabled:opacity-40"
+        >
+          {busy ? '···' : 'עדכן'}
+        </button>
+      </div>
+      {error ? (
+        <p role="alert" className="mt-1.5 text-[11px] font-semibold text-red-600">
+          {error}
         </p>
       ) : null}
     </div>

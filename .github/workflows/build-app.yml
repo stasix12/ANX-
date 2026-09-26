@@ -20,6 +20,18 @@ name: build the downloadable app
 on:
   push:
     tags: ['app-v*']
+    # Also whenever the desktop app itself changes. Two reasons: a build that
+    # only ever runs at release time first breaks weeks after the change that
+    # broke it, and — more immediately — this session can push to the branch
+    # but not create tags (the token answers 403), so without this there is no
+    # way to produce the package at all.
+    branches: [claude/facebook-content-manager-gqtv66]
+    paths:
+      - 'desktop/**'
+      - 'scripts/build-app.mjs'
+      - 'electron-builder.yml'
+      - 'worker/**'
+      - '.github/workflows/build-app.yml'
   workflow_dispatch:
     inputs:
       release:

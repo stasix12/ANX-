@@ -16,9 +16,12 @@
  *      worker never has to prompt: by the time it starts, it is already
  *      somebody's.
  *
- *   2. READING, FOR THE SCREEN ONLY. The dashboard's numbers come from the
- *      same tables the website reads, through the same policies, with the
- *      signed-in person's own token. This process never writes a row.
+ *   2. READING, FOR THE SCREEN. The dashboard's numbers come from the same
+ *      tables the website reads, through the same policies, with the signed-in
+ *      person's own token. The ONE thing it writes is a command row — "open
+ *      Facebook", "check the connection", "disconnect" — and only because a
+ *      person pressed a button that says so. It never writes a post, a queue
+ *      row or a setting: those belong to the website and to the engine.
  *
  *   3. BEING A WINDOWS PROGRAM. Tray, minimise-instead-of-quit, start with
  *      Windows, a small always-there panel. The console it replaces could do
@@ -403,7 +406,10 @@ async function readData() {
       .select('id, level, event, message, created_at, meta')
       .order('created_at', { ascending: false })
       .limit(60),
-    db.from('social_workers').select('name, status, fb_user_name, fb_avatar_url, last_seen_at, version').limit(5),
+    db
+      .from('social_workers')
+      .select('name, status, browser_state, login_stage, fb_user_id, fb_user_name, fb_avatar_url, last_seen_at, version')
+      .limit(5),
   ]);
 
   if (queue.error) return { error: queue.error.message };
@@ -502,12 +508,56 @@ function fail(message: string): { ok: false; message: string } {
 }
 
 async function afterSignIn(): Promise<void> {
+  /*
+   * A BUSINESS OF THEIR OWN, ON THE FIRST SIGN-IN.
+   *
+   * Since v16 a person who belongs to no business sees no row and can create
+   * none — correct, and until v19 there was nothing anywhere that gave them
+   * one. A customer would sign in perfectly and land on an empty dashboard
+   * with no explanation. social_claim_workspace() creates it, with default
+   * settings, and returns the existing one for anybody who already has it —
+   * so this is a no-op for the owner and runs exactly once per customer.
+   *
+   * A failure here is reported and does not stop the sign-in: the account is
+   * valid either way, and an empty dashboard with a line in the log beats
+   * being thrown back to a login screen that will accept the same details.
+   */
+  const session = readSession();
+  if (session) {
+    const { error } = await readerFor(session.access_token).rpc('social_claim_workspace', { business_name: '' });
+    if (error) say(`לא הצלחנו להכין את סביבת העבודה: ${error.message}`, 'err');
+  }
   send('worker:state', workerState());
   stopWorker();
   startWorker();
   startPolling();
   updateTray();
 }
+
+/*
+ * THE FACEBOOK CONNECTION, STARTED FROM HERE.
+ *
+ * The typing happens on Facebook's own page, in a real Chrome window this
+ * machine opens — never in a field of ours. All this does is put a row in the
+ * command table that the engine is already polling, which is the same thing
+ * the button on the website does. Without it a customer installs the app,
+ * signs in, and has nowhere to connect the one account the whole product is
+ * about.
+ */
+async function sendCommand(command: 'login' | 'check' | 'logout' | 'verify', payload?: Record<string, string>) {
+  const session = readSession();
+  if (!session) return fail('המחשב הזה לא מחובר לחשבון.');
+  const { error } = await readerFor(session.access_token)
+    .from('social_worker_commands')
+    .insert({ worker_id: null, command, ...(payload ? { payload } : {}) });
+  if (error) return fail(`לא הצלחנו לשלוח את הבקשה: ${error.message}`);
+  say(`נשלחה בקשה למנוע: ${command}`, 'sys');
+  return ok();
+}
+ipcMain.handle('fb:connect', () => sendCommand('login'));
+ipcMain.handle('fb:check', () => sendCommand('check'));
+ipcMain.handle('fb:disconnect', () => sendCommand('logout'));
+ipcMain.handle('fb:verify', (_e, code: string) => sendCommand('verify', { code: String(code ?? '').trim() }));
 
 ipcMain.handle('auth:password', async (_e, { email, password }: { email: string; password: string }) => {
   if (!email?.includes('@')) return fail('כתובת המייל לא נראית תקינה.');

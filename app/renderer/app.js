@@ -174,6 +174,28 @@ $('signout').addEventListener('click', async () => {
   $('pw').value = '';
 });
 $('addtask').addEventListener('click', () => window.anx.openSite());
+
+/* Facebook. Every one of these only asks the engine to open a real Chrome
+   window on Facebook's own page — nothing here ever takes a Facebook password. */
+async function fb(fn, button, label) {
+  busy(button, true, label);
+  const r = await fn();
+  busy(button, false);
+  if (!r.ok) alert(r.message);
+  else setTimeout(refresh, 1500);
+}
+$('fbconnect').addEventListener('click', (e) => fb(window.anx.fbConnect, e.currentTarget, 'פותח…'));
+$('fbrecheck').addEventListener('click', (e) => fb(window.anx.fbCheck, e.currentTarget, 'בודק…'));
+$('fbout').addEventListener('click', (e) => fb(window.anx.fbDisconnect, e.currentTarget, 'מנתק…'));
+$('fbverify').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const code = $('fbcode').value.trim();
+  if (!code) return;
+  const r = await window.anx.fbVerify(code);
+  $('fbcode').value = '';
+  if (!r.ok) alert(r.message);
+  else setTimeout(refresh, 1500);
+});
 $('opendrawer').addEventListener('click', () => $('drawer').classList.add('on'));
 $('closedrawer').addEventListener('click', () => $('drawer').classList.remove('on'));
 
@@ -268,6 +290,27 @@ function paintData(d) {
   $('s-attn').textContent = d.needsHuman;
   $('s-attn-sub').textContent = d.needsHuman ? 'לא ימשיכו בלי אישור' : 'הכול רץ לבד';
   $('navtasks').textContent = d.counts.waiting + d.counts.active;
+
+  /*
+   * IS FACEBOOK CONNECTED? Three states, and the card only exists for two of
+   * them: not connected at all, and connected-but-Facebook-wants-a-code.
+   * Once an account is on, the card disappears and the face goes in the header.
+   */
+  const m = d.machine ?? {};
+  const connected = !!m.fb_user_id;
+  const challenge = m.login_stage === 'challenge';
+  $('fbcard').hidden = connected && !challenge;
+  $('fbverify').hidden = !challenge;
+  if (challenge) {
+    $('fbtitle').textContent = 'פייסבוק ביקש קוד אימות';
+    $('fbsub').textContent = 'הקוד נשלח אליכם מפייסבוק — בהודעה, במייל או באפליקציה. הקלידו אותו כאן.';
+    $('fbconnect').hidden = true;
+  } else {
+    $('fbtitle').textContent = 'חברו את חשבון הפייסבוק שלכם';
+    $('fbsub').textContent = 'ייפתח חלון Chrome על הדף של פייסבוק עצמו. הסיסמה נשארת אצלכם — אנחנו לא רואים אותה ולא שומרים אותה.';
+    $('fbconnect').hidden = false;
+  }
+  $('setfb').textContent = connected ? (m.fb_user_name || 'מחובר') : 'לא מחובר';
 
   if (d.machine?.fb_user_name) $('whoname').textContent = d.machine.fb_user_name;
   if (d.machine?.fb_avatar_url) {

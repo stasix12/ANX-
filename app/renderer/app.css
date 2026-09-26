@@ -258,3 +258,22 @@ body.mini { background: transparent; }
 #minipanel .pair div { background: var(--card-2); border-radius: var(--radius-sm); padding: var(--s3); text-align: center; }
 #minipanel .pair b { display: block; font-size: 24px; font-weight: 800; line-height: 1.1; }
 #minipanel .pair span { font-size: 11.5px; color: var(--text-3); }
+
+/* ------------------------------------------------- the Facebook prompt */
+
+/*
+ * Deliberately the loudest thing on the screen while it is there, and absent
+ * the rest of the time. Nothing else on this dashboard can do anything until
+ * it is answered.
+ */
+.connect { border-color: var(--brand-400); background: linear-gradient(135deg, var(--tint), transparent 60%), var(--card); }
+.connect-in { display: flex; align-items: center; gap: var(--s4); padding: var(--s5); }
+.connect-in .grow { flex: 1; min-width: 0; }
+.connect-in b { font-size: 16px; }
+.connect-in p { font-size: 13px; margin-top: 2px; }
+.connect-ico {
+  width: 46px; height: 46px; border-radius: 13px; flex: none;
+  display: grid; place-items: center; color: #fff; background: var(--grad);
+  box-shadow: 0 8px 20px -8px rgba(109,40,217,.8);
+}
+.connect-verify { display: flex; gap: var(--s3); padding: 0 var(--s5) var(--s5); }

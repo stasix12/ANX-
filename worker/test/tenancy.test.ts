@@ -35,6 +35,7 @@ const v15 = read('social-schema-v15.sql');
 const v16 = read('social-schema-v16.sql');
 const v17 = read('social-schema-v17.sql');
 const v18 = read('social-schema-v18.sql');
+const v19 = read('social-schema-v19.sql');
 const backfill = read('social-tenant-backfill.sql');
 const latest = read('social-latest.sql');
 const runThis = read('RUN-THIS-IN-SUPABASE.sql');
@@ -66,7 +67,7 @@ checks += 1;
 /* ----------------------------------------------------------------------- */
 /* 2. Nothing in the new files says `using (true)`.                          */
 /* ----------------------------------------------------------------------- */
-for (const [name, sql] of [['v16', v16], ['v17', v17], ['v18', v18]] as const) {
+for (const [name, sql] of [['v16', v16], ['v17', v17], ['v18', v18], ['v19', v19]] as const) {
   const open = sql
     .split('\n')
     .filter((l) => !l.trim().startsWith('--') && !l.trim().startsWith('*') && !l.trim().startsWith('/*'))
@@ -235,21 +236,21 @@ is(!/onConflict: 'name'/.test(worker) && !/onConflict: 'provider,provider_user_i
 /* 8. One file to run, and it contains all of it.                            */
 /* ----------------------------------------------------------------------- */
 const strip = (sql: string) => sql.split('\n').filter((l) => !l.trim().startsWith('--') && l.trim()).join('\n');
-for (const [name, sql] of [['v16', v16], ['v17', v17], ['v18', v18]] as const) {
+for (const [name, sql] of [['v16', v16], ['v17', v17], ['v18', v18], ['v19', v19]] as const) {
   for (const statement of strip(sql).split(';').map((x) => x.trim()).filter((x) => x.length > 20)) {
     is(strip(latest).includes(statement), `social-latest.sql is missing a statement from ${name}: ${statement.slice(0, 60)}…`);
   }
 }
 /* RUN-THIS is the paste the owner actually makes, and the order is the whole
    safety argument: the column, then the filling-in, then the rules. */
-const order = ['## 1 ##', '## 2 ##', '## 3 ##', '## 4 ##', '## 5 ##'].map((m) => runThis.indexOf(m));
-is(order.every((i) => i > 0), 'the one-paste file must carry all five parts');
+const order = ['## 1 ##', '## 2 ##', '## 3 ##', '## 4 ##', '## 5 ##', '## 6 ##'].map((m) => runThis.indexOf(m));
+is(order.every((i) => i > 0), 'the one-paste file must carry all six parts');
 is(order.every((i, n) => n === 0 || i > order[n - 1]), 'and in an order where nothing is locked down before it is filled in');
 /* And it must carry what those parts actually say. RUN-THIS is generated from
    the five files; editing one of them and forgetting to regenerate would hand
    the owner a paste that is quietly a version behind, which is the exact
    failure the "one file to run" rule exists to prevent. */
-for (const [name, sql] of [['v15', v15], ['the backfill', backfill], ['v16', v16], ['v17', v17], ['v18', v18]] as const) {
+for (const [name, sql] of [['v15', v15], ['the backfill', backfill], ['v16', v16], ['v17', v17], ['v18', v18], ['v19', v19]] as const) {
   for (const statement of strip(sql).split(';').map((x) => x.trim()).filter((x) => x.length > 20)) {
     is(strip(runThis).includes(statement), `RUN-THIS-IN-SUPABASE.sql is behind ${name}: ${statement.slice(0, 60)}\u2026`);
   }

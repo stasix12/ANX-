@@ -27,6 +27,13 @@ contextBridge.exposeInMainWorld('anx', {
   signInGoogle: () => ipcRenderer.invoke('auth:google'),
   signOut: () => ipcRenderer.invoke('auth:signout'),
 
+  /* Facebook. The typing happens on Facebook's own page in a real Chrome
+     window; these only ask the engine to open it. */
+  fbConnect: () => ipcRenderer.invoke('fb:connect'),
+  fbCheck: () => ipcRenderer.invoke('fb:check'),
+  fbDisconnect: () => ipcRenderer.invoke('fb:disconnect'),
+  fbVerify: (code) => ipcRenderer.invoke('fb:verify', code),
+
   /* done, not asked */
   answer: (text) => ipcRenderer.send('worker:answer', text),
   openSite: () => ipcRenderer.send('app:open-site'),

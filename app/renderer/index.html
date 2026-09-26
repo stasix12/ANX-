@@ -160,6 +160,34 @@
         <button class="btn" id="minibtn">תצוגה מוקטנת</button>
       </div>
 
+      <!--
+        THE ONE THING THAT MUST HAPPEN BEFORE ANYTHING ELSE CAN.
+        Shown only while no Facebook account is connected, and gone the moment
+        one is. Without it a customer installs the app, signs in, sees a tidy
+        dashboard of zeroes, and has nowhere to connect the single account the
+        whole product is about.
+      -->
+      <div class="card connect" id="fbcard" hidden style="margin-bottom:var(--s5)">
+        <div class="connect-in">
+          <span class="connect-ico">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.4v7A10 10 0 0 0 22 12Z"/></svg>
+          </span>
+          <div class="grow">
+            <b id="fbtitle">חברו את חשבון הפייסבוק שלכם</b>
+            <p class="muted" id="fbsub">ייפתח חלון Chrome על הדף של פייסבוק עצמו. הסיסמה נשארת אצלכם — אנחנו לא רואים אותה ולא שומרים אותה.</p>
+          </div>
+          <button class="btn btn-primary" id="fbconnect">פתח את פייסבוק</button>
+        </div>
+        <!-- Facebook asked for a code. The engine parked the login and is
+             waiting; this is the shortest path back to it. -->
+        <form id="fbverify" hidden class="connect-verify">
+          <label class="field" style="flex:1">
+            <input id="fbcode" placeholder="הקוד שפייסבוק שלח" dir="ltr" autocomplete="one-time-code" />
+          </label>
+          <button class="btn btn-primary" type="submit">שלח</button>
+        </form>
+      </div>
+
       <div class="stats">
         <div class="card stat">
           <span class="ico tint-brand"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
@@ -228,6 +256,12 @@
           <span class="ico tint-brand"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0" stroke-linecap="round"/></svg></span>
           <span class="txt"><b id="setmail">—</b><span>המחשב הזה מחובר לחשבון הזה</span></span>
           <button class="btn" id="signout">נתק את המחשב</button>
+        </div>
+        <div class="setrow">
+          <span class="ico tint-info"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.4v7A10 10 0 0 0 22 12Z"/></svg></span>
+          <span class="txt"><b id="setfb">לא מחובר</b><span>חשבון הפייסבוק שממנו יוצאים הפרסומים</span></span>
+          <button class="btn" id="fbrecheck">בדוק חיבור</button>
+          <button class="btn" id="fbout">נתק פייסבוק</button>
         </div>
       </div>
     </section>

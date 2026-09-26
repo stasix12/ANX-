@@ -3298,6 +3298,30 @@ const scenario: { step: string; line: string }[] = [];
      anybody reading them and a great deal to whatever watches for bursts. */
   assert.ok(/const COMMENTS_PER_TICK = 1;/.test(localWorker), 'comments go out one at a time, not in a burst');
 
+  /*
+   * ============================================================
+   * ONE FACEBOOK ACCOUNT IS A ROW, NOT THREE COLUMNS ON A WORKER
+   * ============================================================
+   *
+   * The connected account lived only as fb_user_id / fb_user_name /
+   * fb_avatar_url on social_workers, which is exactly one account by
+   * construction — a second would have to overwrite the first. social_accounts
+   * has been in the schema since the beginning with nothing ever writing to
+   * it, and social_targets.account_id already points at it. The shape for more
+   * than one account was there all along, unused.
+   *
+   * Nothing reads this yet: the dashboard still takes the connected account
+   * from the worker's own columns and one machine still means one account.
+   * It only means the second account will have somewhere to be.
+   */
+  assert.ok(/\.from\('social_accounts'\)\s*\.upsert\(/.test(localWorker), 'the connected account is recorded as its own row');
+  assert.ok(/onConflict: 'provider,provider_user_id'/.test(localWorker), 'and re-connecting the same account updates it rather than duplicating it');
+  /* Reported and then ignored. Bookkeeping nobody reads yet may never stop a
+     publication — same rule the avatar upload and the note column follow. */
+  assert.ok(/if \(upsert\.error\) console\.error/.test(localWorker), 'and a failure to record it never stops the worker');
+  /* Still one account on screen, still one queue. The step is invisible. */
+  assert.ok(/fb_user_id: account\.id/.test(localWorker), 'the worker still carries the account it is signed into');
+
   const accountPage = readFileSync(new URL('../../src/app/social/account/page.tsx', import.meta.url), 'utf8');
   const clientSrc = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
   assert.ok(/href="\/social\/account"/.test(hero), 'the account chip must lead somewhere, not to an anchor on the same screen');

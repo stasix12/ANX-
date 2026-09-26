@@ -1163,6 +1163,42 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
     for (const line of account.probe.sample) console.log(`[worker]   · ${line}`);
   }
 
+  /*
+   * THE ACCOUNT BECOMES A ROW OF ITS OWN, and that is the whole of this step.
+   *
+   * Until now the connected Facebook account existed only as three columns on
+   * the WORKER — fb_user_id, fb_user_name, fb_avatar_url. That is exactly one
+   * account, by construction: a second one would have to overwrite the first.
+   *
+   * social_accounts has been in the schema since the beginning and nothing
+   * has ever written to it (social-schema.sql:38). social_targets.account_id
+   * already points at it (social-schema.sql:47). The shape for more than one
+   * account, and for saying which groups belong to which, was there all along
+   * and unused. This fills it in.
+   *
+   * NOTHING READS IT YET. The dashboard still takes the connected account from
+   * the worker's own columns, the queue is still claimed the same way, and one
+   * machine still means one account. This only means that when the second
+   * account arrives it has somewhere to be, and that the row it needs already
+   * exists for the first one.
+   *
+   * Failure is reported and then ignored: a missing table or a policy must
+   * never stop a publication over bookkeeping nobody is reading.
+   */
+  const upsert = await db
+    .from('social_accounts')
+    .upsert(
+      {
+        provider: 'facebook',
+        provider_user_id: account.id,
+        name: account.name,
+        last_synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'provider,provider_user_id' },
+    );
+  if (upsert.error) console.error('[worker] ℹ לא נרשם חשבון פייסבוק בטבלת החשבונות:', upsert.error.message);
+
   const { error } = await db.from('social_workers').update(patch).eq('id', state.id);
   if (error) {
     /*

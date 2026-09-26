@@ -45,6 +45,29 @@ execFileSync(process.execPath, [path.join(root, 'scripts', 'build-app.mjs')], {
   stdio: 'pipe',
 });
 
+/*
+ * ELECTRON MUST NOT BE IN THE WEBSITE'S MANIFEST.
+ *
+ * It was, for about ninety minutes, and the live site served a 404 the whole
+ * time: Vercel installs from this same package.json, electron's postinstall
+ * pulls a few hundred megabytes of browser binary, and the production build
+ * stopped completing. Nothing the website renders needs electron — only the
+ * job that packages the desktop app does, and that job installs it itself
+ * with --no-save. This is the guard that stops it coming back, because the
+ * symptom appears nowhere near the change.
+ */
+{
+  const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  const named = Object.keys({ ...manifest.dependencies, ...manifest.devDependencies }).filter((n) => /^electron(-|$)/.test(n));
+  checks += 1;
+  assert.deepEqual(named, [], `electron must not be installed by the website's build — it is installed by .github/workflows/build-app.yml instead (found: ${named.join(', ')})`);
+  const lock = readFileSync(path.join(root, 'package-lock.json'), 'utf8');
+  is(!/"node_modules\/electron"/.test(lock), 'and it must not be in the lockfile either, which is what Vercel actually installs from');
+}
+
 is(existsSync(path.join(out, 'worker.cjs')), 'the build must produce the worker bundle');
 is(existsSync(path.join(out, 'main.cjs')), 'and the window that starts it');
 is(existsSync(path.join(out, 'config.json')), 'and the two public values it needs to reach Supabase');

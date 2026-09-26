@@ -43,6 +43,25 @@ jobs:
 
       - run: npm ci
 
+      # ELECTRON IS INSTALLED HERE AND IS NOT IN package.json, on purpose.
+      #
+      # It was a devDependency for about ninety minutes and it took the live
+      # website down. Vercel installs from the same manifest, electron's
+      # postinstall fetches a few hundred megabytes of browser binary, and the
+      # production build stopped completing — so anx-ggyo.vercel.app served a
+      # 404 for two and a half hours while the owner was trying to use it.
+      # Nothing the website ships needs electron; only this job does. So this
+      # job is where it lives, and worker/test/package.test.ts fails the build
+      # if it ever creeps back into the manifest.
+      - name: electron, for this job only
+        run: npm install --no-save --no-audit --no-fund electron@38 electron-builder@26
+
+      # The shell is typechecked HERE, because this is the only place Electron's
+      # types exist. Without this step nothing would compile app/main.ts at all
+      # and a type error would first appear as a broken installer.
+      - name: typecheck the desktop shell
+        run: npx tsc -p app/tsconfig.json --noEmit
+
       # The package must carry no secret, and that is checked rather than
       # trusted: the test builds it with fake secrets in the environment and
       # then greps every byte of the output for them.

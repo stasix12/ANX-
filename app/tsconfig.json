@@ -1,0 +1,16 @@
+{
+  "//": "The desktop shell is its own program: Electron's runtime, Electron's types, CommonJS output produced by esbuild. It is excluded from the website's tsconfig because the website must never need Electron installed to build — that is what took production down for two and a half hours. This file is what checks it, in the job that packages it, where Electron is installed.",
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "jsx": "preserve",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "types": ["node"],
+    "incremental": false,
+    "plugins": [],
+    "paths": { "@/*": ["../src/*"] }
+  },
+  "include": ["main.ts", "../src/lib/social/**/*.ts"],
+  "exclude": ["../node_modules"]
+}

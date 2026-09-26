@@ -201,8 +201,11 @@ ready_to_publish → publishing → verifying → published.
 
 1. הריצו `supabase/social-schema-v2.sql` ב-SQL Editor (אחרי `social-schema.sql`).
 2. במחשב שמריץ את ה-worker: `git clone`, `npm install`, ו-`.env.local` עם
-   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SOCIAL_WORKER_EMAIL`,
-   `SOCIAL_WORKER_PASSWORD` (משתמש ה-Supabase שפותח את /crm).
+   `NEXT_PUBLIC_SUPABASE_URL` ו-`NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+   `SOCIAL_WORKER_EMAIL`/`SOCIAL_WORKER_PASSWORD` (משתמש ה-Supabase שפותח את /crm)
+   הם **אופציונליים**: אם הם שם, ה-worker מתחבר איתם. אם לא — הוא שואל פעם אחת
+   לאיזה מייל הוא שייך, Supabase שולח קוד או קישור, וזהו. בעותק שנשלח למישהו
+   אחר שתי השורות האלה חייבות להישאר ריקות — הן הסיסמה שפותחת את /crm.
 3. Google Chrome מותקן (ברירת מחדל `SOCIAL_BROWSER_CHANNEL=chrome`). בלי Chrome:
    `npx playwright-core install chromium` ו-`SOCIAL_BROWSER_CHANNEL=chromium`.
 4. `npm run social-worker` — משאירים את הטרמינל פתוח. בלוח הבקרה כרטיס

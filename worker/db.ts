@@ -1,21 +1,74 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { friendlyMessage } from '@/lib/social/errors';
 import { env } from './env';
+import { fileSessionStorage, forgetSession } from './session-store';
+import { signInInteractively } from './sign-in';
 
 /**
- * The worker talks to Supabase as the admin user through the anon key +
- * email/password login, so it is governed by the same RLS policies as the
- * dashboard — no service-role key ever sits on the laptop.
+ * The worker talks to Supabase through the anon key as a real signed-in
+ * person, so it is governed by the same policies as the dashboard — no
+ * service-role key ever sits on the laptop.
+ *
+ * TWO WAYS TO BE THAT PERSON, and the order matters.
+ *
+ * 1. An email and password in .env.local. This is how the owner's own machine
+ *    has always worked and it still wins, so nothing about that machine
+ *    changes. It is also the one thing that can never be in a copy handed to
+ *    somebody else: those two lines are the owner's login to the dashboard,
+ *    the CRM and every lead in it.
+ *
+ * 2. A session this machine obtained for itself, stored in the hidden folder
+ *    beside the Facebook profile and refreshed automatically from then on.
+ *    When there is none, the worker asks for the customer's email, Supabase
+ *    sends a six-digit code, and the customer types the code — once, on this
+ *    machine. No password is typed here and none is written anywhere.
+ *
+ * Which means a package built from this repository carries no identity at
+ * all: it is the same program, and the first thing it does is ask whose it is.
  */
 let client: SupabaseClient | null = null;
 
 export async function workerDb(): Promise<SupabaseClient> {
   if (client) return client;
   const c = createClient(env.supabaseUrl, env.supabaseAnonKey, {
-    auth: { persistSession: false, autoRefreshToken: true },
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      /* Node has no localStorage; this is a 0600 file. See session-store.ts. */
+      storage: fileSessionStorage(),
+      /* A URL never reaches this process, so there is nothing to detect. */
+      detectSessionInUrl: false,
+    },
   });
-  const { error } = await c.auth.signInWithPassword({ email: env.workerEmail, password: env.workerPassword });
-  if (error) throw new Error(`התחברות ל-Supabase נכשלה: ${error.message}`);
+
+  const email = env.workerEmailOptional;
+  const password = env.workerPasswordOptional;
+  if (email && password) {
+    const { error } = await c.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(`התחברות ל-Supabase נכשלה: ${error.message}`);
+    client = c;
+    return c;
+  }
+
+  /*
+   * getSession() reads the file; getUser() asks the server whether what is in
+   * it is still good. Both, because a refresh token that was revoked — the
+   * customer signed out everywhere, the account was disabled — still parses
+   * perfectly and would otherwise send the worker into a loop of requests
+   * that every one of them fails with no explanation on screen.
+   */
+  const { data: existing } = await c.auth.getSession();
+  if (existing.session) {
+    const { error } = await c.auth.getUser();
+    if (!error) {
+      client = c;
+      return c;
+    }
+    console.error(`[worker] החיבור לחשבון פג (${error.message}). מבקש התחברות מחדש.`);
+    forgetSession();
+  }
+
+  await signInInteractively(c);
   client = c;
   return c;
 }

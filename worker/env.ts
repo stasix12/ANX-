@@ -35,19 +35,36 @@ export const env = {
   get supabaseAnonKey() {
     return required('NEXT_PUBLIC_SUPABASE_ANON_KEY');
   },
-  /** The Supabase admin user (same one that opens /crm and /social). NOT a Facebook login. */
-  get workerEmail() {
-    return required('SOCIAL_WORKER_EMAIL');
-  },
-  get workerPassword() {
-    return required('SOCIAL_WORKER_PASSWORD');
-  },
   get workerName() {
     return process.env.SOCIAL_WORKER_NAME ?? `worker@${hostname()}`;
   },
+  /**
+   * Everything this machine remembers between runs: the Facebook browser
+   * profile, and the Supabase session once the worker signs itself in. Outside
+   * the repository on purpose — a folder that gets pulled, zipped or handed to
+   * somebody else must never contain either of them.
+   */
+  get stateDir() {
+    return process.env.SOCIAL_WORKER_STATE_DIR ?? path.join(homedir(), '.hapitaron-social');
+  },
   /** Where the logged-in Facebook profile lives. Outside the repo by default. */
   get profileDir() {
-    return process.env.SOCIAL_BROWSER_PROFILE_DIR ?? path.join(homedir(), '.hapitaron-social', 'facebook-profile');
+    return process.env.SOCIAL_BROWSER_PROFILE_DIR ?? path.join(this.stateDir, 'facebook-profile');
+  },
+  /**
+   * The owner's own login, and now OPTIONAL.
+   *
+   * It is how this worker has always authenticated and it still wins when it
+   * is set, so the machine that publishes today does not change at all. When
+   * it is absent — which is every copy handed to somebody else — the worker
+   * signs in with a one-time code sent to the customer's own email instead,
+   * and remembers the session. See worker/sign-in.ts.
+   */
+  get workerEmailOptional() {
+    return process.env.SOCIAL_WORKER_EMAIL ?? '';
+  },
+  get workerPasswordOptional() {
+    return process.env.SOCIAL_WORKER_PASSWORD ?? '';
   },
   /** 'chrome' uses the installed Google Chrome; 'chromium' uses Playwright's build. */
   get browserChannel() {

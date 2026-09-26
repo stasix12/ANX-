@@ -7,14 +7,20 @@
 # customer's machine rather than in a log anybody reads. So it is built where
 # it runs.
 #
-# WHY A RELEASE AND NOT AN ARTIFACT. The customer needs a link. A workflow
-# artifact requires a GitHub account and a login; a release asset is a plain
-# URL that can be sent in WhatsApp. It is also what the app will later check
-# for updates, which is the thing that replaces `git pull` from the owner's
-# private repository — a customer has no access to that and never will.
+# WHY A RELEASE AND NOT AN ARTIFACT. A workflow artifact requires a GitHub
+# account and a login. A release asset is a plain URL — and, more to the point,
+# it is the feed an INSTALLED copy reads to update itself. That is the whole
+# reason the release exists now: so that a fix reaches a customer's machine
+# without anybody sending them anything.
 #
-# It does not run on every push. Building a 200MB installer for a change to a
-# screen is waste; this runs when a tag is pushed, or when the owner asks.
+# THE RELEASE GOES TO A DIFFERENT REPOSITORY. stasix12/hapitaron-updates, which
+# is public and holds the installer and nothing else. It has to be public,
+# because a private repository's release assets need a token to download and
+# the only way to give an installed copy one is to put it inside the installer
+# — handing every customer a credential that reads all of the source. The
+# public feed exposes a version number and a file that anyone who was ever sent
+# a download link already had. Publishing to it needs the UPDATES_TOKEN secret;
+# without it the build still runs and simply publishes nothing.
 name: build the downloadable app
 
 on:
@@ -64,9 +70,12 @@ jobs:
       # 404 for two and a half hours while the owner was trying to use it.
       # Nothing the website ships needs electron; only this job does. So this
       # job is where it lives, and worker/test/package.test.ts fails the build
-      # if it ever creeps back into the manifest.
+      # if it ever creeps back into the manifest. electron-updater is here for
+      # the same reason and is caught by the same guard — it is bundled into
+      # main.cjs by scripts/build-app.mjs, so it has to exist at build time and
+      # must never exist at Vercel time.
       - name: electron, for this job only
-        run: npm install --no-save --no-audit --no-fund electron@38 electron-builder@26
+        run: npm install --no-save --no-audit --no-fund electron@38 electron-builder@26 electron-updater@6
 
       # The shell is typechecked HERE, because this is the only place Electron's
       # types exist. Without this step nothing would compile desktop/main.ts at all
@@ -120,19 +129,68 @@ jobs:
             dist/installer/*.zip
           if-no-files-found: error
 
-      - name: publish it where a link can be sent
-        if: startsWith(github.ref, 'refs/tags/app-v') || inputs.release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/installer/*.exe
-            dist/installer/*.zip
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('app-{0}', github.run_number) }}
-          name: הפתרון המבריק — תוכנת הפרסום
-          body: |
-            הורידו את הקובץ `.exe`, הפעילו אותו, והתוכנה תשאל למייל שאיתו נרשמתם.
-            נשלח קוד למייל — מקלידים אותו פעם אחת, וזהו.
+      # ------------------------------------------------------------------
+      # THE UPDATE FEED, which is the thing that replaces sending a link.
+      #
+      # An installed copy checks a PUBLIC repository that holds the installer
+      # and nothing else (see `publish:` in electron-builder.yml). This is the
+      # step that puts a version there.
+      #
+      # IT PUBLISHES ONLY WHEN THE VERSION IS NEW. The build runs on every push
+      # that touches the app, which is often; re-uploading the same version
+      # over itself would mean replacing files that customers may be
+      # downloading at that second, for no gain. So the version in the package
+      # is compared against what is already published — bump WORKER_VERSION in
+      # src/lib/social/worker-version.ts and the next push ships; leave it and
+      # the build still produces an artifact and touches nothing public.
+      - name: is this version already out there?
+        id: release
+        shell: pwsh
+        run: |
+          $version = (Get-Content dist/app/package.json | ConvertFrom-Json).version
+          "version=$version" >> $env:GITHUB_OUTPUT
+          if (-not $env:UPDATES_TOKEN) {
+            # Nothing is broken and the installer is still built and uploaded
+            # as an artifact. The app simply has nothing to update from, and
+            # says exactly that on its עדכונים screen rather than claiming to
+            # be current.
+            Write-Host "::warning::UPDATES_TOKEN is not set, so no release is published and installed copies cannot update themselves."
+            "publish=no" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          # A public repository, so this read needs no credentials at all.
+          $url = "https://api.github.com/repos/stasix12/hapitaron-updates/releases/tags/v$version"
+          try {
+            Invoke-RestMethod -Uri $url -Headers @{ 'User-Agent' = 'hapitaron-build' } | Out-Null
+            Write-Host "v$version is already published. Bump WORKER_VERSION to ship a new one."
+            "publish=no" >> $env:GITHUB_OUTPUT
+          } catch {
+            Write-Host "v$version is new — publishing."
+            "publish=yes" >> $env:GITHUB_OUTPUT
+          }
+        env:
+          UPDATES_TOKEN: ${{ secrets.UPDATES_TOKEN }}
 
-            צריך Google Chrome מותקן. התוכנה משתמשת בו, לא מורידה דפדפן משלה.
-          draft: false
-          prerelease: false
+      - name: publish the version customers update to
+        if: steps.release.outputs.publish == 'yes'
+        env:
+          # electron-builder's GitHub publisher reads this. It is a token for
+          # the PUBLIC installer repository only — it cannot read the source,
+          # and nothing about it ever reaches the package.
+          GH_TOKEN: ${{ secrets.UPDATES_TOKEN }}
+          CSC_LINK: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        # Not a second build: --publish only uploads what dist/installer already
+        # holds, including the latest.yml that electron-updater actually reads.
+        run: npx electron-builder --win nsis zip --config electron-builder.yml --publish always
+
+      - name: say where it went
+        if: steps.release.outputs.publish == 'yes'
+        shell: pwsh
+        run: |
+          $v = "${{ steps.release.outputs.version }}"
+          "### גרסה $v פורסמה" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "הורדה ישירה: https://github.com/stasix12/hapitaron-updates/releases/download/v$v/hapitaron-$v-setup.exe" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "כל מחשב שכבר מותקנת עליו התוכנה יאסוף אותה לבד תוך כמה שעות, בלי הקישור הזה." >> $env:GITHUB_STEP_SUMMARY

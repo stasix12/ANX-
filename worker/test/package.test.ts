@@ -41,6 +41,11 @@ execFileSync(process.execPath, [path.join(root, 'scripts', 'build-app.mjs')], {
     SOCIAL_CRON_SECRET: 'CRON-SECRET-MUST-NOT-SHIP',
     SOCIAL_WORKER_EMAIL: 'owner@must-not-ship.example',
     SOCIAL_WORKER_PASSWORD: 'OWNER-PASSWORD-MUST-NOT-SHIP',
+    /* The token that lets CI publish a release. It is a build-time credential
+       and the package must never carry it — an installed copy reads a public
+       feed and needs nothing to do so. */
+    UPDATES_TOKEN: 'UPDATES-TOKEN-MUST-NOT-SHIP',
+    GH_TOKEN: 'GH-TOKEN-MUST-NOT-SHIP',
   },
   stdio: 'pipe',
 });
@@ -174,6 +179,47 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
   is(!/cwd: here,/.test(shell), 'never __dirname, which is inside the archive once packaged');
 }
 
+/*
+ * UPDATING ITSELF, AND THE TWO WAYS THAT GOES WRONG.
+ *
+ * The app now fetches and installs its own next version, which is what
+ * replaces sending a download link after every fix. Two properties have to
+ * hold, and neither is visible by reading the feature working once.
+ *
+ * ONE: the feed must be public. A private repository's release assets need a
+ * token to download, so pointing the updater at the source repository would
+ * mean shipping a credential that can read all of the source inside every
+ * installer. The whole first half of this file exists to stop exactly that, so
+ * it is asserted here rather than left to a code review.
+ *
+ * TWO: it must not restart by itself. This program's job is to be running at
+ * 14:00 when a post is due. An updater that decides on its own that now is a
+ * fine moment to quit and reinstall eats a publication and leaves nothing
+ * behind explaining why.
+ */
+{
+  const builder = readFileSync(path.join(root, 'electron-builder.yml'), 'utf8');
+  is(/^publish:/m.test(builder), 'the package must be built with a publish feed, or app-update.yml is never written and an installed copy has nothing to check');
+  const repo = builder.match(/^\s+repo:\s*(\S+)/m)?.[1];
+  is(repo === 'hapitaron-updates', `the feed must be the separate installer-only repository, not the private source one (found: ${repo})`);
+  is(/^\s+releaseType:\s*release$/m.test(builder), 'and it must publish live releases — a draft is invisible to the updater');
+
+  const updates = readFileSync(path.join(root, 'desktop', 'updates.ts'), 'utf8');
+  is(/autoUpdater\.autoDownload = false/.test(updates), 'the download is started deliberately, so the "עדכונים אוטומטיים" toggle actually decides');
+  is(/autoUpdater\.autoInstallOnAppQuit = true/.test(updates), 'a downloaded version installs on the next ordinary quit, so doing nothing still gets you there');
+  is(
+    !/quitAndInstall/.test(updates.replace(/export function install[\s\S]*$/, '')),
+    'and nothing outside install() may restart the app — an update that interrupts a publication is worse than no update',
+  );
+  is(/beforeInstall\(\)/.test(updates), 'installing must stop the engine first, or the old child outlives its parent and fights the new copy for the same rows');
+
+  /* The bundle must actually contain the updater. esbuild leaving it as a bare
+     require would produce a package that builds, installs, and throws the
+     moment somebody opens the עדכונים screen. */
+  is(!/require\("electron-updater"\)/.test(main), 'electron-updater must be bundled into main.cjs, not required at runtime from a node_modules that is not there');
+  is(/autoInstallOnAppQuit/.test(main), 'and its wiring must survive into the built bundle');
+}
+
 /* The two processes stay two. A window that imported the publishing engine
    instead of starting it would mean a redesign could break a publication. */
 is(/\.spawn\b/.test(main) && /node:child_process/.test(main), 'the engine is started as its own process, not called inside the window');
@@ -182,6 +228,35 @@ is(existsSync(path.join(out, 'renderer', 'mini.html')), 'including the small pan
 const preload = readFileSync(path.join(out, 'preload.cjs'), 'utf8');
 is(!/require\('node:/.test(preload), 'the bridge must not hand the page any Node module');
 is(preload.split('\n').length < 60, 'and must stay short enough to read in full');
+
+/*
+ * EVERY CHANNEL THE PAGE CALLS MUST EXIST ON THE OTHER SIDE.
+ *
+ * The bridge is two string literals in two different files, and nothing
+ * checks that they match. A typo in either — 'updates:check' against
+ * 'update:check' — compiles, packages, installs and runs. The button just
+ * does nothing, or hangs forever on a promise nobody will ever settle, which
+ * is the kind of failure that gets reported as "the app is stuck".
+ */
+{
+  const invoked = [...preload.matchAll(/ipcRenderer\.invoke\('([^']+)'/g)].map((m) => m[1]);
+  const sent = [...preload.matchAll(/ipcRenderer\.send\('([^']+)'/g)].map((m) => m[1]);
+  const listened = [...preload.matchAll(/ipcRenderer\.on\('([^']+)'/g)].map((m) => m[1]);
+  is(invoked.length > 10 && sent.length > 5 && listened.length > 5, 'the bridge was read, not just opened');
+
+  for (const ch of invoked) is(main.includes(`ipcMain.handle("${ch}"`), `the page invokes '${ch}' — something must answer it`);
+  for (const ch of sent) is(main.includes(`ipcMain.on("${ch}"`), `the page sends '${ch}' — something must receive it`);
+  /* And the other direction: a channel the page listens on that nobody ever
+     sends is a screen that stays on its loading state for good. */
+  for (const ch of listened) is(main.includes(`"${ch}"`), `the page listens on '${ch}' — something must push it`);
+
+  /* Named explicitly, because these four are the whole update feature and a
+     silent one of them is a person who thinks they are up to date. */
+  for (const ch of ['updates:state', 'updates:check', 'updates:download', 'updates:install']) {
+    is(invoked.includes(ch), `the עדכונים screen must be able to call '${ch}'`);
+  }
+  is(listened.includes('updates'), 'and must be told about a download it did not start');
+}
 
 /* Chromium is what would make this a 200MB download instead of a 10MB one. */
 is(!existsSync(path.join(out, 'node_modules', 'playwright-core', '.local-browsers')),

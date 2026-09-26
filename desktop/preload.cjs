@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('anx', {
   onData: (fn) => ipcRenderer.on('data', (_e, data) => fn(data)),
   onPrefs: (fn) => ipcRenderer.on('prefs', (_e, prefs) => fn(prefs)),
   onNav: (fn) => ipcRenderer.on('nav', (_e, page) => fn(page)),
+  onUpdates: (fn) => ipcRenderer.on('updates', (_e, state) => fn(state)),
 
   /* asked for, and answered */
   state: () => ipcRenderer.invoke('app:state'),
@@ -26,6 +27,14 @@ contextBridge.exposeInMainWorld('anx', {
   verifyCode: (email, token) => ipcRenderer.invoke('auth:otp-verify', { email, token }),
   signInGoogle: () => ipcRenderer.invoke('auth:google'),
   signOut: () => ipcRenderer.invoke('auth:signout'),
+
+  /* Updates. Four verbs and no file access: the renderer can ask what the
+     state is and ask for the next step, and cannot download or run anything
+     itself. */
+  updates: () => ipcRenderer.invoke('updates:state'),
+  checkUpdates: () => ipcRenderer.invoke('updates:check'),
+  downloadUpdate: () => ipcRenderer.invoke('updates:download'),
+  installUpdate: () => ipcRenderer.invoke('updates:install'),
 
   /* Facebook. The typing happens on Facebook's own page in a real Chrome
      window; these only ask the engine to open it. */

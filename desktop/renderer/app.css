@@ -277,3 +277,23 @@ body.mini { background: transparent; }
   box-shadow: 0 8px 20px -8px rgba(109,40,217,.8);
 }
 .connect-verify { display: flex; gap: var(--s3); padding: 0 var(--s5) var(--s5); }
+
+/* ------------------------------------------------------------- updates */
+
+/*
+ * The download bar. It exists only while bytes are moving — a progress bar
+ * sitting at 0% is a bug report waiting to happen.
+ */
+#upbar { margin-top: var(--s5); }
+#upbar > div {
+  height: 8px; border-radius: var(--radius-pill);
+  background: var(--card-2); overflow: hidden;
+}
+#upbar i { display: block; height: 100%; width: 0; background: var(--grad); transition: width .25s ease; }
+
+/* A quiet dot on the sidebar when a version is sitting there waiting, so the
+   one screen nobody visits can still ask for attention. */
+aside a .dot {
+  margin-inline-start: auto; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 28%, transparent);
+}

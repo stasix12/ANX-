@@ -43,6 +43,7 @@ import os from 'node:os';
 import { QUEUE_LIFECYCLE, NEEDS_HUMAN_STATUSES } from '../src/lib/social/status';
 import { activityKind } from '../src/lib/social/activity';
 import type { QueueStatus } from '../src/lib/social/types';
+import { initUpdates, updateState, check as checkUpdates, download as downloadUpdate, install as installUpdate } from './updates';
 
 const here = __dirname;
 
@@ -269,6 +270,7 @@ function createWindow(): void {
     send('worker:history', scrollback);
     send('worker:state', workerState());
     send('prefs', prefs);
+    send('updates', updateState());
   });
   win.on('close', (e) => {
     if (quitting || !prefs.minimizeToTray) return;
@@ -687,8 +689,22 @@ ipcMain.handle('prefs:set', (_e, patch: Partial<Prefs>) => {
   writePrefs(prefs);
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: prefs.openAtLogin, args: ['--hidden'] });
   send('prefs', prefs);
+  /* The updates screen shows whether it is allowed to download by itself, so
+     flipping the toggle in הגדרות has to reach it without a reload. */
+  send('updates', updateState());
   return prefs;
 });
+/*
+ * UPDATES. The window asks; this process is the only thing that talks to the
+ * feed. `updates:check` is the button, and the state it returns is the same
+ * object the automatic check pushes on the 'updates' channel, so the screen
+ * has one shape to draw whether a person asked or nobody did.
+ */
+ipcMain.handle('updates:state', () => updateState());
+ipcMain.handle('updates:check', () => checkUpdates());
+ipcMain.handle('updates:download', () => downloadUpdate());
+ipcMain.handle('updates:install', () => installUpdate());
+
 ipcMain.on('worker:answer', (_e, text: string) => {
   worker?.stdin?.write(`${String(text)}\n`);
   say(String(text), 'you');
@@ -726,6 +742,9 @@ function updateTray(): void {
       { type: 'separator' },
       { label: 'הדשבורד באתר', click: () => void shell.openExternal(config.siteUrl) },
       { label: 'הגדרות', click: () => { createWindow(); send('nav', 'settings'); } },
+      ...(updateState().status === 'ready'
+        ? [{ label: `התקן עדכון ${updateState().next ?? ''} והפעל מחדש`, click: () => { installUpdate(); } }]
+        : []),
       { type: 'separator' },
       { label: 'יציאה (מפסיק לפרסם)', click: () => { quitting = true; stopWorker(); app.quit(); } },
     ]),
@@ -756,6 +775,20 @@ if (!app.requestSingleInstanceLock()) {
 
     const hidden = process.argv.includes('--hidden') || prefs.startMinimized;
     if (!hidden) createWindow();
+
+    initUpdates({
+      /* The tray is the only thing a person sees when the window is hidden,
+         which is most of the time, so a downloaded update has to reach it. */
+      send: (channel, payload) => { send(channel, payload); updateTray(); },
+      say,
+      autoEnabled: () => prefs.autoUpdates,
+      /* Installing replaces this process. The engine is a CHILD of it, and a
+         child that outlives the parent would fight the new copy for the same
+         queue rows — two browsers, one post, both convinced they should send
+         it. So it is stopped first, and `quitting` is set so the window's
+         close handler hides nothing and the quit actually completes. */
+      beforeInstall: () => { quitting = true; stopWorker(); },
+    });
 
     if (readSession()) {
       startWorker();

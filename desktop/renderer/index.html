@@ -267,12 +267,48 @@
     </section>
 
     <!-- ------------------------------------------------------- updates -->
+    <!--
+      The screen that replaces "here is a link, download it again". Everything
+      in it is filled by paintUpdates() in app.js from one state object that
+      arrives both as an answer to the button and unprompted when the app
+      checks by itself, so there is nothing here that can drift out of date.
+    -->
     <section class="page" id="page-updates" hidden>
-      <div class="pagehead"><div class="grow"><h1>עדכונים</h1><p class="lead">התוכנה מתעדכנת כשיש גרסה חדשה.</p></div></div>
+      <div class="pagehead"><div class="grow"><h1>עדכונים</h1><p class="lead">התוכנה בודקת בעצמה אם יצאה גרסה חדשה, ומורידה אותה ברקע.</p></div></div>
+
       <div class="card" style="padding:var(--s6)">
         <div style="display:flex;align-items:center;gap:var(--s4)">
-          <span class="ico tint-ok" style="width:44px;height:44px;border-radius:12px;display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
-          <div><b style="font-size:16px">הגרסה מעודכנת</b><p class="dim">גרסה <span id="ver2" dir="ltr">—</span></p></div>
+          <span class="ico" id="upico" style="width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex:none"></span>
+          <div class="grow" style="min-width:0">
+            <b style="font-size:16px" id="uptitle">בודק…</b>
+            <p class="dim" id="upsub">&nbsp;</p>
+            <p class="dim" style="font-size:12px;margin-top:2px">גרסה מותקנת <span id="ver2" dir="ltr">—</span></p>
+          </div>
+        </div>
+
+        <!-- Only while something is actually coming down the wire. -->
+        <div id="upbar" hidden><div><i></i></div></div>
+
+        <div style="display:flex;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s5)">
+          <button class="btn btn-primary" id="upinstall" hidden>התקן עכשיו והפעל מחדש</button>
+          <button class="btn btn-primary" id="updownload" hidden>הורד את הגרסה החדשה</button>
+          <button class="btn" id="upcheck">בדוק אם יש עדכון</button>
+        </div>
+
+        <p class="dim" id="upwhen" style="margin-top:var(--s4);font-size:12px">&nbsp;</p>
+      </div>
+
+      <!-- What the new version changed, when the release said. -->
+      <div class="card" id="upnotescard" style="margin-top:var(--s4)" hidden>
+        <div class="cardhead"><h3>מה חדש</h3></div>
+        <div style="padding:var(--s5);white-space:pre-wrap;line-height:1.7" id="upnotes"></div>
+      </div>
+
+      <div class="card" style="margin-top:var(--s4)">
+        <div class="setrows">
+          <div class="setrow"><span class="txt"><b>מתי זה יתקין את עצמו?</b><span>אף פעם באמצע עבודה. גרסה חדשה יורדת ברקע ומחכה — היא נכנסת לפעולה בפעם הבאה שסוגרים את התוכנה לגמרי, או ברגע שלוחצים כאן על "התקן עכשיו".</span></span></div>
+          <div class="setrow"><span class="txt"><b>הפרסום ייעצר בזמן ההתקנה?</b><span>להתקנה עצמה לוקח כמה שניות, והתוכנה חוזרת לבד וממשיכה מאיפה שהפסיקה. מה שמתוזמן לשעה אחרת לא מושפע.</span></span></div>
+          <div class="setrow"><span class="txt"><b>אפשר לבטל את ההורדה האוטומטית?</b><span>כן — בהגדרות, "עדכונים אוטומטיים". כשהיא כבויה המסך הזה עדיין יגיד לכם שיצאה גרסה, פשוט לא יוריד אותה עד שתבקשו.</span></span></div>
         </div>
       </div>
     </section>

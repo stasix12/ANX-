@@ -31,6 +31,30 @@ asarUnpack:
   - worker.cjs
   - node_modules/**
 
+# WHERE THE INSTALLED APP LOOKS FOR ITS NEXT VERSION.
+#
+# This block is what bakes resources/app-update.yml into the package, and that
+# file is the only thing the installed copy knows about updates. Without it
+# electron-updater has no feed and the app says so on its עדכונים screen
+# rather than claiming to be current.
+#
+# IT IS A DIFFERENT REPOSITORY, AND A PUBLIC ONE, ON PURPOSE. The source lives
+# in a private repository, and a private repository's release assets need a
+# token to download. Shipping such a token inside every installer would put a
+# credential that can read all of the source into the hands of every customer
+# — exactly what worker/test/package.test.ts exists to make impossible. So the
+# installer, and only the installer, lives in a public repository that holds
+# no code. What is exposed there is a version number and a file that anybody
+# who was ever sent a download link already had.
+publish:
+  provider: github
+  owner: stasix12
+  repo: hapitaron-updates
+  # Live immediately rather than as a draft: a draft is invisible to the
+  # updater, so a release nobody remembers to un-draft is a release that
+  # silently never reaches anybody.
+  releaseType: release
+
 win:
   target:
     - target: nsis

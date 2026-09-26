@@ -25,6 +25,8 @@ const ICON = {
   x: '<circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/>',
   send: '<path d="m22 2-7 20-4-9-9-4Z"/>',
   hand: '<path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8"/>',
+  down: '<path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/>',
+  spin: '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>',
 };
 
 /* ------------------------------------------------------------- formatting */
@@ -320,10 +322,12 @@ function paintData(d) {
     $('avatar').replaceWith(img);
     img.id = 'avatar';
   }
-  if (d.machine?.version) {
-    $('ver').textContent = d.machine.version;
-    $('ver2').textContent = d.machine.version;
-  }
+  /* The sidebar shows what the ENGINE reported to the server, which is the
+     number the dashboard compares against. The updates screen shows what this
+     window itself is, because that is the number the updater compares. They
+     are built from the same constant; if they ever disagree, that disagreement
+     is the bug and hiding it would not help. */
+  if (d.machine?.version) $('ver').textContent = d.machine.version;
 
   const home = $('feed-home');
   if (!d.activity.length) empty(home, 'עוד לא קרה כלום', 'ברגע שיצא פרסום הוא יופיע כאן.');
@@ -415,6 +419,90 @@ function paintPrefs(p) {
   );
 }
 
+/* ------------------------------------------------------------- updates */
+
+/*
+ * One object in, one screen out. The same state arrives two ways — as the
+ * answer to a button and pushed unprompted when the app checks by itself —
+ * and both go through here, so there is no second code path that could paint
+ * a stale answer.
+ */
+const UPDATE_LOOK = {
+  unsupported: ['tint-info', ICON.warn, 'עדכונים אוטומטיים לא פעילים כאן'],
+  idle:        ['tint-info', ICON.spin, 'עוד לא נבדק'],
+  checking:    ['tint-info', ICON.spin, 'בודק אם יש גרסה חדשה…'],
+  none:        ['tint-ok',   ICON.check, 'הגרסה שלכם מעודכנת'],
+  available:   ['tint-brand', ICON.down, 'יצאה גרסה חדשה'],
+  downloading: ['tint-brand', ICON.down, 'מוריד את הגרסה החדשה'],
+  ready:       ['tint-ok',   ICON.check, 'הגרסה החדשה מוכנה להתקנה'],
+  error:       ['tint-warn', ICON.warn, 'לא הצלחנו לבדוק'],
+};
+
+let upState = { status: 'idle', current: '', next: null, percent: 0, message: '', notes: '', checkedAt: null, auto: true };
+
+function paintUpdates(u) {
+  upState = { ...upState, ...u };
+  const [tint, icon, title] = UPDATE_LOOK[upState.status] ?? UPDATE_LOOK.idle;
+
+  const ico = $('upico');
+  ico.className = `ico ${tint}`;
+  ico.innerHTML = svg(icon, 20);
+  $('uptitle').textContent = upState.next && (upState.status === 'available' || upState.status === 'downloading' || upState.status === 'ready')
+    ? `${title} — ${upState.next}`
+    : title;
+  $('upsub').textContent = upState.message || '\u00a0';
+  $('ver2').textContent = upState.current || '—';
+
+  /* Only while bytes are moving. A bar parked at zero reads as broken. */
+  const downloading = upState.status === 'downloading';
+  $('upbar').hidden = !downloading;
+  if (downloading) $('upbar').firstElementChild.firstElementChild.style.width = `${upState.percent}%`;
+
+  $('upinstall').hidden = upState.status !== 'ready';
+  /* Offered only when nothing is going to do it anyway: with the automatic
+     toggle on, the download has already started by the time this paints. */
+  $('updownload').hidden = !(upState.status === 'available' && !upState.auto);
+  $('upcheck').hidden = upState.status === 'unsupported';
+  $('upcheck').disabled = upState.status === 'checking' || downloading;
+
+  /* Release notes belong to a version that is coming, so they are shown in
+     the three states where one is — never beside "מעודכן" or beside an error,
+     where they would be describing something that is not happening. The tags
+     are stripped because a release body is Markdown or HTML from the release
+     page and this is a text node, not a document. */
+  const notes = String(upState.notes || '').replace(/<[^>]*>/g, '').trim();
+  const coming = upState.status === 'available' || upState.status === 'downloading' || upState.status === 'ready';
+  $('upnotescard').hidden = !notes || !coming;
+  $('upnotes').textContent = notes;
+
+  $('upwhen').textContent = upState.checkedAt
+    ? `נבדק לאחרונה ${time(new Date(upState.checkedAt).toISOString())}${upState.auto ? ' · נבדק שוב לבד כל כמה שעות' : ' · בדיקה אוטומטית כבויה בהגדרות'}`
+    : '\u00a0';
+
+  /* The sidebar, because this screen is one nobody opens on purpose. */
+  const link = document.querySelector('aside a[data-page="updates"]');
+  if (link) {
+    const had = link.querySelector('.dot');
+    if (upState.status === 'ready' && !had) link.append(el('span', 'dot'));
+    if (upState.status !== 'ready' && had) had.remove();
+  }
+}
+
+$('upcheck').addEventListener('click', async (e) => {
+  busy(e.currentTarget, true, 'בודק…');
+  paintUpdates(await window.anx.checkUpdates());
+  busy(e.currentTarget, false);
+});
+$('updownload').addEventListener('click', async (e) => {
+  busy(e.currentTarget, true, 'מוריד…');
+  paintUpdates(await window.anx.downloadUpdate());
+  busy(e.currentTarget, false);
+});
+$('upinstall').addEventListener('click', async (e) => {
+  busy(e.currentTarget, true, 'מתקין…');
+  await window.anx.installUpdate();
+});
+
 /* ---------------------------------------------------------- the drawer */
 
 const log = $('log');
@@ -446,6 +534,7 @@ window.anx.onState(paintState);
 window.anx.onData(paintData);
 window.anx.onPrefs(paintPrefs);
 window.anx.onNav(go);
+window.anx.onUpdates(paintUpdates);
 window.anx.onLine(addLine);
 window.anx.onHistory((lines) => { log.replaceChildren(); lines.forEach(addLine); });
 
@@ -457,5 +546,6 @@ async function refresh() {
   const s = await window.anx.state();
   paintPrefs(s.prefs);
   paintState(s);
+  paintUpdates(await window.anx.updates());
   if (s.signedIn) refresh();
 })();

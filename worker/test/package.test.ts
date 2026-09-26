@@ -88,14 +88,25 @@ for (const forbidden of ['.env', '.env.local', '.git', 'src', 'tsconfig.json', '
 }
 is(!files.some((f) => f.endsWith('.ts') && !f.includes('node_modules')), 'no TypeScript source ships — the customer has no compiler');
 
-/* The window must not carry the owner's own login through to the child. */
+/* The window must not carry the owner's own login through to the child.
+   Quotes are matched loosely because the bundler normalises them. */
 const main = readFileSync(path.join(out, 'main.cjs'), 'utf8');
+const blanked = (name: string) => new RegExp(`${name}:\\s*(''|"")`).test(main);
 is(
-  /SOCIAL_WORKER_EMAIL: ''/.test(main) && /SOCIAL_WORKER_PASSWORD: ''/.test(main),
+  blanked('SOCIAL_WORKER_EMAIL') && blanked('SOCIAL_WORKER_PASSWORD'),
   'and the shell must blank those two variables, so a developer running the app from their own machine cannot leak them into a customer build by habit',
 );
-is(/SOCIAL_WORKER_PROMPTABLE: '1'/.test(main), 'the window must tell the worker there is somebody here to answer');
+is(/SOCIAL_WORKER_PROMPTABLE:\s*('1'|"1")/.test(main), 'the window must tell the worker there is somebody here to answer');
 is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so nothing needs Node.js installed');
+
+/* The two processes stay two. A window that imported the publishing engine
+   instead of starting it would mean a redesign could break a publication. */
+is(/\.spawn\b/.test(main) && /node:child_process/.test(main), 'the engine is started as its own process, not called inside the window');
+is(existsSync(path.join(out, 'renderer', 'index.html')), 'the screens ship');
+is(existsSync(path.join(out, 'renderer', 'mini.html')), 'including the small panel');
+const preload = readFileSync(path.join(out, 'preload.cjs'), 'utf8');
+is(!/require\('node:/.test(preload), 'the bridge must not hand the page any Node module');
+is(preload.split('\n').length < 60, 'and must stay short enough to read in full');
 
 /* Chromium is what would make this a 200MB download instead of a 10MB one. */
 is(!existsSync(path.join(out, 'node_modules', 'playwright-core', '.local-browsers')),

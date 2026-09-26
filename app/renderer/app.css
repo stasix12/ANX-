@@ -1,0 +1,260 @@
+/* ANX Worker — the screens. Tokens live in theme.css; nothing here invents a
+   colour or a spacing of its own. */
+
+/* ==================================================== the sign-in screen */
+
+/*
+ * Two halves. The left is the product saying what it is — the one place in a
+ * desktop app where a person decides whether this looks like something that
+ * will still exist next year. The right is the form, and the form is short.
+ */
+#login { display: grid; grid-template-columns: 1fr 1fr; height: 100vh; }
+#login .pitch {
+  position: relative; overflow: hidden;
+  background: var(--grad);
+  display: flex; flex-direction: column; justify-content: center;
+  padding: var(--s9) var(--s8); color: #fff;
+}
+/* The arcs from the reference: soft, off-centre, never competing with text. */
+#login .pitch::before,
+#login .pitch::after {
+  content: ''; position: absolute; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.16); pointer-events: none;
+}
+#login .pitch::before { width: 620px; height: 620px; inset-inline-start: -260px; bottom: -220px; background: rgba(255,255,255,.05); }
+#login .pitch::after  { width: 900px; height: 900px; inset-inline-start: -420px; bottom: -400px; }
+#login .pitch h2 { position: relative; font-size: 30px; line-height: 1.3; font-weight: 800; letter-spacing: -.4px; }
+#login .pitch p { position: relative; margin-top: var(--s4); font-size: 15px; opacity: .88; max-width: 34ch; }
+#login .pitch ul { position: relative; margin: var(--s7) 0 0; padding: 0; list-style: none; display: grid; gap: var(--s3); }
+#login .pitch li { display: flex; align-items: center; gap: var(--s3); font-size: 14px; opacity: .95; }
+#login .pitch li svg { flex: none; }
+
+#login .form { display: flex; align-items: center; justify-content: center; padding: var(--s7); overflow-y: auto; }
+#login .form > div { width: 100%; max-width: 380px; }
+
+.logo { display: flex; align-items: center; gap: var(--s3); }
+.logo .mark {
+  width: 40px; height: 40px; border-radius: 11px; background: var(--grad);
+  display: grid; place-items: center; color: #fff; font-weight: 900; font-size: 19px;
+  box-shadow: 0 6px 16px -6px rgba(109,40,217,.7);
+}
+.logo .name { font-size: 19px; font-weight: 800; letter-spacing: -.3px; }
+.logo .sub { font-size: 11px; font-weight: 700; color: var(--text-3); letter-spacing: 2px; margin-top: -3px; }
+
+.sep { display: flex; align-items: center; gap: var(--s4); margin: var(--s5) 0; color: var(--text-3); font-size: 12px; }
+.sep::before, .sep::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+.check { display: flex; align-items: center; gap: var(--s2); cursor: pointer; user-select: none; }
+.check input { width: 18px; height: 18px; accent-color: var(--brand-400); cursor: pointer; }
+
+.alert {
+  display: flex; gap: var(--s3); padding: var(--s3) var(--s4);
+  border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+  background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err);
+}
+.alert.ok { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
+
+.link { color: var(--brand-300); font-weight: 700; }
+.link:hover { text-decoration: underline; }
+
+/* ======================================================== the application */
+
+#shell { display: none; height: 100vh; grid-template-columns: 232px 1fr; }
+#shell.on { display: grid; }
+
+aside {
+  background: var(--sidebar); color: #cdd3e6;
+  display: flex; flex-direction: column; gap: var(--s2);
+  padding: var(--s5) var(--s3); border-inline-end: 1px solid rgba(255,255,255,.06);
+}
+aside .logo { padding: 0 var(--s3) var(--s5); }
+/* "PUBLISHING ENGINE" wrapped onto two lines at this width and pushed the mark
+   out of line with it. The sidebar is a fixed 232px, so the answer is to let
+   the wordmark shrink rather than to widen the rail. */
+aside .logo .sub { letter-spacing: 1.4px; font-size: 9.5px; white-space: nowrap; }
+aside .logo .name { font-size: 17px; }
+aside .logo .name { color: #fff; }
+aside nav { display: grid; gap: 2px; }
+aside a {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: 10px var(--s3); border-radius: var(--radius-sm);
+  font-weight: 600; color: #aab2cc; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+aside a:hover { background: rgba(255,255,255,.06); color: #fff; }
+aside a.on { background: var(--grad); color: #fff; box-shadow: 0 6px 16px -8px rgba(109,40,217,.9); }
+aside a .count {
+  margin-inline-start: auto; font-size: 11px; font-weight: 800;
+  background: rgba(255,255,255,.14); padding: 1px 8px; border-radius: var(--radius-pill);
+}
+aside a.on .count { background: rgba(255,255,255,.24); }
+aside .foot { margin-top: auto; padding: var(--s3); font-size: 11px; color: #6f7791; }
+
+main { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+
+header.top {
+  display: flex; align-items: center; gap: var(--s4);
+  padding: var(--s4) var(--s6); border-bottom: 1px solid var(--line);
+  background: var(--bg-2);
+}
+header.top .who { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+header.top .who img, header.top .who .ph {
+  width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex: none;
+  background: var(--grad); display: grid; place-items: center; color: #fff; font-weight: 800;
+}
+header.top .grow { flex: 1; }
+.statepill {
+  display: flex; align-items: center; gap: var(--s2);
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-pill); padding: 5px var(--s3) 5px var(--s2);
+  font-weight: 700; font-size: 13px;
+}
+
+.page { flex: 1; overflow-y: auto; padding: var(--s6); }
+.page[hidden] { display: none; }
+.page h1 { font-size: 22px; font-weight: 800; letter-spacing: -.3px; }
+.page .lead { color: var(--text-2); margin-top: 2px; }
+.pagehead { display: flex; align-items: flex-end; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s5); }
+.pagehead .grow { flex: 1; }
+
+/* Cards that stay honest at every window width the app allows. */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--s4); }
+.stat { padding: var(--s5); display: grid; gap: var(--s1); }
+.stat .ico {
+  width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+  margin-bottom: var(--s2);
+}
+.stat .n { font-size: 30px; font-weight: 800; letter-spacing: -1px; line-height: 1.1; }
+.stat .k { font-weight: 700; }
+.stat .s { font-size: 12.5px; color: var(--text-3); }
+
+.two { display: grid; grid-template-columns: 1.35fr 1fr; gap: var(--s4); margin-top: var(--s4); align-items: start; }
+@media (max-width: 1100px) { .two { grid-template-columns: 1fr; } }
+
+.cardhead {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s4) var(--s5); border-bottom: 1px solid var(--line-soft);
+}
+.cardhead h3 { font-size: 15px; font-weight: 800; }
+.cardhead .grow { flex: 1; }
+
+/* ---------------------------------------------------------- activity feed */
+
+/*
+ * This replaces the console, and the difference is the point: a time, an
+ * icon, a sentence, a state. Nothing here is a log line with a prefix.
+ */
+.feed { display: grid; }
+.feed .row {
+  display: grid; grid-template-columns: auto 34px 1fr auto;
+  align-items: center; gap: var(--s3);
+  padding: var(--s3) var(--s5); border-bottom: 1px solid var(--line-soft);
+}
+.feed .row:last-child { border-bottom: 0; }
+.feed .time { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.feed .ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; }
+.feed .what { min-width: 0; }
+.feed .what b { display: block; font-weight: 700; font-size: 13.5px; }
+.feed .what span {
+  display: block; font-size: 12.5px; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tint-ok   { background: color-mix(in srgb, var(--ok) 14%, transparent);   color: var(--ok); }
+.tint-warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.tint-err  { background: color-mix(in srgb, var(--err) 14%, transparent);  color: var(--err); }
+.tint-info { background: color-mix(in srgb, var(--info) 14%, transparent); color: var(--info); }
+.tint-brand{ background: var(--tint); color: var(--brand-300); }
+
+/* ---------------------------------------------------------------- tasks */
+
+.tabs { display: flex; gap: var(--s1); flex-wrap: wrap; }
+.tabs button {
+  padding: 7px var(--s4); border-radius: var(--radius-pill);
+  font-weight: 700; font-size: 13px; color: var(--text-2);
+  border: 1px solid transparent;
+}
+.tabs button:hover { background: var(--card-2); color: var(--text); }
+.tabs button.on { background: var(--card); border-color: var(--line); color: var(--text); box-shadow: var(--shadow); }
+.tabs button i { font-style: normal; color: var(--text-3); margin-inline-start: 5px; font-variant-numeric: tabular-nums; }
+.tabs button.on i { color: var(--brand-300); }
+
+.rows { display: grid; }
+.rows .row {
+  display: grid; grid-template-columns: 38px 1fr auto auto;
+  align-items: center; gap: var(--s4);
+  padding: var(--s4) var(--s5); border-bottom: 1px solid var(--line-soft);
+}
+.rows .row:last-child { border-bottom: 0; }
+.rows .row:hover { background: var(--card-2); }
+.rows .ico { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; }
+.rows b { font-weight: 700; display: block; }
+.rows small { color: var(--text-3); }
+
+.empty { padding: var(--s9) var(--s5); text-align: center; color: var(--text-3); }
+.empty svg { color: var(--line); margin-bottom: var(--s3); }
+.empty b { display: block; color: var(--text-2); font-size: 15px; margin-bottom: 4px; }
+
+/* -------------------------------------------------------------- settings */
+
+.setrows { display: grid; }
+.setrow {
+  display: flex; align-items: center; gap: var(--s4);
+  padding: var(--s4) var(--s5); border-bottom: 1px solid var(--line-soft);
+}
+.setrow:last-child { border-bottom: 0; }
+.setrow .ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+.setrow .txt { flex: 1; min-width: 0; }
+.setrow .txt b { display: block; font-weight: 700; }
+.setrow .txt span { font-size: 12.5px; color: var(--text-3); }
+
+/* ------------------------------------------------------------- the drawer */
+
+/*
+ * The technical log. It was the whole interface; now it is a drawer, because
+ * the one person who needs it is whoever is fixing something, and the person
+ * it was frightening is the customer.
+ */
+#drawer {
+  position: fixed; inset-inline: 0; bottom: 0; z-index: 30;
+  background: var(--bg-2); border-top: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(100%); transition: transform .24s cubic-bezier(.2,.8,.2,1);
+  display: flex; flex-direction: column; height: min(58vh, 460px);
+}
+#drawer.on { transform: none; }
+#drawer .cardhead { background: var(--bg-2); }
+#log {
+  flex: 1; overflow-y: auto; padding: var(--s4) var(--s5); margin: 0;
+  /* Left to right: these lines mix Hebrew sentences with English identifiers
+     and file paths, and a mixed line reads correctly only one way round. */
+  direction: ltr; text-align: left;
+  font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word;
+}
+#log div { padding: 1px 0; color: var(--text-2); }
+#log .err { color: var(--err); }
+#log .sys { color: var(--text-3); }
+#log .prompt { color: var(--brand-300); }
+#log .you { color: var(--accent); }
+
+#answerbar { border-top: 1px solid var(--line); padding: var(--s3) var(--s5); display: none; }
+#answerbar.on { display: block; }
+
+/* --------------------------------------------------------------- the mini */
+
+body.mini { background: transparent; }
+#minipanel {
+  height: 100vh; display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-lg);
+}
+#minipanel .bar {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: var(--s3) var(--s4); background: var(--grad); color: #fff;
+  -webkit-app-region: drag;
+}
+#minipanel .bar button { -webkit-app-region: no-drag; }
+#minipanel .body { padding: var(--s4); display: grid; gap: var(--s3); }
+#minipanel .pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+#minipanel .pair div { background: var(--card-2); border-radius: var(--radius-sm); padding: var(--s3); text-align: center; }
+#minipanel .pair b { display: block; font-size: 24px; font-weight: 800; line-height: 1.1; }
+#minipanel .pair span { font-size: 11.5px; color: var(--text-3); }

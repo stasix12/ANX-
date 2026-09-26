@@ -1,0 +1,191 @@
+/*
+ * ANX Worker — the design language, in one place.
+ *
+ * Every colour, radius, shadow and step of spacing is a token here and is
+ * never written literally anywhere else. That is not tidiness: a desktop app
+ * has a light mode and a dark mode and they have to be the same product, and
+ * the only way that survives more than one change is if there is exactly one
+ * place where "surface" and "muted text" are decided.
+ *
+ * RTL is the default, not an afterthought. The document is dir="rtl", every
+ * edge is written as inline-start / inline-end rather than left / right, and
+ * the one thing that stays left-to-right is the technical log — a line of
+ * mixed Hebrew and English identifiers reads correctly only one way round.
+ */
+:root {
+  /* Brand — indigo through violet, the gradient that carries the primary
+     action on every screen so that "the purple one" is always the way on. */
+  --brand-600: #4f46e5;
+  --brand-500: #6d28d9;
+  --brand-400: #7c3aed;
+  --brand-300: #a78bfa;
+  --accent: #2563eb;
+  --grad: linear-gradient(135deg, #6d28d9 0%, #4f46e5 55%, #2563eb 100%);
+
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --err: #ef4444;
+  --info: #3b82f6;
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* A single scale. Nothing in this app is 13px or 7px of padding. */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px;
+  --s6: 24px; --s7: 32px; --s8: 40px; --s9: 56px;
+
+  --font: "Segoe UI", "Noto Sans Hebrew", system-ui, -apple-system, sans-serif;
+  --mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+}
+
+/* Dark is the default because this window sits open all day beside other
+   things, and a slab of white does not. */
+:root,
+:root[data-theme='dark'] {
+  --bg: #0f1117;
+  --bg-2: #151823;
+  --sidebar: #15172a;
+  --card: #1a1d2b;
+  --card-2: #20243a;
+  --line: #272b3f;
+  --line-soft: #1f2233;
+  --text: #eef1f8;
+  --text-2: #a8afc4;
+  --text-3: #6f7791;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -8px rgba(0,0,0,.55);
+  --shadow-lg: 0 24px 60px -18px rgba(0,0,0,.7);
+  --tint: rgba(124,58,237,.14);
+}
+
+:root[data-theme='light'] {
+  --bg: #f6f7fb;
+  --bg-2: #ffffff;
+  --sidebar: #15172a;
+  --card: #ffffff;
+  --card-2: #f4f5fa;
+  --line: #e4e7f0;
+  --line-soft: #eef0f6;
+  --text: #11142a;
+  --text-2: #5b6379;
+  --text-3: #8b93a8;
+  --shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px -10px rgba(16,24,40,.14);
+  --shadow-lg: 0 24px 60px -20px rgba(16,24,40,.22);
+  --tint: rgba(109,40,217,.08);
+}
+
+* { box-sizing: border-box; }
+/* A class that sets `display` beats the `hidden` attribute, and every panel in
+   this app is both. Said once, here, rather than remembered at each of them —
+   an empty error box and a stray form both shipped before this line existed. */
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+h1, h2, h3, p { margin: 0; }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+input { font: inherit; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: var(--radius-pill); border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); background-clip: content-box; }
+
+/* Motion, but only where it explains something: a panel arriving, a state
+   changing. Nothing moves for decoration, and nothing moves for a person who
+   has asked their system for less of it. */
+@media (prefers-reduced-motion: no-preference) {
+  .anim { animation: rise .22s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+}
+.t { transition: background .15s, border-color .15s, color .15s, transform .15s, box-shadow .15s, opacity .15s; }
+
+/* ------------------------------------------------------------- primitives */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  min-height: 40px; padding: 0 var(--s4);
+  border-radius: var(--radius-sm); font-weight: 600;
+  background: var(--card-2); color: var(--text);
+  border: 1px solid var(--line);
+  transition: background .15s, border-color .15s, transform .12s, box-shadow .15s;
+}
+.btn:hover { border-color: var(--brand-300); color: var(--brand-300); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--brand-400); outline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--grad); border: 0; color: #fff;
+  box-shadow: 0 6px 18px -6px rgba(109,40,217,.65);
+}
+.btn-primary:hover { color: #fff; filter: brightness(1.08); }
+.btn-lg { min-height: 50px; font-size: 15px; border-radius: var(--radius); width: 100%; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn-ghost:hover { background: var(--card-2); color: var(--text); border-color: transparent; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.field {
+  display: flex; align-items: center; gap: var(--s3);
+  background: var(--card-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 0 var(--s4); min-height: 52px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.field:focus-within { border-color: var(--brand-400); box-shadow: 0 0 0 4px var(--tint); }
+.field input {
+  flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text);
+  padding: 0; height: 50px;
+}
+.field input::placeholder { color: var(--text-3); }
+.field svg { flex: none; color: var(--text-3); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: var(--radius-pill);
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+}
+.badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge.ok   { color: var(--ok);   background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.badge.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.badge.err  { color: var(--err);  background: color-mix(in srgb, var(--err) 14%, transparent); }
+.badge.info { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.badge.mute { color: var(--text-3); background: var(--card-2); }
+
+/* The switch. One control, used eight times on the settings screen, so it is
+   worth being a real one rather than a checkbox with a label. */
+.switch { position: relative; width: 44px; height: 26px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch span {
+  position: absolute; inset: 0; border-radius: var(--radius-pill);
+  background: var(--line); transition: background .18s;
+}
+.switch span::after {
+  content: ''; position: absolute; top: 3px; inset-inline-start: 3px;
+  width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.35); transition: transform .18s;
+}
+.switch input:checked + span { background: var(--brand-400); }
+.switch input:checked + span::after { transform: translateX(-18px); }
+[dir='ltr'] .switch input:checked + span::after { transform: translateX(18px); }
+.switch input:focus-visible + span { outline: 2px solid var(--brand-400); outline-offset: 2px; }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-3); }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+.dot.paused { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 22%, transparent); }
+
+.muted { color: var(--text-2); }
+.dim { color: var(--text-3); }
+.num { font-variant-numeric: tabular-nums; }

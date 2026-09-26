@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<!-- Nothing is fetched. No fonts, no CDN, no analytics: this window opens on a
+     machine with no internet and looks exactly the same. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https:; connect-src 'none'" />
+<title>ANX Worker</title>
+<link rel="stylesheet" href="theme.css" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+
+<!-- ======================================================== sign in ==== -->
+<section id="login">
+  <div class="pitch">
+    <h2>הפרסום שלכם ממשיך<br />גם כשאתם לא ליד המחשב.</h2>
+    <p>ANX Worker מפרסם לקבוצות פייסבוק לפי התזמון שקבעתם, מהמחשב שלכם, עם החשבון שלכם.</p>
+    <ul>
+      <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> פרסום מתוזמן לכל הקבוצות</li>
+      <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> תגובות אוטומטיות עם תמונה</li>
+      <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> מעקב מלא מהטלפון</li>
+    </ul>
+  </div>
+
+  <div class="form">
+    <div>
+      <div class="logo" style="margin-bottom:var(--s7)">
+        <span class="mark">A</span>
+        <span><span class="name">ANX</span> <span class="name" style="font-weight:500">Worker</span><br /><span class="sub">PUBLISHING ENGINE</span></span>
+      </div>
+
+      <h1 style="font-size:28px;font-weight:800;letter-spacing:-.6px">ברוכים הבאים</h1>
+      <p class="muted" style="margin-top:6px;margin-bottom:var(--s6)">התחברו לחשבון שלכם כדי להפעיל את ה־Worker</p>
+
+      <div id="loginerr" class="alert" hidden style="margin-bottom:var(--s4)"></div>
+
+      <!-- password -->
+      <form id="pwform" style="display:grid;gap:var(--s3)">
+        <label class="field">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0" stroke-linecap="round"/></svg>
+          <input id="email" type="email" inputmode="email" autocomplete="username" placeholder="אימייל / שם משתמש" dir="ltr" />
+        </label>
+        <label class="field">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          <input id="pw" type="password" autocomplete="current-password" placeholder="סיסמה" dir="ltr" />
+          <button type="button" id="eye" class="btn-ghost" style="min-height:32px;padding:0 6px" aria-label="הצג סיסמה">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </label>
+
+        <label class="check" style="margin:2px 0 var(--s2)">
+          <input type="checkbox" id="remember" checked />
+          <span>זכור אותי</span>
+        </label>
+
+        <button class="btn btn-primary btn-lg" id="signin" type="submit">
+          <span>התחבר</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </form>
+
+      <div class="sep">או</div>
+
+      <button class="btn btn-lg" id="google" style="background:var(--card);">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-4H24v7.5h12c-.2 2-1.6 5-4.6 7l7 5.4C42.6 36 45 30.6 45 24Z"/><path fill="#34A853" d="M24 46c6 0 11-2 14.7-5.4l-7-5.4c-1.9 1.3-4.4 2.2-7.7 2.2-5.9 0-10.9-3.9-12.7-9.2l-7.2 5.6C7.7 41 15.2 46 24 46Z"/><path fill="#FBBC05" d="M11.3 28.2A13.4 13.4 0 0 1 10.6 24c0-1.5.3-2.9.7-4.2l-7.2-5.6A22 22 0 0 0 2 24c0 3.5.8 6.9 2.1 9.8l7.2-5.6Z"/><path fill="#EA4335" d="M24 10.4c3.3 0 5.6 1.4 6.9 2.6l6.2-6C33.3 3.6 29.3 2 24 2 15.2 2 7.7 7 4.1 14.2l7.2 5.6C13.1 14.3 18.1 10.4 24 10.4Z"/></svg>
+        <span>התחברות עם Google</span>
+      </button>
+
+      <p style="text-align:center;margin-top:var(--s5)" class="muted">
+        אין לך חשבון? <a class="link" id="signup" href="#">צור חשבון חדש</a>
+      </p>
+
+      <!-- The passwordless way, kept as a choice and not as the only way in.
+           It is the safer of the two — nothing reusable is ever typed — and it
+           is also the one that works for somebody who has forgotten a password
+           at 22:00 with a round due at 23:00. -->
+      <p style="text-align:center;margin-top:var(--s3)">
+        <a class="link" id="otplink" href="#" style="font-size:13px">להתחבר בלי סיסמה — קוד למייל</a>
+      </p>
+
+      <form id="otpform" hidden style="display:grid;gap:var(--s3);margin-top:var(--s4)">
+        <label class="field">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+          <input id="otpcode" placeholder="הקוד מהמייל, או הדביקו את הקישור" dir="ltr" />
+        </label>
+        <button class="btn btn-lg" id="otpverify" type="submit">אישור הקוד</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ==================================================== the application == -->
+<div id="shell">
+  <aside>
+    <div class="logo">
+      <span class="mark">A</span>
+      <span><span class="name">ANX</span> <span class="name" style="font-weight:500">Worker</span><br /><span class="sub">PUBLISHING ENGINE</span></span>
+    </div>
+    <nav>
+      <a data-page="home" class="on">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg>
+        בית
+      </a>
+      <a data-page="tasks">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        משימות <span class="count num" id="navtasks">0</span>
+      </a>
+      <a data-page="activity">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        יומן פעילות
+      </a>
+      <a data-page="settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V1a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 17 2.6a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9H23a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.7Z" transform="scale(.88) translate(1.6 1.6)"/></svg>
+        הגדרות
+      </a>
+      <a data-page="updates">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+        עדכונים
+      </a>
+      <a data-page="help">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.6 2.6 0 0 1 5 1c0 1.7-2.5 2-2.5 3.5"/><path d="M12 17h.01"/></svg>
+        עזרה
+      </a>
+    </nav>
+    <div class="foot">
+      גרסה <span id="ver" dir="ltr">—</span>
+      <button class="btn-ghost link" id="opendrawer" style="display:block;margin-top:6px;font-size:11px;padding:0">יומן טכני</button>
+    </div>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div class="who">
+        <span class="ph" id="avatar">A</span>
+        <span>
+          <b id="whoname">ANX Worker</b>
+          <span class="dim" style="display:block;font-size:12px" id="whomail">—</span>
+        </span>
+      </div>
+      <span class="grow"></span>
+      <span class="statepill"><span class="dot" id="dot"></span><span id="statetext">מתחיל…</span></span>
+      <!-- A switch with no word next to it is a mystery, and this one stops
+           publishing. It says which. -->
+      <label class="check" title="כיבוי משהה את הפרסום עד שמדליקים חזרה">
+        <span class="dim" style="font-size:12.5px;font-weight:700">הפעלה</span>
+        <span class="switch"><input type="checkbox" id="power" checked aria-label="הפעלה או השהיה של הפרסום" /><span></span></span>
+      </label>
+      <button class="btn" id="opensite">הדשבורד באתר</button>
+    </header>
+
+    <!-- ---------------------------------------------------------- home -->
+    <section class="page" id="page-home">
+      <div class="pagehead">
+        <div class="grow">
+          <h1 id="greet">שלום</h1>
+          <p class="lead">זה מה שקרה במחשב הזה.</p>
+        </div>
+        <button class="btn" id="minibtn">תצוגה מוקטנת</button>
+      </div>
+
+      <div class="stats">
+        <div class="card stat">
+          <span class="ico tint-brand"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <span class="n num" id="s-queue">—</span>
+          <span class="k">משימות בתור</span>
+          <span class="s" id="s-queue-sub">ממתינות לביצוע</span>
+        </div>
+        <div class="card stat">
+          <span class="ico tint-ok"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <span class="n num" id="s-today">—</span>
+          <span class="k">בוצעו היום</span>
+          <span class="s" id="s-today-sub">מאז חצות</span>
+        </div>
+        <div class="card stat">
+          <span class="ico tint-info"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg></span>
+          <span class="n num" id="s-last">—</span>
+          <span class="k">המשימה האחרונה</span>
+          <span class="s" id="s-last-sub">—</span>
+        </div>
+        <div class="card stat">
+          <span class="ico tint-warn"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+          <span class="n num" id="s-attn">—</span>
+          <span class="k">דורשות אתכם</span>
+          <span class="s" id="s-attn-sub">לא ימשיכו לבד</span>
+        </div>
+      </div>
+
+      <div class="two">
+        <div class="card">
+          <div class="cardhead"><h3>פעילות אחרונה</h3><span class="grow"></span><button class="btn-ghost link" data-goto="activity" style="font-size:13px">הכל</button></div>
+          <div class="feed" id="feed-home"></div>
+        </div>
+        <div class="card">
+          <div class="cardhead"><h3>הקרובות בתור</h3><span class="grow"></span><button class="btn-ghost link" data-goto="tasks" style="font-size:13px">הכל</button></div>
+          <div class="rows" id="next-home"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------- tasks -->
+    <section class="page" id="page-tasks" hidden>
+      <div class="pagehead">
+        <div class="grow"><h1>משימות</h1><p class="lead" id="tasklead">—</p></div>
+        <button class="btn btn-primary" id="addtask">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          הוסף משימה
+        </button>
+      </div>
+      <div class="tabs" id="tabs" style="margin-bottom:var(--s4)"></div>
+      <div class="card"><div class="rows" id="tasklist"></div></div>
+    </section>
+
+    <!-- ------------------------------------------------------ activity -->
+    <section class="page" id="page-activity" hidden>
+      <div class="pagehead"><div class="grow"><h1>יומן פעילות</h1><p class="lead">כל מה שקרה, לפי הסדר.</p></div></div>
+      <div class="card"><div class="feed" id="feed-all"></div></div>
+    </section>
+
+    <!-- ------------------------------------------------------ settings -->
+    <section class="page" id="page-settings" hidden>
+      <div class="pagehead"><div class="grow"><h1>הגדרות</h1><p class="lead">ההגדרות האלה שייכות למחשב הזה בלבד.</p></div></div>
+      <div class="card"><div class="setrows" id="setrows"></div></div>
+      <div class="card" style="margin-top:var(--s4)">
+        <div class="cardhead"><h3>החשבון</h3></div>
+        <div class="setrow">
+          <span class="ico tint-brand"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0" stroke-linecap="round"/></svg></span>
+          <span class="txt"><b id="setmail">—</b><span>המחשב הזה מחובר לחשבון הזה</span></span>
+          <button class="btn" id="signout">נתק את המחשב</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------- updates -->
+    <section class="page" id="page-updates" hidden>
+      <div class="pagehead"><div class="grow"><h1>עדכונים</h1><p class="lead">התוכנה מתעדכנת כשיש גרסה חדשה.</p></div></div>
+      <div class="card" style="padding:var(--s6)">
+        <div style="display:flex;align-items:center;gap:var(--s4)">
+          <span class="ico tint-ok" style="width:44px;height:44px;border-radius:12px;display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <div><b style="font-size:16px">הגרסה מעודכנת</b><p class="dim">גרסה <span id="ver2" dir="ltr">—</span></p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- help -->
+    <section class="page" id="page-help" hidden>
+      <div class="pagehead"><div class="grow"><h1>עזרה</h1><p class="lead">שלושת הדברים שנשאלים הכי הרבה.</p></div></div>
+      <div class="card">
+        <div class="setrow"><span class="txt"><b>החלון נסגר — הפרסום נעצר?</b><span>לא. סגירה מסתירה את החלון בלבד; הסמל נשאר ליד השעון והפרסום ממשיך. יציאה אמיתית היא מהתפריט של הסמל.</span></span></div>
+        <div class="setrow"><span class="txt"><b>צריך שהמחשב יהיה דלוק?</b><span>כן. הפרסום יוצא מהדפדפן שעל המחשב הזה, אז בזמן שמשימה אמורה לצאת המחשב צריך להיות פועל.</span></span></div>
+        <div class="setrow"><span class="txt"><b>איפה בונים פוסטים?</b><span>בדשבורד באתר — שם בונים תוכן, קבוצות וסבבים. החלון הזה רק מבצע.</span></span></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ======================================================== the drawer == -->
+<div id="drawer">
+  <div class="cardhead">
+    <h3>יומן טכני</h3>
+    <span class="dim" style="font-size:12px">מה שהמנוע כותב. לא נדרש לשימוש רגיל.</span>
+    <span class="grow"></span>
+    <button class="btn-ghost" id="closedrawer" aria-label="סגור">✕</button>
+  </div>
+  <div id="log"></div>
+  <div id="answerbar">
+    <div class="link" id="ask" style="margin-bottom:var(--s2)"></div>
+    <form id="answerform" style="display:flex;gap:var(--s2)">
+      <input id="answer" class="field" style="flex:1;min-height:42px;padding:0 var(--s3)" dir="ltr" autocomplete="off" />
+      <button class="btn btn-primary" type="submit">שלח</button>
+    </form>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

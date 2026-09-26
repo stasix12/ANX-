@@ -28,24 +28,49 @@ const WORKER_VERSION = (readFileSync(path.join(root, 'src', 'lib', 'social', 'wo
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-const result = await build({
-  entryPoints: [path.join(root, 'worker', 'social-worker.ts')],
-  outfile: path.join(out, 'worker.cjs'),
+const common = {
   bundle: true,
   platform: 'node',
   target: 'node20',
   format: 'cjs',
-  /* The worker is Hebrew from end to end; anything else mangles every message. */
+  /* Hebrew from end to end; anything else mangles every message. */
   charset: 'utf8',
   /* `@/lib/...` is a Next.js alias and means nothing outside the repository. */
   alias: { '@': path.join(root, 'src') },
-  external: ['playwright-core'],
-  /* Keep names: the worker prints class names in errors the owner reads. */
+  /* Names are kept because both processes print class names in errors that a
+     person is expected to read and send on. */
   keepNames: true,
   minify: false,
   sourcemap: false,
   logLevel: 'info',
   metafile: true,
+};
+
+/*
+ * TWO BUNDLES, and they must stay two.
+ *
+ * worker.cjs is the publishing engine, unchanged, started as a child process.
+ * main.cjs is the window: signing in, reading for the screen, the tray. They
+ * share the vocabulary in src/lib/social (one definition of what a queue
+ * status means, for the website, the worker and this window alike) and share
+ * nothing else. Keeping the engine a separate process is what makes a
+ * redesign of a window unable to break a publication.
+ */
+const result = await build({
+  ...common,
+  entryPoints: [path.join(root, 'worker', 'social-worker.ts')],
+  outfile: path.join(out, 'worker.cjs'),
+  /* playwright-core finds browsers through files of its own; bundling it
+     breaks that in ways that only appear on the customer's machine. */
+  external: ['playwright-core'],
+});
+
+await build({
+  ...common,
+  entryPoints: [path.join(root, 'app', 'main.ts')],
+  outfile: path.join(out, 'main.cjs'),
+  /* Electron is the runtime, not a dependency to carry. */
+  external: ['electron'],
 });
 
 /*
@@ -62,12 +87,11 @@ cpSync(path.join(root, 'node_modules', 'playwright-core'), pw, {
   filter: (src) => !/[\\/](\.local-browsers|\.cache)([\\/]|$)/.test(src),
 });
 
-/* The desktop shell: the window, the tray, and the thing that starts the
-   bundle above. Copied rather than bundled — three small files that are
-   easier to audit as themselves. */
-for (const file of ['main.cjs', 'preload.cjs', 'index.html']) {
-  cpSync(path.join(root, 'app', file), path.join(out, file));
-}
+/* preload.cjs is copied rather than bundled on purpose: it is the entire
+   surface the window is given, and it is worth being a file somebody can read
+   in thirty seconds rather than a line inside a bundle. */
+cpSync(path.join(root, 'app', 'preload.cjs'), path.join(out, 'preload.cjs'));
+cpSync(path.join(root, 'app', 'renderer'), path.join(out, 'renderer'), { recursive: true });
 const icon = path.join(root, 'app', 'icon.png');
 if (existsSync(icon)) cpSync(icon, path.join(out, 'icon.png'));
 

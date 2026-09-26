@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:" />
+<title>ANX Worker</title>
+<link rel="stylesheet" href="theme.css" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body class="mini">
+<!--
+  The small panel. It answers one question — "is it working?" — without
+  opening anything, and it is draggable so it can live in a corner of the
+  screen next to whatever the person actually does all day.
+-->
+<div id="minipanel">
+  <div class="bar">
+    <span style="font-weight:800">ANX Worker</span>
+    <span class="grow" style="flex:1"></span>
+    <span class="dot" id="dot" style="box-shadow:none"></span>
+    <span id="statetext" style="font-size:12px;font-weight:700">—</span>
+    <button id="close" style="color:#fff;opacity:.85;padding:0 4px" aria-label="סגור">✕</button>
+  </div>
+  <div class="body">
+    <div class="pair">
+      <div><b class="num" id="queue">—</b><span>בתור</span></div>
+      <div><b class="num" id="today">—</b><span>בוצעו היום</span></div>
+    </div>
+    <button class="btn btn-primary" id="open">פתח את המערכת</button>
+    <button class="btn" id="pause">השהה</button>
+  </div>
+</div>
+<script src="mini.js"></script>
+</body>
+</html>

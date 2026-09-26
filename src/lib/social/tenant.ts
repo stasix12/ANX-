@@ -32,20 +32,33 @@ type Failed = { code?: string | null; message?: string | null } | null;
 
 /**
  * True only for "this database does not have the key the conflict target
- * names". Two codes, because there are two ways to be behind:
+ * names". Two ways to be behind, and each is matched narrowly:
  *
  *   42P10 — the columns exist but no unique index covers them. A database that
  *           ran v15 (which adds tenant_id) and has not yet run v17.
- *   42703 — the column does not exist at all. A database that has not run v15
- *           either. Proved by running the upsert against one.
+ *   42703 — the column does not exist at all: a database that never ran v15.
+ *           Proved by running the upsert against one. But 42703 is Postgres's
+ *           code for ANY unknown column in the statement, and these upserts
+ *           name plenty of others — fb_user_id, version, host, login_stage —
+ *           each of which a database can also be behind on. Retrying those
+ *           would be harmless in itself, except that the retry then fails with
+ *           42P10 and THAT is the error the caller reports: a real "column X
+ *           does not exist" replaced by a misleading one, and at the worker's
+ *           startup by a Hebrew line telling the owner to run a migration they
+ *           already ran. So 42703 counts only when the message is about
+ *           tenant_id.
  *
- * The message is checked as well because PostgREST has not always passed the
+ * The messages are checked as well because PostgREST has not always passed the
  * code through. Nothing else is treated as a reason to retry.
  */
+const MISSING_TENANT_COLUMN = /column .?tenant_id.? does not exist/i;
+
 export function isConflictTargetMismatch(error: Failed): boolean {
   if (!error) return false;
-  if (error.code === '42P10' || error.code === '42703') return true;
-  return /ON CONFLICT specification/i.test(error.message ?? '') || /column "tenant_id" does not exist/i.test(error.message ?? '');
+  const message = error.message ?? '';
+  if (error.code === '42P10') return true;
+  if (error.code === '42703') return MISSING_TENANT_COLUMN.test(message);
+  return /ON CONFLICT specification/i.test(message) || MISSING_TENANT_COLUMN.test(message);
 }
 
 /**

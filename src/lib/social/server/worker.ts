@@ -1,4 +1,5 @@
 import 'server-only';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { adapterFor } from '../channels/registry';
 import { renderPostText } from '../compose';
 import { evaluateQueueItem } from '../rules';
@@ -69,9 +70,48 @@ export interface WorkerReport {
  */
 const RUN_LOCK_SECONDS = 70;
 
+/*
+ * THIS ROUTE STILL SPEAKS FOR ONE BUSINESS, AND IT HAS TO SAY SO.
+ *
+ * Everything below runs on the service-role key, which bypasses row-level
+ * security by design — it is how the server reaches social_secrets, a table
+ * with no policies at all. That was correct while "every row" and "the owner's
+ * rows" were the same set. Once a second business exists it stops being
+ * correct in ways that are silent and expensive:
+ *
+ *   * getSetting('limits') sees two rows and throws, or worse, returns one at
+ *     random and applies another business's anti-spam gap to this one;
+ *   * the offline-worker sweep below reads EVERY social_workers row, so one
+ *     customer's PC going quiet would move ANOTHER customer's queue rows to
+ *     "דורשים אתכם";
+ *   * setSetting writes the run lock into a business chosen by accident.
+ *
+ * None of that shows up on a screen. The real fix is for /api/social/run to
+ * learn whose request it is serving and filter every query by it — seventeen
+ * of them — and that is a step of its own, not something to bolt on here.
+ *
+ * Until then this refuses, loudly, rather than doing quiet damage. It costs
+ * nothing today: there is one business, and group publishing does not come
+ * through here at all — it comes from the worker on the PC, which signs in as
+ * a person and is scoped by the ordinary policies.
+ *
+ * A database that has never heard of businesses (no social_tenants table) is
+ * the old single-owner world and is allowed through unchanged.
+ */
+async function moreThanOneBusiness(db: SupabaseClient): Promise<boolean> {
+  const { data, error } = await db.from('social_tenants').select('id').limit(2);
+  if (error) return false;
+  return (data?.length ?? 0) > 1;
+}
+
 export async function runWorker(trigger: 'cron' | 'manual'): Promise<WorkerReport> {
   const db = serviceDb();
   const report: WorkerReport = { ran: false, planned: 0, processed: 0, published: 0, manual: 0, skipped: 0, failed: 0, deferred: 0 };
+
+  if (await moreThanOneBusiness(db)) {
+    report.reason = 'יש יותר מעסק אחד במערכת, והמסלול הזה עדיין לא יודע בשם מי הוא פועל — לכן הוא לא רץ. הפרסום לקבוצות ממשיך כרגיל מהמחשב.';
+    return report;
+  }
 
   /*
    * A soft lock against overlapping runs — a double-tap on "publish now", a

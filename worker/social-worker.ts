@@ -175,7 +175,7 @@ async function main(): Promise<void> {
   // before then — two customers whose PC is called DESKTOP-4F2A are two
   // workers, not one. src/lib/social/tenant.ts says why the target is
   // discovered rather than assumed.
-  const { data: worker } = await upsertScoped(
+  const registration = await upsertScoped(
     (onConflict) =>
       db
         .from('social_workers')
@@ -185,7 +185,24 @@ async function main(): Promise<void> {
     'tenant_id,name',
     'name',
   );
-  if (!worker) throw new Error('רישום ה-worker נכשל — האם הרצתם את supabase/social-schema-v2.sql?');
+  const worker = registration.data;
+  /*
+   * The reason, not a guess at the reason. This line used to name v2 and
+   * nothing else, which was a fair guess while the only way to fail was a
+   * missing table. It is no longer: once every row belongs to a business, a
+   * user who belongs to none — or to two — cannot be stamped, and the insert
+   * dies on a NOT NULL that has nothing to do with v2. Registration failing
+   * stops every publication, so the actual message from the database goes on
+   * the screen beside the guess.
+   */
+  if (!worker) {
+    const why = registration.error?.message ?? '';
+    throw new Error(
+      why
+        ? `רישום ה-worker נכשל — ${why}\n(אם זה נראה כמו טבלה חסרה: האם הרצתם את supabase/social-schema-v2.sql?)`
+        : 'רישום ה-worker נכשל — האם הרצתם את supabase/social-schema-v2.sql?',
+    );
+  }
   /*
    * REMEMBERED FROM LAST TIME, because everything that finds a post now needs
    * it and a login check that throws would otherwise take it away.

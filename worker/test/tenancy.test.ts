@@ -175,6 +175,10 @@ for (const file of ['social-schema.sql', 'social-schema-v2.sql']) {
 const tenant = readFileSync(new URL('../../src/lib/social/tenant.ts', import.meta.url), 'utf8');
 is(/42P10/.test(tenant), 'the fallback must trigger on "no unique index covers those columns" — v15 run, v17 not');
 is(/42703/.test(tenant), 'and on "that column does not exist" — a database that has not run v15 either');
+is(
+  /error\.code === '42703'\) return MISSING_TENANT_COLUMN\.test\(message\);/.test(tenant),
+  'but only when the missing column is tenant_id — 42703 is Postgres\u2019s code for any unknown column, and retrying a real one replaces its error with a misleading 42P10',
+);
 is(/ON CONFLICT specification/i.test(tenant), 'and on the messages too, because PostgREST has not always passed the code through');
 is(
   /if \(!isConflictTargetMismatch\(first\.error\)\) return first;/.test(tenant),
@@ -194,6 +198,36 @@ for (const [src, scoped, legacy, what] of [
   );
 }
 is(!/onConflict: 'key'/.test(client), 'no upsert may name the old settings key on its own');
+/*
+ * And the SERVER's settings writer, which is the one that was missed on the
+ * first pass. It is not spare parts: runWorker() writes the run lock through
+ * it before any work starts, and runWorker() is the whole body of
+ * /api/social/run — what "\u05e4\u05e8\u05e1\u05dd \u05e2\u05db\u05e9\u05d9\u05d5" hits. Naming the old key there meant
+ * every publish answering 500 the moment the migration ran.
+ */
+const serverDb = readFileSync(new URL('../../src/lib/social/server/db.ts', import.meta.url), 'utf8');
+is(!/onConflict: 'key'/.test(serverDb), 'the server\u2019s settings writer must not name the old key either');
+is(/'tenant_id,key',\s*\n\s*'key',/.test(serverDb), 'it must try the per-business key first, exactly like the dashboard\u2019s');
+is(!/NOTHING CALLS IT/.test(serverDb), 'and it must not claim to be dead code — runWorker calls it nine times');
+
+/*
+ * The server route bypasses row-level security by design, so until it learns
+ * whose request it is serving it must refuse rather than act on a business
+ * picked by accident.
+ */
+const serverWorker = readFileSync(new URL('../../src/lib/social/server/worker.ts', import.meta.url), 'utf8');
+is(/moreThanOneBusiness/.test(serverWorker), 'the service-role route must notice when there is more than one business');
+is(
+  /if \(await moreThanOneBusiness\(db\)\) \{[\s\S]{0,500}?return report;/.test(serverWorker),
+  'and stop before doing anything, rather than sweeping another business\u2019s queue rows',
+);
+is(/if \(error\) return false;/.test(serverWorker), 'a database with no businesses table at all is the old world and passes through');
+
+/* And the worker must say what actually went wrong when it cannot register. */
+is(
+  /registration\.error\?\.message/.test(worker),
+  'a worker that fails to register stops every publication, so the database\u2019s own reason must reach the screen, not only a guess about v2',
+);
 is(!/onConflict: 'name'/.test(worker) && !/onConflict: 'provider,provider_user_id'/.test(worker),
    'and neither may the worker');
 
@@ -230,16 +264,19 @@ for (const [name, sql] of [['v15', v15], ['the backfill', backfill], ['v16', v16
 /* ----------------------------------------------------------------------- */
 async function fallbackTests() {
   const calls: string[] = [];
-  const failing = (code: string) => async (onConflict: string) => {
+  const failing = (code: string, message: string) => async (onConflict: string) => {
     calls.push(onConflict);
     return onConflict.startsWith('tenant_id')
-      ? { data: null, error: { code, message: 'whatever' } }
+      ? { data: null, error: { code, message } }
       : { data: { id: 'x' }, error: null };
   };
 
-  for (const code of ['42P10', '42703']) {
+  for (const [code, message] of [
+    ['42P10', 'there is no unique or exclusion constraint matching the ON CONFLICT specification'],
+    ['42703', 'column "tenant_id" does not exist'],
+  ] as const) {
     calls.length = 0;
-    const out = await upsertScoped(failing(code), 'tenant_id,key', 'key');
+    const out = await upsertScoped(failing(code, message), 'tenant_id,key', 'key');
     assert.deepEqual(calls, ['tenant_id,key', 'key'], `${code} must send it back to the old key`);
     assert.equal(out.error, null, 'and the second attempt is the one that counts');
     assert.deepEqual(out.data, { id: 'x' }, 'with its data, not the failed attempt\u2019s');
@@ -261,6 +298,8 @@ async function fallbackTests() {
     { code: '23505', message: 'duplicate key value violates unique constraint' },
     { code: '23502', message: 'null value in column "tenant_id" violates not-null constraint' },
     { code: 'PGRST301', message: 'JWT expired' },
+    /* 42703 about some OTHER column: a database behind on v9, not on v15. */
+    { code: '42703', message: 'column social_workers.fb_user_id does not exist' },
   ]) {
     calls.length = 0;
     const out = await upsertScoped(async (onConflict) => { calls.push(onConflict); return { data: null, error: err }; }, 'tenant_id,key', 'key');

@@ -1,5 +1,6 @@
 import 'server-only';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { upsertScoped } from '../tenant';
 import { decrypt, encrypt } from './crypto';
 
 /**
@@ -47,13 +48,22 @@ export async function deleteSecrets(kind: SecretOwner, ownerIds: string[]): Prom
 }
 
 /*
- * NOT TENANT-AWARE, AND NOTHING CALLS IT. The service role bypasses row-level
- * security, so with more than one business these two would read whichever
- * 'limits' row came back first and write into a business chosen by accident —
- * and `.maybeSingle()` would throw the moment two exist. Anything that starts
- * calling them has to take a tenant id and filter on it. Left here rather than
- * changed because dead code that is changed untested is worse than dead code
- * that is labelled.
+ * THE SERVER'S OWN SETTINGS READER AND WRITER, AND THEY ARE NOT TENANT-AWARE.
+ *
+ * These are live, not spare parts: runWorker() calls them nine times, and
+ * runWorker() is the whole body of /api/social/run — which is what "פרסם
+ * עכשיו" and the launch of a round both hit. An earlier version of this
+ * comment said nothing called them. It was wrong, and that wrongness is the
+ * reason setSetting kept naming the old settings key for a while; the mistake
+ * is recorded here rather than quietly deleted.
+ *
+ * The service role bypasses row-level security, so with more than one business
+ * getSetting's `.maybeSingle()` would see two 'limits' rows and throw, and
+ * setSetting would write into a business chosen by accident. That is not fixed
+ * here — it is fixed by teaching /api/social/run whose request it is serving,
+ * which is a step of its own. Until then runWorker() refuses to run at all
+ * once a second business exists (see server/worker.ts), so these two are only
+ * ever reached while "the one business" is unambiguous.
  */
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const { data, error } = await serviceDb().from('social_settings').select('value').eq('key', key).maybeSingle();
@@ -62,6 +72,18 @@ export async function getSetting<T>(key: string, fallback: T): Promise<T> {
 }
 
 export async function setSetting(key: string, value: unknown): Promise<void> {
-  const { error } = await serviceDb().from('social_settings').upsert({ key, value }, { onConflict: 'key' });
+  /*
+   * Same two conflict targets as the dashboard's saveSetting, and for the same
+   * reason: after the migration that gives each business its own settings row
+   * there is no unique index on (key) alone, and an upsert that still names it
+   * fails with 42P10 — which here would mean every "פרסם עכשיו" answering 500,
+   * because the run lock is written through this function before the work
+   * starts. src/lib/social/tenant.ts has the whole argument.
+   */
+  const { error } = await upsertScoped(
+    (onConflict) => serviceDb().from('social_settings').upsert({ key, value }, { onConflict }),
+    'tenant_id,key',
+    'key',
+  );
   if (error) throw new Error(error.message);
 }

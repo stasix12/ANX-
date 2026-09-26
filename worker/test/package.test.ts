@@ -144,6 +144,36 @@ is(
 is(/SOCIAL_WORKER_PROMPTABLE:\s*('1'|"1")/.test(main), 'the window must tell the worker there is somebody here to answer');
 is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so nothing needs Node.js installed');
 
+/*
+ * THE ENGINE MUST LIVE OUTSIDE THE ARCHIVE.
+ *
+ * electron-builder packs everything into app.asar and Electron teaches its own
+ * fs to read through it, so nothing looks wrong until a CHILD process is
+ * asked to. `spawn` goes to the operating system, which cannot open a script
+ * inside the archive or enter a working directory inside it, and the failure
+ * it returns is ENOENT against the EXECUTABLE'S name:
+ *
+ *   Error: spawn C:\...\HaPitaron.exe ENOENT
+ *
+ * which names a file that plainly exists. The first installed build did
+ * exactly this, on the owner's machine, the moment they finished signing in.
+ * Nothing before that point could have noticed: the unpacked build runs fine,
+ * and there is no asar in it at all.
+ */
+{
+  const builder = readFileSync(path.join(root, 'electron-builder.yml'), 'utf8');
+  is(/asarUnpack:/.test(builder), 'the packaging config must keep something out of the archive');
+  is(/^\s+- worker\.cjs$/m.test(builder), 'namely the engine, which is started as its own process');
+  is(/^\s+- node_modules\/\*\*$/m.test(builder), 'and what it requires at runtime, which that process reads itself');
+  const shell = readFileSync(path.join(root, 'desktop', 'main.ts'), 'utf8');
+  is(
+    /app\.asar\$\{path\.sep\}`,\s*`app\.asar\.unpacked\$\{path\.sep\}/.test(shell),
+    'and the shell must rewrite the path to the unpacked copy before spawning',
+  );
+  is(/cwd: WORKER_CWD/.test(shell), 'including the working directory — a cwd inside the archive fails the same way');
+  is(!/cwd: here,/.test(shell), 'never __dirname, which is inside the archive once packaged');
+}
+
 /* The two processes stay two. A window that imported the publishing engine
    instead of starting it would mean a redesign could break a publication. */
 is(/\.spawn\b/.test(main) && /node:child_process/.test(main), 'the engine is started as its own process, not called inside the window');

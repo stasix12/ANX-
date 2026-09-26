@@ -20,6 +20,17 @@ files:
   - '!**/*.map'
   - '!probe.cjs'
 
+# OUT OF THE ARCHIVE, because a child process cannot read from one.
+#
+# Everything else is packed into app.asar, which Electron's own fs can see
+# through. The operating system cannot: `spawn` on a script inside the archive,
+# or with a working directory inside it, fails with ENOENT — reported against
+# the executable's name, so the error blames HaPitaron.exe for a file that is
+# not missing at all. That is exactly what the first installed build did.
+asarUnpack:
+  - worker.cjs
+  - node_modules/**
+
 win:
   target:
     - target: nsis

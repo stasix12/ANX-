@@ -45,6 +45,32 @@ import { activityKind } from '../src/lib/social/activity';
 import type { QueueStatus } from '../src/lib/social/types';
 
 const here = __dirname;
+
+/*
+ * WHERE THE ENGINE ACTUALLY IS ON DISK, once this is a packaged app.
+ *
+ * electron-builder puts everything inside app.asar — a single archive. Electron
+ * teaches its own `fs` to read through it, so loadFile() and readFileSync()
+ * work on paths inside it and there is no sign anything is unusual.
+ *
+ * A CHILD PROCESS IS NOT ELECTRON'S fs. `spawn` goes to the operating system,
+ * which has never heard of app.asar: the script is not a file it can open, and
+ * a `cwd` inside the archive is not a directory it can enter. The failure it
+ * returns is ENOENT against the executable's own name, which is why the error
+ * a person sees names HaPitaron.exe — a file that plainly exists, and is not
+ * the thing that was missing.
+ *
+ *   Error: spawn C:\...\HaPitaron.exe ENOENT
+ *
+ * So worker.cjs and its node_modules are kept OUT of the archive
+ * (`asarUnpack` in electron-builder.yml), and the path is rewritten to the
+ * unpacked copy beside it. Unpacked development runs have no app.asar in the
+ * path at all, so the replace is a no-op there and one code path serves both.
+ */
+const onDisk = (p: string): string =>
+  p.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+const WORKER_ENTRY = onDisk(path.join(here, 'worker.cjs'));
+const WORKER_CWD = path.dirname(WORKER_ENTRY);
 const config = JSON.parse(fs.readFileSync(path.join(here, 'config.json'), 'utf8')) as {
   supabaseUrl: string;
   supabaseAnonKey: string;
@@ -306,8 +332,8 @@ function toggleMini(): void {
 function startWorker(): void {
   if (worker || paused) return;
   say('מפעיל את מנוע הפרסום…', 'sys');
-  worker = spawn(process.execPath, [path.join(here, 'worker.cjs')], {
-    cwd: here,
+  worker = spawn(process.execPath, [WORKER_ENTRY], {
+    cwd: WORKER_CWD,
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',

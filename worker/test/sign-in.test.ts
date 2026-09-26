@@ -197,12 +197,27 @@ void (async () => {
 
   /* Started by Windows at boot, with no console: a prompt would look like a hang. */
   (process.stdin as { isTTY?: boolean }).isTTY = false;
+  delete process.env.SOCIAL_WORKER_PROMPTABLE;
   await assert.rejects(
     () => signInInteractively(fakeClient({}), scripted([])),
     /אין חלון לשאול בו/,
     'a worker with no terminal must say it cannot ask, rather than wait for ever',
   );
   checks += 1;
+
+  /*
+   * The desktop app has no TTY either — it pipes the worker's input — but it
+   * DOES have a person in front of a window. It says so, and only it can.
+   */
+  process.env.SOCIAL_WORKER_PROMPTABLE = '1';
+  {
+    const client = fakeClient({});
+    console.log = () => {};
+    await signInInteractively(client, scripted(['customer@example.com', '123456']));
+    console.log = quiet;
+    eq(client.tried, ['123456|email'], 'a window without a TTY must still be able to sign the machine in');
+  }
+  delete process.env.SOCIAL_WORKER_PROMPTABLE;
   (process.stdin as { isTTY?: boolean }).isTTY = realTTY;
 
   /* ------------------------------------------------- the owner is untouched */

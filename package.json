@@ -14,7 +14,9 @@
     "preview": "EXPORT=1 next build && node scripts/build-preview.mjs",
     "social-worker": "tsx worker/social-worker.ts",
     "social-worker:debug": "SOCIAL_BROWSER_HEADED=1 tsx worker/social-worker.ts",
-    "test:social": "tsx worker/test/unit.test.ts && tsx worker/test/progress-contradiction.test.ts && tsx worker/test/selection.test.ts && tsx worker/test/picker.test.ts && tsx worker/test/layout.test.ts && tsx worker/test/contrast.test.ts && tsx worker/test/activity.test.ts && tsx worker/test/tenancy.test.ts && tsx worker/test/sign-in.test.ts && SOCIAL_PHOTO_CONFIRM_MS=8000 tsx worker/test/composer.test.ts && tsx worker/test/account.test.ts"
+    "test:social": "tsx worker/test/unit.test.ts && tsx worker/test/progress-contradiction.test.ts && tsx worker/test/selection.test.ts && tsx worker/test/picker.test.ts && tsx worker/test/layout.test.ts && tsx worker/test/contrast.test.ts && tsx worker/test/activity.test.ts && tsx worker/test/tenancy.test.ts && tsx worker/test/sign-in.test.ts && tsx worker/test/package.test.ts && SOCIAL_PHOTO_CONFIRM_MS=8000 tsx worker/test/composer.test.ts && tsx worker/test/account.test.ts",
+    "build:app": "node scripts/build-app.mjs",
+    "app": "node scripts/build-app.mjs && electron dist/app"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
@@ -29,6 +31,9 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "electron": "^38.8.6",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3"

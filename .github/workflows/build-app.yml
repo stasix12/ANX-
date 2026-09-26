@@ -1,0 +1,107 @@
+# Builds the thing a customer downloads, on a real Windows machine.
+#
+# WHY IT CANNOT BE BUILT WHERE THE CODE IS WRITTEN. A Windows installer is a
+# Windows program: it embeds an icon and a version resource, and later it has
+# to be signed by the Windows signing tool. Cross-building it from Linux works
+# through Wine until the day it quietly does not, and the failure lands on a
+# customer's machine rather than in a log anybody reads. So it is built where
+# it runs.
+#
+# WHY A RELEASE AND NOT AN ARTIFACT. The customer needs a link. A workflow
+# artifact requires a GitHub account and a login; a release asset is a plain
+# URL that can be sent in WhatsApp. It is also what the app will later check
+# for updates, which is the thing that replaces `git pull` from the owner's
+# private repository — a customer has no access to that and never will.
+#
+# It does not run on every push. Building a 200MB installer for a change to a
+# screen is waste; this runs when a tag is pushed, or when the owner asks.
+name: build the downloadable app
+
+on:
+  push:
+    tags: ['app-v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Publish it as a release people can download'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # The package must carry no secret, and that is checked rather than
+      # trusted: the test builds it with fake secrets in the environment and
+      # then greps every byte of the output for them.
+      - name: the package identifies nobody
+        run: npx tsx worker/test/package.test.ts
+
+      # The two public values. The anon key is the one that already ships in
+      # every browser bundle of the website; what it can reach is decided by
+      # the row-level policies behind it. Nothing else is passed in — see
+      # scripts/build-app.mjs.
+      - name: assemble
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SOCIAL_SITE_URL: ${{ vars.SOCIAL_SITE_URL }}
+        run: node scripts/build-app.mjs
+
+      - name: refuse to ship a package with nothing in it
+        shell: pwsh
+        run: |
+          $cfg = Get-Content dist/app/config.json | ConvertFrom-Json
+          if (-not $cfg.supabaseUrl -or -not $cfg.supabaseAnonKey) {
+            # An installer that builds fine and cannot connect is the worst of
+            # the possible outcomes: it reaches a customer before anybody knows.
+            throw "NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY are not set as repository secrets."
+          }
+
+      # CODE SIGNING. Without it Windows SmartScreen tells the customer this is
+      # an unrecognised app from an unknown publisher, which is a reasonable
+      # thing for it to say and a bad thing for them to read. A certificate is
+      # a few hundred dollars a year; until there is one, these two secrets are
+      # simply absent and electron-builder skips signing.
+      - name: build the installer
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: npx electron-builder --win nsis zip --config electron-builder.yml --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hapitaron-windows
+          path: |
+            dist/installer/*.exe
+            dist/installer/*.zip
+          if-no-files-found: error
+
+      - name: publish it where a link can be sent
+        if: startsWith(github.ref, 'refs/tags/app-v') || inputs.release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/installer/*.exe
+            dist/installer/*.zip
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('app-{0}', github.run_number) }}
+          name: הפתרון המבריק — תוכנת הפרסום
+          body: |
+            הורידו את הקובץ `.exe`, הפעילו אותו, והתוכנה תשאל למייל שאיתו נרשמתם.
+            נשלח קוד למייל — מקלידים אותו פעם אחת, וזהו.
+
+            צריך Google Chrome מותקן. התוכנה משתמשת בו, לא מורידה דפדפן משלה.
+          draft: false
+          prerelease: false

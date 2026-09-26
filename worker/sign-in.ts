@@ -73,7 +73,20 @@ export async function signInInteractively(
   prompt: Prompter = consolePrompter(),
   attempts = 3,
 ): Promise<void> {
-  if (!process.stdin.isTTY) {
+  /*
+   * IS THERE ANYBODY THERE TO ANSWER?
+   *
+   * A console gives a TTY. The desktop app does not — it starts the worker as
+   * a child process and pipes its input, which looks exactly like a service
+   * started by Windows at boot. The difference matters: one has a person in
+   * front of a window, the other has nobody, and a prompt in the second case
+   * is indistinguishable from a hang.
+   *
+   * So the app says so explicitly, and anything that cannot say so is assumed
+   * to be unattended.
+   */
+  const attended = process.stdin.isTTY || process.env.SOCIAL_WORKER_PROMPTABLE === '1';
+  if (!attended) {
     throw new Error(
       'המחשב הזה עדיין לא מחובר לחשבון, ואין חלון לשאול בו.\n' +
         'הפעילו את התוכנה פעם אחת ידנית כדי להתחבר, ואחרי זה היא תזכור.',

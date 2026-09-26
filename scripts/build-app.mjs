@@ -67,7 +67,7 @@ const result = await build({
 
 await build({
   ...common,
-  entryPoints: [path.join(root, 'app', 'main.ts')],
+  entryPoints: [path.join(root, 'desktop', 'main.ts')],
   outfile: path.join(out, 'main.cjs'),
   /* Electron is the runtime, not a dependency to carry. */
   external: ['electron'],
@@ -90,9 +90,9 @@ cpSync(path.join(root, 'node_modules', 'playwright-core'), pw, {
 /* preload.cjs is copied rather than bundled on purpose: it is the entire
    surface the window is given, and it is worth being a file somebody can read
    in thirty seconds rather than a line inside a bundle. */
-cpSync(path.join(root, 'app', 'preload.cjs'), path.join(out, 'preload.cjs'));
-cpSync(path.join(root, 'app', 'renderer'), path.join(out, 'renderer'), { recursive: true });
-const icon = path.join(root, 'app', 'icon.png');
+cpSync(path.join(root, 'desktop', 'preload.cjs'), path.join(out, 'preload.cjs'));
+cpSync(path.join(root, 'desktop', 'renderer'), path.join(out, 'renderer'), { recursive: true });
+const icon = path.join(root, 'desktop', 'icon.png');
 if (existsSync(icon)) cpSync(icon, path.join(out, 'icon.png'));
 
 /*

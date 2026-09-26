@@ -57,10 +57,10 @@ jobs:
         run: npm install --no-save --no-audit --no-fund electron@38 electron-builder@26
 
       # The shell is typechecked HERE, because this is the only place Electron's
-      # types exist. Without this step nothing would compile app/main.ts at all
+      # types exist. Without this step nothing would compile desktop/main.ts at all
       # and a type error would first appear as a broken installer.
       - name: typecheck the desktop shell
-        run: npx tsc -p app/tsconfig.json --noEmit
+        run: npx tsc -p desktop/tsconfig.json --noEmit
 
       # The package must carry no secret, and that is checked rather than
       # trusted: the test builds it with fake secrets in the environment and

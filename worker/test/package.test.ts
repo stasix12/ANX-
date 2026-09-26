@@ -46,6 +46,28 @@ execFileSync(process.execPath, [path.join(root, 'scripts', 'build-app.mjs')], {
 });
 
 /*
+ * THERE MUST BE NO `app/` DIRECTORY AT THE REPOSITORY ROOT.
+ *
+ * This is the one that took production down, and it is invisible: Next.js
+ * looks for its pages in `app/` OR `src/app/`, and when both exist the root
+ * one wins. This project keeps its pages in src/app. The desktop shell was put
+ * in a folder called app/, so `next build` quietly built a site whose only
+ * routes were /_not-found and an icon — it SUCCEEDED, printed no warning, and
+ * every page of anx-ggyo.vercel.app answered 404 for two and a half hours.
+ *
+ * The folder is called desktop/ now. This assertion is here because nothing
+ * else in the repository would ever have said so.
+ */
+{
+  checks += 1;
+  assert.ok(
+    !existsSync(path.join(root, 'app')),
+    'a folder called app/ at the root silently replaces src/app as the Next.js router and empties the whole site — the desktop shell lives in desktop/',
+  );
+  is(existsSync(path.join(root, 'src', 'app', 'page.tsx')), 'and the real pages are still where Next.js will find them');
+}
+
+/*
  * ELECTRON MUST NOT BE IN THE WEBSITE'S MANIFEST.
  *
  * It was, for about ninety minutes, and the live site served a 404 the whole

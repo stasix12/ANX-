@@ -236,6 +236,31 @@ void (async () => {
   is(/forgetSession\(\)/.test(db), 'a revoked session must be cleared, not retried for ever');
   is(/getUser\(\)/.test(db), 'and a stored session must be checked against the server, not merely parsed');
 
+  /*
+   * A FAILED CHECK IS NOT A REVOKED SESSION. The first installed build signed
+   * in through the window, started the engine, and the engine asked for the
+   * email again — because any getUser() failure at all wiped the session. A
+   * dropped connection at 3am must not log out a machine that published all
+   * week, on a machine with nobody in front of it.
+   */
+  is(
+    /status >= 400 && status < 500/.test(db),
+    'only the server refusing the session ends it — a 4xx, and not a timeout or a 500',
+  );
+  is(/status !== 429/.test(db), 'a rate limit is the server asking us to wait, not to sign out');
+  is(
+    /if \(!rejected\) \{[\s\S]{0,260}client = c;[\s\S]{0,40}return c;/.test(db),
+    'and anything unclear keeps the session and carries on publishing',
+  );
+  is(
+    /לא הצלחנו לאמת את החיבור מול השרת/.test(db) && /נדחה על ידי השרת/.test(db),
+    'the two outcomes must read differently, because on screen they are the same silence',
+  );
+  is(
+    /existsSync\(sessionFile\(\)\)/.test(db),
+    'and "there is a file here but no account came out of it" must be said out loud — it is a bug in how the window and the engine share it, not a machine nobody has signed in on',
+  );
+
   const envSrc = readFileSync(new URL('../env.ts', import.meta.url), 'utf8');
   is(!/required\('SOCIAL_WORKER_EMAIL'\)/.test(envSrc), 'the owner’s email may no longer be a hard requirement to start');
   is(/SOCIAL_WORKER_STATE_DIR/.test(envSrc) && /homedir\(\)/.test(envSrc),

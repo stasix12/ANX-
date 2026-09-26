@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { friendlyMessage } from '@/lib/social/errors';
 import { env } from './env';
-import { fileSessionStorage, forgetSession } from './session-store';
+import { existsSync } from 'node:fs';
+import { fileSessionStorage, forgetSession, sessionFile } from './session-store';
 import { signInInteractively } from './sign-in';
 
 /**
@@ -58,13 +59,48 @@ export async function workerDb(): Promise<SupabaseClient> {
    * that every one of them fails with no explanation on screen.
    */
   const { data: existing } = await c.auth.getSession();
+
+  /*
+   * A FILE IS HERE BUT NO SESSION CAME OUT OF IT. Said out loud, because the
+   * two ways of arriving at the prompt look identical on screen and are
+   * completely different problems: "nobody has ever signed in on this machine"
+   * is normal, and "the window signed in a second ago and I cannot see it" is
+   * a bug in how the two halves share the file.
+   */
+  if (!existing.session && existsSync(sessionFile())) {
+    console.error(
+      `[worker] יש קובץ חיבור ב-${sessionFile()} אבל לא הצלחנו לקרוא ממנו חשבון. מבקש התחברות מחדש.`,
+    );
+  }
+
   if (existing.session) {
     const { error } = await c.auth.getUser();
     if (!error) {
       client = c;
       return c;
     }
-    console.error(`[worker] החיבור לחשבון פג (${error.message}). מבקש התחברות מחדש.`);
+
+    /*
+     * A FAILED CHECK IS NOT A REVOKED SESSION, and treating it as one is how a
+     * machine that published all week gets logged out by a dropped Wi-Fi
+     * connection at 3am and asks a question nobody is there to answer.
+     *
+     * Only the server saying NO — 401, 403, a token it will not accept — means
+     * this session is finished. A timeout, a DNS failure, a 500, a rate limit:
+     * the session is probably fine and the client will refresh it when the
+     * network comes back. So it is kept, the reason is printed, and publishing
+     * carries on.
+     */
+    const status = (error as { status?: number }).status;
+    const rejected = typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429;
+    if (!rejected) {
+      console.error(
+        `[worker] לא הצלחנו לאמת את החיבור מול השרת (${error.message}). ממשיכים עם החיבור השמור.`,
+      );
+      client = c;
+      return c;
+    }
+    console.error(`[worker] החיבור לחשבון נדחה על ידי השרת (${error.message}). מבקש התחברות מחדש.`);
     forgetSession();
   }
 

@@ -124,6 +124,13 @@ interface WorkerState {
    * which is three or four things instead of an afternoon of everybody else's.
    */
   accountId?: string;
+  /**
+   * The row in social_accounts this worker publishes as, and how many accounts
+   * the whole system has. Together they decide whether the queue needs
+   * filtering at all — see accountScope().
+   */
+  accountRow?: string;
+  accountsTotal?: number;
 }
 
 const session = new BrowserSession();
@@ -283,14 +290,19 @@ async function main(): Promise<void> {
  * way. A one-row read cannot be wrong about the thing the claim will see,
  * because it is the same read.
  */
-async function anyDue(db: SupabaseClient): Promise<boolean> {
-  const { data } = await db
+async function anyDue(db: SupabaseClient, state: WorkerState): Promise<boolean> {
+  const scope = queueScope(state);
+  let q = db
     .from('social_queue')
-    .select('id, target:social_targets!inner(channel)')
+    .select('id, target:social_targets!inner(channel, account_id)')
     .eq('status', 'scheduled')
     .eq('target.channel', 'facebook_group')
-    .lte('scheduled_at', new Date().toISOString())
-    .limit(1);
+    .lte('scheduled_at', new Date().toISOString());
+  /* THE SAME SCOPE AS THE CLAIM. A worker that checks wider than it claims
+     reports itself busy over work it will never do, and the idle chores — the
+     round's comments among them — stop running for good. */
+  if (scope) q = q.eq('target.account_id', scope);
+  const { data } = await q.limit(1);
   return Boolean(data?.length);
 }
 
@@ -308,26 +320,63 @@ async function anyDue(db: SupabaseClient): Promise<boolean> {
  */
 async function spacingGate(
   db: SupabaseClient,
+  state: WorkerState,
   limits: LimitsSettings,
   browser: BrowserSettings,
 ): Promise<{ open: boolean; waitMs: number; gapMs: number; gapMinutes: number; nextAt: string | null }> {
   const gapMinutes = Math.max(0, (limits.minGapMinutes ?? 0) + (browser.groupMinGapMinutes ?? 0));
   const gapMs = gapMinutes * 60_000;
   if (!gapMs) return { open: true, waitMs: 0, gapMs: 0, gapMinutes, nextAt: null };
-  const { data: last } = await db
+  /*
+   * SCOPED THE SAME WAY, and it matters more here than anywhere.
+   *
+   * This reads THE most recent publication in the whole table to decide when
+   * the next one may go out. Unscoped, with two accounts, one owner's
+   * publication silently delays the other's — the gap becomes shared, and
+   * neither of them chose that. Inert while there is one account, like every
+   * other part of this step.
+   */
+  let lastQuery = db
     .from('social_queue')
-    .select('published_at')
+    .select('published_at, target:social_targets!inner(account_id)')
     .eq('status', 'published')
-    .not('published_at', 'is', null)
-    .order('published_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .not('published_at', 'is', null);
+  const scope = queueScope(state);
+  if (scope) lastQuery = lastQuery.eq('target.account_id', scope);
+  const { data: last } = await lastQuery.order('published_at', { ascending: false }).limit(1).maybeSingle();
   const at = (last as { published_at?: string } | null)?.published_at;
   if (!at) return { open: true, waitMs: 0, gapMs, gapMinutes, nextAt: null };
   const nextMs = new Date(at).getTime() + gapMs;
   const waitMs = nextMs - Date.now();
   return { open: waitMs <= 0, waitMs, gapMs, gapMinutes, nextAt: new Date(nextMs).toISOString() };
 }
+
+/**
+ * The account filter, or the absence of one — asked in one place.
+ *
+ * Returns the account row every group must belong to for this worker to touch
+ * it, or null meaning "take everything, as always". Both the due query and
+ * anyDue() ask it, because a worker that CLAIMS a narrower set than it CHECKS
+ * would report itself busy over work it will never do — and then the idle
+ * chores, the comments among them, would never run again.
+ */
+function queueScope(state: WorkerState): string | null {
+  /* One account in the whole system: the filter has nothing to separate, and
+     applying it would be a new way to fail for no gain. */
+  if ((state.accountsTotal ?? 0) <= 1) return null;
+  /* More than one account and we do not know which we are. Taking anything
+     here could publish another account's group from this browser, under the
+     wrong name, into a group this account may not even be in. Take nothing;
+     the login check will identify us on its next pass. */
+  return state.accountRow ?? NO_ACCOUNT;
+}
+
+/**
+ * A uuid no row can have, used to mean "match nothing" — because PostgREST has
+ * no way to say that, and leaving the filter off would mean "match
+ * everything", which is the opposite.
+ */
+const NO_ACCOUNT = '00000000-0000-0000-0000-000000000000';
 
 /* --------------------------------------------------------------- tick */
 
@@ -347,14 +396,15 @@ async function tick(state: WorkerState): Promise<void> {
   if (state.browserState === 'disconnected') return idle(state, 'אין חיבור לפייסבוק — לחצו "התחבר לפייסבוק" בלוח הבקרה.');
 
   // Anything due for a group?
-  const { data: due, error } = await db
+  const scope = queueScope(state);
+  let dueQuery = db
     .from('social_queue')
-    .select('*, target:social_targets!inner(channel)')
+    .select('*, target:social_targets!inner(channel, account_id)')
     .eq('status', 'scheduled')
     .eq('target.channel', 'facebook_group')
-    .lte('scheduled_at', new Date().toISOString())
-    .order('scheduled_at')
-    .limit(Math.max(1, Math.min(3, browser.concurrentJobs || 1)));
+    .lte('scheduled_at', new Date().toISOString());
+  if (scope) dueQuery = dueQuery.eq('target.account_id', scope);
+  const { data: due, error } = await dueQuery.order('scheduled_at').limit(Math.max(1, Math.min(3, browser.concurrentJobs || 1)));
   if (error) throw new Error(error.message);
 
   /*
@@ -374,7 +424,7 @@ async function tick(state: WorkerState): Promise<void> {
    * caps, a paused run, the duplicate rules — is per row and stays in
    * rules.ts, which still runs for real.
    */
-  const gate = await spacingGate(db, limits, browser);
+  const gate = await spacingGate(db, state, limits, browser);
   if (due?.length && !gate.open && gate.waitMs > PREP_LEAD_MS) {
     /* Not yet, and not close enough to start preparing. Say so once per gap,
        not once per row per tick. */
@@ -417,13 +467,13 @@ async function tick(state: WorkerState): Promise<void> {
      * is waiting on. The comment is.
      */
     for (const chore of [runCampaignComments, resolveAddresses, resolveShareLinks, syncGroupProfiles, syncPostMetrics] as const) {
-      if (stopping || (await anyDue(db))) return;
+      if (stopping || (await anyDue(db, state))) return;
       /* A chore that says it did something is work, and work is what keeps
          the loop off its five-second brake. Discarding the answer meant a
          round of comments ran at one every five seconds of dead waiting. */
       if (await chore(state, headless)) state.worked = true;
     }
-    if (!(await anyDue(db))) await restartIfUpdated(state);
+    if (!(await anyDue(db, state))) await restartIfUpdated(state);
     return;
   }
 
@@ -1065,6 +1115,59 @@ async function waitForConfirmation(queueId: string, page: Page): Promise<'confir
  * because "we could not read it this minute" is not the same fact as "there
  * is nobody signed in" — and browser_state already carries the second one.
  */
+/**
+ * Which account this worker publishes as, and whether that matters yet.
+ *
+ * THE FILTER TURNS ITSELF ON. While there is one Facebook account in the
+ * system — which is every day of this product's life so far — the queue is
+ * read exactly as it always has been, with no filter at all. The moment a
+ * second account exists, every worker starts taking only the groups that
+ * belong to the account it is signed into.
+ *
+ * That shape is deliberate. A filter that is always on would have to be right
+ * on the first tick after an update, on a live machine, against rows that may
+ * not have been linked yet — and if it were wrong the symptom is not an error
+ * message, it is a business that quietly stops publishing. A filter that is
+ * inert until a second account exists cannot do that: today it is provably a
+ * no-op, and by the time it is not, the owner has deliberately added an
+ * account and is watching.
+ *
+ * The groups are adopted here too, and under the same guard: with exactly one
+ * account, every group with no account yet belongs to it. With two, nothing
+ * is adopted — by then a group's account is a decision, not an inference.
+ */
+async function learnAccountScope(state: WorkerState, db: SupabaseClient, fbUserId: string): Promise<void> {
+  const mine = await db
+    .from('social_accounts')
+    .select('id')
+    .eq('provider', 'facebook')
+    .eq('provider_user_id', fbUserId)
+    .maybeSingle();
+  if (mine.error) {
+    console.error('[worker] ℹ לא זוהתה שורת החשבון:', mine.error.message);
+    return;
+  }
+  state.accountRow = (mine.data as { id?: string } | null)?.id;
+
+  const all = await db.from('social_accounts').select('id', { count: 'exact', head: true });
+  if (all.error) {
+    console.error('[worker] ℹ לא נספרו החשבונות:', all.error.message);
+    return;
+  }
+  state.accountsTotal = all.count ?? 0;
+
+  if (state.accountsTotal === 1 && state.accountRow) {
+    const adopted = await db
+      .from('social_targets')
+      .update({ account_id: state.accountRow })
+      .is('account_id', null)
+      .eq('channel', 'facebook_group')
+      .select('id');
+    if (adopted.error) console.error('[worker] ℹ לא שויכו קבוצות לחשבון:', adopted.error.message);
+    else if (adopted.data?.length) console.log(`[worker] ✓ ${adopted.data.length} קבוצות שויכו לחשבון המחובר.`);
+  }
+}
+
 async function recordAccount(state: WorkerState, account: AccountProfile | null | undefined): Promise<void> {
   /*
    * NOTHING HERE FAILS QUIETLY, and the first version of it did.
@@ -1198,6 +1301,7 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
       { onConflict: 'provider,provider_user_id' },
     );
   if (upsert.error) console.error('[worker] ℹ לא נרשם חשבון פייסבוק בטבלת החשבונות:', upsert.error.message);
+  else await learnAccountScope(state, db, account.id);
 
   const { error } = await db.from('social_workers').update(patch).eq('id', state.id);
   if (error) {

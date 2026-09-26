@@ -2451,7 +2451,7 @@ const scenario: { step: string; line: string }[] = [];
       .split('\n')
       .filter((l) => !l.trim().startsWith('--') && l.trim())
       .join('\n');
-  for (const version of [9, 10, 11, 12, 13, 14]) {
+  for (const version of [9, 10, 11, 12, 13, 14, 15]) {
     const file = readFileSync(new URL(`../../supabase/social-schema-v${version}.sql`, import.meta.url), 'utf8');
     for (const statement of strip(file).split(';').map((x) => x.trim()).filter((x) => x.length > 20)) {
       assert.ok(strip(latest).includes(statement), `social-latest.sql is missing a statement from v${version}: ${statement.slice(0, 60)}…`);

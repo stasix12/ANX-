@@ -1,8 +1,10 @@
 {
-  "//": "The desktop shell is its own program: Electron's runtime, Electron's types, CommonJS output produced by esbuild. It is excluded from the website's tsconfig because the website must never need Electron installed to build — that is what took production down for two and a half hours. This file is what checks it, in the job that packages it, where Electron is installed.",
+  "//": "The desktop shell is its own program: Electron's runtime, Electron's types, CommonJS output produced by esbuild. It is excluded from the website's tsconfig because the website must never need Electron installed to build — that is what took production down. This file is what checks it, in the job that packages it, where Electron is installed.",
+  "//include": "ONLY main.ts. An earlier version also globbed ../src/lib/social/**/*.ts, which pulled a React component full of DOM into a Node program and failed with thirteen errors about `document`. TypeScript follows the real imports by itself; listing them again only widens the program to files this one never uses.",
+  "//lib": "DOM is present because the shared vocabulary in src/lib/social is written for the website too, and a type that mentions an HTMLElement must still parse here. Nothing in the main process touches a DOM object; the renderer is plain JavaScript and is not compiled at all.",
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "dom"],
     "jsx": "preserve",
     "module": "commonjs",
     "moduleResolution": "node",
@@ -11,6 +13,6 @@
     "plugins": [],
     "paths": { "@/*": ["../src/*"] }
   },
-  "include": ["main.ts", "../src/lib/social/**/*.ts"],
+  "include": ["main.ts"],
   "exclude": ["../node_modules"]
 }

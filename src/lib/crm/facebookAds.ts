@@ -298,6 +298,67 @@ export async function fetchCampaignPerf(config: FbAdsConfig): Promise<CampaignPe
   return campaigns;
 }
 
+/* ------------------------------------------------ campaign management --- */
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+function manageError(body: any): Error {
+  const code = body?.error?.code;
+  if (code === 10 || code === 200 || code === 270 || code === 294) {
+    return new Error(
+      'לטוקן אין הרשאת ניהול (ads_management). צור טוקן חדש ב-Graph API Explorer עם ההרשאות ads_read + ads_management, ועדכן בהגדרות.',
+    );
+  }
+  return graphError(body);
+}
+
+/** Form-encoded POST to a Graph node — Graph serves CORS on writes too. */
+async function graphPost(
+  config: FbAdsConfig,
+  path: string,
+  params: Record<string, string>,
+): Promise<void> {
+  const body = new URLSearchParams({ ...params, access_token: config.accessToken });
+  const response = await fetch(`${GRAPH_BASE}/${GRAPH_VERSION}/${path}`, {
+    method: 'POST',
+    body,
+  });
+  const json = await response.json().catch(() => null);
+  if (!response.ok || json?.error) throw manageError(json);
+}
+
+/** Pause or resume a campaign — the Ads Manager toggle, from the app. */
+export async function setCampaignStatus(
+  config: FbAdsConfig,
+  campaignId: string,
+  active: boolean,
+): Promise<void> {
+  await graphPost(config, campaignId, { status: active ? 'ACTIVE' : 'PAUSED' });
+}
+
+/** Change a campaign's daily budget, given in whole shekels. */
+export async function setCampaignDailyBudget(
+  config: FbAdsConfig,
+  campaignId: string,
+  shekels: number,
+): Promise<void> {
+  await graphPost(config, campaignId, {
+    // Graph takes budgets in minor units (agorot).
+    daily_budget: String(Math.round(shekels * 100)),
+  });
+}
+
+/**
+ * Deep-copies a campaign (ad sets, ads and creatives included) — the pro
+ * way to scale a winner or A/B a change. The copy lands PAUSED so nothing
+ * spends until it's reviewed and switched on.
+ */
+export async function duplicateCampaign(config: FbAdsConfig, campaignId: string): Promise<void> {
+  await graphPost(config, `${campaignId}/copies`, {
+    deep_copy: 'true',
+    status_option: 'PAUSED',
+  });
+}
+
 /**
  * Trades the current token for a fresh long-lived one (~60 days). Requires
  * the app id + secret; returns null when they're missing or Graph refuses.

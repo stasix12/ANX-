@@ -366,7 +366,18 @@ alter table public.social_activity_log add column if not exists tenant_id uuid;
 alter table public.social_settings add column if not exists tenant_id uuid;
 alter table public.social_workers add column if not exists tenant_id uuid;
 alter table public.social_worker_commands add column if not exists tenant_id uuid;
-alter table public.social_content_categories add column if not exists tenant_id uuid;
+-- social_content_categories is created by v8, which social-latest.sql
+-- deliberately does not include — so on a database that never ran v8 the
+-- table is simply absent, and a bare `alter table` aborts the WHOLE script in
+-- Supabase's editor, where a run is one transaction. Found by applying this
+-- file to an empty Postgres, which is the only way it shows.
+do $$
+begin
+  if to_regclass('public.social_content_categories') is not null then
+    alter table public.social_content_categories add column if not exists tenant_id uuid;
+    comment on column public.social_content_categories.tenant_id is 'Which business this row belongs to. Not read by anything yet.';
+  end if;
+end $$;
 
 comment on column public.social_accounts.tenant_id is 'Which business this row belongs to. Not read by anything yet.';
 comment on column public.social_targets.tenant_id is 'Which business this row belongs to. Not read by anything yet.';
@@ -379,4 +390,3 @@ comment on column public.social_activity_log.tenant_id is 'Which business this r
 comment on column public.social_settings.tenant_id is 'Which business this row belongs to. Not read by anything yet.';
 comment on column public.social_workers.tenant_id is 'Which business this row belongs to. Not read by anything yet.';
 comment on column public.social_worker_commands.tenant_id is 'Which business this row belongs to. Not read by anything yet.';
-comment on column public.social_content_categories.tenant_id is 'Which business this row belongs to. Not read by anything yet.';

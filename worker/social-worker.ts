@@ -5,6 +5,7 @@ import { detectCity } from '@/lib/social/cities';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { PREP_LEAD_MS, evaluateQueueItem } from '@/lib/social/rules';
+import { upsertScoped } from '@/lib/social/tenant';
 import { stampText } from '@/lib/social/time';
 import {
   DEFAULT_BROWSER,
@@ -169,11 +170,21 @@ async function main(): Promise<void> {
     process.exit(EXIT_ALREADY_RUNNING);
   }
 
-  const { data: worker } = await db
-    .from('social_workers')
-    .upsert({ name: env.workerName, status: 'online', version: VERSION, host: hostname(), last_seen_at: new Date().toISOString() }, { onConflict: 'name' })
-    .select('id, fb_user_id')
-    .single();
+  // 'tenant_id,name' once supabase/social-latest.sql has made a PC name
+  // unique within a business rather than across the whole database, 'name'
+  // before then — two customers whose PC is called DESKTOP-4F2A are two
+  // workers, not one. src/lib/social/tenant.ts says why the target is
+  // discovered rather than assumed.
+  const { data: worker } = await upsertScoped(
+    (onConflict) =>
+      db
+        .from('social_workers')
+        .upsert({ name: env.workerName, status: 'online', version: VERSION, host: hostname(), last_seen_at: new Date().toISOString() }, { onConflict })
+        .select('id, fb_user_id')
+        .single(),
+    'tenant_id,name',
+    'name',
+  );
   if (!worker) throw new Error('רישום ה-worker נכשל — האם הרצתם את supabase/social-schema-v2.sql?');
   /*
    * REMEMBERED FROM LAST TIME, because everything that finds a post now needs
@@ -1328,18 +1339,21 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
    * Failure is reported and then ignored: a missing table or a policy must
    * never stop a publication over bookkeeping nobody is reading.
    */
-  const upsert = await db
-    .from('social_accounts')
-    .upsert(
-      {
-        provider: 'facebook',
-        provider_user_id: account.id,
-        name: account.name,
-        last_synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'provider,provider_user_id' },
-    );
+  const upsert = await upsertScoped(
+    (onConflict) =>
+      db.from('social_accounts').upsert(
+        {
+          provider: 'facebook',
+          provider_user_id: account.id,
+          name: account.name,
+          last_synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict },
+      ),
+    'tenant_id,provider,provider_user_id',
+    'provider,provider_user_id',
+  );
   if (upsert.error) console.error('[worker] ℹ לא נרשם חשבון פייסבוק בטבלת החשבונות:', upsert.error.message);
   else await learnAccountScope(state, db, account.id);
 

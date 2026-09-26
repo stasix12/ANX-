@@ -81,8 +81,19 @@ create table if not exists public.social_targets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create unique index if not exists social_targets_channel_external_idx
-  on public.social_targets (channel, external_id) where external_id <> '';
+-- One group per channel — but only while there is one business. v17 replaces
+-- this with the same rule per business, because two businesses advertising in
+-- the same public group is the normal case. Guarded so that re-running this
+-- file on a database that already has customers does not try to re-create the
+-- narrow index, fail on their shared groups, and take the whole run down with
+-- it: in Supabase's editor one run is one transaction.
+do $$
+begin
+  if to_regclass('public.social_targets_tenant_channel_external_idx') is null then
+    create unique index if not exists social_targets_channel_external_idx
+      on public.social_targets (channel, external_id) where external_id <> '';
+  end if;
+end $$;
 
 drop trigger if exists social_targets_set_updated_at on public.social_targets;
 create trigger social_targets_set_updated_at
@@ -237,10 +248,22 @@ create trigger social_settings_set_updated_at
 
 -- ---------------------------------------------------------------------------
 -- RLS: admin (any authenticated user) reads and writes business data.
+--
+-- ONLY ON A DATABASE THAT HAS NO BUSINESSES IN IT YET. `using (true)` means
+-- "anyone who can sign in sees every row", which is right for the one person
+-- setting this up and catastrophic the moment there are two. v16 replaces
+-- these four policies per table with rules that filter by business — and
+-- because Postgres OR-s permissive policies together, re-running this file
+-- afterwards would put `true` back and quietly undo all of it. So once
+-- social_tenant_members exists, this block refuses to run and says so.
 -- ---------------------------------------------------------------------------
 do $$
 declare t text;
 begin
+  if to_regclass('public.social_tenant_members') is not null then
+    raise notice 'הטבלאות כבר מחולקות לפי עסקים — כללי ההרשאות הפתוחים לא נוצרו מחדש, בכוונה. הכללים האמיתיים נמצאים ב-v16.';
+    return;
+  end if;
   foreach t in array array[
     'social_accounts', 'social_targets', 'social_campaigns', 'social_posts',
     'social_variants', 'social_schedules', 'social_queue', 'social_activity_log',
@@ -295,8 +318,38 @@ create policy "social media admin delete"
 -- WhatsApp is simply left off the post.
 --
 -- `on conflict do nothing` means an existing deployment keeps whatever it has.
-insert into public.social_settings (key, value) values
-  ('limits', '{"maxPerDay": 6, "maxPerTargetPerDay": 2, "minGapMinutes": 45, "dedupeDays": 14}'::jsonb),
-  ('control', '{"paused": false, "rateLimitedUntil": null}'::jsonb),
-  ('business', '{"name": "", "phone": "", "whatsapp": "", "cities": [], "services": []}'::jsonb)
-on conflict (key) do nothing;
+-- WHICH BUSINESS GETS THE DEFAULTS. On a database that has never heard of
+-- businesses, the plain insert. On one that has, a row per business that is
+-- missing it — which is both the honest answer when there are several and the
+-- reason a new customer starts with working defaults instead of an empty
+-- settings screen. The conflict target has to match whichever key the database
+-- actually has: v17 widens social_settings' primary key from (key) to
+-- (tenant_id, key), and naming the wrong one fails with "no unique or
+-- exclusion constraint matching the ON CONFLICT specification" — which, in
+-- Supabase's editor, takes the whole run with it.
+do $$
+declare
+  rows_sql text := $v$('limits', '{"maxPerDay": 6, "maxPerTargetPerDay": 2, "minGapMinutes": 45, "dedupeDays": 14}'::jsonb),
+      ('control', '{"paused": false, "rateLimitedUntil": null}'::jsonb),
+      ('business', '{"name": "", "phone": "", "whatsapp": "", "cities": [], "services": []}'::jsonb)$v$;
+  target text := '(key)';
+begin
+  if to_regclass('public.social_tenants') is null then
+    execute format('insert into public.social_settings (key, value) values %s on conflict (key) do nothing', rows_sql);
+    return;
+  end if;
+  if exists (
+    select 1 from pg_index i
+    join pg_class c on c.oid = i.indrelid
+    join pg_attribute a on a.attrelid = c.oid and a.attnum = any (i.indkey)
+    where c.relname = 'social_settings' and i.indisprimary and a.attname = 'tenant_id'
+  ) then
+    target := '(tenant_id, key)';
+  end if;
+  execute format(
+    'insert into public.social_settings (tenant_id, key, value)
+       select t.id, s.key, s.value from public.social_tenants t
+       cross join (values %s) as s(key, value)
+     on conflict %s do nothing',
+    rows_sql, target);
+end $$;

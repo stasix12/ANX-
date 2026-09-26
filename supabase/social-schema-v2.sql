@@ -94,9 +94,24 @@ create table if not exists public.social_worker_commands (
 );
 create index if not exists social_worker_commands_pending_idx on public.social_worker_commands (status, created_at);
 
+-- ---------------------------------------------------------------------------
+-- RLS: admin (any authenticated user) reads and writes business data.
+--
+-- ONLY ON A DATABASE THAT HAS NO BUSINESSES IN IT YET. `using (true)` means
+-- "anyone who can sign in sees every row", which is right for the one person
+-- setting this up and catastrophic the moment there are two. v16 replaces
+-- these four policies per table with rules that filter by business — and
+-- because Postgres OR-s permissive policies together, re-running this file
+-- afterwards would put `true` back and quietly undo all of it. So once
+-- social_tenant_members exists, this block refuses to run and says so.
+-- ---------------------------------------------------------------------------
 do $$
 declare t text;
 begin
+  if to_regclass('public.social_tenant_members') is not null then
+    raise notice 'הטבלאות כבר מחולקות לפי עסקים — כללי ההרשאות הפתוחים לא נוצרו מחדש, בכוונה. הכללים האמיתיים נמצאים ב-v16.';
+    return;
+  end if;
   foreach t in array array['social_workers', 'social_worker_commands'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "admin select" on public.%I', t);
@@ -135,6 +150,36 @@ create policy "social debug admin delete"
   using (bucket_id = 'social-debug');
 
 -- --------------------------------------------------------------- settings
-insert into public.social_settings (key, value) values
-  ('browser', '{"debugMode": true, "testMode": true, "requireConfirmation": true, "concurrentJobs": 1, "maxPerCampaignPerDay": 8, "groupMinGapMinutes": 20}'::jsonb)
-on conflict (key) do nothing;
+-- WHICH BUSINESS GETS THE DEFAULTS. On a database that has never heard of
+-- businesses, the plain insert. On one that has, a row per business that is
+-- missing it — which is both the honest answer when there are several and the
+-- reason a new customer starts with working defaults instead of an empty
+-- settings screen. The conflict target has to match whichever key the database
+-- actually has: v17 widens social_settings' primary key from (key) to
+-- (tenant_id, key), and naming the wrong one fails with "no unique or
+-- exclusion constraint matching the ON CONFLICT specification" — which, in
+-- Supabase's editor, takes the whole run with it.
+do $$
+declare
+  rows_sql text := $v$('browser', '{"debugMode": true, "testMode": true, "requireConfirmation": true, "concurrentJobs": 1, "maxPerCampaignPerDay": 8, "groupMinGapMinutes": 20}'::jsonb)$v$;
+  target text := '(key)';
+begin
+  if to_regclass('public.social_tenants') is null then
+    execute format('insert into public.social_settings (key, value) values %s on conflict (key) do nothing', rows_sql);
+    return;
+  end if;
+  if exists (
+    select 1 from pg_index i
+    join pg_class c on c.oid = i.indrelid
+    join pg_attribute a on a.attrelid = c.oid and a.attnum = any (i.indkey)
+    where c.relname = 'social_settings' and i.indisprimary and a.attname = 'tenant_id'
+  ) then
+    target := '(tenant_id, key)';
+  end if;
+  execute format(
+    'insert into public.social_settings (tenant_id, key, value)
+       select t.id, s.key, s.value from public.social_tenants t
+       cross join (values %s) as s(key, value)
+     on conflict %s do nothing',
+    rows_sql, target);
+end $$;

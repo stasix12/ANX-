@@ -14,6 +14,7 @@ import {
   summarizeQueue,
   type QueueSummary,
 } from './status';
+import { upsertScoped } from './tenant';
 import {
   DEFAULT_BROWSER,
   DEFAULT_BUSINESS,
@@ -114,7 +115,14 @@ export async function getSetting<T>(key: string, fallback: T): Promise<T> {
 }
 
 export async function saveSetting(key: string, value: unknown): Promise<void> {
-  unwrap(await db().from('social_settings').upsert({ key, value }, { onConflict: 'key' }));
+  // 'tenant_id,key' once supabase/social-latest.sql has widened the settings
+  // key to one row per business, 'key' before then. src/lib/social/tenant.ts
+  // says why the target is discovered rather than assumed.
+  unwrap(await upsertScoped(
+    (onConflict) => db().from('social_settings').upsert({ key, value }, { onConflict }),
+    'tenant_id,key',
+    'key',
+  ));
 }
 
 export const getLimits = () => getSetting<LimitsSettings>('limits', DEFAULT_LIMITS);

@@ -46,6 +46,15 @@ export async function deleteSecrets(kind: SecretOwner, ownerIds: string[]): Prom
   if (error) throw new Error(error.message);
 }
 
+/*
+ * NOT TENANT-AWARE, AND NOTHING CALLS IT. The service role bypasses row-level
+ * security, so with more than one business these two would read whichever
+ * 'limits' row came back first and write into a business chosen by accident —
+ * and `.maybeSingle()` would throw the moment two exist. Anything that starts
+ * calling them has to take a tenant id and filter on it. Left here rather than
+ * changed because dead code that is changed untested is worse than dead code
+ * that is labelled.
+ */
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const { data, error } = await serviceDb().from('social_settings').select('value').eq('key', key).maybeSingle();
   if (error) throw new Error(error.message);

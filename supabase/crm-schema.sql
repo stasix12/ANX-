@@ -61,6 +61,20 @@ create trigger leads_set_updated_at
 
 alter table public.leads enable row level security;
 
+-- ONLY ON A DATABASE THAT HAS NOT BEEN LOCKED DOWN YET. `using (true)` means
+-- "anyone who can sign in sees every row" — right while admin accounts are
+-- made by hand, wrong the day a customer of the publishing product can sign
+-- up. v18 replaces these with "the owner of this app, or nobody", and because
+-- Postgres OR-s permissive policies together, re-running this file afterwards
+-- would put `true` back and quietly undo it. So once v18 has run, this block
+-- refuses and says so.
+do $$
+begin
+  if to_regprocedure('public.social_is_app_owner()') is not null then
+    raise notice 'ההרשאות כבר שייכות לבעל המערכת בלבד — הכללים הפתוחים לא נוצרו מחדש, בכוונה. הכללים האמיתיים נמצאים ב-v18.';
+    return;
+  end if;
+  execute $g$
 drop policy if exists "admin read leads" on public.leads;
 create policy "admin read leads"
   on public.leads for select
@@ -84,7 +98,9 @@ drop policy if exists "admin delete leads" on public.leads;
 create policy "admin delete leads"
   on public.leads for delete
   to authenticated
-  using (true);
+  using (true);  $g$;
+end $$;
+
 
 -- Small key/value store for CRM integrations and preferences (e.g. the
 -- Facebook Ads credentials). Same trust model as leads: RLS locks every
@@ -102,6 +118,20 @@ create trigger crm_settings_set_updated_at
 
 alter table public.crm_settings enable row level security;
 
+-- ONLY ON A DATABASE THAT HAS NOT BEEN LOCKED DOWN YET. `using (true)` means
+-- "anyone who can sign in sees every row" — right while admin accounts are
+-- made by hand, wrong the day a customer of the publishing product can sign
+-- up. v18 replaces these with "the owner of this app, or nobody", and because
+-- Postgres OR-s permissive policies together, re-running this file afterwards
+-- would put `true` back and quietly undo it. So once v18 has run, this block
+-- refuses and says so.
+do $$
+begin
+  if to_regprocedure('public.social_is_app_owner()') is not null then
+    raise notice 'ההרשאות כבר שייכות לבעל המערכת בלבד — הכללים הפתוחים לא נוצרו מחדש, בכוונה. הכללים האמיתיים נמצאים ב-v18.';
+    return;
+  end if;
+  execute $g$
 drop policy if exists "admin read settings" on public.crm_settings;
 create policy "admin read settings"
   on public.crm_settings for select
@@ -125,4 +155,6 @@ drop policy if exists "admin delete settings" on public.crm_settings;
 create policy "admin delete settings"
   on public.crm_settings for delete
   to authenticated
-  using (true);
+  using (true);  $g$;
+end $$;
+

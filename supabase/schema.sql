@@ -65,6 +65,20 @@ create policy "public read published"
 
 -- Any authenticated user may read every row, including hidden ones — the
 -- admin panel needs to see and edit unpublished products.
+-- ONLY ON A DATABASE THAT HAS NOT BEEN LOCKED DOWN YET. `using (true)` means
+-- "anyone who can sign in sees every row" — right while admin accounts are
+-- made by hand, wrong the day a customer of the publishing product can sign
+-- up. v18 replaces these with "the owner of this app, or nobody", and because
+-- Postgres OR-s permissive policies together, re-running this file afterwards
+-- would put `true` back and quietly undo it. So once v18 has run, this block
+-- refuses and says so.
+do $$
+begin
+  if to_regprocedure('public.social_is_app_owner()') is not null then
+    raise notice 'ההרשאות כבר שייכות לבעל המערכת בלבד — הכללים הפתוחים לא נוצרו מחדש, בכוונה. הכללים האמיתיים נמצאים ב-v18.';
+    return;
+  end if;
+  execute $g$
 drop policy if exists "admin read all" on public.products;
 create policy "admin read all"
   on public.products for select
@@ -92,7 +106,9 @@ drop policy if exists "admin delete" on public.products;
 create policy "admin delete"
   on public.products for delete
   to authenticated
-  using (true);
+  using (true);  $g$;
+end $$;
+
 
 -- Product photo storage. Public read (the storefront shows these images to
 -- anyone), write restricted to signed-in admins.
@@ -106,6 +122,20 @@ create policy "product images public read"
   to anon, authenticated
   using (bucket_id = 'product-images');
 
+-- ONLY ON A DATABASE THAT HAS NOT BEEN LOCKED DOWN YET. `using (true)` means
+-- "anyone who can sign in sees every row" — right while admin accounts are
+-- made by hand, wrong the day a customer of the publishing product can sign
+-- up. v18 replaces these with "the owner of this app, or nobody", and because
+-- Postgres OR-s permissive policies together, re-running this file afterwards
+-- would put `true` back and quietly undo it. So once v18 has run, this block
+-- refuses and says so.
+do $$
+begin
+  if to_regprocedure('public.social_is_app_owner()') is not null then
+    raise notice 'ההרשאות כבר שייכות לבעל המערכת בלבד — הכללים הפתוחים לא נוצרו מחדש, בכוונה. הכללים האמיתיים נמצאים ב-v18.';
+    return;
+  end if;
+  execute $g$
 drop policy if exists "product images admin write" on storage.objects;
 create policy "product images admin write"
   on storage.objects for insert
@@ -122,4 +152,6 @@ drop policy if exists "product images admin delete" on storage.objects;
 create policy "product images admin delete"
   on storage.objects for delete
   to authenticated
-  using (bucket_id = 'product-images');
+  using (bucket_id = 'product-images');  $g$;
+end $$;
+

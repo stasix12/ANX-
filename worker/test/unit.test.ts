@@ -2452,7 +2452,7 @@ const scenario: { step: string; line: string }[] = [];
       .split('\n')
       .filter((l) => !l.trim().startsWith('--') && l.trim())
       .join('\n');
-  for (const version of [9, 10, 11, 12, 13, 14, 15]) {
+  for (const version of [9, 10, 11, 12, 13, 14, 15, 16, 17, 18]) {
     const file = readFileSync(new URL(`../../supabase/social-schema-v${version}.sql`, import.meta.url), 'utf8');
     for (const statement of strip(file).split(';').map((x) => x.trim()).filter((x) => x.length > 20)) {
       assert.ok(strip(latest).includes(statement), `social-latest.sql is missing a statement from v${version}: ${statement.slice(0, 60)}…`);
@@ -3315,8 +3315,11 @@ const scenario: { step: string; line: string }[] = [];
    * from the worker's own columns and one machine still means one account.
    * It only means the second account will have somewhere to be.
    */
-  assert.ok(/\.from\('social_accounts'\)\s*\.upsert\(/.test(localWorker), 'the connected account is recorded as its own row');
-  assert.ok(/onConflict: 'provider,provider_user_id'/.test(localWorker), 'and re-connecting the same account updates it rather than duplicating it');
+  assert.ok(/\.from\('social_accounts'\)\.upsert\(/.test(localWorker), 'the connected account is recorded as its own row');
+  assert.ok(
+    /'tenant_id,provider,provider_user_id',\s*\n\s*'provider,provider_user_id',/.test(localWorker),
+    'and re-connecting the same account updates it rather than duplicating it — per business once v17 has run, and by the old whole-database key until then',
+  );
   /* Reported and then ignored. Bookkeeping nobody reads yet may never stop a
      publication — same rule the avatar upload and the note column follow. */
   assert.ok(/if \(upsert\.error\) console\.error/.test(localWorker), 'and a failure to record it never stops the worker');

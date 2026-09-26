@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { staggeredSlots } from '../../src/lib/social/slots';
+import { NO_ACCOUNT, queueScope } from '@/lib/social/account-scope';
 import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { zonedToUtc } from '@/lib/social/time';
 import { DEFAULT_BUSINESS, isPendingShare, parseGroupShareUrl, parseGroupUrl, type Variant } from '@/lib/social/types';
@@ -673,11 +674,11 @@ console.log('unit tests OK');
     'the thing the owner asked for goes before the housekeeping',
   );
   assert.ok(
-    /if \(stopping \|\| \(await anyDue\(db\)\)\) return;/.test(localWorker),
+    /if \(stopping \|\| \(await anyDue\(db, state\)\)\) return;/.test(localWorker),
     'each idle chore gives way to a publication that has come due — they hold the only browser',
   );
   assert.ok(
-    /if \(!\(await anyDue\(db\)\)\) await restartIfUpdated\(state\);/.test(localWorker),
+    /if \(!\(await anyDue\(db, state\)\)\) await restartIfUpdated\(state\);/.test(localWorker),
     'and so does the update check, which blocks on git',
   );
   /* Behind, not merely different: a checkout that has drifted ahead would
@@ -3321,6 +3322,88 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/if \(upsert\.error\) console\.error/.test(localWorker), 'and a failure to record it never stops the worker');
   /* Still one account on screen, still one queue. The step is invisible. */
   assert.ok(/fb_user_id: account\.id/.test(localWorker), 'the worker still carries the account it is signed into');
+
+  /*
+   * ==========================================================
+   * ONE ACCOUNT MEANS NO FILTER — the step must be a PROVABLE no-op
+   * ==========================================================
+   *
+   * This touches the query that finds work, on a machine that self-updates
+   * within ten minutes and publishes a post a minute. If it is wrong the
+   * symptom is not an error, it is a business that stops and nobody notices.
+   * So while there is one account the queue is read exactly as it always was,
+   * and "we have not looked yet" must read as one account rather than none.
+   */
+  const scopeSrc = readFileSync(new URL('../../src/lib/social/account-scope.ts', import.meta.url), 'utf8');
+  assert.ok(/if \(\(state\.accountsTotal \?\? 0\) <= 1\) return null;/.test(scopeSrc), 'one account in the system means no filter at all');
+  /* The due query and anyDue ask the SAME function. A worker that checks
+     wider than it claims reports itself busy over work it will never do, and
+     the idle chores — the round's comments among them — never run again. */
+  assert.ok((localWorker.match(/queueScope\(state\)/g) ?? []).length >= 2, 'the claim and the busy check ask one function, not two copies of a rule');
+  /*
+   * A GROUP WITH NO ACCOUNT YET IS STILL OURS. addGroup does not stamp an
+   * account (src/lib/social/client.ts), and adoption stops once a second
+   * account exists — so without this every group added from then on would be
+   * invisible to every worker, for ever, with no error anywhere.
+   */
+  assert.ok(/account_id\.eq\.\$\{scope\},account_id\.is\.null/.test(localWorker), 'a group nobody has claimed is still publishable');
+  /*
+   * AND A WORKER THAT HAS NARROWED ITSELF TO NOTHING SAYS SO. Sign the
+   * browser into a second Facebook account and every group still belongs to
+   * the first: the queue matches nothing, the heartbeat says online, the
+   * dashboard is green, and the rows pile up past due. That is the one
+   * failure this owner cannot detect for himself.
+   */
+  assert.ok(/'account_scope_narrowed'/.test(localWorker), 'a worker taking no work writes it in the activity log');
+  assert.ok(/state\.attention = says;/.test(localWorker), 'and on the dashboard card, not only in a log nobody has open');
+  /* A read that merely came back empty must not un-learn a known account. */
+  assert.ok(/if \(mine\.data\) state\.accountRow =/.test(localWorker), 'a transient empty read never blanks the account already identified');
+  /* Adoption fills a gap and never moves a group, and stops the moment the
+     owner of a group becomes a decision rather than an inference. */
+  assert.ok(/\.is\('account_id', null\)/.test(localWorker), 'adoption only claims rows nobody has claimed');
+  assert.ok(/state\.accountsTotal === 1 && state\.accountRow/.test(localWorker), 'and only while there is exactly one account');
+  /* Known before the loop can publish, not ten minutes later: the self-update
+     restarts this process, and an unfiltered restart publishes the wrong
+     account's groups under the wrong name. */
+  const learnAt = localWorker.indexOf('await learnAccountScope(state, db, state.accountId)');
+  const loopAt = localWorker.indexOf('while (!stopping)');
+  assert.ok(learnAt > 0 && loopAt > 0 && learnAt < loopAt, 'the worker knows which account it is before the loop is allowed to claim');
+  /*
+   * THE SPACING GATE READS ONE COLUMN OF ONE TABLE, and it goes back to that.
+   *
+   * It was scoped by account, which fixed nothing — rules.ts is the authority
+   * and is still global, so the gate would open and rules.ts would defer every
+   * row anyway: thirteen round trips and a "נדחה" line each, the exact burst
+   * the gate exists to prevent. And it meant an inner join in a read whose
+   * answer decides when the next post goes out, where a join can only ever
+   * REMOVE rows.
+   */
+  const gateSrc = localWorker.slice(localWorker.indexOf('async function spacingGate'), localWorker.indexOf('/* ------------------------------------'));
+  assert.ok(!/!inner/.test(gateSrc), 'the spacing gate joins nothing');
+  /* And a spacing read that failed means WAIT, not GO. The error was
+     discarded, so a network blip read as "nothing was ever published" and
+     every due row went out back to back — which is how an account is flagged. */
+  assert.ok(/if \(lastError\) return \{ open: false/.test(localWorker), 'a spacing read that failed holds the gate shut');
+
+  /*
+   * THE TRUTH TABLE, RUN RATHER THAN READ.
+   *
+   * Every other assertion here matches source text, which proves the code
+   * says something, not that it does it. This one decision is where being
+   * wrong is worst and least visible, so it is exercised: it lives in its own
+   * module precisely because the worker starts itself on import and could
+   * never be called from a test.
+   */
+  for (const [label, state, want] of [
+    ['nothing known yet — the first tick after an update', {}, null],
+    ['one account, not yet identified', { accountsTotal: 1 }, null],
+    ['one account, identified', { accountsTotal: 1, accountRow: 'a' }, null],
+    ['two accounts, identified — take only mine', { accountsTotal: 2, accountRow: 'a' }, 'a'],
+    ['two accounts, NOT identified — take nothing, never everything', { accountsTotal: 2 }, NO_ACCOUNT],
+    ['a hundred accounts, identified', { accountsTotal: 100, accountRow: 'z' }, 'z'],
+  ] as const) {
+    assert.equal(queueScope(state), want, `queueScope: ${label}`);
+  }
 
   const accountPage = readFileSync(new URL('../../src/app/social/account/page.tsx', import.meta.url), 'utf8');
   const clientSrc = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');

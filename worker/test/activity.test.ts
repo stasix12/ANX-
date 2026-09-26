@@ -47,6 +47,9 @@ const SYSTEM_BY_DESIGN = new Set([
   /* The database refusing to let a comment be claimed. Same family as the
      missing column above: it is about the installation, not about a post. */
   'comment_claim_failed',
+  /* A worker that has narrowed itself to no work. About the installation,
+     not about a post — and the one notice that must never be missed. */
+  'account_scope_narrowed',
   'metrics_columns_missing',
   'commands_payload_missing',
   'avatar_upload_blocked',

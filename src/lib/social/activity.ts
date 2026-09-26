@@ -74,6 +74,7 @@ const KIND: Record<string, ActivityKind> = {
   group_share_duplicate: 'system',
   comment_columns_missing: 'system',
   comment_claim_failed: 'system',
+  account_scope_narrowed: 'system',
   metrics_columns_missing: 'system',
   commands_payload_missing: 'system',
 };

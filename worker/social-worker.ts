@@ -34,6 +34,7 @@ import { cleanupMedia, downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
 import { BrowserSession, SessionError } from './facebook/session';
+import { NO_ACCOUNT, queueScope } from '@/lib/social/account-scope';
 import { captureScreenshot } from './screenshots';
 
 /**
@@ -127,7 +128,7 @@ interface WorkerState {
   /**
    * The row in social_accounts this worker publishes as, and how many accounts
    * the whole system has. Together they decide whether the queue needs
-   * filtering at all — see accountScope().
+   * filtering at all — see queueScope().
    */
   accountRow?: string;
   accountsTotal?: number;
@@ -212,6 +213,19 @@ async function main(): Promise<void> {
    * "נסה שוב" leaves it alone — the owner looks, then decides.
    */
   await sweepStuckComments(db);
+
+  /*
+   * WHICH ACCOUNT WE ARE, BEFORE THE LOOP CAN CLAIM ANYTHING.
+   *
+   * It is learned in recordAccount, which runs off the login check — at
+   * startup, then once every ten minutes. Left only there, a restart (and the
+   * self-update restarts this process) would run UNFILTERED until that check
+   * came back: with a second account present that means publishing another
+   * account's groups from this browser, under the wrong name, into groups
+   * this account may not even be in. The id is already on the worker's own
+   * row from the last time a check succeeded, so this costs one read.
+   */
+  if (state.accountId) await learnAccountScope(state, db, state.accountId).catch(() => undefined);
 
   await logActivity('info', 'worker_started', `ה-worker "${env.workerName}" עלה (${hostname()})`, { version: VERSION });
   console.log('[worker] מחובר ל-Supabase. ממתין לעבודות… (Ctrl+C לעצירה)');
@@ -301,7 +315,7 @@ async function anyDue(db: SupabaseClient, state: WorkerState): Promise<boolean> 
   /* THE SAME SCOPE AS THE CLAIM. A worker that checks wider than it claims
      reports itself busy over work it will never do, and the idle chores — the
      round's comments among them — stop running for good. */
-  if (scope) q = q.eq('target.account_id', scope);
+  if (scope) q = q.or(`account_id.eq.${scope},account_id.is.null`, { referencedTable: 'target' });
   const { data } = await q.limit(1);
   return Boolean(data?.length);
 }
@@ -320,7 +334,6 @@ async function anyDue(db: SupabaseClient, state: WorkerState): Promise<boolean> 
  */
 async function spacingGate(
   db: SupabaseClient,
-  state: WorkerState,
   limits: LimitsSettings,
   browser: BrowserSettings,
 ): Promise<{ open: boolean; waitMs: number; gapMs: number; gapMinutes: number; nextAt: string | null }> {
@@ -328,55 +341,49 @@ async function spacingGate(
   const gapMs = gapMinutes * 60_000;
   if (!gapMs) return { open: true, waitMs: 0, gapMs: 0, gapMinutes, nextAt: null };
   /*
-   * SCOPED THE SAME WAY, and it matters more here than anywhere.
+   * DELIBERATELY NOT SCOPED BY ACCOUNT, and that is a reversal.
    *
-   * This reads THE most recent publication in the whole table to decide when
-   * the next one may go out. Unscoped, with two accounts, one owner's
-   * publication silently delays the other's — the gap becomes shared, and
-   * neither of them chose that. Inert while there is one account, like every
-   * other part of this step.
+   * It was scoped, on the reasoning that with two accounts one owner's
+   * publication should not delay the other's. True — and this is not the
+   * place that decides it. rules.ts is the authority (see the note above),
+   * and it reads the same global instant per row. Scoping only here opens the
+   * gate for the second account, lets every row be claimed, and then has
+   * rules.ts defer each one anyway — thirteen round trips and a "נדחה" line
+   * per row, which is precisely the burst this gate exists to prevent.
+   *
+   * It also meant joining social_targets into a read that needs one column of
+   * one table. An inner join can only ever REMOVE rows from the answer, and
+   * this answer decides when the next post goes out. The checked-in schema
+   * says target_id is `not null references ... on delete cascade`, so today
+   * it removes nothing — but that is one hand-edit away from being false on a
+   * live database nobody can inspect from here, and the failure would be
+   * silent and early.
+   *
+   * It goes back with the change that scopes rules.ts:209, where it belongs.
    */
-  let lastQuery = db
+  const { data: last, error: lastError } = await db
     .from('social_queue')
-    .select('published_at, target:social_targets!inner(account_id)')
+    .select('published_at')
     .eq('status', 'published')
-    .not('published_at', 'is', null);
-  const scope = queueScope(state);
-  if (scope) lastQuery = lastQuery.eq('target.account_id', scope);
-  const { data: last } = await lastQuery.order('published_at', { ascending: false }).limit(1).maybeSingle();
+    .not('published_at', 'is', null)
+    .order('published_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  /*
+   * A SPACING READ THAT FAILED MEANS WAIT, NOT GO.
+   *
+   * The error was discarded, so any failure left `last` null and the next
+   * line read that as "nothing has ever been published" — the gate opened
+   * wide and every due row went out back to back with no gap at all. That is
+   * how an account gets flagged, arrived at through a network blip.
+   */
+  if (lastError) return { open: false, waitMs: gapMs, gapMs, gapMinutes, nextAt: null };
   const at = (last as { published_at?: string } | null)?.published_at;
   if (!at) return { open: true, waitMs: 0, gapMs, gapMinutes, nextAt: null };
   const nextMs = new Date(at).getTime() + gapMs;
   const waitMs = nextMs - Date.now();
   return { open: waitMs <= 0, waitMs, gapMs, gapMinutes, nextAt: new Date(nextMs).toISOString() };
 }
-
-/**
- * The account filter, or the absence of one — asked in one place.
- *
- * Returns the account row every group must belong to for this worker to touch
- * it, or null meaning "take everything, as always". Both the due query and
- * anyDue() ask it, because a worker that CLAIMS a narrower set than it CHECKS
- * would report itself busy over work it will never do — and then the idle
- * chores, the comments among them, would never run again.
- */
-function queueScope(state: WorkerState): string | null {
-  /* One account in the whole system: the filter has nothing to separate, and
-     applying it would be a new way to fail for no gain. */
-  if ((state.accountsTotal ?? 0) <= 1) return null;
-  /* More than one account and we do not know which we are. Taking anything
-     here could publish another account's group from this browser, under the
-     wrong name, into a group this account may not even be in. Take nothing;
-     the login check will identify us on its next pass. */
-  return state.accountRow ?? NO_ACCOUNT;
-}
-
-/**
- * A uuid no row can have, used to mean "match nothing" — because PostgREST has
- * no way to say that, and leaving the filter off would mean "match
- * everything", which is the opposite.
- */
-const NO_ACCOUNT = '00000000-0000-0000-0000-000000000000';
 
 /* --------------------------------------------------------------- tick */
 
@@ -403,7 +410,7 @@ async function tick(state: WorkerState): Promise<void> {
     .eq('status', 'scheduled')
     .eq('target.channel', 'facebook_group')
     .lte('scheduled_at', new Date().toISOString());
-  if (scope) dueQuery = dueQuery.eq('target.account_id', scope);
+  if (scope) dueQuery = dueQuery.or(`account_id.eq.${scope},account_id.is.null`, { referencedTable: 'target' });
   const { data: due, error } = await dueQuery.order('scheduled_at').limit(Math.max(1, Math.min(3, browser.concurrentJobs || 1)));
   if (error) throw new Error(error.message);
 
@@ -424,7 +431,7 @@ async function tick(state: WorkerState): Promise<void> {
    * caps, a paused run, the duplicate rules — is per row and stays in
    * rules.ts, which still runs for real.
    */
-  const gate = await spacingGate(db, state, limits, browser);
+  const gate = await spacingGate(db, limits, browser);
   if (due?.length && !gate.open && gate.waitMs > PREP_LEAD_MS) {
     /* Not yet, and not close enough to start preparing. Say so once per gap,
        not once per row per tick. */
@@ -1147,7 +1154,11 @@ async function learnAccountScope(state: WorkerState, db: SupabaseClient, fbUserI
     console.error('[worker] ℹ לא זוהתה שורת החשבון:', mine.error.message);
     return;
   }
-  state.accountRow = (mine.data as { id?: string } | null)?.id;
+  /* Only when there IS a row. A read that merely came back empty — a replica
+     a moment behind, a policy hiccup — would otherwise blank an account this
+     worker had already identified, and with a second account present that
+     turns the scope into "match nothing" until the next login check. */
+  if (mine.data) state.accountRow = (mine.data as { id?: string }).id;
 
   const all = await db.from('social_accounts').select('id', { count: 'exact', head: true });
   if (all.error) {
@@ -1155,6 +1166,35 @@ async function learnAccountScope(state: WorkerState, db: SupabaseClient, fbUserI
     return;
   }
   state.accountsTotal = all.count ?? 0;
+
+  /*
+   * A QUEUE THAT STOPS MUST NEVER BE SILENT.
+   *
+   * Once a second account exists this worker takes only its own groups — and
+   * "only its own" can be none of them: sign the browser into a second
+   * Facebook account and every group still belongs to the first. The due
+   * query then matches nothing, the gate opens, the chores run, the heartbeat
+   * says online and the dashboard is green, while the queue fills with
+   * past-due rows. The owner finds out when a customer mentions it.
+   *
+   * So the narrowing announces itself, on the card and in the log. This is
+   * the one thing the step cannot ship without.
+   */
+  if ((state.accountsTotal ?? 0) > 1) {
+    const stranded = await db
+      .from('social_targets')
+      .select('id', { count: 'exact', head: true })
+      .eq('channel', 'facebook_group')
+      .not('account_id', 'is', null)
+      .neq('account_id', state.accountRow ?? NO_ACCOUNT);
+    if (stranded.count) {
+      const says = `יש ${state.accountsTotal} חשבונות פייסבוק במערכת, ו-${stranded.count} קבוצות שייכות לחשבון אחר — הן לא יפורסמו מהמחשב הזה.`;
+      if (state.attention !== says) {
+        state.attention = says;
+        await logActivity('warn', 'account_scope_narrowed', says, { accounts: state.accountsTotal, stranded: stranded.count });
+      }
+    }
+  }
 
   if (state.accountsTotal === 1 && state.accountRow) {
     const adopted = await db

@@ -335,6 +335,107 @@ export async function setCampaignStatus(
   await graphPost(config, campaignId, { status: active ? 'ACTIVE' : 'PAUSED' });
 }
 
+/** Pause or resume a single ad inside a campaign. */
+export async function setAdStatus(
+  config: FbAdsConfig,
+  adId: string,
+  active: boolean,
+): Promise<void> {
+  await graphPost(config, adId, { status: active ? 'ACTIVE' : 'PAUSED' });
+}
+
+/** Change an ad set's daily budget (for campaigns budgeted at set level). */
+export async function setAdSetDailyBudget(
+  config: FbAdsConfig,
+  adsetId: string,
+  shekels: number,
+): Promise<void> {
+  await graphPost(config, adsetId, { daily_budget: String(Math.round(shekels * 100)) });
+}
+
+export interface AdInfo {
+  adId: string;
+  name: string;
+  status: string;
+  /** Creative preview image, when Graph exposes one. */
+  thumbnailUrl: string | null;
+  /** Last 30 days. */
+  spend: number;
+  conversations: number;
+}
+
+export interface AdSetInfo {
+  adsetId: string;
+  name: string;
+  status: string;
+  /** Whole currency units; null when the budget is lifetime/campaign-level. */
+  dailyBudget: number | null;
+}
+
+export interface CampaignDetail {
+  ads: AdInfo[];
+  adsets: AdSetInfo[];
+}
+
+/**
+ * Inside one campaign: its ads with creative thumbnails and 30-day results,
+ * plus its ad sets and their budgets — the drill-down view.
+ */
+export async function fetchCampaignDetail(
+  config: FbAdsConfig,
+  campaignId: string,
+): Promise<CampaignDetail> {
+  const token = `access_token=${encodeURIComponent(config.accessToken)}`;
+  const adsUrl =
+    `${GRAPH_BASE}/${GRAPH_VERSION}/${campaignId}/ads` +
+    `?fields=id,name,effective_status,creative.thumbnail_width(256).thumbnail_height(256){thumbnail_url}` +
+    `&limit=50&${token}`;
+  const adsetsUrl =
+    `${GRAPH_BASE}/${GRAPH_VERSION}/${campaignId}/adsets` +
+    `?fields=id,name,effective_status,daily_budget&limit=25&${token}`;
+  const insightsUrl =
+    `${GRAPH_BASE}/${GRAPH_VERSION}/${campaignId}/insights` +
+    `?level=ad&fields=ad_id,spend,actions&date_preset=last_30d&limit=100&${token}`;
+
+  const [adsRes, adsetsRes, insightsRes] = await Promise.all([
+    fetch(adsUrl),
+    fetch(adsetsUrl),
+    fetch(insightsUrl).catch(() => null),
+  ]);
+  const adsBody = await adsRes.json().catch(() => null);
+  if (!adsRes.ok) throw graphError(adsBody);
+  const adsetsBody = await adsetsRes.json().catch(() => null);
+  const insightsBody = insightsRes ? await insightsRes.json().catch(() => null) : null;
+
+  const perf = new Map<string, { spend: number; conversations: number }>();
+  for (const row of insightsBody?.data ?? []) {
+    if (row?.ad_id) {
+      perf.set(String(row.ad_id), {
+        spend: row.spend ? Number(row.spend) : 0,
+        conversations: countConversations(row.actions),
+      });
+    }
+  }
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const ads: AdInfo[] = (adsBody?.data ?? []).map((row: any) => ({
+    adId: String(row.id),
+    name: row.name ?? '',
+    status: row.effective_status ?? 'UNKNOWN',
+    thumbnailUrl: row.creative?.thumbnail_url ?? null,
+    spend: perf.get(String(row.id))?.spend ?? 0,
+    conversations: perf.get(String(row.id))?.conversations ?? 0,
+  }));
+  const adsets: AdSetInfo[] = (adsetsBody?.data ?? []).map((row: any) => ({
+    adsetId: String(row.id),
+    name: row.name ?? '',
+    status: row.effective_status ?? 'UNKNOWN',
+    dailyBudget: row.daily_budget ? Number(row.daily_budget) / 100 : null,
+  }));
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  return { ads, adsets };
+}
+
 /** Change a campaign's daily budget, given in whole shekels. */
 export async function setCampaignDailyBudget(
   config: FbAdsConfig,

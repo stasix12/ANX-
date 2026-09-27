@@ -163,6 +163,18 @@ function subjectOf(entry: Pick<ActivityEntry, 'meta'>): string {
 
 export function activityText(entry: Pick<ActivityEntry, 'event' | 'level' | 'message' | 'meta'>): ActivityText {
   const title = TITLE[entry.event] ?? BY_LEVEL[entry.level] ?? BY_LEVEL.info;
+  /*
+   * THE ONE FACT WORTH PROMOTING OUT OF `meta`.
+   *
+   * "which version is my PC actually running" has been asked, by me, four
+   * times today, and the answer was already being written to this log on every
+   * start — inside meta, where nobody looks. The stored row is untouched; this
+   * just reads it.
+   */
+  const version = (entry.meta as { version?: unknown } | null | undefined)?.version;
+  if (entry.event === 'worker_started' && typeof version === 'string' && version) {
+    return { title, detail: `גרסה ${version}`, subject: subjectOf(entry) };
+  }
   const detail = plainMessage(entry.message);
   const subject = subjectOf(entry);
   return {

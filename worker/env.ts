@@ -36,7 +36,18 @@ export const env = {
     return required('NEXT_PUBLIC_SUPABASE_ANON_KEY');
   },
   get workerName() {
-    return process.env.SOCIAL_WORKER_NAME ?? `worker@${hostname()}`;
+    /*
+     * `||`, not `??`, and the difference reached the owner's screen.
+     *
+     * `??` only falls back on null or undefined. A .env line written as
+     * `SOCIAL_WORKER_NAME=` gives an EMPTY STRING, which `??` happily keeps —
+     * so the activity log on the dashboard read:
+     *
+     *   ה-worker "" עלה (stas)
+     *
+     * A name is either something or it is the machine's. It is never "".
+     */
+    return process.env.SOCIAL_WORKER_NAME?.trim() || `worker@${hostname()}`;
   },
   /**
    * Everything this machine remembers between runs: the Facebook browser

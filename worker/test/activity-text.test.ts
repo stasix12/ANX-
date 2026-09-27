@@ -72,6 +72,16 @@ const eq = (a: unknown, b: unknown, msg: string) => { checks += 1; assert.equal(
   eq(t.detail, '', 'and are not then repeated underneath it');
 }
 
+/* ------------------------------ the version, promoted out of meta where nobody looks */
+{
+  const t = activityText({ event: 'worker_started', level: 'info', message: 'ה-worker "worker@stas" עלה (stas)', meta: { version: '3.39.0' } });
+  eq(t.title, 'המחשב התחבר', 'the headline says what happened');
+  eq(t.detail, 'גרסה 3.39.0', 'and the line under it answers the question that was asked four times today');
+  /* Without one, it falls back to the sentence rather than inventing a number. */
+  const none = activityText({ event: 'worker_started', level: 'info', message: 'ה-worker "worker@stas" עלה (stas)', meta: {} });
+  is(!/גרסה/.test(none.detail), 'a start with no version stamped says nothing about a version');
+}
+
 /* ------------------------------------------- every writer has a name a person reads */
 {
   /* Read from the classification map next door, so a writer added there and

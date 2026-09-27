@@ -17,11 +17,19 @@ export default function manifest(): MetadataRoute.Manifest {
     /*
      * The scope is the whole site, not /social, even though the app starts
      * and lives there. Scope decides what stays INSIDE the installed window:
-     * anything outside it opens in a browser overlay. The one link out of
-     * this app is the login screen — SocialShell sends you to /crm/login when
-     * the session ends and when you sign out — so a scope of '/social' meant
-     * signing out dropped the owner into Safari and signing back in left them
-     * there, in the browser they had just installed their way out of.
+     * anything outside it opens in a browser overlay.
+     *
+     * THE REASON FOR THIS IS GONE AND THE VALUE IS DELIBERATELY UNCHANGED.
+     * It was '/' because the only link out of this app was a login screen that
+     * lived at /crm/login: with a scope of '/social', signing out dropped the
+     * owner into Safari and signing back in left them there, in the browser
+     * they had just installed their way out of. /social/login exists now, so
+     * '/social' would finally be correct.
+     *
+     * It is not narrowed here because narrowing the scope of an app that is
+     * ALREADY INSTALLED on the owner's home screen is its own change with its
+     * own way of going wrong, and it has nothing to do with giving customers a
+     * door. Worth doing on its own, deliberately, and not as a side effect.
      */
     scope: '/',
     display: 'standalone',

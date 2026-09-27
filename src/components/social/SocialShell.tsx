@@ -228,19 +228,21 @@ export function SocialShell({
     setMoreOpen(false);
   }, [pathname]);
 
-  useEffect(() => {
-    if (!loading && !session) router.replace(`/crm/login?next=${encodeURIComponent(pathname || '/social')}`);
-  }, [loading, session, router, pathname]);
-
-  if (loading || !session) {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-ink-950">
-        {/* brand-300, the indicator blue: brand-500 is the button surface and
-            sits at 3.73 on this page. A spinner is a mark, not a label. */}
-        <SpinnerIcon className="h-8 w-8 animate-spin text-brand-300" />
-      </div>
-    );
-  }
+  /*
+   * THE GATE MOVED OUT OF HERE, and it had to.
+   *
+   * This component used to do it: redirect to /crm/login and hold a spinner
+   * until a session resolved. Two problems. It pointed at the CRM's door,
+   * which for a customer is a login for a cleaning-jobs business they have
+   * never heard of — it was written when /social had no door of its own. And
+   * three screens in this module (posts, posts/new, posts/[id]) do not render
+   * SocialShell at all, so they were never gated.
+   *
+   * SocialGate sits in the layout now, which is the one place every screen
+   * passes through, and sends people to /social/login. One guard, one door.
+   * By the time this component mounts there is a session; the reads below
+   * assume it and always could.
+   */
 
   const isActive = (href: string, exact: boolean) => (exact ? pathname === href : Boolean(pathname?.startsWith(href)));
   /*
@@ -581,7 +583,14 @@ export function SocialShell({
               await signOut();
               // A full load, not router.replace: the client cache still holds
               // the screens of the account being left.
-              window.location.href = '/crm/login';
+              //
+              // /social/login, not /crm/login. This pointed at the CRM's door
+              // because for a long time it was the only one — /social had no
+              // login screen of its own, and the owner reached this app on the
+              // CRM's session. For a customer that is somebody else's
+              // business: they would sign out of the publishing app and land
+              // on a login for a cleaning-jobs CRM they have never heard of.
+              window.location.href = '/social/login';
             }}
             className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3.5 text-start text-base font-bold text-error-400 hover:bg-error-300/12 disabled:text-ink-600"
           >

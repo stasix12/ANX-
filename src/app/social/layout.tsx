@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { SocialGate } from '@/components/social/SocialGate';
 import { ToastProvider } from '@/components/social/ui';
 
 export const metadata: Metadata = {
@@ -95,7 +96,11 @@ export const viewport: Viewport = {
 export default function SocialLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="social-theme">
-      <ToastProvider>{children}</ToastProvider>
+      {/* The gate is INSIDE the toast provider: it renders the login screen,
+          which needs to be able to raise a toast like every other screen. */}
+      <ToastProvider>
+        <SocialGate>{children}</SocialGate>
+      </ToastProvider>
     </div>
   );
 }

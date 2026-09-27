@@ -157,6 +157,10 @@ export default function ActivityPage() {
               onChanged={load}
               onOpen={(id) => setDetail(id)}
               emptyText="אין פעילות בסינון הזה."
+              /* This is the screen the technical text moved TO. Nothing was
+                 deleted from the log; it is one tap further from the
+                 dashboard and all of it is here, per row. */
+              technical
             />
           )}
         </Card>

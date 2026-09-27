@@ -16,9 +16,11 @@ import {
   XCircleIcon,
 } from '@/components/icons';
 import { canRetry, queueIdOf } from '@/lib/social/activity';
+import { activityText, hasTechnicalDetail } from '@/lib/social/activity-text';
 import { retryQueueItem } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
 import { relativeHe } from '@/lib/social/time';
+import { ChevronDownIcon } from '@/components/icons';
 import { stampText } from './DateTime';
 import type { ActivityEntry } from '@/lib/social/types';
 import { Empty, TONE_TEXT, useToast, type Tone } from './ui';
@@ -130,6 +132,7 @@ export function ActivityFeed({
   onChanged,
   onOpen,
   emptyText = 'עדיין אין פעילות. כשתתחילו לפרסם, כל פעולה תופיע כאן.',
+  technical = false,
 }: {
   entries: ActivityEntry[];
   limit?: number;
@@ -147,9 +150,20 @@ export function ActivityFeed({
    */
   onOpen?: (queueId: string, entry: ActivityEntry) => void;
   emptyText?: string;
+  /**
+   * Offer "פרטים מלאים" per row: the raw event name, the message exactly as it
+   * was written, and the whole of `meta`.
+   *
+   * Off on the dashboard and on by default nowhere — the main screen is where
+   * somebody asks "is it working", and a file path answers a question they did
+   * not ask. On the activity screen it is the point: nothing is deleted, it is
+   * one tap further away than it used to be.
+   */
+  technical?: boolean;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  const [openRow, setOpenRow] = useState<number | null>(null);
 
   if (!entries.length) return <Empty>{emptyText}</Empty>;
 
@@ -181,11 +195,47 @@ export function ActivityFeed({
         const queueId = queueIdOf(e);
         const openable = Boolean(onOpen && queueId);
         const retryable = Boolean(onChanged && canRetry(e));
-        const text = HEBREW.test(e.message) ? e.message : TECHNICAL;
+        /*
+         * THE HEADLINE, THEN THE PLAIN LINE, THEN THE SUBJECT.
+         *
+         * Not the stored sentence any more. activity-text.ts strips the parts
+         * addressed to whoever maintains the selectors — file names, stack
+         * frames, worker@host — and keeps every specific the writer put there.
+         * A message with no Hebrew at all resolves to '' rather than to a
+         * paraphrase, and the headline carries the row.
+         *
+         * HEBREW/TECHNICAL below stays as the last guard for the one case that
+         * layer cannot improve: an exception verbatim, with nothing to show.
+         */
+        const t = activityText(e);
+        const body = t.detail || (HEBREW.test(e.message) ? '' : TECHNICAL);
         const line = (
-          <p dir="auto" className={`text-sm leading-snug ${e.level === 'error' ? 'text-error-400' : 'text-mist-100'}`}>
-            {text}
-          </p>
+          <>
+            <p dir="auto" className={`text-sm font-bold leading-snug ${e.level === 'error' ? 'text-error-400' : 'text-mist-100'}`}>
+              {t.title}
+            </p>
+            {body && <p dir="auto" className="mt-0.5 text-[12.5px] leading-snug text-mist-300">{body}</p>}
+            {/* The group, on its own line and isolated: these names are
+                Russian and Hebrew in the same list. */}
+            {/*
+              * dir="auto" AND text-right, which look contradictory and are not.
+              *
+              * `dir` decides the ORDER of the glyphs: "Город Арад , глазами
+              * жителей" has to run left-to-right and keep its comma where the
+              * author put it, which is why the layout guard insists on
+              * dir="auto" for any user-supplied name.
+              *
+              * `text-align` decides where the LINE sits, and it resolves
+              * `start` against the element's OWN direction — so dir="auto"
+              * quietly moved every Cyrillic group name to the left edge of a
+              * right-aligned card. Measured on screen: the Hebrew lines flush
+              * right, the Russian one flush left, looking like a bug.
+              *
+              * The two properties are independent. This surface is RTL-only,
+              * so right IS start here.
+              */}
+            {t.subject && <p dir="auto" className="mt-0.5 truncate text-right text-[12px] font-bold text-mist-500">{t.subject}</p>}
+          </>
         );
         return (
           <li key={e.id} className="log-in flex items-start gap-2.5">
@@ -235,7 +285,42 @@ export function ActivityFeed({
                     {busy === queueId ? 'מחזיר…' : 'נסה שוב'}
                   </button>
                 )}
+                {technical && hasTechnicalDetail(e) && (
+                  <button
+                    type="button"
+                    onClick={() => setOpenRow(openRow === e.id ? null : e.id)}
+                    aria-expanded={openRow === e.id}
+                    className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-xl px-1 text-xs font-bold text-mist-500 transition-colors hover:text-mist-100"
+                  >
+                    פרטים מלאים
+                    <ChevronDownIcon aria-hidden className={`h-3.5 w-3.5 transition-transform duration-200 ${openRow === e.id ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
               </div>
+              {/*
+                * EXACTLY WHAT IS IN THE DATABASE, and nothing rewritten.
+                *
+                * The whole point of moving the technical text off the
+                * dashboard is that it still has somewhere to be. The event
+                * name is here because it is what a bug report needs, and the
+                * message is the stored string, untouched — not the cleaned
+                * one. `dir="ltr"` on the meta because it is JSON.
+                */}
+              {technical && openRow === e.id && (
+                <div className="mt-1.5 grid gap-1.5 rounded-xl bg-ink-800/60 p-2.5">
+                  <p className="text-[11px] font-bold text-mist-500">
+                    <span dir="ltr" className="font-mono">{e.event}</span>
+                    {' · '}
+                    <span>{stampText(e.at)}</span>
+                  </p>
+                  <p dir="auto" className="whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-mist-300">{e.message}</p>
+                  {Object.keys(e.meta ?? {}).length > 0 && (
+                    <pre dir="ltr" className="min-w-0 overflow-x-auto rounded-lg bg-ink-900 p-2 text-[10.5px] leading-relaxed text-mist-500">
+                      {JSON.stringify(e.meta, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              )}
             </div>
           </li>
         );

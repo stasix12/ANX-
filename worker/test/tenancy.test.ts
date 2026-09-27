@@ -400,6 +400,63 @@ fallbackTests().then(() => {
   );
 }
 
+/* ----------------------------------------------------------------------- */
+/* N+1. THE TABLE NO FILE KNEW ABOUT.                                        */
+/*                                                                           */
+/* v16 locks the tables named in a list inside v16. The list is right about   */
+/* every table somebody wrote down, and it cannot be right about one that     */
+/* exists only in the database. The live database had exactly that:           */
+/* social_discovered_groups, mentioned in no migration, no query and no       */
+/* component — grep the whole repository and the name appears only in the     */
+/* file that closes it and the assertions here. After social-latest.sql ran,  */
+/* 48 of 52 open rules were gone and 4 remained, all of them on that table.   */
+/* ----------------------------------------------------------------------- */
+{
+  const strays = read('social-tenant-lock-strays.sql');
+
+  is(
+    /from pg_policies p[\s\S]{0,400}qual = 'true' or p\.with_check = 'true'/.test(strays),
+    'it finds its work by asking the database which tables are still open, which is the only way to reach a table no file lists',
+  );
+  is(
+    /"admin select"[\s\S]{0,200}social_tenant_ids/.test(strays) &&
+      (strays.match(/drop policy if exists "admin (select|insert|update|delete)"/g) ?? []).length === 4,
+    'it reuses v16’s four policy NAMES — Postgres OR-s permissive policies, so a rule added under a new name sits beside the open one and the open one wins',
+  );
+  is(
+    /alter column tenant_id set not null/.test(strays) && /social_stamp_tenant/.test(strays),
+    'and it stamps and requires the column, so the next row written to a stray table cannot arrive without an owner',
+  );
+
+  /* The two refusals. Both would otherwise turn a lockdown into data loss that
+     looks exactly like data loss: rows nobody, including their owner, can see. */
+  is(
+    /where tenant_id is null'[\s\S]{0,300}דילוג/.test(strays),
+    'a table with unassigned rows is SKIPPED, not locked — a null tenant_id under a tenant-scoped rule is a row its own owner cannot read',
+  );
+  is(
+    /column_name = 'tenant_id'\)\s*\n\s*then\s*\n\s*raise notice 'דילוג/.test(strays),
+    'and a table with no tenant_id at all is reported rather than improvised on — adding the column belongs to the repair file',
+  );
+  is(
+    /to_regprocedure\('public\.social_tenant_ids\(\)'\) is null/.test(strays),
+    'it refuses to run before v16 — policies referencing a function that does not exist are policies that fail open at the worst moment',
+  );
+  is(
+    !/\bdrop table\b|\bdelete from\b/.test(strays.replace(/--[^\n]*/g, '')),
+    'and it drops nothing: an unused table keeps its rows, and whether it should exist at all is a decision for a person on a calmer day',
+  );
+  is(
+    !/social_tenants', 'social_tenant_members/.test(strays) ||
+      /not in \('social_tenants', 'social_tenant_members'\)/.test(strays),
+    'the membership tables are left alone — their rules are about who you are, not about who owns the row',
+  );
+  is(
+    /select[\s\S]{0,800}as "טבלאות פתוחות"/.test(strays),
+    'it ends by naming whatever is still open, so "I ran it" and "it took" cannot be confused again',
+  );
+}
+
 console.log(`tenancy tests OK — ${checks} assertions, ${columnTables.length} tables walked`);
 }).catch((e) => {
   /* An assertion inside a promise must still fail the run, loudly. */

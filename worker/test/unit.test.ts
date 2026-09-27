@@ -649,37 +649,67 @@ console.log('unit tests OK');
    */
   assert.ok(/if \(state\.currentJob\) return;/.test(localWorker), 'it never restarts while a post is going out');
   /*
-   * The idle branch is no longer "the queue came back empty" alone — it is
-   * also entered when the spacing gap is still far off, because that is the
-   * only moment these chores have. Whichever way it is entered, the chores
-   * hold the single browser for tens of seconds each, so every one of them is
-   * now preceded by a fresh "is anything due" check and gives way to a
-   * publication. The restart check is the last of them and carries its own.
-   */
-  const idleAt = localWorker.indexOf('for (const chore of [runCampaignComments');
-  const restartAt = localWorker.indexOf('await restartIfUpdated(state);');
-  assert.ok(idleAt > 0 && restartAt > idleAt, 'and is only reached once there is nothing to publish');
-  /*
-   * THE COMMENTS GO FIRST, and that ordering is load-bearing.
+   * THE IDLE BRANCH, AND WHAT MAY RUN INSIDE IT.
    *
-   * The window between two publications is what is left of the minute after
-   * the post went out — about twenty seconds. resolveAddresses opens a group
-   * page and scrolls it ten times, which is fifteen to thirty on its own, so
-   * standing in front of the comments it took the window every time: the loop
-   * then found the next row due, returned, and the comments were never
-   * reached. The owner pressed the button and watched nothing happen.
+   * It is entered two ways — the queue came back empty, or a row is due but
+   * the spacing gap is still far off — and both are windows in which the one
+   * browser is free. What goes in them has to be bounded, because these chores
+   * hold that browser for tens of seconds each and a publication cannot wait.
+   *
+   * THE GUARD USED TO BE `anyDue`: "is a row due at this instant". It is gone,
+   * and it must stay gone. Ten seconds after a post goes out, with the next
+   * scheduled for the top of the minute, nothing is due at this instant — so a
+   * chore started, ran for minutes, and the next post's turn passed underneath
+   * it. On the owner's queue, set to one post a minute, that was every slot:
+   *
+   *   "אני בא לפרסם סבב פוסטים, במקום זה הוא מפרסם תגובה על הפוסט שכבר פירסמתי"
+   *
+   * The question is now how long until the next publication, and each chore
+   * must fit inside the answer. worker/test/chore-window.test.ts runs that
+   * arithmetic case by case; these assertions are about the loop using it.
    */
   assert.ok(
-    localWorker.indexOf('runCampaignComments, resolveAddresses') > 0,
+    !/\banyDue\b/.test(localWorker.replace(/\/\*[\s\S]*?\*\//g, '')),
+    'the "is anything due right now" guard must not come back — it cannot see a post that is ten seconds away',
+  );
+  const idleAt = localWorker.indexOf('const chores: {');
+  const restartAt = localWorker.indexOf('await restartIfUpdated(state);');
+  assert.ok(idleAt > 0, 'the idle chores are a list with a declared cost each');
+  assert.ok(restartAt > idleAt, 'and the update check is the last of them');
+  assert.ok(
+    /const room = await roomForChores\(db, state, gate\);[\s\S]{0,600}?if \(!choreFits\(room, chore\.needs\)\)/.test(localWorker),
+    'the room is measured fresh before every chore — the one before it may have taken the whole window',
+  );
+  assert.ok(
+    /if \(room <= 0\) return;/.test(localWorker),
+    'and once a publication is at the door the loop stops looking at chores entirely',
+  );
+  assert.ok(
+    /choreFits\(await roomForChores\(db, state, gate\), CHORE_NEEDS_MS\.restart\)/.test(localWorker),
+    'the update check carries its own budget — stopping and restarting the program must never land on a publication',
+  );
+  /*
+   * THE COMMENTS GO FIRST among them, and that ordering is load-bearing.
+   *
+   * resolveAddresses opens a group page and scrolls it ten times. Standing in
+   * front of the comments it took every window there was: the loop then found
+   * the next row due, returned, and the comments were never reached. The owner
+   * pressed the button and watched nothing happen for hours.
+   */
+  assert.ok(
+    localWorker.indexOf('{ run: runCampaignComments') > 0 &&
+      localWorker.indexOf('{ run: runCampaignComments') < localWorker.indexOf('{ run: resolveAddresses'),
     'the thing the owner asked for goes before the housekeeping',
   );
+  /*
+   * AND THE EXPENSIVE HALF OF IT WAITS FOR A BIGGER WINDOW. A comment on a
+   * post whose address is stored is a page load; one on a post whose address
+   * is not has to hunt three pages of a group. Budgeting them the same would
+   * let one old row take four minutes out of a queue running at one a minute.
+   */
   assert.ok(
-    /if \(stopping \|\| \(await anyDue\(db, state\)\)\) return;/.test(localWorker),
-    'each idle chore gives way to a publication that has come due — they hold the only browser',
-  );
-  assert.ok(
-    /if \(!\(await anyDue\(db, state\)\)\) await restartIfUpdated\(state\);/.test(localWorker),
-    'and so does the update check, which blocks on git',
+    /choreFits\(roomMs, CHORE_NEEDS_MS\.commentHunt\)/.test(localWorker),
+    'a comment that has to hunt for its post only starts when there is room for minutes of it',
   );
   /* Behind, not merely different: a checkout that has drifted ahead would
      otherwise restart in a loop it could never get out of. */
@@ -784,12 +814,18 @@ console.log('unit tests OK');
   /* Collection is the least urgent thing the worker does and must never sit in
      front of a publication. */
   const dueAt = workerSrc.indexOf('const { data: due, error }');
-  const metricsAt = workerSrc.indexOf('syncPostMetrics] as const');
+  const metricsAt = workerSrc.indexOf('{ run: syncPostMetrics');
   assert.ok(dueAt > 0 && metricsAt > dueAt, 'metrics are collected only when there is nothing to publish');
   /* And it is the LAST of the chores, because it is the most expensive of
      them: a metrics read scrolls a feed twenty times looking for one post. */
-  const chores = workerSrc.slice(workerSrc.indexOf('for (const chore of ['), workerSrc.indexOf('] as const)'));
+  const chores = workerSrc.slice(workerSrc.indexOf('const chores: {'), workerSrc.indexOf('for (const chore of chores)'));
   assert.ok(chores.lastIndexOf('syncPostMetrics') > chores.indexOf('resolveAddresses'), 'and it goes last of the idle chores');
+  /* It also carries the largest budget of the five, for the same reason — a
+     window that fits a comment does not fit this. */
+  assert.ok(
+    /metrics: 90_000/.test(readFileSync(new URL('../chore-window.ts', import.meta.url), 'utf8')),
+    'and needs the biggest free window of the chores before it may start',
+  );
 
   /*
    * A FULL DAILY QUOTA IS "NOT TODAY". IT USED TO BE "NEVER".
@@ -2525,7 +2561,10 @@ const scenario: { step: string; line: string }[] = [];
    * made the queue match nothing at all.
    */
   assert.ok(/\(known \? q\.not\('permalink', 'is', null\) : q\.is\('permalink', null\)\)/.test(localWorker), 'an address is preferred for a comment');
-  assert.ok(/if \(!error && !data\?\.length\) \(\{ data, error \} = await pending\(false\)\);/.test(localWorker), 'and never required — a post with no address is still commented on');
+  assert.ok(
+    /if \(!error && !data\?\.length && choreFits\(roomMs, CHORE_NEEDS_MS\.commentHunt\)\) \{\s*\(\{ data, error \} = await pending\(false\)\);/.test(localWorker),
+    'and never required — a post with no address is still commented on, once there is a window long enough to hunt for it',
+  );
   assert.ok(/export async function findPostArticle/.test(composerSrc), 'the post is found by its own text');
   /* And scoped to it. Reading the whole page on a GROUP feed reports the
      neighbour's engagement as the owner's, which is the same class of lie as
@@ -2836,7 +2875,7 @@ const scenario: { step: string; line: string }[] = [];
    * which is every row this version published. This chore still fills in the
    * old ones, in the windows the comments do not need.
    */
-  const choreList = localWorker.slice(localWorker.indexOf('for (const chore of ['), localWorker.indexOf('] as const)'));
+  const choreList = localWorker.slice(localWorker.indexOf('const chores: {'), localWorker.indexOf('for (const chore of chores)'));
   assert.ok(
     choreList.indexOf('runCampaignComments') >= 0 && choreList.indexOf('runCampaignComments') < choreList.indexOf('resolveAddresses'),
     'the thing the owner is waiting on runs before the housekeeping that feeds it',
@@ -3381,7 +3420,10 @@ const scenario: { step: string; line: string }[] = [];
    * answer decides when the next post goes out, where a join can only ever
    * REMOVE rows.
    */
-  const gateSrc = localWorker.slice(localWorker.indexOf('async function spacingGate'), localWorker.indexOf('/* ------------------------------------'));
+  /* Bounded by the function's own closing brace, not by the next banner
+     comment: roomForChores now sits between the two and does join, legally. */
+  const gateFrom = localWorker.indexOf('async function spacingGate');
+  const gateSrc = localWorker.slice(gateFrom, localWorker.indexOf('\n}\n', gateFrom));
   assert.ok(!/!inner/.test(gateSrc), 'the spacing gate joins nothing');
   /* And a spacing read that failed means WAIT, not GO. The error was
      discarded, so a network blip read as "nothing was ever published" and
@@ -3853,8 +3895,18 @@ const scenario: { step: string; line: string }[] = [];
   );
   assert.ok(/state\.spacingNoticeAt/.test(worker), 'the waiting line is said once per gap, not once per row per tick');
 
-  /* 3 — the idle chores give way to a publication. Pinned above with anyDue. */
-  assert.ok(/async function anyDue\(/.test(worker), 'there is a cheap "is anything due" check for the chores to use');
+  /*
+   * 3 — the idle chores give way to a publication, and the check they use
+   * looks FORWARD.
+   *
+   * `anyDue` asked "is a row due at this instant" and was replaced, because a
+   * post ten seconds away is not due at this instant and a chore started in
+   * that moment runs straight over it. The pair pinned above is the
+   * replacement: one read of the next scheduled row, and arithmetic in
+   * worker/chore-window.ts that is tested on its own.
+   */
+  assert.ok(/async function roomForChores\(/.test(worker), 'the chores ask how long until the next publication, not whether one is due now');
+  assert.ok(/from '\.\/chore-window'/.test(worker), 'and the arithmetic lives where it can be tested without a browser');
 
   /*
    * 4 — in the PUBLISH path, only a publication counts as work.
@@ -3872,7 +3924,7 @@ const scenario: { step: string; line: string }[] = [];
     workedAt > deferAt,
     'and a deferral is not work — set before the rules ran, every gap boundary became a burst with no brake',
   );
-  assert.ok(/if \(await chore\(state, headless\)\) state\.worked = true;/.test(worker), 'an idle chore that did something is work too');
+  assert.ok(/if \(await chore\.run\(state, headless, room\)\) state\.worked = true;/.test(worker), 'an idle chore that did something is work too — and it is handed the window it was granted');
 
   /* 5 — the upload safety regression, fixed. A blob: preview exists the
          instant the file is chosen; only the progress bar proves an upload. */

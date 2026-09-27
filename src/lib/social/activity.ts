@@ -56,6 +56,12 @@ const KIND: Record<string, ActivityKind> = {
 
   // The queue moving: postponed, skipped, re-armed, re-spaced, handed to a human.
   deferred: 'schedule',
+  /* The round's comments are waiting because the publishing queue is dense
+     enough that no window between two posts can hold one. The same family as
+     `deferred`, and for the same reason: it is a fact about timing, not a
+     fault. It is said at all because silence here is indistinguishable from
+     the feature being broken — which is how it was reported. */
+  comments_waiting: 'schedule',
   skipped: 'schedule',
   retry: 'schedule',
   cancelled: 'schedule',
@@ -74,6 +80,7 @@ const KIND: Record<string, ActivityKind> = {
   group_share_duplicate: 'system',
   comment_columns_missing: 'system',
   comment_claim_failed: 'system',
+
   account_scope_narrowed: 'system',
   metrics_columns_missing: 'system',
   commands_payload_missing: 'system',

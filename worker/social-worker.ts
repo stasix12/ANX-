@@ -5,6 +5,7 @@ import { detectCity } from '@/lib/social/cities';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { PREP_LEAD_MS, evaluateQueueItem } from '@/lib/social/rules';
+import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { upsertScoped } from '@/lib/social/tenant';
 import { stampText } from '@/lib/social/time';
 import {
@@ -108,6 +109,8 @@ interface WorkerState {
   metricsNoticeShown?: boolean;
   /** Same, for the round-comment columns. */
   commentNoticeShown?: boolean;
+  /** When the "comments are waiting for a free window" line was last written. */
+  commentStarvedNoticeAt?: number;
   /** The last reason the update check could not run — said once, not per tick. */
   updateProblem?: string;
   /**
@@ -320,33 +323,6 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-/**
- * Is there a group publication due right now?
- *
- * Deliberately the SAME SHAPE as the claim query below — same table, same
- * filters, same embedded inner join — with `limit(1)` instead of a count.
- * An exact count over an embedded `!inner` relation is a combination this
- * codebase uses nowhere else, and this answer decides whether a chore that
- * holds the only browser for half a minute gets to start: wrong in one
- * direction the chores never run again, wrong in the other they never give
- * way. A one-row read cannot be wrong about the thing the claim will see,
- * because it is the same read.
- */
-async function anyDue(db: SupabaseClient, state: WorkerState): Promise<boolean> {
-  const scope = queueScope(state);
-  let q = db
-    .from('social_queue')
-    .select('id, target:social_targets!inner(channel, account_id)')
-    .eq('status', 'scheduled')
-    .eq('target.channel', 'facebook_group')
-    .lte('scheduled_at', new Date().toISOString());
-  /* THE SAME SCOPE AS THE CLAIM. A worker that checks wider than it claims
-     reports itself busy over work it will never do, and the idle chores — the
-     round's comments among them — stop running for good. */
-  if (scope) q = q.or(`account_id.eq.${scope},account_id.is.null`, { referencedTable: 'target' });
-  const { data } = await q.limit(1);
-  return Boolean(data?.length);
-}
 
 /**
  * When the next publication is allowed out, asked once per tick.
@@ -413,6 +389,65 @@ async function spacingGate(
   return { open: waitMs <= 0, waitMs, gapMs, gapMinutes, nextAt: new Date(nextMs).toISOString() };
 }
 
+/**
+ * The queue read behind roomBeforeNextPublish(), and nothing else.
+ *
+ * The arithmetic lives in worker/chore-window.ts, which imports nothing and is
+ * tested case by case in plain Node — this file cannot be loaded without a
+ * database and a Facebook session, and the arithmetic is the part that was
+ * wrong. See that file for what the bug was.
+ */
+async function roomForChores(
+  db: SupabaseClient,
+  state: WorkerState,
+  gate: { open: boolean; nextAt: string | null },
+): Promise<number> {
+  const scope = queueScope(state);
+  /* Deliberately NOT filtered by scheduled_at — the point is to see the row
+     that is coming, not the one that has arrived. Same table, same status,
+     same scope as the claim, so it cannot disagree about which row is next. */
+  let q = db
+    .from('social_queue')
+    .select('scheduled_at, target:social_targets!inner(channel, account_id)')
+    .eq('status', 'scheduled')
+    .eq('target.channel', 'facebook_group');
+  if (scope) q = q.or(`account_id.eq.${scope},account_id.is.null`, { referencedTable: 'target' });
+  const { data, error } = await q.order('scheduled_at').limit(1);
+  return roomBeforeNextPublish({
+    nextScheduledAt: (data?.[0] as { scheduled_at?: string } | undefined)?.scheduled_at ?? null,
+    gate,
+    unknown: Boolean(error),
+    now: Date.now(),
+  });
+}
+
+/**
+ * Said when the comments cannot run because the publishing queue is too dense.
+ *
+ * Without this the honest fix is indistinguishable from the bug. An owner with
+ * 214 posts a minute apart and 54 comments waiting would see the comments stop
+ * moving and have no way to know it was deliberate, that nothing is broken, or
+ * that the lever is theirs — so it says so, with the number and with what to
+ * do about it, and at most once an hour.
+ */
+const COMMENT_STARVED_NOTICE_MS = 60 * 60_000;
+
+async function noticeCommentsStarved(db: SupabaseClient, state: WorkerState, roomMs: number): Promise<void> {
+  if (Date.now() - (state.commentStarvedNoticeAt ?? 0) < COMMENT_STARVED_NOTICE_MS) return;
+  const { count, error } = await db
+    .from('social_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('comment_status', 'pending');
+  if (error || !count) return;
+  state.commentStarvedNoticeAt = Date.now();
+  await logActivity(
+    'info',
+    'comments_waiting',
+    `${count} תגובות ממתינות ולא נוספות כרגע: תור הפרסומים צפוף ואין ביניהם חלון פנוי. הן יתחדשו מעצמן כשהתור יתפנה, או אם תגדילו את המרווח בין הפרסומים.`,
+    { pending: count, roomSeconds: Math.max(0, Math.round(roomMs / 1000)) },
+  );
+}
+
 /* --------------------------------------------------------------- tick */
 
 async function tick(state: WorkerState): Promise<void> {
@@ -460,55 +495,87 @@ async function tick(state: WorkerState): Promise<void> {
    * rules.ts, which still runs for real.
    */
   const gate = await spacingGate(db, limits, browser);
-  if (due?.length && !gate.open && gate.waitMs > PREP_LEAD_MS) {
-    /* Not yet, and not close enough to start preparing. Say so once per gap,
-       not once per row per tick. */
-    if (Date.now() - state.spacingNoticeAt > gate.gapMs / 2) {
-      state.spacingNoticeAt = Date.now();
-      await logActivity('info', 'deferred', `ממתין למרווח של ${gate.gapMinutes} דק׳ בין פרסומים`, { until: gate.nextAt });
-    }
-    return;
+  /*
+   * DUE, BUT THE GAP IS NOT OPEN AND WILL NOT BE SOON.
+   *
+   * This used to `return` here, and that return is why the second condition
+   * below — written for exactly this case — had been unreachable since the day
+   * it was added. So the minutes between two publications on a long gap were
+   * spent doing nothing at all, while the round's comments sat waiting for a
+   * window that was right there. The notice still goes out once per gap; the
+   * tick now falls through to the chores, which decide for themselves whether
+   * they fit in the wait.
+   */
+  const holdingForGap = Boolean(due?.length) && !gate.open && gate.waitMs > PREP_LEAD_MS;
+  if (holdingForGap && Date.now() - state.spacingNoticeAt > gate.gapMs / 2) {
+    /* Once per gap, not once per row per tick. */
+    state.spacingNoticeAt = Date.now();
+    await logActivity('info', 'deferred', `ממתין למרווח של ${gate.gapMinutes} דק׳ בין פרסומים`, { until: gate.nextAt });
   }
 
-  if (!due?.length || (!gate.open && gate.waitMs > PREP_LEAD_MS)) {
+  if (!due?.length || holdingForGap) {
     /*
-     * IDLE CHORES — and they must give way the moment a row comes due.
+     * IDLE CHORES — the work that uses the browser when no post is due.
      *
-     * These six hold the single browser for tens of seconds each (a metrics
-     * read scrolls a feed twenty times; a comment can take minutes), and they
-     * run in exactly the window between two publications — because right
-     * after a publication the queue is always momentarily empty. A row whose
-     * turn arrived mid-chain was not even looked at until the whole chain
-     * finished, which is most of the minute the owner was missing.
+     * Leaving a round's comment, looking up a post's address, reading view
+     * counts. There is ONE browser and one Facebook session, so every one of
+     * these is time a publication cannot have, and each holds it for tens of
+     * seconds: a metrics read scrolls a feed twenty times, a comment on a post
+     * whose address is unknown hunts three pages of a group for the post's own
+     * words.
      *
-     * The queue is re-asked before each one. The worst case is now one chore,
-     * not six.
+     * EACH ONE MUST FIT IN THE WINDOW. That is this block's whole rule, and
+     * getting it wrong is what the owner reported:
+     *
+     *   "אני בא לפרסם סבב פוסטים, במקום זה הוא מפרסם תגובה על הפוסט שכבר
+     *    פירסמתי"
+     *
+     * The guard was `anyDue` — "is a row due at this instant". Ten seconds
+     * after a post goes out, with the next one scheduled for the top of the
+     * minute, nothing is due at this instant. So a chore started, ran for
+     * minutes, and the next post's turn passed underneath it. And the one
+     * after that. On a queue set to one a minute that is every slot, and from
+     * the outside it looks exactly like a machine that answered a freshly
+     * launched round by publishing comments on last week's posts.
+     *
+     * So the question is how long until the next publication — see
+     * worker/chore-window.ts — and it is re-asked before every chore, because
+     * the one before it may have taken the window.
+     *
+     * COMMENTS FIRST among them, and that ordering is its own hard-won fix.
+     * resolveAddresses used to stand in front and take the window every time,
+     * so the owner pressed "הוסף תגובה לכל הפרסומים" and watched nothing
+     * happen for hours. Nothing else here is urgent in the same way: an
+     * address resolved a minute later, a profile picture that fills in
+     * tomorrow, a view count six hours old — none of those is a thing somebody
+     * asked for and is waiting on. The comment is.
      */
-    /*
-     * COMMENTS FIRST, and that ordering is the whole difference between a
-     * feature that works and one that does not.
-     *
-     * The window between two publications is what is left of the minute after
-     * the post has gone out — twenty seconds or so — and the chore standing in
-     * front of the comments was resolveAddresses, which opens a group page and
-     * scrolls it ten times: fifteen to thirty seconds on its own. It took the
-     * window every time, the loop then found the next row due and returned,
-     * and the comments were never reached at all. The owner pressed
-     * "הוסף תגובה לכל הפרסומים" and watched nothing happen, for hours.
-     *
-     * Nothing else here is urgent in the same way. An address that is resolved
-     * a minute later, a profile picture that fills in tomorrow, a view count
-     * that is six hours old — none of those is a thing the owner asked for and
-     * is waiting on. The comment is.
-     */
-    for (const chore of [runCampaignComments, resolveAddresses, resolveShareLinks, syncGroupProfiles, syncPostMetrics] as const) {
-      if (stopping || (await anyDue(db, state))) return;
+    const chores: { run: (s: WorkerState, h: boolean, roomMs: number) => Promise<unknown>; needs: number }[] = [
+      { run: runCampaignComments, needs: CHORE_NEEDS_MS.commentKnown },
+      { run: resolveAddresses, needs: CHORE_NEEDS_MS.addresses },
+      { run: resolveShareLinks, needs: CHORE_NEEDS_MS.shareLinks },
+      { run: syncGroupProfiles, needs: CHORE_NEEDS_MS.profiles },
+      { run: syncPostMetrics, needs: CHORE_NEEDS_MS.metrics },
+    ];
+    for (const chore of chores) {
+      if (stopping) return;
+      const room = await roomForChores(db, state, gate);
+      /* Nothing fits any more — a publication is at the door. Leave the
+         browser free rather than trying the cheaper chores behind it. */
+      if (room <= 0) return;
+      if (!choreFits(room, chore.needs)) {
+        /* The comments are the one the owner is actively waiting on, so a
+           window too small for them is worth saying out loud rather than
+           looking like the feature died. */
+        if (chore.run === runCampaignComments) await noticeCommentsStarved(db, state, room);
+        continue;
+      }
       /* A chore that says it did something is work, and work is what keeps
          the loop off its five-second brake. Discarding the answer meant a
          round of comments ran at one every five seconds of dead waiting. */
-      if (await chore(state, headless)) state.worked = true;
+      if (await chore.run(state, headless, room)) state.worked = true;
     }
-    if (!(await anyDue(db, state))) await restartIfUpdated(state);
+    if (choreFits(await roomForChores(db, state, gate), CHORE_NEEDS_MS.restart)) await restartIfUpdated(state);
     return;
   }
 
@@ -1643,7 +1710,7 @@ function jitterFor(id: string): number {
  * an endless retry would keep that belief alive while re-opening the same page
  * every few seconds.
  */
-async function runCampaignComments(state: WorkerState, headless: boolean): Promise<boolean> {
+async function runCampaignComments(state: WorkerState, headless: boolean, roomMs: number): Promise<boolean> {
   if (state.browserState !== 'connected' || !session.hasProfile()) return false;
   const db = await workerDb();
 
@@ -1688,11 +1755,33 @@ async function runCampaignComments(state: WorkerState, headless: boolean): Promi
     const q = db
       .from('social_queue')
       .select('id, permalink, rendered_text, campaign_id, target:social_targets(url)')
+      /*
+       * THE POST HAS TO BE LIVE. Today nothing can mark an unpublished row —
+       * both writers in src/lib/social/client.ts filter on status='published'
+       * — so this line changes no behaviour and is here so that it stays true
+       * from this side too. Without it the invariant lives in another file,
+       * and the failure if it ever broke is a browser sent to hunt a group for
+       * a post that has not gone out yet: minutes of the only browser, then
+       * 'failed' on a row whose post was simply still in the queue.
+       */
+      .eq('status', 'published')
       .eq('comment_status', 'pending');
     return (known ? q.not('permalink', 'is', null) : q.is('permalink', null)).order('published_at').limit(COMMENT_CANDIDATES);
   };
+  /*
+   * AND THE EXPENSIVE ONE ONLY WHEN THERE IS ROOM FOR IT.
+   *
+   * These two branches cost wildly different amounts of the one browser — a
+   * known address is a page load and a box, an unknown one is up to three
+   * lookup pages with a scrolling search each. The caller only promised room
+   * for the cheap kind, so the hunt waits for a window that can hold it.
+   * Without this the fix above would still let one old row take four minutes
+   * out of a queue running at one post a minute.
+   */
   let { data, error } = await pending(true);
-  if (!error && !data?.length) ({ data, error } = await pending(false));
+  if (!error && !data?.length && choreFits(roomMs, CHORE_NEEDS_MS.commentHunt)) {
+    ({ data, error } = await pending(false));
+  }
   if (error) {
     if (/comment_status/.test(error.message) && !state.commentNoticeShown) {
       state.commentNoticeShown = true;

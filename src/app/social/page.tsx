@@ -1046,7 +1046,9 @@ export default function SocialDashboard() {
           {/* Above the log, because it is a thing happening now rather than a
               record of things that happened. Absent entirely when no comment
               was ever asked for. */}
-          <CommentQueueCard rows={data.comments} totals={data.commentTotals} />
+          {/* onChanged so "נסה שוב" refreshes the numbers it just changed.
+              The only line outside the card this redesign touches. */}
+          <CommentQueueCard rows={data.comments} totals={data.commentTotals} onChanged={load} />
 
           {/* The panic button — it pauses everything and cancels the whole
               queue. It is now rendered only when there is something to cancel:

@@ -2918,9 +2918,25 @@ const scenario: { step: string; line: string }[] = [];
      * drifted into different labels, different sorts and different markup;
      * this is the third thing each would have grown on its own.
      */
-    assert.ok(/<CommentState status=\{r\.comment_status\} permalink=\{r\.permalink\} \/>/.test(screen), 'and both name the state the same way');
+    /*
+     * ONE VOCABULARY. The round's screen renders <CommentState>, which is the
+     * word plus a link to the post; the dashboard card renders the same word
+     * inside a status badge, because there the underline read as a door and
+     * the door is the button beside it. What must not differ is the WORD, so
+     * both go through commentLabel() in comments.ts — the two cards had
+     * already drifted into different names for the same state twice.
+     */
+    assert.ok(/commentLabel\(|<CommentState /.test(screen), 'and both name the state from the one vocabulary');
     assert.ok(/commentRank\(a\.comment_status\) - commentRank\(b\.comment_status\)/.test(screen), 'and sort it the same way');
   }
+  /* The proof the owner asked for is a link to the comment, not a picture of
+     it. CommentState carries it on the round's screen; on the dashboard card
+     the same address is the "פייסבוק" button on the row, and it must stay
+     reachable there or the badge is the only thing left and it proves
+     nothing. */
+  assert.ok(/const href = r\.permalink \|\| r\.target\?\.url \|\| '';/.test(commentCard), 'the dashboard card still sends you to the post itself');
+  assert.ok(/retryComment\(r\.id\)/.test(commentCard), 'and the per-row retry acts on that row, never on its twenty-six neighbours');
+
   /* A missing column may never cost the status — same rule as the note, and
      for the same reason: a row stuck on 'pending' is commented on forever. */
   assert.ok(/comment_note\|comment_shot/.test(localWorker), 'and a database without the column still records what happened');

@@ -926,6 +926,35 @@ export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
  * worth retrying on its own, and after a fix to how posts are found there is
  * every reason to.
  */
+/**
+ * Put ONE failed comment back in the queue.
+ *
+ * The same write as retryFailedComments() below, narrowed to a row, because
+ * the card now offers the retry beside the group it failed on and a button
+ * under one name must not quietly act on the other twenty-six. The alternative
+ * was a per-row control that secretly retried the whole round, which is a
+ * button that lies about what it does.
+ *
+ * It carries the same refusal, and that refusal is the reason this is a
+ * separate function rather than a filter on the caller: it will only move a
+ * row that is 'failed'. 'unverified' means Enter was pressed and Facebook
+ * never confirmed — the comment may be under the post right now, and a retry
+ * would put a second one there, under the owner's name, permanently.
+ *
+ * Returns whether anything moved, so a row that was already retried elsewhere
+ * reports honestly instead of flashing success.
+ */
+export async function retryComment(id: string): Promise<boolean> {
+  const res = await db()
+    .from('social_queue')
+    .update({ comment_status: 'pending', comment_at: null, comment_note: '' })
+    .eq('id', id)
+    .eq('comment_status', 'failed')
+    .select('id');
+  if (res.error) throw new Error(res.error.message);
+  return (res.data?.length ?? 0) > 0;
+}
+
 export async function retryFailedComments(campaignId: string): Promise<number> {
   const res = await db()
     .from('social_queue')

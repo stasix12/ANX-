@@ -457,6 +457,68 @@ fallbackTests().then(() => {
   );
 }
 
+/* ----------------------------------------------------------------------- */
+/* N+2. THE FILES. v16 scoped tables, and storage is not a table.            */
+/*                                                                           */
+/* Both buckets kept the rules they were born with. social-debug's read was  */
+/* `bucket_id = 'social-debug'` — any signed-in person may read every object */
+/* in a bucket that holds SCREENSHOTS OF A LOGGED-IN FACEBOOK SESSION, with  */
+/* no path to guess because the API will list them. 428 of them on the live  */
+/* database. It was the most sensitive store in the system and the least     */
+/* protected.                                                                */
+/* ----------------------------------------------------------------------- */
+{
+  const storage = read('social-storage-tenancy.sql');
+
+  /* A storage object has no tenant_id — it has the session that uploaded it.
+     So the question the policies ask is one step out from the tables'. */
+  is(
+    /create or replace function public\.social_tenant_user_ids\(\)[\s\S]{0,400}security definer/.test(storage),
+    'the storage rules are built on a SECURITY DEFINER helper, for the same reason social_tenant_ids() is one: a policy on storage.objects must read the membership table without that table’s own rule getting in the way',
+  );
+  is(
+    /revoke execute on function public\.social_tenant_user_ids\(\) from public/.test(storage),
+    'and it is revoked from public — Postgres grants EXECUTE to PUBLIC by default, which on Supabase means PostgREST exposes it',
+  );
+
+  /* Every verb that can READ or REACH another business's object is scoped.
+     Insert is not, and that is argued rather than overlooked: Storage sets
+     `owner` to the uploading session, so an insert can only make an object the
+     uploader already owns. */
+  for (const policy of ['social debug admin read', 'social debug admin delete', 'social debug admin update']) {
+    const block = storage.slice(storage.indexOf(`create policy "${policy}"`));
+    is(
+      /social_tenant_user_ids/.test(block.slice(0, 400)),
+      `"${policy}" filters by who shares a business with the caller — screenshots of a live Facebook session are the last thing that should be bucket-wide`,
+    );
+  }
+  is(
+    /create policy "social debug admin update"/.test(storage),
+    'and the update rule v2 never wrote is added rather than left as the next silent failure — Storage’s upsert becomes an UPDATE the moment the path exists',
+  );
+  for (const policy of ['social media admin update', 'social media admin delete']) {
+    const block = storage.slice(storage.indexOf(`create policy "${policy}"`));
+    is(
+      /social_tenant_user_ids/.test(block.slice(0, 400)),
+      `"${policy}" is scoped too — one business overwriting another’s post images is not a leak, it is worse`,
+    );
+  }
+
+  /* The one thing this file deliberately leaves open, stated where somebody
+     will read it rather than discovered later by whoever inherits this. */
+  is(
+    !/create policy "social media public read"/.test(storage) &&
+      /READ STAYS PUBLIC/.test(storage) &&
+      /READABLE BY ANYONE/.test(storage),
+    'it does NOT touch the public read on social-media, and says in capitals why: the stored URLs are public ones, the worker fetches images by them, and closing it means signed URLs everywhere an image renders',
+  );
+  is(
+    /same policy NAMES|same policy names/i.test(storage) ||
+      (storage.match(/drop policy if exists "social (debug|media)/g) ?? []).length >= 5,
+    'and it drops each rule by its existing name before recreating it — a new name would sit BESIDE the open rule, and Postgres OR-s permissive policies together',
+  );
+}
+
 console.log(`tenancy tests OK — ${checks} assertions, ${columnTables.length} tables walked`);
 }).catch((e) => {
   /* An assertion inside a promise must still fail the run, loudly. */

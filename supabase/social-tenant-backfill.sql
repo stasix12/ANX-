@@ -17,6 +17,17 @@
 -- of thing. A backfill that re-ran after a second business existed would hand
 -- that business every row of yours. So it lives apart, and it guards itself.
 --
+-- ⚠ DO NOT RUN THIS IF ANYBODY BUT THE OWNER CAN SIGN IN. Use
+--   supabase/social-tenant-repair.sql instead.
+--
+-- The line further down that reads `select t, u.id from auth.users u` makes
+-- EVERY account a member of the one business. That was the faithful migration
+-- while the rule in force was `using (true)` and everyone already saw
+-- everything: nobody gained access, nobody lost it. Once the signup page
+-- exists it is no longer faithful — it writes a customer into the owner's
+-- business permanently and calls the leak a membership. The repair file does
+-- the same job with the owner named by email and nobody else added.
+--
 -- THE GUARD. Everything below happens only while there is exactly ONE
 -- business in the table. The moment a second one exists this file becomes a
 -- no-op that says so. Running it twice today is also a no-op, because nothing

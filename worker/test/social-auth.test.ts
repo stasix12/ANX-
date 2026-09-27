@@ -6,11 +6,20 @@
  * person who has a CRM and is impossible for a customer, who has no account
  * and nowhere to make one.
  *
- * Adding a gate to a dashboard somebody already depends on is the risky half.
- * The failure that matters is not "a stranger got in" — row-level security has
- * decided that since v16 and decides it whether this code runs or not. It is
- * "the owner was thrown out of their own screen by a slow network", and these
- * are the invariants that prevent it.
+ * Adding a gate to a dashboard somebody already depends on is the risky half,
+ * and "the owner was thrown out of their own screen by a slow network" is the
+ * failure most of the invariants below prevent.
+ *
+ * THIS FILE ONCE SAID THE OTHER FAILURE COULD NOT HAPPEN. The sentence was:
+ * a stranger getting in is not the failure that matters, because row-level
+ * security has decided that since v16 and decides it whether this code runs or
+ * not. Every word about v16 was true. The conclusion was false, because v16
+ * had never taken on the live database — it skips itself while any row has no
+ * business, which was every row — and the first account opened through the
+ * signup page saw the owner's groups, posts and Facebook profile.
+ *
+ * A test file that asserts something cannot happen is worth less than nothing
+ * once it has. So section 5 now pins the check that catches it.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -78,6 +87,40 @@ is(!/insert into|createTenant/.test(auth), 'the client never creates a business 
     'the desktop app still will not create accounts — signing up belongs where a person can read what they are agreeing to, and that place now exists',
   );
 }
+
+/* ------------------------- 6b. and it verifies, on the one account it can     */
+/*                                                                             */
+/* A brand-new workspace holds no groups. So the count of groups this account   */
+/* can see, in the second after its workspace was made, is a complete answer to */
+/* "are the access rules on" — and the only moment the answer is free of the    */
+/* owner's own data. These four hold that check in place.                       */
+is(
+  /seesSomebodyElsesData/.test(auth),
+  'sign-up asks whether the new account can see somebody else’s groups, instead of assuming the database is scoped',
+);
+is(
+  /head: true/.test(auth),
+  'and it asks for the COUNT — a leak check that downloads the leaked rows to count them is not much of one',
+);
+is(
+  /if \(!claimed \|\| leaking\) \{\s*await supabase\.auth\.signOut\(\);/.test(auth),
+  'a failed claim or a visible foreign row signs the account back out — a session it must not use is worse than no session',
+);
+is(
+  /if \(error\) return false;/.test(auth),
+  'a query that ERRORS answers "no leak": a read that failed returned nothing, and refusing a customer over a dropped request locks out the person this file exists to let in',
+);
+/* The asymmetry is the point: the owner has to be able to sign in to a database
+   that has not been repaired yet, because signing in is how they repair it. */
+is(
+  /Result ignored on purpose/.test(auth) &&
+    auth.indexOf('Result ignored on purpose') < auth.indexOf('export async function signUpToSocial'),
+  'SIGN-IN stays tolerant of a missing workspace — on an unrepaired database the owner is the one person who must still get in',
+);
+is(
+  /const NOT_ISOLATED[\s\S]{0,200}החשבון נוצר/.test(auth),
+  'and the refusal says the account WAS created, because it was — otherwise the next attempt answers "this email is taken" and contradicts us',
+);
 
 /* ------------------------------------------------- 7. it says what it is not */
 is(/NOT A SECURITY BOUNDARY/.test(gate), 'the gate states plainly that RLS is the boundary, so nobody later mistakes it for one');

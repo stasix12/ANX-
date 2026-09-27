@@ -319,7 +319,88 @@ async function fallbackTests() {
 }
 
 fallbackTests().then(() => {
-    console.log(`tenancy tests OK — ${checks} assertions, ${columnTables.length} tables walked`);
+    /* ----------------------------------------------------------------------- */
+/* N. THE REPAIR, and the line in the backfill it exists to not run.         */
+/*                                                                           */
+/* social-tenant-backfill.sql makes EVERY auth.users row a member of the one */
+/* business. On the day it was written that was the faithful migration: the  */
+/* rule in force was `using (true)`, so everyone already saw everything and  */
+/* nobody gained anything. It stops being faithful the moment a person who   */
+/* is not the owner has an account — and on this installation one already    */
+/* does, opened through the signup page, which is how the leak was found.    */
+/*                                                                           */
+/* social-tenant-repair.sql does the same job with the owner NAMED. These    */
+/* assertions are what keeps it from drifting back into guessing.            */
+/* ----------------------------------------------------------------------- */
+{
+  const repair = read('social-tenant-repair.sql');
+
+  is(
+    /owner_email text := /.test(repair),
+    'the repair takes the owner by email — the one fact no heuristic can get right, and the one the person running it certainly knows',
+  );
+  is(
+    /if me is null then[\s\S]{0,400}raise exception/.test(repair),
+    'an email with no account STOPS it: a typo must not become a decision about who owns the database',
+  );
+  /* It DOES read auth.users — once, by email, to answer "who is the owner".
+     What it must never do is write the result of a scan of that table into the
+     membership table, which is the backfill's `select t, u.id from auth.users`
+     and the single line that would have made the test account a co-owner. So
+     the assertion is about the INSERT, not about the table. */
+  is(
+    [...repair.matchAll(/insert into public\.social_tenant_members[^;]*/g)]
+      .every((m) => /\bvalues\b/.test(m[0]) && !/\bselect\b/.test(m[0])),
+    'every membership it writes is a named pair, never the result of a scan of auth.users — that scan is the backfill line that would have written the test account into the owner’s business',
+  );
+  is(
+    /select t, u\.id from auth\.users u/.test(backfill),
+    'and the backfill still has that line, so this assertion is guarding something real rather than a line that quietly moved',
+  );
+  is(
+    !/\bdelete from\b/.test(repair.replace(/--[^\n]*/g, '')),
+    'and it deletes nothing — including the people it finds already attached, which it reports instead, because removing somebody’s access is a person’s decision',
+  );
+  is(
+    /social_tenant_members/.test(repair) &&
+      /not in \('social_tenants', 'social_tenant_members'\)/.test(repair),
+    'social_tenant_members carries a tenant_id that means "which business this PERSON belongs to", not "which business owns this row" — stamping it would rewrite the membership table',
+  );
+  is(
+    /raise exception[\s\S]{0,200}social-schema-v15/.test(repair),
+    'it refuses to run before v15 rather than half-running: no tenant table means nothing to fill in',
+  );
+
+  /* The failure this whole file is recovering from was silent. v16 prints a
+     NOTICE and returns, and a NOTICE on a phone is invisible — so the repair
+     ends in a SELECT, which the SQL editor cannot help but render. */
+  is(
+    /select[\s\S]{0,600}as "מצב"/.test(repair) && repair.trimEnd().endsWith(';'),
+    'it ends in a table, not a notice — the whole incident began with a NOTICE that said "the rules were not replaced, on purpose" and was never read',
+  );
+  is(
+    /query_to_xml/.test(repair),
+    'and the report counts whatever tables the database actually has, rather than a list written months before the table that was missed',
+  );
+
+  /* Discovery, not a list: the live database had thirteen tables carrying the
+     open rule where every file in this repo accounts for twelve. */
+  is(
+    /qual = 'true' or p?\.?with_check = 'true'/.test(repair),
+    'it finds the tables to fix by asking which ones are still open, so a table nobody remembered is repaired rather than skipped',
+  );
+  is(
+    /add column tenant_id uuid/.test(repair),
+    'and an open table with no tenant_id gets one — otherwise it is a table that stays readable by everybody after the repair "succeeded"',
+  );
+
+  is(
+    /social-tenant-repair\.sql/.test(backfill),
+    'the backfill points at the repair, so the next person to find it does not run the version that was correct a month ago',
+  );
+}
+
+console.log(`tenancy tests OK — ${checks} assertions, ${columnTables.length} tables walked`);
 }).catch((e) => {
   /* An assertion inside a promise must still fail the run, loudly. */
   console.error(e);

@@ -42,7 +42,7 @@ import { agree, counted, startOfZonedDay } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { AlertTriangleIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, UsersIcon, WrenchIcon } from '@/components/icons';
+import { AlertTriangleIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, TrashIcon, UsersIcon, WrenchIcon } from '@/components/icons';
 
 /**
  * How many upcoming rows the timeline reads. The card's subtitle prints the
@@ -934,10 +934,41 @@ export default function SocialDashboard() {
                     ? 'התור ריק — אלה הפרסומים שהסתיימו היום'
                     : undefined
               }
+              /*
+               * THE RESET, WHERE THE QUEUE IS ACTUALLY LOOKED AT.
+               *
+               * It went on the "ממתינים בתור" stat tile first, which is
+               * literally what was asked for and was the wrong place: that
+               * tile sits at the very top of a long dashboard, and the control
+               * is a 24px chip inside one of four ~84px boxes. The owner
+               * scrolled the whole page twice and reported it missing. It was
+               * not missing — the classes and the label are both in the built
+               * bundle — it was unfindable, which for a control is the same
+               * thing.
+               *
+               * This card is the one they screenshot when they think about the
+               * queue: it is the one with "33 ממתינים בתור" written on it. So
+               * the reset goes here too, beside "הכל", at full tap size and
+               * with a word on it. Both call the same discardQueue(), so there
+               * is still one implementation and one confirmation.
+               */
               action={
-                <Link href="/social/history" className="inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-sm font-bold text-brand-400">
-                  הכל
-                </Link>
+                <div className="flex items-center gap-0.5">
+                  {pending ? (
+                    <button
+                      type="button"
+                      onClick={() => void discardQueue(false)}
+                      disabled={busy === 'discard'}
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-bold text-error-400 transition-colors hover:bg-error-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error-400 disabled:opacity-40"
+                    >
+                      <TrashIcon aria-hidden className="h-4 w-4" />
+                      {busy === 'discard' ? 'מאפס…' : 'אפס'}
+                    </button>
+                  ) : null}
+                  <Link href="/social/history" className="inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-sm font-bold text-brand-400">
+                    הכל
+                  </Link>
+                </div>
               }
             >
               {/* `total` counts the SAME SET as the rows: this list is read

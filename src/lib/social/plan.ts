@@ -97,11 +97,11 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     const approved = (variants ?? []) as Variant[];
     const media = (post.media ?? []) as MediaItem[];
     const taken = await occupiedSlots(db, post.id);
-    const waiting = await plannedTargets(db, post.id);
+    const waiting = await targetsAlreadyWaiting(db);
 
     const dropped: string[] = [];
     for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
-      // This post is already waiting for this group — see plannedTargets().
+      // Something is already waiting for this group — see targetsAlreadyWaiting().
       if (waiting.has(targetId)) {
         dropped.push(targetId);
         continue;
@@ -142,6 +142,12 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
           )
           .select('id');
         if (insErr) {
+          /* Another planner got this group first — see takenByAnotherPlanner(). */
+          if (takenByAnotherPlanner(insErr)) {
+            waiting.add(targetId);
+            dropped.push(targetId);
+            break;
+          }
           await note('error', 'plan_failed', insErr.message, { schedule: schedule.id });
           continue;
         }
@@ -200,38 +206,72 @@ async function enforcedSpacing(db: SupabaseClient): Promise<number> {
 }
 
 /**
- * Groups that already have a publication of this post WAITING, whatever instant
- * it sits on.
+ * The database refusing a second waiting publication for a group.
  *
- * occupiedSlots() above compares instants, which is right for a planner running
- * against untouched rows — but the queue is no longer untouched. The dashboard's
- * queue tuner re-spaces the waiting rows (client.ts respaceQueue) and appends
- * hand-added groups, and both move a row OFF the instant its schedule would plan
- * it on. The next tick, 60 seconds later, finds that instant free and plans the
- * whole campaign a second time: the owner sets the gap, watches the queue double,
- * and every duplicate is later skipped with a reason that explains nothing.
+ * Not a failure, and it must not be logged as one. The planner checks which
+ * groups are taken and then inserts, and between those two moments another
+ * planner can take the group — the PC worker ticks every few seconds and the
+ * server's /api/social/run is what "פרסם עכשיו" calls, so two of them running
+ * at once is ordinary, not exotic. No check before a write can close that gap;
+ * only the write can, which is what social-schema-v20.sql is for.
  *
- * Matching on the target instead closes that hole, and costs nothing that was
- * worth keeping: rules.ts already refuses a post that has gone to a target once
- * ("הפוסט הזה כבר פורסם ל-…"), so a second row for the same post and group was
- * never going to publish — it only ever made the queue longer than the truth.
+ * When it fires, the right answer is the one the check would have given: this
+ * group is spoken for, note it as left out, move on. Writing 'plan_failed' for
+ * it would put an error in the owner's log for the system working correctly.
  *
- * Same status list as occupiedSlots() and for the same reason: a row that was
- * cancelled or failed is finished, and may be planned again.
+ * Matched on the index name rather than on 23505 alone, because the other
+ * unique index on this table — (schedule_id, target_id, scheduled_at) — means
+ * something different and is already handled by ignoreDuplicates.
  */
-async function plannedTargets(db: SupabaseClient, postId: string): Promise<Set<string>> {
-  const { data } = await db
-    .from('social_queue')
-    .select('target_id')
-    .eq('post_id', postId)
-    .in('status', OPEN_STATUSES);
+function takenByAnotherPlanner(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return /social_queue_one_open_per_target_idx/i.test(error.message ?? '');
+}
+
+/**
+ * Groups that already have a publication WAITING — whatever post it is for.
+ *
+ * THIS USED TO BE SCOPED TO ONE POST, and that is the hole the owner found:
+ * two rows for the same group in the same minute, both later skipped.
+ *
+ *   ערד-ערדניקים   16:09   דולג
+ *   ערד-ערדניקים   16:09   דולג
+ *
+ * Neither of the two things that are supposed to prevent that could see it.
+ * The queue's unique index is (schedule_id, target_id, scheduled_at), so it
+ * only ever looks inside ONE schedule. And this check matched on post_id, so
+ * it only ever looked at ONE post. A second campaign, with a different post,
+ * planning the same groups from the same base time with the same one-minute
+ * stagger, passes both — and every group is queued twice.
+ *
+ * Publishing was never in danger: rules.ts refuses a post that has already
+ * gone to a target, which is why every one of those rows reads דולג. But
+ * "safe" is not the same as "right". The owner is shown a queue twice the
+ * length of the truth, told nothing about which half is real, and then watches
+ * half of it fail for a reason that describes something they never did.
+ *
+ * So the rule is now the one they asked for: one waiting publication per
+ * group. Not per post, not per schedule — per group. A group is free again the
+ * moment its row leaves the queue, and noteDropped() below says out loud which
+ * groups a launch left out and why, because a launch that silently plans 30 of
+ * 130 groups is its own kind of lie.
+ *
+ * social/social-schema-v20.sql enforces the same rule in the database, because
+ * a check in application code cannot survive two planners running at once —
+ * both read this set, both find the group free, both insert.
+ *
+ * Terminal rows are deliberately excluded: something cancelled, skipped or
+ * failed is finished, and may be planned again.
+ */
+async function targetsAlreadyWaiting(db: SupabaseClient): Promise<Set<string>> {
+  const { data } = await db.from('social_queue').select('target_id').in('status', OPEN_STATUSES);
   return new Set((data ?? []).map((r) => r.target_id as string));
 }
 
 /**
  * Says out loud which groups a launch quietly left out.
  *
- * plannedTargets() is right to skip a group this post is already waiting for —
+ * targetsAlreadyWaiting() is right to skip a group that already has a row —
  * a second row could never publish (rules.ts refuses a post that has gone to a
  * target once) and would only make the queue longer than the truth. But the
  * skip was completely silent, and for a 'now' or 'once' schedule the schedule
@@ -321,7 +361,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   const media = (post.media ?? []) as MediaItem[];
   const slots = dripSlots(schedule, now);
   const taken = await occupiedSlots(db, post.id);
-  const waiting = await plannedTargets(db, post.id);
+  const waiting = await targetsAlreadyWaiting(db);
   let created = 0;
   let last = now;
 
@@ -330,7 +370,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
     const at = slots[targetIndex];
     if (!at) continue;
     if (at > last) last = at;
-    // This post is already waiting for this group — see plannedTargets().
+    // Something is already waiting for this group — see targetsAlreadyWaiting().
     if (waiting.has(targetId)) {
       dropped.push(targetId);
       continue;
@@ -360,6 +400,12 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
       )
       .select('id');
     if (error) {
+      /* Another planner got this group first — see takenByAnotherPlanner(). */
+      if (takenByAnotherPlanner(error)) {
+        waiting.add(targetId);
+        dropped.push(targetId);
+        continue;
+      }
       await note('error', 'plan_failed', error.message, { schedule: schedule.id });
       continue;
     }

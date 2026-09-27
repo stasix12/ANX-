@@ -788,6 +788,14 @@ export default function SocialDashboard() {
                   invites — would hide awaiting_confirmation and manual_pending
                   from the control centre and break the invariant that
                   queued + needsHuman === open (invariants.ts). */}
+              {/* THE RESET LIVES ON THE NUMBER IT RESETS.
+                  It was only at the foot of the screen, beside "pause", where
+                  it is found by somebody who already knows it exists. The
+                  question "why are there 214 things in my queue" is asked
+                  while looking at this tile, and the answer belongs here.
+                  Same confirmation and same write as the one below — one
+                  implementation, so the count in the question stays the count
+                  the write delivers. */}
               <StatCard
                 dense
                 icon={<UsersIcon aria-hidden className="h-4 w-4" />}
@@ -796,6 +804,16 @@ export default function SocialDashboard() {
                 value={summary.queued}
                 sub="יוצאים לפי התזמון"
                 href="/social/history?status=scheduled"
+                action={
+                  pending
+                    ? {
+                        label: 'אפס',
+                        title: `אפס את התור (${pending})`,
+                        busy: busy === 'discard',
+                        onClick: () => void discardQueue(false),
+                      }
+                    : undefined
+                }
               />
               <StatCard
                 dense

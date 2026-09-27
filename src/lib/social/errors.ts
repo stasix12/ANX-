@@ -41,6 +41,16 @@ const RULES: Rule[] = [
   { match: /row-level security|rls|permission denied|forbidden|403/i, text: 'אין הרשאה לפעולה הזו בחשבון הנוכחי.' },
 
   // Data conflicts.
+  /*
+   * v20's one-waiting-publication-per-group rule, named before the generic
+   * duplicate line below can swallow it. "הפריט הזה כבר קיים במערכת" would be
+   * true and useless: the thing that already exists is a queued publication to
+   * that group, and the answer is to wait for it or cancel it.
+   */
+  {
+    match: /social_queue_one_open_per_target_idx/i,
+    text: 'לאחת הקבוצות כבר ממתין פרסום בתור. אפשר להוסיף אותה שוב אחרי שהפרסום הקיים יֵצא, או לבטל אותו.',
+  },
   { match: /duplicate key|already exists|unique constraint/i, text: 'הפריט הזה כבר קיים במערכת.' },
   { match: /foreign key|violates foreign key constraint/i, text: 'הפריט מקושר לנתונים אחרים ולכן לא ניתן לשמור את השינוי.' },
   { match: /not-null|null value in column/i, text: 'חסר שדה חובה. מלאו את כל השדות ונסו שוב.' },

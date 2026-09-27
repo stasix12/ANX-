@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircleIcon, ChevronIcon, CloseIcon, DotIcon, SpinnerIcon, XCircleIcon } from '@/components/icons';
+import { CheckCircleIcon, ChevronIcon, CloseIcon, DotIcon, SpinnerIcon, TrashIcon, XCircleIcon } from '@/components/icons';
 import { QUEUE_STATUS_LABEL, type PublishMethod, type QueueStatus } from '@/lib/social/types';
 
 /**
@@ -1364,6 +1364,7 @@ export function StatCard({
   icon,
   tone = 'neutral',
   href,
+  action,
   dense = false,
 }: {
   label: string;
@@ -1379,6 +1380,17 @@ export function StatCard({
   icon?: React.ReactNode;
   tone?: Tone;
   href?: string;
+  /**
+   * A small control in the tile's corner — the one action that belongs to the
+   * number, where the number is.
+   *
+   * A SIBLING OF THE LINK, NEVER INSIDE IT. A button nested in an anchor is
+   * invalid HTML, and browsers resolve it by doing both: the click cancels the
+   * queue AND navigates away from the confirmation. So the tile is a
+   * positioned box holding two independent children, and the button sits above
+   * the link's corner.
+   */
+  action?: { label: string; onClick: () => void; busy?: boolean; title?: string };
   /**
    * Four tiles across a phone instead of two.
    *
@@ -1414,6 +1426,9 @@ export function StatCard({
           <ChevronIcon aria-hidden className="h-3 w-3 rtl:rotate-180" />
         </span>
       ) : (
+        /* The action sits exactly here when there is one — see below. Drawing
+           the sub-line underneath it would put text behind a button. */
+        !action &&
         sub && (
           <p dir="auto" className={`mt-0.5 text-[11px] leading-[14px] text-mist-500 ${dense ? 'line-clamp-2' : 'truncate'}`}>
             {sub}
@@ -1422,8 +1437,19 @@ export function StatCard({
       )}
     </>
   );
-  const cls = `${TILE} block min-w-0 p-3 ${dense ? 'flex flex-col items-center text-center' : 'text-start'}`;
-  return href ? (
+  /*
+   * h-full, and it is not cosmetic. These tiles are grid items, so the WRAPPER
+   * is stretched to the tallest tile in the row — but the card inside it is a
+   * block and keeps its own content height. Without this the card ends short
+   * and the chip, which is positioned against the wrapper, floats in the gap
+   * underneath it, outside the card's border. Measured at 390px: a 122px card
+   * inside a 140px wrapper, with the chip sitting in the 18px of nothing.
+   *
+   * pb-9 then reserves the chip its row inside the card, instead of letting it
+   * sit on top of the icon.
+   */
+  const cls = `${TILE} block h-full min-w-0 p-3 ${action ? 'pb-9' : ''} ${dense ? 'flex flex-col items-center text-center' : 'text-start'}`;
+  const tile = href ? (
     <Link
       href={href}
       className={`${cls} transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 active:scale-[0.985]`}
@@ -1432,6 +1458,49 @@ export function StatCard({
     </Link>
   ) : (
     <div className={cls}>{body}</div>
+  );
+  if (!action) return tile;
+  /*
+   * AT THE FOOT OF THE TILE, NOT IN ITS CORNER.
+   *
+   * The corner was the first attempt and it does not survive a phone. Four
+   * dense tiles across 390px are ~83px wide, ~59px of that inside the padding,
+   * and the figure is 26px bold and centred — "214" is about 45px of that 59.
+   * A 28px control at the top corner lands on top of the number it belongs to.
+   *
+   * So it takes the sub-line's place instead: the row below the icon, full
+   * width, with a word on it. `sub` is suppressed when an action is present
+   * (see the body above) so nothing is hidden underneath, and a chip with
+   * "אפס" written on it is findable in a way a bare icon is not — which is the
+   * whole point of putting it here rather than at the foot of the screen.
+   *
+   * A SIBLING OF THE LINK, NEVER INSIDE IT. A button nested in an anchor is
+   * invalid HTML and browsers resolve it by doing both: the click opens the
+   * confirmation AND navigates away from it.
+   */
+  return (
+    <div className="relative min-w-0">
+      {tile}
+      <button
+        type="button"
+        onClick={action.onClick}
+        disabled={action.busy}
+        title={action.title ?? action.label}
+        className="absolute inset-x-2 bottom-2 inline-flex h-6 items-center justify-center gap-1 rounded-full bg-error-500/15 px-2 text-[11px] font-extrabold leading-[15px] text-error-400 transition-colors hover:bg-error-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error-400 disabled:opacity-40"
+      >
+        {action.busy ? (
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        ) : (
+          <TrashIcon aria-hidden className="h-3 w-3" />
+        )}
+        {/* dir="auto" because the label is text and this box is RTL — the
+            layout guard in worker/test/layout.test.ts enforces it, and it is
+            right to: an LTR label in an RTL box truncates at the wrong end. */}
+        <span dir="auto" className="truncate">
+          {action.label}
+        </span>
+      </button>
+    </div>
   );
 }
 

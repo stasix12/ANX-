@@ -36,6 +36,9 @@ const v16 = read('social-schema-v16.sql');
 const v17 = read('social-schema-v17.sql');
 const v18 = read('social-schema-v18.sql');
 const v19 = read('social-schema-v19.sql');
+/* Not a tenancy change — but social-latest.sql is the one file the owner runs,
+   so anything they must run has to be in it, and has to be checked as in it. */
+const v20 = read('social-schema-v20.sql');
 const backfill = read('social-tenant-backfill.sql');
 const latest = read('social-latest.sql');
 const runThis = read('RUN-THIS-IN-SUPABASE.sql');
@@ -236,7 +239,7 @@ is(!/onConflict: 'name'/.test(worker) && !/onConflict: 'provider,provider_user_i
 /* 8. One file to run, and it contains all of it.                            */
 /* ----------------------------------------------------------------------- */
 const strip = (sql: string) => sql.split('\n').filter((l) => !l.trim().startsWith('--') && l.trim()).join('\n');
-for (const [name, sql] of [['v16', v16], ['v17', v17], ['v18', v18], ['v19', v19]] as const) {
+for (const [name, sql] of [['v16', v16], ['v17', v17], ['v18', v18], ['v19', v19], ['v20', v20]] as const) {
   for (const statement of strip(sql).split(';').map((x) => x.trim()).filter((x) => x.length > 20)) {
     is(strip(latest).includes(statement), `social-latest.sql is missing a statement from ${name}: ${statement.slice(0, 60)}…`);
   }

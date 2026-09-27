@@ -968,12 +968,29 @@ console.log('unit tests OK');
    * free for the next tick to fill. Matching on the target, not only the instant,
    * is what stops the owner setting the gap and watching the queue double.
    */
-  assert.ok(planner.includes('async function plannedTargets'), 'the planner must know which groups are already waiting for this post');
+  assert.ok(planner.includes('async function targetsAlreadyWaiting'), 'the planner must know which groups already have something waiting');
   assert.equal(
-    (planner.match(/await plannedTargets\(db, post\.id\)/g) ?? []).length,
+    (planner.match(/await targetsAlreadyWaiting\(db\)/g) ?? []).length,
     2,
     'both planner branches must check which groups are already waiting',
   );
+  /*
+   * AND IT MUST NOT BE SCOPED TO ONE POST. It was `plannedTargets(db, postId)`,
+   * and that is the hole the owner found: every group queued twice, in the same
+   * minute, every row later skipped.
+   *
+   *   ערד-ערדניקים  16:09  דולג
+   *   ערד-ערדניקים  16:09  דולג
+   *
+   * Two campaigns with two different posts, planning the same groups from the
+   * same base time with the same stagger. A per-post check cannot see the other
+   * post; the queue's (schedule_id, target_id, scheduled_at) index cannot see
+   * the other schedule. The rule is per GROUP now, which is what the owner
+   * asked for: "לא רוצה בכלל שתיהיה אופציה לפרסם פעמיים לאותן קבוצה".
+   */
+  const waitingFn = planner.slice(planner.indexOf('async function targetsAlreadyWaiting'), planner.indexOf('/**\n * Says out loud'));
+  assert.ok(!/post_id/.test(waitingFn), 'the check must be per group, not per post — a second post to the same group is the exact bug');
+  assert.ok(/OPEN_STATUSES/.test(waitingFn), 'and it must use the one shared definition of "not finished"');
   /*
    * Updated with the fix that made the skip audible: the shape this pinned was
    * a bare `if (waiting.has(targetId)) continue;`, which was correct and
@@ -992,8 +1009,56 @@ console.log('unit tests OK');
   assert.equal((planner.match(/await noteDropped\(/g) ?? []).length, 2, 'both branches must report the groups they left out');
   const dropNote = planner.slice(planner.indexOf('async function noteDropped'), planner.indexOf('async function stoppedCampaigns'));
   assert.ok(dropNote.includes("from('social_targets')"), 'the report must name the groups, not count them');
-  assert.equal((planner.match(/waiting\.add\(targetId\);/g) ?? []).length, 2, 'both branches must record the group they just planned');
-  const planned = planner.slice(planner.indexOf('async function plannedTargets'), planner.indexOf('async function stoppedCampaigns'));
+  /*
+   * FOUR, NOT TWO, SINCE v20. Each branch records the group two ways: after its
+   * own insert succeeds, and after the DATABASE refuses the insert because
+   * another planner got there first. The second is not a failure — the PC
+   * worker's tick and the server's /api/social/run ("פרסם עכשיו") run at once
+   * all the time, and no check before a write can close the gap between the
+   * check and the write. Only the write can, which is social-schema-v20.sql.
+   */
+  assert.equal((planner.match(/waiting\.add\(targetId\);/g) ?? []).length, 4, 'both branches record the group they planned — and the one the database says is taken');
+  assert.ok(planner.includes('function takenByAnotherPlanner'), 'a race with another planner is recognised as such');
+  assert.equal(
+    (planner.match(/if \(takenByAnotherPlanner\(/g) ?? []).length,
+    2,
+    'in both branches — and it must never be written to the log as plan_failed, which is an error line for the system working correctly',
+  );
+  const raceFn = planner.slice(planner.indexOf('function takenByAnotherPlanner'), planner.indexOf('/**\n * Groups that already have a publication WAITING'));
+  assert.ok(
+    /social_queue_one_open_per_target_idx/.test(raceFn),
+    'matched on the index name — 23505 alone would also swallow the slot index, which means something else entirely',
+  );
+  /*
+   * THE DATABASE'S RULE AND THE CODE'S MUST BE THE SAME RULE.
+   *
+   * v20's index predicate has to be an immutable expression, so the statuses
+   * are written out as literals instead of referencing OPEN_STATUSES. Two
+   * copies of a list is two lists: add a status to status.ts, forget the SQL,
+   * and a group with a row in the new status is free to be queued again —
+   * exactly the bug v20 exists to prevent, back through the gap between the
+   * two files. So they are compared here, as sets.
+   */
+  {
+    const v20 = readFileSync(new URL('../../supabase/social-schema-v20.sql', import.meta.url), 'utf8');
+    const predicate = v20.match(/create unique index[\s\S]*?where status in \(([^)]*)\)/);
+    assert.ok(predicate, 'v20 must create the one-open-row-per-group index');
+    const inSql = new Set((predicate![1].match(/'([a-z_]+)'/g) ?? []).map((q) => q.slice(1, -1)));
+    assert.deepEqual(
+      [...inSql].sort(),
+      [...OPEN_STATUSES].sort(),
+      'the statuses v20 constrains must be exactly OPEN_STATUSES — a status in one list and not the other is a hole',
+    );
+    /* Partial on purpose: a group that has published is free again at once,
+       which is the only thing that makes a second round possible at all. */
+    assert.ok(!inSql.has('published') && !inSql.has('skipped') && !inSql.has('failed'), 'a finished row must never hold a group hostage');
+    assert.ok(/on public\.social_queue \(target_id\)/.test(v20), 'and the rule is one row per GROUP');
+    /* It must not delete. The owner's standing rule, and the duplicates are
+       their record of what was attempted. */
+    assert.ok(!/\bdelete\s+from\b/i.test(v20), 'v20 must not delete anything — duplicates are marked, never removed');
+  }
+
+  const planned = planner.slice(planner.indexOf('async function targetsAlreadyWaiting'), planner.indexOf('async function stoppedCampaigns'));
   assert.ok(!planned.includes("'skipped'"), 'a cancelled row must not block replanning');
   assert.ok(!planned.includes("'failed'"), 'a failed row must not block replanning');
   assert.ok(!planned.includes("'published'"), 'a finished publication must not block a later one');

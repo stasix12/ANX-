@@ -908,11 +908,32 @@ export default function SocialDashboard() {
           {/* 5 — reference material, below the answers. */}
           <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
             <Card
-              title="הפרסומים הקרובים"
+              /*
+               * THE TITLE HAS TO DESCRIBE WHAT IS ACTUALLY IN THE CARD.
+               *
+               * This said "הפרסומים הקרובים" always, and the list underneath
+               * is two reads: the rows still waiting, and today's finished
+               * ones above them. With an empty queue only the second read has
+               * anything — so the card sat there at 17:37 headed "the upcoming
+               * publications" over six rows from 16:26 that had all been
+               * skipped an hour earlier.
+               *
+               * The owner restarted the worker, came back, saw the same six
+               * lines under the same heading, and reported that nothing had
+               * changed. They were right about the screen. The screen was
+               * wrong about itself.
+               */
+              title={data.upcoming.length ? 'הפרסומים הקרובים' : 'מה קרה היום'}
               /* The exact queue count, not this array's length: the array is
                  capped at UPCOMING_LIMIT and printing its length as a total
                  was a ceiling presented as a fact. */
-              subtitle={summary.queued ? `${summary.queued} ממתינים בתור` : undefined}
+              subtitle={
+                data.upcoming.length
+                  ? `${summary.queued} ממתינים בתור`
+                  : data.doneToday.length
+                    ? 'התור ריק — אלה הפרסומים שהסתיימו היום'
+                    : undefined
+              }
               action={
                 <Link href="/social/history" className="inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-sm font-bold text-brand-400">
                   הכל

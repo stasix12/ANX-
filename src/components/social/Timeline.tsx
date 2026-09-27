@@ -325,7 +325,11 @@ export function Timeline({
       <div
         tabIndex={0}
         role="group"
-        aria-label="הפרסומים הקרובים — רשימה נגללת"
+        /* Not "הקרובים": this rail also carries today's finished rows, and
+           when the queue is empty they are ALL it carries. A label that
+           promises what is next, over a list of what is over, is the same lie
+           the card's title was telling. */
+        aria-label="סדר הפרסומים — רשימה נגללת"
         className="max-h-[21rem] overflow-y-auto rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
       >
         {list}

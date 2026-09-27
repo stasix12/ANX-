@@ -1926,8 +1926,25 @@ const scenario: { step: string; line: string }[] = [];
   pin('dashboard tiles', dash, 'value={summary.queued}');
   pin('dashboard tiles', dash, 'value={summary.needsHuman}');
   // The cap is never printed as a total.
-  pin('upcoming subtitle', dash, 'subtitle={summary.queued ? `${summary.queued} ממתינים בתור` : undefined}');
+  pin('upcoming subtitle', dash, '`${summary.queued} ממתינים בתור`');
   assert.ok(!dash.includes('data.upcoming.length} ממתינים'), 'a capped array length must not be printed as the queue');
+  /*
+   * AND THE CARD SAYS WHAT IS IN IT.
+   *
+   * The list under this title is two reads — the rows still waiting, and
+   * today's finished ones above them. The title was the constant string
+   * "הפרסומים הקרובים", so an empty queue left it heading a list that was
+   * ENTIRELY history: at 17:37 the owner was shown six rows from 16:26, all
+   * skipped an hour earlier, under a title promising what was next. They
+   * restarted the worker, saw the same six lines, and reported that nothing
+   * had changed — correctly, about the screen.
+   */
+  pin('upcoming title', dash, "title={data.upcoming.length ? 'הפרסומים הקרובים' : 'מה קרה היום'}");
+  const timeline = readFileSync('src/components/social/Timeline.tsx', 'utf8');
+  assert.ok(
+    !/aria-label="הפרסומים הקרובים/.test(timeline),
+    'and neither may the rail announce itself as "what is next" while it is carrying what is over',
+  );
 
   const client = readFileSync('src/lib/social/client.ts', 'utf8');
   pin('cancel lists', client, "const CANCELLABLE: QueueItem['status'][] = CANCELLABLE_STATUSES;");
@@ -3771,8 +3788,11 @@ const scenario: { step: string; line: string }[] = [];
     !/className="[^"]*overscroll-contain/.test(timeline),
     'no overscroll-contain: at the end of the list the gesture should carry on scrolling the page, not stop dead',
   );
+  /* Named, and named for what it holds. The label used to be "הפרסומים
+     הקרובים", which is only half true: this rail also carries today's finished
+     rows, and with an empty queue they are all of it. */
   assert.ok(
-    /tabIndex=\{0\}[\s\S]{0,200}aria-label="הפרסומים הקרובים/.test(timeline),
+    /tabIndex=\{0\}[\s\S]{0,400}aria-label="סדר הפרסומים/.test(timeline),
     'a scrollable region must be focusable and named, or it is unreachable with a keyboard',
   );
 

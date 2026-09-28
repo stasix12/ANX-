@@ -11,6 +11,7 @@ import {
   type CampaignQueueRow,
   type CampaignState,
 } from '@/lib/social/campaign';
+import { explainFailure } from '@/components/social/ErrorDetail';
 import { AUTOMATIC_WAITING_STATUSES, ALL_QUEUE_STATUSES, summarizeQueue } from '@/lib/social/status';
 import { startOfZonedDay } from '@/lib/social/time';
 import type { Campaign, QueueStatus } from '@/lib/social/types';
@@ -831,6 +832,99 @@ async function main(): Promise<void> {
   const pcWorker = src('worker/social-worker.ts');
   const srvWorker = src('src/lib/social/server/worker.ts');
 
+  /* ======================================================================= */
+  /*  ONE CARD, TWO OPPOSITE SENTENCES — "פורסם · Published" and, under it,   */
+  /*  a red "הפרסום נכשל" with a retry button.                                */
+  /*                                                                          */
+  /*  Photographed by the owner on 28.09. Both halves were reading the         */
+  /*  database correctly. On a SUCCESSFUL publication the worker writes a      */
+  /*  remark into the column named `error`:                                    */
+  /*                                                                          */
+  /*    worker/social-worker.ts   error: note || null                          */
+  /*                                                                          */
+  /*  and the remark is good news with a caveat — the group is moderated so    */
+  /*  the post is queued for its admin, or the post went out but was not       */
+  /*  found in the feed afterwards to confirm it. explainFailure() had no      */
+  /*  branch for a published row, so a non-empty `error` matched none of its   */
+  /*  patterns and fell through to the generic "it failed".                    */
+  /*                                                                          */
+  /*  A column called `error` that carries success notes is the trap. These    */
+  /*  assertions hold the reading side to the rule that survives it: STATUS    */
+  /*  DECIDES, and a published row is never a failure.                         */
+  /* ======================================================================= */
+  {
+    const published = (error: string) => ({ status: 'published' as QueueStatus, error, skip_reason: null });
+
+    for (const [name, note] of [
+      ['awaiting the group admin', 'הפוסט ממתין לאישור מנהל הקבוצה.'],
+      ['not found in the feed', 'לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.'],
+      ['both at once', 'הפוסט ממתין לאישור מנהל הקבוצה. לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.'],
+      ['some remark nobody predicted', 'משהו אחר לגמרי'],
+    ] as const) {
+      const info = explainFailure(published(note));
+      expect(
+        'published-note',
+        'PUB-1',
+        `a published row (${name}) is never headlined as a failure`,
+        info.headline.includes('נכשל'),
+        false,
+        'the green pill says published and the red text says it failed, on the same card, about the same post',
+      );
+      expect(
+        'published-note',
+        'PUB-2',
+        `a published row (${name}) offers no retry`,
+        info.canRetry,
+        false,
+        'a retry button under a post that already went out asks the owner to publish the same words to the same group twice',
+      );
+      expect(
+        'published-note',
+        'PUB-3',
+        `a published row (${name}) is not painted as an error`,
+        info.tone,
+        note.includes('לא הצלחתי לאמת') ? 'warn' : 'note',
+        'red is the colour of something being wrong, and nothing is wrong',
+      );
+    }
+
+    /* The two real notes are still RECOGNISED rather than swept into one
+       shrug: the owner has to know which of the two happened, because one
+       needs them to look in the group and the other needs nothing at all. */
+    expect(
+      'published-note',
+      'PUB-4',
+      'the moderated-group note names moderation',
+      explainFailure(published('הפוסט ממתין לאישור מנהל הקבוצה.')).headline,
+      'הפוסט עלה וממתין לאישור מנהל הקבוצה',
+      NONE,
+    );
+    expect(
+      'published-note',
+      'PUB-4b',
+      'both remarks at once keep BOTH facts — moderation explains the miss, and the warning to not republish survives',
+      (() => {
+        const both = explainFailure(published('הפוסט ממתין לאישור מנהל הקבוצה. לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.'));
+        return [both.headline.includes('אישור מנהל'), both.advice.includes('כפול'), both.tone];
+      })(),
+      [true, true, 'warn'],
+      'a chain of ifs hands this case to whichever pattern is written first, and the calm one was first',
+    );
+    expect(
+      'published-note',
+      'PUB-5',
+      'the unverified note tells them to look, and warns against publishing again',
+      explainFailure(published('לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.')).advice.includes('כפול'),
+      true,
+      'without it the natural reaction to "we could not verify" is to press publish again',
+    );
+
+    /* And a row that really did fail still reads as a failure. The fix must
+       not have bought quiet by making everything quiet. */
+    const failed = explainFailure({ status: 'failed' as QueueStatus, error: 'משהו נשבר', skip_reason: null });
+    expect('published-note', 'PUB-6', 'a failed row still says so, in red, with a retry', [failed.headline, failed.tone, failed.canRetry], ['הפרסום נכשל', 'error', true], NONE);
+  }
+
   const pin = (name: string, haystack: string, needle: string) =>
     expect('guards', 'source-drift', `${name} still reads as this test simulates it`, haystack.includes(needle), true, NONE);
 
@@ -889,6 +983,12 @@ async function main(): Promise<void> {
    */
   pin('campaign.ts publications are their own ratio', campaignSrc, 'return ratio(progress.published, progress.total);');
   pin('campaign.ts 100% is reserved for the exact count', campaignSrc, 'if (part >= total) return 100;');
+  /* The line that makes all of this necessary. If the worker ever stops
+     putting success notes in `error`, these guards fail and whoever changed it
+     is pointed straight at the reading side that was built around it. */
+  pin('worker writes the success note into `error`', pcWorker, 'error: note || null,');
+  pin('worker note: moderated group', pcWorker, "'הפוסט ממתין לאישור מנהל הקבוצה.'");
+  pin('worker note: unverified in feed', pcWorker, "'לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.'");
   pin('pc worker crash recovery', pcWorker, ".in('status', ['publishing', 'awaiting_confirmation']);");
   pin('server worker leaves browser rows alone', srvWorker, ".is('worker_id', null)");
 

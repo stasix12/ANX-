@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { cancelQueueItem, getQueueItem, retryQueueItem, type QueueRow } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
 import { counted } from '@/lib/social/time';
-import { explainFailure } from './ErrorDetail';
+import { explainFailure, TONE_CLASS } from './ErrorDetail';
 import { Stamp } from './DateTime';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, Sheet, SkeletonList, StatusPill, useToast } from './ui';
@@ -129,7 +129,7 @@ export function ActivityDetailSheet({
 
             {failure && (failure.headline || failure.advice) && (row.error || row.skip_reason) && (
               <div className="rounded-tile border border-ink-700 bg-ink-800 p-3">
-                <p className={`text-xs font-bold ${failure.needsOwner ? 'text-warning-400' : 'text-error-400'}`}>{failure.headline}</p>
+                <p className={`text-xs font-bold ${TONE_CLASS[failure.tone]}`}>{failure.headline}</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-mist-300">{failure.advice}</p>
               </div>
             )}

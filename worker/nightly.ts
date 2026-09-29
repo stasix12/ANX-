@@ -15,9 +15,9 @@
  *   day began", or a sweep at 23:10 and another at 00:10 are two nights'
  *   worth of Facebook traffic inside an hour.
  *
- *   AT THE END OF THE DAY. 23:00 on the owner's own clock, not the machine's:
- *   a worker running in a container is on UTC and would sweep at two in the
- *   afternoon.
+ *   IN THE SMALL HOURS. 02:00–03:59 on the owner's own clock, not the
+ *   machine's: a worker running in a container is on UTC and would sweep in
+ *   the middle of their working day.
  *
  *   BUT NOT NEVER. A PC that is shut at 18:00 and opened at 09:00 is never
  *   awake at 23:00, and a check that only ever fires in an hour that machine
@@ -26,8 +26,22 @@
  */
 import { startOfZonedDay, zonedHour } from '@/lib/social/time';
 
-/** The hour the day is considered over, on the owner's own clock. */
-export const NIGHTLY_HOUR = 23;
+/**
+ * THE WINDOW THE SWEEP RUNS IN, on the owner's own clock: 02:00–03:59.
+ *
+ * Asked for in those words — "לעשות מאוחר בלילה בין 2-3" — and it is the
+ * right hour for it: the sweep opens every group the owner has, one after
+ * another, and nobody should be at the desk while that happens.
+ *
+ * A RANGE, AND NOT `hour >= NIGHTLY_HOUR`, which is what this was when the
+ * hour was 23. That test reads "23:00 or later", and 23 is the last hour of
+ * the day so it could only ever mean the one hour. Move the same test to 2
+ * and it becomes "02:00 or later" — true at ten in the morning and at six in
+ * the evening, which is the opposite of what was asked for. So the hour is
+ * now bounded at both ends.
+ */
+export const NIGHTLY_FROM = 2;
+export const NIGHTLY_TO = 4;
 
 /**
  * After this long with no check, the hour stops mattering.
@@ -64,39 +78,7 @@ export function nightlyDue({ lastISO, now }: NightlyInput): boolean {
   /* Done since this local day began. */
   if (lastMs >= startOfZonedDay(now).getTime()) return false;
 
-  if (zonedHour(now) >= NIGHTLY_HOUR) return true;
-  return now.getTime() - lastMs >= NIGHTLY_OVERDUE_MS;
-}
-
-/* ------------------------------------------------- quiet-hours background work */
-
-/**
- * WHEN THE MACHINE IS ALLOWED TO BROWSE FACEBOOK FOR THINGS NOBODY ASKED FOR.
- *
- * The owner filmed their monitor three times — "למה הוא עדיין ממשיך לפתוח
- * קבוצות!!" — and the third video settled it: worker v3.41.0, every loop I
- * had found already fixed, and it was STILL opening group after group. It was
- * not a loop. It was the design.
- *
- * syncPostMetrics re-reads the view counter on every post published in the
- * last THIRTY DAYS, every SIX HOURS, and reading one means opening its group
- * and scrolling until our post is found — about half a minute. At the 231
- * publications the dashboard was showing, that is ~920 group pages a day and
- * close to seven hours of a browser window opening, closing and opening
- * again. Silently: that chore logs nothing when it succeeds. It even ran just
- * under the 40-windows-in-5-minutes breaker I had added, at about eleven.
- *
- * Nobody is waiting on a view count. It is the one piece of background work
- * in this worker that never finishes and never will, so it is the one that
- * belongs at night — beside the group check the owner already asked to have
- * there ("תעשה את זה כפעולה אוטומטית בכל סוף יום"). During the day the
- * machine now does what they asked it to do, and nothing else.
- */
-export const QUIET_FROM = NIGHTLY_HOUR; /* 23:00 — the same "day is over" */
-export const QUIET_TO = 6;
-
-export function inQuietHours(now: Date): boolean {
   const h = zonedHour(now);
-  /* Wraps midnight, so it is an OR and not a range: 23, 00-05. */
-  return h >= QUIET_FROM || h < QUIET_TO;
+  if (h >= NIGHTLY_FROM && h < NIGHTLY_TO) return true;
+  return now.getTime() - lastMs >= NIGHTLY_OVERDUE_MS;
 }

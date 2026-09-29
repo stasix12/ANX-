@@ -57,19 +57,25 @@ export function CampaignReach({ rows, truncated = false }: { rows: QueueRow[]; t
     .sort()
     .at(-1);
 
+  /*
+   * NO NUMBERS, NO CARD — and above all no promise that some are coming.
+   *
+   * This used to say "המספרים יופיעו כאן בקרוב", which was true for as long
+   * as the worker collected them. It no longer does: the owner switched that
+   * off — "לא צריך לבדוק צפיות .. גם ככה לא רואים את זה בפייסבוק" — because
+   * one reading meant opening a group and scrolling to find the post, hundreds
+   * of times a day against their account. A card that sits on the screen
+   * promising numbers that can never arrive is worse than no card.
+   *
+   * Campaigns that WERE measured keep their figures and go on showing them
+   * with the date they were read. Nothing collected has been deleted; this
+   * only decides whether to draw an empty box.
+   */
+  if (!readAt) return null;
+
   return (
     <Card title="מה הפרסומים עשו" subtitle="נקרא מהפוסטים עצמם בפייסבוק, לא מחושב ולא משוער.">
-      {!readAt ? (
-        /*
-         * The honest empty state. Collection happens on the machine, only when
-         * it has nothing to publish, so "no numbers yet" is normal for a round
-         * that is still running — and saying nothing here would read as a
-         * round that achieved nothing.
-         */
-        <p className="text-sm text-mist-300">
-          עוד לא נקראו נתונים מהפרסומים. התוכנה במחשב אוספת אותם כשאין לה מה לפרסם, ומרעננת כל כמה שעות — אם היא פועלת, המספרים יופיעו כאן בקרוב.
-        </p>
-      ) : (
+      {
         <>
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
             {/*
@@ -97,7 +103,7 @@ export function CampaignReach({ rows, truncated = false }: { rows: QueueRow[]; t
             {truncated && ' · הספירה מתייחסת לפרסומים שמוצגים במסך הזה בלבד.'}
           </p>
         </>
-      )}
+      }
       {/*
         Said once, plainly, and not as an apology. Somebody who sells this will
         be asked "כמה אנשים ראו?" by a customer, and the true answer is worth

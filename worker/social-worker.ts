@@ -7,8 +7,8 @@ import { planQueue } from '@/lib/social/plan';
 import { PREP_LEAD_MS, evaluateQueueItem } from '@/lib/social/rules';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { upsertScoped } from '@/lib/social/tenant';
-import { stampText, startOfZonedDay } from '@/lib/social/time';
-import { inQuietHours, nightlyDue } from './nightly';
+import { stampText } from '@/lib/social/time';
+import { nightlyDue } from './nightly';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
@@ -32,7 +32,6 @@ import { env } from './env';
 import { PublishError } from './facebook/composer';
 import { commentOnPost, type CommentOutcome } from './facebook/composer';
 import { matchPosts, ourPostsInGroup } from './facebook/postIndex';
-import { readPostMetrics } from './facebook/metrics';
 import { cleanupMedia, downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
@@ -106,14 +105,6 @@ interface WorkerState {
   idleNoticeShown: boolean;
   /** When the repository was last compared against this checkout. */
   lastUpdateCheckAt?: number;
-  /** Said once: the metrics columns are missing. It must not become a line per tick. */
-  metricsNoticeShown?: boolean;
-  /** The local night the view-count allowance below belongs to. */
-  metricsNight?: number;
-  /** View-count readings taken tonight — see METRICS_PER_NIGHT. */
-  metricsTonight?: number;
-  /** Said once when the allowance runs out, not once per tick. */
-  metricsCapNoticed?: boolean;
   /** Same, for the round-comment columns. */
   commentNoticeShown?: boolean;
   /** When the "comments are waiting for a free window" line was last written. */
@@ -696,7 +687,6 @@ async function tick(state: WorkerState): Promise<void> {
       { run: resolveAddresses, needs: CHORE_NEEDS_MS.addresses },
       { run: resolveShareLinks, needs: CHORE_NEEDS_MS.shareLinks },
       { run: syncGroupProfiles, needs: CHORE_NEEDS_MS.profiles },
-      { run: syncPostMetrics, needs: CHORE_NEEDS_MS.metrics },
     ];
     for (const chore of chores) {
       if (stopping) return;
@@ -2469,189 +2459,24 @@ async function restartIfUpdated(state: WorkerState): Promise<void> {
 
 /* ------------------------------------------------ how a published post did */
 
-/** Posts re-read per idle tick, and how long before a post is worth re-reading. */
 /*
- * One, not three. Reading a post's counters used to be a permalink load; it is
- * now a group page plus a scroll to find our post among other people's, which
- * can take half a minute. Three of those would hold the tick for a minute and
- * a half — and the comment task and the publishing queue are behind it.
+ * NOTHING READS VIEW COUNTS ANY MORE, and that is the owner's decision:
+ * "לא צריך לבדוק צפיות .. גם ככה לא רואים את זה בפייסבוק".
+ *
+ * They are right on both counts. Facebook shows a group post's counters
+ * barely or not at all, and collecting them was by far the most expensive
+ * thing this worker did: a group post has no permalink, so ONE reading meant
+ * opening its group and scrolling until our post was found among other
+ * people's — about half a minute — repeated across every post of the last
+ * month, every few hours, for ever. It was ~920 group page loads a day
+ * against the owner's account, silently, and it is what they filmed their
+ * monitor three times to report.
+ *
+ * The columns and every number already collected are left exactly as they
+ * are. Nothing is deleted; the campaign page simply stops promising more.
+ * If this is ever wanted back, it is one commit away in the history rather
+ * than a dead function here pretending to be a feature.
  */
-const METRICS_PER_TICK = 1;
-/*
- * TWENTY HOURS, NOT SIX — roughly once a day per post rather than four times.
- *
- * Six was chosen as if this were a cheap read. It is not: one reading is a
- * group page plus a scroll hunting for our post among other people's, about
- * half a minute of a browser window. Four readings a day across a month of
- * publications is what put ~920 group page loads a day on the owner's
- * Facebook account, and a view counter simply does not move four times a day
- * in a way anybody acts on.
- */
-const METRICS_STALE_HOURS = 20;
-/**
- * The most view-count readings one night may take.
- *
- * A ceiling, not a target: the tightened window below should keep a normal
- * night far under it. It exists so that a backlog — a machine that was off
- * for a week, a day with an unusually large round — cannot turn into a whole
- * night of uninterrupted browsing, and so that the number has a name the next
- * person can find.
- */
-const METRICS_PER_NIGHT = 150;
-/**
- * After this, a post is left alone.
- *
- * A group post's counters stop moving long before this; past it, re-opening
- * the page costs a Facebook page load per post per day forever and tells
- * nobody anything new. The last reading stands, with the time it was taken.
- */
-const METRICS_MAX_AGE_DAYS = 7;
-
-/**
- * Re-read the counters on posts that already went out.
- *
- * Runs only when there is nothing to publish, on the same browser session, a
- * few at a time — this is the least urgent thing the worker does and must
- * never sit in front of an actual publication.
- *
- * WHAT IT DOES NOT COLLECT is the part worth stating. Facebook publishes no
- * reach or impressions figure for a group post, and Meta closed the Groups API
- * in April 2024, so the only way to produce an "exposure" number would be to
- * take the group's member count and present it as an audience. That is the one
- * number somebody would actually make decisions on, so it is not invented —
- * here or anywhere above this line.
- *
- * A read that fails leaves the row untouched rather than writing zeros: "we
- * could not read it" and "nobody engaged with it" are different facts, and the
- * screen must not state the second when the first is true.
- */
-async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<void> {
-  if (state.browserState !== 'connected' || !session.hasProfile()) return;
-  /*
-   * AT NIGHT ONLY — see inQuietHours() for why this one chore is different.
-   *
-   * "למה הוא עדיין ממשיך לפתוח קבוצות!!" was not a loop; it was this, working
-   * exactly as written. Nobody waits on a view count, and it is the only
-   * background work here that never finishes, so it is the only one with no
-   * business running while the owner is at their desk.
-   */
-  const now = new Date();
-  if (!inQuietHours(now)) return;
-  const night = startOfZonedDay(now).getTime();
-  /* Per local night, so a restart mid-sweep does not hand the backlog a fresh
-     allowance — the owner restarts this worker often. */
-  if (state.metricsNight !== night) {
-    state.metricsNight = night;
-    state.metricsTonight = 0;
-  }
-  if ((state.metricsTonight ?? 0) >= METRICS_PER_NIGHT) {
-    if (!state.metricsCapNoticed) {
-      state.metricsCapNoticed = true;
-      console.log(`[worker] 💤 ${METRICS_PER_NIGHT} קריאות צפיות הלילה — מפסיק עד מחר.`);
-    }
-    return;
-  }
-  state.metricsCapNoticed = false;
-  const db = await workerDb();
-  const staleBefore = new Date(Date.now() - METRICS_STALE_HOURS * 3_600_000).toISOString();
-  const publishedAfter = new Date(Date.now() - METRICS_MAX_AGE_DAYS * 86_400_000).toISOString();
-  /* Same correction as the comments above: a group post has no permalink, so
-     requiring one meant this collected nothing at all, quietly. */
-  const { data, error } = await db
-    .from('social_queue')
-    .select('id, permalink, rendered_text, metrics_at, target:social_targets(url)')
-    .eq('status', 'published')
-    .gte('published_at', publishedAfter)
-    .or(`metrics_at.is.null,metrics_at.lt.${staleBefore}`)
-    // Never read, then longest unread. Nulls first is what this ordering gives
-    // on Postgres ascending, which is the order we want anyway.
-    .order('metrics_at', { ascending: true, nullsFirst: true })
-    .limit(METRICS_PER_TICK);
-  if (error) {
-    /* v13 not run yet. Say it where the owner reads, once — this is a nice to
-       have, and it must not turn into a line every five seconds. */
-    if (/metrics_/.test(error.message) && !state.metricsNoticeShown) {
-      state.metricsNoticeShown = true;
-      console.error('[worker] ✗ אין עמודות מדדים — הריצו את social-latest.sql ב-Supabase.');
-      await logActivity('warn', 'metrics_columns_missing', 'כדי לראות תגובות וצפיות על הפרסומים צריך להריץ את social-latest.sql ב-Supabase.', {
-        detail: error.message,
-      });
-    }
-    return;
-  }
-  if (!data?.length) return;
-
-  for (const row of data as unknown as {
-    id: string;
-    permalink: string | null;
-    rendered_text: string;
-    target: { url: string } | { url: string }[] | null;
-  }[]) {
-    if (stopping) break;
-    /* Read it and got nothing back recently — see backOff(). A post whose page
-       cannot be read is usually permanent (deleted, or the group closed), and
-       metrics_at stays null on that path, so without this the same post is
-       reopened every five seconds for as long as the worker runs. */
-    if (inBackOff(state, `metrics:${row.id}`)) continue;
-    /*
-     * SAID OUT LOUD, and counted. This chore logged nothing at all when it
-     * worked, which is how seven hours a day of it went on behind a terminal
-     * that looked idle, and why it took three videos of a monitor to find.
-     */
-    state.metricsTonight = (state.metricsTonight ?? 0) + 1;
-    console.log(`[worker] 👁 קורא צפיות לפרסום (${state.metricsTonight}/${METRICS_PER_NIGHT} הלילה).`);
-    const page = await session.newPage(headless, 'מדדי פרסום');
-    try {
-      /* Same lookup problem as the comments, same answer: a group filtered to
-         our own posts loads what we published, not what the group published. */
-      const where = row.permalink ?? ourPostsIn(groupUrlOf(row.target), state.accountId) ?? '';
-      const m = where ? await readPostMetrics(page, where, row.rendered_text) : null;
-      if (!m) {
-        /*
-         * Same defect as syncGroupProfiles, same correction. `lastCheckAt = 0`
-         * plus a bare return wrote nothing, and this read is ordered by
-         * metrics_at with nulls first — so the same unreadable post was
-         * reopened on every tick, for ever.
-         *
-         * metrics_at is stamped with no numbers beside it, which is the
-         * honest record: we looked, and there was nothing to read. The row
-         * comes back on its own in METRICS_STALE_HOURS without anybody
-         * clearing anything, so a post that was briefly unreadable heals
-         * itself and a deleted one costs one look every few hours instead of
-         * one every five seconds.
-         */
-        backOff(state, `metrics:${row.id}`);
-        await db.from('social_queue').update({ metrics_at: new Date().toISOString() }).eq('id', row.id);
-        /* No session re-check asked for here, deliberately. METRICS_PER_TICK
-           is 1, so "ask on every blank" is "ask on every tick", and the check
-           is itself a window — the very shape being fixed. A post that cannot
-           be read is nearly always a deleted post, which says nothing about
-           the login; the group sweep is where a blank page IS evidence. */
-        continue;
-      }
-      await db
-        .from('social_queue')
-        .update({
-          metrics_seen: m.seen,
-          metrics_views: m.views,
-          metrics_reactions: m.reactions,
-          metrics_comments: m.comments,
-          metrics_shares: m.shares,
-          metrics_at: new Date().toISOString(),
-        })
-        .eq('id', row.id);
-    } catch (err) {
-      // One unreadable post must not stop the rest, and must not be recorded
-      // as a post that did nothing — so the row keeps its null metrics_at and
-      // is left alone for a while instead, rather than being reopened on every
-      // tick for the rest of the run.
-      console.error('[worker] ℹ לא הצלחנו לקרוא מדדים מפרסום:', err instanceof Error ? err.message.split('\n')[0] : err);
-      backOff(state, `metrics:${row.id}`);
-    } finally {
-      await page.close().catch(() => undefined);
-    }
-  }
-}
 
 /* --------------------------------------------------------- claiming a command */
 

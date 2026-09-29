@@ -808,23 +808,37 @@ console.log('unit tests OK');
     /if \(kind !== 'ok'\) return null;/.test(metricsSrc),
     'and a login wall returns nothing at all rather than recording zeros for somebody else\'s page',
   );
-  /* The worker leaves a row untouched when the read failed, for the same
-     reason: "we could not read it" is not "it did nothing". */
-  assert.ok(/if \(!m\) \{/.test(workerSrc), 'an unreadable post leaves its row unread');
-  /* Collection is the least urgent thing the worker does and must never sit in
-     front of a publication. */
-  const dueAt = workerSrc.indexOf('const { data: due, error }');
-  const metricsAt = workerSrc.indexOf('{ run: syncPostMetrics');
-  assert.ok(dueAt > 0 && metricsAt > dueAt, 'metrics are collected only when there is nothing to publish');
-  /* And it is the LAST of the chores, because it is the most expensive of
-     them: a metrics read scrolls a feed twenty times looking for one post. */
-  const chores = workerSrc.slice(workerSrc.indexOf('const chores: {'), workerSrc.indexOf('for (const chore of chores)'));
-  assert.ok(chores.lastIndexOf('syncPostMetrics') > chores.indexOf('resolveAddresses'), 'and it goes last of the idle chores');
-  /* It also carries the largest budget of the five, for the same reason — a
-     window that fits a comment does not fit this. */
+  /*
+   * NOTHING COLLECTS THESE ANY MORE — the owner's decision, and the right one:
+   * "לא צריך לבדוק צפיות .. גם ככה לא רואים את זה בפייסבוק".
+   *
+   * The assertions that used to stand here pinned the COLLECTION: that it ran
+   * only when nothing was due, that it went last of the chores, that it asked
+   * for the biggest free window. Each was true and none of it was enough.
+   * Collecting one reading meant opening a group and scrolling to find our
+   * post, and repeating that across a month of publications every six hours
+   * came to ~920 group page loads a day against the owner's account. They
+   * filmed their monitor three times to report it.
+   *
+   * The reader above (worker/facebook/metrics.ts) is left exactly as it is,
+   * still tested, still correct — it simply has no caller. Every number
+   * already collected is still in the database and still on the screen. What
+   * is asserted now is that nothing starts filling them again by accident.
+   */
+  assert.ok(!/syncPostMetrics/.test(workerSrc), 'no chore collects view counts');
+  assert.ok(!/readPostMetrics/.test(workerSrc), 'and the reader has no caller in the worker');
+  /* The card must not promise numbers that can no longer arrive. */
+  assert.ok(/if \(!readAt\) return null;/.test(reachCard), 'a campaign with no readings shows no reach card at all');
+  /*
+   * COMMENTS STRIPPED FIRST. The card explains, in a comment, the very
+   * sentence it no longer shows — so a bare search finds the explanation and
+   * fails on nothing. That is the third time in this project a guard has been
+   * anchored on a string that only ever appeared in prose.
+   */
+  const reachDrawn = reachCard.replace(/\/\*[\s\S]*?\*\//g, '');
   assert.ok(
-    /metrics: 90_000/.test(readFileSync(new URL('../chore-window.ts', import.meta.url), 'utf8')),
-    'and needs the biggest free window of the chores before it may start',
+    !/יופיעו כאן בקרוב/.test(reachDrawn),
+    'and above all does not say more are coming — that sentence was true only while something was collecting',
   );
 
   /*

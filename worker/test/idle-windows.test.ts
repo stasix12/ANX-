@@ -128,13 +128,7 @@ assert.ok(
   'the floor must be what a request buys — not a bypass of the cache altogether',
 );
 
-/* METRICS_PER_TICK is 1, so "ask on every blank read" is "ask on every tick". */
-assert.ok(
-  !/recheckSession = true/.test(body('syncPostMetrics')),
-  'a blank metrics read must not ask for a session check: one row per tick means one window per tick, which is the bug',
-);
-
-/* --------------- three: the chore that never ends belongs to the night */
+/* --------------- three: the chore that never ended is gone altogether */
 
 /*
  * The third video: v3.41.0, every loop above already fixed, and it was still
@@ -144,28 +138,26 @@ assert.ok(
  * group and scrolling to find our post: at the 231 publications on the
  * dashboard, ~920 group pages a day and close to seven hours of it. Silently,
  * and at about eleven windows per five minutes — under the breaker below.
+ *
+ * Moving it to the small hours was the first answer. The owner's was better:
+ * "לא צריך לבדוק צפיות .. גם ככה לא רואים את זה בפייסבוק". Facebook barely
+ * reports a group post's counters, so the most expensive thing this worker
+ * did was buying a number nobody could read. It is gone, and this asserts it
+ * STAYS gone rather than being reinstated by somebody who finds the columns
+ * and assumes they should be filled.
  */
-const metrics = body('syncPostMetrics');
-assert.ok(/if \(!inQuietHours\(now\)\) return;/.test(metrics), 'view counts are read at night, not while the owner is at their desk');
-assert.ok(/METRICS_PER_NIGHT/.test(metrics), 'and a backlog cannot turn one night into an unbroken sweep');
+assert.ok(!/syncPostMetrics/.test(code), 'view counts are not collected — the columns keep what they have, nothing refills them');
+assert.ok(!/readPostMetrics/.test(code), 'and the reader is not imported, so it cannot creep back into another chore');
+assert.ok(!/METRICS_STALE_HOURS|METRICS_PER_TICK|METRICS_MAX_AGE_DAYS/.test(code), 'nor its constants');
+
+/* The sweep the owner DOES want has a home, and it is not the working day. */
+const sweepSrc = readFileSync(new URL('../nightly.ts', import.meta.url), 'utf8');
+assert.ok(/export const NIGHTLY_FROM = 2;/.test(sweepSrc), 'the group sweep runs from 02:00 — "לעשות מאוחר בלילה בין 2-3"');
+assert.ok(/export const NIGHTLY_TO = 4;/.test(sweepSrc), 'and stops before 04:00');
 assert.ok(
-  /console\.log\(`\[worker\] 👁/.test(metrics),
-  'every reading says so in the terminal — this chore logging nothing on success is why it took three videos to find',
+  /h >= NIGHTLY_FROM && h < NIGHTLY_TO/.test(sweepSrc),
+  'bounded at BOTH ends: `hour >= 2` alone is true all day, which would put the sweep back in the middle of the owner’s afternoon',
 );
-assert.ok(/const METRICS_STALE_HOURS = 20;/.test(src), 'once a day per post, not four times');
-assert.ok(/const METRICS_MAX_AGE_DAYS = 7;/.test(src), 'and a week of posts, not a month — the counters have stopped moving by then');
-
-/* The gate must come before the read, not after: a query is cheap, the window
-   it leads to is not. */
-assert.ok(metrics.indexOf('inQuietHours') < metrics.indexOf('session.newPage('), 'the quiet-hours gate runs before any page is opened');
-
-/* The chores the owner IS waiting on must NOT be moved to the night. */
-for (const fn of ['runCampaignComments', 'resolveAddresses'] as const) {
-  assert.ok(
-    !/inQuietHours/.test(body(fn)),
-    `${fn} must keep running during the day — the owner presses a button and waits for it, unlike a view count`,
-  );
-}
 
 /* ------------------------------------ the breaker that does not need a cause */
 
@@ -189,7 +181,6 @@ for (const o of opens) {
 
 for (const [fn, key] of [
   ['resolveShareLinks', 'share:'],
-  ['syncPostMetrics', 'metrics:'],
   ['syncGroupProfiles', 'profile:'],
 ] as const) {
   const b = body(fn);

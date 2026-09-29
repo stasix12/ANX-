@@ -123,6 +123,23 @@ interface WorkerState {
    */
   addressTried?: Set<string>;
   /**
+   * Rows a chore just failed on, and the instant each may be tried again.
+   *
+   * THE SAME DEFECT addressTried was added for, in the chores that never got
+   * the fix. A chore selects "the rows that still need X", opens a window per
+   * row, and on the paths where X cannot be worked out writes NOTHING — so the
+   * very same rows come back on the next tick, five seconds later, forever. A
+   * share link Facebook will not resolve, or a post whose page cannot be read,
+   * is a permanent condition: retried at the poll interval it is an endless
+   * row of browser windows over one bad row.
+   *
+   * In memory rather than a column, on purpose: it must not need a migration
+   * the owner has to run before their machine calms down, and it deletes
+   * nothing. A restart clears it, which is right — a restart is also how
+   * somebody says "try again".
+   */
+  retryAfter?: Map<string, number>;
+  /**
    * The c_user id of the account the browser is signed in as.
    *
    * Kept here because finding one of our own posts in a group comes down to
@@ -451,6 +468,48 @@ async function noticeCommentsStarved(db: SupabaseClient, state: WorkerState, roo
 
 /* --------------------------------------------------------------- tick */
 
+/** How long a login answer is trusted before it is asked again. */
+const LOGIN_RECHECK_MS = 10 * 60_000;
+
+/**
+ * IS THE FACEBOOK SESSION STILL GOOD? — asked on BOTH paths now.
+ *
+ * THE BUG THIS CLOSES, reported as "ככה הוא פותח לי חלון אחרי חלון בלי סיבה
+ * ובלי עבודה שהרצתי בתוכנה".
+ *
+ * Three of the idle chores end a failed attempt with `state.lastCheckAt = 0`
+ * and a bare `return`, meaning "the session looks dead — re-verify it before
+ * trusting me again". Nothing ever read that hint. The only login check lived
+ * behind `if (!due?.length …) { …chores…; return; }` — that is, in the branch
+ * that runs when a publication IS due, which is exactly the branch an idle
+ * worker never reaches. So with an empty queue and an expired Facebook login:
+ *
+ *   tick → nothing due → chore opens a window → Facebook shows the login wall
+ *   → readGroupProfile returns null → `return` with nothing written
+ *   → sleep 5s → the same row is selected again → a new window
+ *
+ * forever, every five seconds, with `browserState` still reading 'connected'
+ * so the top-of-tick guard never fired, nothing written to the row, and not
+ * one line in the activity feed. From the desk it is a machine opening Chrome
+ * windows for no reason, which is precisely what it was.
+ *
+ * Asking here turns that loop into the sentence the owner already has a
+ * button for. It costs one page load per ten minutes on an idle worker.
+ */
+async function sessionReady(state: WorkerState, headless: boolean): Promise<boolean> {
+  if (state.browserState === 'connected' && Date.now() - state.lastCheckAt <= LOGIN_RECHECK_MS) return true;
+  const check = await session.checkLogin(headless);
+  state.lastCheckAt = Date.now();
+  state.browserState = check.state;
+  await recordAccount(state, check.account);
+  if (check.state === 'connected') return true;
+  /* attention is what stops the NEXT tick at the top, so the windows stop on
+     the first bad answer rather than on every one of them. */
+  state.attention = check.detail;
+  await logActivity('warn', 'browser_needs_auth', check.detail);
+  return false;
+}
+
 async function tick(state: WorkerState): Promise<void> {
   const db = await workerDb();
   const browser = await getSetting<BrowserSettings>('browser', DEFAULT_BROWSER);
@@ -556,6 +615,15 @@ async function tick(state: WorkerState): Promise<void> {
      * tomorrow, a view count six hours old — none of those is a thing somebody
      * asked for and is waiting on. The comment is.
      */
+    /*
+     * THE SESSION FIRST — see sessionReady(). Every chore below opens a
+     * Facebook page, and a chore that meets a login wall has no way to say so
+     * except by giving up; asked here, a dead session costs one window and a
+     * sentence in the feed instead of a window every five seconds until
+     * somebody notices.
+     */
+    if (!(await sessionReady(state, headless))) return;
+
     const chores: { run: (s: WorkerState, h: boolean, roomMs: number) => Promise<unknown>; needs: number }[] = [
       { run: runCampaignComments, needs: CHORE_NEEDS_MS.commentKnown },
       { run: resolveAddresses, needs: CHORE_NEEDS_MS.addresses },
@@ -586,17 +654,7 @@ async function tick(state: WorkerState): Promise<void> {
   }
 
   // Verify the login before the first job of a batch (and at most every 10 min).
-  if (state.browserState !== 'connected' || Date.now() - state.lastCheckAt > 10 * 60_000) {
-    const check = await session.checkLogin(headless);
-    state.lastCheckAt = Date.now();
-    state.browserState = check.state;
-    await recordAccount(state, check.account);
-    if (check.state !== 'connected') {
-      state.attention = check.detail;
-      await logActivity('warn', 'browser_needs_auth', check.detail);
-      return;
-    }
-  }
+  if (!(await sessionReady(state, headless))) return;
   state.idleNoticeShown = false;
 
   const jobs = (due as (QueueItem & { target: unknown })[]).map(({ target: _t, ...item }) => item);
@@ -757,6 +815,24 @@ const PROFILES_PER_TICK = 2;
  * 40 new groups trickle in over a few minutes.
  */
 /**
+ * How long a row that a chore could not work out is left alone. Long enough
+ * that a permanent failure costs two windows an hour instead of seven hundred,
+ * short enough that something the owner fixes on Facebook is picked up in the
+ * same sitting.
+ */
+const CHORE_BACKOFF_MS = 30 * 60_000;
+
+/** Has this row been tried too recently to be worth another window? */
+function inBackOff(state: WorkerState, key: string): boolean {
+  return (state.retryAfter?.get(key) ?? 0) > Date.now();
+}
+
+/** Record that this row was tried and came back with nothing usable. */
+function backOff(state: WorkerState, key: string): void {
+  (state.retryAfter ??= new Map()).set(key, Date.now() + CHORE_BACKOFF_MS);
+}
+
+/**
  * Turn share links into real group addresses.
  *
  * Facebook's app gives https://www.facebook.com/share/g/<token> on "העתק
@@ -783,6 +859,10 @@ async function resolveShareLinks(state: WorkerState, headless: boolean): Promise
 
   for (const target of data as { id: string; url: string; name: string; external_id: string }[]) {
     if (stopping) break;
+    /* Tried recently and it did not resolve — see backOff(). Nothing about
+       this row changes in five seconds, and a window per five seconds over a
+       link Facebook will never resolve is the whole complaint. */
+    if (inBackOff(state, `share:${target.id}`)) continue;
     const page = await session.newPage(headless);
     try {
       await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
@@ -794,6 +874,7 @@ async function resolveShareLinks(state: WorkerState, headless: boolean): Promise
       const resolved = parseGroupUrl(page.url());
       if (!resolved) {
         console.log(`[worker] ℹ הקישור של "${target.name}" עוד לא נפתר לכתובת קבוצה.`);
+        backOff(state, `share:${target.id}`);
         continue;
       }
       /* Somebody may have added the same group by its real address already.
@@ -815,6 +896,7 @@ async function resolveShareLinks(state: WorkerState, headless: boolean): Promise
       await logActivity('info', 'group_share_resolved', `הקבוצה "${target.name}" מוכנה לפרסום.`, { url: resolved.url });
     } catch (err) {
       console.error('[worker] ℹ פתיחת קישור השיתוף נכשלה:', err instanceof Error ? err.message.split('\n')[0] : err);
+      backOff(state, `share:${target.id}`);
     } finally {
       await page.close().catch(() => undefined);
     }
@@ -2336,6 +2418,11 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
     target: { url: string } | { url: string }[] | null;
   }[]) {
     if (stopping) break;
+    /* Read it and got nothing back recently — see backOff(). A post whose page
+       cannot be read is usually permanent (deleted, or the group closed), and
+       metrics_at stays null on that path, so without this the same post is
+       reopened every five seconds for as long as the worker runs. */
+    if (inBackOff(state, `metrics:${row.id}`)) continue;
     const page = await session.newPage(headless);
     try {
       /* Same lookup problem as the comments, same answer: a group filtered to
@@ -2361,8 +2448,11 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
         .eq('id', row.id);
     } catch (err) {
       // One unreadable post must not stop the rest, and must not be recorded
-      // as a post that did nothing.
+      // as a post that did nothing — so the row keeps its null metrics_at and
+      // is left alone for a while instead, rather than being reopened on every
+      // tick for the rest of the run.
       console.error('[worker] ℹ לא הצלחנו לקרוא מדדים מפרסום:', err instanceof Error ? err.message.split('\n')[0] : err);
+      backOff(state, `metrics:${row.id}`);
     } finally {
       await page.close().catch(() => undefined);
     }

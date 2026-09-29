@@ -118,8 +118,25 @@ jobs:
           SOCIAL_SITE_URL: ${{ vars.SOCIAL_SITE_URL }}
         run: node scripts/build-app.mjs
 
-      - name: the package points at the same database as the dashboard
+      # DOES THIS PACKAGE ASK THE SAME DATABASE THE LIVE DASHBOARD ASKS?
+      #
+      # ASKED OF PRODUCTION, NOT OF A FILE IN THIS REPOSITORY. The first
+      # version of this step compared the package against the literal in
+      # deploy.yml — and deploy.yml publishes to GitHub Pages. The site
+      # customers actually use is built by VERCEL, from environment variables
+      # kept in Vercel's own settings, which nothing in this repository can
+      # see. So that comparison could pass while the two were on different
+      # databases, which is exactly the failure it was written to catch:
+      # an account opened on the website simply does not exist in the other
+      # project, the program answers "wrong email or password", and the person
+      # retypes a correct password for ever.
+      #
+      # /api/version reports the project reference — never the key, and the
+      # same string the site already inlines into every page it serves.
+      - name: the package asks the same database as the live dashboard
         shell: pwsh
+        env:
+          SITE: ${{ vars.PRODUCTION_URL || 'https://anx-ggyo.vercel.app' }}
         run: |
           $cfg = Get-Content dist/app/config.json | ConvertFrom-Json
           if (-not $cfg.supabaseUrl -or -not $cfg.supabaseAnonKey) {
@@ -127,20 +144,25 @@ jobs:
             # the possible outcomes: it reaches a customer before anybody knows.
             throw "NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY came through empty."
           }
-          # Printed as a yes/no and never as the value. The URL is public — it
-          # is a literal in deploy.yml — but a secret's contents are masked in
-          # these logs anyway, so a comparison is the only form of this that
-          # can actually be read afterwards. And this line is the whole
-          # diagnosis when a customer cannot sign in: same database, or not.
-          # A trailing slash and a capital letter are the same host. Compared
-          # loosely on purpose: this step exists to catch a different PROJECT,
-          # and blocking a correct build over a slash would teach whoever hits
-          # it to delete the check.
-          $trim = { param($u) $u.Trim().TrimEnd('/').ToLowerInvariant() }
-          $same = (& $trim $cfg.supabaseUrl) -eq (& $trim $env:WEBSITE_SUPABASE_URL)
-          Write-Host "installer and dashboard share one database: $same"
-          if (-not $same) {
-            throw "This installer is built against a DIFFERENT Supabase project than the website. Every customer's login would be refused with 'wrong email or password', because their account exists in the website's project and not in this one. Fix the NEXT_PUBLIC_SUPABASE_URL repository secret, or delete it so the default in this file is used."
+          $mine = ([uri]$cfg.supabaseUrl).Host.Split('.')[0]
+          $live = ''
+          try {
+            $live = (Invoke-RestMethod -Uri "$env:SITE/api/version" -TimeoutSec 30).db
+          } catch {
+            # A build must not fail because a website was slow for ten seconds.
+            # Said loudly rather than silently, so a run that skipped the check
+            # does not read like a run that passed it.
+            Write-Host "::warning::could not reach $env:SITE/api/version — the database match was NOT verified on this build."
+          }
+          if (-not $live) {
+            Write-Host "::warning::the live site reported no database — deploy the version that reports it, then build again to have this checked."
+          } elseif ($mine -ne $live) {
+            throw "This installer asks a DIFFERENT database than the live dashboard (installer: $mine, site: $live). Every customer's login would be refused with 'wrong email or password', because their account exists in the site's project and not in this one. Set the NEXT_PUBLIC_SUPABASE_URL and _ANON_KEY repository secrets to the values Vercel uses."
+          } else {
+            # Printed as the project reference, which is public, and never the
+            # key. This line is the whole diagnosis when a customer cannot sign
+            # in: same database, or not.
+            Write-Host "installer and live dashboard share one database: $mine"
           }
 
       # CODE SIGNING. Without it Windows SmartScreen tells the customer this is

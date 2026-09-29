@@ -167,21 +167,41 @@ is(!/insert into|createTenant/.test(auth), 'the client never creates a business 
 /* An account is made on the website. If the package were assembled against a   */
 /* different Supabase project, that account would not exist in the one the      */
 /* program asks — and every customer would be told their details are wrong      */
-/* while typing them perfectly. It is a one-word difference in a repository     */
-/* secret and there is nothing on a customer's screen that could ever hint at   */
-/* it, so the build refuses instead.                                           */
+/* while typing them perfectly. That is not a hypothetical: it is what a        */
+/* customer sat in front of, signing in to the website successfully on one      */
+/* screen and being refused by the program on the other.                        */
+/*                                                                             */
+/* THE FIRST VERSION OF THIS CHECK COMPARED AGAINST THE WRONG THING. It read    */
+/* the literal in deploy.yml — which publishes to GitHub Pages. The site        */
+/* customers use is built by Vercel from variables kept in Vercel, which        */
+/* nothing in this repository can see, so the comparison could pass while the   */
+/* two were on different databases. A guard that answers a question nobody      */
+/* asked is worse than none, because its green tick gets believed.              */
+/*                                                                             */
+/* So the build asks PRODUCTION, and production is able to answer.              */
 {
   const flow = readFileSync(new URL('../../.github/workflows/build-app.yml', import.meta.url), 'utf8');
-  const site = readFileSync(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
-  const url = site.match(/NEXT_PUBLIC_SUPABASE_URL:\s*(\S+)/)?.[1] ?? '';
-  is(url.startsWith('https://'), 'the website names the project it deploys against');
+  const version = readFileSync(new URL('../../src/app/api/version/route.ts', import.meta.url), 'utf8');
+
   is(
-    flow.includes(url),
-    'and the installer build carries the SAME one, so a missing secret falls back to the right database rather than to none',
+    /db: project/.test(version) && /NEXT_PUBLIC_SUPABASE_URL/.test(version),
+    'the live site reports which database it is on, so the question can be asked from outside a browser',
+  );
+  /* Comments stripped first. The prose in that file says "never the key", and
+     a search that matches its own explanation is the third time this suite has
+     caught me doing that. */
+  is(
+    !/ANON|KEY/i.test(version.replace(/\/\*[\s\S]*?\*\//g, '').replace(/NEXT_PUBLIC_SUPABASE_URL/g, '')),
+    'and it reports the project reference ONLY — the anon key is public by design and still has no business in an endpoint whose job is diagnosis',
+  );
+  is(/api\/version/.test(flow), 'the installer build asks the live site rather than a file in this repository');
+  is(
+    /throw "This installer asks a DIFFERENT database than the live dashboard/.test(flow),
+    'and a package that would ask a different database fails the build — an installer that reaches a customer and refuses their correct password is the worst of the endings',
   );
   is(
-    /share one database/.test(flow) && /throw "This installer is built against a DIFFERENT Supabase project/.test(flow),
-    'a secret that points somewhere else fails the build — an installer that reaches a customer and refuses their password is the worst of the endings',
+    /::warning::could not reach/.test(flow),
+    'a site that did not answer is a WARNING and not a pass: a run that skipped the check must not read like a run that passed it',
   );
 }
 

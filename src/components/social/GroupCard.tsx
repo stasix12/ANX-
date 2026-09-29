@@ -161,11 +161,21 @@ export function GroupCard({
       {/* Paused is the state worth marking; active is the norm and a dot on
           every one of fifty cards is noise. It sits below the favourite star
           so the two never share a pixel. */}
+      {/*
+        TWO KINDS OF OFF, and they are not the same news.
+
+        A group the owner paused is a decision. A group the worker switched off
+        because Facebook says this account cannot post there — they left it —
+        is something that HAPPENED, and a grey dot identical to the deliberate
+        one hides it among fifty cards. Amber, with the reason in the tooltip.
+      */}
       {!group.enabled && (
         <span
           aria-hidden
-          title="מושהית"
-          className={`pointer-events-none absolute start-1 z-10 block h-2 w-2 rounded-full bg-mist-500 ${group.favorite ? 'top-6' : 'top-1.5'}`}
+          title={group.last_status === 'left' ? 'כבויה — אי אפשר לפרסם בקבוצה הזו מהחשבון שלכם' : 'מושהית'}
+          className={`pointer-events-none absolute start-1 z-10 block h-2 w-2 rounded-full ${
+            group.last_status === 'left' ? 'bg-warning-400' : 'bg-mist-500'
+          } ${group.favorite ? 'top-6' : 'top-1.5'}`}
         />
       )}
 

@@ -3493,6 +3493,70 @@ const scenario: { step: string; line: string }[] = [];
      owner's side it is still a post that has not got its comment yet — but it
      has to be counted somewhere, or the totals stop adding up mid-round. */
   assert.ok(/count\('commenting'\)/.test(clientForComment), 'a comment in flight is still counted as waiting');
+  /*
+   * ============================================================
+   * A GROUP THE OWNER LEFT TURNS ITSELF OFF
+   * ============================================================
+   *
+   * "אם אני יוצא מקבוצה כזאת או אחרת אני רוצה שהוא יצא מייד גם באפליקציה
+   * שלנו, יצאתי עכשיו מקבוצה ומראה לי את אותו המספר."
+   *
+   * There is no API here and Facebook tells us nothing: the app can only learn
+   * this the next time the worker opens that group's page. Both roads to it
+   * are covered — the profile sync, which already opens every group to read
+   * its name, and a publication that Facebook refuses.
+   */
+  {
+    const profile = readFileSync('worker/facebook/profile.ts', 'utf8');
+
+    /* THE POSITIVE SIGNAL. "No composer box" is what leaving a group looks
+       like AND what a Facebook redesign looks like; guessing between them
+       either strands groups the owner is still in or keeps queueing posts into
+       ones they left. patterns.cannotPost is Facebook's own sentence. */
+    assert.ok(/fb\.cannotPostText\(page\)/.test(profile), 'the group visit reads Facebook’s own "you cannot post here" line');
+    assert.ok(
+      /canPost: cannotPost === null \? null : !cannotPost/.test(profile),
+      'and a check that could not run answers null — "we do not know" is not "you are not a member"',
+    );
+    assert.ok(
+      /isVisible\(\{ timeout: 1200 \}\)/.test(profile),
+      'asked of a page that is already open, so it adds no traffic to the account',
+    );
+
+    /* ONLY ON A POSITIVE ANSWER, and never the other way. */
+    assert.ok(
+      /if \(profile\.canPost === false\) \{[\s\S]{0,400}patch\.enabled = false;/.test(localWorker),
+      'a group Facebook says cannot be posted in is switched off',
+    );
+    assert.ok(
+      !/canPost === true[\s\S]{0,200}enabled = true/.test(localWorker),
+      'and one that can post is never switched back ON — an owner who paused a group by hand meant it',
+    );
+    assert.ok(
+      /patch\.last_status = 'left'/.test(localWorker),
+      'marked as left rather than merely off, so the screen can tell a decision from an event',
+    );
+    /* The other road: a publication Facebook refuses. It used to write the
+       reason onto the group and leave it switched on, so every later round
+       queued another publication into a group the owner had left. */
+    assert.ok(
+      /err\.kind === 'cannot_post'[\s\S]{0,900}enabled: false/.test(localWorker),
+      'a refused publication switches the group off too, instead of skipping one row and queueing the next',
+    );
+
+    /* rules.ts is what makes "off" mean "not published to" — without it this
+       whole change would be a label. */
+    const rules = readFileSync('src/lib/social/rules.ts', 'utf8');
+    assert.ok(/if \(!target\.enabled\) return \{ action: 'skip'/.test(rules), 'and a target that is off is skipped before it is claimed');
+
+    /* Said out loud, both on the screen and in the log. */
+    const groupsPage = readFileSync('src/app/social/groups/page.tsx', 'utf8');
+    const groupCard = readFileSync('src/components/social/GroupCard.tsx', 'utf8');
+    assert.ok(/כנראה יצאתם ממנה/.test(groupsPage), 'the list row says why the group is off');
+    assert.ok(/group\.last_status === 'left' \? 'bg-warning-400'/.test(groupCard), 'and the card marks it apart from a group the owner paused');
+    assert.ok(/target_left:/.test(readFileSync('src/lib/social/activity-text.ts', 'utf8')), 'the activity log has a sentence for it');
+  }
+
   /* One per tick. Twenty-eight comments inside a minute is worth nothing to
      anybody reading them and a great deal to whatever watches for bursts. */
   assert.ok(/const COMMENTS_PER_TICK = 1;/.test(localWorker), 'comments go out one at a time, not in a burst');

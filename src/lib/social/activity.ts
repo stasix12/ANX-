@@ -43,6 +43,16 @@ const KIND: Record<string, ActivityKind> = {
   account_save_failed: 'failure',
   avatar_upload_blocked: 'failure',
   login_challenge_failed: 'failure',
+  /*
+   * A group the account can no longer post in, switched off by the worker.
+   *
+   * 'failure' rather than 'system': nothing is broken — the owner left a group
+   * and the app caught up — but a publication that was going to happen now is
+   * not, and this is the one line that says which group and why. Filed as
+   * quiet system news it would sit under a heading nobody opens, and the owner
+   * would meet the change as a number that moved on its own.
+   */
+  target_left: 'failure',
 
   // A round's own life: started, paused, resumed, stopped, reported.
   planned: 'round',

@@ -774,6 +774,40 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
         if (error) console.error(`[worker] ✗ העלאת תמונת הקבוצה "${target.name}" נכשלה:`, error.message);
         else patch.image_url = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
       }
+      /*
+       * YOU LEFT THIS GROUP — turn it off, and say which of the two it was.
+       *
+       * Asked for after the owner left a group on Facebook and watched the
+       * app go on counting it: "אם אני יוצא מקבוצה כזאת או אחרת אני רוצה שהוא
+       * יצא מייד גם באפליקציה שלנו".
+       *
+       * `enabled: false` rather than a new column and another migration:
+       * rules.ts already skips a target that is off, the groups screen already
+       * counts and filters by it, and the owner already has a switch to put it
+       * back. What was missing was anything writing it.
+       *
+       * ONLY ON A POSITIVE ANSWER. profile.canPost is null when the check
+       * could not run and false only when Facebook's own page says the account
+       * cannot post here. A group is never switched off because a selector
+       * went missing — that failure belongs to the publication, which reports
+       * it, and not to the owner's list of groups.
+       *
+       * And never switched back ON: an owner who paused a group by hand did so
+       * for their own reasons, and a sync that re-enabled it would be the
+       * machine overruling a person.
+       */
+      if (profile.canPost === false) {
+        patch.enabled = false;
+        patch.last_status = 'left';
+        patch.last_error = 'פייסבוק אומרת שאי אפשר לפרסם בקבוצה הזו מהחשבון הזה — כנראה יצאתם ממנה. הקבוצה כובתה ולא ייכנסו אליה פרסומים חדשים.';
+        console.log(`[worker] ⛔ "${patch.name ?? target.name}": אי אפשר לפרסם — הקבוצה כובתה.`);
+        await logActivity('warn', 'target_left', `כובתה הקבוצה "${patch.name ?? target.name}" — אי אפשר לפרסם בה מהחשבון הזה`, { targetId: target.id });
+      } else if (profile.canPost === true) {
+        /* It can post, so whatever the last failure said about this group is
+           no longer true. Left in place it would sit on the groups screen for
+           ever, describing a problem that has been fixed. */
+        patch.last_error = '';
+      }
       await db.from('social_targets').update(patch).eq('id', target.id);
       console.log(`[worker] ℹ פרטי קבוצה: "${patch.name ?? target.name}"${profile.image ? ' + תמונה' : ''}`);
     } catch (err) {
@@ -1056,8 +1090,25 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     }
     if (err instanceof PublishError && err.kind === 'cannot_post') {
       await finish({ status: 'skipped', step: '', skip_reason: message, screenshot_path: screenshot });
-      await db.from('social_targets').update({ last_status: 'cannot_post', last_error: message }).eq('id', tt.id);
-      await logActivity('warn', 'skipped', `${tt.name}: ${message}`, { queueId: item.id, detail: raw });
+      /*
+       * AND TURN IT OFF, which is the half that was missing.
+       *
+       * This branch fires on Facebook's own sentence — "אי אפשר לפרסם", "רק
+       * חברי הקבוצה", "join group" — so it is the same certain signal the
+       * profile sync now reads, arriving by the other road: the account cannot
+       * post here. It used to write the reason onto the group and leave it
+       * switched on, so every later round queued another publication into a
+       * group the owner had left, each one skipped with the same sentence.
+       *
+       * `enabled: false` makes rules.ts skip it before it is ever claimed, and
+       * the groups screen stops counting it — which is what the owner asked
+       * for. Their own switch puts it back.
+       */
+      await db
+        .from('social_targets')
+        .update({ enabled: false, last_status: 'left', last_error: `${message} הקבוצה כובתה ולא ייכנסו אליה פרסומים חדשים.` })
+        .eq('id', tt.id);
+      await logActivity('warn', 'target_left', `כובתה הקבוצה "${tt.name}" — ${message}`, { queueId: item.id, targetId: tt.id, detail: raw });
       return;
     }
     const afterSubmit = err instanceof PublishError && err.afterSubmit;

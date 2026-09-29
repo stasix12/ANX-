@@ -270,7 +270,10 @@ export default function GroupsPage() {
       { label: 'שייך לעיר', icon: <MapPinIcon className={mk} />, onSelect: () => setCityFor([g.id]) },
       { label: g.favorite ? 'הסר מהמועדפות' : 'הוסף למועדפות', icon: <StarIcon className={mk} />, onSelect: () => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite })) },
       { label: g.enabled ? 'השהה קבוצה' : 'הפעל קבוצה', icon: g.enabled ? <PauseIcon className={mk} /> : <PlayIcon className={mk} />, onSelect: () => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: !g.enabled }), g.enabled ? 'הקבוצה הושהתה.' : 'הקבוצה הופעלה.') },
-      { label: 'רענן שם ותמונה', icon: <RepeatIcon className={mk} />, onSelect: () => act(`sync-${g.id}`, () => requestGroupRefresh([g.id]), 'התוכנה במחשב תמשוך מחדש כשתהיה פנויה.') },
+      /* The same request as before — it clears last_synced_at and the worker
+         re-opens the group — but the visit now also reads whether this account
+         can still post there, so the label says both things it does. */
+      { label: 'בדוק קבוצה מחדש', icon: <RepeatIcon className={mk} />, onSelect: () => act(`sync-${g.id}`, () => requestGroupRefresh([g.id]), 'התוכנה במחשב תבדוק את הקבוצה כשתהיה פנויה.') },
       {
         label: 'הסר מהרשימה',
         icon: <TrashIcon className={mk} />,
@@ -341,9 +344,35 @@ export default function GroupsPage() {
       title="קבוצות"
       lede="היעדים שאליהם המערכת מפרסמת"
       headerAction={
-        <Button onClick={() => setAddOpen(true)}>
-          + הוסף
-        </Button>
+        <div className="flex items-center gap-1.5">
+          {/*
+            "בדוק הכל" — asked for after the owner left a group on Facebook and
+            the app went on counting it.
+
+            It is requestGroupRefresh() with no ids, which is the call the
+            per-group menu already makes: it clears last_synced_at and the
+            worker re-opens each group, reads its name and picture as it always
+            has, and now also reads whether this account can still post there.
+
+            SLOW ON PURPOSE, and the pace is not this button's to set. The
+            worker takes two groups per tick with four seconds between them,
+            and only in a window where no publication is due — so a hundred
+            groups are checked over an hour of idle time rather than in a burst
+            of a hundred page loads, which is the shape of traffic that gets a
+            Facebook account looked at. The toast says so instead of implying
+            the list will change while they watch.
+          */}
+          <Button
+            variant="secondary"
+            busy={busy === 'recheck'}
+            onClick={() =>
+              act('recheck', () => requestGroupRefresh(), 'התוכנה במחשב תעבור על הקבוצות ותבדוק בכל אחת אם עדיין אפשר לפרסם. זה נעשה לאט, בין פרסומים.')
+            }
+          >
+            בדוק הכל
+          </Button>
+          <Button onClick={() => setAddOpen(true)}>+ הוסף</Button>
+        </div>
       }
     >
       {/* No pb-* here: the shell already reserves the tab bar's height plus the
@@ -574,10 +603,20 @@ export default function GroupsPage() {
                         {g.favorite && <StarIcon aria-hidden className="me-1 inline h-3.5 w-3.5 align-[-0.15em] text-warning-400" fill="currentColor" />}
                         {g.name}
                       </p>
-                      <p dir="auto" className="truncate text-[11px] text-mist-500">
-                        {cityOf(g)}
-                        {g.category ? ` · ${g.category}` : ''} · {g.last_published_at ? `פורסם ${formatDayMonthHe(g.last_published_at)}` : 'טרם פורסם'}
-                      </p>
+                      {/* The reason it is off, where the eye already is. A
+                          group that switched itself off with no explanation is
+                          a group the owner switches back on and watches fail
+                          again. */}
+                      {g.last_status === 'left' && !g.enabled ? (
+                        <p dir="auto" className="truncate text-[11px] font-bold text-warning-400">
+                          אי אפשר לפרסם בקבוצה הזו — כנראה יצאתם ממנה
+                        </p>
+                      ) : (
+                        <p dir="auto" className="truncate text-[11px] text-mist-500">
+                          {cityOf(g)}
+                          {g.category ? ` · ${g.category}` : ''} · {g.last_published_at ? `פורסם ${formatDayMonthHe(g.last_published_at)}` : 'טרם פורסם'}
+                        </p>
+                      )}
                     </div>
                   </Link>
                   <Toggle checked={g.enabled} onChange={(v) => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: v }))} label={`הפעל את ${g.name}`} />

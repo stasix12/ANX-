@@ -1,6 +1,6 @@
 import type { Page } from 'playwright-core';
 import { parseGroupUrl } from '@/lib/social/types';
-import { patterns } from './selectors';
+import { fb, patterns } from './selectors';
 import { classifyPage } from './session';
 
 /**
@@ -11,6 +11,21 @@ export interface GroupProfile {
   name: string;
   /** Raw picture bytes (Facebook CDN links expire, so the caller stores a copy). */
   image: { bytes: Buffer; contentType: string } | null;
+  /**
+   * Whether this account can still post here — false when the page says so.
+   *
+   * THE POSITIVE SIGNAL, NOT THE MISSING ONE. "There is no composer box" is
+   * what leaving a group looks like AND what a Facebook redesign looks like,
+   * and a product that guesses between them either stops publishing to groups
+   * the owner is still in or keeps queueing posts into groups they left. So
+   * this reads the sentence Facebook actually prints — "אי אפשר לפרסם", "רק
+   * חברי הקבוצה", "join group" (selectors.ts, patterns.cannotPost) — and says
+   * nothing at all when that sentence is absent.
+   *
+   * `null` is therefore "we could not tell", which is a different answer from
+   * "you are not a member" and must never be written down as one.
+   */
+  canPost: boolean | null;
 }
 
 export async function readGroupProfile(page: Page, groupUrl: string): Promise<GroupProfile | null> {
@@ -24,6 +39,16 @@ export async function readGroupProfile(page: Page, groupUrl: string): Promise<Gr
   if (kind !== 'ok') return null;
 
   const name = (await page.title().catch(() => '')).replace(/^\(\d+\)\s*/, '').replace(patterns.titleSuffix, '').trim();
+
+  /*
+   * ASKED WHILE THE PAGE IS ALREADY OPEN, which is the whole reason this lives
+   * here rather than in a sweep of its own. The worker opens a group's page to
+   * read its name and picture; asking one more question of a page that is
+   * already loaded costs nothing and adds no traffic to the account — and a
+   * separate "check every group" pass over a hundred-odd groups is exactly the
+   * kind of burst that gets a Facebook account looked at.
+   */
+  const cannotPost = await fb.cannotPostText(page).isVisible({ timeout: 1200 }).catch(() => null);
 
   // The picture: a centred square screenshot of the rendered cover area.
   // Facebook draws a blurred copy behind the real cover and serves both as
@@ -72,5 +97,8 @@ export async function readGroupProfile(page: Page, groupUrl: string): Promise<Gr
       }
     }
   }
-  return { name, image };
+  /* cannotPost is `null` when the check itself failed, and that stays null
+     here rather than collapsing into `true`: not knowing is not the same as
+     knowing you can post, and only the caller can decide what to do with it. */
+  return { name, image, canPost: cannotPost === null ? null : !cannotPost };
 }

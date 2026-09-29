@@ -69,6 +69,9 @@ const TITLE: Record<string, string> = {
   // A round's own life.
   planned: 'נבנה סבב פרסום',
   drip_planned: 'נבנה סבב פרסום',
+  /* Written when Facebook's own page says this account cannot post in a
+     group — the group is switched off and the owner is told which one. */
+  target_left: 'יצאתם מקבוצה — היא כובתה',
   campaign_paused: 'הסבב הושהה',
   campaign_resumed: 'הסבב חודש',
   campaign_stopped: 'הסבב נעצר',

@@ -85,6 +85,24 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+/**
+ * A desktop monitor — screen, neck, foot.
+ *
+ * Asked for by name: "לשנות את הסימן של המחשב, למסך מחשב". MachineIcon below
+ * is a cleaning machine, which is what this product's OTHER half is about, so
+ * in the header it read as a piece of equipment rather than as the PC the
+ * worker runs on.
+ */
+export function MonitorIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2.5" y="4" width="19" height="12.5" rx="2" />
+      <path d="M12 16.5V20" />
+      <path d="M8.5 20h7" />
+    </svg>
+  );
+}
+
 export function MachineIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

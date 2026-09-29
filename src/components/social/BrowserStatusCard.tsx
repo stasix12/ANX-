@@ -35,7 +35,24 @@ function lightFor(w: (SocialWorker & { online: boolean }) | undefined): Light {
  * needs (connect / check / disconnect) and the recovery path when Facebook
  * asks for a human.
  */
-export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; id?: string }) {
+export function BrowserStatusCard({
+  onChanged,
+  id,
+  /**
+   * Render the open form straight away, with no collapsed button and no
+   * "צמצם".
+   *
+   * For the header's panel, which IS the disclosure: it only exists because
+   * somebody tapped the monitor to see this, so a card that opens closed
+   * inside it would be a second tap for the thing they already asked for, and
+   * a "צמצם" inside a popover collapses it to a stub floating in mid-air.
+   */
+  alwaysOpen = false,
+}: {
+  onChanged?: () => void;
+  id?: string;
+  alwaysOpen?: boolean;
+}) {
   const [workers, setWorkers] = useState<(SocialWorker & { online: boolean })[]>([]);
   const [commands, setCommands] = useState<WorkerCommand[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -98,7 +115,7 @@ export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; i
    * at the top of the card and this decision must not be able to disagree.
    */
   const settled = light.tone === 'good' && !needsHuman && !stale && !error;
-  const expanded = !settled || opened;
+  const expanded = alwaysOpen || !settled || opened;
   /* The fast poll belongs to the flow that needs it, not to the card. */
   const watching = expanded || !settled;
 
@@ -189,7 +206,7 @@ export function BrowserStatusCard({ onChanged, id }: { onChanged?: () => void; i
       /* Only when it opened because somebody asked. While something is wrong
          there is nowhere to fold it back to. */
       action={
-        settled ? (
+        settled && !alwaysOpen ? (
           <button type="button" onClick={() => setOpened(false)} aria-expanded className="inline-flex min-h-11 items-center gap-1 px-2 text-sm font-bold text-brand-400">
             צמצם
             <ChevronDownIcon aria-hidden className="h-4 w-4 rotate-180" />

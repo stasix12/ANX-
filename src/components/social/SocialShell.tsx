@@ -8,7 +8,7 @@ import {
   ClipboardListIcon,
   ClockIcon,
   GearIcon,
-  MachineIcon,
+  MonitorIcon,
   HomeIcon,
   LogOutIcon,
   MenuIcon,
@@ -22,6 +22,7 @@ import { getControl, listWorkers } from '@/lib/social/client';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, type SystemState } from './systemState';
 import { InstallPrompt } from './InstallPrompt';
 import { NotificationBell } from './NotificationBell';
+import { BrowserStatusCard } from './BrowserStatusCard';
 import { PublishingToggle } from './PublishingToggle';
 import { UpdateBanner } from './UpdateBanner';
 import { Sheet, TONE_TEXT, useConfirm, type Tone } from './ui';
@@ -224,6 +225,17 @@ export function SocialShell({
    * this replaced polled far harder for a fact that changes a few times a day.
    */
   const [pcOnline, setPcOnline] = useState<boolean | null>(null);
+  /* The header's connection panel. Closed on every navigation below, with the
+     "more" sheet, so it can never be left hanging over the next screen. */
+  const [pcOpen, setPcOpen] = useState(false);
+  useEffect(() => {
+    if (!pcOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPcOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [pcOpen]);
   useEffect(() => {
     if (!session) return;
     let stopped = false;
@@ -254,6 +266,7 @@ export function SocialShell({
   // the new screen.
   useEffect(() => {
     setMoreOpen(false);
+    setPcOpen(false);
   }, [pathname]);
 
   /*
@@ -439,15 +452,22 @@ export function SocialShell({
               * It goes to the connection card, which is where "התחבר
               * לפייסבוק" now lives.
             */}
-            <Link
-              href="/social/settings#browser-status"
-              aria-label={pcOnline ? 'המחשב מחובר — פתיחת מסך החיבור' : 'המחשב לא מחובר — פתיחת מסך החיבור'}
+            <button
+              type="button"
+              onClick={() => setPcOpen((v) => !v)}
+              aria-expanded={pcOpen}
+              aria-controls="pc-panel"
+              aria-label={pcOnline ? 'המחשב מחובר — פרטי החיבור' : 'המחשב לא מחובר — פרטי החיבור'}
               className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors ${
-                pcOnline ? 'text-success-400 hover:bg-success-400/10' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
+                pcOpen
+                  ? 'bg-brand-300/12 text-brand-400'
+                  : pcOnline
+                    ? 'text-success-400 hover:bg-success-400/10'
+                    : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
               }`}
             >
-              <MachineIcon className="h-5 w-5" />
-            </Link>
+              <MonitorIcon className="h-5 w-5" />
+            </button>
             <NotificationBell />
             {/* Settings had a tab on desktop and lived two taps deep behind
                 "עוד" on a phone, which is where the owner goes after a run
@@ -465,6 +485,61 @@ export function SocialShell({
             </Link>
           </div>
         </div>
+
+        {/*
+          THE CONNECTION, AS A PANEL THAT DROPS FROM THE BAR.
+          *
+          * Asked for: "שאני לוחץ עליו אני רוצה שיהיה חלון קטן צף שיורד מתחת
+          * למסך עם הפרטי התחברות". It is the SAME BrowserStatusCard the
+          * settings screen renders — not a copy of it — so "התחבר לפייסבוק",
+          * "בדוק חיבור" and the reset behave identically wherever they are
+          * pressed, and there is one place where those commands are built.
+          *
+          * Mounted only while open, which is what keeps its poller off every
+          * screen in the product: the header's own sixty-second read is all
+          * the icon's colour needs.
+          *
+          * The backdrop is a real element rather than a document listener
+          * because the panel sits inside a sticky header: a listener would
+          * have to exclude the button that opened it, and that exclusion is
+          * the bug every such menu eventually has.
+        */}
+        {pcOpen && (
+          <>
+            <button
+              type="button"
+              aria-label="סגירת פרטי החיבור"
+              onClick={() => setPcOpen(false)}
+              /*
+               * ABSOLUTE AND top-full, NOT `fixed inset-0`.
+               *
+               * The header carries backdrop-blur, and an element with a
+               * backdrop-filter is a containing block for fixed descendants —
+               * so `fixed inset-0` would have sized itself to the HEADER, not
+               * the viewport, and a tap anywhere on the page below would not
+               * have closed the panel. Anchored under the bar with a viewport
+               * height instead, which needs no such assumption.
+               */
+              className="absolute inset-x-0 top-full z-40 h-screen cursor-default bg-ink-950/40"
+            />
+            <div
+              id="pc-panel"
+              /* `rise` is the app's own entrance — the token in globals.css, not a
+                 new keyframe. My first pass wrote animate-[fadeIn_.12s], and
+                 there is no fadeIn in this stylesheet: a class that names a
+                 keyframe nobody defined renders nothing and fails silently. */
+              className="absolute inset-x-0 top-full z-50 px-3 pt-2 motion-safe:animate-[rise_0.22s_cubic-bezier(0.22,1,0.36,1)_both]"
+            >
+              {/* Full width on a phone, a panel on a desktop — and pinned to
+                  the side the button is on, which in RTL is the start. */}
+              <div className="mx-auto w-full max-w-6xl">
+                <div className="ms-auto w-full max-w-md">
+                  <BrowserStatusCard alwaysOpen onChanged={onControlChanged} />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
         {/* Desktop / tablet: pill toolbar under the title. Phones use the bottom bar below. */}
         <nav aria-label="ניווט פרסום" className="mx-auto hidden min-w-0 max-w-6xl overflow-x-auto px-2 [scrollbar-width:none] md:block">
           <ul className="flex min-w-max items-stretch gap-1 pb-1.5">

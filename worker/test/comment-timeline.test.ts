@@ -63,25 +63,32 @@ async function main(): Promise<void> {
 
       const seen = await page.evaluate(() => {
         const card = document.querySelector('.probe > section') as HTMLElement | null;
-        const items = [...(card?.querySelectorAll('ul li') ?? [])] as HTMLElement[];
+        const items = [...(card?.querySelectorAll('ol > li') ?? [])] as HTMLElement[];
         
         return {
           found: Boolean(card),
           rows: items.length,
           pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-          /* The fold: the list shows a first page and ends in "הצג עוד N",
-             which is the shape the card above it uses and the one the owner
-             pointed at ("כמו כאן"). */
-          more: [...(card?.querySelectorAll('button') ?? [])]
-            .map((b) => (b.textContent ?? '').trim())
-            .filter((t) => t.startsWith('הצג')),
+          /* The rail lives in a box that scrolls; the card itself must not
+             grow to the height of the queue. */
+          box: (() => {
+            const el = card?.querySelector('ol')?.parentElement as HTMLElement | null;
+            return el ? { scrolls: el.scrollHeight > el.clientHeight + 1, h: Math.round(el.getBoundingClientRect().height) } : null;
+          })(),
+          /* No fold: the owner asked for the scroll back — "את העיצוב והגלילה
+             תשאיר ככה" — so a "הצג עוד" button reappearing is a regression. */
+          folds: [...(card?.querySelectorAll('button') ?? [])].map((b) => (b.textContent ?? '').trim()).filter((t) => t.startsWith('הצג')),
+          /* Rows for a publication that has not gone out yet. The rail has no
+             section headings, so they are counted by the only thing that
+             marks them. */
+          aheadRows: [...(card?.querySelectorAll('ol > li p') ?? [])].filter((p) => (p.textContent ?? '').trim() === 'תגובה אחרי הפרסום').length,
           cardHeight: card ? Math.round(card.getBoundingClientRect().height) : 0,
           /* Every "לתגובה" link, and where it points. */
           links: [...(card?.querySelectorAll('a') ?? [])].map((a) => (a as HTMLAnchorElement).getAttribute('href') ?? ''),
           /* The queue positions, in the order they are drawn. */
           places: items
-            .map((li) => ([...li.querySelectorAll('span')].find((s) => /^מקום \d+ בתור$/.test((s.textContent ?? '').trim()))?.textContent ?? '').trim())
-            .filter(Boolean),
+            .map((li) => (li.querySelector('span[dir="ltr"]')?.textContent ?? '').trim())
+            .filter((t) => t.startsWith('#')),
           /* Text overflowing its box, excluding what is allowed to clamp. */
           clipped: [...(card?.querySelectorAll('p') ?? [])]
             .filter((e) => !/truncate|line-clamp/.test(String((e as HTMLElement).className)))
@@ -93,7 +100,7 @@ async function main(): Promise<void> {
           bar: Boolean(card?.querySelector('[role="img"]')),
           /* Every group name drawn, so the 24-hour filter can be checked by
              what it left OUT rather than only by a count. */
-          names: [...(card?.querySelectorAll('ul li p[dir="auto"]') ?? [])].map((p) => (p.textContent ?? '').trim()),
+          names: [...(card?.querySelectorAll('ol > li p[dir="auto"]') ?? [])].map((p) => (p.textContent ?? '').trim()),
           text: card?.textContent ?? '',
         };
       });
@@ -107,10 +114,12 @@ async function main(): Promise<void> {
        * it does on any busy day, since the two reads overlap by design. Drawn
        * twice it would be the rail claiming two comments under one post.
        */
-      /* Three lists: eight finished loaded (seven inside the window), seven
-         waiting, and two publications still due that are owed a comment. Two
-         are drawn from each. */
-      assert.equal(seen.rows, 6, `${width}px: the list drew ${seen.rows} rows — two from each of the three lists`);
+      /*
+       * EVERY ROW THAT WAS READ IS DRAWN — the rail scrolls rather than
+       * folding. Seven finished inside the 24-hour window, seven queued, and
+       * two publications still due whose round is owed a comment.
+       */
+      assert.equal(seen.rows, 16, `${width}px: the rail drew ${seen.rows} rows — 7 finished + 7 queued + 2 scheduled ahead`);
       /*
        * TWENTY-FOUR HOURS ONLY. The fixture carries a comment from forty hours
        * ago; it must not be drawn. Checked by NAME rather than by a count, so
@@ -127,18 +136,14 @@ async function main(): Promise<void> {
        * — so it moves the moment the filter does.
        */
       assert.ok(
-        seen.text.includes('מוצגות 2 מתוך 7'),
-        `${width}px: the finished half must be the 7 inside the 24-hour window, not all 8 loaded`,
-      );
-      assert.ok(
-        seen.text.includes('תגובה ישנה יותר לא מוצגת'),
-        `${width}px: the one comment the window excluded must be accounted for, not silently dropped`,
+        seen.text.includes('תגובה קודמת לא מוצגת'),
+        `${width}px: the one comment the 24-hour window excluded must be accounted for, not silently dropped`,
       );
       assert.ok(
         !seen.names.includes('קבוצה מלפני יומיים'),
         `${width}px: a comment older than a day is on the list — ${JSON.stringify(seen.names)}`,
       );
-      assert.ok(seen.text.includes('מה נכתב ב-24 השעות האחרונות'), `${width}px: the window must be stated, not silently applied`);
+      assert.ok(seen.text.includes('24 השעות האחרונות'), `${width}px: the window must be stated, not silently applied`);
 
       /*
        * SCHEDULED AHEAD — "וגם את התגובות המתוזמנות קדימה". A comment is
@@ -150,14 +155,14 @@ async function main(): Promise<void> {
        * imminent it is — checked by name, because a count alone would pass on
        * a filter that dropped the wrong one.
        */
-      assert.ok(seen.text.includes('מתוזמנות קדימה'), `${width}px: the scheduled-ahead section is missing`);
-      assert.ok(
-        seen.text.includes('2 מתוך 2'),
-        `${width}px: only publications whose round carries comment_text are owed a comment — got ${JSON.stringify(seen.names)}`,
+      assert.equal(
+        seen.aheadRows,
+        2,
+        `${width}px: exactly the two due publications whose round carries comment_text are owed a comment — the third round has none and must not appear`,
       );
       assert.ok(
-        seen.text.includes('תגובה אחרי הפרסום'),
-        `${width}px: a scheduled-ahead row must say the comment follows the publication, not that it is queued`,
+        seen.names.includes('ניקוי מזגנים — באר שבע'),
+        `${width}px: a scheduled-ahead row must name its group — ${JSON.stringify(seen.names)}`,
       );
       assert.deepEqual(seen.clipped, [], `${width}px: text is cut off — ${JSON.stringify(seen.clipped)}`);
       assert.deepEqual(seen.smallTargets, [], `${width}px: tap target under 40px — ${JSON.stringify(seen.smallTargets)}`);
@@ -169,15 +174,20 @@ async function main(): Promise<void> {
        */
       assert.deepEqual(
         seen.places,
-        ['מקום 1 בתור', 'מקום 2 בתור'],
-        `${width}px: the queue positions are ${JSON.stringify(seen.places)}`,
+        ['#1', '#2', '#3', '#4', '#5', '#6', '#7'],
+        `${width}px: the queue numbers are ${JSON.stringify(seen.places)}`,
       );
 
       /* Eight folded — four finished and four waiting — and the button says
          so exactly, the way "הצג עוד 36" does in the card above. */
-      /* Five finished and five waiting folded away; both scheduled-ahead rows
-         fit, so they add nothing to the count. */
-      assert.deepEqual(seen.more, ['הצג עוד 10'], `${width}px: the fold's button reads ${JSON.stringify(seen.more)}`);
+      /*
+       * THE SCROLL, NOT A FOLD. "את העיצוב והגלילה תשאיר ככה" — I had replaced
+       * the scrolling rail with tiles ending in "הצג עוד N", having read a
+       * screenshot captioned "כמו כאן" as a request to match the section above.
+       * It was not, and a fold button reappearing here is that regression.
+       */
+      assert.deepEqual(seen.folds, [], `${width}px: the rail must scroll, not fold — found ${JSON.stringify(seen.folds)}`);
+      assert.ok(seen.box?.scrolls, `${width}px: the rail must scroll inside its box rather than grow to the height of the queue`);
       /*
        * THE REAL INVARIANT IS THAT HEIGHT IS BOUNDED BY THE FOLD, NOT BY THE
        * QUEUE. Fourteen rows are loaded and the database holds 271; unfolded
@@ -185,15 +195,14 @@ async function main(): Promise<void> {
        * it is six rows, two headers and a button, whatever the owner's backlog
        * — which is the property worth pinning.
        *
-       * 1000px is that shape measured with a little room, not a target. It
-       * was 950 with two lists; the scheduled-ahead list added a heading, a
-       * count line and two rows, and folded the card measures 966. Raised
-       * deliberately rather than by trimming a list to fit a number — and it
-       * is still about the height of the "תגובות לפרסומים" card it sits
-       * under, which is the company this card is meant to keep.
+       * 650px, down from the 1000 the folded tile version needed. The rail
+       * puts sixteen rows in a 22rem scroll box; the tiles put six on the page
+       * and still measured 966. That difference is the argument for the shape
+       * the owner asked to keep, and pinning the smaller number is what stops
+       * it drifting back.
        */
       assert.ok(
-        seen.cardHeight <= 1000,
+        seen.cardHeight <= 650,
         `${width}px: the card is ${seen.cardHeight}px — folded it must stay a card, not become the page`,
       );
 

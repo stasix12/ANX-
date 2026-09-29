@@ -207,11 +207,22 @@ export function CommentTimeline({
       </p>
 
       {/*
+        THE SAME SCROLL BOX "מה קרה היום" USES, down to the 21rem and the focus
+        ring — "אני רוצה שזה יראה כמו במשבצת של מה קרה היום, אם אופציה לגלילה".
+        Mine was 22rem with a stray pe-1 and no keyboard affordances at all, so
+        the two rails on this screen scrolled to different depths and only one
+        of them could be reached without a mouse.
+
         A box that scrolls rather than a list cut off with the rest behind a
-        button. The half-row at the bottom edge is the affordance: a row
+        button: the half-row at the bottom edge is the affordance, and a row
         clipped mid-height says "there is more below" better than a hint can.
       */}
-      <div className="mt-3 max-h-[22rem] overflow-y-auto pe-1">
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label="סדר התגובות — רשימה נגללת"
+        className="mt-3 max-h-[21rem] overflow-y-auto rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
+      >
         <ol className="relative space-y-0.5">
           {items.map((item, i) => {
             const row = item.row;

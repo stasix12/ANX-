@@ -73,7 +73,17 @@ async function main(): Promise<void> {
              grow to the height of the queue. */
           box: (() => {
             const el = card?.querySelector('ol')?.parentElement as HTMLElement | null;
-            return el ? { scrolls: el.scrollHeight > el.clientHeight + 1, h: Math.round(el.getBoundingClientRect().height) } : null;
+            return el
+              ? {
+                  scrolls: el.scrollHeight > el.clientHeight + 1,
+                  h: Math.round(el.getBoundingClientRect().height),
+                  /* The same box "מה קרה היום" uses: reachable by keyboard and
+                     announced as a scrollable list, not a silent overflow. */
+                  focusable: el.tabIndex === 0,
+                  labelled: Boolean(el.getAttribute('aria-label')),
+                  maxH: getComputedStyle(el).maxHeight,
+                }
+              : null;
           })(),
           /* No fold: the owner asked for the scroll back — "את העיצוב והגלילה
              תשאיר ככה" — so a "הצג עוד" button reappearing is a regression. */
@@ -188,6 +198,15 @@ async function main(): Promise<void> {
        */
       assert.deepEqual(seen.folds, [], `${width}px: the rail must scroll, not fold — found ${JSON.stringify(seen.folds)}`);
       assert.ok(seen.box?.scrolls, `${width}px: the rail must scroll inside its box rather than grow to the height of the queue`);
+      /*
+       * THE SAME BOX AS "מה קרה היום" — asked for directly. 21rem is that
+       * card's max-height; a keyboard must be able to reach this list and a
+       * screen reader must be told it scrolls, which is what the publications
+       * rail already does and what this one was missing.
+       */
+      assert.equal(seen.box?.maxH, '336px', `${width}px: the scroll box must be 21rem, the same depth as "מה קרה היום" — got ${seen.box?.maxH}`);
+      assert.ok(seen.box?.focusable, `${width}px: the scroll box must be reachable by keyboard`);
+      assert.ok(seen.box?.labelled, `${width}px: the scroll box must announce itself as a scrollable list`);
       /*
        * THE REAL INVARIANT IS THAT HEIGHT IS BOUNDED BY THE FOLD, NOT BY THE
        * QUEUE. Fourteen rows are loaded and the database holds 271; unfolded

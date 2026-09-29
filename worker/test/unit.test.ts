@@ -3942,6 +3942,7 @@ const scenario: { step: string; line: string }[] = [];
 {
   const timeline = readFileSync(new URL('../../src/components/social/Timeline.tsx', import.meta.url), 'utf8');
   const dash = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
+  const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
 
   /*
    * The dashboard must hand the strip every row it READ, not a window onto it.
@@ -3973,38 +3974,61 @@ const scenario: { step: string; line: string }[] = [];
    * list, and the waiting read left exactly as it was.
    */
   assert.ok(dash.includes('done={data.doneToday}'), 'the strip must be handed the finished rows');
-  assert.ok(
-    dash.includes(
-      "listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: doneLimit })",
-    ),
-    'and they must be their own read, of the terminal statuses status.ts defines, bounded to today AND to the past',
-  );
   /*
-   * AND THE WINDOW OPENS. Six was the whole day's tail on a screen headed
-   * "מה קרה היום", and the owner asked why it was not showing what the worker
-   * had actually published. It is twelve now and grows by twenty-five a tap —
-   * a growing STATE rather than a bigger constant, because this screen
-   * re-reads every thirty seconds on a metered phone and must carry only what
-   * is on screen.
+   * RE-POINTED. The read moved out of listQueue into listTimelineDone(), and
+   * that is the whole fix rather than a refactor: QUEUE_SELECT is `*` plus
+   * three joins, and `*` on social_queue carries rendered_text — the entire
+   * published post, per row — so a day of two hundred publications was two
+   * hundred post bodies, every error and screenshot path, and the joined
+   * post's media array, re-fetched every thirty seconds to draw a name, a
+   * time and a dot. The rule the old assertion protected (its own read, the
+   * shared terminal statuses, bounded to today AND to the past) is checked
+   * below, where it now lives.
    */
-  assert.ok(/const \[doneLimit, setDoneLimit\] = useState\(DONE_LIMIT\);/.test(dash), 'how far back the strip reads is state, not a constant');
-  assert.ok(/\}, \[doneLimit\]\);/.test(dash), 'and the read depends on it, so one path fetches and there is no second to drift');
   assert.ok(
-    /data\.doneToday\.length >= doneLimit\s*\?\s*\{ busy: refreshing, onClick: \(\) => setDoneLimit/.test(dash),
-    'the control appears only while the read came back FULL — a button offering earlier rows that do not exist is worse than none',
+    dash.includes("listTimelineDone({ since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: DONE_LIMIT })"),
+    'today’s finished rows are their own read, bounded to today AND to the past',
   );
-  assert.ok(/\{earlier\}\s*\{list\}/.test(timeline), 'and it sits above the rail, because `done` runs forwards in time and "earlier" is up');
+  assert.ok(
+    /const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, target:/.test(client),
+    'and it asks for the five things the rail draws, not `*` and three joins',
+  );
+  assert.ok(
+    !/const TIMELINE_SELECT[^;]*rendered_text|const TIMELINE_SELECT[^;]*post:social_posts/.test(client),
+    'never the post body or its media — that is what made showing the whole day look expensive',
+  );
+  {
+    const fn = client.slice(client.indexOf('export async function listTimelineDone'));
+    assert.ok(/\.in\('status', TERMINAL_STATUSES\)/.test(fn.slice(0, 700)), 'the statuses come from status.ts, not an inline list');
+    assert.ok(/\.lte\('scheduled_at', opts\.until\)/.test(fn.slice(0, 700)), 'and the past bound survives the move');
+  }
+  /*
+   * THE WHOLE DAY, WITH NO TAP. It was six, then twelve behind a "show
+   * earlier" button, and the owner was right that a button is not "לפי סדר
+   * רץ": a card headed מה קרה היום should simply be the day. The number is a
+   * safety bound now — a stopped run can make hundreds of skipped rows in a
+   * minute — not a window.
+   */
+  assert.ok(/const DONE_LIMIT = 500;/.test(dash), 'the day is read whole, with a bound only against a pathological one');
+  assert.ok(!/onMoreDone/.test(dash) && !/onMoreDone/.test(timeline), 'and the "show earlier" control is gone rather than left unused');
   /*
    * `until` is not decoration. The read is ordered by scheduled_at descending,
    * and a row can be terminal with its slot still in the future — a duplicate
    * skipped before its turn, a run stopped mid-flight. Unbounded, those future
    * slots sort to the top and take every place: the strip showed four 18:15
    * "דולג" rows above publications waiting at 17:40, and nothing that had
-   * actually gone out appeared at all.
+   * actually gone out appeared at all.   *
+   * RE-POINTED with the read itself: the statuses moved into listTimelineDone,
+   * so `status: TERMINAL_STATUSES` is no longer a string on this page and this
+   * anchor silently matched nothing. It anchors on the call now, and the
+   * `.lte` that enforces the bound is checked above, in client.ts.
    */
-  const doneRead = dash.slice(dash.indexOf('status: TERMINAL_STATUSES'));
+  /* `listTimelineDone({` and not `listTimelineDone(`: the comment above the
+     read names the function, and the bare paren matched the prose first. */
+  const at = dash.indexOf('listTimelineDone({');
+  assert.ok(at > -1, 'the dashboard must still be the thing that asks for the finished rows');
   assert.ok(
-    doneRead.slice(0, 200).includes('until: now.toISOString()'),
+    dash.slice(at, at + 200).includes('until: now.toISOString()'),
     'the finished read must be bounded to the past, or a future-slot skip outranks everything that happened',
   );
   assert.ok(

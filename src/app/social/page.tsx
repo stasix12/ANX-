@@ -27,6 +27,7 @@ import {
   commentTotalsSince,
   listCommentsDone,
   listCommentQueue,
+  listTimelineDone,
   listQueue,
   listTargets,
   listWorkers,
@@ -37,6 +38,7 @@ import {
   stopCampaign,
   type CommentTotals,
   type QueueRow,
+  type TimelineRow,
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
@@ -55,29 +57,29 @@ import { AlertTriangleIcon, MessageIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIc
 const UPCOMING_LIMIT = 40;
 
 /**
- * How many of TODAY's finished publications the strip starts with, and how
- * many more each "הצג עוד" adds.
+ * The ceiling on TODAY's finished publications, and it is a safety bound
+ * rather than a window.
  *
- * It was a flat six, described here as "the tail of the afternoon, not the
- * history screen", and the owner asked the obvious question of a screen
- * headed מה קרה היום: "למה הוא לא מראה לי כאן את כל הפרסומים שהוא פרסם
- * בקבוצות". Six of a day that ran sixty is not the tail of the afternoon, it
- * is a sample of it.
+ * It was six, then twelve behind a "show earlier" button, and the owner was
+ * right that a button is not "לפי סדר רץ": a card headed מה קרה היום should
+ * simply be the day.
  *
- * WHY IT IS NOT SIMPLY 200. This screen re-reads every thirty seconds, each
- * row comes back with its target, its post and that post's media, and the
- * owner is on a metered Israeli mobile plan — the same reason a "this week"
- * count that no screen rendered was taken out of this very poll. A day at
- * their ceiling would be a couple of hundred rows a minute, for ever, to show
- * a list that is usually looked at once.
+ * WHAT MADE THAT EXPENSIVE WAS NOT THE ROW COUNT. Every row came back through
+ * QUEUE_SELECT — `*` on social_queue plus three joins — and `*` carries
+ * rendered_text, the entire published post, per row. Two hundred publications
+ * meant two hundred copies of the post body, plus every error, skip_reason,
+ * screenshot path, comment note and metrics column, plus the joined post's
+ * whole media array, re-fetched every thirty seconds on a metered phone, to
+ * draw a name, a time and a coloured dot.
  *
- * So the window OPENS instead: twelve without asking, twenty-five more per
- * tap, and the poll only ever carries what is actually on screen. It is still
- * a window, and the card's "הכל" still goes to the history, which is the
- * screen built to hold a whole day.
+ * listTimelineDone() asks for the five things the rail actually renders, so
+ * the whole day costs a fraction of what six rows used to. The number here is
+ * only what stops a pathological day (a stopped run can make hundreds of
+ * skipped rows in a minute) from becoming an unbounded read — and it is
+ * deliberately far above any real one, with the card's "הכל" going to the
+ * history screen for anything past it.
  */
-const DONE_LIMIT = 12;
-const DONE_STEP = 25;
+const DONE_LIMIT = 500;
 
 interface DashboardData {
   counts: Record<QueueStatus, number>;
@@ -109,7 +111,7 @@ interface DashboardData {
   upcoming: QueueRow[];
   /** Today's finished publications, newest first. Its own read, counted by
       nothing — the queue's numbers describe the queue, not this window. */
-  doneToday: QueueRow[];
+  doneToday: TimelineRow[];
   /** Publications with a comment asked for on them, across every round. */
   comments: QueueRow[];
   commentTotals: CommentTotals;
@@ -197,15 +199,6 @@ export default function SocialDashboard() {
   /* The manual refresh's own in-flight flag — the interval has one of its own
      (`running` below) and a tap must not be able to stack reads on top of it. */
   const [refreshing, setRefreshing] = useState(false);
-  /*
-   * HOW FAR BACK INTO TODAY THE STRIP IS CURRENTLY READING.
-   *
-   * State rather than a constant, so "הצג עוד" costs one bigger read and the
-   * thirty-second poll keeps carrying exactly what is on screen — no more.
-   * It resets with the page, which is right: tomorrow's first look should not
-   * inherit the size of yesterday's longest scroll.
-   */
-  const [doneLimit, setDoneLimit] = useState(DONE_LIMIT);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -268,7 +261,7 @@ export default function SocialDashboard() {
          * at 17:40, and nothing that had actually gone out appeared at all.
          * The same trap listQueue's own comment describes, from the other end.
          */
-        listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: doneLimit }),
+        listTimelineDone({ since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: DONE_LIMIT }),
         listWorkers(),
         listCommentQueue(),
         commentTotals(),
@@ -313,10 +306,7 @@ export default function SocialDashboard() {
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
-    /* doneLimit is a real dependency: "הצג עוד" raises it and the next read —
-       fired immediately by the effect below — is what brings the rest of the
-       day back. */
-  }, [doneLimit]);
+  }, []);
 
   /*
    * The 30-second refresh, with the two guards every poller in this module
@@ -1118,22 +1108,17 @@ export default function SocialDashboard() {
               {/* One line, and it stays one line: worker/test/unit.test.ts
                   matches these three props together to hold "every row that
                   was read is rendered, in a box that scrolls". */}
-              {/* onMoreDone ONLY while the read came back full. A window that
-                  is not full has reached the start of the day, and a button
-                  offering earlier rows that do not exist is worse than none.
-                  Raising doneLimit re-runs load() through its own dependency,
-                  so there is one read path and no second one to drift. */}
+              {/* No "show earlier" control: the whole day is read. It was a
+                  button while every row cost a full QUEUE_SELECT; with the
+                  lean read the day is cheaper than six rows used to be, and a
+                  card headed מה קרה היום that needs a tap to become the day
+                  is not what it says it is. */}
               <Timeline
                 rows={data.upcoming}
                 limit={UPCOMING_LIMIT}
                 scrollable
                 total={summary.automaticWaiting}
                 done={data.doneToday}
-                onMoreDone={
-                  data.doneToday.length >= doneLimit
-                    ? { busy: refreshing, onClick: () => setDoneLimit((n) => n + DONE_STEP) }
-                    : undefined
-                }
                 onOpen={(row) => setDetail(row.id)}
               />
             </Card>

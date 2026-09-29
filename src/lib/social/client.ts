@@ -9,6 +9,7 @@ import { checkCampaignInvariants, checkQueueInvariants, takeUnreported, type Inv
 import {
   ALL_QUEUE_STATUSES,
   AUTOMATIC_WAITING_STATUSES,
+  TERMINAL_STATUSES,
   CANCELLABLE_STATUSES,
   OPEN_STATUSES,
   summarizeQueue,
@@ -638,6 +639,47 @@ const QUEUE_SELECT =
  * what happens next pass 'asc'; the history, which wants the newest first,
  * keeps the default.
  */
+/**
+ * A queue row with only what a TIMELINE ROW DRAWS — and it is a fraction of
+ * one.
+ *
+ * QUEUE_SELECT is `*` plus three joins, and `*` on social_queue carries
+ * rendered_text: the entire published post, per row. On a day of two hundred
+ * publications that is two hundred copies of the post body, plus every
+ * error, skip_reason, screenshot path, comment note and metrics column, plus
+ * the joined post's whole media array — fetched every thirty seconds, on a
+ * metered Israeli mobile plan, to draw a name, a time and a coloured dot.
+ *
+ * That cost is why the dashboard's strip was capped at six and why raising
+ * the cap looked expensive. It was expensive because of what each row
+ * weighed, not because of how many there were.
+ */
+const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, target:social_targets(id,name,channel,image_url)';
+
+export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'target'>;
+
+/**
+ * Today's finished publications, for the dashboard's rail.
+ *
+ * Ordered DESCENDING and bounded to the past for the same reason listQueue's
+ * caller was: a row can be terminal with its slot still in the future — a
+ * duplicate skipped before its turn, a run stopped mid-flight — and unbounded
+ * those future slots sort to the top and take every place. The component
+ * turns the result round to run forwards in time.
+ */
+export async function listTimelineDone(opts: { since: string; until: string; limit?: number }): Promise<TimelineRow[]> {
+  const res = await db()
+    .from('social_queue')
+    .select(TIMELINE_SELECT)
+    .in('status', TERMINAL_STATUSES)
+    .gte('scheduled_at', opts.since)
+    .lte('scheduled_at', opts.until)
+    .order('scheduled_at', { ascending: false })
+    .limit(opts.limit ?? 500);
+  if (res.error) throw friendlyError(res.error);
+  return (res.data ?? []) as unknown as TimelineRow[];
+}
+
 export async function listQueue(
   opts: { status?: QueueItem['status'][]; since?: string; until?: string; limit?: number; order?: 'asc' | 'desc' } = {},
 ): Promise<QueueRow[]> {

@@ -8,7 +8,7 @@ import { agree, counted, formatDateHe, zonedDateISO } from '@/lib/social/time';
 import { ChevronDownIcon, MessageIcon, ShareIcon } from '@/components/icons';
 import { Stamp } from './DateTime';
 import { TargetAvatar } from './TargetAvatar';
-import { Card, EmptyState, TONE_TEXT } from './ui';
+import { Card, EmptyState, ProgressBar, TONE_FILL, TONE_TEXT } from './ui';
 
 /**
  * THE COMMENTS, IN ORDER — what already went under a post, and what is queued.
@@ -89,9 +89,31 @@ export function CommentTimeline({
    * straight after it; flipping the order between two adjacent lists of the
    * same thing is how a screen starts lying about sequence.
    */
-  const past = all
-    .filter((r) => happened(r.comment_status))
+  /*
+   * TWENTY-FOUR HOURS, AND NOT A ROW OLDER — asked for in those words:
+   * "תגובות טיימלין של 24 שעות בלבד".
+   *
+   * It is the right window for this card. The owner is past six hundred
+   * comments; a list that reaches back to the start is a scroll through a
+   * month to find out what happened tonight, and "מה קרה היום" is the whole
+   * question a timeline on a dashboard answers. Everything older is still in
+   * "תגובות לפרסומים" above, which keeps the full history.
+   *
+   * The QUEUE half is not filtered. It is not history — it is what has not
+   * happened yet, and a comment queued three days ago is still going out
+   * next.
+   */
+  const since = Date.now() - 24 * 3_600_000;
+  const recent = all.filter((r) => happened(r.comment_status));
+  const past = recent
+    .filter((r) => {
+      const at = r.comment_at ? Date.parse(r.comment_at) : NaN;
+      return Number.isFinite(at) && at >= since;
+    })
     .sort((a, b) => (b.comment_at ?? '').localeCompare(a.comment_at ?? ''));
+  /* How many were dropped by the window, so the card can say "nothing in the
+     last day" rather than looking like nothing ever happened. */
+  const older = recent.length - past.length;
 
   /*
    * The waiting ones in the order the worker will take them: oldest
@@ -103,7 +125,7 @@ export function CommentTimeline({
     .filter((r) => !happened(r.comment_status))
     .sort((a, b) => (a.published_at ?? a.scheduled_at).localeCompare(b.published_at ?? b.scheduled_at));
 
-  if (!past.length && !waiting.length) {
+  if (!recent.length && !waiting.length) {
     return (
       <Card title="ציר הזמן של התגובות" subtitle="מה כבר נכתב, מה נכשל ומה עוד בתור">
         <EmptyState
@@ -125,8 +147,6 @@ export function CommentTimeline({
    * 34" when the real remainder was 55. `totals` is four COUNT queries.
    */
   const real = totals.done + totals.failed + totals.unverified + totals.pending;
-  const loaded = past.length + waiting.length;
-  const missing = Math.max(0, real - loaded);
   const today = zonedDateISO(new Date());
 
   /* One row, in the clothes of the card above. */
@@ -197,17 +217,49 @@ export function CommentTimeline({
 
   return (
     <Card title="ציר הזמן של התגובות" subtitle="מה כבר נכתב, מה נכשל ומה עוד בתור">
+      {/*
+        HOW MANY OF HOW MANY, AND HOW MANY STILL TO GO — asked for: "סרגל
+        התקדמות של התגובות כמה מתוך כמה הגיב וכמה בתור".
+        *
+        * These are the DATABASE's counts, not this card's. The list below is
+        * one day deep and folded at three; the bar is every comment ever
+        * queued, which is what makes "233 מתוך 615" a fact about the work
+        * rather than about the window. The sentence under it says so.
+        *
+        * Three segments, in the tones the rest of the product already uses for
+        * these states: written, needs a person, still waiting. A comment being
+        * typed right now is inside `pending` — it is a second long and giving
+        * it a slice of its own would be a bar that flickers.
+      */}
+      <ProgressBar
+        segments={[
+          { value: totals.done, className: TONE_FILL.good },
+          { value: totals.failed + totals.unverified, className: TONE_FILL.warn },
+          { value: totals.pending, className: TONE_FILL.neutral },
+        ]}
+        total={real}
+        ariaLabel={`${totals.done} מתוך ${real} תגובות נכתבו, ${totals.pending} בתור`}
+        height="h-2.5"
+      />
+      <p className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11.5px] font-bold">
+        <span className={TONE_TEXT.good}>{`${totals.done} מתוך ${real} הגיבו`}</span>
+        {totals.pending > 0 && <span className="text-mist-500">{`${totals.pending} בתור`}</span>}
+        {totals.failed + totals.unverified > 0 && (
+          <span className={TONE_TEXT.warn}>{`${totals.failed + totals.unverified} דורשות טיפול`}</span>
+        )}
+      </p>
+
       {past.length > 0 && (
         <>
-          <h3 className="text-[13px] font-extrabold text-mist-100">מה כבר נכתב</h3>
+          <h3 className="mt-4 text-[13px] font-extrabold text-mist-100">מה נכתב ב-24 השעות האחרונות</h3>
           {/*
             HOW MANY OF HOW MANY, IN ONE SENTENCE — the same shape the card
             above states it in, and for the same reason: two counts that
             disagree leave the reader adding numbers to work out which is which.
           */}
           <p className="mt-1 text-[11px] text-mist-500">
-            {`מוצגות ${shownPast.length} מתוך ${past.length} האחרונות, החדשות קודם.`}
-            {missing > 0 && ` סך הכול ${real} תגובות במערכת — המסך הזה טוען רק את האחרונות.`}
+            {`מוצגות ${shownPast.length} מתוך ${past.length} ${agree(past.length, 'תגובה', 'תגובות')} מהיממה האחרונה, החדשות קודם.`}
+            {older > 0 && ` ${older} ${agree(older, 'תגובה ישנה יותר לא מוצגת', 'תגובות ישנות יותר לא מוצגות')} כאן.`}
           </p>
           <ul className="mt-2 grid gap-1.5">
             {shownPast.map((r, i) => {
@@ -236,9 +288,21 @@ export function CommentTimeline({
         </>
       )}
 
+      {/*
+        A QUIET DAY IS NOT AN EMPTY CARD. Without this, an owner whose last
+        round finished two days ago opens the screen to a bar reading "233
+        הגיבו" over a list with no finished half at all, and the only
+        available conclusion is that something was lost.
+      */}
+      {past.length === 0 && older > 0 && (
+        <p className="mt-4 rounded-xl bg-ink-800/50 px-3 py-2.5 text-[12px] leading-snug text-mist-500">
+          לא נכתבו תגובות ב-24 השעות האחרונות. {older} {agree(older, 'תגובה קודמת נמצאת', 'תגובות קודמות נמצאות')} ב"תגובות לפרסומים" למעלה.
+        </p>
+      )}
+
       {waiting.length > 0 && (
         <>
-          <h3 className={`text-[13px] font-extrabold text-mist-100 ${past.length ? 'mt-4 border-t border-ink-700 pt-3' : ''}`}>
+          <h3 className={`text-[13px] font-extrabold text-mist-100 ${past.length || older ? 'mt-4 border-t border-ink-700 pt-3' : ''}`}>
             מה עוד בתור
           </h3>
           <p className="mt-1 text-[11px] text-mist-500">
@@ -262,7 +326,7 @@ export function CommentTimeline({
           <ChevronDownIcon aria-hidden className="h-4 w-4" />
         </button>
       )}
-      {showAll && loaded > FIRST && (
+      {showAll && past.length + waiting.length > FIRST && (
         <button
           type="button"
           onClick={() => setShowAll(false)}
@@ -273,11 +337,6 @@ export function CommentTimeline({
         </button>
       )}
 
-      {missing > 0 && (
-        <p className="mt-2 text-[11px] text-mist-500">
-          ועוד {counted(missing, 'תגובה אחת', 'תגובות', 'שתי תגובות')} {agree(missing, 'שלא נטענה למסך הזה', 'שלא נטענו למסך הזה')}.
-        </p>
-      )}
       <p className="mt-1 text-[11px] leading-snug text-mist-500">
         התגובות יוצאות אחת-אחת, במרווח שנבחר לכל סבב — ולכן אין להן שעה מראש.
       </p>

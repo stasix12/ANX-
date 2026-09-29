@@ -90,7 +90,10 @@ async function main(): Promise<void> {
           smallTargets: [...(card?.querySelectorAll('a,button') ?? [])]
             .map((e) => ({ h: Math.round(e.getBoundingClientRect().height), t: (e.textContent ?? '').slice(0, 14) }))
             .filter((t) => t.h > 0 && t.h < 40),
-          footer: (card?.textContent ?? '').includes('ועוד'),
+          bar: Boolean(card?.querySelector('[role="img"]')),
+          /* Every group name drawn, so the 24-hour filter can be checked by
+             what it left OUT rather than only by a count. */
+          names: [...(card?.querySelectorAll('ul li p[dir="auto"]') ?? [])].map((p) => (p.textContent ?? '').trim()),
           text: card?.textContent ?? '',
         };
       });
@@ -107,6 +110,35 @@ async function main(): Promise<void> {
       /* Seven finished and seven waiting are loaded; three of each are drawn
          and the other eight sit behind the fold. */
       assert.equal(seen.rows, 6, `${width}px: the list drew ${seen.rows} rows — three from each half, the rest behind "הצג עוד"`);
+      /*
+       * TWENTY-FOUR HOURS ONLY. The fixture carries a comment from forty hours
+       * ago; it must not be drawn. Checked by NAME rather than by a count, so
+       * the assertion fails for the right reason when the filter goes.
+       */
+      /*
+       * ASSERTED ON THE COUNT, not on the absence of the old row's name.
+       *
+       * The name check alone is worthless here and I nearly shipped it: the
+       * forty-hour-old comment sorts LAST among the finished ones, so with the
+       * filter deleted it still falls outside the three that are drawn and the
+       * assertion passes over the bug. The subtitle states the size of the
+       * filtered set — eight finished are loaded, seven are inside the window
+       * — so it moves the moment the filter does.
+       */
+      assert.ok(
+        seen.text.includes('מוצגות 3 מתוך 7'),
+        `${width}px: the finished half must be the 7 inside the 24-hour window, not all 8 loaded`,
+      );
+      assert.ok(
+        seen.text.includes('תגובה ישנה יותר לא מוצגת'),
+        `${width}px: the one comment the window excluded must be accounted for, not silently dropped`,
+      );
+      assert.ok(
+        !seen.names.includes('קבוצה מלפני יומיים'),
+        `${width}px: a comment older than a day is on the list — ${JSON.stringify(seen.names)}`,
+      );
+      assert.ok(seen.text.includes('מה נכתב ב-24 השעות האחרונות'), `${width}px: the window must be stated, not silently applied`);
+
       assert.deepEqual(seen.clipped, [], `${width}px: text is cut off — ${JSON.stringify(seen.clipped)}`);
       assert.deepEqual(seen.smallTargets, [], `${width}px: tap target under 40px — ${JSON.stringify(seen.smallTargets)}`);
 
@@ -156,14 +188,18 @@ async function main(): Promise<void> {
       );
 
       /*
-       * THE FOOTER COUNTS THE DATABASE, AND THE LOADED SET — NOT THE DRAWN
-       * ONE. 271 comments exist, 14 were loaded into this card and 6 are
-       * drawn, so "not loaded" is 257. Counting from the drawn rows instead
-       * would say 265 and describe eight rows sitting behind the card's own
-       * "הצג עוד" as rows that were never fetched.
+       * THE BAR COUNTS THE DATABASE, NOT THIS CARD. Asked for: "סרגל התקדמות
+       * של התגובות כמה מתוך כמה הגיב וכמה בתור". The list below is one day
+       * deep and folded at three, so a bar built from the drawn rows would
+       * report "3 מתוך 6" to an owner holding 271 comments.
        */
-      assert.ok(seen.footer, `${width}px: no remainder footer, though the reads are a window onto 271 comments`);
-      assert.ok(seen.text.includes('257'), `${width}px: the remainder must be totals minus what was LOADED (271 - 14 = 257), not minus what was drawn`);
+      assert.ok(seen.bar, `${width}px: the progress bar is missing`);
+      assert.ok(
+        seen.text.includes('18 מתוך 271 הגיבו'),
+        `${width}px: the bar's line must read the database's own totals (done 18 of 271)`,
+      );
+      assert.ok(seen.text.includes('126 בתור'), `${width}px: it must say how many are still queued`);
+      assert.ok(seen.text.includes('127 דורשות טיפול'), `${width}px: failed and unverified are counted together as needing a person`);
 
       /* "צריך לבדוק", never "לא הצליח": an unverified comment may already be
          under the post, and wording it as a failure is what put it in the bulk

@@ -35,11 +35,19 @@ const row = (o: Partial<QueueRow> & { id: string }): QueueRow =>
     ...o,
   }) as QueueRow;
 
+/*
+ * MINUTES AGO, NOT A FIXED DATE. The card shows the last 24 hours only, so a
+ * fixture pinned to 2026-09-29 would fall outside the window the moment the
+ * clock passed it and this file would measure the empty state while claiming
+ * to measure the list. Everything finished is placed relative to now.
+ */
+const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+
 const done: QueueRow[] = [
   row({
     id: 'a',
     comment_status: 'done',
-    comment_at: '2026-09-29T15:31:00Z',
+    comment_at: ago(30),
     permalink: 'https://facebook.com/groups/1/posts/9',
     target: { id: '1', name: 'באר שבע והסביבה ביחד', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/1' } as never,
   }),
@@ -47,7 +55,7 @@ const done: QueueRow[] = [
   row({
     id: 'b',
     comment_status: 'done',
-    comment_at: '2026-09-28T09:05:00Z',
+    comment_at: ago(20 * 60),
     permalink: 'https://facebook.com/groups/2/posts/4',
     target: { id: '2', name: 'АРАД НАШ И РЕШАЕМ МЫ', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/2' } as never,
   }),
@@ -56,11 +64,11 @@ const done: QueueRow[] = [
 const rows: QueueRow[] = [
   /* The same publication as done[0] — present in both reads, as it is on a
      busy day. It must be drawn once. */
-  row({ id: 'a', comment_status: 'done', comment_at: '2026-09-29T15:31:00Z', permalink: 'https://facebook.com/groups/1/posts/9' }),
+  row({ id: 'a', comment_status: 'done', comment_at: ago(30), permalink: 'https://facebook.com/groups/1/posts/9' }),
   row({
     id: 'c',
     comment_status: 'failed',
-    comment_at: '2026-09-29T16:02:00Z',
+    comment_at: ago(90),
     comment_note: 'לא מצאנו את הפוסט בקבוצה. ייתכן שמנהל הקבוצה מחק אותו, או שהקבוצה סגרה תגובות על פוסטים של חברים.',
     permalink: '',
     target: { id: '3', name: 'ניקוי ספות — מבצעים באר שבע', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/3' } as never,
@@ -68,7 +76,7 @@ const rows: QueueRow[] = [
   row({
     id: 'd',
     comment_status: 'unverified',
-    comment_at: '2026-09-29T16:40:00Z',
+    comment_at: ago(120),
     comment_note: 'נלחץ Enter ופייסבוק לא אישרה. ייתכן שהתגובה כבר שם — כדאי להסתכל.',
     permalink: 'https://facebook.com/groups/4/posts/7',
     target: { id: '4', name: 'Арад - обо всём', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/4' } as never,
@@ -88,6 +96,21 @@ const rows: QueueRow[] = [
 ];
 
 /*
+ * ONE FROM THE DAY BEFORE, which must NOT appear. Without it the 24-hour
+ * filter is asserted only by the absence of rows it was never given, which is
+ * no assertion at all.
+ */
+done.push(
+  row({
+    id: 'old',
+    comment_status: 'done',
+    comment_at: ago(40 * 60),
+    permalink: 'https://facebook.com/groups/8/posts/1',
+    target: { id: '8', name: 'קבוצה מלפני יומיים', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/8' } as never,
+  }),
+);
+
+/*
  * ENOUGH OF EACH TO MAKE THE FOLD REAL. Each half shows four and folds the
  * rest, so with four in each half nothing would fold and the "הצג עוד" the
  * owner pointed at would never render — the test would be measuring an
@@ -98,7 +121,7 @@ for (let i = 0; i < 3; i += 1) {
     row({
       id: `p${i}`,
       comment_status: 'done',
-      comment_at: `2026-09-29T1${i}:00:00Z`,
+      comment_at: ago(180 + i * 60),
       permalink: `https://facebook.com/groups/9/posts/${i}`,
       target: { id: `9${i}`, name: `קבוצה נוספת ${i + 1}`, channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/9' } as never,
     }),

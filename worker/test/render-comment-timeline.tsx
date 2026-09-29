@@ -87,6 +87,25 @@ const rows: QueueRow[] = [
   row({ id: 'h', comment_status: 'pending', published_at: '2026-09-29T17:30:00Z', permalink: '' }),
 ];
 
+/*
+ * ENOUGH OF EACH TO MAKE THE FOLD REAL. Each half shows four and folds the
+ * rest, so with four in each half nothing would fold and the "הצג עוד" the
+ * owner pointed at would never render — the test would be measuring an
+ * unfolded card and calling it the folded one.
+ */
+for (let i = 0; i < 3; i += 1) {
+  done.push(
+    row({
+      id: `p${i}`,
+      comment_status: 'done',
+      comment_at: `2026-09-29T1${i}:00:00Z`,
+      permalink: `https://facebook.com/groups/9/posts/${i}`,
+      target: { id: `9${i}`, name: `קבוצה נוספת ${i + 1}`, channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/9' } as never,
+    }),
+  );
+  rows.push(row({ id: `w${i}`, comment_status: 'pending', published_at: `2026-09-29T18:${i}0:00Z`, permalink: '' }));
+}
+
 /* Far larger than the two windows above, which is the real case: the owner's
    own screen showed 124 failures and 126 waiting against reads capped at 60
    and 40. The footer must count THESE. */

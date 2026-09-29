@@ -1,12 +1,14 @@
 'use client';
 
+import { Fragment, useState } from 'react';
 import Link from 'next/link';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import { COMMENT_TONE, commentLabel, commentNeedsHuman } from '@/lib/social/comments';
-import { agree, counted, formatDateHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
+import { agree, counted, formatDateHe, zonedDateISO } from '@/lib/social/time';
+import { ChevronDownIcon, MessageIcon, ShareIcon } from '@/components/icons';
+import { Stamp } from './DateTime';
 import { TargetAvatar } from './TargetAvatar';
-import { Card, EmptyState, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
-import { MessageIcon, ShareIcon } from '@/components/icons';
+import { Card, EmptyState, TONE_TEXT } from './ui';
 
 /**
  * THE COMMENTS, IN ORDER — what already went under a post, and what is queued.
@@ -15,15 +17,20 @@ import { MessageIcon, ShareIcon } from '@/components/icons';
  * בוצע / נכשל אם קישור מהיר לתגובה בעמוד".
  *
  * WHY IT IS NOT THE CARD ABOVE IT. "תגובות לפרסומים" answers "how many, and
- * what needs me" — three rollups with the exceptions foldable underneath. That
- * is the right shape for triage and the wrong one for a sequence: a hundred
- * and twenty-four failures in a drawer say nothing about WHEN they happened or
- * in what order the rest are coming. This is the same afternoon told as a
- * line, which is the shape the publications rail already uses on this screen.
+ * what needs me": three rollups with the exceptions foldable underneath, and
+ * each outcome in a drawer of its own. That is the right shape for triage and
+ * the wrong one for a sequence — a hundred and twenty-four failures in one
+ * drawer and the successes in another say nothing about the order any of it
+ * happened in, and nothing at all about what is coming next. This is the same
+ * evening told as one list.
  *
- * THE RAIL IS DELIBERATELY THE SAME as Timeline's: hollow dot behind us,
- * filled dot still coming, a line between. Two rails on one screen that looked
- * different would read as two features.
+ * IT WEARS THAT CARD'S CLOTHES, and that was asked for too: the owner sent a
+ * screenshot of "תגובות שהועלו" and wrote "כמו כאן". So the rows here are that
+ * section's rows — the group's own picture, its name, the timestamp, the
+ * "לתגובה" link — and the list ends in the same "הצג עוד N" it does. The first
+ * version of this card drew a vertical rail with dots instead, borrowed from
+ * the publications timeline; it was a second visual language for the same
+ * subject, two cards apart.
  *
  * NOTHING HERE IS INTERPOLATED. A finished comment sits at `comment_at`, the
  * instant it actually happened. A waiting one carries no time at all, because
@@ -33,15 +40,17 @@ import { MessageIcon, ShareIcon } from '@/components/icons';
  * a fact.
  */
 
-/* The rail's hollow dot, matching Timeline's. A finished stop is the card's
-   own surface with the outcome's colour as its edge. */
-const RING_DONE: Record<Tone, string> = {
-  brand: 'ring-brand-300',
-  good: 'ring-success-400',
-  bad: 'ring-error-400',
-  warn: 'ring-warning-400',
-  neutral: 'ring-ink-600',
-};
+/**
+ * How many rows each half shows before it folds.
+ *
+ * THREE, not the four DONE_FIRST uses in the card above — because this card
+ * has TWO of those lists in it, finished and queued, and pays for each header
+ * twice. Measured on a phone: four per half came to 1067px even folded, which
+ * is a card and a half of screen for something sitting below two other cards.
+ * Three per half is six rows and the fold button, and the owner's own section
+ * showed four rows out of forty, so a first page of three is the same idea.
+ */
+const FIRST = 3;
 
 /** Already under a post, or already failed to get there. */
 function happened(status: string | undefined): boolean {
@@ -60,6 +69,8 @@ export function CommentTimeline({
   /** The REAL counts, from the database rather than from these two windows. */
   totals: CommentTotals;
 }) {
+  const [showAll, setShowAll] = useState(false);
+
   /*
    * ONE ROW PER PUBLICATION, however many reads it arrived in.
    *
@@ -72,12 +83,15 @@ export function CommentTimeline({
   for (const r of [...done, ...rows]) if (r.comment_status) byId.set(r.id, r);
   const all = [...byId.values()];
 
+  /*
+   * NEWEST FIRST, like the section this mirrors ("החדשות קודם"). The card
+   * above sorts its finished comments that way and the owner reads this one
+   * straight after it; flipping the order between two adjacent lists of the
+   * same thing is how a screen starts lying about sequence.
+   */
   const past = all
     .filter((r) => happened(r.comment_status))
-    /* Placed at the moment each one actually happened. A comment that went
-       under a post at 18:02 sitting above one from 18:51 would be the rail
-       telling the evening out of order. */
-    .sort((a, b) => (a.comment_at ?? '').localeCompare(b.comment_at ?? ''));
+    .sort((a, b) => (b.comment_at ?? '').localeCompare(a.comment_at ?? ''));
 
   /*
    * The waiting ones in the order the worker will take them: oldest
@@ -89,9 +103,7 @@ export function CommentTimeline({
     .filter((r) => !happened(r.comment_status))
     .sort((a, b) => (a.published_at ?? a.scheduled_at).localeCompare(b.published_at ?? b.scheduled_at));
 
-  const items = [...past, ...waiting];
-
-  if (!items.length) {
+  if (!past.length && !waiting.length) {
     return (
       <Card title="ציר הזמן של התגובות" subtitle="מה כבר נכתב, מה נכשל ומה עוד בתור">
         <EmptyState
@@ -107,129 +119,166 @@ export function CommentTimeline({
    * THE REMAINDER IS COUNTED FROM THE DATABASE, NOT FROM THE ARRAY.
    *
    * These two reads are capped at sixty and forty. With the hundred and
-   * twenty-four failures and hundred and twenty-six waiting on the owner's own
-   * screen, `items.length` is a window and printing it as a total is the exact
-   * defect the publications rail was fixed for — "6 shown, ועוד 34" when the
-   * real remainder was 55. `totals` is four COUNT queries; it is the truth.
+   * twenty-four failures and hundred and twenty-five waiting on the owner's
+   * own screen, the arrays are a window and printing their length as a total
+   * is the exact defect the publications rail was fixed for — "6 shown, ועוד
+   * 34" when the real remainder was 55. `totals` is four COUNT queries.
    */
   const real = totals.done + totals.failed + totals.unverified + totals.pending;
-  const rest = Math.max(0, real - items.length);
+  const loaded = past.length + waiting.length;
+  const missing = Math.max(0, real - loaded);
   const today = zonedDateISO(new Date());
+
+  /* One row, in the clothes of the card above. */
+  const Row = ({ r, place }: { r: QueueRow; place: number }) => {
+    const status = r.comment_status ?? '';
+    const tone = COMMENT_TONE[status as keyof typeof COMMENT_TONE] ?? 'neutral';
+    const isPast = happened(status);
+    /* The POST's address. Facebook gives a group post one handle and the
+       comment lives under it, so this is as close as the database can point —
+       and it is the right place to land: the comment is on that page. */
+    const href = r.permalink || r.target?.url || '';
+    return (
+      <li className="min-w-0 rounded-xl bg-ink-800/50 px-2.5 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {r.target?.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={r.target.image_url} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+          ) : (
+            <TargetAvatar name={r.target?.name ?? ''} size={32} />
+          )}
+          {/* dir="auto": these names are Russian and English inside an RTL
+              card, and forcing either direction puts the punctuation on the
+              wrong end. */}
+          <p dir="auto" className="min-w-0 flex-1 truncate text-[13px] font-bold text-mist-100">{r.target?.name ?? 'קבוצה'}</p>
+          {href && (
+            <Link
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`פתח את הפוסט ב${r.target?.name ?? 'קבוצה'} ואת התגובה שעליו`}
+              className="inline-flex h-11 shrink-0 items-center gap-1 rounded-lg border border-ink-600 px-2.5 text-[11.5px] font-bold text-mist-100 transition-colors hover:bg-ink-700"
+            >
+              <ShareIcon aria-hidden className="h-3 w-3" />
+              לתגובה
+            </Link>
+          )}
+        </div>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-mist-500">
+          {/*
+            ONE LINE, TWO MEANINGS. A finished comment shows the instant it
+            happened; a waiting one shows its place in the queue, because no
+            time for it exists anywhere to be shown.
+          */}
+          {isPast ? <Stamp iso={r.comment_at} /> : <span className="font-bold text-brand-400">{`מקום ${place} בתור`}</span>}
+          <span className={`font-bold ${TONE_TEXT[tone]}`}>{commentLabel(status)}</span>
+        </p>
+        {/*
+          THE REASON, WHOLE. "לא הצליח" on its own is what makes a person press
+          the same button again — a post the admin deleted, a group that closed
+          comments and a security screen are three different things to do next.
+        */}
+        {r.comment_note && (
+          /* Clamped at three lines. Every real reason the worker writes fits
+             in two; the clamp is against a pathological one making a single
+             row taller than the card's whole first page. The full text is one
+             tap away in "תגובות לפרסומים" above. */
+          <p dir="auto" className={`mt-0.5 line-clamp-3 text-[11px] leading-snug ${commentNeedsHuman(status) ? 'text-warning-400' : 'text-mist-500'}`}>
+            {r.comment_note}
+          </p>
+        )}
+      </li>
+    );
+  };
+
+  const shownPast = showAll ? past : past.slice(0, FIRST);
+  const shownWaiting = showAll ? waiting : waiting.slice(0, FIRST);
+  const folded = past.length - shownPast.length + (waiting.length - shownWaiting.length);
 
   return (
     <Card title="ציר הזמן של התגובות" subtitle="מה כבר נכתב, מה נכשל ומה עוד בתור">
-      {/*
-        A box that scrolls rather than a list cut off at six with the rest
-        behind a button. The half-row at the bottom edge is the affordance:
-        a row clipped mid-height says "there is more below" better than a hint.
-      */}
-      <div className="max-h-[22rem] overflow-y-auto pe-1">
-        <ol className="relative space-y-0.5">
-          {items.map((row, i) => {
-            const status = row.comment_status ?? '';
-            const tone = COMMENT_TONE[status as keyof typeof COMMENT_TONE] ?? 'neutral';
-            const isPast = happened(status);
-            const at = row.comment_at;
-            /* The POST's address. Facebook gives a group post one handle and
-               the comment lives under it, so this is as close as the database
-               can point — and it is the right place to land: the comment is on
-               that page. The same fallback the card above uses. */
-            const href = row.permalink || row.target?.url || '';
-            const day = at ? zonedDateISO(new Date(at)) : '';
-            const showDay =
-              Boolean(day) &&
-              day !== today &&
-              (i === 0 || zonedDateISO(new Date(items[i - 1].comment_at ?? 0)) !== day);
-            /* Where in the line this one is — 1 for the next comment out.
-               Counted from the start of the waiting block, not from the whole
-               list, or the first one queued would be numbered after every
-               comment that ever succeeded. */
-            const place = isPast ? 0 : i - past.length + 1;
-            return (
-              <li key={row.id}>
-                {/* `at &&` as well as showDay: showDay already implies it, but
-                    only through a Boolean(day) the compiler cannot follow back
-                    to this variable, and a cast here would be the one place
-                    the day heading could render "Invalid Date". */}
-                {showDay && at && (
-                  <p className="mb-1 mt-3 text-[11px] font-extrabold uppercase tracking-wide text-mist-500">{formatDateHe(at)}</p>
-                )}
-                <div className="flex items-stretch gap-3">
-                  <div className="flex w-3 shrink-0 flex-col items-center pt-3.5">
-                    <span
-                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                        isPast ? `bg-ink-850 ring-2 ${RING_DONE[tone]}` : TONE_FILL[tone]
-                      } ${status === 'commenting' ? `ring-4 ring-brand-300/20` : ''}`}
-                    />
-                    {i < items.length - 1 && <span aria-hidden className="w-px grow bg-ink-700" />}
-                  </div>
-                  <div
-                    className={`flex min-w-0 grow items-center gap-2.5 rounded-xl px-2 py-2 ${
-                      status === 'commenting' ? TONE_TINT[tone] : ''
-                    }`}
-                  >
-                    {/*
-                      ONE COLUMN, TWO MEANINGS, and the styling says which:
-                      a finished comment shows the hour it happened, dimmed;
-                      a waiting one shows its place in line, in the accent.
-                      Same width either way so the names below stay in a
-                      straight edge.
-                    */}
-                    <span className="w-12 shrink-0 text-sm font-extrabold tabular-nums">
-                      {isPast ? (
-                        <span className="text-mist-500">{at ? formatTimeHe(at) : '—'}</span>
-                      ) : (
-                        <span dir="ltr" className="inline-block text-brand-400">{`#${place}`}</span>
-                      )}
-                    </span>
-                    <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
-                    <div className="min-w-0 grow">
-                      {/* dir="auto": these group names are Russian and English
-                          inside an RTL card, and forcing either direction puts
-                          the punctuation on the wrong end. */}
-                      <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'קבוצה'}</p>
-                      <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{commentLabel(status)}</p>
-                      {/*
-                        THE REASON, WHOLE. "לא הצליח" on its own is what makes a
-                        person press the same button again — a post the admin
-                        deleted, a group that closed comments and a security
-                        screen are three different things to do next.
-                      */}
-                      {row.comment_note && (
-                        <p dir="auto" className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-mist-500">{row.comment_note}</p>
-                      )}
-                    </div>
-                    {/* The quick link that was asked for, on every row that has
-                        an address — including the ones still queued, because
-                        "where is this about to go" is the same question. */}
-                    {href && (
-                      <Link
-                        href={href}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={`פתח את הפוסט ב${row.target?.name ?? 'קבוצה'} ואת התגובה שעליו`}
-                        className="inline-flex h-11 shrink-0 items-center gap-1 rounded-lg border border-ink-600 px-2.5 text-[11.5px] font-bold text-mist-100 transition-colors hover:bg-ink-700"
-                      >
-                        <ShareIcon aria-hidden className="h-3 w-3" />
-                        לתגובה
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      </div>
+      {past.length > 0 && (
+        <>
+          <h3 className="text-[13px] font-extrabold text-mist-100">מה כבר נכתב</h3>
+          {/*
+            HOW MANY OF HOW MANY, IN ONE SENTENCE — the same shape the card
+            above states it in, and for the same reason: two counts that
+            disagree leave the reader adding numbers to work out which is which.
+          */}
+          <p className="mt-1 text-[11px] text-mist-500">
+            {`מוצגות ${shownPast.length} מתוך ${past.length} האחרונות, החדשות קודם.`}
+            {missing > 0 && ` סך הכול ${real} תגובות במערכת — המסך הזה טוען רק את האחרונות.`}
+          </p>
+          <ul className="mt-2 grid gap-1.5">
+            {shownPast.map((r, i) => {
+              const at = r.comment_at;
+              const day = at ? zonedDateISO(new Date(at)) : '';
+              const prev = i > 0 ? shownPast[i - 1].comment_at : null;
+              const showDay = Boolean(day) && day !== today && (i === 0 || (prev ? zonedDateISO(new Date(prev)) : '') !== day);
+              return (
+                /* A keyed Fragment, not a wrapper element: <ul> may only
+                   contain <li>, and a <div className="contents"> between them
+                   is invalid markup that happens to lay out correctly — which
+                   is the worst kind, because only a validator ever says so. */
+                <Fragment key={r.id}>
+                  {/* `at &&` as well as showDay: showDay already implies it,
+                      but only through a Boolean(day) the compiler cannot
+                      follow back to this variable, and a cast here would be
+                      the one place a day heading could say "Invalid Date". */}
+                  {showDay && at && (
+                    <p className="mt-1.5 text-[11px] font-extrabold uppercase tracking-wide text-mist-500">{formatDateHe(at)}</p>
+                  )}
+                  <Row r={r} place={0} />
+                </Fragment>
+              );
+            })}
+          </ul>
+        </>
+      )}
 
-      {/* Outside the scrolling box, because it is about rows that were never
-          read and therefore can never be scrolled to. */}
-      {rest > 0 && (
-        <p className="ps-6 pt-2 text-xs text-mist-500">
-          ועוד {counted(rest, 'תגובה אחת', 'תגובות', 'שתי תגובות')} {agree(rest, 'אחריה', 'אחריהן')}
+      {waiting.length > 0 && (
+        <>
+          <h3 className={`text-[13px] font-extrabold text-mist-100 ${past.length ? 'mt-4 border-t border-ink-700 pt-3' : ''}`}>
+            מה עוד בתור
+          </h3>
+          <p className="mt-1 text-[11px] text-mist-500">
+            {`מוצגות ${shownWaiting.length} מתוך ${waiting.length} שנטענו, לפי הסדר שבו הן ייצאו.`}
+          </p>
+          <ul className="mt-2 grid gap-1.5">
+            {shownWaiting.map((r, i) => (
+              <Row key={r.id} r={r} place={i + 1} />
+            ))}
+          </ul>
+        </>
+      )}
+
+      {folded > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-800/50 text-[12.5px] font-bold text-brand-400 transition-colors hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+        >
+          {`הצג עוד ${folded}`}
+          <ChevronDownIcon aria-hidden className="h-4 w-4" />
+        </button>
+      )}
+      {showAll && loaded > FIRST && (
+        <button
+          type="button"
+          onClick={() => setShowAll(false)}
+          className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-800/50 text-[12.5px] font-bold text-brand-400 transition-colors hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+        >
+          הצג פחות
+          <ChevronDownIcon aria-hidden className="h-4 w-4 rotate-180" />
+        </button>
+      )}
+
+      {missing > 0 && (
+        <p className="mt-2 text-[11px] text-mist-500">
+          ועוד {counted(missing, 'תגובה אחת', 'תגובות', 'שתי תגובות')} {agree(missing, 'שלא נטענה למסך הזה', 'שלא נטענו למסך הזה')}.
         </p>
       )}
-      <p className="ps-6 pt-1 text-[11px] leading-snug text-mist-500">
+      <p className="mt-1 text-[11px] leading-snug text-mist-500">
         התגובות יוצאות אחת-אחת, במרווח שנבחר לכל סבב — ולכן אין להן שעה מראש.
       </p>
     </Card>

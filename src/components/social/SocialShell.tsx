@@ -41,9 +41,16 @@ const DOT_FILL: Record<Tone, string> = {
 
 const nav = [
   { href: '/social', label: 'ראשי', icon: HomeIcon, exact: true },
-  // A round of publications is a cycle, not an announcement: the megaphone
-  // said "advertising" where the screen is about a repeating run.
-  { href: '/social/campaigns', label: 'סבבים', icon: RepeatIcon, exact: false },
+  /*
+   * "קמפיינים", renamed by the owner along with the screen itself. The word
+   * on the tab has to be the word at the top of the screen it opens, so this
+   * one line moves with it — nothing else about the navigation changes.
+   *
+   * The icon stays a cycle rather than a megaphone: a round of publications
+   * repeats, and the megaphone said "advertising" where the screen is about a
+   * run that comes round again.
+   */
+  { href: '/social/campaigns', label: 'קמפיינים', icon: RepeatIcon, exact: false },
   { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false },
   { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false },
   /* The activity log's own screen. Two places link to it — the dashboard card

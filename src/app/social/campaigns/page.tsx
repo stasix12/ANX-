@@ -181,13 +181,13 @@ export default function CampaignsPage() {
   async function removeCampaign(c: Campaign, state: CampaignState) {
     const waiting = cancellableRows(state.progress);
     const ok = await confirm.ask({
-      title: 'למחוק את הסבב?',
+      title: 'למחוק את הקמפיין?',
       body: (
         <>
           {waiting > 0
             ? `${waiting === 1 ? 'פרסום אחד שטרם יצא יבוטל' : `${waiting} פרסומים שטרם יצאו יבוטלו`} — מחיקה בלי לבטל הייתה משאירה אותם יוצאים לבד, בלי שום מקום לעצור אותם. `
             : 'שום פרסום לא ממתין לצאת. '}
-          הפוסטים עצמם יישארו במערכת ללא שיוך לסבב, והיסטוריית הפרסומים לא נמחקת. אי אפשר לבטל את הפעולה.
+          הפוסטים עצמם יישארו במערכת ללא שיוך לקמפיין, והיסטוריית הפרסומים לא נמחקת. אי אפשר לבטל את הפעולה.
         </>
       ),
       confirmLabel: waiting > 0 ? 'בטל ומחק' : 'מחק',
@@ -202,7 +202,7 @@ export default function CampaignsPage() {
         if (waiting > 0) await stopCampaign(c.id);
         await deleteCampaign(c.id);
       },
-      waiting > 0 ? `הסבב נמחק ו-${waiting} פרסומים בוטלו.` : 'הסבב נמחק.',
+      waiting > 0 ? `הקמפיין נמחק ו-${waiting} פרסומים בוטלו.` : 'הקמפיין נמחק.',
     );
   }
 
@@ -212,17 +212,30 @@ export default function CampaignsPage() {
     // Editing must never resurrect a stopped campaign, so status is only set
     // when the campaign is being created.
     const payload = form.id ? { ...form } : { ...form, status: 'active' as const };
-    await act('save', () => saveCampaign(payload), 'הסבב עודכן.');
+    /* The toast has to say which of the two happened: this form now opens
+       empty from "+ קמפיין חדש" as well as full from "ערוך", and "הקמפיין
+       עודכן" over a campaign that did not exist a second ago is the screen
+       describing the wrong event. */
+    await act('save', () => saveCampaign(payload), form.id ? 'הקמפיין עודכן.' : 'הקמפיין נוצר.');
     setEditorOpen(false);
   }
 
   return (
     <SocialShell
-      title="סבבי פרסום"
-      lede="כל פרסום שהפעלתם — מה יצא, מה עוד יוצא, ומה אפשר לעצור"
-      /* No "new run" action: a run is created by publishing a post, so the
-         useful thing to offer here is the way back to the posts. */
-      headerAction={<ButtonLink href="/social/library">ספריית תוכן</ButtonLink>}
+      title="קמפיינים"
+      lede="כל קמפיין שהפעלתם — מה יצא, מה עוד יוצא, ומה אפשר לעצור"
+      /*
+       * "קמפיין חדש" RATHER THAN "ספריית תוכן".
+       *
+       * The comment that stood here said a run is created by publishing a
+       * post, so the useful offer is the way back to the library. That was
+       * true of the only path that existed then; openEditor() with no argument
+       * has always opened this page's own editor on a blank form and
+       * saveCampaign() has always created from it. The button is that call —
+       * no new function, no new write — and it is what the owner asked for at
+       * the top of this screen.
+       */
+      headerAction={<Button onClick={() => openEditor()}>+ קמפיין חדש</Button>}
       paused={control?.paused ?? null}
       onControlChanged={load}
     >
@@ -239,7 +252,7 @@ export default function CampaignsPage() {
             empty array, not from the database. House rule 1: a number on
             screen is read from the database or it does not exist. */}
         <SegmentedControl
-          label="סינון סבבי פרסום"
+          label="סינון קמפיינים"
           value={filter}
           onChange={setFilter}
           options={[
@@ -258,10 +271,10 @@ export default function CampaignsPage() {
         {campaigns && visible.length === 0 && (
           <EmptyState
             icon={<MegaphoneIcon className="h-5 w-5" />}
-            title={counts.all === 0 ? 'עדיין לא הפעלתם פרסום' : 'אין סבבי פרסום בסינון הזה'}
+            title={counts.all === 0 ? 'עדיין לא הפעלתם פרסום' : 'אין קמפיינים בסינון הזה'}
             description={
               counts.all === 0
-                ? 'סבב הוא המסגרת שמאגדת פוסטים לפי שירות ועיר — למשל "ניקוי ספות באר שבע". אחר כך מוסיפים לו פוסט ובוחרים קבוצות.'
+                ? 'קמפיין הוא המסגרת שמאגדת פוסטים לפי שירות ועיר — למשל "ניקוי ספות באר שבע". אחר כך מוסיפים לו פוסט ובוחרים קבוצות.'
                 : 'החליפו סינון כדי לראות את השאר.'
             }
             action={counts.all === 0 ? <ButtonLink href="/social/library">לספריית התוכן</ButtonLink> : undefined}
@@ -273,74 +286,49 @@ export default function CampaignsPage() {
             const state = stateOf(c);
             const mine = posts.filter((p) => p.campaign_id === c.id);
             return (
-              <div key={c.id} className="space-y-1.5">
-                <CampaignCard
-                  campaign={c}
-                  state={state}
-                  /* The cover of the run's post, and the next group's own
-                     picture — both already loaded, neither was being shown. */
-                  media={mine.find((p) => p.media?.length)?.media ?? null}
-                  nextTargetImage={state.upcoming.find((r) => r.target?.image_url)?.target?.image_url ?? null}
-                  hasPost={mine.length > 0}
-                  globalPaused={control?.paused ?? false}
-                  workerOnline={workerOnline}
-                  busy={busy === `pause-${c.id}` || busy === `resume-${c.id}`}
-                  onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הסבב הושהה.')}
-                  onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הסבב ממשיך.')}
-                />
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs font-bold">
-                  {/* Hebrew has no bare-numeral singular, so a fixed plural
-                      prints "1 פוסטים" — and 1 is the commonest value here. */}
-                  <span className="text-mist-500">{mine.length === 1 ? 'פוסט אחד' : `${mine.length} פוסטים`}</span>
-                  <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => openEditor(c)}>
-                    ערוך
-                  </button>
-                  <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}>
-                    שכפל
-                  </button>
-                  {/* Every control in this row is the same size: "ערוך" and
-                      "שכפל" above already carry the 44px floor, and these three
-                      were measuring 16px tall in the browser — a 16px target
-                      sitting a few pixels from a 44px one, with delete among
-                      them. A Link is inline, so it needs the flex box too for
-                      min-height to apply at all. */}
-                  {state.state === 'stopped' && (
-                    <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הסבב חזר לפעילות.')}>
-                      החזר לפעילות
-                    </button>
-                  )}
-                  {/*
-                    THE REASON THIS LINK EXISTS, in the owner's own words:
-                    "even if two hours have passed, even if a day — I pick the
-                    round and schedule the comment on the whole thing."
+              <CampaignCard
+                key={c.id}
+                campaign={c}
+                state={state}
+                /* The cover of the run's post, and the next group's own
+                   picture — both already loaded, neither was being shown. */
+                media={mine.find((p) => p.media?.length)?.media ?? null}
+                nextTargetImage={state.upcoming.find((r) => r.target?.image_url)?.target?.image_url ?? null}
+                hasPost={mine.length > 0}
+                postCount={mine.length}
+                globalPaused={control?.paused ?? false}
+                workerOnline={workerOnline}
+                busy={busy === `pause-${c.id}` || busy === `resume-${c.id}` || busy === `dup-${c.id}` || busy === `open-${c.id}`}
+                onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הקמפיין נעצר.')}
+                onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הקמפיין ממשיך.')}
+                /*
+                 * THE SAME HANDLERS THAT USED TO SIT IN A ROW UNDER THE CARD,
+                 * handed to it instead. Not one of them is new or rewritten —
+                 * openEditor, duplicateCampaign, reopenCampaign, setCommentFor
+                 * and removeCampaign are exactly the functions this page
+                 * already called; only the place they are drawn has moved,
+                 * from between two cards into the border of the one they act
+                 * on. A red "מחק" a thumb-width from "שכפל", belonging to
+                 * neither card visibly, is what that row was.
+                 */
+                addPostHref={`/social/posts/new?campaign=${c.id}`}
+                onEdit={() => openEditor(c)}
+                onDuplicate={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}
+                /* Only a stopped run can be put back — the card draws nothing
+                   when this is undefined, which is how a menu item that cannot
+                   act stays off the menu. */
+                onReopen={state.state === 'stopped' ? () => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הקמפיין חזר לפעילות.') : undefined}
+                /*
+                  THE REASON THIS ACTION EXISTS, in the owner's own words:
+                  "even if two hours have passed, even if a day — I pick the
+                  round and schedule the comment on the whole thing."
 
-                    That was already possible and effectively unreachable. The
-                    path was: open the round, then scroll past the hero, six
-                    tiles and the entire publication queue — a hundred and
-                    twenty-two rows on the round they actually wanted — to a
-                    card with no hint of it above the fold. From here it is
-                    three taps: סבבים, הסתיימו, תגובה. The round list is
-                    already the "which round" picker and the filter is already
-                    "the one I ran this morning".
-                  */}
-                  {state.progress.published > 0 && (
-                    <button type="button" className="min-h-11 px-1 text-brand-400" onClick={() => setCommentFor(c)}>
-                      תגובה
-                    </button>
-                  )}
-                  <Link href={`/social/posts/new?campaign=${c.id}`} className="inline-flex min-h-11 items-center px-1 text-brand-400">
-                    + פוסט
-                  </Link>
-                  <button
-                    type="button"
-                    className="ms-auto min-h-11 px-1 text-error-400"
-                    onClick={() => removeCampaign(c, state)}
-                  >
-                    מחק
-                  </button>
-                </div>
-              </div>
-            );
+                  Offered only once something has published, because before
+                  that there is nothing to comment on.
+                */
+                onComment={state.progress.published > 0 ? () => setCommentFor(c) : undefined}
+                onDelete={() => removeCampaign(c, state)}
+              />            );
           })}
         </div>
       </div>
@@ -385,7 +373,7 @@ export default function CampaignsPage() {
       <Sheet
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
-        title="עריכת סבב"
+        title={form.id ? "עריכת קמפיין" : "קמפיין חדש"}
         footer={
           <div className="flex gap-2">
             <Button size="lg" busy={busy === 'save'} onClick={submit} className="grow" disabled={!form.name.trim()}>
@@ -414,7 +402,7 @@ export default function CampaignsPage() {
               ))}
             </datalist>
           </Field>
-          <Field label="שם הסבב" hint="כך הוא יופיע בלוח הבקרה ובהיסטוריה">
+          <Field label="שם הקמפיין" hint="כך הוא יופיע בלוח הבקרה ובהיסטוריה">
             <input
               className={inputClass}
               value={form.name}

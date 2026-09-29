@@ -2267,11 +2267,20 @@ const scenario: { step: string; line: string }[] = [];
   }
 
   /*
-   * A failed row is TERMINAL and its count has no date filter, so it must not
-   * decide the system state: one failure last March would pin the dot for ever.
+   * A failed row is TERMINAL, so it must not decide the system state: one
+   * failure last March would pin the dot for ever.
    */
   assert.ok(!/systemState[\s\S]{0,400}summary\.failed/.test(dash), 'summary.failed must not appear in the system-state ladder');
-  assert.ok(dash.includes("tone={summary.failed ? 'bad' : 'neutral'}"), 'it is reported by its own tile');
+  /*
+   * RE-POINTED. This pinned the literal `tone={summary.failed ? ...}`, and
+   * that expression is gone — the tile counts TODAY now, because an all-time
+   * "38 נכשלו" sat in the same row as "0 פורסמו היום" and the owner read both
+   * as today's. The rule it was protecting is untouched: failures are reported
+   * by their own tile rather than by the state ladder. So the needle moves to
+   * the tile, wherever its number comes from.
+   */
+  assert.ok(/label="נכשלו היום"[\s\S]{0,200}value=\{data\.failedToday\}/.test(dash), 'failures are reported by their own tile');
+  assert.ok(!/value=\{summary\.failed\}/.test(dash), 'and that tile counts one day, not every day since the install');
 
   console.log('dashboard cross-scope invariant tests OK');
 }

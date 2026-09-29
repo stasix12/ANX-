@@ -934,6 +934,29 @@ async function main(): Promise<void> {
   pin('client.ts listQueue order is the caller\'s', client, ".order('scheduled_at', { ascending: opts.order === 'asc' })");
   pin('client.ts countByStatus is exact', client, "select('id', { count: 'exact', head: true }).eq('status', status)");
   pin('page.tsx upcoming read is ascending', page, "listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' })");
+  /*
+   * THE FAILURES TILE IS ABOUT TODAY, like the tile at the other end of its
+   * row. It printed summary.failed — an all-time count with no date filter —
+   * so a screen showing "0 פורסמו היום" also showed "38 נכשלו", four tiles
+   * apart, same row, same size, one about this morning and one about every
+   * day since the install. The owner read the 38 as today's and asked why.
+   */
+  pin('page.tsx failures tile counts today', page, 'value={data.failedToday}');
+  pin('page.tsx failures tile says which day', page, 'label="נכשלו היום"');
+  pin('page.tsx failures tile opens today', page, "href=\"/social/history?status=failed&range=1\"");
+  pin('page.tsx skips counted today too', page, 'data.skippedToday');
+  pin('client.ts failures are counted from an instant', client, 'export async function countFailuresSince(sinceISO: string)');
+  pin('client.ts uses the finish stamp, as listLiveQueue does', client, ".eq('status', status).gte('updated_at', sinceISO)");
+  /* Both numbers in that row come from ONE midnight, or they are about two
+     different days while sitting next to each other. */
+  pin('page.tsx one midnight for both tiles', page, 'countFailuresSince(startOfZonedDay(now).toISOString())');
+
+  /* The bottom bar is the navigation. A card of shortcuts to screens the tab
+     bar already holds is a second door to the same room, and on a phone it
+     costs a scroll to offer nothing. */
+  pin('dashboard has no duplicate shortcut row', page, 'THE THREE SHORTCUT TILES USED TO SIT HERE');
+  expect('guards', 'source-drift', 'QuickActions is gone rather than orphaned', page.includes('<QuickActions />'), false, NONE);
+
   pin('page.tsx queued tile', page, 'value={summary.queued}');
   pin('page.tsx needs-you tile', page, 'value={summary.needsHuman}');
   pin('page.tsx pending figure is the cancellable count', page, 'const pending = summary.cancellable;');

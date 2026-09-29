@@ -1225,6 +1225,34 @@ export async function cancelAllScheduled(): Promise<number> {
   return rows.length;
 }
 
+/**
+ * Failures and skips since an instant — the dashboard's "נכשלו היום" tile.
+ *
+ * IT USED TO BE AN ALL-TIME HEAD COUNT, and the owner asked for this after
+ * looking at a "38 נכשלו" that had been accumulating since the product's
+ * first week, beside a "0 פורסמו היום" that was about today. One tile
+ * describing this morning and the tile next to it describing the whole of
+ * recorded history, in the same row, in the same size.
+ *
+ * `updated_at`, not a column named for the failure, because there is no such
+ * column: a row records WHEN it failed only through the trigger that stamps
+ * every update (social-schema.sql, social_queue_set_updated_at). That makes
+ * this "reached a terminal state today" rather than "failed today", and the
+ * two differ only if something touches a finished row later — which nothing
+ * does. It is the same instant listLiveQueue() already treats as the moment a
+ * publication finished, so both screens agree about which day a failure
+ * belongs to.
+ */
+export async function countFailuresSince(sinceISO: string): Promise<{ failed: number; skipped: number }> {
+  const count = async (status: QueueStatus) => {
+    const res = await db().from('social_queue').select('id', { count: 'exact', head: true }).eq('status', status).gte('updated_at', sinceISO);
+    if (res.error) throw friendlyError(res.error);
+    return res.count ?? 0;
+  };
+  const [failed, skipped] = await Promise.all([count('failed'), count('skipped')]);
+  return { failed, skipped };
+}
+
 export async function countPublishedSince(sinceISO: string): Promise<number> {
   const res = await db().from('social_queue').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('published_at', sinceISO);
   if (res.error) throw friendlyError(res.error);

@@ -7,7 +7,6 @@ import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { LiveCampaignHero, LiveQueueHero, type SystemState } from '@/components/social/LiveCampaignHero';
 import { ActivityDetailSheet } from '@/components/social/ActivityDetailSheet';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
-import { QuickActions } from '@/components/social/QuickActions';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
 import { CommentQueueCard } from '@/components/social/CommentQueueCard';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -17,6 +16,7 @@ import {
   callSocialApi,
   campaignStates,
   cancelAllScheduled,
+  countFailuresSince,
   countPublishedSince,
   getControl,
   getLimits,
@@ -67,6 +67,17 @@ interface DashboardData {
   /** The same counts rolled up through the one classification (status.ts). */
   summary: QueueSummary;
   today: number;
+  /**
+   * Failures and skips SINCE MIDNIGHT, not since the install.
+   *
+   * The tile used to print summary.failed, which has no date filter at all, so
+   * it read 38 on a day nothing had been published — every failure the system
+   * had ever recorded, sitting in a row of tiles whose first member says
+   * "פורסמו היום". A number that never goes down is not a number anybody acts
+   * on; it is a scar.
+   */
+  failedToday: number;
+  skippedToday: number;
   upcoming: QueueRow[];
   /** Today's finished publications, newest first. Its own read, counted by
       nothing — the queue's numbers describe the queue, not this window. */
@@ -179,9 +190,13 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [queue, today, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, totals] = await Promise.all([
+      const [queue, today, failures, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, totals] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
+        /* The same midnight the tile beside it uses — one instant, so the two
+           numbers are about the same day. Asia/Jerusalem, from the browser's
+           own zone, which is what startOfZonedDay reads. */
+        countFailuresSince(startOfZonedDay(now).toISOString()),
         /* countPublishedBetween(weekStart) used to run here on every 30s poll
            and `data.week` was rendered nowhere. One whole count query a
            minute, on a metered Israeli mobile plan, for a number no screen
@@ -220,6 +235,8 @@ export default function SocialDashboard() {
         counts: queue.counts,
         summary: queue.summary,
         today,
+        failedToday: failures.failed,
+        skippedToday: failures.skipped,
         upcoming,
         doneToday,
         comments,
@@ -815,19 +832,33 @@ export default function SocialDashboard() {
                     : undefined
                 }
               />
+              {/*
+                TODAY, like the tile at the other end of this row.
+                summary.failed is an ALL-TIME count, and printing it here put
+                "38 נכשלו" beside "0 פורסמו היום" — one tile about this
+                morning, the tile three across about every day since the
+                product existed, same row, same size. The owner read the 38 as
+                today's and asked why. They were reading the row correctly.
+
+                The old failures are not deleted and not hidden: the tile links
+                into the history, which still holds every one of them. What
+                changes is that this row is now four numbers about one day, and
+                tomorrow morning it starts from zero. */}
               <StatCard
                 dense
                 icon={<AlertTriangleIcon aria-hidden className="h-4 w-4" />}
-                tone={summary.failed ? 'bad' : 'neutral'}
-                label="נכשלו"
-                value={summary.failed}
+                tone={data.failedToday ? 'bad' : 'neutral'}
+                label="נכשלו היום"
+                value={data.failedToday}
                 /* The chip REPLACES the sub-line rather than stacking under
                    it, so only this tile's row grows and its neighbour grows
                    with it — CSS grid keeps the pair level. It is a <span>
                    inside the tile's own link, never a nested anchor. */
-                chipLabel={summary.failed ? 'טפל עכשיו' : undefined}
-                sub={summary.skipped ? `ועוד ${summary.skipped} ${agree(summary.skipped, 'דולג', 'דולגו')}` : 'סך הכול'}
-                href="/social/history?status=failed"
+                chipLabel={data.failedToday ? 'טפל עכשיו' : undefined}
+                sub={data.skippedToday ? `ועוד ${data.skippedToday} ${agree(data.skippedToday, 'דולג', 'דולגו')}` : 'מאז חצות'}
+                /* &range=1 for the same reason the published tile carries it:
+                   a tile that counts today must open today. */
+                href="/social/history?status=failed&range=1"
               />
               <StatCard
                 dense
@@ -900,12 +931,20 @@ export default function SocialDashboard() {
             <ActivityFeed entries={data.log} limit={5} onChanged={load} onOpen={(id) => setDetail(id)} />
           </Card>
 
-          {/* 4 — four taps, compact. The mockup's "statistics" tile points at
-              /social/history, because /social/stats does not exist and
-              history IS the reports screen in this product. */}
-          <QuickActions />
+          {/*
+            THE THREE SHORTCUT TILES USED TO SIT HERE, AND THEY WERE THE SAME
+            THREE DESTINATIONS AS THE BAR AT THE BOTTOM OF THE SCREEN.
 
-          {/* 5 — reference material, below the answers. */}
+            קבוצות and ספרייה are two of the four tabs a thumb already rests on;
+            הגדרות is one tap further, under "עוד". So the row cost a scroll and
+            a block of vertical space to offer nothing that was not already
+            within reach — "יש את זה כבר למטה, למה צריך את זה פעמיים", which is
+            the whole argument.
+
+            Deleted rather than moved: a second door to the same room is not a
+            feature of a small screen. */}
+
+          {/* 4 — reference material, below the answers. */}
           <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
             <Card
               /*

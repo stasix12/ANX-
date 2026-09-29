@@ -212,11 +212,9 @@ export default function CampaignsPage() {
     // Editing must never resurrect a stopped campaign, so status is only set
     // when the campaign is being created.
     const payload = form.id ? { ...form } : { ...form, status: 'active' as const };
-    /* The toast has to say which of the two happened: this form now opens
-       empty from "+ קמפיין חדש" as well as full from "ערוך", and "הקמפיין
-       עודכן" over a campaign that did not exist a second ago is the screen
-       describing the wrong event. */
-    await act('save', () => saveCampaign(payload), form.id ? 'הקמפיין עודכן.' : 'הקמפיין נוצר.');
+    /* Reachable only from "ערוך" again, so the word is "עודכן" again — the
+       conditional here was for a create path that has been taken away. */
+    await act('save', () => saveCampaign(payload), 'הקמפיין עודכן.');
     setEditorOpen(false);
   }
 
@@ -225,17 +223,29 @@ export default function CampaignsPage() {
       title="קמפיינים"
       lede="כל קמפיין שהפעלתם — מה יצא, מה עוד יוצא, ומה אפשר לעצור"
       /*
-       * "קמפיין חדש" RATHER THAN "ספריית תוכן".
+       * "+ קמפיין חדש" GOES TO THE POST EDITOR, and the detour it replaces is
+       * worth writing down.
        *
-       * The comment that stood here said a run is created by publishing a
-       * post, so the useful offer is the way back to the library. That was
-       * true of the only path that existed then; openEditor() with no argument
-       * has always opened this page's own editor on a blank form and
-       * saveCampaign() has always created from it. The button is that call —
-       * no new function, no new write — and it is what the owner asked for at
-       * the top of this screen.
+       * The comment that originally stood here said: no "new run" action,
+       * because a run is created by publishing a post. A brief asked for the
+       * button and I wired it to openEditor() — this page's own sheet, which
+       * is name, service, city, language and notes. That call does create a
+       * campaign row, so it was not broken; it was the wrong thing entirely.
+       * The owner pressed it expecting to write a post, attach pictures, pick
+       * groups and set a time, and got a five-field form that produces an
+       * empty shell: "למה לא נותן לי לרשום פוסט להוסיף תמונות לתזמן כמו שהיה
+       * לפני". A campaign with no post in it is not a campaign, it is a name.
+       *
+       * So the button goes where that work actually happens. /social/posts/new
+       * is the editor with the text, the media, the group picker and the
+       * scheduler in it, and ensureRunForPost() opens the campaign by itself
+       * the moment the post is scheduled — which is why this screen never had
+       * a create button to begin with.
+       *
+       * The sheet below stays exactly where it belongs: behind "ערוך" on a
+       * campaign that already exists, for renaming it.
        */
-      headerAction={<Button onClick={() => openEditor()}>+ קמפיין חדש</Button>}
+      headerAction={<ButtonLink href="/social/posts/new">+ קמפיין חדש</ButtonLink>}
       paused={control?.paused ?? null}
       onControlChanged={load}
     >
@@ -277,7 +287,11 @@ export default function CampaignsPage() {
                 ? 'קמפיין הוא המסגרת שמאגדת פוסטים לפי שירות ועיר — למשל "ניקוי ספות באר שבע". אחר כך מוסיפים לו פוסט ובוחרים קבוצות.'
                 : 'החליפו סינון כדי לראות את השאר.'
             }
-            action={counts.all === 0 ? <ButtonLink href="/social/library">לספריית התוכן</ButtonLink> : undefined}
+            /* The same destination the header button uses. An owner with no
+               campaigns at all usually has no posts either, so the library is
+               a room with nothing in it; the post editor is where the first
+               campaign is actually made. */
+            action={counts.all === 0 ? <ButtonLink href="/social/posts/new">כתבו את הפוסט הראשון</ButtonLink> : undefined}
           />
         )}
 
@@ -373,7 +387,7 @@ export default function CampaignsPage() {
       <Sheet
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
-        title={form.id ? "עריכת קמפיין" : "קמפיין חדש"}
+        title="עריכת קמפיין"
         footer={
           <div className="flex gap-2">
             <Button size="lg" busy={busy === 'save'} onClick={submit} className="grow" disabled={!form.name.trim()}>

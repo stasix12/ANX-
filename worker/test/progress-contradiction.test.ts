@@ -978,6 +978,32 @@ async function main(): Promise<void> {
     NONE,
   );
 
+  /*
+   * "+ קמפיין חדש" MUST LEAD WHERE THE WORK IS.
+   *
+   * It was wired to this page's own editor sheet — name, service, city,
+   * language, notes — which does create a campaign row and is not what anybody
+   * means by opening one: "למה לא נותן לי לרשום פוסט להוסיף תמונות לתזמן כמו
+   * שהיה לפני". A campaign with no post in it is a name, not a campaign.
+   * ensureRunForPost() opens the campaign by itself when a post is scheduled,
+   * which is why this screen never had a create button before.
+   */
+  {
+    const camp = readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8');
+    pin('new-campaign button goes to the post editor', camp, 'headerAction={<ButtonLink href="/social/posts/new">+ קמפיין חדש</ButtonLink>}');
+    expect(
+      'guards',
+      'source-drift',
+      'the new-campaign button does not open the rename sheet',
+      /headerAction=\{<Button onClick=\{\(\) => openEditor\(\)\}/.test(camp),
+      false,
+      NONE,
+    );
+    /* And the sheet still says what it is, now that it is only reachable from
+       "ערוך" on a campaign that already exists. */
+    pin('the editor sheet is for editing', camp, 'title="עריכת קמפיין"');
+  }
+
   /* The bottom bar is the navigation. A card of shortcuts to screens the tab
      bar already holds is a second door to the same room, and on a phone it
      costs a scroll to offer nothing. */

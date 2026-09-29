@@ -3943,11 +3943,18 @@ const scenario: { step: string; line: string }[] = [];
   const timeline = readFileSync(new URL('../../src/components/social/Timeline.tsx', import.meta.url), 'utf8');
   const dash = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
 
-  // The dashboard must hand the strip every row it READ, not a window onto it.
-  assert.ok(
-    /<Timeline rows=\{data\.upcoming\} limit=\{UPCOMING_LIMIT\} scrollable/.test(dash),
-    'the dashboard timeline must render the whole read and scroll, not cut off at six with the rest in a footer',
-  );
+  /*
+   * The dashboard must hand the strip every row it READ, not a window onto it.
+   *
+   * RE-POINTED at the props rather than at one line of JSX: the element grew
+   * an onMoreDone and Prettier broke it across lines, which said nothing
+   * whatever about the rule. Each prop is checked on its own so the formatting
+   * is free to change and the rule is not.
+   */
+  const timelineTag = dash.slice(dash.indexOf('<Timeline'), dash.indexOf('<Timeline') + 700);
+  for (const prop of ['rows={data.upcoming}', 'limit={UPCOMING_LIMIT}', 'scrollable', 'total={summary.automaticWaiting}']) {
+    assert.ok(timelineTag.includes(prop), `the dashboard timeline lost ${prop} — it must render the whole read and scroll, not cut off with the rest in a footer`);
+  }
 
   /*
    * WHAT ALREADY WENT OUT STAYS ON THE RAIL — as a SECOND read.
@@ -3968,10 +3975,25 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(dash.includes('done={data.doneToday}'), 'the strip must be handed the finished rows');
   assert.ok(
     dash.includes(
-      "listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: DONE_LIMIT })",
+      "listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: doneLimit })",
     ),
     'and they must be their own read, of the terminal statuses status.ts defines, bounded to today AND to the past',
   );
+  /*
+   * AND THE WINDOW OPENS. Six was the whole day's tail on a screen headed
+   * "מה קרה היום", and the owner asked why it was not showing what the worker
+   * had actually published. It is twelve now and grows by twenty-five a tap —
+   * a growing STATE rather than a bigger constant, because this screen
+   * re-reads every thirty seconds on a metered phone and must carry only what
+   * is on screen.
+   */
+  assert.ok(/const \[doneLimit, setDoneLimit\] = useState\(DONE_LIMIT\);/.test(dash), 'how far back the strip reads is state, not a constant');
+  assert.ok(/\}, \[doneLimit\]\);/.test(dash), 'and the read depends on it, so one path fetches and there is no second to drift');
+  assert.ok(
+    /data\.doneToday\.length >= doneLimit\s*\?\s*\{ busy: refreshing, onClick: \(\) => setDoneLimit/.test(dash),
+    'the control appears only while the read came back FULL — a button offering earlier rows that do not exist is worse than none',
+  );
+  assert.ok(/\{earlier\}\s*\{list\}/.test(timeline), 'and it sits above the rail, because `done` runs forwards in time and "earlier" is up');
   /*
    * `until` is not decoration. The read is ordered by scheduled_at descending,
    * and a row can be terminal with its slot still in the future — a duplicate

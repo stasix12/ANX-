@@ -55,15 +55,29 @@ import { AlertTriangleIcon, MessageIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIc
 const UPCOMING_LIMIT = 40;
 
 /**
- * How many of TODAY's finished publications the upcoming strip keeps above
- * the waiting ones.
+ * How many of TODAY's finished publications the strip starts with, and how
+ * many more each "הצג עוד" adds.
  *
- * Six, not forty: this is the tail of the afternoon, not the history screen.
- * It is read separately from the waiting rows and counted by nothing — the
- * card's subtitle and its footer both describe the queue, and neither may
- * start describing a set this array is a window onto.
+ * It was a flat six, described here as "the tail of the afternoon, not the
+ * history screen", and the owner asked the obvious question of a screen
+ * headed מה קרה היום: "למה הוא לא מראה לי כאן את כל הפרסומים שהוא פרסם
+ * בקבוצות". Six of a day that ran sixty is not the tail of the afternoon, it
+ * is a sample of it.
+ *
+ * WHY IT IS NOT SIMPLY 200. This screen re-reads every thirty seconds, each
+ * row comes back with its target, its post and that post's media, and the
+ * owner is on a metered Israeli mobile plan — the same reason a "this week"
+ * count that no screen rendered was taken out of this very poll. A day at
+ * their ceiling would be a couple of hundred rows a minute, for ever, to show
+ * a list that is usually looked at once.
+ *
+ * So the window OPENS instead: twelve without asking, twenty-five more per
+ * tap, and the poll only ever carries what is actually on screen. It is still
+ * a window, and the card's "הכל" still goes to the history, which is the
+ * screen built to hold a whole day.
  */
-const DONE_LIMIT = 6;
+const DONE_LIMIT = 12;
+const DONE_STEP = 25;
 
 interface DashboardData {
   counts: Record<QueueStatus, number>;
@@ -183,6 +197,15 @@ export default function SocialDashboard() {
   /* The manual refresh's own in-flight flag — the interval has one of its own
      (`running` below) and a tap must not be able to stack reads on top of it. */
   const [refreshing, setRefreshing] = useState(false);
+  /*
+   * HOW FAR BACK INTO TODAY THE STRIP IS CURRENTLY READING.
+   *
+   * State rather than a constant, so "הצג עוד" costs one bigger read and the
+   * thirty-second poll keeps carrying exactly what is on screen — no more.
+   * It resets with the page, which is right: tomorrow's first look should not
+   * inherit the size of yesterday's longest scroll.
+   */
+  const [doneLimit, setDoneLimit] = useState(DONE_LIMIT);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -245,7 +268,7 @@ export default function SocialDashboard() {
          * at 17:40, and nothing that had actually gone out appeared at all.
          * The same trap listQueue's own comment describes, from the other end.
          */
-        listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: DONE_LIMIT }),
+        listQueue({ status: TERMINAL_STATUSES, since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: doneLimit }),
         listWorkers(),
         listCommentQueue(),
         commentTotals(),
@@ -290,7 +313,10 @@ export default function SocialDashboard() {
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
-  }, []);
+    /* doneLimit is a real dependency: "הצג עוד" raises it and the next read —
+       fired immediately by the effect below — is what brings the rest of the
+       day back. */
+  }, [doneLimit]);
 
   /*
    * The 30-second refresh, with the two guards every poller in this module
@@ -1092,7 +1118,24 @@ export default function SocialDashboard() {
               {/* One line, and it stays one line: worker/test/unit.test.ts
                   matches these three props together to hold "every row that
                   was read is rendered, in a box that scrolls". */}
-              <Timeline rows={data.upcoming} limit={UPCOMING_LIMIT} scrollable total={summary.automaticWaiting} done={data.doneToday} onOpen={(row) => setDetail(row.id)} />
+              {/* onMoreDone ONLY while the read came back full. A window that
+                  is not full has reached the start of the day, and a button
+                  offering earlier rows that do not exist is worse than none.
+                  Raising doneLimit re-runs load() through its own dependency,
+                  so there is one read path and no second one to drift. */}
+              <Timeline
+                rows={data.upcoming}
+                limit={UPCOMING_LIMIT}
+                scrollable
+                total={summary.automaticWaiting}
+                done={data.doneToday}
+                onMoreDone={
+                  data.doneToday.length >= doneLimit
+                    ? { busy: refreshing, onClick: () => setDoneLimit((n) => n + DONE_STEP) }
+                    : undefined
+                }
+                onOpen={(row) => setDetail(row.id)}
+              />
             </Card>
 
             <BrowserStatusCard id="browser-status" onChanged={load} />

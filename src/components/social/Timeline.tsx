@@ -139,6 +139,7 @@ export function Timeline({
   scrollable = false,
   done = [],
   onOpen,
+  onMoreDone,
 }: {
   rows: QueueRow[];
   limit?: number;
@@ -192,6 +193,20 @@ export function Timeline({
    * `automaticWaiting` for exactly this.
    */
   total?: number;
+  /**
+   * Fetch more of what already happened today, if there is more.
+   *
+   * Given only when the caller's read came back FULL — a window that is not
+   * full has reached the start of the day, and a button offering earlier rows
+   * that do not exist is worse than no button. The caller owns the count
+   * because the caller owns the read.
+   *
+   * It sits at the TOP of the rail, inside the scrolling box, because `done`
+   * runs forwards in time: the earliest of the day is the first row, so
+   * "earlier" is up. Putting it under the list would send a thumb the wrong
+   * way for rows that land above it.
+   */
+  onMoreDone?: { busy: boolean; onClick: () => void };
 }) {
   const waiting = rows.slice(0, limit);
   /*
@@ -221,6 +236,19 @@ export function Timeline({
   /* The footer counts the WAITING window only — `done` is its own small read
      with no remainder to promise. */
   const rest = (total ?? rows.length) - waiting.length;
+  const earlier = onMoreDone ? (
+    <div className="pb-1">
+      <button
+        type="button"
+        onClick={onMoreDone.onClick}
+        disabled={onMoreDone.busy}
+        className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-800/60 text-[12.5px] font-bold text-brand-400 transition-colors hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-40"
+      >
+        {onMoreDone.busy ? 'טוען…' : 'הצג פרסומים מוקדמים יותר מהיום'}
+      </button>
+    </div>
+  ) : null;
+
   const list = (
     <ol className="relative space-y-0.5">
       {items.map((row, i) => {
@@ -301,6 +329,7 @@ export function Timeline({
   if (!scrollable) {
     return (
       <>
+        {earlier}
         {list}
         {footer}
       </>
@@ -332,6 +361,7 @@ export function Timeline({
         aria-label="סדר הפרסומים — רשימה נגללת"
         className="max-h-[21rem] overflow-y-auto rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
       >
+        {earlier}
         {list}
       </div>
       {footer}

@@ -207,6 +207,41 @@ async function main(): Promise<void> {
       assert.equal(seen.box?.maxH, '336px', `${width}px: the scroll box must be 21rem, the same depth as "מה קרה היום" — got ${seen.box?.maxH}`);
       assert.ok(seen.box?.focusable, `${width}px: the scroll box must be reachable by keyboard`);
       assert.ok(seen.box?.labelled, `${width}px: the scroll box must announce itself as a scrollable list`);
+
+      /*
+       * WHAT IS NEXT, AND IN HOW LONG — "אני רוצה לראות גם את התגובות שאמורות
+       * לצאת הבאות בתור ובעוד כמה זמן".
+       *
+       * The queued rows were always on the rail, but the owner's screen had
+       * forty-eight finished comments above them, so "what is about to happen"
+       * was six swipes down a box that refreshes every thirty seconds. The
+       * line at the top is the answer without the scrolling.
+       */
+      assert.ok(seen.text.includes('הבא בתור'), `${width}px: the head of the queue must be named without scrolling for it`);
+
+      /*
+       * THE PACE IS MEASURED, AND SAYS SO ONLY WHEN IT IS.
+       *
+       * The fixture's finished comments are two minutes apart — the owner's
+       * real spacing — which gives the three usable intervals the median
+       * needs. So the card must report the measured pace, not the 30-second
+       * default the round is configured with: an estimate built on the setting
+       * told them forty minutes for a queue that is really closer to three
+       * hours.
+       *
+       * This also pins a bug of my own: the seconds were computed from the
+       * usable INTERVALS while "measured" was decided by the row COUNT, so a
+       * day with a publishing run in it fell back to the configured gap while
+       * telling the owner it was reading today's pace.
+       */
+      assert.ok(seen.text.includes('לפי הקצב היום'), `${width}px: with four comments two minutes apart the pace must be measured, not assumed`);
+      assert.ok(seen.text.includes('בערך ~2 דק׳ לכל תגובה'), `${width}px: the measured pace must be the median interval (2 minutes), not the configured 30s gap`);
+
+      /* And the estimate compounds down the queue at that pace: #2 is one
+         pace out, #3 two, #4 three — "בעוד ~2/4/6 דק׳". */
+      for (const label of ['בעוד ~2 דק׳', 'בעוד ~4 דק׳']) {
+        assert.ok(seen.text.includes(label), `${width}px: a queued comment must say how long until it goes — "${label}" is missing`);
+      }
       /*
        * THE REAL INVARIANT IS THAT HEIGHT IS BOUNDED BY THE FOLD, NOT BY THE
        * QUEUE. Fourteen rows are loaded and the database holds 271; unfolded

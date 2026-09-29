@@ -56,7 +56,7 @@ const done: QueueRow[] = [
   row({
     id: 'a',
     comment_status: 'done',
-    comment_at: ago(45),
+    comment_at: ago(14),
     permalink: 'https://facebook.com/groups/1/posts/9',
     target: { id: '1', name: 'באר שבע והסביבה ביחד', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/1' } as never,
   }),
@@ -77,7 +77,7 @@ const rows: QueueRow[] = [
   row({
     id: 'c',
     comment_status: 'failed',
-    comment_at: ago(20),
+    comment_at: ago(12),
     comment_note: 'לא מצאנו את הפוסט בקבוצה. ייתכן שמנהל הקבוצה מחק אותו, או שהקבוצה סגרה תגובות על פוסטים של חברים.',
     permalink: '',
     target: { id: '3', name: 'ניקוי ספות — מבצעים באר שבע', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/3' } as never,
@@ -126,11 +126,22 @@ done.push(
  * unfolded card and calling it the folded one.
  */
 for (let i = 0; i < 3; i += 1) {
+  /*
+   * TWO MINUTES APART, which is the owner's real pace — their own screen read
+   * 23:28, 23:30, 23:32, 23:34, 23:35.
+   *
+   * The WHOLE finished series is on that spacing, not just these three. The
+   * median is taken over every usable interval in the day, so leaving the
+   * others at five, twenty-five and ten minutes made the median five and the
+   * assertion below was asserting my arithmetic rather than the component's.
+   * The only interval deliberately left huge is the one to yesterday's
+   * comment, which the 30-minute filter is there to drop.
+   */
   done.push(
     row({
       id: `p${i}`,
       comment_status: 'done',
-      comment_at: ago(180 + i * 60),
+      comment_at: ago(16 + i * 2),
       permalink: `https://facebook.com/groups/9/posts/${i}`,
       target: { id: `9${i}`, name: `קבוצה נוספת ${i + 1}`, channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/9' } as never,
     }),

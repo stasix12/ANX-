@@ -51,6 +51,33 @@ const RING_DONE: Record<Tone, string> = {
   neutral: 'ring-ink-600',
 };
 
+/**
+ * "בעוד ~12 דק׳" — a wait, in the largest unit that still says something.
+ *
+ * Approximate on purpose, and it says so with the tilde: the number is built
+ * from the pace the comments actually went out at today, which is a good
+ * predictor of the next hour and no promise at all about the one after it.
+ * Minutes rather than the mm:ss the publications countdown uses — that one
+ * counts down to a stored instant seconds away, and a queue eighty deep is
+ * measured in hours.
+ */
+function aboutLong(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 1) return 'פחות מדקה';
+  if (minutes < 60) return `~${minutes} דק׳`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  /* "~3 שע׳" reads as a wait; "~180 דק׳" reads as arithmetic somebody else
+     should have done. */
+  return rest >= 5 ? `~${hours} שע׳ ו-${rest} דק׳` : `~${hours} שע׳`;
+}
+
+function inAbout(seconds: number): string {
+  if (seconds < 30) return 'הבא בתור';
+  if (seconds < 90) return 'בעוד כדקה';
+  return `בעוד ${aboutLong(seconds)}`;
+}
+
 /** Already under a post, or already failed to get there. */
 function happened(status: string | undefined): boolean {
   return status === 'done' || commentNeedsHuman(status);
@@ -145,6 +172,57 @@ export function CommentTimeline({
     })
     .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
 
+  /*
+   * HOW LONG UNTIL EACH QUEUED COMMENT — "התגובות שאמורות לצאת הבאות בתור
+   * ובעוד כמה זמן".
+   *
+   * MEASURED FROM WHAT ACTUALLY HAPPENED, not from the configured gap. The
+   * round's `comment_gap_seconds` is what the worker SLEEPS between comments,
+   * and it is the smaller half of the truth: writing one means opening the
+   * post, finding it and typing, which takes its own tens of seconds on top.
+   * On the owner's own screen the finished rows read 23:28, 23:30, 23:32,
+   * 23:34, 23:35 — about two minutes apart against a default gap of thirty
+   * seconds. An estimate built on the setting would have told them forty
+   * minutes for a queue that is really closer to three hours.
+   *
+   * So the pace is the MEDIAN interval between the comments that actually
+   * went out today. The median rather than the mean because the worker also
+   * publishes: one comment written after a twenty-minute publishing run is a
+   * single huge interval that would drag an average far past anything the
+   * queue will really do. Intervals outside 5s–30min are dropped for the same
+   * reason — past thirty minutes the worker was not pacing, it was busy or
+   * switched off, and that is not a rate.
+   *
+   * Under three samples there is nothing to measure, so it falls back to the
+   * configured gap, clamped the same way the worker and the database clamp it.
+   */
+  const GAP_DEFAULT = 30;
+  const gapOf = (r: QueueRow): number => {
+    const c = r.campaign_id ? rounds.get(r.campaign_id) : null;
+    return Math.max(5, Math.min(600, Math.round(c?.comment_gap_seconds ?? GAP_DEFAULT)));
+  };
+  /*
+   * ONE DECISION, TWO VALUES. The seconds and whether they were measured have
+   * to be decided together: my first version computed the pace from the
+   * usable INTERVALS and then said "measured" based on the row COUNT, and the
+   * two disagree constantly — seven finished comments with a publishing run
+   * between them yield two usable intervals, so the card fell back to the
+   * configured gap while telling the owner it was reading today's pace.
+   */
+  const pace = ((): { seconds: number; measured: boolean } => {
+    const gaps: number[] = [];
+    for (let i = 1; i < past.length; i += 1) {
+      const a = Date.parse(past[i - 1].comment_at ?? '');
+      const b = Date.parse(past[i].comment_at ?? '');
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+      const d = (b - a) / 1000;
+      if (d >= 5 && d <= 1800) gaps.push(d);
+    }
+    if (gaps.length < 3) return { seconds: waiting.length ? gapOf(waiting[0]) : GAP_DEFAULT, measured: false };
+    gaps.sort((x, y) => x - y);
+    return { seconds: gaps[Math.floor(gaps.length / 2)], measured: true };
+  })();
+
   const items: { row: QueueRow; kind: Kind }[] = [
     ...past.map((row) => ({ row, kind: 'past' as const })),
     ...waiting.map((row) => ({ row, kind: 'queued' as const })),
@@ -170,6 +248,7 @@ export function CommentTimeline({
    * from the rows on screen would report "5 מתוך 9" to an owner holding 271
    * comments. `totals` is four COUNT queries, which is the truth.
    */
+  const next = waiting[0] ?? null;
   const real = totals.done + totals.failed + totals.unverified + totals.pending;
   const needsHuman = totals.failed + totals.unverified;
   const today = zonedDateISO(new Date());
@@ -205,6 +284,35 @@ export function CommentTimeline({
         הציר מציג את 24 השעות האחרונות
         {older > 0 && ` · ${older} ${agree(older, 'תגובה קודמת לא מוצגת', 'תגובות קודמות לא מוצגות')} כאן`}
       </p>
+
+      {/*
+        WHAT IS NEXT, WITHOUT SCROLLING FOR IT.
+        *
+        * The queued rows are on the rail in their place — after the day, which
+        * is where a timeline puts them — but the owner's own screen had
+        * forty-eight finished comments above them, so "what is about to
+        * happen" was six swipes down a box that refreshes every thirty
+        * seconds. It is also the commonest question this card is opened with,
+        * so it goes at the top as one line.
+        *
+        * The pace is stated beside it because the estimates below are only as
+        * good as it is, and whether it came from today's own comments or from
+        * the setting is exactly the thing that decides how much to trust them.
+      */}
+      {next && (
+        <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-xl bg-ink-800/50 px-2.5 py-2 text-[11.5px]">
+          <span className="font-extrabold text-brand-400">הבא בתור</span>
+          <span dir="auto" className="min-w-0 flex-1 truncate font-bold text-mist-100">{next.target?.name ?? 'קבוצה'}</span>
+          <span className="font-bold text-mist-300">
+            {next.comment_status === 'commenting' ? 'כותב עכשיו' : inAbout(0)}
+          </span>
+          <span className="w-full text-[11px] text-mist-500">
+            {pace.measured
+              ? `לפי הקצב היום — בערך ${aboutLong(pace.seconds)} לכל תגובה`
+              : 'הקצב לפי המרווח שנבחר לסבב — ההערכות יתעדכנו אחרי כמה תגובות'}
+          </span>
+        </p>
+      )}
 
       {/*
         THE SAME SCROLL BOX "מה קרה היום" USES, down to the 21rem and the focus
@@ -295,8 +403,25 @@ export function CommentTimeline({
                           inside an RTL card, and forcing either direction puts
                           the punctuation on the wrong end. */}
                       <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'קבוצה'}</p>
+                      {/*
+                        A QUEUED ROW SAYS WHEN, NOT "ממתין". That the row is
+                        waiting is already told by its place in the rail and by
+                        the "#3" beside it, so the word spent the line saying
+                        nothing; the wait is what was asked for. 'commenting'
+                        keeps its own word — it is happening now, and a
+                        countdown over it would be wrong by the time it is
+                        read.
+                      */}
                       <p className={`text-[11px] font-bold ${item.kind === 'ahead' ? 'text-mist-300' : TONE_TEXT[tone]}`}>
-                        {item.kind === 'ahead' ? 'תגובה אחרי הפרסום' : commentLabel(status)}
+                        {item.kind === 'ahead'
+                          ? 'תגובה אחרי הפרסום'
+                          : item.kind === 'queued' && status === 'pending'
+                            /* place is 1-based, so the NEXT one out is
+                               place 1 and must be zero paces away — at
+                               `paceSeconds * place` the head of the queue
+                               claimed a two-minute wait it does not have. */
+                            ? inAbout(pace.seconds * (place - 1))
+                            : commentLabel(status)}
                       </p>
                       {/*
                         THE REASON, WHOLE. "לא הצליח" on its own is what makes a

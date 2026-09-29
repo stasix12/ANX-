@@ -8,6 +8,7 @@ import { PREP_LEAD_MS, evaluateQueueItem } from '@/lib/social/rules';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { upsertScoped } from '@/lib/social/tenant';
 import { stampText } from '@/lib/social/time';
+import { nightlyDue } from './nightly';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
@@ -494,6 +495,11 @@ async function tick(state: WorkerState): Promise<void> {
    * caps, a paused run, the duplicate rules — is per row and stays in
    * rules.ts, which still runs for real.
    */
+  /* Queues the nightly membership sweep when the day is over. One settings
+     read and, at most once a night, one update — the looking is a chore and
+     is paced by the chore window like everything else. */
+  await nightlyGroupCheck();
+
   const gate = await spacingGate(db, limits, browser);
   /*
    * DUE, BUT THE GAP IS NOT OPEN AND WILL NOT BE SOON.
@@ -658,6 +664,87 @@ function idle(state: WorkerState, reason: string): void {
     console.log(`[worker] ${reason}`);
     state.idleNoticeShown = true;
   }
+}
+
+/* -------------------------------------------------- the nightly check */
+
+/**
+ * ONCE A NIGHT, ASK EVERY GROUP WHETHER THIS ACCOUNT CAN STILL POST IN IT.
+ *
+ * Asked for: "תעשה את זה כפעולה אוטומטית בכל סוף יום". The owner leaves
+ * groups in the normal course of running a business and had to remember to
+ * press a button to make the app catch up.
+ *
+ * WHAT IT ACTUALLY DOES IS ONE UPDATE. It clears last_synced_at, which is the
+ * same lever the button pulls; the looking is syncGroupProfiles', and that is
+ * already paced — two groups a tick, four seconds apart, and only in a window
+ * where no publication is due. So this never competes with publishing even
+ * though it fires while a round may be running: it queues the work, it does
+ * not do it.
+ *
+ * THE OFF SWITCH IS THE ONE THAT ALREADY EXISTS. tick() returns above this on
+ * control.paused, so "השהה פרסום" stops the nightly check with everything
+ * else — which is what an owner who wants nothing touching their Facebook
+ * account today would reach for anyway.
+ *
+ * REMEMBERED IN THE DATABASE, not on WorkerState. This worker updates itself
+ * and restarts, sometimes several times a day; an in-memory "already done"
+ * would be forgotten on every restart and the sweep would run again each
+ * time, which is the opposite of once a night.
+ */
+async function nightlyGroupCheck(): Promise<void> {
+  const now = new Date();
+  const seen = await getSetting<{ groupCheckAt?: string }>('maintenance', {});
+  if (!nightlyDue({ lastISO: seen.groupCheckAt, now })) return;
+
+  const db = await workerDb();
+  /*
+   * Written BEFORE the sweep, not after.
+   *
+   * If the update below fails the stamp still moves, and the check waits for
+   * tomorrow rather than retrying every five seconds for the rest of the
+   * night — which on a permissions error would be a page load per tick
+   * against the owner's Facebook account, all night, over a row the database
+   * was never going to accept.
+   */
+  await saveWorkerSetting('maintenance', { ...seen, groupCheckAt: now.toISOString() });
+
+  const { data, error } = await db
+    .from('social_targets')
+    .update({ last_synced_at: null })
+    .eq('channel', 'facebook_group')
+    .eq('enabled', true)
+    .select('id');
+  if (error) {
+    console.error('[worker] ✗ הבדיקה הלילית של הקבוצות נכשלה:', error.message);
+    return;
+  }
+  const n = data?.length ?? 0;
+  if (!n) return;
+  console.log(`[worker] 🌙 בדיקה לילית: ${n} קבוצות ייבדקו בהדרגה.`);
+  await logActivity(
+    'info',
+    'nightly_group_check',
+    `בדיקה יומית: ${n} קבוצות ייבדקו בהדרגה כדי לוודא שעדיין אפשר לפרסם בהן. זה נעשה לאט, בין פרסומים.`,
+    { groups: n },
+  );
+}
+
+/**
+ * The worker's own settings writer.
+ *
+ * getSetting() has been here from the beginning and nothing in this file ever
+ * needed to write one back. Same conflict-target discovery as the browser's
+ * saveSetting() in client.ts, and for the same reason — see tenant.ts.
+ */
+async function saveWorkerSetting(key: string, value: unknown): Promise<void> {
+  const db = await workerDb();
+  const res = await upsertScoped(
+    (onConflict) => db.from('social_settings').upsert({ key, value }, { onConflict }),
+    'tenant_id,key',
+    'key',
+  );
+  if (res.error) console.error(`[worker] ✗ שמירת ההגדרה "${key}" נכשלה:`, res.error.message);
 }
 
 /* ------------------------------------------------------ group profiles */

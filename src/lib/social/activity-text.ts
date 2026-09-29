@@ -72,6 +72,7 @@ const TITLE: Record<string, string> = {
   /* Written when Facebook's own page says this account cannot post in a
      group — the group is switched off and the owner is told which one. */
   target_left: 'יצאתם מקבוצה — היא כובתה',
+  nightly_group_check: 'בדיקה יומית של הקבוצות',
   campaign_paused: 'הסבב הושהה',
   campaign_resumed: 'הסבב חודש',
   campaign_stopped: 'הסבב נעצר',

@@ -32,6 +32,10 @@ const KIND: Record<string, ActivityKind> = {
   run_adopted_queue: 'success',
   worker_started: 'success',
   worker_self_update: 'success',
+  /* The nightly sweep queueing itself. 'success' rather than 'system': it is
+     the app doing the thing the owner asked it to do, and the line that says
+     how many groups are about to be looked at is the only evidence it ran. */
+  nightly_group_check: 'success',
 
   // Something did not.
   publish_failed: 'failure',

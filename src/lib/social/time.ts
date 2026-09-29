@@ -56,6 +56,11 @@ export function zonedDateISO(date: Date, tz = TIMEZONE): string {
   return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
 }
 
+/** The hour of the local clock (0-23) at an instant. */
+export function zonedHour(date: Date, tz = TIMEZONE): number {
+  return partsInZone(date, tz).hour;
+}
+
 export function zonedWeekday(date: Date, tz = TIMEZONE): number {
   return partsInZone(date, tz).weekday;
 }

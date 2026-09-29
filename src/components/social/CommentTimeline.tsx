@@ -3,6 +3,7 @@
 import { Fragment, useState } from 'react';
 import Link from 'next/link';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
+import type { Campaign } from '@/lib/social/types';
 import { COMMENT_TONE, commentLabel, commentNeedsHuman } from '@/lib/social/comments';
 import { agree, counted, formatDateHe, zonedDateISO } from '@/lib/social/time';
 import { ChevronDownIcon, MessageIcon, ShareIcon } from '@/components/icons';
@@ -43,14 +44,14 @@ import { Card, EmptyState, ProgressBar, TONE_FILL, TONE_TEXT } from './ui';
 /**
  * How many rows each half shows before it folds.
  *
- * THREE, not the four DONE_FIRST uses in the card above — because this card
- * has TWO of those lists in it, finished and queued, and pays for each header
- * twice. Measured on a phone: four per half came to 1067px even folded, which
- * is a card and a half of screen for something sitting below two other cards.
- * Three per half is six rows and the fold button, and the owner's own section
- * showed four rows out of forty, so a first page of three is the same idea.
+ * TWO, against the four DONE_FIRST uses in the card above — because this card
+ * holds THREE of those lists (written, queued, scheduled ahead) and pays for a
+ * header and a count line on each. Measured on a phone, folded: four per list
+ * came to 1067px with two lists, and three per list to 1139px with the third
+ * added. Two per list is six rows and the fold button, and the owner's own
+ * section showed four out of forty — a first page is a sample, not the data.
  */
-const FIRST = 3;
+const FIRST = 2;
 
 /** Already under a post, or already failed to get there. */
 function happened(status: string | undefined): boolean {
@@ -61,6 +62,8 @@ export function CommentTimeline({
   rows,
   done,
   totals,
+  upcoming,
+  campaigns,
 }: {
   /** Everything carrying a comment state — the dashboard's existing read. */
   rows: QueueRow[];
@@ -68,6 +71,10 @@ export function CommentTimeline({
   done: QueueRow[];
   /** The REAL counts, from the database rather than from these two windows. */
   totals: CommentTotals;
+  /** Publications still waiting to go out — the dashboard's existing read. */
+  upcoming: QueueRow[];
+  /** Read only for comment_text: which rounds have a comment waiting to follow. */
+  campaigns: Campaign[];
 }) {
   const [showAll, setShowAll] = useState(false);
 
@@ -125,7 +132,37 @@ export function CommentTimeline({
     .filter((r) => !happened(r.comment_status))
     .sort((a, b) => (a.published_at ?? a.scheduled_at).localeCompare(b.published_at ?? b.scheduled_at));
 
-  if (!recent.length && !waiting.length) {
+  /*
+   * COMMENTS THAT HAVE NOT GOT A POST YET — "וגם את התגובות המתוזמנות קדימה".
+   *
+   * A comment is queued onto a publication, so until that publication goes out
+   * there is no comment row to queue: the round carries the wording, and every
+   * post it still owes will get it on the way out. Those were invisible here —
+   * the list showed comments waiting on posts that already existed and nothing
+   * at all about the eighty due tonight.
+   *
+   * THESE ARE THE ONLY ONES WITH A REAL CLOCK. A queued comment has no time
+   * stored anywhere (the worker paces them itself), but a publication has
+   * `scheduled_at` — so this is the one list on this card that can honestly
+   * print an hour, and it does.
+   *
+   * `comment_text` is the whole test: it is what the worker reads to decide a
+   * post is owed a comment, so asking the same column asks the same question
+   * rather than a lookalike.
+   */
+  const rounds = new Map(campaigns.map((c) => [c.id, c]));
+  const ahead = upcoming
+    .filter((r) => {
+      /* Not already counted: a row cannot be both waiting to publish and
+         carrying a finished comment, but the guard costs nothing and this card
+         has already been bitten once by two reads that overlap. */
+      if (byId.has(r.id)) return false;
+      const c = r.campaign_id ? rounds.get(r.campaign_id) : null;
+      return Boolean((c?.comment_text ?? '').trim());
+    })
+    .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+
+  if (!recent.length && !waiting.length && !ahead.length) {
     return (
       <Card title="ציר הזמן של התגובות" subtitle="מה כבר נכתב, מה נכשל ומה עוד בתור">
         <EmptyState
@@ -150,14 +187,18 @@ export function CommentTimeline({
   const today = zonedDateISO(new Date());
 
   /* One row, in the clothes of the card above. */
-  const Row = ({ r, place }: { r: QueueRow; place: number }) => {
-    const status = r.comment_status ?? '';
-    const tone = COMMENT_TONE[status as keyof typeof COMMENT_TONE] ?? 'neutral';
-    const isPast = happened(status);
+  /**
+   * One row. The meta line is passed in rather than derived, because the three
+   * lists this card holds mean three different things by "when": the instant a
+   * comment was written, a place in a queue that has no clock, and the hour a
+   * publication is due. A component that worked all three out from the row
+   * would be three components sharing a body.
+   */
+  const Row = ({ r, meta, link = true }: { r: QueueRow; meta: React.ReactNode; link?: boolean }) => {
     /* The POST's address. Facebook gives a group post one handle and the
        comment lives under it, so this is as close as the database can point —
        and it is the right place to land: the comment is on that page. */
-    const href = r.permalink || r.target?.url || '';
+    const href = link ? r.permalink || r.target?.url || '' : '';
     return (
       <li className="min-w-0 rounded-xl bg-ink-800/50 px-2.5 py-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -184,15 +225,7 @@ export function CommentTimeline({
             </Link>
           )}
         </div>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-mist-500">
-          {/*
-            ONE LINE, TWO MEANINGS. A finished comment shows the instant it
-            happened; a waiting one shows its place in the queue, because no
-            time for it exists anywhere to be shown.
-          */}
-          {isPast ? <Stamp iso={r.comment_at} /> : <span className="font-bold text-brand-400">{`מקום ${place} בתור`}</span>}
-          <span className={`font-bold ${TONE_TEXT[tone]}`}>{commentLabel(status)}</span>
-        </p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-mist-500">{meta}</p>
         {/*
           THE REASON, WHOLE. "לא הצליח" on its own is what makes a person press
           the same button again — a post the admin deleted, a group that closed
@@ -203,7 +236,7 @@ export function CommentTimeline({
              in two; the clamp is against a pathological one making a single
              row taller than the card's whole first page. The full text is one
              tap away in "תגובות לפרסומים" above. */
-          <p dir="auto" className={`mt-0.5 line-clamp-3 text-[11px] leading-snug ${commentNeedsHuman(status) ? 'text-warning-400' : 'text-mist-500'}`}>
+          <p dir="auto" className={`mt-0.5 line-clamp-3 text-[11px] leading-snug ${commentNeedsHuman(r.comment_status) ? 'text-warning-400' : 'text-mist-500'}`}>
             {r.comment_note}
           </p>
         )}
@@ -213,7 +246,9 @@ export function CommentTimeline({
 
   const shownPast = showAll ? past : past.slice(0, FIRST);
   const shownWaiting = showAll ? waiting : waiting.slice(0, FIRST);
-  const folded = past.length - shownPast.length + (waiting.length - shownWaiting.length);
+  const shownAhead = showAll ? ahead : ahead.slice(0, FIRST);
+  const folded =
+    past.length - shownPast.length + (waiting.length - shownWaiting.length) + (ahead.length - shownAhead.length);
 
   return (
     <Card title="ציר הזמן של התגובות" subtitle="מה כבר נכתב, מה נכשל ומה עוד בתור">
@@ -280,7 +315,17 @@ export function CommentTimeline({
                   {showDay && at && (
                     <p className="mt-1.5 text-[11px] font-extrabold uppercase tracking-wide text-mist-500">{formatDateHe(at)}</p>
                   )}
-                  <Row r={r} place={0} />
+                  <Row
+                    r={r}
+                    meta={
+                      <>
+                        <Stamp iso={r.comment_at} />
+                        <span className={`font-bold ${TONE_TEXT[COMMENT_TONE[(r.comment_status ?? '') as keyof typeof COMMENT_TONE] ?? 'neutral']}`}>
+                          {commentLabel(r.comment_status)}
+                        </span>
+                      </>
+                    }
+                  />
                 </Fragment>
               );
             })}
@@ -310,7 +355,49 @@ export function CommentTimeline({
           </p>
           <ul className="mt-2 grid gap-1.5">
             {shownWaiting.map((r, i) => (
-              <Row key={r.id} r={r} place={i + 1} />
+              <Row
+                key={r.id}
+                r={r}
+                meta={
+                  <>
+                    <span className="font-bold text-brand-400">{`מקום ${i + 1} בתור`}</span>
+                    <span className={`font-bold ${TONE_TEXT[COMMENT_TONE[(r.comment_status ?? '') as keyof typeof COMMENT_TONE] ?? 'neutral']}`}>
+                      {commentLabel(r.comment_status)}
+                    </span>
+                  </>
+                }
+              />
+            ))}
+          </ul>
+        </>
+      )}
+
+      {ahead.length > 0 && (
+        <>
+          <h3 className={`text-[13px] font-extrabold text-mist-100 ${past.length || older || waiting.length ? 'mt-4 border-t border-ink-700 pt-3' : ''}`}>
+            מתוזמנות קדימה
+          </h3>
+          <p className="mt-1 text-[11px] text-mist-500">
+            {`${shownAhead.length} מתוך ${ahead.length} ${agree(ahead.length, 'פרסום שעוד לא יצא ויקבל תגובה', 'פרסומים שעוד לא יצאו ויקבלו תגובה')}.`}
+          </p>
+          <ul className="mt-2 grid gap-1.5">
+            {shownAhead.map((r) => (
+              <Row
+                key={r.id}
+                r={r}
+                /* NO LINK. The post does not exist yet, so "לתגובה" would open
+                   the group and show the owner everything except the thing the
+                   button named. */
+                link={false}
+                meta={
+                  <>
+                    {/* The one honest clock on this card — the publication's
+                        own scheduled_at. The comment follows it. */}
+                    <Stamp iso={r.scheduled_at} />
+                    <span className="font-bold text-mist-300">תגובה אחרי הפרסום</span>
+                  </>
+                }
+              />
             ))}
           </ul>
         </>
@@ -326,7 +413,7 @@ export function CommentTimeline({
           <ChevronDownIcon aria-hidden className="h-4 w-4" />
         </button>
       )}
-      {showAll && past.length + waiting.length > FIRST && (
+      {showAll && past.length + waiting.length + ahead.length > FIRST && (
         <button
           type="button"
           onClick={() => setShowAll(false)}

@@ -43,11 +43,20 @@ const row = (o: Partial<QueueRow> & { id: string }): QueueRow =>
  */
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
+/*
+ * THE TWO EXCEPTION STATES ARE THE NEWEST ON PURPOSE. The finished list folds
+ * at two, and "לא הצליח" and "צריך לבדוק" are the wordings most worth pinning
+ * — an unverified comment may already be under the post, and calling it a
+ * failure is what once put it in the bulk retry and posted a second one. Left
+ * further down the list they fold away and the assertions about them pass on
+ * an empty page.
+ */
+
 const done: QueueRow[] = [
   row({
     id: 'a',
     comment_status: 'done',
-    comment_at: ago(30),
+    comment_at: ago(45),
     permalink: 'https://facebook.com/groups/1/posts/9',
     target: { id: '1', name: 'באר שבע והסביבה ביחד', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/1' } as never,
   }),
@@ -64,11 +73,11 @@ const done: QueueRow[] = [
 const rows: QueueRow[] = [
   /* The same publication as done[0] — present in both reads, as it is on a
      busy day. It must be drawn once. */
-  row({ id: 'a', comment_status: 'done', comment_at: ago(30), permalink: 'https://facebook.com/groups/1/posts/9' }),
+  row({ id: 'a', comment_status: 'done', comment_at: ago(45), permalink: 'https://facebook.com/groups/1/posts/9' }),
   row({
     id: 'c',
     comment_status: 'failed',
-    comment_at: ago(90),
+    comment_at: ago(20),
     comment_note: 'לא מצאנו את הפוסט בקבוצה. ייתכן שמנהל הקבוצה מחק אותו, או שהקבוצה סגרה תגובות על פוסטים של חברים.',
     permalink: '',
     target: { id: '3', name: 'ניקוי ספות — מבצעים באר שבע', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/3' } as never,
@@ -76,7 +85,7 @@ const rows: QueueRow[] = [
   row({
     id: 'd',
     comment_status: 'unverified',
-    comment_at: ago(120),
+    comment_at: ago(10),
     comment_note: 'נלחץ Enter ופייסבוק לא אישרה. ייתכן שהתגובה כבר שם — כדאי להסתכל.',
     permalink: 'https://facebook.com/groups/4/posts/7',
     target: { id: '4', name: 'Арад - обо всём', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/4' } as never,
@@ -134,8 +143,43 @@ for (let i = 0; i < 3; i += 1) {
    and 40. The footer must count THESE. */
 const totals = { pending: 126, done: 18, failed: 124, unverified: 3 };
 
+/*
+ * PUBLICATIONS STILL DUE, and only some of them are owed a comment.
+ *
+ * Two rounds: one carrying `comment_text` and one with none. Both have posts
+ * waiting to go out; only the first round's may appear. Without the second the
+ * filter is asserted by the absence of rows it was never given, which is no
+ * assertion at all — the same trap the forty-hour-old comment above is there
+ * to avoid.
+ *
+ * The hours are in the future, because these are the one list on this card
+ * that prints a real clock.
+ */
+const soon = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
+
+const campaigns = [
+  { id: 'r1', name: 'סבב עם תגובה', service: '', city: '', language: 'he', status: 'active', notes: '', comment_text: 'מחיר: 299 ש"ח' },
+  { id: 'r2', name: 'סבב בלי תגובה', service: '', city: '', language: 'he', status: 'active', notes: '', comment_text: '' },
+] as never as import('@/lib/social/types').Campaign[];
+
+const upcoming: QueueRow[] = [
+  row({ id: 'u1', status: 'scheduled', campaign_id: 'r1', scheduled_at: soon(20), published_at: null, comment_status: '' }),
+  row({
+    id: 'u2',
+    status: 'scheduled',
+    campaign_id: 'r1',
+    scheduled_at: soon(80),
+    published_at: null,
+    comment_status: '',
+    target: { id: '7', name: 'ניקוי מזגנים — באר שבע', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/7' } as never,
+  }),
+  /* Its round has no comment text, so no comment is coming: it must NOT be
+     drawn, however imminent its publication is. */
+  row({ id: 'u3', status: 'scheduled', campaign_id: 'r2', scheduled_at: soon(5), published_at: null, comment_status: '' }),
+];
+
 const body = renderToStaticMarkup(
-  createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, done, totals })),
+  createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, done, totals, upcoming, campaigns })),
 );
 
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">

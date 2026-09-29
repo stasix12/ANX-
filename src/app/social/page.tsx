@@ -1199,7 +1199,13 @@ export default function SocialDashboard() {
             from reads this screen already makes — no new query — and `totals`
             is passed so the footer counts the database rather than the window.
           */}
-          <CommentTimeline rows={data.comments} done={data.commentsDone} totals={data.commentTotals} />
+          <CommentTimeline
+            rows={data.comments}
+            done={data.commentsDone}
+            totals={data.commentTotals}
+            upcoming={data.upcoming}
+            campaigns={data.campaigns}
+          />
 
           {/* The panic button — it pauses everything and cancels the whole
               queue. It is now rendered only when there is something to cancel:

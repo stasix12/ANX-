@@ -107,9 +107,10 @@ async function main(): Promise<void> {
        * it does on any busy day, since the two reads overlap by design. Drawn
        * twice it would be the rail claiming two comments under one post.
        */
-      /* Seven finished and seven waiting are loaded; three of each are drawn
-         and the other eight sit behind the fold. */
-      assert.equal(seen.rows, 6, `${width}px: the list drew ${seen.rows} rows — three from each half, the rest behind "הצג עוד"`);
+      /* Three lists: eight finished loaded (seven inside the window), seven
+         waiting, and two publications still due that are owed a comment. Two
+         are drawn from each. */
+      assert.equal(seen.rows, 6, `${width}px: the list drew ${seen.rows} rows — two from each of the three lists`);
       /*
        * TWENTY-FOUR HOURS ONLY. The fixture carries a comment from forty hours
        * ago; it must not be drawn. Checked by NAME rather than by a count, so
@@ -126,7 +127,7 @@ async function main(): Promise<void> {
        * — so it moves the moment the filter does.
        */
       assert.ok(
-        seen.text.includes('מוצגות 3 מתוך 7'),
+        seen.text.includes('מוצגות 2 מתוך 7'),
         `${width}px: the finished half must be the 7 inside the 24-hour window, not all 8 loaded`,
       );
       assert.ok(
@@ -139,6 +140,25 @@ async function main(): Promise<void> {
       );
       assert.ok(seen.text.includes('מה נכתב ב-24 השעות האחרונות'), `${width}px: the window must be stated, not silently applied`);
 
+      /*
+       * SCHEDULED AHEAD — "וגם את התגובות המתוזמנות קדימה". A comment is
+       * queued onto a publication, so until that publication goes out there is
+       * no comment row at all; these were invisible here.
+       *
+       * The fixture offers three due publications and only two belong to a
+       * round carrying comment_text. The third must not appear however
+       * imminent it is — checked by name, because a count alone would pass on
+       * a filter that dropped the wrong one.
+       */
+      assert.ok(seen.text.includes('מתוזמנות קדימה'), `${width}px: the scheduled-ahead section is missing`);
+      assert.ok(
+        seen.text.includes('2 מתוך 2'),
+        `${width}px: only publications whose round carries comment_text are owed a comment — got ${JSON.stringify(seen.names)}`,
+      );
+      assert.ok(
+        seen.text.includes('תגובה אחרי הפרסום'),
+        `${width}px: a scheduled-ahead row must say the comment follows the publication, not that it is queued`,
+      );
       assert.deepEqual(seen.clipped, [], `${width}px: text is cut off — ${JSON.stringify(seen.clipped)}`);
       assert.deepEqual(seen.smallTargets, [], `${width}px: tap target under 40px — ${JSON.stringify(seen.smallTargets)}`);
 
@@ -149,13 +169,15 @@ async function main(): Promise<void> {
        */
       assert.deepEqual(
         seen.places,
-        ['מקום 1 בתור', 'מקום 2 בתור', 'מקום 3 בתור'],
+        ['מקום 1 בתור', 'מקום 2 בתור'],
         `${width}px: the queue positions are ${JSON.stringify(seen.places)}`,
       );
 
       /* Eight folded — four finished and four waiting — and the button says
          so exactly, the way "הצג עוד 36" does in the card above. */
-      assert.deepEqual(seen.more, ['הצג עוד 8'], `${width}px: the fold's button reads ${JSON.stringify(seen.more)}`);
+      /* Five finished and five waiting folded away; both scheduled-ahead rows
+         fit, so they add nothing to the count. */
+      assert.deepEqual(seen.more, ['הצג עוד 10'], `${width}px: the fold's button reads ${JSON.stringify(seen.more)}`);
       /*
        * THE REAL INVARIANT IS THAT HEIGHT IS BOUNDED BY THE FOLD, NOT BY THE
        * QUEUE. Fourteen rows are loaded and the database holds 271; unfolded
@@ -163,12 +185,15 @@ async function main(): Promise<void> {
        * it is six rows, two headers and a button, whatever the owner's backlog
        * — which is the property worth pinning.
        *
-       * 950px is that shape measured with room to spare, not a target. It is
-       * about the height of the "תגובות לפרסומים" card it sits under, which is
-       * the company this card is meant to keep.
+       * 1000px is that shape measured with a little room, not a target. It
+       * was 950 with two lists; the scheduled-ahead list added a heading, a
+       * count line and two rows, and folded the card measures 966. Raised
+       * deliberately rather than by trimming a list to fit a number — and it
+       * is still about the height of the "תגובות לפרסומים" card it sits
+       * under, which is the company this card is meant to keep.
        */
       assert.ok(
-        seen.cardHeight <= 950,
+        seen.cardHeight <= 1000,
         `${width}px: the card is ${seen.cardHeight}px — folded it must stay a card, not become the page`,
       );
 
@@ -178,9 +203,11 @@ async function main(): Promise<void> {
        * of "" is a control that looks alive and goes nowhere.
        */
       assert.ok(!seen.links.includes(''), `${width}px: a "לתגובה" link with an empty address`);
+      /* d's permalink, not a's: the finished list folds at two and a is third,
+         so asserting a's address was asserting something not on screen. */
       assert.ok(
-        seen.links.includes('https://facebook.com/groups/1/posts/9'),
-        `${width}px: a comment with a permalink must link to the POST, not to the group`,
+        seen.links.includes('https://facebook.com/groups/4/posts/7'),
+        `${width}px: a comment with a permalink must link to the POST, not to the group — got ${JSON.stringify(seen.links)}`,
       );
       assert.ok(
         seen.links.includes('https://facebook.com/groups/3'),

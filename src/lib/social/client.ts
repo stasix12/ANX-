@@ -1054,6 +1054,45 @@ export async function listCommentsDone(limit = 40): Promise<QueueRow[]> {
   return (res.data ?? []) as unknown as QueueRow[];
 }
 
+/**
+ * The comments that have NOT been written yet, in the order the worker will
+ * take them.
+ *
+ * WHY THIS EXISTS AND listCommentQueue() COULD NOT DO IT. That read asks for
+ * every row carrying any comment state, oldest publication first, capped at
+ * sixty. On a fresh account the cap never bites and the pending rows are in
+ * there. On the owner's account there are 482 such rows, so the sixty oldest
+ * are the earliest things they ever published — all of them long since
+ * commented on. The 75 still waiting were outside the window every single
+ * time, and the dashboard's rail showed a queue of nothing while the card
+ * above it counted 75 in the queue. "לא מראה", and it was right.
+ *
+ * Narrowed to the two live states rather than re-ordered, because the order
+ * is the one thing that must not change: the worker claims the oldest
+ * publication first, so this is also the order they will go out in, which is
+ * what lets the screen number them.
+ *
+ * A LEAN SELECT, not QUEUE_SELECT. That one is `*` plus three joins, and `*`
+ * on social_queue carries rendered_text — the entire published post — per
+ * row. This list draws a name, a state and a link.
+ */
+const COMMENT_WAIT_SELECT =
+  'id, status, comment_status, comment_at, published_at, scheduled_at, permalink, campaign_id, target:social_targets(id,name,channel,url,image_url)';
+
+export async function listCommentsWaiting(limit = 60): Promise<QueueRow[]> {
+  const res = await db()
+    .from('social_queue')
+    .select(COMMENT_WAIT_SELECT)
+    .in('comment_status', ['pending', 'commenting'])
+    .order('published_at', { ascending: true })
+    .limit(limit);
+  /* Same silence as listCommentQueue, for the same reason: this runs on the
+     dashboard's poll, and the screen that can explain a missing column is the
+     one with the button. */
+  if (res.error) return [];
+  return (res.data ?? []) as unknown as QueueRow[];
+}
+
 export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
   const res = await db()
     .from('social_queue')

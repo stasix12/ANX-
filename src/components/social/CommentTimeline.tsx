@@ -87,6 +87,7 @@ type Kind = 'past' | 'queued' | 'ahead';
 
 export function CommentTimeline({
   rows,
+  waiting: waitingRows,
   done,
   totals,
   upcoming,
@@ -94,6 +95,16 @@ export function CommentTimeline({
 }: {
   /** Everything carrying a comment state — the dashboard's existing read. */
   rows: QueueRow[];
+  /**
+   * The ones still to be written, read on their own.
+   *
+   * It has to be its own read. `rows` is every comment state, oldest
+   * publication first, capped at sixty — and on an account with 482 of them
+   * the sixty oldest are all long finished, so the queue was never in there.
+   * The rail showed nothing waiting while the bar above it counted 75 in the
+   * queue: "לא מראה".
+   */
+  waiting: QueueRow[];
   /** The finished ones, read separately and more deeply than `rows` reaches. */
   done: QueueRow[];
   /** The REAL counts, from the database rather than from these two windows. */
@@ -112,7 +123,7 @@ export function CommentTimeline({
    * twice it would be the rail claiming two comments under one post.
    */
   const byId = new Map<string, QueueRow>();
-  for (const r of [...done, ...rows]) if (r.comment_status) byId.set(r.id, r);
+  for (const r of [...done, ...rows, ...waitingRows]) if (r.comment_status) byId.set(r.id, r);
   const all = [...byId.values()];
 
   /*
@@ -143,7 +154,9 @@ export function CommentTimeline({
    * worker claims them, so the numbers on screen are the real positions rather
    * than a second opinion about them.
    */
-  const waiting = all
+  const waiting = waitingRows
+    /* Belt and braces against the two reads overlapping, and against a row
+       that finished between the two queries going out. */
     .filter((r) => !happened(r.comment_status))
     .sort((a, b) => (a.published_at ?? a.scheduled_at).localeCompare(b.published_at ?? b.scheduled_at));
 

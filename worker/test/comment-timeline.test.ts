@@ -125,6 +125,23 @@ async function main(): Promise<void> {
        * twice it would be the rail claiming two comments under one post.
        */
       /*
+       * THE QUEUE COMES FROM ITS OWN READ — and the fixture is the owner's
+       * account in miniature: `rows` carries not one pending comment, because
+       * listCommentQueue asks for every comment state oldest-publication-first
+       * capped at sixty, and with 482 such rows the sixty oldest were all long
+       * finished. The queue fell outside the window every time, so the rail
+       * showed nothing waiting while the bar above it counted 75 in the queue.
+       *
+       * "לא מראה", and it was right. If the component goes back to deriving
+       * the queue from `rows`, these four vanish and this fails.
+       */
+      assert.ok(seen.text.includes('הבא בתור'), `${width}px: the head of the queue must be named without scrolling for it`);
+      assert.equal(
+        seen.places.length,
+        7,
+        `${width}px: all seven waiting comments must be on the rail — got ${JSON.stringify(seen.places)}. They come from their own read; derived from \`rows\` there are none.`,
+      );
+      /*
        * EVERY ROW THAT WAS READ IS DRAWN — the rail scrolls rather than
        * folding. Seven finished inside the 24-hour window, seven queued, and
        * two publications still due whose round is owed a comment.
@@ -217,7 +234,6 @@ async function main(): Promise<void> {
        * was six swipes down a box that refreshes every thirty seconds. The
        * line at the top is the answer without the scrolling.
        */
-      assert.ok(seen.text.includes('הבא בתור'), `${width}px: the head of the queue must be named without scrolling for it`);
 
       /*
        * THE PACE IS MEASURED, AND SAYS SO ONLY WHEN IT IS.

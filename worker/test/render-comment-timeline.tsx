@@ -92,16 +92,31 @@ const rows: QueueRow[] = [
   }),
   /* No permalink and no group address: it must render with no link at all
      rather than an href of "". */
-  row({ id: 'e', comment_status: 'commenting', permalink: '', target: null as never }),
-  row({ id: 'f', comment_status: 'pending', published_at: '2026-09-29T17:10:00Z', permalink: '' }),
+];
+
+/*
+ * THE WAITING ONES COME FROM THEIR OWN READ — and the fixture proves why.
+ *
+ * `rows` below carries NO pending row at all, which is exactly the shape the
+ * owner's account produced: listCommentQueue asks for every comment state
+ * oldest-publication-first capped at sixty, and with 482 such rows the sixty
+ * oldest were all long finished. The queue was outside the window every time,
+ * so the rail showed nothing waiting while the bar counted 75 in it.
+ *
+ * So if the component ever goes back to deriving the queue from `rows`, these
+ * four disappear and the assertions about "הבא בתור" and the estimates fail.
+ */
+const waiting: QueueRow[] = [
+  row({ id: 'e', comment_status: 'commenting', published_at: ago(9), permalink: '', target: null as never }),
+  row({ id: 'f', comment_status: 'pending', published_at: ago(8), permalink: '' }),
   row({
     id: 'g',
     comment_status: 'pending',
-    published_at: '2026-09-29T17:20:00Z',
+    published_at: ago(7),
     permalink: '',
     target: { id: '5', name: 'ארד — לוח מודעות ומידע לתושבים', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/5' } as never,
   }),
-  row({ id: 'h', comment_status: 'pending', published_at: '2026-09-29T17:30:00Z', permalink: '' }),
+  row({ id: 'h', comment_status: 'pending', published_at: ago(6), permalink: '' }),
 ];
 
 /*
@@ -146,7 +161,7 @@ for (let i = 0; i < 3; i += 1) {
       target: { id: `9${i}`, name: `קבוצה נוספת ${i + 1}`, channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/9' } as never,
     }),
   );
-  rows.push(row({ id: `w${i}`, comment_status: 'pending', published_at: `2026-09-29T18:${i}0:00Z`, permalink: '' }));
+  waiting.push(row({ id: `w${i}`, comment_status: 'pending', published_at: ago(5 - i), permalink: '' }));
 }
 
 /* Far larger than the two windows above, which is the real case: the owner's
@@ -189,8 +204,9 @@ const upcoming: QueueRow[] = [
   row({ id: 'u3', status: 'scheduled', campaign_id: 'r2', scheduled_at: soon(5), published_at: null, comment_status: '' }),
 ];
 
+
 const body = renderToStaticMarkup(
-  createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, done, totals, upcoming, campaigns })),
+  createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, waiting, done, totals, upcoming, campaigns })),
 );
 
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">

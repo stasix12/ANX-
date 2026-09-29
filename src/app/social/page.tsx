@@ -30,6 +30,7 @@ import {
   commentTotalsSince,
   listCommentsDone,
   listCommentQueue,
+  listCommentsWaiting,
   listTimelineDone,
   listQueue,
   listTargets,
@@ -118,6 +119,8 @@ interface DashboardData {
   doneToday: TimelineRow[];
   /** Publications with a comment asked for on them, across every round. */
   comments: QueueRow[];
+  /* The ones still to be written, read on their own — see listCommentsWaiting. */
+  commentsWaiting: QueueRow[];
   commentTotals: CommentTotals;
   /** Comments that FINISHED today — what the card's headline is about. */
   commentsToday: { done: number; failed: number; unverified: number };
@@ -232,7 +235,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, totals, commentsToday, commentsDone] = await Promise.all([
+      const [queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         /* The same midnight the tile beside it uses — one instant, so the two
@@ -272,6 +275,7 @@ export default function SocialDashboard() {
         listTimelineDone({ since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: DONE_LIMIT }),
         listWorkers(),
         listCommentQueue(),
+        listCommentsWaiting(),
         commentTotals(),
         /* The same midnight every other "today" on this screen uses. */
         commentTotalsSince(startOfZonedDay(now).toISOString()),
@@ -289,6 +293,7 @@ export default function SocialDashboard() {
         upcoming,
         doneToday,
         comments,
+        commentsWaiting,
         commentTotals: totals,
         commentsToday,
         commentsDone,
@@ -1201,6 +1206,7 @@ export default function SocialDashboard() {
           */}
           <CommentTimeline
             rows={data.comments}
+            waiting={data.commentsWaiting}
             done={data.commentsDone}
             totals={data.commentTotals}
             upcoming={data.upcoming}

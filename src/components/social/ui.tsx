@@ -1360,6 +1360,7 @@ export function StatCard({
   label,
   value,
   sub,
+  note,
   chipLabel,
   icon,
   tone = 'neutral',
@@ -1370,6 +1371,20 @@ export function StatCard({
   label: string;
   value: string | number;
   sub?: string;
+  /**
+   * A second, quieter figure under the sub-line, in the success colour.
+   *
+   * It exists because the row above it now resets at midnight, and a daily
+   * number with nothing beside it answers "how is today" while losing "how is
+   * it going" — on a morning before the first publication both the figure and
+   * its tile read as zero progress. The week is the shortest span that still
+   * says something on a quiet Tuesday.
+   *
+   * Green on purpose and only here: it is always an accumulation of things
+   * that WORKED, so it never has to carry a warning, and the tone of the tile
+   * above it stays free to describe today.
+   */
+  note?: string;
   /** A call to action in place of the sub-line, inside the tile's own link. */
   chipLabel?: string;
   /**
@@ -1434,6 +1449,14 @@ export function StatCard({
             {sub}
           </p>
         )
+      )}
+      {/* Under everything, including a chip: the chip is this tile's call to
+          action about today, and the week is a separate sentence rather than
+          a replacement for it. */}
+      {note && !action && (
+        <p dir="auto" className={`mt-1 text-[11px] font-bold leading-[14px] text-success-400 ${dense ? 'line-clamp-2' : 'truncate'}`}>
+          {note}
+        </p>
       )}
     </>
   );

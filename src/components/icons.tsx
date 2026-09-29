@@ -285,6 +285,22 @@ export function GearIcon(props: IconProps) {
   );
 }
 
+/**
+ * A comment under a post.
+ *
+ * It lived as an inline <svg> inside CommentQueueCard, with a note saying
+ * there was no speech bubble in this set and that the change was meant to
+ * touch one card. A second screen needs it now — the dashboard's tile row —
+ * and two copies of one shape is the drift this file exists to prevent.
+ */
+export function MessageIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.8-.8L3 21l1.9-5.1A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4Z" />
+    </svg>
+  );
+}
+
 /** Something a person has to put right by hand — not a setting, a repair. */
 export function WrenchIcon(props: IconProps) {
   return (

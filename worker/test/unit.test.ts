@@ -1924,7 +1924,20 @@ const scenario: { step: string; line: string }[] = [];
   // the sort, so descending returned the FURTHEST-OUT rows.
   pin('dashboard upcoming', dash, "listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' })");
   pin('dashboard tiles', dash, 'value={summary.queued}');
-  pin('dashboard tiles', dash, 'value={summary.needsHuman}');
+  /*
+   * RE-POINTED. needsHuman no longer has a tile of its own — it read 0 on
+   * every screenshot the owner sent, and a tile that is always zero teaches
+   * people to stop reading the row, so its place went to the comments. The
+   * rule here was never "there must be a tile": it is that the dashboard reads
+   * the ONE classification in status.ts instead of re-deriving who is waiting.
+   * So the needle moves to where the figure moved — the queue tile's own
+   * sub-line, which is what keeps a publication waiting for a person from
+   * disappearing off this row entirely.
+   */
+  pin('dashboard needs-you count', dash, 'summary.needsHuman ? `ועוד ${summary.needsHuman} דורשים אתכם`');
+  /* And it still decides the banner above the row, which is louder than the
+     tile ever was. */
+  pin('dashboard needs-you banner', dash, 'summary.needsHuman > 0');
   // The cap is never printed as a total.
   pin('upcoming subtitle', dash, '`${summary.queued} ממתינים בתור`');
   assert.ok(!dash.includes('data.upcoming.length} ממתינים'), 'a capped array length must not be printed as the queue');

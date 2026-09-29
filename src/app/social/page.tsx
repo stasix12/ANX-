@@ -17,6 +17,7 @@ import {
   campaignStates,
   cancelAllScheduled,
   countFailuresSince,
+  countCommentsDoneSince,
   countPublishedSince,
   getControl,
   getLimits,
@@ -40,11 +41,11 @@ import {
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
-import { agree, counted, startOfZonedDay } from '@/lib/social/time';
+import { agree, counted, startOfZonedDay, startOfZonedWeek } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { AlertTriangleIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, TrashIcon, UsersIcon, WrenchIcon } from '@/components/icons';
+import { AlertTriangleIcon, MessageIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
 /**
  * How many upcoming rows the timeline reads. The card's subtitle prints the
@@ -80,6 +81,17 @@ interface DashboardData {
    */
   failedToday: number;
   skippedToday: number;
+  /**
+   * The same two figures for the WEEK, which is the line under each of them.
+   *
+   * The day alone was not enough once the row started resetting at midnight:
+   * before the first publication of the morning every tile in it reads zero,
+   * and a dashboard that says "nothing" on a week that published two hundred
+   * posts is describing the clock rather than the work. Sunday, because that
+   * is where the week starts on the owner's own calendar.
+   */
+  weekPublished: number;
+  weekComments: number;
   upcoming: QueueRow[];
   /** Today's finished publications, newest first. Its own read, counted by
       nothing — the queue's numbers describe the queue, not this window. */
@@ -196,13 +208,15 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [queue, today, failures, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, totals, commentsToday, commentsDone] = await Promise.all([
+      const [queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, totals, commentsToday, commentsDone] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         /* The same midnight the tile beside it uses — one instant, so the two
            numbers are about the same day. Asia/Jerusalem, from the browser's
            own zone, which is what startOfZonedDay reads. */
         countFailuresSince(startOfZonedDay(now).toISOString()),
+        countPublishedSince(startOfZonedWeek(now).toISOString()),
+        countCommentsDoneSince(startOfZonedWeek(now).toISOString()),
         /* countPublishedBetween(weekStart) used to run here on every 30s poll
            and `data.week` was rendered nowhere. One whole count query a
            minute, on a metered Israeli mobile plan, for a number no screen
@@ -246,6 +260,8 @@ export default function SocialDashboard() {
         today,
         failedToday: failures.failed,
         skippedToday: failures.skipped,
+        weekPublished,
+        weekComments,
         upcoming,
         doneToday,
         comments,
@@ -748,45 +764,19 @@ export default function SocialDashboard() {
             </Button>
           </div>
 
-          {/* 1 — IS IT WORKING, how much of today's own ceiling has gone out,
-              when is the next one and to which group. Unconditional: it used
-              to be the else-branch of a ternary, so on a morning with an empty
-              queue the screen carried no system state at all. */}
-          <LiveQueueHero
-            systemState={systemState}
-            publishedToday={data.today}
-            dailyTarget={data.limits.maxPerDay}
-            pendingCancellable={pending}
-            nextAt={data.upcoming[0]?.scheduled_at ?? null}
-            nextTargetName={data.upcoming[0]?.target?.name ?? null}
-            nextTarget={data.upcoming[0]?.target ?? null}
-            inFlight={summary.inFlight}
-            workerOnline={data.workerOnline}
-            fbAccount={data.fbAccount}
-            intervention={intervention}
-            onRunNow={runNow}
-            onTune={() => setTuner({ campaignId: data.upcoming[0]?.campaign_id ?? undefined })}
-            updatedAt={updatedAt}
-            refreshing={refreshing}
-            onRefresh={async () => {
-              if (refreshing) return;
-              setRefreshing(true);
-              setError(null);
-              try {
-                await load();
-              } finally {
-                setRefreshing(false);
-              }
-            }}
-            onResume={() => act('resume', () => setPaused(false), 'הפרסום חודש.')}
-            busy={busy === 'run'}
-            resumeBusy={busy === 'resume'}
-          />
+          {/*
+            1 — HOW MANY, AND IT COMES FIRST NOW.
 
-          {/* 2 — how many. The card above answers yes/no; this row answers how
-              much, and that split is the whole hierarchy. Colour marks the
-              status, not the tile. A tile whose value is 0 goes neutral — a
-              red zero is noise, not a warning. */}
+            It used to sit under the system card, on the reasoning that
+            "is it working" outranks "how much". That was right while the card
+            was the only place a number lived. It stopped being right once the
+            row started resetting at midnight: the owner opens this screen to
+            see the day, and the day was one scroll down, under a card that on
+            a quiet morning says nothing but "אין פרסום מתוזמן". Asked for
+            directly — "את הריבועים של הפרסום תעלה אותם למעלה".
+
+            Colour marks the status, not the tile. A tile whose value is 0 goes
+            neutral — a red zero is noise, not a warning. */}
           <section>
             {/* Four across on a phone, not two. The row is scanned as one
                 line of numbers, and halving its height is what let the two
@@ -799,6 +789,12 @@ export default function SocialDashboard() {
                 label="פורסמו היום"
                 value={data.today}
                 sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`}
+                /* The week under the day, asked for by name. On a morning
+                   before the first publication the figure above is 0 and the
+                   tile reads as no progress at all; this is the line that says
+                   otherwise, and it is green because it only ever counts
+                   things that worked. */
+                note={data.weekPublished ? `${data.weekPublished} מתחילת השבוע` : undefined}
                 /* &range=1, because this tile alone is a TODAY count
                    (countPublishedSince(startOfZonedDay)). The other three are
                    all-time head counts and history opens "all" for them; this
@@ -830,7 +826,11 @@ export default function SocialDashboard() {
                 tone={summary.queued ? 'brand' : 'neutral'}
                 label="ממתינים בתור"
                 value={summary.queued}
-                sub="יוצאים לפי התזמון"
+                /* "יוצאים לפי התזמון" is true of this figure and false of the
+                   rows that need a person, so those are named rather than
+                   folded in. It is also the only place in the row they still
+                   appear now that their own tile is gone. */
+                sub={summary.needsHuman ? `ועוד ${summary.needsHuman} דורשים אתכם` : 'יוצאים לפי התזמון'}
                 href="/social/history?status=scheduled"
                 action={
                   pending
@@ -871,21 +871,68 @@ export default function SocialDashboard() {
                    a tile that counts today must open today. */
                 href="/social/history?status=failed&range=1"
               />
+              {/*
+                COMMENTS, WHERE "דורשים טיפול" USED TO BE.
+
+                That tile read 0 on every screenshot the owner has sent, and a
+                tile that is always zero teaches people to stop reading the
+                row. Removing it does not hide the work: a publication waiting
+                for a person raises the intervention banner at the top of this
+                screen, which is louder than a tile, and the queue tile below
+                names the count in its own sub-line so the number never leaves
+                the row entirely.
+
+                What takes its place is the other half of what this product
+                does. Comments were counted only in a card further down, so the
+                row of numbers about today was silent about half the work. */}
               <StatCard
                 dense
-                icon={<WrenchIcon aria-hidden className="h-4 w-4" />}
-                tone={summary.needsHuman ? 'warn' : 'neutral'}
-                label="דורשים טיפול"
-                value={summary.needsHuman}
-                /* Every other tile's sub-line describes its OWN figure. This
-                   one used to print the number of active targets, which has
-                   nothing to do with the count above it — "6" over "43 יעדים
-                   פעילים" reads as "6 of 43". */
-                sub={summary.needsHuman ? 'לא יזוזו עד שתטפלו' : 'אין מה לעשות כרגע'}
-                href="/social/history?status=needs_attention"
+                icon={<MessageIcon aria-hidden className="h-4 w-4" />}
+                tone={data.commentsToday.done ? 'good' : 'neutral'}
+                label="תגובות היום"
+                value={data.commentsToday.done}
+                sub={data.commentTotals.pending ? `${data.commentTotals.pending} ממתינות` : 'על הפוסטים שפורסמו'}
+                note={data.weekComments ? `${data.weekComments} מתחילת השבוע` : undefined}
+                href="/social/history?status=published&range=1"
               />
             </div>
           </section>
+
+          {/* 2 — IS IT WORKING, when is the next one and to which group.
+              Unconditional: it used to be the else-branch of a ternary, so on
+              a morning with an empty queue the screen carried no system state
+              at all. */}
+          <LiveQueueHero
+            systemState={systemState}
+            publishedToday={data.today}
+            dailyTarget={data.limits.maxPerDay}
+            pendingCancellable={pending}
+            nextAt={data.upcoming[0]?.scheduled_at ?? null}
+            nextTargetName={data.upcoming[0]?.target?.name ?? null}
+            nextTarget={data.upcoming[0]?.target ?? null}
+            inFlight={summary.inFlight}
+            workerOnline={data.workerOnline}
+            fbAccount={data.fbAccount}
+            intervention={intervention}
+            onRunNow={runNow}
+            onTune={() => setTuner({ campaignId: data.upcoming[0]?.campaign_id ?? undefined })}
+            updatedAt={updatedAt}
+            refreshing={refreshing}
+            onRefresh={async () => {
+              if (refreshing) return;
+              setRefreshing(true);
+              setError(null);
+              try {
+                await load();
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+            onResume={() => act('resume', () => setPaused(false), 'הפרסום חודש.')}
+            busy={busy === 'run'}
+            resumeBusy={busy === 'resume'}
+          />
+
 
           {/* 3 — what the current round is doing. No countdown on this card:
               its next instant comes from a different row than the system

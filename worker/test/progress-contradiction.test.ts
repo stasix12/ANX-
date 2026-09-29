@@ -951,6 +951,33 @@ async function main(): Promise<void> {
      different days while sitting next to each other. */
   pin('page.tsx one midnight for both tiles', page, 'countFailuresSince(startOfZonedDay(now).toISOString())');
 
+  /*
+   * THE WEEK UNDER THE DAY. Once the row resets at midnight, every tile in it
+   * reads zero on a morning before the first publication — and a dashboard
+   * that says "nothing" about a week that published two hundred posts is
+   * describing the clock, not the work.
+   */
+  pin('time.ts knows where the week starts', readFileSync(new URL('../../src/lib/social/time.ts', import.meta.url), 'utf8'), 'export function startOfZonedWeek');
+  pin('page.tsx counts the week from Sunday', page, 'countPublishedSince(startOfZonedWeek(now).toISOString())');
+  pin('page.tsx counts the week of comments too', page, 'countCommentsDoneSince(startOfZonedWeek(now).toISOString())');
+  pin('published tile carries the week', page, 'note={data.weekPublished ?');
+  pin('comments tile carries the week', page, 'note={data.weekComments ?');
+  /* The two spans must never be confused for one another, so the second line
+     says which it is rather than being a bare number under a daily figure. */
+  pin('the week line says it is the week', page, 'מתחילת השבוע');
+
+  /* The row is the first thing on the screen now. It used to sit under the
+     system card, which on a quiet morning says nothing but "אין פרסום מתוזמן"
+     — so the day was one scroll below a card announcing there was no day. */
+  expect(
+    'guards',
+    'source-drift',
+    'the tile row comes before the system card',
+    page.indexOf('1 — HOW MANY, AND IT COMES FIRST NOW') < page.indexOf('<LiveQueueHero'),
+    true,
+    NONE,
+  );
+
   /* The bottom bar is the navigation. A card of shortcuts to screens the tab
      bar already holds is a second door to the same room, and on a phone it
      costs a scroll to offer nothing. */
@@ -958,7 +985,11 @@ async function main(): Promise<void> {
   expect('guards', 'source-drift', 'QuickActions is gone rather than orphaned', page.includes('<QuickActions />'), false, NONE);
 
   pin('page.tsx queued tile', page, 'value={summary.queued}');
-  pin('page.tsx needs-you tile', page, 'value={summary.needsHuman}');
+  /* RE-POINTED with unit.test.ts: the tile is gone (always 0, so nobody read
+     the row), the figure is not — it names itself in the queue tile's sub-line
+     and still raises the banner above the row. INV-1 below is about the
+     NUMBER being on screen, not about which element carries it. */
+  pin('page.tsx needs-you count survives the tile', page, 'ועוד ${summary.needsHuman} דורשים אתכם');
   pin('page.tsx pending figure is the cancellable count', page, 'const pending = summary.cancellable;');
   pin('page.tsx resetRun quotes what a stop can cancel', page, 'const waiting = cancellableRows(state.progress);');
   /*

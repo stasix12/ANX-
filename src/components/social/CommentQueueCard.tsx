@@ -6,7 +6,7 @@ import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import { retryComment, retryFailedComments } from '@/lib/social/client';
 import { agree } from '@/lib/social/time';
 import { commentLabel, commentNeedsHuman, commentRank } from '@/lib/social/comments';
-import { AlertTriangleIcon, CheckCircleIcon, ChevronDownIcon, RepeatIcon, ShareIcon } from '@/components/icons';
+import { AlertTriangleIcon, CheckCircleIcon, ChevronDownIcon, MessageIcon, RepeatIcon, ShareIcon } from '@/components/icons';
 import { CommentShot } from './CommentShot';
 import { Stamp } from './DateTime';
 import { TargetAvatar } from './TargetAvatar';
@@ -137,12 +137,11 @@ export function CommentQueueCard({
       title={
         <span className="inline-flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-brand-300/12 text-brand-300">
-            {/* Inline rather than added to components/icons.tsx: there is no
-                speech bubble in the set, and this change is meant to touch one
-                card and nothing else. */}
-            <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-              <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.8-.8L3 21l1.9-5.1A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4Z" />
-            </svg>
+            {/* It was an inline <svg> here, on the reasoning that the set had
+                no speech bubble and this change should touch one card. The
+                dashboard's tile row needs the same shape now, so it lives in
+                components/icons.tsx and both read it from there. */}
+            <MessageIcon aria-hidden className="h-4 w-4" />
           </span>
           תגובות לפרסומים
         </span>

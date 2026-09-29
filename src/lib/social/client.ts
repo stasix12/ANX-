@@ -933,6 +933,24 @@ export async function commentTotalsSince(sinceISO: string): Promise<{ done: numb
 }
 
 /**
+ * Comments that went up since an instant — one count, for the week line.
+ *
+ * Narrower than commentTotalsSince() on purpose: that one runs three head
+ * requests to work out a success rate, and the tile's second line needs one
+ * number. This screen already polls every thirty seconds on a metered phone
+ * plan, and two more counts a minute for a figure nobody divides by is how a
+ * dashboard becomes expensive without becoming more useful.
+ */
+export async function countCommentsDoneSince(sinceISO: string): Promise<number> {
+  const res = await db()
+    .from('social_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('comment_status', 'done')
+    .gte('comment_at', sinceISO);
+  return res.error ? 0 : (res.count ?? 0);
+}
+
+/**
  * The comments that went up, newest first — the list behind the green tile.
  *
  * Its own read rather than a filter over listCommentQueue(), because that one

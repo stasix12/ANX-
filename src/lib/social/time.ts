@@ -71,6 +71,20 @@ export function startOfZonedDay(date: Date, tz = TIMEZONE): Date {
   return zonedToUtc(zonedDateISO(date, tz), '00:00', tz);
 }
 
+/**
+ * Start of the local WEEK containing `date`, as a UTC instant.
+ *
+ * Sunday, because the week this counts is a working week in Israel and that is
+ * where it starts — the same day the calendar on the owner's phone starts on.
+ * Built out of startOfZonedDay rather than by subtracting milliseconds, so the
+ * DST changeover cannot move the boundary by an hour: the day is resolved in
+ * the zone first and only then turned into an instant.
+ */
+export function startOfZonedWeek(date: Date, tz = TIMEZONE): Date {
+  const back = zonedWeekday(date, tz); // 0 = Sunday
+  return zonedToUtc(addDaysISO(zonedDateISO(date, tz), -back), '00:00', tz);
+}
+
 export function formatDateTimeHe(iso: string | Date | null | undefined, tz = TIMEZONE): string {
   if (!iso) return '—';
   const d = typeof iso === 'string' ? new Date(iso) : iso;

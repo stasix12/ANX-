@@ -48,6 +48,14 @@ on:
 permissions:
   contents: write
 
+# The database the WEBSITE runs against — the same two values deploy.yml passes
+# to Vercel. Kept here so the installer cannot drift away from it; see the
+# assemble step. Neither is a secret: the anon key is designed to be public and
+# ships in every page of the site.
+env:
+  WEBSITE_SUPABASE_URL: https://kadiiszpmuboawssdhfy.supabase.co
+  WEBSITE_SUPABASE_ANON_KEY: sb_publishable_ibaDG7kFQL9i5Zab6rEjWw_34vE2NQP
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -93,21 +101,46 @@ jobs:
       # every browser bundle of the website; what it can reach is decided by
       # the row-level policies behind it. Nothing else is passed in — see
       # scripts/build-app.mjs.
+      #
+      # THE DEFAULTS ARE THE WEBSITE'S OWN, and they are literals here for the
+      # same reason they are literals in deploy.yml: the installer and the
+      # dashboard MUST be the same database. An account is created on the
+      # website; if this package were built against a different Supabase
+      # project the account would simply not exist there, and every customer
+      # would be told their email and password are wrong while typing them
+      # perfectly. A repository secret still wins, so moving projects is one
+      # change — but it has to be the same change in both files, and the step
+      # below refuses the build until it is.
       - name: assemble
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || env.WEBSITE_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.WEBSITE_SUPABASE_ANON_KEY }}
           SOCIAL_SITE_URL: ${{ vars.SOCIAL_SITE_URL }}
         run: node scripts/build-app.mjs
 
-      - name: refuse to ship a package with nothing in it
+      - name: the package points at the same database as the dashboard
         shell: pwsh
         run: |
           $cfg = Get-Content dist/app/config.json | ConvertFrom-Json
           if (-not $cfg.supabaseUrl -or -not $cfg.supabaseAnonKey) {
             # An installer that builds fine and cannot connect is the worst of
             # the possible outcomes: it reaches a customer before anybody knows.
-            throw "NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY are not set as repository secrets."
+            throw "NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY came through empty."
+          }
+          # Printed as a yes/no and never as the value. The URL is public — it
+          # is a literal in deploy.yml — but a secret's contents are masked in
+          # these logs anyway, so a comparison is the only form of this that
+          # can actually be read afterwards. And this line is the whole
+          # diagnosis when a customer cannot sign in: same database, or not.
+          # A trailing slash and a capital letter are the same host. Compared
+          # loosely on purpose: this step exists to catch a different PROJECT,
+          # and blocking a correct build over a slash would teach whoever hits
+          # it to delete the check.
+          $trim = { param($u) $u.Trim().TrimEnd('/').ToLowerInvariant() }
+          $same = (& $trim $cfg.supabaseUrl) -eq (& $trim $env:WEBSITE_SUPABASE_URL)
+          Write-Host "installer and dashboard share one database: $same"
+          if (-not $same) {
+            throw "This installer is built against a DIFFERENT Supabase project than the website. Every customer's login would be refused with 'wrong email or password', because their account exists in the website's project and not in this one. Fix the NEXT_PUBLIC_SUPABASE_URL repository secret, or delete it so the default in this file is used."
           }
 
       # CODE SIGNING. Without it Windows SmartScreen tells the customer this is

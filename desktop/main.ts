@@ -587,17 +587,77 @@ ipcMain.handle('fb:check', () => sendCommand('check'));
 ipcMain.handle('fb:disconnect', () => sendCommand('logout'));
 ipcMain.handle('fb:verify', (_e, code: string) => sendCommand('verify', { code: String(code ?? '').trim() }));
 
+/*
+ * WHAT WENT WRONG, IN HEBREW, WITH THE NEXT STEP NAMED.
+ *
+ * This was two lines: "invalid login" became "המייל או הסיסמה לא נכונים" and
+ * every other ending was printed in English behind a Hebrew prefix. Both
+ * halves misled the first customer who ever used this screen. He had an
+ * account, he typed it correctly, and he was told his details were wrong —
+ * because an account whose address has not been CONFIRMED yet is refused with
+ * a DIFFERENT error, which went out to somebody who reads Hebrew as
+ * "ההתחברות נכשלה: Email not confirmed".
+ *
+ * So every ending a person can actually reach is named here, and each one says
+ * what to do next rather than what failed. The ones that matter:
+ *
+ *   * the address was never confirmed. The account exists and the password is
+ *     right; the way in is the code-by-email link further down this screen,
+ *     which confirms the address on its way through.
+ *   * there is no account with this address. The password route cannot tell
+ *     this apart from a wrong password — GoTrue deliberately answers both the
+ *     same, so that a stranger cannot use this form to discover who has an
+ *     account — but the code route CAN, and says so.
+ *   * the details really are wrong.
+ *   * the address or the key this build carries is not accepted. That is our
+ *     mistake, not a typing mistake, and it must not be worded as one: it is
+ *     what an installer built against the wrong Supabase project does, and it
+ *     would have every customer retyping a password that was never the
+ *     problem.
+ *
+ * The raw text goes to the technical log and never on screen: it is English,
+ * it names internals, and it is the one thing worth having when a customer
+ * calls. GoTrue's messages carry no password and no token, so there is nothing
+ * in them that must not be written down.
+ */
+const CONFIRM_FIRST =
+  'החשבון קיים, אבל כתובת המייל עוד לא אושרה. פתחו את ההודעה שקיבלתם ולחצו על הקישור שבה — או לחצו כאן למטה על "להתחבר בלי סיסמה — קוד למייל", וזה מאשר את הכתובת בדרך.';
+const NO_ACCOUNT =
+  'אין חשבון עם המייל הזה. פותחים חשבון באתר — "צור חשבון חדש" למטה — ואחר כך נכנסים לכאן עם אותו מייל.';
+const WRONG_DETAILS =
+  'המייל או הסיסמה לא נכונים. אם פתחתם את החשבון עכשיו — צריך קודם לאשר את המייל; ואם שכחתם את הסיסמה, אפשר להיכנס עם קוד למייל בקישור שלמטה.';
+const OUR_FAULT =
+  'התוכנה הזאת לא מצליחה לדבר עם המערכת שלנו. זו לא טעות שלכם ולא בעיה בסיסמה — כדאי לפנות אלינו.';
+
+function authTrouble(error: { message: string; status?: number }): { ok: false; message: string } {
+  const text = error.message.toLowerCase();
+  const status = error.status;
+  say(`ההתחברות נדחתה: ${error.message}${status ? ` (${status})` : ''}`, 'err');
+  if (text.includes('not confirmed')) return fail(CONFIRM_FIRST);
+  if (text.includes('signups not allowed') || text.includes('user not found')) return fail(NO_ACCOUNT);
+  if (text.includes('invalid login')) return fail(WRONG_DETAILS);
+  if (text.includes('rate limit') || text.includes('too many') || status === 429) {
+    return fail('יותר מדי ניסיונות. נסו שוב בעוד דקה.');
+  }
+  /* BEFORE the 401 below, and that order is the whole point: a code that has
+     run out comes back as a 401 too, and calling that "our mistake" would
+     leave somebody waiting for us instead of asking for a fresh code. */
+  if (text.includes('expired') || text.includes('token') || text.includes('otp')) {
+    return fail('הקוד לא נכון או שפג תוקפו. בקשו קוד חדש ונסו שוב.');
+  }
+  /* "Invalid API key" is a 401 and is ours; a wrong password is a 400. */
+  if (text.includes('api key') || text.includes('jwt') || status === 401 || status === 403) return fail(OUR_FAULT);
+  if (text.includes('fetch') || text.includes('network') || text.includes('timeout')) {
+    return fail('אין חיבור לאינטרנט, או שהחיבור נפל באמצע. בדקו את הרשת ונסו שוב.');
+  }
+  return fail(`ההתחברות נכשלה: ${error.message}`);
+}
+
 ipcMain.handle('auth:password', async (_e, { email, password }: { email: string; password: string }) => {
   if (!email?.includes('@')) return fail('כתובת המייל לא נראית תקינה.');
   if (!password) return fail('צריך להקליד סיסמה.');
   const { error } = await authClient().auth.signInWithPassword({ email, password });
-  if (error) {
-    return fail(
-      /invalid login/i.test(error.message)
-        ? 'המייל או הסיסמה לא נכונים.'
-        : `ההתחברות נכשלה: ${error.message}`,
-    );
-  }
+  if (error) return authTrouble(error);
   await afterSignIn();
   return ok();
 });
@@ -608,7 +668,15 @@ ipcMain.handle('auth:otp-send', async (_e, { email }: { email: string }) => {
      person can read what they are agreeing to, and a typo here would make a
      second empty account and explain nothing. */
   const { error } = await authClient().auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
-  if (error) return fail(`לא הצלחנו לשלוח קוד: ${error.message}`);
+  /*
+   * THIS IS THE ROUTE THAT CAN TELL THE TWO APART. With shouldCreateUser
+   * false, an address that has no account comes back as "Signups not allowed
+   * for otp" — so a customer who is sure of his details and is refused by the
+   * password form can press this and find out, in one sentence, whether the
+   * account exists at all. It is also the way IN for an account whose address
+   * was never confirmed: verifying the code confirms the address.
+   */
+  if (error) return authTrouble(error);
   return ok();
 });
 
@@ -621,7 +689,7 @@ ipcMain.handle('auth:otp-verify', async (_e, { email, token }: { email: string; 
   const { error } = hash
     ? await client.auth.verifyOtp({ token_hash: decodeURIComponent(hash[1]), type: 'email' })
     : await client.auth.verifyOtp({ email, token: clean.replace(/\s/g, ''), type: 'email' });
-  if (error) return fail(`הקוד לא התקבל: ${error.message}`);
+  if (error) return authTrouble(error);
   await afterSignIn();
   return ok();
 });

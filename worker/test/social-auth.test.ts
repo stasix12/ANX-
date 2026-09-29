@@ -88,6 +88,103 @@ is(!/insert into|createTenant/.test(auth), 'the client never creates a business 
   );
 }
 
+/* ------------------- 6c. and when it refuses somebody, it says why in Hebrew  */
+/*                                                                             */
+/* THE FIRST CUSTOMER WHO EVER USED THAT SCREEN WAS TOLD THE WRONG THING. He    */
+/* had an account, he typed it correctly, and the app answered that his email   */
+/* or password were wrong. Two separate failures reach that field and neither   */
+/* is a typing mistake:                                                        */
+/*                                                                             */
+/*   * an address that was never confirmed — GoTrue answers "Email not          */
+/*     confirmed", which went out as that English sentence behind a Hebrew      */
+/*     prefix, to somebody who reads Hebrew;                                   */
+/*   * a package built against a different Supabase project than the website —  */
+/*     the account genuinely does not exist there, so the answer really IS      */
+/*     "invalid login credentials", and the person retypes a correct password   */
+/*     for ever.                                                               */
+/*                                                                             */
+/* Both now say what they are and what to do next, and the build below can no   */
+/* longer produce the second one at all.                                       */
+{
+  const desktop = read('../../desktop/main.ts');
+  const code = desktop.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  is(/function authTrouble\(/.test(code), 'one place maps a rejected sign-in to a sentence, rather than three handlers each guessing');
+  for (const handler of ["auth:password", "auth:otp-send", "auth:otp-verify"]) {
+    /*
+     * Cut at the NEXT handler, not at a fixed number of characters. A 900-byte
+     * window from 'auth:otp-send' reached into 'auth:otp-verify' and found ITS
+     * call, so this loop passed while otp-send was printing English again. A
+     * guard that reads its neighbour's homework is worse than none.
+     */
+    const from = code.indexOf(`'${handler}'`);
+    const next = code.indexOf('ipcMain.handle(', from + 1);
+    const body = code.slice(from, next === -1 ? undefined : next);
+    is(from !== -1 && body.length < 1500, `${handler} is still a handler of its own — this slice has to be one handler, or it proves nothing`);
+    is(/authTrouble\(error\)/.test(body), `${handler} must go through it — the route a customer happens to try must not decide how clearly they are told`);
+  }
+  is(
+    !/ההתחברות נכשלה: \$\{error\.message\}/.test(code.slice(0, code.indexOf('function authTrouble'))),
+    'and no handler may still print GoTrue\u2019s English as its own answer',
+  );
+
+  const map = code.slice(code.indexOf('function authTrouble'), code.indexOf('ipcMain.handle(\'auth:password\''));
+  /* Both orderings below compare indexOf against indexOf, and a string that is
+     not there answers -1 — which is smaller than everything and would pass
+     them on a file that had lost the check entirely. So the four are proved to
+     exist first. */
+  for (const needle of ["includes('not confirmed')", "includes('invalid login')", "includes('expired')", 'status === 401']) {
+    is(map.includes(needle), `the mapping still tests ${needle} — an ordering assertion against a missing test passes on nothing`);
+  }
+  is(
+    map.indexOf("includes('not confirmed')") < map.indexOf("includes('invalid login')"),
+    'the unconfirmed address is checked FIRST, because it is the one that was being reported as a wrong password',
+  );
+  is(
+    /CONFIRM_FIRST[\s\S]{0,400}קוד למייל/.test(desktop),
+    'and its sentence names the way in that actually works — verifying a code by email confirms the address on the way through',
+  );
+  is(
+    map.indexOf("includes('expired')") < map.indexOf('status === 401'),
+    'a code that has run out is a 401 too, and calling THAT our fault leaves somebody waiting for us instead of asking for a new code',
+  );
+  is(
+    /const OUR_FAULT[\s\S]{0,200}לא טעות שלכם/.test(desktop),
+    'a key or an address this build carries that is not accepted must not be worded as a typing mistake',
+  );
+  is(
+    /NO_ACCOUNT[\s\S]{0,300}צור חשבון חדש/.test(desktop),
+    'and "there is no such account" points at the website, which is the only place one can be opened',
+  );
+  /* The raw text is worth keeping — it is the one thing worth having when a
+     customer telephones — and it belongs in the technical log, which nobody is
+     shown by accident. GoTrue's messages carry no password and no token. */
+  is(/say\(`ההתחברות נדחתה: \$\{error\.message\}/.test(desktop), 'the English original is logged rather than lost');
+}
+
+/* --------------- 6d. the installer cannot point at another database at all    */
+/*                                                                             */
+/* An account is made on the website. If the package were assembled against a   */
+/* different Supabase project, that account would not exist in the one the      */
+/* program asks — and every customer would be told their details are wrong      */
+/* while typing them perfectly. It is a one-word difference in a repository     */
+/* secret and there is nothing on a customer's screen that could ever hint at   */
+/* it, so the build refuses instead.                                           */
+{
+  const flow = readFileSync(new URL('../../.github/workflows/build-app.yml', import.meta.url), 'utf8');
+  const site = readFileSync(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
+  const url = site.match(/NEXT_PUBLIC_SUPABASE_URL:\s*(\S+)/)?.[1] ?? '';
+  is(url.startsWith('https://'), 'the website names the project it deploys against');
+  is(
+    flow.includes(url),
+    'and the installer build carries the SAME one, so a missing secret falls back to the right database rather than to none',
+  );
+  is(
+    /share one database/.test(flow) && /throw "This installer is built against a DIFFERENT Supabase project/.test(flow),
+    'a secret that points somewhere else fails the build — an installer that reaches a customer and refuses their password is the worst of the endings',
+  );
+}
+
 /* ------------------------- 6b. and it verifies, on the one account it can     */
 /*                                                                             */
 /* A brand-new workspace holds no groups. So the count of groups this account   */

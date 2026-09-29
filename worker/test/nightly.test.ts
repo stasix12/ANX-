@@ -12,7 +12,7 @@
  * that sweeps at 23:00 its time is sweeping at two in the afternoon theirs.
  */
 import assert from 'node:assert/strict';
-import { NIGHTLY_OVERDUE_MS, nightlyDue } from '../nightly';
+import { NIGHTLY_OVERDUE_MS, inQuietHours, nightlyDue } from '../nightly';
 
 let checks = 0;
 const is = (cond: unknown, msg: string) => {
@@ -132,5 +132,31 @@ is(
   !nightlyDue({ lastISO: '2026-09-28T23:10:00+03:00', now: at('2026-09-29T20:05:00+03:00') }),
   'while 20:05 on the owner’s clock is still the evening, not the end of it',
 );
+
+/* ------------------------------------------------------------ quiet hours */
+
+/*
+ * The window in which the worker may browse Facebook for things nobody asked
+ * for. It wraps midnight, which is the whole reason it is a function and not
+ * a comparison written inline at the call site: `h >= 23 && h < 6` is never
+ * true, and it would have switched the view-count sweep off altogether rather
+ * than moving it to the night.
+ */
+is(inQuietHours(at('2026-09-29T20:30:00Z')), '23:30 on the owner’s clock is inside the quiet hours');
+is(inQuietHours(at('2026-09-29T21:00:00Z')), 'and so is midnight');
+is(inQuietHours(at('2026-09-30T00:30:00Z')), 'and 03:30');
+is(inQuietHours(at('2026-09-30T02:59:00Z')), 'and 05:59, the last minute of it');
+is(!inQuietHours(at('2026-09-30T03:00:00Z')), 'but 06:00 is the morning — the machine goes quiet for the owner, not the other way round');
+is(!inQuietHours(at('2026-09-29T09:00:00Z')), 'midday is not the time to open two hundred group pages');
+is(!inQuietHours(at('2026-09-29T19:59:00Z')), 'nor 22:59, one minute before the day is declared over');
+
+/*
+ * THE CLOCK IS THE OWNER'S, NOT THE MACHINE'S, and this is the pair that
+ * proves it rather than merely restating the range. Each is quiet on one
+ * clock and not on the other, so a rule reading UTC gives the opposite answer
+ * to both.
+ */
+is(inQuietHours(at('2026-09-29T20:30:00Z')), '20:30 UTC would be a working evening; 23:30 in Be’er Sheva is not');
+is(!inQuietHours(at('2026-09-30T04:00:00Z')), 'and 04:00 UTC is 07:00 there — the owner is up, so the browsing stops');
 
 console.log(`nightly check tests OK — ${checks} assertions`);

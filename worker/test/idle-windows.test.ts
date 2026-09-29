@@ -134,6 +134,39 @@ assert.ok(
   'a blank metrics read must not ask for a session check: one row per tick means one window per tick, which is the bug',
 );
 
+/* --------------- three: the chore that never ends belongs to the night */
+
+/*
+ * The third video: v3.41.0, every loop above already fixed, and it was still
+ * opening group after group — "למה הוא עדיין ממשיך לפתוח קבוצות!!". Not a
+ * loop this time. syncPostMetrics re-read the view counter on every post from
+ * the last thirty days, every six hours, and one reading means opening its
+ * group and scrolling to find our post: at the 231 publications on the
+ * dashboard, ~920 group pages a day and close to seven hours of it. Silently,
+ * and at about eleven windows per five minutes — under the breaker below.
+ */
+const metrics = body('syncPostMetrics');
+assert.ok(/if \(!inQuietHours\(now\)\) return;/.test(metrics), 'view counts are read at night, not while the owner is at their desk');
+assert.ok(/METRICS_PER_NIGHT/.test(metrics), 'and a backlog cannot turn one night into an unbroken sweep');
+assert.ok(
+  /console\.log\(`\[worker\] 👁/.test(metrics),
+  'every reading says so in the terminal — this chore logging nothing on success is why it took three videos to find',
+);
+assert.ok(/const METRICS_STALE_HOURS = 20;/.test(src), 'once a day per post, not four times');
+assert.ok(/const METRICS_MAX_AGE_DAYS = 7;/.test(src), 'and a week of posts, not a month — the counters have stopped moving by then');
+
+/* The gate must come before the read, not after: a query is cheap, the window
+   it leads to is not. */
+assert.ok(metrics.indexOf('inQuietHours') < metrics.indexOf('session.newPage('), 'the quiet-hours gate runs before any page is opened');
+
+/* The chores the owner IS waiting on must NOT be moved to the night. */
+for (const fn of ['runCampaignComments', 'resolveAddresses'] as const) {
+  assert.ok(
+    !/inQuietHours/.test(body(fn)),
+    `${fn} must keep running during the day — the owner presses a button and waits for it, unlike a view count`,
+  );
+}
+
 /* ------------------------------------ the breaker that does not need a cause */
 
 assert.ok(/const IDLE_WINDOW_LIMIT = 40;/.test(src), 'an idle worker has a ceiling on windows per five minutes');

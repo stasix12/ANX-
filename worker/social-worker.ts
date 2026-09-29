@@ -7,8 +7,8 @@ import { planQueue } from '@/lib/social/plan';
 import { PREP_LEAD_MS, evaluateQueueItem } from '@/lib/social/rules';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { upsertScoped } from '@/lib/social/tenant';
-import { stampText } from '@/lib/social/time';
-import { nightlyDue } from './nightly';
+import { stampText, startOfZonedDay } from '@/lib/social/time';
+import { inQuietHours, nightlyDue } from './nightly';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
@@ -108,6 +108,12 @@ interface WorkerState {
   lastUpdateCheckAt?: number;
   /** Said once: the metrics columns are missing. It must not become a line per tick. */
   metricsNoticeShown?: boolean;
+  /** The local night the view-count allowance below belongs to. */
+  metricsNight?: number;
+  /** View-count readings taken tonight — see METRICS_PER_NIGHT. */
+  metricsTonight?: number;
+  /** Said once when the allowance runs out, not once per tick. */
+  metricsCapNoticed?: boolean;
   /** Same, for the round-comment columns. */
   commentNoticeShown?: boolean;
   /** When the "comments are waiting for a free window" line was last written. */
@@ -2471,7 +2477,27 @@ async function restartIfUpdated(state: WorkerState): Promise<void> {
  * a half — and the comment task and the publishing queue are behind it.
  */
 const METRICS_PER_TICK = 1;
-const METRICS_STALE_HOURS = 6;
+/*
+ * TWENTY HOURS, NOT SIX — roughly once a day per post rather than four times.
+ *
+ * Six was chosen as if this were a cheap read. It is not: one reading is a
+ * group page plus a scroll hunting for our post among other people's, about
+ * half a minute of a browser window. Four readings a day across a month of
+ * publications is what put ~920 group page loads a day on the owner's
+ * Facebook account, and a view counter simply does not move four times a day
+ * in a way anybody acts on.
+ */
+const METRICS_STALE_HOURS = 20;
+/**
+ * The most view-count readings one night may take.
+ *
+ * A ceiling, not a target: the tightened window below should keep a normal
+ * night far under it. It exists so that a backlog — a machine that was off
+ * for a week, a day with an unusually large round — cannot turn into a whole
+ * night of uninterrupted browsing, and so that the number has a name the next
+ * person can find.
+ */
+const METRICS_PER_NIGHT = 150;
 /**
  * After this, a post is left alone.
  *
@@ -2479,7 +2505,7 @@ const METRICS_STALE_HOURS = 6;
  * the page costs a Facebook page load per post per day forever and tells
  * nobody anything new. The last reading stands, with the time it was taken.
  */
-const METRICS_MAX_AGE_DAYS = 30;
+const METRICS_MAX_AGE_DAYS = 7;
 
 /**
  * Re-read the counters on posts that already went out.
@@ -2501,6 +2527,31 @@ const METRICS_MAX_AGE_DAYS = 30;
  */
 async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<void> {
   if (state.browserState !== 'connected' || !session.hasProfile()) return;
+  /*
+   * AT NIGHT ONLY — see inQuietHours() for why this one chore is different.
+   *
+   * "למה הוא עדיין ממשיך לפתוח קבוצות!!" was not a loop; it was this, working
+   * exactly as written. Nobody waits on a view count, and it is the only
+   * background work here that never finishes, so it is the only one with no
+   * business running while the owner is at their desk.
+   */
+  const now = new Date();
+  if (!inQuietHours(now)) return;
+  const night = startOfZonedDay(now).getTime();
+  /* Per local night, so a restart mid-sweep does not hand the backlog a fresh
+     allowance — the owner restarts this worker often. */
+  if (state.metricsNight !== night) {
+    state.metricsNight = night;
+    state.metricsTonight = 0;
+  }
+  if ((state.metricsTonight ?? 0) >= METRICS_PER_NIGHT) {
+    if (!state.metricsCapNoticed) {
+      state.metricsCapNoticed = true;
+      console.log(`[worker] 💤 ${METRICS_PER_NIGHT} קריאות צפיות הלילה — מפסיק עד מחר.`);
+    }
+    return;
+  }
+  state.metricsCapNoticed = false;
   const db = await workerDb();
   const staleBefore = new Date(Date.now() - METRICS_STALE_HOURS * 3_600_000).toISOString();
   const publishedAfter = new Date(Date.now() - METRICS_MAX_AGE_DAYS * 86_400_000).toISOString();
@@ -2542,6 +2593,13 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
        metrics_at stays null on that path, so without this the same post is
        reopened every five seconds for as long as the worker runs. */
     if (inBackOff(state, `metrics:${row.id}`)) continue;
+    /*
+     * SAID OUT LOUD, and counted. This chore logged nothing at all when it
+     * worked, which is how seven hours a day of it went on behind a terminal
+     * that looked idle, and why it took three videos of a monitor to find.
+     */
+    state.metricsTonight = (state.metricsTonight ?? 0) + 1;
+    console.log(`[worker] 👁 קורא צפיות לפרסום (${state.metricsTonight}/${METRICS_PER_NIGHT} הלילה).`);
     const page = await session.newPage(headless, 'מדדי פרסום');
     try {
       /* Same lookup problem as the comments, same answer: a group filtered to

@@ -67,3 +67,36 @@ export function nightlyDue({ lastISO, now }: NightlyInput): boolean {
   if (zonedHour(now) >= NIGHTLY_HOUR) return true;
   return now.getTime() - lastMs >= NIGHTLY_OVERDUE_MS;
 }
+
+/* ------------------------------------------------- quiet-hours background work */
+
+/**
+ * WHEN THE MACHINE IS ALLOWED TO BROWSE FACEBOOK FOR THINGS NOBODY ASKED FOR.
+ *
+ * The owner filmed their monitor three times — "למה הוא עדיין ממשיך לפתוח
+ * קבוצות!!" — and the third video settled it: worker v3.41.0, every loop I
+ * had found already fixed, and it was STILL opening group after group. It was
+ * not a loop. It was the design.
+ *
+ * syncPostMetrics re-reads the view counter on every post published in the
+ * last THIRTY DAYS, every SIX HOURS, and reading one means opening its group
+ * and scrolling until our post is found — about half a minute. At the 231
+ * publications the dashboard was showing, that is ~920 group pages a day and
+ * close to seven hours of a browser window opening, closing and opening
+ * again. Silently: that chore logs nothing when it succeeds. It even ran just
+ * under the 40-windows-in-5-minutes breaker I had added, at about eleven.
+ *
+ * Nobody is waiting on a view count. It is the one piece of background work
+ * in this worker that never finishes and never will, so it is the one that
+ * belongs at night — beside the group check the owner already asked to have
+ * there ("תעשה את זה כפעולה אוטומטית בכל סוף יום"). During the day the
+ * machine now does what they asked it to do, and nothing else.
+ */
+export const QUIET_FROM = NIGHTLY_HOUR; /* 23:00 — the same "day is over" */
+export const QUIET_TO = 6;
+
+export function inQuietHours(now: Date): boolean {
+  const h = zonedHour(now);
+  /* Wraps midnight, so it is an OR and not a range: 23, 00-05. */
+  return h >= QUIET_FROM || h < QUIET_TO;
+}

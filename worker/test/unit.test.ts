@@ -2751,10 +2751,28 @@ const scenario: { step: string; line: string }[] = [];
    * has been reached, and a failure is only actionable once it has a name.
    */
   assert.ok(/r\.target\?\.name/.test(campaignPage), 'the round lists the groups it is commenting on');
+  /*
+   * RE-POINTED at the rail that replaced it. "תגובות לפרסומים" is off the
+   * dashboard at the owner's request — its three rollups and two drawers said
+   * what the comment rail now says in order, with the bar across the top
+   * carrying the counts. The RULE is unchanged and is what these assert: the
+   * main screen must name the groups, not only count them, and it must say
+   * something rather than draw an empty rail on an account that has never
+   * asked for a comment.
+   */
+  const commentRail = readFileSync(new URL('../../src/components/social/CommentTimeline.tsx', import.meta.url), 'utf8');
+  /*
+   * PARKED, NOT DELETED. CommentQueueCard is no longer rendered anywhere — the
+   * owner asked for it off the dashboard — but the file is left in place and
+   * its rules below are left guarding it, because it is one line from coming
+   * back and the day it does, it should come back correct rather than as
+   * whatever four months of drift made of it.
+   */
   const commentCard = readFileSync(new URL('../../src/components/social/CommentQueueCard.tsx', import.meta.url), 'utf8');
   const dashSrcComments = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
-  assert.ok(/<CommentQueueCard rows=\{data\.comments\}/.test(dashSrcComments), 'and so does the main screen');
-  assert.ok(/if \(!rows\.length\) return null;/.test(commentCard), 'which stays absent when nothing was ever asked for');
+  assert.ok(/<CommentTimeline\n/.test(dashSrcComments), 'and so does the main screen');
+  assert.ok(/row\.target\?\.name/.test(commentRail), 'the rail names the group each comment went to');
+  assert.ok(/עוד לא ביקשתם תגובות/.test(commentRail), 'and explains itself rather than drawing an empty rail');
   /* A missing migration is the likeliest reason the button does nothing, and
      Postgres answers it in English about relations. Say it in Hebrew, naming
      the file, or the owner is left pressing a button that says nothing. */
@@ -2932,7 +2950,22 @@ const scenario: { step: string; line: string }[] = [];
   const shotCard = readFileSync(new URL('../../src/components/social/CommentShot.tsx', import.meta.url), 'utf8');
   assert.ok(/screenshotUrl\(path\)/.test(shotCard), 'the picture is opened through a signed link');
   assert.ok(/onClick=\{async \(\) => \{/.test(shotCard), 'and only when somebody asks to see it, since the link is short-lived');
-  for (const screen of [campaignPage, commentCard]) {
+  /*
+   * ONE SCREEN NOW, NOT TWO, and that is a real loss rather than a tidy-up.
+   *
+   * The dashboard's "תגובות לפרסומים" card was removed at the owner's
+   * request, and the worker's screenshot of a failed comment went with it —
+   * along with the per-row "נסה שוב". Both still live on the round's own
+   * screen, which is where a decision about a round belongs, and retrying a
+   * whole round's failures is still one button there.
+   *
+   * Asserted on the remaining screen rather than deleted, because the rule
+   * has not changed: wherever a comment that needs a person is listed, the
+   * page the worker actually saw must be one tap away. Words were not enough
+   * — rounds went by on "לא מצאנו את הפוסט" while the owner looked straight
+   * at the post on his phone.
+   */
+  for (const screen of [campaignPage]) {
     /* Under every row that needs a person — which is 'failed' and also
        'unverified', where the comment may be live and looking at the page the
        worker saw is the whole way to find out. One predicate, from
@@ -2970,7 +3003,7 @@ const scenario: { step: string; line: string }[] = [];
      the same address is the "פייסבוק" button on the row, and it must stay
      reachable there or the badge is the only thing left and it proves
      nothing. */
-  assert.ok(/const href = r\.permalink \|\| r\.target\?\.url \|\| '';/.test(commentCard), 'the dashboard card still sends you to the post itself');
+  assert.ok(/const href = r\.permalink \|\| r\.target\?\.url \|\| '';/.test(commentCard), 'the parked card still sends you to the post itself');
   assert.ok(/retryComment\(r\.id\)/.test(commentCard), 'and the per-row retry acts on that row, never on its twenty-six neighbours');
 
   /* A missing column may never cost the status — same rule as the note, and

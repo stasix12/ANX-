@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
+import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, saveSetting, setPaused } from '@/lib/social/client';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
@@ -269,6 +270,20 @@ export default function SettingsPage() {
 
           {tab === 'browser' && (
             <>
+              {/*
+                THE CONNECTION LIVES HERE NOW, not on the dashboard.
+                *
+                * The owner asked for the "התוכנה במחשב פועלת ומחוברת" strip
+                * off the home screen and a computer icon in the header
+                * instead. Moved rather than deleted: this card is the ONLY
+                * place in the product with "התחבר לפייסבוק", "בדוק חיבור" and
+                * the profile reset, and deleting it would have taken away the
+                * one way to reconnect at exactly the moment it is needed. The
+                * header's icon links straight to it, and it keeps its
+                * #browser-status id so every existing link still lands on it.
+              */}
+              <BrowserStatusCard id="browser-status" />
+
               <Card title="פרסום בקבוצות — איך זה עובד">
                 <Notice tone="warn">
                   ל-Meta אין API לפרסום בקבוצות מאז אפריל 2024. הפרסום בקבוצות נעשה דרך חלון Chrome אמיתי על המחשב שלכם, מהחשבון שלכם. זו

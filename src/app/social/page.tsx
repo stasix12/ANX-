@@ -3,12 +3,10 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
-import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { LiveCampaignHero, LiveQueueHero, type SystemState } from '@/components/social/LiveCampaignHero';
 import { ActivityDetailSheet } from '@/components/social/ActivityDetailSheet';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
-import { CommentQueueCard } from '@/components/social/CommentQueueCard';
 import { QuickCommentsCard } from '@/components/social/QuickCommentsCard';
 import { CommentTimeline } from '@/components/social/CommentTimeline';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
@@ -651,21 +649,21 @@ export default function SocialDashboard() {
             title: 'הפרסום עומד — המחשב לא מחובר',
             body: `הפרסום הבא היה אמור לצאת ב-${stampText(stalledSince)} ואף אחד לא לקח אותו. פרסום לקבוצות יוצא רק כשהתוכנה פועלת על המחשב שלכם.`,
             actionLabel: 'מה לעשות',
-            href: '#browser-status',
+            href: '/social/settings#browser-status',
           }
         : !data.workerOnline && summary.queued > 0
           ? {
               title: 'התוכנה במחשב לא פועלת',
               body: `${counted(summary.queued, 'פרסום אחד ממתין בתור', 'פרסומים ממתינים בתור', 'שני פרסומים ממתינים בתור')} ואף אחד מהם לא יֵצא: הפרסום לקבוצות נעשה מהדפדפן שעל המחשב שלכם. פתחו את התיקייה ולחצו פעמיים על start-worker.cmd, והשאירו את החלון פתוח.`,
               actionLabel: 'מה לעשות',
-              href: '#browser-status',
+              href: '/social/settings#browser-status',
             }
           : data.workerNeedsAuth
           ? {
               title: 'פייסבוק מבקשת אימות במחשב',
               body: 'התוכנה במחשב פועלת, אבל חלון הדפדפן שלה מחכה שתתחברו לפייסבוק. עד אז פרסום לקבוצות לא יצא.',
               actionLabel: 'מה לעשות',
-              href: '#browser-status',
+              href: '/social/settings#browser-status',
             }
           : summary.needsHuman > 0
             ? {
@@ -1136,7 +1134,6 @@ export default function SocialDashboard() {
               />
             </Card>
 
-            <BrowserStatusCard id="browser-status" onChanged={load} />
           </div>
 
           {data.manual.length > 0 && (
@@ -1181,12 +1178,18 @@ export default function SocialDashboard() {
             is still used by the post editor.
           */}
 
-          {/* Above the log, because it is a thing happening now rather than a
-              record of things that happened. Absent entirely when no comment
-              was ever asked for. */}
-          {/* onChanged so "נסה שוב" refreshes the numbers it just changed.
-              The only line outside the card this redesign touches. */}
-          <CommentQueueCard rows={data.comments} totals={data.commentTotals} today={data.commentsToday} done={data.commentsDone} onChanged={load} />
+          {/*
+            "תגובות לפרסומים" was here and the owner asked for it gone: its
+            three rollups and two drawers said the same things the comment rail
+            below now says in order, with the bar across the top carrying the
+            counts. Two cards about one subject, one under the other.
+
+            WHAT WENT WITH IT, said plainly rather than discovered later: the
+            per-row "נסה שוב" and the worker's screenshot of a failed comment.
+            Retrying a whole round's failures is still on the campaign screen
+            (retryFailedComments), which is where a decision about a round
+            belongs; a single row's retry has no home now.
+          */}
 
           {/*
             THE LAST FEW RUNS, with the comment control attached to each.

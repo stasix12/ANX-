@@ -8,6 +8,7 @@ import {
   ClipboardListIcon,
   ClockIcon,
   GearIcon,
+  MachineIcon,
   HomeIcon,
   LogOutIcon,
   MenuIcon,
@@ -213,18 +214,38 @@ export function SocialShell({
    * this component is mounted on all eleven screens.
    */
   const [ownAccount, setOwnAccount] = useState<FbAccount | null>(null);
+  /*
+   * IS THE PC RUNNING — null until the first answer, so the icon never claims
+   * "off" during the second before anything has been read.
+   *
+   * Read on a clock rather than once, which the account above is not: a name
+   * does not change while you look at it, but the machine going off is the
+   * whole thing this icon exists to show. Sixty seconds, because the card
+   * this replaced polled far harder for a fact that changes a few times a day.
+   */
+  const [pcOnline, setPcOnline] = useState<boolean | null>(null);
   useEffect(() => {
-    if (account !== undefined || !session) return;
+    if (!session) return;
     let stopped = false;
-    listWorkers()
-      .then((ws) => {
-        if (stopped) return;
-        const w = ws.find((x) => x.online && x.fb_user_name) ?? ws.find((x) => x.fb_user_name);
-        setOwnAccount(w?.fb_user_name ? { name: w.fb_user_name, avatar: w.fb_avatar_url ?? '' } : null);
-      })
-      .catch(() => undefined);
+    const read = () =>
+      listWorkers()
+        .then((ws) => {
+          if (stopped) return;
+          setPcOnline(ws.some((x) => x.online));
+          if (account === undefined) {
+            const w = ws.find((x) => x.online && x.fb_user_name) ?? ws.find((x) => x.fb_user_name);
+            setOwnAccount(w?.fb_user_name ? { name: w.fb_user_name, avatar: w.fb_avatar_url ?? '' } : null);
+          }
+        })
+        .catch(() => undefined);
+    read();
+    const id = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      read();
+    }, 60_000);
     return () => {
       stopped = true;
+      clearInterval(id);
     };
   }, [account, session]);
   const who = account ?? ownAccount;
@@ -399,6 +420,34 @@ export function SocialShell({
                 }}
               />
             )}
+            {/*
+              THE COMPUTER, AND WHETHER IT IS RUNNING.
+              *
+              * This replaces the "התוכנה במחשב פועלת ומחוברת" strip that sat
+              * on the dashboard: one fact, on every screen, in the corner
+              * where the other state lives — "למחוק את זה ובמקום להוסיף
+              * אייקון של מחשב למעלה".
+              *
+              * GREEN WHEN IT IS RUNNING, AND NEVER RED — asked for in those
+              * words. Off is the muted grey every other inactive control in
+              * this bar wears, not an alarm: the PC being off in the evening
+              * is the normal state of this product, and a red badge that is
+              * red most nights is a red badge nobody reads. What actually
+              * needs doing still arrives as an alert on the dashboard, in
+              * words, with a button.
+              *
+              * It goes to the connection card, which is where "התחבר
+              * לפייסבוק" now lives.
+            */}
+            <Link
+              href="/social/settings#browser-status"
+              aria-label={pcOnline ? 'המחשב מחובר — פתיחת מסך החיבור' : 'המחשב לא מחובר — פתיחת מסך החיבור'}
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors ${
+                pcOnline ? 'text-success-400 hover:bg-success-400/10' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
+              }`}
+            >
+              <MachineIcon className="h-5 w-5" />
+            </Link>
             <NotificationBell />
             {/* Settings had a tab on desktop and lived two taps deep behind
                 "עוד" on a phone, which is where the owner goes after a run

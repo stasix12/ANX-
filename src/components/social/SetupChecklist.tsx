@@ -48,7 +48,7 @@ export function SetupChecklist({
       done: workerOnline,
       title: 'הפעילו את התוכנה במחשב',
       body: 'פרסום לקבוצות עובד רק דרך חלון Chrome אמיתי על המחשב שלכם — לפייסבוק אין דרך אחרת מאז אפריל 2024. לחצו פעמיים על start-worker.cmd והשאירו את החלון פתוח.',
-      href: '#browser-status',
+      href: '/social/settings#browser-status',
       cta: 'למצב החיבור',
     },
     {

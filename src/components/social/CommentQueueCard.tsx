@@ -8,6 +8,7 @@ import { agree } from '@/lib/social/time';
 import { commentLabel, commentNeedsHuman, commentRank } from '@/lib/social/comments';
 import { AlertTriangleIcon, CheckCircleIcon, ChevronDownIcon, RepeatIcon, ShareIcon } from '@/components/icons';
 import { CommentShot } from './CommentShot';
+import { Stamp } from './DateTime';
 import { TargetAvatar } from './TargetAvatar';
 import { Card } from './ui';
 
@@ -37,23 +38,60 @@ import { Card } from './ui';
  * commentTotals), never from rows.length — that is a page size, and it was
  * once printed as a fact about the work.
  */
-export function CommentQueueCard({ rows, totals, onChanged }: { rows: QueueRow[]; totals: CommentTotals; onChanged?: () => void }) {
+export function CommentQueueCard({
+  rows,
+  totals,
+  today,
+  done: doneRows,
+  onChanged,
+}: {
+  rows: QueueRow[];
+  totals: CommentTotals;
+  /** Comments that FINISHED today — what the headline is about. */
+  today: { done: number; failed: number; unverified: number };
+  /** The successes, newest first — the list behind the green tile. */
+  done: QueueRow[];
+  onChanged?: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [openDone, setOpenDone] = useState(false);
+  const [showAllDone, setShowAllDone] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   if (!rows.length) return null;
 
-  const { pending, done, failed, unverified } = totals;
-  const all = pending + done + failed + unverified;
+  const { pending, done: doneAll, failed, unverified } = totals;
+  /*
+   * TWO CLOCKS, ON PURPOSE, AND THE CARD SAYS WHICH IS WHICH.
+   *
+   * The headline used to be all-time — "231 הצליחו מתוך 356" — under a row of
+   * tiles that describes one day. The owner asked why this one did not reset,
+   * and they were right to: two things in the same column counting two
+   * different spans, neither saying so.
+   *
+   * So the headline is TODAY: of the comments that finished today, how many
+   * went up. It starts from zero at midnight like everything above it.
+   *
+   * The two tiles under it are NOT today, and that is not an oversight. A
+   * comment waiting in the queue has no outcome and therefore no day, and a
+   * failure from Tuesday still needs a person on Thursday. Scoping those to
+   * today would empty them at midnight while the work behind them had not
+   * moved an inch — which is the opposite of what a number on a dashboard is
+   * for. They are live totals and the card labels them as such.
+   */
+  const finishedToday = today.done + today.failed + today.unverified;
+  const done = today.done;
   const needsHuman = failed + unverified;
-  /* Guarded: `all` is a sum of counts and is zero on a fresh install, where a
-     bar dividing by it renders NaN% and collapses. */
-  const pct = (n: number) => (all > 0 ? (n / all) * 100 : 0);
+  /* Guarded: zero on a day nothing has finished, where a bar dividing by it
+     renders NaN% and collapses. */
+  const pct = (n: number) => (finishedToday > 0 ? (n / finishedToday) * 100 : 0);
   /* Rounded for reading, floored away from 100: 127 of 128 is not "100%", and
      a person who sees 100% beside a failure count stops trusting both. */
-  const rate = all > 0 ? Math.min(done === all ? 100 : 99, Math.round((done / all) * 100)) : 0;
+  const rate = finishedToday > 0 ? Math.min(done === finishedToday ? 100 : 99, Math.round((done / finishedToday) * 100)) : 0;
+  const DONE_FIRST = 4;
+  const shownDone = showAllDone ? doneRows : doneRows.slice(0, DONE_FIRST);
 
   /*
    * WHAT IS LEFT TO LOOK AT, BY NAME.
@@ -116,11 +154,19 @@ export function CommentQueueCard({ rows, totals, onChanged }: { rows: QueueRow[]
           inline-flex child inside a <p> collapsed against the number before
           it and rendered "12879% הצלחה". Real gaps, real items. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <p className="text-sm font-bold text-mist-100">
-          <span className="text-lg text-success-400">{done}</span> הצליחו{' '}
-          <span className="font-normal text-mist-500">מתוך {all}</span>
-        </p>
-        <span className="rounded-full bg-success-400/12 px-2 py-0.5 text-[11px] font-extrabold text-success-400">{rate}% הצלחה</span>
+        {finishedToday > 0 ? (
+          <>
+            <p className="text-sm font-bold text-mist-100">
+              <span className="text-lg text-success-400">{done}</span> הצליחו{' '}
+              <span className="font-normal text-mist-500">מתוך {finishedToday} היום</span>
+            </p>
+            <span className="rounded-full bg-success-400/12 px-2 py-0.5 text-[11px] font-extrabold text-success-400">{rate}% הצלחה</span>
+          </>
+        ) : (
+          /* Not "0 מתוך 0 · 0% הצלחה". Nothing has been tried today, and a zero
+             percent success rate is a verdict on work that never happened. */
+          <p className="text-sm font-bold text-mist-300">עדיין לא הסתיימו תגובות היום</p>
+        )}
         <span className="grow" />
         {needsHuman > 0 && <p className="text-sm font-extrabold text-warning-400">{needsHuman} לטיפול</p>}
       </div>
@@ -130,17 +176,45 @@ export function CommentQueueCard({ rows, totals, onChanged }: { rows: QueueRow[]
           rather than a drawn segment, so "not yet" never reads as a state. */}
       <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-ink-700" role="presentation">
         <span className="h-full bg-success-400 transition-[width] duration-500" style={{ width: `${pct(done)}%` }} />
-        <span className="h-full bg-warning-400 transition-[width] duration-500" style={{ width: `${pct(needsHuman)}%` }} />
+        {/* Today's failures, not the live backlog: the rail divides ONE bar,
+            and feeding it a live count beside a daily one made the two
+            segments add up to more than the whole. */}
+        <span className="h-full bg-warning-400 transition-[width] duration-500" style={{ width: `${pct(today.failed + today.unverified)}%` }} />
       </div>
 
       {/* ── the same two facts, short ─────────────────────────────────── */}
       <div className="mt-2.5 grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
-        <div className="flex items-center gap-2 rounded-xl bg-success-400/10 px-2.5 py-2">
-          <CheckCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-success-400" />
-          <p className="min-w-0 truncate text-[12.5px] font-bold text-success-400">
-            {`${done} ${agree(done, 'תגובה הועלתה', 'תגובות הועלו')} בהצלחה`}
-          </p>
-        </div>
+        {/*
+          * THE GREEN TILE IS A DOOR TOO, and it was asked for by name: "שיהיה
+          * אופציה ללחוץ ולראות באיזה קבוצות זה פורסם". A success count with
+          * nothing behind it answers "did it work" and refuses "where".
+          *
+          * A <button> only when there is something to open. On a day with no
+          * successes it stays a plain tile rather than a control that opens an
+          * empty drawer.
+          */}
+        {doneRows.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setOpenDone(!openDone)}
+            aria-expanded={openDone}
+            aria-controls="comment-successes"
+            className="flex min-h-11 items-center gap-2 rounded-xl bg-success-400/10 px-2.5 py-2 text-start transition-colors hover:bg-success-400/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success-400"
+          >
+            <CheckCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-success-400" />
+            <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-success-400">
+              {`${done} ${agree(done, 'תגובה הועלתה', 'תגובות הועלו')} היום`}
+            </span>
+            <ChevronDownIcon aria-hidden className={`h-4 w-4 shrink-0 text-success-400 transition-transform duration-200 ${openDone ? 'rotate-180' : ''}`} />
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 rounded-xl bg-success-400/10 px-2.5 py-2">
+            <CheckCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-success-400" />
+            <p className="min-w-0 truncate text-[12.5px] font-bold text-success-400">
+              {`${done} ${agree(done, 'תגובה הועלתה', 'תגובות הועלו')} היום`}
+            </p>
+          </div>
+        )}
 
         {/*
           * THE ORANGE TILE IS THE DOOR.
@@ -176,6 +250,97 @@ export function CommentQueueCard({ rows, totals, onChanged }: { rows: QueueRow[]
             </p>
           </div>
         )}
+      </div>
+
+      {/* ── the successes, behind the green door ──────────────────────── */}
+      {/*
+        * WHERE DID THEY GO. The same accordion mechanics as the failures
+        * panel — grid-rows 0fr→1fr for a height nobody measures, `inert` while
+        * closed so a keyboard and a screen reader do not wander into a list
+        * the screen says is hidden.
+        *
+        * The rows are simpler than the failures': nothing here needs a retry,
+        * a status badge or a screenshot. A name, when it went up, and the way
+        * to go and look at it.
+        */}
+      <div
+        id="comment-successes"
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${openDone ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className="overflow-hidden" inert={!openDone}>
+          <div className="mt-3 border-t border-ink-700 pt-3">
+            <h3 className="text-[13px] font-extrabold text-mist-100">תגובות שהועלו</h3>
+            {/*
+              * THE TILE COUNTS TODAY AND THIS LIST DOES NOT, so it says so
+              * rather than letting the reader discover it from a date. Hiding
+              * yesterday's would answer "where did my comments go" with "not
+              * here", which is the question this panel exists for.
+              */}
+            <p className="mt-1 text-[11px] text-mist-500">
+              {`מוצגות ${shownDone.length} מתוך ${doneRows.length} האחרונות, החדשות קודם.`}
+              {doneAll > doneRows.length && ` סך הכול הועלו ${doneAll} תגובות מאז ההתחלה.`}
+            </p>
+
+            <ul className="mt-2 grid gap-1.5">
+              {shownDone.map((r) => {
+                /* The POST's address. Facebook gives a group post one handle
+                   and the comment lives under it, so this is as close as the
+                   database can point — and it is the right place to land:
+                   the comment is on that page. */
+                const href = r.permalink || r.target?.url || '';
+                return (
+                  <li key={r.id} className="min-w-0 rounded-xl bg-ink-800/50 px-2.5 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {r.target?.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={r.target.image_url} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                      ) : (
+                        <TargetAvatar name={r.target?.name ?? ''} size={32} />
+                      )}
+                      {/* dir="auto": these names are Russian and English inside
+                          an RTL card, and forcing either direction puts the
+                          punctuation on the wrong end. */}
+                      <p dir="auto" className="min-w-0 flex-1 truncate text-[13px] font-bold text-mist-100">{r.target?.name ?? '—'}</p>
+                      {href && (
+                        <Link
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`פתח את הפוסט ב${r.target?.name ?? 'קבוצה'} ואת התגובה שעליו`}
+                          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-ink-600 px-2.5 text-[11.5px] font-bold text-mist-100 transition-colors hover:bg-ink-700"
+                        >
+                          <ShareIcon aria-hidden className="h-3 w-3" />
+                          לתגובה
+                        </Link>
+                      )}
+                    </div>
+                    {r.comment_at && (
+                      <p className="mt-1 text-[11px] text-mist-500">
+                        <Stamp iso={r.comment_at} />
+                        {/* A success CAN carry a note — "the picture went in and
+                            Facebook never showed it back". Kept, because
+                            dropping it would leave it in the database and on no
+                            screen at all. */}
+                        {r.comment_note ? ` · ${r.comment_note}` : ''}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+
+            {doneRows.length > DONE_FIRST && (
+              <button
+                type="button"
+                onClick={() => setShowAllDone(!showAllDone)}
+                className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-800/50 text-[12.5px] font-bold text-brand-400 transition-colors hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+              >
+                {showAllDone ? 'הצג פחות' : `הצג עוד ${doneRows.length - DONE_FIRST}`}
+                <ChevronDownIcon aria-hidden className={`h-4 w-4 transition-transform duration-200 ${showAllDone ? 'rotate-180' : ''}`} />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ── the failures, behind the door ─────────────────────────────── */}

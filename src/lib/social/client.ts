@@ -903,6 +903,59 @@ export async function commentTotals(): Promise<CommentTotals> {
   return { pending: pending + claimed, done, failed, unverified };
 }
 
+/**
+ * The same counts, but only for comments that FINISHED since an instant.
+ *
+ * The card's headline used to read "231 הצליחו מתוך 356" for ever: three
+ * numbers with no date filter, sitting under a row of tiles that had just been
+ * taught to describe one day. The owner asked the obvious question — why did
+ * this one not reset too.
+ *
+ * `comment_at` is the stamp the worker writes with every outcome
+ * (worker/social-worker.ts, saveCommentOutcome), so this is "finished today",
+ * which is the fact the headline claims to state.
+ *
+ * NOT `pending`. A comment still waiting has no outcome and therefore no day —
+ * it is queued work, and scoping it to today would make the number shrink at
+ * midnight while the queue behind it had not moved at all.
+ */
+export async function commentTotalsSince(sinceISO: string): Promise<{ done: number; failed: number; unverified: number }> {
+  const count = async (status: string) => {
+    const res = await db()
+      .from('social_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('comment_status', status)
+      .gte('comment_at', sinceISO);
+    return res.error ? 0 : (res.count ?? 0);
+  };
+  const [done, failed, unverified] = await Promise.all([count('done'), count('failed'), count('unverified')]);
+  return { done, failed, unverified };
+}
+
+/**
+ * The comments that went up, newest first — the list behind the green tile.
+ *
+ * Its own read rather than a filter over listCommentQueue(), because that one
+ * is ordered `published_at` ASCENDING and capped: it holds the OLDEST rows
+ * with a comment on them, which is right for chasing failures and exactly
+ * wrong for "show me what just went out". Asked for by the owner, who wanted
+ * to click the success count and see which groups it actually meant.
+ *
+ * `permalink` is the POST's address. There is no column anywhere for a link to
+ * a comment itself — Facebook gives a group post one handle and the comment
+ * lives under it — so the link opens the post, with the comment beneath it.
+ */
+export async function listCommentsDone(limit = 40): Promise<QueueRow[]> {
+  const res = await db()
+    .from('social_queue')
+    .select(QUEUE_SELECT)
+    .eq('comment_status', 'done')
+    .order('comment_at', { ascending: false })
+    .limit(limit);
+  if (res.error) return [];
+  return (res.data ?? []) as unknown as QueueRow[];
+}
+
 export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
   const res = await db()
     .from('social_queue')

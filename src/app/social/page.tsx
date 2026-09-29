@@ -23,6 +23,8 @@ import {
   listActivity,
   listCampaigns,
   commentTotals,
+  commentTotalsSince,
+  listCommentsDone,
   listCommentQueue,
   listQueue,
   listTargets,
@@ -85,6 +87,10 @@ interface DashboardData {
   /** Publications with a comment asked for on them, across every round. */
   comments: QueueRow[];
   commentTotals: CommentTotals;
+  /** Comments that FINISHED today — what the card's headline is about. */
+  commentsToday: { done: number; failed: number; unverified: number };
+  /** The successes, newest first, behind the card's green tile. */
+  commentsDone: QueueRow[];
   limits: LimitsSettings;
   control: ControlSettings;
   /**
@@ -190,7 +196,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [queue, today, failures, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, totals] = await Promise.all([
+      const [queue, today, failures, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, totals, commentsToday, commentsDone] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         /* The same midnight the tile beside it uses — one instant, so the two
@@ -229,6 +235,9 @@ export default function SocialDashboard() {
         listWorkers(),
         listCommentQueue(),
         commentTotals(),
+        /* The same midnight every other "today" on this screen uses. */
+        commentTotalsSince(startOfZonedDay(now).toISOString()),
+        listCommentsDone(),
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
       setData({
@@ -241,6 +250,8 @@ export default function SocialDashboard() {
         doneToday,
         comments,
         commentTotals: totals,
+        commentsToday,
+        commentsDone,
         limits,
         control,
         activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
@@ -1087,7 +1098,7 @@ export default function SocialDashboard() {
               was ever asked for. */}
           {/* onChanged so "נסה שוב" refreshes the numbers it just changed.
               The only line outside the card this redesign touches. */}
-          <CommentQueueCard rows={data.comments} totals={data.commentTotals} onChanged={load} />
+          <CommentQueueCard rows={data.comments} totals={data.commentTotals} today={data.commentsToday} done={data.commentsDone} onChanged={load} />
 
           {/* The panic button — it pauses everything and cancels the whole
               queue. It is now rendered only when there is something to cancel:

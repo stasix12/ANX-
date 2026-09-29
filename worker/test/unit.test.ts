@@ -3435,7 +3435,46 @@ const scenario: { step: string; line: string }[] = [];
   /* The counts come from the database, the list from the page. They used to
      both come from the page, so a task of 117 announced itself as 59. */
   assert.ok(/export async function commentTotals/.test(clientForComment), 'the totals are counted where the rows are');
-  assert.ok(/const \{ pending, done, failed, unverified \} = totals;/.test(commentCard), 'and the card shows those rather than its own page size');
+  /*
+   * RE-POINTED. This pinned the literal destructuring, and the literal changed
+   * when the headline was scoped to today (`done: doneAll`, with the day's own
+   * figure beside it). The rule is untouched and is the one worth holding: no
+   * number on this card may be the length of a list, because a page size
+   * printed as a fact is how a task of 117 announced itself as 59.
+   */
+  assert.ok(/= totals;/.test(commentCard), 'the card reads the database totals');
+  /* The danger is a list length printed as a FACT ABOUT THE WORK. A length
+     stated as a length — "showing 4 of the 40 most recent" — is not that, and
+     the line that does it names the database total beside it, so the page size
+     can never be mistaken for the total again. */
+  assert.ok(
+    !/\{rows\.length\}|\{stuck\.length\}/.test(commentCard),
+    'and no count on this card is a page size presented as a total',
+  );
+  assert.ok(
+    /מוצגות \$\{shownDone\.length\} מתוך \$\{doneRows\.length\} האחרונות/.test(commentCard) &&
+      /doneAll > doneRows\.length/.test(commentCard),
+    'the successes panel says how many it loaded AND the real total, so neither can be read as the other',
+  );
+  /*
+   * TWO SPANS ON ONE CARD, AND IT HAS TO SAY WHICH IS WHICH. The headline is
+   * today (it sits under a row of tiles that all reset at midnight); the
+   * failures and the queue below it are live, because a comment waiting has no
+   * outcome and therefore no day, and a failure from Tuesday still needs a
+   * person on Thursday.
+   */
+  assert.ok(/export async function commentTotalsSince/.test(clientForComment), "today's comments are counted from an instant");
+  assert.ok(/\.gte\('comment_at', sinceISO\)/.test(clientForComment), 'by the stamp the worker writes with every outcome');
+  assert.ok(/מתוך \{finishedToday\} היום/.test(commentCard), 'and the headline says the day out loud');
+  assert.ok(
+    /finishedToday > 0 \?/.test(commentCard),
+    'a day with nothing finished shows no rate at all — 0% is a verdict on work that never happened',
+  );
+  /* Asked for by name: "שיהיה אופציה ללחוץ ולראות באיזה קבוצות זה פורסם". */
+  assert.ok(/export async function listCommentsDone/.test(clientForComment), 'the successes can be listed');
+  assert.ok(/\.order\('comment_at', \{ ascending: false \}\)/.test(clientForComment), 'newest first — the other list is oldest first, which is wrong for "what just went out"');
+  assert.ok(/aria-controls="comment-successes"/.test(commentCard), 'and the green tile is a door, like the orange one');
+  assert.ok(/inert=\{!openDone\}/.test(commentCard), 'whose closed panel is out of the tab order, not merely invisible');
   /* 'commenting' is a row the worker is holding at this instant. It is added
      to "waiting" rather than shown as a fourth number, because from the
      owner's side it is still a post that has not got its comment yet — but it

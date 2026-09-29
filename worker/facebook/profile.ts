@@ -28,7 +28,22 @@ export interface GroupProfile {
   canPost: boolean | null;
 }
 
-export async function readGroupProfile(page: Page, groupUrl: string): Promise<GroupProfile | null> {
+/**
+ * @param needPicture  Whether to do the cover work at all.
+ *
+ * IT IS THE WHOLE COST OF THIS FUNCTION. The membership question is answered
+ * on line one of the loaded page; everything after it — waiting for the feed
+ * to go quiet, scrolling to the top, measuring the images, cropping a
+ * screenshot — exists to produce a picture, and the `networkidle` wait alone
+ * is fifteen seconds that Facebook almost never satisfies early, so it is
+ * usually spent in full. Measured across the two: about 27 seconds a group
+ * with the picture, about 11 without it.
+ *
+ * So a sweep over a hundred groups that already have their pictures is an
+ * hour with it and twenty minutes without, and the difference is entirely
+ * re-fetching images the owner is already looking at.
+ */
+export async function readGroupProfile(page: Page, groupUrl: string, needPicture = true): Promise<GroupProfile | null> {
   // Same guard, same reason as publishToGroup(): this page holds a live
   // Facebook login and the address comes out of a database column.
   const group = parseGroupUrl(groupUrl);
@@ -55,6 +70,9 @@ export async function readGroupProfile(page: Page, groupUrl: string): Promise<Gr
   // images, so picking a file is unreliable — what the screen shows is the
   // real thing, and a centre crop is exactly how the Facebook app builds a
   // group's small icon.
+  /* Everything below is the picture. Asked for, or skipped entirely. */
+  if (!needPicture) return { name, image: null, canPost: cannotPost === null ? null : !cannotPost };
+
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(800);

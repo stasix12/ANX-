@@ -273,7 +273,9 @@ export default function GroupsPage() {
       /* The same request as before — it clears last_synced_at and the worker
          re-opens the group — but the visit now also reads whether this account
          can still post there, so the label says both things it does. */
-      { label: 'בדוק קבוצה מחדש', icon: <RepeatIcon className={mk} />, onSelect: () => act(`sync-${g.id}`, () => requestGroupRefresh([g.id]), 'התוכנה במחשב תבדוק את הקבוצה כשתהיה פנויה.') },
+      /* One group, deliberately: this is the call that wants a new cover as
+         well, so it clears the stored one and the worker fetches it. */
+      { label: 'רענן ובדוק קבוצה', icon: <RepeatIcon className={mk} />, onSelect: () => act(`sync-${g.id}`, () => requestGroupRefresh([g.id], { picture: true }), 'התוכנה במחשב תבדוק את הקבוצה כשתהיה פנויה.') },
       {
         label: 'הסר מהרשימה',
         icon: <TrashIcon className={mk} />,

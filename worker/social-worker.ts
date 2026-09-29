@@ -739,7 +739,7 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
   const db = await workerDb();
   const { data } = await db
     .from('social_targets')
-    .select('id, url, name, external_id')
+    .select('id, url, name, external_id, image_url')
     .eq('channel', 'facebook_group')
     .is('last_synced_at', null)
     .order('created_at')
@@ -749,7 +749,21 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
   for (const target of data) {
     const page = await session.newPage(headless);
     try {
-      const profile = await readGroupProfile(page, target.url);
+      /*
+       * THE PICTURE ONLY WHEN THERE ISN'T ONE — which is what makes a sweep
+       * over every group affordable.
+       *
+       * The cover work is about sixteen of the twenty-seven seconds a group
+       * costs, most of it a `networkidle` wait Facebook does not satisfy. A
+       * group that already has its picture does not need it re-cropped to
+       * answer "can this account still post here", so the check over a hundred
+       * groups goes from about an hour to about twenty minutes.
+       *
+       * Nothing is lost: "בדוק קבוצה מחדש" on a single group clears image_url
+       * along with last_synced_at, so the deliberate refresh still fetches a
+       * new cover — which is the only time anybody wants one.
+       */
+      const profile = await readGroupProfile(page, target.url, !((target as { image_url?: string }).image_url ?? ''));
       if (!profile) {
         // Login / checkpoint: leave it unsynced and let the job path report it.
         state.lastCheckAt = 0;

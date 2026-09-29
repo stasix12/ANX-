@@ -3544,6 +3544,34 @@ const scenario: { step: string; line: string }[] = [];
       'a refused publication switches the group off too, instead of skipping one row and queueing the next',
     );
 
+    /*
+     * AND THE SWEEP HAS TO BE AFFORDABLE, or nobody will run it twice.
+     *
+     * The membership question is answered on the loaded page immediately;
+     * everything after it produces a PICTURE, and the networkidle wait alone
+     * is fifteen seconds Facebook rarely satisfies early. About 27 seconds a
+     * group with the cover work, about 11 without — over a hundred groups,
+     * an hour against twenty minutes, spent re-cropping images the owner is
+     * already looking at.
+     */
+    assert.ok(
+      /if \(!needPicture\) return \{ name, image: null/.test(profile),
+      'the cover work is skippable, and the membership answer comes before it',
+    );
+    assert.ok(
+      /readGroupProfile\(page, target\.url, !\(\(target as \{ image_url\?: string \}\)\.image_url \?\? ''\)\)/.test(localWorker),
+      'and it is skipped for a group that already has a picture',
+    );
+    /* Nothing is lost: the deliberate one-group refresh still wants a new
+       cover, so it clears the stored one and the same rule fetches it. */
+    const clientSrc = readFileSync('src/lib/social/client.ts', 'utf8');
+    assert.ok(/if \(opts\?\.picture\) patch\.image_url = '';/.test(clientSrc), 'a deliberate refresh clears the picture so a new one is fetched');
+    assert.ok(
+      /requestGroupRefresh\(\[g\.id\], \{ picture: true \}\)/.test(readFileSync('src/app/social/groups/page.tsx', 'utf8')) &&
+        /requestGroupRefresh\(\), '/.test(readFileSync('src/app/social/groups/page.tsx', 'utf8')),
+      'one group asks for the picture, the sweep over all of them does not',
+    );
+
     /* rules.ts is what makes "off" mean "not published to" — without it this
        whole change would be a label. */
     const rules = readFileSync('src/lib/social/rules.ts', 'utf8');

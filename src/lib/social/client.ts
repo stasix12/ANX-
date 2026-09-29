@@ -187,8 +187,26 @@ export async function addGroup(input: { url: string; name?: string; notes?: stri
 export const addManualGroup = (input: { name: string; url: string; notes?: string }) => addGroup(input);
 
 /** Ask the worker to (re)fetch name + picture from Facebook for these groups. */
-export async function requestGroupRefresh(ids?: string[]): Promise<void> {
-  let q = db().from('social_targets').update({ last_synced_at: null }).eq('channel', 'facebook_group');
+/**
+ * Asks the worker to open these groups again — the one lever the browser has
+ * over what the machine looks at next.
+ *
+ * `picture` is what separates the two callers. A sweep over every group is
+ * asking one question: can this account still post there. A deliberate
+ * refresh of ONE group is usually asking for its new cover. The worker cannot
+ * tell those apart from a null timestamp, so the second one clears image_url
+ * as well and the worker's rule becomes simply "fetch a picture when there
+ * isn't one".
+ *
+ * It is worth the extra column, because the cover work is about sixteen of
+ * the twenty-seven seconds a group costs — most of it a `networkidle` wait
+ * Facebook does not satisfy — and over a hundred groups that is the
+ * difference between an hour and twenty minutes.
+ */
+export async function requestGroupRefresh(ids?: string[], opts?: { picture?: boolean }): Promise<void> {
+  const patch: Record<string, unknown> = { last_synced_at: null };
+  if (opts?.picture) patch.image_url = '';
+  let q = db().from('social_targets').update(patch).eq('channel', 'facebook_group');
   if (ids?.length) q = q.in('id', ids);
   unwrap(await q);
 }

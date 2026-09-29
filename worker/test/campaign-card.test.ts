@@ -92,6 +92,9 @@ async function main(): Promise<void> {
             clipped: [...c.querySelectorAll('li')].some((e) => e.scrollWidth > e.clientWidth + 1),
             /* Anything a thumb is meant to hit. `truncate` boxes are allowed
                to be narrower than their text; nothing else is. */
+            /* The first child of the header link: the cover, the dashed plus
+               or the quiet tile. All three are 48px or the names go ragged. */
+            slot: Math.round((c.querySelector('header a > :first-child') as HTMLElement | null)?.getBoundingClientRect().width ?? 0),
             smallTargets: [...c.querySelectorAll('button,a')]
               .map((e) => ({ tag: e.tagName, h: e.getBoundingClientRect().height, cls: String(e.className).slice(0, 40) }))
               .filter((t) => t.h > 0 && t.h < 40),
@@ -116,6 +119,19 @@ async function main(): Promise<void> {
         /* Four outcomes, always four, or the row stops being readable as one
            sentence. A campaign with no publications at all has none. */
         assert.ok(card.chips === 4 || card.chips === 0, `${width}px: card ${i} drew ${card.chips} chips`);
+        /*
+         * EVERY CARD RESERVES THE SAME PICTURE SLOT. The owner asked why some
+         * campaigns showed a picture and some showed nothing: a campaign whose
+         * post could not be found rendered no slot at all, so its name sat 58px
+         * to the side of its neighbours' and the list's left edge moved from
+         * row to row. Three states now — a cover, a dashed plus, a quiet tile —
+         * and all of them 48px wide.
+         */
+        assert.equal(
+          card.slot,
+          48,
+          `${width}px: card ${i} has a ${card.slot}px picture slot — every card must reserve the same width or the list's edge moves`,
+        );
       }
       const tall = Math.max(...seen.cards.map((c) => c.height));
       console.log(`  ✓ ${width}px — tallest card ${tall}px, no overflow, no clipped chip, no small target`);

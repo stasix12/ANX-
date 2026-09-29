@@ -149,6 +149,22 @@ export function CampaignCard({
           href={link}
           className="flex min-h-11 min-w-0 grow items-start gap-2.5 rounded-xl transition-colors hover:bg-ink-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
         >
+          {/*
+            THE SLOT IS ALWAYS THERE, and this is the owner's question:
+            "למה בחלק מהקמפיינים הוא מראה תמונה בצד ובחלק לא".
+
+            It rendered `null` for a campaign whose post could not be found,
+            so those cards had their name flush against the card's edge while
+            their neighbours were indented by 58px. A list whose left edge
+            moves from row to row reads as broken before anybody works out
+            why, and the answer — which of three different things is true —
+            was not on the screen at all.
+
+            Three states, one width:
+              a cover          — the post's own first image or video
+              a dashed plus    — there IS a post and it has no media yet
+              a quiet tile     — no post was found for this campaign
+          */}
           {cover(media) ? (
             <PostCover media={media} className="h-12 w-12" />
           ) : hasPost ? (
@@ -160,7 +176,26 @@ export function CampaignCard({
             >
               <PlusIcon aria-hidden className="h-4 w-4" />
             </span>
-          ) : null}
+          ) : (
+            /*
+             * NO POST IN THE LIBRARY FOR THIS CAMPAIGN — which is not the
+             * same absence as the one above and must not look like it.
+             *
+             * It happens for a real reason: the campaigns screen finds a
+             * campaign's post by filtering listPosts(), and that read both
+             * excludes archived posts and is unbounded, so PostgREST's own
+             * row ceiling can leave an older post out of it. Either way the
+             * campaign is fine — it published, its numbers are right — and
+             * what is missing is the picture, not the work. So: no dashed
+             * border, no warning colour, and a tooltip that says so.
+             */
+            <span
+              title="לא נמצא פוסט לקמפיין הזה — ייתכן שהוא הועבר לארכיון. המספרים למטה נכונים בכל מקרה."
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-ink-800 text-ink-500"
+            >
+              <ClipboardListIcon aria-hidden className="h-4 w-4" />
+            </span>
+          )}
 
           <span className="min-w-0 grow py-0.5">
             <span dir="auto" className="block truncate text-[15px] font-extrabold leading-5 text-mist-100">

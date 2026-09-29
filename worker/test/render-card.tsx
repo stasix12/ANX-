@@ -36,6 +36,11 @@ const cases = [
     st(prog({ total:248, published:120, scheduled:100, skipped:16, failed:12, finished:148 }), { state:'paused' }), 1],
   ['an empty campaign', { id:'4', name:'קמפיין חדש', service:'', city:'', status:'active' as const, created_at:'2026-09-29T09:00:00Z' },
     st(prog({}), { state:'draft' as never }), 0],
+  /* The owner's own screenshot: campaigns that published fifteen times with no
+     post findable for them, so the picture slot rendered nothing at all and
+     their names sat 58px to the side of every neighbour's. */
+  ['published, but no post found for it', { id:'5', name:'סבב פרסום', service:'', city:'', status:'active' as const, created_at:'2026-09-25T09:00:00Z' },
+    st(prog({ total:15, published:5, skipped:10, finished:15 }), { state:'stopped' }), 0],
 ] as const;
 
 const body = cases.map(([label, c, s, posts]) => `

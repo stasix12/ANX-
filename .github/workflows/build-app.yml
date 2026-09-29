@@ -48,14 +48,6 @@ on:
 permissions:
   contents: write
 
-# The database the WEBSITE runs against — the same two values deploy.yml passes
-# to Vercel. Kept here so the installer cannot drift away from it; see the
-# assemble step. Neither is a secret: the anon key is designed to be public and
-# ships in every page of the site.
-env:
-  WEBSITE_SUPABASE_URL: https://kadiiszpmuboawssdhfy.supabase.co
-  WEBSITE_SUPABASE_ANON_KEY: sb_publishable_ibaDG7kFQL9i5Zab6rEjWw_34vE2NQP
-
 jobs:
   windows:
     runs-on: windows-latest
@@ -97,42 +89,32 @@ jobs:
       - name: the package identifies nobody
         run: npx tsx worker/test/package.test.ts
 
-      # The two public values. The anon key is the one that already ships in
-      # every browser bundle of the website; what it can reach is decided by
-      # the row-level policies behind it. Nothing else is passed in — see
-      # scripts/build-app.mjs.
+      # The two public values, and they come from the repository secrets ONLY.
       #
-      # THE DEFAULTS ARE THE WEBSITE'S OWN, and they are literals here for the
-      # same reason they are literals in deploy.yml: the installer and the
-      # dashboard MUST be the same database. An account is created on the
-      # website; if this package were built against a different Supabase
-      # project the account would simply not exist there, and every customer
-      # would be told their email and password are wrong while typing them
-      # perfectly. A repository secret still wins, so moving projects is one
-      # change — but it has to be the same change in both files, and the step
-      # below refuses the build until it is.
+      # THERE IS NO DEFAULT HERE, AND THAT IS DELIBERATE. There was one for an
+      # hour: the literals in deploy.yml. But deploy.yml publishes to GitHub
+      # Pages, while the site customers use is built by VERCEL from variables
+      # kept in Vercel — which nothing in this repository can read. The two had
+      # drifted apart, and the fallback was quietly pointing every installer at
+      # a project where no customer's account exists. A wrong default is worse
+      # than no default: it turns "this build is not configured" into "this
+      # build is configured incorrectly", and only one of those announces
+      # itself.
+      #
+      # So the values must be set, as repository secrets, to whatever Vercel
+      # holds — and the step after this one checks that against the live site
+      # rather than taking anyone's word for it.
+      #
+      # The anon key is the one that already ships in every browser bundle of
+      # the website; what it can reach is decided by the row-level policies
+      # behind it. Nothing else is passed in — see scripts/build-app.mjs.
       - name: assemble
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || env.WEBSITE_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.WEBSITE_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SOCIAL_SITE_URL: ${{ vars.SOCIAL_SITE_URL }}
         run: node scripts/build-app.mjs
 
-      # DOES THIS PACKAGE ASK THE SAME DATABASE THE LIVE DASHBOARD ASKS?
-      #
-      # ASKED OF PRODUCTION, NOT OF A FILE IN THIS REPOSITORY. The first
-      # version of this step compared the package against the literal in
-      # deploy.yml — and deploy.yml publishes to GitHub Pages. The site
-      # customers actually use is built by VERCEL, from environment variables
-      # kept in Vercel's own settings, which nothing in this repository can
-      # see. So that comparison could pass while the two were on different
-      # databases, which is exactly the failure it was written to catch:
-      # an account opened on the website simply does not exist in the other
-      # project, the program answers "wrong email or password", and the person
-      # retypes a correct password for ever.
-      #
-      # /api/version reports the project reference — never the key, and the
-      # same string the site already inlines into every page it serves.
       - name: the package asks the same database as the live dashboard
         shell: pwsh
         env:
@@ -142,7 +124,7 @@ jobs:
           if (-not $cfg.supabaseUrl -or -not $cfg.supabaseAnonKey) {
             # An installer that builds fine and cannot connect is the worst of
             # the possible outcomes: it reaches a customer before anybody knows.
-            throw "NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY came through empty."
+            throw "NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY are not set as repository secrets. Copy them from Vercel (Project -> Settings -> Environment Variables) into GitHub (Settings -> Secrets and variables -> Actions), under the same two names."
           }
           $mine = ([uri]$cfg.supabaseUrl).Host.Split('.')[0]
           $live = ''

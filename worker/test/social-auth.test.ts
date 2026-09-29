@@ -195,6 +195,17 @@ is(!/insert into|createTenant/.test(auth), 'the client never creates a business 
     'and it reports the project reference ONLY — the anon key is public by design and still has no business in an endpoint whose job is diagnosis',
   );
   is(/api\/version/.test(flow), 'the installer build asks the live site rather than a file in this repository');
+  /*
+   * AND IT CARRIES NO DEFAULT OF ITS OWN. For an hour it fell back to the
+   * literals in deploy.yml when the secrets were unset — pointing every
+   * installer at a project where no customer's account exists, which is the
+   * exact bug. A wrong default turns "not configured" into "configured
+   * incorrectly", and only one of those announces itself.
+   */
+  is(
+    !/kadiiszpmuboawssdhfy|sb_publishable_/.test(flow),
+    'and it hardcodes no database of its own — the only correct values are the ones Vercel holds, which this repository cannot see',
+  );
   is(
     /throw "This installer asks a DIFFERENT database than the live dashboard/.test(flow),
     'and a package that would ask a different database fails the build — an installer that reaches a customer and refuses their correct password is the worst of the endings',

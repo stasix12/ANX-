@@ -458,7 +458,12 @@ export function SocialShell({
               aria-expanded={pcOpen}
               aria-controls="pc-panel"
               aria-label={pcOnline ? 'המחשב מחובר — פרטי החיבור' : 'המחשב לא מחובר — פרטי החיבור'}
-              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors ${
+              /* A column, not a grid, and still exactly 44px tall: the icon
+                 (20) plus a 9px label on a 10px line plus the 1px gap is 31px
+                 inside the 44 the touch floor already required, so the word
+                 costs the header no height at all. Rounded-2xl rather than
+                 -full because the box is no longer a circle. */
+              className={`flex h-11 min-w-11 shrink-0 flex-col items-center justify-center gap-px rounded-2xl px-1.5 transition-colors ${
                 pcOpen
                   ? 'bg-brand-300/12 text-brand-400'
                   : pcOnline
@@ -467,6 +472,24 @@ export function SocialShell({
               }`}
             >
               <MonitorIcon className="h-5 w-5" />
+              {/*
+                THE WORD, NOT ONLY THE COLOUR — "שיהיה רשום גם מתחת … שזה דלוק
+                או מכובה".
+                *
+                * Colour alone is the wrong carrier for this on its own: it is
+                * the fact people check at a glance, and green-vs-grey is
+                * exactly the distinction that disappears for a colour-blind
+                * reader, in sunlight, or on a dimmed phone at night. The word
+                * says it outright and the colour agrees with it.
+                *
+                * "בודק" while the first read is in flight rather than a blank
+                * or a dash: the slot keeps its width so nothing jumps when the
+                * answer lands, and the button never claims "כבוי" about a
+                * machine nobody has asked about yet.
+              */}
+              <span aria-hidden className="text-[9px] font-extrabold leading-[10px]">
+                {pcOnline === null ? 'בודק' : pcOnline ? 'פועל' : 'כבוי'}
+              </span>
             </button>
             <NotificationBell />
             {/* Settings had a tab on desktop and lived two taps deep behind

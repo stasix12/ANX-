@@ -9,6 +9,8 @@ import { ActivityDetailSheet } from '@/components/social/ActivityDetailSheet';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
 import { CommentQueueCard } from '@/components/social/CommentQueueCard';
+import { QuickCommentsCard } from '@/components/social/QuickCommentsCard';
+import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
 import { AlertBar, Button, ButtonLink, Card, ErrorState, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
@@ -32,6 +34,7 @@ import {
   listTargets,
   listWorkers,
   pauseCampaign,
+  queueCampaignComment,
   queueSummary,
   runCoverMedia,
   setPaused,
@@ -187,6 +190,10 @@ export default function SocialDashboard() {
   /* Which publication the activity card was asked about. The sheet reads that
      one row on demand; nothing about it is fetched until it is opened. */
   const [detail, setDetail] = useState<string | null>(null);
+  /* Which run the quick-comment sheet is writing for. The round itself and
+     not its id, because the sheet is seeded from the round's own stored
+     wording and spacing — an id would mean looking it up again. */
+  const [commentFor, setCommentFor] = useState<Campaign | null>(null);
   /* The featured run's cover. Read on its own, and only when a run is
      featured: the queue rows carry their post, but only while something is
      still scheduled - a finished run would lose its picture exactly when the
@@ -1175,6 +1182,15 @@ export default function SocialDashboard() {
               The only line outside the card this redesign touches. */}
           <CommentQueueCard rows={data.comments} totals={data.commentTotals} today={data.commentsToday} done={data.commentsDone} onChanged={load} />
 
+          {/*
+            THE LAST FEW RUNS, with the comment control attached to each.
+            Adding a comment is the owner's commonest follow-up and it lived
+            two screens away; the card draws from `campaigns` and `states`,
+            which this screen had already loaded, and opens the app's existing
+            comment sheet rather than a second way of doing the same thing.
+          */}
+          <QuickCommentsCard campaigns={data.campaigns} states={data.states} onComment={setCommentFor} />
+
           {/* The panic button — it pauses everything and cancels the whole
               queue. It is now rendered only when there is something to cancel:
               on a fresh install it sat at the foot of a 2620px scroll offering
@@ -1191,6 +1207,35 @@ export default function SocialDashboard() {
       {/* Scope comes from the doorway, never re-derived here: the panel that
           was tapped is the queue the owner meant. */}
       <ActivityDetailSheet queueId={detail} onClose={() => setDetail(null)} onChanged={load} />
+
+      {/*
+        THE SAME SHEET THE CAMPAIGNS SCREEN OPENS — not a copy of it. Keyed by
+        round so the fields are re-seeded when a different card is tapped;
+        without the key React keeps the first round's wording in the inputs and
+        the owner comments on run B with run A's text.
+      */}
+      <CampaignCommentSheet
+        key={commentFor?.id ?? 'none'}
+        open={commentFor !== null}
+        onClose={() => setCommentFor(null)}
+        publishedCount={commentFor ? (data?.states[commentFor.id]?.progress.published ?? 0) : 0}
+        initialText={commentFor?.comment_text ?? ''}
+        initialMedia={commentFor?.comment_media ?? []}
+        initialGapSeconds={commentFor?.comment_gap_seconds ?? 30}
+        busy={busy === 'comment'}
+        onSubmit={(text, media, gapSeconds) => {
+          const round = commentFor;
+          if (!round) return;
+          void act(
+            'comment',
+            async () => {
+              await queueCampaignComment(round.id, text, media, gapSeconds);
+              setCommentFor(null);
+            },
+            'נשלח. התגובות יתווספו אחת-אחת, במרווח שבחרתם.',
+          );
+        }}
+      />
 
       <QueueTunerSheet
         open={tuner !== null}

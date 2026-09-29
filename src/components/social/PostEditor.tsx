@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckIcon, SparklesIcon, TrashIcon } from '@/components/icons';
 import { LiveBoard } from '@/components/social/LiveBoard';
+import { StartFromLibrary } from '@/components/social/StartFromLibrary';
 import { MediaUploader } from '@/components/social/MediaUploader';
 import { TargetPicker } from '@/components/social/TargetPicker';
 import { PostPreview } from '@/components/social/PostPreview';
@@ -49,6 +50,7 @@ import {
   type CtaType,
   type Language,
   type MediaItem,
+  type Post,
   type QueueStatus,
   type Schedule,
   type SocialTarget,
@@ -323,6 +325,43 @@ export function PostEditor({ postId }: { postId?: string }) {
      only answer — and it always was, for an account with no Pages. */
   const pageName = business.name;
 
+  /**
+   * Fill this form from a post the owner already has.
+   *
+   * A COPY, NEVER A LINK. Everything below is set onto the draft in front of
+   * them and the source post is not opened, not loaded by id and not saved —
+   * so the thing they started from cannot be changed by what they do next.
+   * The alternative, navigating to the old post, would have let a campaign
+   * editor quietly rewrite something already scheduled somewhere else.
+   *
+   * WHAT IS NOT COPIED, and each for its own reason:
+   *   campaign_id — this post is about to open a campaign of its own, and
+   *     carrying the old one would silently file it under last month's run;
+   *   status      — a copy starts as a draft whatever the original became;
+   *   the variants — they are rows of their own table belonging to the source
+   *     post, and the editor's own copy button (הבא גרסאות) is where that
+   *     belongs. Said in the toast rather than left to be discovered.
+   *
+   * phone and whatsapp_url fall back to the business settings when the source
+   * post has none, which is what emptyPost does for a blank one — a copy that
+   * dropped the WhatsApp button would publish without the thing the whole post
+   * exists to produce.
+   */
+  function startFrom(src: Post) {
+    setPost((prev) => ({
+      ...prev,
+      title: src.title,
+      base_text: src.base_text,
+      language: src.language,
+      link_url: src.link_url,
+      cta_type: src.cta_type,
+      phone: src.phone || business.phone,
+      whatsapp_url: src.whatsapp_url || whatsappUrlFor(business.whatsapp),
+      media: src.media ?? [],
+    }));
+    toast(`הטופס מולא מ"${src.title || 'פוסט ללא שם'}". הפוסט המקורי לא השתנה.`);
+  }
+
   function update<K extends keyof PostInput>(key: K, value: PostInput[K]) {
     setPost((p) => ({ ...p, [key]: value }));
   }
@@ -522,6 +561,15 @@ export function PostEditor({ postId }: { postId?: string }) {
           page instead of scrolling inside itself. */}
       <div className="grid gap-5 lg:grid-cols-[1fr_380px] [&>*]:min-w-0">
         <div className="min-w-0 space-y-5">
+          {/*
+            THE LIBRARY, ABOVE THE EMPTY FORM.
+
+            Only on a NEW post, and only while the form is still empty: once
+            there is a title or a word of text, a row of thumbnails whose job
+            is to overwrite the form is a trap rather than a shortcut.
+          */}
+          <StartFromLibrary hidden={Boolean(postId) || Boolean(post.title.trim() || post.base_text.trim() || post.media.length)} onPick={startFrom} />
+
           <Card title="תוכן הפוסט">
             {/* No run picker: a run is created for the post on its first launch
                 and reused after that (library.ts quickPublish). Choosing a

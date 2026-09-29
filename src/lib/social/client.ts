@@ -345,6 +345,26 @@ export async function listPosts(): Promise<Post[]> {
  * drafts paid for all of them twelve times a minute for the life of the screen.
  * The filter now happens in Postgres.
  */
+/**
+ * The most recently edited posts, for the "start from one of mine" picker.
+ *
+ * Its own read rather than listPosts(), which fetches every non-archived post
+ * in the account with base_text and media included, has no limit, and is
+ * therefore capped by PostgREST's own row ceiling without saying so. A picker
+ * needs a dozen covers; a phone on a metered plan should not download the
+ * whole library to draw them.
+ */
+export async function listRecentPosts(limit = 12): Promise<Post[]> {
+  return unwrap<Post[]>(
+    await db()
+      .from('social_posts')
+      .select('id, title, base_text, language, link_url, cta_type, phone, whatsapp_url, media, campaign_id, status, created_at, updated_at')
+      .neq('status', 'archived')
+      .order('updated_at', { ascending: false })
+      .limit(limit),
+  );
+}
+
 export async function listPostsForCampaign(campaignId: string): Promise<Post[]> {
   return unwrap<Post[]>(
     await db().from('social_posts').select('*').eq('campaign_id', campaignId).neq('status', 'archived').order('updated_at', { ascending: false }),

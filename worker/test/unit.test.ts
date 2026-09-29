@@ -3495,6 +3495,63 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/count\('commenting'\)/.test(clientForComment), 'a comment in flight is still counted as waiting');
   /*
    * ============================================================
+   * THE LIBRARY, INSIDE THE CAMPAIGN FLOW
+   * ============================================================
+   *
+   * "+ קמפיין חדש" opens the post editor, and the editor opens empty — an
+   * internal name, an empty text box, an empty media area — in front of an
+   * owner whose library is full of posts they have published dozens of times:
+   * "בתוך הקמפיינים אני רוצה שיהיה את ספריית התוכן שלי שאני לוחץ וזה ממלא
+   * כבר הכל".
+   */
+  {
+    const picker = readFileSync('src/components/social/StartFromLibrary.tsx', 'utf8');
+    const editor = readFileSync('src/components/social/PostEditor.tsx', 'utf8');
+
+    /*
+     * A COPY, NEVER A LINK, and this is the assertion that matters. Navigating
+     * to the old post instead would let a campaign editor quietly rewrite
+     * something already scheduled somewhere else — the owner would be editing
+     * last month's live post while believing they were writing a new one.
+     */
+    assert.ok(/function startFrom\(src: Post\)/.test(editor), 'picking a post fills the form from it');
+    assert.ok(
+      !/startFrom[\s\S]{0,600}(router\.push|savePost|setSavedId)/.test(editor),
+      'and it neither navigates to the source post nor saves anything — the original must not change',
+    );
+    assert.ok(
+      !/startFrom[\s\S]{0,600}campaign_id: src\.campaign_id/.test(editor),
+      'the source post’s campaign is NOT carried over — this post is about to open one of its own',
+    );
+    assert.ok(
+      /phone: src\.phone \|\| business\.phone/.test(editor) && /whatsapp_url: src\.whatsapp_url \|\| whatsappUrlFor/.test(editor),
+      'and the WhatsApp button falls back to the business settings — a copy that dropped it would publish without the thing the post exists to produce',
+    );
+
+    /* It removes itself the moment there is work to lose: a strip of
+       thumbnails whose job is to overwrite the form is a trap above a form
+       somebody has started filling. */
+    assert.ok(
+      /hidden=\{Boolean\(postId\) \|\| Boolean\(post\.title\.trim\(\) \|\| post\.base_text\.trim\(\) \|\| post\.media\.length\)\}/.test(editor),
+      'the picker is hidden on an existing post and once the new one has anything in it',
+    );
+
+    /* Its own bounded read. listPosts() fetches every non-archived post with
+       base_text and media, has no limit, and is silently capped by PostgREST’s
+       row ceiling — a picker needs a dozen covers, not the whole library on a
+       metered phone. */
+    assert.ok(/export async function listRecentPosts/.test(clientForComment), 'the picker has a bounded read of its own');
+    assert.ok(/\.limit\(limit\)/.test(clientForComment.slice(clientForComment.indexOf('listRecentPosts'))), 'which is actually limited');
+    assert.ok(/listRecentPosts\(\)/.test(picker) && !/listPosts\(\)/.test(picker), 'and the picker uses it rather than the unbounded one');
+
+    /* A shortcut that cannot load is a shortcut that is missing, not a red
+       banner over an editor that works perfectly without it. */
+    assert.ok(/\.catch\(\(\) => \{[\s\S]{0,80}setPosts\(\[\]\);/.test(picker), 'a failed load hides the picker instead of breaking the screen');
+    assert.ok(/if \(posts\?\.length === 0\) return null;/.test(picker), 'and an empty library draws nothing at all');
+  }
+
+  /*
+   * ============================================================
    * A GROUP THE OWNER LEFT TURNS ITSELF OFF
    * ============================================================
    *

@@ -10,6 +10,7 @@ import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
 import { CommentQueueCard } from '@/components/social/CommentQueueCard';
 import { QuickCommentsCard } from '@/components/social/QuickCommentsCard';
+import { CommentTimeline } from '@/components/social/CommentTimeline';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
@@ -1190,6 +1191,15 @@ export default function SocialDashboard() {
             comment sheet rather than a second way of doing the same thing.
           */}
           <QuickCommentsCard campaigns={data.campaigns} states={data.states} onComment={setCommentFor} />
+
+          {/*
+            THE SAME COMMENTS, TOLD AS A SEQUENCE. The card above counts them
+            and folds the exceptions away, which is right for triage and wrong
+            for "when did this happen and what is coming next". Both are drawn
+            from reads this screen already makes — no new query — and `totals`
+            is passed so the footer counts the database rather than the window.
+          */}
+          <CommentTimeline rows={data.comments} done={data.commentsDone} totals={data.commentTotals} />
 
           {/* The panic button — it pauses everything and cancels the whole
               queue. It is now rendered only when there is something to cancel:

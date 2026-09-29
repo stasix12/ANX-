@@ -13,9 +13,13 @@
  * the singular "קבוצה" is ever rendered; and six of them in total, because the
  * strip's whole job is to hold more than fits and let a thumb reach the rest.
  *
- * It renders inside .crm-theme, which is the class /social itself renders
- * under. Without it every ink/mist/brand token resolves to the storefront's
- * DARK set and the measurement would be of a card that no owner ever sees.
+ * It renders inside .social-theme, which is the class /social's own layout
+ * wraps the screen in. Without it every ink/mist/brand token resolves to the
+ * storefront's DARK set and the measurement would be of a card no owner sees.
+ * (This said .crm-theme at first, which is a DIFFERENT scope in the same
+ * stylesheet — the CRM's, where brand-* is blue. Sizes were unaffected, but it
+ * was measuring the wrong product, and it is why I told the owner their accent
+ * was blue when /social's brand-* is in fact purple.)
  */
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -77,4 +81,4 @@ const body = renderToStaticMarkup(
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
-<body class="crm-theme bg-ink-950"><div style="padding:16px">${body}</div></body></html>`);
+<body class="social-theme bg-ink-950"><div style="padding:16px">${body}</div></body></html>`);

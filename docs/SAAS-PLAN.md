@@ -96,12 +96,14 @@
 
 **זו בדיקה של דקה והיא קודמת לכל דבר אחר בתוכנית.**
 
-מפתח ה-anon של הפרויקט מפורסם בגלוי בקוד — `.github/workflows/deploy.yml:65`. זה בסדר **רק אם ה-RLS אמיתי**, וה-RLS שלך אומר `using (true)`. לכן: אם הרשמה עצמית פתוחה בלוח הבקרה של Supabase, **כל אחד באינטרנט יכול לפתוח חשבון ולקבל את כל הנתונים שלך — היום, לא בעתיד.**
+מפתח ה-anon של הפרויקט מגיע מסודות הריפו (`NEXT_PUBLIC_SUPABASE_ANON_KEY`), והוא ממילא ציבורי — הוא מוטמע בכל עמוד שהאתר מגיש. זה בסדר **רק אם ה-RLS אמיתי**, וה-RLS שלך אומר `using (true)`. לכן: אם הרשמה עצמית פתוחה בלוח הבקרה של Supabase, **כל אחד באינטרנט יכול לפתוח חשבון ולקבל את כל הנתונים שלך — היום, לא בעתיד.**
 
 הבדיקה כבר מתועדת אצלך ב-`docs/SOCIAL.md:399-410`:
 
 ```
-curl -s https://kadiiszpmuboawssdhfy.supabase.co/auth/v1/settings -H "apikey: <ANON_KEY>"
+# את שם הפרויקט החי שואלים את האתר עצמו — לא זוכרים אותו מהראש:
+#   https://anx-ggyo.vercel.app/api/version   →   {"build":"…","db":"<PROJECT-REF>"}
+curl -s https://<PROJECT-REF>.supabase.co/auth/v1/settings -H "apikey: <ANON_KEY>"
 ```
 
 צריך לראות `"disable_signup": true` **וגם** `"anonymous_users": false`. כל דבר אחר = הנתונים פתוחים עכשיו.

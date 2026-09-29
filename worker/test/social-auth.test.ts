@@ -206,6 +206,21 @@ is(!/insert into|createTenant/.test(auth), 'the client never creates a business 
     !/kadiiszpmuboawssdhfy|sb_publishable_/.test(flow),
     'and it hardcodes no database of its own — the only correct values are the ones Vercel holds, which this repository cannot see',
   );
+  /*
+   * AND NEITHER DOES ANY OTHER WORKFLOW. The literal the installer build
+   * trusted was not its own: it was copied from deploy.yml, where it had sat
+   * unnoticed while the live site moved to a different project. One stale
+   * string in a file nobody reads became a package that refused a paying
+   * customer's correct password. There is now exactly one place in this
+   * repository that says which database is in use, and it is the secrets.
+   */
+  for (const name of ['deploy.yml', 'setup-adsignal.yml']) {
+    const other = readFileSync(new URL(`../../.github/workflows/${name}`, import.meta.url), 'utf8');
+    is(
+      !/[a-z]{20}\.supabase\.co/.test(other.replace(/#[^\n]*/g, '')) && !/sb_publishable_[A-Za-z0-9_-]+/.test(other),
+      `${name} names no database of its own either — a second answer to "which project" is how the first one went stale unnoticed`,
+    );
+  }
   is(
     /throw "This installer asks a DIFFERENT database than the live dashboard/.test(flow),
     'and a package that would ask a different database fails the build — an installer that reaches a customer and refuses their correct password is the worst of the endings',

@@ -32,9 +32,13 @@ on:
         required: false
         default: ''
       supabase_ref:
-        description: 'Supabase project ref'
+        # NO DEFAULT. It used to carry one, and that one named a project this
+        # product had already moved off — so running this without thinking
+        # pointed a whole setup at a dead database. The live ref is one request
+        # away (https://anx-ggyo.vercel.app/api/version reports it), and typing
+        # it is the moment to notice which database you are configuring.
+        description: 'Supabase project ref — see /api/version on the live site'
         required: true
-        default: 'kadiiszpmuboawssdhfy'
       vercel_project:
         description: 'Vercel project name'
         required: true

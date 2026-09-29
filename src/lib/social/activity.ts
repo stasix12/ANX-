@@ -38,6 +38,11 @@ const KIND: Record<string, ActivityKind> = {
   nightly_group_check: 'success',
 
   // Something did not.
+  /* The worker deciding it is looping and stopping its own background work.
+     A warning and not a failure: nothing was lost and publishing is
+     untouched — but it is the owner's machine opening browser windows, so it
+     must never be filed where it can be scrolled past. */
+  worker_window_storm: 'failure',
   publish_failed: 'failure',
   publish_unrecorded: 'failure',
   needs_attention: 'failure',

@@ -85,6 +85,41 @@ async function releaseProfile(): Promise<void> {
   await new Promise((r) => setTimeout(r, 1_500));
 }
 
+/*
+ * EVERY WINDOW THIS WORKER OPENS, COUNTED — AND WHAT IT WAS FOR.
+ *
+ * The owner filmed their monitor twice: "ככה הוא פותח לי חלון אחרי חלון בלי
+ * סיבה ובלי עבודה שהרצתי בתוכנה", and then, after a fix that did not fix it,
+ * "עדיין פותח בלי סוף". Both times the terminal looked perfectly healthy,
+ * because a loop between a chore and the tick has nothing to say for itself:
+ * every individual step is a normal step.
+ *
+ * So the steps are counted here, where every single one of them passes. It
+ * makes the loop a number and a name instead of an argument, and it is what
+ * lets the worker stop ITSELF rather than waiting to be filmed again.
+ */
+const OPENS: { at: number; why: string }[] = [];
+
+function notePageOpen(why: string): void {
+  const now = Date.now();
+  OPENS.push({ at: now, why });
+  /* Only the recent past is ever asked about; without this the array is a
+     slow leak on a machine that runs for weeks. */
+  while (OPENS.length && now - OPENS[0].at > 30 * 60_000) OPENS.shift();
+}
+
+/** How many windows were opened in the last `ms`, and what most of them were for. */
+export function recentPageOpens(ms: number): { count: number; why: string } {
+  const since = Date.now() - ms;
+  const recent = OPENS.filter((o) => o.at >= since);
+  const tally = new Map<string, number>();
+  for (const o of recent) tally.set(o.why, (tally.get(o.why) ?? 0) + 1);
+  let why = '';
+  let best = 0;
+  for (const [k, n] of tally) if (n > best) [why, best] = [k, n];
+  return { count: recent.length, why };
+}
+
 export class BrowserSession {
   private context: BrowserContext | null = null;
   private headless = true;
@@ -183,8 +218,9 @@ export class BrowserSession {
     return chromium.launchPersistentContext(env.profileDir, { ...common, channel: env.browserChannel });
   }
 
-  async newPage(headless: boolean): Promise<Page> {
+  async newPage(headless: boolean, why = 'לא מסומן'): Promise<Page> {
     const ctx = await this.ensure(headless);
+    notePageOpen(why);
     return ctx.newPage();
   }
 
@@ -208,7 +244,7 @@ export class BrowserSession {
    */
   async checkLogin(headless: boolean): Promise<{ state: 'connected' | 'needs_auth'; detail: string; account?: AccountProfile | null }> {
     if (!this.hasProfile()) return { state: 'needs_auth', detail: 'אין עדיין פרופיל דפדפן — לחצו "התחבר לפייסבוק".' };
-    const page = await this.newPage(headless);
+    const page = await this.newPage(headless, 'בדיקת התחברות');
     try {
       await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
       await page.waitForTimeout(2500);
@@ -262,7 +298,7 @@ export class BrowserSession {
     hooks?: { onChallenge?: (screenshot: Buffer) => Promise<string | null> },
     timeoutMs = 15 * 60_000,
   ): Promise<{ state: 'connected' | 'needs_auth'; detail: string }> {
-    const page = await this.newPage(false);
+    const page = await this.newPage(false, 'התחברות ידנית');
     try {
       await page.goto('https://www.facebook.com/login', { waitUntil: 'domcontentloaded', timeout: 60_000 });
       if (credentials?.user && credentials.pass) {

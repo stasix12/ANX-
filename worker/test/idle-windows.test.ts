@@ -30,6 +30,21 @@ import { readFileSync } from 'node:fs';
 
 const src = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
 
+/**
+ * The same file with every comment removed.
+ *
+ * Needed because this file explains, at length and in prose, the exact lines
+ * it forbids — so a bare search finds its own explanation and passes (or, as
+ * happened here, fails) on nothing. Twice now a guard in this project has
+ * been anchored on a string that only ever appeared in a comment; an
+ * assertion that cannot tell code from prose is not an assertion.
+ */
+const code = src
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .split('\n')
+  .map((l) => l.replace(/^\s*\/\/.*$/, ''))
+  .join('\n');
+
 /** The body of a named function, from its declaration to the next one. */
 function body(name: string): string {
   const at = src.indexOf(`async function ${name}(`);
@@ -73,11 +88,76 @@ assert.ok(/state\.lastCheckAt/.test(ready), 'sessionReady must read lastCheckAt 
 assert.ok(/state\.attention = check\.detail/.test(ready), 'a bad answer must raise attention, which is what stops the next tick at the top');
 assert.ok(/browser_needs_auth/.test(ready), 'and it must reach the activity feed — a silent spin is half of what was reported');
 
+/* ------------------- one-and-a-half: the loop the FIRST fix introduced */
+
+/*
+ * The first attempt at this made it worse, and the owner filmed it again:
+ * "עדיין פותח בלי סוף לא תיקנתה כלום". sessionReady read `lastCheckAt`, and
+ * the chores "asked" for a re-check by setting `lastCheckAt = 0`. But zero is
+ * not a request, it is a permanent claim that the last check was in 1970 — so
+ * every tick verified the login (a window), the chore failed and zeroed the
+ * clock again, and the next tick verified it again. Twice the windows.
+ *
+ * A request has to be consumed by whoever answers it.
+ */
+assert.ok(
+  !/state\.lastCheckAt = 0/.test(code),
+  'no chore may zero the login clock: that is not "check once more", it is "never trust the clock again" — and with sessionReady reading it, a window every tick',
+);
+assert.ok(/recheckSession\?: boolean/.test(src), 'a chore asks for a re-check with a flag');
+const readyBody = body('sessionReady');
+assert.ok(
+  /state\.recheckSession = false/.test(readyBody),
+  'sessionReady must CONSUME the request — an unread one costs a window on every tick for ever',
+);
+/* Consumed before the early return, or a request made while the answer is
+   still fresh survives to be asked again next tick. */
+const consumed = readyBody.indexOf('state.recheckSession = false');
+const early = readyBody.indexOf('return true');
+assert.ok(consumed > -1 && early > -1 && consumed < early, 'the request is consumed before the cached-answer shortcut, not after it');
+
+/*
+ * A consumed flag stops one chore asking for ever; it does not stop MANY
+ * chores each asking once per tick, and a login check is itself a window. So
+ * the request has a floor under it: however many ask, the answer is re-taken
+ * at most once a minute.
+ */
+assert.ok(/const RECHECK_FLOOR_MS = 60_000;/.test(src), 'a chore-requested re-check is rate-limited, or the request becomes the storm');
+assert.ok(
+  /asked \? RECHECK_FLOOR_MS : LOGIN_RECHECK_MS/.test(readyBody),
+  'the floor must be what a request buys — not a bypass of the cache altogether',
+);
+
+/* METRICS_PER_TICK is 1, so "ask on every blank read" is "ask on every tick". */
+assert.ok(
+  !/recheckSession = true/.test(body('syncPostMetrics')),
+  'a blank metrics read must not ask for a session check: one row per tick means one window per tick, which is the bug',
+);
+
+/* ------------------------------------ the breaker that does not need a cause */
+
+assert.ok(/const IDLE_WINDOW_LIMIT = 40;/.test(src), 'an idle worker has a ceiling on windows per five minutes');
+assert.ok(/recentPageOpens\(5 \* 60_000\)/.test(src), 'and it is measured, not assumed');
+const brk = tick.indexOf('IDLE_WINDOW_LIMIT');
+assert.ok(brk > -1 && brk < tick.indexOf('const chores:'), 'the breaker runs before the chores — after them it is a post-mortem');
+assert.ok(
+  tick.indexOf('sessionReady') > -1 && brk < tick.lastIndexOf('await sessionReady(state, headless)', tick.indexOf('const chores:')),
+  'and before the session check, which is itself a window',
+);
+assert.ok(/worker_window_storm/.test(src), 'tripping it reaches the activity feed — the owner should never have to film a monitor to report this');
+
+/* Every window carries what it was for, or the breaker can only say "40". */
+const opens = src.match(/session\.newPage\([^)]*\)/g) ?? [];
+for (const o of opens) {
+  assert.ok(/,\s*'/.test(o), `every newPage must say what it is for — ${o} does not`);
+}
+
 /* -------------------------- two: a chore that gives up records the attempt */
 
 for (const [fn, key] of [
   ['resolveShareLinks', 'share:'],
   ['syncPostMetrics', 'metrics:'],
+  ['syncGroupProfiles', 'profile:'],
 ] as const) {
   const b = body(fn);
   assert.ok(b.includes(`inBackOff(state, \`${key}`), `${fn} must skip a row it already failed on this run`);
@@ -96,6 +176,29 @@ assert.strictEqual(
   2,
   'both of resolveShareLinks’ empty-handed paths must back off: the link that did not resolve AND the catch',
 );
+
+/*
+ * THE ONE THAT ACTUALLY CAUSED IT. syncGroupProfiles selects groups by
+ * `last_synced_at IS NULL` ordered by created_at, so a row it does not stamp
+ * is the row it picks again five seconds later — for ever, over one deleted
+ * or private group sitting at the head of the queue, with the account signed
+ * in perfectly well the whole time.
+ */
+const profiles = body('syncGroupProfiles');
+/* From the branch to the reset that follows it — searched FORWARD from the
+   branch, because `let blind = 0;` above the loop is an earlier match and
+   slicing to it runs the range backwards into nothing. */
+const blankAt = profiles.indexOf('if (!profile) {');
+const blankPath = profiles.slice(blankAt, profiles.indexOf('blind = 0;', blankAt));
+assert.ok(blankPath.length > 0, 'the blank-profile path moved — re-point this test');
+assert.ok(
+  /last_synced_at: new Date\(\)\.toISOString\(\)/.test(blankPath),
+  'a group that came back blank MUST be stamped, or the sweep never reaches the second group',
+);
+assert.ok(/last_error:/.test(blankPath), 'and it must say so on the groups screen rather than going quiet');
+assert.ok(/continue;/.test(blankPath), 'one blank group is a group, not the account — the sweep goes on to the next');
+assert.ok(/blind >= 2/.test(blankPath), 'but two in a row IS the account: stop, and ask for one session check');
+assert.ok(/state\.recheckSession = true/.test(blankPath), 'asked with the flag, which is consumed — never by zeroing the clock');
 
 /* The sibling that was fixed long ago must keep its guard. */
 assert.ok(/state\.addressTried/.test(body('resolveAddresses')), 'resolveAddresses keeps the per-run guard it was given');

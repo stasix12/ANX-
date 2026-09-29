@@ -65,7 +65,7 @@ export class FacebookGroupBrowserAdapter {
       throw new PublishError('cannot_post', `הכתובת של "${input.target.name}" אינה כתובת של קבוצת פייסבוק. תקנו אותה במסך הקבוצות.`);
     }
     let local: LocalMedia | null = null;
-    const page = await this.session.newPage(input.headless);
+    const page = await this.session.newPage(input.headless, 'פרסום לקבוצה');
     input.onPage?.(page);
     try {
       local = input.media.length ? await downloadMedia(input.queueId, input.media) : null;

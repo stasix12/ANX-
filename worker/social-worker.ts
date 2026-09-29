@@ -36,7 +36,7 @@ import { readPostMetrics } from './facebook/metrics';
 import { cleanupMedia, downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
-import { BrowserSession, SessionError } from './facebook/session';
+import { BrowserSession, SessionError, recentPageOpens } from './facebook/session';
 import { NO_ACCOUNT, queueScope } from '@/lib/social/account-scope';
 import { captureScreenshot } from './screenshots';
 
@@ -139,6 +139,20 @@ interface WorkerState {
    * somebody says "try again".
    */
   retryAfter?: Map<string, number>;
+  /**
+   * A chore asks for the Facebook session to be re-verified — ONCE.
+   *
+   * This replaces `state.lastCheckAt = 0`, which was a worse idea than it
+   * looked: zeroing the clock does not mean "check once more", it means "the
+   * last check was in 1970", and that stays true until something checks. With
+   * the login check finally reading it, the result was a loop of my own
+   * making — verify (a window), chore fails and zeroes the clock, verify
+   * again (another window), five seconds later, for ever. Twice the windows
+   * the owner filmed the first time.
+   *
+   * A flag that the check CONSUMES can only ever cost one extra look.
+   */
+  recheckSession?: boolean;
   /**
    * The c_user id of the account the browser is signed in as.
    *
@@ -468,8 +482,25 @@ async function noticeCommentsStarved(db: SupabaseClient, state: WorkerState, roo
 
 /* --------------------------------------------------------------- tick */
 
+/**
+ * How many browser windows an IDLE worker may open in five minutes before it
+ * decides something is wrong with itself. See the breaker in tick().
+ */
+const IDLE_WINDOW_LIMIT = 40;
+
 /** How long a login answer is trusted before it is asked again. */
 const LOGIN_RECHECK_MS = 10 * 60_000;
+
+/**
+ * The floor under a chore's request to re-verify the session.
+ *
+ * A consumed flag stops ONE chore from forcing a check for ever, but not many
+ * chores from each forcing one: a sweep over blank groups asks on every tick,
+ * and a check is itself a browser window, so the request would become the
+ * storm it was meant to report. However many ask, the answer is re-taken at
+ * most once a minute.
+ */
+const RECHECK_FLOOR_MS = 60_000;
 
 /**
  * IS THE FACEBOOK SESSION STILL GOOD? — asked on BOTH paths now.
@@ -497,7 +528,12 @@ const LOGIN_RECHECK_MS = 10 * 60_000;
  * button for. It costs one page load per ten minutes on an idle worker.
  */
 async function sessionReady(state: WorkerState, headless: boolean): Promise<boolean> {
-  if (state.browserState === 'connected' && Date.now() - state.lastCheckAt <= LOGIN_RECHECK_MS) return true;
+  /* Consumed whatever the answer turns out to be: an unread request is how a
+     single "look again" became a look on every tick. */
+  const asked = state.recheckSession === true;
+  state.recheckSession = false;
+  const fresh = Date.now() - state.lastCheckAt;
+  if (state.browserState === 'connected' && fresh <= (asked ? RECHECK_FLOOR_MS : LOGIN_RECHECK_MS)) return true;
   const check = await session.checkLogin(headless);
   state.lastCheckAt = Date.now();
   state.browserState = check.state;
@@ -615,6 +651,31 @@ async function tick(state: WorkerState): Promise<void> {
      * tomorrow, a view count six hours old — none of those is a thing somebody
      * asked for and is waiting on. The comment is.
      */
+    /*
+     * THE CIRCUIT BREAKER — the promise that "חלון אחרי חלון" cannot happen
+     * again, whatever causes it next time.
+     *
+     * Every fix above is a fix for a loop I could name. This one does not
+     * care about the cause: an idle worker has no honest reason to open forty
+     * browser windows in five minutes, so when it does, it stops and says
+     * which kind of window it was. Twice now the owner has had to film their
+     * own monitor to tell me something the machine was in a position to say
+     * itself; this is the machine saying it.
+     *
+     * Idle only, and deliberately far above normal: the nightly sweep is two
+     * groups a tick with a four-second sleep, roughly 25 windows in five
+     * minutes at its very busiest, and a run of comments is slower still. A
+     * loop, by contrast, opens one every five seconds — 60 — and does not
+     * stop. Publishing is not subject to this at all; it never reaches here.
+     */
+    const burst = recentPageOpens(5 * 60_000);
+    if (burst.count > IDLE_WINDOW_LIMIT) {
+      state.attention = `התוכנה פתחה ${burst.count} חלונות דפדפן ב-5 דקות בלי שום פרסום (${burst.why}) — עצרנו את פעולות הרקע כדי לא להעמיס על החשבון. הפעילו מחדש את התוכנה במחשב, ואם זה חוזר — ספרו לנו.`;
+      console.error(`[worker] ✗ ${burst.count} חלונות ב-5 דקות (${burst.why}) — עוצר את פעולות הרקע.`);
+      await logActivity('warn', 'worker_window_storm', state.attention, { opens: burst.count, why: burst.why });
+      return;
+    }
+
     /*
      * THE SESSION FIRST — see sessionReady(). Every chore below opens a
      * Facebook page, and a chore that meets a login wall has no way to say so
@@ -863,7 +924,7 @@ async function resolveShareLinks(state: WorkerState, headless: boolean): Promise
        this row changes in five seconds, and a window per five seconds over a
        link Facebook will never resolve is the whole complaint. */
     if (inBackOff(state, `share:${target.id}`)) continue;
-    const page = await session.newPage(headless);
+    const page = await session.newPage(headless, 'קישור שיתוף');
     try {
       await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
       /* The address bar can still be showing the share link when the load
@@ -915,8 +976,23 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
     .limit(PROFILES_PER_TICK);
   if (!data?.length) return;
 
+  /*
+   * HOW MANY GROUPS IN A ROW CAME BACK BLANK.
+   *
+   * One blank group is a group — deleted, renamed, gone private, a page
+   * Facebook served oddly this minute. Two in a row is the account: a login
+   * wall or a checkpoint answers every address the same way. The difference
+   * matters because the two need opposite handling, and treating the first
+   * as the second is the bug the owner filmed twice.
+   */
+  let blind = 0;
+
   for (const target of data) {
-    const page = await session.newPage(headless);
+    /* Blank last time and left alone since — see backOff(). Checked before
+       the window opens, because after it the window has already cost what it
+       costs. */
+    if (inBackOff(state, `profile:${target.id}`)) continue;
+    const page = await session.newPage(headless, 'פרטי קבוצה');
     try {
       /*
        * THE PICTURE ONLY WHEN THERE ISN'T ONE — which is what makes a sweep
@@ -934,10 +1010,53 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
        */
       const profile = await readGroupProfile(page, target.url, !((target as { image_url?: string }).image_url ?? ''));
       if (!profile) {
-        // Login / checkpoint: leave it unsynced and let the job path report it.
-        state.lastCheckAt = 0;
-        return;
+        /*
+         * THE ENDLESS WINDOWS, AND THE LINE THAT CAUSED THEM.
+         *
+         * This used to be `state.lastCheckAt = 0; return;` — "the session
+         * looks dead, let the job path report it" — and it wrote NOTHING to
+         * the row. The row is selected by `last_synced_at IS NULL` ordered by
+         * created_at, so the next tick picked the very same group, got the
+         * same blank answer, and returned again: a browser window every five
+         * seconds, for ever, over ONE bad group at the head of the queue,
+         * while the account was signed in perfectly well the whole time.
+         *
+         * It was never safe to assume the session. readGroupProfile returns
+         * null whenever classifyPage does not say 'ok', and a deleted group,
+         * a group gone private, or a page Facebook decided to render behind a
+         * prompt all look identical from here to an expired login.
+         *
+         * So: RECORD THE ATTEMPT, always. The stamp is what lets the sweep
+         * reach group two. Nothing is lost — the nightly check clears
+         * last_synced_at again tonight, so a group that was merely having a
+         * bad minute is asked again, and `last_error` says what happened in
+         * the meantime rather than leaving the groups screen silent.
+         */
+        blind += 1;
+        backOff(state, `profile:${target.id}`);
+        await db
+          .from('social_targets')
+          .update({
+            last_synced_at: new Date().toISOString(),
+            last_error:
+              'לא הצלחנו לקרוא את פרטי הקבוצה — ייתכן שפייסבוק ביקש אימות, או שהקבוצה נמחקה או הפכה לפרטית. נבדוק שוב בבדיקה הלילית הבאה.',
+          })
+          .eq('id', target.id);
+        console.log(`[worker] ℹ "${target.name}": לא הצלחנו לקרוא את פרטי הקבוצה.`);
+        /*
+         * Two in a row is the account, not the groups. Stop the sweep and ask
+         * for ONE session check — which, if the login really has expired,
+         * raises attention and stops every chore at the top of the next tick.
+         * That bounds a dead session to two error stamps instead of marking
+         * every group the owner has.
+         */
+        if (blind >= 2) {
+          state.recheckSession = true;
+          return;
+        }
+        continue;
       }
+      blind = 0;
       const patch: Record<string, unknown> = { last_synced_at: new Date().toISOString() };
       // The name is always Facebook's own, so the list reads exactly like Facebook.
       if (profile.name) {
@@ -1807,7 +1926,7 @@ async function resolveAddresses(state: WorkerState, headless: boolean): Promise<
      * reached.
      */
     state.addressTried = (state.addressTried ?? new Set()).add(groupUrl);
-    const page = await session.newPage(headless);
+    const page = await session.newPage(headless, 'איתור כתובת פוסט');
     try {
       const posts = await ourPostsInGroup(page, groupUrl, state.accountId);
       const found = posts.length
@@ -2164,7 +2283,7 @@ async function runCampaignComments(state: WorkerState, headless: boolean, roomMs
      */
     let page: Page | null = null;
     try {
-      page = await session.newPage(headless);
+      page = await session.newPage(headless, 'תגובה לפוסט');
       local = media.length ? await downloadMedia(`${row.id}-comment`, media).catch(() => null) : null;
       /*
        * THE PICTURE HAS TO GET AS FAR AS THIS MACHINE FIRST.
@@ -2423,17 +2542,34 @@ async function syncPostMetrics(state: WorkerState, headless: boolean): Promise<v
        metrics_at stays null on that path, so without this the same post is
        reopened every five seconds for as long as the worker runs. */
     if (inBackOff(state, `metrics:${row.id}`)) continue;
-    const page = await session.newPage(headless);
+    const page = await session.newPage(headless, 'מדדי פרסום');
     try {
       /* Same lookup problem as the comments, same answer: a group filtered to
          our own posts loads what we published, not what the group published. */
       const where = row.permalink ?? ourPostsIn(groupUrlOf(row.target), state.accountId) ?? '';
       const m = where ? await readPostMetrics(page, where, row.rendered_text) : null;
       if (!m) {
-        /* Login wall or checkpoint: the numbers on screen are not this post's.
-           Leave the row unread and let the job path report the session. */
-        state.lastCheckAt = 0;
-        return;
+        /*
+         * Same defect as syncGroupProfiles, same correction. `lastCheckAt = 0`
+         * plus a bare return wrote nothing, and this read is ordered by
+         * metrics_at with nulls first — so the same unreadable post was
+         * reopened on every tick, for ever.
+         *
+         * metrics_at is stamped with no numbers beside it, which is the
+         * honest record: we looked, and there was nothing to read. The row
+         * comes back on its own in METRICS_STALE_HOURS without anybody
+         * clearing anything, so a post that was briefly unreadable heals
+         * itself and a deleted one costs one look every few hours instead of
+         * one every five seconds.
+         */
+        backOff(state, `metrics:${row.id}`);
+        await db.from('social_queue').update({ metrics_at: new Date().toISOString() }).eq('id', row.id);
+        /* No session re-check asked for here, deliberately. METRICS_PER_TICK
+           is 1, so "ask on every blank" is "ask on every tick", and the check
+           is itself a window — the very shape being fixed. A post that cannot
+           be read is nearly always a deleted post, which says nothing about
+           the login; the group sweep is where a blank page IS evidence. */
+        continue;
       }
       await db
         .from('social_queue')

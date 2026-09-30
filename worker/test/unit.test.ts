@@ -3640,13 +3640,33 @@ const scenario: { step: string; line: string }[] = [];
       /patch\.last_status = 'left'/.test(localWorker),
       'marked as left rather than merely off, so the screen can tell a decision from an event',
     );
-    /* The other road: a publication Facebook refuses. It used to write the
-       reason onto the group and leave it switched on, so every later round
-       queued another publication into a group the owner had left. */
-    assert.ok(
-      /err\.kind === 'cannot_post'[\s\S]{0,900}enabled: false/.test(localWorker),
-      'a refused publication switches the group off too, instead of skipping one row and queueing the next',
-    );
+    /*
+     * The other road: a publication Facebook refuses. It used to write the
+     * reason onto the group and leave it switched on, so every later round
+     * queued another publication into a group the owner had left.
+     *
+     * MEASURED ON THE BRANCH, not within N characters of its first line. It
+     * was written as a 900-character window and then a second case grew
+     * inside that branch — a PAGE being refused, which must NOT switch the
+     * group off — and the window expired before reaching the line it was
+     * looking for. The test failed on code that was correct, which is the
+     * kind of failure that gets a guard deleted rather than read.
+     *
+     * The Page half is held in worker/test/profiles.test.ts, which owns that
+     * distinction; this one still owns the original: for a PERSON, refused
+     * means left, and left means off.
+     */
+    {
+      const branch = localWorker.slice(
+        localWorker.indexOf("err.kind === 'cannot_post'"),
+        localWorker.indexOf('const afterSubmit ='),
+      );
+      assert.ok(branch.length > 200, 'the cannot_post branch is found');
+      assert.ok(
+        /enabled: false/.test(branch),
+        'a refused publication switches the group off too, instead of skipping one row and queueing the next',
+      );
+    }
 
     /*
      * AND THE SWEEP HAS TO BE AFFORDABLE, or nobody will run it twice.

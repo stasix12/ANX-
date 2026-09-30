@@ -58,6 +58,10 @@ const SYSTEM_BY_DESIGN = new Set([
      Facebook account holds and the database would not take the answer. About
      the installation, not about any one post. */
   'profiles_save_failed',
+  /* About one group and one identity, not about a post that failed on its
+     merits — and nothing was switched off, which is what separates it from
+     target_left. */
+  'page_not_allowed',
 ]);
 
 let checks = 0;

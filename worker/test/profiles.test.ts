@@ -153,7 +153,7 @@ async function main() {
   const src = readFileSync(new URL('../facebook/profiles.ts', import.meta.url), 'utf8');
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   is(
-    /if \(!names\.includes\(name\)\)/.test(code),
+    /if \(!names\.some\(\(r\) => r\.name === name\)\)/.test(code),
     'the guard in section 4 is the code’s own, not this test’s — a switch may only press a row the reader returned',
   );
   const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
@@ -220,6 +220,59 @@ async function main() {
       is(allowed.includes(c), `the database accepts '${c}' — a command the app can send and the database refuses is a button that does nothing`);
     }
   }
+
+  /* ------------- 6. a group that refuses a PAGE is never switched off ------- */
+  /*
+   * THE MOST EXPENSIVE MISTAKE THIS FEATURE COULD MAKE, and it was already
+   * written and waiting before the feature existed.
+   *
+   * When Facebook answers "you cannot post here", the worker concludes the
+   * account left the group and sets enabled = false — permanently, so no later
+   * round even considers it. That inference is sound for a person and false
+   * for a Page: Facebook refuses a Page in every group whose admin did not
+   * allow Pages, which is most of them, and the same group publishes normally
+   * the moment the personal profile is back.
+   *
+   * So one round published as a Page would have retired a working group list,
+   * silently, with a reason that reads perfectly sensibly in the log — and it
+   * would not have come back when the owner switched back. The owner publishes
+   * to hundreds of groups a week; he would have found out by noticing the
+   * number had fallen.
+   */
+  {
+    const branch = worker.slice(worker.indexOf("err.kind === 'cannot_post'"), worker.indexOf("const afterSubmit ="));
+    is(branch.length > 200, 'the cannot_post branch is where this is decided');
+    is(
+      /if \(state\.asPage\) \{/.test(branch),
+      'the branch asks who is publishing before it acts — "cannot post here" means two different things',
+    );
+    const asPage = branch.slice(branch.indexOf('if (state.asPage)'), branch.indexOf('await finish({ status: \'skipped\', step: \'\', skip_reason: message'));
+    is(
+      !/enabled: false/.test(asPage),
+      'and while a Page is publishing it NEVER switches the group off — the group has not been left, it is closed to that identity',
+    );
+    is(
+      /enabled: false/.test(branch.replace(asPage, '')),
+      'while for a person it still does, which is the behaviour that was there and is correct',
+    );
+    is(/page_not_allowed/.test(asPage), 'the skip is logged, so the refused groups are a list the owner can read');
+    is(
+      /מפרופיל אישי היא עובדת כרגיל/.test(asPage),
+      'and the reason says the group is fine — otherwise it reads like a broken group and gets deleted by hand',
+    );
+  }
+
+  /*
+   * AND THE FLAG SURVIVES A RESTART. The profiles are read from Facebook only
+   * on request, so after a restart — which the self-updater performs by itself
+   * — the worker would run as "not a Page" until somebody asked again, which
+   * might be never. That window is exactly when the branch above would do the
+   * damage.
+   */
+  is(
+    /fb_profiles, fb_user_name/.test(worker) && /markIdentity\(state\)/.test(worker),
+    'the identity is restored from the worker\u2019s own row at startup, not left to be asked for',
+  );
 
   console.log(`profile switcher tests OK — ${checks} assertions`);
 }

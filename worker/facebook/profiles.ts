@@ -34,6 +34,8 @@ import { patterns } from './selectors';
  * "wrong face on the dashboard" mistake account.ts documents at length.
  */
 
+export type ProfileKind = 'profile' | 'page';
+
 export interface FacebookProfile {
   /**
    * Facebook's numeric id, when the row gives one up — most do not, because
@@ -43,6 +45,20 @@ export interface FacebookProfile {
   id: string;
   /** Exactly as Facebook rendered it. Never trimmed to a guess, never invented. */
   name: string;
+  /*
+   * A PAGE OR A PERSON, and the difference is not cosmetic.
+   *
+   * Facebook lets a Page post in a group only where the group's admin allowed
+   * Pages in. So a group that refuses a Page has NOT been left — it is simply
+   * closed to that identity, and the same group publishes perfectly the moment
+   * the personal profile is back. Without this field the worker cannot tell
+   * those two apart, and it treats "cannot post here" as "you left this
+   * group" and switches the group off for good.
+   *
+   * Read from the word Facebook prints under the name ("דף" / "Page"), which
+   * is the only thing in that menu that says so.
+   */
+  kind: ProfileKind;
 }
 
 export interface ProfileRead {
@@ -141,7 +157,7 @@ async function openAccountMenu(page: Page): Promise<ElementHandle<Element> | nul
  * rows come BEFORE the anchor — and doing that from outside would mean a
  * round trip per candidate on a menu that Facebook may close underneath us.
  */
-async function rowsInMenu(menu: ElementHandle<Element>): Promise<{ names: string[]; note: ProfileRead['note'] }> {
+async function rowsInMenu(menu: ElementHandle<Element>): Promise<{ names: { name: string; kind: ProfileKind }[]; note: ProfileRead['note'] }> {
   return await menu.evaluate((root, source) => {
     const allProfiles = new RegExp(source.allProfiles, 'i');
     const noise = new RegExp(source.menuStuff, 'i');
@@ -165,7 +181,7 @@ async function rowsInMenu(menu: ElementHandle<Element>): Promise<{ names: string
 
     const anchorIndex = texts.findIndex((t) => allProfiles.test(t));
     const anchor = anchorIndex === -1 ? undefined : candidates[anchorIndex];
-    if (!anchor) return { names: [] as string[], note: 'no-anchor' as const };
+    if (!anchor) return { names: [] as { name: string; kind: ProfileKind }[], note: 'no-anchor' as const };
 
     /*
      * A row is a candidate that comes before the anchor and is not itself an
@@ -173,7 +189,7 @@ async function rowsInMenu(menu: ElementHandle<Element>): Promise<{ names: string
      * "come before" it in document order and would otherwise be read as
      * profiles whose text is the entire menu.
      */
-    const names: string[] = [];
+    const names: { name: string; kind: ProfileKind }[] = [];
     for (let i = 0; i < candidates.length; i += 1) {
       const el = candidates[i];
       if (el === anchor) break;
@@ -204,8 +220,11 @@ async function rowsInMenu(menu: ElementHandle<Element>): Promise<{ names: string
        */
       const name = lines[0].replace(/[\s·|-]+(דף|page|страница)$/i, '').trim();
       if (!name || name.length > 60) continue;
-      if (names.includes(name)) continue;
-      names.push(name);
+      if (names.some((r) => r.name === name)) continue;
+      /* The label says which it is, whether it sits on its own line or ran
+         into the name above. Anything without it is a person. */
+      const labelled = /(^|[\s·|-])(דף|page|страница)$/i.test(lines[1] ?? '') || /[\s·|-](דף|page|страница)$/i.test(lines[0]);
+      names.push({ name, kind: labelled ? 'page' : 'profile' });
     }
     return { names, note: names.length ? ('ok' as const) : ('no-rows' as const) };
   }, { allProfiles: patterns.allProfiles.source, menuStuff: patterns.menuStuff.source });
@@ -223,7 +242,7 @@ export async function readProfiles(page: Page): Promise<ProfileRead> {
   if (!menu) return { profiles: [], note: 'no-menu' };
   try {
     const { names, note } = await rowsInMenu(menu);
-    return { profiles: names.map((name) => ({ id: '', name })), note };
+    return { profiles: names.map((r) => ({ id: '', name: r.name, kind: r.kind })), note };
   } finally {
     /* Put the menu back the way it was found. Escape rather than a click
        somewhere neutral, which on Facebook is never reliably neutral. */
@@ -246,7 +265,7 @@ export async function switchProfile(page: Page, name: string): Promise<'clicked'
   const { names } = await rowsInMenu(menu);
   /* Only a row this reader itself returned may be pressed. Without this the
      locator below could match the same words anywhere inside the menu. */
-  if (!names.includes(name)) {
+  if (!names.some((r) => r.name === name)) {
     await page.keyboard.press('Escape').catch(() => undefined);
     return 'not-found';
   }

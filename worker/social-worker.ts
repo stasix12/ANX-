@@ -111,6 +111,23 @@ interface WorkerState {
   commentStarvedNoticeAt?: number;
   /** The last reason the update check could not run — said once, not per tick. */
   updateProblem?: string;
+  /*
+   * IS A PAGE PUBLISHING RIGHT NOW?
+   *
+   * Kept because one branch elsewhere turns a group OFF FOR GOOD when Facebook
+   * says it cannot be posted in, and that inference — "you must have left" —
+   * is only sound for a person. A Page is refused by any group whose admin did
+   * not allow Pages in, which is most of them, and the same group publishes
+   * perfectly the moment the personal profile is back. Without this flag one
+   * run as a Page would quietly retire a working group list.
+   *
+   * Derived by name from the profiles the worker itself read out of Facebook's
+   * menu, so it re-derives rather than drifts: switching in the browser by
+   * hand corrects it at the next login check.
+   */
+  asPage?: boolean;
+  /** The menu rows last read, kept only to answer the question above. */
+  profiles?: { name: string; kind: 'profile' | 'page' }[];
   /**
    * Groups whose addresses have already been looked up this run.
    *
@@ -158,6 +175,8 @@ interface WorkerState {
    * which is three or four things instead of an afternoon of everybody else's.
    */
   accountId?: string;
+  /** The display name of that account, kept so markIdentity can ask about it. */
+  accountName?: string;
   /**
    * The row in social_accounts this worker publishes as, and how many accounts
    * the whole system has. Together they decide whether the queue needs
@@ -286,6 +305,26 @@ async function main(): Promise<void> {
    * row from the last time a check succeeded, so this costs one read.
    */
   if (state.accountId) await learnAccountScope(state, db, state.accountId).catch(() => undefined);
+
+  /*
+   * AND WHICH IDENTITY THAT IS — read from the row, not waited for.
+   *
+   * The profiles are read from Facebook only when somebody asks, so after a
+   * restart (and the self-update restarts this process) the worker would run
+   * with `asPage` false until the next explicit read — which might be never.
+   * In that window a Page being refused by a group would be read as "you left
+   * this group" and the group switched off for good. The answer is already on
+   * the worker's own row from the last read, so this costs one column.
+   */
+  {
+    const { data: mine } = await db.from('social_workers').select('fb_profiles, fb_user_name').eq('id', state.id).maybeSingle();
+    const rows = (mine as { fb_profiles?: { name: string; kind?: 'profile' | 'page' }[]; fb_user_name?: string } | null) ?? null;
+    if (rows?.fb_profiles?.length) {
+      state.profiles = rows.fb_profiles.map((p) => ({ name: p.name, kind: p.kind === 'page' ? 'page' : 'profile' }));
+    }
+    if (rows?.fb_user_name) state.accountName = rows.fb_user_name;
+    markIdentity(state);
+  }
 
   await logActivity('info', 'worker_started', `ה-worker "${env.workerName}" עלה (${hostname()})`, { version: VERSION });
   console.log('[worker] מחובר ל-Supabase. ממתין לעבודות… (Ctrl+C לעצירה)');
@@ -1445,6 +1484,35 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       return;
     }
     if (err instanceof PublishError && err.kind === 'cannot_post') {
+      /*
+       * A PAGE BEING REFUSED IS NOT A GROUP YOU LEFT.
+       *
+       * Facebook lets a Page post in a group only where the admin switched
+       * Pages on, and most have not. So this sentence — "you cannot post
+       * here" — means two completely different things depending on who is
+       * signed in, and the branch below acts on the wrong one: it switches
+       * the group OFF FOR GOOD, on the reasoning that a person who cannot
+       * post has left. For a Page that reasoning is simply false, and one
+       * round published as a Page would have retired every group whose admin
+       * does not allow Pages — silently, permanently, and invisibly until the
+       * owner noticed their list had shrunk.
+       *
+       * So while a Page is publishing the row is skipped and the group is
+       * left exactly as it is. The reason is written onto the group so the
+       * groups screen lists them, and it names the Page, because "this group
+       * does not allow Pages" is only true of that identity.
+       */
+      if (state.asPage) {
+        const why = `הקבוצה הזו לא מאפשרת פרסום בתור דף${state.accountName ? ` ("${state.accountName}")` : ''}. דילגנו עליה. מפרופיל אישי היא עובדת כרגיל.`;
+        await finish({ status: 'skipped', step: '', skip_reason: why, screenshot_path: screenshot });
+        await db.from('social_targets').update({ last_status: 'skipped', last_error: why }).eq('id', tt.id);
+        await logActivity('warn', 'page_not_allowed', `"${tt.name}" לא מאפשרת פרסום בתור דף — דילגנו`, {
+          queueId: item.id,
+          targetId: tt.id,
+        });
+        console.log(`[worker] ⤼ "${tt.name}": לא מאפשרת דפים — דילגנו (הקבוצה נשארה פעילה).`);
+        return;
+      }
       await finish({ status: 'skipped', step: '', skip_reason: message, screenshot_path: screenshot });
       /*
        * AND TURN IT OFF, which is the half that was missing.
@@ -1728,6 +1796,8 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
     return;
   }
   state.accountId = account.id;
+  state.accountName = account.name;
+  markIdentity(state);
   const db = await workerDb();
   const patch: Record<string, string> = { fb_user_id: account.id };
   /*
@@ -1880,8 +1950,10 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
  * did not, and that answer has already been given to the command. Losing the
  * list costs a button press to read it again.
  */
-async function recordProfiles(state: WorkerState, profiles: { id: string; name: string }[]): Promise<void> {
+async function recordProfiles(state: WorkerState, profiles: { id: string; name: string; kind: 'profile' | 'page' }[]): Promise<void> {
   const db = await workerDb();
+  state.profiles = profiles.map((p) => ({ name: p.name, kind: p.kind }));
+  markIdentity(state);
   const { error } = await db
     .from('social_workers')
     .update({ fb_profiles: profiles, fb_profiles_at: new Date().toISOString() })
@@ -1897,6 +1969,30 @@ async function recordProfiles(state: WorkerState, profiles: { id: string; name: 
     return;
   }
   console.log(`[worker] ✓ פרופילים בחשבון: ${profiles.length}`);
+}
+
+/**
+ * Is the identity that publishes a Page?
+ *
+ * By NAME, against the rows the worker read itself. Cheap, and it re-derives
+ * every time either half changes rather than being set once and trusted — a
+ * person who switches profiles in the browser by hand would otherwise leave
+ * this saying the opposite of the truth, and the one thing it guards is
+ * whether a group is switched off for ever.
+ *
+ * Unknown answers false. The consequence of a wrong `true` is a group that
+ * stays on when it should have been retired — a queued publication that gets
+ * skipped, noisy and harmless. The consequence of a wrong `false` is a group
+ * switched off for ever on a technicality. They are not symmetrical, and this
+ * leans the way that loses nothing.
+ */
+function markIdentity(state: WorkerState): void {
+  const name = state.accountName ?? '';
+  if (!name || !state.profiles?.length) {
+    state.asPage = false;
+    return;
+  }
+  state.asPage = state.profiles.some((p) => p.name === name && p.kind === 'page');
 }
 
 /**

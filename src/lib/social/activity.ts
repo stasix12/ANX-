@@ -54,6 +54,12 @@ const KIND: Record<string, ActivityKind> = {
      belongs to: it means the same thing — the machine learned something about
      WHO publishes and the database would not take it. */
   profiles_save_failed: 'failure',
+  /*
+   * A group that will not take a Page. Filed beside target_left, because it is
+   * its near-twin and the difference is the whole point: nothing was turned
+   * off, and the same group publishes normally from the personal profile.
+   */
+  page_not_allowed: 'failure',
   avatar_upload_blocked: 'failure',
   login_challenge_failed: 'failure',
   /*

@@ -64,6 +64,7 @@ const TITLE: Record<string, string> = {
   plan_failed: 'תכנון הסבב נכשל',
   account_save_failed: 'שמירת החשבון נכשלה',
   profiles_save_failed: 'רשימת הפרופילים לא נשמרה',
+  page_not_allowed: 'הקבוצה לא מאפשרת פרסום בתור דף',
   avatar_upload_blocked: 'תמונת הפרופיל לא נשמרה',
   login_challenge_failed: 'אימות הפייסבוק נכשל',
 

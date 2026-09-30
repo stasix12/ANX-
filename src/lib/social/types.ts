@@ -366,7 +366,7 @@ export interface SocialWorker {
    * the command rather than by the length of this, because a guess about
    * WHOSE account publishes is the one guess this product must never make.
    */
-  fb_profiles?: { id: string; name: string }[];
+  fb_profiles?: { id: string; name: string; kind?: 'profile' | 'page' }[];
   fb_profiles_at?: string | null;
   /*
    * Facebook is mid-login and asking a person something.

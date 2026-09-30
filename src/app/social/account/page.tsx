@@ -544,8 +544,21 @@ export default function AccountPage() {
                             {p.name.trim().charAt(0) || '?'}
                           </span>
                         )}
-                        <span dir="auto" className="min-w-0 flex-1 truncate text-sm font-bold text-mist-100">
-                          {p.name}
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span dir="auto" className="truncate text-sm font-bold text-mist-100">
+                            {p.name}
+                          </span>
+                          {/*
+                            SAID ON THE ROW, because it changes what to expect.
+                            A Page can publish only to groups whose admin
+                            allowed Pages in; the rest are skipped and listed.
+                            Somebody choosing between two names deserves to
+                            know that before they tap, not afterwards from a
+                            list of skipped groups.
+                          */}
+                          {p.kind === 'page' && (
+                            <span className="text-[11px] font-bold text-mist-500">דף עסקי</span>
+                          )}
                         </span>
                         {active ? (
                           <span className="shrink-0 rounded-lg bg-success-400/15 px-2 py-1 text-xs font-extrabold text-success-400">
@@ -566,6 +579,12 @@ export default function AccountPage() {
                     );
                   })}
                 </ul>
+              )}
+              {profiles.some((p) => p.kind === 'page') && (
+                <p className="mt-3 rounded-xl bg-warning-400/10 px-3 py-2 text-xs leading-relaxed text-warning-400">
+                  פרסום בתור <b>דף עסקי</b> אפשרי רק בקבוצות שמנהל הקבוצה אישר בהן פרסום מדפים — ברוב הקבוצות זה כבוי.
+                  קבוצה שלא מאפשרת תדולג, תופיע ברשימה עם הסיבה, <b>ותישאר פעילה</b> — היא תמשיך לעבוד כרגיל מהפרופיל האישי.
+                </p>
               )}
               <p className="mt-3 text-xs text-mist-500">
                 המעבר נעשה בתפריט של פייסבוק עצמה, באותו חלון שבו התוכנה מפרסמת — בדיוק כמו שהייתם עושים ידנית. אם פייסבוק תבקש אימות באמצע, זה יופיע למעלה במסך הזה.

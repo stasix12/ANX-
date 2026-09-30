@@ -201,7 +201,29 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
   const builder = readFileSync(path.join(root, 'electron-builder.yml'), 'utf8');
   is(/^publish:/m.test(builder), 'the package must be built with a publish feed, or app-update.yml is never written and an installed copy has nothing to check');
   const repo = builder.match(/^\s+repo:\s*(\S+)/m)?.[1];
-  is(repo === 'hapitaron-updates', `the feed must be the separate installer-only repository, not the private source one (found: ${repo})`);
+  /*
+   * THE PROPERTY, NOT THE NAME. This pinned the string "hapitaron-updates",
+   * and then the feed repository turned out to have been created under a
+   * different name entirely — so the build failed on a package that was
+   * correct, and the only way to make it pass was to change the name in a
+   * third place. A test that has to be edited to accept a working
+   * configuration is testing the author's memory, not the product.
+   *
+   * What actually matters is that the feed is NOT the source repository. Put
+   * the updater there and every installer needs a credential able to read all
+   * of the source, which is what the whole first half of this file exists to
+   * prevent.
+   *
+   * Whether the feed is readable without a login is no longer guessed at from
+   * a name either: build-app.yml asks GitHub, unauthenticated, exactly as an
+   * installed copy would, and refuses to publish when the answer is no.
+   */
+  const source = path.basename(root);
+  is(Boolean(repo), 'the feed names a repository');
+  is(
+    repo !== source,
+    `the feed must be a separate installer-only repository, not the source one (found: ${repo})`,
+  );
   is(/^\s+releaseType:\s*release$/m.test(builder), 'and it must publish live releases — a draft is invisible to the updater');
 
   const updates = readFileSync(path.join(root, 'desktop', 'updates.ts'), 'utf8');

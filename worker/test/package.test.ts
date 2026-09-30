@@ -180,6 +180,40 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
 }
 
 /*
+ * ONE UPDATER PER PROGRAM, AND THE OTHER ONE MUST NOT RUN IN HERE.
+ *
+ * worker/self-update.ts is for the machine this was developed on: a git
+ * checkout started by start-worker.cmd, where the launcher pulls on every
+ * start and the worker's only job is to know when to stand down. A CUSTOMER
+ * has none of that, so in the packaged app the check fails — and it reports
+ * its failure to their own dashboard, in these words: "צריך להתקין אותה
+ * מחדש מהקישור המקורי". A paying customer whose app updates itself perfectly
+ * was being told, on their own screen, to go and download the installer again.
+ *
+ * And on a machine that HAS git, with the app installed anywhere inside a
+ * repository, the same check can answer "a new version is waiting" and exit
+ * with code 4 for a launcher that does not exist. The shell restarts it
+ * thirty seconds later, for ever, publishing nothing.
+ *
+ * Both are gone behind one environment variable, and both halves of it are
+ * asserted here because either half alone is the bug.
+ */
+{
+  const shell = readFileSync(path.join(root, 'desktop', 'main.ts'), 'utf8');
+  const selfUpdate = readFileSync(path.join(root, 'worker', 'self-update.ts'), 'utf8');
+  is(/SOCIAL_WORKER_MANAGED: '1',/.test(shell), 'the desktop shell tells the engine that it is the one doing the updating');
+  is(
+    /if \(process\.env\.SOCIAL_WORKER_MANAGED === '1'\) return \{ ready: false, problem: '', detail: '' \};/.test(selfUpdate),
+    'and the engine stands down when told — with no "problem", because a problem is printed on the customer’s dashboard',
+  );
+  /* The gate has to come BEFORE anything reaches for git, or the customer gets
+     the failure anyway. */
+  const gateAt = selfUpdate.indexOf("SOCIAL_WORKER_MANAGED === '1'");
+  const gitAt = selfUpdate.indexOf("run('git'");
+  is(gateAt > 0 && gitAt > gateAt, 'and it stands down before it reaches for git, not after');
+}
+
+/*
  * UPDATING ITSELF, AND THE TWO WAYS THAT GOES WRONG.
  *
  * The app now fetches and installs its own next version, which is what

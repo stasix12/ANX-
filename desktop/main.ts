@@ -343,6 +343,30 @@ function startWorker(): void {
       NEXT_PUBLIC_SUPABASE_ANON_KEY: config.supabaseAnonKey,
       SOCIAL_WORKER_STATE_DIR: stateDir,
       /*
+       * THE ENGINE MUST NOT TRY TO UPDATE ITSELF IN HERE.
+       *
+       * worker/self-update.ts exists for the machine this was developed on: a
+       * git checkout, started by start-worker.cmd, where the launcher pulls on
+       * every start and the worker's only job is to know when to stand down.
+       * A CUSTOMER has none of that — no git, no checkout, no launcher — and
+       * the check therefore fails and reports its failure to their dashboard,
+       * in these words: "צריך להתקין אותה מחדש מהקישור המקורי".
+       *
+       * A paying customer whose app updates itself perfectly was being told, on
+       * their own screen, to go and download the installer again. It is the
+       * exact opposite of what this whole feature promises, and it was shipping.
+       *
+       * And the other outcome is worse: on a machine that DOES have git, with
+       * the app installed somewhere inside any repository, the check can come
+       * back "a new version is waiting" and the worker exits with code 4 to let
+       * a launcher that does not exist install it. The shell below simply
+       * restarts it thirty seconds later — for ever, publishing nothing.
+       *
+       * In here the shell owns updating (desktop/updates.ts), so the engine is
+       * told to leave it alone. One updater per program.
+       */
+      SOCIAL_WORKER_MANAGED: '1',
+      /*
        * The window signs people in now, so the worker should never need to
        * ask. Left at '1' all the same: if a session is somehow missing when
        * it starts, a prompt in the technical log is recoverable, and silence

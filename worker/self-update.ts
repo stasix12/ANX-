@@ -43,6 +43,21 @@ export interface UpdateCheck {
  * same answer as a machine that is already up to date.
  */
 export async function updateAvailable(): Promise<UpdateCheck> {
+  /*
+   * NOT INSIDE THE PACKAGED APP. The desktop shell sets this, and in there the
+   * shell is what updates the program — electron-updater against a real
+   * release, not git against a checkout that does not exist on a customer's
+   * machine.
+   *
+   * It returns "nothing waiting, no problem" rather than a problem, because a
+   * problem is written to the owner's dashboard: the packaged copy was telling
+   * customers, in Hebrew, to reinstall from the original link — while the app
+   * around it was updating itself perfectly well. Silence is the honest answer
+   * here; the thing this function reports on is simply not this program's job
+   * any more.
+   */
+  if (process.env.SOCIAL_WORKER_MANAGED === '1') return { ready: false, problem: '', detail: '' };
+
   const cwd = path.resolve(__dirname, '..');
   const git = (args: string[]) => run('git', args, { cwd, timeout: 60_000, windowsHide: true });
   const why = (err: unknown) => (err instanceof Error ? err.message.split('\n')[0] : String(err));

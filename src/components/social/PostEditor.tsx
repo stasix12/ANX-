@@ -34,6 +34,7 @@ import {
   setScheduleActive,
   type PostInput,
 } from '@/lib/social/client';
+import { audienceBlock } from '@/lib/social/audience';
 import { generateVariantSeeds, renderPostText, whatsappUrlFor } from '@/lib/social/compose';
 import { AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES } from '@/lib/social/status';
 import { agree, counted, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
@@ -721,6 +722,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                 variantMap={variantMap}
                 onVariantMap={setVariantMap}
                 maxSelectable={browser.testMode ? 1 : undefined}
+                limits={limits}
                 note={browser.testMode ? `מצב בדיקה: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. כדי לכבות: ${TEST_MODE_PATH}.` : undefined}
               />
             )}
@@ -861,6 +863,21 @@ export function PostEditor({ postId }: { postId?: string }) {
             ? `מצב בדיקה פעיל: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. כדי לכבות: ${TEST_MODE_PATH}.`
             : '',
           approvedCount === 0 && variants.length > 0 ? 'אין גרסה מאושרת — יצא הטקסט הבסיסי.' : '',
+          /*
+           * A GROUP IN THIS ROUND THAT THE MARK WILL REFUSE.
+           *
+           * The picker cannot offer one, but a post saved before the switch was
+           * turned on still carries its old target list — and the last moment to
+           * say so is this sheet, not the history tomorrow. The same
+           * audienceBlock() the engine uses, so the count here is the count that
+           * will actually be skipped.
+           */
+          (() => {
+            const refused = selectedObjects.filter((t) => audienceBlock(t, limits) !== null);
+            return refused.length
+              ? `${refused.length} מהיעדים שנבחרו לא יקבלו את הפוסט: המתג "לפרסם רק לקבוצות עם לקוחות" מופעל והם לא מסומנים כקבוצות שיש בהן לקוחות.`
+              : '';
+          })(),
           capWarning,
         ].filter(Boolean)}
       />

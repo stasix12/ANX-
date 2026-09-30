@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { audienceBlock } from './audience';
 import { startOfZonedDay } from './time';
 import type { BrowserSettings, LimitsSettings, Post, QueueItem, SocialTarget, Variant } from './types';
 
@@ -117,6 +118,23 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   if (!target) return { action: 'skip', reason: 'היעד נמחק.' };
   if (!post || post.status === 'archived') return { action: 'skip', reason: 'הפוסט נמחק או הועבר לארכיון.' };
   if (!target.enabled) return { action: 'skip', reason: `היעד "${target.name}" כבוי.` };
+  /*
+   * A GROUP THE OWNER SAID HIS CUSTOMERS ARE NOT IN.
+   *
+   * "שלא אשלח לקבוצות שאין שם לקוחות שלי." This is the last gate before a post
+   * goes out, and it is the one that has to hold: the picker keeps these groups
+   * out of a new round and the planner keeps them out of the queue, but a queue
+   * row written last week, or by an older copy of the program, arrives here with
+   * no such filtering behind it.
+   *
+   * A skip rather than a defer, deliberately. The daily ceilings above are a
+   * rate and a full one means "not today"; this is not a rate — the owner has
+   * said this group is the wrong place, and waiting for tomorrow does not make
+   * it the right one. The reason is his own wording so the history reads as a
+   * decision he made rather than as a fault.
+   */
+  const notCustomers = audienceBlock(target, limits);
+  if (notCustomers) return { action: 'skip', reason: notCustomers };
   if (variant && variant.approval !== 'approved') return { action: 'skip', reason: `הגרסה ${variant.label} לא אושרה.` };
   if (!variant && !post.base_text.trim() && !post.media.length) return { action: 'skip', reason: 'הפוסט ריק.' };
 

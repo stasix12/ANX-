@@ -44,6 +44,20 @@ export interface SocialTarget {
   favorite?: boolean;
   /** Free-form grouping ("לוחות מכירה", "קהילתי"…). */
   category?: string;
+  /*
+   * WHETHER THE OWNER'S CUSTOMERS ARE IN THIS GROUP — his own mark, never ours.
+   *
+   * "תעשה שיהיה אפשר לפרסם רק לקבוצות שיש בהם לקוחות פוטנציאליים, שלא אשלח
+   * לקבוצות שאין שם לקוחות שלי."
+   *
+   * 'customers' — he says they are. 'none' — he says they are not, and nothing
+   * publishes here while the switch in settings is on. Absent or 'unknown' —
+   * nobody has said yet, which is a THIRD state and not a quiet "no": treating
+   * it as one would stop publishing to a list that took a year to build. See
+   * src/lib/social/audience.ts, which is the only place that decides what each
+   * of the three means.
+   */
+  audience?: 'unknown' | 'customers' | 'none';
   created_at: string;
 }
 
@@ -462,6 +476,20 @@ export interface LimitsSettings {
    * which has no such key, keeps the behaviour it has today.
    */
   blockRepeatToSameTarget: boolean;
+  /*
+   * PUBLISH ONLY TO GROUPS MARKED AS HAVING POTENTIAL CUSTOMERS.
+   *
+   * Off by default, and that default is not a preference — it is the only safe
+   * one. Every group in every existing installation is unmarked, so a switch
+   * that arrived already on would stop an owner's entire round the moment they
+   * updated, with a reason nobody had asked for. On means the owner has been
+   * through his list.
+   *
+   * Enforced in rules.ts (which runs on the PC for groups and on the server for
+   * Pages), in the planner, and in the group picker — all three through
+   * audienceBlock(), so no path can forget to ask.
+   */
+  customersOnly?: boolean;
 }
 
 export interface ControlSettings {
@@ -478,6 +506,7 @@ export interface BusinessSettings {
 }
 
 export const DEFAULT_LIMITS: LimitsSettings = {
+  customersOnly: false,
   maxPerDay: 6,
   maxPerTargetPerDay: 2,
   minGapMinutes: 45,

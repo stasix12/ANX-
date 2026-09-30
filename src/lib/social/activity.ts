@@ -96,6 +96,7 @@ const KIND: Record<string, ActivityKind> = {
   cancelled: 'schedule',
   manual_pending: 'schedule',
   plan_targets_skipped: 'schedule',
+  plan_not_customers: 'schedule',
   queue_respaced: 'schedule',
   queue_target_removed: 'schedule',
   queue_targets_added: 'schedule',

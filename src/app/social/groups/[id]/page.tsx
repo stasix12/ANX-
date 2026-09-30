@@ -37,6 +37,7 @@ import {
 } from '@/lib/social/client';
 import { isOpen } from '@/lib/social/status';
 import { KNOWN_CITIES, OTHER_CITY, detectCity, sortCities } from '@/lib/social/cities';
+import { audienceOf } from '@/lib/social/audience';
 import { Stamp } from '@/components/social/DateTime';
 import { CHANNEL_LABEL, type Campaign, type SocialTarget } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -221,6 +222,64 @@ export default function GroupProfilePage() {
               </span>
             </Row>
           </dl>
+
+          {/*
+            IS THIS ONE WORTH PUBLISHING TO — decided here, where the owner is
+            looking at the group's own history and can actually tell.
+            *
+            * Three buttons rather than a toggle, because there are three states
+            * and the third is not a middle: "אין לקוחות" is a decision and "לא
+            * סומן" is the absence of one. A two-way switch would have to call
+            * one of them the other.
+          */}
+          <div className="mt-4">
+            <Field
+              label="יש כאן לקוחות פוטנציאליים?"
+              hint='כשהמתג "לפרסם רק לקבוצות עם לקוחות" מופעל בהגדרות, פרסום יוצא רק לקבוצות שסומנו "יש".'
+            >
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  ['customers', 'יש לקוחות'],
+                  ['none', 'אין לקוחות'],
+                  ['unknown', 'לא סומן'],
+                ] as const).map(([value, label]) => {
+                  const on = audienceOf(group) === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={on}
+                      disabled={busy === 'audience'}
+                      onClick={() =>
+                        on
+                          ? undefined
+                          : act(
+                              'audience',
+                              () => updateTarget(group.id, { audience: value }),
+                              value === 'customers'
+                                ? 'סומנה: יש כאן לקוחות.'
+                                : value === 'none'
+                                  ? 'סומנה: אין כאן לקוחות — לא נפרסם אליה כל עוד המתג מופעל.'
+                                  : 'הסימון הוסר.',
+                            )
+                      }
+                      className={`min-h-11 rounded-xl px-3.5 text-sm font-bold transition-colors disabled:opacity-50 ${
+                        on
+                          ? value === 'customers'
+                            ? 'bg-success-400/15 text-success-400 ring-2 ring-success-400/40'
+                            : value === 'none'
+                              ? 'bg-error-300/12 text-error-400 ring-2 ring-error-300/40'
+                              : 'bg-ink-700 text-mist-100 ring-2 ring-ink-600'
+                          : 'bg-ink-800 text-mist-300 hover:bg-ink-700'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
             <Field label="עיר / אזור" hint="משמש לסינון ולבחירה קבוצתית">

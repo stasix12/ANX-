@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
-import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, saveSetting, setPaused } from '@/lib/social/client';
+import { getBrowserSettings, getBusiness, getControl, getLimits, listTargets, listWorkers, saveSetting, setPaused } from '@/lib/social/client';
+import { audienceOf } from '@/lib/social/audience';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type BrowserSettings, type BusinessSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -42,9 +44,36 @@ export default function SettingsPage() {
    */
   const [workerVersion, setWorkerVersion] = useState<string | null>(null);
 
+  /*
+   * HOW MANY GROUPS ARE MARKED — read here so the switch above cannot be turned
+   * on blind.
+   *
+   * A boolean is cheap to flip and this one can stop an entire business's
+   * publishing: with nothing marked, "publish only where the customers are"
+   * means publish nowhere. The three counts turn that from something discovered
+   * the next morning into something stated beside the switch.
+   *
+   * Failing to read them hides the counts and nothing else — the switch still
+   * works, because the engine reads the marks itself.
+   */
+  const [groupMarks, setGroupMarks] = useState<{ customers: number; none: number; unknown: number } | null>(null);
+
   useEffect(() => {
-    Promise.all([getLimits(), getControl(), getBusiness(), getBrowserSettings(), listWorkers().catch(() => [])])
-      .then(([l, c, b, br, workers]) => {
+    Promise.all([
+      getLimits(),
+      getControl(),
+      getBusiness(),
+      getBrowserSettings(),
+      listWorkers().catch(() => []),
+      listTargets().catch(() => []),
+    ])
+      .then(([l, c, b, br, workers, targets]) => {
+        const groups = targets.filter((t) => t.channel === 'facebook_group' || t.channel === 'facebook_group_manual');
+        setGroupMarks({
+          customers: groups.filter((t) => audienceOf(t) === 'customers').length,
+          none: groups.filter((t) => audienceOf(t) === 'none').length,
+          unknown: groups.filter((t) => audienceOf(t) === 'unknown').length,
+        });
         setLimits(l);
         setControl(c);
         setBusiness(b);
@@ -187,6 +216,82 @@ export default function SettingsPage() {
                   <Field label="מניעת כפילות (ימים)" hint="אותו טקסט ומדיה לאותו יעד לא יפורסמו שוב בטווח הזה">
                     <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.dedupeDays} onChange={num('dedupeDays')} />
                   </Field>
+                </div>
+
+                {/*
+                  PUBLISH ONLY WHERE THE CUSTOMERS ARE.
+                  *
+                  * "תעשה שיהיה אפשר לפרסם רק לקבוצות שיש בהם לקוחות
+                  * פוטנציאליים, שלא אשלח לקבוצות שאין שם לקוחות שלי."
+                  *
+                  * The switch is one line; the counts under it are the feature.
+                  * Turning this on with nothing marked would stop every round
+                  * in the product, so the screen says how many groups are
+                  * marked and how many are not BEFORE the switch is touched —
+                  * and the second number links to the screen that fixes it.
+                */}
+                <div className="mt-4 rounded-xl border border-ink-700 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-mist-100">לפרסם רק לקבוצות עם לקוחות פוטנציאליים</p>
+                      <p className="text-xs leading-relaxed text-mist-500">
+                        כשמופעל, פרסום יוצא רק לקבוצות שסימנתם במסך הקבוצות שיש בהן לקוחות. קבוצה שסימנתם שאין בה לקוחות — וגם קבוצה
+                        שעוד לא סימנתם — לא תקבל פרסום, והסיבה תופיע בהיסטוריה.
+                      </p>
+                    </div>
+                    <Toggle
+                      checked={limits.customersOnly === true}
+                      onChange={(v) => setLimits({ ...limits, customersOnly: v })}
+                      label="פרסום רק לקבוצות עם לקוחות"
+                    />
+                  </div>
+                  {groupMarks && (
+                    <p className="mt-2 text-xs font-bold text-mist-300">
+                      כרגע: <span className="text-success-400">{groupMarks.customers} עם לקוחות</span> ·{' '}
+                      <span className="text-error-400">{groupMarks.none} בלי</span> ·{' '}
+                      <span className={groupMarks.unknown ? 'text-warning-400' : ''}>{groupMarks.unknown} לא סומנו</span>
+                    </p>
+                  )}
+                  {/*
+                    THE NUMBER THAT MATTERS, AS A WARNING RATHER THAN A FOOTNOTE.
+                    Switching this on while half the list is unmarked halves the
+                    business's reach, quietly. It is still allowed — it is the
+                    owner's list — but it is not allowed to be a surprise.
+                  */}
+                  {limits.customersOnly === true && groupMarks && groupMarks.unknown > 0 && (
+                    <div className="mt-2.5">
+                      <Notice tone="warn">
+                        <strong>{groupMarks.unknown} קבוצות עוד לא סומנו</strong> ולכן לא יקבלו פרסום כרגע. במסך הקבוצות יש סינון "לא
+                        סומנו" וכפתור "הצע סימון" שעובר על כולן בבת אחת.{' '}
+                        <Link href="/social/groups" className="font-bold text-brand-400 underline">
+                          למסך הקבוצות
+                        </Link>
+                      </Notice>
+                    </div>
+                  )}
+                  {limits.customersOnly === true && groupMarks && groupMarks.customers === 0 && (
+                    <div className="mt-2.5">
+                      <Notice tone="error">
+                        אף קבוצה לא סומנה כקבוצה שיש בה לקוחות, ולכן <strong>שום פרסום לא ייצא</strong> כל עוד המתג הזה מופעל. סמנו קודם
+                        קבוצות, או כבו את המתג.
+                      </Notice>
+                    </div>
+                  )}
+                  {/*
+                    Groups are published by the program on the PC, and it is the
+                    copy of rules.ts THERE that enforces this. An older one does
+                    not know the key exists and will publish to everything — the
+                    same trap the switch below documents, and the same warning.
+                  */}
+                  {limits.customersOnly === true && workerVersion && workerVersion !== WORKER_VERSION && (
+                    <div className="mt-2.5">
+                      <Notice tone="error">
+                        <strong>המתג עדיין לא תקף לקבוצות.</strong> התוכנה שעל המחשב מריצה גרסה <span dir="ltr">{workerVersion}</span>{' '}
+                        במקום <span dir="ltr">{WORKER_VERSION}</span>, והיא זו שמפרסמת לקבוצות — גרסה ישנה לא מכירה את המתג הזה ותמשיך
+                        לפרסם לכל הקבוצות. סגרו את חלון התוכנה במחשב ולחצו פעמיים על <code dir="ltr">start-worker.cmd</code>.
+                      </Notice>
+                    </div>
+                  )}
                 </div>
 
                 {/*

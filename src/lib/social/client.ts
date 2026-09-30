@@ -149,7 +149,10 @@ export async function listTargets(): Promise<SocialTarget[]> {
   return rows;
 }
 
-export async function updateTarget(id: string, patch: Partial<Pick<SocialTarget, 'enabled' | 'name' | 'url' | 'notes' | 'city' | 'favorite' | 'category'>>): Promise<void> {
+export async function updateTarget(
+  id: string,
+  patch: Partial<Pick<SocialTarget, 'enabled' | 'name' | 'url' | 'notes' | 'city' | 'favorite' | 'category' | 'audience'>>,
+): Promise<void> {
   unwrap(await db().from('social_targets').update(patch).eq('id', id));
 }
 
@@ -212,7 +215,10 @@ export async function requestGroupRefresh(ids?: string[], opts?: { picture?: boo
   unwrap(await q);
 }
 
-export async function bulkUpdateTargets(ids: string[], patch: Partial<Pick<SocialTarget, 'enabled' | 'favorite' | 'category' | 'city'>>): Promise<void> {
+export async function bulkUpdateTargets(
+  ids: string[],
+  patch: Partial<Pick<SocialTarget, 'enabled' | 'favorite' | 'category' | 'city' | 'audience'>>,
+): Promise<void> {
   if (!ids.length) return;
   unwrap(await db().from('social_targets').update(patch).in('id', ids));
 }

@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { audienceBlock } from './audience';
 import { dedupeKey, renderPostText } from './compose';
 import { dripSlots, slotsFor, staggerAt } from './slots';
 import { CANCELLABLE_STATUSES, OPEN_STATUSES } from './status';
-import { DEFAULT_BROWSER, DEFAULT_LIMITS, type MediaItem, type Post, type Schedule, type Variant } from './types';
+import { DEFAULT_BROWSER, DEFAULT_LIMITS, type LimitsSettings, type MediaItem, type Post, type Schedule, type SocialTarget, type Variant } from './types';
 import { pickVariant } from './variants';
 
 /**
@@ -100,7 +101,17 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     const waiting = await targetsAlreadyWaiting(db);
 
     const dropped: string[] = [];
+    /* Groups the owner has said are not worth publishing to — kept out of the
+       queue rather than queued and then skipped, so the round's own count is
+       the truth from the start. Listed apart from `dropped`, which means
+       something else entirely. */
+    const notCustomers = await offLimits(db, schedule.target_ids);
+    const refused: string[] = [];
     for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
+      if (notCustomers.has(targetId)) {
+        refused.push(targetId);
+        continue;
+      }
       // Something is already waiting for this group — see targetsAlreadyWaiting().
       if (waiting.has(targetId)) {
         dropped.push(targetId);
@@ -161,6 +172,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     }
 
     await noteDropped(db, note, schedule.id, dropped);
+    await noteNotCustomers(note, schedule.id, refused, notCustomers);
     await db.from('social_schedules').update({ planned_until: until.toISOString() }).eq('id', schedule.id);
     if (schedule.mode === 'now' || schedule.mode === 'once') {
       await db.from('social_schedules').update({ active: false }).eq('id', schedule.id);
@@ -300,6 +312,55 @@ async function noteDropped(db: SupabaseClient, note: PlanLogger, scheduleId: str
 }
 
 /**
+ * GROUPS THIS ROUND MAY NOT REACH, AND WHY — the planner's half of the owner's
+ * "publish only where my customers are".
+ *
+ * The decision itself is audienceBlock()'s, not this function's: the same call
+ * the rules engine makes before publishing and the same one the picker makes
+ * before offering a group. This only fetches what that needs — the switch, and
+ * the three columns of each target — so that the three cannot drift into
+ * disagreeing about a group.
+ *
+ * A missing settings row, a missing column, an unreadable target: all of them
+ * come back as "not blocked". A gate that refuses when it cannot see is a gate
+ * that stops a business's whole round over a failed read.
+ */
+async function offLimits(db: SupabaseClient, targetIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!targetIds.length) return out;
+  const { data: settings } = await db.from('social_settings').select('value').eq('key', 'limits').maybeSingle();
+  const limits = { ...DEFAULT_LIMITS, ...((settings?.value ?? {}) as Partial<LimitsSettings>) };
+  if (!limits.customersOnly) return out;
+  const { data } = await db.from('social_targets').select('id, name, channel, audience').in('id', targetIds);
+  for (const row of ((data ?? []) as Pick<SocialTarget, 'id' | 'name' | 'channel' | 'audience'>[])) {
+    const why = audienceBlock(row, limits);
+    if (why) out.set(row.id, why);
+  }
+  return out;
+}
+
+/**
+ * Say which groups the mark kept out. One line, naming them.
+ *
+ * It is a 'warn' and it names names for the same reason noteDropped() does: a
+ * launch that plans 40 groups out of 130 and says nothing is a launch the owner
+ * reads as a broken product. Here the count is the point — it is how he sees
+ * that the switch he turned on is doing what he asked, or that half his list is
+ * still waiting to be marked.
+ */
+async function noteNotCustomers(note: PlanLogger, scheduleId: string, targetIds: string[], reasons: Map<string, string>): Promise<void> {
+  if (!targetIds.length) return;
+  const first = reasons.get(targetIds[0]) ?? '';
+  const more = targetIds.length - 1;
+  await note(
+    'warn',
+    'plan_not_customers',
+    `${targetIds.length} קבוצות לא נכנסו לתור כי "לפרסם רק לקבוצות עם לקוחות" מופעל. ${first}${more > 0 ? ` (ועוד ${more})` : ''}`,
+    { scheduleId, skipped: targetIds.length, targetIds },
+  );
+}
+
+/**
  * Campaigns the owner has stopped, and a sweep of anything they still hold.
  *
  * "Stop campaign" archives the campaign, deactivates its schedules and cancels
@@ -366,10 +427,19 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   let last = now;
 
   const dropped: string[] = [];
+  const notCustomers = await offLimits(db, schedule.target_ids);
+  const refused: string[] = [];
   for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
     const at = slots[targetIndex];
     if (!at) continue;
     if (at > last) last = at;
+    /* The same gate as the loop above. A drip campaign spreads one post over
+       days, so a group left in here would go on publishing long after the owner
+       marked it. */
+    if (notCustomers.has(targetId)) {
+      refused.push(targetId);
+      continue;
+    }
     // Something is already waiting for this group — see targetsAlreadyWaiting().
     if (waiting.has(targetId)) {
       dropped.push(targetId);
@@ -416,6 +486,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
     }
   }
   await noteDropped(db, note, schedule.id, dropped);
+  await noteNotCustomers(note, schedule.id, refused, notCustomers);
   await db.from('social_schedules').update({ planned_until: last.toISOString(), active: false }).eq('id', schedule.id);
   if (created) await note('info', 'drip_planned', `הפצה הדרגתית: ${created} פרסומים תוכננו עד ${last.toISOString()}`, { created });
   return created;

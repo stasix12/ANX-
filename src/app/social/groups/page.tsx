@@ -30,17 +30,34 @@ import {
   addGroup,
   bulkDeleteTargets,
   bulkUpdateTargets,
+  getBusiness,
+  getLimits,
   listQueue,
   listTargets,
   listWorkers,
   requestGroupRefresh,
   updateTarget,
 } from '@/lib/social/client';
+import {
+  AUDIENCE_SHORT,
+  audienceOf,
+  suggestForAll,
+  type Audience,
+} from '@/lib/social/audience';
 import { formatDayMonthHe } from '@/lib/social/time';
 import { KNOWN_CITIES, detectCity, sortCities } from '@/lib/social/cities';
-import { isPendingShare, parseGroupShareUrl, parseGroupUrl, type SocialTarget } from '@/lib/social/types';
+import {
+  DEFAULT_BUSINESS,
+  DEFAULT_LIMITS,
+  isPendingShare,
+  parseGroupShareUrl,
+  parseGroupUrl,
+  type BusinessSettings,
+  type LimitsSettings,
+  type SocialTarget,
+} from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { ChartIcon, CloseIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
+import { ChartIcon, CheckIcon, CloseIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, SparklesIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent' | 'new';
 type View = 'grid' | 'list';
@@ -114,15 +131,34 @@ export default function GroupsPage() {
   const [shown, setShown] = useState(CHUNK);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * WHO THE CUSTOMERS ARE — the owner's own mark per group, and the switch that
+   * makes it bite. "שלא אשלח לקבוצות שאין שם לקוחות שלי."
+   *
+   * The settings are read here as well as enforced in the engine because this
+   * screen has to be able to say what the mark COSTS: with the switch on, an
+   * unmarked group receives nothing, and the only place that is discoverable is
+   * the screen where the marking happens.
+   */
+  const [audience, setAudience] = useState<'all' | Audience>('all');
+  const [limits, setLimits] = useState<LimitsSettings | null>(null);
+  const [business, setBusiness] = useState<BusinessSettings>(DEFAULT_BUSINESS);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  /** Which of the suggested marks the owner is still willing to apply. */
+  const [suggestOff, setSuggestOff] = useState<Record<string, boolean>>({});
   const toast = useToast();
   const confirm = useConfirm();
 
   const load = useCallback(async () => {
-    const [t, w, queued] = await Promise.all([
+    const [t, w, queued, lim, biz] = await Promise.all([
       listTargets(),
       listWorkers().catch(() => []),
       listQueue({ status: ['scheduled'], limit: 500 }).catch(() => []),
+      getLimits().catch(() => DEFAULT_LIMITS),
+      getBusiness().catch(() => DEFAULT_BUSINESS),
     ]);
+    setLimits(lim);
+    setBusiness(biz);
     setGroups(t.filter((x) => x.channel === 'facebook_group' || x.channel === 'facebook_group_manual'));
     setWorkerOnline(w.some((x) => x.online));
     const next: Record<string, string> = {};
@@ -188,11 +224,12 @@ export default function GroupsPage() {
     return all.filter(
       (g) =>
         matchesStatus(g) &&
+        (audience === 'all' || audienceOf(g) === audience) &&
         (!cityFilter || cityOf(g) === cityFilter) &&
         (!categoryFilter || (g.category || '') === categoryFilter) &&
         (!q || g.name.toLowerCase().includes(q) || g.url.toLowerCase().includes(q) || (g.category ?? '').toLowerCase().includes(q)),
     );
-  }, [all, query, matchesStatus, cityFilter, categoryFilter, cityOf]);
+  }, [all, query, matchesStatus, audience, cityFilter, categoryFilter, cityOf]);
 
   const cities = useMemo(() => sortCities(all.map(cityOf)), [all, cityOf]);
   const categories = useMemo(() => Array.from(new Set(all.map((g) => g.category).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'he')), [all]);
@@ -202,7 +239,7 @@ export default function GroupsPage() {
   /* A new filter means a new list, so start from the top again. */
   useEffect(() => {
     setShown(CHUNK);
-  }, [query, cityFilter, categoryFilter, status]);
+  }, [query, cityFilter, categoryFilter, status, audience]);
 
   const sections = useMemo(
     () =>
@@ -225,9 +262,62 @@ export default function GroupsPage() {
       favorites: all.filter((g) => g.favorite).length,
       recent: all.filter((g) => g.last_published_at && g.last_published_at > recentCutoff).length,
       added: all.filter((g) => g.created_at && g.created_at > addedCutoff).length,
+      customers: all.filter((g) => audienceOf(g) === 'customers').length,
+      noCustomers: all.filter((g) => audienceOf(g) === 'none').length,
+      unmarked: all.filter((g) => audienceOf(g) === 'unknown').length,
     }),
     [all, recentCutoff, addedCutoff],
   );
+
+  /*
+   * MARKING, IN ONE PLACE — used by a single group's menu, by the selection bar
+   * and by the suggestion sheet. The wording of the confirmation the owner gets
+   * is part of the feature: "אין לקוחות" means nothing will be published there
+   * again while the switch is on, and that is said in the toast rather than
+   * discovered from an empty round.
+   */
+  const MARK_DONE: Record<Audience, string> = {
+    customers: 'סומנה: יש שם לקוחות פוטנציאליים.',
+    none: 'סומנה: אין שם לקוחות. לא נפרסם אליה כל עוד המתג בהגדרות מופעל.',
+    unknown: 'הסימון הוסר.',
+  };
+  /*
+   * WHAT A ROW SHOULD SAY ABOUT ITS MARK — and when it should say nothing.
+   *
+   * Only the two cases that change what happens: marked as having none (never
+   * published to while the switch is on) and unmarked WHILE THE SWITCH IS ON,
+   * which is a group quietly receiving nothing. "יש לקוחות" is the normal case
+   * once the list has been walked, and a green chip on a hundred and twenty
+   * cards is noise, not information.
+   */
+  const audienceNote = useCallback(
+    (g: SocialTarget): string => {
+      const mark = audienceOf(g);
+      if (mark === 'none') return AUDIENCE_SHORT.none;
+      if (mark === 'unknown' && limits?.customersOnly) return 'לא סומנה — לא תקבל פרסום';
+      return '';
+    },
+    [limits],
+  );
+
+  const markOne = (g: SocialTarget, mark: Audience) =>
+    act(`aud-${g.id}`, () => updateTarget(g.id, { audience: mark }), MARK_DONE[mark]);
+  const markMany = (ids: string[], mark: Audience) =>
+    act('bulk-aud', () => bulkUpdateTargets(ids, { audience: mark }), `${ids.length} קבוצות — ${MARK_DONE[mark]}`);
+
+  /*
+   * WHAT WE WOULD GUESS, for every group nobody has marked yet.
+   *
+   * Computed on the spot rather than stored: it is a reading of the group's name
+   * against the cities the owner typed into settings, and both of those change.
+   * Storing a guess would also blur the one distinction this feature rests on —
+   * a mark is something the owner decided, and a guess is not a mark.
+   */
+  const suggestions = useMemo(
+    () => (suggestOpen ? suggestForAll(all.map((g) => ({ ...g, city: cityOf(g) })), business) : []),
+    [suggestOpen, all, business, cityOf],
+  );
+  const suggestChosen = suggestions.filter((r) => !suggestOff[r.id]);
 
   async function act(key: string, fn: () => Promise<unknown>, done?: string) {
     setBusy(key);
@@ -268,6 +358,21 @@ export default function GroupsPage() {
       { label: 'פרופיל והיסטוריה', icon: <ChartIcon className={mk} />, onSelect: () => router.push(`/social/groups/${g.id}`) },
       { label: 'צור פוסט לקבוצה הזו', icon: <PencilIcon className={mk} />, onSelect: () => router.push(`/social/posts/new?targets=${g.id}`) },
       { label: 'שייך לעיר', icon: <MapPinIcon className={mk} />, onSelect: () => setCityFor([g.id]) },
+      /*
+       * THE MARK, on the group's own menu — where somebody who has just looked
+       * at a group decides about it. Only the marks it does not already have,
+       * so the menu never offers a no-op; when it is already marked, the way
+       * back is "בטל סימון" rather than a second identical row.
+       */
+      ...(audienceOf(g) !== 'customers'
+        ? [{ label: 'סמן: יש כאן לקוחות', icon: <CheckIcon className={mk} />, onSelect: () => markOne(g, 'customers') }]
+        : []),
+      ...(audienceOf(g) !== 'none'
+        ? [{ label: 'סמן: אין כאן לקוחות', icon: <CloseIcon className={mk} />, onSelect: () => markOne(g, 'none') }]
+        : []),
+      ...(audienceOf(g) !== 'unknown'
+        ? [{ label: 'בטל סימון קהל', icon: <RepeatIcon className={mk} />, onSelect: () => markOne(g, 'unknown') }]
+        : []),
       { label: g.favorite ? 'הסר מהמועדפות' : 'הוסף למועדפות', icon: <StarIcon className={mk} />, onSelect: () => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite })) },
       { label: g.enabled ? 'השהה קבוצה' : 'הפעל קבוצה', icon: g.enabled ? <PauseIcon className={mk} /> : <PlayIcon className={mk} />, onSelect: () => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: !g.enabled }), g.enabled ? 'הקבוצה הושהתה.' : 'הקבוצה הופעלה.') },
       /* The same request as before — it clears last_synced_at and the worker
@@ -322,6 +427,11 @@ export default function GroupsPage() {
     { label: 'הפעל', icon: <PlayIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-on', () => bulkUpdateTargets(selected, { enabled: true }), 'הופעלו.') },
     { label: 'השהה', icon: <PauseIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-off', () => bulkUpdateTargets(selected, { enabled: false }), 'הושהו.') },
     { label: 'סמן כמועדפות', icon: <StarIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-fav', () => bulkUpdateTargets(selected, { favorite: true }), 'סומנו כמועדפות.') },
+    /* The bulk marks. This is how a list of a hundred and twenty groups gets
+       marked in an evening: filter to a city, select all, one tap. */
+    { label: 'סמן: יש כאן לקוחות', icon: <CheckIcon className={mk} />, disabled: selected.length === 0, onSelect: () => markMany(selected, 'customers') },
+    { label: 'סמן: אין כאן לקוחות', icon: <CloseIcon className={mk} />, disabled: selected.length === 0, onSelect: () => markMany(selected, 'none') },
+    { label: 'בטל סימון קהל', icon: <RepeatIcon className={mk} />, disabled: selected.length === 0, onSelect: () => markMany(selected, 'unknown') },
     { label: 'שייך לעיר', icon: <MapPinIcon className={mk} />, disabled: selected.length === 0, onSelect: () => setCityFor(selected) },
     { label: 'שייך לקטגוריה', icon: <TagIcon className={mk} />, disabled: selected.length === 0, onSelect: () => { setCategoryDraft(''); setCategoryOpen(true); } },
     {
@@ -395,6 +505,66 @@ export default function GroupsPage() {
         )}
 
         {/*
+          WHO THE CUSTOMERS ARE — the card that explains the mark, and the one
+          place the switch's cost is spelled out.
+          *
+          * It appears only when there is something to do: groups exist, and
+          * either some are unmarked or the switch is on. Once every group is
+          * marked and the owner has settled it, the card gets out of the way.
+          *
+          * The number is the whole point of it. With the switch on, unmarked
+          * groups receive nothing — so "37 קבוצות לא יקבלו פרסום" has to be on
+          * screen BEFORE an empty round teaches it.
+        */}
+        {groups && all.length > 0 && (statusCounts.unmarked > 0 || limits?.customersOnly) && (
+          <Card padded={false} className="px-3 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-mist-100">לפרסם רק לאן שיש לקוחות</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
+                  {limits?.customersOnly ? (
+                    <>
+                      המתג מופעל: מפרסמים רק ל-{statusCounts.customers} הקבוצות שסימנתם שיש בהן לקוחות.
+                      {statusCounts.unmarked > 0 && (
+                        <>
+                          {' '}
+                          <strong className="text-warning-400">
+                            {statusCounts.unmarked} קבוצות עוד לא סומנו ולא יקבלו פרסום
+                          </strong>{' '}
+                          — סמנו אותן כדי שיחזרו לפרסום.
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      סמנו בכל קבוצה אם יש בה לקוחות פוטנציאליים. אחרי שתסמנו, הפעילו בהגדרות את "לפרסם רק לקבוצות עם לקוחות" — ואז
+                      פרסום לא ייצא לקבוצות שסימנתם שאין בהן לקוחות. כרגע המתג כבוי והפרסום יוצא לכל הקבוצות הפעילות.
+                    </>
+                  )}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                {statusCounts.unmarked > 0 && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setSuggestOff({});
+                      setSuggestOpen(true);
+                    }}
+                  >
+                    <SparklesIcon className="h-4 w-4" />
+                    הצע סימון
+                  </Button>
+                )}
+                <ButtonLink href="/social/settings" variant="ghost">
+                  להגדרות
+                </ButtonLink>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/*
           Search + the filter dimensions, at about half the height they cost
           before.
 
@@ -441,6 +611,26 @@ export default function GroupsPage() {
                 { value: 'favorites', label: 'מועדפות', count: groups ? statusCounts.favorites : undefined },
                 { value: 'recent', label: 'פורסם לאחרונה', count: groups ? statusCounts.recent : undefined },
                 { value: 'paused', label: 'מושהות', count: groups ? statusCounts.paused : undefined },
+              ]}
+            />
+            {/*
+              THE CUSTOMERS FILTER, its own row.
+              *
+              * It is not a variation on "status": a group can be active and
+              * unmarked, or paused and full of customers. Keeping the two
+              * dimensions apart is what lets the owner do the one job this
+              * screen now has — walk the unmarked ones and decide.
+            */}
+            <SegmentedControl
+              variant="chips"
+              label="קהל"
+              value={audience}
+              onChange={setAudience}
+              options={[
+                { value: 'all', label: 'כל הקבוצות', count: groups ? statusCounts.all : undefined },
+                { value: 'customers', label: 'יש לקוחות', count: groups ? statusCounts.customers : undefined },
+                { value: 'unknown', label: 'לא סומנו', count: groups ? statusCounts.unmarked : undefined },
+                { value: 'none', label: 'אין לקוחות', count: groups ? statusCounts.noCustomers : undefined },
               ]}
             />
             <SegmentedControl
@@ -567,6 +757,7 @@ export default function GroupsPage() {
                         actions={menuFor(g)}
                         nextAt={nextByTarget[g.id]}
                         cityLabel={cityOf(g)}
+                        audienceNote={audienceNote(g)}
                       />
                     ))}
                   </ul>
@@ -617,6 +808,9 @@ export default function GroupsPage() {
                         <p dir="auto" className="truncate text-[11px] text-mist-500">
                           {cityOf(g)}
                           {g.category ? ` · ${g.category}` : ''} · {g.last_published_at ? `פורסם ${formatDayMonthHe(g.last_published_at)}` : 'טרם פורסם'}
+                          {/* The mark, only where it changes what happens —
+                              same rule as the card. */}
+                          {audienceNote(g) && <span className="font-bold text-warning-400"> · {audienceNote(g)}</span>}
                         </p>
                       )}
                     </div>
@@ -795,6 +989,115 @@ export default function GroupsPage() {
       </Sheet>
 
       {/* Adding groups: one link, or a whole list pasted at once. */}
+      {/*
+        THE SUGGESTION, AS A LIST THE OWNER READS BEFORE ANYTHING IS WRITTEN.
+        *
+        * A hundred and twenty groups is too many to mark one at a time, and
+        * "mark them all automatically" is not something this product may do:
+        * which groups hold his customers is a judgement about his own business,
+        * and a machine that makes it silently will eventually cross out the one
+        * group half his work comes from.
+        *
+        * So the sheet shows every group it would change, what it would mark it
+        * as, AND WHY, in one line each — and every row can be switched off. The
+        * button applies exactly what is left. Groups the owner has already
+        * marked are not in this list at all: a guess never overwrites a
+        * decision, not even one it agrees with.
+      */}
+      <Sheet
+        open={suggestOpen}
+        onClose={() => setSuggestOpen(false)}
+        title="הצעת סימון לפי שם הקבוצה"
+        size="lg"
+        footer={
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={suggestChosen.length === 0}
+            busy={busy === 'bulk-suggest'}
+            onClick={() => {
+              const yes = suggestChosen.filter((r) => r.verdict === 'customers').map((r) => r.id);
+              const no = suggestChosen.filter((r) => r.verdict === 'none').map((r) => r.id);
+              setSuggestOpen(false);
+              act(
+                'bulk-suggest',
+                async () => {
+                  /* Two writes, because they are two different values — and the
+                     "yes" list goes first: if the second call fails, what is
+                     left behind is groups that publish, not groups that
+                     silently stopped. */
+                  if (yes.length) await bulkUpdateTargets(yes, { audience: 'customers' });
+                  if (no.length) await bulkUpdateTargets(no, { audience: 'none' });
+                },
+                `סומנו ${yes.length} עם לקוחות ו-${no.length} בלי. אפשר לשנות כל אחת ביד.`,
+              );
+            }}
+          >
+            {suggestChosen.length ? `סמן ${suggestChosen.length} קבוצות` : 'לא נבחרה אף קבוצה'}
+          </Button>
+        }
+      >
+        <p className="mb-3 text-sm leading-relaxed text-mist-500">
+          זאת הצעה בלבד, לפי מה שכתוב בשם הקבוצה ולפי הערים שרשמתם בהגדרות. עברו על הרשימה, כבו כל שורה שלא מתאימה, ורק אז אשרו.
+          {business.cities.length === 0 && (
+            <>
+              {' '}
+              <strong className="text-warning-400">לא רשמתם בהגדרות באילו ערים אתם עובדים</strong> — בלי זה אנחנו לא יכולים לזהות קבוצות
+              שמחוץ לאזור שלכם, ורק הנושא של הקבוצה נבדק.
+            </>
+          )}
+        </p>
+        {suggestions.length === 0 ? (
+          <p className="text-sm text-mist-300">
+            אין לנו הצעה לאף קבוצה שלא סומנה. השם של כל אחת מהן לא אומר מספיק — תסמנו אותן ביד, או לפי עיר: סננו לעיר, "בחר", ואז "סמן: יש
+            כאן לקוחות".
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {suggestions.map((r) => {
+              const on = !suggestOff[r.id];
+              return (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setSuggestOff((o) => ({ ...o, [r.id]: on }))}
+                    className={`flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-start transition-colors ${
+                      on ? 'border-brand-300/40 bg-brand-300/8' : 'border-ink-700 opacity-60'
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border-2 ${
+                        on ? 'border-brand-500 bg-brand-500 text-on-brand' : 'border-mist-500'
+                      }`}
+                    >
+                      {on && <CheckIcon className="h-3.5 w-3.5" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span dir="auto" className="truncate text-sm font-bold text-mist-100">
+                          {r.name}
+                        </span>
+                        <Badge tone={r.verdict === 'customers' ? 'good' : 'bad'}>
+                          {r.verdict === 'customers' ? AUDIENCE_SHORT.customers : AUDIENCE_SHORT.none}
+                        </Badge>
+                      </span>
+                      {/* The reason, always. A mark with no reason is a mark
+                          nobody can check — and he is being asked to trust it
+                          with his whole group list. */}
+                      <span dir="auto" className="mt-0.5 block text-xs leading-relaxed text-mist-500">
+                        {r.why}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Sheet>
+
       <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="הוספת קבוצות" size="lg">
         <form
           className="space-y-3"

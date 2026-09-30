@@ -91,6 +91,7 @@ const TITLE: Record<string, string> = {
   cancelled: 'פרסום בוטל',
   manual_pending: 'ממתין לפרסום ידני',
   plan_targets_skipped: 'קבוצות לא נכנסו לסבב',
+  plan_not_customers: 'קבוצות בלי לקוחות — לא נכנסו לסבב',
   queue_respaced: 'המרווח בתור שונה',
   queue_target_removed: 'קבוצה הוסרה מהתור',
   queue_targets_added: 'קבוצות נוספו לתור',

@@ -18,6 +18,7 @@
  * short of that would have found it. This is the cheap version of that.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { readable } from '../../desktop/update-messages';
 
 let checks = 0;
@@ -70,5 +71,43 @@ is(odd.startsWith('לא הצלחנו'), 'wrapped in Hebrew, so the screen is nev
 is(typeof readable('net::ERR_CONNECTION_REFUSED') === 'string', 'a thrown string must not crash the screen');
 is(readable('net::ERR_CONNECTION_REFUSED') === OFFLINE, 'and is read the same way');
 is(typeof readable(undefined) === 'string', 'nor must nothing at all');
+
+
+/*
+ * THE FEED'S ADDRESS, NAMED THE SAME IN BOTH PLACES.
+ *
+ * electron-builder.yml decides what gets baked into every installed copy as
+ * app-update.yml — the address a customer's PC will ask for the rest of its
+ * life. build-app.yml decides where the release is uploaded, and whether the
+ * build even bothers. Two files, one fact, and nothing in either one notices
+ * when they stop agreeing.
+ *
+ * That is not hypothetical: the first feed repository was created by pasting a
+ * URL into GitHub's name field, so what exists is called "https-github.com-new"
+ * while both files said "hapitaron-updates". The build uploaded nothing, said
+ * so in a warning nobody was watching for, and every installed copy went on
+ * asking an address that does not exist — silently, for ever, which is the one
+ * failure mode an update feed cannot have.
+ *
+ * So the two are compared rather than trusted. Renaming the repository stays a
+ * one-line change; making it a one-line change in ONE of the two files fails
+ * here instead of in three months.
+ */
+{
+  const builder = readFileSync(new URL('../../electron-builder.yml', import.meta.url), 'utf8');
+  const flow = readFileSync(new URL('../../.github/workflows/build-app.yml', import.meta.url), 'utf8');
+  const owner = builder.match(/^\s*owner:\s*(\S+)\s*$/m)?.[1] ?? '';
+  const repo = builder.match(/^\s*repo:\s*(\S+)\s*$/m)?.[1] ?? '';
+  is(Boolean(owner && repo), 'electron-builder names the repository every installed copy will ask for updates');
+  is(
+    flow.includes(`${owner}/${repo}`),
+    `the build publishes to the SAME place the package asks (${owner}/${repo}) — two files holding one fact must not drift`,
+  );
+  /* And no stale name left behind anywhere, which is how the drift starts. */
+  is(
+    !/hapitaron-updates/.test(builder + flow),
+    'and no earlier name survives in either file — a leftover is the next silent mismatch',
+  );
+}
 
 console.log(`update message tests OK — ${checks} assertions`);

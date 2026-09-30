@@ -13,7 +13,7 @@
 # reason the release exists now: so that a fix reaches a customer's machine
 # without anybody sending them anything.
 #
-# THE RELEASE GOES TO A DIFFERENT REPOSITORY. stasix12/hapitaron-updates, which
+# THE RELEASE GOES TO A DIFFERENT REPOSITORY. stasix12/https-github.com-new, which
 # is public and holds the installer and nothing else. It has to be public,
 # because a private repository's release assets need a token to download and
 # the only way to give an installed copy one is to put it inside the installer
@@ -212,20 +212,20 @@ jobs:
           # uploaded, and each is said in a sentence naming what to do.
           $feed = $null
           try {
-            $feed = Invoke-RestMethod -Uri "https://api.github.com/repos/stasix12/hapitaron-updates" -Headers @{ 'User-Agent' = 'hapitaron-build' }
+            $feed = Invoke-RestMethod -Uri "https://api.github.com/repos/stasix12/https-github.com-new" -Headers @{ 'User-Agent' = 'hapitaron-build' }
           } catch {
             # 404 covers both "no such repository" and "private", because
             # GitHub deliberately does not tell a stranger which — and neither
             # can this build.
           }
           if (-not $feed) {
-            Write-Host "::warning::stasix12/hapitaron-updates is not readable without a login: it either does not exist, or it is PRIVATE. Create it as a PUBLIC repository with that exact name. A private feed cannot work — an installed copy has no login, and shipping it one would put a credential inside every customer's app."
+            Write-Host "::warning::stasix12/https-github.com-new is not readable without a login: it either does not exist, or it is PRIVATE. Create it as a PUBLIC repository with that exact name. A private feed cannot work — an installed copy has no login, and shipping it one would put a credential inside every customer's app."
             "publish=no" >> $env:GITHUB_OUTPUT
             exit 0
           }
           Write-Host "update feed: $($feed.full_name), public, created $($feed.created_at)"
 
-          $url = "https://api.github.com/repos/stasix12/hapitaron-updates/releases/tags/v$version"
+          $url = "https://api.github.com/repos/stasix12/https-github.com-new/releases/tags/v$version"
           try {
             Invoke-RestMethod -Uri $url -Headers @{ 'User-Agent' = 'hapitaron-build' } | Out-Null
             Write-Host "v$version is already published. Bump WORKER_VERSION to ship a new one."
@@ -257,6 +257,6 @@ jobs:
           $v = "${{ steps.release.outputs.version }}"
           "### גרסה $v פורסמה" >> $env:GITHUB_STEP_SUMMARY
           "" >> $env:GITHUB_STEP_SUMMARY
-          "הורדה ישירה: https://github.com/stasix12/hapitaron-updates/releases/download/v$v/hapitaron-$v-setup.exe" >> $env:GITHUB_STEP_SUMMARY
+          "הורדה ישירה: https://github.com/stasix12/https-github.com-new/releases/download/v$v/hapitaron-$v-setup.exe" >> $env:GITHUB_STEP_SUMMARY
           "" >> $env:GITHUB_STEP_SUMMARY
           "כל מחשב שכבר מותקנת עליו התוכנה יאסוף אותה לבד תוך כמה שעות, בלי הקישור הזה." >> $env:GITHUB_STEP_SUMMARY

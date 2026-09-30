@@ -46,10 +46,19 @@ asarUnpack:
 # installer, and only the installer, lives in a public repository that holds
 # no code. What is exposed there is a version number and a file that anybody
 # who was ever sent a download link already had.
+# THE NAME IS WHAT THE REPOSITORY IS ACTUALLY CALLED, not what it should have
+# been called. It was created by pasting the "new repository" URL into the name
+# field, and GitHub turned that into a legal repository name — so this is the
+# address every installed copy really has to ask. Renaming it on GitHub is a
+# cosmetic change and a one-line change here; leaving these two disagreeing is
+# a product that silently never updates, which is what the whole feed is for.
+#
+# Kept identical to the three places .github/workflows/build-app.yml names it,
+# and worker/test/updates.test.ts fails the build if they ever drift apart.
 publish:
   provider: github
   owner: stasix12
-  repo: hapitaron-updates
+  repo: https-github.com-new
   # Live immediately rather than as a draft: a draft is invisible to the
   # updater, so a release nobody remembers to un-draft is a release that
   # silently never reaches anybody.

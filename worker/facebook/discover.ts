@@ -49,6 +49,10 @@ import { dedupe, interpretCard, type DiscoveredGroup, type RawCard } from '../..
  */
 const PICTURE_LIMIT = 60;
 
+/** How many unreadable cards to keep for the log. Three is enough to see a
+    pattern and few enough that the line stays readable. */
+const UNREAD_SAMPLES = 3;
+
 /** How far to scroll. Each pass is roughly a screenful of new results. */
 const PASSES = 6;
 /** And the ceiling, because a phrase like "קבוצה" matches most of Facebook. */
@@ -60,8 +64,33 @@ export interface CardPicture {
   contentType: string;
 }
 
+/**
+ * A card whose membership could not be read, kept exactly as it was.
+ *
+ * WHY THIS EXISTS. The words Facebook puts on a card for a group you are
+ * already in were WRITTEN FROM REASONING rather than read off a real page, and
+ * on the owner's own account the result was 0 of 92 groups recognised as his —
+ * while he had just joined several. Guessing a second set of words would have
+ * the same chance of being wrong and no way to tell.
+ *
+ * So when a search cannot read a membership, it keeps a few of the cards it
+ * failed on and the worker writes their button labels to the activity log. One
+ * search then answers the question for good, in the wording of the real
+ * Facebook, in the browser the worker actually drives — which is not the same
+ * page as the one on somebody's phone.
+ *
+ * Nothing private is in here: a group's public name and the labels on its own
+ * buttons.
+ */
+export interface UnreadCard {
+  name: string;
+  buttons: string[];
+}
+
 export interface SearchOutcome {
   groups: DiscoveredGroup[];
+  /** Up to three cards whose membership could not be read. Diagnostic only. */
+  unread: UnreadCard[];
   /** Keyed by externalId. Only the ones asked for; see PICTURE_LIMIT. */
   pictures: Map<string, CardPicture>;
   /** A Hebrew sentence for the owner. Empty when nothing went wrong. */
@@ -88,6 +117,8 @@ export async function searchGroups(page: Page, query: string, opts: { pictures?:
   await page.waitForSelector('a[href*="/groups/"]', { timeout: 20_000 }).catch(() => undefined);
 
   const collected: DiscoveredGroup[] = [];
+  /* Keyed by id so the same card scrolling past twice is one sample. */
+  const unread = new Map<string, UnreadCard>();
   let lastCount = -1;
   let truncated = false;
 
@@ -95,7 +126,11 @@ export async function searchGroups(page: Page, query: string, opts: { pictures?:
     const cards = await readCards(page);
     for (const raw of cards) {
       const group = interpretCard(raw);
-      if (group) collected.push(group);
+      if (!group) continue;
+      collected.push(group);
+      if (group.membership === 'unknown' && unread.size < UNREAD_SAMPLES && !unread.has(group.externalId)) {
+        unread.set(group.externalId, { name: group.name, buttons: (raw.buttons ?? []).slice(0, 6) });
+      }
     }
     const unique = dedupe(collected).length;
     if (unique >= MAX_GROUPS) {
@@ -126,7 +161,7 @@ export async function searchGroups(page: Page, query: string, opts: { pictures?:
   const wanted = new Set(opts.pictures ?? []);
   const pictures = wanted.size ? await fetchPictures(page, groups.filter((g) => wanted.has(g.externalId))) : new Map<string, CardPicture>();
 
-  return { groups, pictures, problem: '', truncated };
+  return { groups, pictures, unread: [...unread.values()], problem: '', truncated };
 }
 
 /**

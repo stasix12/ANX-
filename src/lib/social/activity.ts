@@ -111,6 +111,15 @@ const KIND: Record<string, ActivityKind> = {
   comment_columns_missing: 'system',
   comment_claim_failed: 'system',
 
+  /*
+   * גילוי קבוצות could not tell whether this account is in a group it found,
+   * and wrote down the labels that were on the card. It is a line the OWNER
+   * is meant to read back to whoever maintains the patterns — Facebook's
+   * wording is the one thing in this feature that cannot be learned from
+   * here — so it belongs in the log rather than only in a terminal.
+   */
+  discover_unread: 'system',
+
   account_scope_narrowed: 'system',
   metrics_columns_missing: 'system',
   commands_payload_missing: 'system',

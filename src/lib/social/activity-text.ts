@@ -105,6 +105,7 @@ const TITLE: Record<string, string> = {
   group_share_duplicate: 'קישור כפול לקבוצה',
   comment_columns_missing: 'חסר עדכון במסד הנתונים',
   comment_claim_failed: 'תגובה לא ננעלה לעיבוד',
+  discover_unread: 'לא זוהתה חברות בקבוצה',
   account_scope_narrowed: 'הגישה צומצמה לחשבון אחד',
   metrics_columns_missing: 'חסר עדכון במסד הנתונים',
   commands_payload_missing: 'חסר עדכון במסד הנתונים',

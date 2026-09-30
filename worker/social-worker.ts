@@ -1427,6 +1427,24 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
              * Printed only when pictures were asked for at all: a re-search
              * that needed none would otherwise report zero and look broken.
              */
+            /*
+             * THE WORDING FACEBOOK REALLY USES, INTO THE ACTIVITY LOG.
+             *
+             * The owner joined several groups and the search recognised zero
+             * of ninety-two as his. The patterns that decide "you are a member
+             * of this one" were written from reasoning and never checked
+             * against a real Hebrew card, and a second guess would be worth
+             * exactly as much as the first.
+             *
+             * So the cards it could not read are written down, with the labels
+             * that were on them. One search and the question is settled — in
+             * the wording of the browser the worker actually drives, which is
+             * not the page a phone shows.
+             */
+            if (found.unread.length) {
+              const sample = found.unread.map((c) => `${c.name}: [${c.buttons.join(' | ')}]`).join('   ·   ');
+              await logActivity('info', 'discover_unread', `לא הצלחנו לקרוא סטטוס חברות ב-${found.unread.length} כרטיסים. מה שהיה עליהם: ${sample}`);
+            }
             const shots = need.length ? ` ${wrote.pictures} תמונות.` : '';
             result = found.groups.length
               ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${shots}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`

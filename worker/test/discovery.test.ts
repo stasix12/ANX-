@@ -456,4 +456,28 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(/joinedNotListed\.length\} הקבוצות שאתה כבר חבר בהן/.test(page), "and the label names the count, so the promise and the set are the same thing");
 }
 
+/* ------------------------- the cards it could not read, kept for reading */
+{
+  const browser = readFileSync(new URL('../facebook/discover.ts', import.meta.url), 'utf8');
+  const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+
+  /*
+   * 0 OF 92 GROUPS RECOGNISED AS HIS, on an account that had just joined
+   * several. The words on a card for a group you are already in were written
+   * from reasoning and never read off a real page. A second guess is worth
+   * what the first was; a sample of the real cards ends it.
+   */
+  is(/group\.membership === 'unknown' && unread\.size < UNREAD_SAMPLES/.test(browser), 'a card whose membership could not be read is kept');
+  is(/!unread\.has\(group\.externalId\)/.test(browser), 'once each — the same card scrolls past twice');
+  is(/UNREAD_SAMPLES = 3/.test(browser), 'a few, not all: the log line has to stay readable');
+  is(/buttons: \(raw\.buttons \?\? \[\]\)\.slice\(0, 6\)/.test(browser), 'with the labels that were on it, which is the whole point');
+  is(/discover_unread/.test(worker), 'and the worker writes them where the owner can read them back to me');
+
+  /* A group's public name and its own button labels. Nothing else goes in,
+     and nothing else is available to go in. */
+  const line = worker.slice(worker.indexOf('const sample = found.unread'), worker.indexOf('const shots'));
+  is(/c\.name/.test(line) && /c\.buttons/.test(line), 'the line carries the name and the labels');
+  is(!/text|payload|cookie|token/i.test(line), "and nothing else — a diagnostic that logs a page's whole text is a diagnostic nobody should ship");
+}
+
 console.log(`discovery tests OK — ${checks} assertions`);

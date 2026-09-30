@@ -43,6 +43,11 @@ const SYSTEM_BY_DESIGN = new Set([
   'login_challenge_failed',
   'group_share_duplicate',
   'group_share_resolved',
+  /* גילוי קבוצות could not read whether this account is in a group it found,
+     and kept the labels that were on the card. About the machine's reading of
+     a page, not about a publication — and the one line in this product whose
+     audience is the owner reading it back to whoever maintains the patterns. */
+  'discover_unread',
   'comment_columns_missing',
   /* The database refusing to let a comment be claimed. Same family as the
      missing column above: it is about the installation, not about a post. */

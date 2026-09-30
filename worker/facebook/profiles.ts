@@ -87,6 +87,15 @@ export interface ProfileRead {
   profiles: FacebookProfile[];
   /** Why the list is empty, for the worker's log. Never rendered to a customer. */
   note: 'ok' | 'no-menu' | 'no-anchor' | 'no-rows';
+  /*
+   * What the page actually showed when nothing could be opened.
+   *
+   * Present only on 'no-menu', and written for a person: how many menus were up
+   * and the first words of each. Three rounds of guessing at this failure from
+   * the outside cost a day, because "we could not open the menu" says what did
+   * not happen and nothing about what did.
+   */
+  why?: string;
 }
 
 /*
@@ -110,38 +119,104 @@ const MENU_SELECTOR = 'div[role="menu"], div[role="dialog"]';
  * in. The second is a fallback and is treated as one — if the menu does not
  * appear after it, the read gives up rather than clicking on.
  */
-async function openAccountMenu(page: Page): Promise<ElementHandle<Element> | null> {
-  /*
-   * IS THIS THE ACCOUNT MENU?
-   *
-   * Recognised by the items it ALWAYS has — settings, help, log out — and not
-   * by the profile list, which is the thing being looked for. Using the list
-   * as the identity test was the obvious shortcut and it destroyed the one
-   * distinction that matters: an account with a single profile then looked
-   * exactly like a menu that never opened, and the screen could no longer tell
-   * "you have no second profile" from "we could not read your Facebook".
-   */
-  const isAccountMenu = async (el: ElementHandle<Element> | null): Promise<boolean> => {
-    if (!el) return false;
-    return await el
-      .evaluate(
-        (root, src) => {
-          const text = (root as HTMLElement).innerText || '';
-          return new RegExp(src.stuff, 'i').test(text) || new RegExp(src.all, 'i').test(text);
-        },
-        { stuff: patterns.menuStuff.source, all: patterns.allProfiles.source },
-      )
-      .catch(() => false);
-  };
+/**
+ * IS THIS THE ACCOUNT MENU?
+ *
+ * Recognised by the items it ALWAYS has — settings, help, log out — and not by
+ * the profile list, which is the thing being looked for. Using the list as the
+ * identity test was the obvious shortcut and it destroyed the one distinction
+ * that matters: an account with a single profile then looked exactly like a
+ * menu that never opened, and the screen could no longer tell "you have no
+ * second profile" from "we could not read your Facebook".
+ */
+async function isAccountMenu(el: ElementHandle<Element> | null): Promise<boolean> {
+  if (!el) return false;
+  return await el
+    .evaluate(
+      (root, src) => {
+        const text = (root as HTMLElement).innerText || '';
+        return new RegExp(src.stuff, 'i').test(text) || new RegExp(src.all, 'i').test(text);
+      },
+      { stuff: patterns.menuStuff.source, all: patterns.allProfiles.source },
+    )
+    .catch(() => false);
+}
 
+/**
+ * EVERY VISIBLE MENU ON THE PAGE, ASKED IN TURN — not just the first one.
+ *
+ * THIS IS THE FAILURE THE OWNER KEPT HITTING. Facebook's home page carries
+ * other things that answer to `div[role="dialog"]`: a notifications popover, a
+ * chat window, whatever was left over from the last interaction. The code used
+ * to take whatever `waitForSelector` returned — the FIRST match in document
+ * order — ask it whether it was the account menu, get "no", press Escape and
+ * try the next button. So on a page holding any other dialog at all, every
+ * attempt examined that same wrong element and the answer was always the same:
+ * "לא הצלחנו לפתוח את תפריט החשבון", on a machine where the menu had opened
+ * perfectly and was sitting there unread.
+ *
+ * One dialog on the page is the difference between this feature working and
+ * this feature never working, which is why it is looked for among ALL of them.
+ */
+async function openMenuOnPage(page: Page): Promise<ElementHandle<Element> | null> {
+  for (const handle of await page.$$(MENU_SELECTOR)) {
+    if ((await handle.isVisible().catch(() => false)) && (await isAccountMenu(handle))) return handle;
+  }
+  return null;
+}
+
+/**
+ * The same, but given time to become itself.
+ *
+ * A menu is visible before it is full: Facebook mounts the container and fills
+ * it a moment later, so an identity test run on the instant it appears reads an
+ * empty box and rejects a perfectly good menu. Same class of mistake as reading
+ * the top bar before it had buttons in it, one layer in.
+ */
+async function waitForAccountMenu(page: Page, ms: number): Promise<ElementHandle<Element> | null> {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const found = await openMenuOnPage(page);
+    if (found) return found;
+    if (Date.now() >= deadline) return null;
+    await page.waitForTimeout(250);
+  }
+}
+
+/**
+ * WHAT WAS ACTUALLY ON THE PAGE WHEN IT FAILED.
+ *
+ * Nobody here can see the owner's Facebook, and "we could not open the menu"
+ * describes the symptom and nothing else — three rounds of guessing at it cost
+ * a day. This says how many menus were up and what the first words in each of
+ * them were, which is the difference between another guess and a reading.
+ *
+ * It goes to his own screen and his own machine, about his own account.
+ */
+async function menuReport(page: Page): Promise<string> {
+  const seen: string[] = [];
+  for (const handle of await page.$$(MENU_SELECTOR)) {
+    if (!(await handle.isVisible().catch(() => false))) continue;
+    const text = await handle
+      .evaluate((root) => ((root as HTMLElement).innerText || '').replace(/\s+/g, ' ').trim().slice(0, 40))
+      .catch(() => '');
+    seen.push(text || '(ריק)');
+    if (seen.length >= 3) break;
+  }
+  if (!seen.length) return 'לא נפתח שום תפריט';
+  return `נפתחו ${seen.length} תפריטים: ${seen.map((t) => `"${t}"`).join(' · ')}`;
+}
+
+async function openAccountMenu(page: Page): Promise<{ menu: ElementHandle<Element> | null; note: string }> {
   /*
    * ALREADY OPEN? ONLY IF IT IS THE RIGHT ONE.
    *
    * Presence is not enough and neither is visibility: Facebook keeps dialogs
    * and menus around for all sorts of things.
    */
-  for (const handle of await page.$$(MENU_SELECTOR)) {
-    if (await handle.isVisible().catch(() => false) && (await isAccountMenu(handle))) return handle;
+  {
+    const already = await openMenuOnPage(page);
+    if (already) return { menu: already, note: '' };
   }
 
   /*
@@ -176,6 +251,17 @@ async function openAccountMenu(page: Page): Promise<ElementHandle<Element> | nul
   await page.waitForSelector(bannerButtons, { state: 'visible', timeout: 10_000 }).catch(() => undefined);
 
   /*
+   * CLEAR WHATEVER IS OPEN BEFORE REACHING FOR THE AVATAR.
+   *
+   * Something else being up — notifications, a chat window, the thing he last
+   * tapped — is the normal state of a real Facebook page, and an open dialog
+   * both swallows the first click and sits in front of the menu we are about to
+   * look for. Escape on a page with nothing open does nothing at all, so this
+   * costs one keystroke and removes an entire class of "it worked yesterday".
+   */
+  await page.keyboard.press('Escape').catch(() => undefined);
+
+  /*
    * THE CANDIDATES ARE READ AGAIN EVERY ROUND, for the same reason.
    *
    * A list built once is a photograph of a bar that was still assembling
@@ -207,13 +293,17 @@ async function openAccountMenu(page: Page): Promise<ElementHandle<Element> | nul
     if (round) await page.waitForTimeout(1_500);
     for (const candidate of await candidatesNow()) {
       await candidate.click({ timeout: 8_000 }).catch(() => undefined);
-      const opened = await page.waitForSelector(MENU_SELECTOR, { state: 'visible', timeout: 6_000 }).catch(() => null);
-      if (await isAccountMenu(opened)) return opened;
+      /* Every visible menu, for up to four seconds — see openMenuOnPage() and
+         waitForAccountMenu() above. The two things this replaced, taking the
+         first match and judging it instantly, were each enough on their own to
+         make the whole feature look broken. */
+      const opened = await waitForAccountMenu(page, 4_000);
+      if (opened) return { menu: opened, note: '' };
       await page.keyboard.press('Escape').catch(() => undefined);
       await page.waitForTimeout(400);
     }
   }
-  return null;
+  return { menu: null, note: await menuReport(page) };
 }
 
 /**
@@ -358,8 +448,8 @@ const PICTURE_LIMIT = 12;
  * thing that opened it.
  */
 export async function readProfiles(page: Page, opts?: { pictures?: boolean }): Promise<ProfileRead> {
-  const menu = await openAccountMenu(page);
-  if (!menu) return { profiles: [], note: 'no-menu' };
+  const { menu, note: why } = await openAccountMenu(page);
+  if (!menu) return { profiles: [], note: 'no-menu', why };
   try {
     const wantPictures = Boolean(opts?.pictures);
     const { names, note } = await rowsInMenu(menu, wantPictures);
@@ -403,9 +493,9 @@ export async function switchProfile(
      */
     pictures?: boolean;
   },
-): Promise<{ pressed: 'clicked' | 'no-menu' | 'not-found'; profiles?: FacebookProfile[] }> {
-  const menu = await openAccountMenu(page);
-  if (!menu) return { pressed: 'no-menu' };
+): Promise<{ pressed: 'clicked' | 'no-menu' | 'not-found'; profiles?: FacebookProfile[]; why?: string }> {
+  const { menu, note: why } = await openAccountMenu(page);
+  if (!menu) return { pressed: 'no-menu', why };
 
   const wantPictures = Boolean(opts?.pictures);
   const { names } = await rowsInMenu(menu, wantPictures);

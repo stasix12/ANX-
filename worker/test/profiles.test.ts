@@ -147,6 +147,53 @@ async function main() {
     await page.close();
   }
 
+  /* ------- 3a. another dialog on the page is not the account menu ---------- */
+  /*
+   * THE ONE THE OWNER KEPT PHOTOGRAPHING.
+   *
+   * His Facebook always has something else open — notifications, chat,
+   * whatever was last touched — and those are role="dialog" too, sitting
+   * BEFORE the account menu in the document. The reader took the first match,
+   * judged that, and reported "we could not open the account menu" while the
+   * real one was open beside it. Three rounds of fixing other things never
+   * touched it, because this fixture had exactly one menu in it.
+   *
+   * The decoy is in the fixture permanently now: every assertion in this file
+   * is made on a page that has one, which is what his page looks like.
+   */
+  {
+    const page = await context.newPage();
+    await page.goto(fixture);
+    eq(await page.locator('#decoy').isVisible(), true, 'the decoy dialog is really there and really visible');
+    const read = await readProfiles(page);
+    eq(read.note, 'ok', 'and the account menu is still found — among all the open menus, not just the first');
+    eq(read.profiles.length, 4, 'with every identity in it');
+    await page.close();
+  }
+
+  /* --------- 3a2. a menu that is visible before it is full ------------------ */
+  {
+    const page = await context.newPage();
+    await page.goto(`${fixture}#slowmenu`);
+    const read = await readProfiles(page);
+    eq(read.note, 'ok', 'a menu that fills a moment after it opens is waited for, not thrown away');
+    eq(read.profiles.length, 4, 'and read in full once it has');
+    await page.close();
+  }
+
+  /* -------- 3a3. and when nothing opens, it says what WAS on the page ------- */
+  {
+    const page = await context.newPage();
+    await page.goto(noAnchor);
+    /* Take the avatar away: now nothing can open the account menu, and the only
+       thing on the page is the decoy-shaped landmark. */
+    await page.evaluate(() => document.getElementById('avatar')?.remove());
+    const read = await readProfiles(page);
+    eq(read.note, 'no-menu', 'with no way in, it says so');
+    is(read.why && read.why.length > 0, 'and reports what the page was actually showing — nobody here can see his Facebook');
+    await page.close();
+  }
+
   /* ---------------- 3b. a top bar that is not there yet is waited for -------- */
   /*
    * THE REGRESSION THE OWNER FOUND, AND IT WAS MINE.
@@ -347,6 +394,7 @@ async function main() {
 
   /* ------------------------------------ 5. the promises the code must keep */
   const src = readFileSync(new URL('../facebook/profiles.ts', import.meta.url), 'utf8');
+  const profilesSrc = src;
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   is(
     /if \(!names\.some\(\(r\) => r\.name === name\)\)/.test(code),
@@ -388,6 +436,25 @@ async function main() {
   is(
     (body.match(/page\.reload\(/g) ?? []).length === 1,
     'once, and only once — looping on somebody’s live Facebook account is not how to find out why',
+  );
+
+  /*
+   * AND THE MENU IS GIVEN TIME TO FILL, not judged on the instant it appears.
+   *
+   * A source assertion rather than a browser one, deliberately: the retry rounds
+   * are forgiving enough that a fixture cannot tell the two apart reliably, and
+   * a test that passes either way is worse than none. What it fixes is real —
+   * Facebook mounts the container before its contents — and the call is the
+   * thing to protect.
+   */
+  is(
+    /const opened = await waitForAccountMenu\(page, 4_000\);/.test(profilesSrc),
+    'the menu is waited for after the click, not read on the instant it appears',
+  );
+  /* And an open notifications popover does not eat the first click. */
+  is(
+    /await page\.keyboard\.press\('Escape'\)[\s\S]{0,2500}?for \(let round = 0/.test(profilesSrc),
+    'whatever was already open is closed before the avatar is reached for',
   );
 
   const watcher = session.slice(session.indexOf('private async awaitIdentity('));

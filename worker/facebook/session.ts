@@ -321,7 +321,7 @@ export class BrowserSession {
           read.note === 'no-anchor'
             ? 'לא מצאנו רשימת פרופילים בחשבון הזה. אם יש בו פרופיל נוסף, ייתכן שפייסבוק שינתה את התפריט — שלחו לנו צילום מסך של התפריט.'
             : read.note === 'no-menu'
-              ? 'לא הצלחנו לפתוח את תפריט החשבון בפייסבוק. נסו שוב בעוד רגע.'
+              ? `לא הצלחנו לפתוח את תפריט החשבון בפייסבוק. נסו שוב בעוד רגע. (${read.why || 'אין פרטים'})`
               : 'תפריט החשבון נפתח אבל לא זוהו בו פרופילים.',
       };
     } finally {
@@ -375,7 +375,7 @@ export class BrowserSession {
         return { ok: false, detail: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".' };
       }
       const before = await this.currentUserId();
-      let { pressed, profiles } = await switchProfile(page, name, { pictures: opts?.pictures });
+      let { pressed, profiles, why } = await switchProfile(page, name, { pictures: opts?.pictures });
       /*
        * ONE RELOAD, THEN ASK AGAIN — instead of handing back "try again in a
        * moment" and leaving the owner to be the retry.
@@ -389,9 +389,15 @@ export class BrowserSession {
       if (pressed === 'no-menu') {
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => undefined);
         await page.waitForSelector('div[role="banner"] div[role="button"]', { state: 'visible', timeout: 10_000 }).catch(() => undefined);
-        ({ pressed, profiles } = await switchProfile(page, name, { pictures: opts?.pictures }));
+        ({ pressed, profiles, why } = await switchProfile(page, name, { pictures: opts?.pictures }));
       }
-      if (pressed === 'no-menu') return { ok: false, detail: 'לא הצלחנו לפתוח את תפריט החשבון בפייסבוק. נסו שוב בעוד רגע.' };
+      if (pressed === 'no-menu') {
+        /* WITH WHAT WAS ON THE PAGE. The bare sentence has been on his screen
+           three times now and it says only what did not happen; the report says
+           what did, which is what a fix is built from. */
+        console.log(`[worker] ✗ תפריט החשבון לא נפתח — ${why || 'בלי פרטים'}`);
+        return { ok: false, detail: `לא הצלחנו לפתוח את תפריט החשבון בפייסבוק. נסו שוב בעוד רגע. (${why || 'אין פרטים'})` };
+      }
       if (pressed === 'not-found') {
         return { ok: false, detail: `לא מצאנו פרופיל בשם "${name}" בתפריט. רעננו את רשימת הפרופילים ונסו שוב.` };
       }

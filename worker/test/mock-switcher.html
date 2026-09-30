@@ -51,6 +51,25 @@
     The owner pressed the button, the machine did everything right, and the
     screen said his account has no second profile. Nothing looked broken.
   -->
+  <!--
+    ANOTHER DIALOG, ALWAYS OPEN, AND FIRST IN THE DOCUMENT.
+
+    Facebook's home page is never just the page: a notifications popover, a chat
+    window, something left over from the last interaction. They answer to
+    role="dialog" exactly like the account menu does, and they come BEFORE it.
+
+    The reader used to take whatever `waitForSelector` handed back — the first
+    match in document order — ask that one whether it was the account menu, get
+    "no", press Escape and try the next button. Every attempt therefore examined
+    this same wrong element, and the answer was always "לא הצלחנו לפתוח את תפריט
+    החשבון" while the real menu sat open beside it, unread. It is the failure the
+    owner photographed three times.
+  -->
+  <div role="dialog" id="decoy">
+    <span>התראות</span>
+    <span>אין התראות חדשות</span>
+  </div>
+
   <div role="navigation">
     <div role="button"><span>בית</span></div>
     <div role="button"><span>חברים</span></div>
@@ -177,6 +196,22 @@
         const menu = document.getElementById('menu');
         if (menu) menu.remove();
       });
+    }
+
+    /*
+      A MENU THAT IS VISIBLE BEFORE IT IS FULL — loaded with #slowmenu.
+
+      Facebook mounts the container and fills it a moment later, so an identity
+      test run on the instant the menu appears reads an empty box and throws a
+      perfectly good menu away. Same mistake as reading the top bar before it had
+      any buttons in it, one layer further in.
+    */
+    if (location.hash === '#slowmenu') {
+      const menu = document.getElementById('menu');
+      const kept = Array.from(menu.children);
+      for (const node of kept) node.remove();
+      const fill = () => setTimeout(() => { for (const node of kept) menu.appendChild(node); }, 900);
+      document.getElementById('avatar').addEventListener('click', fill);
     }
 
     if (location.hash === '#late') {

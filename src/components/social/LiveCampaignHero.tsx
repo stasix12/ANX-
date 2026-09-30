@@ -624,7 +624,9 @@ export function LiveQueueHero({
                         onSwitchProfile?.(p.name);
                       }}
                       className={`flex w-full min-h-11 items-center gap-2 rounded-xl px-2 text-start text-[13px] font-bold ${
-                        active ? 'bg-success-400/12 text-success-400' : 'text-mist-100 hover:bg-ink-800'
+                        /* Same as the bar's picker: on a panel that lets light
+                           through, 12% is half a tint. */
+                        active ? 'bg-success-400/20 text-success-400' : 'text-mist-100 hover:bg-ink-800'
                       }`}
                     >
                       {/* That identity's own logo when the computer

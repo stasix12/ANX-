@@ -1029,23 +1029,24 @@
    * through; the blur is what turns whatever is behind into light and colour
    * instead of words competing with the words on top.
    *
-   * 92%, AND THE FIRST ATTEMPT AT 80% WAS WRONG FOR A REASON WORTH WRITING DOWN.
+   * 84% AND A HEAVIER BLUR — glass that is actually frosted.
    *
-   * A blur only reaches what is painted inside its BACKDROP ROOT, and an
-   * ancestor that itself carries a backdrop-filter becomes one. The bar at the
-   * top of this product does: `backdrop-blur-lg`, so that content scrolling
-   * under it stays sensed but never legible. The switcher panel hangs from that
-   * bar — so its own blur had nothing to work on, and what the owner got was
-   * not frosted glass at all but plain see-through: the dashboard's big bold
-   * numbers reading straight through the names of his own businesses, sharp.
-   * "לא יותר מדי שקוף?" — yes, and not only too much: the wrong kind.
+   * THE FIRST ATTEMPT WAS 80% AND IT LOOKED TERRIBLE, for a reason worth
+   * writing down: a backdrop-filter only reaches what is painted inside its
+   * BACKDROP ROOT, and an ancestor that carries one becomes a root. The bar at
+   * the top of this product blurs what scrolls under it, so the panel hanging
+   * from it had nothing left to frost — what came out was not glass at all but
+   * a plain see-through rectangle, with the dashboard's big numbers reading
+   * straight through the names of the owner's businesses.
    *
-   * So the transparency is now a HINT rather than a window. At 8% the ground
-   * behind tints the panel and its edges, which is what makes it read as glass
-   * sitting on something; it is nowhere near enough for anything behind to
-   * become a shape. The highlight along the top edge does the rest of the work
-   * — that is what a real pane of glass does with light, and it costs no
-   * legibility at all.
+   * Raising it to 92% hid that, and hiding it cost the thing he asked for:
+   * "לא לבטל את השקיפות — רק להפוך אותה לחלשה ומבוקרת יותר."
+   *
+   * So the root cause is fixed instead (see SocialShell: the bar drops its own
+   * blur while the picker is open) and the numbers go where he asked — a real
+   * 16% of light coming through, and a heavier blur turning whatever is behind
+   * into colour rather than shapes. Frosted, not transparent: you can see that
+   * something is there, and you cannot read a word of it.
    *
    * The tint is mixed from the theme's own tokens rather than written as
    * rgba(255,255,255,…), so the panel follows the theme instead of being a
@@ -1054,11 +1055,13 @@
    */
   .glass-switcher {
     --glass-tint: color-mix(in oklab, var(--color-ink-900) 94%, var(--color-brand-400) 6%);
-    background-color: color-mix(in oklab, var(--glass-tint) 92%, transparent);
-    /* Kept, and it does work wherever this panel is not hanging from the
-       blurred bar — but it is no longer what the look depends on. */
-    -webkit-backdrop-filter: saturate(160%) blur(20px);
-    backdrop-filter: saturate(160%) blur(20px);
+    background-color: color-mix(in oklab, var(--glass-tint) 84%, transparent);
+    /* 24px, at the top of the range he asked for: the blur is what stops the
+       16% of light coming through from being readable content. Saturation is
+       what keeps a milky panel from going grey — it is the difference between
+       frosted glass and tracing paper. */
+    -webkit-backdrop-filter: saturate(180%) blur(24px);
+    backdrop-filter: saturate(180%) blur(24px);
     box-shadow:
       /* The lit top edge, inside the panel: the one thing that says "glass"
          without spending a drop of legibility. */

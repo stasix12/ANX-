@@ -545,7 +545,28 @@ export function SocialShell({
           a phone with no notch, where the inset resolves to 0. Giving that
           2px to the header's own top padding — which the inset already owns —
           is what lets the row itself drop to zero padding. */}
-      <header className="sticky top-0 z-40 border-b border-ink-700 bg-ink-850/96 pt-[max(env(safe-area-inset-top),2px)] backdrop-blur-lg">
+      {/*
+        THE BAR'S OWN BLUR STEPS ASIDE WHILE THE SWITCHER IS OPEN — and this one
+        line is what makes the frosted panel below actually frosted.
+        *
+        * A backdrop-filter only reaches what is painted inside its BACKDROP
+        * ROOT, and an element that carries one becomes a root for everything
+        * inside it. The switcher panel hangs from this bar, so while the bar was
+        * blurring, the panel's own blur had nothing to work on: what came out
+        * was not frosted glass but a plain see-through rectangle with the
+        * dashboard's big numbers reading straight through the names of the
+        * owner's businesses.
+        *
+        * So for the two or three seconds the picker is open, the bar keeps its
+        * 96% ground and drops the blur. Nothing is visible in that swap — at 96%
+        * opacity the 4% showing through is a tint either way — and in exchange
+        * the panel below gets a real backdrop to frost.
+      */}
+      <header
+        className={`sticky top-0 z-40 border-b border-ink-700 bg-ink-850/96 pt-[max(env(safe-area-inset-top),2px)] ${
+          whoOpen ? '' : 'backdrop-blur-lg'
+        }`}
+      >
         {/* No vertical padding at all: every child of this row is pinned at
             the 44px touch floor (the identity link is min-h-11; the three
             controls are h-11 each), so every pixel of py was dead space
@@ -690,7 +711,12 @@ export function SocialShell({
                           void goToProfile(p.name);
                         }}
                         className={`flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-start text-[13px] font-bold ${
-                          active ? 'bg-success-400/12 text-success-400' : 'text-mist-100 hover:bg-ink-800'
+                          /* On glass a 12% tint is half a tint: the panel under
+                             it is already letting light through. 20% keeps the
+                             marked row unmistakable without turning it into a
+                             solid block, and the label on it is a solid colour
+                             either way. */
+                          active ? 'bg-success-400/20 text-success-400' : 'text-mist-100 hover:bg-ink-800'
                         } disabled:opacity-70`}
                       >
                         {/* The identity's own logo, photographed out of

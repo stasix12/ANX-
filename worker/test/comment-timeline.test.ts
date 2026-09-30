@@ -104,9 +104,36 @@ async function main(): Promise<void> {
             .filter((e) => !/truncate|line-clamp/.test(String((e as HTMLElement).className)))
             .filter((e) => e.scrollWidth > e.clientWidth + 1)
             .map((e) => (e.textContent ?? '').slice(0, 30)),
+          /*
+           * THE TAP TARGET, WHICH IS NOT THE SAME THING AS THE PAINTED BOX.
+           *
+           * A control may be drawn smaller than it is tapped, and the good ones
+           * are: the "לתגובה" link is 36px of chrome so it does not shout next
+           * to a 13px group name, with a ::before layer extending its hit area
+           * past the 40px floor. Measuring only the border box would have
+           * failed that — and, worse, would have passed a control that shrank
+           * its hit area to match, which is the failure this check exists for.
+           *
+           * So the negative insets on ::before are read and added back. A
+           * control with no such layer measures exactly as before.
+           */
           smallTargets: [...(card?.querySelectorAll('a,button') ?? [])]
-            .map((e) => ({ h: Math.round(e.getBoundingClientRect().height), t: (e.textContent ?? '').slice(0, 14) }))
-            .filter((t) => t.h > 0 && t.h < 40),
+            .map((e) => {
+              const box = e.getBoundingClientRect().height;
+              const pseudo = getComputedStyle(e, '::before');
+              /* NO NAMED HELPER IN HERE: tsx's esbuild rewrites `const f = () =>`
+                 into `__name(…)`, and a function handed to page.evaluate ships
+                 as source — so the call travels into the page and the helper
+                 does not. This codebase has paid for that more than once. */
+              const layer = pseudo.content !== 'none';
+              const top = Number.parseFloat(pseudo.getPropertyValue('top'));
+              const bottom = Number.parseFloat(pseudo.getPropertyValue('bottom'));
+              /* Only a real layer counts, and only where it reaches OUT. */
+              const up = layer && Number.isFinite(top) && top < 0 ? -top : 0;
+              const down = layer && Number.isFinite(bottom) && bottom < 0 ? -bottom : 0;
+              return { h: Math.round(box), hit: Math.round(box + up + down), t: (e.textContent ?? '').slice(0, 14) };
+            })
+            .filter((t) => t.h > 0 && t.hit < 40),
           bar: Boolean(card?.querySelector('[role="img"]')),
           /* Every group name drawn, so the 24-hour filter can be checked by
              what it left OUT rather than only by a count. */

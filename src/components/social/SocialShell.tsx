@@ -23,7 +23,6 @@ import { SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, type SystemState } from './syste
 import { InstallPrompt } from './InstallPrompt';
 import { NotificationBell } from './NotificationBell';
 import { BrowserStatusCard } from './BrowserStatusCard';
-import { PublishingToggle } from './PublishingToggle';
 import { UpdateBanner } from './UpdateBanner';
 import { Sheet, TONE_TEXT, useConfirm, type Tone } from './ui';
 
@@ -745,20 +744,26 @@ export function SocialShell({
           </Link>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
-            {/* Stopping everything must be reachable from wherever you are when
-                you realise you need to, not only from the dashboard. Label off
-                (see `compact`), because the line to its right now says which
-                way the system is. */}
-            {control !== null && (
-              <PublishingToggle
-                compact
-                paused={control}
-                onChanged={() => {
-                  onControlChanged?.();
-                  if (!owned) readControl();
-                }}
-              />
-            )}
+            {/*
+              THE PAUSE BUTTON IS GONE FROM HERE — "למעלה ב-header יש כפתור
+              עצירה ומתחת גם … לא צריך שיהיה פעמיים, תמחק למעלה".
+              *
+              * It was put here so that stopping everything would be reachable
+              * from any screen, and that reasoning was sound in isolation. On
+              * the screen the owner actually opens it produced two controls for
+              * one switch, 300px apart, one of them a bare icon — and two
+              * buttons for one fact is the thing this module keeps removing,
+              * not adding.
+              *
+              * It is still reachable in two places, both of them named: the
+              * "השהה פרסום" card at the top of the dashboard, and "עצירת
+              * חירום" in settings, which is one tap from here.
+              *
+              * The pause FLAG is still read on this bar. It is what the line
+              * under the greeting says when everything is stopped — "הפרסום
+              * מושהה" — and that line is now the only thing here that speaks
+              * about it. Saying it beats having a second button for it.
+            */}
             {/*
               THE COMPUTER, AND WHETHER IT IS RUNNING.
               *

@@ -140,12 +140,26 @@ async function openAccountMenu(page: Page): Promise<ElementHandle<Element> | nul
   const inBanner = await banner.count().catch(() => 0);
   for (let i = 0; i < Math.min(inBanner, 2); i += 1) tries.push(banner.nth(inBanner - 1 - i));
 
-  for (const candidate of tries) {
-    await candidate.click({ timeout: 8_000 }).catch(() => undefined);
-    const opened = await page.waitForSelector(MENU_SELECTOR, { state: 'visible', timeout: 6_000 }).catch(() => null);
-    if (await isAccountMenu(opened)) return opened;
-    await page.keyboard.press('Escape').catch(() => undefined);
-    await page.waitForTimeout(400);
+  /*
+   * TWICE ROUND, WITH A PAUSE. The first version tried each candidate once and
+   * gave up — and the one moment this is asked most is right after a switch,
+   * when Facebook has just reloaded into another identity and the banner is
+   * still assembling itself. The owner met exactly that: "לא הצלחנו לפתוח את
+   * תפריט החשבון", on an account where the menu had been read perfectly a
+   * minute earlier.
+   *
+   * A second pass costs a few seconds on the rare failure and nothing at all
+   * on the ordinary path, where the first candidate answers.
+   */
+  for (let round = 0; round < 2; round += 1) {
+    if (round) await page.waitForTimeout(2_500);
+    for (const candidate of tries) {
+      await candidate.click({ timeout: 8_000 }).catch(() => undefined);
+      const opened = await page.waitForSelector(MENU_SELECTOR, { state: 'visible', timeout: 6_000 }).catch(() => null);
+      if (await isAccountMenu(opened)) return opened;
+      await page.keyboard.press('Escape').catch(() => undefined);
+      await page.waitForTimeout(400);
+    }
   }
   return null;
 }

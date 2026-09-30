@@ -37,6 +37,7 @@ import {
   queueCampaignComment,
   queueSummary,
   runCoverMedia,
+  sendWorkerCommand,
   setPaused,
   stopCampaign,
   type CommentTotals,
@@ -165,6 +166,8 @@ interface DashboardData {
    * when no worker has reported one yet — never a placeholder.
    */
   fbAccount: { name: string; avatar: string } | null;
+  profiles: { id?: string; name: string; kind?: 'profile' | 'page' }[];
+  workerId: string | null;
 }
 
 /**
@@ -311,6 +314,11 @@ export default function SocialDashboard() {
           const w = workers.find((x) => x.online && x.fb_user_name) ?? workers.find((x) => x.fb_user_name);
           return w?.fb_user_name ? { name: w.fb_user_name, avatar: w.fb_avatar_url ?? '' } : null;
         })(),
+        /* The identities that machine last read out of Facebook's menu, from
+           the row this screen has already fetched. The picker in the chip
+           renders these; nothing here goes and asks Facebook. */
+        profiles: (workers.find((x) => x.online) ?? workers[0])?.fb_profiles ?? [],
+        workerId: (workers.find((x) => x.online) ?? workers[0])?.id ?? null,
       });
       setUpdatedAt(new Date());
       setError(null);
@@ -461,6 +469,48 @@ export default function SocialDashboard() {
    * runtime to facebook_page and facebook_group_manual). Groups still wait for
    * the worker on the owner's PC. Nothing is brought forward.
    */
+  /**
+   * MOVE THE PUBLISHING ONTO ANOTHER IDENTITY, from the chip at the top.
+   *
+   * Confirmed, and the confirmation names the two things that actually change
+   * — who every future post is signed by, and which groups are reachable at
+   * all, since an identity is a member of its own groups and not of another's.
+   * For a Page there is a third: most groups do not accept Pages, and those
+   * are skipped rather than published under a name nobody chose.
+   *
+   * The NAME travels, because Facebook's menu rows carry no id. It is checked
+   * against the machine's own reading of that menu before anything is pressed
+   * — see the switch command in social-worker.ts. A name from a screen is a
+   * request, never a permission.
+   */
+  async function switchProfile(name: string) {
+    const kind = data?.profiles.find((p) => p.name === name)?.kind;
+    const ok = await confirm.ask({
+      title: `לעבור ל"${name}"?`,
+      body: (
+        <>
+מהרגע הזה כל פרסום וכל תגובה ייצאו מהזהות הזאת.
+          {' '}אפשר לפרסם רק לקבוצות שהיא חברה בהן, ולכן ייתכן שרשימת הקבוצות שנפרסם אליהן תשתנה.
+          {kind === 'page' && (
+            <>
+              {' '}בנוסף: פייסבוק מאפשרת לדף לפרסם רק בקבוצות שמנהל הקבוצה אישר בהן פרסום מדפים.
+              {' '}קבוצה שלא מאפשרת תדולג ותופיע ברשימה עם הסיבה — היא תישאר פעילה ותמשיך לעבוד מהפרופיל האישי.
+            </>
+          )}
+        </>
+      ),
+      confirmLabel: 'עבור',
+    });
+    if (!ok) return;
+    try {
+      await sendWorkerCommand(data?.workerId ?? null, 'switch', { name });
+      toast('הבקשה נשלחה למחשב. המעבר לוקח כמה שניות.');
+      await load();
+    } catch (err) {
+      setError(friendlyMessage(err, 'הפקודה נכשלה.'));
+    }
+  }
+
   async function runNow() {
     const ok = await confirm.ask({
       title: 'להריץ את הפרסום עכשיו?',
@@ -940,6 +990,8 @@ export default function SocialDashboard() {
             inFlight={summary.inFlight}
             workerOnline={data.workerOnline}
             fbAccount={data.fbAccount}
+            profiles={data.profiles}
+            onSwitchProfile={switchProfile}
             intervention={intervention}
             onRunNow={runNow}
             onTune={() => setTuner({ campaignId: data.upcoming[0]?.campaign_id ?? undefined })}

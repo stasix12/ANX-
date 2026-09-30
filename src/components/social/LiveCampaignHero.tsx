@@ -365,6 +365,8 @@ export function LiveQueueHero({
   inFlight = 0,
   workerOnline,
   intervention = null,
+  profiles = [],
+  onSwitchProfile,
 }: {
   systemState: SystemState;
   publishedToday: number;
@@ -425,6 +427,15 @@ export function LiveQueueHero({
    * reported one, in which case the chip says only what it knows.
    */
   fbAccount?: { name: string; avatar: string } | null;
+  /*
+   * EVERY IDENTITY THIS ACCOUNT CAN PUBLISH AS, as the machine last read them
+   * out of Facebook's own menu. Empty means nobody has looked — which the
+   * panel says in those words rather than as "there is only one", because
+   * those are different facts and only one of them is about the account.
+   */
+  profiles?: { name: string; kind?: 'profile' | 'page' }[];
+  /** Ask the machine to move onto one. Absent while nothing can be asked. */
+  onSwitchProfile?: (name: string) => void;
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
   workerOnline?: boolean;
@@ -434,6 +445,17 @@ export function LiveQueueHero({
   const paused = systemState === 'paused';
   const now = useTick(Boolean(nextAt) && !paused);
   const tone = SYSTEM_STATE_TONE[systemState];
+  const [pickerOpen, setPickerOpen] = useState(false);
+  /* Escape closes it, like every other overlay in this app. Bound only while
+     it is open, so the screen is not listening for a key nobody pressed. */
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pickerOpen]);
   /*
    * "Live" is a claim about a machine, so it is made from a machine fact: a
    * row in flight, or a worker heartbeat. A queue with rows in it only ever
@@ -527,8 +549,26 @@ export function LiveQueueHero({
           With no account reported the chip is exactly what it was. It never
           fills that gap with a placeholder face or a guessed name.
         */}
-        <Link
-          href="/social/account"
+        {/*
+         * THE CHIP IS THE SWITCHER, not a way to a screen that has one.
+         *
+         * "אני לוחץ למעלה במסך הראשי … אני רוצה שיפתח חלון צף אם המשתמשים /
+         * דפים שאני יכול לעבור אליהם." It already carries a swap icon and
+         * already names the identity every post goes out under, so sending
+         * somebody two screens away to change it was the wrong shape: the
+         * control that states the fact is the one that should change it.
+         *
+         * The full screen stays, and this panel links to it. What lives only
+         * there is everything switching is NOT — signing in, disconnecting,
+         * answering a security check.
+         */}
+        <div className="relative">
+        <button
+          type="button"
+          onClick={() => setPickerOpen((v) => !v)}
+          aria-expanded={pickerOpen}
+          aria-haspopup="menu"
+          aria-label={fbAccount ? `מפרסם בתור ${fbAccount.name} — החלפת פרופיל` : 'בחירת פרופיל'}
           className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl ps-1.5 pe-2 text-[13px] font-extrabold ${
             workerOnline ? 'bg-success-400/12 text-success-400' : 'bg-warning-400/12 text-warning-400'
           }`}
@@ -546,8 +586,71 @@ export function LiveQueueHero({
           ) : (
             <span className="ps-1">{workerOnline ? 'מחובר' : 'לא מחובר'}</span>
           )}
-          <ChevronIcon aria-hidden className="h-4 w-4 rtl:rotate-180" />
-        </Link>
+          <ChevronIcon aria-hidden className={`h-4 w-4 transition-transform ${pickerOpen ? '-rotate-90' : 'rtl:rotate-180'}`} />
+        </button>
+        {pickerOpen && (
+          <>
+            {/*
+              `fixed` would be wrong here and it is worth saying why: an
+              ancestor with backdrop-filter becomes the containing block for
+              fixed children, and this card sits inside one. The backdrop would
+              size itself to the header instead of the screen, and a tap
+              outside would land on nothing.
+            */}
+            <button
+              type="button"
+              aria-label="סגירה"
+              onClick={() => setPickerOpen(false)}
+              className="absolute inset-x-0 top-full z-40 h-screen w-screen cursor-default"
+            />
+            <div
+              role="menu"
+              className="absolute end-0 top-full z-50 mt-1.5 w-64 rounded-2xl border border-ink-700 bg-ink-900 p-1.5 shadow-xl motion-safe:animate-[rise_0.18s_ease-out]"
+            >
+              {profiles.length ? (
+                profiles.map((p) => {
+                  const active = Boolean(fbAccount?.name) && p.name === fbAccount?.name;
+                  return (
+                    <button
+                      key={p.name}
+                      type="button"
+                      role="menuitem"
+                      disabled={active || !onSwitchProfile}
+                      onClick={() => {
+                        setPickerOpen(false);
+                        onSwitchProfile?.(p.name);
+                      }}
+                      className={`flex w-full min-h-11 items-center gap-2 rounded-xl px-2 text-start text-[13px] font-bold ${
+                        active ? 'bg-success-400/12 text-success-400' : 'text-mist-100 hover:bg-ink-800'
+                      }`}
+                    >
+                      <TargetAvatar name={p.name} size={22} />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span dir="auto" className="truncate">{p.name}</span>
+                        {p.kind === 'page' && <span className="text-[10px] font-bold text-mist-500">דף עסקי</span>}
+                      </span>
+                      {active && <span className="shrink-0 text-[10px] font-extrabold">מפרסם</span>}
+                    </button>
+                  );
+                })
+              ) : (
+                /* Never "you have only one" — nobody has looked yet, and the
+                   screen that can look says so in its own words. */
+                <p className="px-2 py-3 text-[12px] leading-relaxed text-mist-300">
+                  עוד לא קראנו אילו פרופילים יש בחשבון. פתחו את מסך החשבון ולחצו "חפש פרופילים".
+                </p>
+              )}
+              <Link
+                href="/social/account"
+                onClick={() => setPickerOpen(false)}
+                className="mt-1 flex min-h-11 items-center justify-center rounded-xl text-[12px] font-bold text-brand-400 hover:bg-ink-800"
+              >
+                מסך החשבון
+              </Link>
+            </div>
+          </>
+        )}
+        </div>
         </div>
       </div>
 

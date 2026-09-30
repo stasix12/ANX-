@@ -1029,12 +1029,23 @@
    * through; the blur is what turns whatever is behind into light and colour
    * instead of words competing with the words on top.
    *
-   * 80%, not less. Measured against the page it floats over: the module's body
-   * text stays above 4.5:1 through it, and the separation between panel and
-   * page survives — the two things the brief asked not to lose ("שהטקסטים
-   * יישארו מאוד קריאים", "לא להעלים את ההפרדה"). Below about 70% both start to
-   * go, and a picker whose names are hard to read is a picker that publishes
-   * as the wrong person.
+   * 92%, AND THE FIRST ATTEMPT AT 80% WAS WRONG FOR A REASON WORTH WRITING DOWN.
+   *
+   * A blur only reaches what is painted inside its BACKDROP ROOT, and an
+   * ancestor that itself carries a backdrop-filter becomes one. The bar at the
+   * top of this product does: `backdrop-blur-lg`, so that content scrolling
+   * under it stays sensed but never legible. The switcher panel hangs from that
+   * bar — so its own blur had nothing to work on, and what the owner got was
+   * not frosted glass at all but plain see-through: the dashboard's big bold
+   * numbers reading straight through the names of his own businesses, sharp.
+   * "לא יותר מדי שקוף?" — yes, and not only too much: the wrong kind.
+   *
+   * So the transparency is now a HINT rather than a window. At 8% the ground
+   * behind tints the panel and its edges, which is what makes it read as glass
+   * sitting on something; it is nowhere near enough for anything behind to
+   * become a shape. The highlight along the top edge does the rest of the work
+   * — that is what a real pane of glass does with light, and it costs no
+   * legibility at all.
    *
    * The tint is mixed from the theme's own tokens rather than written as
    * rgba(255,255,255,…), so the panel follows the theme instead of being a
@@ -1043,10 +1054,15 @@
    */
   .glass-switcher {
     --glass-tint: color-mix(in oklab, var(--color-ink-900) 94%, var(--color-brand-400) 6%);
-    background-color: color-mix(in oklab, var(--glass-tint) 80%, transparent);
-    -webkit-backdrop-filter: saturate(180%) blur(18px);
-    backdrop-filter: saturate(180%) blur(18px);
+    background-color: color-mix(in oklab, var(--glass-tint) 92%, transparent);
+    /* Kept, and it does work wherever this panel is not hanging from the
+       blurred bar — but it is no longer what the look depends on. */
+    -webkit-backdrop-filter: saturate(160%) blur(20px);
+    backdrop-filter: saturate(160%) blur(20px);
     box-shadow:
+      /* The lit top edge, inside the panel: the one thing that says "glass"
+         without spending a drop of legibility. */
+      inset 0 1px 0 color-mix(in oklab, #ffffff 70%, transparent),
       0 2px 6px color-mix(in oklab, var(--color-shadow) 10%, transparent),
       0 24px 48px -24px color-mix(in oklab, var(--color-shadow) 38%, transparent);
   }

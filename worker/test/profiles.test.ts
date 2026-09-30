@@ -192,6 +192,35 @@ async function main() {
     'and it is recorded as a FAILURE, so the dashboard shows it in red rather than as a completed instruction',
   );
 
+  /*
+   * EVERY COMMAND THE SCREEN CAN SEND, THE DATABASE WILL ACCEPT.
+   *
+   * social_worker_commands.command carries a CHECK that lists the commands by
+   * name. Two were added to the app and not to that list, so the insert was
+   * refused before the machine heard of it — the owner pressed "חפש
+   * פרופילים", nothing happened, and every explanation pointed at the worker,
+   * which had done nothing wrong and had not even been asked.
+   *
+   * Three files have to agree on this set and none of them can see the others,
+   * so the agreement is checked rather than remembered.
+   */
+  {
+    const types = readFileSync(new URL('../../src/lib/social/types.ts', import.meta.url), 'utf8');
+    const union = types.match(/export type WorkerCommandName =([^;]+);/)?.[1] ?? '';
+    const named = [...union.matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
+    is(named.length >= 7, `the app names its commands (${named.join(', ')})`);
+
+    const sql = readFileSync(new URL('../../supabase/social-latest.sql', import.meta.url), 'utf8');
+    /* The LAST one wins when the file is run top to bottom, so that is the one
+       that decides — an earlier, shorter list further up is harmless. */
+    const checks_ = [...sql.matchAll(/check \(command in \(([^)]*)\)\)/g)];
+    is(checks_.length > 0, 'the migration constrains which commands may be inserted');
+    const allowed = [...(checks_.at(-1)?.[1] ?? '').matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
+    for (const c of named) {
+      is(allowed.includes(c), `the database accepts '${c}' — a command the app can send and the database refuses is a button that does nothing`);
+    }
+  }
+
   console.log(`profile switcher tests OK — ${checks} assertions`);
 }
 

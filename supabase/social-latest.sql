@@ -1189,3 +1189,20 @@ comment on column public.social_workers.fb_profiles is
   'Profiles Facebook''s account menu offered, as [{id,name}]. Written by the worker from what it read; [] means never read, or read and empty.';
 comment on column public.social_workers.fb_profiles_at is
   'When that list was last read. Null when it never was — which the screen must not present as "no other profiles".';
+
+-- AND THE DATABASE HAS TO ALLOW THE TWO NEW INSTRUCTIONS.
+--
+-- social_worker_commands.command carries a CHECK that lists every command by
+-- name, and v21 added two — 'profiles' and 'switch' — without touching it. So
+-- the dashboard's button was refused by the database before the machine ever
+-- heard of it: pressed, nothing happened, and the reason was a constraint
+-- nobody was looking at.
+--
+-- The list is replaced rather than extended, because that is the only form
+-- that is safe to run twice.
+
+alter table public.social_worker_commands
+  drop constraint if exists social_worker_commands_command_check;
+alter table public.social_worker_commands
+  add constraint social_worker_commands_command_check
+  check (command in ('login', 'check', 'logout', 'resume', 'verify', 'profiles', 'switch'));

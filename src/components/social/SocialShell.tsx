@@ -355,7 +355,21 @@ export function SocialShell({
       confirmLabel: 'עבור',
     });
     if (!ok) return;
-    setSwitchNote(null);
+    /*
+     * THE COMPUTER IS THE ONE THAT DOES THIS, and when it is not running there
+     * is nothing to wait for.
+     *
+     * The bar knows — the monitor icon two controls away is already saying
+     * "כבוי" — and it said nothing, so the ring turned for two and a half
+     * minutes over a queue nobody was reading. The request is still stored,
+     * because it will run the moment the machine comes up; what changes is that
+     * the screen says which of the two is happening.
+     */
+    setSwitchNote(
+      pcOnline === false
+        ? 'התוכנה במחשב לא פועלת כרגע, אז המעבר לא יקרה עדיין. שמרנו את הבקשה — היא תתבצע ברגע שהתוכנה תעלה. במחשב: לחצו פעמיים על start-worker.cmd.'
+        : null,
+    );
     /* The name and the logo go up NOW. Nothing about the computer's work has
        changed; what changed is that the screen answers the tap. */
     setPending({ name, kind, image: row?.image });
@@ -483,8 +497,15 @@ export function SocialShell({
     ? /* While a switch is in flight this outranks everything else the line can
          say, because it is the one fact the owner is waiting on and it is about
          the name printed beside it. Anything else here would look like a
-         statement about the identity now showing. */
-      { label: 'מעביר פרופיל…', tone: 'brand' as const }
+         statement about the identity now showing.
+         *
+         * AND IT DISTINGUISHES WAITING FROM WORKING. "מעביר פרופיל…" over a
+         * computer that is switched off is a sentence about something that is
+         * not happening — the owner watched that ring turn with the monitor
+         * icon beside it already reading "כבוי". */
+      pcOnline === false
+      ? { label: 'המחשב כבוי — הבקשה ממתינה לו', tone: 'warn' as const }
+      : { label: 'מעביר פרופיל…', tone: 'brand' as const }
     : systemState
     ? { label: SYSTEM_STATE_LABEL[systemState], tone: SYSTEM_STATE_TONE[systemState] }
     : publishingStopped
@@ -598,10 +619,18 @@ export function SocialShell({
                   <SparklesIcon className="h-5 w-5" />
                 </span>
               )}
+              {/* Turning only while something is actually turning: with the
+                  computer off the ring goes still and amber, matching the line
+                  under the greeting. A spinner over a machine that is not
+                  running is the animation equivalent of a lie. */}
               {pending && (
                 <span
                   aria-hidden
-                  className="absolute -inset-0.5 rounded-full border-2 border-brand-300/25 border-t-brand-400 motion-safe:animate-spin"
+                  className={
+                    pcOnline === false
+                      ? 'absolute -inset-0.5 rounded-full border-2 border-warning-400/70'
+                      : 'absolute -inset-0.5 rounded-full border-2 border-brand-300/25 border-t-brand-400 motion-safe:animate-spin'
+                  }
                 />
               )}
             </span>

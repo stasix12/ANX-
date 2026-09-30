@@ -620,6 +620,47 @@ async function main() {
     );
   }
 
+  /* ------- 8. the wait in front of the loop may never end the process ------ */
+  /*
+   * THE CRASH THE OWNER SAW AS "כבוי".
+   *
+   * The idle wait grew a database read so that a tap on his phone would be
+   * picked up in a second instead of five. It sits OUTSIDE the loop's
+   * try/catch — it used to be a sleep, and a sleep cannot fail — and
+   * workerDb() throws when a Supabase sign-in or token refresh fails, which is
+   * an ordinary night on a home connection. One such failure ended the process:
+   * the queue stopped, the switch he had asked for sat unread, and the only
+   * sign of any of it was a monitor icon reading "off".
+   *
+   * The publishing loop survives everything it meets. The waiting in front of it
+   * has to as well.
+   */
+  {
+    const idle = worker.slice(worker.indexOf('async function idleWait('), worker.indexOf('async function nextAllowedAt('));
+    is(idle.length > 200, 'the idle wait is where this is decided');
+    is(
+      /try \{[\s\S]*?await workerDb\(\)[\s\S]*?\} catch \{/.test(idle),
+      'its database read is inside a try/catch — a failed read is one unanswered slice of waiting, never the end of the program',
+    );
+    is(
+      /await idleWait\(state\.id\)\.catch\(\(\) => undefined\)/.test(worker),
+      'and the call is guarded too, because "the wait cannot fail" is exactly what was believed last time',
+    );
+  }
+
+  /* ---- 9. and the screen tells "working" apart from "nothing is running" --- */
+  {
+    const shell = readFileSync(new URL('../../src/components/social/SocialShell.tsx', import.meta.url), 'utf8');
+    is(
+      /pcOnline === false\n?\s*\? \{ label: 'המחשב כבוי — הבקשה ממתינה לו'/.test(shell),
+      'a switch asked of a computer that is switched off says so, instead of turning a ring over a queue nobody is reading',
+    );
+    is(
+      /התוכנה במחשב לא פועלת כרגע/.test(shell),
+      'and it says it at the moment it is asked for, with what to do about it',
+    );
+  }
+
   console.log(`profile switcher tests OK — ${checks} assertions`);
 }
 

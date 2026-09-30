@@ -390,7 +390,9 @@ async function main(): Promise<void> {
        pace is the queue's to set, and it already sets it: the next row is
        claimed only if its own instant has come and the spacing rule lets it
        through. This sleep was only ever meant for an idle worker. */
-    if (!state.worked) await idleWait(state.id);
+    /* And the call itself is guarded too, because "the wait cannot fail" is
+       exactly what was believed the last time this ended the process. */
+    if (!state.worked) await idleWait(state.id).catch(() => undefined);
   }
   await heartbeat(state, 'offline');
   await session.close();
@@ -432,17 +434,36 @@ async function idleWait(workerId: string): Promise<void> {
   while (Date.now() < until && !stopping) {
     await sleep(Math.max(200, Math.min(env.commandPollMs, until - Date.now())));
     if (stopping) return;
-    const db = await workerDb();
-    const { data } = await db
-      .from('social_worker_commands')
-      .select('id')
-      .eq('status', 'pending')
-      .or(`worker_id.eq.${workerId},worker_id.is.null`)
-      .limit(1);
-    const id = (data?.[0] as { id?: string } | undefined)?.id ?? '';
-    if (id && id !== wokeForCommand) {
-      wokeForCommand = id;
-      return;
+    /*
+     * NOTHING IN HERE MAY THROW, AND THE FIRST VERSION COULD.
+     *
+     * This runs OUTSIDE the loop's try/catch — it is the sleep, and a sleep
+     * could never fail. Then it grew a database read: workerDb() throws when a
+     * Supabase sign-in or token refresh fails, which is a thing that happens to
+     * a machine left running all night on a home connection. The exception
+     * escaped the `while`, the process ended, and the owner's screen said
+     * "כבוי" over a switch that never happened and a queue that had stopped.
+     *
+     * The publishing loop survives every error it meets, by design. The wait in
+     * front of it has to as well: a failed read here is not news, it is one
+     * slice of waiting that asked nothing, and the ordinary tick asks again.
+     */
+    try {
+      const db = await workerDb();
+      const { data } = await db
+        .from('social_worker_commands')
+        .select('id')
+        .eq('status', 'pending')
+        .or(`worker_id.eq.${workerId},worker_id.is.null`)
+        .limit(1);
+      const id = (data?.[0] as { id?: string } | undefined)?.id ?? '';
+      if (id && id !== wokeForCommand) {
+        wokeForCommand = id;
+        return;
+      }
+    } catch {
+      /* Deliberately silent: one unanswered slice. The tick that follows this
+         wait reports anything that is genuinely wrong, in the owner's words. */
     }
   }
 }

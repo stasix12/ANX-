@@ -9,6 +9,7 @@ import { checkCampaignInvariants, checkQueueInvariants, takeUnreported, type Inv
 import {
   ALL_QUEUE_STATUSES,
   AUTOMATIC_WAITING_STATUSES,
+  NEEDS_HUMAN_STATUSES,
   TERMINAL_STATUSES,
   CANCELLABLE_STATUSES,
   OPEN_STATUSES,
@@ -698,6 +699,38 @@ export async function listQueue(
   if (opts.since) q = q.gte('scheduled_at', opts.since);
   if (opts.until) q = q.lte('scheduled_at', opts.until);
   return unwrap<QueueRow[]>(await q);
+}
+
+/**
+ * The IDs of every publication that is waiting on a PERSON, and nothing else
+ * about them.
+ *
+ * The dashboard's orange bar already knows how many there are — queueSummary()
+ * counts them. What it did not know is WHICH, and without that the only kind
+ * of "I have seen this" it could offer was a flag that hides the next one too
+ * (see seen.ts). So: one column, no join, no media, no target. It rides in the
+ * dashboard's existing Promise.all and is by a distance the cheapest read in
+ * it.
+ *
+ * THE LIMIT IS LOAD-BEARING AND SO IS RETURNING A SHORT LIST HONESTLY. A
+ * capped result would let the screen mark "everything" as seen while holding
+ * only the first slice of it, and the rows past the cap would then be hidden
+ * by a tap that never showed them. The caller compares this list's length
+ * against the counted total and simply does not offer to dismiss when the two
+ * disagree — which is why this returns what it got rather than paging.
+ */
+export const WAITING_FOR_YOU_LIMIT = 200;
+
+export async function listWaitingForYouIds(): Promise<string[]> {
+  const rows = unwrap<{ id: string }[]>(
+    await db()
+      .from('social_queue')
+      .select('id')
+      .in('status', NEEDS_HUMAN_STATUSES)
+      .order('scheduled_at', { ascending: true })
+      .limit(WAITING_FOR_YOU_LIMIT),
+  );
+  return rows.map((r) => r.id);
 }
 
 export async function getQueueItem(id: string): Promise<QueueRow | null> {

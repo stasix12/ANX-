@@ -32,6 +32,7 @@ import {
   listTimelineDone,
   listQueue,
   listTargets,
+  listWaitingForYouIds,
   listWorkers,
   pauseCampaign,
   queueCampaignComment,
@@ -48,6 +49,7 @@ import {
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
+import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
 import { agree, counted, startOfZonedDay, startOfZonedWeek } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
@@ -137,6 +139,14 @@ interface DashboardData {
    * zero and must not be printed as one.
    */
   activeTargets: number | null;
+  /**
+   * The IDs of every row waiting on a PERSON — the ones the orange bar counts.
+   *
+   * Read as IDs and not as a number because the bar can now be answered: see
+   * lib/social/seen.ts. The count alone could only support a flag that hides
+   * the next one too.
+   */
+  waitingForYou: string[];
   manual: QueueRow[];
   log: ActivityEntry[];
   campaigns: Campaign[];
@@ -212,6 +222,13 @@ export default function SocialDashboard() {
   /* The manual refresh's own in-flight flag — the interval has one of its own
      (`running` below) and a tap must not be able to stack reads on top of it. */
   const [refreshing, setRefreshing] = useState(false);
+  /*
+   * The publications waiting on a person that this device has already shown
+   * him. Empty until the effect below reads it: localStorage does not exist on
+   * the server, and seeding state from it during render is the one way to make
+   * the first paint differ from the markup Next.js sent.
+   */
+  const [seen, setSeen] = useState<string[]>([]);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -237,7 +254,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, log, states, upcoming, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone] = await Promise.all([
+      const [queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, states, upcoming, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone] = await Promise.all([
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         /* The same midnight the tile beside it uses — one instant, so the two
@@ -254,6 +271,10 @@ export default function SocialDashboard() {
         getControl(),
         needTargets ? listTargets() : Promise.resolve(null),
         listQueue({ status: ['manual_pending'], limit: 20 }),
+        /* One column, no joins — see listWaitingForYouIds. It is the cheapest
+           read in this batch and the only one that knows WHICH rows the
+           orange bar is about. */
+        listWaitingForYouIds(),
         listActivity(30),
         campaignStates(liveIds),
         // Ascending, because the limit is applied after the sort: read
@@ -302,6 +323,7 @@ export default function SocialDashboard() {
         limits,
         control,
         activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
+        waitingForYou,
         manual,
         log,
         campaigns,
@@ -397,6 +419,56 @@ export default function SocialDashboard() {
    */
   const summary = data?.summary ?? EMPTY_QUEUE_SUMMARY;
   const pending = summary.cancellable;
+
+  /*
+   * "N פרסומים ממתינים לכם" — AND WHETHER HE HAS ALREADY BEEN SHOWN THEM.
+   *
+   * These rows move only when a person moves them, so the bar about them used
+   * to be permanent: looked at, understood, left alone deliberately, and still
+   * repeated on every load. The count below is of the ones he has NOT been
+   * shown, so pressing "הצג" once answers it — and a row that arrives
+   * afterwards raises it again, with its own number. lib/social/seen.ts holds
+   * the why.
+   *
+   * COVERAGE FIRST. listWaitingForYouIds() is capped, and a capped list would
+   * let one tap mark "everything" as seen while holding only the first slice
+   * of it — hiding rows that were never on screen. When the list and the
+   * counted total disagree the whole mechanism stands down: the bar counts the
+   * total, as it always did, and cannot be dismissed at all.
+   */
+  const waitingIds = data?.waitingForYou ?? [];
+  const waitingCovered = !!data && waitingIds.length === summary.needsHuman;
+  const waitingForYou = waitingCovered ? unseen(waitingIds, seen).length : summary.needsHuman;
+
+  useEffect(() => {
+    setSeen(readSeen());
+  }, []);
+
+  /*
+   * Narrowed to what is still waiting, on every load, and written back.
+   *
+   * This is what lets the same row raise the bar a second time: handled, it
+   * leaves the set; stuck again later, it is unseen again and says so. It is
+   * also the only thing stopping the key from growing for as long as this
+   * browser is used. `sameSeen` keeps it from writing — and re-rendering — on
+   * every one of the 30-second polls that change nothing.
+   */
+  useEffect(() => {
+    if (!data || !waitingCovered) return;
+    const next = keepSeen(seen, data.waitingForYou);
+    if (sameSeen(next, seen)) return;
+    setSeen(next);
+    writeSeen(next);
+  }, [data, waitingCovered, seen]);
+
+  /* Pressing "הצג" means "I am looking at these now" — and the screen it
+     opens lists exactly these rows, which is what makes that true. */
+  const markWaitingSeen = useCallback(() => {
+    if (!data || !waitingCovered) return;
+    const next = markAll(data.waitingForYou);
+    setSeen(next);
+    writeSeen(next);
+  }, [data, waitingCovered]);
 
   /**
    * Clears the queue. One implementation behind two entry points: beside
@@ -688,7 +760,11 @@ export default function SocialDashboard() {
          */
         (!data.workerOnline && summary.queued > 0) ||
         stalledSince ||
-        summary.needsHuman > 0 ||
+        /* The ones he has not been shown yet — not every one that exists.
+           Dismissing the bar has to take the state with it, or the header
+           keeps its amber dot and the panel keeps a headline reading "נדרשת
+           פעולה שלכם" with nothing under it saying which. */
+        waitingForYou > 0 ||
         data.workerNeedsAuth ||
         data.counts.paused > 0
         ? 'needs_intervention'
@@ -730,12 +806,20 @@ export default function SocialDashboard() {
               actionLabel: 'מה לעשות',
               href: '/social/settings#browser-status',
             }
-          : summary.needsHuman > 0
+          : waitingForYou > 0
             ? {
-                title: counted(summary.needsHuman, 'פרסום אחד ממתין לכם', 'פרסומים ממתינים לכם'),
+                title: counted(waitingForYou, 'פרסום אחד ממתין לכם', 'פרסומים ממתינים לכם'),
                 body: 'בדרך כלל פייסבוק ביקשה אימות בחלון הדפדפן שבמחשב, או שהפרסום מחכה לאישור שלכם.',
                 actionLabel: 'הצג',
+                /* ?status=needs_attention lands on the history screen's
+                   'ידניים' group, which is NEEDS_HUMAN_STATUSES entire — the
+                   same three statuses counted here. The list it opens is
+                   therefore exactly the rows being marked as shown. */
                 href: '/social/history?status=needs_attention',
+                /* Only offered while the ID list covers the count; see
+                   waitingCovered. Without it the bar behaves as it always
+                   did. */
+                onAction: waitingCovered ? markWaitingSeen : undefined,
               }
             : {
                 title: counted(data.counts.paused, 'פרסום אחד תקוע', 'פרסומים תקועים'),

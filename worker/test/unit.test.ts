@@ -1949,9 +1949,19 @@ const scenario: { step: string; line: string }[] = [];
    * disappearing off this row entirely.
    */
   pin('dashboard needs-you count', dash, 'summary.needsHuman ? `ועוד ${summary.needsHuman} דורשים אתכם`');
-  /* And it still decides the banner above the row, which is louder than the
-     tile ever was. */
-  pin('dashboard needs-you banner', dash, 'summary.needsHuman > 0');
+  /*
+   * And it still decides the banner above the row, which is louder than the
+   * tile ever was — now through `waitingForYou`, which is the same figure
+   * minus the rows this device has already SHOWN him (lib/social/seen.ts).
+   *
+   * The needle moves rather than disappearing, because the rule is unchanged:
+   * the dashboard does not get to re-derive who is waiting. Both branches
+   * below come from summary.needsHuman — one compares the ID list against it,
+   * the other falls back to it whole. worker/test/seen.test.ts is what holds
+   * the dismissal itself honest.
+   */
+  pin('dashboard needs-you banner', dash, 'waitingIds.length === summary.needsHuman');
+  pin('dashboard needs-you fallback', dash, 'unseen(waitingIds, seen).length : summary.needsHuman');
   // The cap is never printed as a total.
   pin('upcoming subtitle', dash, '`${summary.queued} ממתינים בתור`');
   assert.ok(!dash.includes('data.upcoming.length} ממתינים'), 'a capped array length must not be printed as the queue');

@@ -439,8 +439,17 @@ export function LiveQueueHero({
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
   workerOnline?: boolean;
-  /** What needs a person, and the one place to go and do it. */
-  intervention?: { title: string; body: string; actionLabel: string; href: string } | null;
+  /**
+   * What needs a person, and the one place to go and do it.
+   *
+   * `onAction` is present only when following the link ANSWERS the warning —
+   * today that is the "N פרסומים ממתינים לכם" bar, whose rows the screen
+   * behind the link lists in full, so arriving there is the same event as
+   * having been shown them. The other four cannot be answered by reading
+   * anything (a sleeping PC, a Chrome asking for a login) and must keep
+   * saying so until the machine's own state changes, so they omit it.
+   */
+  intervention?: { title: string; body: string; actionLabel: string; href: string; onAction?: () => void } | null;
 }) {
   const paused = systemState === 'paused';
   const now = useTick(Boolean(nextAt) && !paused);
@@ -715,7 +724,14 @@ export function LiveQueueHero({
         <div className="mt-3 rounded-xl border border-warning-400/30 bg-warning-400/12 px-3 py-2.5">
           <p dir="auto" className="text-[13px] font-extrabold leading-[17px] text-warning-400">{intervention.title}</p>
           <p dir="auto" className="mt-0.5 text-xs leading-4 text-mist-300">{intervention.body}</p>
-          <Link href={intervention.href} className="mt-1 inline-flex min-h-11 min-w-11 items-center gap-0.5 text-[13px] font-extrabold text-warning-400">
+          <Link
+            href={intervention.href}
+            /* Marked on the way out, not on the way back: the click is the
+               event, and a person who opens the list and then uses the back
+               button has still been shown it. */
+            onClick={intervention.onAction}
+            className="mt-1 inline-flex min-h-11 min-w-11 items-center gap-0.5 text-[13px] font-extrabold text-warning-400"
+          >
             {intervention.actionLabel}
             <ChevronIcon aria-hidden className="h-4 w-4 rtl:rotate-180" />
           </Link>

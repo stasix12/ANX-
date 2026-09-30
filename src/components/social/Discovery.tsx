@@ -69,14 +69,26 @@ export function GroupRow({
   onHide: () => void;
 }) {
   /*
-   * ADDING TO THE PUBLISHING LIST IS OFFERED ONLY WHERE IT MAKES SENSE.
+   * ADDED ONLY WHERE THE SEARCH SAID HE IS A MEMBER. Not "not proven
+   * otherwise" — SAID.
    *
-   * A group he is not in cannot be published to, so the button would queue
-   * publications that fail one by one — the row says what to do first instead.
-   * 'unknown' counts as offerable: the search simply did not say, and he is
-   * the one who knows.
+   * This read `!== 'none' && !== 'requested'`, so a row whose membership the
+   * card did not state got the button too, on the reasoning that the search
+   * did not know and he does. The owner read the result exactly as it looks:
+   * "זה נותן לי לצרף לרשימה קבוצות שאני עדיין לא חבר בהם". He was right and
+   * the reasoning was wrong — a screen that has nothing to say about a group
+   * must not offer an action whose whole meaning is "you are in this one".
+   * Every such row would have become a publishing target that fails once a
+   * day, with a sensible-looking reason, for ever.
+   *
+   * The same rule as the bulk button above the list, deliberately: two
+   * controls that add groups may not disagree about which groups they mean.
+   *
+   * A group he IS in that the card stayed silent about is not lost — it
+   * resolves on the next search, and "+ הוסף" on the groups screen takes its
+   * link. Both cost him a step. Neither queues a publication that cannot work.
    */
-  const canAdd = !already && row.membership !== 'none' && row.membership !== 'requested';
+  const canAdd = !already && row.membership === 'member';
 
   const facts = [
     row.members !== null ? `${membersText(row.members)} חברים` : '',

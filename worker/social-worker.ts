@@ -1413,8 +1413,23 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             result = found.problem;
           } else {
             const wrote = await recordDiscovered(phrase, found.groups, found.pictures);
+            /*
+             * THE PICTURE COUNT IS IN THE SENTENCE ON PURPOSE.
+             *
+             * When the rows came back showing letters instead of pictures
+             * there was no way to tell from the outside which half had failed
+             * — the fetch through Facebook, or the upload to storage — and the
+             * owner is on a Supabase account that is over its quota, where an
+             * upload really can be refused. A number he can read means the
+             * next report is "0 תמונות" or "54 תמונות" rather than "still
+             * letters", and those are different bugs.
+             *
+             * Printed only when pictures were asked for at all: a re-search
+             * that needed none would otherwise report zero and look broken.
+             */
+            const shots = need.length ? ` ${wrote.pictures} תמונות.` : '';
             result = found.groups.length
-              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
+              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${shots}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
               : 'לא נמצאו קבוצות למילה הזאת.';
           }
         }
@@ -2217,8 +2232,8 @@ async function recordDiscovered(
   phrase: string,
   groups: DiscoveredGroup[],
   pictures: Map<string, { bytes: Buffer; contentType: string }> = new Map(),
-): Promise<{ fresh: number }> {
-  if (!groups.length) return { fresh: 0 };
+): Promise<{ fresh: number; pictures: number }> {
+  if (!groups.length) return { fresh: 0, pictures: 0 };
   const db = await workerDb();
   const stored = await storeDiscoveryPictures(pictures);
   const normalized = normalizeQuery(phrase);
@@ -2274,7 +2289,7 @@ async function recordDiscovered(
   if (search?.id) await db.from('social_discovery_searches').update(patch).eq('id', search.id);
   else await db.from('social_discovery_searches').insert(patch);
 
-  return { fresh };
+  return { fresh, pictures: stored.size };
 }
 
 async function recordProfiles(state: WorkerState, profiles: FacebookProfile[]): Promise<void> {

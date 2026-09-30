@@ -391,6 +391,12 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(/page\.request\.get\(g\.image/.test(browser), "the bytes are fetched through the browser's own session, which is what makes a signed URL answer at all");
   is(/bytes\.length < 500/.test(browser), 'a tracking pixel or an error page is not a picture, and would replace an initial with a blank square');
 
+  /* The count reaches the owner, so "still letters" can be told apart from
+     "the upload was refused" — he is on a storage account over its quota. */
+  is(/pictures: stored\.size/.test(worker), 'how many pictures were really stored is returned, not assumed');
+  is(/wrote\.pictures\} תמונות/.test(worker), 'and printed in the sentence he reads');
+  is(/need\.length \? ` \$\{wrote\.pictures\}/.test(worker), 'but only when pictures were asked for — a re-search needing none would otherwise report zero and look broken');
+
   /* Fetched once in the life of a row, on an account already over its storage
      quota — so a re-search must cost nothing. */
   is(/opts\.pictures \?\? \[\]/.test(browser), 'only the ids the caller still needs are fetched');
@@ -421,6 +427,22 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   const block = page.slice(page.indexOf('const joinedNotListed'), page.indexOf('const hiddenCount'));
 
   is(/r\.membership === 'member'/.test(block), 'the bulk button counts only groups the search said he is a MEMBER of');
+
+  /*
+   * AND THE PER-ROW BUTTON AGREES WITH IT.
+   *
+   * It did not. It offered itself whenever membership was not 'none' or
+   * 'requested', so a row the card said nothing about got "הוסף לרשימה" —
+   * "זה נותן לי לצרף לרשימה קבוצות שאני עדיין לא חבר בהם". Every one of those
+   * becomes a publishing target that fails once a day with a sensible-looking
+   * reason. Two controls that add groups may not disagree about which groups
+   * they mean.
+   */
+  const rowSrc = readFileSync(new URL('../../src/components/social/Discovery.tsx', import.meta.url), 'utf8');
+  is(
+    /const canAdd = !already && row\.membership === 'member';/.test(rowSrc),
+    "A ROW ONLY OFFERS \"הוסף לרשימה\" WHERE THE SEARCH SAID HE IS A MEMBER — not where it merely failed to say otherwise",
+  );
   is(
     !/'unknown'/.test(block),
     "AND NOT THE UNKNOWN ONES — the per-row button may offer itself for those because he is looking at one group and knows; a bulk press cannot borrow that, and would put groups he never joined into the publishing list",

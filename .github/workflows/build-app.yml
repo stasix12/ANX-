@@ -242,7 +242,22 @@ jobs:
             # about the repository. Said out loud, and carried on with.
             Write-Host "::notice::the anonymous check did not answer (HTTP $($anon.StatusCode)) — almost certainly the runner's shared rate limit. The repository is public, so publishing continues."
           }
-          Write-Host "update feed ready: $feed"
+          # AND CAN THE TOKEN WRITE THERE?
+          #
+          # Reading the repository and being allowed to publish to it are two
+          # different grants, and a fine-grained token can easily have the
+          # first without the second. That is what happened: everything passed,
+          # 344 MB went up, and the upload failed at the end with a stack trace
+          # whose only real content was a header — "x-accepted-github-
+          # permissions: contents=write".
+          #
+          # The repository response already carries the answer in
+          # permissions.push, so it costs nothing to ask before the upload
+          # rather than after it.
+          if (-not ($withKey.Content | ConvertFrom-Json).permissions.push) {
+            throw "The UPDATES_TOKEN can READ $feed but not write to it, so the release cannot be published. Open https://github.com/settings/personal-access-tokens, edit the token, and under Repository permissions set Contents to 'Read and write' (it is currently read-only)."
+          }
+          Write-Host "update feed ready: $feed (readable and writable)"
 
           $url = "https://api.github.com/repos/stasix12/https-github.com-new/releases/tags/v$version"
           try {

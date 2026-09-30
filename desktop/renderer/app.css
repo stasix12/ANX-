@@ -90,7 +90,33 @@ aside a .count {
 aside a.on .count { background: rgba(255,255,255,.24); }
 aside .foot { margin-top: auto; padding: var(--s3); font-size: 11px; color: #6f7791; }
 
-main { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+/*
+ * `min-height: 0`, AND THE OWNER PAID FOR IT.
+ *
+ * "לא נותן לי לגלול למטה" — on the settings screen, on a laptop, in a window
+ * that was not maximised. The account card holding "נתק את המחשב" and "נתק
+ * פייסבוק" sat 182px below the bottom edge and there was no way to reach it:
+ * not a hidden scrollbar, nothing to scroll at all. Measured in the real
+ * renderer at 1100x620 — `main` was 960px tall inside a 620px window, and
+ * `.page` reported clientHeight === scrollHeight.
+ *
+ * WHY. `main` is a grid item of #shell, and a grid item defaults to
+ * `min-height: auto` — "never shrink below your content". So it grew past the
+ * window instead of being held to it, and `.page` inside it was never shorter
+ * than what it contained, so its `overflow-y: auto` had nothing to do.
+ * `overflow` alone does not make a box scroll; it only scrolls a box that
+ * something else has constrained.
+ *
+ * ONE LINE AND NOT TWO. The obvious second half — the same property on
+ * `.page` — was written, measured, and removed: `.page` carries
+ * `overflow-y: auto`, which already sets its automatic minimum size to zero,
+ * so the line changed nothing. worker/test/desktop-window.test.ts passed
+ * with it deleted, which is how that was established rather than argued.
+ *
+ * It surfaced on this screen first because settings is the tallest page. It
+ * was waiting for every other one.
+ */
+main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
 
 header.top {
   display: flex; align-items: center; gap: var(--s4);

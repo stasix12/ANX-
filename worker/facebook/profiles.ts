@@ -59,6 +59,28 @@ export interface FacebookProfile {
    * is the only thing in that menu that says so.
    */
   kind: ProfileKind;
+  /*
+   * THE ROW'S OWN PICTURE — a Page's logo, a person's face.
+   *
+   * "שזה ישר יעבור לשם שבחרתי יחד אם הלוגו שלו". The dashboard could show the
+   * NAMES of the other profiles the moment they were read, but not their
+   * pictures: the only face this product ever photographed was the signed-in
+   * one, so every other row was an initial in a grey circle, and the header
+   * could not show the chosen identity until the switch had finished and the
+   * new avatar had been uploaded — half a minute later.
+   *
+   * Photographed from the element rather than taken as a URL, for the reason
+   * account.ts gives at length: Facebook's CDN links are signed and expire, so
+   * a stored link is a picture that works today and is a broken image next
+   * week.
+   *
+   * Absent is normal and is not an error: a row Facebook drew without a
+   * picture, or one we could not photograph, keeps whatever was stored for
+   * that name before and falls back to the initial. A picture is never
+   * invented and never borrowed from another row — a face beside the wrong
+   * name is the mistake account.ts was rewritten to stop making.
+   */
+  image?: { bytes: Buffer; contentType: string } | null;
 }
 
 export interface ProfileRead {
@@ -171,10 +193,25 @@ async function openAccountMenu(page: Page): Promise<ElementHandle<Element> | nul
  * rows come BEFORE the anchor — and doing that from outside would mean a
  * round trip per candidate on a menu that Facebook may close underneath us.
  */
-async function rowsInMenu(menu: ElementHandle<Element>): Promise<{ names: { name: string; kind: ProfileKind }[]; note: ProfileRead['note'] }> {
+async function rowsInMenu(
+  menu: ElementHandle<Element>,
+  mark: boolean,
+): Promise<{ names: { name: string; kind: ProfileKind }[]; note: ProfileRead['note'] }> {
   return await menu.evaluate((root, source) => {
     const allProfiles = new RegExp(source.allProfiles, 'i');
     const noise = new RegExp(source.menuStuff, 'i');
+
+    /*
+     * LAST TIME'S MARKS COME OFF FIRST.
+     *
+     * The rows are marked so that the picture in each one can be photographed
+     * from outside the page — an index is the only handle these rows give us,
+     * since they carry no id, no class and usually no link. This menu is read
+     * more than once on the same page (a switch reads it, presses a row, and
+     * reads it again afterwards), and a mark left from the previous read would
+     * point the camera at the row that used to be in that position.
+     */
+    for (const stale of Array.from(root.querySelectorAll('[data-anx-row]'))) stale.removeAttribute('data-anx-row');
 
     const candidates = Array.from(
       root.querySelectorAll('div[role="button"], div[role="menuitem"], a[role="link"], a[role="menuitem"], a'),
@@ -238,11 +275,50 @@ async function rowsInMenu(menu: ElementHandle<Element>): Promise<{ names: { name
       /* The label says which it is, whether it sits on its own line or ran
          into the name above. Anything without it is a person. */
       const labelled = /(^|[\s·|-])(דף|page|страница)$/i.test(lines[1] ?? '') || /[\s·|-](דף|page|страница)$/i.test(lines[0]);
+      /* The row's position in the answer, written onto the row itself, so the
+         camera outside can find exactly this one. Only when pictures were
+         asked for: nothing touches Facebook's DOM for a read that has no use
+         for it. */
+      if (source.mark) el.setAttribute('data-anx-row', String(names.length));
       names.push({ name, kind: labelled ? 'page' : 'profile' });
     }
     return { names, note: names.length ? ('ok' as const) : ('no-rows' as const) };
-  }, { allProfiles: patterns.allProfiles.source, menuStuff: patterns.menuStuff.source });
+  }, { allProfiles: patterns.allProfiles.source, menuStuff: patterns.menuStuff.source, mark });
 }
+
+/**
+ * Photograph the picture inside one marked row.
+ *
+ * `img` OR `svg`, because Facebook draws these both ways, and only a node that
+ * is actually the size of an avatar: a 1px tracking pixel and a 10px badge are
+ * both `img` elements inside these rows, and either one photographed would put
+ * a smudge on the dashboard beside somebody's name.
+ *
+ * Every failure returns null. This rides on a read that must not fail because
+ * a picture did — the names are the feature, the pictures make it pleasant.
+ */
+async function rowPicture(menu: ElementHandle<Element>, index: number): Promise<FacebookProfile['image']> {
+  const nodes = await menu.$$(`[data-anx-row="${index}"] img, [data-anx-row="${index}"] svg`).catch(() => []);
+  for (const node of nodes) {
+    const box = await node.boundingBox().catch(() => null);
+    if (!box || box.width < 14 || box.height < 14) continue;
+    const bytes = await node.screenshot({ type: 'png', timeout: 5_000 }).catch(() => null);
+    /* A sane avatar is kilobytes; the bound is account.ts's, for the same
+       reason — a "picture" measured in megabytes is not one. */
+    if (bytes?.length && bytes.length < 8_000_000) return { bytes, contentType: 'image/png' };
+  }
+  return null;
+}
+
+/**
+ * How many rows we are willing to photograph.
+ *
+ * The menu holds a handful of profiles; this is a bound against a read that
+ * went wrong, not a product limit. Each picture is one screenshot on somebody
+ * else's real account, and a loop with no ceiling on markup we do not own is
+ * how a two-second read becomes a two-minute one.
+ */
+const PICTURE_LIMIT = 12;
 
 /**
  * Every profile this account can switch to, the signed-in one included.
@@ -251,12 +327,22 @@ async function rowsInMenu(menu: ElementHandle<Element>): Promise<{ names: { name
  * rides on a page that is already open, and a failure here must never fail the
  * thing that opened it.
  */
-export async function readProfiles(page: Page): Promise<ProfileRead> {
+export async function readProfiles(page: Page, opts?: { pictures?: boolean }): Promise<ProfileRead> {
   const menu = await openAccountMenu(page);
   if (!menu) return { profiles: [], note: 'no-menu' };
   try {
-    const { names, note } = await rowsInMenu(menu);
-    return { profiles: names.map((r) => ({ id: '', name: r.name, kind: r.kind })), note };
+    const wantPictures = Boolean(opts?.pictures);
+    const { names, note } = await rowsInMenu(menu, wantPictures);
+    const profiles: FacebookProfile[] = [];
+    for (let i = 0; i < names.length; i += 1) {
+      profiles.push({
+        id: '',
+        name: names[i].name,
+        kind: names[i].kind,
+        image: wantPictures && i < PICTURE_LIMIT ? await rowPicture(menu, i) : null,
+      });
+    }
+    return { profiles, note };
   } finally {
     /* Put the menu back the way it was found. Escape rather than a click
        somewhere neutral, which on Facebook is never reliably neutral. */
@@ -276,7 +362,7 @@ export async function switchProfile(page: Page, name: string): Promise<'clicked'
   const menu = await openAccountMenu(page);
   if (!menu) return 'no-menu';
 
-  const { names } = await rowsInMenu(menu);
+  const { names } = await rowsInMenu(menu, false);
   /* Only a row this reader itself returned may be pressed. Without this the
      locator below could match the same words anywhere inside the menu. */
   if (!names.some((r) => r.name === name)) {

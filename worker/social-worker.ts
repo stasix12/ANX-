@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Page } from 'playwright-core';
@@ -35,6 +36,7 @@ import { matchPosts, ourPostsInGroup } from './facebook/postIndex';
 import { cleanupMedia, downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
+import type { FacebookProfile } from './facebook/profiles';
 import { BrowserSession, SessionError, recentPageOpens } from './facebook/session';
 import { NO_ACCOUNT, queueScope } from '@/lib/social/account-scope';
 import { captureScreenshot } from './screenshots';
@@ -1950,13 +1952,61 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
  * did not, and that answer has already been given to the command. Losing the
  * list costs a button press to read it again.
  */
-async function recordProfiles(state: WorkerState, profiles: { id: string; name: string; kind: 'profile' | 'page' }[]): Promise<void> {
+async function recordProfiles(state: WorkerState, profiles: FacebookProfile[]): Promise<void> {
   const db = await workerDb();
   state.profiles = profiles.map((p) => ({ name: p.name, kind: p.kind }));
   markIdentity(state);
+
+  /*
+   * THE PICTURE OF EACH IDENTITY, so the app can show the one that was chosen
+   * the instant it is chosen — "שזה ישר יעבור לשם שבחרתי יחד אם הלוגו שלו".
+   *
+   * THE PATH IS DERIVED FROM THE NAME, not from the row's position. An index
+   * would be reused: Facebook reorders that menu (the signed-in profile moves
+   * to the top after a switch), so `…-p0.png` would hold the personal face one
+   * minute and the business logo the next, and every screen that had already
+   * loaded the first one would keep showing it beside the other name. A digest
+   * of the name is stable for as long as the name is, which is exactly as long
+   * as the picture is right.
+   *
+   * A ROW WITH NO NEW PICTURE KEEPS THE ONE IT HAD. Same rule as the avatar in
+   * recordAccount: failing to photograph a face is a transient failure, and
+   * blanking a good picture over it would make the list flicker between logos
+   * and initials. Only a name that never had one shows an initial.
+   */
+  const { data: kept } = await db.from('social_workers').select('fb_profiles').eq('id', state.id).maybeSingle();
+  const before = new Map<string, string>();
+  for (const row of ((kept as { fb_profiles?: { name?: string; image?: string }[] } | null)?.fb_profiles ?? [])) {
+    if (row?.name && row.image) before.set(row.name, row.image);
+  }
+
+  const stored: { id: string; name: string; kind: 'profile' | 'page'; image: string }[] = [];
+  for (const p of profiles) {
+    let image = before.get(p.name) ?? '';
+    if (p.image) {
+      const slug = createHash('sha1').update(p.name).digest('hex').slice(0, 16);
+      const objectPath = `workers/${state.id}-p-${slug}.png`;
+      const up = await db.storage
+        .from('social-media')
+        .upload(objectPath, p.image.bytes, { contentType: p.image.contentType, upsert: true });
+      if (up.error) {
+        /* Reported and then ignored, in the terminal only: the names are the
+           feature and they are already in hand. The avatar's own upload failure
+           reaches the activity log because without it the dashboard shows no
+           face at all; this one costs a logo beside a name that is right. */
+        console.error(`[worker] ℹ לא נשמרה תמונת הפרופיל "${p.name}":`, up.error.message);
+      } else {
+        // The path is stable per name, so the cache-buster is what makes a
+        // replaced logo actually appear.
+        image = `${db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl}?v=${Date.now()}`;
+      }
+    }
+    stored.push({ id: p.id, name: p.name, kind: p.kind, image });
+  }
+
   const { error } = await db
     .from('social_workers')
-    .update({ fb_profiles: profiles, fb_profiles_at: new Date().toISOString() })
+    .update({ fb_profiles: stored, fb_profiles_at: new Date().toISOString() })
     .eq('id', state.id);
   if (error) {
     console.error('[worker] ✗ שמירת רשימת הפרופילים נכשלה:', error.message);

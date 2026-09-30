@@ -295,7 +295,16 @@ export class BrowserSession {
       if (kind === 'login' || !(await this.hasLoginCookie())) {
         return { profiles: [], detail: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".' };
       }
-      const read = await readProfiles(page);
+      /*
+       * WITH THE PICTURES, and only here.
+       *
+       * This is the one command whose whole purpose is to build the list the
+       * owner picks from, so it is the right place to pay a second for each
+       * face. The switch below reads the menu again afterwards and takes them
+       * too — a list whose pictures went stale the moment it was used would be
+       * a list that shows logos once.
+       */
+      const read = await readProfiles(page, { pictures: true });
       if (read.profiles.length) {
         return { profiles: read.profiles, detail: `נמצאו ${read.profiles.length} פרופילים בחשבון הזה.` };
       }
@@ -363,7 +372,7 @@ export class BrowserSession {
         }
         return { ok: false, detail: `פייסבוק לא השלימה את המעבר ל"${name}". החשבון נשאר כפי שהיה.`, account };
       }
-      const read = await readProfiles(page).catch(() => null);
+      const read = await readProfiles(page, { pictures: true }).catch(() => null);
       return {
         ok: true,
         detail: `עברנו לפרופיל "${account?.name || name}". מכאן כל פרסום יוצא ממנו.`,

@@ -147,6 +147,127 @@ async function main() {
     await page.close();
   }
 
+  /* ------------------------ 4b. the logo of each identity, off its own row ---- */
+  /*
+   * WHY PICTURES AT ALL: "שזה ישר יעבור לשם שבחרתי יחד אם הלוגו שלו". The app
+   * could show the other identities' NAMES the moment they were read, but the
+   * only face this product had ever photographed was the signed-in one — so the
+   * bar could not show the chosen identity until the whole switch had finished
+   * and a new avatar had been uploaded, half a minute later. With a picture
+   * stored per name the app answers the tap immediately.
+   *
+   * WHAT CAN GO WRONG IS NOT "no picture". It is the WRONG picture: a camera
+   * pointed at the first image in the row photographs a tracking pixel, and one
+   * pointed at a stale marker photographs the row that used to be in that
+   * position — a face beside somebody else's name, which is the exact mistake
+   * account.ts was rewritten to stop making, one size smaller.
+   */
+  let firstShots = new Map<string, Buffer | undefined>();
+  {
+    const page = await context.newPage();
+    await page.goto(fixture);
+    const read = await readProfiles(page, { pictures: true });
+    eq(
+      read.profiles.map((p) => p.name),
+      ['Dor Moyal', 'Air Master', 'הפתרון המבריק', 'FreshWave – ניקוי עמוק למזגנים'],
+      'asking for the pictures does not change the reading — the same rows, in the same order',
+    );
+    firstShots = new Map(read.profiles.map((p) => [p.name, p.image?.bytes]));
+
+    const dor = firstShots.get('Dor Moyal');
+    const page1 = firstShots.get('הפתרון המבריק');
+    is(dor && dor.length > 0, 'a row with an avatar comes back with one');
+    is(dor?.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), 'and it is a real PNG, not a description of one');
+    /*
+     * THE ONE ASSERTION THAT PROVES THE CAMERA AIMED. Each row in the fixture
+     * is a different colour, so identical bytes would mean every "logo" is a
+     * photograph of the same element — which is what a reader that queries the
+     * menu instead of the row produces, and it looks perfectly fine until two
+     * names carry one face.
+     */
+    is(page1 && dor && !page1.equals(dor), 'each row is photographed from ITSELF — two rows never come back as the same picture');
+    /* The 1px image sits FIRST inside Dor's row. A camera that takes whatever
+       image it finds first would have uploaded that. */
+    /* Read out of the PNG's own header (width lives at byte 16), because the
+       point is the SIZE of what was photographed: a picture one pixel wide is
+       the tracking pixel, whatever it weighs. */
+    is(dor && dor.readUInt32BE(16) >= 14, 'a tracking pixel beside the avatar is skipped — the avatar is what is photographed');
+    eq(
+      firstShots.get('FreshWave – ניקוי עמוק למזגנים'),
+      undefined,
+      'and a row whose ONLY image is a tracking pixel comes back with no picture at all — an initial is honest, a smudge is not',
+    );
+    await page.close();
+  }
+
+  /* ---- 4c. the marks come off, so a reordered menu is still photographed right */
+  /*
+   * Facebook reorders this menu — the signed-in profile moves to the top after
+   * a switch — and the rows carry no id, no class and usually no link, so the
+   * only handle on one is a mark this reader writes onto it. A mark left from
+   * the previous read points the camera at whatever now sits in that position,
+   * and the picture then belongs to the wrong name.
+   */
+  {
+    const page = await context.newPage();
+    await page.goto(fixture);
+    await readProfiles(page, { pictures: true });
+    /* The page moves to the top, exactly as Facebook does it. */
+    await page.evaluate(() => {
+      const row = document.querySelector('[data-row="page1"]')?.parentElement;
+      const first = document.querySelector('[data-row="dor"]')?.parentElement;
+      if (row && first?.parentElement) first.parentElement.insertBefore(row, first);
+    });
+    const again = await readProfiles(page, { pictures: true });
+    eq(
+      again.profiles.map((p) => p.name),
+      ['הפתרון המבריק', 'Dor Moyal', 'Air Master', 'FreshWave – ניקוי עמוק למזגנים'],
+      'the reordered menu is read in its new order',
+    );
+    const moved = again.profiles.find((p) => p.name === 'הפתרון המבריק')?.image?.bytes;
+    is(moved && moved.equals(firstShots.get('הפתרון המבריק')!), 'and the picture still belongs to the NAME, not to the position it used to hold');
+    const dorAgain = again.profiles.find((p) => p.name === 'Dor Moyal')?.image?.bytes;
+    is(dorAgain && dorAgain.equals(firstShots.get('Dor Moyal')!), 'both ways round — the row that was pushed down keeps its own face too');
+    eq(await page.$$('[data-anx-row]').then((n) => n.length), 4, 'one mark per row, not one per read');
+
+    /*
+     * AND THE CASE THAT ACTUALLY BITES: a row that STOPS being a profile.
+     *
+     * Reordering alone forgives a reader that never clears its marks, because
+     * the same rows get re-marked. But a row that drops out of the answer keeps
+     * the mark it was given — and it still comes first in the page — so "row 0"
+     * then matches two elements and the camera photographs the one that left.
+     * The picture that comes back belongs to a name that is no longer there.
+     */
+    await page.evaluate(() => {
+      const row = document.querySelector('[data-row="page1"] span');
+      if (row) row.textContent = 'הגדרות ופרטיות';
+    });
+    const shorter = await readProfiles(page, { pictures: true });
+    eq(
+      shorter.profiles.map((p) => p.name),
+      ['Dor Moyal', 'Air Master', 'FreshWave – ניקוי עמוק למזגנים'],
+      'a row that stopped being a profile is gone from the answer',
+    );
+    const stillDor = shorter.profiles[0]?.image?.bytes;
+    is(
+      stillDor && stillDor.equals(firstShots.get('Dor Moyal')!),
+      'and the row that took its place at the front is photographed from itself — not from the one that dropped out and kept its mark',
+    );
+    await page.close();
+  }
+
+  /* -------------- 4d. and a read that was not asked for pictures takes none --- */
+  {
+    const page = await context.newPage();
+    await page.goto(fixture);
+    await readProfiles(page, { pictures: true });
+    const plain = await readProfiles(page);
+    is(plain.profiles.every((p) => !p.image), 'a plain read returns no pictures — the switch itself has no use for them and should not pay for them');
+    eq(await page.$$('[data-anx-row]').then((n) => n.length), 0, 'and it leaves nothing of ours behind in Facebook’s page');
+    await page.close();
+  }
+
   await browser.close();
 
   /* ------------------------------------ 5. the promises the code must keep */
@@ -273,6 +394,74 @@ async function main() {
     /fb_profiles, fb_user_name/.test(worker) && /markIdentity\(state\)/.test(worker),
     'the identity is restored from the worker\u2019s own row at startup, not left to be asked for',
   );
+
+  /* ----------- 7. the logo is stored per NAME, and the bar never lies ------- */
+  /*
+   * WHERE THE PICTURES LAND. An index would be the obvious path — `…-p0.png` —
+   * and it would be wrong for the same reason the marker above has to be
+   * cleared: Facebook reorders that menu, so position 0 is the personal face one
+   * minute and the business logo the next. Every screen that had already loaded
+   * the first one would go on showing it beside the other name, and nothing
+   * about that looks broken.
+   */
+  {
+    const record = worker.slice(worker.indexOf('async function recordProfiles('), worker.indexOf('async function markIdentity('));
+    is(record.length > 400, 'recordProfiles is where the pictures are stored');
+    is(
+      /createHash\('sha1'\)\.update\(p\.name\)/.test(record),
+      'the stored path is derived from the NAME — an index would hand one identity the other one’s logo when Facebook reorders the menu',
+    );
+    is(
+      /before\.get\(p\.name\)/.test(record),
+      'and a row we could not photograph this time keeps the picture it had — the same rule the avatar has, so the list never flickers between logos and initials',
+    );
+  }
+
+  /*
+   * AND THE ONE RULE THE BAR AT THE TOP MUST NEVER BREAK.
+   *
+   * Showing the chosen name and logo the instant they are tapped is the point of
+   * this — but the computer has not switched yet, and every post that goes out
+   * is signed by whoever this chip names. So the chip may show the choice and
+   * must not CLAIM it: the pulsing ring and "מעביר פרופיל…" say it is under way,
+   * and "מפרסם" stays with the identity the machine confirmed.
+   */
+  {
+    const shell = readFileSync(new URL('../../src/components/social/SocialShell.tsx', import.meta.url), 'utf8');
+    is(/const \[pending, setPending\] = useState<Identity \| null>/.test(shell), 'the bar holds the chosen identity separately from the confirmed one');
+    is(
+      /label: 'מעביר פרופיל…'/.test(shell) && /ring-2 ring-brand-300 motion-safe:animate-pulse/.test(shell),
+      'and says out loud that it is mid-switch, rather than showing the new name as a fact',
+    );
+    is(
+      /const active = Boolean\(confirmedWho\?\.name\) && p\.name === confirmedWho\?\.name;/.test(shell),
+      '"מפרסם" is decided by the CONFIRMED identity — for the seconds those differ, the old one is the true one',
+    );
+    is(
+      /waitForWorkerCommand\(queued\)/.test(shell),
+      'the outcome is read from the command row rather than waited for on the minute clock — a failed switch used to look identical to one in progress for a full minute',
+    );
+    is(
+      /cmd\?\.status === 'failed'/.test(shell) && /cmd\.result/.test(shell),
+      'and a refused switch puts the computer’s own reason on screen, in the panel it was asked from',
+    );
+    /*
+     * BOTH PICKERS, ONE ANSWER. The dashboard card has a picker of its own — the
+     * same tap — and it used to send the command and never mention it again, so a
+     * refused switch there was silent.
+     */
+    const dash = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
+    is(/waitForWorkerCommand\(id\)/.test(dash), 'the card’s picker waits for the same answer as the bar’s');
+    /*
+     * AND NEITHER OF THEM IMPLEMENTS THE WAIT ITSELF: two clocks on one fact is
+     * the defect class this module keeps removing, one layer up.
+     */
+    const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+    is(
+      /export async function waitForWorkerCommand/.test(client) && /status === 'done' \|\| cmd\?\.status === 'failed'/.test(client),
+      'the wait lives in one place, and "still running" is not reported as a failure',
+    );
+  }
 
   console.log(`profile switcher tests OK — ${checks} assertions`);
 }

@@ -18,7 +18,7 @@ import {
   UsersIcon,
 } from '@/components/icons';
 import { signOut, useAdminSession } from '@/lib/adminAuth';
-import { getControl, listWorkers, sendWorkerCommand } from '@/lib/social/client';
+import { getControl, listWorkers, sendWorkerCommand, waitForWorkerCommand } from '@/lib/social/client';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, type SystemState } from './systemState';
 import { InstallPrompt } from './InstallPrompt';
 import { NotificationBell } from './NotificationBell';
@@ -71,6 +71,9 @@ const MOBILE_TABS = ['/social', '/social/campaigns', '/social/groups', '/social/
 
 /** The Facebook account the computer publishes as: name and picture. */
 type FbAccount = { name: string; avatar: string };
+
+/** One of the identities on that account, as the worker read it out of Facebook's menu. */
+type Identity = { name: string; kind?: 'profile' | 'page'; image?: string };
 
 /**
  * Greeting by time of day, in the app's own timezone.
@@ -250,20 +253,91 @@ export function SocialShell({
    * The greeting beside it still goes home, so nothing was taken away.
    */
   const [whoOpen, setWhoOpen] = useState(false);
-  const [profiles, setProfiles] = useState<{ name: string; kind?: 'profile' | 'page' }[]>([]);
+  const [profiles, setProfiles] = useState<Identity[]>([]);
   const [workerId, setWorkerId] = useState<string | null>(null);
-  const [switching, setSwitching] = useState<string | null>(null);
+  /*
+   * THE IDENTITY THAT WAS JUST CHOSEN, while the computer is still moving onto
+   * it — the whole of "שזה ישר יעבור לשם שבחרתי יחד אם הלוגו שלו".
+   *
+   * The name and the logo go up at the top of the screen the moment they are
+   * tapped, which is the instant feedback that was missing: the switch itself
+   * is half a minute of somebody else's website and nothing in this app could
+   * make that shorter, but the app no longer sits there showing the previous
+   * identity as if nothing had been pressed.
+   *
+   * AND IT DOES NOT CLAIM THE SWITCH HAPPENED. The bar says "מעביר פרופיל…"
+   * beside it and the picture wears a ring until the computer confirms. This
+   * product's one unbreakable rule about this chip is that it must never assert
+   * an identity nobody verified — every post that goes out is signed by it, and
+   * a chip that lies about who is publishing is worse than a chip that is slow.
+   * If the switch fails, the previous identity comes straight back and the
+   * reason is put on screen in the panel that was tapped.
+   */
+  const [pending, setPending] = useState<Identity | null>(null);
+  /** Why the last switch did not happen, in the worker's own Hebrew. */
+  const [switchNote, setSwitchNote] = useState<string | null>(null);
+  const switching = pending?.name ?? null;
   useEffect(() => {
     if (!whoOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setWhoOpen(false);
+      if (e.key === 'Escape') {
+        setWhoOpen(false);
+        setSwitchNote(null);
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [whoOpen]);
 
+  /*
+   * ONE READER FOR THE WORKER ROWS, called by the minute clock below and by the
+   * switch watcher — which is why it is a callback rather than a closure inside
+   * the effect. The watcher needs the same read the moment a switch lands, so
+   * that the real name and the real face replace the chosen ones without
+   * waiting out the rest of the minute.
+   */
+  const readWorkers = useCallback(async () => {
+    const ws = await listWorkers().catch(() => null);
+    if (!ws) return null;
+    setPcOnline(ws.some((x) => x.online));
+    /*
+     * THE IDENTITIES, off the same read. This poll already fetches the
+     * worker rows every minute for the monitor light and the greeting;
+     * the profile list is two more columns on rows that are already in
+     * hand, so the picker costs no request of its own.
+     */
+    {
+      const w = ws.find((x) => x.online) ?? ws[0];
+      setWorkerId(w?.id ?? null);
+      setProfiles(w?.fb_profiles ?? []);
+    }
+    if (account === undefined) {
+      const w = ws.find((x) => x.online && x.fb_user_name) ?? ws.find((x) => x.fb_user_name);
+      setOwnAccount(w?.fb_user_name ? { name: w.fb_user_name, avatar: w.fb_avatar_url ?? '' } : null);
+    }
+    return ws;
+  }, [account]);
+  useEffect(() => {
+    if (!session) return;
+    void readWorkers();
+    const id = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void readWorkers();
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [readWorkers, session]);
+  /*
+   * WHO THE BAR SHOWS: the identity that was just chosen while it is being
+   * moved onto, and the confirmed one at every other moment. `pending` carries
+   * the logo the worker photographed out of Facebook's own menu, so the face
+   * changes with the name rather than a minute after it.
+   */
+  const confirmedWho = account ?? ownAccount;
+  const who = pending ? { name: pending.name, avatar: pending.image ?? '' } : confirmedWho;
+
   async function goToProfile(name: string) {
-    const kind = profiles.find((p) => p.name === name)?.kind;
+    const row = profiles.find((p) => p.name === name);
+    const kind = row?.kind;
     const ok = await confirm.ask({
       title: `לעבור ל"${name}"?`,
       body: (
@@ -281,53 +355,59 @@ export function SocialShell({
       confirmLabel: 'עבור',
     });
     if (!ok) return;
-    setSwitching(name);
+    setSwitchNote(null);
+    /* The name and the logo go up NOW. Nothing about the computer's work has
+       changed; what changed is that the screen answers the tap. */
+    setPending({ name, kind, image: row?.image });
+    let queued: string;
     try {
-      await sendWorkerCommand(workerId, 'switch', { name });
+      queued = (await sendWorkerCommand(workerId, 'switch', { name })).id;
       onControlChanged?.();
     } catch {
       /* The command row is the record; a failed insert leaves the bar exactly
          as it was rather than claiming a switch that was never asked for. */
-    } finally {
-      setSwitching(null);
+      setPending(null);
+      setSwitchNote('לא הצלחנו לשלוח את הבקשה למחשב. בדקו את החיבור לאינטרנט ונסו שוב.');
+      setWhoOpen(true);
+      return;
     }
-  }
-  useEffect(() => {
-    if (!session) return;
-    let stopped = false;
-    const read = () =>
-      listWorkers()
-        .then((ws) => {
-          if (stopped) return;
-          setPcOnline(ws.some((x) => x.online));
-          /*
-           * THE IDENTITIES, off the same read. This poll already fetches the
-           * worker rows every minute for the monitor light and the greeting;
-           * the profile list is two more columns on rows that are already in
-           * hand, so the picker costs no request of its own.
+
+    /*
+     * AND NOW WAIT FOR THE COMPUTER, ON A CLOCK THAT MATCHES THE WORK.
+     *
+     * The bar used to learn the outcome from its own sixty-second read, so the
+     * fastest possible switch still took up to a minute to show and a FAILED one
+     * looked exactly like one still in progress for just as long. The command
+     * row answers within seconds of the machine finishing, so that is what is
+     * watched.
+     */
+    const cmd = await waitForWorkerCommand(queued);
+    if (cmd?.status === 'done') {
+      /* The worker has already written the new name and the new face; this read
+         is what puts them on screen, and the chosen pair comes down only
+         afterwards — so the bar never blinks back to the old identity on the way
+         to the new one. */
+      await readWorkers();
+      setPending(null);
+      onControlChanged?.();
+      return;
+    }
+    setPending(null);
+    setSwitchNote(
+      cmd?.status === 'failed'
+        ? cmd.result || `המעבר ל"${name}" לא הושלם. נסו שוב בעוד רגע.`
+        : /*
+           * NOTHING CAME BACK, which is not the same as a refusal: the command
+           * is still in the queue — the computer is off, or asleep, or has not
+           * reached it — so the bar stops claiming to be mid-switch and says
+           * what is actually true. It will change by itself when the machine
+           * gets to it.
            */
-          {
-            const w = ws.find((x) => x.online) ?? ws[0];
-            setWorkerId(w?.id ?? null);
-            setProfiles(w?.fb_profiles ?? []);
-          }
-          if (account === undefined) {
-            const w = ws.find((x) => x.online && x.fb_user_name) ?? ws.find((x) => x.fb_user_name);
-            setOwnAccount(w?.fb_user_name ? { name: w.fb_user_name, avatar: w.fb_avatar_url ?? '' } : null);
-          }
-        })
-        .catch(() => undefined);
-    read();
-    const id = setInterval(() => {
-      if (document.visibilityState === 'hidden') return;
-      read();
-    }, 60_000);
-    return () => {
-      stopped = true;
-      clearInterval(id);
-    };
-  }, [account, session]);
-  const who = account ?? ownAccount;
+          'הבקשה נשלחה אבל המחשב עוד לא ביצע אותה. בדקו שהתוכנה במחשב פועלת — ברגע שהמעבר יקרה, השם כאן יתחלף.',
+    );
+    setWhoOpen(true);
+    void readWorkers();
+  }
 
   // A tap through the sheet navigates; make sure it never stays open behind
   // the new screen.
@@ -399,7 +479,13 @@ export function SocialShell({
    * only when that flag is on — "everything is stopped" must never be
    * discovered by accident, and "everything is fine" needs no announcement.
    */
-  const state = systemState
+  const state = pending
+    ? /* While a switch is in flight this outranks everything else the line can
+         say, because it is the one fact the owner is waiting on and it is about
+         the name printed beside it. Anything else here would look like a
+         statement about the identity now showing. */
+      { label: 'מעביר פרופיל…', tone: 'brand' as const }
+    : systemState
     ? { label: SYSTEM_STATE_LABEL[systemState], tone: SYSTEM_STATE_TONE[systemState] }
     : publishingStopped
       ? { label: 'הפרסום מושהה', tone: 'warn' as const }
@@ -470,17 +556,45 @@ export function SocialShell({
             onClick={() => setWhoOpen((v) => !v)}
             aria-expanded={whoOpen}
             aria-haspopup="menu"
-            aria-label={who ? `מפרסם בתור ${who.name} — החלפת פרופיל` : 'בחירת הפרופיל שמפרסם'}
+            /* The words a screen reader gets must not claim it either: while the
+               computer is still moving, this says so. */
+            aria-label={
+              pending
+                ? `מעביר ל${pending.name} — החלפת פרופיל`
+                : who
+                  ? `מפרסם בתור ${who.name} — החלפת פרופיל`
+                  : 'בחירת הפרופיל שמפרסם'
+            }
             className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
           >
             {who?.avatar ? (
+              /* THE RING IS THE HONESTY. The picture and the name are already
+                 the chosen ones; the brand ring, pulsing, is what says the
+                 computer has not confirmed it yet — so the bar can answer the
+                 tap instantly without asserting that this identity is already
+                 publishing. It returns to the quiet grey the moment the switch
+                 lands. */
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={who.avatar} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-ink-700" />
+              <img
+                src={who.avatar}
+                alt=""
+                className={`h-10 w-10 shrink-0 rounded-full object-cover ${
+                  pending ? 'ring-2 ring-brand-300 motion-safe:animate-pulse' : 'ring-1 ring-ink-700'
+                }`}
+              />
             ) : (
               /* No picture, or nobody connected yet: the brand mark holds the
                  slot rather than a grey circle, so the bar never looks broken
                  before the first connection. */
-              <span aria-hidden className="grad-primary grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500 text-on-brand shadow-[0_4px_12px_rgba(124,58,237,0.25)]">
+              <span
+                aria-hidden
+                className={`grad-primary grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500 text-on-brand shadow-[0_4px_12px_rgba(124,58,237,0.25)] ${
+                  /* An identity whose logo was never photographed still shows
+                     that it is mid-switch — the ring belongs to the state, not
+                     to the picture. */
+                  pending ? 'ring-2 ring-brand-300 motion-safe:animate-pulse' : ''
+                }`}
+              >
                 <SparklesIcon className="h-5 w-5" />
               </span>
             )}
@@ -495,7 +609,10 @@ export function SocialShell({
               <button
                 type="button"
                 aria-label="סגירה"
-                onClick={() => setWhoOpen(false)}
+                onClick={() => {
+                  setWhoOpen(false);
+                  setSwitchNote(null);
+                }}
                 className="absolute inset-x-0 top-full z-40 h-screen w-screen cursor-default"
               />
               <div
@@ -503,9 +620,25 @@ export function SocialShell({
                 className="absolute start-0 top-full z-50 mt-2 w-64 rounded-2xl border border-ink-700 bg-ink-900 p-1.5 shadow-xl motion-safe:animate-[rise_0.18s_ease-out]"
               >
                 <p className="px-2 pb-1 pt-1.5 text-[11px] font-bold text-mist-500">מי מפרסם</p>
+                {/*
+                  WHY THE LAST ONE DID NOT HAPPEN, where it was asked for.
+                  A switch that Facebook refused, or a computer that is switched
+                  off, used to leave this panel looking exactly like a switch
+                  that worked — the name simply never changed. The computer's own
+                  sentence says which, in the place the owner was already looking.
+                */}
+                {switchNote && (
+                  <p className="mx-1 mb-1 rounded-xl bg-warning-300/12 px-2 py-2 text-[12px] font-bold leading-relaxed text-warning-400">
+                    {switchNote}
+                  </p>
+                )}
                 {profiles.length ? (
                   profiles.map((p) => {
-                    const active = Boolean(who?.name) && p.name === who?.name;
+                    /* Against the CONFIRMED identity, never against the one
+                       being moved onto: "מפרסם" is a statement about what the
+                       computer is doing, and for the few seconds those two
+                       differ it is the old one that is still true. */
+                    const active = Boolean(confirmedWho?.name) && p.name === confirmedWho?.name;
                     return (
                       <button
                         key={p.name}
@@ -520,9 +653,18 @@ export function SocialShell({
                           active ? 'bg-success-400/12 text-success-400' : 'text-mist-100 hover:bg-ink-800'
                         } disabled:opacity-70`}
                       >
-                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink-800 text-[11px] font-extrabold text-mist-300">
-                          {p.name.trim().charAt(0) || '?'}
-                        </span>
+                        {/* The identity's own logo, photographed out of
+                            Facebook's menu by the computer. The initial is the
+                            fallback for a name we have no picture for — never a
+                            stock face, and never another row's. */}
+                        {p.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.image} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-ink-700" />
+                        ) : (
+                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink-800 text-[11px] font-extrabold text-mist-300">
+                            {p.name.trim().charAt(0) || '?'}
+                          </span>
+                        )}
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span dir="auto" className="truncate">{p.name}</span>
                           {p.kind === 'page' && <span className="text-[10px] font-bold text-mist-500">דף עסקי</span>}

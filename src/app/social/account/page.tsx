@@ -536,9 +536,19 @@ export default function AccountPage() {
                             actually photographed — the signed-in one. A stock
                             circle beside somebody else's name is the same lie
                             as a stock face, one size smaller. */}
+                        {/* The signed-in account's own avatar for the row that
+                            is publishing, and for the others the logo the
+                            computer photographed in Facebook's menu — which is
+                            what this list had no way of showing until the
+                            switcher started collecting them. Still never a stock
+                            circle standing in for a face nobody read: a name
+                            with no picture gets its initial. */}
                         {active && avatar ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={avatar} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                        ) : p.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.image} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-ink-700" />
                         ) : (
                           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-800 text-sm font-extrabold text-mist-300">
                             {p.name.trim().charAt(0) || '?'}

@@ -433,7 +433,7 @@ export function LiveQueueHero({
    * panel says in those words rather than as "there is only one", because
    * those are different facts and only one of them is about the account.
    */
-  profiles?: { name: string; kind?: 'profile' | 'page' }[];
+  profiles?: { name: string; kind?: 'profile' | 'page'; image?: string }[];
   /** Ask the machine to move onto one. Absent while nothing can be asked. */
   onSwitchProfile?: (name: string) => void;
   /** Rows a worker is holding right now (summary.inFlight). */
@@ -624,7 +624,16 @@ export function LiveQueueHero({
                         active ? 'bg-success-400/12 text-success-400' : 'text-mist-100 hover:bg-ink-800'
                       }`}
                     >
-                      <TargetAvatar name={p.name} size={22} />
+                      {/* That identity's own logo when the computer
+                          photographed one out of Facebook's menu; the generated
+                          circle otherwise. The same rule as the header's picker
+                          — a real picture or an initial, never a stand-in face. */}
+                      {p.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.image} alt="" className="h-[22px] w-[22px] shrink-0 rounded-full object-cover ring-1 ring-ink-700" />
+                      ) : (
+                        <TargetAvatar name={p.name} size={22} />
+                      )}
                       <span className="flex min-w-0 flex-1 flex-col">
                         <span dir="auto" className="truncate">{p.name}</span>
                         {p.kind === 'page' && <span className="text-[10px] font-bold text-mist-500">דף עסקי</span>}

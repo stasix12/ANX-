@@ -366,7 +366,23 @@ export interface SocialWorker {
    * the command rather than by the length of this, because a guess about
    * WHOSE account publishes is the one guess this product must never make.
    */
-  fb_profiles?: { id: string; name: string; kind?: 'profile' | 'page' }[];
+  fb_profiles?: {
+    id: string;
+    name: string;
+    kind?: 'profile' | 'page';
+    /*
+     * That identity's own picture, photographed out of Facebook's menu by the
+     * worker and stored beside the name.
+     *
+     * It is what lets the app change the face at the top the moment a profile
+     * is chosen instead of a minute later: until this existed, the only picture
+     * this product had was the signed-in one, so the header could not show the
+     * chosen identity before the worker had finished the switch and uploaded a
+     * new avatar. Empty means no picture was ever photographed for this name —
+     * the screen shows the initial, never somebody else's face.
+     */
+    image?: string;
+  }[];
   fb_profiles_at?: string | null;
   /*
    * Facebook is mid-login and asking a person something.

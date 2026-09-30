@@ -26,6 +26,14 @@
     * THE MENU STARTS CLOSED, behind a banner button labelled the way Facebook
       labels it, because opening it is half of what can fail.
 
+    * EACH ROW CARRIES ITS OWN PICTURE, at the size Facebook draws an avatar,
+      and a different colour per row. That is what lets the suite prove the
+      camera photographed THIS row rather than the first one it found: three
+      identical placeholders would pass whatever it pointed at. One row's
+      picture is a 1px tracking pixel instead, because these rows really do
+      contain those, and a smudge uploaded as somebody's business logo is the
+      failure that shape produces.
+
   The two names are the customer's real ones. They are on his screen every day
   and they are the point of the feature: one account, a personal profile and a
   business one.
@@ -60,13 +68,18 @@
     <div>
       <div>
         <div role="button" data-row="dor" onclick="window.__picked = 'Dor Moyal'">
-          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+          <!-- A 1px image BEFORE the avatar, which is the ordinary state of
+               Facebook's markup. A camera that takes the first <img> it finds
+               in the row uploads this — a one-pixel smudge — as the owner's
+               face, and on screen that is a grey dot nobody can explain. -->
+          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="" style="width:1px;height:1px">
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4o6EBAAMQAS0ujiXaAAAAAElFTkSuQmCC" alt="" style="width:36px;height:36px;image-rendering:pixelated">
           <span>Dor Moyal</span>
         </div>
       </div>
       <div>
         <div role="button" data-row="air" onclick="window.__picked = 'Air Master'">
-          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPQCLgDAAH4AVXSujU3AAAAAElFTkSuQmCC" alt="" style="width:36px;height:36px;image-rendering:pixelated">
           <span>Air Master</span>
         </div>
       </div>
@@ -82,7 +95,7 @@
       <!-- The label on its OWN line, which is how the menu draws it. -->
       <div>
         <div role="button" data-row="page1" onclick="window.__picked = 'הפתרון המבריק'">
-          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOQWxAFAAH4ARkK9rG6AAAAAElFTkSuQmCC" alt="" style="width:36px;height:36px;image-rendering:pixelated">
           <span style="display:block">הפתרון המבריק</span>
           <span style="display:block">דף</span>
         </div>
@@ -91,8 +104,11 @@
            or two is a single CSS value that belongs to Facebook and changes
            without notice. Both shapes are real; both must yield the name. -->
       <div>
+        <!-- AND A ROW WHOSE ONLY IMAGE IS A TRACKING PIXEL. It must come back
+             with NO picture: an initial in a circle is honest, a 1px smear
+             presented as a business logo is not. -->
         <div role="button" data-row="page2" onclick="window.__picked = 'FreshWave'">
-          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="" style="width:1px;height:1px">
           <span>FreshWave – ניקוי עמוק למזגנים</span>
           <span>דף</span>
         </div>

@@ -1388,6 +1388,63 @@ export async function sendWorkerCommand(
 
 const COMMAND_COLUMNS = 'id, worker_id, command, status, result, created_at, finished_at';
 
+/**
+ * One command, by the id its insert returned.
+ *
+ * It exists so a screen can WAIT for an answer instead of guessing at how long
+ * the machine takes. The profile switcher is the case that needed it: pressing
+ * a name queues a command, the computer then spends half a minute inside
+ * Facebook, and until this existed the app learned the outcome only from the
+ * next sixty-second read of the worker row — so a switch that had already
+ * failed still looked like it was in progress, and one that had succeeded took
+ * a minute to show.
+ *
+ * Named columns, not '*', for the reason listRecentCommands gives: `payload`
+ * may hold a password for the second before the worker claims the row.
+ */
+export async function getWorkerCommand(id: string): Promise<WorkerCommand | null> {
+  const { data, error } = await db().from('social_worker_commands').select(COMMAND_COLUMNS).eq('id', id).maybeSingle();
+  if (error) throw error;
+  return (data as WorkerCommand | null) ?? null;
+}
+
+/*
+ * HOW LONG A SCREEN WILL WAIT FOR THE MACHINE, and how often it asks.
+ *
+ * The computer picks a command up within five seconds (SOCIAL_WORKER_POLL_MS)
+ * and then spends the rest of the time inside Facebook — for a profile switch
+ * that is a page load, the account menu, the row, Facebook's own reload,
+ * sometimes a confirmation, then re-reading who it has become. Twenty to forty
+ * seconds is ordinary and a slow machine on a slow line is worse, so the
+ * ceiling is generous: it exists to stop a screen waiting forever on a computer
+ * that was switched off mid-command, not to judge how long Facebook may take.
+ *
+ * Two and a half seconds between asks — one row, by its primary key, and only
+ * while something is actually in flight.
+ */
+export const COMMAND_POLL_MS = 2_500;
+export const COMMAND_WAIT_MS = 150_000;
+
+/**
+ * Wait for one command to finish, and hand back how it went.
+ *
+ * `null` means it has not finished — not that it failed. The command is still
+ * in the queue and the machine will run it when it gets to it, so a screen that
+ * gets null must say exactly that rather than reporting a failure that has not
+ * happened.
+ *
+ * A read that throws (a phone that lost signal for a moment) is not an answer
+ * either and simply costs one tick.
+ */
+export async function waitForWorkerCommand(id: string): Promise<WorkerCommand | null> {
+  for (let waited = 0; waited < COMMAND_WAIT_MS; waited += COMMAND_POLL_MS) {
+    await new Promise((done) => setTimeout(done, COMMAND_POLL_MS));
+    const cmd = await getWorkerCommand(id).catch(() => null);
+    if (cmd?.status === 'done' || cmd?.status === 'failed') return cmd;
+  }
+  return null;
+}
+
 export async function listRecentCommands(limit = 5): Promise<WorkerCommand[]> {
   /* Named columns, not '*': `payload` may hold a password for the second or
      two before the worker claims it, and this list is rendered on screen. */

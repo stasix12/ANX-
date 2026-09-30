@@ -40,6 +40,7 @@ import {
   sendWorkerCommand,
   setPaused,
   stopCampaign,
+  waitForWorkerCommand,
   type CommentTotals,
   type QueueRow,
   type TimelineRow,
@@ -166,7 +167,7 @@ interface DashboardData {
    * when no worker has reported one yet — never a placeholder.
    */
   fbAccount: { name: string; avatar: string } | null;
-  profiles: { id?: string; name: string; kind?: 'profile' | 'page' }[];
+  profiles: { id?: string; name: string; kind?: 'profile' | 'page'; image?: string }[];
   workerId: string | null;
 }
 
@@ -503,9 +504,23 @@ export default function SocialDashboard() {
     });
     if (!ok) return;
     try {
-      await sendWorkerCommand(data?.workerId ?? null, 'switch', { name });
+      const { id } = await sendWorkerCommand(data?.workerId ?? null, 'switch', { name });
       toast('הבקשה נשלחה למחשב. המעבר לוקח כמה שניות.');
       await load();
+      /*
+       * AND THEN SAY HOW IT WENT.
+       *
+       * This used to end at the toast above: the command went off and the screen
+       * never mentioned it again, so a switch Facebook refused looked exactly
+       * like one that worked — the name simply stayed as it was, and the reason
+       * sat in the activity log. The card's own picker is the same tap as the
+       * bar's, so it gets the same answer, from the same wait.
+       */
+      const cmd = await waitForWorkerCommand(id);
+      await load();
+      if (cmd?.status === 'failed') setError(cmd.result || `המעבר ל"${name}" לא הושלם.`);
+      else if (cmd?.status === 'done') toast(cmd.result || `עברנו ל"${name}".`);
+      else toast('הבקשה ממתינה במחשב. ברגע שהמעבר יקרה, השם יתעדכן כאן.');
     } catch (err) {
       setError(friendlyMessage(err, 'הפקודה נכשלה.'));
     }

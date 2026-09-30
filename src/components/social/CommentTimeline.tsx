@@ -458,13 +458,17 @@ export function CommentTimeline({
                         /*
                          * SMALLER, AND STILL A 48px TARGET.
                          *
-                         * 36px of button instead of 44 — the 18% the brief asked
-                         * for — on a white ground with a thin lavender edge, so
-                         * it reads as the quiet secondary action it is. The
-                         * group's name on the same row is 13px; a control beside
-                         * it has no business being bigger than the thing it is
-                         * about, which is why the text here is 12 and not the 16
-                         * the brief also asked for.
+                         * 32px of button where there were 44 — a bit over a
+                         * quarter off — on a white ground with a thin lavender
+                         * edge, so it reads as the quiet secondary action it is.
+                         * The group's name on the same row is 13px; a control
+                         * beside it has no business being bigger than the thing
+                         * it is about, which is why the label is 11.5 and the
+                         * mark 12.
+                         *
+                         * This is where it stops. Below about 30px a chip starts
+                         * to read as a label rather than as something to press,
+                         * and the one job this has is to be pressed.
                          *
                          * THE TAP AREA DOES NOT SHRINK WITH IT. The `before`
                          * layer reaches 6px past the visible edge top and
@@ -474,9 +478,9 @@ export function CommentTimeline({
                          * rather than the painted box. Small to look at and
                          * small to hit is the trade this refuses to make.
                          */
-                        className="relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-brand-300/50 bg-ink-900 px-3 text-[12px] font-bold text-brand-400 transition-colors before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-[''] hover:bg-brand-300/10"
+                        className="relative inline-flex h-8 shrink-0 items-center gap-1 rounded-[10px] border border-brand-300/50 bg-ink-900 px-2.5 text-[11.5px] font-bold text-brand-400 transition-colors before:absolute before:inset-x-0 before:-inset-y-2 before:content-[''] hover:bg-brand-300/10"
                       >
-                        <ShareIcon aria-hidden className="h-3.5 w-3.5" />
+                        <ShareIcon aria-hidden className="h-3 w-3" />
                         לתגובה
                       </Link>
                     )}

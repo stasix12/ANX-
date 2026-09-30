@@ -13,14 +13,20 @@
 # reason the release exists now: so that a fix reaches a customer's machine
 # without anybody sending them anything.
 #
-# THE RELEASE GOES TO A DIFFERENT REPOSITORY. stasix12/https-github.com-new, which
-# is public and holds the installer and nothing else. It has to be public,
-# because a private repository's release assets need a token to download and
-# the only way to give an installed copy one is to put it inside the installer
-# — handing every customer a credential that reads all of the source. The
-# public feed exposes a version number and a file that anyone who was ever sent
-# a download link already had. Publishing to it needs the UPDATES_TOKEN secret;
-# without it the build still runs and simply publishes nothing.
+# THE RELEASE GOES TO THIS REPOSITORY, and the one property that matters is
+# that it is PUBLIC: a private repository's release assets need a token to
+# download, and the only way to give an installed copy one is to put it inside
+# the installer — handing every customer a credential. The check below asks
+# GitHub anonymously, exactly as an installed copy asks, and refuses to publish
+# if the answer is ever anything else.
+#
+# IT USED TO GO TO A SEPARATE REPOSITORY, on the belief that the source was
+# private. It is not, and never was. What the separate feed actually bought was
+# a dependency on a hand-made token — which was issued read-only, so for days
+# every build produced a good installer and then had its release refused at the
+# last step, and not one installed copy could see it. Publishing here needs no
+# token at all: GitHub issues every workflow one for its own repository (see
+# `permissions:` below), scoped to the run and gone when it ends.
 name: build the downloadable app
 
 on:
@@ -186,15 +192,19 @@ jobs:
         run: |
           $version = (Get-Content dist/app/package.json | ConvertFrom-Json).version
           "version=$version" >> $env:GITHUB_OUTPUT
-          if (-not $env:UPDATES_TOKEN) {
-            # Nothing is broken and the installer is still built and uploaded
-            # as an artifact. The app simply has nothing to update from, and
-            # says exactly that on its עדכונים screen rather than claiming to
-            # be current.
-            Write-Host "::warning::UPDATES_TOKEN is not set, so no release is published and installed copies cannot update themselves."
-            "publish=no" >> $env:GITHUB_OUTPUT
-            exit 0
-          }
+          # NO HAND-MADE TOKEN IS INVOLVED ANY MORE.
+          #
+          # This step used to stop here unless an UPDATES_TOKEN secret existed,
+          # because the release went to a different repository and only a
+          # personal token can write across repositories. That token was issued
+          # with Contents: Read-only, and for days every build ended the same
+          # way: a perfectly good installer, and a publish refused at the last
+          # step, with nobody's copy able to update.
+          #
+          # The release goes to THIS repository now, and GitHub hands every
+          # workflow a token for its own repository — see `permissions:
+          # contents: write` at the top of this file. Nothing to create,
+          # nothing to scope, nothing to forget.
 
           # IS THE FEED THERE, AND CAN A STRANGER READ IT?
           #
@@ -212,16 +222,16 @@ jobs:
           # the token, which is not rate limited and can say which of the three
           # things is actually true. Each gets its own sentence, and a rate
           # limit is no longer allowed to impersonate a missing repository.
-          $feed = 'stasix12/https-github.com-new'
+          $feed = 'stasix12/ANX-'
           $head = @{ 'User-Agent' = 'hapitaron-build'; 'Accept' = 'application/vnd.github+json' }
           $anon = Invoke-WebRequest -Uri "https://api.github.com/repos/$feed" -Headers $head -SkipHttpErrorCheck
           Write-Host "feed as a stranger sees it: HTTP $($anon.StatusCode)"
 
-          $withKey = Invoke-WebRequest -Uri "https://api.github.com/repos/$feed" -Headers ($head + @{ Authorization = "Bearer $env:UPDATES_TOKEN" }) -SkipHttpErrorCheck
+          $withKey = Invoke-WebRequest -Uri "https://api.github.com/repos/$feed" -Headers ($head + @{ Authorization = "Bearer $env:GITHUB_TOKEN" }) -SkipHttpErrorCheck
           Write-Host "feed as the build sees it: HTTP $($withKey.StatusCode)"
 
           if ($withKey.StatusCode -eq 404) {
-            Write-Host "::warning::$feed does not exist, or the UPDATES_TOKEN is not scoped to it. Check Repository access on the token, and that the repository name matches this workflow and electron-builder.yml."
+            Write-Host "::warning::$feed does not answer even to this build's own token, which should be impossible — the name in this workflow and in electron-builder.yml must be the repository this workflow runs in."
             "publish=no" >> $env:GITHUB_OUTPUT
             exit 0
           }
@@ -234,7 +244,7 @@ jobs:
             # Not a warning. A private feed is a package that can never update
             # itself, and shipping one quietly is the failure this whole step
             # exists to prevent.
-            throw "$feed is PRIVATE. An installed copy has no login, so it could never download from it — and giving it one would put a credential inside every customer's app. Make the repository public."
+            throw "$feed is PRIVATE. An installed copy has no login, so it could never download from it — and giving it one would put a credential inside every customer's app. Either make this repository public again, or move the update feed to a separate public repository (change `publish:` in electron-builder.yml and the feed name in this workflow, and give the build a token that may write there)."
           }
           if ($anon.StatusCode -ne 200) {
             # The token can read it and a stranger momentarily could not, which
@@ -259,7 +269,7 @@ jobs:
           # forty-line stack trace into an instruction.
           Write-Host "update feed ready: $feed (readable; write access is proven by the publish itself)"
 
-          $url = "https://api.github.com/repos/stasix12/https-github.com-new/releases/tags/v$version"
+          $url = "https://api.github.com/repos/$feed/releases/tags/v$version"
           try {
             Invoke-RestMethod -Uri $url -Headers @{ 'User-Agent' = 'hapitaron-build' } | Out-Null
             Write-Host "v$version is already published. Bump WORKER_VERSION to ship a new one."
@@ -269,15 +279,16 @@ jobs:
             "publish=yes" >> $env:GITHUB_OUTPUT
           }
         env:
-          UPDATES_TOKEN: ${{ secrets.UPDATES_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: publish the version customers update to
         if: steps.release.outputs.publish == 'yes'
         env:
-          # electron-builder's GitHub publisher reads this. It is a token for
-          # the PUBLIC installer repository only — it cannot read the source,
-          # and nothing about it ever reaches the package.
-          GH_TOKEN: ${{ secrets.UPDATES_TOKEN }}
+          # electron-builder's GitHub publisher reads this. It is the token
+          # GitHub issues for this workflow run, scoped to this repository and
+          # expiring with the job — there is nothing to store, nothing to
+          # rotate, and nothing that could reach the package.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         # Not a second build: --publish only uploads what dist/installer already
@@ -294,8 +305,8 @@ jobs:
           $out | ForEach-Object { Write-Host $_ }
           if ($LASTEXITCODE -ne 0) {
             $text = ($out | Out-String)
-            if ($text -match 'Resource not accessible by personal access token' -or $text -match 'contents=write') {
-              throw "The release was refused: the UPDATES_TOKEN may READ the feed repository but not WRITE to it. Fix it at https://github.com/settings/personal-access-tokens — open the token, and under Repository permissions set Contents to 'Read and write'. Everything else about this build is fine; the installer is already uploaded as an artifact."
+            if ($text -match 'Resource not accessible' -or $text -match 'contents=write') {
+              throw "The release was refused for want of write access. This build publishes with the token GitHub issues it, so the setting to look at is Settings -> Actions -> General -> Workflow permissions on this repository: it must be 'Read and write permissions'. Everything else about this build is fine; the installer is already uploaded as an artifact."
             }
             throw "electron-builder could not publish the release. The reason is in the output above."
           }
@@ -307,6 +318,6 @@ jobs:
           $v = "${{ steps.release.outputs.version }}"
           "### גרסה $v פורסמה" >> $env:GITHUB_STEP_SUMMARY
           "" >> $env:GITHUB_STEP_SUMMARY
-          "הורדה ישירה: https://github.com/stasix12/https-github.com-new/releases/download/v$v/hapitaron-$v-setup.exe" >> $env:GITHUB_STEP_SUMMARY
+          "הורדה ישירה: https://github.com/stasix12/ANX-/releases/download/v$v/hapitaron-$v-setup.exe" >> $env:GITHUB_STEP_SUMMARY
           "" >> $env:GITHUB_STEP_SUMMARY
           "כל מחשב שכבר מותקנת עליו התוכנה יאסוף אותה לבד תוך כמה שעות, בלי הקישור הזה." >> $env:GITHUB_STEP_SUMMARY

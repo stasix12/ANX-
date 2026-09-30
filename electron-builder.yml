@@ -38,27 +38,38 @@ asarUnpack:
 # electron-updater has no feed and the app says so on its עדכונים screen
 # rather than claiming to be current.
 #
-# IT IS A DIFFERENT REPOSITORY, AND A PUBLIC ONE, ON PURPOSE. The source lives
-# in a private repository, and a private repository's release assets need a
-# token to download. Shipping such a token inside every installer would put a
-# credential that can read all of the source into the hands of every customer
-# — exactly what worker/test/package.test.ts exists to make impossible. So the
-# installer, and only the installer, lives in a public repository that holds
-# no code. What is exposed there is a version number and a file that anybody
-# who was ever sent a download link already had.
-# THE NAME IS WHAT THE REPOSITORY IS ACTUALLY CALLED, not what it should have
-# been called. It was created by pasting the "new repository" URL into the name
-# field, and GitHub turned that into a legal repository name — so this is the
-# address every installed copy really has to ask. Renaming it on GitHub is a
-# cosmetic change and a one-line change here; leaving these two disagreeing is
-# a product that silently never updates, which is what the whole feed is for.
+# THE ONE PROPERTY THAT MATTERS IS THAT IT IS PUBLIC. A private repository's
+# release assets need a token to download, so pointing the updater at one would
+# mean shipping a credential inside every customer's installer — exactly what
+# worker/test/package.test.ts exists to make impossible.
 #
-# Kept identical to the three places .github/workflows/build-app.yml names it,
-# and worker/test/updates.test.ts fails the build if they ever drift apart.
+# IT USED TO BE A SEPARATE REPOSITORY, and the reason written here was that the
+# source is private. The source is not private: stasix12/ANX- is public, and has
+# been throughout. So the separate feed bought nothing and cost the one thing
+# that mattered — it could only be published to with a hand-made token, that
+# token was issued read-only, and for days every build ended with a green
+# installer that no installed copy could ever see. A feature nobody can turn on
+# is not a feature.
+#
+# Publishing to the repository the build already runs in needs no token at all:
+# GitHub hands every workflow one, scoped to that repository, that cannot leak
+# and cannot be misconfigured. Nothing extra is exposed — the source is already
+# public, and a release adds a version number and a file that anybody sent a
+# download link already had.
+#
+# IF THE SOURCE IS EVER MADE PRIVATE, this becomes the trap the old comment was
+# afraid of: installed copies would go on asking a repository they can no longer
+# read, silently. build-app.yml therefore asks GitHub — anonymously, exactly as
+# an installed copy asks — and REFUSES to publish when the answer is not public.
+# Then it is a loud build failure with instructions, rather than a hundred
+# machines quietly stuck on an old version.
+#
+# Kept identical to the places .github/workflows/build-app.yml names it, and
+# worker/test/updates.test.ts fails the build if they ever drift apart.
 publish:
   provider: github
   owner: stasix12
-  repo: https-github.com-new
+  repo: ANX-
   # Live immediately rather than as a draft: a draft is invisible to the
   # updater, so a release nobody remembers to un-draft is a release that
   # silently never reaches anybody.

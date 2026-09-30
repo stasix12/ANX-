@@ -202,28 +202,53 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
   is(/^publish:/m.test(builder), 'the package must be built with a publish feed, or app-update.yml is never written and an installed copy has nothing to check');
   const repo = builder.match(/^\s+repo:\s*(\S+)/m)?.[1];
   /*
-   * THE PROPERTY, NOT THE NAME. This pinned the string "hapitaron-updates",
-   * and then the feed repository turned out to have been created under a
-   * different name entirely — so the build failed on a package that was
-   * correct, and the only way to make it pass was to change the name in a
-   * third place. A test that has to be edited to accept a working
-   * configuration is testing the author's memory, not the product.
+   * THE PROPERTY, NOT THE NAME — twice over now.
    *
-   * What actually matters is that the feed is NOT the source repository. Put
-   * the updater there and every installer needs a credential able to read all
-   * of the source, which is what the whole first half of this file exists to
-   * prevent.
+   * This first pinned the string "hapitaron-updates", and the feed repository
+   * turned out to have been created under a different name entirely, so the
+   * build failed on a package that was correct. It then asserted that the feed
+   * is not the source repository, as a stand-in for "the feed is public".
    *
-   * Whether the feed is readable without a login is no longer guessed at from
-   * a name either: build-app.yml asks GitHub, unauthenticated, exactly as an
-   * installed copy would, and refuses to publish when the answer is no.
+   * That stand-in was wrong in the direction that costs the most: it was
+   * enforcing a SEPARATE repository, which can only be published to with a
+   * hand-made token — and that token was issued read-only, so for days the
+   * build produced a good installer and had its release refused at the last
+   * step. The source repository is public and always was, so the separation
+   * was protecting against nothing while breaking the thing it protected.
+   *
+   * What actually matters is that WHATEVER the feed is, an installed copy can
+   * read it with no login. That cannot be read off a name, so it is not
+   * guessed at here: build-app.yml asks GitHub anonymously, exactly as an
+   * installed copy asks, and refuses to publish when the answer is not public.
+   * This asserts that the refusal is still there.
    */
-  const source = path.basename(root);
+  const flow = readFileSync(path.join(root, '.github', 'workflows', 'build-app.yml'), 'utf8');
   is(Boolean(repo), 'the feed names a repository');
   is(
-    repo !== source,
-    `the feed must be a separate installer-only repository, not the source one (found: ${repo})`,
+    /\.private\)\s*\{[\s\S]{0,400}?throw "\$feed is PRIVATE/.test(flow),
+    'the build refuses to publish to a feed a stranger cannot read — the one property an update feed must have',
   );
+  is(
+    /\$anon = Invoke-WebRequest[\s\S]{0,200}?\$feed/.test(flow),
+    'and it asks anonymously, the way an installed copy asks, rather than trusting a name',
+  );
+  /*
+   * AND THE PUBLISH MUST NOT HANG ON A SECRET SOMEBODY HAS TO CREATE.
+   *
+   * The whole feature spent days broken on exactly that. GitHub issues every
+   * workflow a token for its own repository; it cannot be forgotten, scoped
+   * wrongly or left read-only, and it expires with the job — so it is the only
+   * credential this build is allowed to depend on.
+   */
+  is(
+    /GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/.test(flow),
+    'the release is published with the token GitHub issues the run, not with one a person has to make and maintain',
+  );
+  is(
+    /^permissions:\s*\n\s+contents: write$/m.test(flow),
+    'and the workflow asks for the write permission that token needs, out loud',
+  );
+  is(!/UPDATES_TOKEN: \$\{\{ secrets/.test(flow), 'no hand-made token is wired into the publish any more');
   is(/^\s+releaseType:\s*release$/m.test(builder), 'and it must publish live releases — a draft is invisible to the updater');
 
   const updates = readFileSync(path.join(root, 'desktop', 'updates.ts'), 'utf8');

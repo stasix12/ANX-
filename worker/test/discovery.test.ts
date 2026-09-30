@@ -7,6 +7,7 @@ import {
   matchesFilter,
   mergeDiscovered,
   membersText,
+  nameMatches,
   newSince,
   normalizeQuery,
   parseMembers,
@@ -306,6 +307,43 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(!('hidden' in m), 'nor hidden — a group he dismissed must not come back because he searched again');
 }
 
+/* ------------------------------ only the ones whose NAME carries the phrase */
+{
+  /*
+   * "למה שאני רושם ערד זה מוצא לי גם קבוצות אחרות — שימצא קבוצות שמכילות את
+   *  השם ערד בלבד."
+   *
+   * Facebook's group search is associative. His search for "ערד" came back
+   * with "דימונה שלנו", "דימונאים גאים בדימונה" and "שכונת השחר-דימונה" —
+   * none of which carry the word. For a publishing list of one city that is
+   * ninety rows to read past.
+   */
+  is(nameMatches('ערד ביחד', 'ערד'), 'the word is in the name');
+  is(nameMatches('קבוצת עסקים בערד והסביבה', 'ערד'), 'and inside a longer word of the same place');
+  is(!nameMatches('דימונה שלנו', 'ערד'), 'A GROUP THAT DOES NOT CARRY THE WORD IS NOT A RESULT — this is the whole complaint');
+  is(!nameMatches('דימונאים גאים בדימונה', 'ערד'), 'however related Facebook thinks it is');
+  is(!nameMatches('שכונת השחר-דימונה', 'ערד'), 'and however it is punctuated');
+
+  /*
+   * PUNCTUATION IS FLATTENED ON BOTH SIDES. "באר-שבע" and "באר שבע" are one
+   * place written two ways, and a plain substring test calls one a miss.
+   */
+  is(nameMatches('באר-שבע ביחד', 'באר שבע'), 'a hyphen between the words is not a different city');
+  is(nameMatches('דרושים | באר שבע | דרום', 'באר שבע'), 'nor are pipes around it');
+  is(nameMatches('באר   שבע', 'באר שבע'), 'nor is doubled whitespace');
+  is(nameMatches('\u200fערד\u200e ביחד', 'ערד'), 'nor are the bidi marks a Hebrew page carries invisibly');
+
+  /*
+   * THE PHRASE, NOT ITS WORDS IN ANY ORDER — because "words in any order" is
+   * exactly what Facebook is already doing to him.
+   */
+  is(!nameMatches('שבע מעיינות באר אורה', 'באר שבע'), 'the words in another order are another place');
+  is(nameMatches('Наша Беэр-Шева', 'беэр шева'), 'and the same rule reads Cyrillic, where case does matter');
+  is(nameMatches('Beer Sheva Board', 'BEER sheva'), 'and Latin');
+
+  eq(nameMatches('anything at all', ''), true, 'an empty phrase filters nothing, rather than everything');
+}
+
 /* ------------------------------------------------------------ the phrase */
 {
   eq(normalizeQuery('  באר   שבע '), 'באר שבע', 'spaces collapse');
@@ -405,6 +443,8 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   );
   is(!/seen\.add\(key\)/.test(worker), 'and no anchor is skipped before it has been considered for the name');
   is(/search\/groups/.test(worker), "and it reads Facebook's own group search, signed in as the account that is already signed in");
+  is(/onTopic = all\.filter\(\(g\) => nameMatches\(g\.name, query\)\)/.test(worker), 'and keeps only the results whose NAME carries the phrase');
+  is(/offTopic: all\.length - onTopic\.length/.test(worker), 'counting what it dropped rather than hiding it — "why so few" has to have an answer');
 
   const sql = readFileSync(new URL('../../supabase/social-latest.sql', import.meta.url), 'utf8');
   const check = sql.match(/check \(membership in \(([^)]*)\)\)/);

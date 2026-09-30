@@ -1467,9 +1467,12 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
               await logActivity('info', 'discover_unread', `לא הצלחנו לקרוא סטטוס חברות ב-${found.unread.length} כרטיסים. מה שהיה עליהם: ${sample}`);
             }
             const shots = need.length ? ` ${wrote.pictures} תמונות.` : '';
+            /* Counted rather than hidden: a search that drops most of what it
+               found owes the person the number, or "why so few" has no answer. */
+            const skipped = found.offTopic ? ` (${found.offTopic} תוצאות שלא הכילו את המילה סוננו)` : '';
             result = found.groups.length
-              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${shots}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
-              : 'לא נמצאו קבוצות למילה הזאת.';
+              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${shots}${skipped}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
+              : `לא נמצאו קבוצות ששמן מכיל "${phrase}".${skipped}`;
           }
         }
       } else if (cmd.command === 'resume') {

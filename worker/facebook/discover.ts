@@ -1,5 +1,5 @@
 import type { Page } from 'playwright-core';
-import { dedupe, interpretCard, type DiscoveredGroup, type RawCard } from '../../src/lib/social/discovery';
+import { dedupe, interpretCard, nameMatches, type DiscoveredGroup, type RawCard } from '../../src/lib/social/discovery';
 
 /*
  * גילוי קבוצות, the browser half: OPEN FACEBOOK'S OWN SEARCH AND READ IT.
@@ -97,6 +97,10 @@ export interface SearchOutcome {
   problem: string;
   /** True when the scroll hit the ceiling rather than the end of the results. */
   truncated: boolean;
+  /** Results Facebook returned whose NAME did not contain the phrase. Counted
+      rather than hidden: a search that quietly drops most of what it found
+      owes the person the number. */
+  offTopic: number;
 }
 
 /**
@@ -150,7 +154,16 @@ export async function searchGroups(page: Page, query: string, opts: { pictures?:
     await page.waitForTimeout(1_400);
   }
 
-  const groups = dedupe(collected).slice(0, MAX_GROUPS);
+  /*
+   * ONLY THE ONES WHOSE NAME REALLY CARRIES THE PHRASE.
+   *
+   * Facebook's group search is associative — "ערד" comes back with three
+   * different Dimona groups — and for a publishing list of one city that is
+   * ninety rows to read past. See nameMatches.
+   */
+  const all = dedupe(collected);
+  const onTopic = all.filter((g) => nameMatches(g.name, query));
+  const groups = onTopic.slice(0, MAX_GROUPS);
 
   /*
    * `opts.pictures` is the list of ids the CALLER still needs a picture for —
@@ -161,7 +174,7 @@ export async function searchGroups(page: Page, query: string, opts: { pictures?:
   const wanted = new Set(opts.pictures ?? []);
   const pictures = wanted.size ? await fetchPictures(page, groups.filter((g) => wanted.has(g.externalId))) : new Map<string, CardPicture>();
 
-  return { groups, pictures, unread: [...unread.values()], problem: '', truncated };
+  return { groups, pictures, unread: [...unread.values()], problem: '', truncated, offTopic: all.length - onTopic.length };
 }
 
 /**

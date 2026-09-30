@@ -407,6 +407,36 @@ export function mergeDiscovered(
 /* ------------------------------------------------------------ the phrase */
 
 /**
+ * Does this group's NAME actually contain what he typed?
+ *
+ * "למה שאני רושם ערד זה מוצא לי גם קבוצות אחרות — שימצא קבוצות שמכילות את
+ *  השם ערד בלבד."
+ *
+ * Facebook's group search is associative: "ערד" comes back with "דימונה
+ * שלנו", "דימונאים גאים בדימונה" and "שכונת השחר-דימונה", none of which
+ * carry the word. For finding people to talk to that is a feature; for
+ * building a publishing list of ONE city it is ninety rows to read past.
+ *
+ * PUNCTUATION IS FLATTENED ON BOTH SIDES, and that is the whole subtlety.
+ * "באר-שבע" and "באר שבע" are the same place written two ways, and a plain
+ * substring test calls one of them a miss. Hyphens, slashes, commas and the
+ * rest become spaces first, so the phrase matches the name a person would
+ * read, not the bytes Facebook happened to store.
+ *
+ * The phrase and not its words: "באר שבע" must not match a group called
+ * "שבע מעיינות באר אורה". He asked for exact, and the words-in-any-order
+ * reading is what Facebook is already doing to him.
+ */
+const FLATTEN = /[-–—_,.:;/\\|()[\]{}'"״׳`~!?*+=&]+/g;
+
+export function nameMatches(name: string, query: string): boolean {
+  const flat = (t: string) => normalizeQuery(t).replace(FLATTEN, ' ').replace(/\s+/g, ' ').trim();
+  const needle = flat(query);
+  if (!needle) return true;
+  return flat(name).includes(needle);
+}
+
+/**
  * The form two searches are compared by.
  *
  * Hebrew has no case, which is exactly why this cannot simply be skipped: the

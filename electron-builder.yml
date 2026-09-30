@@ -95,9 +95,16 @@ compression: maximum
 # Hebrew and written by us; the only two that can ever be READ here are Hebrew
 # and the English fallback Chromium requires. The other fifty-odd are tens of
 # megabytes for languages nobody using this product has.
+# …AND ON WINDOWS THIS SETTING IS IGNORED, which the first attempt at it paid
+# to discover: the build accepted it, went green, and shipped all fifty-five
+# anyway. It is kept because it is honoured for the Linux build, and the hook
+# below does the same job for every platform — including the one the customers
+# are on.
 electronLanguages:
   - he
   - en-US
+
+afterPack: scripts/trim-locales.cjs
 
 win:
   # NSIS ONLY. The zip was a second copy of the same program — 190 MB beside a

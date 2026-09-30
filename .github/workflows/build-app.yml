@@ -276,6 +276,35 @@ jobs:
           } catch {
             Write-Host "v$version is new — publishing."
             "publish=yes" >> $env:GITHUB_OUTPUT
+
+            # THE RELEASE IS CREATED HERE, ONCE, BEFORE ANYTHING UPLOADS.
+            #
+            # electron-builder starts one publisher per file and each of them
+            # checks "does the release exist?" and creates it if not. With two
+            # files that is two checks and two creates, a few milliseconds
+            # apart, both answering "doesn't exist" — and GitHub refused the
+            # loser with 422 "Published releases must have a valid tag".
+            #
+            # What that left behind was worse than a failed build: a release
+            # holding the installer and NOT latest.yml, sitting at
+            # /releases/latest, which is the one file an installed copy reads.
+            # Every machine asking for an update got nothing, from a release
+            # that looked perfectly fine on the page.
+            #
+            # Creating it up front makes the race impossible: both publishers
+            # find it and both just upload. target_commitish is the commit this
+            # build ran on, so the tag it creates always points at real code.
+            $make = @{ tag_name = "v$version"; name = $version; target_commitish = $env:GITHUB_SHA; draft = $false; prerelease = $false } | ConvertTo-Json
+            $auth = $head + @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
+            $made = Invoke-WebRequest -Method Post -Uri "https://api.github.com/repos/$feed/releases" -Headers $auth -Body $make -ContentType 'application/json' -SkipHttpErrorCheck
+            if ($made.StatusCode -eq 201) {
+              Write-Host "release v$version created up front — the uploads have somewhere to land"
+            } elseif ($made.StatusCode -eq 422) {
+              # Already there, which is the other way this is safe to run.
+              Write-Host "release v$version already exists — uploading into it"
+            } else {
+              throw "Could not create release v$version (HTTP $($made.StatusCode)): $($made.Content)"
+            }
           }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -290,6 +319,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          VERSION: ${{ steps.release.outputs.version }}
         # Not a second build: --publish only uploads what dist/installer already
         # holds, including the latest.yml that electron-updater actually reads.
         #
@@ -304,11 +334,52 @@ jobs:
           $out | ForEach-Object { Write-Host $_ }
           if ($LASTEXITCODE -ne 0) {
             $text = ($out | Out-String)
-            if ($text -match 'Resource not accessible' -or $text -match 'contents=write') {
-              throw "The release was refused for want of write access. This build publishes with the token GitHub issues it, so the setting to look at is Settings -> Actions -> General -> Workflow permissions on this repository: it must be 'Read and write permissions'. Everything else about this build is fine; the installer is already uploaded as an artifact."
+            # MATCHED ON THE ERROR, NOT ON A HEADER THAT IS ALWAYS THERE.
+            #
+            # This matched 'contents=write', which GitHub prints in
+            # x-accepted-github-permissions on EVERY response it refuses —
+            # including a 422 about something else entirely. So a race over
+            # creating the release was reported to the owner as "your token
+            # cannot write", and he was sent to fix a permission that was
+            # already correct. Exactly the mistake the comment above this step
+            # warns about, made again, one line lower.
+            if ($text -match 'Resource not accessible by') {
+              throw "The release was refused for want of write access. This build publishes with the token GitHub issues it, so the setting to look at is Settings -> Actions -> General -> Workflow permissions: it must be 'Read and write permissions'. The installer is already uploaded as an artifact."
+            }
+            if ($text -match '422') {
+              throw "GitHub refused something about the release itself (422), not the permission to make it. The release for this version may already exist, or exist half-finished — open https://github.com/$feed/releases, and if v$($env:VERSION) is there WITHOUT latest.yml beside the .exe, delete it and run this build again. A release missing latest.yml is invisible to every installed copy."
             }
             throw "electron-builder could not publish the release. The reason is in the output above."
           }
+
+      # THE ONLY CHECK THAT MATTERS: can an installed copy see this version?
+      #
+      # A release can exist, look complete on the page, carry the installer —
+      # and be invisible to every machine in the world, because the one file
+      # electron-updater reads is latest.yml and it is uploaded last. That is
+      # exactly what the previous build left behind, and nothing noticed.
+      #
+      # So the build asks the same question an installed copy asks, the same
+      # way, with no credentials, and fails if the answer is not there.
+      - name: can an installed copy actually see it?
+        if: steps.release.outputs.publish == 'yes'
+        shell: pwsh
+        run: |
+          $v = "${{ steps.release.outputs.version }}"
+          $feed = 'stasix12/ANX-'
+          $head = @{ 'User-Agent' = 'hapitaron-build'; 'Accept' = 'application/vnd.github+json' }
+          $rel = Invoke-WebRequest -Uri "https://api.github.com/repos/$feed/releases/tags/v$v" -Headers ($head + @{ Authorization = "Bearer $env:GITHUB_TOKEN" }) -SkipHttpErrorCheck
+          if ($rel.StatusCode -ne 200) { throw "v$v was published and cannot be read back (HTTP $($rel.StatusCode))." }
+          $names = ($rel.Content | ConvertFrom-Json).assets | ForEach-Object { $_.name }
+          Write-Host "assets on v$v : $($names -join ', ')"
+          foreach ($needed in @('latest.yml', "hapitaron-$v-setup.exe")) {
+            if ($names -notcontains $needed) {
+              throw "v$v is missing $needed. A release without latest.yml is one no installed copy can see — delete it at https://github.com/$feed/releases and run this build again."
+            }
+          }
+          Write-Host "v$v is complete: the installer and the file every installed copy reads."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: say where it went
         if: steps.release.outputs.publish == 'yes'
@@ -327,3 +398,5 @@ jobs:
           "הורדה ישירה: https://github.com/stasix12/ANX-/releases/download/v$v/hapitaron-$v-setup.exe" >> $env:GITHUB_STEP_SUMMARY
           "" >> $env:GITHUB_STEP_SUMMARY
           "כל מחשב שכבר מותקנת עליו התוכנה יאסוף אותה לבד תוך כמה שעות, בלי הקישור הזה." >> $env:GITHUB_STEP_SUMMARY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

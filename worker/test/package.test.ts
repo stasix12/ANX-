@@ -272,6 +272,35 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
   /* And nothing else is built beside it: the zip was a second copy of the same
      program that no customer downloads and the updater never reads. */
   is(!/target:\s*zip/.test(builder), 'no second copy of the program is built beside the installer');
+  /*
+   * AND THE LOCALES ARE REMOVED BY SOMETHING THAT ACTUALLY RUNS ON WINDOWS.
+   *
+   * `electronLanguages` above is honoured on Linux and IGNORED on Windows —
+   * the build accepted it, went green, and shipped all fifty-five anyway. A
+   * setting that is accepted and does nothing is worse than no setting,
+   * because it reads like the job is done.
+   */
+  is(/^afterPack:\s*scripts\/trim-locales\.cjs$/m.test(builder), 'a hook removes the locales on every platform, including the one the customers are on');
+  const trim = readFileSync(path.join(root, 'scripts', 'trim-locales.cjs'), 'utf8');
+  is(/'he\.pak', 'en-US\.pak'/.test(trim), 'and it keeps Hebrew and the English fallback Chromium cannot start without');
+
+  /*
+   * THE HALF-RELEASE, which is the worst outcome this whole feature has.
+   *
+   * electron-builder starts a publisher per file, each one creating the
+   * release if it is missing; two of them raced, GitHub refused the loser, and
+   * what was left was a release carrying the installer and NOT latest.yml —
+   * at /releases/latest, where every installed copy looks. It looked complete
+   * on the page and was invisible to every machine in the world.
+   */
+  is(
+    /releases" -Headers \$auth -Body \$make/.test(flow),
+    'the release is created once, up front, so two uploaders cannot both try to create it',
+  );
+  is(
+    /if \(\$names -notcontains \$needed\)/.test(flow) && /'latest\.yml'/.test(flow),
+    'and the build reads the release back and fails if latest.yml is not on it — the one file an installed copy needs',
+  );
 
   const updates = readFileSync(path.join(root, 'desktop', 'updates.ts'), 'utf8');
   is(/autoUpdater\.autoDownload = false/.test(updates), 'the download is started deliberately, so the "עדכונים אוטומטיים" toggle actually decides');

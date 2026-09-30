@@ -316,26 +316,25 @@ function profilePathOf(raw: string): string {
   }
 }
 
-export async function readAccountProfile(page: Page): Promise<AccountProfile | null> {
-  const cookies = await page.context().cookies('https://www.facebook.com').catch(() => []);
-  const id = cookies.find((c) => c.name === 'c_user')?.value ?? '';
-  if (!id) return null;
-
-  /*
-   * FIRST, THE PAGE'S OWN DATA — no DOM guessing and no second page load.
-   *
-   * facebook.com embeds a `CurrentUserInitialData` blob in its bootstrap
-   * script holding the signed-in user's ACCOUNT_ID and NAME. Measured on the
-   * owner's machine, both DOM attempts below came back empty on the real home
-   * layout while this blob was sitting in the HTML the whole time.
-   *
-   * It is matched next to the id we already have from the cookie, so a blob
-   * belonging to anything else cannot be mistaken for the signed-in user, and
-   * the value is unescaped through JSON.parse because Hebrew and Cyrillic
-   * arrive as \uXXXX. Structural, not linguistic: nothing here depends on the
-   * account's language.
-   */
-  const fromBlob = await page
+/**
+ * The signed-in account's NAME, out of the page's own bootstrap data.
+ *
+ * facebook.com embeds a `CurrentUserInitialData` blob in its bootstrap script
+ * holding the signed-in user's ACCOUNT_ID and NAME. Measured on the owner's
+ * machine, both DOM attempts elsewhere in this file came back empty on the real
+ * home layout while this blob was sitting in the HTML the whole time.
+ *
+ * It is matched next to the id the COOKIE gave us, so a blob belonging to
+ * anything else cannot be mistaken for the signed-in user, and the value is
+ * unescaped through JSON.parse because Hebrew and Cyrillic arrive as \uXXXX.
+ * Structural, not linguistic: nothing here depends on the account's language.
+ *
+ * It is also the FASTEST answer there is — one read of HTML that is already in
+ * memory, no page load, no waiting for Facebook's app to draw — which is why
+ * readAccountIdentity() below is built on it.
+ */
+async function nameFromBlob(page: Page, id: string): Promise<string> {
+  return await page
     .content()
     .then((html) => {
       const at = html.indexOf('"CurrentUserInitialData"');
@@ -354,27 +353,18 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
       }
     })
     .catch(() => '');
+}
 
-  /*
-   * The picture is taken HERE, on the page that is already open.
-   *
-   * It used to be attempted only on the profile page, behind a navigation that
-   * only happened when the rail link was missing — so on the layout where the
-   * rail link WAS found, no picture was ever looked for at all. The home page
-   * carries the owner's avatar in its top bar on every layout Facebook has
-   * shipped; asking for it here costs one evaluate and no page load.
-   */
-  let shot = await captureAvatar(page, id, fromBlob, '');
-
-  /*
-   * The profile link is found BY THE ID, never by a label.
-   *
-   * Facebook renders this app in whatever language the account is set to, so
-   * matching "Your profile" or "הפרופיל שלך" breaks for half the owners who
-   * would use it. The left rail's first row links to the signed-in user, and
-   * that href carries the same id the cookie just gave us — which is a fact
-   * about identity rather than a guess about markup.
-   */
+/**
+ * The name on the left rail's own link to the signed-in profile.
+ *
+ * FOUND BY THE ID, never by a label: Facebook renders this app in whatever
+ * language the account is set to, so matching "Your profile" or "הפרופיל שלך"
+ * breaks for half the owners who would use it. The rail's first row links to
+ * the signed-in user and that href carries the same id the cookie gave us —
+ * a fact about identity rather than a guess about markup.
+ */
+async function nameFromRail(page: Page, id: string): Promise<string> {
   const found = await page
     .evaluate((userId: string) => {
       const links = Array.from(document.querySelectorAll('a[href]')) as HTMLAnchorElement[];
@@ -388,8 +378,52 @@ export async function readAccountProfile(page: Page): Promise<AccountProfile | n
       return null;
     }, id)
     .catch(() => null);
+  return found?.name ?? '';
+}
 
-  const nameHere = fromBlob || found?.name || '';
+/**
+ * WHO IS SIGNED IN, AND NOTHING ELSE — the cheap read.
+ *
+ * No screenshot, no /me navigation, no waiting for pictures to render: the
+ * cookie, the bootstrap blob, and failing that one look at the rail. Measured
+ * against readAccountProfile() below, which does all of that and is worth it
+ * when the answer is going on the dashboard for the first time, this is the
+ * difference between a profile switch that takes half a minute and one that
+ * takes a few seconds — "אני רוצה שהמעבר יקרה מיידי … גג 5-7 שניות".
+ *
+ * It exists BECAUSE the expensive parts are not needed on that path: the name
+ * is what confirms the switch, and the picture of every identity was already
+ * photographed out of Facebook's own account menu and stored beside it.
+ */
+export async function readAccountIdentity(page: Page): Promise<{ id: string; name: string } | null> {
+  const cookies = await page.context().cookies('https://www.facebook.com').catch(() => []);
+  const id = cookies.find((c) => c.name === 'c_user')?.value ?? '';
+  if (!id) return null;
+  const name = (await nameFromBlob(page, id)) || (await nameFromRail(page, id));
+  return { id, name };
+}
+
+export async function readAccountProfile(page: Page): Promise<AccountProfile | null> {
+  const cookies = await page.context().cookies('https://www.facebook.com').catch(() => []);
+  const id = cookies.find((c) => c.name === 'c_user')?.value ?? '';
+  if (!id) return null;
+
+  /* The page's own data first — see nameFromBlob(). */
+  const fromBlob = await nameFromBlob(page, id);
+
+  /*
+   * The picture is taken HERE, on the page that is already open.
+   *
+   * It used to be attempted only on the profile page, behind a navigation that
+   * only happened when the rail link was missing — so on the layout where the
+   * rail link WAS found, no picture was ever looked for at all. The home page
+   * carries the owner's avatar in its top bar on every layout Facebook has
+   * shipped; asking for it here costs one evaluate and no page load.
+   */
+  let shot = await captureAvatar(page, id, fromBlob, '');
+
+  /* Then the rail's own link to the signed-in profile — see nameFromRail(). */
+  const nameHere = fromBlob || (await nameFromRail(page, id));
   if (nameHere && shot.image) return { id, name: nameHere, image: shot.image, imageNote: shot.reason, probe: shot.probe };
 
   /*

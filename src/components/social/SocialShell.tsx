@@ -567,37 +567,44 @@ export function SocialShell({
             }
             className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
           >
-            {who?.avatar ? (
-              /* THE RING IS THE HONESTY. The picture and the name are already
-                 the chosen ones; the brand ring, pulsing, is what says the
-                 computer has not confirmed it yet — so the bar can answer the
-                 tap instantly without asserting that this identity is already
-                 publishing. It returns to the quiet grey the moment the switch
-                 lands. */
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={who.avatar}
-                alt=""
-                className={`h-10 w-10 shrink-0 rounded-full object-cover ${
-                  pending ? 'ring-2 ring-brand-300 motion-safe:animate-pulse' : 'ring-1 ring-ink-700'
-                }`}
-              />
-            ) : (
-              /* No picture, or nobody connected yet: the brand mark holds the
-                 slot rather than a grey circle, so the bar never looks broken
-                 before the first connection. */
-              <span
-                aria-hidden
-                className={`grad-primary grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500 text-on-brand shadow-[0_4px_12px_rgba(124,58,237,0.25)] ${
-                  /* An identity whose logo was never photographed still shows
-                     that it is mid-switch — the ring belongs to the state, not
-                     to the picture. */
-                  pending ? 'ring-2 ring-brand-300 motion-safe:animate-pulse' : ''
-                }`}
-              >
-                <SparklesIcon className="h-5 w-5" />
-              </span>
-            )}
+            {/*
+              THE PICTURE, AND A RING THAT TURNS WHILE THE COMPUTER WORKS.
+              *
+              * Asked for in those words: "בזמן הזה שקורה מעבר שתיהיה אינדיקציה
+              * של טעינה (סוג של טבעת טעינה מסביב לתמונה שזה עובר אלייה)". The
+              * chosen face and name are already up — this is what says the
+              * machine has not finished, and it is a spinner rather than a pulse
+              * because a pulse reads as decoration and a turning ring reads as
+              * work in progress.
+              *
+              * It rides OUTSIDE the picture (a 2px outset, which keeps the whole
+              * control at the header's 44px row height) so nothing of the logo
+              * is covered, and it is aria-hidden: the button's own label already
+              * says "מעביר ל…", and a screen reader has no use for a spinning
+              * border.
+            */}
+            <span className="relative block h-10 w-10 shrink-0">
+              {who?.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={who.avatar} alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-ink-700" />
+              ) : (
+                /* No picture, or nobody connected yet: the brand mark holds the
+                   slot rather than a grey circle, so the bar never looks broken
+                   before the first connection. */
+                <span
+                  aria-hidden
+                  className="grad-primary grid h-10 w-10 place-items-center rounded-full bg-brand-500 text-on-brand shadow-[0_4px_12px_rgba(124,58,237,0.25)]"
+                >
+                  <SparklesIcon className="h-5 w-5" />
+                </span>
+              )}
+              {pending && (
+                <span
+                  aria-hidden
+                  className="absolute -inset-0.5 rounded-full border-2 border-brand-300/25 border-t-brand-400 motion-safe:animate-spin"
+                />
+              )}
+            </span>
           </button>
           {whoOpen && (
             <>

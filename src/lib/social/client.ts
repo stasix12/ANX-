@@ -1425,10 +1425,12 @@ export async function getWorkerCommand(id: string): Promise<WorkerCommand | null
  * ceiling is generous: it exists to stop a screen waiting forever on a computer
  * that was switched off mid-command, not to judge how long Facebook may take.
  *
- * Two and a half seconds between asks — one row, by its primary key, and only
- * while something is actually in flight.
+ * ONE SECOND between asks — one row, by its primary key, and only while
+ * something is actually in flight. It was two and a half, which on a switch that
+ * now takes five or six seconds was up to half of the remaining wait spent
+ * looking at a finished answer nobody had fetched yet.
  */
-export const COMMAND_POLL_MS = 2_500;
+export const COMMAND_POLL_MS = 1_000;
 export const COMMAND_WAIT_MS = 150_000;
 
 /**

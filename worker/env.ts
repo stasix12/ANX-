@@ -91,6 +91,24 @@ export const env = {
   get pollMs() {
     return Number(process.env.SOCIAL_WORKER_POLL_MS ?? 5000);
   },
+  /*
+   * HOW OFTEN THE IDLE WORKER LOOKS FOR AN INSTRUCTION FROM THE PHONE.
+   *
+   * The queue's own pace is `pollMs` above and it is right: a publication that
+   * is not due is not due, and asking every second would be a thousand pointless
+   * reads an hour. But a BUTTON is different — somebody is holding the phone
+   * waiting for it — and until now a tap waited out that same five-second sleep
+   * before the machine even heard about it.
+   *
+   * So the idle wait is spent in short slices with one small query per slice
+   * (pending commands for this worker, by index), which is what makes "לפרסם
+   * כעת", "בדוק חיבור" and a profile switch feel like they were pressed rather
+   * than scheduled. One second is the granularity of a person's patience;
+   * lower would buy nothing they could perceive.
+   */
+  get commandPollMs() {
+    return Number(process.env.SOCIAL_WORKER_COMMAND_POLL_MS ?? 1000);
+  },
   get locale() {
     return process.env.SOCIAL_BROWSER_LOCALE ?? 'he-IL';
   },

@@ -285,13 +285,59 @@ async function main() {
   const session = readFileSync(new URL('../facebook/session.ts', import.meta.url), 'utf8');
   const body = session.slice(session.indexOf('async switchTo('));
   is(
-    /const before = await this\.currentUserId\(\)/.test(body) && /after === before/.test(body),
-    'a switch is confirmed against the c_user cookie — pressing a row is not evidence that Facebook moved',
+    /const before = await this\.currentUserId\(\)/.test(body) && /await this\.awaitIdentity\(page, before, name\)/.test(body),
+    'the identity before the click is captured and the switch is measured against it — pressing a row is not evidence that Facebook moved',
   );
   is(
-    /await recordAccount\(state, r\.account\)/.test(worker.slice(worker.indexOf("cmd.command === 'switch'"))),
-    'and the account is re-read afterwards, so the chip and the group scope follow the identity that now publishes',
+    /if \(!account\) \{[\s\S]{0,200}?ok: false/.test(body),
+    'and when it cannot be established, the command FAILS rather than reporting a switch nobody verified',
   );
+  /*
+   * THE WAIT IS A WATCH, NOT A SLEEP — which is the whole of "גג 5-7 שניות".
+   *
+   * A fixed pause is wrong in both directions: paid in full when Facebook
+   * answered in half a second, and too short on a slow machine, where it turns
+   * into a false "the switch did not happen". The loop below returns the instant
+   * either proof lands.
+   */
+  const watcher = session.slice(session.indexOf('private async awaitIdentity('));
+  is(/who\.id && who\.id !== before/.test(watcher), 'the cookie moving is proof, and it ends the wait at once');
+  is(
+    /who\.name && who\.name === wanted/.test(watcher),
+    'and so is the rendered name, because Facebook keeps one c_user across some profile pairs — a cookie that did not move is not evidence that nothing happened',
+  );
+  is(/return null/.test(watcher), 'and running out of time returns "could not establish", never a success');
+  is(
+    !/waitForTimeout\(4_000\)/.test(readFileSync(new URL('../facebook/profiles.ts', import.meta.url), 'utf8')),
+    'the four-second pause after the click is gone — it was time spent whatever had happened',
+  );
+  {
+    const branch = worker.slice(worker.indexOf("cmd.command === 'switch'"));
+    is(
+      /await recordAccount\(state, r\.account, logo\)/.test(branch),
+      'and the account is written afterwards, so the chip and the group scope follow the identity that now publishes',
+    );
+    /*
+     * WITH THE LOGO IT ALREADY HAS. The identity's picture was photographed out
+     * of Facebook's own account menu when the list was read, so the switch does
+     * not stop to take it again — that screenshot, plus the /me fallback behind
+     * it, was most of the half-minute the owner was watching.
+     *
+     * And it must be PASSED, not left out: a light read carries no picture, and
+     * without one handed over recordAccount would fall into its "nothing on the
+     * page was provably theirs" branch and CLEAR the stored avatar — the
+     * dashboard would lose the face on every switch.
+     */
+    is(
+      /state\.profiles\?\.find\(\(p\) => p\.name === \(r\.account\?\.name \|\| wanted\)\)\?\.image/.test(branch),
+      'the picture comes from the list the worker already read, not from a fresh screenshot',
+    );
+    const record = worker.slice(worker.indexOf('async function recordAccount('), worker.indexOf('async function recordProfiles('));
+    is(
+      /account\.imageNote === undefined/.test(record) && /if \(storedPicture\) patch\.fb_avatar_url = storedPicture;/.test(record),
+      '"nobody looked for a picture" is a different fact from "we looked and found none", and only the second one clears the stored face',
+    );
+  }
 
   /*
    * AND A MACHINE THAT HAS NEVER HEARD OF THIS COMMAND SAYS SO.
@@ -430,7 +476,7 @@ async function main() {
     const shell = readFileSync(new URL('../../src/components/social/SocialShell.tsx', import.meta.url), 'utf8');
     is(/const \[pending, setPending\] = useState<Identity \| null>/.test(shell), 'the bar holds the chosen identity separately from the confirmed one');
     is(
-      /label: 'מעביר פרופיל…'/.test(shell) && /ring-2 ring-brand-300 motion-safe:animate-pulse/.test(shell),
+      /label: 'מעביר פרופיל…'/.test(shell) && /border-t-brand-400 motion-safe:animate-spin/.test(shell),
       'and says out loud that it is mid-switch, rather than showing the new name as a fact',
     );
     is(

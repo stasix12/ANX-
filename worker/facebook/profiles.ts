@@ -384,6 +384,15 @@ export async function switchProfile(page: Page, name: string): Promise<'clicked'
     await confirm.click({ timeout: 8_000 }).catch(() => undefined);
     await page.waitForLoadState('domcontentloaded', { timeout: 30_000 }).catch(() => undefined);
   }
-  await page.waitForTimeout(4_000);
+  /*
+   * AND THEN NOTHING — THE FIXED FOUR-SECOND WAIT IS GONE.
+   *
+   * It used to sit here, and it was four seconds spent whatever had happened:
+   * paid in full when Facebook had already switched, and not nearly enough when
+   * it had not. The caller now WATCHES for the identity to change (see
+   * BrowserSession.awaitIdentity) and continues the instant it does, which is
+   * both faster on the ordinary path and more patient on a slow one — the
+   * difference between "מיידי, גג 5-7 שניות" and half a minute of clock.
+   */
   return 'clicked';
 }

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
-import { readAccountProfile, type AccountProfile } from './account';
+import { readAccountIdentity, readAccountProfile, type AccountProfile } from './account';
 import { readProfiles, switchProfile, type FacebookProfile } from './profiles';
 import { env } from '../env';
 import { CHECKPOINT_PATHS, LOGIN_PATHS, fb, patterns } from './selectors';
@@ -343,12 +343,23 @@ export class BrowserSession {
   async switchTo(
     headless: boolean,
     name: string,
-  ): Promise<{ ok: boolean; detail: string; account?: AccountProfile | null; profiles?: FacebookProfile[] }> {
+  ): Promise<{ ok: boolean; detail: string; account?: { id: string; name: string } | null; profiles?: FacebookProfile[] }> {
     if (!this.hasProfile()) return { ok: false, detail: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.' };
     const page = await this.newPage(headless, 'מעבר בין פרופילים');
     try {
       await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
-      await page.waitForTimeout(2500);
+      /*
+       * WAIT FOR THE TOP BAR, NOT FOR THE CLOCK.
+       *
+       * This was `waitForTimeout(2500)` — two and a half seconds spent on every
+       * switch whether the page was ready in 300ms or not ready in three
+       * seconds. The banner is the thing the next step actually needs (the
+       * account menu lives in it), so waiting for THAT returns as soon as it is
+       * there and still gives a slow machine its time. The cap is kept as a cap
+       * rather than a guarantee: if the banner never appears, the code below
+       * reports what it finds instead of hanging.
+       */
+      await page.waitForSelector('div[role="banner"]', { state: 'visible', timeout: 6_000 }).catch(() => undefined);
       if ((await classifyPage(page)) !== 'ok' || !(await this.hasLoginCookie())) {
         return { ok: false, detail: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".' };
       }
@@ -361,27 +372,70 @@ export class BrowserSession {
       if ((await classifyPage(page)) === 'checkpoint') {
         return { ok: false, detail: 'פייסבוק ביקשה אימות באמצע המעבר — פתחו את הדפדפן וטפלו בזה.' };
       }
-      const after = await this.currentUserId();
-      const account = await readAccountProfile(page).catch(() => null);
-      if (!after || after === before) {
-        /* The name is the one thing that can still prove it: Facebook keeps a
-           single c_user across some profile pairs, and a switch that changed
-           the rendered name changed the identity whatever the cookie says. */
-        if (account?.name && account.name === name) {
-          return { ok: true, detail: `עברנו לפרופיל "${name}".`, account };
-        }
-        return { ok: false, detail: `פייסבוק לא השלימה את המעבר ל"${name}". החשבון נשאר כפי שהיה.`, account };
+      /*
+       * WATCHED, NOT WAITED OUT. Returns the moment Facebook is somebody else.
+       */
+      const account = await this.awaitIdentity(page, before, name);
+      if (!account) {
+        return { ok: false, detail: `פייסבוק לא השלימה את המעבר ל"${name}". החשבון נשאר כפי שהיה.`, account: null };
       }
-      const read = await readProfiles(page, { pictures: true }).catch(() => null);
-      return {
-        ok: true,
-        detail: `עברנו לפרופיל "${account?.name || name}". מכאן כל פרסום יוצא ממנו.`,
-        account,
-        profiles: read?.profiles,
-      };
+      /*
+       * AND THE EXPENSIVE READS ARE NOT ON THIS PATH ANY MORE.
+       *
+       * This used to end with readAccountProfile() — which screenshots the
+       * avatar and, when the home layout does not carry it, navigates to /me and
+       * waits for its title — and then readProfiles() with pictures, which opens
+       * the account menu a second time and photographs every row. Together they
+       * were most of the half-minute the owner was watching.
+       *
+       * Neither is needed to answer "did the switch happen": the name is, and
+       * the identity's picture was already photographed out of that same menu
+       * and stored beside its name when the list was read. The list itself does
+       * not change by switching between its own entries.
+       *
+       * The full-size avatar is refreshed by the ordinary ten-minute login
+       * check, which runs anyway and costs the owner no waiting at all.
+       */
+      return { ok: true, detail: `עברנו לפרופיל "${account.name || name}". מכאן כל פרסום יוצא ממנו.`, account };
     } finally {
       await page.close().catch(() => undefined);
     }
+  }
+
+  /**
+   * WAIT FOR FACEBOOK TO BECOME SOMEBODY ELSE, and say who.
+   *
+   * Polls rather than sleeps, because the two things that prove a switch happen
+   * at different moments on different machines: the `c_user` cookie changes when
+   * Facebook issues the new session, and the rendered name changes when the app
+   * draws it. Either one is proof, so whichever lands first ends the wait —
+   * measured, this is usually well inside two seconds after the click.
+   *
+   * THE NAME IS PART OF THE PROOF AND NOT A CONSOLATION. Facebook keeps ONE
+   * c_user across some profile pairs, so a cookie that did not move is not
+   * evidence that nothing happened; a rendered name equal to the one that was
+   * asked for is evidence that something did. Neither is ever assumed: null
+   * means we could not establish it, and the caller reports a failure rather
+   * than a success nobody verified. Every group post after this is signed by
+   * this answer.
+   */
+  private async awaitIdentity(page: Page, before: string, wanted: string): Promise<{ id: string; name: string } | null> {
+    const deadline = Date.now() + 12_000;
+    let last: { id: string; name: string } | null = null;
+    while (Date.now() < deadline) {
+      const who = await readAccountIdentity(page).catch(() => null);
+      if (who) {
+        last = who;
+        if (who.id && who.id !== before) return who;
+        if (who.name && who.name === wanted) return who;
+      }
+      await page.waitForTimeout(500);
+    }
+    /* Out of time. The one case worth accepting late is the cookie having moved
+       between the last read and now; anything else is reported as unfinished. */
+    const id = await this.currentUserId();
+    if (id && id !== before) return { id, name: last?.name ?? '' };
+    return null;
   }
 
   /**

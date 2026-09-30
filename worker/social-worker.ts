@@ -128,8 +128,12 @@ interface WorkerState {
    * hand corrects it at the next login check.
    */
   asPage?: boolean;
-  /** The menu rows last read, kept only to answer the question above. */
-  profiles?: { name: string; kind: 'profile' | 'page' }[];
+  /*
+   * The menu rows last read — the question above, plus each identity's own
+   * stored logo, which is what lets a switch report itself without stopping to
+   * photograph a face it already has.
+   */
+  profiles?: { name: string; kind: 'profile' | 'page'; image?: string }[];
   /**
    * Groups whose addresses have already been looked up this run.
    *
@@ -320,9 +324,10 @@ async function main(): Promise<void> {
    */
   {
     const { data: mine } = await db.from('social_workers').select('fb_profiles, fb_user_name').eq('id', state.id).maybeSingle();
-    const rows = (mine as { fb_profiles?: { name: string; kind?: 'profile' | 'page' }[]; fb_user_name?: string } | null) ?? null;
+    const rows =
+      (mine as { fb_profiles?: { name: string; kind?: 'profile' | 'page'; image?: string }[]; fb_user_name?: string } | null) ?? null;
     if (rows?.fb_profiles?.length) {
-      state.profiles = rows.fb_profiles.map((p) => ({ name: p.name, kind: p.kind === 'page' ? 'page' : 'profile' }));
+      state.profiles = rows.fb_profiles.map((p) => ({ name: p.name, kind: p.kind === 'page' ? 'page' : 'profile', image: p.image }));
     }
     if (rows?.fb_user_name) state.accountName = rows.fb_user_name;
     markIdentity(state);
@@ -385,7 +390,7 @@ async function main(): Promise<void> {
        pace is the queue's to set, and it already sets it: the next row is
        claimed only if its own instant has come and the spacing rule lets it
        through. This sleep was only ever meant for an idle worker. */
-    if (!state.worked) await sleep(env.pollMs);
+    if (!state.worked) await idleWait(state.id);
   }
   await heartbeat(state, 'offline');
   await session.close();
@@ -393,6 +398,54 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
+
+/**
+ * THE IDLE WAIT, INTERRUPTED BY A BUTTON.
+ *
+ * The loop used to sleep `pollMs` — five seconds — before looking at anything
+ * again, and a command from the phone sat in the queue for however much of that
+ * was left. On a profile switch the owner is watching a ring spin while nothing
+ * at all is happening, and up to five of those seconds were this sleep.
+ *
+ * Now the same wait is spent in one-second slices, each one asking the one cheap
+ * question that somebody might be waiting on: is there an instruction for this
+ * worker? The moment there is, the wait ends and the ordinary tick runs it. The
+ * publication pace is untouched — this only shortens how long a TAP waits, and
+ * it is the same total wait when nobody taps.
+ *
+ * A failed read is not an answer and simply costs one slice: the tick that
+ * follows asks again in the normal way.
+ */
+/*
+ * The command this wait has already cut short once.
+ *
+ * Without it a row that stays 'pending' — one another worker is about to claim,
+ * or one that failed to claim here — would end every wait the instant it started
+ * and turn the idle loop into a continuous tick. Waking for the same instruction
+ * twice buys nothing: the tick that followed the first wake has already looked
+ * at it.
+ */
+let wokeForCommand = '';
+
+async function idleWait(workerId: string): Promise<void> {
+  const until = Date.now() + env.pollMs;
+  while (Date.now() < until && !stopping) {
+    await sleep(Math.max(200, Math.min(env.commandPollMs, until - Date.now())));
+    if (stopping) return;
+    const db = await workerDb();
+    const { data } = await db
+      .from('social_worker_commands')
+      .select('id')
+      .eq('status', 'pending')
+      .or(`worker_id.eq.${workerId},worker_id.is.null`)
+      .limit(1);
+    const id = (data?.[0] as { id?: string } | undefined)?.id ?? '';
+    if (id && id !== wokeForCommand) {
+      wokeForCommand = id;
+      return;
+    }
+  }
+}
 
 /**
  * When the next publication is allowed out, asked once per tick.
@@ -1269,11 +1322,21 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             state.lastCheckAt = Date.now();
             state.browserState = 'connected';
             state.attention = '';
-            /* The account changed, so everything derived from it is re-read
-               rather than kept: the chip, and the scope that decides which
-               groups this browser is allowed to publish to. */
-            await recordAccount(state, r.account);
-            if (r.profiles?.length) await recordProfiles(state, r.profiles);
+            /*
+             * The account changed, so everything derived from it follows: the
+             * chip, and the scope that decides which groups this browser may
+             * publish to.
+             *
+             * THE FACE COMES FROM THE LIST, not from a fresh screenshot. It was
+             * photographed out of Facebook's own account menu when the profiles
+             * were read, so the dashboard gets the right picture with the right
+             * name immediately — and the switch does not spend ten seconds
+             * taking a photograph of something it already has. The ordinary
+             * login check refreshes the full-size avatar later, on its own
+             * clock, costing the owner no waiting.
+             */
+            const logo = state.profiles?.find((p) => p.name === (r.account?.name || wanted))?.image;
+            await recordAccount(state, r.account, logo);
           }
         }
       } else if (cmd.command === 'resume') {
@@ -1780,7 +1843,31 @@ async function learnAccountScope(state: WorkerState, db: SupabaseClient, fbUserI
   }
 }
 
-async function recordAccount(state: WorkerState, account: AccountProfile | null | undefined): Promise<void> {
+/**
+ * An identity as this worker may learn it: everything readAccountProfile()
+ * returns, or just the id and the name when that is all that was asked for.
+ *
+ * The cheap form exists for the profile switch, which has to answer in seconds
+ * (see BrowserSession.switchTo): there the picture is already stored beside the
+ * name, photographed out of Facebook's own account menu, so paying for a
+ * screenshot and possibly a second page load to learn it again is paying for
+ * nothing the owner can see.
+ */
+type LearnedAccount = AccountProfile | { id: string; name: string; image?: undefined; imageNote?: undefined; probe?: undefined };
+
+async function recordAccount(
+  state: WorkerState,
+  account: LearnedAccount | null | undefined,
+  /**
+   * The picture to store, when the caller has one and no screenshot was taken.
+   *
+   * Passed on the switch path, where it is the logo already photographed for
+   * that identity. Without it a light read would fall into the "nothing on the
+   * page was provably theirs" branch below and CLEAR a perfectly good avatar —
+   * the dashboard would lose the face every time the owner switched.
+   */
+  storedPicture?: string,
+): Promise<void> {
   /*
    * NOTHING HERE FAILS QUIETLY, and the first version of it did.
    *
@@ -1820,7 +1907,17 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
   patch.fb_user_name = account.name;
   if (!account.name) console.log('[worker] ℹ זוהה חשבון פייסבוק אבל לא נקרא ממנו שם — הדשבורד יציג "מחובר" בלבד.');
 
-  if (account.image) {
+  if (!account.image && account.imageNote === undefined) {
+    /*
+     * NOBODY LOOKED FOR A PICTURE ON THIS READ — so the stored one stays.
+     *
+     * This is the light read: `imageNote` is absent, which is a different fact
+     * from "we looked and found nothing" (that comes back as a note) and must
+     * not be treated as it. A caller that has the identity's own logo hands it
+     * over and it is written; otherwise the column is left exactly as it was.
+     */
+    if (storedPicture) patch.fb_avatar_url = storedPicture;
+  } else if (account.image) {
     const objectPath = `workers/${state.id}.png`;
     const { error } = await db.storage
       .from('social-media')
@@ -1874,10 +1971,12 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
      * that describes what it rejected makes the next attempt reading rather
      * than guessing. Terminal only, and only on failure.
      */
-    console.log(
-      `[worker]   (בעמוד ${account.probe.nodes} תמונות, מתוכן ${account.probe.shaped} בגודל מתאים · ${account.probe.note} · ${account.probe.where})`,
-    );
-    for (const line of account.probe.sample) console.log(`[worker]   · ${line}`);
+    if (account.probe) {
+      console.log(
+        `[worker]   (בעמוד ${account.probe.nodes} תמונות, מתוכן ${account.probe.shaped} בגודל מתאים · ${account.probe.note} · ${account.probe.where})`,
+      );
+      for (const line of account.probe.sample) console.log(`[worker]   · ${line}`);
+    }
   }
 
   /*
@@ -2003,6 +2102,11 @@ async function recordProfiles(state: WorkerState, profiles: FacebookProfile[]): 
     }
     stored.push({ id: p.id, name: p.name, kind: p.kind, image });
   }
+
+  /* The logos go into the worker's own memory as well, because the switch path
+     reads them from there to answer without photographing anything. */
+  state.profiles = stored.map((p) => ({ name: p.name, kind: p.kind, image: p.image || undefined }));
+  markIdentity(state);
 
   const { error } = await db
     .from('social_workers')

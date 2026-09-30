@@ -353,6 +353,22 @@ export interface SocialWorker {
   fb_user_name?: string;
   fb_avatar_url?: string;
   /*
+   * The OTHER profiles this Facebook account can switch between.
+   *
+   * A customer showed the account menu on the machine that publishes: his own
+   * name, and his business beside it. One Facebook account, two identities,
+   * and this product knew only the one whose cookie it held — so a business
+   * that posts as itself had no way to say so.
+   *
+   * Written only by the worker, and only from rows it actually read out of
+   * Facebook's own menu. An empty array means the list has never been read, or
+   * was read and held nothing; the screen tells those apart by the result of
+   * the command rather than by the length of this, because a guess about
+   * WHOSE account publishes is the one guess this product must never make.
+   */
+  fb_profiles?: { id: string; name: string }[];
+  fb_profiles_at?: string | null;
+  /*
    * Facebook is mid-login and asking a person something.
    *
    * It exists so that person does not have to be standing at the machine. The
@@ -366,7 +382,7 @@ export interface SocialWorker {
   login_asked_at?: string | null;
 }
 
-export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume' | 'verify';
+export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume' | 'verify' | 'profiles' | 'switch';
 
 export interface WorkerCommand {
   id: string;

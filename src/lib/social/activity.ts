@@ -50,6 +50,10 @@ const KIND: Record<string, ActivityKind> = {
   browser_start_failed: 'failure',
   plan_failed: 'failure',
   account_save_failed: 'failure',
+  /* The list of profiles could not be written. Filed with the account it
+     belongs to: it means the same thing — the machine learned something about
+     WHO publishes and the database would not take it. */
+  profiles_save_failed: 'failure',
   avatar_upload_blocked: 'failure',
   login_challenge_failed: 'failure',
   /*

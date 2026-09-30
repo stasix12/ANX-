@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<meta charset="utf-8">
+<title>mock — an account menu with no profile list</title>
+<!--
+  THE SAME MENU, FROM AN ACCOUNT THAT HAS ONE PROFILE.
+
+  Facebook does not print "הצגת כל הפרופילים" when there is nothing to switch
+  to, and this fixture exists so that the reader's answer in that case is
+  measured rather than assumed.
+
+  It is the fixture that makes the whole module honest. Without the anchor a
+  reader that falls back to "the rows near the top" happily returns "הגדרות
+  ופרטיות" as a profile — a name, one line, an ordinary menu row — and the
+  screen then offers to publish as it. Nothing about that failure looks wrong
+  until a post goes out.
+-->
+<body>
+  <div role="banner">
+    <div role="button" aria-label="החשבון שלך" id="avatar" onclick="document.getElementById('menu').hidden = false">
+      <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+    </div>
+  </div>
+
+  <div role="menu" id="menu" hidden>
+    <div>
+      <div role="button" onclick="window.__picked = 'settings'"><span>הגדרות ופרטיות</span></div>
+      <div role="button" onclick="window.__picked = 'help'"><span>עזרה ותמיכה</span></div>
+      <div role="button" onclick="window.__picked = 'logout'"><span>התנתקות</span></div>
+    </div>
+  </div>
+</body>
+</html>

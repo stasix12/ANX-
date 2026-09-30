@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<meta charset="utf-8">
+<title>mock — Facebook account menu</title>
+<!--
+  THE MENU profiles.ts READS, rebuilt from the customer's own screenshot.
+
+  It is not a copy of Facebook's markup — nobody has that — it is a copy of the
+  SHAPES that make the read hard, and every one of them is here because getting
+  it wrong produces a specific, nasty bug:
+
+    * THE ROWS CARRY NO LINK, NO ID AND NO CLASS. Only a role, an image and a
+      name. A reader that needs an href finds nothing at all.
+
+    * THE MENU'S OWN ITEMS LOOK EXACTLY LIKE PROFILES — same role, same
+      nesting, same single line of text. Only their words tell them apart, and
+      "התנתקות" offered as somebody to publish as is the failure that matters.
+
+    * EVERY ROW IS NESTED two levels deep, so a reader that collects ancestors
+      as well as rows finds "profiles" whose name is the whole menu.
+
+    * THE ANCHOR HAS ITS OWN WRAPPERS, which precede the rows' wrappers in
+      document order. Those wrappers CONTAIN the anchor, which is why the
+      reader skips containers of it rather than trusting position alone.
+
+    * THE MENU STARTS CLOSED, behind a banner button labelled the way Facebook
+      labels it, because opening it is half of what can fail.
+
+  The two names are the customer's real ones. They are on his screen every day
+  and they are the point of the feature: one account, a personal profile and a
+  business one.
+-->
+<body>
+  <div role="banner">
+    <div role="button" aria-label="חיפוש">🔍</div>
+    <div role="button" aria-label="החשבון שלך" id="avatar" onclick="document.getElementById('menu').hidden = false">
+      <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+    </div>
+  </div>
+
+  <div role="menu" id="menu" hidden>
+    <div>
+      <div>
+        <div role="button" data-row="dor" onclick="window.__picked = 'Dor Moyal'">
+          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+          <span>Dor Moyal</span>
+        </div>
+      </div>
+      <div>
+        <div role="button" data-row="air" onclick="window.__picked = 'Air Master'">
+          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+          <span>Air Master</span>
+        </div>
+      </div>
+      <!--
+        ABOVE THE ANCHOR AND NOT A PROFILE — the one shape that the word list
+        in selectors.ts is the only defence against.
+
+        Everything below "הצגת כל הפרופילים" is already excluded by position,
+        so without a row like this one the filter is never exercised and the
+        test passes whether it exists or not. It was: deleting the filter
+        entirely left this suite green, which is how it got added here.
+
+        Facebook really does offer this row, right beside the anchor, and it is
+        exactly the sort of thing a person must never be offered as somebody to
+        publish as.
+      -->
+      <div>
+        <div role="button" data-row="create" onclick="window.__picked = 'create'">
+          <span>יצירת פרופיל חדש</span>
+        </div>
+      </div>
+      <div>
+        <div role="button" data-row="all" onclick="window.__picked = 'ALL'">
+          <span>הצגת כל הפרופילים</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div role="button" onclick="window.__picked = 'settings'"><span>הגדרות ופרטיות</span></div>
+      <div role="button" onclick="window.__picked = 'help'"><span>עזרה ותמיכה</span></div>
+      <div role="button" onclick="window.__picked = 'report'"><span>דיווח על בעיה</span></div>
+      <div role="button" onclick="window.__picked = 'display'"><span>תצוגה ונגישות</span></div>
+      <div role="button" onclick="window.__picked = 'logout'"><span>התנתקות</span></div>
+    </div>
+  </div>
+</body>
+</html>

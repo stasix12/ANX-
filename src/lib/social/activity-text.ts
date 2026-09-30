@@ -63,6 +63,7 @@ const TITLE: Record<string, string> = {
   browser_start_failed: 'הדפדפן לא נפתח',
   plan_failed: 'תכנון הסבב נכשל',
   account_save_failed: 'שמירת החשבון נכשלה',
+  profiles_save_failed: 'רשימת הפרופילים לא נשמרה',
   avatar_upload_blocked: 'תמונת הפרופיל לא נשמרה',
   login_challenge_failed: 'אימות הפייסבוק נכשל',
 

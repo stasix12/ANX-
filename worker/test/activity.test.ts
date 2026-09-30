@@ -54,6 +54,10 @@ const SYSTEM_BY_DESIGN = new Set([
   'commands_payload_missing',
   'avatar_upload_blocked',
   'account_save_failed',
+  /* Same shape as the line above it: the machine read which profiles this
+     Facebook account holds and the database would not take the answer. About
+     the installation, not about any one post. */
+  'profiles_save_failed',
 ]);
 
 let checks = 0;

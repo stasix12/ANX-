@@ -1133,7 +1133,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     .or(`worker_id.eq.${state.id},worker_id.is.null`)
     .order('created_at')
     .limit(5);
-  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string } })[]) {
+  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string } })[]) {
     /*
      * CLAIMING A COMMAND ALSO EMPTIES IT.
      *
@@ -1195,6 +1195,46 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
          */
         await forgetAccount(state);
         result = 'הפרופיל המקומי נמחק — הדפדפן מנותק מפייסבוק.';
+      } else if (cmd.command === 'profiles') {
+        /*
+         * WHICH IDENTITIES THIS ACCOUNT HOLDS.
+         *
+         * Read on request and not on the ten-minute clock: the answer changes
+         * perhaps twice a year, and every avoidable click on somebody's real
+         * Facebook account is one worth avoiding.
+         */
+        const r = await session.listProfiles(headless);
+        await recordProfiles(state, r.profiles);
+        result = r.detail;
+      } else if (cmd.command === 'switch') {
+        /*
+         * AND MOVE ONTO ONE — Facebook's own menu, Facebook's own row.
+         *
+         * The name comes from the dashboard, so it is checked against the list
+         * the worker itself read before anything is pressed: a name that was
+         * never on that menu is refused here rather than typed into a search.
+         * An id arriving from a screen is not a permission, and neither is a
+         * name.
+         */
+        const wanted = String(cmd.payload?.name ?? '').trim();
+        if (!wanted) {
+          ok = false;
+          result = 'לא צוין לאיזה פרופיל לעבור.';
+        } else {
+          const r = await session.switchTo(headless, wanted);
+          ok = r.ok;
+          result = r.detail;
+          if (r.ok) {
+            state.lastCheckAt = Date.now();
+            state.browserState = 'connected';
+            state.attention = '';
+            /* The account changed, so everything derived from it is re-read
+               rather than kept: the chip, and the scope that decides which
+               groups this browser is allowed to publish to. */
+            await recordAccount(state, r.account);
+            if (r.profiles?.length) await recordProfiles(state, r.profiles);
+          }
+        }
       } else if (cmd.command === 'resume') {
         state.attention = '';
         state.browserState = session.hasProfile() ? 'unknown' : 'disconnected';
@@ -1807,6 +1847,38 @@ async function recordAccount(state: WorkerState, account: AccountProfile | null 
     return;
   }
   console.log(`[worker] ✓ חשבון פייסבוק מחובר: ${patch.fb_user_name || account.id}`);
+}
+
+/**
+ * Remember what Facebook's account menu offered.
+ *
+ * Stamped even when the list is EMPTY, and that is the point of the timestamp
+ * beside it. "We looked and there is only one profile" and "nobody has ever
+ * looked" are different facts that an empty array alone cannot tell apart, and
+ * the screen that reads this is one where a person decides whether their
+ * business profile exists at all.
+ *
+ * A failure here is logged and swallowed: the switch itself either happened or
+ * did not, and that answer has already been given to the command. Losing the
+ * list costs a button press to read it again.
+ */
+async function recordProfiles(state: WorkerState, profiles: { id: string; name: string }[]): Promise<void> {
+  const db = await workerDb();
+  const { error } = await db
+    .from('social_workers')
+    .update({ fb_profiles: profiles, fb_profiles_at: new Date().toISOString() })
+    .eq('id', state.id);
+  if (error) {
+    console.error('[worker] ✗ שמירת רשימת הפרופילים נכשלה:', error.message);
+    await logActivity(
+      'warn',
+      'profiles_save_failed',
+      'לא הצלחנו לשמור את רשימת הפרופילים. סביר שצריך להריץ את social-latest.sql ב-Supabase.',
+      { detail: error.message },
+    );
+    return;
+  }
+  console.log(`[worker] ✓ פרופילים בחשבון: ${profiles.length}`);
 }
 
 /**

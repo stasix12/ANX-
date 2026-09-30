@@ -3,6 +3,7 @@ import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { readAccountProfile, type AccountProfile } from './account';
+import { readProfiles, switchProfile, type FacebookProfile } from './profiles';
 import { env } from '../env';
 import { CHECKPOINT_PATHS, LOGIN_PATHS, fb, patterns } from './selectors';
 
@@ -262,6 +263,113 @@ export class BrowserSession {
        */
       const account = await readAccountProfile(page).catch(() => null);
       return { state: 'connected', detail: 'מחובר לפייסבוק.', account };
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+
+  /** The signed-in id, or '' — the cookie itself rather than a yes/no. */
+  private async currentUserId(): Promise<string> {
+    if (!this.context) return '';
+    const cookies = await this.context.cookies('https://www.facebook.com');
+    return cookies.find((c) => c.name === 'c_user')?.value ?? '';
+  }
+
+  /**
+   * THE PROFILES THIS ACCOUNT CAN SWITCH BETWEEN.
+   *
+   * One page load and one menu, read and closed. Deliberately NOT folded into
+   * checkLogin, which runs on a ten-minute clock: a list that changes perhaps
+   * twice a year does not justify opening Facebook's account menu a hundred
+   * and forty times a day, and every avoidable click on somebody's real
+   * account is one worth avoiding.
+   */
+  async listProfiles(headless: boolean): Promise<{ profiles: FacebookProfile[]; detail: string }> {
+    if (!this.hasProfile()) return { profiles: [], detail: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.' };
+    const page = await this.newPage(headless, 'רשימת פרופילים');
+    try {
+      await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page.waitForTimeout(2500);
+      const kind = await classifyPage(page);
+      if (kind === 'checkpoint') return { profiles: [], detail: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.' };
+      if (kind === 'login' || !(await this.hasLoginCookie())) {
+        return { profiles: [], detail: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".' };
+      }
+      const read = await readProfiles(page);
+      if (read.profiles.length) {
+        return { profiles: read.profiles, detail: `נמצאו ${read.profiles.length} פרופילים בחשבון הזה.` };
+      }
+      /*
+       * THE THREE WAYS OF FINDING NOTHING ARE NOT THE SAME FACT, and the
+       * screen this reaches is read by somebody deciding whether their
+       * business profile exists. "No second profile" is an answer; "we could
+       * not read the menu" is a fault. Saying the first when the second
+       * happened is the mistake this whole module is written against.
+       */
+      return {
+        profiles: [],
+        detail:
+          read.note === 'no-anchor'
+            ? 'לא מצאנו רשימת פרופילים בחשבון הזה. אם יש בו פרופיל נוסף, ייתכן שפייסבוק שינתה את התפריט — שלחו לנו צילום מסך של התפריט.'
+            : read.note === 'no-menu'
+              ? 'לא הצלחנו לפתוח את תפריט החשבון בפייסבוק. נסו שוב בעוד רגע.'
+              : 'תפריט החשבון נפתח אבל לא זוהו בו פרופילים.',
+      };
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+
+  /**
+   * MOVE THE BROWSER ONTO ANOTHER PROFILE.
+   *
+   * What makes this safe to automate is that it decides nothing: it presses
+   * Facebook's own row and then asks the cookie who it is now. A switch that
+   * Facebook refused, answered with a security check, or simply ignored leaves
+   * c_user where it was, and that is reported as a failure — never as a
+   * success nobody verified. Every group post after this goes out under the
+   * name this returns, so a confident wrong answer here would be the worst
+   * kind in the product.
+   */
+  async switchTo(
+    headless: boolean,
+    name: string,
+  ): Promise<{ ok: boolean; detail: string; account?: AccountProfile | null; profiles?: FacebookProfile[] }> {
+    if (!this.hasProfile()) return { ok: false, detail: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.' };
+    const page = await this.newPage(headless, 'מעבר בין פרופילים');
+    try {
+      await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page.waitForTimeout(2500);
+      if ((await classifyPage(page)) !== 'ok' || !(await this.hasLoginCookie())) {
+        return { ok: false, detail: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".' };
+      }
+      const before = await this.currentUserId();
+      const pressed = await switchProfile(page, name);
+      if (pressed === 'no-menu') return { ok: false, detail: 'לא הצלחנו לפתוח את תפריט החשבון בפייסבוק. נסו שוב בעוד רגע.' };
+      if (pressed === 'not-found') {
+        return { ok: false, detail: `לא מצאנו פרופיל בשם "${name}" בתפריט. רעננו את רשימת הפרופילים ונסו שוב.` };
+      }
+      if ((await classifyPage(page)) === 'checkpoint') {
+        return { ok: false, detail: 'פייסבוק ביקשה אימות באמצע המעבר — פתחו את הדפדפן וטפלו בזה.' };
+      }
+      const after = await this.currentUserId();
+      const account = await readAccountProfile(page).catch(() => null);
+      if (!after || after === before) {
+        /* The name is the one thing that can still prove it: Facebook keeps a
+           single c_user across some profile pairs, and a switch that changed
+           the rendered name changed the identity whatever the cookie says. */
+        if (account?.name && account.name === name) {
+          return { ok: true, detail: `עברנו לפרופיל "${name}".`, account };
+        }
+        return { ok: false, detail: `פייסבוק לא השלימה את המעבר ל"${name}". החשבון נשאר כפי שהיה.`, account };
+      }
+      const read = await readProfiles(page).catch(() => null);
+      return {
+        ok: true,
+        detail: `עברנו לפרופיל "${account?.name || name}". מכאן כל פרסום יוצא ממנו.`,
+        account,
+        profiles: read?.profiles,
+      };
     } finally {
       await page.close().catch(() => undefined);
     }

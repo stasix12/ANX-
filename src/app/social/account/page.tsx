@@ -64,6 +64,8 @@ function commandLine(cmd: WorkerCommand, online: boolean): string {
     logout: 'ניתוק',
     resume: 'המשך סבב',
     verify: 'שליחת קוד אימות',
+    profiles: 'חיפוש פרופילים',
+    switch: 'מעבר בין פרופילים',
   };
   const name = what[cmd.command] ?? cmd.command;
   if (cmd.status === 'pending') {
@@ -146,6 +148,15 @@ export default function AccountPage() {
      not be filled in with a placeholder. */
   const account = worker?.fb_user_name ? { name: worker.fb_user_name, avatar: worker.fb_avatar_url ?? '' } : null;
   const lastCommand = commands[0];
+  /*
+   * The profile list, and WHETHER IT WAS EVER READ — two facts, because an
+   * empty array answers both "this account has one profile" and "nobody has
+   * looked", and only the timestamp separates them.
+   */
+  const profiles = worker?.fb_profiles ?? [];
+  const profilesReadAt = worker?.fb_profiles_at ?? null;
+  const currentName = worker?.fb_user_name ?? '';
+  const avatar = worker?.fb_avatar_url ?? '';
   const challenge = worker?.login_stage === 'challenge';
   const shotPath = worker?.login_shot ?? '';
 
@@ -181,6 +192,40 @@ export default function AccountPage() {
       toast('נשלח. אם זה התקבל, ההתחברות תושלם תוך כמה שניות.');
     } catch (err) {
       setError(friendlyMessage(err, 'השליחה נכשלה.'));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * MOVE THE PUBLISHING ONTO ANOTHER PROFILE OF THE SAME ACCOUNT.
+   *
+   * Confirmed rather than instant, and the wording says the two things that
+   * actually change: who every future post is signed by, and which groups are
+   * reachable at all — a second profile is a member of its own groups, not of
+   * the first one's. Somebody tapping this on a phone at midnight should not
+   * discover the second half in the morning.
+   *
+   * The NAME is what travels, because that is what Facebook's menu offers;
+   * there are no ids on those rows. It is checked against the worker's own
+   * reading of that menu before anything is pressed — see the switch command
+   * in social-worker.ts. A name arriving from this screen is a request, never
+   * a permission.
+   */
+  async function goToProfile(name: string) {
+    const ok = await confirm.ask({
+      title: `לעבור לפרופיל "${name}"?`,
+      body: 'מהרגע הזה כל פרסום וכל תגובה ייצאו מהפרופיל הזה. שימו לב: אפשר לפרסם רק לקבוצות שהפרופיל הזה חבר בהן, ולכן ייתכן שרשימת הקבוצות שנפרסם אליהן תשתנה.',
+      confirmLabel: 'עבור',
+    });
+    if (!ok) return;
+    setBusy(`switch:${name}`);
+    try {
+      await sendWorkerCommand(worker?.online ? worker.id : null, 'switch', { name });
+      await load();
+      toast('הבקשה נשלחה למחשב. המעבר לוקח כמה שניות.');
+    } catch (err) {
+      setError(friendlyMessage(err, 'הפקודה נכשלה.'));
     } finally {
       setBusy(null);
     }
@@ -428,6 +473,103 @@ export default function AccountPage() {
                   {lastCommand.result ? ` · ${lastCommand.result}` : ''}
                 </p>
               )}
+            </Card>
+          </div>
+
+          {/*
+            THE OTHER PROFILES ON THIS ACCOUNT.
+
+            One Facebook account can carry several profiles — a person and
+            their business — and until now this product knew only the one whose
+            cookie the browser happened to hold. Every group post went out
+            under it, and a business that posts as itself had no way to say so.
+
+            THE LIST IS THE WORKER'S, NOT THIS SCREEN'S. It is whatever the
+            machine read out of Facebook's own account menu, and the switch is
+            performed there, in that menu, in the window that publishes. This
+            screen offers the choice and reports the answer; it cannot invent a
+            profile, and a name it sends is checked against that same reading
+            before anything is pressed.
+
+            THE BUTTON IS ON THE OTHER ROWS, never on the active one. A "switch
+            to" beside the profile you are already on is a tap that asks
+            Facebook to do nothing and then reports either outcome as news.
+          */}
+          <div className="mt-3">
+            <Card
+              title="פרופילים בחשבון הזה"
+              subtitle="לפייסבוק אחת יכולים להיות כמה פרופילים — אישי ועסקי. כאן בוחרים מי מהם מפרסם."
+              action={
+                <Button variant="secondary" busy={busy === 'profiles'} disabled={!online} onClick={() => send('profiles', 'מחפשים פרופילים במחשב…')}>
+                  {profilesReadAt ? 'רענן' : 'חפש פרופילים'}
+                </Button>
+              }
+            >
+              {/*
+                THREE STATES, AND THE FIRST TWO ARE NOT THE SAME.
+                "Nobody has looked yet" and "we looked and there is one" are
+                different answers, and only the timestamp can tell them apart.
+                Showing "no other profiles" to somebody who has a business
+                profile, merely because nothing was ever read, would send them
+                looking for a bug in the wrong place.
+              */}
+              {!profilesReadAt ? (
+                <p className="text-sm text-mist-300">
+                  עוד לא בדקנו אילו פרופילים יש בחשבון הזה. לחצו "חפש פרופילים" — התוכנה במחשב תפתח את תפריט החשבון בפייסבוק ותקרא מה יש בו.
+                </p>
+              ) : profiles.length <= 1 ? (
+                <p className="text-sm text-mist-300">
+                  בחשבון הזה יש פרופיל אחד בלבד{currentName ? ` — ${currentName}` : ''}. אם פתחתם מאז פרופיל נוסף בפייסבוק, לחצו "רענן".
+                </p>
+              ) : (
+                <ul className="grid gap-2">
+                  {profiles.map((p) => {
+                    const active = Boolean(currentName) && p.name === currentName;
+                    return (
+                      <li
+                        key={p.name}
+                        className={`flex min-h-14 items-center gap-3 rounded-xl border px-3 py-2 ${
+                          active ? 'border-success-400/40 bg-success-400/10' : 'border-ink-700 bg-ink-850'
+                        }`}
+                      >
+                        {/* The face is only ever shown for the profile we
+                            actually photographed — the signed-in one. A stock
+                            circle beside somebody else's name is the same lie
+                            as a stock face, one size smaller. */}
+                        {active && avatar ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={avatar} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                        ) : (
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-800 text-sm font-extrabold text-mist-300">
+                            {p.name.trim().charAt(0) || '?'}
+                          </span>
+                        )}
+                        <span dir="auto" className="min-w-0 flex-1 truncate text-sm font-bold text-mist-100">
+                          {p.name}
+                        </span>
+                        {active ? (
+                          <span className="shrink-0 rounded-lg bg-success-400/15 px-2 py-1 text-xs font-extrabold text-success-400">
+                            מפרסם עכשיו
+                          </span>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            className="shrink-0"
+                            busy={busy === `switch:${p.name}`}
+                            disabled={!online}
+                            onClick={() => goToProfile(p.name)}
+                          >
+                            עבור לזה
+                          </Button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <p className="mt-3 text-xs text-mist-500">
+                המעבר נעשה בתפריט של פייסבוק עצמה, באותו חלון שבו התוכנה מפרסמת — בדיוק כמו שהייתם עושים ידנית. אם פייסבוק תבקש אימות באמצע, זה יופיע למעלה במסך הזה.
+              </p>
             </Card>
           </div>
 

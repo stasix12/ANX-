@@ -14,6 +14,37 @@ import type { Locator, Page } from 'playwright-core';
 /* ------------------------------------------------------------ patterns */
 
 export const patterns = {
+  /*
+   * THE ACCOUNT MENU, top right — the one that holds the other profiles.
+   *
+   * Facebook labels this button after the signed-in person ("Your profile"),
+   * after the thing it opens ("Account"), or after neither; all three have
+   * been seen on the same account in a week. Broad on purpose, and harmless
+   * because it is only ever used to LOOK for a button by role=button, never
+   * to match text on a page.
+   */
+  accountMenu:
+    /your profile|account|settings and privacy menu|profile menu|החשבון שלך|הפרופיל שלך|חשבון|תפריט חשבון|ваш профиль|аккаунт|профиль/i,
+  /**
+   * "See all profiles" — the landmark the profile rows sit above.
+   *
+   * This is the anchor the whole switcher read depends on, which is why it is
+   * matched by its own words rather than by position: a menu whose shape
+   * changed still says this, and a menu that does not say it is one this
+   * reader must refuse rather than guess at.
+   */
+  allProfiles: /see all profiles|all profiles|switch profiles?|הצגת כל הפרופילים|כל הפרופילים|מעבר בין פרופילים|все профили|показать все профили|переключить профиль/i,
+  /**
+   * The account menu's OWN items, which are not profiles.
+   *
+   * Excluded by name, in the three languages this product meets, because the
+   * alternative is excluding them by position and a menu that gains one row
+   * would then offer "Log out" as somebody to publish as.
+   */
+  menuStuff:
+    /settings (and|&) privacy|help (and|&) support|give feedback|report a problem|display (and|&) accessibility|log out|sign out|create (a )?new profile|new profile|יצירת פרופיל חדש|צור פרופיל חדש|פרופיל חדש|создать новый профиль|новый профиль|הגדרות ופרטיות|עזרה ותמיכה|דיווח על בעיה|משוב|תצוגה ונגישות|התנתקות|התנתק|настройки и конфиденциальность|помощь и поддержка|сообщить о проблеме|внешний вид|выход/i,
+  /** Facebook asking to confirm a switch it is about to make. */
+  switchConfirm: /^(continue|switch|switch profile|ok|המשך|המשיכו|עבור|אישור|продолжить|перейти|ок)$/i,
   /** Group feed: the "Write something..." box that opens the composer. */
   composerTrigger: /write something|create (a )?(public )?post|what'?s on your mind|share something|start a discussion|כאן כותב(ים|ות)?|כת(ו)?ב(\/י|י|ו)?\s*(משהו|פוסט)|יצירת פוסט|צור פוסט|כתיבת פוסט|פוסט חדש|מה (תרצ[הו]|בא ל[ךכ][םן]?) לשתף|שת(ף|פי|פו)\s*משהו|פרסם משהו|מה חדש|מה עובר לך בראש|напишите что-нибудь|создать публикацию|что у вас нового|поделитесь/i,
   /** Anything that is a COMMENT box, never a post composer — typing here is forbidden. */

@@ -204,6 +204,21 @@ export default function DiscoverPage() {
     [rows, activeSearch],
   );
 
+  /*
+   * "הוסף את כל הקבוצות שאתה חבר בהן" — the ones this tap would really add.
+   *
+   * MEMBER ONLY, AND NOT 'unknown'. The per-row button offers itself for
+   * unknown too, because there he is looking at one group and knows the answer
+   * about it. A bulk button cannot borrow that: sweeping in every row the
+   * search could not read would put groups he has never joined into the
+   * publishing list, and each of them would then fail one publication at a
+   * time. The button's own label is the promise, so the set has to match it.
+   */
+  const joinedNotListed = useMemo(
+    () => (rows ?? []).filter((r) => !r.hidden && r.membership === 'member' && !r.target_id && !inSystem.has(r.external_id)),
+    [rows, inSystem],
+  );
+
   const hiddenCount = (rows ?? []).filter((r) => r.hidden).length;
 
   /* Watched searches nobody has run for half a day. See toggleWatch. */
@@ -251,6 +266,47 @@ export default function DiscoverPage() {
     } catch (err) {
       toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
     }
+  }
+
+  /**
+   * All of them into the publishing list, one press.
+   *
+   * SEQUENTIAL AND NOT PARALLEL. Each of these is an insert that first asks
+   * whether the group is already there, and firing thirty of those at once
+   * against PostgREST is how two of them race, both see "not there", and one
+   * dies on the unique index with an error he did not earn. It is also slower
+   * than it looks only in theory — these are small writes.
+   *
+   * A group that is ALREADY in the list counts as a success, not a failure:
+   * the sentence on the toast is about what is true afterwards, and afterwards
+   * it is in the list.
+   */
+  async function adoptAll() {
+    if (!joinedNotListed.length || busyId === 'all') return;
+    setBusyId('all');
+    let added = 0;
+    let failed = 0;
+    for (const row of joinedNotListed) {
+      try {
+        await adoptDiscovered(row);
+        added += 1;
+        setInSystem((was) => new Set(was).add(row.external_id));
+      } catch (err) {
+        if (/כבר קיימת/.test(friendlyMessage(err, ''))) {
+          setInSystem((was) => new Set(was).add(row.external_id));
+          added += 1;
+        } else {
+          failed += 1;
+        }
+      }
+    }
+    setBusyId(null);
+    toast(
+      failed
+        ? `${added} קבוצות נוספו לרשימה, ו-${failed} לא הצליחו. נסו אותן אחת-אחת.`
+        : `${added} ${added === 1 ? 'קבוצה נוספה' : 'קבוצות נוספו'} לרשימת הקבוצות שלך.`,
+      failed ? 'error' : 'success',
+    );
   }
 
   /** Everything hidden for this phrase, back on screen. Nothing was deleted. */
@@ -446,6 +502,24 @@ export default function DiscoverPage() {
               <Figure tone="warn" value={totals.requested} label="בקשות ממתינות" />
               <Figure tone="brand" value={totals.fresh} label="קבוצות חדשות" />
             </div>
+            {/*
+              ONE PRESS FOR THE ONES HE IS ALREADY IN.
+
+              "אני חבר ב-9 מאלה ואני רוצה לפרסם בהן" was nine taps through a
+              list, and the per-row button is easy to miss because it only
+              appears on the rows that can use it. The count is in the label,
+              so the promise and the set are the same thing.
+            */}
+            {joinedNotListed.length > 0 && (
+              <Button
+                variant="secondary"
+                busy={busyId === 'all'}
+                onClick={adoptAll}
+                className="mt-3 w-full"
+              >
+                הוסף לרשימה את {joinedNotListed.length} הקבוצות שאתה כבר חבר בהן
+              </Button>
+            )}
             {totals.unknown > 0 && (
               <p className="mt-2 text-xs leading-4 text-mist-500">
                 ב-{totals.unknown} קבוצות תוצאות החיפוש לא אמרו אם אתם חברים. פתחו אותן כדי לראות.

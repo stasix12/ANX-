@@ -345,16 +345,16 @@ export class BrowserSession {
    * command in this file uses, because they mean the same thing and the owner
    * reads them in the same place.
    */
-  async discoverGroups(headless: boolean, query: string): Promise<SearchOutcome> {
-    if (!this.hasProfile()) return { groups: [], problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
+  async discoverGroups(headless: boolean, query: string, opts: { pictures?: string[] } = {}): Promise<SearchOutcome> {
+    if (!this.hasProfile()) return { groups: [], pictures: new Map(), problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
     const page = await this.newPage(headless, 'גילוי קבוצות');
     try {
       const kind = await classifyPage(page);
-      if (kind === 'checkpoint') return { groups: [], problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
+      if (kind === 'checkpoint') return { groups: [], pictures: new Map(), problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
       if (kind === 'login' || !(await this.hasLoginCookie())) {
-        return { groups: [], problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+        return { groups: [], pictures: new Map(), problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
       }
-      const found = await searchGroups(page, query);
+      const found = await searchGroups(page, query, opts);
       /*
        * AND CHECKED AGAIN AFTERWARDS. Facebook can answer a search with a
        * security check, and it does so by replacing the page — so the read
@@ -364,8 +364,8 @@ export class BrowserSession {
        */
       if (!found.groups.length) {
         const after = await classifyPage(page);
-        if (after === 'checkpoint') return { groups: [], problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
-        if (after === 'login') return { groups: [], problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+        if (after === 'checkpoint') return { groups: [], pictures: new Map(), problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
+        if (after === 'login') return { groups: [], pictures: new Map(), problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
       }
       return found;
     } finally {

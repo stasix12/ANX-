@@ -31,13 +31,39 @@ import { dedupe, interpretCard, type DiscoveredGroup, type RawCard } from '../..
  * day twice.
  */
 
+/**
+ * How many of the results get their picture copied, per search.
+ *
+ * THE PICTURE CANNOT BE THE URL THE CARD CARRIES. Facebook's thumbnails are
+ * signed scontent links that expire within hours and are not served to another
+ * origin, so a row storing one shows a letter where a picture should be — which
+ * is exactly what the first version of this did on the owner's phone. The bytes
+ * are fetched here, through the browser's own session, and the caller stores a
+ * copy. It is the same thing readGroupProfile already does for the groups he
+ * publishes to, for the same reason.
+ *
+ * Capped because this costs storage on an account that is already over its
+ * Supabase quota, and because a group only needs its picture fetched ONCE —
+ * the caller skips every row it already has one for, so a repeated search
+ * costs nothing.
+ */
+const PICTURE_LIMIT = 60;
+
 /** How far to scroll. Each pass is roughly a screenful of new results. */
 const PASSES = 6;
 /** And the ceiling, because a phrase like "קבוצה" matches most of Facebook. */
 const MAX_GROUPS = 120;
 
+/** One group's picture, as bytes, for the caller to store somewhere durable. */
+export interface CardPicture {
+  bytes: Buffer;
+  contentType: string;
+}
+
 export interface SearchOutcome {
   groups: DiscoveredGroup[];
+  /** Keyed by externalId. Only the ones asked for; see PICTURE_LIMIT. */
+  pictures: Map<string, CardPicture>;
   /** A Hebrew sentence for the owner. Empty when nothing went wrong. */
   problem: string;
   /** True when the scroll hit the ceiling rather than the end of the results. */
@@ -52,7 +78,7 @@ export interface SearchOutcome {
  * that had to tell them apart from the markup would be guessing at exactly the
  * moment it must not.
  */
-export async function searchGroups(page: Page, query: string): Promise<SearchOutcome> {
+export async function searchGroups(page: Page, query: string, opts: { pictures?: string[] } = {}): Promise<SearchOutcome> {
   const url = `https://www.facebook.com/search/groups/?q=${encodeURIComponent(query)}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   /* Search results arrive after the shell does, so the wait is for a link to a
@@ -90,7 +116,58 @@ export async function searchGroups(page: Page, query: string): Promise<SearchOut
   }
 
   const groups = dedupe(collected).slice(0, MAX_GROUPS);
-  return { groups, problem: '', truncated };
+
+  /*
+   * `opts.pictures` is the list of ids the CALLER still needs a picture for —
+   * it knows which rows already have one and this function does not. Absent,
+   * nothing is fetched: a search re-run for its membership counts should not
+   * re-download sixty images.
+   */
+  const wanted = new Set(opts.pictures ?? []);
+  const pictures = wanted.size ? await fetchPictures(page, groups.filter((g) => wanted.has(g.externalId))) : new Map<string, CardPicture>();
+
+  return { groups, pictures, problem: '', truncated };
+}
+
+/**
+ * The card thumbnails, through the browser's own session.
+ *
+ * `page.request` carries the context's cookies and origin, which is what makes
+ * a signed scontent URL answer at all — the same call readGroupProfile uses for
+ * a group's og:image. The images were already loaded once when the results
+ * rendered, so these come back from cache and add no traffic of consequence.
+ *
+ * Four at a time, and every failure is silent by design: a row without a
+ * picture shows its initial, which is what it did before and is not worth
+ * failing a search over.
+ */
+async function fetchPictures(page: Page, groups: DiscoveredGroup[]): Promise<Map<string, CardPicture>> {
+  const out = new Map<string, CardPicture>();
+  const todo = groups.filter((g) => /^https?:\/\//i.test(g.image)).slice(0, PICTURE_LIMIT);
+  const lanes = 4;
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(lanes, todo.length) }, async () => {
+      for (;;) {
+        const i = next;
+        next += 1;
+        if (i >= todo.length) return;
+        const g = todo[i];
+        try {
+          const res = await page.request.get(g.image, { timeout: 15_000 });
+          if (!res.ok()) continue;
+          const bytes = await res.body();
+          /* A one-pixel tracking gif or an error page is not a picture, and
+             storing it would replace an initial with a blank square. */
+          if (bytes.length < 500) continue;
+          out.set(g.externalId, { bytes, contentType: res.headers()['content-type'] ?? 'image/jpeg' });
+        } catch {
+          /* no picture for this one */
+        }
+      }
+    }),
+  );
+  return out;
 }
 
 /**

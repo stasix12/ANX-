@@ -371,4 +371,67 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(/social_discovery_groups_tenant_external_idx/.test(sql), 'one row per group per business — "אם אותה קבוצה נמצאה בחיפוש קודם, לא ליצור אותה שוב"');
 }
 
+/* ------------------------------------------- the picture, and where it lives */
+{
+  const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const browser = readFileSync(new URL('../facebook/discover.ts', import.meta.url), 'utf8');
+
+  /*
+   * THE BUG THE OWNER SAW: every row showed a letter instead of the group's
+   * picture. The card's thumbnail is a SIGNED scontent URL — it expires within
+   * hours and is not served to another origin — so storing it is storing
+   * something that renders for a little while and then does not.
+   */
+  is(
+    /image: stored\.get\(g\.externalId\) \?\? ''/.test(worker),
+    "THE SIGNED FACEBOOK URL NEVER REACHES THE DATABASE — it is replaced by our own copy, or by nothing",
+  );
+  is(/storage\.from\('social-media'\)\.upload\(objectPath/.test(worker), 'the bytes are stored in the same bucket the groups screen already uses');
+  is(/createHash\('sha1'\)\.update\(externalId\)/.test(worker), "and a group's own id is hashed rather than pasted into a storage path");
+  is(/page\.request\.get\(g\.image/.test(browser), "the bytes are fetched through the browser's own session, which is what makes a signed URL answer at all");
+  is(/bytes\.length < 500/.test(browser), 'a tracking pixel or an error page is not a picture, and would replace an initial with a blank square');
+
+  /* Fetched once in the life of a row, on an account already over its storage
+     quota — so a re-search must cost nothing. */
+  is(/opts\.pictures \?\? \[\]/.test(browser), 'only the ids the caller still needs are fetched');
+  is(/wanted\.size \? await fetchPictures/.test(browser), 'and a search that needs none downloads nothing at all');
+  is(
+    /\/storage\\\/v1\\\/object\\\/public\\\//.test(worker) || /storage.{0,4}v1.{0,4}object.{0,4}public/.test(worker),
+    'A LINK WE DID NOT STORE OURSELVES COUNTS AS MISSING — otherwise every row the first version wrote keeps its dead URL for ever',
+  );
+
+  /* The merge already refuses to downgrade a known value to an unknown one,
+     which is what lets an empty `image` keep the copy stored last time. */
+  const kept = mergeDiscovered(
+    { externalId: 'a', url: 'u', name: 'א', image: '', members: 1, privacy: 'public', membership: 'member' },
+    { external_id: 'a', image_url: 'https://x.supabase.co/storage/v1/object/public/social-media/discovery/ab.jpg' },
+    'q',
+    '2026-09-30T00:00:00Z',
+  );
+  eq(
+    kept.image_url,
+    'https://x.supabase.co/storage/v1/object/public/social-media/discovery/ab.jpg',
+    'a search that fetched no picture keeps the one already stored rather than blanking the row',
+  );
+}
+
+/* ----------------------------------------- "הוסף את כל מה שאני חבר בהן" */
+{
+  const page = readFileSync(new URL('../../src/app/social/discover/page.tsx', import.meta.url), 'utf8');
+  const block = page.slice(page.indexOf('const joinedNotListed'), page.indexOf('const hiddenCount'));
+
+  is(/r\.membership === 'member'/.test(block), 'the bulk button counts only groups the search said he is a MEMBER of');
+  is(
+    !/'unknown'/.test(block),
+    "AND NOT THE UNKNOWN ONES — the per-row button may offer itself for those because he is looking at one group and knows; a bulk press cannot borrow that, and would put groups he never joined into the publishing list",
+  );
+  is(/!r\.target_id && !inSystem\.has\(r\.external_id\)/.test(block), 'and skips anything already in the list, by either of the two ways of knowing');
+  is(/!r\.hidden/.test(block), 'and anything he dismissed');
+
+  const handler = page.slice(page.indexOf('async function adoptAll'), page.indexOf('/** Everything hidden for this phrase'));
+  is(/for \(const row of joinedNotListed\)/.test(handler), 'the inserts are sequential — thirty at once race each other onto the unique index');
+  is(/כבר קיימת/.test(handler), 'a group that was already there counts as a success: the sentence is about what is true afterwards');
+  is(/joinedNotListed\.length\} הקבוצות שאתה כבר חבר בהן/.test(page), "and the label names the count, so the promise and the set are the same thing");
+}
+
 console.log(`discovery tests OK — ${checks} assertions`);

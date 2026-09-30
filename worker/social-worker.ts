@@ -1395,12 +1395,24 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
           ok = false;
           result = phrase ? 'מילת החיפוש ארוכה מדי.' : 'לא צוין מה לחפש.';
         } else {
-          const found = await session.discoverGroups(headless, phrase);
+          /*
+           * WHICH PICTURES ARE STILL MISSING — asked before the search, so the
+           * browser fetches each thumbnail once in the life of the row rather
+           * than on every re-search. A repeated "באר שבע" costs no images at
+           * all, which matters on an account already over its storage quota.
+           *
+           * The list cannot be known until the search has run (we do not know
+           * what it will find), so this is deliberately generous: every group
+           * this business has ever seen WITHOUT a stored picture. searchGroups
+           * intersects it with what it actually found.
+           */
+          const need = await groupsMissingPictures();
+          const found = await session.discoverGroups(headless, phrase, { pictures: need });
           if (found.problem) {
             ok = false;
             result = found.problem;
           } else {
-            const wrote = await recordDiscovered(phrase, found.groups);
+            const wrote = await recordDiscovered(phrase, found.groups, found.pictures);
             result = found.groups.length
               ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
               : 'לא נמצאו קבוצות למילה הזאת.';
@@ -2146,9 +2158,69 @@ async function recordAccount(
  * read could not tell, in which case what was known last time is kept rather
  * than downgraded to "unknown".
  */
-async function recordDiscovered(phrase: string, groups: DiscoveredGroup[]): Promise<{ fresh: number }> {
+/**
+ * Every discovered group of this business that has no stored picture.
+ *
+ * Read as ids and nothing else: it is handed to the browser as "fetch these if
+ * you meet them", and a search that meets none of them downloads nothing. A
+ * group whose picture is already stored is never fetched twice.
+ */
+async function groupsMissingPictures(): Promise<string[]> {
+  const db = await workerDb();
+  const { data } = await db.from('social_discovery_groups').select('external_id, image_url');
+  return ((data ?? []) as { external_id: string; image_url: string | null }[])
+    /*
+     * "MISSING" INCLUDES A LINK WE DID NOT STORE OURSELVES.
+     *
+     * Asking only for empty ones would have left every row the first version
+     * wrote — each holding a signed scontent URL that stopped rendering hours
+     * later — showing a letter for ever, because the column is not empty. Our
+     * own copies live under Supabase storage, so anything that is not one is
+     * a picture this row does not really have.
+     */
+    .filter((r) => !/\/storage\/v1\/object\/public\//.test(r.image_url ?? ''))
+    .map((r) => r.external_id);
+}
+
+/**
+ * The thumbnails, into the same bucket the groups screen's pictures live in.
+ *
+ * A COPY AND NOT A LINK, for the reason discover.ts states: Facebook's card
+ * thumbnails are signed scontent URLs that expire and are not served to another
+ * origin, so a row that stored one showed a letter where a picture should be.
+ * This is the same upload the group sweep does at social-worker.ts:1181, to the
+ * same bucket, and it fails the same way — loudly in the terminal, silently on
+ * screen, because a missing picture is a cosmetic loss and a failed search is
+ * not.
+ */
+async function storeDiscoveryPictures(pictures: Map<string, { bytes: Buffer; contentType: string }>): Promise<Map<string, string>> {
+  const urls = new Map<string, string>();
+  if (!pictures.size) return urls;
+  const db = await workerDb();
+  for (const [externalId, pic] of pictures) {
+    const ext = pic.contentType.includes('png') ? 'png' : 'jpg';
+    /* The id is Facebook's own and can hold anything a vanity name can, so it
+       is hashed rather than pasted into a storage path. */
+    const objectPath = `discovery/${createHash('sha1').update(externalId).digest('hex').slice(0, 20)}.${ext}`;
+    const { error } = await db.storage.from('social-media').upload(objectPath, pic.bytes, { contentType: pic.contentType, upsert: true });
+    if (error) {
+      console.error(`[worker] ✗ העלאת תמונת קבוצה מהחיפוש נכשלה:`, error.message);
+      continue;
+    }
+    urls.set(externalId, db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl);
+  }
+  console.log(`[worker]    תמונות קבוצות מהחיפוש: ${urls.size} נשמרו`);
+  return urls;
+}
+
+async function recordDiscovered(
+  phrase: string,
+  groups: DiscoveredGroup[],
+  pictures: Map<string, { bytes: Buffer; contentType: string }> = new Map(),
+): Promise<{ fresh: number }> {
   if (!groups.length) return { fresh: 0 };
   const db = await workerDb();
+  const stored = await storeDiscoveryPictures(pictures);
   const normalized = normalizeQuery(phrase);
   const ids = groups.map((g) => g.externalId);
 
@@ -2163,7 +2235,16 @@ async function recordDiscovered(phrase: string, groups: DiscoveredGroup[]): Prom
   /* The rules themselves are in lib/social/discovery.ts, where they can be
      tested without a database — see mergeDiscovered's own comment for what
      each of them is protecting. */
-  const rows = groups.map((g) => mergeDiscovered(g, before.get(g.externalId), normalized, now));
+  const rows = groups.map((g) =>
+    /*
+     * `g.image` is REPLACED by our own copy before the merge sees it, and by an
+     * empty string when there is no copy. The signed Facebook URL must never
+     * reach the database: it renders for an hour and then the row shows a
+     * letter, which is the bug this whole path exists to fix. An empty string
+     * lets mergeDiscovered keep whatever was stored last time.
+     */
+    mergeDiscovered({ ...g, image: stored.get(g.externalId) ?? '' }, before.get(g.externalId), normalized, now),
+  );
 
   /*
    * The conflict target is per-business from the day the table was created, so

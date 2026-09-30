@@ -38,8 +38,15 @@ comment on column public.social_workers.fb_profiles_at is
 -- The list is replaced rather than extended, because that is the only form
 -- that is safe to run twice.
 
-alter table public.social_worker_commands
-  drop constraint if exists social_worker_commands_command_check;
-alter table public.social_worker_commands
-  add constraint social_worker_commands_command_check
-  check (command in ('login', 'check', 'logout', 'resume', 'verify', 'profiles', 'switch'));
+do $$
+begin
+  if exists (select 1 from public.social_worker_commands where command not in ('login', 'check', 'logout', 'resume', 'verify', 'profiles', 'switch')) then
+    raise notice 'לטבלת הפקודות יש כבר פקודות חדשות יותר — הגבלה ישנה לא הוחלה מחדש, בכוונה.';
+  else
+    alter table public.social_worker_commands
+      drop constraint if exists social_worker_commands_command_check;
+    alter table public.social_worker_commands
+      add constraint social_worker_commands_command_check
+      check (command in ('login', 'check', 'logout', 'resume', 'verify', 'profiles', 'switch'));
+  end if;
+end $$;

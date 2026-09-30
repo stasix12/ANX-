@@ -412,7 +412,42 @@ export interface SocialWorker {
   login_asked_at?: string | null;
 }
 
-export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume' | 'verify' | 'profiles' | 'switch';
+/**
+ * A group גילוי קבוצות turned up, as the database holds it.
+ *
+ * `membership` and `privacy` are what the SEARCH RESULT said, which is not
+ * always anything — see discovery.ts on why both carry an 'unknown' rather
+ * than a default. `target_id` and `hidden` are the owner's own decisions about
+ * the row and are never written by a search.
+ */
+export interface DiscoveredGroupRow {
+  id: string;
+  external_id: string;
+  name: string;
+  url: string;
+  image_url: string;
+  members: number | null;
+  privacy: 'public' | 'private' | 'unknown';
+  membership: 'member' | 'requested' | 'none' | 'unknown';
+  queries: string[];
+  first_seen_at: string;
+  last_seen_at: string;
+  target_id: string | null;
+  hidden: boolean;
+}
+
+/** A phrase the owner has searched, and when it last ran. */
+export interface DiscoverySearchRow {
+  id: string;
+  query: string;
+  normalized: string;
+  watching: boolean;
+  last_run_at: string | null;
+  previous_run_at: string | null;
+  last_found: number;
+}
+
+export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume' | 'verify' | 'profiles' | 'switch' | 'discover';
 
 export interface WorkerCommand {
   id: string;

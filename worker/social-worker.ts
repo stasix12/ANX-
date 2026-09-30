@@ -3,6 +3,7 @@ import { hostname } from 'node:os';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Page } from 'playwright-core';
 import { detectCity } from '@/lib/social/cities';
+import { mergeDiscovered, normalizeQuery, type DiscoveredGroup, type StoredGroup } from '@/lib/social/discovery';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { PREP_LEAD_MS, evaluateQueueItem } from '@/lib/social/rules';
@@ -1248,7 +1249,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     .or(`worker_id.eq.${state.id},worker_id.is.null`)
     .order('created_at')
     .limit(5);
-  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string } })[]) {
+  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string } })[]) {
     /*
      * CLAIMING A COMMAND ALSO EMPTIES IT.
      *
@@ -1376,6 +1377,33 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             if (r.profiles?.length) await recordProfiles(state, r.profiles);
             const logo = state.profiles?.find((p) => p.name === (r.account?.name || wanted))?.image;
             await recordAccount(state, r.account, logo);
+          }
+        }
+      } else if (cmd.command === 'discover') {
+        /*
+         * גילוי קבוצות — READ FACEBOOK'S SEARCH, WRITE DOWN WHAT IT SAID.
+         *
+         * The phrase comes from the dashboard, so it is checked here rather
+         * than trusted: a length and nothing else, because unlike the profile
+         * switcher there is no list of legal values to check it against — it
+         * is a search box. What protects the account is not the phrase but
+         * what this branch is allowed to DO with it, which is: open a search
+         * page and read it. No join, no request, no click.
+         */
+        const phrase = String(cmd.payload?.query ?? '').trim();
+        if (!phrase || phrase.length > 80) {
+          ok = false;
+          result = phrase ? 'מילת החיפוש ארוכה מדי.' : 'לא צוין מה לחפש.';
+        } else {
+          const found = await session.discoverGroups(headless, phrase);
+          if (found.problem) {
+            ok = false;
+            result = found.problem;
+          } else {
+            const wrote = await recordDiscovered(phrase, found.groups);
+            result = found.groups.length
+              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
+              : 'לא נמצאו קבוצות למילה הזאת.';
           }
         }
       } else if (cmd.command === 'resume') {
@@ -2090,6 +2118,84 @@ async function recordAccount(
  * did not, and that answer has already been given to the command. Losing the
  * list costs a button press to read it again.
  */
+/**
+ * WHAT THE SEARCH FOUND, WRITTEN DOWN WITHOUT LOSING WHAT WAS ALREADY KNOWN.
+ *
+ * "אם אותה קבוצה נמצאה בחיפוש קודם, לא ליצור אותה שוב." De-duplication is by
+ * (business, Facebook's own id), which the database enforces — but an upsert
+ * alone would have quietly destroyed three things the row holds and the search
+ * does not:
+ *
+ *   • `queries`, the phrases that have ever turned this group up. Sent as just
+ *     this search's phrase it would REPLACE the list, and a group found by
+ *     "באר שבע" and then by "דרום" would stop belonging to the first search —
+ *     so it would vanish from a screen the owner had already filled.
+ *   • `first_seen_at`, which is the whole of "נמצאו 7 קבוצות חדשות מאז החיפוש
+ *     האחרון". Overwritten with now() on every re-search, EVERY group is new
+ *     for ever and the badge means nothing.
+ *   • `target_id` and `hidden` — his own decisions: this one is already in the
+ *     publishing list, that one he does not want to see again. A search must
+ *     never be able to undo a decision a person made.
+ *
+ * So the existing rows are read first, in ONE query, and the merge happens
+ * here. Two round trips for a hundred and twenty groups rather than two
+ * hundred and forty.
+ *
+ * The membership and the count, by contrast, are REPLACED, because those are
+ * facts about Facebook rather than decisions of his — except when the fresh
+ * read could not tell, in which case what was known last time is kept rather
+ * than downgraded to "unknown".
+ */
+async function recordDiscovered(phrase: string, groups: DiscoveredGroup[]): Promise<{ fresh: number }> {
+  if (!groups.length) return { fresh: 0 };
+  const db = await workerDb();
+  const normalized = normalizeQuery(phrase);
+  const ids = groups.map((g) => g.externalId);
+
+  const { data: existing } = await db
+    .from('social_discovery_groups')
+    .select('external_id, queries, first_seen_at, members, privacy, membership, name, image_url')
+    .in('external_id', ids);
+  const before = new Map<string, StoredGroup>();
+  for (const row of (existing ?? []) as StoredGroup[]) before.set(row.external_id, row);
+
+  const now = new Date().toISOString();
+  /* The rules themselves are in lib/social/discovery.ts, where they can be
+     tested without a database — see mergeDiscovered's own comment for what
+     each of them is protecting. */
+  const rows = groups.map((g) => mergeDiscovered(g, before.get(g.externalId), normalized, now));
+
+  /*
+   * The conflict target is per-business from the day the table was created, so
+   * unlike the four upserts in tenant.ts this one needs no fallback for a
+   * database that is behind: a database without social_discovery_groups cannot
+   * have sent this command at all — its CHECK constraint refuses the word.
+   */
+  const { error } = await db.from('social_discovery_groups').upsert(rows, { onConflict: 'tenant_id,external_id' });
+  if (error) throw error;
+
+  const fresh = rows.filter((r) => !before.has(r.external_id)).length;
+
+  /* The search itself: when it last ran, and the run before that, which is the
+     pair "חדשות מאז החיפוש האחרון" subtracts. */
+  const { data: search } = await db
+    .from('social_discovery_searches')
+    .select('id, last_run_at')
+    .eq('normalized', normalized)
+    .maybeSingle();
+  const patch = {
+    query: phrase,
+    normalized,
+    previous_run_at: (search?.last_run_at as string | null) ?? null,
+    last_run_at: now,
+    last_found: groups.length,
+  };
+  if (search?.id) await db.from('social_discovery_searches').update(patch).eq('id', search.id);
+  else await db.from('social_discovery_searches').insert(patch);
+
+  return { fresh };
+}
+
 async function recordProfiles(state: WorkerState, profiles: FacebookProfile[]): Promise<void> {
   const db = await workerDb();
   state.profiles = profiles.map((p) => ({ name: p.name, kind: p.kind }));

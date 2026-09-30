@@ -33,8 +33,15 @@ comment on column public.social_workers.login_asked_at is
   'When the challenge was raised, so a stale one can be recognised rather than answered.';
 
 -- 'verify' carries the code the person typed on the screen.
-alter table public.social_worker_commands
-  drop constraint if exists social_worker_commands_command_check;
-alter table public.social_worker_commands
-  add constraint social_worker_commands_command_check
-  check (command in ('login', 'check', 'logout', 'resume', 'verify'));
+do $$
+begin
+  if exists (select 1 from public.social_worker_commands where command not in ('login', 'check', 'logout', 'resume', 'verify')) then
+    raise notice 'לטבלת הפקודות יש כבר פקודות חדשות יותר — הגבלה ישנה לא הוחלה מחדש, בכוונה.';
+  else
+    alter table public.social_worker_commands
+      drop constraint if exists social_worker_commands_command_check;
+    alter table public.social_worker_commands
+      add constraint social_worker_commands_command_check
+      check (command in ('login', 'check', 'logout', 'resume', 'verify'));
+  end if;
+end $$;

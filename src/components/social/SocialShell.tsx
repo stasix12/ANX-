@@ -13,6 +13,7 @@ import {
   LogOutIcon,
   MenuIcon,
   RepeatIcon,
+  SearchIcon,
   SparklesIcon,
   SpinnerIcon,
   UsersIcon,
@@ -53,6 +54,15 @@ const nav = [
    */
   { href: '/social/campaigns', label: 'קמפיינים', icon: RepeatIcon, exact: false },
   { href: '/social/groups', label: 'קבוצות', icon: UsersIcon, exact: false },
+  /*
+   * גילוי קבוצות. NOT a fifth tab — MOBILE_TABS below is a fixed list and does
+   * not contain it, so on a phone this appears under "עוד" and the bar the
+   * owner already calls crowded is untouched. It is here for the reason the
+   * activity log's entry gives two lines down: the groups screen carries the
+   * button people will actually use, and a route with no entry in the
+   * navigation is one somebody can reach and then never find again.
+   */
+  { href: '/social/discover', label: 'גילוי קבוצות', icon: SearchIcon, exact: false },
   { href: '/social/history', label: 'היסטוריה', icon: CalendarIcon, exact: false },
   /* The activity log's own screen. Two places link to it — the dashboard card
      and the bell — but a route with no entry in the navigation is a route the

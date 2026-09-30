@@ -4,6 +4,7 @@ import path from 'node:path';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { readAccountIdentity, readAccountProfile, type AccountProfile } from './account';
 import { readProfiles, switchProfile, type FacebookProfile } from './profiles';
+import { searchGroups, type SearchOutcome } from './discover';
 import { env } from '../env';
 import { CHECKPOINT_PATHS, LOGIN_PATHS, fb, patterns } from './selectors';
 
@@ -324,6 +325,49 @@ export class BrowserSession {
               ? `לא הצלחנו לפתוח את תפריט החשבון בפייסבוק. נסו שוב בעוד רגע. (${read.why || 'אין פרטים'})`
               : 'תפריט החשבון נפתח אבל לא זוהו בו פרופילים.',
       };
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+
+  /**
+   * גילוי קבוצות — what Facebook offers this account for a phrase.
+   *
+   * The browser lifecycle lives here with every other one, so the command in
+   * social-worker.ts stays a command and never learns what a page is. The
+   * reading itself is discover.ts, and it presses nothing: no join button, no
+   * request, no "see more". A link comes back and a person decides.
+   *
+   * THE TWO REFUSALS COME FIRST AND SEPARATELY. A search run against a login
+   * wall returns the login page's own links — /groups/ is in the footer of it
+   * — so a reader that did not check would report a handful of nonsense groups
+   * as a successful search. Their sentences are the same ones every other
+   * command in this file uses, because they mean the same thing and the owner
+   * reads them in the same place.
+   */
+  async discoverGroups(headless: boolean, query: string): Promise<SearchOutcome> {
+    if (!this.hasProfile()) return { groups: [], problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
+    const page = await this.newPage(headless, 'גילוי קבוצות');
+    try {
+      const kind = await classifyPage(page);
+      if (kind === 'checkpoint') return { groups: [], problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
+      if (kind === 'login' || !(await this.hasLoginCookie())) {
+        return { groups: [], problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+      }
+      const found = await searchGroups(page, query);
+      /*
+       * AND CHECKED AGAIN AFTERWARDS. Facebook can answer a search with a
+       * security check, and it does so by replacing the page — so the read
+       * above comes back with nothing and no error, which is exactly what a
+       * phrase with no results looks like. Telling those two apart is the
+       * whole of what this second look buys.
+       */
+      if (!found.groups.length) {
+        const after = await classifyPage(page);
+        if (after === 'checkpoint') return { groups: [], problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
+        if (after === 'login') return { groups: [], problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+      }
+      return found;
     } finally {
       await page.close().catch(() => undefined);
     }

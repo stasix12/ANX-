@@ -3,6 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
+import { normalizeQuery } from './discovery';
 import { dedupeKey } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
 import { checkCampaignInvariants, checkQueueInvariants, takeUnreported, type InvariantViolation } from './invariants';
@@ -41,6 +42,8 @@ import {
   type Variant,
   type WorkerCommand,
   type WorkerCommandName,
+  type DiscoveredGroupRow,
+  type DiscoverySearchRow,
 } from './types';
 
 /**
@@ -208,6 +211,95 @@ export const addManualGroup = (input: { name: string; url: string; notes?: strin
  * Facebook does not satisfy — and over a hundred groups that is the
  * difference between an hour and twenty minutes.
  */
+/* ────────────────────────────── גילוי קבוצות ──────────────────────────────
+ *
+ * Reads and writes for the discovery screen. None of these talk to Facebook:
+ * the machine does that, once, when it is sent a `discover` command, and
+ * everything below is about the rows it left behind.
+ */
+
+const DISCOVERY_COLUMNS =
+  'id, external_id, name, url, image_url, members, privacy, membership, queries, first_seen_at, last_seen_at, target_id, hidden';
+
+/** Every group a given phrase has ever turned up, newest sighting first. */
+export async function listDiscovered(query?: string): Promise<DiscoveredGroupRow[]> {
+  let q = db().from('social_discovery_groups').select(DISCOVERY_COLUMNS).order('last_seen_at', { ascending: false }).limit(500);
+  if (query) {
+    /*
+     * `contains` on the array column, which the GIN index serves. The phrase
+     * is normalised on the way in for the same reason it is normalised on the
+     * way out: a chip copied from a Hebrew page carries invisible bidi marks,
+     * and an exact match against the raw text would find nothing while looking
+     * identical on screen.
+     */
+    q = q.contains('queries', [normalizeQuery(query)]);
+  }
+  return unwrap<DiscoveredGroupRow[]>(await q);
+}
+
+/** The chips under the search box — what he has looked for before. */
+export async function listSearches(limit = 12): Promise<DiscoverySearchRow[]> {
+  return unwrap<DiscoverySearchRow[]>(
+    await db()
+      .from('social_discovery_searches')
+      .select('id, query, normalized, watching, last_run_at, previous_run_at, last_found')
+      .order('last_run_at', { ascending: false, nullsFirst: false })
+      .limit(limit),
+  );
+}
+
+/**
+ * The external ids already in the publishing list.
+ *
+ * "אם הקבוצה כבר קיימת ברשימת הקבוצות של מערכת הפרסום — להציג ✓ כבר במערכת."
+ * The discovery row's own `target_id` is not enough on its own: a group he
+ * added by pasting a link last month has no link to this row, and without
+ * this read the screen would offer to add it a second time and the insert
+ * would be refused by the unique index with an error he did not earn.
+ *
+ * One column, and only the groups — this runs beside a list of results.
+ */
+export async function listTargetExternalIds(): Promise<Set<string>> {
+  const rows = unwrap<{ external_id: string }[]>(
+    await db().from('social_targets').select('external_id').eq('channel', 'facebook_group').neq('external_id', ''),
+  );
+  return new Set(rows.map((r) => r.external_id));
+}
+
+/** Ask the machine to run a search. The answer arrives as rows, not as text. */
+export async function startDiscovery(workerId: string | null, query: string): Promise<{ id: string }> {
+  return sendWorkerCommand(workerId, 'discover', { query: query.trim() });
+}
+
+/** "לא מעניין אותי" — kept rather than deleted, or the next search brings it back. */
+export async function hideDiscovered(id: string, hidden: boolean): Promise<void> {
+  unwrap(await db().from('social_discovery_groups').update({ hidden }).eq('id', id));
+}
+
+/** Remember a phrase, so the screen can re-run it and say what is new. */
+export async function watchSearch(id: string, watching: boolean): Promise<void> {
+  unwrap(await db().from('social_discovery_searches').update({ watching }).eq('id', id));
+}
+
+/**
+ * "הוסף לרשימת הקבוצות שלי" — one discovered group into the publishing list.
+ *
+ * The link back is written in a SECOND statement, on purpose: the group being
+ * in the publishing list is the thing that matters, and a failure to record
+ * which discovery row it came from must not undo it. Worst case the row says
+ * "כבר במערכת" from listTargetExternalIds instead of from its own column,
+ * which is the same sentence on screen.
+ */
+export async function adoptDiscovered(row: Pick<DiscoveredGroupRow, 'id' | 'url' | 'name'>): Promise<SocialTarget> {
+  const target = await addGroup({ url: row.url, name: row.name });
+  await db()
+    .from('social_discovery_groups')
+    .update({ target_id: target.id })
+    .eq('id', row.id)
+    .then(undefined, () => undefined);
+  return target;
+}
+
 export async function requestGroupRefresh(ids?: string[], opts?: { picture?: boolean }): Promise<void> {
   const patch: Record<string, unknown> = { last_synced_at: null };
   if (opts?.picture) patch.image_url = '';

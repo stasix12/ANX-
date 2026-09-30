@@ -8,6 +8,7 @@ import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import {
   Badge,
+  CARD,
   CARD_ELEVATED,
   Button,
   Card,
@@ -57,7 +58,7 @@ import {
   type SocialTarget,
 } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { ChartIcon, CheckIcon, CloseIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, SparklesIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
+import { ChartIcon, CheckIcon, ChevronIcon, CloseIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, SparklesIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent' | 'new';
 type View = 'grid' | 'list';
@@ -503,6 +504,31 @@ export default function GroupsPage() {
             <code dir="ltr">start-worker.cmd</code> והשאירו את החלון פתוח.
           </Notice>
         )}
+
+        {/*
+          גילוי קבוצות — THE WAY IN, and it is here rather than in the header.
+
+          The header already carries "בדוק הכל" and "+ הוסף"; a third button
+          beside them does not fit a 375px phone without one of the three
+          wrapping under the title. This is one 56px row instead, at the top of
+          the screen whose whole subject it is — "הוסף" is for a link he
+          already has, this is for the ones he does not.
+
+          Nothing else on this screen changes.
+        */}
+        <Link
+          href="/social/discover"
+          className={`${CARD} flex min-h-11 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-ink-800`}
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-400/12">
+            <SearchIcon aria-hidden className="h-5 w-5 text-brand-400" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-extrabold text-mist-100">גילוי קבוצות</span>
+            <span className="block truncate text-xs text-mist-500">חפשו עיר או נושא וראו אילו קבוצות קיימות</span>
+          </span>
+          <ChevronIcon aria-hidden className="h-4 w-4 shrink-0 text-mist-500 rtl:rotate-180" />
+        </Link>
 
         {/*
           WHO THE CUSTOMERS ARE — the card that explains the mark, and the one

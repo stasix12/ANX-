@@ -43,6 +43,14 @@ on:
       - 'scripts/build-app.mjs'
       - 'electron-builder.yml'
       - 'worker/**'
+      # BUNDLED INTO THE APP, and left out until a feature whose whole library
+      # lives here nearly shipped without a rebuild. build-app.mjs compiles
+      # worker.cjs and main.cjs with `alias: { '@': src }`, so every file under
+      # src/lib/social is INSIDE the installer — the queue's vocabulary, the
+      # planner, the rules, and now discovery.ts. A change to one of them with
+      # no change under worker/ produced no build at all, which means the next
+      # release would have carried the previous version of it.
+      - 'src/lib/social/**'
       - '.github/workflows/build-app.yml'
   workflow_dispatch:
     inputs:

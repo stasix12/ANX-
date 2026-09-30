@@ -650,9 +650,14 @@ export function SocialShell({
                 }}
                 className="absolute inset-x-0 top-full z-40 h-screen w-screen cursor-default"
               />
+              {/* glass-switcher: the frosted panel, defined in globals.css and
+                  worn by this popup and the dashboard chip's — the same
+                  switcher, one screen in — and by nothing else in the product.
+                  The hairline, the radius, the width and everything inside are
+                  unchanged. */}
               <div
                 role="menu"
-                className="absolute start-0 top-full z-50 mt-2 w-64 rounded-2xl border border-ink-700 bg-ink-900 p-1.5 shadow-xl motion-safe:animate-[rise_0.18s_ease-out]"
+                className="glass-switcher absolute start-0 top-full z-50 mt-2 w-64 rounded-2xl border border-ink-700 p-1.5 motion-safe:animate-[rise_0.18s_ease-out]"
               >
                 <p className="px-2 pb-1 pt-1.5 text-[11px] font-bold text-mist-500">מי מפרסם</p>
                 {/*

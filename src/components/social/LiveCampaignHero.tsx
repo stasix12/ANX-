@@ -603,9 +603,12 @@ export function LiveQueueHero({
               onClick={() => setPickerOpen(false)}
               className="absolute inset-x-0 top-full z-40 h-screen w-screen cursor-default"
             />
+            {/* The same frosted panel as the bar's — this is the same switcher,
+                reached from the card instead of from the picture. Two looks for
+                one popup is the thing that would need explaining. */}
             <div
               role="menu"
-              className="absolute end-0 top-full z-50 mt-1.5 w-64 rounded-2xl border border-ink-700 bg-ink-900 p-1.5 shadow-xl motion-safe:animate-[rise_0.18s_ease-out]"
+              className="glass-switcher absolute end-0 top-full z-50 mt-1.5 w-64 rounded-2xl border border-ink-700 p-1.5 motion-safe:animate-[rise_0.18s_ease-out]"
             >
               {profiles.length ? (
                 profiles.map((p) => {

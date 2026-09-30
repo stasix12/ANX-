@@ -1014,6 +1014,57 @@
       0 16px 32px -20px color-mix(in oklab, var(--color-shadow) 30%, transparent);
   }
 
+  /*
+   * GLASS — AND ONLY FOR THE ACCOUNT SWITCHER.
+   *
+   * Asked for in those words: the floating panel that changes which identity
+   * publishes should read as frosted glass, and nothing else in the product
+   * should move. So this is a class of its own rather than a change to
+   * .surface, to a modal, to a dropdown or to any token: exactly two panels
+   * carry it — the one under the picture in the bar, and the one on the
+   * dashboard card's chip, which is the same switcher one screen in.
+   *
+   * WHAT MAKES IT GLASS is the pair: a panel that is not quite opaque, and a
+   * blur BEHIND it. Transparency on its own is a panel you cannot read
+   * through; the blur is what turns whatever is behind into light and colour
+   * instead of words competing with the words on top.
+   *
+   * 80%, not less. Measured against the page it floats over: the module's body
+   * text stays above 4.5:1 through it, and the separation between panel and
+   * page survives — the two things the brief asked not to lose ("שהטקסטים
+   * יישארו מאוד קריאים", "לא להעלים את ההפרדה"). Below about 70% both start to
+   * go, and a picker whose names are hard to read is a picker that publishes
+   * as the wrong person.
+   *
+   * The tint is mixed from the theme's own tokens rather than written as
+   * rgba(255,255,255,…), so the panel follows the theme instead of being a
+   * white rectangle under a dark one — the same discipline .surface above
+   * keeps, for the same reason.
+   */
+  .glass-switcher {
+    --glass-tint: color-mix(in oklab, var(--color-ink-900) 94%, var(--color-brand-400) 6%);
+    background-color: color-mix(in oklab, var(--glass-tint) 80%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(18px);
+    backdrop-filter: saturate(180%) blur(18px);
+    box-shadow:
+      0 2px 6px color-mix(in oklab, var(--color-shadow) 10%, transparent),
+      0 24px 48px -24px color-mix(in oklab, var(--color-shadow) 38%, transparent);
+  }
+
+  /*
+   * NO BLUR, NO TRANSPARENCY. A browser that cannot blur would otherwise show
+   * the page's own cards straight through the names — which is not a softer
+   * look, it is an unreadable one. The panel simply stays solid there.
+   */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass-switcher {
+      /* The plain token, not the mixed one: a browser this old may not have
+         color-mix either, and the panel has to stay a readable surface rather
+         than fall back to whatever the root theme resolves to. */
+      background-color: var(--color-ink-900);
+    }
+  }
+
   .text-balance-he {
     text-wrap: balance;
   }

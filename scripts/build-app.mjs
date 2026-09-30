@@ -84,7 +84,13 @@ const pw = path.join(out, 'node_modules', 'playwright-core');
 mkdirSync(path.dirname(pw), { recursive: true });
 cpSync(path.join(root, 'node_modules', 'playwright-core'), pw, {
   recursive: true,
-  filter: (src) => !/[\\/](\.local-browsers|\.cache)([\\/]|$)/.test(src),
+  /*
+   * Its bundled Chromium is not copied — the worker drives the Chrome the
+   * customer already has — and neither are its TypeScript definitions. `types/`
+   * is 1.6 MB of .d.ts: read by an editor, never by Node, and this package is
+   * shipped to people who will not open it in one.
+   */
+  filter: (src) => !/[\\/](\.local-browsers|\.cache|types)([\\/]|$)/.test(src),
 });
 
 /* preload.cjs is copied rather than bundled on purpose: it is the entire

@@ -75,11 +75,37 @@ publish:
   # silently never reaches anybody.
   releaseType: release
 
+# HOW BIG THE DOWNLOAD IS, WHICH IS THE CUSTOMER'S PROBLEM AND NOT ELECTRON'S.
+#
+# The app's own code is 11 MB — the bundle, the window and playwright-core. The
+# other hundred and thirty are Chromium, which Electron carries and which no
+# setting here can remove. So the three things below are what is actually
+# available, and they were all left at their defaults.
+#
+# MAXIMUM COMPRESSION. electron-builder ships `normal`, which is a build-time
+# choice paid for by every person who ever downloads this. A build runs on a
+# server for a few extra minutes; a download runs on a customer's line, once
+# per machine, on whatever connection they have.
+compression: maximum
+
+# EVERY LANGUAGE CHROMIUM SPEAKS, WHICH IS FIFTY-FIVE OF THEM.
+#
+# Electron ships a .pak per locale for its own dialogs and menus — the
+# right-click menu, the file picker, the spell-check UI. All of ours are
+# Hebrew and written by us; the only two that can ever be READ here are Hebrew
+# and the English fallback Chromium requires. The other fifty-odd are tens of
+# megabytes for languages nobody using this product has.
+electronLanguages:
+  - he
+  - en-US
+
 win:
+  # NSIS ONLY. The zip was a second copy of the same program — 190 MB beside a
+  # 140 MB installer — that nothing downloads and the updater never reads: an
+  # installed copy follows latest.yml to the .exe. It cost every build minutes
+  # and the release page a file that could only confuse whoever landed there.
   target:
     - target: nsis
-      arch: [x64]
-    - target: zip
       arch: [x64]
   artifactName: hapitaron-${version}-setup.${ext}
 

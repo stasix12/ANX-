@@ -251,6 +251,28 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
   is(!/UPDATES_TOKEN: \$\{\{ secrets/.test(flow), 'no hand-made token is wired into the publish any more');
   is(/^\s+releaseType:\s*release$/m.test(builder), 'and it must publish live releases — a draft is invisible to the updater');
 
+  /*
+   * HOW BIG THE DOWNLOAD IS.
+   *
+   * The installer reached 140 MB and nobody noticed, because nothing measured
+   * it and nothing said it out loud. The app's own payload is asserted below
+   * (under 40 MB, currently under 9); what the customer actually downloads is
+   * that plus Electron, and the only levers over Electron are these two. They
+   * are defaults that were never set, so they are the first things a future
+   * change would quietly drop.
+   *
+   * Every locale but Hebrew and the English fallback is 43 MB of Chromium's own
+   * dialogs in languages nobody using this product reads.
+   */
+  is(/^compression:\s*maximum$/m.test(builder), 'the installer is compressed as hard as the build can — a build minute against every customer’s download');
+  is(
+    /^electronLanguages:/m.test(builder) && /^\s+-\s*he$/m.test(builder),
+    'and it ships Chromium’s Hebrew and English locales only, not all fifty-five',
+  );
+  /* And nothing else is built beside it: the zip was a second copy of the same
+     program that no customer downloads and the updater never reads. */
+  is(!/target:\s*zip/.test(builder), 'no second copy of the program is built beside the installer');
+
   const updates = readFileSync(path.join(root, 'desktop', 'updates.ts'), 'utf8');
   is(/autoUpdater\.autoDownload = false/.test(updates), 'the download is started deliberately, so the "עדכונים אוטומטיים" toggle actually decides');
   is(/autoUpdater\.autoInstallOnAppQuit = true/.test(updates), 'a downloaded version installs on the next ordinary quit, so doing nothing still gets you there');

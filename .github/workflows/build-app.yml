@@ -162,14 +162,13 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-        run: npx electron-builder --win nsis zip --config electron-builder.yml --publish never
+        run: npx electron-builder --win nsis --config electron-builder.yml --publish never
 
       - uses: actions/upload-artifact@v4
         with:
           name: hapitaron-windows
           path: |
             dist/installer/*.exe
-            dist/installer/*.zip
           if-no-files-found: error
 
       # ------------------------------------------------------------------
@@ -301,7 +300,7 @@ jobs:
         # correct" — pointed at the one thing that was fine. Twice.
         shell: pwsh
         run: |
-          $log = npx electron-builder --win nsis zip --config electron-builder.yml --publish always 2>&1 | Tee-Object -Variable out
+          $log = npx electron-builder --win nsis --config electron-builder.yml --publish always 2>&1 | Tee-Object -Variable out
           $out | ForEach-Object { Write-Host $_ }
           if ($LASTEXITCODE -ne 0) {
             $text = ($out | Out-String)
@@ -316,7 +315,14 @@ jobs:
         shell: pwsh
         run: |
           $v = "${{ steps.release.outputs.version }}"
+          # THE NUMBER THAT MATTERS TO THE PERSON DOWNLOADING IT, printed by
+          # every build. The installer grew to 140 MB without anybody noticing,
+          # because nothing ever said how big it was.
+          $exe = Get-ChildItem dist/installer/*.exe | Select-Object -First 1
+          $mb = [math]::Round($exe.Length / 1MB, 1)
           "### גרסה $v פורסמה" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "גודל ההורדה: $mb MB" >> $env:GITHUB_STEP_SUMMARY
           "" >> $env:GITHUB_STEP_SUMMARY
           "הורדה ישירה: https://github.com/stasix12/ANX-/releases/download/v$v/hapitaron-$v-setup.exe" >> $env:GITHUB_STEP_SUMMARY
           "" >> $env:GITHUB_STEP_SUMMARY

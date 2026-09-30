@@ -195,7 +195,36 @@ jobs:
             "publish=no" >> $env:GITHUB_OUTPUT
             exit 0
           }
-          # A public repository, so this read needs no credentials at all.
+
+          # IS THE FEED THERE AT ALL, AND CAN A STRANGER READ IT?
+          #
+          # Asked with NO credentials, which is not a shortcut — it is exactly
+          # how an installed copy on a customer's PC asks. A repository that
+          # answers here answers for them; one that does not is invisible to
+          # every copy of this app no matter what the token can see.
+          #
+          # This step used to go straight to the release tag, so a missing
+          # repository and an unpublished version were the same 404 and the
+          # build walked on into electron-builder, which failed three minutes
+          # later with a stack trace and "Please double check that your
+          # authentication token is correct" — advice about the one thing that
+          # was fine. The two causes are separated here, before anything is
+          # uploaded, and each is said in a sentence naming what to do.
+          $feed = $null
+          try {
+            $feed = Invoke-RestMethod -Uri "https://api.github.com/repos/stasix12/hapitaron-updates" -Headers @{ 'User-Agent' = 'hapitaron-build' }
+          } catch {
+            # 404 covers both "no such repository" and "private", because
+            # GitHub deliberately does not tell a stranger which — and neither
+            # can this build.
+          }
+          if (-not $feed) {
+            Write-Host "::warning::stasix12/hapitaron-updates is not readable without a login: it either does not exist, or it is PRIVATE. Create it as a PUBLIC repository with that exact name. A private feed cannot work — an installed copy has no login, and shipping it one would put a credential inside every customer's app."
+            "publish=no" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          Write-Host "update feed: $($feed.full_name), public, created $($feed.created_at)"
+
           $url = "https://api.github.com/repos/stasix12/hapitaron-updates/releases/tags/v$version"
           try {
             Invoke-RestMethod -Uri $url -Headers @{ 'User-Agent' = 'hapitaron-build' } | Out-Null

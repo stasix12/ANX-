@@ -314,8 +314,8 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
    * setting that is accepted and does nothing is worse than no setting,
    * because it reads like the job is done.
    */
-  is(/^afterPack:\s*scripts\/trim-locales\.cjs$/m.test(builder), 'a hook removes the locales on every platform, including the one the customers are on');
-  const trim = readFileSync(path.join(root, 'scripts', 'trim-locales.cjs'), 'utf8');
+  is(/^afterPack:\s*scripts\/after-pack\.cjs$/m.test(builder), 'a hook removes the locales on every platform, including the one the customers are on');
+  const trim = readFileSync(path.join(root, 'scripts', 'after-pack.cjs'), 'utf8');
   is(/'he\.pak', 'en-US\.pak'/.test(trim), 'and it keeps Hebrew and the English fallback Chromium cannot start without');
 
   /*
@@ -334,6 +334,26 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
   is(
     /if \(\$names -notcontains \$needed\)/.test(flow) && /'latest\.yml'/.test(flow),
     'and the build reads the release back and fails if latest.yml is not on it — the one file an installed copy needs',
+  );
+  /*
+   * THE THREE WAYS A VERSION CAN BE PUBLISHED AND STILL NEVER ARRIVE.
+   *
+   * Each of them ends the same way — a fleet that reports itself up to date
+   * for ever, with nothing anywhere saying otherwise — and none of them is
+   * visible from the release page.
+   */
+  is(
+    /\[version\]\$version -le \[version\]\$already/.test(flow),
+    'a version that is not GREATER than the published one is refused — one typo would otherwise freeze every installed copy',
+  );
+  is(
+    /if \(\$serving -ne "v\$v"\)/.test(flow),
+    'and the build checks what the FEED hands out, not only what it uploaded — GitHub picks "latest" by commit date, so a build from an older commit publishes fine and reaches nobody',
+  );
+  const assemble = readFileSync(path.join(root, 'scripts', 'build-app.mjs'), 'utf8');
+  is(
+    /if \(!\/\^\\d\+\\\.\\d\+\\\.\\d\+\$\/\.test\(WORKER_VERSION\)/.test(assemble),
+    'and a build that cannot read its own version number refuses to ship, instead of quietly packaging 0.0.0',
   );
 
   const updates = readFileSync(path.join(root, 'desktop', 'updates.ts'), 'utf8');

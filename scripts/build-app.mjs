@@ -25,6 +25,24 @@ const out = path.join(root, 'dist', 'app');
 const WORKER_VERSION = (readFileSync(path.join(root, 'src', 'lib', 'social', 'worker-version.ts'), 'utf8')
   .match(/WORKER_VERSION = '([^']+)'/) ?? [, '0.0.0'])[1];
 
+/*
+ * AND IT MAY NOT FAIL OPEN.
+ *
+ * That regex wants single quotes and one space. Change the constant to double
+ * quotes, or a backtick, or close the gap — all of them ordinary edits — and
+ * this silently packages version 0.0.0. The publish gate only asks whether tag
+ * v0.0.0 exists, so it would go out as a release, become the newest one every
+ * installed copy reads, and tell a fleet on 3.55.0 that it is current. For ever.
+ *
+ * A build that cannot read its own version number has nothing to ship.
+ */
+if (!/^\d+\.\d+\.\d+$/.test(WORKER_VERSION) || WORKER_VERSION === '0.0.0') {
+  throw new Error(
+    `Could not read a version out of src/lib/social/worker-version.ts (got "${WORKER_VERSION}"). ` +
+      "It must read exactly: export const WORKER_VERSION = '1.2.3';",
+  );
+}
+
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
@@ -116,9 +134,27 @@ if (existsSync(icon)) cpSync(icon, path.join(out, 'icon.png'));
  * handing every customer a master key. worker/test/package.test.ts fails the
  * build if any of them appear in the output.
  */
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
-const site = process.env.SOCIAL_SITE_URL ?? 'https://anx-ggyo.vercel.app/social';
+/*
+ * `||` AND `.trim()`, AND BOTH WERE PAID FOR.
+ *
+ * `??` falls back only on null and undefined — and an unset GitHub repository
+ * VARIABLE is passed to a step as the EMPTY STRING, not as nothing. So the
+ * default below was bypassed and the shipped config carried `"siteUrl": ""`.
+ * Everything it reaches is then dead: "צור חשבון חדש" on the sign-in screen,
+ * "הדשבורד באתר" in the tray, the whole way to the website. A customer who
+ * installs the app without already having an account has no route to make one.
+ * (worker/env.ts:39 carries a comment about this exact trap; the very next step
+ * of build-app.yml gets it right with `||`. This line did not.)
+ *
+ * `.trim()` because a secret pasted with a trailing newline stays in the value:
+ * the shipped supabaseUrl really did read "https://….supabase.co\n". WHATWG URL
+ * parsing happens to forgive it, so nothing is broken today — and the first
+ * piece of code that concatenates the string instead of parsing it would break
+ * in a way nobody could see.
+ */
+const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
+const anon = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+const site = (process.env.SOCIAL_SITE_URL || 'https://anx-ggyo.vercel.app/social').trim();
 if (!url || !anon) {
   console.warn('\n  [!] NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY are not set, so config.json is a template.');
   console.warn('      The package will build, and will not connect until they are filled in.');

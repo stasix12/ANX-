@@ -15,10 +15,33 @@ directories:
 # Chromium is NOT bundled. The worker drives the Chrome the customer already
 # has (playwright-core with channel 'chrome'), which is the difference between
 # a download of tens of megabytes and one of several hundred.
+# WHAT GOES IN — AND THE FIFTY MEGABYTES THAT WENT IN WITHOUT BEING ASKED.
+#
+# The header above says this file never sees the repository, and about
+# directories.app that is true. It is NOT true of node_modules: electron-builder
+# collects production dependencies from the PROJECT root — this repository —
+# and dist/app/package.json declaring none does not stop it. Measured on the
+# released 3.55.0 installer, 48 of its 132 MB were the WEBSITE's build tools:
+#
+#   23.4 MB  @next/swc-win32-x64-msvc   (the Next.js Rust compiler, 106 MB raw)
+#   16.5 MB  next                       (4,878 files)
+#    5.9 MB  @img/sharp-win32-x64       (libvips, for resizing images on a server)
+#    1.7 MB  playwright-core            ← the only one this program uses
+#
+# None of it is reachable from main.cjs or worker.cjs: both are esbuild bundles
+# and the only runtime require() either makes into node_modules is
+# playwright-core. A customer on a home connection was downloading a Rust
+# compiler for a website that runs on Vercel.
+#
+# So node_modules is excluded and exactly one package invited back. The order
+# matters — a later pattern wins — and the negation has to come before the
+# re-inclusion.
 files:
   - '**/*'
   - '!**/*.map'
   - '!probe.cjs'
+  - '!node_modules/**/*'
+  - 'node_modules/playwright-core/**/*'
 
 # OUT OF THE ARCHIVE, because a child process cannot read from one.
 #
@@ -82,29 +105,36 @@ publish:
 # setting here can remove. So the three things below are what is actually
 # available, and they were all left at their defaults.
 #
-# MAXIMUM COMPRESSION. electron-builder ships `normal`, which is a build-time
-# choice paid for by every person who ever downloads this. A build runs on a
-# server for a few extra minutes; a download runs on a customer's line, once
-# per machine, on whatever connection they have.
+# Asked for, and its effect is NOT established. electron-builder overrides the
+# compression of the inner archive for any differential-aware NSIS target (it
+# pins a 1 MB dictionary and non-solid blocks, which is exactly what makes a
+# 1 MB update possible instead of a 133 MB one), so on Windows this may be doing
+# nothing at all. Kept because it is honoured for the Linux AppImage and costs
+# only build time — but the measured saving between 3.53.0 and 3.55.0 came from
+# the locales below and the trimmed playwright-core, not from here. Claiming
+# otherwise, as this comment first did, is the kind of thing that sends the next
+# person looking in the wrong place.
 compression: maximum
 
 # EVERY LANGUAGE CHROMIUM SPEAKS, WHICH IS FIFTY-FIVE OF THEM.
 #
 # Electron ships a .pak per locale for its own dialogs and menus — the
-# right-click menu, the file picker, the spell-check UI. All of ours are
-# Hebrew and written by us; the only two that can ever be READ here are Hebrew
-# and the English fallback Chromium requires. The other fifty-odd are tens of
-# megabytes for languages nobody using this product has.
-# …AND ON WINDOWS THIS SETTING IS IGNORED, which the first attempt at it paid
-# to discover: the build accepted it, went green, and shipped all fifty-five
-# anyway. It is kept because it is honoured for the Linux build, and the hook
-# below does the same job for every platform — including the one the customers
-# are on.
+# right-click menu, the file picker, the spell-check UI. All of ours are Hebrew
+# and written by us; the only two that can ever be READ here are Hebrew and the
+# English fallback Chromium requires.
+#
+# AND IT DOES WORK ON WINDOWS. I wrote here that it was ignored, added a hook to
+# do the job by hand, and only then opened the published installer: it contains
+# exactly he.pak and en-US.pak, and has since the build before the hook existed.
+# The setting was working the whole time. What the hook actually reports on
+# Windows is "removed 0". It stays as a belt — one line, and it is what would
+# catch this if a future electron-builder stopped honouring the setting — but
+# the credit for those megabytes belongs here.
 electronLanguages:
   - he
   - en-US
 
-afterPack: scripts/trim-locales.cjs
+afterPack: scripts/after-pack.cjs
 
 win:
   # NSIS ONLY. The zip was a second copy of the same program — 190 MB beside a

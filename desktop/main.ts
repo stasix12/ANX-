@@ -399,6 +399,31 @@ function startWorker(): void {
   worker.stdout?.on('data', feed('out'));
   worker.stderr?.on('data', feed('err'));
 
+  /*
+   * A LAUNCH THAT NEVER HAPPENS, which is not the same event as one that ends.
+   *
+   * `spawn` reports a failure to start — the file quarantined by antivirus, the
+   * exe locked mid-update, a path that does not exist — as an 'error' event,
+   * and 'exit' never fires at all. With no listener for it, Node makes it an
+   * uncaught exception: the customer gets Electron's "A JavaScript error
+   * occurred in the main process" dialog, the thirty-second retry below never
+   * runs, and `worker` stays non-null so startWorker() refuses to try again.
+   * The engine is then off for ever on a machine whose owner sees only a crash
+   * box.
+   *
+   * This product has already shipped that exact failure once — the note at the
+   * top of this file is about `spawn … ENOENT` on the owner's own machine. The
+   * PATH was fixed then; the missing handler was not.
+   */
+  worker.on('error', (err) => {
+    const why = err instanceof Error ? err.message : String(err);
+    say(`מנוע הפרסום לא הצליח לעלות: ${why}. מנסה שוב בעוד 30 שניות…`, 'err');
+    worker = null;
+    send('worker:state', workerState());
+    if (quitting || paused) return;
+    setTimeout(() => { if (!quitting && !paused) startWorker(); }, 30_000);
+  });
+
   worker.on('exit', (code) => {
     worker = null;
     send('worker:state', workerState());

@@ -118,7 +118,9 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SOCIAL_SITE_URL: ${{ vars.SOCIAL_SITE_URL }}
+          # An unset repository variable arrives as the EMPTY STRING, which is
+          # not "unset" — so the default belongs here as well as in the script.
+          SOCIAL_SITE_URL: ${{ vars.SOCIAL_SITE_URL || 'https://anx-ggyo.vercel.app/social' }}
         run: node scripts/build-app.mjs
 
       - name: the package asks the same database as the live dashboard
@@ -131,6 +133,14 @@ jobs:
             # An installer that builds fine and cannot connect is the worst of
             # the possible outcomes: it reaches a customer before anybody knows.
             throw "NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY are not set as repository secrets. Copy them from Vercel (Project -> Settings -> Environment Variables) into GitHub (Settings -> Secrets and variables -> Actions), under the same two names."
+          }
+          # AND THE WAY TO THE WEBSITE, which this guard did not check and a
+          # shipped installer therefore went out without. Everything it reaches
+          # is dead when it is empty: "צור חשבון חדש" on the sign-in screen and
+          # "הדשבורד באתר" in the tray both open nothing, so a customer who does
+          # not already have an account has no way to make one.
+          if (-not $cfg.siteUrl) {
+            throw "config.json has no siteUrl, so 'צור חשבון חדש' and 'הדשבורד באתר' would do nothing in the installed app. Set the SOCIAL_SITE_URL repository variable, or leave it unset to take the default."
           }
           $mine = ([uri]$cfg.supabaseUrl).Host.Split('.')[0]
           $live = ''
@@ -274,7 +284,26 @@ jobs:
             Write-Host "v$version is already published. Bump WORKER_VERSION to ship a new one."
             "publish=no" >> $env:GITHUB_OUTPUT
           } catch {
-            Write-Host "v$version is new — publishing."
+            # NEW IS NOT THE SAME AS NEWER.
+            #
+            # The only gate here was "does this tag exist". Type 3.5.0 where you
+            # meant 3.55.0 — a plausible slip on a product already past 3.53 —
+            # and that is a brand-new tag, so it publishes, becomes the newest
+            # release every installed copy reads, and is LOWER than what they
+            # have. electron-updater refuses downgrades, so every machine
+            # reports itself current and never updates again. A typo would
+            # freeze the whole fleet, permanently, with nothing anywhere saying
+            # so.
+            $out = Invoke-WebRequest -Uri "https://api.github.com/repos/$feed/releases/latest" -Headers $head -SkipHttpErrorCheck
+            if ($out.StatusCode -eq 200) {
+              $already = ($out.Content | ConvertFrom-Json).tag_name -replace '^v', ''
+              if ($already -and [version]$version -le [version]$already) {
+                throw "This build is version $version and the published one is $already. Publishing it would make the newest release OLDER than what customers already have — every installed copy would then report itself up to date and never update again. Raise WORKER_VERSION in src/lib/social/worker-version.ts."
+              }
+              Write-Host "v$version is newer than the published v$already — publishing."
+            } else {
+              Write-Host "nothing published yet — v$version is the first."
+            }
             "publish=yes" >> $env:GITHUB_OUTPUT
 
             # THE RELEASE IS CREATED HERE, ONCE, BEFORE ANYTHING UPLOADS.
@@ -377,6 +406,27 @@ jobs:
               throw "v$v is missing $needed. A release without latest.yml is one no installed copy can see — delete it at https://github.com/$feed/releases and run this build again."
             }
           }
+          # AND THAT IT IS THE ONE THE FEED HANDS OUT.
+          #
+          # electron-updater does not ask for a version — it asks GitHub for the
+          # LATEST release and reads whatever is there. GitHub orders that by
+          # created_at, which it takes from the release's COMMIT date, not from
+          # when the upload happened. So a build from an older commit — a
+          # revert, a hotfix branched from last week, a manual re-run — can
+          # publish perfectly and still leave an older release sitting at
+          # /releases/latest. Every customer would go on reading the old one and
+          # nothing would look wrong anywhere.
+          #
+          # Checking the release BY TAG, which the lines above do, cannot catch
+          # that: it is the one check that passes precisely when this fails.
+          $head2 = Invoke-WebRequest -Uri "https://api.github.com/repos/$feed/releases/latest" -Headers ($head + @{ Authorization = "Bearer $env:GITHUB_TOKEN" }) -SkipHttpErrorCheck
+          if ($head2.StatusCode -ne 200) { throw "Published v$v, but the feed has no 'latest' release to hand out (HTTP $($head2.StatusCode))." }
+          $serving = ($head2.Content | ConvertFrom-Json).tag_name
+          if ($serving -ne "v$v") {
+            throw "Published v$v, but the feed still hands out $serving. GitHub picks 'latest' by the release's commit date, so a build from an older commit does not become the one customers read. Nothing was broken — but nobody will receive v$v until a release newer than $serving exists."
+          }
+          Write-Host "the feed hands out $serving — which is what this build just published."
+
           Write-Host "v$v is complete: the installer and the file every installed copy reads."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -18,7 +18,7 @@ import {
   UsersIcon,
 } from '@/components/icons';
 import { signOut, useAdminSession } from '@/lib/adminAuth';
-import { getControl, listWorkers } from '@/lib/social/client';
+import { getControl, listWorkers, sendWorkerCommand } from '@/lib/social/client';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, type SystemState } from './systemState';
 import { InstallPrompt } from './InstallPrompt';
 import { NotificationBell } from './NotificationBell';
@@ -236,6 +236,62 @@ export function SocialShell({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [pcOpen]);
+
+  /*
+   * WHO PUBLISHES — opened from the picture at the top of every screen.
+   *
+   * "שאני לוחץ למעלה על הלוגו כמה פעמים לא יוצא חלון צף". It was built on the
+   * chip inside the dashboard's card, which also carries the name and also
+   * looked like the place; the owner meant the picture in the bar, and he is
+   * right that it is the better one. It is on every screen, it is the thing
+   * showing whose face is publishing, and tapping a picture of somebody to
+   * change who that somebody is needs no explaining.
+   *
+   * The greeting beside it still goes home, so nothing was taken away.
+   */
+  const [whoOpen, setWhoOpen] = useState(false);
+  const [profiles, setProfiles] = useState<{ name: string; kind?: 'profile' | 'page' }[]>([]);
+  const [workerId, setWorkerId] = useState<string | null>(null);
+  const [switching, setSwitching] = useState<string | null>(null);
+  useEffect(() => {
+    if (!whoOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setWhoOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [whoOpen]);
+
+  async function goToProfile(name: string) {
+    const kind = profiles.find((p) => p.name === name)?.kind;
+    const ok = await confirm.ask({
+      title: `לעבור ל"${name}"?`,
+      body: (
+        <>
+מהרגע הזה כל פרסום וכל תגובה ייצאו מהזהות הזאת.
+          {' '}אפשר לפרסם רק לקבוצות שהיא חברה בהן, ולכן ייתכן שרשימת הקבוצות שנפרסם אליהן תשתנה.
+          {kind === 'page' && (
+            <>
+              {' '}בנוסף: פייסבוק מאפשרת לדף לפרסם רק בקבוצות שמנהל הקבוצה אישר בהן פרסום מדפים.
+              {' '}קבוצה שלא מאפשרת תדולג ותישאר פעילה.
+            </>
+          )}
+        </>
+      ),
+      confirmLabel: 'עבור',
+    });
+    if (!ok) return;
+    setSwitching(name);
+    try {
+      await sendWorkerCommand(workerId, 'switch', { name });
+      onControlChanged?.();
+    } catch {
+      /* The command row is the record; a failed insert leaves the bar exactly
+         as it was rather than claiming a switch that was never asked for. */
+    } finally {
+      setSwitching(null);
+    }
+  }
   useEffect(() => {
     if (!session) return;
     let stopped = false;
@@ -244,6 +300,17 @@ export function SocialShell({
         .then((ws) => {
           if (stopped) return;
           setPcOnline(ws.some((x) => x.online));
+          /*
+           * THE IDENTITIES, off the same read. This poll already fetches the
+           * worker rows every minute for the monitor light and the greeting;
+           * the profile list is two more columns on rows that are already in
+           * hand, so the picker costs no request of its own.
+           */
+          {
+            const w = ws.find((x) => x.online) ?? ws[0];
+            setWorkerId(w?.id ?? null);
+            setProfiles(w?.fb_profiles ?? []);
+          }
           if (account === undefined) {
             const w = ws.find((x) => x.online && x.fb_user_name) ?? ws.find((x) => x.fb_user_name);
             setOwnAccount(w?.fb_user_name ? { name: w.fb_user_name, avatar: w.fb_avatar_url ?? '' } : null);
@@ -391,7 +458,21 @@ export function SocialShell({
             now. The link still goes home, so nothing that was reachable from
             this corner stopped being reachable.
           */}
-          <Link href="/social" className="flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl">
+          {/*
+            THE PICTURE OPENS THE SWITCHER; THE WORDS STILL GO HOME.
+            Two jobs that were one link. Tapping a face to change whose face
+            it is needs no label, and the greeting keeps the way back to the
+            dashboard that this corner has always had.
+          */}
+          <div className="relative flex min-w-0 items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setWhoOpen((v) => !v)}
+            aria-expanded={whoOpen}
+            aria-haspopup="menu"
+            aria-label={who ? `מפרסם בתור ${who.name} — החלפת פרופיל` : 'בחירת הפרופיל שמפרסם'}
+            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+          >
             {who?.avatar ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={who.avatar} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-ink-700" />
@@ -403,6 +484,72 @@ export function SocialShell({
                 <SparklesIcon className="h-5 w-5" />
               </span>
             )}
+          </button>
+          {whoOpen && (
+            <>
+              {/* absolute, not fixed: this bar has a backdrop-filter, which
+                  makes it the containing block for fixed children — a fixed
+                  backdrop would size itself to the bar and a tap outside would
+                  land on nothing. The monitor panel beside it learned the same
+                  thing. */}
+              <button
+                type="button"
+                aria-label="סגירה"
+                onClick={() => setWhoOpen(false)}
+                className="absolute inset-x-0 top-full z-40 h-screen w-screen cursor-default"
+              />
+              <div
+                role="menu"
+                className="absolute start-0 top-full z-50 mt-2 w-64 rounded-2xl border border-ink-700 bg-ink-900 p-1.5 shadow-xl motion-safe:animate-[rise_0.18s_ease-out]"
+              >
+                <p className="px-2 pb-1 pt-1.5 text-[11px] font-bold text-mist-500">מי מפרסם</p>
+                {profiles.length ? (
+                  profiles.map((p) => {
+                    const active = Boolean(who?.name) && p.name === who?.name;
+                    return (
+                      <button
+                        key={p.name}
+                        type="button"
+                        role="menuitem"
+                        disabled={active || switching !== null}
+                        onClick={() => {
+                          setWhoOpen(false);
+                          void goToProfile(p.name);
+                        }}
+                        className={`flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-start text-[13px] font-bold ${
+                          active ? 'bg-success-400/12 text-success-400' : 'text-mist-100 hover:bg-ink-800'
+                        } disabled:opacity-70`}
+                      >
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink-800 text-[11px] font-extrabold text-mist-300">
+                          {p.name.trim().charAt(0) || '?'}
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span dir="auto" className="truncate">{p.name}</span>
+                          {p.kind === 'page' && <span className="text-[10px] font-bold text-mist-500">דף עסקי</span>}
+                        </span>
+                        {active && <span className="shrink-0 text-[10px] font-extrabold">מפרסם</span>}
+                        {switching === p.name && <span className="shrink-0 text-[10px] font-bold text-mist-500">מעביר…</span>}
+                      </button>
+                    );
+                  })
+                ) : (
+                  /* Never "there is only one": nobody has looked yet, and the
+                     screen that can look says so in its own words. */
+                  <p className="px-2 py-2 text-[12px] leading-relaxed text-mist-300">
+                    עוד לא קראנו אילו פרופילים יש בחשבון. פתחו את מסך החשבון ולחצו "חפש פרופילים".
+                  </p>
+                )}
+                <Link
+                  href="/social/account"
+                  onClick={() => setWhoOpen(false)}
+                  className="mt-1 flex min-h-11 items-center justify-center rounded-xl text-[12px] font-bold text-brand-400 hover:bg-ink-800"
+                >
+                  מסך החשבון
+                </Link>
+              </div>
+            </>
+          )}
+          <Link href="/social" className="flex min-h-11 min-w-0 items-center rounded-xl">
             <span className="min-w-0">
               <span dir="auto" className="block truncate text-[14px] font-extrabold leading-[18px] text-mist-100">
                 {greetingNow()}
@@ -418,6 +565,7 @@ export function SocialShell({
               )}
             </span>
           </Link>
+          </div>
           <div className="flex shrink-0 items-center gap-0.5">
             {/* Stopping everything must be reachable from wherever you are when
                 you realise you need to, not only from the dashboard. Label off

@@ -16,6 +16,12 @@
   until a post goes out.
 -->
 <body>
+  <!-- The same always-visible landmark as the other fixture. Without it here,
+       "this account has one profile" could pass by reading the side bar. -->
+  <div role="navigation">
+    <div role="button"><span>בית</span></div>
+  </div>
+
   <div role="banner">
     <div role="button" aria-label="החשבון שלך" id="avatar" onclick="document.getElementById('menu').hidden = false">
       <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">

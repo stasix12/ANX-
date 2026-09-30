@@ -31,6 +31,24 @@
   business one.
 -->
 <body>
+  <!--
+    FACEBOOK'S LEFT-HAND NAVIGATION, always on the page and always visible.
+
+    This is not scenery. MENU_SELECTOR used to include role="navigation", so
+    "is a menu already open?" answered yes the instant any Facebook page
+    loaded: the avatar was never clicked, this landmark was read instead of the
+    account menu, and the perfectly honest answer that came back — "no profile
+    list here" — was about the side bar.
+
+    The owner pressed the button, the machine did everything right, and the
+    screen said his account has no second profile. Nothing looked broken.
+  -->
+  <div role="navigation">
+    <div role="button"><span>בית</span></div>
+    <div role="button"><span>חברים</span></div>
+    <div role="button"><span>קבוצות</span></div>
+  </div>
+
   <div role="banner">
     <div role="button" aria-label="חיפוש">🔍</div>
     <div role="button" aria-label="החשבון שלך" id="avatar" onclick="document.getElementById('menu').hidden = false">
@@ -50,6 +68,33 @@
         <div role="button" data-row="air" onclick="window.__picked = 'Air Master'">
           <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
           <span>Air Master</span>
+        </div>
+      </div>
+      <!--
+        A PAGE, WHICH IS DRAWN AS TWO LINES: the name, and "דף" under it.
+
+        The row filter rejected any text containing a newline — a guard against
+        a container that had swallowed its children — and that quietly threw
+        away every Page there is. The owner's own account holds two of them and
+        no additional profiles at all, so for him the feature returned an empty
+        list that was, line by line, working exactly as written.
+      -->
+      <!-- The label on its OWN line, which is how the menu draws it. -->
+      <div>
+        <div role="button" data-row="page1" onclick="window.__picked = 'הפתרון המבריק'">
+          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+          <span style="display:block">הפתרון המבריק</span>
+          <span style="display:block">דף</span>
+        </div>
+      </div>
+      <!-- And the same thing INLINE, because whether those two sit on one line
+           or two is a single CSS value that belongs to Facebook and changes
+           without notice. Both shapes are real; both must yield the name. -->
+      <div>
+        <div role="button" data-row="page2" onclick="window.__picked = 'FreshWave'">
+          <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+          <span>FreshWave – ניקוי עמוק למזגנים</span>
+          <span>דף</span>
         </div>
       </div>
       <!--

@@ -73,8 +73,8 @@ async function main() {
     eq(read.note, 'ok', 'a menu that holds profiles is reported as read, not as a fault');
     eq(
       read.profiles.map((p) => p.name),
-      ['Dor Moyal', 'Air Master'],
-      'exactly the rows above "הצגת כל הפרופילים", in the order Facebook drew them',
+      ['Dor Moyal', 'Air Master', 'הפתרון המבריק', 'FreshWave – ניקוי עמוק למזגנים'],
+      'exactly the rows above "הצגת כל הפרופילים", in the order Facebook drew them — profiles AND pages',
     );
     /*
      * THE ROW ABOVE THE ANCHOR IS THE ONE THAT PROVES ANYTHING.

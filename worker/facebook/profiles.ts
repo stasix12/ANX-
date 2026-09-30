@@ -51,8 +51,17 @@ export interface ProfileRead {
   note: 'ok' | 'no-menu' | 'no-anchor' | 'no-rows';
 }
 
-/** The menu container Facebook opens under the top-right avatar. */
-const MENU_SELECTOR = 'div[role="menu"], div[role="dialog"], div[role="navigation"]';
+/*
+ * THE MENU CONTAINER — and NOT role="navigation".
+ *
+ * It was in this list, and Facebook's left-hand navigation is a permanent,
+ * always-visible `role="navigation"` landmark. So "is a menu already open?"
+ * answered yes on every page load, the avatar was never clicked, the side bar
+ * was read instead of the account menu, and the honest answer that came back
+ * — "no profile list here" — was about the wrong element entirely. A selector
+ * that matches furniture reports the furniture.
+ */
+const MENU_SELECTOR = 'div[role="menu"], div[role="dialog"]';
 
 /**
  * Open the account menu, or say it could not be opened.
@@ -65,32 +74,62 @@ const MENU_SELECTOR = 'div[role="menu"], div[role="dialog"], div[role="navigatio
  */
 async function openAccountMenu(page: Page): Promise<ElementHandle<Element> | null> {
   /*
-   * VISIBLE, NOT MERELY PRESENT — and the test is what taught this.
+   * IS THIS THE ACCOUNT MENU?
    *
-   * The first version returned whatever `div[role="menu"]` the document held,
-   * and a menu that exists but is closed satisfies that. It reads almost
-   * correctly, which is the dangerous part: `innerText` is empty for anything
-   * not laid out, so the rows come back through the `textContent` fallback
-   * with the whitespace and the hidden text that innerText exists to strip,
-   * and on a page where the closed menu holds different rows than the open one
-   * it would report the wrong names entirely — with no error anywhere.
+   * Recognised by the items it ALWAYS has — settings, help, log out — and not
+   * by the profile list, which is the thing being looked for. Using the list
+   * as the identity test was the obvious shortcut and it destroyed the one
+   * distinction that matters: an account with a single profile then looked
+   * exactly like a menu that never opened, and the screen could no longer tell
+   * "you have no second profile" from "we could not read your Facebook".
    */
-  const open = page.locator(MENU_SELECTOR).first();
-  if (await open.isVisible({ timeout: 500 }).catch(() => false)) return await open.elementHandle();
+  const isAccountMenu = async (el: ElementHandle<Element> | null): Promise<boolean> => {
+    if (!el) return false;
+    return await el
+      .evaluate(
+        (root, src) => {
+          const text = (root as HTMLElement).innerText || '';
+          return new RegExp(src.stuff, 'i').test(text) || new RegExp(src.all, 'i').test(text);
+        },
+        { stuff: patterns.menuStuff.source, all: patterns.allProfiles.source },
+      )
+      .catch(() => false);
+  };
 
-  const byName = page.getByRole('button', { name: patterns.accountMenu }).first();
-  if (await byName.count().then((n) => n > 0).catch(() => false)) {
-    await byName.click({ timeout: 8_000 }).catch(() => undefined);
-    const menu = await page.waitForSelector(MENU_SELECTOR, { state: 'visible', timeout: 8_000 }).catch(() => null);
-    if (menu) return menu;
+  /*
+   * ALREADY OPEN? ONLY IF IT IS THE RIGHT ONE.
+   *
+   * Presence is not enough and neither is visibility: Facebook keeps dialogs
+   * and menus around for all sorts of things.
+   */
+  for (const handle of await page.$$(MENU_SELECTOR)) {
+    if (await handle.isVisible().catch(() => false) && (await isAccountMenu(handle))) return handle;
   }
 
-  /* The banner's own last button. Scoped to role=banner so this can never
-     reach into the feed and press somebody's post. */
-  const inBanner = page.locator('div[role="banner"] div[role="button"], div[role="banner"] [aria-label]').last();
-  if (await inBanner.count().then((n) => n > 0).catch(() => false)) {
-    await inBanner.click({ timeout: 8_000 }).catch(() => undefined);
-    return await page.waitForSelector(MENU_SELECTOR, { state: 'visible', timeout: 8_000 }).catch(() => null);
+  /*
+   * THE AVATAR, tried from the end of the banner backwards.
+   *
+   * Facebook labels that button differently by locale and by week, and a
+   * pattern loose enough to catch every wording is also loose enough to catch
+   * the wrong control. So a click is not trusted on the strength of its label:
+   * whatever opens is checked for the anchor, and if it is the wrong menu it
+   * is closed and the next candidate tried. Three attempts, then it gives up
+   * and says so, which is better than reading something and calling it a
+   * profile list.
+   */
+  const banner = page.locator('div[role="banner"] div[role="button"], div[role="banner"] [aria-label]');
+  const named = page.getByRole('button', { name: patterns.accountMenu });
+  const tries: import('playwright-core').Locator[] = [];
+  if (await named.count().then((n) => n > 0).catch(() => false)) tries.push(named.first());
+  const inBanner = await banner.count().catch(() => 0);
+  for (let i = 0; i < Math.min(inBanner, 2); i += 1) tries.push(banner.nth(inBanner - 1 - i));
+
+  for (const candidate of tries) {
+    await candidate.click({ timeout: 8_000 }).catch(() => undefined);
+    const opened = await page.waitForSelector(MENU_SELECTOR, { state: 'visible', timeout: 6_000 }).catch(() => null);
+    if (await isAccountMenu(opened)) return opened;
+    await page.keyboard.press('Escape').catch(() => undefined);
+    await page.waitForTimeout(400);
   }
   return null;
 }
@@ -140,13 +179,33 @@ async function rowsInMenu(menu: ElementHandle<Element>): Promise<{ names: string
       if (el === anchor) break;
       if (el.contains(anchor)) continue;
       const text = texts[i];
-      /* One line, a plausible length, and not one of the menu's own items.
-         A name with a newline in it is a container that swallowed its
-         siblings, not a person. */
-      if (!text || text.includes('\n') || text.length > 60) continue;
-      if (noise.test(text)) continue;
-      if (names.includes(text)) continue;
-      names.push(text);
+      if (!text || noise.test(text)) continue;
+      /*
+       * A ROW MAY BE TWO LINES, AND THE SECOND IS NOT PART OF THE NAME.
+       *
+       * A Page is drawn as its name with the word "דף" ("Page") beneath it.
+       * This used to reject any text containing a newline — a guard against a
+       * container that had swallowed its children — and that guard quietly
+       * threw away every Page. The protection is kept by bounding how MANY
+       * lines and how long the whole thing is, rather than by forbidding the
+       * second line: a wrapper holding the menu is long and has many lines, a
+       * Page row has two short ones.
+       */
+      const lines = text.split('\n').map((t) => t.trim()).filter(Boolean);
+      if (!lines.length || lines.length > 3 || text.length > 80) continue;
+      /*
+       * AND THE LABEL MAY BE ON THE SAME LINE.
+       *
+       * Whether "דף" lands on its own line or beside the name is a matter of
+       * one CSS display value, which is not ours and changes without notice.
+       * Both shapes are handled: the second line is dropped above, and a
+       * trailing label word is trimmed here. Only these exact words, anchored
+       * at the end — a Page genuinely called "הדף שלי" keeps its name.
+       */
+      const name = lines[0].replace(/[\s·|-]+(דף|page|страница)$/i, '').trim();
+      if (!name || name.length > 60) continue;
+      if (names.includes(name)) continue;
+      names.push(name);
     }
     return { names, note: names.length ? ('ok' as const) : ('no-rows' as const) };
   }, { allProfiles: patterns.allProfiles.source, menuStuff: patterns.menuStuff.source });

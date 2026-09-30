@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
+import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Figure, GroupRow, WalkThrough } from '@/components/social/Discovery';
 import {
   Badge,
@@ -22,9 +23,11 @@ import {
   hideDiscovered,
   listDiscovered,
   listSearches,
+  listJoined,
   listTargetExternalIds,
   listWorkers,
   startDiscovery,
+  startJoinedScan,
   watchSearch,
   waitForWorkerCommand,
 } from '@/lib/social/client';
@@ -93,6 +96,13 @@ export default function DiscoverPage() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [walk, setWalk] = useState<DiscoveredGroupRow[] | null>(null);
   const [walkAt, setWalkAt] = useState(0);
+  /*
+   * "הקבוצות שלי שעוד לא במערכת" — read off Facebook's OWN list of the groups
+   * this account is in, which is a different question from anything a search
+   * can answer and is kept apart from the search results on screen.
+   */
+  const [joined, setJoined] = useState<DiscoveredGroupRow[] | null>(null);
+  const [scanning, setScanning] = useState(false);
   const [searching, setSearching] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -127,10 +137,11 @@ export default function DiscoverPage() {
     let alive = true;
     (async () => {
       try {
-        const [saved, targets, workers] = await Promise.all([listSearches(), listTargetExternalIds(), listWorkers()]);
+        const [saved, targets, workers, mine] = await Promise.all([listSearches(), listTargetExternalIds(), listWorkers(), listJoined()]);
         if (!alive) return;
         setSearches(saved);
         setInSystem(targets);
+        setJoined(mine);
         setWorkerOnline(workers.some((w) => w.online));
         setWorkerId(workers.find((w) => w.online)?.id ?? workers[0]?.id ?? null);
         const last = saved.find((s) => s.last_run_at);
@@ -217,6 +228,13 @@ export default function DiscoverPage() {
   const joinedNotListed = useMemo(
     () => (rows ?? []).filter((r) => !r.hidden && r.membership === 'member' && !r.target_id && !inSystem.has(r.external_id)),
     [rows, inSystem],
+  );
+
+  /* His own groups that the publishing list does not have. The set difference
+     that this whole card exists to compute. */
+  const joinedMissing = useMemo(
+    () => (joined ?? []).filter((r) => !r.hidden && !r.target_id && !inSystem.has(r.external_id)),
+    [joined, inSystem],
   );
 
   const hiddenCount = (rows ?? []).filter((r) => r.hidden).length;
@@ -309,6 +327,65 @@ export default function DiscoverPage() {
     );
   }
 
+  /**
+   * Read Facebook's list of this account's groups and show what is missing.
+   *
+   * NOT A SEARCH, and that is the whole value of it: every group on that page
+   * is one he is in, by construction, so "which of mine is not in the
+   * publishing list" is a set difference rather than a guess about wording.
+   * The membership parser has been wrong about this twice; this cannot be.
+   */
+  async function scanJoined() {
+    if (scanning || workerOnline === false) {
+      if (workerOnline === false) toast('התוכנה במחשב לא פועלת, ולכן אי אפשר לקרוא את הקבוצות שלך.', 'error');
+      return;
+    }
+    setScanning(true);
+    try {
+      const { id } = await startJoinedScan(workerId);
+      const done = await waitForWorkerCommand(id);
+      const [mine, targets] = await Promise.all([listJoined(), listTargetExternalIds()]);
+      setJoined(mine);
+      setInSystem(targets);
+      if (done?.status === 'failed') toast(done.result || 'הקריאה נכשלה.', 'error');
+      else if (!done) toast('הבקשה נשלחה למחשב ולוקחת יותר מהרגיל — הרשימה תתעדכן כשהוא יסיים.', 'info');
+      else if (done.result) toast(done.result, 'success');
+    } catch (err) {
+      toast(friendlyMessage(err, 'הקריאה נכשלה.'), 'error');
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  /** All of the missing ones into the publishing list, one press. */
+  async function adoptJoined() {
+    if (!joinedMissing.length || busyId === 'joined') return;
+    setBusyId('joined');
+    let added = 0;
+    let failed = 0;
+    for (const row of joinedMissing) {
+      try {
+        await adoptDiscovered(row);
+        added += 1;
+        setInSystem((was) => new Set(was).add(row.external_id));
+      } catch (err) {
+        if (/כבר קיימת/.test(friendlyMessage(err, ''))) {
+          setInSystem((was) => new Set(was).add(row.external_id));
+          added += 1;
+        } else {
+          failed += 1;
+        }
+      }
+    }
+    setBusyId(null);
+    toast(
+      failed
+        ? `${added} קבוצות נוספו, ו-${failed} לא הצליחו. נסו אותן אחת-אחת.`
+        : `${added} ${added === 1 ? 'קבוצה נוספה' : 'קבוצות נוספו'} לרשימת הקבוצות שלך.`,
+      failed ? 'error' : 'success',
+    );
+  }
+
   /** Everything hidden for this phrase, back on screen. Nothing was deleted. */
   async function unhideAll() {
     const buried = (rows ?? []).filter((r) => r.hidden);
@@ -386,6 +463,61 @@ export default function DiscoverPage() {
             </div>
           </Card>
         )}
+
+        {/* ─────────────── the groups he is in, and what is missing ───────────
+
+            NOT A SEARCH. Facebook's own list of the groups this account
+            belongs to, so "which of mine is not in the publishing list" is a
+            set difference instead of a guess about the wording on a card. The
+            membership parser has been wrong about that twice on this owner's
+            account; this cannot be wrong in the same way.
+
+            Above the search box, because it is the question he asked and the
+            search is the one he was offered. */}
+        <Card padded={false} className="px-3 py-3.5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-extrabold text-mist-100">הקבוצות שלך בפייסבוק</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
+                {joined === null
+                  ? 'טוען…'
+                  : joined.length === 0
+                    ? 'עוד לא קראנו אילו קבוצות אתם חברים בהן. אחרי שהצטרפתם לקבוצות חדשות, לחצו כאן ונראה מה עוד לא נמצא ברשימת הפרסום.'
+                    : joinedMissing.length === 0
+                      ? `כל ${joined.length} הקבוצות שאתם חברים בהן כבר ברשימת הפרסום.`
+                      : `מתוך ${joined.length} קבוצות שאתם חברים בהן, ${joinedMissing.length} עוד לא ברשימת הפרסום.`}
+              </p>
+            </div>
+            <Button size="sm" variant="secondary" busy={scanning} onClick={scanJoined} className="whitespace-nowrap">
+              {joined && joined.length ? 'בדוק שוב' : 'בדוק את הקבוצות שלי'}
+            </Button>
+          </div>
+
+          {joinedMissing.length > 0 && (
+            <>
+              {/* The names, so the press is not blind. Facebook mixes
+                  suggestions into some layouts of that page and the reader
+                  drops them by their section heading — but a list he can read
+                  is the honest second lock. */}
+              <ul className="mt-2.5 space-y-1.5">
+                {joinedMissing.slice(0, 8).map((row) => (
+                  <li key={row.id} className="flex items-center gap-2">
+                    <TargetAvatar name={row.name} imageUrl={row.image_url || null} channel="facebook_group" size={28} />
+                    <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-300">
+                      {row.name}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {joinedMissing.length > 8 && (
+                <p className="mt-1.5 text-xs text-mist-500">ועוד {joinedMissing.length - 8}…</p>
+              )}
+              <Button busy={busyId === 'joined'} onClick={adoptJoined} className="mt-3 w-full">
+                הוסף את {joinedMissing.length} הקבוצות לרשימת הפרסום
+              </Button>
+            </>
+          )}
+        </Card>
 
         {/* ─────────────────────────── the search box ─────────────────────── */}
         <Card padded={false} className="px-3 py-3.5">

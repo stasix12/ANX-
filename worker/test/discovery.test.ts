@@ -389,6 +389,21 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(/if \(ids\.size > 1\) break;/.test(worker), 'the climb stops the moment it would swallow a second group — that boundary IS the card');
   is(/up < 10/.test(worker), 'and is bounded, so a page with no such boundary cannot climb to the document');
   is(!/lines >= 2/.test(worker), 'the old shape test is gone: it stopped at the title block and left every button outside');
+
+  /*
+   * AND THE NAME SURVIVED THE BIGGER BOX.
+   *
+   * A card links to its group twice, from the picture and from the name, and
+   * the picture's anchor has no text. Taking the first anchor and skipping the
+   * rest meant falling through to the card's first line — which, once the card
+   * was its real size, was Facebook's unread badge. The owner's list came back
+   * reading "לא נקראובקבוצה דרושים ער…". My regression, in one screenshot.
+   */
+  is(
+    /if \(name && name\.length > had\.name\.length\) had\.name = name;/.test(worker),
+    'the LONGEST text among a card\'s links wins — the picture\'s anchor has none, and taking it first put an unread badge in every name',
+  );
+  is(!/seen\.add\(key\)/.test(worker), 'and no anchor is skipped before it has been considered for the name');
   is(/search\/groups/.test(worker), "and it reads Facebook's own group search, signed in as the account that is already signed in");
 
   const sql = readFileSync(new URL('../../supabase/social-latest.sql', import.meta.url), 'utf8');
@@ -508,6 +523,53 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   const line = worker.slice(worker.indexOf('const sample = found.unread'), worker.indexOf('const shots'));
   is(/c\.name/.test(line) && /c\.buttons/.test(line), 'the line carries the name and the labels');
   is(!/text|payload|cookie|token/i.test(line), "and nothing else — a diagnostic that logs a page's whole text is a diagnostic nobody should ship");
+}
+
+/* ------------------------ the groups he is in, read off his own list */
+{
+  const mine = readFileSync(new URL('../facebook/mygroups.ts', import.meta.url), 'utf8');
+  const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../../src/app/social/discover/page.tsx', import.meta.url), 'utf8');
+
+  /*
+   * "אני רוצה לאחר שאני מצטרף לקבוצות שיהיה אופציה לראות קבוצות שעדיין לא
+   *  התווספו למערכת ולהוסיף אותם במכה."
+   *
+   * The value is that it is NOT a search: every group on Facebook's own list
+   * of a person's groups is one they are in, by construction. Reading
+   * membership off a search card has been wrong twice on this owner's account
+   * — 0 of 92 — and a set difference cannot be wrong the same way.
+   */
+  is(/groups\/joins/.test(mine), "it reads Facebook's own list of this account's groups");
+  is(/membership: 'member'/.test(mine), 'and every row from it is a membership, not a guess');
+  is(!/parseMembership/.test(mine), 'nothing on this path parses a membership out of words at all');
+
+  /*
+   * EXCEPT THAT THE PAGE IS NOT PURE. Facebook mixes suggestions into some
+   * layouts, and a suggested group in the publishing list is one that fails
+   * every publication with "you are not a member".
+   */
+  is(/NOT_MINE/.test(mine) && /suggested/i.test(mine), 'suggestions on the same page are recognised');
+  is(/if \(suggested\) continue;/.test(mine), 'and dropped rather than reported as his');
+  is(/role="heading"/.test(mine), 'by the section they sit under, which is the only thing that distinguishes them');
+
+  /* No migration for the owner: the CHECK lists commands by name. */
+  /* The screen calls startJoinedScan; the payload lives in client.ts, which is
+     where the one place that builds the command is. */
+  const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+  is(/startJoinedScan/.test(page), 'the screen asks for the scan');
+  is(/sendWorkerCommand\(workerId, 'discover', \{ source: 'joined' \}\)/.test(client), 'as a source of the command it already has — no new command name, no migration for the owner');
+  is(/cmd\.payload\?\.source === 'joined'/.test(worker), 'and the worker branches on that rather than on a new command name');
+
+  /* It must not read as a search, or "new since last search" counts it. */
+  is(/JOINED_QUERY/.test(worker), 'its results are filed under a reserved phrase');
+  is(/JOINED_QUERY = '@joined'/.test(readFileSync(new URL('../../src/lib/social/discovery.ts', import.meta.url), 'utf8')), "which no search box can produce");
+
+  /* The press is over a set difference, and it is shown before it is made. */
+  const diff = page.slice(page.indexOf('const joinedMissing'), page.indexOf('const hiddenCount'));
+  is(/!r\.target_id && !inSystem\.has\(r\.external_id\)/.test(diff), 'the list is exactly what the publishing list does not have');
+  is(/!r\.hidden/.test(diff), 'minus anything he dismissed');
+  is(/joinedMissing\.slice\(0, 8\)/.test(page), 'and the names are on screen before the button is pressed — a blind bulk add is not a bulk add');
 }
 
 console.log(`discovery tests OK — ${checks} assertions`);

@@ -3,7 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
-import { normalizeQuery } from './discovery';
+import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
 import { checkCampaignInvariants, checkQueueInvariants, takeUnreported, type InvariantViolation } from './invariants';
@@ -269,6 +269,26 @@ export async function listTargetExternalIds(): Promise<Set<string>> {
 /** Ask the machine to run a search. The answer arrives as rows, not as text. */
 export async function startDiscovery(workerId: string | null, query: string): Promise<{ id: string }> {
   return sendWorkerCommand(workerId, 'discover', { query: query.trim() });
+}
+
+/**
+ * Ask the machine to read Facebook's own list of the groups this account is
+ * in — not a search.
+ *
+ * "אני רוצה לאחר שאני מצטרף לקבוצות שיהיה אופציה לראות קבוצות שעדיין לא
+ *  התווספו למערכת ולהוסיף אותם במכה."
+ *
+ * It rides the `discover` command with a different source rather than taking a
+ * name of its own, so the owner does not have to run another migration: the
+ * CHECK on social_worker_commands lists every command by name.
+ */
+export async function startJoinedScan(workerId: string | null): Promise<{ id: string }> {
+  return sendWorkerCommand(workerId, 'discover', { source: 'joined' });
+}
+
+/** Everything that scan has ever found. */
+export async function listJoined(): Promise<DiscoveredGroupRow[]> {
+  return listDiscovered(JOINED_QUERY);
 }
 
 /** "לא מעניין אותי" — kept rather than deleted, or the next search brings it back. */

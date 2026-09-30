@@ -5,6 +5,7 @@ import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { readAccountIdentity, readAccountProfile, type AccountProfile } from './account';
 import { readProfiles, switchProfile, type FacebookProfile } from './profiles';
 import { searchGroups, type SearchOutcome } from './discover';
+import { readMyGroups, type MyGroupsOutcome } from './mygroups';
 import { env } from '../env';
 import { CHECKPOINT_PATHS, LOGIN_PATHS, fb, patterns } from './selectors';
 
@@ -366,6 +367,34 @@ export class BrowserSession {
         const after = await classifyPage(page);
         if (after === 'checkpoint') return { groups: [], pictures: new Map(), unread: [], problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
         if (after === 'login') return { groups: [], pictures: new Map(), unread: [], problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+      }
+      return found;
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+
+  /**
+   * The groups this account is in, off Facebook's own list of them.
+   *
+   * The same two refusals as discoverGroups, and the same reason they come
+   * first: a page behind a login wall answers with the login page's own
+   * links, and /groups/ is in its footer.
+   */
+  async myGroups(headless: boolean, opts: { pictures?: string[] } = {}): Promise<MyGroupsOutcome> {
+    if (!this.hasProfile()) return { groups: [], pictures: new Map(), problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
+    const page = await this.newPage(headless, 'הקבוצות שלי');
+    try {
+      const kind = await classifyPage(page);
+      if (kind === 'checkpoint') return { groups: [], pictures: new Map(), problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
+      if (kind === 'login' || !(await this.hasLoginCookie())) {
+        return { groups: [], pictures: new Map(), problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+      }
+      const found = await readMyGroups(page, opts);
+      if (!found.groups.length) {
+        const after = await classifyPage(page);
+        if (after === 'checkpoint') return { groups: [], pictures: new Map(), problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
+        if (after === 'login') return { groups: [], pictures: new Map(), problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
       }
       return found;
     } finally {

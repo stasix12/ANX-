@@ -176,7 +176,7 @@ export async function searchGroups(page: Page, query: string, opts: { pictures?:
  * picture shows its initial, which is what it did before and is not worth
  * failing a search over.
  */
-async function fetchPictures(page: Page, groups: DiscoveredGroup[]): Promise<Map<string, CardPicture>> {
+export async function fetchPictures(page: Page, groups: DiscoveredGroup[]): Promise<Map<string, CardPicture>> {
   const out = new Map<string, CardPicture>();
   const todo = groups.filter((g) => /^https?:\/\//i.test(g.image)).slice(0, PICTURE_LIMIT);
   const lanes = 4;
@@ -217,15 +217,13 @@ async function fetchPictures(page: Page, groups: DiscoveredGroup[]): Promise<Map
  */
 async function readCards(page: Page): Promise<RawCard[]> {
   return page.evaluate(() => {
-    const out = [];
-    const seen = new Set();
+    const out: (RawCard & { key: string })[] = [];
     const anchors = Array.from(document.querySelectorAll<HTMLElement>('a[href*="/groups/"]'));
     for (const anchor of anchors) {
       const href = anchor.getAttribute('href') || '';
       const match = href.match(/\/groups\/([^/?#]+)/i);
       if (!match) continue;
       const key = match[1];
-      if (seen.has(key)) continue;
 
       /*
        * THE CARD IS THE LARGEST BOX THAT STILL HOLDS ONLY THIS GROUP.
@@ -259,16 +257,32 @@ async function readCards(page: Page): Promise<RawCard[]> {
       }
 
       /*
-       * THE NAME COMES FROM THE LINK ITSELF, not from the card's first line.
-       * A card's text begins with whatever rendered first, which on a slow
-       * connection is the member count. The anchor's own text is the group's
-       * name by construction — and when the anchor wraps only the picture it
-       * has none, in which case the card's first non-empty line is the
-       * fallback rather than the first guess.
+       * THE NAME COMES FROM THE LINK ITSELF, and the BEST link of the several
+       * a card has.
+       *
+       * A card links to its group twice — once from the picture, once from the
+       * name — and the picture's anchor has no text. Taking the first anchor
+       * and skipping the rest meant taking the picture's, falling through to
+       * the card's first line, and once the card grew to its real size that
+       * line was Facebook's unread badge: the owner's list came back full of
+       * "לא נקראובקבוצה דרושים ער…". A regression of mine, visible in one
+       * screenshot.
+       *
+       * So every anchor for a group is considered and the longest real text
+       * wins. The card's first line survives only as the last resort, for a
+       * card whose every link is a picture.
        */
       let name = (anchor.innerText || '').trim().split('\n')[0] || '';
       const lines = (box.innerText || '').split('\n').map((l: string) => l.trim()).filter(Boolean);
       if (!name) name = lines[0] || '';
+
+      const had = out.find((c) => c.key === key);
+      if (had) {
+        /* A better name for a group already collected, and nothing else: the
+           first sighting's card is the one that was measured. */
+        if (name && name.length > had.name.length) had.name = name;
+        continue;
+      }
 
       const picture = box.querySelector('img');
       const buttons = [];
@@ -277,8 +291,8 @@ async function readCards(page: Page): Promise<RawCard[]> {
         if (label && label.length < 60) buttons.push(label);
       }
 
-      seen.add(key);
       out.push({
+        key,
         href,
         name,
         image: picture ? picture.getAttribute('src') || '' : '',

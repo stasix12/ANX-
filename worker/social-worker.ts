@@ -3,7 +3,7 @@ import { hostname } from 'node:os';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Page } from 'playwright-core';
 import { detectCity } from '@/lib/social/cities';
-import { mergeDiscovered, normalizeQuery, type DiscoveredGroup, type StoredGroup } from '@/lib/social/discovery';
+import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, type StoredGroup } from '@/lib/social/discovery';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { PREP_LEAD_MS, evaluateQueueItem } from '@/lib/social/rules';
@@ -1249,7 +1249,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     .or(`worker_id.eq.${state.id},worker_id.is.null`)
     .order('created_at')
     .limit(5);
-  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string } })[]) {
+  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string; source?: string } })[]) {
     /*
      * CLAIMING A COMMAND ALSO EMPTIES IT.
      *
@@ -1390,8 +1390,29 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
          * what this branch is allowed to DO with it, which is: open a search
          * page and read it. No join, no request, no click.
          */
+        /*
+         * TWO SOURCES, ONE COMMAND — and no migration for the owner.
+         *
+         * "אילו קבוצות שאני חבר בהן עוד לא במערכת" is a discovery job whose
+         * candidates come from Facebook's own list of his groups instead of
+         * from a search. A command name of its own would have been tidier and
+         * would have cost him another SQL paste, because the CHECK on
+         * social_worker_commands lists every command by name. This is the same
+         * verb with a different source, so it travels in the payload.
+         */
         const phrase = String(cmd.payload?.query ?? '').trim();
-        if (!phrase || phrase.length > 80) {
+        if (cmd.payload?.source === 'joined') {
+          const mine = await session.myGroups(headless, { pictures: await groupsMissingPictures() });
+          if (mine.problem) {
+            ok = false;
+            result = mine.problem;
+          } else {
+            const wrote = await recordDiscovered(JOINED_QUERY, mine.groups, mine.pictures);
+            result = mine.groups.length
+              ? `נמצאו ${mine.groups.length} קבוצות שאתה חבר בהן${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${mine.truncated ? ' יש עוד — הרשימה ארוכה מהרגיל.' : ''}`
+              : 'לא הצלחנו לקרוא את רשימת הקבוצות שלך בפייסבוק.';
+          }
+        } else if (!phrase || phrase.length > 80) {
           ok = false;
           result = phrase ? 'מילת החיפוש ארוכה מדי.' : 'לא צוין מה לחפש.';
         } else {

@@ -423,6 +423,16 @@ export function normalizeQuery(q: string): string {
     .toLowerCase();
 }
 
+/**
+ * The phrase the "my own groups" scan files its results under.
+ *
+ * Not a phrase anybody types: normalizeQuery lower-cases and collapses spaces,
+ * and no search box produces a leading '@'. It behaves as an ordinary saved
+ * search everywhere else — same table, same de-duplication, same "new since
+ * last time" — which is why it is a reserved STRING rather than a column.
+ */
+export const JOINED_QUERY = '@joined';
+
 /** Long enough to mean something. One character finds the whole of Facebook. */
 export const MIN_QUERY = 2;
 export const MAX_QUERY = 80;

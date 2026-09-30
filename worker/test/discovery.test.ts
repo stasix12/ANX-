@@ -149,6 +149,27 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   eq(parseMembership('', ['Перейти в группу']), 'member', 'and in Russian');
   eq(parseMembership('Joined · 543 members', []), 'member', '"joined" is the opposite of "join" and must not be read as it');
 
+  /*
+   * THE ORDER THE OWNER'S OWN LOG FORCED.
+   *
+   * The reader used to capture the title block instead of the whole card, so
+   * it saw no buttons at all — three cards came back with an empty label list
+   * and 0 of 92 groups were recognised as his. Now it captures the card, which
+   * means it sees EVERY control on it, including an "open"/"view" verb sitting
+   * beside a Join button on a group he is not in. A visible JOIN is the one
+   * unambiguous thing Facebook says about membership, so it outranks the soft
+   * words — the other order puts groups he cannot publish to into the list.
+   */
+  eq(parseMembership('', ['הצטרפות', 'הצגה']), 'none', 'A JOIN BUTTON OUTRANKS AN OPEN VERB on the same card');
+  eq(parseMembership('', ['שיתוף', 'הצגה']), 'member', 'and with no join button, the open verb is what says he is in it');
+  eq(parseMembership('', ['ביטול הבקשה', 'הצגה']), 'requested', 'a pending request still outranks both');
+
+  /* The Hebrew labels that recognised nothing before. */
+  for (const label of ['הצגה', 'פתיחה', 'מעבר לקבוצה', 'עבור לקבוצה', 'כניסה לקבוצה', 'הצגת הקבוצה']) {
+    eq(parseMembership('', [label]), 'member', `"${label}" on its own means he is in the group`);
+  }
+  eq(parseMembership('', ['הצג עוד תגובות']), 'unknown', 'but a longer sentence that merely starts with those words is not a membership claim');
+
   eq(parseMembership('Public group · 543 members', []), 'unknown', 'A CARD THAT DID NOT SAY IS UNKNOWN — never "not a member"');
   eq(parseMembership('', []), 'unknown', 'and an empty card is not evidence of anything');
 
@@ -359,6 +380,15 @@ const eq = (a: unknown, b: unknown, msg: string) => {
     'THE BROWSER HALF NEVER LOOKS FOR A JOIN BUTTON, let alone presses one',
   );
   is(/scroll/i.test(worker), 'it scrolls the results, because one screenful is not a search');
+  /*
+   * THE CARD, NOT THE TITLE BLOCK. The owner's log came back with three cards
+   * whose button list was empty — the climb stopped before the Join button.
+   * Membership cannot be read from a box that does not contain the control
+   * that states it.
+   */
+  is(/if \(ids\.size > 1\) break;/.test(worker), 'the climb stops the moment it would swallow a second group — that boundary IS the card');
+  is(/up < 10/.test(worker), 'and is bounded, so a page with no such boundary cannot climb to the document');
+  is(!/lines >= 2/.test(worker), 'the old shape test is gone: it stopped at the title block and left every button outside');
   is(/search\/groups/.test(worker), "and it reads Facebook's own group search, signed in as the account that is already signed in");
 
   const sql = readFileSync(new URL('../../supabase/social-latest.sql', import.meta.url), 'utf8');

@@ -221,7 +221,18 @@ export function parsePrivacy(text: string): Privacy {
  * down, "Join" on a suggested group beside it when the containers overlap.
  */
 const REQUESTED = /requested|request sent|cancel (join )?request|pending|נשלחה בקשה|בקשה נשלחה|ממתין לאישור|ביטול הבקשה|בקשה ממתינה|запрос отправлен|отменить запрос|заявка отправлена|ожидает/i;
-const MEMBER = /you'?re a member|you are a member|joined|visit|view group|open group|חבר בקבוצה|חברה בקבוצה|את[הם]? חבר|כבר חבר|ביקור|הצג קבוצה|מעבר לקבוצה|вы участник|вы состоите|перейти в группу|открыть группу|посетить/i;
+/*
+ * The words a card carries when the account is already in the group.
+ *
+ * The Hebrew half is wider than it was because the first version recognised
+ * NONE of the owner's own groups. Hebrew Facebook labels the primary action on
+ * a group you belong to as some form of "open"/"view" rather than with a
+ * sentence about membership, and only "ביקור" and "הצג קבוצה" were listed.
+ * These are safe to be generous with now that a JOIN button outranks them: a
+ * card carrying both is read as not-a-member, which is the direction that
+ * cannot put an unpublishable group into the list.
+ */
+const MEMBER = /you'?re a member|you are a member|joined|visit|view group|open group|go to group|חבר בקבוצה|חברה בקבוצה|את[הם]? חבר|כבר חבר|ביקור|הצג קבוצה|הצגת הקבוצה|^\s*(הצגה|פתיחה|לצפייה)\s*$|מעבר לקבוצה|עבור לקבוצה|כניסה לקבוצה|вы участник|вы состоите|перейти в группу|открыть группу|посетить/i;
 const NOT_MEMBER = /^\s*(join( group)?|join now)\s*$|הצטרפות|הצטרף|להצטרף|вступить|присоединиться/i;
 
 export function parseMembership(text: string, buttons: string[] = []): Membership {
@@ -233,9 +244,26 @@ export function parseMembership(text: string, buttons: string[] = []): Membershi
    * accessible name belongs to one control, so it is asked first and alone.
    */
   const labels = buttons.map((b) => b.trim()).filter(Boolean);
+  /*
+   * REQUESTED, THEN JOIN, THEN MEMBER — and the middle one moved here on
+   * purpose.
+   *
+   * It used to ask MEMBER before NOT_MEMBER, which was safe only while the
+   * "you are in this one" words were rare. Now that the reader captures the
+   * whole card, it sees every control on it — and a card for a group he is NOT
+   * in can easily carry some "open"/"view" verb beside its Join button. Read
+   * in the old order, that card becomes 'member', the row offers "הוסף
+   * לרשימה", and a group he cannot publish to enters the publishing list to
+   * fail once a day.
+   *
+   * A visible JOIN button is the one unambiguous statement Facebook makes
+   * about membership, so it wins over anything softer. "Cancel join request"
+   * still cannot reach it: REQUESTED is asked first and matches that whole
+   * family.
+   */
   for (const label of labels) if (REQUESTED.test(label)) return 'requested';
-  for (const label of labels) if (MEMBER.test(label)) return 'member';
   for (const label of labels) if (NOT_MEMBER.test(label)) return 'none';
+  for (const label of labels) if (MEMBER.test(label)) return 'member';
 
   if (!text) return 'unknown';
   if (REQUESTED.test(text)) return 'requested';

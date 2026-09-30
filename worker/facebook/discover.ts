@@ -227,14 +227,35 @@ async function readCards(page: Page): Promise<RawCard[]> {
       const key = match[1];
       if (seen.has(key)) continue;
 
-      /* The card: the first ancestor that holds a picture AND more than one
-         line, which is what a result looks like and what a bare link in a
-         sidebar does not. */
+      /*
+       * THE CARD IS THE LARGEST BOX THAT STILL HOLDS ONLY THIS GROUP.
+       *
+       * It used to be "the first ancestor with a picture and two lines", and
+       * that stopped too early: on the owner's own results the box was the
+       * title block, the Join button lived OUTSIDE it, and the log came back
+       * with three cards whose button list was literally empty — one of them
+       * carrying the group's own name as its only label. Membership cannot be
+       * read from a box that does not contain the control that states it, and
+       * 0 of 92 groups were recognised as his.
+       *
+       * So the climb is bounded by MEANING rather than by shape: go up while
+       * the ancestor still contains exactly one group, and stop the moment it
+       * would swallow a second. What is left is one result, whole — with its
+       * buttons, its member count and its picture inside it.
+       *
+       * Counted by distinct id, not by anchor: a card links to the same group
+       * twice, once from the picture and once from the name.
+       */
       let box: HTMLElement = anchor;
-      for (let up = 0; up < 6 && box.parentElement; up += 1) {
-        box = box.parentElement;
-        const lines = (box.innerText || '').split('\n').filter((l: string) => l.trim()).length;
-        if (box.querySelector('img') && lines >= 2) break;
+      for (let up = 0; up < 10 && box.parentElement; up += 1) {
+        const parent = box.parentElement;
+        const ids = new Set();
+        for (const link of Array.from(parent.querySelectorAll('a[href*="/groups/"]'))) {
+          const hit = (link.getAttribute('href') || '').match(/\/groups\/([^/?#]+)/i);
+          if (hit) ids.add(hit[1]);
+        }
+        if (ids.size > 1) break;
+        box = parent;
       }
 
       /*

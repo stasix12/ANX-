@@ -1,4 +1,4 @@
-import type { ElementHandle, Page } from 'playwright-core';
+import type { ElementHandle, Locator, Page } from 'playwright-core';
 import { patterns } from './selectors';
 
 /**
@@ -155,27 +155,57 @@ async function openAccountMenu(page: Page): Promise<ElementHandle<Element> | nul
    * and says so, which is better than reading something and calling it a
    * profile list.
    */
-  const banner = page.locator('div[role="banner"] div[role="button"], div[role="banner"] [aria-label]');
-  const named = page.getByRole('button', { name: patterns.accountMenu });
-  const tries: import('playwright-core').Locator[] = [];
-  if (await named.count().then((n) => n > 0).catch(() => false)) tries.push(named.first());
-  const inBanner = await banner.count().catch(() => 0);
-  for (let i = 0; i < Math.min(inBanner, 2); i += 1) tries.push(banner.nth(inBanner - 1 - i));
+  /*
+   * WAIT FOR THE BAR TO HAVE CONTROLS IN IT — not merely to exist.
+   *
+   * THIS IS THE BUG THE OWNER HIT, AND IT WAS MINE. Facebook ships the banner
+   * element early and fills it with buttons when its app renders. The caller
+   * used to spend a blind two and a half seconds before ever reaching here, so
+   * by this line there was always something to click; when that pause was
+   * removed in the name of speed, this function started running against an
+   * empty bar. The candidate list below was built ONCE, came back empty, and
+   * both retry rounds then looped over nothing and returned "no menu" —
+   * instantly, with a message asking him to try again in a moment. "לפני זה
+   * היה מעביר משתמש לפחות, עכשיו כלום."
+   *
+   * Waiting for a control rather than for a clock is what the whole speed change
+   * was supposed to be: it returns the moment the bar is usable, and it gives a
+   * slow machine the time a fixed pause never could.
+   */
+  const bannerButtons = 'div[role="banner"] div[role="button"], div[role="banner"] [aria-label]';
+  await page.waitForSelector(bannerButtons, { state: 'visible', timeout: 10_000 }).catch(() => undefined);
 
   /*
-   * TWICE ROUND, WITH A PAUSE. The first version tried each candidate once and
+   * THE CANDIDATES ARE READ AGAIN EVERY ROUND, for the same reason.
+   *
+   * A list built once is a photograph of a bar that was still assembling
+   * itself; a round that finds nothing has to be able to find something on the
+   * next one, or the retry is not a retry at all.
+   */
+  const candidatesNow = async (): Promise<Locator[]> => {
+    const banner = page.locator(bannerButtons);
+    const named = page.getByRole('button', { name: patterns.accountMenu });
+    const out: Locator[] = [];
+    if (await named.count().then((n) => n > 0).catch(() => false)) out.push(named.first());
+    const inBanner = await banner.count().catch(() => 0);
+    for (let i = 0; i < Math.min(inBanner, 2); i += 1) out.push(banner.nth(inBanner - 1 - i));
+    return out;
+  };
+
+  /*
+   * THREE ROUNDS, WITH A PAUSE. The first version tried each candidate once and
    * gave up — and the one moment this is asked most is right after a switch,
    * when Facebook has just reloaded into another identity and the banner is
    * still assembling itself. The owner met exactly that: "לא הצלחנו לפתוח את
    * תפריט החשבון", on an account where the menu had been read perfectly a
    * minute earlier.
    *
-   * A second pass costs a few seconds on the rare failure and nothing at all
-   * on the ordinary path, where the first candidate answers.
+   * Another pass costs a second on the rare failure and nothing at all on the
+   * ordinary path, where the first candidate answers.
    */
-  for (let round = 0; round < 2; round += 1) {
-    if (round) await page.waitForTimeout(2_500);
-    for (const candidate of tries) {
+  for (let round = 0; round < 3; round += 1) {
+    if (round) await page.waitForTimeout(1_500);
+    for (const candidate of await candidatesNow()) {
       await candidate.click({ timeout: 8_000 }).catch(() => undefined);
       const opened = await page.waitForSelector(MENU_SELECTOR, { state: 'visible', timeout: 6_000 }).catch(() => null);
       if (await isAccountMenu(opened)) return opened;
@@ -358,16 +388,41 @@ export async function readProfiles(page: Page, opts?: { pictures?: boolean }): P
  * Facebook refused, or answered with a security check, looks from in here
  * exactly like one that worked, and the c_user cookie is the only witness.
  */
-export async function switchProfile(page: Page, name: string): Promise<'clicked' | 'no-menu' | 'not-found'> {
+export async function switchProfile(
+  page: Page,
+  name: string,
+  opts?: {
+    /*
+     * PHOTOGRAPH THE ROWS WHILE WE ARE IN HERE.
+     *
+     * The menu is open anyway — it has to be, to find the row to press — so a
+     * caller that is missing the identities' logos can have them for the price
+     * of a few element screenshots instead of a second visit. Asked for only
+     * when they are actually missing: once they are stored, every later switch
+     * pays nothing.
+     */
+    pictures?: boolean;
+  },
+): Promise<{ pressed: 'clicked' | 'no-menu' | 'not-found'; profiles?: FacebookProfile[] }> {
   const menu = await openAccountMenu(page);
-  if (!menu) return 'no-menu';
+  if (!menu) return { pressed: 'no-menu' };
 
-  const { names } = await rowsInMenu(menu, false);
+  const wantPictures = Boolean(opts?.pictures);
+  const { names } = await rowsInMenu(menu, wantPictures);
   /* Only a row this reader itself returned may be pressed. Without this the
      locator below could match the same words anywhere inside the menu. */
   if (!names.some((r) => r.name === name)) {
     await page.keyboard.press('Escape').catch(() => undefined);
-    return 'not-found';
+    return { pressed: 'not-found' };
+  }
+
+  /* Taken BEFORE the click, because the click navigates and the menu — with
+     every picture in it — is gone the moment Facebook reloads. */
+  const profiles: FacebookProfile[] = [];
+  if (wantPictures) {
+    for (let i = 0; i < names.length; i += 1) {
+      profiles.push({ id: '', name: names[i].name, kind: names[i].kind, image: i < PICTURE_LIMIT ? await rowPicture(menu, i) : null });
+    }
   }
 
   const row = page.locator(MENU_SELECTOR).locator(`text="${name.replace(/"/g, '\\"')}"`).first();
@@ -394,5 +449,5 @@ export async function switchProfile(page: Page, name: string): Promise<'clicked'
    * both faster on the ordinary path and more patient on a slow one — the
    * difference between "מיידי, גג 5-7 שניות" and half a minute of clock.
    */
-  return 'clicked';
+  return { pressed: 'clicked', profiles: wantPictures ? profiles : undefined };
 }

@@ -343,6 +343,17 @@ export class BrowserSession {
   async switchTo(
     headless: boolean,
     name: string,
+    opts?: {
+      /*
+       * Collect each identity's logo on the way past.
+       *
+       * The caller asks for this only while any of them is missing — after a
+       * fresh install, or on the first switch since the pictures existed at all.
+       * The menu is open regardless, so it costs a few screenshots once rather
+       * than a second visit to Facebook on every switch forever.
+       */
+      pictures?: boolean;
+    },
   ): Promise<{ ok: boolean; detail: string; account?: { id: string; name: string } | null; profiles?: FacebookProfile[] }> {
     if (!this.hasProfile()) return { ok: false, detail: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.' };
     const page = await this.newPage(headless, 'מעבר בין פרופילים');
@@ -359,12 +370,27 @@ export class BrowserSession {
        * rather than a guarantee: if the banner never appears, the code below
        * reports what it finds instead of hanging.
        */
-      await page.waitForSelector('div[role="banner"]', { state: 'visible', timeout: 6_000 }).catch(() => undefined);
+      await page.waitForSelector('div[role="banner"] div[role="button"]', { state: 'visible', timeout: 10_000 }).catch(() => undefined);
       if ((await classifyPage(page)) !== 'ok' || !(await this.hasLoginCookie())) {
         return { ok: false, detail: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".' };
       }
       const before = await this.currentUserId();
-      const pressed = await switchProfile(page, name);
+      let { pressed, profiles } = await switchProfile(page, name, { pictures: opts?.pictures });
+      /*
+       * ONE RELOAD, THEN ASK AGAIN — instead of handing back "try again in a
+       * moment" and leaving the owner to be the retry.
+       *
+       * A top bar that never finished rendering is the one failure here that a
+       * fresh page reliably fixes, and the machine can do that in two seconds
+       * without anybody watching. It is attempted once: a second failure is a
+       * real one, and looping on somebody's live Facebook account is not a way
+       * to find out.
+       */
+      if (pressed === 'no-menu') {
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => undefined);
+        await page.waitForSelector('div[role="banner"] div[role="button"]', { state: 'visible', timeout: 10_000 }).catch(() => undefined);
+        ({ pressed, profiles } = await switchProfile(page, name, { pictures: opts?.pictures }));
+      }
       if (pressed === 'no-menu') return { ok: false, detail: 'לא הצלחנו לפתוח את תפריט החשבון בפייסבוק. נסו שוב בעוד רגע.' };
       if (pressed === 'not-found') {
         return { ok: false, detail: `לא מצאנו פרופיל בשם "${name}" בתפריט. רעננו את רשימת הפרופילים ונסו שוב.` };
@@ -396,7 +422,7 @@ export class BrowserSession {
        * The full-size avatar is refreshed by the ordinary ten-minute login
        * check, which runs anyway and costs the owner no waiting at all.
        */
-      return { ok: true, detail: `עברנו לפרופיל "${account.name || name}". מכאן כל פרסום יוצא ממנו.`, account };
+      return { ok: true, detail: `עברנו לפרופיל "${account.name || name}". מכאן כל פרסום יוצא ממנו.`, account, profiles };
     } finally {
       await page.close().catch(() => undefined);
     }

@@ -146,5 +146,47 @@
       <div role="button" onclick="window.__picked = 'logout'"><span>התנתקות</span></div>
     </div>
   </div>
+
+  <script>
+    /*
+      THE TOP BAR THAT FILLS IN LATE — loaded with #late.
+
+      This is the owner's own failure, reproduced. Facebook ships the banner
+      element with the page and puts the buttons in it when its app renders, so
+      a reader that looks for the avatar the instant the HTML arrives finds an
+      empty bar. It never used to matter, because the caller spent a blind 2.5
+      seconds first; the moment that pause was removed for speed, "we could not
+      open the account menu" came back instantly on an account where the menu
+      was perfectly fine.
+
+      A retry is only a retry if it looks again: the candidates have to be
+      re-read each round, and the wait has to be for a control rather than for a
+      clock.
+    */
+    /*
+      AND PRESSING A PROFILE ROW TAKES THE MENU WITH IT.
+
+      Facebook reloads into the other identity when one of these is pressed, so
+      the menu — and every picture in it — is gone the instant the click lands.
+      A reader that photographs the rows AFTER pressing one is photographing a
+      page that no longer exists, and on this fixture that would have passed
+      quietly unless the fixture behaved the same way.
+    */
+    for (const row of document.querySelectorAll('[data-row="dor"], [data-row="air"], [data-row="page1"], [data-row="page2"]')) {
+      row.addEventListener('click', () => {
+        const menu = document.getElementById('menu');
+        if (menu) menu.remove();
+      });
+    }
+
+    if (location.hash === '#late') {
+      const bar = document.querySelector('div[role="banner"]');
+      const kept = Array.from(bar.children);
+      for (const node of kept) node.remove();
+      setTimeout(() => {
+        for (const node of kept) bar.appendChild(node);
+      }, 1200);
+    }
+  </script>
 </body>
 </html>

@@ -1315,7 +1315,21 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
           ok = false;
           result = 'לא צוין לאיזה פרופיל לעבור.';
         } else {
-          const r = await session.switchTo(headless, wanted);
+          /*
+           * ASK FOR THE LOGOS ONLY WHILE ANY IS MISSING.
+           *
+           * The owner's screen showed three identities and three grey initials:
+           * the pictures are collected when the profile LIST is read, and a
+           * machine that had never been asked to re-read it since the pictures
+           * existed had none — and the fast switch no longer re-reads the menu
+           * afterwards, so they would never have arrived on their own.
+           *
+           * The menu is open during the switch anyway, so this is a few element
+           * screenshots on the first switch and nothing at all on every one
+           * after it.
+           */
+          const needLogos = !state.profiles?.length || state.profiles.some((p) => !p.image);
+          const r = await session.switchTo(headless, wanted, { pictures: needLogos });
           ok = r.ok;
           result = r.detail;
           if (r.ok) {
@@ -1335,6 +1349,10 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
              * login check refreshes the full-size avatar later, on its own
              * clock, costing the owner no waiting.
              */
+            /* Store the freshly photographed menu first, so the logo looked up
+               below is the one that was just taken rather than the one that was
+               missing a moment ago. */
+            if (r.profiles?.length) await recordProfiles(state, r.profiles);
             const logo = state.profiles?.find((p) => p.name === (r.account?.name || wanted))?.image;
             await recordAccount(state, r.account, logo);
           }

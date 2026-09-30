@@ -117,7 +117,7 @@ async function main() {
     const page = await context.newPage();
     await page.goto(fixture);
     const out = await switchProfile(page, 'Air Master');
-    eq(out, 'clicked', 'a name the reader returned is pressed');
+    eq(out.pressed, 'clicked', 'a name the reader returned is pressed');
     eq(await picked(page), 'Air Master', 'and it is THAT row — not the first one, not the anchor');
     await page.close();
   }
@@ -133,7 +133,7 @@ async function main() {
      * a way to press arbitrary rows of the owner's Facebook menu.
      */
     const out = await switchProfile(page, 'הגדרות ופרטיות');
-    eq(out, 'not-found', 'a menu item asked for by name is refused');
+    eq(out.pressed, 'not-found', 'a menu item asked for by name is refused');
     eq(await picked(page), '', 'and nothing at all was clicked');
     await page.close();
   }
@@ -142,8 +142,83 @@ async function main() {
     const page = await context.newPage();
     await page.goto(fixture);
     const out = await switchProfile(page, 'מישהו שלא קיים');
-    eq(out, 'not-found', 'a name that is not in the menu is refused');
+    eq(out.pressed, 'not-found', 'a name that is not in the menu is refused');
     eq(await picked(page), '', 'and nothing at all was clicked');
+    await page.close();
+  }
+
+  /* ---------------- 3b. a top bar that is not there yet is waited for -------- */
+  /*
+   * THE REGRESSION THE OWNER FOUND, AND IT WAS MINE.
+   *
+   * Speeding the switch up meant dropping a blind 2.5-second pause before the
+   * menu was opened — and that pause was the only thing that had ever guaranteed
+   * Facebook's top bar had finished rendering. Without it this reader ran against
+   * an empty bar, built its list of things to click ONCE, found nothing, and both
+   * retry rounds then looped over an empty list and returned "no menu" in
+   * milliseconds. On his phone: a switch that used to work, replaced by "לא
+   * הצלחנו לפתוח את תפריט החשבון" and nothing happening at all.
+   *
+   * The fixture removes the bar's contents and puts them back after 1.2s, which
+   * is exactly the shape of the thing. A reader that waits for a CONTROL rather
+   * than for a clock passes it and is faster than the old pause on a bar that is
+   * ready immediately.
+   */
+  {
+    const page = await context.newPage();
+    await page.goto(`${fixture}#late`);
+    const read = await readProfiles(page);
+    eq(read.note, 'ok', 'a bar that fills in a second later is waited for, not declared broken');
+    eq(
+      read.profiles.map((p) => p.name),
+      ['Dor Moyal', 'Air Master', 'הפתרון המבריק', 'FreshWave – ניקוי עמוק למזגנים'],
+      'and the same list comes back — the delay costs a second, not the feature',
+    );
+    await page.close();
+  }
+
+  {
+    const page = await context.newPage();
+    await page.goto(`${fixture}#late`);
+    const out = await switchProfile(page, 'Air Master');
+    eq(out.pressed, 'clicked', 'and the switch itself survives it too — this is the path that broke');
+    eq(await picked(page), 'Air Master', 'pressing the row he asked for');
+    await page.close();
+  }
+
+  /* ------- 3c. the switch collects the logos when they are missing --------- */
+  /*
+   * THE OTHER HALF OF WHAT HIS SCREEN SHOWED: three identities, three grey
+   * initials. The pictures are taken when the profile LIST is read, and the
+   * fast switch deliberately stopped re-reading that list afterwards — so on a
+   * machine that had never been asked to refresh it since the pictures existed,
+   * they would never have arrived at all.
+   *
+   * The menu is open during a switch regardless. Taking them THERE, and only
+   * while any is missing, costs a few screenshots once.
+   */
+  {
+    const page = await context.newPage();
+    await page.goto(fixture);
+    const out = await switchProfile(page, 'Air Master', { pictures: true });
+    eq(out.pressed, 'clicked', 'the switch still happens');
+    eq(out.profiles?.length, 4, 'and it brings back every identity in the menu');
+    const logo = out.profiles?.find((p) => p.name === 'הפתרון המבריק')?.image?.bytes;
+    is(logo && logo.readUInt32BE(16) >= 14, 'each with its own logo, photographed from its own row');
+    /*
+     * BEFORE THE CLICK, and that is not a detail: the click navigates, and a
+     * picture taken afterwards would be of whatever Facebook drew next — or of
+     * nothing at all, on a page that has already gone.
+     */
+    eq(await picked(page), 'Air Master', 'the row was still pressed after the photographs');
+    await page.close();
+  }
+
+  {
+    const page = await context.newPage();
+    await page.goto(fixture);
+    const out = await switchProfile(page, 'Air Master');
+    eq(out.profiles, undefined, 'and a switch that was not asked for pictures takes none — the ordinary case pays nothing');
     await page.close();
   }
 
@@ -300,6 +375,21 @@ async function main() {
    * into a false "the switch did not happen". The loop below returns the instant
    * either proof lands.
    */
+  /*
+   * AND A BAR THAT NEVER RENDERED IS RETRIED BY THE MACHINE, not by the owner.
+   * "נסו שוב בעוד רגע" is a fair thing to say once; saying it instead of doing
+   * the one thing that fixes it — loading the page again — is making a person do
+   * the computer's job.
+   */
+  is(
+    /if \(pressed === 'no-menu'\) \{[\s\S]{0,600}?page\.reload\(/.test(body),
+    'a menu that would not open is retried once on a fresh page before anything is reported',
+  );
+  is(
+    (body.match(/page\.reload\(/g) ?? []).length === 1,
+    'once, and only once — looping on somebody’s live Facebook account is not how to find out why',
+  );
+
   const watcher = session.slice(session.indexOf('private async awaitIdentity('));
   is(/who\.id && who\.id !== before/.test(watcher), 'the cookie moving is proof, and it ends the wait at once');
   is(
@@ -331,6 +421,27 @@ async function main() {
     is(
       /state\.profiles\?\.find\(\(p\) => p\.name === \(r\.account\?\.name \|\| wanted\)\)\?\.image/.test(branch),
       'the picture comes from the list the worker already read, not from a fresh screenshot',
+    );
+    /*
+     * AND WHEN IT HAS NO SUCH LIST, IT COLLECTS ONE ON THE WAY PAST.
+     *
+     * Without this the owner's screen stays as he photographed it — three
+     * identities, three grey initials — because the logos are taken when the
+     * list is read and the fast switch stopped re-reading it. The menu is open
+     * during the switch anyway; asking only while something is missing means the
+     * cost is paid once and never again.
+     */
+    is(
+      /const needLogos = !state\.profiles\?\.length \|\| state\.profiles\.some\(\(p\) => !p\.image\)/.test(branch),
+      'a machine with no logos stored knows it',
+    );
+    is(
+      /session\.switchTo\(headless, wanted, \{ pictures: needLogos \}\)/.test(branch),
+      'and asks for them during the switch itself rather than never',
+    );
+    is(
+      /if \(r\.profiles\?\.length\) await recordProfiles\(state, r\.profiles\);[\s\S]{0,200}?const logo =/.test(branch),
+      'they are stored BEFORE the identity is written, so the face that goes up is the one just photographed',
     );
     const record = worker.slice(worker.indexOf('async function recordAccount('), worker.indexOf('async function recordProfiles('));
     is(

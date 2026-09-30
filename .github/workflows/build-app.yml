@@ -196,34 +196,53 @@ jobs:
             exit 0
           }
 
-          # IS THE FEED THERE AT ALL, AND CAN A STRANGER READ IT?
+          # IS THE FEED THERE, AND CAN A STRANGER READ IT?
           #
-          # Asked with NO credentials, which is not a shortcut — it is exactly
-          # how an installed copy on a customer's PC asks. A repository that
-          # answers here answers for them; one that does not is invisible to
-          # every copy of this app no matter what the token can see.
+          # ASKED TWICE, AND THE SECOND ASK IS THE REASON THIS WORKS.
           #
-          # This step used to go straight to the release tag, so a missing
-          # repository and an unpublished version were the same 404 and the
-          # build walked on into electron-builder, which failed three minutes
-          # later with a stack trace and "Please double check that your
-          # authentication token is correct" — advice about the one thing that
-          # was fine. The two causes are separated here, before anything is
-          # uploaded, and each is said in a sentence naming what to do.
-          $feed = $null
-          try {
-            $feed = Invoke-RestMethod -Uri "https://api.github.com/repos/stasix12/https-github.com-new" -Headers @{ 'User-Agent' = 'hapitaron-build' }
-          } catch {
-            # 404 covers both "no such repository" and "private", because
-            # GitHub deliberately does not tell a stranger which — and neither
-            # can this build.
-          }
-          if (-not $feed) {
-            Write-Host "::warning::stasix12/https-github.com-new is not readable without a login: it either does not exist, or it is PRIVATE. Create it as a PUBLIC repository with that exact name. A private feed cannot work — an installed copy has no login, and shipping it one would put a credential inside every customer's app."
+          # The first version asked once, without credentials — the way an
+          # installed copy asks — and treated ANY failure as "the repository is
+          # missing or private". That is wrong in a way that wastes a night:
+          # unauthenticated API calls from Actions runners share an IP and a
+          # tiny hourly budget, so a rate limit arrives as a failure too, and
+          # the build then reports a perfectly good repository as absent. It
+          # did exactly that, twice, while the repository sat there public.
+          #
+          # So: ask anonymously, and if that does not answer, ask again WITH
+          # the token, which is not rate limited and can say which of the three
+          # things is actually true. Each gets its own sentence, and a rate
+          # limit is no longer allowed to impersonate a missing repository.
+          $feed = 'stasix12/https-github.com-new'
+          $head = @{ 'User-Agent' = 'hapitaron-build'; 'Accept' = 'application/vnd.github+json' }
+          $anon = Invoke-WebRequest -Uri "https://api.github.com/repos/$feed" -Headers $head -SkipHttpErrorCheck
+          Write-Host "feed as a stranger sees it: HTTP $($anon.StatusCode)"
+
+          $withKey = Invoke-WebRequest -Uri "https://api.github.com/repos/$feed" -Headers ($head + @{ Authorization = "Bearer $env:UPDATES_TOKEN" }) -SkipHttpErrorCheck
+          Write-Host "feed as the build sees it: HTTP $($withKey.StatusCode)"
+
+          if ($withKey.StatusCode -eq 404) {
+            Write-Host "::warning::$feed does not exist, or the UPDATES_TOKEN is not scoped to it. Check Repository access on the token, and that the repository name matches this workflow and electron-builder.yml."
             "publish=no" >> $env:GITHUB_OUTPUT
             exit 0
           }
-          Write-Host "update feed: $($feed.full_name), public, created $($feed.created_at)"
+          if ($withKey.StatusCode -ne 200) {
+            Write-Host "::warning::could not read $feed (HTTP $($withKey.StatusCode)). Nothing was published on this build."
+            "publish=no" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          if (($withKey.Content | ConvertFrom-Json).private) {
+            # Not a warning. A private feed is a package that can never update
+            # itself, and shipping one quietly is the failure this whole step
+            # exists to prevent.
+            throw "$feed is PRIVATE. An installed copy has no login, so it could never download from it — and giving it one would put a credential inside every customer's app. Make the repository public."
+          }
+          if ($anon.StatusCode -ne 200) {
+            # The token can read it and a stranger momentarily could not, which
+            # at this point means the shared rate limit rather than anything
+            # about the repository. Said out loud, and carried on with.
+            Write-Host "::notice::the anonymous check did not answer (HTTP $($anon.StatusCode)) — almost certainly the runner's shared rate limit. The repository is public, so publishing continues."
+          }
+          Write-Host "update feed ready: $feed"
 
           $url = "https://api.github.com/repos/stasix12/https-github.com-new/releases/tags/v$version"
           try {

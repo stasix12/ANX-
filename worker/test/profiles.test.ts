@@ -172,6 +172,26 @@ async function main() {
     'and the account is re-read afterwards, so the chip and the group scope follow the identity that now publishes',
   );
 
+  /*
+   * AND A MACHINE THAT HAS NEVER HEARD OF THIS COMMAND SAYS SO.
+   *
+   * The dashboard deploys the instant it is written; the program on somebody's
+   * PC is whatever they last installed. So this button reached a phone while
+   * every machine in the world still ran a version with no branch for it — and
+   * the command loop's if/else had no final else, so the command was claimed,
+   * marked done, and left an empty result. A button that reports success and
+   * changes nothing is the worst answer a control can give, and it is the
+   * failure this whole session kept finding in other clothes.
+   */
+  is(
+    /\} else \{[\s\S]{0,1200}?לא קיימת בגרסה שמותקנת במחשב/.test(worker),
+    'an unknown command is refused with a sentence naming the installed version — never claimed, done, and silent',
+  );
+  is(
+    /ok = false;[\s\S]{0,200}?לא קיימת בגרסה/.test(worker),
+    'and it is recorded as a FAILURE, so the dashboard shows it in red rather than as a completed instruction',
+  );
+
   console.log(`profile switcher tests OK — ${checks} assertions`);
 }
 

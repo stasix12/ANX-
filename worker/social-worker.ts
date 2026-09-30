@@ -1239,6 +1239,24 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
         state.attention = '';
         state.browserState = session.hasProfile() ? 'unknown' : 'disconnected';
         result = 'ממשיך. עבודות שסומנו "דורש טיפול" יחזרו לתור אם הפעלתם אותן מחדש בלוח הבקרה.';
+      } else {
+        /*
+         * A COMMAND THIS VERSION HAS NEVER HEARD OF.
+         *
+         * The dashboard is deployed the moment it is written; the program on
+         * somebody's PC is whatever they last installed. So a new button ships
+         * to a phone hours or weeks before the machine that answers it knows
+         * what to do — and until now that chain ended here, in an if/else with
+         * no final branch: the command was claimed, marked DONE, and left an
+         * empty result. On screen that is a button that reports success and
+         * changes nothing, which is the worst answer a control can give.
+         *
+         * It was the profile switcher that walked into it. It will not be the
+         * last: this is a product that is sold, so the two halves will always
+         * be out of step for a while.
+         */
+        ok = false;
+        result = `הפעולה הזאת לא קיימת בגרסה שמותקנת במחשב (${VERSION}). עדכנו את התוכנה במחשב ונסו שוב.`;
       }
     } catch (err) {
       ok = false;

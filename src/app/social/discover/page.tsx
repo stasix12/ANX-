@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
-import { TargetAvatar } from '@/components/social/TargetAvatar';
-import { Figure, GroupRow, WalkThrough } from '@/components/social/Discovery';
+import { Figure, GroupRow, MyGroupsCard, WalkThrough } from '@/components/social/Discovery';
 import {
   Badge,
   Button,
@@ -464,60 +463,16 @@ export default function DiscoverPage() {
           </Card>
         )}
 
-        {/* ─────────────── the groups he is in, and what is missing ───────────
-
-            NOT A SEARCH. Facebook's own list of the groups this account
-            belongs to, so "which of mine is not in the publishing list" is a
-            set difference instead of a guess about the wording on a card. The
-            membership parser has been wrong about that twice on this owner's
-            account; this cannot be wrong in the same way.
-
-            Above the search box, because it is the question he asked and the
-            search is the one he was offered. */}
-        <Card padded={false} className="px-3 py-3.5">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-extrabold text-mist-100">הקבוצות שלך בפייסבוק</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
-                {joined === null
-                  ? 'טוען…'
-                  : joined.length === 0
-                    ? 'עוד לא קראנו אילו קבוצות אתם חברים בהן. אחרי שהצטרפתם לקבוצות חדשות, לחצו כאן ונראה מה עוד לא נמצא ברשימת הפרסום.'
-                    : joinedMissing.length === 0
-                      ? `כל ${joined.length} הקבוצות שאתם חברים בהן כבר ברשימת הפרסום.`
-                      : `מתוך ${joined.length} קבוצות שאתם חברים בהן, ${joinedMissing.length} עוד לא ברשימת הפרסום.`}
-              </p>
-            </div>
-            <Button size="sm" variant="secondary" busy={scanning} onClick={scanJoined} className="whitespace-nowrap">
-              {joined && joined.length ? 'בדוק שוב' : 'בדוק את הקבוצות שלי'}
-            </Button>
-          </div>
-
-          {joinedMissing.length > 0 && (
-            <>
-              {/* The names, so the press is not blind. Facebook mixes
-                  suggestions into some layouts of that page and the reader
-                  drops them by their section heading — but a list he can read
-                  is the honest second lock. */}
-              <ul className="mt-2.5 space-y-1.5">
-                {joinedMissing.slice(0, 8).map((row) => (
-                  <li key={row.id} className="flex items-center gap-2">
-                    <TargetAvatar name={row.name} imageUrl={row.image_url || null} channel="facebook_group" size={28} />
-                    <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-300">
-                      {row.name}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {joinedMissing.length > 8 && (
-                <p className="mt-1.5 text-xs text-mist-500">ועוד {joinedMissing.length - 8}…</p>
-              )}
-              <Button busy={busyId === 'joined'} onClick={adoptJoined} className="mt-3 w-full">
-                הוסף את {joinedMissing.length} הקבוצות לרשימת הפרסום
-              </Button>
-            </>
-          )}
-        </Card>
+        {/* Its own component so worker/test/render-discovery.tsx can put the
+            REAL card in a browser and measure it — see MyGroupsCard. */}
+        <MyGroupsCard
+          joined={joined}
+          missing={joinedMissing}
+          scanning={scanning}
+          busy={busyId === 'joined'}
+          onScan={scanJoined}
+          onAdopt={adoptJoined}
+        />
 
         {/* ─────────────────────────── the search box ─────────────────────── */}
         <Card padded={false} className="px-3 py-3.5">

@@ -569,7 +569,12 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   const diff = page.slice(page.indexOf('const joinedMissing'), page.indexOf('const hiddenCount'));
   is(/!r\.target_id && !inSystem\.has\(r\.external_id\)/.test(diff), 'the list is exactly what the publishing list does not have');
   is(/!r\.hidden/.test(diff), 'minus anything he dismissed');
-  is(/joinedMissing\.slice\(0, 8\)/.test(page), 'and the names are on screen before the button is pressed — a blind bulk add is not a bulk add');
+  /* The card itself is a component now, so the fixture can put the real one
+     in a browser. The assertion follows it. */
+  const card = readFileSync(new URL('../../src/components/social/Discovery.tsx', import.meta.url), 'utf8');
+  const block = card.slice(card.indexOf('export function MyGroupsCard'));
+  is(/missing\.slice\(0, 8\)/.test(block), 'and the names are on screen before the button is pressed — a blind bulk add is not a bulk add');
+  is(/הוסף את \{missing\.length\} הקבוצות/.test(block), 'the label names the count, so the promise and the set are the same thing');
 }
 
 console.log(`discovery tests OK — ${checks} assertions`);

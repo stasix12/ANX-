@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
-import { Badge, Button, ButtonLink, CARD_ELEVATED } from '@/components/social/ui';
+import { Badge, Button, ButtonLink, CARD_ELEVATED, Card } from '@/components/social/ui';
 import { MEMBERSHIP_SHORT, PRIVACY_LABEL, membersText, type Membership } from '@/lib/social/discovery';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
 import { CheckIcon, CloseIcon } from '@/components/icons';
@@ -305,5 +305,91 @@ export function WalkThrough({
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * "הקבוצות שלך בפייסבוק" — what this account is in, and what the publishing
+ * list is still missing.
+ *
+ * NOT A SEARCH, and that is the whole of its value. Facebook's own list of a
+ * person's groups contains only groups they are in, by construction, so
+ * "which of mine is not in the publishing list" is a set difference rather
+ * than a guess about the wording on a card. The membership parser has been
+ * wrong about that twice on this owner's account — 0 of 92 — and this cannot
+ * be wrong in the same way.
+ *
+ * THE NAMES ARE ON SCREEN BEFORE THE BUTTON IS PRESSED. Facebook mixes
+ * suggested groups into some layouts of that page; the reader drops them by
+ * the heading of the section they sit under, and this list is the second lock:
+ * a bulk add he cannot read first is not a bulk add, it is a leap.
+ *
+ * Its own component rather than JSX inside the page so that the fixture can
+ * put the REAL card in a browser and measure it, for the reason
+ * render-card.tsx gives: a copy written inside a test stops failing when the
+ * component changes.
+ */
+export function MyGroupsCard({
+  joined,
+  missing,
+  scanning,
+  busy,
+  onScan,
+  onAdopt,
+}: {
+  /** Everything the scan has ever found. null = not read yet. */
+  joined: DiscoveredGroupRow[] | null;
+  /** Of those, the ones the publishing list does not have. */
+  missing: DiscoveredGroupRow[];
+  scanning: boolean;
+  busy: boolean;
+  onScan: () => void;
+  onAdopt: () => void;
+}) {
+  return (
+      <Card padded={false} className="px-3 py-3.5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold text-mist-100">הקבוצות שלך בפייסבוק</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
+              {joined === null
+                ? 'טוען…'
+                : joined.length === 0
+                  ? 'עוד לא קראנו אילו קבוצות אתם חברים בהן. אחרי שהצטרפתם לקבוצות חדשות, לחצו כאן ונראה מה עוד לא נמצא ברשימת הפרסום.'
+                  : missing.length === 0
+                    ? `כל ${joined.length} הקבוצות שאתם חברים בהן כבר ברשימת הפרסום.`
+                    : `מתוך ${joined.length} קבוצות שאתם חברים בהן, ${missing.length} עוד לא ברשימת הפרסום.`}
+            </p>
+          </div>
+          <Button size="sm" variant="secondary" busy={scanning} onClick={onScan} className="whitespace-nowrap">
+            {joined && joined.length ? 'בדוק שוב' : 'בדוק את הקבוצות שלי'}
+          </Button>
+        </div>
+
+        {missing.length > 0 && (
+          <>
+            {/* The names, so the press is not blind. Facebook mixes
+                suggestions into some layouts of that page and the reader
+                drops them by their section heading — but a list he can read
+                is the honest second lock. */}
+            <ul className="mt-2.5 space-y-1.5">
+              {missing.slice(0, 8).map((row) => (
+                <li key={row.id} className="flex items-center gap-2">
+                  <TargetAvatar name={row.name} imageUrl={row.image_url || null} channel="facebook_group" size={28} />
+                  <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-300">
+                    {row.name}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {missing.length > 8 && (
+              <p className="mt-1.5 text-xs text-mist-500">ועוד {missing.length - 8}…</p>
+            )}
+            <Button busy={busy} onClick={onAdopt} className="mt-3 w-full">
+              הוסף את {missing.length} הקבוצות לרשימת הפרסום
+            </Button>
+          </>
+        )}
+      </Card>
   );
 }

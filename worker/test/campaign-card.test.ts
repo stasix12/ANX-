@@ -113,10 +113,41 @@ async function main(): Promise<void> {
               pictureHeight: pb ? Math.round(pb.height) : 0,
               pictureShare: pb ? Math.round((pb.width / box.width) * 1000) / 10 : 0,
               pictureAtEnd: pb ? (pb.left + pb.right) / 2 < mid : false,
-              /* Whether a real cover was painted, not merely wired. Two of the
-                 fixtures carry media; a card that drew the letter tile for
-                 them would mean the cover never reached the page. */
-              drewCover: !!c.querySelector('img, video'),
+              /*
+               * Whether a real cover was painted, not merely wired — INSIDE
+               * the picture, not anywhere on the card. `c.querySelector('img')`
+               * also matches TargetAvatar's own <img> on the "הבא בתור" line,
+               * which the page passes a group picture to in production: the
+               * day the fixture gains one, that form stops measuring covers
+               * and nothing says so.
+               */
+              drewCover: !!pic?.querySelector('img, video'),
+              /*
+               * TEXT CUT OFF MID-NUMBER.
+               *
+               * The check this replaces measured the four status chips —
+               * "the one thing on this card that must never be half-read" —
+               * and went with them. The sentence that took their place reaches
+               * "120 מתוך 248 פורסמו" in a column barely 200px wide, so the
+               * rule is worth more now, not less.
+               *
+               * BY THE ATTRIBUTE, NOT BY `truncate`. A group's own name and
+               * the campaign's own name are user text and are MEANT to end in
+               * an ellipsis — "Город Арад , глазами жителей" does, at 360px,
+               * and that is the layout working. What may never be cut is a
+               * sentence this product wrote with a number in it, and
+               * data-must-fit is the card saying which those are. Selected by
+               * the attribute under test, a card that drops it reads as having
+               * no such labels and this assertion stops asserting — which the
+               * floor below is for.
+               */
+              mustFit: c.querySelectorAll('[data-must-fit]').length,
+              /* "הקמפיין הסתיים בהצלחה" — the one claim on this card that is
+                 about an OUTCOME rather than a count. See the assertion. */
+              saysSuccess: (c.textContent || '').includes('הקמפיין הסתיים בהצלחה'),
+              clipped: [...c.querySelectorAll('[data-must-fit]')]
+                .filter((e) => e.scrollWidth > e.clientWidth + 1)
+                .map((e) => (e.textContent || '').trim().slice(0, 28)),
               /*
                * ANY CONTROL SITTING ON THE PICTURE.
                *
@@ -221,14 +252,43 @@ async function main(): Promise<void> {
         assert.equal(card.escaped, 0, say(`card ${i} has ${card.escaped} controls outside its own border`));
         const targets = hits[i] ?? [];
         assert.ok(targets.length >= 4, say(`card ${i} offered ${targets.length} controls to hit-test — the floor below would pass on an empty card`));
+        /* A card with publications promises one such label; an empty one
+           promises none, and its own branch is checked by the height ceiling. */
+        assert.ok(card.mustFit <= 1, say(`card ${i} marked ${card.mustFit} labels as must-fit — the check below would be measuring something else`));
+        assert.deepEqual(
+          card.clipped,
+          [],
+          say(`card ${i} cut a label that was meant to fit — ${card.clipped.join(' | ')}`),
+        );
         assert.deepEqual(
           targets.filter((t) => t.w < 40 || t.h < 40),
           [],
           say(`card ${i} has a target under 40px to a thumb — ${JSON.stringify(targets.filter((t) => t.w < 40 || t.h < 40))}`),
         );
       }
+      /*
+       * "הקמפיין הסתיים בהצלחה" ON EXACTLY ONE OF THEM.
+       *
+       * The first version of this line read `published === total` alone, and
+       * three of the fixtures below satisfy that while their badge says
+       * otherwise: one from a read that was cut short (so publications are
+       * still waiting), one with the whole product on hold from the header,
+       * and the clean one. Only the last may say it.
+       *
+       * Counted rather than located, because the point is the two that must
+       * NOT say it: a card is allowed to be anywhere in the list.
+       */
+      const success = seen.cards.filter((c) => c.saysSuccess).length;
+      assert.equal(
+        success,
+        1,
+        say(`${success} cards say "הקמפיין הסתיים בהצלחה" — exactly one fixture finished cleanly; the others are a truncated read and a global pause, and neither ended well`),
+      );
       const withCover = seen.cards.filter((c) => c.drewCover).length;
-      assert.ok(withCover >= 2, say(`only ${withCover} cards painted a real cover — the fixture carries media on four of them`));
+      /* Seven of the nine fixtures carry media. The floor is all seven, not a
+         majority: with a majority, a case that silently stopped painting its
+         cover still passed, which is what happened when this read `>= 4`. */
+      assert.ok(withCover >= 7, say(`only ${withCover} of the nine cards painted a real cover — seven of them carry media`));
       const tall = Math.max(...seen.cards.map((c) => c.height));
       console.log(`  ✓ ${width}px — tallest card ${tall}px, picture ${seen.cards[0].pictureShare}% and on the left, no overlap, no small target`);
     }

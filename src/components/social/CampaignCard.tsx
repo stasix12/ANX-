@@ -120,13 +120,35 @@ export function CampaignCard({
   const showResume = canResumeRun(state.progress, campaign.status);
   const view = runProgress(state.progress);
   const { total, published, skipped, failed } = state.progress;
-  /* Rows that ended without publishing. The bar's faint tone and view.note are
-     the same fact drawn twice — never a zero, in either place. */
-  const unpublished = skipped + failed;
-  /* The one case the brief asks to call a success in words. Everything else
-     that has ended says so through the badge and `view.note` instead — a run
-     where 121 of 122 rows were skipped did not end "בהצלחה". */
-  const finishedClean = total > 0 && published === total;
+  /* The same line the dashboard hero prints, from the same two pieces, and
+     neither of them ever invents a zero. */
+  const tail = [view.note, view.open > 0 ? `${view.open} עוד לא יצאו` : ''].filter(Boolean).join(' · ');
+  /*
+   * THE ONE CASE THE BRIEF ASKS TO CALL A SUCCESS IN WORDS — and four
+   * conditions, not one, because the first version of this line said
+   * "הקמפיין הסתיים בהצלחה" under three badges that said otherwise.
+   *
+   *   published === total   the claim itself.
+   *   state === 'completed' an archived run resolves to 'stopped' and wore
+   *                         "נעצר" over a green success line.
+   *   badge.tone === 'good' runBadge short-circuits on a global pause and on
+   *                         a disconnected PC, so the header could read
+   *                         "everything is held" while the card asserted it
+   *                         had finished well. The badge is the one opinion
+   *                         about the run's state in this product; this line
+   *                         is not allowed a second one.
+   *   !state.truncated      the serious one. campaignStates() caps at 5000
+   *                         rows ACROSS every campaign, dropping the
+   *                         furthest-out scheduled ones first, so a run that
+   *                         loses its pending rows reports published === total
+   *                         with publications still waiting. client.ts names
+   *                         this exact failure. The old card's worst output
+   *                         was a label claiming completion; a green
+   *                         "finished successfully" is a claim campaign.ts was
+   *                         written to forbid.
+   */
+  const finishedClean =
+    total > 0 && published === total && state.state === 'completed' && badge.tone === 'good' && !state.truncated;
   /* The mockup's primary button for a run that has stopped. Same condition the
      old card used for the same action, moved from the secondary slot. */
   const restart = !showPause && !showResume && onReopen ? onReopen : undefined;
@@ -201,7 +223,14 @@ export function CampaignCard({
                 </p>
               )}
               <div className="flex items-baseline justify-between gap-2">
-                <p dir="auto" className="min-w-0 truncate text-[12px] font-bold leading-4 text-mist-100">{view.publishedLabel}</p>
+                {/* data-must-fit: this sentence is OURS and it carries the two numbers
+                    the card exists to report, so it may be narrowed but never
+                    cut. worker/test/campaign-card.test.ts measures exactly the
+                    elements carrying this attribute; a group's own name, two
+                    lines down, is user text and is allowed to end in an
+                    ellipsis. dir="auto" because the guard in layout.test.ts
+                    reads "publishedLabel" as user text and is right to ask. */}
+                <p data-must-fit dir="auto" className="min-w-0 truncate text-[12px] font-bold leading-4 text-mist-100">{view.publishedLabel}</p>
                 <p className="shrink-0 text-[11px] font-extrabold tabular-nums leading-4 text-brand-400">{view.percent}%</p>
               </div>
               {/*
@@ -224,19 +253,35 @@ export function CampaignCard({
               <div
                 className="mt-1 flex h-2 overflow-hidden rounded-full bg-brand-300/15"
                 role="img"
-                aria-label={`${view.percent}% — ${view.publishedLabel}${view.note ? ` · ${view.note}` : ''}`}
+                aria-label={`${view.percent}% — ${view.publishedLabel}${tail ? ` · ${tail}` : ''}`}
               >
                 {published > 0 && <span className="grad-primary bg-brand-500" style={{ width: `${(published / total) * 100}%` }} />}
-                {unpublished > 0 && <span className="bg-brand-300/45" style={{ width: `${(unpublished / total) * 100}%` }} />}
+                {skipped > 0 && <span className="bg-brand-300/45" style={{ width: `${(skipped / total) * 100}%` }} />}
+                {/* A failure keeps the colour it had before this pass. Folded
+                    into one faint tone with the skips, a run with twelve
+                    failures drew the same bar as a run with twelve skips. */}
+                {failed > 0 && <span className={TONE_FILL.bad} style={{ width: `${(failed / total) * 100}%` }} />}
               </div>
               {/* What became of the rest, in words rather than four chips:
                   "12 דולגו · 3 נכשלו", and nothing at all when every finished
                   row published. unpublishedNote() never invents a zero. */}
-              {/* NOT truncated: this is our own sentence and it is short, and the
-                  layout guard is right to ask why a label with a number in it
-                  would be cut. If it ever outgrows the column it wraps, and
-                  the card's height ceiling is what says so. */}
-              {view.note && <p className="mt-0.5 min-w-0 text-[10.5px] font-semibold leading-4 text-mist-500">{view.note}</p>}
+              {/*
+                WHAT BECAME OF THE REST, and how much has not happened yet.
+
+                The four chips this pass removed carried one number that is
+                nowhere else on the card: how many publications are still
+                waiting. It is derivable — total minus published minus skipped
+                minus failed — but it is the number that answers "is this still
+                going to publish?", which is the question the screen exists
+                for. view.open hands it over, and this is the line the
+                dashboard hero already builds from the same two pieces.
+
+                NOT truncated: this is our own sentence and it is short, and the
+                layout guard is right to ask why a label with a number in it
+                would be cut. If it ever outgrows the column it wraps, and the
+                card's height ceiling is what says so.
+              */}
+              {tail && <p className="mt-0.5 min-w-0 text-[10.5px] font-semibold leading-4 text-mist-500">{tail}</p>}
             </div>
           ) : (
             <div className="mt-1.5">
@@ -352,7 +397,7 @@ export function CampaignCard({
                picture that failed to load, so say what is missing. */
             <span
               title="לפוסט אין תמונה או סרטון"
-              className="grid h-full w-full place-items-center rounded-[18px] border border-dashed border-ink-600 bg-ink-900 text-ink-500"
+              className="grid h-full w-full place-items-center rounded-[18px] border border-dashed border-ink-600 bg-ink-900 text-mist-500"
             >
               <PlusIcon aria-hidden className="h-5 w-5" />
             </span>
@@ -371,7 +416,7 @@ export function CampaignCard({
              */
             <span
               title="לא נמצא פוסט לקמפיין הזה — ייתכן שהוא הועבר לארכיון. המספרים לצד נכונים בכל מקרה."
-              className="grid h-full w-full place-items-center rounded-[18px] bg-ink-800 text-ink-500"
+              className="grid h-full w-full place-items-center rounded-[18px] bg-ink-800 text-mist-500"
             >
               <ClipboardListIcon aria-hidden className="h-5 w-5" />
             </span>

@@ -449,7 +449,13 @@ export function SegmentedControl<T extends string>({
               className={`inline-flex min-h-11 basis-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-xl text-[13px] transition-colors ${
                 active
                   ? 'grad-primary bg-brand-500 font-extrabold text-on-brand'
-                  : 'font-bold text-mist-200 hover:bg-ink-800'
+                  /* mist-300, not mist-200: there is no --color-mist-200 in
+                     any theme in this product, so Tailwind resolved it to the
+                     storefront's #e3e7e8 and the two unselected filters
+                     measured 1.25:1 on the white bar — invisible. The contrast
+                     guard could not see it either: an undefined token is in no
+                     pair. mist-300 is the guarded secondary step. */
+                  : 'font-bold text-mist-300 hover:bg-ink-800'
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900`}
             >
               {o.label}

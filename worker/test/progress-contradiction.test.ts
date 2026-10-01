@@ -1000,7 +1000,14 @@ async function main(): Promise<void> {
        הראשון" — and a pin over the whole file passed with the header's own
        destination changed. Verified by changing it: the slice fails, the
        file-wide search did not. */
-    const headerAction = camp.slice(camp.indexOf('headerAction='), camp.indexOf('paused={'));
+    /* The slice is computed, so its own ends are checked first: reorder the
+       two props and indexOf would hand slice() a backwards range, which
+       returns '' and fails both pins below with a message about the
+       destination rather than about prop order. */
+    const headerAt = camp.indexOf('headerAction=');
+    const pausedAt = camp.indexOf('paused={');
+    expect('guards', 'source-drift', 'the headerAction slice has both of its ends, in order', headerAt >= 0 && pausedAt > headerAt, true, NONE);
+    const headerAction = camp.slice(headerAt, pausedAt);
     pin('new-campaign button goes to the post editor', headerAction, '<ButtonLink href="/social/posts/new"');
     pin('new-campaign button is still the one labelled that', headerAction, '+ קמפיין חדש');
     expect(

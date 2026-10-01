@@ -73,13 +73,29 @@ const cases = [
   /* And the one case allowed to say "בהצלחה": every row published. */
   ['a run that finished clean', { id:'7', name:'ניקוי ריפודי רכב', service:'', city:'', status:'active' as const, created_at:'2026-09-28T09:00:00Z' },
     st(prog({ total:20, published:20, finished:20 }), { state:'completed' }), 1, vid],
+  /*
+   * THE SAME NUMBERS, FROM A READ THAT WAS CUT SHORT — and it must NOT say
+   * "בהצלחה".
+   *
+   * campaignStates() caps at 5000 rows across every campaign and drops the
+   * furthest-out scheduled ones first, so a run whose pending rows fell off
+   * the end reports published === total with publications still waiting.
+   * client.ts names this exact failure. There is nothing here to tell it apart
+   * from the case above except `truncated`.
+   */
+  ['the same, from a truncated read', { id:'8', name:'ניקוי חלונות', service:'', city:'', status:'active' as const, created_at:'2026-09-27T09:00:00Z' },
+    st(prog({ total:20, published:20, finished:20 }), { state:'completed', truncated:true }), 1, img],
+  /* Every row published, and the whole product is on hold from the header.
+     runBadge says "מושהה"; this card may not say it ended well. */
+  ['every row published, publishing globally paused', { id:'9', name:'ניקוי מרפסות', service:'', city:'', status:'active' as const, created_at:'2026-09-26T09:00:00Z' },
+    st(prog({ total:20, published:20, finished:20 }), { state:'completed' }), 1, img, true],
 ] as const;
 
-const body = cases.map(([label, c, s, posts, media]) => `
+const body = cases.map(([label, c, s, posts, media, paused]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
   <div class="card-probe">${renderToStaticMarkup(
     CampaignCard({ campaign: c as never, state: s as never, postCount: posts as number,
-      hasPost: (posts as number) > 0, media: media as never, globalPaused: false, workerOnline: true,
+      hasPost: (posts as number) > 0, media: media as never, globalPaused: paused === true, workerOnline: true,
       onPause: () => {}, onResume: () => {}, onEdit: () => {}, onDuplicate: () => {},
       onDelete: () => {}, addPostHref: '/x', busy: false }) as never,
   )}</div>`).join('');

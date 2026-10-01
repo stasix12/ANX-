@@ -5,7 +5,7 @@ import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Badge, Button, ButtonLink, CARD_ELEVATED, Card, inputClass } from '@/components/social/ui';
 import { MEMBERSHIP_SHORT, PRIVACY_LABEL, membersText, normalizeQuery, type Membership } from '@/lib/social/discovery';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
-import { CheckIcon, ClockIcon, CloseIcon, GlobeIcon, MoreIcon, SearchIcon, SparklesIcon, StarIcon, TargetIcon, UsersIcon } from '@/components/icons';
+import { CheckIcon, ChevronDownIcon, ClockIcon, CloseIcon, GlobeIcon, MoreIcon, PlusIcon, SearchIcon, SparklesIcon, StarIcon, TargetIcon, UsersIcon } from '@/components/icons';
 
 /*
  * THE PARTS OF גילוי קבוצות THAT ARE WORTH MEASURING.
@@ -57,14 +57,22 @@ export function Figure({ tone, value, label }: { tone: 'good' | 'warn' | 'brand'
        three of them are 64px of the top of this screen and the owner asked for
        the top back — measured, this is twelve of them, with nothing about the
        design language changed. */
-    <div className={`rounded-tile border px-2 py-1.5 ${skin.tint}`}>
+    /* data-figure: the three of them have to agree on four numbers, and
+       worker/test/discovery-row.test.ts finds them by this rather than by
+       position — by position the check could never fail. */
+    <div data-figure className={`rounded-tile border px-2 py-1.5 ${skin.tint}`}>
       <div className="flex items-center justify-center gap-1.5">
         <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${skin.chip} ${skin.text}`}>
           <Glyph aria-hidden className="h-3.5 w-3.5" />
         </span>
         <p className={`text-[19px] font-extrabold leading-none tabular-nums ${skin.text}`}>{value}</p>
       </div>
-      <p className="mt-1 text-center text-[11px] font-bold leading-tight text-mist-500">{label}</p>
+      {/* nowrap, not leading-tight: a label that wraps on one tile and not on
+          its neighbour makes three tiles of two different heights, which is
+          exactly what "בדיוק באותו גובה" is about. 10.5px is what lets the
+          longest of the three — "בקשות ממתינות" — sit on one line inside the
+          80px a tile has at 360. Measured, and measured for overflow too. */}
+      <p className="mt-1 whitespace-nowrap text-center text-[10.5px] font-bold leading-[14px] text-mist-500">{label}</p>
     </div>
   );
 }
@@ -137,7 +145,7 @@ export function GroupRow({
    */
   return (
     <div
-      className={`relative rounded-card border px-2.5 py-2 transition-all ${
+      className={`relative rounded-card border px-2 py-1.5 transition-all ${
         picked
           ? 'border-brand-400 bg-brand-400/[0.06] shadow-[0_2px_10px_-2px_rgba(46,16,101,0.14)]'
           : 'border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(46,16,101,0.04),0_8px_20px_-14px_rgba(46,16,101,0.18)]'
@@ -450,7 +458,7 @@ export function SearchCard({
         Measured at 390px, moving it alongside is the single biggest piece of
         the top this pass gives back.
       */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <div className="relative min-w-0 grow">
           <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-mist-500 start-3" />
           {/* dir="auto" and not "rtl": he searches in Hebrew, and the
@@ -468,7 +476,7 @@ export function SearchCard({
             onKeyDown={(e) => {
               if (e.key === 'Enter') onRun(text);
             }}
-            className={`${inputClass} h-12 rounded-tile pe-10 ps-10 text-base`}
+            className={`${inputClass} h-11 rounded-tile pe-10 ps-10 text-base`}
           />
           {/* The reference's clear button. It writes the same state the
               field does and runs no search of its own. */}
@@ -490,7 +498,10 @@ export function SearchCard({
           size="lg"
           busy={searching}
           onClick={() => onRun(text)}
-          className="h-12 shrink-0 whitespace-nowrap rounded-tile !min-h-12 !px-3.5 shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
+          /* 48×63 → 44×56, which is the 10-15% the brief asks for, and every
+             pixel of it goes to the field beside it. Still over the 44px
+             floor; worker/test/discovery-row.test.ts measures that. */
+          className="h-11 shrink-0 whitespace-nowrap rounded-tile !min-h-11 !px-3 shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
         >
           {searching ? 'מחפש…' : 'חפש'}
         </Button>
@@ -505,7 +516,12 @@ export function SearchCard({
           search silently added 44px to this card. The bleed and padding keep a
           chip's focus ring from being clipped by the overflow.
         */
-        <div className="-mx-1 mt-2 min-w-0 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        /* EDGE TO EDGE OF THE CARD. The scroller used to sit inside the
+           card's own padding, so the first and last chip were cut by it mid-
+           word — "נחתכת בקצוות". Bleeding out by the padding and putting it
+           back inside the scroller lets a chip scroll all the way to the
+           card's edge and stop there. */
+        <div className="-mx-3 mt-2 min-w-0 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex w-max items-center gap-1.5">
             <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-mist-500">
               <ClockIcon aria-hidden className="h-3.5 w-3.5" />
@@ -522,7 +538,7 @@ export function SearchCard({
                     onText(s.query);
                     onRun(s.query);
                   }}
-                  className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-bold transition-colors ${
+                  className={`inline-flex min-h-10 items-center whitespace-nowrap rounded-full border px-3 text-[11px] font-bold transition-colors ${
                     on
                       ? 'border-brand-400 bg-brand-400/10 text-brand-400 shadow-[0_1px_4px_-1px_rgba(109,40,217,0.3)]'
                       : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600 hover:bg-ink-800'
@@ -536,6 +552,96 @@ export function SearchCard({
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * THE FILTER ROW AND THE SORT UNDER IT.
+ *
+ * A component for the same reason SearchCard is: it is part of the top of this
+ * screen, the owner asked for the top to be smaller, and a claim about pixels
+ * has to be measured. Every value and handler is the page's own.
+ */
+export function FilterRow<F extends string, S extends string>({
+  filters,
+  filterLabel,
+  filter,
+  onFilter,
+  sorts,
+  sortLabel,
+  sort,
+  onSort,
+}: {
+  filters: readonly F[];
+  filterLabel: Record<F, string>;
+  filter: F;
+  onFilter: (f: F) => void;
+  sorts: readonly S[];
+  sortLabel: Record<S, string>;
+  sort: S;
+  onSort: (s: S) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      {/* EDGE TO EDGE OF THE SCREEN, not of the page's padding. Inside it the
+          first and last chip were cut mid-word by the gutter; bleeding out by
+          the gutter and putting it back inside the scroller lets a chip reach
+          the screen's edge and stop there. */}
+      <div className="-mx-4 min-w-0 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex w-max gap-1.5">
+          {filters.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => onFilter(f)}
+              className={`inline-flex min-h-10 items-center whitespace-nowrap rounded-full border px-3 text-[11px] font-bold transition-colors ${
+                filter === f
+                  /* brand-600 → brand-500, NOT → brand-300.
+                     White on brand-300 measures 4.23:1 and the pill's 12px
+                     label came out at 4.40 — under the 4.5 AA asks for.
+                     globals.css says it outright: brand-300 is the indicator
+                     step, "using the bright accent as text is exactly the
+                     mistake the split exists to prevent". Both ends here are
+                     fills a white label sits on. */
+                  ? 'border-transparent bg-gradient-to-l from-brand-600 to-brand-500 text-on-brand shadow-[0_2px_8px_-2px_rgba(124,58,237,0.45)]'
+                  : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600'
+              }`}
+            >
+              {filterLabel[f]}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/*
+        "במקום 3 כפתורים גדולים: הצג שורה קטנה — מיון: הכי רלוונטיות ▼".
+        The same state, the same setter, the same list and the same labels; a
+        native select so the options open as the phone's own list.
+
+        QUIETER THAN IT WAS — "לא להפוך אותה לאלמנט בולט". The pill had a
+        border and a fill of its own, which made a sort control look like one
+        of the filters above it. It is plain text now, and the 44px the select
+        overlay already had is what a thumb still gets.
+      */}
+      <div className="flex justify-center">
+        <label className="relative inline-flex items-center gap-1 rounded-full px-2 text-[11px] font-bold text-mist-500">
+          <span>מיון:</span>
+          <span className="text-mist-300">{sortLabel[sort]}</span>
+          <ChevronDownIcon aria-hidden className="pointer-events-none h-3 w-3" />
+          <select
+            aria-label="סדר התוצאות"
+            value={sort}
+            onChange={(e) => onSort(e.target.value as S)}
+            className="absolute inset-0 h-11 w-full cursor-pointer opacity-0"
+          >
+            {sorts.map((o) => (
+              <option key={o} value={o}>
+                {sortLabel[o]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </div>
   );
 }
 
@@ -574,11 +680,6 @@ export function ResultsCard({
         <p className="min-w-0 grow text-[19px] font-extrabold leading-tight text-mist-100">
           נמצאו <span className="tabular-nums">{totals.total}</span> קבוצות
         </p>
-        {fresh > 0 && (
-          <Badge tone="brand">
-            {fresh === 1 ? 'אחת חדשה' : `${fresh} חדשות`}
-          </Badge>
-        )}
         {onToggleWatch && (
           <button
             type="button"
@@ -594,9 +695,17 @@ export function ResultsCard({
           </button>
         )}
       </div>
-      <p dir="auto" className="truncate text-xs text-mist-500">
-        עבור החיפוש “{query}”
-      </p>
+      {/* THE BADGE RODE DOWN HERE. On the heading's line it was a second
+          bold thing on the row the heading owns — "לוודא שה-badge לא מתחרה עם
+          הכותרת" — and it pushed the heading off centre when the count was
+          long. Beside the quiet line it reads as what it is: a note about the
+          same search. The heading now has the row to itself and the star. */}
+      <div className="flex items-center gap-2">
+        <p dir="auto" className="min-w-0 grow truncate text-xs text-mist-500">
+          עבור החיפוש “{query}”
+        </p>
+        {fresh > 0 && <Badge tone="brand">{fresh === 1 ? 'אחת חדשה' : `${fresh} חדשות`}</Badge>}
+      </div>
       {/* The brief's order, read right-to-left as the page is: new,
           waiting, already joined. Same three values, same three tones,
           same labels — only the order they sit in. */}
@@ -614,7 +723,11 @@ export function ResultsCard({
         so the promise and the set are the same thing.
       */}
       {joinedNotListed > 0 && (
-        <Button variant="secondary" busy={adoptBusy} onClick={onAdoptAll} className="mt-2 h-11 w-full !min-h-11">
+        /* "להוסיף אייקון + קטן, להקטין מעט את הגובה, לשמור על outline סגול."
+           The variant is the outline; the height is 44 → 40, which is still a
+           target; the label and the handler are the ones that were here. */
+        <Button variant="secondary" busy={adoptBusy} onClick={onAdoptAll} className="mt-2 h-10 w-full !min-h-10 !gap-1.5 !text-[12.5px]">
+          <PlusIcon aria-hidden className="h-3.5 w-3.5" />
           הוסף לרשימה את {joinedNotListed} הקבוצות שאתה כבר חבר בהן
         </Button>
       )}
@@ -653,16 +766,18 @@ export function MyGroupsCard({
   pictures?: Map<string, string>;
 }) {
   return (
-      <Card padded={false} className="px-3 py-2.5">
+      /* py-2.5 → py-2: the 20% of vertical padding the brief asks for, off a
+         card that is mostly one sentence. */
+      <Card padded={false} className="px-3 py-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
           {/* The target glyph from the brief's first panel. Decoration only —
               aria-hidden, no handler, and the heading beside it is the same
               text it always was. */}
           <span
             aria-hidden
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-tile bg-gradient-to-br from-brand-500 to-brand-300 text-on-brand shadow-[0_3px_10px_-3px_rgba(124,58,237,0.5)]"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-tile bg-gradient-to-br from-brand-500 to-brand-300 text-on-brand shadow-[0_3px_10px_-3px_rgba(124,58,237,0.5)]"
           >
-            <TargetIcon className="h-5 w-5" />
+            <TargetIcon className="h-4 w-4" />
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[15px] font-extrabold text-mist-100">הקבוצות שלך בפייסבוק</p>
@@ -676,7 +791,7 @@ export function MyGroupsCard({
                     : `מתוך ${joined.length} קבוצות שאתם חברים בהן, ${missing.length} עוד לא ברשימת הפרסום.`}
             </p>
           </div>
-          <Button size="sm" variant="secondary" busy={scanning} onClick={onScan} className="whitespace-nowrap">
+          <Button size="sm" variant="secondary" busy={scanning} onClick={onScan} className="h-10 whitespace-nowrap !min-h-10 !px-2.5 !text-[12px]">
             {joined && joined.length ? 'בדוק שוב' : 'בדוק את הקבוצות שלי'}
           </Button>
         </div>

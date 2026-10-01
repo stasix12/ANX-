@@ -1049,7 +1049,15 @@ const eq = (a: unknown, b: unknown, msg: string) => {
      this screen may reach it, and the pill, which carries a 12px label, may
      not. Pinned on the pill itself rather than by sweeping every gradient,
      because only the pill's contrast is a text contrast. */
-  const pill = page.slice(page.indexOf('{FILTERS.map('), page.indexOf('<SegmentedControl'));
+  /* The pill moved to FilterRow in Discovery.tsx so a browser could measure
+     the row it sits in. Both ends of the slice are checked before it is cut:
+     a missing anchor gives indexOf -1, slice returns the wrong half of the
+     file, and the two assertions below would then be about somewhere else. */
+  const filterSrc = readFileSync(new URL('../../src/components/social/Discovery.tsx', import.meta.url), 'utf8');
+  const pillFrom = filterSrc.indexOf('{filters.map((f) => (');
+  const pillTo = filterSrc.indexOf('{filterLabel[f]}', pillFrom);
+  is(pillFrom >= 0 && pillTo > pillFrom, 'the filter pill is where this check cuts the file');
+  const pill = filterSrc.slice(pillFrom, pillTo);
   is(/from-brand-600 to-brand-500 text-on-brand/.test(pill), 'the selected filter pill runs brand-600 → brand-500 — both fills a white LABEL is allowed on');
   is(
     !/to-brand-300|from-brand-300/.test(pill),

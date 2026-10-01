@@ -52,7 +52,7 @@ function builtCss(): string | null {
  * measured maximum plus four pixels: enough that a font metric changing by a
  * hair is not a failure, not enough for a fourth line of anything.
  *
- * 174 → 144 → 127, EACH STEP MEASURED AND EACH ASKED FOR.
+ * 174 → 144 → 127 → 123, EACH STEP MEASURED AND EACH ASKED FOR.
  *
  * The last step is the design specification: "כל Group Card יהיה בערך בגובה
  * 110-130px", with the picture moved to the far side, the action under the
@@ -81,7 +81,11 @@ function builtCss(): string | null {
  *
  * The ceiling is the measured maximum plus four, as it has always been.
  */
-const MAX_ROW = 127;
+/* The last step is the polish pass: "לצמצם מעט padding" on the row, px-2.5
+   py-2 → px-2 py-1.5. Measured, the worst row at 360 went 123 → 119 and every
+   row at 390 and 430 went 102 → 98. Ceiling is the measured maximum plus
+   four, as always in this file. */
+const MAX_ROW = 123;
 
 async function main(): Promise<void> {
   const css = builtCss();
@@ -543,24 +547,85 @@ async function main(): Promise<void> {
              word beside the field, and a word beside a field is exactly where
              a 36px control gets shipped. */
           search: (() => {
-            const b = [...document.querySelectorAll('button')].find((e) => /חפש|מחפש/.test(e.textContent || ''));
+            const b = [...document.querySelectorAll('button')].find((e) => /^(חפש|מחפש)/.test((e.textContent || '').trim()));
             const r = b?.getBoundingClientRect();
             return r ? { w: Math.round(r.width), h: Math.round(r.height) } : null;
           })(),
+          /*
+           * THE THREE TILES, WHICH THE BRIEF ASKS TO BE IDENTICAL.
+           *
+           * "בדיוק באותו רוחב, בדיוק באותו גובה, אותו radius, אותו padding."
+           * They were not: at 360px "בקשות ממתינות" wrapped to a second line
+           * and its tile stood 12px taller than the two beside it. Four
+           * numbers per tile and a set of each is the whole check — a set of
+           * one means all three agree.
+           */
+          tiles: [...document.querySelectorAll('[data-figure]')].map((t) => {
+            const r = t.getBoundingClientRect();
+            const cs = getComputedStyle(t);
+            const label = t.querySelector('p:last-of-type');
+            return {
+              w: Math.round(r.width),
+              h: Math.round(r.height),
+              radius: cs.borderRadius,
+              pad: `${cs.paddingTop}/${cs.paddingRight}/${cs.paddingBottom}/${cs.paddingLeft}`,
+              /* A nowrap label wider than its tile is a word running out of
+                 its own box, which is how this looked before the wrap was
+                 forbidden. */
+              clipped: !!label && label.scrollWidth > label.clientWidth + 1,
+            };
+          }),
+          /*
+           * EVERY CONTROL UP HERE, AS A TARGET. The whole pass made things
+           * smaller on purpose, and 40px is this product's measured floor —
+           * the chips went from 44 to 40 and the next notch down is a mis-tap.
+           */
+          small: [...document.querySelectorAll('button,a,select,label')]
+            /* A <label> whose own box is short but which carries a full-size
+               <select> laid over it is not the control — the select is, and it
+               is measured in its own right on the next line. The sort row is
+               drawn as plain text on purpose ("לא להפוך אותה לאלמנט בולט")
+               and gets its 44px from the invisible select above it. */
+            .filter((e) => {
+              if (e.tagName !== 'LABEL') return true;
+              const inner = e.querySelector('select');
+              return !inner || inner.getBoundingClientRect().height < 40;
+            })
+            .map((e) => {
+              const r = e.getBoundingClientRect();
+              return { what: (e.textContent || e.getAttribute('aria-label') || '?').trim().slice(0, 18), w: Math.round(r.width), h: Math.round(r.height) };
+            })
+            .filter((t) => t.w > 0 && (t.h < 40 || t.w < 24)),
         };
       });
       await page.close();
       const say = (m: string) => `${width}px: ${m}`;
-      checks += 4;
-      assert.ok(top.blocks.length === 3, say(`the top fixture rendered ${top.blocks.length} blocks, not three — nothing below is measuring the top`));
+      checks += 8;
+      assert.ok(top.blocks.length === 4, say(`the top fixture rendered ${top.blocks.length} blocks, not four — nothing below is measuring the top`));
       assert.equal(top.overflow, false, say('the top of the screen pushes the page sideways'));
       assert.ok(
-        top.height <= 429,
-        say(`the top of גילוי קבוצות is ${top.height}px (${top.blocks.join(' + ')}) — it measured 509 before this pass and 411 after, and this is the ceiling that holds it`),
+        top.search !== null && top.search.h >= 44 && top.search.w >= 50,
+        say(`the search button is ${top.search ? `${top.search.w}×${top.search.h}` : 'missing'} — the polish pass took 10-15% off it, not its target`),
       );
+      assert.equal(top.tiles.length, 3, say(`the fixture drew ${top.tiles.length} statistic tiles, not three`));
+      assert.equal(
+        new Set(top.tiles.map((t) => `${t.w}×${t.h} r${t.radius} p${t.pad}`)).size,
+        1,
+        say(`the three tiles are not identical — ${top.tiles.map((t) => `${t.w}×${t.h} r${t.radius} p${t.pad}`).join(' | ')}`),
+      );
+      assert.deepEqual(
+        top.tiles.filter((t) => t.clipped),
+        [],
+        say('a statistic tile cut its own label — the label is ours and may not be half-read'),
+      );
+      assert.deepEqual(top.small, [], say(`a control at the top of the screen is under the 40px floor — ${JSON.stringify(top.small)}`));
+      /* The ceiling LAST, so a specific failure above it is the one reported:
+         every way of making this screen taller also trips one of those, and
+         "the top is 532px" is a worse sentence to debug than "one tile is not
+         the size of the other two". */
       assert.ok(
-        top.search !== null && top.search.h >= 44 && top.search.w >= 60,
-        say(`the search button is ${top.search ? `${top.search.w}×${top.search.h}` : 'missing'} — it lost its own line, not its target`),
+        top.height <= 526,
+        say(`the top of גילוי קבוצות is ${top.height}px (${top.blocks.join(' + ')}) and this is the ceiling that holds it`),
       );
     }
   } finally {

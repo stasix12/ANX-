@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
-import { GroupRow, MyGroupsCard, ResultsCard, SearchCard, WalkThrough } from '@/components/social/Discovery';
+import { FilterRow, GroupRow, MyGroupsCard, ResultsCard, SearchCard, WalkThrough } from '@/components/social/Discovery';
 import {
-  Badge,
   Button,
   ButtonLink,
   CARD_ELEVATED,
@@ -13,7 +12,6 @@ import {
   ErrorState,
   Notice,
   SkeletonList,
-  inputClass,
   useToast,
 } from '@/components/social/ui';
 import {
@@ -46,7 +44,7 @@ import {
 import { friendlyMessage } from '@/lib/social/errors';
 import { relativeHe } from '@/lib/social/time';
 import type { DiscoveredGroupRow, DiscoverySearchRow } from '@/lib/social/types';
-import { ChevronDownIcon, ClockIcon, CloseIcon, EyeIcon, SearchIcon, StarIcon, UsersIcon } from '@/components/icons';
+import { CloseIcon, EyeIcon, SearchIcon, UsersIcon } from '@/components/icons';
 
 /**
  * גילוי קבוצות — "מצא קבוצות חדשות שמתאימות לעסק שלך".
@@ -620,58 +618,16 @@ export default function DiscoverPage() {
             which would be wrong on the one device nobody tested. The chips
             scroll with the list, like every other filter row in this product. */}
         {rows !== null && totals.total > 0 && (
-          <div className="-mx-1 space-y-2 px-1">
-            <div className="-mx-1 min-w-0 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex w-max gap-1.5">
-                {FILTERS.map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setFilter(f)}
-                    className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full border px-3.5 text-xs font-bold transition-colors ${
-                      filter === f
-                        /* brand-600 → brand-500, NOT → brand-300.
-                           White on brand-300 measures 4.23:1 and the pill's
-                           12px label came out at 4.40 — under the 4.5 AA asks
-                           for. globals.css says it outright: brand-300 is the
-                           indicator step, "using the bright accent as text is
-                           exactly the mistake the split exists to prevent".
-                           Both ends here are fills a white label sits on. */
-                        ? 'border-transparent bg-gradient-to-l from-brand-600 to-brand-500 text-on-brand shadow-[0_2px_8px_-2px_rgba(124,58,237,0.45)]'
-                        : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600'
-                    }`}
-                  >
-                    {FILTER_LABEL[f]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/*
-              "במקום 3 כפתורים גדולים: הצג שורה קטנה — מיון: הכי רלוונטיות ▼".
-              The same `sort` state, the same setter, the same SORTS and the
-              same labels; a native select so the options open as the phone's
-              own list and the row costs one line instead of three buttons.
-            */}
-            <div className="flex justify-center">
-              <label className="relative inline-flex items-center gap-1 rounded-full border border-ink-700 bg-ink-900 ps-3 text-xs font-bold text-mist-300">
-                <span className="text-mist-500">מיון:</span>
-                <span className="text-brand-400">{SORT_LABEL[sort]}</span>
-                <ChevronDownIcon aria-hidden className="pointer-events-none me-2.5 h-3.5 w-3.5 text-mist-500" />
-                <select
-                  aria-label="סדר התוצאות"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as typeof sort)}
-                  className="absolute inset-0 h-11 w-full cursor-pointer opacity-0"
-                >
-                  {SORTS.map((s) => (
-                    <option key={s} value={s}>
-                      {SORT_LABEL[s]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </div>
+          <FilterRow
+            filters={FILTERS}
+            filterLabel={FILTER_LABEL}
+            filter={filter}
+            onFilter={setFilter}
+            sorts={SORTS}
+            sortLabel={SORT_LABEL}
+            sort={sort}
+            onSort={setSort}
+          />
         )}
 
         {/* ───────────────────────────── the list ─────────────────────────── */}

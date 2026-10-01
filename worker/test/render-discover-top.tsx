@@ -11,7 +11,12 @@
  * 20 whose membership the cards did not state.
  */
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MyGroupsCard, ResultsCard, SearchCard } from '@/components/social/Discovery';
+import { FilterRow, MyGroupsCard, ResultsCard, SearchCard } from '@/components/social/Discovery';
+import { FILTER_LABEL, SORT_LABEL, type DiscoveryFilter, type DiscoverySort } from '@/lib/social/discovery';
+
+/* The page's own two lists, which are locals there. */
+const FILTERS: DiscoveryFilter[] = ['all', 'none', 'member', 'requested', 'public', 'private'];
+const SORTS: DiscoverySort[] = ['relevance', 'members', 'name'];
 
 const searches = [
   { id: '1', query: 'באר שבע', normalized: 'באר שבע', watching: false },
@@ -25,7 +30,7 @@ const text = 'באר שבע';
 const active = 'באר שבע';
 const searching = false;
 const fresh: number = 0;
-const joinedNotListed: unknown[] = [];
+const joinedNotListed: unknown[] = [{}, {}];
 const activeSearch = { id: '1', query: 'באר שבע', normalized: 'באר שבע', watching: false };
 const adoptAll = () => {};
 const toggleWatch = (_s: unknown) => {};
@@ -73,6 +78,18 @@ const after = (
       joinedNotListed={joinedNotListed.length}
       adoptBusy={false}
       onAdoptAll={adoptAll}
+    />
+    {/* The filters and the sort are part of the top too — they are the last
+        thing between the search and the first result. */}
+    <FilterRow
+      filters={FILTERS}
+      filterLabel={FILTER_LABEL}
+      filter="all"
+      onFilter={() => {}}
+      sorts={SORTS}
+      sortLabel={SORT_LABEL}
+      sort="relevance"
+      onSort={() => {}}
     />
   </div>
 );

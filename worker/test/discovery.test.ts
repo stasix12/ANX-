@@ -8,6 +8,7 @@ import {
   mergeDiscovered,
   membersText,
   nameMatches,
+  JOINED_QUERY,
   newSince,
   normalizeQuery,
   parseMembers,
@@ -219,6 +220,60 @@ const eq = (a: unknown, b: unknown, msg: string) => {
 
   eq(interpretCard({ href: '/groups/1/', name: '   ', text: 'x' }), null, 'a nameless card is not shown — it is always a row that had not finished rendering');
   eq(interpretCard({ href: '/marketplace/', name: 'x', text: 'y' }), null, 'and neither is something that is not a group');
+
+  /*
+   * A GROUP WHOSE NAME CONTAINS THE WORDS THE READER IS LOOKING FOR.
+   *
+   * These three names are from the owner's own screenshot — the ninety-three he
+   * was shown as his own groups. The leaked search is what put them in front of
+   * the reader, and that is fixed four ways over; but what made them say "he is
+   * a member" is separate and would have outlived the leak: the prose fallback
+   * reads the card's whole text, the card's text contains the group's NAME, and
+   * MEMBER matches the bare word "joined".
+   *
+   * So any group called "...Nobody Joined" was a group this account belonged
+   * to, from its title alone. The pattern cannot be narrowed — "joined" on a
+   * Facebook card really does mean you are in the group — so the name is taken
+   * out of the text before the question is asked.
+   */
+  const named = (name: string, text = '', buttons: string[] = []) =>
+    interpretCard({ href: '/groups/99/', name, text: `${name} · ${text}`, buttons })?.membership;
+
+  eq(named('I Started a Facebook Group But Nobody Joined', '4 members'), 'unknown', 'a group named "...Joined" makes no claim about membership — its title is not evidence');
+  eq(named('JAMS Joined Artists Musicians and Singers', '2 members'), 'unknown', 'nor does this one, which is how it reached a card saying "הקבוצות שלך"');
+  eq(named('joined me', '1 member'), 'unknown', 'nor the shortest of them');
+
+  /* Hebrew and Russian the same way — it was never an English problem. */
+  eq(named('חבר בקבוצה שלנו', 'קבוצה ציבורית'), 'unknown', 'a Hebrew name carrying the membership words is still only a name');
+  eq(named('Перейти в группу Беэр-Шева', 'Открытая группа'), 'unknown', 'and a Russian one');
+
+  /* AND THE REAL SIGNALS STILL WORK, which is the half that makes it a fix
+     rather than a mute: the same words OUTSIDE the name, and a button. */
+  eq(named('באר שבע ביחד', 'אתה חבר בקבוצה'), 'member', 'the same words outside the name still mean what they mean');
+  eq(named('I Started a Facebook Group But Nobody Joined', '', ['הצטרפות']), 'none', 'and a join button on such a card is read normally');
+  eq(named('joined me', 'You are a member'), 'member', 'a card that really says it, about a group named for the word, is believed');
+
+  /*
+   * AND THE SAME THING FOR THE OTHER TWO FACTS ON THE CARD.
+   *
+   * Membership is the one that reached him, so it was the one I looked at —
+   * and the first version of this fix applied only there, with a comment
+   * claiming the count and the privacy word could not be imitated by a name.
+   * They can. The group below is named for its own privacy, and the one after
+   * it carries a number, and both are ordinary Hebrew group names.
+   */
+  const full = (name: string, text: string) => interpretCard({ href: '/groups/98/', name, text: `${name} · ${text}` });
+
+  eq(full('קבוצה פרטית של באר שבע', 'קבוצה ציבורית · 500 חברים')?.privacy, 'public', 'a group NAMED private is read from its card, not from its title');
+  eq(full('באר שבע', 'קבוצה פרטית · 500 חברים')?.privacy, 'private', 'and a card that says private still says private');
+  /* A bare number in a name cannot reach the count — parseMembers wants the
+     number AND the word beside it. A name that carries BOTH can, and group
+     names are written this way all the time. The first version of this
+     assertion used "דרושים 2 עובדים", which has no such word, so it passed
+     with the fix removed and proved nothing. */
+  eq(full('באר שבע — 10,000 חברים', '54.3 אלף חברים')?.members, 54_300, 'a count ADVERTISED IN THE NAME does not override the card — it is what the group calls itself, not what Facebook counted');
+  eq(full('Беэр-Шева 5000 участников', '12 тыс. участников')?.members, 12_000, 'the same in Russian, where the pair is just as common in a name');
+  eq(full('באר שבע ביחד', '54.3 אלף חברים')?.members, 54_300, 'while the real count is untouched');
 }
 
 /* ------------------------------------------------------------ de-duping */
@@ -565,6 +620,80 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(!/text|payload|cookie|token/i.test(line), "and nothing else — a diagnostic that logs a page's whole text is a diagnostic nobody should ship");
 }
 
+/* ------------------- the reserved phrase, and the day it reached Facebook */
+{
+  /*
+   * "מה זה הקבוצות האלה??? אני לא הוספתי אותם."
+   *
+   * His "my groups" card filled with "JAMS Joined Artists Musicians and
+   * Singers", "joined me" and "I Started a Facebook Group But Nobody Joined" —
+   * ninety-three of them, offered as groups he belongs to, one button press
+   * from the publishing list.
+   *
+   * ONE MISTAKE, THREE DOORS IT WALKED THROUGH. The scan files its results
+   * under JOINED_QUERY so they share the table. That row came back from
+   * listSearches as an ordinary saved search; the screen loads the newest
+   * search into the box on arrival, so it typed "@joined" into the box; the
+   * machine searched it literally and Facebook returned every group with
+   * "joined" in its name; and because those landed in the same bucket, they
+   * became the "my groups" list.
+   *
+   * He never typed it. So all three doors are shut, and each is tested: it is
+   * not a chip, it is not loadable, it is not searchable — and the card no
+   * longer trusts the bucket alone.
+   */
+  const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../../src/app/social/discover/page.tsx', import.meta.url), 'utf8');
+
+  is(/\.neq\('normalized', JOINED_QUERY\)/.test(client), 'DOOR 1: the reserved phrase is not a saved search, so it is never a chip');
+  is(/s\.normalized !== JOINED_QUERY/.test(page), 'DOOR 2: and the screen will not load it into the box by itself');
+  is(
+    queryProblem(JOINED_QUERY).includes('ביטוי פנימי'),
+    'DOOR 3: and it is refused as a search however it got into the box',
+  );
+  is(queryProblem('@JOINED  ') === queryProblem(JOINED_QUERY), 'in any spelling the normaliser folds to the same thing');
+  eq(queryProblem('באר שבע'), '', 'while a real phrase is untouched');
+
+  is(
+    /rows\.filter\(\(r\) => r\.membership === 'member'\)/.test(client),
+    "THE SECOND LOCK: the card no longer trusts the bucket alone — a group is his only if the read CONFIRMED membership, which only Facebook's own list of his groups does",
+  );
+
+  /*
+   * AND NEITHER OF THE TWO LOCKS ABOVE IS ON THE MACHINE THAT DOES THE WORK.
+   *
+   * Doors 1-3 are in the dashboard, which is deployed the moment it is written;
+   * the program that opens the browser is whatever was last installed on
+   * somebody's PC, and the phrase travels between them as a row in a table. A
+   * refusal that only exists in the newest build of the screen is not a
+   * refusal — the owner's machine would still search it, and an old build, a
+   * stale tab or a hand-written row would still ask.
+   *
+   * So the worker refuses the phrase itself, and the single function that
+   * writes the table refuses to file a row under it without a confirmed
+   * membership. That last one is the floor: with it, the junk the card showed
+   * him could not have been written at all, by any caller.
+   */
+  const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  is(
+    /normalizeQuery\(phrase\) === JOINED_QUERY/.test(worker),
+    'DOOR 4: the machine that would open the browser refuses the reserved phrase on its own, not because the screen said so',
+  );
+  const writer = worker.slice(worker.indexOf('async function recordDiscovered'));
+  is(
+    /normalized === JOINED_QUERY && groups\.some\(\(g\) => g\.membership !== 'member'\)/.test(
+      writer.slice(0, writer.indexOf('const { error }')),
+    ),
+    'THE FLOOR: the one writer of the table will not file anything in the reserved bucket that does not carry a confirmed membership',
+  );
+  is(
+    /throw new Error/.test(
+      writer.slice(writer.indexOf('normalized === JOINED_QUERY'), writer.indexOf('const ids =')),
+    ),
+    'and it throws rather than skipping quietly — a bucket silently half-written is the bug that cannot be reported',
+  );
+}
+
 /* ------------------------ the groups he is in, read off his own list */
 {
   const mine = readFileSync(new URL('../facebook/mygroups.ts', import.meta.url), 'utf8');
@@ -615,6 +744,23 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   const block = card.slice(card.indexOf('export function MyGroupsCard'));
   is(/missing\.slice\(0, 8\)/.test(block), 'and the names are on screen before the button is pressed — a blind bulk add is not a bulk add');
   is(/הוסף את \{missing\.length\} הקבוצות/.test(block), 'the label names the count, so the promise and the set are the same thing');
+
+  /*
+   * AND A WAY OUT THAT IS NOT A RELEASE.
+   *
+   * Everything above is a rule of mine, and a rule of mine is what let
+   * ninety-three groups he had never joined onto this card. The dismiss beside
+   * each name is the only part of it that works when I am wrong again — so it
+   * is guarded here as well as measured in a browser, because the measurement
+   * SKIPS without a built stylesheet and a skipped check is not a check.
+   */
+  is(/aria-label=\{`זאת לא קבוצה שלי/.test(block), 'every name on the card can be dismissed by the person reading it');
+  is(/onHide\(row\)/.test(block), 'and the dismiss acts on that row, not on the list');
+  is(/h-11 w-11/.test(block), "with a target a thumb can hit — this card is read on a phone");
+  is(/onHide=\{hideJoined\}/.test(page), 'the screen wires it to its own handler');
+  const joinedHide = page.slice(page.indexOf('async function hideJoined'), page.indexOf('async function hide('));
+  is(/hideDiscovered\(row\.id, true\)/.test(joinedHide), 'which hides the row rather than deleting it — nothing he taught the app is thrown away');
+  is(/setJoined\(/.test(joinedHide) && /setRows\(/.test(joinedHide), 'and updates BOTH lists, because the same row can be in the card and in the search results');
 }
 
 console.log(`discovery tests OK — ${checks} assertions`);

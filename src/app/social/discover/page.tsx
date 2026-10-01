@@ -32,6 +32,7 @@ import {
 } from '@/lib/social/client';
 import {
   FILTER_LABEL,
+  JOINED_QUERY,
   SORT_LABEL,
   matchesFilter,
   newSince,
@@ -143,7 +144,10 @@ export default function DiscoverPage() {
         setJoined(mine);
         setWorkerOnline(workers.some((w) => w.online));
         setWorkerId(workers.find((w) => w.online)?.id ?? workers[0]?.id ?? null);
-        const last = saved.find((s) => s.last_run_at);
+        /* listSearches already drops the reserved phrase; this is belt. The
+           screen loading a phrase into the box by itself is how "@joined"
+           reached Facebook at all. */
+        const last = saved.find((s) => s.last_run_at && s.normalized !== JOINED_QUERY);
         if (last) {
           setActive(last.query);
           setText(last.query);
@@ -410,6 +414,34 @@ export default function DiscoverPage() {
     }
   }
 
+  /**
+   * "זאת לא קבוצה שלי" — one name off the card, without waiting for a fix.
+   *
+   * The card once filled with ninety-three groups he had never joined, and
+   * every lock that stops that is a rule I wrote: four of them now, each
+   * checked by a test, and the one before them was also checked by a test. So
+   * the card gets the thing none of them can give it — a way for the person
+   * looking at a wrong name to remove it himself, the same minute he sees it,
+   * from the same list the bulk button promises.
+   *
+   * Hidden rather than deleted, like every other dismissal here: the row stays,
+   * so a later scan does not bring it back and nothing he taught the app is
+   * thrown away. Its own state, because the card reads `joined` and the search
+   * results read `rows` — the same database row can be in both.
+   */
+  async function hideJoined(row: DiscoveredGroupRow) {
+    setBusyId(row.id);
+    try {
+      await hideDiscovered(row.id, true);
+      setJoined((was) => (was ?? []).map((r) => (r.id === row.id ? { ...r, hidden: true } : r)));
+      setRows((was) => (was ?? []).map((r) => (r.id === row.id ? { ...r, hidden: true } : r)));
+    } catch (err) {
+      toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function hide(row: DiscoveredGroupRow) {
     setBusyId(row.id);
     try {
@@ -472,6 +504,8 @@ export default function DiscoverPage() {
           busy={busyId === 'joined'}
           onScan={scanJoined}
           onAdopt={adoptJoined}
+          onHide={hideJoined}
+          busyId={busyId}
         />
 
         {/* ─────────────────────────── the search box ─────────────────────── */}

@@ -336,6 +336,8 @@ export function MyGroupsCard({
   busy,
   onScan,
   onAdopt,
+  onHide,
+  busyId,
 }: {
   /** Everything the scan has ever found. null = not read yet. */
   joined: DiscoveredGroupRow[] | null;
@@ -345,6 +347,9 @@ export function MyGroupsCard({
   busy: boolean;
   onScan: () => void;
   onAdopt: () => void;
+  /** "זאת לא קבוצה שלי" — one name off this list. See hideJoined. */
+  onHide: (row: DiscoveredGroupRow) => void;
+  busyId: string | null;
 }) {
   return (
       <Card padded={false} className="px-3 py-3.5">
@@ -379,6 +384,18 @@ export function MyGroupsCard({
                   <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-300">
                     {row.name}
                   </span>
+                  {/* The one control on this card that is not mine to get
+                      right: a name he can see is wrong, gone in one tap,
+                      instead of waiting for the next version. */}
+                  <button
+                    type="button"
+                    aria-label={`זאת לא קבוצה שלי: ${row.name}`}
+                    disabled={busyId === row.id}
+                    onClick={() => onHide(row)}
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-500 hover:bg-ink-900 disabled:opacity-40"
+                  >
+                    <CloseIcon aria-hidden className="h-4 w-4" />
+                  </button>
                 </li>
               ))}
             </ul>

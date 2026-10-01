@@ -1412,6 +1412,28 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
               ? `נמצאו ${mine.groups.length} קבוצות שאתה חבר בהן${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${mine.truncated ? ' יש עוד — הרשימה ארוכה מהרגיל.' : ''}`
               : 'לא הצלחנו לקרוא את רשימת הקבוצות שלך בפייסבוק.';
           }
+        } else if (normalizeQuery(phrase) === JOINED_QUERY) {
+          /*
+           * THE RESERVED PHRASE IS NOT A SEARCH, AND THIS IS WHERE THAT IS TRUE.
+           *
+           * It reached a real Facebook search once: the phrase the "my groups"
+           * scan files its results under came back from listSearches as an
+           * ordinary saved search, the screen loads the newest search into the
+           * box on arrival, and the machine searched "joined" literally.
+           * Ninety-three English groups with "joined" in their names landed in
+           * the bucket the "הקבוצות שלך בפייסבוק" card reads, and he was one
+           * button from putting them in his publishing list — groups he had
+           * never heard of, let alone joined.
+           *
+           * The screen refuses it too (queryProblem), and the screen is not
+           * where a refusal belongs: the phrase arrives in a row of a database
+           * table, and the dashboard that wrote it is a different program on a
+           * different machine, often a different version. So the branch that
+           * would open the browser says no on its own, and the bucket cannot be
+           * poisoned by any caller — old build, new build, or hand-written row.
+           */
+          ok = false;
+          result = 'זה ביטוי פנימי של המערכת ולא מילת חיפוש.';
         } else if (!phrase || phrase.length > 80) {
           ok = false;
           result = phrase ? 'מילת החיפוש ארוכה מדי.' : 'לא צוין מה לחפש.';
@@ -2279,6 +2301,27 @@ async function recordDiscovered(
   const db = await workerDb();
   const stored = await storeDiscoveryPictures(pictures);
   const normalized = normalizeQuery(phrase);
+
+  /*
+   * THE RESERVED BUCKET HAS EXACTLY ONE WRITER, AND IT IS CHECKED HERE.
+   *
+   * Everything filed under JOINED_QUERY is read back by the card that says
+   * "these are your groups on Facebook" and offered for the publishing list, so
+   * a row in it is a claim about membership that nobody re-checks. Only
+   * readMyGroups() may make that claim, because it reads Facebook's own list of
+   * this account's groups — where membership is true by construction rather
+   * than parsed out of the words on a card, which has been wrong on this
+   * account twice.
+   *
+   * So the one function that writes the table refuses to file anything there
+   * that does not carry a confirmed membership. The screen filters, the command
+   * branch refuses the phrase, and this is the floor under both: whatever asked
+   * for it, the junk cannot be written in the first place.
+   */
+  if (normalized === JOINED_QUERY && groups.some((g) => g.membership !== 'member')) {
+    throw new Error('סירוב פנימי: תחת הביטוי השמור נשמרת רק רשימת הקבוצות של החשבון עצמו.');
+  }
+
   const ids = groups.map((g) => g.externalId);
 
   const { data: existing } = await db

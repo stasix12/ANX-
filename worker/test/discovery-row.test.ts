@@ -159,6 +159,80 @@ async function main(): Promise<void> {
       const slots = new Set(seen.rows.map((r) => r.avatar));
       checks += 1;
       assert.equal(slots.size, 1, say(`the picture slot differs between rows (${[...slots].join(', ')}) — the list's edge would move row to row`));
+
+      /*
+       * THE "הקבוצות שלך בפייסבוק" CARD, WHICH NOW HAS A ✕ ON EVERY LINE.
+       *
+       * The card listed ninety-three groups he had never joined and offered to
+       * add all of them at once. Four locks stop that from being written now,
+       * and every one of them is a rule I wrote — the same kind of rule that
+       * was already in place when it happened. So the card also got the thing a
+       * rule cannot give it: a dismiss beside each name, for the person who can
+       * see the name is wrong.
+       *
+       * It is a 44px control pushed into a line whose middle item truncates, in
+       * an RTL page, beside Hebrew, Cyrillic and mixed-script names and one
+       * name long enough to fill the card. That shape has already pushed a
+       * control off a 360px screen once in this feature, so it is measured and
+       * not reasoned about: every ✕ reachable by a thumb, every name still
+       * readable beside it, nothing past the card's own edge.
+       */
+      const cardPage = await browser.newPage({ viewport: { width, height: 1200 } });
+      await cardPage.goto(`file://${path.join(dir, 'index.html')}`);
+      await cardPage.waitForTimeout(200);
+      const cardSeen = await cardPage.evaluate(() => {
+        /* The card's own root, whatever element Card renders — a tag name here
+           is a selector that stops matching when the primitive changes and
+           reads as "the card is gone". */
+        const probe = document.querySelector('.card-probe > *') as HTMLElement | null;
+        if (!probe) return null;
+        const box = probe.getBoundingClientRect();
+        const lines = [...probe.querySelectorAll('li')];
+        return {
+          /* The dismiss on each line, found by the label a screen reader
+             reads — so deleting the button is a missing line, not a silent
+             pass. */
+          dismisses: lines.map((li) => {
+            const b = li.querySelector('button[aria-label^="זאת לא קבוצה שלי"]') as HTMLElement | null;
+            const bb = b?.getBoundingClientRect();
+            const name = li.querySelector('span[dir="auto"]') as HTMLElement | null;
+            const nb = name?.getBoundingClientRect();
+            return {
+              /* Square and thumb-sized, both dimensions. */
+              h: bb ? Math.round(bb.height) : 0,
+              w: bb ? Math.round(bb.width) : 0,
+              /* Inside the card, which on a phone is the whole question. */
+              inside: !!bb && bb.left >= box.left - 1 && bb.right <= box.right + 1,
+              /* And the name it belongs to is still worth reading. */
+              nameWidth: nb ? Math.round(nb.width) : 0,
+              nameInside: !!nb && nb.left >= box.left - 1 && nb.right <= box.right + 1,
+            };
+          }),
+          /* The bulk button names the count; it must not be clipped either. */
+          adoptInside: [...probe.querySelectorAll('button')].every((b) => {
+            const bb = b.getBoundingClientRect();
+            return bb.width === 0 || (bb.left >= box.left - 1 && bb.right <= box.right + 1);
+          }),
+          overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        };
+      });
+      await cardPage.close();
+
+      checks += 2;
+      assert.ok(cardSeen, say('the "my groups" card did not render at all'));
+      assert.equal(cardSeen.dismisses.length, 5, say('the card lost lines — the fixture and the card disagree'));
+      checks += 1;
+      assert.equal(cardSeen.overflow, false, say('the card pushed the page sideways'));
+      checks += 1;
+      assert.equal(cardSeen.adoptInside, true, say("a control in the card is outside the card's own box"));
+      for (const [i, d] of cardSeen.dismisses.entries()) {
+        checks += 5;
+        assert.ok(d.h >= 40, say(`the dismiss on card line ${i} is ${d.h}px tall — under a thumb's 40px`));
+        assert.ok(d.w >= 40, say(`the dismiss on card line ${i} is ${d.w}px wide — under a thumb's 40px`));
+        assert.ok(d.inside, say(`the dismiss on card line ${i} is outside the card — off the screen on a phone`));
+        assert.ok(d.nameWidth > 60, say(`card line ${i} squeezed its name to ${d.nameWidth}px — the ✕ ate the name it is for`));
+        assert.ok(d.nameInside, say(`card line ${i}'s name is outside the card`));
+      }
     }
   } finally {
     await browser.close();

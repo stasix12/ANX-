@@ -26,7 +26,7 @@
  *     than any other row.
  */
 import { renderToStaticMarkup } from 'react-dom/server';
-import { GroupRow } from '@/components/social/Discovery';
+import { GroupRow, MyGroupsCard } from '@/components/social/Discovery';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
 
 const row = (over: Partial<DiscoveredGroupRow>): DiscoveredGroupRow => ({
@@ -79,7 +79,63 @@ const body = cases
   )
   .join('');
 
+/*
+ * AND THE CARD, WHICH WAS NEVER MEASURED UNTIL IT HAD A BUG IN IT.
+ *
+ * "מה זה הקבוצות האלה??? אני לא הוספתי אותם" — the card filled with
+ * ninety-three groups he had never joined. Four locks now stop that, all of
+ * them rules, and the card got the one thing a rule cannot give it: a ✕ beside
+ * every name, so a wrong one goes in a tap instead of in a release.
+ *
+ * That ✕ is a 44px control dropped into a row whose middle item truncates, in
+ * an RTL page, next to names in three scripts — which is the exact shape that
+ * has already pushed controls off a 360px screen once in this feature. The
+ * comment in page.tsx claimed this fixture measured the card. It did not. It
+ * does now, with the same four scripts and the same long name, because an
+ * unmeasured touch target on a phone is the thing the owner reports.
+ */
+const cardRows = [
+  row({ external_id: 'c1', name: 'באר שבע ביחד', membership: 'member' }),
+  row({ external_id: 'c2', name: 'Наша Беэр-Шева 24', members: 12_000, privacy: 'private', membership: 'member' }),
+  row({ external_id: 'c3', name: 'Беэр-Шева — באר שבע והסביבה', membership: 'member' }),
+  row({
+    external_id: 'c4',
+    name: 'קבוצת תושבי שכונת נווה זאב ורמות באר שבע — קניה, מכירה, המלצות ועסקים מקומיים',
+    membership: 'member',
+  }),
+  /*
+   * A NAME WITH NOWHERE TO BREAK, which is the only shape that actually tests
+   * the truncation. Every other name here has spaces, so it wraps and the
+   * line stays inside the card whether or not it truncates at all — deleting
+   * `min-w-0 truncate` from the name passed the measurement, which made the
+   * guard worthless. Russian group names really are written this way, as one
+   * closed compound, and one of them is enough to push the ✕ off a 360px
+   * screen.
+   */
+  row({
+    external_id: 'c5',
+    name: 'БеэрШеваОбъявленияКуплюПродамОтдамБесплатноБарахолкаЮгИзраиля',
+    members: 3_100,
+    membership: 'member',
+  }),
+];
+
+const card = `
+  <p style="color:#9aa;font:12px sans-serif;margin:22px 0 4px">the "my groups" card</p>
+  <div class="card-probe">${renderToStaticMarkup(
+    MyGroupsCard({
+      joined: cardRows,
+      missing: cardRows,
+      scanning: false,
+      busy: false,
+      onScan: () => {},
+      onAdopt: () => {},
+      onHide: () => {},
+      busyId: null,
+    }) as never,
+  )}</div>`;
+
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
-<body class="bg-ink-950"><div class="social-theme" style="padding:16px">${body}</div></body></html>`);
+<body class="bg-ink-950"><div class="social-theme" style="padding:16px">${body}${card}</div></body></html>`);

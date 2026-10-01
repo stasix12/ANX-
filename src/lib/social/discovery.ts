@@ -295,10 +295,45 @@ export function interpretCard(raw: RawCard): DiscoveredGroup | null {
     url: groupUrl(externalId),
     name,
     image: raw.image ?? '',
-    members: parseMembers(text),
-    privacy: parsePrivacy(text),
-    membership: parseMembership(text, raw.buttons ?? []),
+    /*
+     * EVERY FACT IS READ FROM THE CARD WITH THE GROUP'S OWN NAME TAKEN OUT.
+     *
+     * A card's text contains its name, so until now the name was evidence
+     * about the group it names. A group called "I Started a Facebook Group But
+     * Nobody Joined" matched MEMBER on the word in its title and was written
+     * down as a group this account belongs to — not a hypothetical: it is one
+     * of the ninety-three the owner was shown as his own, and the reason some
+     * of them carry `member` in his database today.
+     *
+     * The patterns cannot be narrowed to fix it. "joined", "חבר בקבוצה" and
+     * "перейти в группу" really are what Facebook writes on a card about a
+     * group you are in; the name is simply the wrong place to look for them.
+     *
+     * And it was never only membership — that was the one that reached him, so
+     * it was the one I looked at. A group named "קבוצה פרטית של באר שבע" reads
+     * as private from its title, and a number in a name can be picked up as a
+     * member count. All three questions are about the group, and the name is
+     * the answer to none of them, so all three are asked of the text without
+     * it rather than of whichever ones I can think of an example for.
+     */
+    members: parseMembers(withoutName(text, name)),
+    privacy: parsePrivacy(withoutName(text, name)),
+    membership: parseMembership(withoutName(text, name), raw.buttons ?? []),
   };
+}
+
+/**
+ * The card's text with the group's own name removed.
+ *
+ * Every occurrence, not the first: a card commonly repeats its name — in the
+ * picture's alt text, in the link, in the heading — and one copy left behind is
+ * the whole bug. Replaced by a space rather than deleted, so two phrases the
+ * name sat between do not become one word.
+ */
+function withoutName(text: string, name: string): string {
+  if (!text || !name) return text;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(escaped, 'gi'), ' ');
 }
 
 /**
@@ -470,6 +505,16 @@ export const MAX_QUERY = 80;
 export function queryProblem(q: string): string {
   const clean = normalizeQuery(q);
   if (!clean) return 'צריך להקליד מה לחפש — עיר, אזור או נושא.';
+  /*
+   * THE RESERVED PHRASE IS NOT SEARCHABLE, and this is the third lock on one
+   * mistake. It leaked into the saved-search chips, the screen loaded it into
+   * the box by itself, and Facebook searched "@joined" literally — filling the
+   * owner's "my groups" card with "joined me" and "I Started a Facebook Group
+   * But Nobody Joined". The chips no longer carry it and the card checks
+   * membership, but a phrase that would poison the bucket must also simply be
+   * refused, however it got into the box.
+   */
+  if (clean === JOINED_QUERY) return 'זה ביטוי פנימי של המערכת ולא מילת חיפוש. השתמשו בכפתור "בדוק את הקבוצות שלי".';
   if (clean.length < MIN_QUERY) return 'מילת חיפוש קצרה מדי — לפחות שתי אותיות.';
   if (clean.length > MAX_QUERY) return `מילת חיפוש ארוכה מדי — עד ${MAX_QUERY} תווים.`;
   return '';

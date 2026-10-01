@@ -237,12 +237,27 @@ export async function listDiscovered(query?: string): Promise<DiscoveredGroupRow
   return unwrap<DiscoveredGroupRow[]>(await q);
 }
 
-/** The chips under the search box — what he has looked for before. */
+/**
+ * The chips under the search box — what he has looked for before.
+ *
+ * THE RESERVED PHRASE IS NOT ONE OF THEM, and leaving it in did real damage.
+ * The "my own groups" scan files its results under JOINED_QUERY so they share
+ * the table, and that row came back here as an ordinary saved search: it
+ * appeared as a chip, the screen loaded the newest search into the box on
+ * arrival, and Facebook was handed "@joined" to search. It searched it
+ * literally. The owner's screen filled with "JAMS Joined Artists Musicians
+ * and Singers" and "I Started a Facebook Group But Nobody Joined", offered as
+ * groups he belongs to — and because those results were filed under the same
+ * reserved phrase, they became the "my groups" list itself.
+ *
+ * He never typed it. The machinery typed it for him.
+ */
 export async function listSearches(limit = 12): Promise<DiscoverySearchRow[]> {
   return unwrap<DiscoverySearchRow[]>(
     await db()
       .from('social_discovery_searches')
       .select('id, query, normalized, watching, last_run_at, previous_run_at, last_found')
+      .neq('normalized', JOINED_QUERY)
       .order('last_run_at', { ascending: false, nullsFirst: false })
       .limit(limit),
   );
@@ -286,9 +301,23 @@ export async function startJoinedScan(workerId: string | null): Promise<{ id: st
   return sendWorkerCommand(workerId, 'discover', { source: 'joined' });
 }
 
-/** Everything that scan has ever found. */
+/**
+ * Everything that scan has ever found — AND ONLY WHAT IT CONFIRMED.
+ *
+ * The bucket alone is not enough. It was, and the owner watched ninety-three
+ * groups named things like "joined me" offered to him as his own: a literal
+ * search for the reserved phrase had landed in the same bucket, and the card
+ * showed whatever was in it.
+ *
+ * `membership = member` is the second lock and the honest one. readMyGroups
+ * sets it on every row it returns, because Facebook's own list of a person's
+ * groups IS their membership; nothing a search writes can claim it without
+ * the card having said so. Two independent things now have to be true before
+ * a group is called his.
+ */
 export async function listJoined(): Promise<DiscoveredGroupRow[]> {
-  return listDiscovered(JOINED_QUERY);
+  const rows = await listDiscovered(JOINED_QUERY);
+  return rows.filter((r) => r.membership === 'member');
 }
 
 /** "לא מעניין אותי" — kept rather than deleted, or the next search brings it back. */

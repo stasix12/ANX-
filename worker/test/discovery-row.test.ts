@@ -90,9 +90,12 @@ async function main(): Promise<void> {
      * A SKIPPED CHECK IS NOT A CHECK — my own words, two files over, while
      * this one skipped and exited 0.
      *
-     * Everything measured here is measured nowhere else: that the ✕ on the
-     * card is 44px and inside the card at 360px, that a Cyrillic name resolves
-     * left-to-right, that no row pushes the page sideways. On a tree where
+     * Everything measured here is measured nowhere else: that every control
+     * in a row gives a thumb 40px in BOTH directions and the ⋮ 44, that the
+     * dismiss on the card is 40px and inside the card at 360px, that a
+     * Cyrillic name resolves left-to-right, that the picture is on the row's
+     * right and the button on its left, that no row pushes the page
+     * sideways. On a tree where
      * `npm run build` has not run, all of it passed while asserting nothing —
      * and `npm run test:social` went green.
      *

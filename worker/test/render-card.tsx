@@ -149,7 +149,7 @@ const body = cases.map(([label, c, s, posts, media, paused]) => `
   <div class="card-probe">${renderToStaticMarkup(
     CampaignCard({ campaign: c as never, state: s as never, postCount: posts as number,
       hasPost: (posts as number) > 0, media: media as never, globalPaused: paused === true, workerOnline: true,
-      onPause: () => {}, onResume: () => {}, onEdit: () => {}, onDuplicate: () => {},
+      onPause: () => {}, onResume: () => {}, editHref: '/social/posts/p1', onDuplicate: () => {},
       onDelete: () => {}, addPostHref: '/x', busy: false,
       schedule: schedules[(c as { id: string }).id] ?? null,
       onScheduleChange: schedules[(c as { id: string }).id] ? () => {} : undefined }) as never,

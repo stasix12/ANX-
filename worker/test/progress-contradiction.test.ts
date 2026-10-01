@@ -1018,9 +1018,19 @@ async function main(): Promise<void> {
       false,
       NONE,
     );
-    /* And the sheet still says what it is, now that it is only reachable from
-       "ערוך" on a campaign that already exists. */
-    pin('the editor sheet is for editing', camp, 'title="עריכת קמפיין"');
+    /*
+     * AND "ערוך" OPENS THE POST — "אני רוצה שיהיה אפשר לערוך את טקסט הפרסום /
+     * תמונת מדיה של הפוסט ולא את מה שזה נותן עכשיו. את זה תמחק לא רלוונטי."
+     *
+     * This read `pin('the editor sheet is for editing', camp, 'title="עריכת
+     * קמפיין"')` — the sheet of service, city, name, language and notes, none
+     * of which is what goes out. The sheet is deleted, so the pin is inverted:
+     * it must not come back, and the button it stood behind must point at the
+     * screen that holds the text and the pictures.
+     */
+    expect('guards', 'source-drift', 'the campaign-rename sheet is gone, not orphaned', camp.includes('עריכת קמפיין'), false, NONE);
+    pin('"ערוך" opens this campaign\u2019s post', camp, 'editHref={mine.length ? `/social/posts/${mine[0].id}`');
+    pin('and a campaign with no post gets a new one already attached to it', camp, '`/social/posts/new?campaign=${c.id}`}');
   }
 
   /* The bottom bar is the navigation. A card of shortcuts to screens the tab

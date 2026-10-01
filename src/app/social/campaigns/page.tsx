@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CampaignCard } from '@/components/social/CampaignCard';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
@@ -11,11 +10,8 @@ import {
   ButtonLink,
   EmptyState,
   ErrorState,
-  Field,
   SegmentedControl,
-  Sheet,
   SkeletonList,
-  inputClass,
   useConfirm,
   useToast,
 } from '@/components/social/ui';
@@ -23,7 +19,6 @@ import {
   campaignStates,
   deleteCampaign,
   duplicateCampaign,
-  getBusiness,
   getControl,
   listCampaigns,
   listPosts,
@@ -36,11 +31,9 @@ import {
 } from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { readSchedule, scheduleColumns, type CampaignSchedule } from '@/lib/social/campaign-schedule';
-import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type ControlSettings, type Post } from '@/lib/social/types';
+import type { Campaign, ControlSettings, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { MegaphoneIcon } from '@/components/icons';
-
-const blank = { name: '', service: '', city: '', language: 'he' as Campaign['language'], notes: '' };
 
 type Filter = 'live' | 'all' | 'done';
 
@@ -57,7 +50,6 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [states, setStates] = useState<Record<string, CampaignState>>({});
-  const [business, setBusiness] = useState<BusinessSettings>(DEFAULT_BUSINESS);
   /*
    * The two machine facts every run badge on this screen depends on, and this
    * page read neither. Without the control row the cards showed a green
@@ -68,8 +60,6 @@ export default function CampaignsPage() {
    */
   const [control, setControl] = useState<ControlSettings | null>(null);
   const [workerOnline, setWorkerOnline] = useState<boolean | undefined>(undefined);
-  const [form, setForm] = useState<typeof blank & { id?: string }>(blank);
-  const [editorOpen, setEditorOpen] = useState(false);
   /*
    * WHICH ROUND THE COMMENT SHEET IS ABOUT — and null when it is closed, so
    * one sheet serves every card instead of one mounted per row.
@@ -83,17 +73,18 @@ export default function CampaignsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [c, p, b, st, ctrl, workers] = await Promise.all([
+      /* getBusiness() used to be read here too — for the service and city
+         lists in the editing sheet, and for nothing else. The sheet is gone,
+         so the round trip went with it. */
+      const [c, p, st, ctrl, workers] = await Promise.all([
         listCampaigns(),
         listPosts(),
-        getBusiness(),
         campaignStates(),
         getControl(),
         listWorkers(),
       ]);
       setCampaigns(c);
       setPosts(p);
-      setBusiness(b);
       setStates(st);
       setControl(ctrl);
       setWorkerOnline(workers.some((w) => w.online));
@@ -143,11 +134,6 @@ export default function CampaignsPage() {
       return 0;
     });
   }, [campaigns, filter, stateOf]);
-
-  function openEditor(c?: Campaign) {
-    setForm(c ? { id: c.id, name: c.name, service: c.service, city: c.city, language: c.language, notes: c.notes } : { ...blank, service: business.services[0], city: business.cities[0] });
-    setEditorOpen(true);
-  }
 
   /*
    * ─── SAVING A CAMPAIGN'S PUBLISHING WINDOW ─────────────────────────────
@@ -263,18 +249,6 @@ export default function CampaignsPage() {
     );
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.name.trim()) return;
-    // Editing must never resurrect a stopped campaign, so status is only set
-    // when the campaign is being created.
-    const payload = form.id ? { ...form } : { ...form, status: 'active' as const };
-    /* Reachable only from "ערוך" again, so the word is "עודכן" again — the
-       conditional here was for a create path that has been taken away. */
-    await act('save', () => saveCampaign(payload), 'הקמפיין עודכן.');
-    setEditorOpen(false);
-  }
-
   return (
     <SocialShell
       title="קמפיינים"
@@ -285,9 +259,9 @@ export default function CampaignsPage() {
        *
        * The comment that originally stood here said: no "new run" action,
        * because a run is created by publishing a post. A brief asked for the
-       * button and I wired it to openEditor() — this page's own sheet, which
-       * is name, service, city, language and notes. That call does create a
-       * campaign row, so it was not broken; it was the wrong thing entirely.
+       * button and I wired it to this page's own editing sheet — name,
+       * service, city, language and notes. That call did create a campaign
+       * row, so it was not broken; it was the wrong thing entirely.
        * The owner pressed it expecting to write a post, attach pictures, pick
        * groups and set a time, and got a five-field form that produces an
        * empty shell: "למה לא נותן לי לרשום פוסט להוסיף תמונות לתזמן כמו שהיה
@@ -299,8 +273,11 @@ export default function CampaignsPage() {
        * the moment the post is scheduled — which is why this screen never had
        * a create button to begin with.
        *
-       * The sheet below stays exactly where it belongs: behind "ערוך" on a
-       * campaign that already exists, for renaming it.
+       * AND THE SHEET IT USED TO OPEN IS GONE — "את זה תמחק לא רלוונטי."
+       * "ערוך" now opens the post: its text and its pictures, which is what
+       * actually goes out. One consequence worth writing down: a campaign's
+       * name was only ever editable there, so it is now fixed at whatever the
+       * post was called when the run opened (ensureRunForPost names it).
        */
       /* The reference's primary: taller than the product's default button and
          at the card radius rather than the button one, because on this screen
@@ -390,15 +367,27 @@ export default function CampaignsPage() {
                 /*
                  * THE SAME HANDLERS THAT USED TO SIT IN A ROW UNDER THE CARD,
                  * handed to it instead. Not one of them is new or rewritten —
-                 * openEditor, duplicateCampaign, reopenCampaign, setCommentFor
-                 * and removeCampaign are exactly the functions this page
+                 * duplicateCampaign, reopenCampaign, setCommentFor and
+                 * removeCampaign are exactly the functions this page
                  * already called; only the place they are drawn has moved,
                  * from between two cards into the border of the one they act
                  * on. A red "מחק" a thumb-width from "שכפל", belonging to
                  * neither card visibly, is what that row was.
                  */
                 addPostHref={`/social/posts/new?campaign=${c.id}`}
-                onEdit={() => openEditor(c)}
+                /*
+                 * "ערוך" PRESSED ON A CAMPAIGN OPENS ITS POST.
+                 *
+                 * "אני רוצה שיהיה אפשר לערוך את טקסט הפרסום / תמונת מדיה של
+                 *  הפוסט ולא את מה שזה נותן עכשיו."
+                 *
+                 * `mine` is this campaign's posts and listPosts() orders by
+                 * updated_at descending, so mine[0] is the one last worked on
+                 * — the same post whose cover this card is already showing.
+                 * A campaign with no post at all gets the editor on a new one,
+                 * already attached to it, which is where "+ הוסף פוסט" goes.
+                 */
+                editHref={mine.length ? `/social/posts/${mine[0].id}` : `/social/posts/new?campaign=${c.id}`}
                 onDuplicate={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}
                 /* Only a stopped run can be put back — the card draws nothing
                    when this is undefined, which is how a menu item that cannot
@@ -466,59 +455,6 @@ export default function CampaignsPage() {
         }}
       />
 
-      <Sheet
-        open={editorOpen}
-        onClose={() => setEditorOpen(false)}
-        title="עריכת קמפיין"
-        footer={
-          <div className="flex gap-2">
-            <Button size="lg" busy={busy === 'save'} onClick={submit} className="grow" disabled={!form.name.trim()}>
-              שמור שינויים
-            </Button>
-            <Button variant="secondary" size="lg" onClick={() => setEditorOpen(false)}>
-              ביטול
-            </Button>
-          </div>
-        }
-      >
-        <form onSubmit={submit} className="space-y-3">
-          <Field label="שירות">
-            <select className={inputClass} value={form.service} onChange={(e) => setForm({ ...form, service: e.target.value })}>
-              {business.services.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-              <option value={form.service && !business.services.includes(form.service) ? form.service : 'אחר'}>אחר</option>
-            </select>
-          </Field>
-          <Field label="עיר / אזור">
-            <input className={inputClass} list="campaign-cities" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-            <datalist id="campaign-cities">
-              {business.cities.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          </Field>
-          <Field label="שם הקמפיין" hint="כך הוא יופיע בלוח הבקרה ובהיסטוריה">
-            <input
-              className={inputClass}
-              value={form.name}
-              onFocus={() => setForm((f) => ({ ...f, name: f.name || `${f.service || ''} ${f.city || ''}`.trim() }))}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="ניקוי ספות באר שבע"
-            />
-          </Field>
-          <Field label="שפה">
-            <select className={inputClass} value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value as Campaign['language'] })}>
-              <option value="he">עברית</option>
-              <option value="ru">רוסית</option>
-              <option value="mixed">שתיהן</option>
-            </select>
-          </Field>
-          <Field label="הערות">
-            <textarea className={`${inputClass} min-h-20`} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-          </Field>
-        </form>
-      </Sheet>
       {confirm.dialog}
     </SocialShell>
   );

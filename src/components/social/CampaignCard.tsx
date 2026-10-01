@@ -69,7 +69,7 @@ export function CampaignCard({
   workerOnline,
   postCount = 0,
   addPostHref,
-  onEdit,
+  editHref,
   onDuplicate,
   onReopen,
   onComment,
@@ -102,7 +102,23 @@ export function CampaignCard({
   /* ---- the actions that used to float underneath, now the card's own ---- */
   postCount?: number;
   addPostHref?: string;
-  onEdit?: () => void;
+  /*
+   * "ערוך" OPENS THE POST, not the campaign.
+   *
+   * "שאני לוחץ עריכה אני רוצה שיהיה אפשר לערוך את טקסט הפרסום / תמונת מדיה
+   *  של הפוסט ולא את מה שזה נותן עכשיו."
+   *
+   * It used to open a sheet with the campaign's service, city, name, language
+   * and notes — none of which is what goes out. What goes out is the post's
+   * text and its pictures, and this button now goes straight to the screen
+   * that holds them.
+   *
+   * AN href AND NOT A HANDLER, which is the point of the change rather than
+   * a detail of it: this is navigation, so it is a link. Long-press, open in
+   * a new tab and the browser's own prefetch all come back, and the card stops
+   * needing to know how to navigate.
+   */
+  editHref?: string;
   onDuplicate?: () => void;
   /** Only a stopped run can be put back; the page decides, this draws it. */
   onReopen?: () => void;
@@ -517,11 +533,11 @@ export function CampaignCard({
                 פתח קמפיין
               </ButtonLink>
             )}
-            {onEdit && (
-              <Button variant="secondary" size="sm" onClick={onEdit} className="h-11 shrink-0 whitespace-nowrap !gap-1 !min-h-11 !px-2 !text-[12px]">
+            {editHref && (
+              <ButtonLink href={editHref} variant="secondary" size="sm" className="h-11 shrink-0 whitespace-nowrap !gap-1 !min-h-11 !px-2 !text-[12px]">
                 <PencilIcon aria-hidden className="h-3.5 w-3.5" />
                 ערוך
-              </Button>
+              </ButtonLink>
             )}
             {/* The round ⋯ becomes the reference's square, bordered like the
                 button beside it. `!rounded-xl` because the component's own

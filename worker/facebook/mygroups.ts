@@ -1,6 +1,6 @@
 import type { Page } from 'playwright-core';
 import { fetchPictures, type CardPicture } from './discover';
-import { dedupe, groupIdFromHref, groupUrl, parseMembers, type DiscoveredGroup } from '../../src/lib/social/discovery';
+import { dedupe, groupIdFromHref, groupUrl, parseMembers, withoutName, type DiscoveredGroup } from '../../src/lib/social/discovery';
 
 /*
  * THE GROUPS THIS ACCOUNT IS ACTUALLY IN — read off Facebook's own list of
@@ -69,7 +69,11 @@ export async function readMyGroups(page: Page, opts: { pictures?: string[] } = {
         url: groupUrl(externalId),
         name,
         image: raw.image,
-        members: parseMembers(raw.text),
+        /* Without the name, for the reason interpretCard gives: the row's text
+           begins with the group's own name, and a group that advertises
+           "10,000 חברים" in its title would report that instead of what
+           Facebook counted. */
+        members: parseMembers(withoutName(raw.text, name)),
         /* The page says nothing about public or private, and inventing it
            would be worse than leaving the row honest. */
         privacy: 'unknown',

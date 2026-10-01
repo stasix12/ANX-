@@ -1408,8 +1408,31 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             result = mine.problem;
           } else {
             const wrote = await recordDiscovered(JOINED_QUERY, mine.groups, mine.pictures);
+            /*
+             * AND WHAT IS NO LONGER ON THE LIST COMES OFF THE CARD.
+             *
+             * Writing what was found is only half of reading a list. The owner
+             * opened the card and saw ninety-three groups he had never joined —
+             * "I Got Bored So I Joined a Bunch of Face Book Groups", "group
+             * joined" — offered as his own. A leaked search had put them in the
+             * bucket, and because their NAMES carry the word "joined" they were
+             * each written down as a membership. Both of those are fixed, and
+             * neither fix reaches a row already in his database: it is stored
+             * as `member`, so the card's membership filter shows it, and a
+             * re-scan never touches it because it is not on his list.
+             *
+             * It is not on his list — and that IS the answer. This page is
+             * Facebook's own complete enumeration of the groups an account is
+             * in, so a row in this bucket that the page does not mention is not
+             * a group of his, whether it arrived by that bug or because he
+             * simply left. A snapshot that only ever adds is not a snapshot.
+             *
+             * Nothing is deleted: the row keeps its name, its picture and its
+             * history, and only the claim that he is IN it is withdrawn.
+             */
+            const dropped = await reconcileJoined(mine.groups, mine.truncated);
             result = mine.groups.length
-              ? `נמצאו ${mine.groups.length} קבוצות שאתה חבר בהן${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${mine.truncated ? ' יש עוד — הרשימה ארוכה מהרגיל.' : ''}`
+              ? `נמצאו ${mine.groups.length} קבוצות שאתה חבר בהן${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${dropped ? ` ${dropped} קבוצות שכבר אינן ברשימה שלך בפייסבוק הוסרו מהכרטיס.` : ''}${mine.truncated ? ' יש עוד — הרשימה ארוכה מהרגיל, ולכן לא הסרנו הפעם כלום.' : ''}`
               : 'לא הצלחנו לקרוא את רשימת הקבוצות שלך בפייסבוק.';
           }
         } else if (normalizeQuery(phrase) === JOINED_QUERY) {
@@ -2237,6 +2260,55 @@ async function recordAccount(
  * read could not tell, in which case what was known last time is kept rather
  * than downgraded to "unknown".
  */
+/**
+ * The bucket, told what is NOT on Facebook's own list of this account's groups.
+ *
+ * ONLY EVER CALLED WITH A COMPLETE READ, and that is the whole safety of it.
+ * `truncated` means the scroll hit its ceiling instead of the end of the list,
+ * so the page did not finish enumerating — and a partial list used this way
+ * would quietly withdraw the membership of every group past the cut-off. The
+ * caller passes the flag and this refuses; the owner is told nothing was
+ * removed rather than left to discover it.
+ *
+ * It narrows further than it has to, twice over. Only rows that currently
+ * claim `member` are touched, so a row that already says nothing keeps saying
+ * nothing; and the claim is lowered to 'none' rather than the row being hidden
+ * or deleted, because `hidden` means "the owner dismissed this" and only he may
+ * say that. The row survives with its name, its picture and its first-seen
+ * date — what goes is one wrong sentence about it.
+ *
+ * @returns how many rows stopped claiming a membership.
+ */
+async function reconcileJoined(found: DiscoveredGroup[], truncated: boolean): Promise<number> {
+  if (truncated || !found.length) return 0;
+  const db = await workerDb();
+  /* The bucket is addressed by its query tag rather than by a column of its
+     own — the same array the search results use, so no migration. */
+  const { data, error } = await db
+    .from('social_discovery_groups')
+    .select('id, external_id, membership')
+    .contains('queries', [JOINED_QUERY]);
+  if (error) throw error;
+
+  const onTheList = new Set(found.map((g) => g.externalId));
+  const stale = (data ?? [])
+    .filter((row) => (row as StoredGroup).membership === 'member' && !onTheList.has((row as StoredGroup).external_id))
+    .map((row) => (row as { id: string }).id);
+  if (!stale.length) return 0;
+
+  /* In batches: this is an `in (...)` list in a URL, and the owner's account
+     reached a hundred and sixty-four groups in the bucket on its own. */
+  for (let at = 0; at < stale.length; at += 100) {
+    const { error: wrote } = await db
+      .from('social_discovery_groups')
+      .update({ membership: 'none' })
+      .in('id', stale.slice(at, at + 100));
+    if (wrote) throw wrote;
+  }
+  console.log(`[worker]    ${stale.length} קבוצות כבר לא ברשימת הקבוצות שלך בפייסבוק — הוסרו מהכרטיס`);
+  return stale.length;
+}
+
 /**
  * Every discovered group of this business that has no stored picture.
  *

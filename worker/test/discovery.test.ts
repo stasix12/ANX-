@@ -761,6 +761,45 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   const joinedHide = page.slice(page.indexOf('async function hideJoined'), page.indexOf('async function hide('));
   is(/hideDiscovered\(row\.id, true\)/.test(joinedHide), 'which hides the row rather than deleting it — nothing he taught the app is thrown away');
   is(/setJoined\(/.test(joinedHide) && /setRows\(/.test(joinedHide), 'and updates BOTH lists, because the same row can be in the card and in the search results');
+
+  /*
+   * AND THE ROWS THAT ARE ALREADY WRONG IN HIS DATABASE.
+   *
+   * This is the half I missed, and he found it: "למה זה עדיין מראה לי את זה?"
+   *
+   * Every junk name on his card carries the word "joined" — "group joined",
+   * "I Got Bored So I Joined a Bunch of Face Book Groups" — and the old reader
+   * took the card's prose, which CONTAINS the name, as evidence. So each one
+   * was written down as membership = member. Shutting the leak stops new ones;
+   * stripping the name fixes future reads; the filter on the card asks for
+   * `member` and these all SAY member. None of the three touches a row that is
+   * already stored, so the card would have looked identical after the fix.
+   *
+   * What fixes it is that the scan reads Facebook's own COMPLETE list of his
+   * groups. A row in this bucket that the list does not mention is not his —
+   * by that bug, or because he left. So the scan reconciles, and the guard
+   * below is the one that matters: never on a truncated read.
+   */
+  const recon = worker.slice(worker.indexOf('async function reconcileJoined'));
+  const body = recon.slice(0, recon.indexOf('\n}'));
+
+  is(/reconcileJoined\(mine\.groups, mine\.truncated\)/.test(worker), 'the scan reconciles the bucket against the list it just read');
+  is(
+    /if \(truncated \|\| !found\.length\) return 0;/.test(body),
+    'THE GUARD: a partial read reconciles NOTHING — a truncated list used this way withdraws the membership of every group past the cut-off',
+  );
+  is(/לא הסרנו הפעם כלום/.test(worker), 'and the owner is told that nothing was removed, rather than left to find out');
+  is(
+    /membership === 'member' && !onTheList\.has/.test(body),
+    'only a row that CLAIMS a membership is touched — one that already says nothing is left alone',
+  );
+  is(/update\(\{ membership: 'none' \}\)/.test(body), "the claim is withdrawn, not the row: nothing is deleted");
+  is(!/\.delete\(\)/.test(body), 'and nothing on this path deletes anything at all');
+  is(!/hidden/.test(body), "nor sets `hidden` — that word means the OWNER dismissed it, and only he may say so");
+  /* Anchored at both ends: /at \+= 100/ alone also matches `at += 100000`,
+     which is the batching removed. It passed that mutation. */
+  is(/at \+= 100\b(?!\d)/.test(body), 'in batches, because this is an in(...) list in a URL and his bucket already holds 164');
+  is(/slice\(at, at \+ 100\)/.test(body), 'and each batch is the slice that batch size describes');
 }
 
 console.log(`discovery tests OK — ${checks} assertions`);

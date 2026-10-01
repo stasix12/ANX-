@@ -330,7 +330,7 @@ export function interpretCard(raw: RawCard): DiscoveredGroup | null {
  * the whole bug. Replaced by a space rather than deleted, so two phrases the
  * name sat between do not become one word.
  */
-function withoutName(text: string, name: string): string {
+export function withoutName(text: string, name: string): string {
   if (!text || !name) return text;
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return text.replace(new RegExp(escaped, 'gi'), ' ');

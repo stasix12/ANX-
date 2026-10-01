@@ -143,58 +143,11 @@ export function GroupRow({
              The reference stacks these two — the checkbox at the head of the
              card and the one action at its foot, with the group's name between
              them and its picture on the far side. */}
-        <div className="flex w-[94px] shrink-0 flex-col items-start justify-between gap-1">
-          <button
-            type="button"
-            role="checkbox"
-            aria-checked={picked}
-            aria-label={`בחר את ${row.name}`}
-            onClick={onToggle}
-            className="-ms-1 grid h-10 w-10 shrink-0 place-items-center rounded-xl"
-          >
-            <span
-              className={`grid h-[22px] w-[22px] place-items-center rounded-md border-2 transition-colors ${
-                picked ? 'border-brand-500 bg-brand-500 text-on-brand shadow-[0_2px_6px_-1px_rgba(124,58,237,0.5)]' : 'border-ink-600 bg-ink-900'
-              }`}
-            >
-              {picked && <CheckIcon aria-hidden className="h-3 w-3" />}
-            </span>
-          </button>
-
-          {/*
-            ONE CONTROL, NEVER TWO. At phone width the room left once the
-            checkbox, the picture and the ⋮ have taken theirs is about 165px;
-            two filled buttons need two hundred, and
-            worker/test/discovery-row.test.ts caught what that costs — the row
-            went to 178px, or a button left the card.
-          */}
-          {canAdd ? (
-            <>
-              <Button size="sm" variant="primary" busy={busy} onClick={onAdopt} className="w-full whitespace-nowrap px-1 text-[11px]">
-                הוסף לרשימה
-              </Button>
-            </>
-          ) : (
-            <ButtonLink
-              href={row.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              size="sm"
-              variant={row.membership === 'member' ? 'secondary' : 'primary'}
-              /* The two skins the brief names, chosen by the SAME condition as
-                 before. `!` on the border because the secondary variant carries
-                 border-ink-700 and both are one-class border-colour utilities in
-                 the same layer — the later one wins. Measured in a browser:
-                 without it the purple edge never appeared at all. */
-              className={`w-full whitespace-nowrap px-1 text-[11px] ${
-                row.membership === 'member' ? '!border-brand-400/35 text-brand-400' : ''
-              }`}
-            >
-              {row.membership === 'member' ? 'פתח קבוצה' : 'פתח להצטרפות'}
-            </ButtonLink>
-          )}
-        </div>
-
+        {/* ─── the start of the row (RIGHT in RTL): the group's picture ───
+             "התמונות של הקבוצה יהיה בצד ימין וכפתורים בצד שמאל." Same
+             TargetAvatar, same sources, same size — it simply opens the row
+             now instead of closing it. */}
+        <TargetAvatar name={row.name} imageUrl={row.image_url || fallbackImage || null} channel="facebook_group" size={54} />
         {/* ─── the middle: what the group is ─── */}
         <div className="min-w-0 flex-1 self-center">
           {/*
@@ -250,12 +203,73 @@ export function GroupRow({
           </div>
         </div>
 
-        {/* ─── the far side: the picture, and the quiet action ───
+        {/* ─── the far side (LEFT in RTL): pick it, then act on it ───
+             The checkbox at the head of this column and the one action at its
+             foot, which is where they were before the picture and they traded
+             places. Every handler below is untouched. */}
+        <div className="flex w-[94px] shrink-0 flex-col items-end justify-between gap-1">
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={picked}
+            aria-label={`בחר את ${row.name}`}
+            onClick={onToggle}
+            /* No negative margin here any more. It was `-ms-1`, which nudged
+               the 22px box out toward the card's edge when this column sat at
+               the row's START; from the END side the mirror of it (`-me-1`)
+               would pull the 40px tap box to within 4px of the ⋮ beside it,
+               and those two mean opposite things. Flush instead: measured, the
+               box's outer edge lands exactly on the action button's below it. */
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+          >
+            <span
+              className={`grid h-[22px] w-[22px] place-items-center rounded-md border-2 transition-colors ${
+                picked ? 'border-brand-500 bg-brand-500 text-on-brand shadow-[0_2px_6px_-1px_rgba(124,58,237,0.5)]' : 'border-ink-600 bg-ink-900'
+              }`}
+            >
+              {picked && <CheckIcon aria-hidden className="h-3 w-3" />}
+            </span>
+          </button>
+
+          {/*
+            ONE CONTROL, NEVER TWO. At phone width the room left once the
+            checkbox, the picture and the ⋮ have taken theirs is about 165px;
+            two filled buttons need two hundred, and
+            worker/test/discovery-row.test.ts caught what that costs — the row
+            went to 178px, or a button left the card.
+          */}
+          {canAdd ? (
+            <>
+              <Button size="sm" variant="primary" busy={busy} onClick={onAdopt} className="w-full whitespace-nowrap px-1 text-[11px]">
+                הוסף לרשימה
+              </Button>
+            </>
+          ) : (
+            <ButtonLink
+              href={row.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              size="sm"
+              variant={row.membership === 'member' ? 'secondary' : 'primary'}
+              /* The two skins the brief names, chosen by the SAME condition as
+                 before. `!` on the border because the secondary variant carries
+                 border-ink-700 and both are one-class border-colour utilities in
+                 the same layer — the later one wins. Measured in a browser:
+                 without it the purple edge never appeared at all. */
+              className={`w-full whitespace-nowrap px-1 text-[11px] ${
+                row.membership === 'member' ? '!border-brand-400/35 text-brand-400' : ''
+              }`}
+            >
+              {row.membership === 'member' ? 'פתח קבוצה' : 'פתח להצטרפות'}
+            </ButtonLink>
+          )}
+        </div>
+
+        {/* ─── and the quiet one ───
              "כרגע יש X בצד הכרטיס. מבחינה ויזואלית הוא נראה כמו 'סגור'." The
              same onHide, as a ⋮. In the row's flow and never floating over it:
              floated, it measured 36×23px on top of "פתח להצטרפות" at every
              width, so a thumb aiming at the button hid the group instead. */}
-        <TargetAvatar name={row.name} imageUrl={row.image_url || fallbackImage || null} channel="facebook_group" size={54} />
         <button
           type="button"
           aria-label={`הסתר את ${row.name}`}
@@ -401,7 +415,7 @@ export function MyGroupsCard({
   pictures?: Map<string, string>;
 }) {
   return (
-      <Card padded={false} className="px-3 py-3.5">
+      <Card padded={false} className="px-3 py-2.5">
         <div className="flex flex-wrap items-start justify-between gap-2">
           {/* The target glyph from the brief's first panel. Decoration only —
               aria-hidden, no handler, and the heading beside it is the same
@@ -435,9 +449,9 @@ export function MyGroupsCard({
                 suggestions into some layouts of that page and the reader
                 drops them by their section heading — but a list he can read
                 is the honest second lock. */}
-            <ul className="mt-2.5 space-y-1.5">
+            <ul className="mt-2 space-y-1">
               {missing.slice(0, 8).map((row) => (
-                <li key={row.id} className="flex items-center gap-2 rounded-xl bg-ink-800/60 px-1.5 py-1">
+                <li key={row.id} className="flex items-center gap-2 rounded-xl bg-ink-800/60 px-1.5 py-0.5">
                   <TargetAvatar name={row.name} imageUrl={row.image_url || pictures?.get(row.external_id) || null} channel="facebook_group" size={28} />
                   <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-300">
                     {row.name}
@@ -450,7 +464,7 @@ export function MyGroupsCard({
                     aria-label={`זאת לא קבוצה שלי: ${row.name}`}
                     disabled={busyId === row.id}
                     onClick={() => onHide(row)}
-                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-500 hover:bg-ink-900 disabled:opacity-40"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-mist-500 hover:bg-ink-900 disabled:opacity-40"
                   >
                     <CloseIcon aria-hidden className="h-4 w-4" />
                   </button>
@@ -458,13 +472,13 @@ export function MyGroupsCard({
               ))}
             </ul>
             {missing.length > 8 && (
-              <p className="mt-1.5 text-xs text-mist-500">ועוד {missing.length - 8}…</p>
+              <p className="mt-1 text-xs text-mist-500">ועוד {missing.length - 8}…</p>
             )}
             {/* Same onClick, same busy, same label and the same count in it. */}
             <Button
               busy={busy}
               onClick={onAdopt}
-              className="mt-3 h-12 w-full rounded-tile bg-gradient-to-l from-brand-500 to-brand-300 shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
+              className="mt-2 h-11 w-full rounded-tile shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
             >
               הוסף את {missing.length} הקבוצות לרשימת הפרסום
             </Button>

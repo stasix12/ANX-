@@ -188,6 +188,40 @@ async function main(): Promise<void> {
                   .filter(Boolean);
               })(),
               /*
+               * WHICH SIDE OF THE ROW EACH THING IS ON.
+               *
+               * "ואת הכרטיסים למטה תשנה כיוון שהתמונות של הקבוצה יהיה בצד ימין
+               *  וכפתורים בצד שמאל." Source order decides this and reads the
+               * same either way round, so it is measured: the picture's middle
+               * has to be past the row's middle toward the start (right, in
+               * RTL) and the action's toward the end (left). `apart` is the
+               * clear space between them, which also catches the two of them
+               * sitting on top of each other.
+               */
+              sides: (() => {
+                const mid = rowBox.left + rowBox.width / 2;
+                const pic = (r.querySelector('img, span.grid.shrink-0') as HTMLElement | null)?.getBoundingClientRect();
+                /* The stacked column, found by its own width class rather than
+                   by position — by position this check could never fail. */
+                const column = [...r.querySelectorAll('div')].find((d) => d.className.includes('w-[94px]'));
+                const act = ([...(column?.querySelectorAll('a,button') ?? [])] as HTMLElement[])
+                  .find((e) => e.getAttribute('role') !== 'checkbox')
+                  ?.getBoundingClientRect();
+                const box = (column?.querySelector('[role=checkbox]') as HTMLElement | null)?.getBoundingClientRect();
+                return {
+                  found: !!pic && !!act,
+                  pictureAtStart: pic ? (pic.left + pic.right) / 2 > mid : false,
+                  actionAtEnd: act ? (act.left + act.right) / 2 < mid : false,
+                  apart: pic && act ? Math.round(pic.left - act.right) : -1,
+                  /* The checkbox's 40px tap box and the action below it share
+                     an outer edge. A negative inline margin here — the mirror
+                     of the one this layout used to carry on the other side —
+                     pulls that box to within 4px of the ⋮, and the two mean
+                     opposite things. */
+                  flush: box && act ? Math.round(box.left - act.left) : 99,
+                };
+              })(),
+              /*
                * WHAT THE ACTION ACTUALLY PAINTS, not which classes it carries.
                *
                * The brief asked for two button skins and the diff appeared to
@@ -226,6 +260,12 @@ async function main(): Promise<void> {
         assert.equal(r.escaped, 0, say(`row ${i} has ${r.escaped} controls outside the card`));
         checks += 1;
         assert.deepEqual(r.covered, [], say(`row ${i}: the ✕ sits on top of a control — ${r.covered.join(', ')}. A tap meant for it would hide the group.`));
+        checks += 5;
+        assert.ok(r.sides.found, say(`row ${i}: no picture or no action to measure — the selectors below would pass on an empty row`));
+        assert.ok(r.sides.pictureAtStart, say(`row ${i}'s picture is not on the right — "התמונות של הקבוצה יהיה בצד ימין"`));
+        assert.ok(r.sides.actionAtEnd, say(`row ${i}'s button is not on the left — "וכפתורים בצד שמאל"`));
+        assert.ok(r.sides.apart > 0, say(`row ${i}: ${r.sides.apart}px between the button and the picture — they overlap, or they have traded sides`));
+        assert.ok(Math.abs(r.sides.flush) <= 2, say(`row ${i}: the checkbox's tap box is ${r.sides.flush}px off the action's edge below it, which moves it toward the ⋮`));
       }
 
       /*
@@ -346,6 +386,7 @@ async function main(): Promise<void> {
             return bb.width === 0 || (bb.left >= box.left - 1 && bb.right <= box.right + 1);
           }),
           overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          height: Math.round(box.height),
         };
       });
       await cardPage.close();
@@ -363,6 +404,19 @@ async function main(): Promise<void> {
       );
       checks += 1;
       assert.equal(cardSeen.overflow, false, say('the card pushed the page sideways'));
+      /*
+       * AND ITS HEIGHT, because "החלק העליון... גבוה מדי ותופס יותר מדי מהמסך"
+       * was the whole of the last pass and nothing was stopping it growing
+       * back. With five missing groups on it the card measured 448px; tighter
+       * padding, a 40px dismiss per line and a shorter bulk button brought it
+       * to 382 — 14.7%, measured here rather than reasoned about. The ceiling
+       * is that plus four, as everywhere else in this file.
+       */
+      checks += 1;
+      assert.ok(
+        cardSeen.height <= 386,
+        say(`the "my groups" card is ${cardSeen.height}px, over the 386 a five-row card may take`),
+      );
       checks += 1;
       assert.equal(cardSeen.adoptInside, true, say("a control in the card is outside the card's own box"));
       for (const [i, d] of cardSeen.dismisses.entries()) {

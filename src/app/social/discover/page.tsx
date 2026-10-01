@@ -502,16 +502,24 @@ export default function DiscoverPage() {
          every other screen uses is untouched. Decoration: aria-hidden, no
          handler, nothing to press. */
       headerAction={
-        <span aria-hidden className="relative grid h-14 w-14 shrink-0 place-items-center">
-          <span className="absolute inset-0 rounded-full bg-brand-300/15 blur-[2px]" />
-          <UsersIcon className="relative h-8 w-8 text-brand-300" />
-          <span className="absolute bottom-0 end-0 grid h-7 w-7 place-items-center rounded-full border-2 border-ink-950 bg-gradient-to-br from-brand-500 to-brand-300 text-on-brand">
-            <SearchIcon className="h-3.5 w-3.5" />
+        /* 56px → 44px, and the glow halved. It read as a button at the old
+           size — a round filled badge beside a title is exactly what a control
+           looks like — so the halo is fainter, the magnifier badge is flat
+           rather than filled with the primary gradient, and the whole thing
+           sits on the title's own line. Decoration: aria-hidden, no handler. */
+        <span aria-hidden className="relative grid h-11 w-11 shrink-0 place-items-center self-center">
+          <span className="absolute inset-0 rounded-full bg-brand-300/[0.08]" />
+          <UsersIcon className="relative h-6 w-6 text-brand-300" />
+          <span className="absolute bottom-0 end-0 grid h-5 w-5 place-items-center rounded-full border-2 border-ink-950 bg-brand-400 text-on-brand">
+            <SearchIcon className="h-2.5 w-2.5" />
           </span>
         </span>
       }
     >
-      <div className="space-y-4">
+      {/* 16px → 12px between the blocks of this screen. Four gaps above the
+          results, so it is 16px of the height this pass is winning back, and
+          the one saving that costs nothing inside any card. */}
+      <div className="space-y-3">
         {error && <ErrorState message={error} onRetry={() => (active ? run(active) : undefined)} />}
 
         {workerOnline === false && (
@@ -558,8 +566,8 @@ export default function DiscoverPage() {
         />
 
         {/* ─────────────────────────── the search box ─────────────────────── */}
-        <Card padded={false} className="px-3 py-3.5">
-          <div className="flex flex-col gap-2.5">
+        <Card padded={false} className="px-3 py-2.5">
+          <div className="flex flex-col gap-2">
             <div className="relative flex-1">
               <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-mist-500 start-3" />
               {/* dir="auto" and not "rtl": he searches in Hebrew, and the
@@ -577,7 +585,7 @@ export default function DiscoverPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') run(text);
                 }}
-                className={`${inputClass} h-14 rounded-tile pe-11 ps-11 text-base`}
+                className={`${inputClass} h-[52px] rounded-tile pe-11 ps-11 text-base`}
               />
               {/* The reference's clear button. It writes the same state the
                   field does and runs no search of its own. */}
@@ -601,7 +609,7 @@ export default function DiscoverPage() {
                  own `.social-theme .grad-primary` is what paints a primary
                  button — two classes beat one, so a bg-gradient-* beside it
                  would change nothing. Measured. */
-              className="h-14 w-full rounded-tile shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
+              className="h-[54px] w-full rounded-tile shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
             >
               <SearchIcon aria-hidden className="h-5 w-5" />
               {searching ? 'מחפש…' : 'חפש קבוצות'}
@@ -610,33 +618,39 @@ export default function DiscoverPage() {
 
           {/* ───────────────────────── recent searches ────────────────────── */}
           {searches.length > 0 && (
-            <div className="mt-3">
-              <p className="mb-1.5 flex items-center gap-1 text-xs font-bold text-mist-500">
+            <div className="mt-2">
+              <p className="mb-1 flex items-center gap-1 text-xs font-bold text-mist-500">
                 <ClockIcon aria-hidden className="h-3.5 w-3.5" />
                 חיפושים אחרונים
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {searches.map((s) => {
-                  const on = s.normalized === normalizeQuery(active);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      dir="auto"
-                      onClick={() => {
-                        setText(s.query);
-                        run(s.query);
-                      }}
-                      className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-bold transition-colors ${
-                        on
-                          ? 'border-brand-400 bg-brand-400/10 text-brand-400 shadow-[0_1px_4px_-1px_rgba(109,40,217,0.3)]'
-                          : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600 hover:bg-ink-800'
-                      }`}
-                    >
-                      {s.query}
-                    </button>
-                  );
-                })}
+              {/* ONE ROW THAT SCROLLS, never a second line. Wrapped, a sixth
+                  saved search silently added 44px to this card — the height
+                  this whole pass is trying to win back. The bleed and padding
+                  keep a chip's focus ring from being clipped by the overflow. */}
+              <div className="-mx-1 min-w-0 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex w-max gap-1.5">
+                  {searches.map((s) => {
+                    const on = s.normalized === normalizeQuery(active);
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        dir="auto"
+                        onClick={() => {
+                          setText(s.query);
+                          run(s.query);
+                        }}
+                        className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-bold transition-colors ${
+                          on
+                            ? 'border-brand-400 bg-brand-400/10 text-brand-400 shadow-[0_1px_4px_-1px_rgba(109,40,217,0.3)]'
+                            : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600 hover:bg-ink-800'
+                        }`}
+                      >
+                        {s.query}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -665,7 +679,7 @@ export default function DiscoverPage() {
         {rows === null && <SkeletonList rows={4} />}
 
         {rows !== null && active && totals.total > 0 && (
-          <Card padded={false} className="px-3 py-3.5">
+          <Card padded={false} className="px-3 py-2.5">
             <div className="flex items-baseline justify-between gap-2">
               <p className="text-[19px] font-extrabold leading-tight text-mist-100">
                 נמצאו <span className="tabular-nums">{totals.total}</span> קבוצות
@@ -687,7 +701,7 @@ export default function DiscoverPage() {
                   aria-label={activeSearch.watching ? 'הפסק לעקוב אחרי החיפוש הזה' : 'עקוב אחרי החיפוש הזה'}
                   title={activeSearch.watching ? 'במעקב' : 'עקוב אחרי החיפוש הזה'}
                   onClick={() => toggleWatch(activeSearch)}
-                  className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl transition-colors hover:bg-ink-900 ${
+                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors hover:bg-ink-900 ${
                     activeSearch.watching ? 'text-warning-400' : 'text-mist-500'
                   }`}
                 >
@@ -698,7 +712,7 @@ export default function DiscoverPage() {
             {/* The brief's order, read right-to-left as the page is: new,
                 waiting, already joined. Same three values, same three tones,
                 same labels — only the order they sit in. */}
-            <div className="mt-3 grid grid-cols-3 gap-2 [&>*]:min-w-0">
+            <div className="mt-2 grid grid-cols-3 gap-2 [&>*]:min-w-0">
               <Figure tone="brand" value={totals.fresh} label="קבוצות חדשות" />
               <Figure tone="warn" value={totals.requested} label="בקשות ממתינות" />
               <Figure tone="good" value={totals.member} label="כבר הצטרפת" />

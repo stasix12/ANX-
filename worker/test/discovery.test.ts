@@ -901,7 +901,24 @@ const eq = (a: unknown, b: unknown, msg: string) => {
    */
   is(/aria-label=\{`זאת לא קבוצה שלי/.test(block), 'every name on the card can be dismissed by the person reading it');
   is(/onHide\(row\)/.test(block), 'and the dismiss acts on that row, not on the list');
-  is(/h-11 w-11/.test(block), "with a target a thumb can hit — this card is read on a phone");
+  /*
+   * A SQUARE, NOT A LITERAL.
+   *
+   * This read `h-11 w-11` until the card was compacted to a 40px dismiss, and
+   * it was the wrong thing to pin: the block it searches also holds the card's
+   * own 40px header tile, so the same regex passes with the dismiss's size
+   * class deleted. It is pinned to the ✕'s own tag now, and to a square of at
+   * least 40px rather than one exact number — the real floor is measured on the
+   * painted box in discovery-row.test.ts.
+   */
+  const dismissTag = block.slice(
+    block.indexOf('aria-label={`זאת לא קבוצה שלי'),
+    block.indexOf('</button>', block.indexOf('aria-label={`זאת לא קבוצה שלי')),
+  );
+  is(
+    /h-(1[0-2]) w-\1(?!\d)/.test(dismissTag),
+    'with a square target a thumb can hit — 40px at the smallest, on this card read on a phone',
+  );
 
   /*
    * THE PICTURE THIS APP ALREADY HAS.

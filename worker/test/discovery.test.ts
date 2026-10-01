@@ -274,6 +274,47 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   eq(full('באר שבע — 10,000 חברים', '54.3 אלף חברים')?.members, 54_300, 'a count ADVERTISED IN THE NAME does not override the card — it is what the group calls itself, not what Facebook counted');
   eq(full('Беэр-Шева 5000 участников', '12 тыс. участников')?.members, 12_000, 'the same in Russian, where the pair is just as common in a name');
   eq(full('באר שבע ביחד', '54.3 אלף חברים')?.members, 54_300, 'while the real count is untouched');
+
+  /*
+   * THE BUTTON LABELS, WHICH WERE THE HALF THAT ACTUALLY MATTERED.
+   *
+   * The first version of this fix stripped the name from the card's prose and
+   * handed the labels over untouched — and parseMembership asks the LABELS
+   * FIRST AND ALONE. So the fix cleaned the fallback and left the primary
+   * evidence poisoned.
+   *
+   * The reader collects `[role="button"], button, [aria-label]`, and a card's
+   * title link carries the group's name as its aria-label. The name arrived as
+   * a label, MEMBER matched "Joined" inside it, and the answer came back
+   * 'member' before any real button was looked at.
+   */
+  const labelled = (name: string, buttons: string[]) =>
+    interpretCard({ href: '/groups/97/', name, text: `${name} · 4 members`, buttons })?.membership;
+
+  eq(labelled('I Got Bored So I Joined a Bunch of Face Book Groups', ['I Got Bored So I Joined a Bunch of Face Book Groups']), 'unknown', 'the name as an aria-label is not a button that says you are a member');
+  eq(labelled('group joined', ['group joined']), 'unknown', 'however short the name is');
+  eq(labelled('group joined', ['group joined', 'הצטרפות']), 'none', 'and the REAL button beside it is still read');
+  eq(labelled('באר שבע ביחד', ['אתה חבר בקבוצה']), 'member', 'while a genuine membership label still means what it means');
+
+  /*
+   * WHITESPACE, which is where the strip quietly did nothing at all.
+   *
+   * interpretCard collapses the name — trim + /\s+/g → ' ' — and then looked
+   * for that collapsed string inside the card's raw innerText, which keeps its
+   * double spaces, its non-breaking spaces and the newlines between a card's
+   * own lines. A literal search finds none of those, so on exactly the cards
+   * this was written for the name stayed in the text.
+   */
+  eq(
+    interpretCard({ href: '/groups/96/', name: 'group  joined', text: 'group \u00a0joined\n4 members', buttons: [] })?.membership,
+    'unknown',
+    'a name whose copy in the card is spelled with other whitespace is still removed',
+  );
+  eq(
+    interpretCard({ href: '/groups/95/', name: 'I Joined This Group', text: 'I Joined\nThis Group · 4 members', buttons: [] })?.membership,
+    'unknown',
+    'including a name the card broke across two lines, which is the common case',
+  );
 }
 
 /* ------------------------------------------------------------ de-duping */
@@ -655,9 +696,17 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   eq(queryProblem('באר שבע'), '', 'while a real phrase is untouched');
 
   is(
-    /rows\.filter\(\(r\) => r\.membership === 'member'\)/.test(client),
+    /r\.membership === 'member'/.test(client),
     "THE SECOND LOCK: the card no longer trusts the bucket alone — a group is his only if the read CONFIRMED membership, which only Facebook's own list of his groups does",
   );
+  /*
+   * AND THE DISMISSED ONES GO OUT HERE, so the card's two numbers count the
+   * same set. They did not: the headline counted every row while the list
+   * under it skipped the dismissed ones, so dismissing the last missing group
+   * turned "מתוך 164 … 1 עוד לא ברשימת הפרסום" into "כל 164 הקבוצות … כבר
+   * ברשימת הפרסום" — a sentence about 164 that was true of 163.
+   */
+  is(/r\.membership === 'member' && !r\.hidden/.test(client), 'and a dismissed row is not counted as one of his groups either');
 
   /*
    * AND NEITHER OF THE TWO LOCKS ABOVE IS ON THE MACHINE THAT DOES THE WORK.
@@ -800,6 +849,66 @@ const eq = (a: unknown, b: unknown, msg: string) => {
      which is the batching removed. It passed that mutation. */
   is(/at \+= 100\b(?!\d)/.test(body), 'in batches, because this is an in(...) list in a URL and his bucket already holds 164');
   is(/slice\(at, at \+ 100\)/.test(body), 'and each batch is the slice that batch size describes');
+
+  /*
+   * AND THE FLAG THE WHOLE THING RESTS ON HAS TO MEAN WHAT IT SAYS.
+   *
+   * Three independent reviewers found the same hole, and they were right:
+   * `truncated` was set in ONE place — the MAX_GROUPS ceiling — while the
+   * scroll loop had two other ways out. One barren pass ended the read, and
+   * running out of passes ended it too, both reporting a PARTIAL list as
+   * Facebook's complete enumeration. Reconciliation would then have withdrawn
+   * the membership of every group past the cut-off: his real groups, off his
+   * own card, by the fix meant to clean it.
+   *
+   * So completeness is proven, not assumed. The flag starts true and only two
+   * consecutive barren passes AT THE BOTTOM OF THE PAGE can clear it — which
+   * also covers a layout where scrollBy moves nothing, because then the page
+   * never reports itself at the bottom.
+   */
+  const mineSrc = readFileSync(new URL('../facebook/mygroups.ts', import.meta.url), 'utf8');
+  is(/let truncated = true;/.test(mineSrc), 'THE DEFAULT IS "we did not finish" — every exit that proves nothing leaves it saying so');
+  is(/barren >= 2 && atBottom/.test(mineSrc), 'and only two barren passes AT THE BOTTOM clear it');
+  is(/truncated = false;/.test(mineSrc) && mineSrc.split('truncated = false;').length === 2, 'from exactly one place, so no other exit can claim completeness');
+  is(
+    !/if \(unique >= MAX_GROUPS\) \{\s*truncated = true;/.test(mineSrc),
+    'the ceiling no longer needs to SET it — it simply breaks, and the default already says the read did not finish',
+  );
+  is(
+    /document\.body\.scrollHeight/.test(mineSrc),
+    "and 'at the bottom' is what the page reports about itself, not what the row count implies",
+  );
+
+  /*
+   * AND A SEARCH MAY NOT PUT BACK WHAT THE SCAN TOOK OFF.
+   *
+   * mergeDiscovered never lowers a known value, so an ordinary search that
+   * read a card as 'member' would RAISE a row the scan had just reconciled to
+   * 'none' — and put it straight back on the card. That is reconciliation
+   * undone by exactly the kind of guess it exists to overrule.
+   */
+  const writer2 = worker.slice(worker.indexOf('async function recordDiscovered'));
+  const merge = writer2.slice(0, writer2.indexOf('const { error }'));
+  is(
+    /normalized !== JOINED_QUERY && was\?\.membership && \(was\.queries \?\? \[\]\)\.includes\(JOINED_QUERY\)/.test(merge),
+    "THE BUCKET'S MEMBERSHIP COLUMN IS THE SCAN'S ALONE: a search may not raise a row that is in it",
+  );
+  is(/row\.membership = was\.membership;/.test(merge), 'the stored answer is kept rather than the search\u2019s guess');
+
+  /* …while everything else a search learns about that row is still written. */
+  is(/const row = mergeDiscovered\(/.test(merge), 'the rest of the merge is untouched — name, picture, count and queries still update');
+
+  /* The screen re-reads what the scan wrote, including the search list. */
+  is(/active \? listDiscovered\(active\) : Promise\.resolve\(null\)/.test(page), 'after a scan the search rows are re-read too, because the scan now writes to them');
+
+  /* And the card cannot be left claiming it is still loading. */
+  is(/setJoined\(\(was\) => was \?\? \[\]\)/.test(page), "a failed first load leaves the card out of 'טוען…', which is the one state with no way out");
+
+  /* Hebrew counts to one. */
+  is(/dropped === 1 \? 'קבוצה אחת/.test(worker), 'one group removed is said in the singular, not "1 קבוצות"');
+
+  /* A read that found nothing is a failed read, not an account with no groups. */
+  is(/if \(!mine\.groups\.length\) ok = false;/.test(worker), 'and a scan that came back empty is not reported as a success under a tick');
 }
 
 console.log(`discovery tests OK — ${checks} assertions`);

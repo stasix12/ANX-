@@ -1431,8 +1431,13 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
              * history, and only the claim that he is IN it is withdrawn.
              */
             const dropped = await reconcileJoined(mine.groups, mine.truncated);
+            /* A read that came back with nothing is a failed read, not an
+               account with no groups: Facebook does not show an empty list to
+               somebody who has groups, and reporting it green leaves the card
+               showing yesterday's numbers under a tick. */
+            if (!mine.groups.length) ok = false;
             result = mine.groups.length
-              ? `נמצאו ${mine.groups.length} קבוצות שאתה חבר בהן${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${dropped ? ` ${dropped} קבוצות שכבר אינן ברשימה שלך בפייסבוק הוסרו מהכרטיס.` : ''}${mine.truncated ? ' יש עוד — הרשימה ארוכה מהרגיל, ולכן לא הסרנו הפעם כלום.' : ''}`
+              ? `נמצאו ${mine.groups.length} קבוצות שאתה חבר בהן${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${dropped ? ` ${dropped === 1 ? 'קבוצה אחת שכבר אינה ברשימה שלך בפייסבוק הוסרה' : `${dropped} קבוצות שכבר אינן ברשימה שלך בפייסבוק הוסרו`} מהכרטיס.` : ''}${mine.truncated ? ' יש עוד — הרשימה ארוכה מהרגיל, ולכן לא הסרנו הפעם כלום.' : ''}`
               : 'לא הצלחנו לקרוא את רשימת הקבוצות שלך בפייסבוק.';
           }
         } else if (normalizeQuery(phrase) === JOINED_QUERY) {
@@ -2407,7 +2412,8 @@ async function recordDiscovered(
   /* The rules themselves are in lib/social/discovery.ts, where they can be
      tested without a database — see mergeDiscovered's own comment for what
      each of them is protecting. */
-  const rows = groups.map((g) =>
+  const rows = groups.map((g) => {
+    const was = before.get(g.externalId);
     /*
      * `g.image` is REPLACED by our own copy before the merge sees it, and by an
      * empty string when there is no copy. The signed Facebook URL must never
@@ -2415,8 +2421,26 @@ async function recordDiscovered(
      * letter, which is the bug this whole path exists to fix. An empty string
      * lets mergeDiscovered keep whatever was stored last time.
      */
-    mergeDiscovered({ ...g, image: stored.get(g.externalId) ?? '' }, before.get(g.externalId), normalized, now),
-  );
+    const row = mergeDiscovered({ ...g, image: stored.get(g.externalId) ?? '' }, was, normalized, now);
+    /*
+     * THE RESERVED BUCKET'S MEMBERSHIP COLUMN BELONGS TO THE JOINED SCAN ALONE.
+     *
+     * A search may find a group that is also in that bucket, and mergeDiscovered
+     * never lowers a known value — so a search that read a card as 'member'
+     * could raise a row the scan had just reconciled down to 'none', and put it
+     * straight back on the "your groups" card. That is reconciliation being
+     * undone by exactly the kind of guess it exists to overrule.
+     *
+     * Everything else a search learns about such a row — its name, its picture,
+     * its member count, the query that found it — is still written. Only the
+     * one sentence the card reads is reserved to the one reader that cannot be
+     * wrong about it.
+     */
+    if (normalized !== JOINED_QUERY && was?.membership && (was.queries ?? []).includes(JOINED_QUERY)) {
+      row.membership = was.membership;
+    }
+    return row;
+  });
 
   /*
    * The conflict target is per-business from the day the table was created, so

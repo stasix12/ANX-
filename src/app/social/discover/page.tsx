@@ -157,7 +157,13 @@ export default function DiscoverPage() {
           setRows([]);
         }
       } catch (err) {
-        if (alive) setError(friendlyMessage(err, 'טעינה נכשלה.'));
+        if (!alive) return;
+        setError(friendlyMessage(err, 'טעינה נכשלה.'));
+        /* Out of 'טוען…', which is the one state with no way out: the card
+           reads `joined === null` as "still loading" and nothing on the page
+           sets it again. An empty list plus the error banner is the truth. */
+        setJoined((was) => was ?? []);
+        setRows((was) => was ?? []);
       }
     })();
     return () => {
@@ -347,9 +353,21 @@ export default function DiscoverPage() {
     try {
       const { id } = await startJoinedScan(workerId);
       const done = await waitForWorkerCommand(id);
-      const [mine, targets] = await Promise.all([listJoined(), listTargetExternalIds()]);
+      /*
+       * THE SEARCH RESULTS ARE RE-READ TOO, because the scan now writes to
+       * them. reconcileJoined lowers the membership of rows that are no longer
+       * on Facebook's list, and one of those rows can be sitting in the list
+       * below this card — still showing "הוסף לרשימה" on a group the machine
+       * has just established he is not in.
+       */
+      const [mine, targets, found] = await Promise.all([
+        listJoined(),
+        listTargetExternalIds(),
+        active ? listDiscovered(active) : Promise.resolve(null),
+      ]);
       setJoined(mine);
       setInSystem(targets);
+      if (found) setRows(found);
       if (done?.status === 'failed') toast(done.result || 'הקריאה נכשלה.', 'error');
       else if (!done) toast('הבקשה נשלחה למחשב ולוקחת יותר מהרגיל — הרשימה תתעדכן כשהוא יסיים.', 'info');
       else if (done.result) toast(done.result, 'success');

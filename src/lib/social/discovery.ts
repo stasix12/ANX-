@@ -318,7 +318,25 @@ export function interpretCard(raw: RawCard): DiscoveredGroup | null {
      */
     members: parseMembers(withoutName(text, name)),
     privacy: parsePrivacy(withoutName(text, name)),
-    membership: parseMembership(withoutName(text, name), raw.buttons ?? []),
+    /*
+     * THE LABELS GET THE NAME TAKEN OUT TOO — and they are the half that
+     * mattered. parseMembership asks the BUTTONS FIRST AND ALONE, so stripping
+     * the name from the prose and handing the labels over untouched fixed the
+     * fallback and left the primary evidence poisoned.
+     *
+     * The reader collects `[role="button"], button, [aria-label]` — and a
+     * card's title link carries the group's name as its aria-label. So "I Got
+     * Bored So I Joined a Bunch of Face Book Groups" arrived as a label, and
+     * MEMBER matched the word in it before any real button was read.
+     *
+     * A label that was ONLY the name is dropped rather than kept empty: an
+     * empty string is not evidence of anything, and filtering it here keeps
+     * parseMembership's own "no labels at all" path honest.
+     */
+    membership: parseMembership(
+      withoutName(text, name),
+      (raw.buttons ?? []).map((label) => withoutName(label, name).trim()).filter(Boolean),
+    ),
   };
 }
 
@@ -332,7 +350,22 @@ export function interpretCard(raw: RawCard): DiscoveredGroup | null {
  */
 export function withoutName(text: string, name: string): string {
   if (!text || !name) return text;
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /*
+   * MATCHED ACROSS WHITESPACE, because the two sides do not agree about it.
+   *
+   * interpretCard collapses the name — `raw.name.trim().replace(/\s+/g, ' ')` —
+   * and then looks for it inside `raw.text`, which is the element's innerText
+   * exactly as the browser produced it: double spaces, non-breaking spaces,
+   * and the newlines a card puts between its own lines. A literal search for
+   * the collapsed name finds nothing in any of those, and the strip silently
+   * does nothing on the very cards it was written for. So each run of
+   * whitespace in the needle matches any run of whitespace in the text.
+   */
+  const escaped = name
+    .trim()
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\s+/g, '\\s+');
+  if (!escaped) return text;
   return text.replace(new RegExp(escaped, 'gi'), ' ');
 }
 

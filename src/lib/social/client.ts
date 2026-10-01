@@ -317,7 +317,17 @@ export async function startJoinedScan(workerId: string | null): Promise<{ id: st
  */
 export async function listJoined(): Promise<DiscoveredGroupRow[]> {
   const rows = await listDiscovered(JOINED_QUERY);
-  return rows.filter((r) => r.membership === 'member');
+  /*
+   * `hidden` goes out HERE rather than only where the missing list is built,
+   * so the card's two numbers count the same set. They did not: the headline
+   * counted every row and the list under it skipped the dismissed ones, so
+   * dismissing the last missing group turned "מתוך 164 … 1 עוד לא ברשימת
+   * הפרסום" into "כל 164 הקבוצות … כבר ברשימת הפרסום" — a sentence about 164
+   * groups that was true of 163. On this card a dismissal means "זאת לא קבוצה
+   * שלי", so a dismissed row is not one of his groups and is not counted as
+   * one.
+   */
+  return rows.filter((r) => r.membership === 'member' && !r.hidden);
 }
 
 /** "לא מעניין אותי" — kept rather than deleted, or the next search brings it back. */

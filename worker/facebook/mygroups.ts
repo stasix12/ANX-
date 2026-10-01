@@ -46,7 +46,15 @@ export interface MyGroupsOutcome {
   pictures: Map<string, CardPicture>;
   /** A Hebrew sentence for the owner. Empty when the read worked. */
   problem: string;
-  /** True when the scroll hit the ceiling rather than the end of the list. */
+  /**
+   * True unless this read PROVED it reached the end of the list.
+   *
+   * Not "the ceiling was hit" — that is only one of the ways a read can stop
+   * early, and it was the only one this flag used to catch. The caller uses it
+   * to decide whether the list may be treated as Facebook's complete
+   * enumeration of the account's groups (reconcileJoined), so anything less
+   * than proof has to read as "incomplete".
+   */
   truncated: boolean;
 }
 
@@ -56,7 +64,23 @@ export async function readMyGroups(page: Page, opts: { pictures?: string[] } = {
 
   const collected: DiscoveredGroup[] = [];
   let last = -1;
-  let truncated = false;
+  /*
+   * "DID WE REACH THE END OF THE LIST" — AND NOTHING ELSE MAY SAY YES.
+   *
+   * This flag used to mean "the ceiling was hit", and it was the ONLY thing
+   * standing between a partial read and reconcileJoined withdrawing the
+   * membership of every group past the cut-off. It was set in one place, and
+   * the loop had two other ways out: one barren pass ended the read, and
+   * running out of passes ended it too — both reporting a partial list as the
+   * complete enumeration of somebody's groups.
+   *
+   * So completeness is now PROVEN rather than assumed: two consecutive passes
+   * that add nothing, with the page actually scrolled to the bottom. Anything
+   * else — the ceiling, the passes running out, a layout where scrolling does
+   * nothing — leaves this true, and the caller does not reconcile.
+   */
+  let truncated = true;
+  let barren = 0;
 
   for (let pass = 0; pass < PASSES; pass += 1) {
     for (const raw of await readRows(page)) {
@@ -82,12 +106,25 @@ export async function readMyGroups(page: Page, opts: { pictures?: string[] } = {
       });
     }
     const unique = dedupe(collected).length;
-    if (unique >= MAX_GROUPS) {
-      truncated = true;
+    if (unique >= MAX_GROUPS) break;
+    if (unique === last && pass > 0) barren += 1;
+    else barren = 0;
+    last = unique;
+
+    /*
+     * AT THE BOTTOM, AS THE PAGE ITSELF REPORTS IT — not as the row count
+     * implies. A pass that adds nothing means the end of the list only if
+     * there is nothing below; on a layout where scrollBy does nothing, or
+     * while Facebook is still fetching the next page, it means the opposite.
+     * The two have to agree before this read calls itself complete.
+     */
+    const atBottom = await page
+      .evaluate(() => window.innerHeight + window.scrollY >= document.body.scrollHeight - 200)
+      .catch(() => false);
+    if (barren >= 2 && atBottom) {
+      truncated = false;
       break;
     }
-    if (unique === last && pass > 0) break;
-    last = unique;
     await page.evaluate(() => window.scrollBy(0, window.innerHeight * 2));
     await page.waitForTimeout(1_200);
   }

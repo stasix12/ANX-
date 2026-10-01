@@ -375,12 +375,62 @@ export async function bulkUpdateTargets(
   unwrap(await db().from('social_targets').update(patch).in('id', ids));
 }
 
+/**
+ * REMOVING A GROUP IS A DECISION, AND גילוי קבוצות HAS TO REMEMBER IT.
+ *
+ * "ברגע שאני מסיר קבוצה באפליקציה שלי שלא תקפוץ לי בתור אופציה להוספה
+ *  לקבוצות שאני כבר חבר בהם."
+ *
+ * He is right, and until now it did the opposite. The "הקבוצות שלך בפייסבוק"
+ * card offers every group he is in that the publishing list does not have — so
+ * the moment he removed one, it became a group he is in that the list does not
+ * have, and the card offered it straight back. The only way out of that loop
+ * was to remove it and then dismiss it, twice, for ever.
+ *
+ * So a removal marks the discovery row dismissed. `hidden` already means "the
+ * owner said no to this one" — it is what the ✕ on the card and "לא רלוונטי"
+ * in the search results write — and removing the group from the publishing
+ * list says the same thing with a bigger gesture. Reusing it costs him no
+ * migration and is reversible from the screen he already has
+ * ("הצג קבוצות שהוסתרו").
+ *
+ * READ BEFORE THE DELETE, because it cannot be read after: `target_id` is a
+ * foreign key with ON DELETE SET NULL, so the link this needs is gone the
+ * instant the row is. And matched on BOTH sides — the link and the group's own
+ * id — because a group added by hand has no link but can still have been found
+ * by a search.
+ *
+ * The dismissal is deliberately second: if it fails, the group is still
+ * removed, which is what he asked for. A removal that failed because the
+ * discovery table did not take an update would be a worse answer than a card
+ * that offers the group again.
+ */
+async function dismissDiscoveredFor(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const { data } = await db().from('social_targets').select('id, external_id').in('id', ids);
+  const externalIds = (data ?? []).map((r) => (r as { external_id: string }).external_id).filter(Boolean);
+  await db()
+    .from('social_discovery_groups')
+    .update({ hidden: true })
+    .in('target_id', ids)
+    .then(undefined, () => undefined);
+  if (externalIds.length) {
+    await db()
+      .from('social_discovery_groups')
+      .update({ hidden: true })
+      .in('external_id', externalIds)
+      .then(undefined, () => undefined);
+  }
+}
+
 export async function bulkDeleteTargets(ids: string[]): Promise<void> {
   if (!ids.length) return;
+  await dismissDiscoveredFor(ids);
   unwrap(await db().from('social_targets').delete().in('id', ids));
 }
 
 export async function deleteTarget(id: string): Promise<void> {
+  await dismissDiscoveredFor([id]);
   unwrap(await db().from('social_targets').delete().eq('id', id));
 }
 

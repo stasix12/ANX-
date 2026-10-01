@@ -909,6 +909,37 @@ const eq = (a: unknown, b: unknown, msg: string) => {
 
   /* A read that found nothing is a failed read, not an account with no groups. */
   is(/if \(!mine\.groups\.length\) ok = false;/.test(worker), 'and a scan that came back empty is not reported as a success under a tick');
+
+  /*
+   * REMOVING A GROUP IS A DECISION, AND THE CARD HAS TO REMEMBER IT.
+   *
+   * "ברגע שאני מסיר קבוצה באפליקציה שלי שלא תקפוץ לי בתור אופציה להוספה
+   *  לקבוצות שאני כבר חבר בהם."
+   *
+   * The card offers every group he is IN that the publishing list does NOT
+   * have. So removing one made it exactly that — a group he is in, missing
+   * from the list — and the card offered it straight back. The only escape was
+   * to remove it and then dismiss it, every time, for ever.
+   */
+  const dismiss = client.slice(client.indexOf('async function dismissDiscoveredFor'), client.indexOf('export async function bulkDeleteTargets'));
+
+  is(/dismissDiscoveredFor/.test(client), 'a removal tells גילוי קבוצות about itself');
+  is(
+    /await dismissDiscoveredFor\(ids\);\s*unwrap\(await db\(\)\.from\('social_targets'\)\.delete\(\)/.test(client),
+    'BEFORE the delete, because target_id is ON DELETE SET NULL and the link is gone the instant the row is',
+  );
+  is(
+    /await dismissDiscoveredFor\(\[id\]\);\s*unwrap\(await db\(\)\.from\('social_targets'\)\.delete\(\)/.test(client),
+    'on both ways out — one group and many — so neither screen is the exception',
+  );
+  is(/\.in\('target_id', ids\)/.test(dismiss), 'matched by the link the adoption wrote');
+  is(/\.in\('external_id', externalIds\)/.test(dismiss), 'AND by the groupitself, because a group added by hand has no link but can still have been found by a search');
+  is(/update\(\{ hidden: true \}\)/.test(dismiss), 'and it is a dismissal — the same word the ✕ writes, reversible from "הצג קבוצות שהוסתרו"');
+  is(!/\.delete\(\)/.test(dismiss), 'nothing in the discovery table is deleted by it');
+  is(
+    /\.then\(undefined, \(\) => undefined\)/.test(dismiss),
+    'and a dismissal that fails never fails the removal — he asked for the group to go, and it goes',
+  );
 }
 
 console.log(`discovery tests OK — ${checks} assertions`);

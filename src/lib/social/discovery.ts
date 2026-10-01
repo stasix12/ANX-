@@ -137,8 +137,19 @@ const MINE_AFTER = /^\s*(?:שלך|שלכם|שלי|משותפים|משותפות|
    positions are checked, because both are how a card really reads. */
 const MINE_BEFORE = /^(?:общих|ваших|твоих|общие|mutual)$/iu;
 
+/*
+ * EVERY BIDI CONTROL CHARACTER FACEBOOK PUTS INSIDE A NUMBER. The Hebrew UI
+ * wraps the count in RLM/isolate marks — "\u200f9.4K\u200f חברים" — and they
+ * are invisible, they are not whitespace (trim() keeps them), and they are not
+ * digits. So the unit landed in the suffix WITH a mark glued to it, "\u200fK"
+ * failed the anchored THOUSAND test, and a 9,400-member group was written down
+ * as 9. Stripped once up front, before any pattern looks at the text.
+ */
+const BIDI_MARKS = /[\u200e\u200f\u061c\u202a-\u202e\u2066-\u2069]/g;
+
 export function parseMembers(text: string): number | null {
   if (!text) return null;
+  text = text.replace(BIDI_MARKS, '');
   /*
    * Only a number that is ACCOMPANIED by the word for members counts. Facebook
    * puts several numbers on a card — posts this month, posts today — and the

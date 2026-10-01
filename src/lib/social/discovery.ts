@@ -112,6 +112,31 @@ const MILLION = /^(m|mln|מיליון|מליון|млн\.?|миллион[аов
     something else — "12 posts a day" — is not read as a membership count. */
 const MEMBER_WORD = /members?|חברים|חברות|משתתפים|участник|участников|участника/i;
 
+/*
+ * "3 חברים" ON A BEER SHEVA GROUP WAS NEVER THE GROUP'S SIZE.
+ *
+ * Facebook puts a second members-count on a card — the one about YOU: "3
+ * חברים שלך בקבוצה", "2 חברים משותפים", "5 friends are members". It is the
+ * same word as the real count, it is usually written FIRST, and this function
+ * returns the first pair it finds. So the owner's screen said a city group of
+ * fifty thousand had four members, and every one of those numbers was the
+ * count of his own friends in it.
+ *
+ * The qualifier is the only thing that separates the two, so it is what gets
+ * looked for. A match followed by one of these is skipped and the scan goes on
+ * to the next pair — which is the real one, because the group's own count
+ * carries no qualifier at all.
+ */
+/* `\b` is ASCII-only in JavaScript — between a Hebrew letter and a space there
+   is no word boundary at all, so an anchor written that way never matches and
+   the guard silently does nothing. A negative lookahead for another letter is
+   the same intent and works in every script on this screen. */
+const MINE_AFTER = /^\s*(?:שלך|שלכם|שלי|משותפים|משותפות|מהחברים|of yours|mutual)(?!\p{L})/iu;
+/* Russian puts it the other way round — "5 общих участников" — so the
+   qualifier lands between the number and the word rather than after it. Both
+   positions are checked, because both are how a card really reads. */
+const MINE_BEFORE = /^(?:общих|ваших|твоих|общие|mutual)$/iu;
+
 export function parseMembers(text: string): number | null {
   if (!text) return null;
   /*
@@ -122,6 +147,9 @@ export function parseMembers(text: string): number | null {
    */
   const re = /([\d][\d.,\u00a0\u202f\s]*)\s*([^\s\d]*)\s*(members?|חברים|חברות|משתתפים|участник\w*)/giu;
   for (const m of text.matchAll(re)) {
+    /* What sits around the word decides whose count this is. */
+    if (MINE_AFTER.test(text.slice((m.index ?? 0) + m[0].length))) continue;
+    if (MINE_BEFORE.test((m[2] ?? '').trim())) continue;
     const value = readNumber(m[1], m[2]);
     if (value !== null) return value;
   }

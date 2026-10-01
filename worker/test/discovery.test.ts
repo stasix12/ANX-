@@ -276,6 +276,33 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   eq(full('באר שבע ביחד', '54.3 אלף חברים')?.members, 54_300, 'while the real count is untouched');
 
   /*
+   * AND THE COUNT THAT IS ABOUT HIM, NOT ABOUT THE GROUP.
+   *
+   * His screen said "דירות למכירה בבאר שבע · 7 חברים" and "באר שבע ביחד · 4
+   * חברים" — city groups of tens of thousands. Facebook writes a second
+   * members-count on the card, the one about YOU ("3 חברים שלך בקבוצה"), in
+   * the same word and usually first, and this read the first pair it found.
+   */
+  eq(parseMembers('3 חברים שלך בקבוצה · 54.3 אלף חברים'), 54_300, "a friends-of-yours count is skipped and the group's own count is taken");
+  eq(parseMembers('2 חברים משותפים · 12 אלף חברים'), 12_000, 'the same for "משותפים"');
+  eq(parseMembers('5 общих участников · 12 тыс. участников'), 12_000, 'and in Russian');
+  eq(parseMembers('54.3 אלף חברים · 3 חברים שלך'), 54_300, 'order does not matter — the unqualified count is the group');
+  eq(parseMembers('7 חברים'), 7, 'a small group that really has seven members still reads as seven');
+  eq(parseMembers('3 חברים שלך בקבוצה'), null, 'and a card that ONLY says how many of your friends are in it says nothing about its size');
+
+  /*
+   * AND A WORD THAT MERELY BEGINS WITH ONE OF THOSE IS NOT ONE OF THOSE.
+   *
+   * "שלי" is a prefix of "שליחת", so without a letter-aware boundary a card
+   * reading "12 אלף חברים שליחת הודעה" has its REAL count thrown away and the
+   * group reports nothing. `\b` cannot do this job: it is ASCII-only in
+   * JavaScript, so between a Hebrew letter and a space there is no boundary at
+   * all and the guard it anchors never fires.
+   */
+  eq(parseMembers('12 אלף חברים שליחת הודעה'), 12_000, 'a real count followed by a word that starts like a qualifier is still the count');
+  eq(parseMembers('12 אלף חברים שלי'), null, 'while the qualifier itself is still recognised');
+
+  /*
    * THE BUTTON LABELS, WHICH WERE THE HALF THAT ACTUALLY MATTERED.
    *
    * The first version of this fix stripped the name from the card's prose and

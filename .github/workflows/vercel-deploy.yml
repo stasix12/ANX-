@@ -29,6 +29,17 @@ on:
   workflow_dispatch:
 
 # A newer commit supersedes an older one, so cancel a run still waiting.
+#
+# AND THAT NOW BITES HARDER THAN IT USED TO. The wait below grew from ten
+# minutes to three rounds of ten, so a second push inside half an hour cancels
+# the first run before it can confirm anything — which is how four deploys in a
+# row ended "cancelled" and the owner was left looking at an old build while
+# every one of them was reported as pushed.
+#
+# Cancelling is still right: the newer commit contains the older one, and two
+# runs polling the same production URL for different commits can only disagree.
+# What it means in practice is that only the LAST push of a burst gets a
+# confirmation — so a burst has to end before the answer is worth anything.
 concurrency:
   group: vercel-deploy
   cancel-in-progress: true

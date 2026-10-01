@@ -712,7 +712,21 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   const handler = page.slice(page.indexOf('async function adoptAll'), page.indexOf('/** Everything hidden for this phrase'));
   is(/for \(const row of joinedNotListed\)/.test(handler), 'the inserts are sequential — thirty at once race each other onto the unique index');
   is(/כבר קיימת/.test(handler), 'a group that was already there counts as a success: the sentence is about what is true afterwards');
-  is(/joinedNotListed\.length\} הקבוצות שאתה כבר חבר בהן/.test(page), "and the label names the count, so the promise and the set are the same thing");
+  /*
+   * THE LABEL NAMES THE COUNT — in two halves now, because the results panel
+   * became a component so that a browser could measure its height. The card
+   * prints the number it was handed; the page hands it the length of the very
+   * list adoptAll walks. Both halves are pinned: either one alone passes while
+   * the other points somewhere else.
+   */
+  is(
+    /\{joinedNotListed\} הקבוצות שאתה כבר חבר בהן/.test(rowSrc),
+    'and the label names the count the card was handed',
+  );
+  is(
+    /joinedNotListed=\{joinedNotListed\.length\}/.test(page),
+    'and what it is handed is the length of the list the handler walks, so the promise and the set are the same thing',
+  );
 }
 
 /* ------------------------- the cards it could not read, kept for reading */
@@ -980,7 +994,34 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(/getAttribute\('srcset'\)/.test(reader), 'a srcset is read too, because a lazy card often has only that');
   is(/querySelectorAll\('svg image'\)/.test(reader), 'and an <svg><image>, which has no <img> to find');
   is(/backgroundImage/.test(reader), 'and a CSS background, same reason');
-  is(/if \(area <= bestArea\) return;/.test(reader), "and the LARGEST as rendered wins — the group's own thumbnail, never a badge on a button");
+  is(/if \(candidate\.area <= bestArea\) continue;/.test(reader), "and the LARGEST as rendered wins — the group's own thumbnail, never a badge on a button");
+  /*
+   * AND NONE OF IT HAPPENS THROUGH A NAMED HELPER.
+   *
+   * The candidates used to be weighed by `const consider = (url, w, h) => …`
+   * inside the evaluate. esbuild keeps function names, so that compiles to
+   * `__name(() => …, 'consider')`, the call ships to the browser with the
+   * function source and the helper stays in Node. It ran only because
+   * session.ts defines `__name` on every worker context — a line in another
+   * file — and the first browser test written against this one died on its
+   * first statement. An array of candidates needs no such line.
+   */
+  /* The typed form, not the words: the comment beside the code in discover.ts
+     quotes the construct it is warning about, and a bare search for it matches
+     the warning. */
+  is(!/const consider = \(url: string/.test(reader), 'and the weighing is an array, not a named function that ships a call to a helper that stays behind');
+  /*
+   * THE PICTURE IS A PASS OF ITS OWN, and this is the second time the owner
+   * has reported the same sentence. Everything above is about WHERE to look on
+   * a card; none of it helps when the card has never been in the viewport, and
+   * Facebook does not load a thumbnail until it has. What this pins is that
+   * the search goes back for them; worker/test/discover-pictures.test.ts is
+   * what proves it works, against a page that lazy-loads exactly as the real
+   * one does.
+   */
+  is(/await fillPictures\(page, groups, wanted\);/.test(reader), 'a search that found no address for a card goes back and brings the card into view');
+  is(/scrollIntoView\(\{ block: 'center' \}\)/.test(reader), 'by scrolling it into view, which is the only thing that makes the browser load it');
+  is(/pictureless: wanted\.size/.test(reader), 'and the ones it still could not find an address for are counted, so "0 תמונות" names which half failed');
 
   /* What comes back has to be an image, judged by the bytes. A row that holds
      a picture is never fetched again, so one wrong answer is permanent. */

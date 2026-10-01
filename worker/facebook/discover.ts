@@ -112,6 +112,14 @@ export interface SearchOutcome {
       rather than hidden: a search that quietly drops most of what it found
       owes the person the number. */
   offTopic: number;
+  /**
+   * Groups this search wanted a picture for and could not find an address for
+   * — AFTER the picture pass. Counted because the two ways a row ends up
+   * drawing a letter look identical on screen and need opposite fixes: no URL
+   * on the card at all, or a URL that downloaded and then failed to store. The
+   * worker logs both numbers.
+   */
+  pictureless: number;
 }
 
 /**
@@ -192,9 +200,47 @@ export async function searchGroups(page: Page, query: string, opts: { havePictur
    * longer protects it by skipping the groups that need it most.
    */
   const have = new Set(opts.havePictures ?? []);
+
+  /*
+   * AND NOW THE PICTURES, WHICH THE COLLECTING PASS CANNOT GET ON ITS OWN.
+   *
+   * This is the second time the owner has reported the same thing — "קבוצות
+   * שאני לא חבר בהם עדיין לא מראה תמונה" — and the first fix was aimed at the
+   * wrong half of the problem. It taught readCards to look in currentSrc, in
+   * srcset, in an <svg><image> and in a CSS background, which was all true and
+   * all useless, because on the cards that matter there is nothing in ANY of
+   * those places at the moment they are read.
+   *
+   * Facebook loads a card's thumbnail when the card reaches the viewport. The
+   * collecting loop above scrolls TWO screenfuls at a time for speed, so a
+   * card in the skipped middle screen is in the DOM — its name, its member
+   * count and its buttons all read correctly — and never once rests where the
+   * browser would decide to load its picture. The groups he is not a member of
+   * sit further down a long list of results, which is exactly why it was those
+   * rows, and only those rows, that drew a letter.
+   *
+   * So the picture is a pass of its own: walk back through the results, stop
+   * ON the cards that still have no address, and let the browser do what it
+   * was always going to do when they came into view. No extra request to
+   * Facebook — these are the same images the page loads for anyone scrolling
+   * it — and nothing is opened that the search did not already open.
+   */
+  const wanted = new Set(
+    groups.filter((g) => !have.has(g.externalId) && !/^https?:\/\//i.test(g.image)).map((g) => g.externalId),
+  );
+  await fillPictures(page, groups, wanted);
+
   const pictures = await fetchPictures(page, groups.filter((g) => !have.has(g.externalId)));
 
-  return { groups, pictures, unread: [...unread.values()], problem: '', truncated, offTopic: all.length - onTopic.length };
+  return {
+    groups,
+    pictures,
+    unread: [...unread.values()],
+    problem: '',
+    truncated,
+    offTopic: all.length - onTopic.length,
+    pictureless: wanted.size,
+  };
 }
 
 /**
@@ -223,6 +269,95 @@ function looksLikeImage(b: Buffer): boolean {
   if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return true; // GIF
   if (b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP') return true;
   return false;
+}
+
+/**
+ * THE PICTURE PASS: stop ON the cards that still have no address.
+ *
+ * Each stop also brings the cards either side of it into view, so this rescues
+ * several rows per stop and the ceiling below is far larger than the number of
+ * stops it usually takes. Bounded by both a count and a clock, because a page
+ * that has stopped answering must not hold a search open.
+ *
+ * NO NAMED FUNCTION EXPRESSION INSIDE THE evaluate. session.ts defines
+ * `__name` on every worker context precisely because esbuild keeps names and
+ * a function handed to evaluate ships as source — but a page built without
+ * that line dies before its first statement, which is what the first run of
+ * worker/test/discover-pictures.test.ts did. Avoiding the construct is the
+ * second of the two independent reasons this code runs.
+ */
+const PICTURE_STOPS = 60;
+const PICTURE_SETTLE_MS = 450;
+/* ONE SEARCH FINISHES THE JOB, the same rule PICTURE_LIMIT is written to.
+   A run that gives up halfway leaves rows drawing letters, which is
+   indistinguishable on screen from the bug this pass exists to fix — so the
+   budget is generous and the number still unfilled is reported either way. */
+const PICTURE_BUDGET_MS = 45_000;
+
+async function fillPictures(page: Page, groups: DiscoveredGroup[], want: Set<string>): Promise<void> {
+  if (!want.size) return;
+  const byId = new Map(groups.map((g) => [g.externalId, g]));
+  const deadline = Date.now() + PICTURE_BUDGET_MS;
+  for (let stop = 0; stop < PICTURE_STOPS && want.size; stop += 1) {
+    if (Date.now() > deadline) return;
+    const next = want.values().next().value as string | undefined;
+    if (next === undefined) return;
+    const found = await page
+      .evaluate((id) => {
+        for (const a of Array.from(document.querySelectorAll('a[href*="/groups/"]'))) {
+          const hit = (a.getAttribute('href') || '').match(/\/groups\/([^/?#]+)/i);
+          if (!hit || hit[1] !== id) continue;
+          a.scrollIntoView({ block: 'center' });
+          return true;
+        }
+        return false;
+      }, next)
+      .catch(() => false);
+    /* Gone from the page entirely — a result that scrolled out of a virtual
+       list. Nothing more to try for it, and leaving it in the set would spend
+       every remaining stop on it. */
+    if (!found) {
+      want.delete(next);
+      continue;
+    }
+    await page.waitForTimeout(PICTURE_SETTLE_MS);
+    /*
+     * A CHEAP READ, NOT readCards. readCards climbs every card, reads its
+     * text, its buttons and getComputedStyle on up to sixty nodes apiece — a
+     * quarter of a second on a page of a hundred results, which spent on every
+     * one of sixty stops is the whole budget on work already done. This asks
+     * one question of the cards that are still missing an address.
+     */
+    const seen = await page
+      .evaluate((wanted: string[]) => {
+        const want = new Set(wanted);
+        const found: Record<string, string> = {};
+        for (const a of Array.from(document.querySelectorAll('a[href*="/groups/"]'))) {
+          const hit = (a.getAttribute('href') || '').match(/\/groups\/([^/?#]+)/i);
+          if (!hit || !want.has(hit[1]) || found[hit[1]]) continue;
+          let node: Element | null = a;
+          for (let up = 0; up < 4 && node && !found[hit[1]]; up += 1) {
+            for (const img of Array.from(node.querySelectorAll('img'))) {
+              const r = img.getBoundingClientRect();
+              /* A group's own thumbnail, never the little mark on a button. */
+              if (r.width < 24 || r.height < 24) continue;
+              const url = img.currentSrc || img.getAttribute('src') || '';
+              if (!/^https?:\/\//i.test(url)) continue;
+              found[hit[1]] = url;
+              break;
+            }
+            node = node.parentElement;
+          }
+        }
+        return found;
+      }, [...want])
+      .catch(() => ({}) as Record<string, string>);
+    for (const [id, url] of Object.entries(seen)) {
+      const g = byId.get(id);
+      if (g) g.image = url;
+      want.delete(id);
+    }
+  }
 }
 
 export async function fetchPictures(page: Page, groups: DiscoveredGroup[]): Promise<Map<string, CardPicture>> {
@@ -284,7 +419,7 @@ export async function fetchPictures(page: Page, groups: DiscoveredGroup[]): Prom
  * of text. Climbing too far would swallow the next result; the loop stops at
  * the first ancestor that looks like a card, and at six levels regardless.
  */
-async function readCards(page: Page): Promise<RawCard[]> {
+async function readCards(page: Page): Promise<(RawCard & { key: string })[]> {
   return page.evaluate(() => {
     const out: (RawCard & { key: string })[] = [];
     const anchors = Array.from(document.querySelectorAll<HTMLElement>('a[href*="/groups/"]'));
@@ -370,36 +505,46 @@ async function readCards(page: Page): Promise<RawCard[]> {
        */
       let picture: string = '';
       {
-        let bestArea = -1;
-        const consider = (url: string, w: number, h: number) => {
-          if (!/^https?:\/\//i.test(url)) return;
-          const area = w * h;
-          if (area <= bestArea) return;
-          bestArea = area;
-          picture = url;
-        };
+        /*
+         * COLLECTED INTO AN ARRAY AND THEN JUDGED, rather than through a named
+         * helper. This was `const consider = (url, w, h) => …`, and esbuild
+         * keeps function names: it compiles to `__name(() => …, 'consider')`,
+         * the call travels into the page with the function source and the
+         * helper does not. session.ts defines `__name` on every worker context
+         * for exactly this reason, so it ran — but it ran because of a line in
+         * another file, and the first browser test written against this one
+         * died on its first statement. An array is not a function.
+         */
+        const found: { url: string; area: number }[] = [];
         for (const img of Array.from(box.querySelectorAll('img'))) {
           const r = img.getBoundingClientRect();
+          const area = (r.width || 1) * (r.height || 1);
           /* currentSrc is what the browser actually chose; src is the fallback
              for an image that has not loaded yet. */
-          const best = img.currentSrc || img.getAttribute('src') || '';
-          consider(best, r.width || 1, r.height || 1);
+          found.push({ url: img.currentSrc || img.getAttribute('src') || '', area });
           const set = img.getAttribute('srcset') || '';
-          for (const part of set.split(',')) {
-            const url = part.trim().split(/\s+/)[0] || '';
-            consider(url, r.width || 1, r.height || 1);
-          }
+          for (const part of set.split(',')) found.push({ url: part.trim().split(/\s+/)[0] || '', area });
         }
         for (const node of Array.from(box.querySelectorAll('svg image'))) {
           const r = (node as unknown as Element).getBoundingClientRect();
-          consider(node.getAttribute('href') || node.getAttribute('xlink:href') || '', r.width || 1, r.height || 1);
+          found.push({
+            url: node.getAttribute('href') || node.getAttribute('xlink:href') || '',
+            area: (r.width || 1) * (r.height || 1),
+          });
         }
         for (const node of Array.from(box.querySelectorAll('*')).slice(0, 60)) {
           const bg = getComputedStyle(node as Element).backgroundImage;
           const hit = /url\(["']?(https?:[^"')]+)/i.exec(bg || '');
           if (!hit) continue;
           const r = (node as Element).getBoundingClientRect();
-          consider(hit[1], r.width || 1, r.height || 1);
+          found.push({ url: hit[1], area: (r.width || 1) * (r.height || 1) });
+        }
+        let bestArea = -1;
+        for (const candidate of found) {
+          if (!/^https?:\/\//i.test(candidate.url)) continue;
+          if (candidate.area <= bestArea) continue;
+          bestArea = candidate.area;
+          picture = candidate.url;
         }
       }
       const buttons = [];

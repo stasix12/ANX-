@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Figure, GroupRow, MyGroupsCard, WalkThrough } from '@/components/social/Discovery';
+import { GroupRow, MyGroupsCard, ResultsCard, SearchCard, WalkThrough } from '@/components/social/Discovery';
 import {
   Badge,
   Button,
@@ -566,95 +566,17 @@ export default function DiscoverPage() {
         />
 
         {/* ─────────────────────────── the search box ─────────────────────── */}
-        <Card padded={false} className="px-3 py-2.5">
-          <div className="flex flex-col gap-2">
-            <div className="relative flex-1">
-              <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-mist-500 start-3" />
-              {/* dir="auto" and not "rtl": he searches in Hebrew, and the
-                  results are Hebrew and Russian alike — a Cyrillic phrase
-                  typed into a field forced to RTL has its punctuation thrown
-                  to the wrong end while he is typing it. */}
-              <input
-                aria-label="חפש עיר, אזור או נושא"
-                placeholder="חפש עיר, אזור או נושא…   למשל: באר שבע"
-                dir="auto"
-                inputMode="search"
-                enterKeyHint="search"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') run(text);
-                }}
-                className={`${inputClass} h-[52px] rounded-tile pe-11 ps-11 text-base`}
-              />
-              {/* The reference's clear button. It writes the same state the
-                  field does and runs no search of its own. */}
-              {text && (
-                <button
-                  type="button"
-                  aria-label="נקה את תיבת החיפוש"
-                  onClick={() => setText('')}
-                  className="absolute top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-300 end-1"
-                >
-                  <CloseIcon aria-hidden className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            <Button
-              size="lg"
-              busy={searching}
-              onClick={() => run(text)}
-              /* Same onClick, same busy, same label. */
-              /* Full width and gradient, as the reference draws it. The theme's
-                 own `.social-theme .grad-primary` is what paints a primary
-                 button — two classes beat one, so a bg-gradient-* beside it
-                 would change nothing. Measured. */
-              className="h-[54px] w-full rounded-tile shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
-            >
-              <SearchIcon aria-hidden className="h-5 w-5" />
-              {searching ? 'מחפש…' : 'חפש קבוצות'}
-            </Button>
-          </div>
-
-          {/* ───────────────────────── recent searches ────────────────────── */}
-          {searches.length > 0 && (
-            <div className="mt-2">
-              <p className="mb-1 flex items-center gap-1 text-xs font-bold text-mist-500">
-                <ClockIcon aria-hidden className="h-3.5 w-3.5" />
-                חיפושים אחרונים
-              </p>
-              {/* ONE ROW THAT SCROLLS, never a second line. Wrapped, a sixth
-                  saved search silently added 44px to this card — the height
-                  this whole pass is trying to win back. The bleed and padding
-                  keep a chip's focus ring from being clipped by the overflow. */}
-              <div className="-mx-1 min-w-0 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div className="flex w-max gap-1.5">
-                  {searches.map((s) => {
-                    const on = s.normalized === normalizeQuery(active);
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        dir="auto"
-                        onClick={() => {
-                          setText(s.query);
-                          run(s.query);
-                        }}
-                        className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-bold transition-colors ${
-                          on
-                            ? 'border-brand-400 bg-brand-400/10 text-brand-400 shadow-[0_1px_4px_-1px_rgba(109,40,217,0.3)]'
-                            : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600 hover:bg-ink-800'
-                        }`}
-                      >
-                        {s.query}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
+        {/* Its markup moved to Discovery.tsx so a browser can measure it — see
+            the component's own comment for why an estimate was not enough.
+            Every value and handler below is the one that was here. */}
+        <SearchCard
+          text={text}
+          searching={searching}
+          searches={searches}
+          activeQuery={active}
+          onText={setText}
+          onRun={run}
+        />
 
         {/* ─────────────────────────── while it runs ──────────────────────── */}
         {searching && (
@@ -679,68 +601,16 @@ export default function DiscoverPage() {
         {rows === null && <SkeletonList rows={4} />}
 
         {rows !== null && active && totals.total > 0 && (
-          <Card padded={false} className="px-3 py-2.5">
-            <div className="flex items-baseline justify-between gap-2">
-              <p className="text-[19px] font-extrabold leading-tight text-mist-100">
-                נמצאו <span className="tabular-nums">{totals.total}</span> קבוצות
-              </p>
-              {fresh > 0 && (
-                <Badge tone="brand">
-                  {fresh === 1 ? 'קבוצה אחת חדשה מאז החיפוש האחרון' : `${fresh} קבוצות חדשות מאז החיפוש האחרון`}
-                </Badge>
-              )}
-            </div>
-            <div className="mt-0.5 flex items-center gap-1">
-              <p dir="auto" className="min-w-0 flex-1 truncate text-xs text-mist-500">
-                עבור החיפוש “{active}”
-              </p>
-              {activeSearch && (
-                <button
-                  type="button"
-                  aria-pressed={activeSearch.watching}
-                  aria-label={activeSearch.watching ? 'הפסק לעקוב אחרי החיפוש הזה' : 'עקוב אחרי החיפוש הזה'}
-                  title={activeSearch.watching ? 'במעקב' : 'עקוב אחרי החיפוש הזה'}
-                  onClick={() => toggleWatch(activeSearch)}
-                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors hover:bg-ink-900 ${
-                    activeSearch.watching ? 'text-warning-400' : 'text-mist-500'
-                  }`}
-                >
-                  <StarIcon aria-hidden className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            {/* The brief's order, read right-to-left as the page is: new,
-                waiting, already joined. Same three values, same three tones,
-                same labels — only the order they sit in. */}
-            <div className="mt-2 grid grid-cols-3 gap-2 [&>*]:min-w-0">
-              <Figure tone="brand" value={totals.fresh} label="קבוצות חדשות" />
-              <Figure tone="warn" value={totals.requested} label="בקשות ממתינות" />
-              <Figure tone="good" value={totals.member} label="כבר הצטרפת" />
-            </div>
-            {/*
-              ONE PRESS FOR THE ONES HE IS ALREADY IN.
-
-              "אני חבר ב-9 מאלה ואני רוצה לפרסם בהן" was nine taps through a
-              list, and the per-row button is easy to miss because it only
-              appears on the rows that can use it. The count is in the label,
-              so the promise and the set are the same thing.
-            */}
-            {joinedNotListed.length > 0 && (
-              <Button
-                variant="secondary"
-                busy={busyId === 'all'}
-                onClick={adoptAll}
-                className="mt-3 w-full"
-              >
-                הוסף לרשימה את {joinedNotListed.length} הקבוצות שאתה כבר חבר בהן
-              </Button>
-            )}
-            {totals.unknown > 0 && (
-              <p className="mt-2 text-xs leading-4 text-mist-500">
-                ב-{totals.unknown} קבוצות תוצאות החיפוש לא אמרו אם אתם חברים. פתחו אותן כדי לראות.
-              </p>
-            )}
-          </Card>
+          <ResultsCard
+            query={active}
+            fresh={fresh}
+            totals={totals}
+            watching={activeSearch?.watching}
+            onToggleWatch={activeSearch ? () => toggleWatch(activeSearch) : undefined}
+            joinedNotListed={joinedNotListed.length}
+            adoptBusy={busyId === 'all'}
+            onAdoptAll={adoptAll}
+          />
         )}
 
         {/* ──────────────────────── filters and sorting ─────────────────────

@@ -1521,11 +1521,23 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
                always — and the number is the useful part anyway: "0 תמונות" and
                "54 תמונות" are different bugs, which is why it is on screen. */
             const shots = wrote.pictures ? ` ${wrote.pictures} תמונות.` : '';
+            /*
+             * AND THE OTHER HALF OF THE SAME QUESTION.
+             *
+             * "0 תמונות" has had two completely different causes, and from the
+             * outside they look identical: either no address was found on the
+             * cards at all, or addresses were found, downloaded, and refused
+             * by storage. The first is this number; the second is the
+             * picture_upload_failed line storeDiscoveryPictures writes. With
+             * both on screen the next report names the half that failed
+             * instead of the symptom.
+             */
+            const blind = found.pictureless ? ` ${found.pictureless} כרטיסים בלי כתובת תמונה.` : '';
             /* Counted rather than hidden: a search that drops most of what it
                found owes the person the number, or "why so few" has no answer. */
             const skipped = found.offTopic ? ` (${found.offTopic} תוצאות שלא הכילו את המילה סוננו)` : '';
             result = found.groups.length
-              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${shots}${skipped}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
+              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${shots}${blind}${skipped}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
               : `לא נמצאו קבוצות ששמן מכיל "${phrase}".${skipped}`;
           }
         }

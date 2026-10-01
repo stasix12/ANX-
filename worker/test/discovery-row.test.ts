@@ -496,6 +496,73 @@ async function main(): Promise<void> {
         assert.ok(d.nameInside, say(`card line ${i}'s name is outside the card`));
       }
     }
+
+    /*
+     * ─── AND THE TOP OF THE SCREEN, WHICH IS A PROMISE I BROKE TWICE ───
+     *
+     * "את הגובה של הכרטיסייה להוריד בכ-15-20%" was answered with a measured
+     * number for the card and a COMPUTED one for everything above it: "the
+     * saving in the search card and the results card is calculated from the
+     * spacing changes and not measured in a browser, because measuring it
+     * would mean extracting that JSX into a component." One version later the
+     * owner wrote "החלק העליון עדיין לא הצטמצם", and he was right — an
+     * estimate is not a measurement and I had nothing that could tell me.
+     *
+     * So the search box and the results panel ARE components now, and this is
+     * the measurement. Rendered with the numbers off his own screen: 155
+     * groups already listed, five saved searches, 146 results with 80 new and
+     * 20 whose membership the cards did not state.
+     *
+     *   390px (his iPhone)   509 → 411   98px, 19.3%
+     *   360px                523 → 425   98px, 18.7%
+     *   430px                509 → 395  114px, 22.4%
+     *
+     * Where it went, at 390: the search button left its own full-width line
+     * and sat beside the field (-62), "חיפושים אחרונים" rode into the chip row
+     * instead of standing above it (-20), the follow star moved up onto the
+     * heading's line instead of making the 16px line under it 40 (-24), and
+     * the three tiles lost a notch of padding (-12).
+     *
+     * The ceiling is the widest measurement plus four, as everywhere in this
+     * file.
+     */
+    const topHtml = execFileSync('npx', ['tsx', 'worker/test/render-discover-top.tsx'], { encoding: 'utf8', maxBuffer: 8 << 20 });
+    writeFileSync(path.join(dir, 'top.html'), topHtml);
+    for (const width of [360, 390, 430]) {
+      const page = await browser.newPage({ viewport: { width, height: 1400 } });
+      await page.goto(`file://${path.join(dir, 'top.html')}`);
+      await page.waitForTimeout(200);
+      const top = await page.evaluate(() => {
+        const el = document.querySelector('.top-after > div');
+        return {
+          height: Math.round(el?.getBoundingClientRect().height ?? 0),
+          blocks: [...(el?.children ?? [])].map((c) => Math.round(c.getBoundingClientRect().height)),
+          overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          /* The one control this pass made smaller on purpose. It still has to
+             be a target: the search button went from a full-width bar to a
+             word beside the field, and a word beside a field is exactly where
+             a 36px control gets shipped. */
+          search: (() => {
+            const b = [...document.querySelectorAll('button')].find((e) => /חפש|מחפש/.test(e.textContent || ''));
+            const r = b?.getBoundingClientRect();
+            return r ? { w: Math.round(r.width), h: Math.round(r.height) } : null;
+          })(),
+        };
+      });
+      await page.close();
+      const say = (m: string) => `${width}px: ${m}`;
+      checks += 4;
+      assert.ok(top.blocks.length === 3, say(`the top fixture rendered ${top.blocks.length} blocks, not three — nothing below is measuring the top`));
+      assert.equal(top.overflow, false, say('the top of the screen pushes the page sideways'));
+      assert.ok(
+        top.height <= 429,
+        say(`the top of גילוי קבוצות is ${top.height}px (${top.blocks.join(' + ')}) — it measured 509 before this pass and 411 after, and this is the ceiling that holds it`),
+      );
+      assert.ok(
+        top.search !== null && top.search.h >= 44 && top.search.w >= 60,
+        say(`the search button is ${top.search ? `${top.search.w}×${top.search.h}` : 'missing'} — it lost its own line, not its target`),
+      );
+    }
   } finally {
     await browser.close();
   }

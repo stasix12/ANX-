@@ -347,13 +347,13 @@ export class BrowserSession {
    * reads them in the same place.
    */
   async discoverGroups(headless: boolean, query: string, opts: { havePictures?: string[] } = {}): Promise<SearchOutcome> {
-    if (!this.hasProfile()) return { groups: [], pictures: new Map(), unread: [], offTopic: 0, problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
+    if (!this.hasProfile()) return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
     const page = await this.newPage(headless, 'גילוי קבוצות');
     try {
       const kind = await classifyPage(page);
-      if (kind === 'checkpoint') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
+      if (kind === 'checkpoint') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
       if (kind === 'login' || !(await this.hasLoginCookie())) {
-        return { groups: [], pictures: new Map(), unread: [], offTopic: 0, problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+        return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
       }
       const found = await searchGroups(page, query, opts);
       /*
@@ -365,8 +365,8 @@ export class BrowserSession {
        */
       if (!found.groups.length) {
         const after = await classifyPage(page);
-        if (after === 'checkpoint') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
-        if (after === 'login') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+        if (after === 'checkpoint') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
+        if (after === 'login') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
       }
       return found;
     } finally {

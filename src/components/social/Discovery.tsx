@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
-import { Badge, Button, ButtonLink, CARD_ELEVATED, Card } from '@/components/social/ui';
-import { MEMBERSHIP_SHORT, PRIVACY_LABEL, membersText, type Membership } from '@/lib/social/discovery';
+import { Badge, Button, ButtonLink, CARD_ELEVATED, Card, inputClass } from '@/components/social/ui';
+import { MEMBERSHIP_SHORT, PRIVACY_LABEL, membersText, normalizeQuery, type Membership } from '@/lib/social/discovery';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
-import { CheckIcon, ClockIcon, CloseIcon, GlobeIcon, MoreIcon, SparklesIcon, TargetIcon, UsersIcon } from '@/components/icons';
+import { CheckIcon, ClockIcon, CloseIcon, GlobeIcon, MoreIcon, SearchIcon, SparklesIcon, StarIcon, TargetIcon, UsersIcon } from '@/components/icons';
 
 /*
  * THE PARTS OF גילוי קבוצות THAT ARE WORTH MEASURING.
@@ -52,12 +52,17 @@ export function Figure({ tone, value, label }: { tone: 'good' | 'warn' | 'brand'
   /* The reference's tile: a round glyph and the number on one line, the words
      under both. Same props, same value, same tone — this is where they sit. */
   return (
-    <div className={`rounded-tile border px-2 py-2 ${skin.tint}`}>
+    /* A notch tighter than it was, and the same tile: px-2 py-1.5 instead of
+       py-2, a 24px glyph instead of 28 and a 19px figure instead of 22. The
+       three of them are 64px of the top of this screen and the owner asked for
+       the top back — measured, this is twelve of them, with nothing about the
+       design language changed. */
+    <div className={`rounded-tile border px-2 py-1.5 ${skin.tint}`}>
       <div className="flex items-center justify-center gap-1.5">
-        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${skin.chip} ${skin.text}`}>
+        <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${skin.chip} ${skin.text}`}>
           <Glyph aria-hidden className="h-3.5 w-3.5" />
         </span>
-        <p className={`text-[22px] font-extrabold leading-none tabular-nums ${skin.text}`}>{value}</p>
+        <p className={`text-[19px] font-extrabold leading-none tabular-nums ${skin.text}`}>{value}</p>
       </div>
       <p className="mt-1 text-center text-[11px] font-bold leading-tight text-mist-500">{label}</p>
     </div>
@@ -402,6 +407,226 @@ export function WalkThrough({
  * render-card.tsx gives: a copy written inside a test stops failing when the
  * component changes.
  */
+/**
+ * THE SEARCH BOX, as its own component — and the reason is a promise I made
+ * twice and could not keep.
+ *
+ * "את הגובה של הכרטיסייה להוריד בכ-15-20%" was answered with a measured
+ * number for the card below and a COMPUTED one for this: "the saving in the
+ * search card is calculated from the spacing changes and not measured in a
+ * browser, because measuring it would mean extracting this JSX into a
+ * component." The owner's answer, one version later, was "החלק העליון עדיין
+ * לא הצטמצם" — and he was right, because an arithmetic estimate is not a
+ * measurement and I had no way to tell.
+ *
+ * So it is a component. Every value and every handler is the page's own,
+ * passed in; nothing here decides anything. What it buys is that
+ * worker/test/discovery-row.test.ts can put the real thing in a real browser
+ * and read its height, which is the only kind of claim about pixels worth
+ * making.
+ */
+export function SearchCard({
+  text,
+  searching,
+  searches,
+  activeQuery,
+  onText,
+  onRun,
+}: {
+  text: string;
+  searching: boolean;
+  searches: { id: string; query: string; normalized: string }[];
+  /** The phrase whose results are on screen, for the chip that is lit. */
+  activeQuery: string;
+  onText: (v: string) => void;
+  onRun: (q: string) => void;
+}) {
+  return (
+    <Card padded={false} className="px-3 py-2.5">
+      {/*
+        ONE ROW, NOT TWO. The button was full width on a line of its own under
+        the field: 54 pixels of button plus the gap above it, every time this
+        screen is opened, to say a word the field beside it already says.
+        Measured at 390px, moving it alongside is the single biggest piece of
+        the top this pass gives back.
+      */}
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 grow">
+          <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-mist-500 start-3" />
+          {/* dir="auto" and not "rtl": he searches in Hebrew, and the
+              results are Hebrew and Russian alike — a Cyrillic phrase
+              typed into a field forced to RTL has its punctuation thrown
+              to the wrong end while he is typing it. */}
+          <input
+            aria-label="חפש עיר, אזור או נושא"
+            placeholder="חפש עיר, אזור או נושא…"
+            dir="auto"
+            inputMode="search"
+            enterKeyHint="search"
+            value={text}
+            onChange={(e) => onText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onRun(text);
+            }}
+            className={`${inputClass} h-12 rounded-tile pe-10 ps-10 text-base`}
+          />
+          {/* The reference's clear button. It writes the same state the
+              field does and runs no search of its own. */}
+          {text && (
+            <button
+              type="button"
+              aria-label="נקה את תיבת החיפוש"
+              onClick={() => onText('')}
+              className="absolute top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-300 end-0.5"
+            >
+              <CloseIcon aria-hidden className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {/* Same onClick, same busy, same word. The gradient is the theme's own
+            `.social-theme .grad-primary`, which a bg-gradient-* beside it
+            would not change — two classes beat one. Measured. */}
+        <Button
+          size="lg"
+          busy={searching}
+          onClick={() => onRun(text)}
+          className="h-12 shrink-0 whitespace-nowrap rounded-tile !min-h-12 !px-3.5 shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
+        >
+          {searching ? 'מחפש…' : 'חפש'}
+        </Button>
+      </div>
+
+      {/* ───────────────────────── recent searches ────────────────────── */}
+      {searches.length > 0 && (
+        /*
+          THE LABEL RIDES WITH THE CHIPS instead of standing on a line of its
+          own above them — twenty more pixels, and the words are still there.
+          ONE ROW THAT SCROLLS, never a second line: wrapped, a sixth saved
+          search silently added 44px to this card. The bleed and padding keep a
+          chip's focus ring from being clipped by the overflow.
+        */
+        <div className="-mx-1 mt-2 min-w-0 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex w-max items-center gap-1.5">
+            <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-mist-500">
+              <ClockIcon aria-hidden className="h-3.5 w-3.5" />
+              אחרונים
+            </span>
+            {searches.map((s) => {
+              const on = s.normalized === normalizeQuery(activeQuery);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  dir="auto"
+                  onClick={() => {
+                    onText(s.query);
+                    onRun(s.query);
+                  }}
+                  className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-bold transition-colors ${
+                    on
+                      ? 'border-brand-400 bg-brand-400/10 text-brand-400 shadow-[0_1px_4px_-1px_rgba(109,40,217,0.3)]'
+                      : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600 hover:bg-ink-800'
+                  }`}
+                >
+                  {s.query}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * WHAT THE SEARCH FOUND. Same component reason as SearchCard above: it is
+ * measured in a browser rather than estimated in a comment.
+ */
+export function ResultsCard({
+  query,
+  fresh,
+  totals,
+  watching,
+  onToggleWatch,
+  joinedNotListed,
+  adoptBusy,
+  onAdoptAll,
+}: {
+  query: string;
+  /** Groups new since the PREVIOUS run of this search — not totals.fresh. */
+  fresh: number;
+  totals: { total: number; fresh: number; requested: number; member: number; unknown: number };
+  watching?: boolean;
+  onToggleWatch?: () => void;
+  joinedNotListed: number;
+  adoptBusy: boolean;
+  onAdoptAll: () => void;
+}) {
+  return (
+    <Card padded={false} className="px-3 py-2.5">
+      {/*
+        THE STAR MOVED UP ONE LINE. It is a 40px control and it was sitting on
+        the 16px line below, which made that line 40px tall for nothing. On the
+        title's line it costs nothing at all: the heading is taller than it is.
+      */}
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 grow text-[19px] font-extrabold leading-tight text-mist-100">
+          נמצאו <span className="tabular-nums">{totals.total}</span> קבוצות
+        </p>
+        {fresh > 0 && (
+          <Badge tone="brand">
+            {fresh === 1 ? 'אחת חדשה' : `${fresh} חדשות`}
+          </Badge>
+        )}
+        {onToggleWatch && (
+          <button
+            type="button"
+            aria-pressed={watching}
+            aria-label={watching ? 'הפסק לעקוב אחרי החיפוש הזה' : 'עקוב אחרי החיפוש הזה'}
+            title={watching ? 'במעקב' : 'עקוב אחרי החיפוש הזה'}
+            onClick={onToggleWatch}
+            className={`-me-1 grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors hover:bg-ink-900 ${
+              watching ? 'text-warning-400' : 'text-mist-500'
+            }`}
+          >
+            <StarIcon aria-hidden className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      <p dir="auto" className="truncate text-xs text-mist-500">
+        עבור החיפוש “{query}”
+      </p>
+      {/* The brief's order, read right-to-left as the page is: new,
+          waiting, already joined. Same three values, same three tones,
+          same labels — only the order they sit in. */}
+      <div className="mt-2 grid grid-cols-3 gap-2 [&>*]:min-w-0">
+        <Figure tone="brand" value={totals.fresh} label="קבוצות חדשות" />
+        <Figure tone="warn" value={totals.requested} label="בקשות ממתינות" />
+        <Figure tone="good" value={totals.member} label="כבר הצטרפת" />
+      </div>
+      {/*
+        ONE PRESS FOR THE ONES HE IS ALREADY IN.
+
+        "אני חבר ב-9 מאלה ואני רוצה לפרסם בהן" was nine taps through a
+        list, and the per-row button is easy to miss because it only
+        appears on the rows that can use it. The count is in the label,
+        so the promise and the set are the same thing.
+      */}
+      {joinedNotListed > 0 && (
+        <Button variant="secondary" busy={adoptBusy} onClick={onAdoptAll} className="mt-2 h-11 w-full !min-h-11">
+          הוסף לרשימה את {joinedNotListed} הקבוצות שאתה כבר חבר בהן
+        </Button>
+      )}
+      {totals.unknown > 0 && (
+        <p className="mt-1.5 text-[11px] leading-4 text-mist-500">
+          ב-{totals.unknown} קבוצות תוצאות החיפוש לא אמרו אם אתם חברים. פתחו אותן כדי לראות.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 export function MyGroupsCard({
   joined,
   missing,

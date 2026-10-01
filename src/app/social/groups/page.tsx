@@ -39,6 +39,7 @@ import {
 } from '@/lib/social/client';
 import { formatDayMonthHe } from '@/lib/social/time';
 import { KNOWN_CITIES, detectCity, sortCities } from '@/lib/social/cities';
+import { RUSSIAN_CATEGORY, needsRussianCategory, russianNamed } from '@/lib/social/language';
 import {
   isPendingShare,
   parseGroupShareUrl,
@@ -202,6 +203,11 @@ export default function GroupsPage() {
 
   const cities = useMemo(() => sortCities(all.map(cityOf)), [all, cityOf]);
   const categories = useMemo(() => Array.from(new Set(all.map((g) => g.category).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'he')), [all]);
+  /* Read off the name every render rather than stored: a group renamed in
+     Facebook, or one a search found an hour ago, is counted without anything
+     having to be re-scanned. See language.ts for the rule. */
+  const russianAll = useMemo(() => russianNamed(all), [all]);
+  const russianToFile = useMemo(() => needsRussianCategory(all), [all]);
   /* Only this slice is drawn; `visible` remains the real filtered set. */
   const page = useMemo(() => visible.slice(0, shown), [visible, shown]);
 
@@ -424,6 +430,51 @@ export default function GroupsPage() {
           </span>
           <ChevronIcon aria-hidden className="h-4 w-4 shrink-0 text-mist-500 rtl:rotate-180" />
         </Link>
+
+        {/*
+          THE RUSSIAN-LANGUAGE GROUPS, FILED IN ONE TAP.
+
+          "תוסיף קטגוריה של קבוצות דוברי רוסית ותמיין לי אותם." The category is
+          the product's own — the same free-text field the "שייך לקטגוריה"
+          sheet writes and the same chip row filters by — so once this is
+          pressed nothing here is special any more: they are a category like
+          any other, and it can be renamed or undone from the same menu.
+
+          IT ONLY APPEARS WHEN THERE IS SOMETHING TO DO. Groups already filed
+          under something are not counted and not touched, so the card goes
+          away when the list is sorted and comes back by itself when a search
+          adds Russian-named groups later.
+        */}
+        {groups && russianToFile.length > 0 && (
+          <Card padded={false} className="px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-mist-100">
+                  {russianToFile.length === 1 ? 'קבוצה אחת ששמה כתוב ברוסית' : `${russianToFile.length} קבוצות ששמן כתוב ברוסית`}
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
+                  נסווג אותן כ"{RUSSIAN_CATEGORY}" ואז אפשר לסנן אליהן בשורת הקטגוריות.
+                  {russianAll.length > russianToFile.length && ` ${russianAll.length - russianToFile.length} כבר מסווגות ולא ייגעו.`}
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                busy={busy === 'bulk-ru'}
+                className="shrink-0 whitespace-nowrap"
+                onClick={() =>
+                  act(
+                    'bulk-ru',
+                    () => bulkUpdateTargets(russianToFile.map((g) => g.id), { category: RUSSIAN_CATEGORY }),
+                    `${russianToFile.length} קבוצות סווגו כ"${RUSSIAN_CATEGORY}".`,
+                  )
+                }
+              >
+                <TagIcon className="h-4 w-4" />
+                סווג אותן
+              </Button>
+            </div>
+          </Card>
+        )}
 
         {/*
           Search + the filter dimensions, at about half the height they cost

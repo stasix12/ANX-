@@ -12,7 +12,6 @@ import {
   EmptyState,
   ErrorState,
   Notice,
-  SegmentedControl,
   SkeletonList,
   inputClass,
   useToast,
@@ -47,7 +46,7 @@ import {
 import { friendlyMessage } from '@/lib/social/errors';
 import { relativeHe } from '@/lib/social/time';
 import type { DiscoveredGroupRow, DiscoverySearchRow } from '@/lib/social/types';
-import { CloseIcon, EyeIcon, SearchIcon, StarIcon, UsersIcon } from '@/components/icons';
+import { ChevronDownIcon, ClockIcon, CloseIcon, EyeIcon, SearchIcon, StarIcon, UsersIcon } from '@/components/icons';
 
 /**
  * גילוי קבוצות — "מצא קבוצות חדשות שמתאימות לעסק שלך".
@@ -495,7 +494,23 @@ export default function DiscoverPage() {
   const pickedRows = shown.filter((r) => picked.has(r.id));
 
   return (
-    <SocialShell title="גילוי קבוצות" lede="מצא קבוצות חדשות שמתאימות לעסק שלך">
+    <SocialShell
+      title="גילוי קבוצות"
+      lede="מצא קבוצות חדשות שמתאימות לעסק שלך"
+      /* The reference puts an illustration beside the page title. `headerAction`
+         is the shell's own slot for what sits there, so the shared page header
+         every other screen uses is untouched. Decoration: aria-hidden, no
+         handler, nothing to press. */
+      headerAction={
+        <span aria-hidden className="relative grid h-14 w-14 shrink-0 place-items-center">
+          <span className="absolute inset-0 rounded-full bg-brand-300/15 blur-[2px]" />
+          <UsersIcon className="relative h-8 w-8 text-brand-300" />
+          <span className="absolute bottom-0 end-0 grid h-7 w-7 place-items-center rounded-full border-2 border-ink-950 bg-gradient-to-br from-brand-500 to-brand-300 text-on-brand">
+            <SearchIcon className="h-3.5 w-3.5" />
+          </span>
+        </span>
+      }
+    >
       <div className="space-y-4">
         {error && <ErrorState message={error} onRetry={() => (active ? run(active) : undefined)} />}
 
@@ -544,23 +559,7 @@ export default function DiscoverPage() {
 
         {/* ─────────────────────────── the search box ─────────────────────── */}
         <Card padded={false} className="px-3 py-3.5">
-          {/* The illustrated head the brief asks for. DECORATION ONLY — no
-              control, no handler, aria-hidden, and it sits inside this card so
-              the app's shared page header is untouched. */}
-          <div aria-hidden className="mb-3 flex items-center gap-2.5">
-            <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-tile bg-gradient-to-br from-brand-500 to-brand-300 shadow-[0_4px_12px_-3px_rgba(124,58,237,0.5)]">
-              <UsersIcon className="h-5 w-5 text-on-brand" />
-              <span className="absolute -bottom-1 -end-1 grid h-5 w-5 place-items-center rounded-full border-2 border-ink-900 bg-ink-900 text-brand-400">
-                <SearchIcon className="h-3 w-3" />
-              </span>
-            </span>
-            <div className="min-w-0">
-              <p className="text-[15px] font-extrabold leading-tight text-mist-100">חפשו קבוצות</p>
-              <p className="mt-0.5 text-xs leading-tight text-mist-500">עיר, אזור או נושא</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2.5">
             <div className="relative flex-1">
               <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-mist-500 start-3" />
               {/* dir="auto" and not "rtl": he searches in Hebrew, and the
@@ -578,16 +577,33 @@ export default function DiscoverPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') run(text);
                 }}
-                className={`${inputClass} h-14 rounded-tile ps-11 text-base`}
+                className={`${inputClass} h-14 rounded-tile pe-11 ps-11 text-base`}
               />
+              {/* The reference's clear button. It writes the same state the
+                  field does and runs no search of its own. */}
+              {text && (
+                <button
+                  type="button"
+                  aria-label="נקה את תיבת החיפוש"
+                  onClick={() => setText('')}
+                  className="absolute top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-300 end-1"
+                >
+                  <CloseIcon aria-hidden className="h-4 w-4" />
+                </button>
+              )}
             </div>
             <Button
               size="lg"
               busy={searching}
               onClick={() => run(text)}
               /* Same onClick, same busy, same label. */
-              className="h-14 rounded-tile bg-gradient-to-l from-brand-500 to-brand-300 shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)] sm:w-auto"
+              /* Full width and gradient, as the reference draws it. The theme's
+                 own `.social-theme .grad-primary` is what paints a primary
+                 button — two classes beat one, so a bg-gradient-* beside it
+                 would change nothing. Measured. */
+              className="h-14 w-full rounded-tile shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
             >
+              <SearchIcon aria-hidden className="h-5 w-5" />
               {searching ? 'מחפש…' : 'חפש קבוצות'}
             </Button>
           </div>
@@ -595,7 +611,10 @@ export default function DiscoverPage() {
           {/* ───────────────────────── recent searches ────────────────────── */}
           {searches.length > 0 && (
             <div className="mt-3">
-              <p className="mb-1.5 text-xs font-bold text-mist-500">חיפושים אחרונים</p>
+              <p className="mb-1.5 flex items-center gap-1 text-xs font-bold text-mist-500">
+                <ClockIcon aria-hidden className="h-3.5 w-3.5" />
+                חיפושים אחרונים
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {searches.map((s) => {
                   const on = s.normalized === normalizeQuery(active);
@@ -743,11 +762,31 @@ export default function DiscoverPage() {
                 ))}
               </div>
             </div>
-            <SegmentedControl
-              value={sort}
-              onChange={setSort}
-              options={SORTS.map((s) => ({ value: s, label: SORT_LABEL[s] }))}
-            />
+            {/*
+              "במקום 3 כפתורים גדולים: הצג שורה קטנה — מיון: הכי רלוונטיות ▼".
+              The same `sort` state, the same setter, the same SORTS and the
+              same labels; a native select so the options open as the phone's
+              own list and the row costs one line instead of three buttons.
+            */}
+            <div className="flex justify-center">
+              <label className="relative inline-flex items-center gap-1 rounded-full border border-ink-700 bg-ink-900 ps-3 text-xs font-bold text-mist-300">
+                <span className="text-mist-500">מיון:</span>
+                <span className="text-brand-400">{SORT_LABEL[sort]}</span>
+                <ChevronDownIcon aria-hidden className="pointer-events-none me-2.5 h-3.5 w-3.5 text-mist-500" />
+                <select
+                  aria-label="סדר התוצאות"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as typeof sort)}
+                  className="absolute inset-0 h-11 w-full cursor-pointer opacity-0"
+                >
+                  {SORTS.map((s) => (
+                    <option key={s} value={s}>
+                      {SORT_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
         )}
 

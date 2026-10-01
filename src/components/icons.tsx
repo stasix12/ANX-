@@ -723,6 +723,34 @@ export function SendIcon(props: IconProps) {
 }
 
 /** Filled dot, for a status marker in a list. */
+/** A globe — "ציבורית" beside a group's member count. Decorative. */
+export function GlobeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3c2.5 2.6 2.5 15.4 0 18-2.5-2.6-2.5-15.4 0-18Z" />
+    </svg>
+  );
+}
+
+/**
+ * Three dots — "more", for a row action that is not "close".
+ *
+ * "כרגע יש X בצד הכרטיס. מבחינה ויזואלית הוא נראה כמו 'סגור'." A ✕ on a card
+ * reads as dismissing the card itself; this carries the same handler without
+ * making that promise.
+ */
+export function MoreIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props} fill="currentColor" stroke="none">
+      <circle cx="12" cy="5" r="1.7" />
+      <circle cx="12" cy="12" r="1.7" />
+      <circle cx="12" cy="19" r="1.7" />
+    </svg>
+  );
+}
+
 export function DotIcon(props: IconProps) {
   return (
     <svg {...base} {...props} fill="currentColor" stroke="none">

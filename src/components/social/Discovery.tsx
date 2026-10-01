@@ -5,7 +5,7 @@ import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Badge, Button, ButtonLink, CARD_ELEVATED, Card } from '@/components/social/ui';
 import { MEMBERSHIP_SHORT, PRIVACY_LABEL, membersText, type Membership } from '@/lib/social/discovery';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
-import { CheckIcon, ClockIcon, CloseIcon, SparklesIcon, TargetIcon, UsersIcon } from '@/components/icons';
+import { CheckIcon, ClockIcon, CloseIcon, GlobeIcon, MoreIcon, SparklesIcon, TargetIcon, UsersIcon } from '@/components/icons';
 
 /*
  * THE PARTS OF גילוי קבוצות THAT ARE WORTH MEASURING.
@@ -48,14 +48,18 @@ const FIGURE_SKIN: Record<'good' | 'warn' | 'brand', { tint: string; text: strin
 
 export function Figure({ tone, value, label }: { tone: 'good' | 'warn' | 'brand'; value: number; label: string }) {
   const skin = FIGURE_SKIN[tone];
-  const Glyph = tone === 'good' ? CheckIcon : tone === 'warn' ? ClockIcon : SparklesIcon;
+  const Glyph = tone === 'good' ? UsersIcon : tone === 'warn' ? ClockIcon : SparklesIcon;
+  /* The reference's tile: a round glyph and the number on one line, the words
+     under both. Same props, same value, same tone — this is where they sit. */
   return (
-    <div className={`rounded-tile border px-2 py-2.5 text-center ${skin.tint}`}>
-      <span className={`mx-auto mb-1.5 grid h-7 w-7 place-items-center rounded-lg ${skin.chip} ${skin.text}`}>
-        <Glyph aria-hidden className="h-3.5 w-3.5" />
-      </span>
-      <p className={`text-[22px] font-extrabold leading-none tabular-nums ${skin.text}`}>{value}</p>
-      <p className="mt-1 text-[11px] font-bold leading-tight text-mist-500">{label}</p>
+    <div className={`rounded-tile border px-2 py-2 ${skin.tint}`}>
+      <div className="flex items-center justify-center gap-1.5">
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${skin.chip} ${skin.text}`}>
+          <Glyph aria-hidden className="h-3.5 w-3.5" />
+        </span>
+        <p className={`text-[22px] font-extrabold leading-none tabular-nums ${skin.text}`}>{value}</p>
+      </div>
+      <p className="mt-1 text-center text-[11px] font-bold leading-tight text-mist-500">{label}</p>
     </div>
   );
 }
@@ -102,23 +106,11 @@ export function GroupRow({
 }) {
   /*
    * ADDED ONLY WHERE THE SEARCH SAID HE IS A MEMBER. Not "not proven
-   * otherwise" — SAID.
-   *
-   * This read `!== 'none' && !== 'requested'`, so a row whose membership the
-   * card did not state got the button too, on the reasoning that the search
-   * did not know and he does. The owner read the result exactly as it looks:
-   * "זה נותן לי לצרף לרשימה קבוצות שאני עדיין לא חבר בהם". He was right and
-   * the reasoning was wrong — a screen that has nothing to say about a group
-   * must not offer an action whose whole meaning is "you are in this one".
-   * Every such row would have become a publishing target that fails once a
-   * day, with a sensible-looking reason, for ever.
-   *
-   * The same rule as the bulk button above the list, deliberately: two
-   * controls that add groups may not disagree about which groups they mean.
-   *
-   * A group he IS in that the card stayed silent about is not lost — it
-   * resolves on the next search, and "+ הוסף" on the groups screen takes its
-   * link. Both cost him a step. Neither queues a publication that cannot work.
+   * otherwise" — SAID. The owner read the old behaviour exactly as it looked:
+   * "זה נותן לי לצרף לרשימה קבוצות שאני עדיין לא חבר בהם". A screen that has
+   * nothing to say about a group must not offer an action whose whole meaning
+   * is "you are in this one", or every such row becomes a publishing target
+   * that fails once a day with a sensible-looking reason.
    */
   const canAdd = !already && row.membership === 'member';
 
@@ -127,207 +119,158 @@ export function GroupRow({
     PRIVACY_LABEL[row.privacy],
   ].filter(Boolean);
 
+  /*
+   * THE REFERENCE'S LAYOUT, and only its layout.
+   *
+   * Every handler, condition and string below is the one that was here. What
+   * the design specification changed is where things sit: the checkbox opens
+   * the row at the start, the name and its facts take the middle, the picture
+   * moves to the far side, and the action sits under it rather than beside the
+   * badges. The ✕ became a ⋮ — the same onHide, in a mark that reads as "more"
+   * instead of "close", which is what the brief asked for and why it is not
+   * simply deleted.
+   */
   return (
-    /* VISUAL ONLY. Every handler, every condition and every string below is the
-       one that was here — what changed is the skin: a lifted white card with a
-       soft violet shadow instead of a flat bordered box, a larger picture, a
-       roomier checkbox, and the facts as a quiet line under a bolder name. */
     <div
-      className={`relative rounded-card border px-3 py-1.5 transition-all ${
+      className={`relative rounded-card border px-2.5 py-2 transition-all ${
         picked
           ? 'border-brand-400 bg-brand-400/[0.06] shadow-[0_2px_10px_-2px_rgba(46,16,101,0.14)]'
           : 'border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(46,16,101,0.04),0_8px_20px_-14px_rgba(46,16,101,0.18)]'
       }`}
     >
-      <div className="flex items-start gap-2.5">
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={picked}
-          aria-label={`בחר את ${row.name}`}
-          onClick={onToggle}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
-        >
-          <span
-            className={`grid h-[26px] w-[26px] place-items-center rounded-lg border-2 transition-colors ${
-              picked ? 'border-brand-500 bg-brand-500 text-on-brand shadow-[0_2px_6px_-1px_rgba(124,58,237,0.5)]' : 'border-ink-600 bg-ink-900'
-            }`}
+      <div className="flex items-stretch gap-2">
+        {/* ─── the start of the row (right in RTL): pick it, then act on it ───
+             The reference stacks these two — the checkbox at the head of the
+             card and the one action at its foot, with the group's name between
+             them and its picture on the far side. */}
+        <div className="flex w-[94px] shrink-0 flex-col items-start justify-between gap-1">
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={picked}
+            aria-label={`בחר את ${row.name}`}
+            onClick={onToggle}
+            className="-ms-1 grid h-10 w-10 shrink-0 place-items-center rounded-xl"
           >
-            {picked && <CheckIcon aria-hidden className="h-3.5 w-3.5" />}
-          </span>
-        </button>
+            <span
+              className={`grid h-[22px] w-[22px] place-items-center rounded-md border-2 transition-colors ${
+                picked ? 'border-brand-500 bg-brand-500 text-on-brand shadow-[0_2px_6px_-1px_rgba(124,58,237,0.5)]' : 'border-ink-600 bg-ink-900'
+              }`}
+            >
+              {picked && <CheckIcon aria-hidden className="h-3 w-3" />}
+            </span>
+          </button>
 
-        <TargetAvatar name={row.name} imageUrl={row.image_url || fallbackImage || null} channel="facebook_group" size={52} />
+          {/*
+            ONE CONTROL, NEVER TWO. At phone width the room left once the
+            checkbox, the picture and the ⋮ have taken theirs is about 165px;
+            two filled buttons need two hundred, and
+            worker/test/discovery-row.test.ts caught what that costs — the row
+            went to 178px, or a button left the card.
+          */}
+          {canAdd ? (
+            <>
+              <Button size="sm" variant="primary" busy={busy} onClick={onAdopt} className="w-full whitespace-nowrap px-1 text-[11px]">
+                הוסף לרשימה
+              </Button>
+            </>
+          ) : (
+            <ButtonLink
+              href={row.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              size="sm"
+              variant={row.membership === 'member' ? 'secondary' : 'primary'}
+              /* The two skins the brief names, chosen by the SAME condition as
+                 before. `!` on the border because the secondary variant carries
+                 border-ink-700 and both are one-class border-colour utilities in
+                 the same layer — the later one wins. Measured in a browser:
+                 without it the purple edge never appeared at all. */
+              className={`w-full whitespace-nowrap px-1 text-[11px] ${
+                row.membership === 'member' ? '!border-brand-400/35 text-brand-400' : ''
+              }`}
+            >
+              {row.membership === 'member' ? 'פתח קבוצה' : 'פתח להצטרפות'}
+            </ButtonLink>
+          )}
+        </div>
 
-        {/* THE WHOLE COLUMN RESERVES THE ✕, not just the name.
-            Moving the ✕ out of the row's flow bought the height, and put it on
-            top of the row's own button: measured 36×23px of overlap on "פתח
-            להצטרפות" at all three widths — a thumb aiming at the button would
-            hide the group instead. Reserving the space on the name alone left
-            every line BELOW it free to run under the ✕. */}
-        <div className="min-w-0 flex-1 pe-10">
+        {/* ─── the middle: what the group is ─── */}
+        <div className="min-w-0 flex-1 self-center">
           {/*
             `data-group-name` is a measurement hook and nothing else.
-
             worker/test/discovery-row.test.ts asserts that the browser RESOLVES
             this element's direction to ltr for a Cyrillic name and rtl for a
-            Hebrew one — which is the whole of the owner's "תבדוק שהפיצ'ר עובד
-            גם בשמות קבוצות ברוסית". Found by its dir attribute, the test could
-            not tell "the attribute was deleted" from "the name did not render"
-            and reported the wrong failure for the right bug. Found by this, it
-            says exactly which.
+            Hebrew one — the whole of "תבדוק שהפיצ'ר עובד גם בשמות קבוצות
+            ברוסית". Found by its dir attribute, the test could not tell a
+            deleted attribute from a name that never rendered.
           */}
-          {/* Two lines rather than one, clamped. A long Hebrew name used to end
-              in an ellipsis halfway through the town it names; the brief asks
-              for up to two lines, and the row is measured at all three phone
-              widths so the extra line cannot push the card out of shape. */}
           <p data-group-name dir="auto" className="line-clamp-2 text-sm font-extrabold leading-tight text-mist-100">
             {row.name}
           </p>
-          {/* THE FACTS AND THE ACTION SHARE A LINE WHEN THEY FIT.
-              The action used to have a line of its own always, which is 48 of
-              a 120px card. Wrapped like this it drops beside the badges on a
-              390px phone and wider, and on a 360px one it wraps exactly where
-              it used to sit — so this is never worse and usually a line
-              shorter. */}
-          <div className="mt-0.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            {facts.length > 0 && <span className="text-[11px] text-mist-500">{facts.join(' · ')}</span>}
+
+          {facts.length > 0 && (
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-mist-500">
+              <GlobeIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-300" />
+              <span className="truncate">{facts.join(' · ')}</span>
+            </p>
+          )}
+
+          <div className="mt-1 flex flex-wrap items-center gap-1">
             {row.membership !== 'unknown' && (
               <Badge tone={MEMBERSHIP_TONE[row.membership]}>{MEMBERSHIP_SHORT[row.membership]}</Badge>
             )}
             {already && (
-              /* "במערכת" rather than "כבר במערכת": the shorter word is what
-                 lets this share the line with the status badge instead of
-                 taking one of its own, which was a whole line on most cards. */
               <span className="inline-flex items-center gap-1 rounded-full bg-success-400/10 px-1.5 py-0.5 text-[11px] font-bold text-success-400">
                 <CheckIcon aria-hidden className="h-3 w-3" />
-                במערכת
+                כבר במערכת
               </span>
             )}
-            </div>
-
-          {/*
-            TWO CONTROLS, NEVER THREE — measured, not guessed.
-
-            It was three, and worker/test/discovery-row.test.ts caught what
-            that costs: with "הוסף לקבוצות שלי" beside the open link the row
-            wrapped to a second and third line of buttons and measured 208px
-            at 360, against 116 for the same row without them. Nine rows would
-            not fit a phone screen; four would.
-
-            So "לא רלוונטי" moved out of this line and became the ✕ at the top
-            of the row, where the avatar has already paid for the height — and
-            the add button lost four words it did not need. Both are still
-            44px targets.
-          */}
-          {/*
-            NEVER TWO BUTTONS, and the measurement is why.
-
-            At 360px the content column is about 165 wide once the checkbox,
-            the picture and the dismiss have taken their 44 each. Two filled
-            buttons need two hundred. Told not to wrap they left the card;
-            allowed to wrap they took the row to 178px. Both were caught by
-            worker/test/discovery-row.test.ts rather than by looking.
-
-            So the row asks ONE question. For a group he is not in, that is
-            "open it so you can join". For one he is already in and has not
-            added to the publishing list, adding it is the useful act and
-            opening it is the afterthought — so they swap, and the afterthought
-            becomes a text link. A link still carries its own 44px.
-          */}
-          <div className="flex min-w-0 items-center gap-2">
-            {canAdd ? (
-              <>
-                {/* Same onClick, same busy, same label. No gradient utilities
-                    here: the primary variant already paints the theme's own
-                    `.social-theme .grad-primary`, which is two classes and
-                    beats any one-class bg-gradient-* put beside it. Measured —
-                    adding them changed the computed background by nothing. */}
-                <Button
-                  size="sm"
-                  variant="primary"
-                  busy={busy}
-                  onClick={onAdopt}
-                  className="whitespace-nowrap shadow-[0_3px_10px_-2px_rgba(124,58,237,0.45)]"
-                >
-                  הוסף לרשימה
-                </Button>
-                <a
-                  href={row.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-11 items-center whitespace-nowrap text-[13px] font-bold text-brand-400"
-                >
-                  פתח קבוצה
-                </a>
-              </>
-            ) : (
-              <ButtonLink
+            {/*
+              THE WAY TO OPEN THE GROUP, KEPT — AND KEPT WHERE IT IS CHEAP.
+              The first pass at this layout dropped it, and a diff of every href
+              in the file is what caught it: on a row he CAN add, the only
+              control left was "add", so a group he wanted to look at before
+              committing to it had nowhere to be opened from.
+              Beside the badges rather than under the button: the start column
+              is what sets this card's height, and a third control there
+              measured 150px against the 102 of every other row. Here the
+              middle column has the room already, and it stays at 123.
+            */}
+            {canAdd && (
+              <a
                 href={row.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                size="sm"
-                variant={row.membership === 'member' ? 'secondary' : 'primary'}
-                /* The brief's two skins, chosen by the SAME condition as before:
-                   "פתח להצטרפות" is the gradient call to action, "פתח קבוצה"
-                   is the quiet white button with a purple edge. */
-                /* The brief's two skins, chosen by the SAME condition as before.
-                   `!` because the secondary variant carries border-ink-700 and
-                   both are single-class border-colour utilities in the same
-                   layer — the one emitted LATER wins, and that is the pale
-                   hairline. Measured in a browser: without the important flag
-                   this button's computed border was byte-identical to having
-                   no override at all, so the purple edge simply never
-                   appeared. */
-                className={`whitespace-nowrap ${
-                  row.membership === 'member' ? '!border-brand-400/35 text-brand-400' : ''
-                }`}
+                className="inline-flex min-h-11 items-center whitespace-nowrap text-[11px] font-bold text-brand-400"
               >
-                {row.membership === 'member' ? 'פתח קבוצה' : 'פתח להצטרפות'}
-              </ButtonLink>
+                פתח קבוצה
+              </a>
             )}
-          </div>
           </div>
         </div>
 
+        {/* ─── the far side: the picture, and the quiet action ───
+             "כרגע יש X בצד הכרטיס. מבחינה ויזואלית הוא נראה כמו 'סגור'." The
+             same onHide, as a ⋮. In the row's flow and never floating over it:
+             floated, it measured 36×23px on top of "פתח להצטרפות" at every
+             width, so a thumb aiming at the button hid the group instead. */}
+        <TargetAvatar name={row.name} imageUrl={row.image_url || fallbackImage || null} channel="facebook_group" size={54} />
+        <button
+          type="button"
+          aria-label={`הסתר את ${row.name}`}
+          title="לא רלוונטי"
+          onClick={onHide}
+          disabled={busy}
+          className="-me-1.5 grid w-7 shrink-0 place-items-center self-start rounded-xl py-3 text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-300 disabled:opacity-50"
+        >
+          <MoreIcon aria-hidden className="h-4 w-4" />
+        </button>
       </div>
-
-      {/*
-        OUT OF THE ROW'S FLOW, and that is what bought the height.
-
-        "את הגובה של הכרטיסייה להוריד בכ-15-20%." At 360px this column had
-        about 166px to put a group's name in, once the checkbox, the picture and
-        this ✕ had each taken their 44. Lifting the ✕ out of the line gives
-        those pixels back to the name, so names that needed two lines now fit on
-        one — which removes a whole line from most cards rather than squeezing
-        every card's padding.
-
-        Still a 44px target, still in the same corner it was in, and the name
-        reserves room for it so the two can never overlap.
-      */}
-      <button
-        type="button"
-        aria-label={`הסתר את ${row.name}`}
-        title="לא רלוונטי"
-        onClick={onHide}
-        disabled={busy}
-        className="absolute top-1 grid h-11 w-11 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-300 disabled:opacity-50 end-1"
-      >
-        <CloseIcon aria-hidden className="h-4 w-4" />
-      </button>
     </div>
   );
 }
 
-/**
- * "מעבר מהיר בין קבוצות" — one group, then the next.
- *
- * ONE AT A TIME AND NOT ALL AT ONCE, which is the point of it: opening twelve
- * tabs at a stroke is what a pop-up blocker exists to stop, and what Facebook
- * would read as a script. Each step is a link he presses, so each new tab is
- * opened by a real gesture.
- */
 export function WalkThrough({
   rows,
   at,

@@ -52,6 +52,18 @@ function builtCss(): string | null {
  * measured maximum plus four pixels: enough that a font metric changing by a
  * hair is not a failure, not enough for a fourth line of anything.
  *
+ * 174 → 144 → 127, EACH STEP MEASURED AND EACH ASKED FOR.
+ *
+ * The last step is the design specification: "כל Group Card יהיה בערך בגובה
+ * 110-130px", with the picture moved to the far side, the action under the
+ * checkbox and the ✕ replaced by a ⋮. Laid out that way the card stops being
+ * one tall column of stacked lines: at 390 and 430 EVERY fixture measures 102,
+ * and at 360 only the three with two-line names reach 123. The ceiling is the
+ * measured maximum plus four, as it has always been.
+ *
+ * What follows is the history of the two steps before it, kept because each
+ * number in it was paid for.
+ *
  * THE REDESIGN TOOK IT TO 174 AND THEN "להוריד בכ-15-20%" BROUGHT IT TO 144.
  *
  * The redesign bought a 52px picture and a name on two lines instead of one
@@ -69,7 +81,7 @@ function builtCss(): string | null {
  *
  * The ceiling is the measured maximum plus four, as it has always been.
  */
-const MAX_ROW = 144;
+const MAX_ROW = 127;
 
 async function main(): Promise<void> {
   const css = builtCss();

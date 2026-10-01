@@ -40,6 +40,7 @@ import {
 import { formatDayMonthHe } from '@/lib/social/time';
 import { KNOWN_CITIES, detectCity, sortCities } from '@/lib/social/cities';
 import { RUSSIAN_CATEGORY, needsRussianCategory, russianNamed } from '@/lib/social/language';
+import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import {
   isPendingShare,
   parseGroupShareUrl,
@@ -81,10 +82,21 @@ const DELETE_GROUP_WARNING =
  * for group posting since April 2024 — and the screen says so rather than
  * implying an official integration.
  */
+/** Everything this screen draws, kept whole between visits. */
+interface GroupsSnapshot {
+  groups: SocialTarget[];
+  workerOnline: boolean | null;
+  nextByTarget: Record<string, string>;
+}
+
 export default function GroupsPage() {
   const router = useRouter();
-  const [groups, setGroups] = useState<SocialTarget[] | null>(null);
-  const [workerOnline, setWorkerOnline] = useState<boolean | null>(null);
+  /* Seeded from the last visit so this screen opens on its list instead of a
+     skeleton — src/lib/social/snapshot.ts. load() below still runs on mount,
+     unchanged, and replaces every value here the moment it lands. */
+  const seed = useState(() => readSnapshot<GroupsSnapshot>(SNAPSHOT.groups))[0];
+  const [groups, setGroups] = useState<SocialTarget[] | null>(seed?.groups ?? null);
+  const [workerOnline, setWorkerOnline] = useState<boolean | null>(seed?.workerOnline ?? null);
   const [selected, setSelected] = useState<string[]>([]);
   /*
    * Selection is a mode, not an always-on affordance.
@@ -102,7 +114,7 @@ export default function GroupsPage() {
   const [view, setView] = useState<View>('grid');
   const [cityFilter, setCityFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [nextByTarget, setNextByTarget] = useState<Record<string, string>>({});
+  const [nextByTarget, setNextByTarget] = useState<Record<string, string>>(seed?.nextByTarget ?? {});
   const [form, setForm] = useState({ url: '', name: '' });
   const [bulk, setBulk] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -130,13 +142,16 @@ export default function GroupsPage() {
       listWorkers().catch(() => []),
       listQueue({ status: ['scheduled'], limit: 500 }).catch(() => []),
     ]);
-    setGroups(t.filter((x) => x.channel === 'facebook_group' || x.channel === 'facebook_group_manual'));
-    setWorkerOnline(w.some((x) => x.online));
+    const mine = t.filter((x) => x.channel === 'facebook_group' || x.channel === 'facebook_group_manual');
+    const online = w.some((x) => x.online);
     const next: Record<string, string> = {};
     for (const row of [...queued].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))) {
       if (!next[row.target_id]) next[row.target_id] = row.scheduled_at;
     }
+    setGroups(mine);
+    setWorkerOnline(online);
     setNextByTarget(next);
+    writeSnapshot<GroupsSnapshot>(SNAPSHOT.groups, { groups: mine, workerOnline: online, nextByTarget: next });
   }, []);
 
   /* One entry point for the first read and for the retry button, so a failed
@@ -203,6 +218,32 @@ export default function GroupsPage() {
 
   const cities = useMemo(() => sortCities(all.map(cityOf)), [all, cityOf]);
   const categories = useMemo(() => Array.from(new Set(all.map((g) => g.category).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'he')), [all]);
+  /*
+   * HOW MANY GROUPS EACH CHIP STANDS FOR — counted once per list, not once
+   * per render.
+   *
+   * These two numbers were computed inside the JSX, as
+   * `cities.map((c) => ({ …, count: all.filter((g) => cityOf(g) === c).length }))`.
+   * That is a full pass over every group for every city, and it ran on EVERY
+   * render — including every keystroke in the search box, which re-renders
+   * this component by design. At the owner's size (155 groups, ~30 cities,
+   * and cityOf called on each) that is about five thousand comparisons per
+   * letter typed, for two rows of chips whose numbers cannot change while he
+   * is typing.
+   *
+   * One pass each now, and only when the list itself changes. The numbers are
+   * identical — same predicate, same source, same order.
+   */
+  const cityCounts = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const g of all) n.set(cityOf(g), (n.get(cityOf(g)) ?? 0) + 1);
+    return n;
+  }, [all, cityOf]);
+  const categoryCounts = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const g of all) n.set(g.category ?? '', (n.get(g.category ?? '') ?? 0) + 1);
+    return n;
+  }, [all]);
   /* Read off the name every render rather than stored: a group renamed in
      Facebook, or one a search found an hour ago, is counted without anything
      having to be re-scanned. See language.ts for the rule. */
@@ -530,7 +571,7 @@ export default function GroupsPage() {
               label="עיר"
               value={cityFilter}
               onChange={setCityFilter}
-              options={[{ value: '', label: 'כל הערים' }, ...cities.map((c) => ({ value: c, label: c, count: all.filter((g) => cityOf(g) === c).length }))]}
+              options={[{ value: '', label: 'כל הערים' }, ...cities.map((c) => ({ value: c, label: c, count: cityCounts.get(c) ?? 0 }))]}
             />
             {categories.length > 0 && (
               <SegmentedControl
@@ -538,7 +579,7 @@ export default function GroupsPage() {
                 label="קטגוריה"
                 value={categoryFilter}
                 onChange={setCategoryFilter}
-                options={[{ value: '', label: 'כל הקטגוריות' }, ...categories.map((c) => ({ value: c, label: c, count: all.filter((g) => g.category === c).length }))]}
+                options={[{ value: '', label: 'כל הקטגוריות' }, ...categories.map((c) => ({ value: c, label: c, count: categoryCounts.get(c) ?? 0 }))]}
               />
             )}
           </div>

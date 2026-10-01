@@ -39,6 +39,7 @@ import {
   type LibraryPost,
 } from '@/lib/social/library';
 import { friendlyMessage } from '@/lib/social/errors';
+import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 
 type MediaFilter = '' | 'image' | 'video' | 'text';
 type PublishedFilter = '' | 'yes' | 'no';
@@ -66,10 +67,20 @@ const CHUNK = 60;
  * the visual grid, owner-managed content categories, real usage counts read
  * from social_queue, and publishing a post without opening it.
  */
+/** What the library draws, kept whole between visits. */
+interface LibrarySnapshot {
+  items: LibraryPost[];
+  categories: ContentCategory[];
+}
+
 export default function LibraryPage() {
-  const [items, setItems] = useState<LibraryPost[] | null>(null);
+  /* Seeded from the last visit so the library opens on its grid rather than
+     a skeleton — src/lib/social/snapshot.ts. load() still runs on mount and
+     replaces all of it. */
+  const seed = useState(() => readSnapshot<LibrarySnapshot>(SNAPSHOT.library))[0];
+  const [items, setItems] = useState<LibraryPost[] | null>(seed?.items ?? null);
   const [truncated, setTruncated] = useState(false);
-  const [categories, setCategories] = useState<ContentCategory[]>([]);
+  const [categories, setCategories] = useState<ContentCategory[]>(seed?.categories ?? []);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   /* v8 has not been run: the categories are not "empty", they are unavailable,
      and the owner needs to be told which file to run rather than left guessing. */
@@ -130,6 +141,7 @@ export default function LibraryPage() {
       setCategorySchemaMissing(cats.schemaMissing);
       setBusinessName(business.name);
       setError(null);
+      writeSnapshot<LibrarySnapshot>(SNAPSHOT.library, { items: rows.items, categories: cats.items });
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }

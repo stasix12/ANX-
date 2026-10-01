@@ -50,6 +50,7 @@ import { cancellableRows, percentFinished, type CampaignState } from '@/lib/soci
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
 import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
+import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { agree, counted, startOfZonedDay, startOfZonedWeek } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
@@ -188,7 +189,15 @@ interface DashboardData {
  * something you can act on.
  */
 export default function SocialDashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  /*
+   * SEEDED FROM THE LAST TIME THIS SCREEN WAS OPEN — see
+   * src/lib/social/snapshot.ts. This is the heaviest read in the product
+   * (twenty-one requests), and tapping away to "קבוצות" and back used to pay
+   * for all of it again behind a skeleton. It still pays for all of it; it
+   * just does not make the owner watch.
+   */
+  const dashboardSeed = useState(() => readSnapshot<DashboardData>(SNAPSHOT.dashboard))[0];
+  const [data, setData] = useState<DashboardData | null>(dashboardSeed);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   /*
@@ -240,10 +249,25 @@ export default function SocialDashboard() {
   const load = useCallback(async () => {
     try {
       const now = new Date();
-      const campaigns = await listCampaigns();
+      /*
+       * STARTED, NOT AWAITED — and this is one whole round trip off the time
+       * between the tap and the screen.
+       *
+       * campaignStates() needs the live campaign ids, so it has to follow
+       * listCampaigns(). The other nineteen reads below do not, and they used
+       * to wait behind it anyway: `await listCampaigns()` blocked the batch,
+       * so the cost was RTT(campaigns) + RTT(everything else) instead of the
+       * longer of the two. On a phone that is a few hundred milliseconds,
+       * every time this screen opens AND every thirty seconds after.
+       *
+       * The chain is unchanged — states still sees exactly the ids this
+       * resolves to, and nothing reads `campaigns` before Promise.all hands it
+       * back. Only the waiting is gone.
+       */
+      const campaignsPromise = listCampaigns();
       // Only a live campaign can be the one running right now, so the rollup
       // read stays proportional to what the hero can actually show.
-      const liveIds = campaigns.filter((c) => c.status !== 'archived').map((c) => c.id);
+      const statesPromise = campaignsPromise.then((cs) => campaignStates(cs.filter((c) => c.status !== 'archived').map((c) => c.id)));
       /*
        * The targets table is read for ONE boolean: whether the setup checklist
        * still has its first step open. That card removes itself for good once
@@ -254,7 +278,9 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, states, upcoming, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone] = await Promise.all([
+        campaignsPromise,
+        statesPromise,
         queueSummary(),
         countPublishedSince(startOfZonedDay(now).toISOString()),
         /* The same midnight the tile beside it uses — one instant, so the two
@@ -276,7 +302,6 @@ export default function SocialDashboard() {
            orange bar is about. */
         listWaitingForYouIds(),
         listActivity(30),
-        campaignStates(liveIds),
         // Ascending, because the limit is applied after the sort: read
         // newest-first, these 40 would be the FURTHEST-OUT rows in the queue
         // and "הפרסומים הקרובים" would be showing the last publications while
@@ -305,7 +330,7 @@ export default function SocialDashboard() {
         listCommentsDone(),
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
-      setData({
+      const next: DashboardData = {
         counts: queue.counts,
         summary: queue.summary,
         today,
@@ -342,7 +367,11 @@ export default function SocialDashboard() {
            renders these; nothing here goes and asks Facebook. */
         profiles: (workers.find((x) => x.online) ?? workers[0])?.fb_profiles ?? [],
         workerId: (workers.find((x) => x.online) ?? workers[0])?.id ?? null,
-      });
+      };
+      setData(next);
+      /* Only on a read that came back whole — a half-failed load must never be
+         what the next visit opens on. */
+      writeSnapshot<DashboardData>(SNAPSHOT.dashboard, next);
       setUpdatedAt(new Date());
       setError(null);
     } catch (err) {

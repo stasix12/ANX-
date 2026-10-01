@@ -21,7 +21,8 @@ import {
   duplicateCampaign,
   getControl,
   listCampaigns,
-  listPosts,
+  listCampaignPosts,
+  type CampaignPostSummary,
   listWorkers,
   pauseCampaign,
   queueCampaignComment,
@@ -30,8 +31,9 @@ import {
   stopCampaign,
 } from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
+import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { readSchedule, scheduleColumns, type CampaignSchedule } from '@/lib/social/campaign-schedule';
-import type { Campaign, ControlSettings, Post } from '@/lib/social/types';
+import type { Campaign, ControlSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { MegaphoneIcon } from '@/components/icons';
 
@@ -46,10 +48,31 @@ type Filter = 'live' | 'all' | 'done';
  * "Live" is the default filter, because a finished campaign is history and
  * belongs one tap away.
  */
+/** Everything this screen draws, in one object, so it can be kept whole. */
+interface CampaignsSnapshot {
+  campaigns: Campaign[];
+  posts: CampaignPostSummary[];
+  states: Record<string, CampaignState>;
+  control: ControlSettings | null;
+  workerOnline: boolean | undefined;
+}
+
 export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [states, setStates] = useState<Record<string, CampaignState>>({});
+  /*
+   * SEEDED FROM THE LAST TIME THIS SCREEN WAS OPEN, so coming back to it
+   * paints immediately instead of shimmering through five reads it already
+   * made a minute ago. See src/lib/social/snapshot.ts: nothing here is read
+   * INSTEAD of the database — load() runs below exactly as it did, on mount,
+   * and replaces all of this the moment it lands.
+   *
+   * In the initialiser and nowhere else: the snapshot is module state, and
+   * reading it during a later render would let two renders of this component
+   * disagree about what is on screen.
+   */
+  const seed = useState(() => readSnapshot<CampaignsSnapshot>(SNAPSHOT.campaigns))[0];
+  const [campaigns, setCampaigns] = useState<Campaign[] | null>(seed?.campaigns ?? null);
+  const [posts, setPosts] = useState<CampaignPostSummary[]>(seed?.posts ?? []);
+  const [states, setStates] = useState<Record<string, CampaignState>>(seed?.states ?? {});
   /*
    * The two machine facts every run badge on this screen depends on, and this
    * page read neither. Without the control row the cards showed a green
@@ -58,8 +81,8 @@ export default function CampaignsPage() {
    * asleep since yesterday pulsed as if it were publishing right now.
    * runBadge() in campaign.ts decides what they mean — the cards only render it.
    */
-  const [control, setControl] = useState<ControlSettings | null>(null);
-  const [workerOnline, setWorkerOnline] = useState<boolean | undefined>(undefined);
+  const [control, setControl] = useState<ControlSettings | null>(seed?.control ?? null);
+  const [workerOnline, setWorkerOnline] = useState<boolean | undefined>(seed?.workerOnline);
   /*
    * WHICH ROUND THE COMMENT SHEET IS ABOUT — and null when it is closed, so
    * one sheet serves every card instead of one mounted per row.
@@ -76,19 +99,34 @@ export default function CampaignsPage() {
       /* getBusiness() used to be read here too — for the service and city
          lists in the editing sheet, and for nothing else. The sheet is gone,
          so the round trip went with it. */
+      /*
+       * listCampaignPosts() AND NOT listPosts().
+       *
+       * listPosts() is every non-archived post in the account with its
+       * base_text and its media, unbounded — and this screen uses three
+       * fields of it: which campaign a post belongs to, its cover, and its
+       * id. An owner with two hundred drafts downloaded all of them, text
+       * included, to draw twenty-five thumbnails. The campaign control centre
+       * had exactly this bug and listPostsForCampaign() was written for it;
+       * this is the list screen's version of the same fix.
+       */
       const [c, p, st, ctrl, workers] = await Promise.all([
         listCampaigns(),
-        listPosts(),
+        listCampaignPosts(),
         campaignStates(),
         getControl(),
         listWorkers(),
       ]);
+      const online = workers.some((w) => w.online);
       setCampaigns(c);
       setPosts(p);
       setStates(st);
       setControl(ctrl);
-      setWorkerOnline(workers.some((w) => w.online));
+      setWorkerOnline(online);
       setError(null);
+      /* Kept only when the whole read succeeded, so a half-failed load can
+         never be what the next visit opens on. */
+      writeSnapshot<CampaignsSnapshot>(SNAPSHOT.campaigns, { campaigns: c, posts: p, states: st, control: ctrl, workerOnline: online });
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
@@ -381,7 +419,7 @@ export default function CampaignsPage() {
                  * "אני רוצה שיהיה אפשר לערוך את טקסט הפרסום / תמונת מדיה של
                  *  הפוסט ולא את מה שזה נותן עכשיו."
                  *
-                 * `mine` is this campaign's posts and listPosts() orders by
+                 * `mine` is this campaign's posts and listCampaignPosts() orders by
                  * updated_at descending, so mine[0] is the one last worked on
                  * — the same post whose cover this card is already showing.
                  * A campaign with no post at all gets the editor on a new one,

@@ -142,12 +142,42 @@ export async function setPaused(paused: boolean): Promise<void> {
 
 /* -------------------------------------------------------------- targets */
 
+/**
+ * Groups and pages this account can publish to, with one piece of repair work
+ * attached — and the repair is now done ONCE.
+ *
+ * THE BACKFILL. A row created before the city column existed has no city, and
+ * every screen that groups by city needs one, so detectCity() fills it in from
+ * the name and the row is updated to match. That part is unchanged: the same
+ * function, the same value, the same column.
+ *
+ * WHAT WAS WRONG WITH IT. The updates were fired on EVERY call, with no memory
+ * and no bound — one request per city-less group, all at once, every time
+ * anything asked for the list. This function is called by the groups screen,
+ * the post editor, the target picker, the queue tuner, the library's reach
+ * calculation AND the dashboard's thirty-second poll. On an account where a
+ * hundred groups predate the column, opening the groups screen opened a
+ * hundred concurrent writes alongside the reads the screen was waiting for,
+ * through the same connection — and did it again on the next visit, and the
+ * one after, for ever, because a write that failed and a write that succeeded
+ * both left the next call looking at the same freshly-read row.
+ *
+ * NOW: attempted once per row per session. `t.city` is still set in memory on
+ * every call whether or not the write is made, so what the caller gets back is
+ * byte-for-byte what it got before — the saving is entirely in requests that
+ * were repeating work already done.
+ */
+const cityBackfilled = new Set<string>();
+
 export async function listTargets(): Promise<SocialTarget[]> {
   const rows = unwrap<SocialTarget[]>(await db().from('social_targets').select('*').order('channel').order('name'));
   // Backfill cities for rows created before the column existed (or never classified).
-  const missing = rows.filter((t) => !t.city);
-  for (const t of missing) {
+  for (const t of rows) {
+    if (t.city) continue;
+    /* In memory for the caller, every time — this is what the screens read. */
     t.city = detectCity(t.name);
+    if (cityBackfilled.has(t.id)) continue;
+    cityBackfilled.add(t.id);
     db().from('social_targets').update({ city: t.city }).eq('id', t.id).then(() => undefined, () => undefined);
   }
   return rows;
@@ -572,6 +602,43 @@ export async function deleteCampaign(id: string): Promise<number> {
 
 export async function listPosts(): Promise<Post[]> {
   return unwrap<Post[]>(await db().from('social_posts').select('*').neq('status', 'archived').order('updated_at', { ascending: false }));
+}
+
+/**
+ * WHAT THE CAMPAIGNS LIST NEEDS TO KNOW ABOUT POSTS, and not a byte more.
+ *
+ * That screen draws, per campaign: a cover, how many posts the run has, and
+ * where "ערוך" goes. Three facts. It got them by calling listPosts() — every
+ * non-archived post in the account, `base_text` and all, with no limit — and
+ * filtering the result in the browser. An owner with two hundred drafts
+ * downloaded two hundred post bodies to draw twenty-five thumbnails, on every
+ * visit to the screen.
+ *
+ * The columns here are exactly the three uses plus the one the ORDER depends
+ * on. Same rows, same order, same results on screen; a fraction of the bytes.
+ *
+ * `campaign_id is not null` is not a narrowing of the result either: the
+ * caller matches each row against a campaign id, and a post belonging to no
+ * campaign can never match one.
+ */
+export interface CampaignPostSummary {
+  id: string;
+  campaign_id: string;
+  media: MediaItem[];
+  updated_at: string;
+}
+
+export async function listCampaignPosts(): Promise<CampaignPostSummary[]> {
+  return unwrap<CampaignPostSummary[]>(
+    await db()
+      .from('social_posts')
+      .select('id, campaign_id, media, updated_at')
+      .neq('status', 'archived')
+      .not('campaign_id', 'is', null)
+      /* The same order listPosts() used, because the caller takes [0] as "the
+         post last worked on" — the one "ערוך" opens. */
+      .order('updated_at', { ascending: false }),
+  );
 }
 
 /**

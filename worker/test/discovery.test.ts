@@ -900,6 +900,52 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(/h-11 w-11/.test(block), "with a target a thumb can hit — this card is read on a phone");
 
   /*
+   * THE PICTURE THIS APP ALREADY HAS.
+   *
+   * "בקוביה הסגולה איפה שהאות תכניס לשם את התמונה של הקבוצה (כמו שאתה מושך
+   *  מקבוצות שאני מכניס ידני)." Every row marked "במערכת" is a group whose
+   * page this app already opened once and whose cover it already stored — and
+   * the row was drawing a letter beside it. One small read, no Facebook
+   * traffic, no storage upload, and no waiting for the next search.
+   */
+  is(/export async function listTargetPictures/.test(client), 'the publishing list can be asked for the pictures it holds');
+  is(/\.neq\('image_url', ''\)/.test(client), 'and only the rows that really have one come back');
+  is(/fallbackImage=\{targetPics\.get\(row\.external_id\) \?\? null\}/.test(page), 'each result row is given the one for its own group');
+  is(
+    /imageUrl=\{row\.image_url \|\| fallbackImage \|\| null\}/.test(card),
+    "BEHIND the row's own picture, never in front of it — what discovery stored is the newer of the two",
+  );
+  is(/pictures\?\.get\(row\.external_id\)/.test(card), 'and the card and the walk-through use the same fallback, so one list cannot show a picture the next hides');
+
+  /* A refused upload has to be visible, or "still letters" cannot be told from
+     "never fetched" — and those need completely different fixes. */
+  is(/picture_upload_failed/.test(worker), 'storage refusing a picture reaches the activity log');
+  is(/if \(!refused\) refused = error\.message;/.test(worker), 'with the reason the bucket gave, which is the part that names the quota');
+
+  /*
+   * AND THE READ THAT EVERYTHING ELSE IS WRITTEN FROM.
+   *
+   * recordDiscovered reads the stored rows and then rebuilds each one from
+   * what it read. That read had no error check at all — so one failed request
+   * made `was` undefined for every group, and the upsert twelve lines down
+   * committed a rewrite from nothing: image_url back to '', first_seen_at back
+   * to now, queries reset to this one phrase, and the reserved-bucket guard
+   * (keyed on `was`) silently off. Every picture he was looking at would have
+   * gone back to a purple letter in one run.
+   */
+  const record = worker.slice(worker.indexOf('async function recordDiscovered'));
+  const rebuild = record.slice(0, record.indexOf('const { error }'));
+  is(/const \{ data: existing, error: read \}/.test(rebuild), 'the read that feeds the rebuild is checked');
+  is(/if \(read\) throw read;/.test(rebuild), 'and a failed read fails the command rather than rewriting every row from nothing');
+
+  /* One search finishes the pictures. 60 against a MAX_GROUPS of 120 meant a
+     broad phrase could only ever picture half of what it found, while the
+     sentence reported the half it did and said nothing of the half it skipped —
+     which on screen is the same purple letters he already reported once. */
+  const reader = readFileSync(new URL('../facebook/discover.ts', import.meta.url), 'utf8');
+  is(/const PICTURE_LIMIT = MAX_GROUPS;/.test(reader), 'the picture cap matches how many groups a search may return, so one run finishes the job');
+
+  /*
    * AND NO WHITE LABEL MAY SIT ON brand-300.
    *
    * The selected filter pill was given a gradient ending at brand-300, and its

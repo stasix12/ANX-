@@ -73,6 +73,7 @@ const EVENT_MARK: Record<string, { icon: React.ComponentType<{ className?: strin
    * publication that went out but could not be recorded — had no mark and fell
    * through to their level's grey dot. The map is now built from the writers.
    */
+  picture_upload_failed: { icon: XCircleIcon, tone: 'bad' },
   plan_failed: { icon: XCircleIcon, tone: 'bad' },
   plan_retry: { icon: ClockIcon, tone: 'warn' },
   plan_revived: { icon: RepeatIcon, tone: 'brand' },

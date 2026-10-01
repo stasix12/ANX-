@@ -281,6 +281,36 @@ export async function listTargetExternalIds(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.external_id));
 }
 
+/**
+ * THE PICTURES THE PUBLISHING LIST ALREADY HAS, BY GROUP.
+ *
+ * "בקוביה הסגולה איפה שהאות תכניס לשם את התמונה של הקבוצה (כמו שאתה מושך
+ *  מקבוצות שאני מכניס ידני)."
+ *
+ * He is pointing at a picture this app already holds. A group he added by hand
+ * had its page opened once and its cover stored — so for every discovery row
+ * marked "במערכת", the picture is sitting in social_targets under the same
+ * Facebook id, and the row was drawing a letter beside it.
+ *
+ * Costs one small read of a table the screen already queries, and nothing else:
+ * no Facebook traffic, no storage upload, no worker, and no waiting for the
+ * next search. The discovery feature's own picture path still fills in the
+ * groups he is NOT in — this is for the ones the app has already met.
+ */
+export async function listTargetPictures(): Promise<Map<string, string>> {
+  const rows = unwrap<{ external_id: string; image_url: string | null }[]>(
+    await db()
+      .from('social_targets')
+      .select('external_id, image_url')
+      .eq('channel', 'facebook_group')
+      .neq('external_id', '')
+      .neq('image_url', ''),
+  );
+  const out = new Map<string, string>();
+  for (const r of rows) if (r.image_url) out.set(r.external_id, r.image_url);
+  return out;
+}
+
 /** Ask the machine to run a search. The answer arrives as rows, not as text. */
 export async function startDiscovery(workerId: string | null, query: string): Promise<{ id: string }> {
   return sendWorkerCommand(workerId, 'discover', { query: query.trim() });

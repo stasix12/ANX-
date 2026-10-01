@@ -24,6 +24,7 @@ import {
   listSearches,
   listJoined,
   listTargetExternalIds,
+  listTargetPictures,
   listWorkers,
   startDiscovery,
   startJoinedScan,
@@ -102,6 +103,9 @@ export default function DiscoverPage() {
    * can answer and is kept apart from the search results on screen.
    */
   const [joined, setJoined] = useState<DiscoveredGroupRow[] | null>(null);
+  /* Pictures the publishing list already holds, keyed by the group's Facebook
+     id — the fallback behind every row that has none of its own. */
+  const [targetPics, setTargetPics] = useState<Map<string, string>>(new Map());
   const [scanning, setScanning] = useState(false);
   const [searching, setSearching] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -117,15 +121,17 @@ export default function DiscoverPage() {
   );
 
   const load = useCallback(async (phrase: string) => {
-    const [found, saved, targets, workers] = await Promise.all([
+    const [found, saved, targets, workers, pics] = await Promise.all([
       phrase ? listDiscovered(phrase) : Promise.resolve([]),
       listSearches(),
       listTargetExternalIds(),
       listWorkers(),
+      listTargetPictures(),
     ]);
     setRows(found);
     setSearches(saved);
     setInSystem(targets);
+    setTargetPics(pics);
     setWorkerOnline(workers.some((w) => w.online));
     setWorkerId(workers.find((w) => w.online)?.id ?? workers[0]?.id ?? null);
   }, []);
@@ -137,10 +143,17 @@ export default function DiscoverPage() {
     let alive = true;
     (async () => {
       try {
-        const [saved, targets, workers, mine] = await Promise.all([listSearches(), listTargetExternalIds(), listWorkers(), listJoined()]);
+        const [saved, targets, workers, mine, pics] = await Promise.all([
+          listSearches(),
+          listTargetExternalIds(),
+          listWorkers(),
+          listJoined(),
+          listTargetPictures(),
+        ]);
         if (!alive) return;
         setSearches(saved);
         setInSystem(targets);
+        setTargetPics(pics);
         setJoined(mine);
         setWorkerOnline(workers.some((w) => w.online));
         setWorkerId(workers.find((w) => w.online)?.id ?? workers[0]?.id ?? null);
@@ -360,13 +373,15 @@ export default function DiscoverPage() {
        * below this card — still showing "הוסף לרשימה" on a group the machine
        * has just established he is not in.
        */
-      const [mine, targets, found] = await Promise.all([
+      const [mine, targets, found, pics] = await Promise.all([
         listJoined(),
         listTargetExternalIds(),
         active ? listDiscovered(active) : Promise.resolve(null),
+        listTargetPictures(),
       ]);
       setJoined(mine);
       setInSystem(targets);
+      setTargetPics(pics);
       if (found) setRows(found);
       if (done?.status === 'failed') toast(done.result || 'הקריאה נכשלה.', 'error');
       else if (!done) toast('הבקשה נשלחה למחשב ולוקחת יותר מהרגיל — הרשימה תתעדכן כשהוא יסיים.', 'info');
@@ -524,6 +539,7 @@ export default function DiscoverPage() {
           onAdopt={adoptJoined}
           onHide={hideJoined}
           busyId={busyId}
+          pictures={targetPics}
         />
 
         {/* ─────────────────────────── the search box ─────────────────────── */}
@@ -745,6 +761,7 @@ export default function DiscoverPage() {
                 picked={picked.has(row.id)}
                 already={inSystem.has(row.external_id) || !!row.target_id}
                 busy={busyId === row.id}
+                fallbackImage={targetPics.get(row.external_id) ?? null}
                 onToggle={() => toggle(row.id)}
                 onAdopt={() => adopt(row)}
                 onHide={() => hide(row)}
@@ -839,6 +856,7 @@ export default function DiscoverPage() {
           rows={walk}
           at={walkAt}
           already={inSystem}
+          pictures={targetPics}
           onNext={() => {
             if (walkAt + 1 >= walk.length) {
               setWalk(null);

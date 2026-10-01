@@ -29,6 +29,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { GroupRow, MyGroupsCard } from '@/components/social/Discovery';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
 
+/* A 1x1 PNG as a data URI: this measures whether an <img> is rendered at all,
+   and a fixture must not reach the network to answer that. */
+const BORROWED =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
 const row = (over: Partial<DiscoveredGroupRow>): DiscoveredGroupRow => ({
   id: over.external_id ?? 'x',
   external_id: over.external_id ?? 'x',
@@ -59,6 +64,15 @@ const cases: [string, DiscoveredGroupRow, boolean, boolean][] = [
   ],
   ['nothing known about it', row({ external_id: '6', name: 'דרושים דרום', members: null, privacy: 'unknown', membership: 'unknown' }), false, false],
   ['already in the publishing list', row({ external_id: '7', name: 'עסקים בבאר שבע', membership: 'member' }), true, false],
+  /*
+   * A ROW WITH NO PICTURE OF ITS OWN, BESIDE ONE THE PUBLISHING LIST HAS.
+   *
+   * "בקוביה הסגולה איפה שהאות תכניס לשם את התמונה." The fallback is a prop,
+   * and a prop that is threaded but never read renders exactly the letter it
+   * was meant to replace — which is the shape of the two button skins that
+   * were written and never painted. So it is rendered and looked at.
+   */
+  ['no picture of its own — the publishing list has one', row({ external_id: '8', name: 'קבוצה עם תמונה מושאלת', membership: 'member' }), true, false],
 ];
 
 const body = cases
@@ -71,6 +85,9 @@ const body = cases
       picked,
       already,
       busy: false,
+      /* Only the borrowed-picture fixture gets one, so the test can prove the
+         letter is replaced for it and kept for every other row. */
+      fallbackImage: r.external_id === '8' ? BORROWED : null,
       onToggle: () => {},
       onAdopt: () => {},
       onHide: () => {},

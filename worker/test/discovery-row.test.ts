@@ -147,6 +147,8 @@ async function main(): Promise<void> {
               /* The picture slot, which every row reserves whether or not it
                  has a picture — otherwise the list's edge moves row to row. */
               avatar: Math.round((r.querySelector('img, span.grid.shrink-0') as HTMLElement | null)?.getBoundingClientRect().width ?? 0),
+              /* Whether a real <img> was drawn, or the letter tile. */
+              hasPicture: !!r.querySelector('img'),
               /*
                * WHAT THE ACTION ACTUALLY PAINTS, not which classes it carries.
                *
@@ -175,7 +177,7 @@ async function main(): Promise<void> {
       checks += 1;
       assert.equal(seen.overflow, false, say('the page scrolls sideways — a row pushed something past the screen'));
       checks += 1;
-      assert.equal(seen.rows.length, 7, say('the fixture lost rows'));
+      assert.equal(seen.rows.length, 8, say('the fixture lost rows'));
 
       for (const [i, r] of seen.rows.entries()) {
         checks += 5;
@@ -230,6 +232,19 @@ async function main(): Promise<void> {
           );
         }
       }
+
+      /*
+       * THE BORROWED PICTURE IS ACTUALLY DRAWN.
+       *
+       * Row 7 has no picture of its own and is given the one the publishing
+       * list holds; every other row has neither. A prop that is threaded but
+       * never read renders the very letter it was meant to replace — which is
+       * exactly how two button skins were written and never painted — so this
+       * looks for the <img> rather than for the prop.
+       */
+      checks += 2;
+      assert.equal(seen.rows[7].hasPicture, true, say('the row with a borrowed picture still drew a letter — the fallback is not being read'));
+      assert.equal(seen.rows[0].hasPicture, false, say('a row with no picture anywhere should draw its letter tile'));
 
       /* Every row reserves the same picture slot, with a picture or without. */
       const slots = new Set(seen.rows.map((r) => r.avatar));

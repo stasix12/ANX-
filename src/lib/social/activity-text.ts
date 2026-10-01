@@ -61,6 +61,7 @@ const TITLE: Record<string, string> = {
   needs_attention: 'פרסום דורש טיפול',
   worker_error: 'תקלה בתוכנה שבמחשב',
   browser_start_failed: 'הדפדפן לא נפתח',
+  picture_upload_failed: 'תמונות קבוצות לא נשמרו',
   plan_failed: 'תכנון הסבב נכשל',
   plan_retry: 'הסבב יתוכנן שוב',
   plan_revived: 'סבב הוחזר לתכנון',

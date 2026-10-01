@@ -61,6 +61,11 @@ const KIND: Record<string, ActivityKind> = {
    */
   page_not_allowed: 'failure',
   avatar_upload_blocked: 'failure',
+  /* Pictures that came down from Facebook and were refused by storage. A
+     failure and not quiet system news: the rows go on showing letters, and
+     this is the only line that says the bytes arrived and the bucket said no —
+     which is a different problem from never fetching them. */
+  picture_upload_failed: 'failure',
   login_challenge_failed: 'failure',
   /*
    * A group the account can no longer post in, switched off by the worker.

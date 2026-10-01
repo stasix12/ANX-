@@ -77,6 +77,7 @@ export function GroupRow({
   picked,
   already,
   busy,
+  fallbackImage = null,
   onToggle,
   onAdopt,
   onHide,
@@ -85,6 +86,16 @@ export function GroupRow({
   picked: boolean;
   already: boolean;
   busy: boolean;
+  /**
+   * The picture the PUBLISHING LIST already holds for this same group.
+   *
+   * "בקוביה הסגולה איפה שהאות תכניס לשם את התמונה של הקבוצה (כמו שאתה מושך
+   *  מקבוצות שאני מכניס ידני)." For every row marked "במערכת" the app has
+   * already opened that group's page once and stored its cover — and the row
+   * was drawing a letter beside it. Behind the row's own picture, never in
+   * front of it: what discovery stored is the newer of the two.
+   */
+  fallbackImage?: string | null;
   onToggle: () => void;
   onAdopt: () => void;
   onHide: () => void;
@@ -146,7 +157,7 @@ export function GroupRow({
           </span>
         </button>
 
-        <TargetAvatar name={row.name} imageUrl={row.image_url || null} channel="facebook_group" size={52} />
+        <TargetAvatar name={row.name} imageUrl={row.image_url || fallbackImage || null} channel="facebook_group" size={52} />
 
         <div className="min-w-0 flex-1">
           {/*
@@ -315,12 +326,15 @@ export function WalkThrough({
   rows,
   at,
   already,
+  pictures,
   onNext,
   onClose,
 }: {
   rows: DiscoveredGroupRow[];
   at: number;
   already: Set<string>;
+  /** Same fallback as the rows behind it — see GroupRow.fallbackImage. */
+  pictures?: Map<string, string>;
   onNext: () => void;
   onClose: () => void;
 }) {
@@ -356,7 +370,7 @@ export function WalkThrough({
         </div>
 
         <div className="mt-1 flex items-center gap-3">
-          <TargetAvatar name={row.name} imageUrl={row.image_url || null} channel="facebook_group" size={52} />
+          <TargetAvatar name={row.name} imageUrl={row.image_url || pictures?.get(row.external_id) || null} channel="facebook_group" size={52} />
           <div className="min-w-0">
             <p dir="auto" className="text-base font-extrabold leading-tight text-mist-100">
               {row.name}
@@ -421,6 +435,7 @@ export function MyGroupsCard({
   onAdopt,
   onHide,
   busyId,
+  pictures,
 }: {
   /** Everything the scan has ever found. null = not read yet. */
   joined: DiscoveredGroupRow[] | null;
@@ -433,6 +448,8 @@ export function MyGroupsCard({
   /** "זאת לא קבוצה שלי" — one name off this list. See hideJoined. */
   onHide: (row: DiscoveredGroupRow) => void;
   busyId: string | null;
+  /** Pictures the publishing list already holds — see GroupRow.fallbackImage. */
+  pictures?: Map<string, string>;
 }) {
   return (
       <Card padded={false} className="px-3 py-3.5">
@@ -472,7 +489,7 @@ export function MyGroupsCard({
             <ul className="mt-2.5 space-y-1.5">
               {missing.slice(0, 8).map((row) => (
                 <li key={row.id} className="flex items-center gap-2 rounded-xl bg-ink-800/60 px-1.5 py-1">
-                  <TargetAvatar name={row.name} imageUrl={row.image_url || null} channel="facebook_group" size={28} />
+                  <TargetAvatar name={row.name} imageUrl={row.image_url || pictures?.get(row.external_id) || null} channel="facebook_group" size={28} />
                   <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-300">
                     {row.name}
                   </span>

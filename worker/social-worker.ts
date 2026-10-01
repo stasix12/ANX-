@@ -2341,6 +2341,9 @@ async function reconcileJoined(found: DiscoveredGroup[], truncated: boolean): Pr
  */
 async function groupsWithPictures(): Promise<string[]> {
   const db = await workerDb();
+  /* Unchecked here on purpose, and it is a different kind of unchecked: a
+     failed read makes this return nothing, which means the search fetches
+     thumbnails it already had. Wasteful, never destructive. */
   const { data } = await db.from('social_discovery_groups').select('external_id, image_url');
   return ((data ?? []) as { external_id: string; image_url: string | null }[])
     .filter((r) => /\/storage\/v1\/object\/public\//.test(r.image_url ?? ''))
@@ -2361,6 +2364,8 @@ async function groupsWithPictures(): Promise<string[]> {
 async function storeDiscoveryPictures(pictures: Map<string, { bytes: Buffer; contentType: string }>): Promise<Map<string, string>> {
   const urls = new Map<string, string>();
   if (!pictures.size) return urls;
+  let failed = 0;
+  let refused = '';
   const db = await workerDb();
   for (const [externalId, pic] of pictures) {
     const ext = pic.contentType.includes('png') ? 'png' : 'jpg';
@@ -2370,11 +2375,30 @@ async function storeDiscoveryPictures(pictures: Map<string, { bytes: Buffer; con
     const { error } = await db.storage.from('social-media').upload(objectPath, pic.bytes, { contentType: pic.contentType, upsert: true });
     if (error) {
       console.error(`[worker] ✗ העלאת תמונת קבוצה מהחיפוש נכשלה:`, error.message);
+      if (!refused) refused = error.message;
+      failed += 1;
       continue;
     }
     urls.set(externalId, db.storage.from('social-media').getPublicUrl(objectPath).data.publicUrl);
   }
   console.log(`[worker]    תמונות קבוצות מהחיפוש: ${urls.size} נשמרו`);
+  /*
+   * A REFUSED UPLOAD HAS TO REACH HIM, not only this console.
+   *
+   * The owner is on a storage account that has been over its quota, and when
+   * the bucket says no, every picture is dropped here and the rows keep drawing
+   * letters. From the outside that is indistinguishable from "the pictures were
+   * never fetched" — which is the other bug on this exact path, and the two
+   * need completely different fixes. One line in the log tells them apart.
+   */
+  if (failed) {
+    await logActivity(
+      'warn',
+      'picture_upload_failed',
+      `${failed} תמונות קבוצות ירדו מפייסבוק אבל לא נשמרו, ולכן הקבוצות האלה עדיין מציגות אות. הסיבה שהאחסון החזיר: ${refused}`,
+      { failed },
+    );
+  }
   return urls;
 }
 
@@ -2410,10 +2434,27 @@ async function recordDiscovered(
 
   const ids = groups.map((g) => g.externalId);
 
-  const { data: existing } = await db
+  /*
+   * THIS READ IS CHECKED, because everything below is written FROM it.
+   *
+   * It was `const { data: existing } = ...` with no error at all, and one
+   * failed request turns the whole command into a rewrite from nothing: `was`
+   * is undefined for every group, so mergeDiscovered resolves image_url to '',
+   * first_seen_at to now and queries to just this phrase — and the upsert
+   * twelve lines down commits all of it. Every picture the owner was looking
+   * at becomes a purple letter again, every group is "new since the last
+   * search" again, and groups drop out of their other saved searches. The
+   * reserved-bucket guard is keyed on `was` too, so it would go quiet in the
+   * same breath.
+   *
+   * The upsert already throws on its own error. The read that feeds it has to
+   * as well — the standard reconcileJoined in this same file already holds.
+   */
+  const { data: existing, error: read } = await db
     .from('social_discovery_groups')
     .select('external_id, queries, first_seen_at, members, privacy, membership, name, image_url')
     .in('external_id', ids);
+  if (read) throw read;
   const before = new Map<string, StoredGroup>();
   for (const row of (existing ?? []) as StoredGroup[]) before.set(row.external_id, row);
 

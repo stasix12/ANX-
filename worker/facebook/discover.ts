@@ -47,7 +47,19 @@ import { dedupe, interpretCard, nameMatches, type DiscoveredGroup, type RawCard 
  * the caller skips every row it already has one for, so a repeated search
  * costs nothing.
  */
-const PICTURE_LIMIT = 60;
+const MAX_GROUPS = 120;
+/*
+ * ONE SEARCH FINISHES THE JOB. It was 60 against a MAX_GROUPS of 120, so a
+ * broad phrase could picture at most half of what it found and the other half
+ * stayed purple letters — with the result sentence reporting the 60 it did and
+ * saying nothing about the 60 it skipped. On screen that is indistinguishable
+ * from the bug the owner already reported, so he reports it again.
+ *
+ * These are thumbnails the page has already rendered, fetched through the
+ * session in four lanes, so the extra sixty are cache-warm requests to a CDN
+ * rather than anything Facebook reads as traffic.
+ */
+const PICTURE_LIMIT = MAX_GROUPS;
 
 /** How many unreadable cards to keep for the log. Three is enough to see a
     pattern and few enough that the line stays readable. */
@@ -56,7 +68,6 @@ const UNREAD_SAMPLES = 3;
 /** How far to scroll. Each pass is roughly a screenful of new results. */
 const PASSES = 6;
 /** And the ceiling, because a phrase like "קבוצה" matches most of Facebook. */
-const MAX_GROUPS = 120;
 
 /** One group's picture, as bytes, for the caller to store somewhere durable. */
 export interface CardPicture {

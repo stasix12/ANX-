@@ -144,12 +144,6 @@ async function main(): Promise<void> {
               resolved: name ? getComputedStyle(name).direction : '',
               nameVisible: !!nameBox && nameBox.width > 20 && nameBox.height > 8,
               nameInside: !!nameBox && nameBox.left >= rowBox.left - 1 && nameBox.right <= rowBox.right + 1,
-              /* Anything a thumb is meant to hit. */
-              /* `h > 0` used to be here, which let a COLLAPSED control — the
-                 worst case, not an acceptable one — out of the check. */
-              smallTargets: [...r.querySelectorAll('button,a')]
-                .map((e) => ({ h: Math.round(e.getBoundingClientRect().height), text: (e.textContent || e.getAttribute('aria-label') || '').slice(0, 24) }))
-                .filter((t) => t.h < 40),
               /* Every control has to sit inside the row's own box, or it is
                  off the screen on a phone. */
               escaped: [...r.querySelectorAll('button,a')].filter((e) => {
@@ -243,6 +237,60 @@ async function main(): Promise<void> {
           }),
         };
       });
+
+      /*
+       * THE TARGET A THUMB ACTUALLY HAS, measured separately and last.
+       *
+       * What stood here read the HEIGHT of the drawn box and nothing else. So
+       * when the ✕ became a ⋮ and went from 44×44 to 28×40, the suite had
+       * nothing to say: 40 is not under 40, and the width was never looked at
+       * — while this same file checks both dimensions on the "my groups"
+       * card. A review agent found it by rendering the row and measuring it,
+       * which is exactly what this check claimed to be doing.
+       *
+       * It is a hit test now, not a box measurement. Walking out from the
+       * middle until elementFromPoint stops answering with the control gives
+       * what a finger gets, including the area an ::after carries past the
+       * glyph — and that difference is the whole fix, because the ⋮ cannot be
+       * drawn wider without taking the room the name wraps in.
+       *
+       * Its own pass, after everything above, because elementFromPoint only
+       * answers for what is on screen: the window is made tall enough to hold
+       * the whole fixture first. The WIDTH is the one under test and does not
+       * move, and nothing in these components is measured against the
+       * viewport's height. Scrolling each row into view instead left every
+       * control in the lower rows reading 1×1 — nothing at the point at all.
+       */
+      await page.setViewportSize({ width, height: 2400 });
+      const hits = await page.evaluate(() =>
+        [...document.querySelectorAll('.row-probe > div')].map((r) =>
+          [...r.querySelectorAll('button,a')].map((e) => {
+            const b = e.getBoundingClientRect();
+            const x = (b.left + b.right) / 2;
+            const y = (b.top + b.bottom) / 2;
+            /* Four directions through an anonymous arrow, and NOT a named
+               `const reach = …`: esbuild keeps function names by wrapping them
+               in `__name`, which does not exist in the page, and the whole
+               evaluate throws. The same hazard is reproduced on purpose in
+               worker/test/account.test.ts. */
+            const span = [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dx, dy]) => {
+              let n = 0;
+              /* 24 each way is 49 across, which is all a 44px floor needs. */
+              for (let d = 1; d <= 24; d += 1) {
+                const under = document.elementFromPoint(x + dx * d, y + dy * d);
+                if (!under || (under !== e && !e.contains(under))) break;
+                n = d;
+              }
+              return n;
+            });
+            return {
+              text: (e.textContent || e.getAttribute('aria-label') || '').slice(0, 24),
+              w: span[0] + span[1] + 1,
+              h: span[2] + span[3] + 1,
+            };
+          }),
+        ),
+      );
       await page.close();
 
       const say = (m: string) => `${width}px: ${m}`;
@@ -252,12 +300,27 @@ async function main(): Promise<void> {
       assert.equal(seen.rows.length, 8, say('the fixture lost rows'));
 
       for (const [i, r] of seen.rows.entries()) {
-        checks += 5;
+        checks += 4;
         assert.ok(r.height <= MAX_ROW, say(`row ${i} ("${r.name.slice(0, 20)}") is ${r.height}px, over the ${MAX_ROW}px a compact row may take`));
         assert.ok(r.nameVisible, say(`row ${i} rendered no readable name — "${r.name}"`));
         assert.ok(r.nameInside, say(`row ${i}'s name is outside its own card`));
-        assert.deepEqual(r.smallTargets, [], say(`row ${i} has a tap target under 40px — ${JSON.stringify(r.smallTargets)}`));
         assert.equal(r.escaped, 0, say(`row ${i} has ${r.escaped} controls outside the card`));
+        checks += 3;
+        const targets = hits[i] ?? [];
+        assert.ok(targets.length >= 3, say(`row ${i} offered ${targets.length} controls to hit-test — the floors below would pass on an empty row`));
+        assert.deepEqual(
+          targets.filter((t) => t.w < 40 || t.h < 40),
+          [],
+          say(`row ${i} has a target under 40px to a thumb — ${JSON.stringify(targets.filter((t) => t.w < 40 || t.h < 40))}`),
+        );
+        /* The one control in the row that removes a group, and the one the
+           redesign shrank. 44 is the floor src/components/social/ui.tsx
+           states twice, and what it had as a ✕. */
+        const hide = targets.find((t) => t.text.startsWith('הסתר'));
+        assert.ok(
+          hide !== undefined && hide.w >= 44 && hide.h >= 44,
+          say(`row ${i}: the ⋮ is ${hide ? `${hide.w}×${hide.h}` : 'not there'} to a thumb, and it is what removes a group`),
+        );
         checks += 1;
         assert.deepEqual(r.covered, [], say(`row ${i}: the ✕ sits on top of a control — ${r.covered.join(', ')}. A tap meant for it would hide the group.`));
         checks += 5;

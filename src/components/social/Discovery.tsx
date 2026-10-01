@@ -220,7 +220,11 @@ export function GroupRow({
                would pull the 40px tap box to within 4px of the ⋮ beside it,
                and those two mean opposite things. Flush instead: measured, the
                box's outer edge lands exactly on the action button's below it. */
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+            /* Same trick, and only where it is free: 4px toward the middle,
+               where the column holds nothing beside it, and 2px top and
+               bottom. Nothing toward the ⋮ — the two mean opposite things and
+               their targets must not touch. */
+            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl after:absolute after:-start-1 after:end-0 after:-top-0.5 after:-bottom-0.5 after:content-['']"
           >
             <span
               className={`grid h-[22px] w-[22px] place-items-center rounded-md border-2 transition-colors ${
@@ -276,7 +280,16 @@ export function GroupRow({
           title="לא רלוונטי"
           onClick={onHide}
           disabled={busy}
-          className="-me-1.5 grid w-7 shrink-0 place-items-center self-start rounded-xl py-3 text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-300 disabled:opacity-50"
+          /*
+             28×40 PAINTED, 44×44 TO A THUMB.
+             The ✕ this replaced was 44×44. As a ⋮ it is drawn 28px wide, and
+             w-11 cannot buy the rest back: the 16px comes out of the middle
+             column, which is where the name wraps, and the worst row at 360px
+             measured 123 → 146 — past both MAX_ROW and the 110-130 the brief
+             asked for. So the glyph stays 28px and the ::after carries the
+             target, into the gutter on one side and into the 8px of dead card
+             on the other, stopping exactly at the checkbox's own edge. */
+          className="relative -me-1.5 grid w-7 shrink-0 place-items-center self-start rounded-xl py-3 text-mist-500 transition-colors after:absolute after:-inset-x-2 after:-inset-y-0.5 after:content-[''] hover:bg-ink-800 hover:text-mist-300 disabled:opacity-50"
         >
           <MoreIcon aria-hidden className="h-4 w-4" />
         </button>

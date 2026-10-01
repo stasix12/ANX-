@@ -76,6 +76,11 @@ const KIND: Record<string, ActivityKind> = {
   // A round's own life: started, paused, resumed, stopped, reported.
   planned: 'round',
   drip_planned: 'round',
+  /* A round that a failure had switched off, put back on the list. Filed with
+     the round's own life rather than as system news: it is the owner's round
+     becoming real again, and it is the line that explains why publications he
+     had given up on suddenly appear in the queue. */
+  plan_revived: 'round',
   campaign_paused: 'round',
   campaign_resumed: 'round',
   campaign_stopped: 'round',
@@ -93,6 +98,11 @@ const KIND: Record<string, ActivityKind> = {
   comments_waiting: 'schedule',
   skipped: 'schedule',
   retry: 'schedule',
+  /* Slots that could not be written because the machine could not reach the
+     database. Filed beside `retry` and not with the failures: nothing is lost,
+     the schedule was deliberately left open, and the next pass writes them.
+     The `plan_failed` row in the same pass is the red one. */
+  plan_retry: 'schedule',
   cancelled: 'schedule',
   manual_pending: 'schedule',
   plan_targets_skipped: 'schedule',

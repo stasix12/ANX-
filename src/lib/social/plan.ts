@@ -8,6 +8,68 @@ import { DEFAULT_BROWSER, DEFAULT_LIMITS, type LimitsSettings, type MediaItem, t
 import { pickVariant } from './variants';
 
 /**
+ * ROUNDS THAT WERE SWITCHED OFF BY A FAILURE, SWITCHED BACK ON.
+ *
+ * "למה הסבב לא יצא? תזמנתי לפרסום." His round was planned at 04:51 while the
+ * PC could not reach the database; every insert returned `TypeError: fetch
+ * failed`, nothing was queued, and the planner stamped the schedule as planned
+ * and switched it off regardless. planQueue reads `active = true` only, so that
+ * round was unreachable from then on: it would never publish and never be
+ * tried again, and the only trace was one red line in the activity log.
+ *
+ * The counters above make sure it cannot happen again. This is for the rounds
+ * it already happened to, and it is deliberately narrow — all four must hold:
+ *
+ *   · the schedule is off and carries a `planned_until`, so it was retired
+ *     rather than merely paused by the owner;
+ *   · a `plan_failed` was written for it in the last week, so a FAILURE is why
+ *     — not "every group was already spoken for", which is a real plan with
+ *     nothing in it and must stay retired;
+ *   · it has no queue rows at all, so nothing it meant to do was done;
+ *   · and its post is still there to publish.
+ *
+ * It cannot loop: the moment a retry writes one queue row the third condition
+ * stops matching, and the one-week window ends it even if the row never comes.
+ */
+async function revivePlanFailures(db: SupabaseClient, note: PlanLogger): Promise<void> {
+  const { data: dead } = await db
+    .from('social_schedules')
+    .select('id, post_id')
+    .eq('active', false)
+    .not('planned_until', 'is', null);
+  if (!dead?.length) return;
+
+  const week = new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString();
+  const { data: failures } = await db
+    .from('social_activity_log')
+    .select('meta')
+    .eq('event', 'plan_failed')
+    .gte('created_at', week);
+  const blamed = new Set(
+    (failures ?? [])
+      .map((r) => (r as { meta?: { schedule?: unknown } }).meta?.schedule)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0),
+  );
+  if (!blamed.size) return;
+
+  for (const row of dead as { id: string; post_id: string }[]) {
+    if (!blamed.has(row.id)) continue;
+    const { count } = await db
+      .from('social_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('schedule_id', row.id);
+    if (count) continue;
+    const { data: post } = await db.from('social_posts').select('status').eq('id', row.post_id).maybeSingle();
+    if (!post || (post as { status?: string }).status === 'archived') continue;
+
+    await db.from('social_schedules').update({ active: true, planned_until: null }).eq('id', row.id);
+    await note('warn', 'plan_revived', 'סבב שנכשל בגלל תקלת רשת הוחזר לתכנון — הפרסומים שלו ייכנסו לתור עכשיו.', {
+      schedule: row.id,
+    });
+  }
+}
+
+/**
  * Materialises schedules into concrete queue rows a little ahead of time
  * (HORIZON_HOURS). Idempotent: the unique (schedule, target, scheduled_at)
  * index means re-running the planner never double-books a slot.
@@ -64,6 +126,10 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
    */
   const spacingMinutes = await enforcedSpacing(db);
 
+  /* The rounds an earlier failure buried — brought back before this pass reads
+     the list, so they are planned in the same run that finds them. */
+  await revivePlanFailures(db, note);
+
   const { data: schedules, error } = await db.from('social_schedules').select('*').eq('active', true);
   if (error) throw new Error(error.message);
   let created = 0;
@@ -101,6 +167,21 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     const waiting = await targetsAlreadyWaiting(db);
 
     const dropped: string[] = [];
+    /*
+     * HOW MANY SLOTS COULD NOT BE WRITTEN AT ALL — and it is counted because
+     * retiring the schedule depends on it.
+     *
+     * "למה הסבב לא יצא? תזמנתי לפרסום." His round was planned while the PC
+     * briefly could not reach the database, every insert came back
+     * `TypeError: fetch failed`, nothing was queued — and the schedule was
+     * then stamped `planned_until` and switched off anyway. planQueue only looks
+     * at `active = true`, so that round was dead for good: no publications, no
+     * retry, and nothing on screen saying the round would never happen.
+     *
+     * A transport failure is not a plan. It is the one outcome that must leave
+     * the schedule exactly as it found it.
+     */
+    let failed = 0;
     /* Groups the owner has said are not worth publishing to — kept out of the
        queue rather than queued and then skipped, so the round's own count is
        the truth from the start. Listed apart from `dropped`, which means
@@ -159,6 +240,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
             dropped.push(targetId);
             break;
           }
+          failed += 1;
           await note('error', 'plan_failed', insErr.message, { schedule: schedule.id });
           continue;
         }
@@ -173,6 +255,22 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
 
     await noteDropped(db, note, schedule.id, dropped);
     await noteNotCustomers(note, schedule.id, refused, notCustomers);
+    /*
+     * MARKED PLANNED ONLY IF IT WAS. The stamp and the retirement below are
+     * what make a round final; writing them after a failure is what killed his.
+     * The upsert carries `onConflict ... ignoreDuplicates`, so running the
+     * same plan again costs nothing and creates no second copy — which is
+     * exactly why leaving the schedule alone is safe.
+     */
+    if (failed) {
+      await note(
+        'warn',
+        'plan_retry',
+        `${failed} פרסומים לא נכתבו לתור כי לא הייתה גישה למסד הנתונים. הסבב לא נסגר — ננסה שוב בבדיקה הבאה.`,
+        { schedule: schedule.id, failed },
+      );
+      continue;
+    }
     await db.from('social_schedules').update({ planned_until: until.toISOString() }).eq('id', schedule.id);
     if (schedule.mode === 'now' || schedule.mode === 'once') {
       await db.from('social_schedules').update({ active: false }).eq('id', schedule.id);
@@ -429,6 +527,10 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   const dropped: string[] = [];
   const notCustomers = await offLimits(db, schedule.target_ids);
   const refused: string[] = [];
+  /* Same counter, same reason as the loop above: a drip retires for good the
+     moment `planned_until` is set, so a network blip would bury the whole
+     multi-day campaign on its first pass. */
+  let failed = 0;
   for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
     const at = slots[targetIndex];
     if (!at) continue;
@@ -476,6 +578,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
         dropped.push(targetId);
         continue;
       }
+      failed += 1;
       await note('error', 'plan_failed', error.message, { schedule: schedule.id });
       continue;
     }
@@ -487,6 +590,15 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   }
   await noteDropped(db, note, schedule.id, dropped);
   await noteNotCustomers(note, schedule.id, refused, notCustomers);
+  if (failed) {
+    await note(
+      'warn',
+      'plan_retry',
+      `${failed} פרסומים לא נכתבו לתור כי לא הייתה גישה למסד הנתונים. ההפצה ההדרגתית לא נסגרה — ננסה שוב בבדיקה הבאה.`,
+      { schedule: schedule.id, failed },
+    );
+    return created;
+  }
   await db.from('social_schedules').update({ planned_until: last.toISOString(), active: false }).eq('id', schedule.id);
   if (created) await note('info', 'drip_planned', `הפצה הדרגתית: ${created} פרסומים תוכננו עד ${last.toISOString()}`, { created });
   return created;

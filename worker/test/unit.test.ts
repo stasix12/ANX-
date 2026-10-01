@@ -467,6 +467,61 @@ console.log('unit tests OK');
   assert.ok(!sweep.includes("'published'"), 'the sweep must never touch what already went out');
   assert.ok(!sweep.includes("'paused',\n") || sweep.includes("'paused'"), 'sweep status list is explicit');
 
+  /*
+   * A ROUND THAT COULD NOT BE WRITTEN IS NOT A ROUND THAT WAS PLANNED.
+   *
+   * "למה הסבב לא יצא? תזמנתי לפרסום." His round was planned at 04:51 while the
+   * machine briefly could not reach the database. Every insert came back
+   * `TypeError: fetch failed`, nothing reached the queue — and the planner then
+   * stamped the schedule `planned_until` and switched it off exactly as if it
+   * had succeeded. planQueue reads `active = true` only, so the round was
+   * unreachable from that moment: it would never publish, never retry, and the
+   * only trace was one red line in a log he had to go looking for.
+   *
+   * Both planner branches have to survive this, because both retire a schedule
+   * and a drip retires it permanently on its first pass.
+   */
+  assert.equal(
+    (plan.match(/let failed = 0;/g) ?? []).length,
+    2,
+    'both planner branches count the slots they could not write — the recurring one and the drip',
+  );
+  assert.equal(
+    (plan.match(/failed \+= 1;/g) ?? []).length,
+    2,
+    'and both increment it where plan_failed is written, not somewhere else',
+  );
+  assert.equal(
+    (plan.match(/if \(failed\) \{/g) ?? []).length,
+    2,
+    'THE FIX: each branch bails out before retiring the schedule when anything failed',
+  );
+
+  /* The retirement in each branch must sit AFTER that bail-out. A guard that
+     runs after the stamp is a guard that does nothing. */
+  const repeatTail = plan.slice(plan.indexOf('await noteDropped(db, note, schedule.id, dropped);'));
+  const repeatGuard = repeatTail.indexOf('if (failed) {');
+  const repeatStamp = repeatTail.indexOf("update({ planned_until: until.toISOString() })");
+  assert.ok(repeatGuard >= 0 && repeatStamp >= 0 && repeatGuard < repeatStamp, 'the recurring branch checks before it stamps');
+
+  const dripTail = plan.slice(plan.indexOf('async function planDrip'));
+  const dripGuard = dripTail.indexOf('if (failed) {');
+  const dripStamp = dripTail.indexOf("update({ planned_until: last.toISOString(), active: false })");
+  assert.ok(dripGuard >= 0 && dripStamp >= 0 && dripGuard < dripStamp, 'and so does the drip, which retires for good');
+
+  /*
+   * AND THE ROUNDS IT ALREADY BURIED. The fix above is forward-only; his was
+   * already off. The revival is deliberately narrow — see its own comment —
+   * and the two conditions that stop it looping are the ones worth pinning.
+   */
+  const revive = plan.slice(plan.indexOf('async function revivePlanFailures'), plan.indexOf('export async function planQueue'));
+  assert.ok(plan.includes('await revivePlanFailures(db, note);'), 'the planner revives buried rounds before it reads the list');
+  assert.ok(revive.includes("eq('event', 'plan_failed')"), 'only a round a FAILURE switched off is revived');
+  assert.ok(revive.includes("gte('created_at', week)"), 'and only a recent one, so this cannot run for ever');
+  assert.ok(revive.includes('if (count) continue;'), 'a round that managed to queue anything is left alone — which is what stops it looping');
+  assert.ok(revive.includes("update({ active: true, planned_until: null })"), 'and reviving means both: back on the list, and not already planned');
+  assert.ok(!revive.includes('.delete()'), 'nothing is deleted to revive a round');
+
   console.log('planner-reachability tests OK');
 }
 

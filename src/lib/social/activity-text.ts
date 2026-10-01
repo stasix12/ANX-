@@ -62,6 +62,8 @@ const TITLE: Record<string, string> = {
   worker_error: 'תקלה בתוכנה שבמחשב',
   browser_start_failed: 'הדפדפן לא נפתח',
   plan_failed: 'תכנון הסבב נכשל',
+  plan_retry: 'הסבב יתוכנן שוב',
+  plan_revived: 'סבב הוחזר לתכנון',
   account_save_failed: 'שמירת החשבון נכשלה',
   profiles_save_failed: 'רשימת הפרופילים לא נשמרה',
   page_not_allowed: 'הקבוצה לא מאפשרת פרסום בתור דף',

@@ -74,6 +74,8 @@ const EVENT_MARK: Record<string, { icon: React.ComponentType<{ className?: strin
    * through to their level's grey dot. The map is now built from the writers.
    */
   plan_failed: { icon: XCircleIcon, tone: 'bad' },
+  plan_retry: { icon: ClockIcon, tone: 'warn' },
+  plan_revived: { icon: RepeatIcon, tone: 'brand' },
   plan_targets_skipped: { icon: AlertTriangleIcon, tone: 'warn' },
   /* Groups the owner's own "only where my customers are" kept out of a round. */
   plan_not_customers: { icon: AlertTriangleIcon, tone: 'warn' },

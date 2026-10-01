@@ -132,15 +132,32 @@ function sources(dir: string, out: string[] = []): string[] {
 }
 
 const WRITE = /log(?:Client)?Activity\(\s*(?:'[a-z]+'|[a-zA-Z.]+\s*\?\s*'[a-z]+'\s*:\s*'[a-z]+')\s*,\s*'([a-z0-9_]+)'/g;
+/*
+ * AND THE PLANNER, WHICH THIS WALK COULD NOT SEE.
+ *
+ * The regex above matches logActivity( and logClientActivity(. plan.ts writes
+ * through a `note(level, event, …)` callback instead, so every event the
+ * planner emits — planned, drip_planned, plan_failed, deferred, and whatever
+ * is added next — was invisible here. Two new ones were added and the walk
+ * reported "42 writers walked" and passed, which is the one thing it exists to
+ * stop: the whole point of this file is that a new event cannot reach the
+ * owner's screen without being classified on purpose.
+ */
+const NOTE = /\bnote\(\s*'[a-z]+'\s*,\s*'([a-z0-9_]+)'/g;
 const emitted = new Set<string>();
 for (const file of [...sources('src/lib/social'), ...sources('worker'), ...sources('src/app/social')]) {
   if (file.includes('/test/')) continue;
   const src = readFileSync(file, 'utf8');
   for (const m of src.matchAll(WRITE)) emitted.add(m[1]);
+  for (const m of src.matchAll(NOTE)) emitted.add(m[1]);
 }
 
 ok(emitted.size > 15, `the walk found the writers (${emitted.size} events)`);
 ok(emitted.has('published') && emitted.has('publish_failed'), 'the walk found the two events that matter most');
+ok(
+  emitted.has('plan_failed') && emitted.has('drip_planned'),
+  "and the PLANNER's events too — it writes through note() rather than logActivity(), and was invisible to this walk until a round that never published went unclassified",
+);
 
 const unclassified = [...emitted].filter((event) => {
   // An unknown info-level row falls back to 'system'; that is the tell.

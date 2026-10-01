@@ -51,8 +51,18 @@ function builtCss(): string | null {
  * add button put every row at 132 or under, which is six. The ceiling is the
  * measured maximum plus four pixels: enough that a font metric changing by a
  * hair is not a failure, not enough for a fourth line of anything.
+ *
+ * THE REDESIGN RAISED IT FROM 136 TO 174, and that is a trade, not a drift.
+ * The brief asked for a 52px picture and a name on up to two lines rather than
+ * one ellipsised line — and at 360px, where the content column is narrowest, a
+ * long Hebrew name really does take the second line. Measured across the seven
+ * fixtures at three widths after the redesign: 88 to 170, with the two-line
+ * names at 146-170 and every single-line row at 88-133. So the typical row got
+ * SHORTER and the longest names got taller, which is the trade the brief asked
+ * for: his town names are how he picks a group, and "קבוצת תושבי שכונת נווה
+ * זאב ורמו…" is not something to pick from.
  */
-const MAX_ROW = 136;
+const MAX_ROW = 174;
 
 async function main(): Promise<void> {
   const css = builtCss();

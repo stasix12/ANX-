@@ -528,6 +528,22 @@ export default function DiscoverPage() {
 
         {/* ─────────────────────────── the search box ─────────────────────── */}
         <Card padded={false} className="px-3 py-3.5">
+          {/* The illustrated head the brief asks for. DECORATION ONLY — no
+              control, no handler, aria-hidden, and it sits inside this card so
+              the app's shared page header is untouched. */}
+          <div aria-hidden className="mb-3 flex items-center gap-2.5">
+            <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-tile bg-gradient-to-br from-brand-500 to-brand-300 shadow-[0_4px_12px_-3px_rgba(124,58,237,0.5)]">
+              <UsersIcon className="h-5 w-5 text-on-brand" />
+              <span className="absolute -bottom-1 -end-1 grid h-5 w-5 place-items-center rounded-full border-2 border-ink-900 bg-ink-900 text-brand-400">
+                <SearchIcon className="h-3 w-3" />
+              </span>
+            </span>
+            <div className="min-w-0">
+              <p className="text-[15px] font-extrabold leading-tight text-mist-100">חפשו קבוצות</p>
+              <p className="mt-0.5 text-xs leading-tight text-mist-500">עיר, אזור או נושא</p>
+            </div>
+          </div>
+
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
             <div className="relative flex-1">
               <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-mist-500 start-3" />
@@ -546,10 +562,16 @@ export default function DiscoverPage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') run(text);
                 }}
-                className={`${inputClass} h-12 ps-11 text-base`}
+                className={`${inputClass} h-14 rounded-tile ps-11 text-base`}
               />
             </div>
-            <Button size="lg" busy={searching} onClick={() => run(text)} className="sm:w-auto">
+            <Button
+              size="lg"
+              busy={searching}
+              onClick={() => run(text)}
+              /* Same onClick, same busy, same label. */
+              className="h-14 rounded-tile bg-gradient-to-l from-brand-500 to-brand-300 shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)] sm:w-auto"
+            >
               {searching ? 'מחפש…' : 'חפש קבוצות'}
             </Button>
           </div>
@@ -570,8 +592,10 @@ export default function DiscoverPage() {
                         setText(s.query);
                         run(s.query);
                       }}
-                      className={`inline-flex min-h-11 items-center rounded-full border px-3 text-[13px] font-bold transition-colors ${
-                        on ? 'border-brand-400 bg-brand-400/12 text-brand-400' : 'border-ink-700 bg-ink-850 text-mist-300 hover:bg-ink-800'
+                      className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-bold transition-colors ${
+                        on
+                          ? 'border-brand-400 bg-brand-400/10 text-brand-400 shadow-[0_1px_4px_-1px_rgba(109,40,217,0.3)]'
+                          : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600 hover:bg-ink-800'
                       }`}
                     >
                       {s.query}
@@ -608,8 +632,8 @@ export default function DiscoverPage() {
         {rows !== null && active && totals.total > 0 && (
           <Card padded={false} className="px-3 py-3.5">
             <div className="flex items-baseline justify-between gap-2">
-              <p className="text-[17px] font-extrabold leading-tight text-mist-100">
-                נמצאו {totals.total} קבוצות
+              <p className="text-[19px] font-extrabold leading-tight text-mist-100">
+                נמצאו <span className="tabular-nums">{totals.total}</span> קבוצות
               </p>
               {fresh > 0 && (
                 <Badge tone="brand">
@@ -636,10 +660,13 @@ export default function DiscoverPage() {
                 </button>
               )}
             </div>
+            {/* The brief's order, read right-to-left as the page is: new,
+                waiting, already joined. Same three values, same three tones,
+                same labels — only the order they sit in. */}
             <div className="mt-3 grid grid-cols-3 gap-2 [&>*]:min-w-0">
-              <Figure tone="good" value={totals.member} label="כבר הצטרפת" />
-              <Figure tone="warn" value={totals.requested} label="בקשות ממתינות" />
               <Figure tone="brand" value={totals.fresh} label="קבוצות חדשות" />
+              <Figure tone="warn" value={totals.requested} label="בקשות ממתינות" />
+              <Figure tone="good" value={totals.member} label="כבר הצטרפת" />
             </div>
             {/*
               ONE PRESS FOR THE ONES HE IS ALREADY IN.
@@ -682,8 +709,10 @@ export default function DiscoverPage() {
                     key={f}
                     type="button"
                     onClick={() => setFilter(f)}
-                    className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full border px-3 text-[13px] font-bold transition-colors ${
-                      filter === f ? 'border-brand-400 bg-brand-400/12 text-brand-400' : 'border-ink-700 bg-ink-850 text-mist-300'
+                    className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full border px-3.5 text-xs font-bold transition-colors ${
+                      filter === f
+                        ? 'border-transparent bg-gradient-to-l from-brand-500 to-brand-300 text-on-brand shadow-[0_2px_8px_-2px_rgba(124,58,237,0.45)]'
+                        : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600'
                     }`}
                   >
                     {FILTER_LABEL[f]}
@@ -768,19 +797,24 @@ export default function DiscoverPage() {
           `data-overlay` so the page's entrance transform does not drag it. */}
       {picked.size > 0 && (
         <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+var(--safe-b))] z-40 px-3 md:bottom-4">
-          <div className={`${CARD_ELEVATED} mx-auto flex max-w-3xl items-center justify-between gap-2 px-3 py-2.5`}>
-            <div className="flex min-w-0 items-center gap-2">
+          {/* Same two controls, same handlers, same count. The brief's skin:
+              a purple gradient bar with softer top corners, lifted off the
+              list rather than sitting in it. */}
+          <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 rounded-sheet bg-gradient-to-l from-brand-600 to-brand-500 px-2.5 py-2.5 shadow-[0_8px_28px_-6px_rgba(46,16,101,0.45)]">
+            <div className="flex min-w-0 items-center gap-1.5">
               <button
                 type="button"
                 aria-label="בטל את הבחירה"
                 onClick={() => setPicked(new Set())}
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-500 hover:bg-ink-900"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-on-brand/80 transition-colors hover:bg-white/15 hover:text-on-brand"
               >
                 <CloseIcon aria-hidden className="h-4 w-4" />
               </button>
-              <p className="truncate text-sm font-extrabold text-mist-100">נבחרו {picked.size} קבוצות</p>
+              <p className="truncate text-sm font-extrabold text-on-brand">נבחרו {picked.size} קבוצות</p>
             </div>
             <Button
+              variant="secondary"
+              className="border-transparent bg-ink-900 text-brand-400 hover:bg-ink-800"
               onClick={() => {
                 setWalk(pickedRows);
                 setWalkAt(0);

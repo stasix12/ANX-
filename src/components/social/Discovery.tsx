@@ -5,7 +5,7 @@ import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Badge, Button, ButtonLink, CARD_ELEVATED, Card } from '@/components/social/ui';
 import { MEMBERSHIP_SHORT, PRIVACY_LABEL, membersText, type Membership } from '@/lib/social/discovery';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
-import { CheckIcon, CloseIcon } from '@/components/icons';
+import { CheckIcon, ClockIcon, CloseIcon, SparklesIcon, TargetIcon, UsersIcon } from '@/components/icons';
 
 /*
  * THE PARTS OF גילוי קבוצות THAT ARE WORTH MEASURING.
@@ -29,11 +29,32 @@ const MEMBERSHIP_TONE: Record<Membership, 'good' | 'warn' | 'brand' | 'neutral'>
   unknown: 'neutral',
 };
 
+/*
+ * VISUAL ONLY — the props, the values and the three tones are untouched.
+ *
+ * The tile was a bordered box with a coloured number in it. The brief asks for
+ * three mini dashboard cards, each tinted by what it counts, with the number
+ * large and the words small under it. Same data, same order of magnitude of
+ * space, read in one glance instead of three.
+ *
+ * The icon is DERIVED FROM `tone` rather than passed in, so no caller changes
+ * and no prop is added: a tile's tone already says what it counts.
+ */
+const FIGURE_SKIN: Record<'good' | 'warn' | 'brand', { tint: string; text: string; chip: string }> = {
+  good: { tint: 'border-success-400/25 bg-success-400/[0.07]', text: 'text-success-400', chip: 'bg-success-400/12' },
+  warn: { tint: 'border-warning-400/25 bg-warning-400/[0.07]', text: 'text-warning-400', chip: 'bg-warning-400/12' },
+  brand: { tint: 'border-brand-400/25 bg-brand-400/[0.07]', text: 'text-brand-400', chip: 'bg-brand-400/12' },
+};
+
 export function Figure({ tone, value, label }: { tone: 'good' | 'warn' | 'brand'; value: number; label: string }) {
-  const colour = tone === 'good' ? 'text-success-400' : tone === 'warn' ? 'text-warning-400' : 'text-brand-400';
+  const skin = FIGURE_SKIN[tone];
+  const Glyph = tone === 'good' ? CheckIcon : tone === 'warn' ? ClockIcon : SparklesIcon;
   return (
-    <div className="rounded-tile border border-ink-700 bg-ink-900 px-2 py-2 text-center">
-      <p className={`text-xl font-extrabold leading-none ${colour}`}>{value}</p>
+    <div className={`rounded-tile border px-2 py-2.5 text-center ${skin.tint}`}>
+      <span className={`mx-auto mb-1.5 grid h-7 w-7 place-items-center rounded-lg ${skin.chip} ${skin.text}`}>
+        <Glyph aria-hidden className="h-3.5 w-3.5" />
+      </span>
+      <p className={`text-[22px] font-extrabold leading-none tabular-nums ${skin.text}`}>{value}</p>
       <p className="mt-1 text-[11px] font-bold leading-tight text-mist-500">{label}</p>
     </div>
   );
@@ -96,7 +117,17 @@ export function GroupRow({
   ].filter(Boolean);
 
   return (
-    <div className={`${picked ? 'border-brand-400 bg-brand-400/[0.06]' : 'border-ink-700 bg-ink-850'} rounded-card border px-2.5 py-2.5 transition-colors`}>
+    /* VISUAL ONLY. Every handler, every condition and every string below is the
+       one that was here — what changed is the skin: a lifted white card with a
+       soft violet shadow instead of a flat bordered box, a larger picture, a
+       roomier checkbox, and the facts as a quiet line under a bolder name. */
+    <div
+      className={`rounded-card border px-3 py-2.5 transition-all ${
+        picked
+          ? 'border-brand-400 bg-brand-400/[0.06] shadow-[0_2px_10px_-2px_rgba(46,16,101,0.14)]'
+          : 'border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(46,16,101,0.04),0_8px_20px_-14px_rgba(46,16,101,0.18)]'
+      }`}
+    >
       <div className="flex items-start gap-2.5">
         <button
           type="button"
@@ -107,15 +138,15 @@ export function GroupRow({
           className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
         >
           <span
-            className={`grid h-5 w-5 place-items-center rounded-md border-2 transition-colors ${
-              picked ? 'border-brand-400 bg-brand-400 text-on-brand' : 'border-ink-600'
+            className={`grid h-[26px] w-[26px] place-items-center rounded-lg border-2 transition-colors ${
+              picked ? 'border-brand-500 bg-brand-500 text-on-brand shadow-[0_2px_6px_-1px_rgba(124,58,237,0.5)]' : 'border-ink-600 bg-ink-900'
             }`}
           >
-            {picked && <CheckIcon aria-hidden className="h-3 w-3" />}
+            {picked && <CheckIcon aria-hidden className="h-3.5 w-3.5" />}
           </span>
         </button>
 
-        <TargetAvatar name={row.name} imageUrl={row.image_url || null} channel="facebook_group" size={44} />
+        <TargetAvatar name={row.name} imageUrl={row.image_url || null} channel="facebook_group" size={52} />
 
         <div className="min-w-0 flex-1">
           {/*
@@ -129,17 +160,21 @@ export function GroupRow({
             and reported the wrong failure for the right bug. Found by this, it
             says exactly which.
           */}
-          <p data-group-name dir="auto" className="truncate text-sm font-extrabold leading-tight text-mist-100">
+          {/* Two lines rather than one, clamped. A long Hebrew name used to end
+              in an ellipsis halfway through the town it names; the brief asks
+              for up to two lines, and the row is measured at all three phone
+              widths so the extra line cannot push the card out of shape. */}
+          <p data-group-name dir="auto" className="line-clamp-2 text-sm font-extrabold leading-tight text-mist-100">
             {row.name}
           </p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             {facts.length > 0 && <span className="text-xs text-mist-500">{facts.join(' · ')}</span>}
             {row.membership !== 'unknown' && (
               <Badge tone={MEMBERSHIP_TONE[row.membership]}>{MEMBERSHIP_SHORT[row.membership]}</Badge>
             )}
             {already && (
-              <span className="inline-flex items-center gap-0.5 text-xs font-bold text-success-400">
-                <CheckIcon aria-hidden className="h-3.5 w-3.5" />
+              <span className="inline-flex items-center gap-1 rounded-full bg-success-400/10 px-2 py-0.5 text-[11px] font-bold text-success-400">
+                <CheckIcon aria-hidden className="h-3 w-3" />
                 כבר במערכת
               </span>
             )}
@@ -174,10 +209,18 @@ export function GroupRow({
             opening it is the afterthought — so they swap, and the afterthought
             becomes a text link. A link still carries its own 44px.
           */}
-          <div className="mt-2 flex min-w-0 items-center gap-2">
+          <div className="mt-1.5 flex min-w-0 items-center gap-2">
             {canAdd ? (
               <>
-                <Button size="sm" variant="primary" busy={busy} onClick={onAdopt} className="whitespace-nowrap">
+                {/* Same onClick, same busy, same label — a gradient fill and a
+                    softer shadow on top of them. */}
+                <Button
+                  size="sm"
+                  variant="primary"
+                  busy={busy}
+                  onClick={onAdopt}
+                  className="whitespace-nowrap bg-gradient-to-l from-brand-500 to-brand-300 shadow-[0_3px_10px_-2px_rgba(124,58,237,0.45)]"
+                >
                   הוסף לרשימה
                 </Button>
                 <a
@@ -196,7 +239,14 @@ export function GroupRow({
                 rel="noopener noreferrer"
                 size="sm"
                 variant={row.membership === 'member' ? 'secondary' : 'primary'}
-                className="whitespace-nowrap"
+                /* The brief's two skins, chosen by the SAME condition as before:
+                   "פתח להצטרפות" is the gradient call to action, "פתח קבוצה"
+                   is the quiet white button with a purple edge. */
+                className={`whitespace-nowrap ${
+                  row.membership === 'member'
+                    ? 'border-brand-400/35 text-brand-400'
+                    : 'bg-gradient-to-l from-brand-500 to-brand-300 shadow-[0_3px_10px_-2px_rgba(124,58,237,0.45)]'
+                }`}
               >
                 {row.membership === 'member' ? 'פתח קבוצה' : 'פתח להצטרפות'}
               </ButtonLink>
@@ -354,8 +404,17 @@ export function MyGroupsCard({
   return (
       <Card padded={false} className="px-3 py-3.5">
         <div className="flex flex-wrap items-start justify-between gap-2">
+          {/* The target glyph from the brief's first panel. Decoration only —
+              aria-hidden, no handler, and the heading beside it is the same
+              text it always was. */}
+          <span
+            aria-hidden
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-tile bg-gradient-to-br from-brand-500 to-brand-300 text-on-brand shadow-[0_3px_10px_-3px_rgba(124,58,237,0.5)]"
+          >
+            <TargetIcon className="h-5 w-5" />
+          </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-extrabold text-mist-100">הקבוצות שלך בפייסבוק</p>
+            <p className="text-[15px] font-extrabold text-mist-100">הקבוצות שלך בפייסבוק</p>
             <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
               {joined === null
                 ? 'טוען…'
@@ -379,7 +438,7 @@ export function MyGroupsCard({
                 is the honest second lock. */}
             <ul className="mt-2.5 space-y-1.5">
               {missing.slice(0, 8).map((row) => (
-                <li key={row.id} className="flex items-center gap-2">
+                <li key={row.id} className="flex items-center gap-2 rounded-xl bg-ink-800/60 px-1.5 py-1">
                   <TargetAvatar name={row.name} imageUrl={row.image_url || null} channel="facebook_group" size={28} />
                   <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-300">
                     {row.name}
@@ -402,7 +461,12 @@ export function MyGroupsCard({
             {missing.length > 8 && (
               <p className="mt-1.5 text-xs text-mist-500">ועוד {missing.length - 8}…</p>
             )}
-            <Button busy={busy} onClick={onAdopt} className="mt-3 w-full">
+            {/* Same onClick, same busy, same label and the same count in it. */}
+            <Button
+              busy={busy}
+              onClick={onAdopt}
+              className="mt-3 h-12 w-full rounded-tile bg-gradient-to-l from-brand-500 to-brand-300 shadow-[0_4px_14px_-3px_rgba(124,58,237,0.5)]"
+            >
               הוסף את {missing.length} הקבוצות לרשימת הפרסום
             </Button>
           </>

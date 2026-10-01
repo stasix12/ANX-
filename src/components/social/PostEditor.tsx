@@ -320,10 +320,7 @@ export function PostEditor({ postId }: { postId?: string }) {
   const previewVariant = variants.find((v) => v.key === previewKey) ?? null;
   const previewText = useMemo(() => renderPostText(post, previewVariant), [post, previewVariant]);
   const approvedCount = variants.filter((v) => v.approval === 'approved').length;
-  /* The name the preview signs the post with. It used to prefer a connected
-     Facebook Page's name; with Pages gone, the business's own name is the
-     only answer — and it always was, for an account with no Pages. */
-  const pageName = business.name;
+  const pageName = targets.find((t) => t.channel === 'facebook_page')?.name || business.name;
 
   /**
    * Fill this form from a post the owner already has.

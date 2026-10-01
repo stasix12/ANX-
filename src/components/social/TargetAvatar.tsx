@@ -28,7 +28,7 @@ export function TargetAvatar({
   className?: string;
 }) {
   const style = { width: size, height: size };
-  const shape = 'rounded-xl';
+  const shape = channel === 'facebook_page' ? 'rounded-full' : 'rounded-xl';
   if (imageUrl) {
     // eslint-disable-next-line @next/next/no-img-element
     /* loading="lazy" — this is the one <img> every group picture in the
@@ -40,7 +40,7 @@ export function TargetAvatar({
        PostCover and ContentCard already do this; this one was missed. */
     return <img src={imageUrl} alt="" loading="lazy" decoding="async" style={style} className={`shrink-0 ${shape} object-cover object-center ring-1 ring-ink-700 ${className}`} />;
   }
-  const tone = 'bg-brand-500 text-on-brand';
+  const tone = channel === 'facebook_page' ? 'bg-success-500 text-on-state' : 'bg-brand-500 text-on-brand';
   return (
     <span style={style} className={`grid shrink-0 place-items-center ${shape} ${tone} text-sm font-extrabold ${className}`}>
       {initial(name)}

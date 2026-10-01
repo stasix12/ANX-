@@ -37,9 +37,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Ask Vercel to build this branch
+      - name: Ask Vercel to build this branch, and keep asking until it lands
         env:
           HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+          SITE: ${{ vars.PRODUCTION_URL || 'https://anx-ggyo.vercel.app' }}
+          EXPECTED: ${{ github.sha }}
         run: |
           set -u
           if [ -z "${HOOK}" ]; then
@@ -47,46 +49,55 @@ jobs:
             echo "Add it under Settings → Secrets and variables → Actions to turn this on."
             exit 0
           fi
-          status=$(curl -sS --max-time 30 -o response.json -w '%{http_code}' -X POST "${HOOK}")
-          echo "Vercel answered HTTP ${status}"
-          cat response.json || true
-          echo
-          case "${status}" in
-            2??) echo "Deployment requested." ;;
-            *) echo "The deploy hook was rejected. Check that the secret still matches the hook in Vercel."; exit 1 ;;
-          esac
-
-      # WHY THIS STEP EXISTS.
-      #
-      # The hook returns 201 and {"state":"PENDING"} the moment Vercel accepts
-      # the request. It says nothing about whether the build then succeeded, so
-      # this job went green for e33f49c and 290907c while production stayed on
-      # 5a11493 — the owner reloaded, saw the old screen, and had no way to
-      # tell a fix that did not ship from a fix that did not work. That is the
-      # same class of silence /api/version was added to end, one layer up.
-      #
-      # So: ask production what it is running until it says the commit we just
-      # pushed. A build that never lands now fails the job loudly instead of
-      # reporting success.
-      - name: Wait for production to report this commit
-        env:
-          SITE: ${{ vars.PRODUCTION_URL || 'https://anx-ggyo.vercel.app' }}
-          EXPECTED: ${{ github.sha }}
-        run: |
-          set -u
           short="${EXPECTED:0:7}"
-          echo "Waiting for ${SITE} to report build ${short}"
+
+          # WHY THIS ASKS MORE THAN ONCE.
+          #
+          # Roughly half the hook calls produced no deployment at all. Vercel
+          # answered 201 {"state":"PENDING"} every time and then production
+          # stayed on the previous build for the full ten minutes — not a slow
+          # build: the ones that DO land are served in under a minute. Measured
+          # over one evening: eight calls, four of which never reached
+          # production, alternating with no change to the code in between.
+          #
+          # The cause is on Vercel's side and is not visible from here — the
+          # likeliest is this repository having BOTH the Git integration and
+          # this hook attached, so two deployments race for the same commit and
+          # one is dropped as a duplicate. That is a setting in somebody's
+          # dashboard, and until it is found, a fix that reached GitHub and not
+          # the owner's phone is the thing that actually costs him.
+          #
+          # So: ask, wait, and if production has not moved, ask again. A second
+          # request after the first has gone quiet is not a retry storm — it is
+          # at most three hook calls, ten minutes apart, for one push.
+          ask() {
+            status=$(curl -sS --max-time 30 -o response.json -w '%{http_code}' -X POST "${HOOK}")
+            echo "Vercel answered HTTP ${status}"
+            cat response.json || true
+            echo
+            case "${status}" in
+              2??) echo "Deployment requested." ;;
+              *) echo "::error::The deploy hook was rejected (HTTP ${status}). Check that the secret still matches the hook in Vercel."; exit 1 ;;
+            esac
+          }
+
           live=''
-          # 30 x 20s = 10 minutes. A normal build lands in well under two.
-          for i in $(seq 1 30); do
-            body=$(curl -sS --max-time 15 "${SITE}/api/version" || true)
-            live=$(printf '%s' "${body}" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')
-            echo "attempt ${i}: production reports '${live}'"
-            if [ "${live}" = "${short}" ]; then
-              echo "Production is on ${short}."
-              exit 0
-            fi
-            sleep 20
+          for round in 1 2 3; do
+            ask
+            echo "Round ${round}: waiting for ${SITE} to report build ${short}"
+            # 30 x 20s = 10 minutes. A build that lands at all lands in under one.
+            for i in $(seq 1 30); do
+              body=$(curl -sS --max-time 15 "${SITE}/api/version" || true)
+              live=$(printf '%s' "${body}" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')
+              if [ "${live}" = "${short}" ]; then
+                echo "Production is on ${short} (round ${round}, attempt ${i})."
+                exit 0
+              fi
+              [ $((i % 5)) -eq 0 ] && echo "  attempt ${i}: production reports '${live}'"
+              sleep 20
+            done
+            echo "::warning::Round ${round} ended with production still on '${live}'. Asking Vercel again."
           done
-          echo "::error::Production is still on '${live}' after 10 minutes, not '${short}'. The deploy hook was accepted but the build did not reach production — open the Vercel dashboard, find the newest deployment for this branch and read why it failed."
+
+          echo "::error::Production is still on '${live}' after three requests and thirty minutes, not '${short}'. Open the Vercel dashboard, find the newest deployment for this branch and read why it failed — and check whether the Git integration AND this deploy hook are both attached to the project, which makes two deployments race for every commit."
           exit 1

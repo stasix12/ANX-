@@ -356,6 +356,37 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
     'and a build that cannot read its own version number refuses to ship, instead of quietly packaging 0.0.0',
   );
 
+  /*
+   * THE DEPLOY ASKS MORE THAN ONCE, because asking once was not enough.
+   *
+   * Over one evening, four of eight hook calls produced no deployment at all:
+   * Vercel answered 201 PENDING and production stayed on the previous build
+   * for the full ten minutes, while the calls that DID land were served in
+   * under a minute. The owner's fixes sat in GitHub and never reached his
+   * phone, and the job that was supposed to catch that reported it and stopped.
+   *
+   * The cause is in a dashboard this repository cannot see. Until it is found,
+   * a second and third request are what actually get the fix to him.
+   */
+  const deploy = readFileSync(path.join(root, '.github', 'workflows', 'vercel-deploy.yml'), 'utf8');
+  is(/for round in 1 2 3; do/.test(deploy), 'a deploy that does not land is asked for again, not merely reported');
+  is(
+    /ask\n\s*echo "Round \$\{round\}: waiting/.test(deploy),
+    'and each round ASKS before it waits — a round that only waits again is the same ten minutes twice',
+  );
+  is(
+    /exit 0/.test(deploy.slice(deploy.indexOf('if [ "${live}" = "${short}" ]'), deploy.indexOf('::warning::'))),
+    'it stops the moment production reports the commit, rather than burning all three rounds',
+  );
+  is(
+    /Production is still on .* after three requests/.test(deploy),
+    'and when all three fail it still fails loudly — a deploy that never landed must never read as success',
+  );
+  is(
+    /api\/version/.test(deploy),
+    'the check asks PRODUCTION what it is running, not Vercel what it accepted — the 201 was always the lie',
+  );
+
   const updates = readFileSync(path.join(root, 'desktop', 'updates.ts'), 'utf8');
   is(/autoUpdater\.autoDownload = false/.test(updates), 'the download is started deliberately, so the "עדכונים אוטומטיים" toggle actually decides');
   is(/autoUpdater\.autoInstallOnAppQuit = true/.test(updates), 'a downloaded version installs on the next ordinary quit, so doing nothing still gets you there');

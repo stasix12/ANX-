@@ -1402,7 +1402,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
          */
         const phrase = String(cmd.payload?.query ?? '').trim();
         if (cmd.payload?.source === 'joined') {
-          const mine = await session.myGroups(headless, { pictures: await groupsMissingPictures() });
+          const mine = await session.myGroups(headless, { havePictures: await groupsWithPictures() });
           if (mine.problem) {
             ok = false;
             result = mine.problem;
@@ -1477,8 +1477,8 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
            * this business has ever seen WITHOUT a stored picture. searchGroups
            * intersects it with what it actually found.
            */
-          const need = await groupsMissingPictures();
-          const found = await session.discoverGroups(headless, phrase, { pictures: need });
+          const have = await groupsWithPictures();
+          const found = await session.discoverGroups(headless, phrase, { havePictures: have });
           if (found.problem) {
             ok = false;
             result = found.problem;
@@ -1516,7 +1516,11 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
               const sample = found.unread.map((c) => `${c.name}: [${c.buttons.join(' | ')}]`).join('   ·   ');
               await logActivity('info', 'discover_unread', `לא הצלחנו לקרוא סטטוס חברות ב-${found.unread.length} כרטיסים. מה שהיה עליהם: ${sample}`);
             }
-            const shots = need.length ? ` ${wrote.pictures} תמונות.` : '';
+            /* Said whenever anything was stored. The old condition asked
+               whether pictures had been REQUESTED, which under the new shape is
+               always — and the number is the useful part anyway: "0 תמונות" and
+               "54 תמונות" are different bugs, which is why it is on screen. */
+            const shots = wrote.pictures ? ` ${wrote.pictures} תמונות.` : '';
             /* Counted rather than hidden: a search that drops most of what it
                found owes the person the number, or "why so few" has no answer. */
             const skipped = found.offTopic ? ` (${found.offTopic} תוצאות שלא הכילו את המילה סוננו)` : '';
@@ -2321,20 +2325,25 @@ async function reconcileJoined(found: DiscoveredGroup[], truncated: boolean): Pr
  * you meet them", and a search that meets none of them downloads nothing. A
  * group whose picture is already stored is never fetched twice.
  */
-async function groupsMissingPictures(): Promise<string[]> {
+/**
+ * The groups this business ALREADY has a picture of — the ones a read may skip.
+ *
+ * It used to answer the opposite question, "which stored rows are missing a
+ * picture", and the reader fetched exactly those. Which meant a group found for
+ * the FIRST time — with no row yet, and so on no list — was never fetched. The
+ * owner searched his city, eighty of the results were new, and every one of
+ * them drew a letter instead of a picture. Asking which ones we HAVE makes the
+ * new ones the default rather than the exception.
+ *
+ * OUR OWN COPIES ONLY. A row holding a signed scontent URL does not really have
+ * a picture: those render for an hour and then the row shows a letter for ever,
+ * because the column is not empty. Only something under Supabase storage counts.
+ */
+async function groupsWithPictures(): Promise<string[]> {
   const db = await workerDb();
   const { data } = await db.from('social_discovery_groups').select('external_id, image_url');
   return ((data ?? []) as { external_id: string; image_url: string | null }[])
-    /*
-     * "MISSING" INCLUDES A LINK WE DID NOT STORE OURSELVES.
-     *
-     * Asking only for empty ones would have left every row the first version
-     * wrote — each holding a signed scontent URL that stopped rendering hours
-     * later — showing a letter for ever, because the column is not empty. Our
-     * own copies live under Supabase storage, so anything that is not one is
-     * a picture this row does not really have.
-     */
-    .filter((r) => !/\/storage\/v1\/object\/public\//.test(r.image_url ?? ''))
+    .filter((r) => /\/storage\/v1\/object\/public\//.test(r.image_url ?? ''))
     .map((r) => r.external_id);
 }
 

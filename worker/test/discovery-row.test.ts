@@ -52,17 +52,24 @@ function builtCss(): string | null {
  * measured maximum plus four pixels: enough that a font metric changing by a
  * hair is not a failure, not enough for a fourth line of anything.
  *
- * THE REDESIGN RAISED IT FROM 136 TO 174, and that is a trade, not a drift.
- * The brief asked for a 52px picture and a name on up to two lines rather than
- * one ellipsised line — and at 360px, where the content column is narrowest, a
- * long Hebrew name really does take the second line. Measured across the seven
- * fixtures at three widths after the redesign: 88 to 170, with the two-line
- * names at 146-170 and every single-line row at 88-133. So the typical row got
- * SHORTER and the longest names got taller, which is the trade the brief asked
- * for: his town names are how he picks a group, and "קבוצת תושבי שכונת נווה
- * זאב ורמו…" is not something to pick from.
+ * THE REDESIGN TOOK IT TO 174 AND THEN "להוריד בכ-15-20%" BROUGHT IT TO 144.
+ *
+ * The redesign bought a 52px picture and a name on two lines instead of one
+ * ellipsised line, and paid for it in height. The owner then asked for that
+ * height back, and most of it came from ONE change rather than from squeezing
+ * every padding: the ✕ left the row's flow for the card's corner, which gave
+ * the content column back about 54px — so names that needed a second line now
+ * fit on one, and a whole line left most cards. The rest came from a shorter
+ * "במערכת", an 11px facts line, and tighter padding.
+ *
+ * Measured over the seven fixtures, before → after, at each width:
+ *   360: 981 → 810 total (17.4% shorter), worst row 170 → 140
+ *   390: 933 → 769 (17.6%)
+ *   430: 873 → 702 (19.6%)
+ *
+ * The ceiling is the measured maximum plus four, as it has always been.
  */
-const MAX_ROW = 174;
+const MAX_ROW = 144;
 
 async function main(): Promise<void> {
   const css = builtCss();
@@ -140,6 +147,24 @@ async function main(): Promise<void> {
               /* The picture slot, which every row reserves whether or not it
                  has a picture — otherwise the list's edge moves row to row. */
               avatar: Math.round((r.querySelector('img, span.grid.shrink-0') as HTMLElement | null)?.getBoundingClientRect().width ?? 0),
+              /*
+               * WHAT THE ACTION ACTUALLY PAINTS, not which classes it carries.
+               *
+               * The brief asked for two button skins and the diff appeared to
+               * deliver both — and neither reached the screen. `border-ink-700`
+               * from the secondary variant and the added `border-brand-400/35`
+               * are both one-class border-colour utilities in the same layer,
+               * so the one emitted later wins, and that is the pale hairline;
+               * the member button's computed style was byte-identical to having
+               * no override at all. A class-name assertion cannot see that. A
+               * browser can.
+               */
+              action: (() => {
+                const el = [...r.querySelectorAll('a,button')].find((e) => /פתח קבוצה|פתח להצטרפות|הוסף לרשימה/.test(e.textContent || ''));
+                if (!el) return null;
+                const cs = getComputedStyle(el);
+                return { label: (el.textContent || '').trim(), border: cs.borderTopColor, bg: cs.backgroundColor, image: cs.backgroundImage };
+              })(),
             };
           }),
         };
@@ -184,6 +209,27 @@ async function main(): Promise<void> {
       assert.ok(cyrillic.name.includes('Наша Беэр-Шева'), say('the Cyrillic name was mangled'));
       assert.ok(mixed.name.includes('Беэр-Шева') && mixed.name.includes('באר שבע'), say('the mixed-script name lost one of its halves'));
       assert.ok(hebrew.name.includes('באר שבע ביחד'), say('the Hebrew name was mangled'));
+
+      /*
+       * THE TWO SKINS, MEASURED. "פתח קבוצה" is the quiet one: white, with a
+       * PURPLE edge — not the pale #e7e2f3 hairline every other card uses.
+       * "פתח להצטרפות" is the loud one and must actually be filled.
+       */
+      for (const r of seen.rows) {
+        if (!r.action) continue;
+        checks += 1;
+        if (/פתח קבוצה/.test(r.action.label)) {
+          assert.ok(
+            !/231,\s*226,\s*243/.test(r.action.border),
+            say(`"פתח קבוצה" still paints the pale hairline (${r.action.border}) — the purple edge lost the cascade again`),
+          );
+        } else {
+          assert.ok(
+            r.action.image !== 'none' || !/rgba\(0,\s*0,\s*0,\s*0\)/.test(r.action.bg),
+            say(`"${r.action.label}" paints no fill at all (${r.action.bg} / ${r.action.image})`),
+          );
+        }
+      }
 
       /* Every row reserves the same picture slot, with a picture or without. */
       const slots = new Set(seen.rows.map((r) => r.avatar));

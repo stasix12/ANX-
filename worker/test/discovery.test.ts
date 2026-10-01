@@ -614,12 +614,45 @@ const eq = (a: unknown, b: unknown, msg: string) => {
      "the upload was refused" — he is on a storage account over its quota. */
   is(/pictures: stored\.size/.test(worker), 'how many pictures were really stored is returned, not assumed');
   is(/wrote\.pictures\} תמונות/.test(worker), 'and printed in the sentence he reads');
-  is(/need\.length \? ` \$\{wrote\.pictures\}/.test(worker), 'but only when pictures were asked for — a re-search needing none would otherwise report zero and look broken');
+  is(/wrote\.pictures \? ` \$\{wrote\.pictures\}/.test(worker), 'and only when something really was stored — a re-search that needed none would otherwise report zero and look broken');
+
+  /*
+   * AND THE SET THAT DECIDES WHO GETS ONE WAS THE WRONG WAY ROUND.
+   *
+   * The caller used to list the rows it already HELD that were missing a
+   * picture, and the reader fetched exactly those. A group found for the FIRST
+   * time has no row, so it was on no list and got no picture — only a re-run of
+   * the same search could give it one. The owner searched his city, eighty of
+   * the results were new, and every one of them drew a letter in a purple
+   * square.
+   *
+   * Inverted, the new groups are the default and a re-run still downloads
+   * nothing, which is what the old shape was really protecting.
+   */
+  is(/async function groupsWithPictures/.test(worker), 'the caller now names the groups it ALREADY has a picture of');
+  is(
+    /\.filter\(\(r\) => \/\\\/storage\\\/v1\\\/object\\\/public\\\/\/\.test\(r\.image_url \?\? ''\)\)/.test(worker),
+    'and counts only OUR copies — a signed Facebook URL renders for an hour and then shows a letter for ever',
+  );
+  is(/havePictures: await groupsWithPictures\(\)/.test(worker), 'both reads are given that set');
+  is(
+    (worker.match(/havePictures: /g) ?? []).length === 2,
+    'the search and the "my groups" scan alike — neither is the exception',
+  );
+  is(
+    /groups\.filter\(\(g\) => !have\.has\(g\.externalId\)\)/.test(browser),
+    'THE INVERSION: everything the read found that we do not already hold gets a picture, which is what makes a first sighting get one',
+  );
 
   /* Fetched once in the life of a row, on an account already over its storage
-     quota — so a re-search must cost nothing. */
-  is(/opts\.pictures \?\? \[\]/.test(browser), 'only the ids the caller still needs are fetched');
-  is(/wanted\.size \? await fetchPictures/.test(browser), 'and a search that needs none downloads nothing at all');
+     quota — so a re-search must still cost nothing. The set is the inverse of
+     what it was, and that is the point: see the inversion assertions above. */
+  is(/opts\.havePictures \?\? \[\]/.test(browser), 'the caller names what it already holds, and only the rest is fetched');
+  /* A re-search where every group is already held passes an empty list, and an
+     empty list opens no lanes — so it still downloads nothing. The old shape
+     said this with a `wanted.size ?` in front of the call; this says it where
+     the work actually happens, which is the half that cannot be bypassed. */
+  is(/Math\.min\(lanes, todo\.length\)/.test(browser), 'and a read that needs none opens no lanes, so it downloads nothing at all');
   is(
     /\/storage\\\/v1\\\/object\\\/public\\\//.test(worker) || /storage.{0,4}v1.{0,4}object.{0,4}public/.test(worker),
     'A LINK WE DID NOT STORE OURSELVES COUNTS AS MISSING — otherwise every row the first version wrote keeps its dead URL for ever',
@@ -865,6 +898,32 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(/aria-label=\{`זאת לא קבוצה שלי/.test(block), 'every name on the card can be dismissed by the person reading it');
   is(/onHide\(row\)/.test(block), 'and the dismiss acts on that row, not on the list');
   is(/h-11 w-11/.test(block), "with a target a thumb can hit — this card is read on a phone");
+
+  /*
+   * AND NO WHITE LABEL MAY SIT ON brand-300.
+   *
+   * The selected filter pill was given a gradient ending at brand-300, and its
+   * 12px white label measured 4.40:1 — under the 4.5 AA asks for. globals.css
+   * says it in as many words: brand-300 is the indicator step, "using the
+   * bright accent as text is exactly the mistake the split exists to prevent".
+   *
+   * contrast.test.ts could not catch it: it compares solid tokens from a fixed
+   * list, and a gradient stop is in neither. So the rule is kept where the
+   * gradient is written — both ends of anything carrying `text-on-brand` must
+   * be fills a white label is allowed on, which is brand-500 (5.70:1) and
+   * darker.
+   */
+  /* The rule is about TEXT. A white glyph on brand-300 measures 4.23:1, which
+     clears the 3:1 WCAG 1.4.11 asks of a graphic — so the decorative tiles on
+     this screen may reach it, and the pill, which carries a 12px label, may
+     not. Pinned on the pill itself rather than by sweeping every gradient,
+     because only the pill's contrast is a text contrast. */
+  const pill = page.slice(page.indexOf('{FILTERS.map('), page.indexOf('<SegmentedControl'));
+  is(/from-brand-600 to-brand-500 text-on-brand/.test(pill), 'the selected filter pill runs brand-600 → brand-500 — both fills a white LABEL is allowed on');
+  is(
+    !/to-brand-300|from-brand-300/.test(pill),
+    'and never reaches brand-300, where a 12px white label measured 4.40:1 — under the 4.5 AA asks of text',
+  );
   is(/onHide=\{hideJoined\}/.test(page), 'the screen wires it to its own handler');
   const joinedHide = page.slice(page.indexOf('async function hideJoined'), page.indexOf('async function hide('));
   is(/hideDiscovered\(row\.id, true\)/.test(joinedHide), 'which hides the row rather than deleting it — nothing he taught the app is thrown away');

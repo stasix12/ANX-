@@ -58,7 +58,7 @@ export interface MyGroupsOutcome {
   truncated: boolean;
 }
 
-export async function readMyGroups(page: Page, opts: { pictures?: string[] } = {}): Promise<MyGroupsOutcome> {
+export async function readMyGroups(page: Page, opts: { havePictures?: string[] } = {}): Promise<MyGroupsOutcome> {
   await page.goto(JOINED_URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.waitForSelector('a[href*="/groups/"]', { timeout: 20_000 }).catch(() => undefined);
 
@@ -132,8 +132,11 @@ export async function readMyGroups(page: Page, opts: { pictures?: string[] } = {
   const groups = dedupe(collected).slice(0, MAX_GROUPS);
   /* Fetched here, while the page is still open and its session still applies —
      the same reason the search reader does it rather than the caller. */
-  const wanted = new Set(opts.pictures ?? []);
-  const pictures = wanted.size ? await fetchPictures(page, groups.filter((g) => wanted.has(g.externalId))) : new Map<string, CardPicture>();
+  /* Same inversion as the search reader, for the same reason: a group of his
+     that the system is seeing for the first time is exactly the one with no
+     picture, and the old shape skipped precisely those. */
+  const have = new Set(opts.havePictures ?? []);
+  const pictures = await fetchPictures(page, groups.filter((g) => !have.has(g.externalId)));
   return { groups, pictures, problem: '', truncated };
 }
 

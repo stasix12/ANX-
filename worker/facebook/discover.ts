@@ -111,7 +111,7 @@ export interface SearchOutcome {
  * that had to tell them apart from the markup would be guessing at exactly the
  * moment it must not.
  */
-export async function searchGroups(page: Page, query: string, opts: { pictures?: string[] } = {}): Promise<SearchOutcome> {
+export async function searchGroups(page: Page, query: string, opts: { havePictures?: string[] } = {}): Promise<SearchOutcome> {
   const url = `https://www.facebook.com/search/groups/?q=${encodeURIComponent(query)}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   /* Search results arrive after the shell does, so the wait is for a link to a
@@ -166,13 +166,22 @@ export async function searchGroups(page: Page, query: string, opts: { pictures?:
   const groups = onTopic.slice(0, MAX_GROUPS);
 
   /*
-   * `opts.pictures` is the list of ids the CALLER still needs a picture for —
-   * it knows which rows already have one and this function does not. Absent,
-   * nothing is fetched: a search re-run for its membership counts should not
-   * re-download sixty images.
+   * WHICH PICTURES TO FETCH — AND THE ANSWER USED TO EXCLUDE EVERY NEW GROUP.
+   *
+   * `opts.pictures` was the list of ids the caller still needed a picture for,
+   * and the caller built it by reading the rows it already had. A group found
+   * for the FIRST time has no row yet, so it was never on that list and never
+   * got a picture — only a re-run of the same search could give it one. The
+   * owner searched "באר שבע", eighty of the results were new, and every one of
+   * them drew a letter in a purple square.
+   *
+   * Inverted: the caller now says which groups it ALREADY HAS a stored picture
+   * for, and everything else this search found is fetched. A re-run still
+   * downloads nothing, which is what the old shape was protecting — it just no
+   * longer protects it by skipping the groups that need it most.
    */
-  const wanted = new Set(opts.pictures ?? []);
-  const pictures = wanted.size ? await fetchPictures(page, groups.filter((g) => wanted.has(g.externalId))) : new Map<string, CardPicture>();
+  const have = new Set(opts.havePictures ?? []);
+  const pictures = await fetchPictures(page, groups.filter((g) => !have.has(g.externalId)));
 
   return { groups, pictures, unread: [...unread.values()], problem: '', truncated, offTopic: all.length - onTopic.length };
 }

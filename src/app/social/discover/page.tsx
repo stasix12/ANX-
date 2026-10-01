@@ -711,7 +711,14 @@ export default function DiscoverPage() {
                     onClick={() => setFilter(f)}
                     className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-full border px-3.5 text-xs font-bold transition-colors ${
                       filter === f
-                        ? 'border-transparent bg-gradient-to-l from-brand-500 to-brand-300 text-on-brand shadow-[0_2px_8px_-2px_rgba(124,58,237,0.45)]'
+                        /* brand-600 → brand-500, NOT → brand-300.
+                           White on brand-300 measures 4.23:1 and the pill's
+                           12px label came out at 4.40 — under the 4.5 AA asks
+                           for. globals.css says it outright: brand-300 is the
+                           indicator step, "using the bright accent as text is
+                           exactly the mistake the split exists to prevent".
+                           Both ends here are fills a white label sits on. */
+                        ? 'border-transparent bg-gradient-to-l from-brand-600 to-brand-500 text-on-brand shadow-[0_2px_8px_-2px_rgba(124,58,237,0.45)]'
                         : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600'
                     }`}
                   >

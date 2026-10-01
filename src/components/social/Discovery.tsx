@@ -122,7 +122,7 @@ export function GroupRow({
        soft violet shadow instead of a flat bordered box, a larger picture, a
        roomier checkbox, and the facts as a quiet line under a bolder name. */
     <div
-      className={`rounded-card border px-3 py-2.5 transition-all ${
+      className={`relative rounded-card border px-3 py-1.5 transition-all ${
         picked
           ? 'border-brand-400 bg-brand-400/[0.06] shadow-[0_2px_10px_-2px_rgba(46,16,101,0.14)]'
           : 'border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(46,16,101,0.04),0_8px_20px_-14px_rgba(46,16,101,0.18)]'
@@ -164,21 +164,31 @@ export function GroupRow({
               in an ellipsis halfway through the town it names; the brief asks
               for up to two lines, and the row is measured at all three phone
               widths so the extra line cannot push the card out of shape. */}
-          <p data-group-name dir="auto" className="line-clamp-2 text-sm font-extrabold leading-tight text-mist-100">
+          <p data-group-name dir="auto" className="line-clamp-2 pe-10 text-sm font-extrabold leading-tight text-mist-100">
             {row.name}
           </p>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            {facts.length > 0 && <span className="text-xs text-mist-500">{facts.join(' · ')}</span>}
+          {/* THE FACTS AND THE ACTION SHARE A LINE WHEN THEY FIT.
+              The action used to have a line of its own always, which is 48 of
+              a 120px card. Wrapped like this it drops beside the badges on a
+              390px phone and wider, and on a 360px one it wraps exactly where
+              it used to sit — so this is never worse and usually a line
+              shorter. */}
+          <div className="mt-0.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            {facts.length > 0 && <span className="text-[11px] text-mist-500">{facts.join(' · ')}</span>}
             {row.membership !== 'unknown' && (
               <Badge tone={MEMBERSHIP_TONE[row.membership]}>{MEMBERSHIP_SHORT[row.membership]}</Badge>
             )}
             {already && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-success-400/10 px-2 py-0.5 text-[11px] font-bold text-success-400">
+              /* "במערכת" rather than "כבר במערכת": the shorter word is what
+                 lets this share the line with the status badge instead of
+                 taking one of its own, which was a whole line on most cards. */
+              <span className="inline-flex items-center gap-1 rounded-full bg-success-400/10 px-1.5 py-0.5 text-[11px] font-bold text-success-400">
                 <CheckIcon aria-hidden className="h-3 w-3" />
-                כבר במערכת
+                במערכת
               </span>
             )}
-          </div>
+            </div>
 
           {/*
             TWO CONTROLS, NEVER THREE — measured, not guessed.
@@ -209,17 +219,20 @@ export function GroupRow({
             opening it is the afterthought — so they swap, and the afterthought
             becomes a text link. A link still carries its own 44px.
           */}
-          <div className="mt-1.5 flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             {canAdd ? (
               <>
-                {/* Same onClick, same busy, same label — a gradient fill and a
-                    softer shadow on top of them. */}
+                {/* Same onClick, same busy, same label. No gradient utilities
+                    here: the primary variant already paints the theme's own
+                    `.social-theme .grad-primary`, which is two classes and
+                    beats any one-class bg-gradient-* put beside it. Measured —
+                    adding them changed the computed background by nothing. */}
                 <Button
                   size="sm"
                   variant="primary"
                   busy={busy}
                   onClick={onAdopt}
-                  className="whitespace-nowrap bg-gradient-to-l from-brand-500 to-brand-300 shadow-[0_3px_10px_-2px_rgba(124,58,237,0.45)]"
+                  className="whitespace-nowrap shadow-[0_3px_10px_-2px_rgba(124,58,237,0.45)]"
                 >
                   הוסף לרשימה
                 </Button>
@@ -242,30 +255,50 @@ export function GroupRow({
                 /* The brief's two skins, chosen by the SAME condition as before:
                    "פתח להצטרפות" is the gradient call to action, "פתח קבוצה"
                    is the quiet white button with a purple edge. */
+                /* The brief's two skins, chosen by the SAME condition as before.
+                   `!` because the secondary variant carries border-ink-700 and
+                   both are single-class border-colour utilities in the same
+                   layer — the one emitted LATER wins, and that is the pale
+                   hairline. Measured in a browser: without the important flag
+                   this button's computed border was byte-identical to having
+                   no override at all, so the purple edge simply never
+                   appeared. */
                 className={`whitespace-nowrap ${
-                  row.membership === 'member'
-                    ? 'border-brand-400/35 text-brand-400'
-                    : 'bg-gradient-to-l from-brand-500 to-brand-300 shadow-[0_3px_10px_-2px_rgba(124,58,237,0.45)]'
+                  row.membership === 'member' ? '!border-brand-400/35 text-brand-400' : ''
                 }`}
               >
                 {row.membership === 'member' ? 'פתח קבוצה' : 'פתח להצטרפות'}
               </ButtonLink>
             )}
           </div>
+          </div>
         </div>
 
-        {/* The dismiss, level with the name rather than under the buttons. */}
-        <button
-          type="button"
-          aria-label={`הסתר את ${row.name}`}
-          title="לא רלוונטי"
-          onClick={onHide}
-          disabled={busy}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-300 disabled:opacity-50"
-        >
-          <CloseIcon aria-hidden className="h-4 w-4" />
-        </button>
       </div>
+
+      {/*
+        OUT OF THE ROW'S FLOW, and that is what bought the height.
+
+        "את הגובה של הכרטיסייה להוריד בכ-15-20%." At 360px this column had
+        about 166px to put a group's name in, once the checkbox, the picture and
+        this ✕ had each taken their 44. Lifting the ✕ out of the line gives
+        those pixels back to the name, so names that needed two lines now fit on
+        one — which removes a whole line from most cards rather than squeezing
+        every card's padding.
+
+        Still a 44px target, still in the same corner it was in, and the name
+        reserves room for it so the two can never overlap.
+      */}
+      <button
+        type="button"
+        aria-label={`הסתר את ${row.name}`}
+        title="לא רלוונטי"
+        onClick={onHide}
+        disabled={busy}
+        className="absolute top-1 grid h-11 w-11 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-300 disabled:opacity-50 end-1"
+      >
+        <CloseIcon aria-hidden className="h-4 w-4" />
+      </button>
     </div>
   );
 }

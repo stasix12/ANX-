@@ -346,7 +346,7 @@ export class BrowserSession {
    * command in this file uses, because they mean the same thing and the owner
    * reads them in the same place.
    */
-  async discoverGroups(headless: boolean, query: string, opts: { pictures?: string[] } = {}): Promise<SearchOutcome> {
+  async discoverGroups(headless: boolean, query: string, opts: { havePictures?: string[] } = {}): Promise<SearchOutcome> {
     if (!this.hasProfile()) return { groups: [], pictures: new Map(), unread: [], offTopic: 0, problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
     const page = await this.newPage(headless, 'גילוי קבוצות');
     try {
@@ -381,7 +381,7 @@ export class BrowserSession {
    * first: a page behind a login wall answers with the login page's own
    * links, and /groups/ is in its footer.
    */
-  async myGroups(headless: boolean, opts: { pictures?: string[] } = {}): Promise<MyGroupsOutcome> {
+  async myGroups(headless: boolean, opts: { havePictures?: string[] } = {}): Promise<MyGroupsOutcome> {
     if (!this.hasProfile()) return { groups: [], pictures: new Map(), problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
     const page = await this.newPage(headless, 'הקבוצות שלי');
     try {

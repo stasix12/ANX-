@@ -18,6 +18,12 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
 
+# unzip opens the profile archive a customer uploads through the dashboard
+# (worker/profile-import.ts) — the only way a session reaches a managed host
+# that has no SSH. One small tool, cleaned apt lists, nothing else.
+RUN apt-get update && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/*
+
 # ONLY WHAT THE WORKER IMPORTS, and that turns out to be two packages.
 #
 # The first version installed the whole product's lockfile — next, react, the
@@ -57,6 +63,12 @@ VOLUME ["/data"]
 # Playwright's own Chromium, not Google Chrome: there is no Chrome in this
 # image and no reason to add one.
 ENV SOCIAL_BROWSER_CHANNEL=chromium
+
+# Managed hosts give /dev/shm 64MB and no shm_size knob; this moves Chromium's
+# shared memory to /tmp so an image upload cannot crash the browser (see
+# worker/env.ts, disableDevShm). Compose deployments keep shm_size: 1gb too —
+# the flag and the bigger shm are belt and braces, not alternatives.
+ENV SOCIAL_BROWSER_DISABLE_DEV_SHM=1
 
 # Headless always. There is no screen here, and the dashboard's Debug Mode
 # would otherwise try to open a window onto one that does not exist.

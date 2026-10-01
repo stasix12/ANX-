@@ -149,7 +149,7 @@ export class BrowserSession {
       timezoneId: env.timezone,
       ...(env.proxy ? { proxy: env.proxy } : {}),
       viewport: wantHeadless ? { width: 1280, height: 900 } : null,
-      args: ['--disable-notifications'],
+      args: ['--disable-notifications', ...(env.disableDevShm ? ['--disable-dev-shm-usage'] : [])],
       ignoreDefaultArgs: ['--enable-automation'],
     };
     try {

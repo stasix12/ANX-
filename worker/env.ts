@@ -88,6 +88,15 @@ export const env = {
   get forceHeaded() {
     return process.env.SOCIAL_BROWSER_HEADED === '1';
   },
+  /*
+   * Managed container hosts (Railway, Render) give /dev/shm Docker's 64MB
+   * default and no shm_size knob. Chromium then dies mid-upload in a way that
+   * looks exactly like Facebook rejecting the post. The flag moves shared
+   * memory to /tmp; the worker's Dockerfile sets it, desktops are unaffected.
+   */
+  get disableDevShm() {
+    return process.env.SOCIAL_BROWSER_DISABLE_DEV_SHM === '1';
+  },
   get pollMs() {
     return Number(process.env.SOCIAL_WORKER_POLL_MS ?? 5000);
   },

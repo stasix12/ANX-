@@ -38,6 +38,7 @@ import { cleanupMedia, downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
 import type { FacebookProfile } from './facebook/profiles';
+import { importProfileFromCloud } from './profile-import';
 import { BrowserSession, SessionError, recentPageOpens } from './facebook/session';
 import { NO_ACCOUNT, queueScope } from '@/lib/social/account-scope';
 import { captureScreenshot } from './screenshots';
@@ -200,6 +201,17 @@ let stopping = false;
 async function main(): Promise<void> {
   console.log(`[worker] הפתרון המבריק — social worker v${VERSION} (${env.workerName})`);
   const db = await workerDb();
+
+  /*
+   * A profile uploaded through the dashboard (cloud deployments with no SSH)
+   * is picked up before anything opens a browser. Failure is reported and
+   * swallowed: the fresh-login path from the dashboard still exists.
+   */
+  try {
+    await importProfileFromCloud(db);
+  } catch (err) {
+    console.error('[worker] ייבוא הפרופיל מהענן נכשל:', err instanceof Error ? err.message : err);
+  }
 
   /*
    * One worker per name, and the reason is not tidiness.

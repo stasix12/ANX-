@@ -111,6 +111,9 @@ const KIND: Record<string, ActivityKind> = {
   cancelled: 'schedule',
   manual_pending: 'schedule',
   plan_targets_skipped: 'schedule',
+  /* The feature that wrote this is gone ("לפרסם רק לאן שיש לקוחות"), and the
+     entry stays because his history still holds rows that carry it. Deleting
+     the label would not delete the rows — it would only make them unreadable. */
   plan_not_customers: 'schedule',
   queue_respaced: 'schedule',
   queue_target_removed: 'schedule',

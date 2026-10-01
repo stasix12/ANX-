@@ -441,7 +441,6 @@ export function QuickPublishSheet({
               selected={selectedIds}
               onChange={setSelectedIds}
               maxSelectable={ctx.browser.testMode ? 1 : undefined}
-              limits={ctx.limits}
             />
             {/*
               Two different sentences about the same groups, because the rule

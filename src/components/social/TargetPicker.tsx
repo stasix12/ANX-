@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { StarIcon } from '@/components/icons';
-import { audienceBlock } from '@/lib/social/audience';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { agree, counted } from '@/lib/social/time';
 import { type LimitsSettings, type SocialTarget, type Variant } from '@/lib/social/types';
@@ -34,7 +33,6 @@ export function TargetPicker({
   onVariantMap,
   maxSelectable,
   note,
-  limits,
 }: {
   targets: SocialTarget[];
   selected: string[];
@@ -45,16 +43,6 @@ export function TargetPicker({
   /** Test mode: at most this many group targets. */
   maxSelectable?: number;
   note?: string;
-  /*
-   * The owner's "publish only where my customers are", so this list cannot
-   * offer a group the queue is going to refuse.
-   *
-   * It is the SAME audienceBlock() the rules engine and the planner call — not a
-   * second opinion about the same groups. Without it the picker would happily
-   * build a round of 130 groups and the engine would skip 90 of them one by
-   * one, which is how a product teaches its owner not to trust its numbers.
-   */
-  limits?: Pick<LimitsSettings, 'customersOnly'> | null;
 }) {
   const [query, setQuery] = useState('');
   const [channel, setChannel] = useState<'all' | 'facebook_group'>('all');
@@ -69,24 +57,18 @@ export function TargetPicker({
     [targets],
   );
 
-  /* Groups the mark keeps out, counted before they are dropped — the number is
-     said out loud below, because a list that quietly got shorter is worse than
-     a list with a reason attached. */
-  const offLimits = useMemo(() => targets.filter((t) => audienceBlock(t, limits) !== null), [targets, limits]);
-  const offLimitsIds = useMemo(() => new Set(offLimits.map((t) => t.id)), [offLimits]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return targets.filter(
       (t) =>
-        !offLimitsIds.has(t.id) &&
         (channel === 'all' || t.channel === channel) &&
         (!city || cityOf(t) === city) &&
         (!category || (t.category || '') === category) &&
         (!q || t.name.toLowerCase().includes(q) || t.url.toLowerCase().includes(q)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targets, query, channel, city, category, offLimitsIds]);
+  }, [targets, query, channel, city, category]);
 
   /* Drawn slice. `visible` stays the real filtered set everything else uses. */
   const page = useMemo(() => visible.slice(0, shown), [visible, shown]);
@@ -117,7 +99,7 @@ export function TargetPicker({
     return ids.filter((id) => targets.find((t) => t.id === id)?.channel !== 'facebook_group').concat(groups);
   }
 
-  const enabledIds = (items: SocialTarget[]) => items.filter((t) => t.enabled && !offLimitsIds.has(t.id)).map((t) => t.id);
+  const enabledIds = (items: SocialTarget[]) => items.filter((t) => t.enabled).map((t) => t.id);
   /** "Only Be'er Sheva" means only Be'er Sheva — it replaces, it does not merge. */
   const only = (items: SocialTarget[]) => onChange(capped(enabledIds(items)));
   const also = (items: SocialTarget[]) => onChange(capped(Array.from(new Set([...selected, ...enabledIds(items)]))));
@@ -141,7 +123,7 @@ export function TargetPicker({
     {
       label: 'מועדפות',
       icon: <StarIcon className="h-3.5 w-3.5" fill="currentColor" />,
-      items: targets.filter((t) => t.favorite && !offLimitsIds.has(t.id)),
+      items: targets.filter((t) => t.favorite),
     },
   ].filter((s) => s.items.length > 0);
 
@@ -218,21 +200,7 @@ export function TargetPicker({
         </span>
       </div>
 
-      {/*
-        WHY THE LIST IS SHORTER THAN THE GROUP COUNT.
-        *
-        * The owner has 130 groups and this picker is showing 40. Without this
-        * line that is indistinguishable from a bug, and the fix — marking the
-        * rest — is on another screen.
-      */}
-      {offLimits.length > 0 && (
-        <p className="rounded-xl border border-ink-700 bg-ink-850 px-3 py-2 text-[12px] leading-relaxed text-mist-300">
-          {offLimits.length} קבוצות לא מוצגות כאן כי המתג "לפרסם רק לקבוצות עם לקוחות" מופעל בהגדרות, והן לא מסומנות כקבוצות שיש בהן
-          לקוחות. אפשר לסמן אותן במסך הקבוצות.
-        </p>
-      )}
-
-      {hiddenSelected.length > 0 && (
+            {hiddenSelected.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warning-400/30 bg-warning-400/12 px-3 py-2">
           <span className="text-xs font-bold text-warning-400">
             {counted(hiddenSelected.length, 'יעד אחד שנבחר אינו מוצג', 'יעדים נבחרים לא מוצגים', 'שני יעדים נבחרים לא מוצגים')} בסינון

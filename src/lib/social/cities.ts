@@ -47,58 +47,11 @@ export function sortCities(cities: string[], primary: string[] = ['ערד', 'ב�
 export const KNOWN_CITIES = CITY_PATTERNS.map(([c]) => c);
 
 /*
- * PLACES THIS BUSINESS DOES NOT DRIVE TO.
+ * AREA_PATTERNS AND OTHER_AREAS ARE GONE WITH THE FEATURE THAT USED THEM.
  *
- * The list above is the owner's own region — a group that names one of those
- * cities is a group in his market. This list is the other direction, and it
- * exists for one question: "is this group about somewhere I do not work?"
- *
- * It is used ONLY by the audience suggestion (audience.ts), and only to offer
- * an answer a person then accepts or rejects. Nothing is filtered by it
- * automatically, because a group named after a distant city can still be the
- * one his cousin runs — the owner knows, this file does not.
- *
- * The label is a display name, so a suggestion can say "נראית כמו קבוצה של תל
- * אביב" in the reason the owner reads. Cities from the region list above are
- * deliberately absent: two lists that both claim a city would make the
- * suggestion depend on which one was consulted first.
+ * They existed only to answer "is this group about somewhere I do not work?"
+ * for the audience suggestion — "לפרסם רק לאן שיש לקוחות" — which the owner
+ * asked to have removed. Nothing else in the product ever read them, and a
+ * table of a hundred regular expressions kept for nobody is a file that gets
+ * believed later. The region list above, which detectCity() uses, is untouched.
  */
-const AREA_PATTERNS: [string, RegExp][] = [
-  ['תל אביב', /תל[\s-]?אביב|ת["'׳״]?א(?![\p{L}])|tel[\s-]?aviv|тель[\s-]?авив/iu],
-  ['ירושלים', /ירושלים|jerusalem|иерусалим/i],
-  ['חיפה', /חיפה|haifa|хайфа/i],
-  ['נתניה', /נתניה|netanya|нетания/i],
-  ['רעננה', /רעננה|raanana/i],
-  ['הרצליה', /הרצליה|herzliya/i],
-  ['רמת גן', /רמת[\s-]?גן|ramat[\s-]?gan/i],
-  ['גבעתיים', /גבעתיים|givatayim/i],
-  ['בת ים', /בת[\s-]?ים|bat[\s-]?yam/i],
-  ['חולון', /חולון|holon/i],
-  ['ראשון לציון', /ראשון[\s-]?לציון|rishon/i],
-  ['רחובות', /רחובות|rehovot|реховот/i],
-  ['נס ציונה', /נס[\s-]?ציונה|ness?[\s-]?ziona/i],
-  ['מודיעין', /מודיעין|modiin/i],
-  ['בית שמש', /בית[\s-]?שמש|beit[\s-]?shemesh/i],
-  ['פתח תקווה', /פתח[\s-]?תקו?ו?ה|petah/i],
-  ['כפר סבא', /כפר[\s-]?סבא|kfar[\s-]?saba/i],
-  ['הוד השרון', /הוד[\s-]?השרון|hod[\s-]?hasharon/i],
-  ['ראש העין', /ראש[\s-]?העין|rosh[\s-]?haayin/i],
-  ['חדרה', /חדרה|hadera|хадера/i],
-  ['הקריות', /קריית[\s-]?(ביאליק|ים|מוצקין|חיים)|הקריות/i],
-  ['עכו', /(?<![\p{L}])עכו(?![\p{L}])|\bakko\b|\bacre\b/iu],
-  ['נהריה', /נהריה|nahariya/i],
-  ['כרמיאל', /כרמיאל|karmiel|кармиэль/i],
-  ['צפת', /(?<![\p{L}])צפת(?![\p{L}])|\bsafed\b/iu],
-  ['טבריה', /טבריה|tiberias/i],
-  ['עפולה', /עפולה|afula/i],
-  ['נצרת', /נצרת|nazareth/i],
-  ['בית שאן', /בית[\s-]?שאן/i],
-  ['קריית שמונה', /קריית[\s-]?שמונה/i],
-  ['אילת', /(?<![\p{L}])אילת(?![\p{L}])|\beilat\b|эйлат/iu],
-  ['יבנה', /(?<![\p{L}])יבנה(?![\p{L}])|\byavne\b/iu],
-  ['גדרה', /(?<![\p{L}])גדרה(?![\p{L}])/iu],
-  ['לוד', /(?<![\p{L}])לוד(?![\p{L}])|\blod\b/iu],
-  ['רמלה', /(?<![\p{L}])רמלה(?![\p{L}])|\bramla\b/iu],
-];
-
-export const OTHER_AREAS: [string, RegExp][] = AREA_PATTERNS.filter(([name]) => !KNOWN_CITIES.includes(name));

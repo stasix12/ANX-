@@ -79,6 +79,9 @@ const EVENT_MARK: Record<string, { icon: React.ComponentType<{ className?: strin
   plan_revived: { icon: RepeatIcon, tone: 'brand' },
   plan_targets_skipped: { icon: AlertTriangleIcon, tone: 'warn' },
   /* Groups the owner's own "only where my customers are" kept out of a round. */
+  /* The feature that wrote this is gone ("לפרסם רק לאן שיש לקוחות"), and the
+     entry stays because his history still holds rows that carry it. Deleting
+     the label would not delete the rows — it would only make them unreadable. */
   plan_not_customers: { icon: AlertTriangleIcon, tone: 'warn' },
   publish_unrecorded: { icon: AlertTriangleIcon, tone: 'warn' },
   quick_published: { icon: CheckCircleIcon, tone: 'good' },

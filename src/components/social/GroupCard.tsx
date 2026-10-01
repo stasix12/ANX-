@@ -41,7 +41,6 @@ export function GroupCard({
   actions,
   nextAt,
   cityLabel,
-  audienceNote,
 }: {
   group: SocialTarget;
   /** True only while the screen is in selection mode — see the note above. */
@@ -57,17 +56,6 @@ export function GroupCard({
    * this product keeps removing.
    */
   cityLabel?: string;
-  /*
-   * WHY THIS GROUP WILL NOT RECEIVE PUBLICATIONS — the owner's own mark, when it
-   * changes what happens.
-   *
-   * The page decides when there is anything to say (see audienceNote there),
-   * because the answer depends on a setting the card has no business reading and
-   * on the same rule the queue enforces. Empty on the ordinary card: a chip
-   * saying "yes, this group is fine" on every one of a hundred and twenty tiles
-   * is noise, and this line exists for the ones that have stopped.
-   */
-  audienceNote?: string;
 }) {
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -140,11 +128,6 @@ export function GroupCard({
       {group.category && (
         <p dir="auto" className="w-full truncate text-[11px] leading-[14px] text-mist-500">
           {group.category}
-        </p>
-      )}
-      {audienceNote && (
-        <p dir="auto" className="w-full truncate text-[11px] font-bold leading-[14px] text-warning-400" title={audienceNote}>
-          {audienceNote}
         </p>
       )}
       {/* One meta line, not two. "פורסם 18.09" and "הבא: 20.09" were separate

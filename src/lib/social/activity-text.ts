@@ -94,6 +94,9 @@ const TITLE: Record<string, string> = {
   cancelled: 'פרסום בוטל',
   manual_pending: 'ממתין לפרסום ידני',
   plan_targets_skipped: 'קבוצות לא נכנסו לסבב',
+  /* The feature that wrote this is gone ("לפרסם רק לאן שיש לקוחות"), and the
+     entry stays because his history still holds rows that carry it. Deleting
+     the label would not delete the rows — it would only make them unreadable. */
   plan_not_customers: 'קבוצות בלי לקוחות — לא נכנסו לסבב',
   queue_respaced: 'המרווח בתור שונה',
   queue_target_removed: 'קבוצה הוסרה מהתור',

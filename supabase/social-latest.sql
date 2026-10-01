@@ -1259,6 +1259,15 @@ end $$;
 -- Safe to run more than once.
 
 alter table public.social_targets
+-- NOTHING IN THE PRODUCT READS THIS COLUMN ANY MORE.
+--
+-- "לפרסם רק לאן שיש לקוחות" was removed at the owner's request: the card on
+-- the groups screen, the marks, the filters, the settings switch, the
+-- suggestion and the gate in rules.ts and the planner are all gone. The column
+-- and the constraint below are deliberately LEFT ALONE — whatever he marked is
+-- his, dropping a column is deleting it, and an unread column costs nothing.
+-- The comment two statements down still describes the switch that enforced it;
+-- it is kept verbatim so a re-run of this file changes nothing at all.
   add column if not exists audience text not null default 'unknown';
 
 -- The list is replaced rather than extended, because that is the only form that

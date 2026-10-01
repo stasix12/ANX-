@@ -31,7 +31,14 @@ export function TargetAvatar({
   const shape = 'rounded-xl';
   if (imageUrl) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={imageUrl} alt="" style={style} className={`shrink-0 ${shape} object-cover object-center ring-1 ring-ink-700 ${className}`} />;
+    /* loading="lazy" — this is the one <img> every group picture in the
+       product goes through, and the dashboard's two rails mount ~190 and ~160
+       rows of them while showing about six. The pictures are unresized PNG
+       crops of a Facebook cover with a ?v= cache-buster, so without this a
+       dashboard load fetched megabytes of thumbnails nobody scrolled to. The
+       element already carries explicit width/height, so nothing shifts.
+       PostCover and ContentCard already do this; this one was missed. */
+    return <img src={imageUrl} alt="" loading="lazy" decoding="async" style={style} className={`shrink-0 ${shape} object-cover object-center ring-1 ring-ink-700 ${className}`} />;
   }
   const tone = 'bg-brand-500 text-on-brand';
   return (

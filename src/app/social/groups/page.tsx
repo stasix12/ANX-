@@ -140,7 +140,18 @@ export default function GroupsPage() {
     const [t, w, queued] = await Promise.all([
       listTargets(),
       listWorkers().catch(() => []),
-      listQueue({ status: ['scheduled'], limit: 500 }).catch(() => []),
+      /*
+       * order: 'asc' — listQueue sorts DESCENDING by default and applies the
+       * limit after the sort, so this was reading the 500 FURTHEST-OUT
+       * scheduled rows. On a queue deeper than 500 every group card then
+       * printed a "הבא" date taken from the far tail: "הבא 12.10" on a group
+       * actually due in ten minutes. client.ts documents this trap in these
+       * words — "callers that want what happens next pass 'asc'".
+       *
+       * On a queue of 500 or fewer the result set is identical, because the
+       * loop below re-sorts anyway.
+       */
+      listQueue({ status: ['scheduled'], limit: 500, order: 'asc' }).catch(() => []),
     ]);
     const mine = t.filter((x) => x.channel === 'facebook_group' || x.channel === 'facebook_group_manual');
     const online = w.some((x) => x.online);

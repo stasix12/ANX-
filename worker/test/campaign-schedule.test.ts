@@ -120,8 +120,21 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    * about what that means is worse than either answer.
    */
   const backwards = readSchedule({ schedule_start: '22:00', schedule_end: '08:00' });
-  eq(backwards.end, '22:00', 'an end before its start collapses onto the start rather than producing a window nothing fits in');
-  is(nextAllowedAt({ ...backwards, enabled: true, days: [0, 1, 2, 3, 4] }, at('2026-10-04T09:00')) !== null, 'and the campaign can still publish — on the next day at 22:00');
+  eq(backwards.end, '23:59', 'an end before its start runs to midnight instead');
+  /*
+   * AND THAT IS THE WHOLE POINT — this used to collapse onto the start, which
+   * is a window exactly one instant wide. rules.ts defers to the allowed
+   * instant plus a five-second cushion, so every claim landed five seconds
+   * past the only legal moment and deferred to the next chosen day, for ever:
+   * a campaign set to an overnight window never published anything. Reproduced
+   * before the fix. The assertion that replaces the old one is not "it has
+   * some window" but "a publication deferred into it is actually inside it".
+   */
+  const over = { ...backwards, enabled: true, days: [0, 1, 2, 3, 4] };
+  const allowed = nextAllowedAt(over, at('2026-10-04T09:00'));
+  is(allowed !== null, 'the campaign can still publish');
+  is(isAllowedAt(over, new Date(allowed!.getTime() + 5_000)), 'AND FIVE SECONDS PAST THAT INSTANT IS STILL INSIDE THE WINDOW — the defer cushion lands in it rather than past it');
+  is(isAllowedAt(over, at('2026-10-04T23:30')), 'and so is half past eleven at night');
 
   eq(readSchedule({ schedule_days: [9, -1, 3, 3, 1] }).days, [1, 3], 'junk day indices are dropped and the real ones de-duplicated and sorted');
   eq(readSchedule({ schedule_days: [] }).days, [], 'AN EMPTY WEEK IS A REAL CHOICE and is kept — see the branch for it below');

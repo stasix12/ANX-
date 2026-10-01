@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { friendlyMessage } from '@/lib/social/errors';
 import { listSchedules, listVariants, listWorkers } from '@/lib/social/client';
 import {
@@ -214,12 +214,31 @@ export function QuickPublishSheet({
     return null;
   }
 
+  /*
+   * THE DOUBLE-TAP GUARD ON THE BUTTON THAT ACTUALLY PUBLISHES.
+   *
+   * `busy` below is React state: it is not set until the render AFTER the
+   * click, so two taps dispatched inside one task both reach quickPublish().
+   * Measured on the settings screen, which had the identical shape: three
+   * same-task taps produced three full saves. Here the cost is not a wasted
+   * request — it is a second set of queue rows for the same post and the same
+   * groups, i.e. the same text posted twice to each of them under the owner's
+   * own Facebook account. There is no undo for that.
+   *
+   * A ref flips synchronously inside the handler, which is the only thing
+   * that can stop the second tap. One tap behaves exactly as it always did.
+   * Same guard, same reason, as `writing` in src/app/social/page.tsx.
+   */
+  const publishing = useRef(false);
+
   async function onConfirm() {
     const problem = localProblem();
     if (problem) {
       setError(problem);
       return;
     }
+    if (publishing.current) return;
+    publishing.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -253,6 +272,7 @@ export function QuickPublishSheet({
     } catch (err) {
       setError(friendlyMessage(err, 'התזמון נכשל.'));
     } finally {
+      publishing.current = false;
       setBusy(false);
     }
   }

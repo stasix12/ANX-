@@ -24,6 +24,12 @@ export function UpdateBanner() {
     if (!mine) return;
     let alive = true;
     const check = async () => {
+      /* The visibility guard every other poller in this module carries, and
+         the only one that was missing it: a banner about a new build does not
+         need to ask every 90 seconds in a tab nobody is looking at. The
+         listener below re-checks the moment the tab comes back, so what the
+         owner sees on return is current. */
+      if (document.visibilityState === 'hidden') return;
       try {
         const res = await fetch('/api/version', { cache: 'no-store' });
         if (!res.ok) return;
@@ -35,9 +41,11 @@ export function UpdateBanner() {
     };
     check();
     const id = setInterval(check, CHECK_EVERY_MS);
+    document.addEventListener('visibilitychange', check);
     return () => {
       alive = false;
       clearInterval(id);
+      document.removeEventListener('visibilitychange', check);
     };
   }, [mine]);
 

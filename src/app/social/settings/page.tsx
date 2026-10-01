@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
@@ -80,7 +80,31 @@ export default function SettingsPage() {
    * is not here at all — its two controls write themselves on the tap, since a
    * stop that waits for a second tap on שמור is not a stop.
    */
+  /*
+   * A REF, BECAUSE `busy` IS A RENDER TOO LATE.
+   *
+   * Measured in a real browser against this screen: three taps on "שמור"
+   * dispatched inside one task produced THREE writes to social_settings. The
+   * `busy` flag above is React state, so it is not set until the render after
+   * the first click — the second and third handlers run before it exists.
+   *
+   * It matters more than a wasted request. save() is a read-modify-write: it
+   * re-reads limits, business and browser, merges the form over them and
+   * writes back. Three of those interleaving can land a merge built on a row
+   * that a sibling save has already replaced. And there are two "שמור"
+   * buttons on this screen, both calling this, so it does not even take a
+   * double-tap.
+   *
+   * The same guard, for the same reason, as `writing` in
+   * src/app/social/page.tsx — that comment explains it at length. A ref flips
+   * synchronously, inside the handler, which is the only thing that can stop
+   * the second tap. One tap behaves exactly as it always did.
+   */
+  const saving = useRef(false);
+
   async function save() {
+    if (saving.current) return;
+    saving.current = true;
     setBusy(true);
     try {
       const [curLimits, curBrowser, curBusiness] = await Promise.all([getLimits(), getBrowserSettings(), getBusiness()]);
@@ -93,6 +117,7 @@ export default function SettingsPage() {
     } catch (err) {
       toast(friendlyMessage(err, 'השמירה נכשלה.'), 'error');
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -149,10 +174,29 @@ export default function SettingsPage() {
       lede="קצב, מגבלות ופרטי העסק"
       paused={loaded ? control.paused : null}
       onControlChanged={refreshControl}
+      /*
+       * NOT PRESSABLE BEFORE THE FORM HAS LOADED — and this was the worst bug
+       * in the screen.
+       *
+       * The body below is gated on `loaded`; this button was not. So on a slow
+       * connection, or on a failed first read (which leaves `loaded` false and
+       * renders nothing but a red banner and this button), one tap ran save()
+       * — which merges the form state over the stored rows. That form state is
+       * still DEFAULT_LIMITS / DEFAULT_BUSINESS / DEFAULT_BROWSER at that
+       * point, so the tap wrote the factory defaults over everything: testMode
+       * back to true (every later publish capped at one group), the phone and
+       * the WhatsApp link wiped out of every future post, and the gap reset.
+       * The toast then said "ההגדרות נשמרו".
+       *
+       * Hidden rather than disabled, because while the body is not on screen
+       * there is nothing to save; it comes back with the form.
+       */
       headerAction={
-        <Button busy={busy} onClick={save}>
-          שמור
-        </Button>
+        loaded ? (
+          <Button busy={busy} onClick={save}>
+            שמור
+          </Button>
+        ) : undefined
       }
     >
       {error && (

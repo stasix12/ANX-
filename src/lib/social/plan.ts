@@ -43,7 +43,15 @@ async function revivePlanFailures(db: SupabaseClient, note: PlanLogger): Promise
     .from('social_activity_log')
     .select('meta')
     .eq('event', 'plan_failed')
-    .gte('created_at', week);
+    /* `at`, not `created_at`. social_activity_log is the one table in this
+       schema whose timestamp is not called created_at (social-schema.sql:231,
+       and its index is built on it), so this filter named a column that does
+       not exist: PostgREST answered 42703, the destructure took only `data`,
+       `failures` came back undefined, and the whole revive below returned
+       before touching a schedule. The self-healing this function exists for
+       has therefore never run once, silently — no log line, nothing on
+       screen. */
+    .gte('at', week);
   const blamed = new Set(
     (failures ?? [])
       .map((r) => (r as { meta?: { schedule?: unknown } }).meta?.schedule)

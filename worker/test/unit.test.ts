@@ -517,7 +517,18 @@ console.log('unit tests OK');
   const revive = plan.slice(plan.indexOf('async function revivePlanFailures'), plan.indexOf('export async function planQueue'));
   assert.ok(plan.includes('await revivePlanFailures(db, note);'), 'the planner revives buried rounds before it reads the list');
   assert.ok(revive.includes("eq('event', 'plan_failed')"), 'only a round a FAILURE switched off is revived');
-  assert.ok(revive.includes("gte('created_at', week)"), 'and only a recent one, so this cannot run for ever');
+  /*
+   * `at`, AND THE PIN ITSELF IS WHY THIS SURVIVED. It read created_at — the
+   * column social_activity_log does not have (it is the one table in the
+   * schema whose timestamp is `at`). So the query returned 42703, the caller
+   * destructured only `data`, and the whole revive returned before touching a
+   * schedule: the self-healing never ran once, and this assertion passed on
+   * every run because it was pinning the typo.
+   */
+  assert.ok(revive.includes("gte('at', week)"), 'and only a recent one, so this cannot run for ever');
+  /* Comments stripped: the fix carries a note naming the old column, and a
+     raw search matched its own explanation. */
+  assert.ok(!revive.replace(/\/\*[\s\S]*?\*\//g, '').includes('created_at'), 'against the column that table actually has');
   assert.ok(revive.includes('if (count) continue;'), 'a round that managed to queue anything is left alone — which is what stops it looping');
   assert.ok(revive.includes("update({ active: true, planned_until: null })"), 'and reviving means both: back on the list, and not already planned');
   assert.ok(!revive.includes('.delete()'), 'nothing is deleted to revive a round');

@@ -26,7 +26,20 @@ function isOurs(message: string): boolean {
  * sentence every screen shows, so it also cannot drift: bump it here when a
  * newer migration lands.
  */
-export const LATEST_SCHEMA_FILE = 'supabase/social-schema-v8.sql';
+/*
+ * THE ONE FILE TO RUN — and it was still naming v8, which cannot fix any
+ * column that has been added since.
+ *
+ * Every "מבנה הנתונים לא מעודכן" message in the product interpolates this.
+ * v8 creates the content categories and nothing else, so an owner missing
+ * social_campaigns.schedule_* (v24), social_queue.comment_* (v13/v14) or the
+ * discovery tables (v23) was told to run a file that changes none of them,
+ * ran it, saw the same error, and was never pointed at the file that would
+ * have worked. worker/test/unit.test.ts asserts that no screen sends the
+ * owner to a numbered migration — but it scans only social-worker.ts and
+ * client.ts, and this is the shared classifier they both funnel through.
+ */
+export const LATEST_SCHEMA_FILE = 'supabase/social-latest.sql';
 
 type Rule = { match: RegExp; text: string };
 

@@ -123,12 +123,24 @@ export function readSchedule(campaign: ScheduleFields | null | undefined): Campa
     days,
     start,
     /*
-     * An end before its start is not a window, it is a campaign that can never
-     * publish. dripSlots() in slots.ts has clamped the same pair the same way
-     * since it was written; doing anything else here would mean two modules
-     * disagreeing about what "22:00 to 08:00" means.
+     * AN END AT OR BEFORE ITS START RUNS TO MIDNIGHT — it does NOT collapse
+     * onto the start, which is what this did and which was a deadlock.
+     *
+     * The panel offers start and end as two independent selects, so "22:00 to
+     * 08:00" — the natural way to ask for an overnight window — is two taps
+     * away. Clamping `end` onto `start` made the window exactly one instant
+     * wide, and rules.ts defers to the allowed instant PLUS a five-second
+     * cushion: five seconds past the only legal moment of the day. So every
+     * claim landed outside the window and deferred to the next chosen day,
+     * for ever. Reproduced: a campaign set that way never published a single
+     * post, and the only sign was one "מחוץ לשעות הפרסום" line a day.
+     *
+     * 23:59 is the closest honest reading of "from 22:00, overnight" that
+     * this product can actually deliver — a window that crosses midnight is a
+     * bigger change than a clamp. Only reachable when end <= start, which
+     * until now could not publish at all, so no working schedule moves.
      */
-    end: (toMinutes(end) ?? 0) < (toMinutes(start) ?? 0) ? start : end,
+    end: (toMinutes(end) ?? 0) <= (toMinutes(start) ?? 0) ? '23:59' : end,
     gapMinutes: Number.isFinite(gap) ? Math.min(MAX_GAP_MINUTES, Math.max(MIN_GAP_MINUTES, Math.round(gap))) : DEFAULT_CAMPAIGN_SCHEDULE.gapMinutes,
   };
 }

@@ -84,7 +84,15 @@ async function main(): Promise<void> {
     /* 390 is the iPhone the owner uses; 360 is the narrowest Android still
        worth supporting; 430 is the widest phone. A card that survives all
        three survives the grid on desktop, which only gets wider. */
-    for (const width of [360, 390, 430]) {
+    /*
+     * 360 is the narrowest Android still worth supporting, 390 is the iPhone
+     * the owner uses, 430 is the widest phone — and 600 is one column of the
+     * desktop grid, which is where the reference image itself was drawn
+     * (566px) and the only width at which the panel's `@[440px]` arrangement
+     * is the one on screen. Without it, half of this layout was never
+     * measured.
+     */
+    for (const width of [360, 390, 430, 600]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
       await page.goto(`file://${path.join(dir, 'index.html')}`);
       await page.waitForTimeout(200);
@@ -175,6 +183,50 @@ async function main(): Promise<void> {
                 const b = e.getBoundingClientRect();
                 return b.width > 0 && (b.left < box.left - 1 || b.right > box.right + 1);
               }).length,
+              /*
+               * ─── "תזמון פרסום", the panel this pass added ───────────────
+               *
+               * Found by its own data attribute rather than by position: the
+               * whole point of the assertions below is WHERE it landed, and a
+               * probe that located it by position could never fail.
+               */
+              panel: (() => {
+                const p = c.querySelector('[data-schedule]');
+                if (!p) return null;
+                const pr = p.getBoundingClientRect();
+                const chips = [...p.querySelectorAll('[aria-pressed]')].map((e) => e.getBoundingClientRect());
+                const fields = [...p.querySelectorAll('select')].map((e) => e.getBoundingClientRect());
+                const label = [...p.querySelectorAll('p')][0];
+                const summary = [...p.querySelectorAll('p')].at(-1);
+                return {
+                  width: Math.round(pr.width),
+                  height: Math.round(pr.height),
+                  /* Inside the card's padding, on both edges. */
+                  inside: pr.left >= box.left - 1 && pr.right <= box.right + 1,
+                  /* Under "הוסף פוסט"/the progress bar and above the actions —
+                     the order the brief writes out. */
+                  belowHead: pr.top > (c.querySelector('[data-must-fit]')?.getBoundingClientRect().top ?? pr.top) ,
+                  aboveActions: pr.bottom <= Math.min(
+                    ...[...c.querySelectorAll('a,button')]
+                      .filter((e) => /פתח קמפיין|ערוך|הפעל שוב/.test(e.textContent || ''))
+                      .map((e) => e.getBoundingClientRect().top + 1),
+                  ),
+                  chips: chips.length,
+                  /* ONE ROW. Seven distinct tops means seven rows. */
+                  chipRows: new Set(chips.map((r) => Math.round(r.top))).size,
+                  chipWidths: [...new Set(chips.map((r) => Math.round(r.width)))],
+                  fields: fields.length,
+                  fieldRows: new Set(fields.map((r) => Math.round(r.top))).size,
+                  fieldWidths: [...new Set(fields.map((r) => Math.round(r.width)))],
+                  /* How many of the seven are lit — the fixture's own data. */
+                  lit: [...p.querySelectorAll('[aria-pressed="true"]')].length,
+                  switches: p.querySelectorAll('[role="switch"]').length,
+                  daysLabel: (label?.textContent || '').trim(),
+                  summary: (summary?.textContent || '').trim(),
+                  /* Cut off, which is what a 250px column did to this line. */
+                  summaryClipped: !!summary && summary.scrollWidth > summary.clientWidth + 1,
+                };
+              })(),
             };
           }),
         };
@@ -183,13 +235,17 @@ async function main(): Promise<void> {
       /*
        * THE TARGETS, MEASURED LAST AND IN A TALL WINDOW.
        *
-       * elementFromPoint only answers for what is on screen, and seven cards
-       * do not fit in 900px: every control on the lower ones read 1×1 — no
-       * target at all — which would have passed as a failure for the wrong
+       * elementFromPoint only answers for what is on screen, and the fixture's
+       * cards do not fit in 900px: every control on the lower ones read 1×1 —
+       * no target at all — which would have passed as a failure for the wrong
        * reason. The WIDTH is the one under test and does not move, and nothing
        * on this card is measured against the viewport's height.
        */
-      await page.setViewportSize({ width, height: 2800 });
+      /* 2800 held seven cards. There are twelve now and each with a
+         scheduling panel is 400-460px, so the lower half read 1x1 — no target
+         at all, which passes as a failure for the wrong reason. The height is
+         not under test and nothing here is measured against it. */
+      await page.setViewportSize({ width, height: 9000 });
       const hits = await page.evaluate(() =>
         [...document.querySelectorAll('.card-probe > div')].map((c) =>
           [...c.querySelectorAll('a,button')].map((e) => {
@@ -225,10 +281,31 @@ async function main(): Promise<void> {
       const shares = new Set(seen.cards.map((c) => c.pictureShare));
       assert.equal(shares.size, 1, say(`the cards reserve different picture widths — ${[...shares].join(', ')}%. A list whose edge moves row to row reads as broken.`));
 
+      /*
+       * EXACTLY ONE CARD IN THE FIXTURE HAS NO SCHEDULING PANEL, and it is
+       * there on purpose: it is the card as every other screen renders this
+       * component, and the floor that stops the whole panel block below from
+       * passing on a card that simply lost it.
+       */
+      const withPanel = seen.cards.filter((c) => c.panel);
+      assert.equal(seen.cards.length - withPanel.length, 1, say(`${seen.cards.length - withPanel.length} cards rendered no scheduling panel — the fixture has exactly one such case`));
+
       for (const [i, card] of seen.cards.entries()) {
+        /*
+         * TWO CEILINGS, BECAUSE THERE ARE NOW TWO CARDS.
+         *
+         * Without the panel the card is what it has always been: 166px here,
+         * and the old 210 ceiling still holds it. With the panel it carries a
+         * 232px block — a header, seven 40px chips, three 40px fields and a
+         * summary strip — and measures 404 to 462 across these widths. The
+         * second ceiling is that maximum plus four, as everywhere in this
+         * suite, and the gap between the two is what would catch the panel
+         * quietly growing a row.
+         */
+        const ceiling = card.panel ? 466 : 210;
         assert.ok(
-          card.height <= 210,
-          say(`card ${i} is ${card.height}px — the design specification's card measured 169 to 206 here, and this is the ceiling that holds it`),
+          card.height <= ceiling,
+          say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling panel it measured 404 to 462 when this was written' : "the design specification's card measured 169 to 206 here"}`),
         );
         /*
          * THE PICTURE IS THE POINT OF THIS CARD. "התמונה צריכה להיות אלמנט
@@ -243,9 +320,29 @@ async function main(): Promise<void> {
           card.pictureShare >= 24,
           say(`card ${i}'s picture is ${card.pictureShare}% of it — the specification asks for about a third, and a thumbnail is what this pass replaced`),
         );
+        /*
+         * THE PICTURE IS A PORTRAIT, NOT A STRIPE.
+         *
+         * This used to read `pictureHeight >= card.height - 24`: the picture
+         * ran the card's whole height, because the card was one row. The card
+         * is three rows now and the picture occupies the first — which is what
+         * the reference draws, with "הבא בתור" and the three actions in a band
+         * underneath it rather than beside it.
+         *
+         * So the rule that replaces it is about SHAPE. A picture 76px wide and
+         * 400 tall is what came out of the first version of this layout, when
+         * the panel went in beside it and stretched the row it was in; it is
+         * unmistakable on screen and no class name shows it. Between 0.35 and
+         * 2 is a portrait; the reference's own is 0.54.
+         */
+        const ratio = card.pictureHeight ? card.picture / card.pictureHeight : 0;
         assert.ok(
-          card.pictureHeight >= card.height - 24,
-          say(`card ${i}'s picture is ${card.pictureHeight}px tall inside a ${card.height}px card — it is meant to run the card's full height`),
+          ratio >= 0.35 && ratio <= 2,
+          say(`card ${i}'s picture is ${card.picture}×${card.pictureHeight} — a ratio of ${ratio.toFixed(2)}, which is a stripe rather than the reference's portrait`),
+        );
+        assert.ok(
+          card.pictureHeight >= 100,
+          say(`card ${i}'s picture is only ${card.pictureHeight}px tall — "התמונה צריכה להיות אלמנט ויזואלי מרכזי בכרטיס... לא Thumbnail קטן"`),
         );
         assert.ok(card.pictureAtEnd, say(`card ${i}'s picture is not on its left — "תמונת פוסט גדולה בצד שמאל של הכרטיס"`));
         assert.deepEqual(card.onPicture, [], say(`card ${i}: a control sits on the picture — ${card.onPicture.join(', ')}`));
@@ -289,8 +386,102 @@ async function main(): Promise<void> {
          majority: with a majority, a case that silently stopped painting its
          cover still passed, which is what happened when this read `>= 4`. */
       assert.ok(withCover >= 7, say(`only ${withCover} of the nine cards painted a real cover — seven of them carry media`));
+      /* ================================================================ *
+       * "תזמון פרסום" — THE PANEL, AGAINST THE REFERENCE IMAGE.
+       *
+       * The owner called the image a binding specification rather than an
+       * inspiration, and listed what to check by name: "✓ תזמון נמצא בתוך
+       * הכרטיסייה ✓ מיקום זהה ✓ 7 ימי השבוע בשורה ✓ Multi Select ✓ שעת התחלה
+       * ✓ שעת סיום ✓ 1–30 דקות ✓ Toggle ✓ סיכום תזמון ✓ Thumbnail נשאר
+       * ✓ הבא בתור נשאר ✓ כפתורי הפעולה נשארו ✓ RTL תקין".
+       *
+       * Everything on that list that is a FACT ABOUT PIXELS is here; the rest
+       * is in worker/test/campaign-schedule.test.ts, which drives the values.
+       * ================================================================ */
+      for (const card of withPanel) {
+        const p = card.panel!;
+        const where = `${width}px: card "${p.summary.slice(0, 24)}"`;
+
+        /* "✓ תזמון נמצא בתוך הכרטיסייה" — and no part of it outside the
+           card's own border, at any width. */
+        assert.ok(p.inside, `${where}: the scheduling panel sticks out of the card`);
+        assert.ok(p.width > 180, `${where}: the panel is only ${p.width}px wide`);
+
+        /* "✓ מיקום זהה" — the order the brief writes out: under the head,
+           above the actions. Measured as boxes rather than read off the
+           source, because source order and visual order are two things in a
+           grid and the whole layout below 440px is a grid. */
+        assert.ok(p.aboveActions, `${where}: the panel is not above the card's action row`);
+
+        /* "✓ 7 ימי השבוע בשורה" — seven of them, and ONE row. The reference
+           draws א׳ ב׳ ג׳ ד׳ ה׳ ו׳ ש׳ on a single line and a week that wraps
+           is a week that is read wrong. */
+        assert.equal(p.chips, 7, `${where}: ${p.chips} day chips, not seven`);
+        assert.equal(p.chipRows, 1, `${where}: the seven days wrapped onto ${p.chipRows} rows`);
+        /* And all seven the same width: "יום שנבחר / יום שלא נבחר" differ by
+           their fill, never by their size. */
+        assert.ok(
+          p.chipWidths.length <= 2 && Math.max(...p.chipWidths) - Math.min(...p.chipWidths) <= 1,
+          `${where}: the day chips are different widths — ${p.chipWidths.join(', ')}px`,
+        );
+
+        /* "✓ Multi Select" — more than one lit at a time, which is the whole
+           point and is not visible from a single chip. */
+        assert.ok(p.lit >= 2 || p.lit === 0, `${where}: ${p.lit} day lit — a single-choice row would look exactly like this`);
+
+        /* "✓ שעת התחלה ✓ שעת סיום ✓ 1–30 דקות" — three fields, one row,
+           equal widths, as the reference draws them. */
+        assert.equal(p.fields, 3, `${where}: ${p.fields} fields, not three`);
+        assert.equal(p.fieldRows, 1, `${where}: the three fields wrapped onto ${p.fieldRows} rows`);
+        assert.ok(
+          p.fieldWidths.length === 1,
+          `${where}: the three fields are different widths — ${p.fieldWidths.join(', ')}px`,
+        );
+
+        /* "✓ Toggle" — exactly one, and it is a real switch rather than a
+           styled div, so a screen reader says "on"/"off". */
+        assert.equal(p.switches, 1, `${where}: ${p.switches} switches in the panel`);
+
+        assert.equal(p.daysLabel, 'ימי פרסום', `${where}: the days are not labelled "ימי פרסום"`);
+
+        /*
+         * "✓ סיכום תזמון" — AND ALL OF IT.
+         *
+         * The first version of this layout put the panel in a 250px column
+         * beside the picture and the line came out "סיכום תזמון: א׳, ב׳, ג׳,
+         * ד׳, ה׳ · …" — the days, and then nothing. A summary cut before its
+         * hours is a summary of nothing, and the brief asks for the whole
+         * sentence: days, window and interval.
+         */
+        assert.ok(!p.summaryClipped, `${where}: the summary line is cut off — "${p.summary}"`);
+        assert.ok(
+          /^סיכום תזמון:/.test(p.summary) || /^התזמון כבוי/.test(p.summary),
+          `${where}: the summary line says something else — "${p.summary}"`,
+        );
+      }
+
+      /*
+       * THE CONTAINER QUERY, both sides of it, measured rather than assumed.
+       *
+       * Under 440px the panel takes the card's full width; at or above it the
+       * panel sits in the content column beside the picture, which is the
+       * reference's own arrangement. One number tells the two apart: whether
+       * the panel is as wide as the card's content box.
+       */
+      const widest = Math.max(...withPanel.map((c) => c.panel!.width));
+      const cardInner = seen.cards[0].width - 20; // the card's own p-2.5, both sides
+      if (width < 440) {
+        assert.ok(
+          widest >= cardInner - 4,
+          say(`the panel is ${widest}px inside a ${cardInner}px card — under 440 it takes the full width, or the seven chips are squeezed under 40px`),
+        );
+      }
+
       const tall = Math.max(...seen.cards.map((c) => c.height));
-      console.log(`  ✓ ${width}px — tallest card ${tall}px, picture ${seen.cards[0].pictureShare}% and on the left, no overlap, no small target`);
+      console.log(
+        `  ✓ ${width}px — tallest card ${tall}px, picture ${seen.cards[0].pictureShare}% and on the left,` +
+          ` panel ${widest}px wide with 7 chips on one row, no overlap, no small target`,
+      );
     }
   } finally {
     await browser.close();

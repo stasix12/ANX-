@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CampaignCard } from '@/components/social/CampaignCard';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -35,6 +35,7 @@ import {
   stopCampaign,
 } from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
+import { readSchedule, scheduleColumns, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { DEFAULT_BUSINESS, type BusinessSettings, type Campaign, type ControlSettings, type Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { MegaphoneIcon } from '@/components/icons';
@@ -147,6 +148,62 @@ export default function CampaignsPage() {
     setForm(c ? { id: c.id, name: c.name, service: c.service, city: c.city, language: c.language, notes: c.notes } : { ...blank, service: business.services[0], city: business.cities[0] });
     setEditorOpen(true);
   }
+
+  /*
+   * ─── SAVING A CAMPAIGN'S PUBLISHING WINDOW ─────────────────────────────
+   *
+   * "ההגדרות חייבות להישמר גם לאחר: Refresh, סגירת התוכנה, Login מחדש,
+   *  Restart של השרת/אפליקציה." So every change is written to the campaign
+   * row — there is no browser-local copy of any of this, and nothing here is
+   * remembered in a way a different device would not see.
+   *
+   * WHY THE SCREEN UPDATES FIRST AND WRITES AFTER. These are chips and
+   * selects: choosing Sunday, Monday and Thursday is three taps in under a
+   * second, and a control that waits for a round trip before it lights up is
+   * a control the owner taps twice. The state the panel draws is this page's
+   * own `campaigns` array, patched immediately; the write follows.
+   *
+   * AND WHY IT IS DEBOUNCED. Those three taps would otherwise be three
+   * updates to one row, racing each other, with the last one to LAND — not
+   * the last one sent — deciding what is stored. One write, 600ms after the
+   * owner stops, settles that. The ref holds one timer per campaign, so two
+   * cards being set up at once do not cancel each other.
+   *
+   * ON FAILURE THE SCREEN GOES BACK. A row that refused the write (most
+   * likely: social-latest.sql has not been run, and errors.ts says exactly
+   * that) must not leave the card showing a window the engine has never heard
+   * of — that is the screen promising something the machine will not do.
+   */
+  const scheduleTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [scheduleBusy, setScheduleBusy] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const timers = scheduleTimers.current;
+    return () => {
+      for (const t of Object.values(timers)) clearTimeout(t);
+    };
+  }, []);
+
+  const changeSchedule = useCallback(
+    (campaign: Campaign, next: CampaignSchedule) => {
+      const before = campaigns ?? [];
+      const columns = scheduleColumns(next);
+      setCampaigns(before.map((c) => (c.id === campaign.id ? { ...c, ...columns } : c)));
+      clearTimeout(scheduleTimers.current[campaign.id]);
+      scheduleTimers.current[campaign.id] = setTimeout(async () => {
+        setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
+        try {
+          await saveCampaign({ id: campaign.id, name: campaign.name, ...columns });
+        } catch (err) {
+          /* Put the row back exactly as it was before this burst of taps. */
+          setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? (before.find((o) => o.id === c.id) ?? c) : c)));
+          toast(friendlyMessage(err, 'שמירת התזמון נכשלה.'), 'error');
+        } finally {
+          setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
+        }
+      }, 600);
+    },
+    [campaigns, toast],
+  );
 
   async function act(key: string, fn: () => Promise<unknown>, done: string) {
     setBusy(key);
@@ -357,6 +414,16 @@ export default function CampaignsPage() {
                 */
                 onComment={state.progress.published > 0 ? () => setCommentFor(c) : undefined}
                 onDelete={() => removeCampaign(c, state)}
+                /*
+                 * "תזמון פרסום", read straight off the campaign row. A row from
+                 * a database that has not run social-latest.sql has none of
+                 * these columns and readSchedule() answers `enabled: false` —
+                 * so the panel draws, the owner can set it up, and only
+                 * pressing the switch reports the migration is missing.
+                 */
+                schedule={readSchedule(c)}
+                onScheduleChange={(next) => changeSchedule(c, next)}
+                scheduleBusy={scheduleBusy[c.id] ?? false}
               />            );
           })}
         </div>

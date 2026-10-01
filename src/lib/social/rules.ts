@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isAllowedAt, nextPublishAt, readSchedule, scheduleSummary, type ScheduleFields } from './campaign-schedule';
 import { startOfZonedDay } from './time';
-import type { BrowserSettings, LimitsSettings, Post, QueueItem, SocialTarget, Variant } from './types';
+import type { BrowserSettings, Campaign, LimitsSettings, Post, QueueItem, SocialTarget, Variant } from './types';
 
 /**
  * Anti-spam decisions shared by the server worker (Pages, Graph API) and the
@@ -120,14 +121,125 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   if (variant && variant.approval !== 'approved') return { action: 'skip', reason: `הגרסה ${variant.label} לא אושרה.` };
   if (!variant && !post.base_text.trim() && !post.media.length) return { action: 'skip', reason: 'הפוסט ריק.' };
 
+  /*
+   * NOT BEFORE THIS INSTANT — carried rather than returned.
+   *
+   * There are now two gates that can say "you may prepare, but do not click
+   * yet": the campaign's own interval, and the account-wide spacing rule at
+   * the foot of this function. Each used to be free to `return {action:
+   * 'publish', notBefore}` on its own, which means whichever ran first
+   * silently decided, and the other's instant was thrown away — a campaign
+   * set to ten minutes would have had its gap erased by an account gap of one.
+   *
+   * So each gate RAISES this and falls through, and the single return at the
+   * end hands over the latest of them. The worker holds the final click until
+   * it; see PREP_LEAD_MS.
+   */
+  let holdUntil: Date | null = null;
+  const holdFor = (at: Date) => {
+    if (!holdUntil || at > holdUntil) holdUntil = at;
+  };
+
   // Campaign pause/stop: leave the row alone until the owner resumes.
   const campaignId = item.campaign_id ?? post.campaign_id;
   if (campaignId) {
-    const { data: campaign } = await db.from('social_campaigns').select('status').eq('id', campaignId).maybeSingle();
+    /*
+     * The five schedule columns come back with the status in the one read this
+     * function already did. They may not exist — a database that has not run
+     * social-latest.sql — so the select names them and the failure is handled
+     * by falling back to the status alone rather than by refusing to publish.
+     * An engine that stops working because a column is missing is a worse
+     * outcome than an engine that ignores a window nobody has set yet.
+     */
+    let campaign: (Pick<Campaign, 'status'> & ScheduleFields) | null = null;
+    const full = await db
+      .from('social_campaigns')
+      .select('status, schedule_enabled, schedule_days, schedule_start, schedule_end, schedule_gap_minutes')
+      .eq('id', campaignId)
+      .maybeSingle();
+    if (full.error) {
+      const { data } = await db.from('social_campaigns').select('status').eq('id', campaignId).maybeSingle();
+      campaign = (data as Pick<Campaign, 'status'> | null) ?? null;
+    } else {
+      campaign = (full.data as (Pick<Campaign, 'status'> & ScheduleFields) | null) ?? null;
+    }
     if (campaign?.status === 'paused') {
       return { action: 'wait', until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(), reason: 'הסבב מושהה.' };
     }
     if (campaign?.status === 'archived') return { action: 'skip', reason: 'הסבב נעצר.' };
+
+    /*
+     * ─── "תזמון פרסום": THE DAYS, THE HOURS AND THE INTERVAL ───────────────
+     *
+     * "המערכת רשאית לפרסם רק בימים שנבחרו, רק בין 08:00 ל-22:00, ובהפרש של 10
+     *  דקות בין פרסום לפרסום."
+     *
+     * DEFER, NEVER SKIP, and this is the rule the whole feature rests on:
+     * "אין לאפס את התור. אין להתחיל את הקמפיין מחדש. יש להמשיך מאותו מקום."
+     * A row outside the window keeps its identity, its post, its group and its
+     * place; only its instant moves, to the first moment the owner's own
+     * settings allow. That is the same shape as the daily-quota branch below,
+     * and for the same reason: a window is a RATE, not a verdict on a
+     * particular publication.
+     *
+     * AND IT COSTS NOTHING WHEN IT IS OFF. readSchedule() reports
+     * `enabled: false` for every campaign that predates this feature and for
+     * every row on a database without the columns, and the branch is not
+     * entered at all — no extra query, no change in behaviour.
+     */
+    const schedule = readSchedule(campaign);
+    if (schedule.enabled) {
+      /*
+       * The campaign's OWN last publication, not the account's. limits.
+       * minGapMinutes at the foot of this function is about the Facebook
+       * account and looks at every campaign at once; this is about this round,
+       * and the two are enforced together — a row waits for whichever is
+       * later, which is what holdFor() above is for.
+       */
+      const { data: lastOwn } = await db
+        .from('social_queue')
+        .select('published_at')
+        .eq('campaign_id', campaignId)
+        .eq('status', 'published')
+        .not('published_at', 'is', null)
+        .order('published_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const lastAt = lastOwn?.published_at ? new Date(lastOwn.published_at) : null;
+      const allowed = nextPublishAt(schedule, now, lastAt);
+      if (!allowed) {
+        /*
+         * No day is selected. Nothing can ever satisfy that, so the row is
+         * held a day at a time rather than parked on a far-future instant the
+         * owner would have to discover: he changes the setting, and the next
+         * poll after that publishes.
+         */
+        return {
+          action: 'defer',
+          until: new Date(now.getTime() + 24 * 60 * 60_000).toISOString(),
+          reason: 'לא נבחר אף יום פרסום בתזמון של הקמפיין — הפרסום ממתין',
+        };
+      }
+      const wait = allowed.getTime() - now.getTime();
+      if (wait > PREP_LEAD_MS) {
+        /*
+         * WHICH of the two moved it, in the owner's own words. "נדחה" with no
+         * reason is the line this product keeps having to explain; the window
+         * and the interval fail in completely different ways and the fix for
+         * each is a different control on the panel.
+         */
+        const byWindow = !isAllowedAt(schedule, now);
+        return {
+          action: 'defer',
+          until: new Date(allowed.getTime() + DEFER_CUSHION_MS).toISOString(),
+          reason: byWindow
+            ? `מחוץ לשעות הפרסום של הקמפיין (${scheduleSummary(schedule)}) — הפרסום ימתין`
+            : `נדחה כדי לשמור מרווח של ${schedule.gapMinutes} דק׳ בין הפרסומים של הקמפיין`,
+        };
+      }
+      /* Close enough to start: prepare now, click at the instant itself. */
+      if (wait > 0) holdFor(allowed);
+    }
   }
 
   /*
@@ -239,11 +351,17 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
        * minute rather than a publication every minute-and-a-publication.
        */
       const wait = gapMs - sinceLast;
-      if (wait <= PREP_LEAD_MS) return { action: 'publish', notBefore: new Date(new Date(last.published_at).getTime() + gapMs).toISOString() };
-      const until = new Date(new Date(last.published_at).getTime() + gapMs + DEFER_CUSHION_MS).toISOString();
-      return { action: 'defer', until, reason: `נדחה כדי לשמור מרווח של ${limits.minGapMinutes + extra} דק׳ בין פרסומים` };
+      if (wait <= PREP_LEAD_MS) {
+        /* Raised rather than returned: the campaign's own interval may already
+           have asked for a LATER instant, and the one return below hands over
+           whichever of the two is further out. */
+        holdFor(new Date(new Date(last.published_at).getTime() + gapMs));
+      } else {
+        const until = new Date(new Date(last.published_at).getTime() + gapMs + DEFER_CUSHION_MS).toISOString();
+        return { action: 'defer', until, reason: `נדחה כדי לשמור מרווח של ${limits.minGapMinutes + extra} דק׳ בין פרסומים` };
+      }
     }
   }
 
-  return { action: 'publish' };
+  return holdUntil ? { action: 'publish', notBefore: (holdUntil as Date).toISOString() } : { action: 'publish' };
 }

@@ -84,6 +84,26 @@ export interface Campaign {
    * seconds is twenty minutes, at sixty it is an hour and a half.
    */
   comment_gap_seconds?: number;
+  /*
+   * WHEN THIS CAMPAIGN IS ALLOWED TO PUBLISH — the five columns behind the
+   * "תזמון פרסום" panel on its card. src/lib/social/campaign-schedule.ts owns
+   * every rule about them; nothing reads these fields raw.
+   *
+   * ALL FIVE ARE OPTIONAL, and that is what makes the feature safe to ship on
+   * a database that has not run social-latest.sql yet: listCampaigns() selects
+   * '*', so a row without these columns simply arrives without them,
+   * readSchedule() resolves `enabled: false`, and the campaign behaves exactly
+   * as it did before this existed.
+   */
+  /** Off means the window is not enforced at all. Existing campaigns are off. */
+  schedule_enabled?: boolean;
+  /** 0 = Sunday … 6 = Saturday. */
+  schedule_days?: number[];
+  /** 'HH:MM', local. */
+  schedule_start?: string;
+  schedule_end?: string;
+  /** Minutes between one publication of this campaign and the next, 1–30. */
+  schedule_gap_minutes?: number;
   created_at: string;
 }
 

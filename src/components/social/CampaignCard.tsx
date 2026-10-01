@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { canPauseRun, canResumeRun, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
+import { nextPublishAt, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { formatDayMonthHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem } from '@/lib/social/types';
@@ -18,6 +19,7 @@ import {
   RepeatIcon,
   TrashIcon,
 } from '@/components/icons';
+import { CampaignSchedulePanel } from './CampaignSchedulePanel';
 import { PostCover } from './PostCover';
 import { TargetAvatar } from './TargetAvatar';
 import { Badge, Button, ButtonLink, OverflowMenu, TONE_FILL, type MenuAction, type Tone } from './ui';
@@ -72,6 +74,9 @@ export function CampaignCard({
   onReopen,
   onComment,
   onDelete,
+  schedule,
+  onScheduleChange,
+  scheduleBusy = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status' | 'created_at'>;
   state: CampaignState;
@@ -104,6 +109,22 @@ export function CampaignCard({
   /** Only offered once something has published — there is nothing to comment on before. */
   onComment?: () => void;
   onDelete?: () => void;
+  /*
+   * ─── "תזמון פרסום" ────────────────────────────────────────────────────
+   *
+   * The campaign's publishing window, drawn inside this card rather than
+   * behind a sheet: "אל תפתח Modal. אל תפתח Popup. אל תיצור מסך חדש."
+   *
+   * Both of these are optional together, and the panel is drawn only when a
+   * caller hands over a way to save it. Every other screen that renders a
+   * CampaignCard — and there are several — keeps the card it has today
+   * without passing anything, which is what "אל תשבור ואל תשנה שום
+   * פונקציונליות קיימת" means for a shared component.
+   */
+  schedule?: CampaignSchedule | null;
+  onScheduleChange?: (next: CampaignSchedule) => void;
+  /** The campaign's row is being written; the panel's controls hold still. */
+  scheduleBusy?: boolean;
 }) {
   const link = href ?? `/social/campaigns/${campaign.id}`;
   /* One opinion about the run's state, from campaign.ts, for the label, the
@@ -154,6 +175,41 @@ export function CampaignCard({
   const restart = !showPause && !showResume && onReopen ? onReopen : undefined;
 
   /*
+   * ─── WHEN THE NEXT PUBLICATION ACTUALLY HAPPENS ────────────────────────
+   *
+   * "לאחר חישוב התזמון החדש, 'הבא בתור' בכרטיסייה צריך להציג את מועד הפרסום
+   *  הבא האמיתי. אם הפרסום הבא נמצא מחוץ לשעות הפעילות, יש לחשב אוטומטית את
+   *  היום והשעה החוקיים הבאים."
+   *
+   * state.nextAt is the row's stored scheduled_at, and with a window switched
+   * on that is no longer the answer: a row stamped 23:40 on a campaign that
+   * stops at 22:00 does not go out at 23:40, it goes out at 08:00 on the next
+   * chosen day. The engine already knows that — rules.ts defers it — so a card
+   * printing the stored instant is the screen contradicting the machine for
+   * however long it takes the worker to claim the row.
+   *
+   * THE SAME FUNCTION THE ENGINE USES, and that is the whole reason
+   * campaign-schedule.ts exists as a module rather than as a block inside
+   * rules.ts. nextPublishAt() is called here with what this card knows — the
+   * stored instant, and when this campaign last published — and in rules.ts
+   * with what the worker knows. Two readers, one rule.
+   *
+   * WITH THE SWITCH OFF, THIS IS A NO-OP. nextPublishAt() returns `from`
+   * unchanged, `from` is the stored instant, and the line prints exactly what
+   * it printed before this feature existed.
+   */
+  const lastPublishedAt = state.done.find((r) => r.published_at)?.published_at ?? null;
+  const nextAt: string | null = (() => {
+    if (!state.nextAt) return null;
+    if (!schedule?.enabled) return state.nextAt;
+    /* A row whose instant has already passed publishes at the next legal
+       moment from NOW, not from the moment it missed. */
+    const from = new Date(Math.max(new Date(state.nextAt).getTime(), Date.now()));
+    const at = nextPublishAt(schedule, from, lastPublishedAt ? new Date(lastPublishedAt) : null);
+    return at ? at.toISOString() : null;
+  })();
+
+  /*
    * EVERYTHING ELSE, ONE TAP AWAY.
    *
    * Built from the handlers the page actually passed, so a campaign with no
@@ -179,10 +235,45 @@ export function CampaignCard({
   return (
     /* radius and padding are the mockup's, written here rather than pushed
        into --radius-card: that token is every card in the product. */
-    <div className="surface rounded-[22px] border border-ink-700 p-2.5">
-      <div className="flex items-stretch gap-3">
-        {/* ─── everything about the run, beside it ────────────────────────── */}
-        <div className="flex min-w-0 grow flex-col">
+    <div className="surface @container rounded-[22px] border border-ink-700 p-2.5">
+      {/*
+        ─── THREE ROWS AND TWO COLUMNS, AND THE MIDDLE ONE MOVES ───────────
+        
+        The reference draws the card as: the picture beside everything about
+        the run, the scheduling panel under that, and ONE row at the foot
+        carrying "הבא בתור" and the three actions across the card's whole
+        width. That is this grid:
+
+            row 1   [ name · date · progress · + הוסף פוסט ] [ picture ]
+            row 2   [ תזמון פרסום                          ] [    ↕    ]
+            row 3   [ פתח קמפיין · ערוך · ⋯ ·········· הבא בתור        ]
+
+        WHY THE PANEL CHANGES COLUMN, which is the one thing here that is not
+        simply the image. The reference was drawn on a card 566px wide, and at
+        that width the panel sits in the content column beside a picture about
+        a quarter of the card — which is exactly what the `@[440px]` variants
+        below produce, down to the 46px day chip the image measures.
+
+        On the owner's phone that same card is 358px. A seven-chip row and
+        three time fields cannot share 230px with a picture: the chips come out
+        26px wide, narrower than they are tall, the summary line is cut after
+        the days, and the picture — stretched down the side of a panel it is
+        not beside — becomes a 76px sliver. All three are visible in the first
+        render of this layout, and all three are what section 11 of the brief
+        is about: "אל תדחוס את האלמנטים עד שהם בלתי קריאים... שמור על אותה שפה
+        ויזואלית ואותה היררכיה."
+
+        So under 440px the panel takes the full width of the card instead. The
+        order, the contents, the colours, the radii and the proportions inside
+        it are the reference's at every width; what changes is which of the
+        card's two columns it starts in. A CONTAINER query and not a viewport
+        one, because what decides this is how wide the CARD is — and on the
+        desktop grid two cards sit side by side in a viewport far wider than
+        either of them.
+      */}
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(76px,30%)] gap-x-3 [&>*]:min-w-0 @[440px]:grid-cols-[minmax(0,1fr)_minmax(96px,26%)]">
+        {/* ─── row 1, right: everything about the run ─────────────────────── */}
+        <div className="col-start-1 row-start-1 flex min-w-0 flex-col">
           {/* 1. what it is, and what state it is in */}
           <div className="flex items-start gap-2">
             {/* A 20px LINE IS NOT A TARGET, and this card learned that once
@@ -297,85 +388,42 @@ export function CampaignCard({
             </div>
           )}
 
-          {/* 4. what happens next, in ONE line */}
-          <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] font-semibold leading-4">
-            <CalendarIcon aria-hidden className="h-3.5 w-3.5 shrink-0 text-mist-500" />
-            <span className="shrink-0 text-mist-500">הבא בתור:</span>
-            {state.nextAt ? (
-              <span className="flex min-w-0 items-center gap-1">
-                <span className="shrink-0 tabular-nums text-mist-100">{ltr(whenLabel(state.nextAt))}</span>
-                {state.nextTargetName && <TargetAvatar name={state.nextTargetName} imageUrl={nextTargetImage} size={14} />}
-                {state.nextTargetName && (
-                  <span dir="auto" className="min-w-0 truncate text-mist-500">
-                    {state.nextTargetName}
-                  </span>
-                )}
-              </span>
-            ) : (
-              <span className="truncate text-mist-500">{showResume ? 'מושהה — אין פרסום ממתין' : 'אין פרסום ממתין'}</span>
-            )}
-          </div>
-
-          {/* 5. the three the reference draws, and nothing loose outside the card */}
-          <div className="mt-auto flex items-stretch gap-1 pt-2">
-            {restart ? (
-              <Button size="sm" busy={busy} onClick={restart} className="h-11 grow whitespace-nowrap !gap-1 !min-h-11 !px-2 !text-[12px]">
-                <RepeatIcon aria-hidden className="h-3.5 w-3.5" />
-                הפעל שוב
-              </Button>
-            ) : (
-              <ButtonLink href={link} size="sm" className="h-11 grow whitespace-nowrap !gap-1 !min-h-11 !px-2 !text-[12px]">
-                <PlayIcon aria-hidden className="h-3.5 w-3.5" />
-                פתח קמפיין
-              </ButtonLink>
-            )}
-            {onEdit && (
-              <Button variant="secondary" size="sm" onClick={onEdit} className="h-11 shrink-0 whitespace-nowrap !gap-1 !min-h-11 !px-2 !text-[12px]">
-                <PencilIcon aria-hidden className="h-3.5 w-3.5" />
-                ערוך
-              </Button>
-            )}
-            {/* The round ⋯ becomes the reference's square, bordered like the
-                button beside it. `!rounded-xl` because the component's own
-                `rounded-full` is a one-class radius utility in the same layer
-                and the later-emitted one would otherwise decide. */}
-            <OverflowMenu
-              label={`עוד פעולות ל${campaign.name}`}
-              actions={menu}
-              className="h-11 w-11 !rounded-xl border border-ink-700 bg-ink-900"
-            />
-          </div>
         </div>
 
         {/*
-          ─── THE PICTURE, which is the whole point of this pass ───────────
+          ─── THE PICTURE, row 1 of the left column ────────────────────────
 
           "אני רוצה תמונת פוסט גדולה בצד שמאל של הכרטיס... לא Thumbnail קטן.
            התמונה צריכה להיות אלמנט ויזואלי מרכזי בכרטיס."
 
-          LAST IN THE ROW, which in an RTL page is its LEFT — "תמונת פוסט
-          גדולה בצד שמאל של הכרטיס... בצד ימין של התמונה: שם הקמפיין". Source
-          order is what decides this and it reads the same either way round,
-          so worker/test/campaign-card.test.ts measures which side it landed
-          on rather than trusting the file.
+          COLUMN 2 OF AN RTL GRID IS ITS LEFT, which is the same place the old
+          flex row put it by being last in source. Written as an explicit
+          `col-start-2` now, because a grid item's position is its own property
+          rather than its order among siblings — and because row 2 beside it
+          moves between the columns, which source order could not express.
+          worker/test/campaign-card.test.ts still measures which side it landed
+          on rather than trusting either.
 
-          36% OF THE ROW, UNTIL THE ROW CANNOT AFFORD IT. A third of the card
-          once its padding is off, which is where "רוחב בערך 34%–38% מהכרטיס"
-          lands, and the full height of whatever stands beside it.
+          30% ON A PHONE, 26% ON A WIDE CARD — and the second number is the
+          reference's own (141 of its 566). It is the width of a grid COLUMN
+          now, not of the picture: `minmax(76px, 30%)` reserves it against the
+          card, so the content beside it can never push the picture to a
+          sliver, which is exactly what a `calc(100% - …)` on the picture
+          itself did the moment the scheduling panel went in next to it.
 
-          The `min()` is the part that is not decoration. The three controls at
-          the foot of the card measure 214px together and none of them may wrap
-          or be cut, so on a narrow phone a flat 36% leaves the row less room
-          than it needs and it runs back UNDER the picture — 17px of the ⋯ on
-          top of a picture that is itself a link, which is a mis-tap, not a
-          cosmetic fault. So the picture takes 36% wherever 226px is left over
-          for the row and its gap, and gives way below that: 34% at 430, 31% at
-          390 — the reference's own proportion — and 25% at 360, where the
-          choice is between a smaller picture and a button nobody can read. Measured off the reference, where the
-          picture is 120 of the card's 380 and runs from its top padding to
-          its bottom one. `items-stretch`
-          on the row is what makes "full height" true without a fixed number,
-          so a card that grows for a two-line name grows its picture too.
+          IT SPANS TWO ROWS ONLY ON A WIDE CARD. That is where the panel sits
+          beside it, so there are two rows to span and the reference's tall
+          portrait is what comes out. On a phone the panel is underneath, the
+          picture stops at the end of row 1, and it keeps a portrait's shape
+          instead of being stretched 400px down the side of something it is not
+          beside.
+
+          AND IT HAS A FLOOR. A grid row is as tall as its tallest cell, and on
+          a campaign with little to say beside it — one that published and has
+          no post findable for it, so there is no bar and no tail — that is 91px
+          against a 92px-wide picture. Square is not a portrait and at that size
+          it reads as a thumbnail, which is the thing this card was rebuilt to
+          stop being.
 
           THE SLOT IS ALWAYS THERE, and this is the owner's question:
           "למה בחלק מהקמפיינים הוא מראה תמונה בצד ובחלק לא".
@@ -388,7 +436,7 @@ export function CampaignCard({
         <Link
           href={link}
           aria-label={`פתח את ${campaign.name}`}
-          className="relative w-[max(72px,min(36%,calc(100%-226px)))] shrink-0 overflow-hidden rounded-[18px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+          className="relative col-start-2 row-start-1 min-h-28 overflow-hidden rounded-[18px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 @[440px]:row-span-2"
         >
           {cover(media) ? (
             <PostCover media={media} className="h-full w-full !rounded-[18px]" />
@@ -422,6 +470,103 @@ export function CampaignCard({
             </span>
           )}
         </Link>
+
+        {/*
+          ─── ROW 2: "תזמון פרסום" ──────────────────────────────────────────
+
+          Under "הוסף פוסט" and above the card's own actions, which is where
+          the reference puts it and where the brief spells the order out:
+
+            [שם הקמפיין + סטטוס] [מידע/תיאור] [הוסף פוסט]
+            [תזמון פרסום – האזור החדש]
+            [הבא בתור] […] [ערוך] [פתח קמפיין]
+
+          Full width under 440px, beside the picture above it; see the note on
+          the grid. The row collapses to nothing when no caller passes a
+          schedule, so a card without the panel is the card as it was.
+        */}
+        {schedule && onScheduleChange && (
+          <div className="col-span-2 col-start-1 row-start-2 min-w-0 @[440px]:col-span-1 @[440px]:col-start-1">
+            <CampaignSchedulePanel
+              schedule={schedule}
+              onChange={onScheduleChange}
+              campaignName={campaign.name}
+              disabled={scheduleBusy}
+            />
+          </div>
+        )}
+
+        {/*
+          ─── ROW 3: the actions, and "הבא בתור" beside them ────────────────
+
+          One row across the whole card, the actions at its start and the next
+          publication at its far end — "[הבא בתור] […] [ערוך] [פתח קמפיין]",
+          read off the reference, where that line sits under the picture rather
+          than in the column beside it.
+        */}
+        <div className="col-span-2 col-start-1 row-start-3 mt-2 flex items-center gap-2">
+          <div className="flex shrink-0 items-stretch gap-1">
+            {restart ? (
+              <Button size="sm" busy={busy} onClick={restart} className="h-11 whitespace-nowrap !gap-1 !min-h-11 !px-2 !text-[12px]">
+                <RepeatIcon aria-hidden className="h-3.5 w-3.5" />
+                הפעל שוב
+              </Button>
+            ) : (
+              <ButtonLink href={link} size="sm" className="h-11 whitespace-nowrap !gap-1 !min-h-11 !px-2 !text-[12px]">
+                <PlayIcon aria-hidden className="h-3.5 w-3.5" />
+                פתח קמפיין
+              </ButtonLink>
+            )}
+            {onEdit && (
+              <Button variant="secondary" size="sm" onClick={onEdit} className="h-11 shrink-0 whitespace-nowrap !gap-1 !min-h-11 !px-2 !text-[12px]">
+                <PencilIcon aria-hidden className="h-3.5 w-3.5" />
+                ערוך
+              </Button>
+            )}
+            {/* The round ⋯ becomes the reference's square, bordered like the
+                button beside it. `!rounded-xl` because the component's own
+                `rounded-full` is a one-class radius utility in the same layer
+                and the later-emitted one would otherwise decide. */}
+            <OverflowMenu
+              label={`עוד פעולות ל${campaign.name}`}
+              actions={menu}
+              className="h-11 w-11 !rounded-xl border border-ink-700 bg-ink-900"
+            />
+          </div>
+
+          {/*
+            WHAT HAPPENS NEXT, in the reference's own two lines: the label above
+            the instant, so the block needs about half the width it would on
+            one line — which is what lets it share a row with three buttons on
+            a 360px phone instead of being pushed under them.
+          */}
+          <div className="flex min-w-0 grow items-center justify-end gap-1.5 text-[11px] font-semibold leading-4">
+            <span className="min-w-0 text-end">
+              <span className="block text-mist-500">הבא בתור:</span>
+              {state.nextAt && !nextAt ? (
+                /* The schedule permits no day at all, so the stored instant is
+                   not when this will publish — and printing it would be the
+                   screen promising something the engine will not do. */
+                <span className="block truncate text-warning-400">לא נבחר יום פרסום</span>
+              ) : nextAt ? (
+                <span className="flex min-w-0 items-center gap-1">
+                  <span dir="ltr" className="shrink-0 tabular-nums text-mist-100">{whenLabel(nextAt)}</span>
+                  {state.nextTargetName && <TargetAvatar name={state.nextTargetName} imageUrl={nextTargetImage} size={14} />}
+                  {state.nextTargetName && (
+                    <span dir="auto" className="min-w-0 truncate text-mist-500">
+                      {state.nextTargetName}
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span className="block truncate text-mist-500">{showResume ? 'מושהה — אין פרסום ממתין' : 'אין פרסום ממתין'}</span>
+              )}
+            </span>
+            {/* AFTER the text in source, which in RTL puts it at the far left
+                — the corner the reference draws it in, under the picture. */}
+            <CalendarIcon aria-hidden className="h-3.5 w-3.5 shrink-0 text-mist-500" />
+          </div>
+        </div>
       </div>
     </div>
   );

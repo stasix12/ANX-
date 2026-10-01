@@ -4365,9 +4365,31 @@ const scenario: { step: string; line: string }[] = [];
   /* 1 — the row is let through early and the CLICK waits, so the gap and the
          preparation overlap instead of following one another. */
   assert.ok(/export const PREP_LEAD_MS = /.test(rules), 'how early a row may start is one named number');
+  /*
+   * RE-POINTED, NOT RELAXED. This read `if (wait <= PREP_LEAD_MS) return
+   * { action: 'publish', notBefore: … }` — the literal line, when the spacing
+   * rule was the only gate that could ask a row to wait. A campaign's own
+   * publishing interval is a second one now, and whichever of the two
+   * returned first threw the other's instant away, so both RAISE a shared
+   * `holdUntil` and one return at the end hands over the later of them.
+   *
+   * The property is the same and is still pinned in three pieces: inside the
+   * lead the gap does not defer, it raises; the deferral is the `else`; and
+   * the instant reaches the single publish return. campaign-schedule.test.ts
+   * holds the other gate to the same three.
+   */
+  const gapBranch = rules.slice(rules.indexOf('const wait = gapMs - sinceLast;'));
   assert.ok(
-    /if \(wait <= PREP_LEAD_MS\) return \{ action: 'publish', notBefore:/.test(rules),
+    /if \(wait <= PREP_LEAD_MS\) \{[\s\S]{0,400}holdFor\(new Date\(new Date\(last\.published_at\)\.getTime\(\) \+ gapMs\)\);/.test(gapBranch),
     'within that lead the rule lets the row through with the instant attached, instead of deferring it',
+  );
+  assert.ok(
+    /\} else \{[\s\S]{0,200}action: 'defer'/.test(gapBranch),
+    'and only past the lead does it defer',
+  );
+  assert.ok(
+    /return holdUntil \? \{ action: 'publish', notBefore: \(holdUntil as Date\)\.toISOString\(\) \} : \{ action: 'publish' \};/.test(rules),
+    'the one publish return carries whichever gate asked for the latest instant',
   );
   assert.ok(/\{ action: 'publish'; notBefore\?: string \}/.test(rules), 'and the decision type carries it');
   assert.ok(

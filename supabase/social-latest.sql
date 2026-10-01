@@ -1492,3 +1492,40 @@ comment on table public.social_discovery_groups is
   'Facebook groups a search turned up. Written only from what the signed-in account could already see in its own search results; nothing here joins a group.';
 comment on column public.social_discovery_groups.membership is
   'member = already in it, requested = a join request is pending, none = not a member, unknown = the search results did not say. Never guessed at.';
+
+
+-- ─────────────────────────── from social-schema-v24.sql ───────────────────────────
+
+-- v24 — תזמון פרסום לכל קמפיין: ימים, שעות, והפרש בין פוסט לפוסט.
+--
+-- OFF FOR EVERY CAMPAIGN THAT ALREADY EXISTS. A round that has never been
+-- touched reads schedule_enabled = false, and rules.ts never reaches the
+-- window check — nothing about its behaviour changes until the switch on its
+-- card is turned on. See supabase/social-schema-v24.sql for the whole note.
+
+alter table public.social_campaigns
+  add column if not exists schedule_enabled boolean not null default false;
+
+alter table public.social_campaigns
+  add column if not exists schedule_days smallint[] not null default '{0,1,2,3,4}';
+
+alter table public.social_campaigns
+  add column if not exists schedule_start text not null default '08:00';
+alter table public.social_campaigns
+  add column if not exists schedule_end text not null default '22:00';
+
+alter table public.social_campaigns
+  add column if not exists schedule_gap_minutes smallint not null default 10;
+
+alter table public.social_campaigns
+  drop constraint if exists social_campaigns_schedule_gap_check;
+alter table public.social_campaigns
+  add constraint social_campaigns_schedule_gap_check
+  check (schedule_gap_minutes between 1 and 30);
+
+comment on column public.social_campaigns.schedule_enabled is
+  'Off = the window is not enforced at all, which is how every campaign that existed before v24 behaves. Only the panel on the campaign card turns it on.';
+comment on column public.social_campaigns.schedule_days is
+  'Weekdays this campaign may publish on, 0 = Sunday .. 6 = Saturday. An empty array holds every publication rather than dropping it.';
+comment on column public.social_campaigns.schedule_gap_minutes is
+  'Minutes between one publication OF THIS CAMPAIGN and the next, 1-30. Separate from settings.minGapMinutes, which is the whole account.';

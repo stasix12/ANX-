@@ -31,6 +31,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CampaignCard } from '@/components/social/CampaignCard';
 import type { CampaignState } from '@/lib/social/campaign';
+import { DEFAULT_CAMPAIGN_SCHEDULE, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 
 /* Inline so the fixture never reaches the network: a flat tile the size of a
    real cover, which is all `object-fit: cover` needs to be measured. */
@@ -48,6 +49,24 @@ const st = (p: unknown, extra: Partial<CampaignState> = {}): CampaignState => ({
   estimatedCompletionAt: null, nextAt: null, nextTargetName: null,
   upcoming: [], done: [], now: [], ...extra,
 } as CampaignState);
+
+/*
+ * THE SCHEDULING PANEL, in the three shapes that have different geometry.
+ *
+ * The reference's own setting (Sun–Thu, 08:00–22:00, every 10 minutes) is the
+ * common one; `all` is the widest the summary line can get with seven day
+ * labels in it, and `none` is the state the owner can reach in one tap from
+ * `all` — no day chosen, which the panel has to say out loud rather than
+ * leaving a card promising a publication that cannot happen.
+ */
+const sched: Record<string, CampaignSchedule> = {
+  reference: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true },
+  /* Every day lit, a gap of one (so "כל דקה", the singular branch), and a
+     window that runs the whole clock — the longest summary this can print. */
+  all: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:30', gapMinutes: 1 },
+  none: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true, days: [] },
+  off: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: false },
+};
 
 const cases = [
   ['a finished run, mostly skipped', { id:'1', name:'ניקוי שטיחים', service:'', city:'', status:'active' as const, created_at:'2026-09-18T09:00:00Z' },
@@ -89,7 +108,41 @@ const cases = [
      runBadge says "מושהה"; this card may not say it ended well. */
   ['every row published, publishing globally paused', { id:'9', name:'ניקוי מרפסות', service:'', city:'', status:'active' as const, created_at:'2026-09-26T09:00:00Z' },
     st(prog({ total:20, published:20, finished:20 }), { state:'completed' }), 1, img, true],
+  /*
+   * ─── THE THREE THE SCHEDULING PANEL ADDS ───────────────────────────────
+   *
+   * Every card above now carries the reference's own window (see schedules
+   * below), so the panel is measured on all of them. These three are the
+   * shapes that are only reachable through it:
+   *
+   *  10  seven days lit, a one-minute gap and a round-the-clock window — the
+   *      longest "סיכום תזמון" line this can print, on the narrowest column.
+   *  11  no day chosen. "הבא בתור" may not print the stored instant here: the
+   *      engine will not publish at it.
+   *  12  the switch off, which is every campaign that existed before this
+   *      feature and must look and behave exactly as it did.
+   */
+  ['every day, every hour, a one-minute gap', { id:'10', name:'ניקוי ספות', service:'', city:'', status:'active' as const, created_at:'2026-10-01T08:00:00Z' },
+    st(prog({ total:40, published:12, scheduled:28, finished:12 }), { state:'running', nextAt:new Date(Date.now()+90*60e3).toISOString(), nextTargetName:'באר שבע מדברת' }), 1, img],
+  ['no day chosen — nothing can go out', { id:'11', name:'ניקוי שטיחים בערד', service:'', city:'', status:'active' as const, created_at:'2026-10-01T08:00:00Z' },
+    st(prog({ total:40, published:12, scheduled:28, finished:12 }), { state:'running', nextAt:new Date(Date.now()+90*60e3).toISOString(), nextTargetName:'ערד ביחד' }), 1, vid],
+  ['the switch off — the card as it was before this feature', { id:'12', name:'ניקוי חלונות ערד', service:'', city:'', status:'active' as const, created_at:'2026-10-01T08:00:00Z' },
+    st(prog({ total:40, published:12, scheduled:28, finished:12 }), { state:'running', nextAt:new Date(Date.now()+90*60e3).toISOString(), nextTargetName:'לוח ערד' }), 1, img],
 ] as const;
+
+/*
+ * WHICH CARD GETS WHICH WINDOW. Keyed by campaign id rather than threaded
+ * through the tuples above, so adding a case needs no change here and a case
+ * with no entry renders the card with no panel at all — which is the shape
+ * every OTHER screen in the product renders it in, and is worth measuring too.
+ */
+const schedules: Record<string, CampaignSchedule> = {
+  '1': sched.reference, '2': sched.reference, '3': sched.reference, '4': sched.reference,
+  '6': sched.reference, '7': sched.reference, '8': sched.reference, '9': sched.reference,
+  '10': sched.all, '11': sched.none, '12': sched.off,
+  /* '5' is left out on purpose: a card with no panel, the way the dashboard
+     and the campaign screen render this component. */
+};
 
 const body = cases.map(([label, c, s, posts, media, paused]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
@@ -97,7 +150,9 @@ const body = cases.map(([label, c, s, posts, media, paused]) => `
     CampaignCard({ campaign: c as never, state: s as never, postCount: posts as number,
       hasPost: (posts as number) > 0, media: media as never, globalPaused: paused === true, workerOnline: true,
       onPause: () => {}, onResume: () => {}, onEdit: () => {}, onDuplicate: () => {},
-      onDelete: () => {}, addPostHref: '/x', busy: false }) as never,
+      onDelete: () => {}, addPostHref: '/x', busy: false,
+      schedule: schedules[(c as { id: string }).id] ?? null,
+      onScheduleChange: schedules[(c as { id: string }).id] ? () => {} : undefined }) as never,
   )}</div>`).join('');
 
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">

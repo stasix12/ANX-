@@ -2835,7 +2835,7 @@ const scenario: { step: string; line: string }[] = [];
    */
   const commentCard = readFileSync(new URL('../../src/components/social/CommentQueueCard.tsx', import.meta.url), 'utf8');
   const dashSrcComments = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
-  assert.ok(/<CommentTimeline\n/.test(dashSrcComments), 'and so does the main screen');
+  assert.ok(/<CommentTimeline\s/.test(dashSrcComments), 'and so does the main screen');
   assert.ok(/row\.target\?\.name/.test(commentRail), 'the rail names the group each comment went to');
   assert.ok(/עוד לא ביקשתם תגובות/.test(commentRail), 'and explains itself rather than drawing an empty rail');
   /* A missing migration is the likeliest reason the button does nothing, and

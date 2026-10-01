@@ -371,7 +371,11 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
   const deploy = readFileSync(path.join(root, '.github', 'workflows', 'vercel-deploy.yml'), 'utf8');
   is(/for round in 1 2 3; do/.test(deploy), 'a deploy that does not land is asked for again, not merely reported');
   is(
-    /ask\n\s*echo "Round \$\{round\}: waiting/.test(deploy),
+    /* `\s+` and not `\n\s*`: this file is read on the WINDOWS runner, where git
+       checks it out with CRLF, so a bare `\n` after a non-space character never
+       matches. Written that way it passed here and failed there — and it is the
+       only test the installer build runs, so every customer update stopped. */
+    /ask\s+echo "Round \$\{round\}: waiting/.test(deploy),
     'and each round ASKS before it waits — a round that only waits again is the same ten minutes twice',
   );
   is(
@@ -444,6 +448,56 @@ is(preload.split('\n').length < 60, 'and must stay short enough to read in full'
 /* Chromium is what would make this a 200MB download instead of a 10MB one. */
 is(!existsSync(path.join(out, 'node_modules', 'playwright-core', '.local-browsers')),
   'playwright’s own Chromium must not be shipped — the worker drives the Chrome the customer already has');
+/*
+ * NO TEST IN THIS TREE MAY DEPEND ON THE LINE ENDING IT WAS WRITTEN WITH.
+ *
+ * This file is the ONLY test the installer build runs, and it runs on Windows,
+ * where git checks every file out with CRLF. A regex matching a bare `\n` after
+ * a non-space character therefore passes on the machine it was written on and
+ * fails on the machine that ships the product — and when it fails the build
+ * stops before the release, so no installer is published and every customer
+ * stays on an old version with nothing saying why.
+ *
+ * That is exactly what happened: one assertion written `/ask\n\s*echo …/`
+ * blocked six consecutive installer builds while the website deployed fine, so
+ * the owner's worker-side fixes — a buried publishing round among them — could
+ * not reach his machine at all.
+ *
+ * `\s*\n` is safe: the `\s*` absorbs the `\r`. A bare `\n` is not.
+ */
+{
+  const offenders: string[] = [];
+  for (const name of readdirSync(path.join(root, 'worker', 'test'))) {
+    if (!name.endsWith('.ts') && !name.endsWith('.tsx')) continue;
+    /* Comments are stripped first: a regex quoted inside an explanation is not
+       executed, and this file's own comment above quotes the offending one. */
+    const src = readFileSync(path.join(root, 'worker', 'test', name), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/^\s*\/\/.*$/gm, ' ');
+    for (const lit of src.match(/\/(?:[^/\\\n]|\\.)+\/[gimsuy]*/g) ?? []) {
+      if (!lit.includes('\\n')) continue;
+      /* A character class such as [^\n] says what may APPEAR, not that the
+         pattern must cross a line break — those are not at risk. */
+      const stripped = lit.replace(/\[\^?(?:[^\]\\]|\\.)*\]/g, '\u00b7');
+      for (let at = stripped.indexOf('\\n'); at >= 0; at = stripped.indexOf('\\n', at + 2)) {
+        const before = stripped.slice(Math.max(0, at - 3), at);
+        if (before.endsWith('\\s*') || before.endsWith('\\s+') || before.endsWith('\\s?')) continue;
+        /* `\n?\s*` is safe too: the newline is optional and the `\s*` behind it
+           absorbs the CR. */
+        if (/^\?\\s[*+]/.test(stripped.slice(at + 2))) continue;
+        offenders.push(`${name}: ${lit.slice(0, 64)}`);
+        break;
+      }
+    }
+  }
+  checks += 1;
+  assert.deepEqual(
+    offenders,
+    [],
+    `a regex here matches a bare \\n, which never matches on the Windows runner that builds the installer. Use \\s* or \\s+:\n  ${offenders.join('\n  ')}`,
+  );
+}
+
 const mb = files.reduce((n, f) => n + statSync(f).size, 0) / 1024 / 1024;
 is(mb < 40, `the payload beside Electron must stay small (it is ${mb.toFixed(1)} MB)`);
 

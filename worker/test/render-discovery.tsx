@@ -124,7 +124,14 @@ const card = `
   <p style="color:#9aa;font:12px sans-serif;margin:22px 0 4px">the "my groups" card</p>
   <div class="card-probe">${renderToStaticMarkup(
     MyGroupsCard({
-      joined: cardRows,
+      /*
+       * TWO DIFFERENT SETS, because the difference between them IS the card.
+       * Passing one array for both made the headline render "5 … 5", so
+       * swapping the two counts was invisible, and rendering `joined` where
+       * `missing` belongs was pixel-identical — the exact mismatch that let
+       * "מתוך 164 … 1 עוד לא ברשימת הפרסום" be true of 163.
+       */
+      joined: [...cardRows, row({ external_id: 'c6', name: 'כבר ברשימת הפרסום', membership: 'member' })],
       missing: cardRows,
       scanning: false,
       busy: false,

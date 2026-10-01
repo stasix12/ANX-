@@ -179,9 +179,24 @@ async function readRows(page: Page): Promise<{ href: string; name: string; image
       let suggested = false;
       let scope: HTMLElement | null = box;
       for (let up = 0; up < 6 && scope; up += 1) {
-        const heads = scope.querySelectorAll('h1, h2, h3, [role="heading"]');
+        /*
+         * THE SECTION'S HEADING — NOT THE CARD'S OWN TITLE.
+         *
+         * This asked the subtree for every heading in it, and a card's title
+         * is a heading inside that subtree. So the test for "is this a
+         * suggestion" was run against THE GROUP'S OWN NAME, and a group
+         * called "גלה את באר שבע" or "קבוצות מומלצות לדרום" answered yes —
+         * dropped from the read as somebody else's suggestion.
+         *
+         * That now costs more than a missing row: a group missing from the
+         * read is a group missing from Facebook's list as far as
+         * reconcileJoined can tell, and its membership is withdrawn. The same
+         * name-is-not-evidence mistake as interpretCard, on the one path where
+         * it changes stored data.
+         */
+        const heads = Array.from(scope.querySelectorAll('h1, h2, h3, [role="heading"]')).filter((h) => !box.contains(h));
         if (heads.length) {
-          const text = Array.from(heads).map((h) => h.textContent || '').join(' ');
+          const text = heads.map((h) => h.textContent || '').join(' ');
           if (notMine.test(text)) suggested = true;
           break;
         }

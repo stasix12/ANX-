@@ -57,8 +57,26 @@ const MAX_ROW = 136;
 async function main(): Promise<void> {
   const css = builtCss();
   if (!css) {
-    console.log('discovery row measurement SKIPPED — no built CSS (run `npm run build` first)');
-    return;
+    /*
+     * A SKIPPED CHECK IS NOT A CHECK — my own words, two files over, while
+     * this one skipped and exited 0.
+     *
+     * Everything measured here is measured nowhere else: that the ✕ on the
+     * card is 44px and inside the card at 360px, that a Cyrillic name resolves
+     * left-to-right, that no row pushes the page sideways. On a tree where
+     * `npm run build` has not run, all of it passed while asserting nothing —
+     * and `npm run test:social` went green.
+     *
+     * So it fails instead, and says exactly how to fix it. ALLOW_UNMEASURED=1
+     * is there for someone who deliberately wants the rest of the suite
+     * without a build; it has to be typed, which is the whole point.
+     */
+    const message = 'discovery row measurement CANNOT RUN — no built CSS. Run `npm run build` first, or set ALLOW_UNMEASURED=1 to skip it deliberately.';
+    if (process.env.ALLOW_UNMEASURED === '1') {
+      console.log(`discovery row measurement SKIPPED ON PURPOSE — ${message}`);
+      return;
+    }
+    throw new Error(message);
   }
   const dir = mkdtempSync(path.join(tmpdir(), 'discovery-row-'));
   copyFileSync(css, path.join(dir, 'app.css'));
@@ -98,9 +116,11 @@ async function main(): Promise<void> {
               nameVisible: !!nameBox && nameBox.width > 20 && nameBox.height > 8,
               nameInside: !!nameBox && nameBox.left >= rowBox.left - 1 && nameBox.right <= rowBox.right + 1,
               /* Anything a thumb is meant to hit. */
+              /* `h > 0` used to be here, which let a COLLAPSED control — the
+                 worst case, not an acceptable one — out of the check. */
               smallTargets: [...r.querySelectorAll('button,a')]
                 .map((e) => ({ h: Math.round(e.getBoundingClientRect().height), text: (e.textContent || e.getAttribute('aria-label') || '').slice(0, 24) }))
-                .filter((t) => t.h > 0 && t.h < 40),
+                .filter((t) => t.h < 40),
               /* Every control has to sit inside the row's own box, or it is
                  off the screen on a phone. */
               escaped: [...r.querySelectorAll('button,a')].filter((e) => {
@@ -208,6 +228,7 @@ async function main(): Promise<void> {
               nameInside: !!nb && nb.left >= box.left - 1 && nb.right <= box.right + 1,
             };
           }),
+          headline: (probe.querySelector('p.mt-0\\.5') as HTMLElement | null)?.textContent ?? '',
           /* The bulk button names the count; it must not be clipped either. */
           adoptInside: [...probe.querySelectorAll('button')].every((b) => {
             const bb = b.getBoundingClientRect();
@@ -221,6 +242,14 @@ async function main(): Promise<void> {
       checks += 2;
       assert.ok(cardSeen, say('the "my groups" card did not render at all'));
       assert.equal(cardSeen.dismisses.length, 5, say('the card lost lines — the fixture and the card disagree'));
+      /* The fixture gives 6 joined and 5 missing, so the headline proves the
+         card reads the right one of the two. Identical sets made rendering
+         `joined` where `missing` belongs pixel-identical. */
+      checks += 1;
+      assert.ok(
+        cardSeen.headline.includes('6') && cardSeen.headline.includes('5'),
+        say(`the headline does not name both sets — "${cardSeen.headline}"`),
+      );
       checks += 1;
       assert.equal(cardSeen.overflow, false, say('the card pushed the page sideways'));
       checks += 1;
@@ -228,6 +257,8 @@ async function main(): Promise<void> {
       for (const [i, d] of cardSeen.dismisses.entries()) {
         checks += 5;
         assert.ok(d.h >= 40, say(`the dismiss on card line ${i} is ${d.h}px tall — under a thumb's 40px`));
+        /* 0px passed `inside` and `adoptInside`, both of which excuse a
+           zero-width box. A control nobody can press is not a control. */
         assert.ok(d.w >= 40, say(`the dismiss on card line ${i} is ${d.w}px wide — under a thumb's 40px`));
         assert.ok(d.inside, say(`the dismiss on card line ${i} is outside the card — off the screen on a phone`));
         assert.ok(d.nameWidth > 60, say(`card line ${i} squeezed its name to ${d.nameWidth}px — the ✕ ate the name it is for`));

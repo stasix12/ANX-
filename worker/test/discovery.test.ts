@@ -315,6 +315,17 @@ const eq = (a: unknown, b: unknown, msg: string) => {
     'unknown',
     'including a name the card broke across two lines, which is the common case',
   );
+  /*
+   * EVERY COPY OF IT, which is what the `g` flag is for and what nothing
+   * tested: every input above held the name exactly once, so dropping the flag
+   * passed. A real card says its name in the picture's alt text, in the link
+   * and in the heading.
+   */
+  eq(
+    interpretCard({ href: '/groups/94/', name: 'group joined', text: 'group joined\ngroup joined\n4 members', buttons: [] })?.membership,
+    'unknown',
+    'a card that repeats its own name is stripped of every copy — one left behind is the whole bug',
+  );
 }
 
 /* ------------------------------------------------------------ de-duping */
@@ -605,7 +616,10 @@ const eq = (a: unknown, b: unknown, msg: string) => {
 /* ----------------------------------------- "הוסף את כל מה שאני חבר בהן" */
 {
   const page = readFileSync(new URL('../../src/app/social/discover/page.tsx', import.meta.url), 'utf8');
-  const block = page.slice(page.indexOf('const joinedNotListed'), page.indexOf('const hiddenCount'));
+  /* Stops at the NEXT memo, not at a marker two memos away: reaching past
+     joinedMissing let ITS filters satisfy these assertions, so deleting them
+     from joinedNotListed changed nothing the suite could see. */
+  const block = page.slice(page.indexOf('const joinedNotListed'), page.indexOf('const joinedMissing'));
 
   is(/r\.membership === 'member'/.test(block), 'the bulk button counts only groups the search said he is a MEMBER of');
 
@@ -695,9 +709,18 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(queryProblem('@JOINED  ') === queryProblem(JOINED_QUERY), 'in any spelling the normaliser folds to the same thing');
   eq(queryProblem('באר שבע'), '', 'while a real phrase is untouched');
 
+  /*
+   * READ OUT OF listJoined ITSELF, not out of the file.
+   *
+   * A whole-file regex for the filter was satisfied by a listJoined that
+   * computed `his` and then returned `rows` — the lock written down and not
+   * applied. This is the one door between the reserved bucket and the card.
+   */
+  const joinedFn = client.slice(client.indexOf('export async function listJoined'));
+  const joinedBody = joinedFn.slice(0, joinedFn.indexOf('\n}'));
   is(
-    /r\.membership === 'member'/.test(client),
-    "THE SECOND LOCK: the card no longer trusts the bucket alone — a group is his only if the read CONFIRMED membership, which only Facebook's own list of his groups does",
+    /return rows\.filter\(\(r\) => r\.membership === 'member'/.test(joinedBody),
+    "THE SECOND LOCK: listJoined RETURNS the filtered rows — a group is his only if the read CONFIRMED membership, which only Facebook's own list of his groups does",
   );
   /*
    * AND THE DISMISSED ONES GO OUT HERE, so the card's two numbers count the
@@ -706,7 +729,7 @@ const eq = (a: unknown, b: unknown, msg: string) => {
    * turned "מתוך 164 … 1 עוד לא ברשימת הפרסום" into "כל 164 הקבוצות … כבר
    * ברשימת הפרסום" — a sentence about 164 that was true of 163.
    */
-  is(/r\.membership === 'member' && !r\.hidden/.test(client), 'and a dismissed row is not counted as one of his groups either');
+  is(/r\.membership === 'member' && !r\.hidden/.test(joinedBody), 'and a dismissed row is not counted as one of his groups either');
 
   /*
    * AND NEITHER OF THE TWO LOCKS ABOVE IS ON THE MACHINE THAT DOES THE WORK.
@@ -724,9 +747,17 @@ const eq = (a: unknown, b: unknown, msg: string) => {
    * him could not have been written at all, by any caller.
    */
   const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  const door4 = worker.slice(worker.indexOf("} else if (normalizeQuery(phrase) === JOINED_QUERY) {"));
   is(
     /normalizeQuery\(phrase\) === JOINED_QUERY/.test(worker),
     'DOOR 4: the machine that would open the browser refuses the reserved phrase on its own, not because the screen said so',
+  );
+  is(
+    /* From AFTER the branch's own `} else if` to the next one — searching from
+       index 0 finds the opening token itself and slices to nothing, which is a
+       guard that reads an empty string and always passes. */
+    /ok = false;/.test(door4.slice(0, door4.indexOf('} else if', 10))),
+    'and it REFUSES — pinning the condition alone let the branch report a refused scan as a success with a green toast',
   );
   const writer = worker.slice(worker.indexOf('async function recordDiscovered'));
   is(
@@ -785,6 +816,7 @@ const eq = (a: unknown, b: unknown, msg: string) => {
 
   /* The press is over a set difference, and it is shown before it is made. */
   const diff = page.slice(page.indexOf('const joinedMissing'), page.indexOf('const hiddenCount'));
+  is(diff.length > 0 && diff.length < 600, 'and that slice is the memo itself, not a span of the file that another memo could satisfy');
   is(/!r\.target_id && !inSystem\.has\(r\.external_id\)/.test(diff), 'the list is exactly what the publishing list does not have');
   is(/!r\.hidden/.test(diff), 'minus anything he dismissed');
   /* The card itself is a component now, so the fixture can put the real one
@@ -849,6 +881,31 @@ const eq = (a: unknown, b: unknown, msg: string) => {
      which is the batching removed. It passed that mutation. */
   is(/at \+= 100\b(?!\d)/.test(body), 'in batches, because this is an in(...) list in a URL and his bucket already holds 164');
   is(/slice\(at, at \+ 100\)/.test(body), 'and each batch is the slice that batch size describes');
+
+  /*
+   * THE THREE LINES THAT DECIDE HOW FAR THIS REACHES, each pinned on its own.
+   *
+   * A reviewer mutated them and the suite stayed green, which is worse than
+   * having no test: the block asserted the guard, the predicate, the write
+   * shape and the batching, and left unpinned the only line that says WHICH
+   * ROWS are in range.
+   */
+  is(
+    /\.contains\('queries', \[JOINED_QUERY\]\)/.test(body),
+    "THE BLAST RADIUS: only the reserved bucket is read — without this one line a single scan lowers the membership of every group ever found by any search",
+  );
+  is(
+    /new Set\(found\.map\(\(g\) => g\.externalId\)\)/.test(body),
+    'the set is built from the group IDS of what Facebook just listed',
+  );
+  is(
+    /!onTheList\.has\(\(row as StoredGroup\)\.external_id\)/.test(body),
+    'and compared against the stored row\u2019s ID — comparing names instead would miss every row and withdraw all 164 of his memberships',
+  );
+  is(
+    /\.in\('id', stale\.slice/.test(body),
+    "and the update finds its rows by the id `stale` holds — by external_id it would match nothing, write nothing, and still report a count",
+  );
 
   /*
    * AND THE FLAG THE WHOLE THING RESTS ON HAS TO MEAN WHAT IT SAYS.

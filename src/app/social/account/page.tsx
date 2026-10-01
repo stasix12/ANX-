@@ -6,6 +6,7 @@ import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Button, Card, Field, Loading, Notice, inputClass, useConfirm, useToast } from '@/components/social/ui';
 import { ProfileUploadCard } from '@/components/social/ProfileUploadCard';
+import { PairWorkerCard } from '@/components/social/PairWorkerCard';
 import { listRecentCommands, listWorkers, screenshotUrl, sendWorkerCommand } from '@/lib/social/client';
 import type { SocialWorker, WorkerCommand, WorkerCommandName } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -630,6 +631,10 @@ export default function AccountPage() {
                 "פתח חלון התחברות" מנתק את החשבון הנוכחי ופותח במחשב חלון על דף ההתחברות של פייסבוק, בלי להזין כאן כלום — שימושי כשיושבים ליד המחשב.
               </p>
             </Card>
+          </div>
+
+          <div className="mt-3">
+            <PairWorkerCard />
           </div>
 
           <div className="mt-3">

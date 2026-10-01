@@ -54,9 +54,10 @@ Storage → Upload file size limit.
    — אין מה להגדיר בבנייה.
 2. **Variables** של השירות — להדביק:
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   (מה-`.env.local`), `SOCIAL_WORKER_EMAIL` + `SOCIAL_WORKER_PASSWORD`
-   (המייל והסיסמה שאיתם נכנסים ללוח הבקרה), ו-
-   `SOCIAL_WORKER_NAME=worker@cloud`.
+   (מה-`.env.local`), `SOCIAL_WORKER_NAME=worker@cloud`, וזהות — אחת
+   משתיים: `SOCIAL_WORKER_PAIRING` עם קוד חיבור חד-פעמי מעמוד החשבון
+   (כרטיס "חיבור worker בענן" — הדרך ללקוחות, בלי סיסמאות), או לחשבון
+   של עצמכם `SOCIAL_WORKER_EMAIL` + `SOCIAL_WORKER_PASSWORD`.
 3. **Volume**: ללחוץ על השירות → Attach Volume → נתיב `/data`. בלי זה
    הפרופיל נמחק בכל דיפלוי — וזה בדיוק מה שאסור שיקרה.
 4. **Settings → Region**: לבחור את הקרוב ביותר לישראל (EU-West).
@@ -135,18 +136,21 @@ docker compose -f worker/docker-compose.yml logs -f
 
 אונבורדינג של לקוח, בכל מסלול:
 
-1. הלקוח נרשם לאפליקציה ומגדיר קבוצות ופוסטים.
-2. מרימים לו worker (אחת משתי הדרכים למטה) עם פרטי הכניסה *שלו*.
-3. אם יש לו כבר פרופיל פייסבוק מחובר על מחשב — הוא מעלה אותו מכרטיס
-   "העברת הפרופיל ל-worker בענן" בעמוד החשבון, מהמחשב שלו. אם אין —
-   מתחברים דרך "פייסבוק מבקשת אימות" בלוח הבקרה.
-4. ‏worker ירוק בדשבורד שלו → הלקוח באוויר.
+1. הלקוח נרשם רגיל לאפליקציה (/social/login, יש כפתור הרשמה) ומגדיר
+   קבוצות ופוסטים.
+2. הלקוח לוחץ "צור קוד חיבור" בעמוד החשבון שלו ושולח לכם את הקוד
+   (חד-פעמי, תקף שעה — אף אחד לא נוגע בסיסמה שלו).
+3. מרימים לו worker עם `SOCIAL_WORKER_PAIRING=<הקוד>`.
+4. אם יש לו פרופיל פייסבוק מחובר על מחשב — הוא מעלה אותו מכרטיס
+   "העברת הפרופיל ל-worker בענן", מהמחשב שלו. אם אין — מתחברים דרך
+   "פייסבוק מבקשת אימות" בלוח הבקרה.
+5. ‏worker ירוק בדשבורד שלו → הלקוח באוויר.
 
 ### מסלול Railway — עד ~5 לקוחות, בלי שרת
 
 באותו פרויקט Railway: ‏Right-click על השירות הקיים → **Duplicate** (או
-New Service → אותו ריפו). לכל שירות: ‏Variables עם הכניסה של הלקוח
-(`SOCIAL_WORKER_EMAIL/PASSWORD`, ‏`SOCIAL_WORKER_NAME=worker@cloud-N`) +
+New Service → אותו ריפו). לכל שירות: ‏Variables עם קוד החיבור של הלקוח
+(`SOCIAL_WORKER_PAIRING=<קוד מהלקוח>`, ‏`SOCIAL_WORKER_NAME=worker@cloud-N`) +
 ‏**Volume משלו** ב-`/data`. עלות: ‏~3–5$ לשירות לחודש.
 
 ### מסלול VPS — זול יותר מ-5 ומעלה

@@ -77,6 +77,16 @@ export const env = {
   get workerPasswordOptional() {
     return process.env.SOCIAL_WORKER_PASSWORD ?? '';
   },
+  /*
+   * A one-time pairing code minted by the dashboard (/api/social/pair) —
+   * how a cloud container with no screen becomes the customer's worker
+   * WITHOUT anybody handling the customer's password. Exchanged for a
+   * session exactly once; after that the saved session wins and a stale
+   * value here is never even looked at.
+   */
+  get pairingTokenOptional() {
+    return process.env.SOCIAL_WORKER_PAIRING?.trim() ?? '';
+  },
   /** 'chrome' uses the installed Google Chrome; 'chromium' uses Playwright's build. */
   get browserChannel() {
     return (process.env.SOCIAL_BROWSER_CHANNEL ?? 'chrome') as 'chrome' | 'msedge' | 'chromium';

@@ -384,9 +384,10 @@ export function SegmentedControl<T extends string>({
    * `track` is the original and stays the default, so no existing call site
    * changes. `chips` is the phone filter row — see the comment on the branch
    * below for what it buys and why it is a variant rather than a new
-   * component.
+   * component. `tabs` is the campaigns screen's design specification: one
+   * white bar with a hairline, split into equal parts.
    */
-  variant?: 'track' | 'chips';
+  variant?: 'track' | 'chips' | 'tabs';
   className?: string;
 }) {
   // Height is a floor, not padding: these are filter chips people tap on a
@@ -415,6 +416,53 @@ export function SegmentedControl<T extends string>({
    * The count stays inline and at full strength for the same reason it does
    * on the track below — it is a real filter count, not decoration.
    */
+  /*
+   * ONE WHITE BAR, SPLIT INTO EQUAL PARTS — the campaigns screen's reference:
+   * "Container לבן, border עדין, פינות מעוגלות, 3 חלקים שווים, Tab פעיל: רקע
+   * סגול מלא".
+   *
+   * Why a third variant and not a change to `track`: `track` is a grey rail
+   * whose chips are as wide as their own words, and it is on five other
+   * screens. Equal parts and a white card are what this one screen's design
+   * asked for, and a variant leaves every existing call site painting exactly
+   * what it painted before — the same reason `chips` is a variant.
+   *
+   * `basis-0 grow` rather than `w-1/3`: the parts stay equal for two options
+   * or four, and the count is free to grow inside one without pushing the
+   * others.
+   */
+  if (variant === 'tabs') {
+    return (
+      <div
+        role="group"
+        aria-label={label}
+        className={`flex items-stretch gap-1 rounded-2xl border border-ink-700 bg-ink-900 p-1 ${className}`}
+      >
+        {options.map((o) => {
+          const active = o.value === value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(o.value)}
+              className={`inline-flex min-h-11 basis-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-xl text-[13px] transition-colors ${
+                active
+                  ? 'grad-primary bg-brand-500 font-extrabold text-on-brand'
+                  : 'font-bold text-mist-200 hover:bg-ink-800'
+              } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900`}
+            >
+              {o.label}
+              {/* Same rule as the two branches below: a filter count is a real
+                  number, so it keeps its strength and is set apart by weight. */}
+              {o.count !== undefined && <span className="font-normal tabular-nums">{o.count}</span>}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (variant === 'chips') {
     return (
       <div role="group" aria-label={label} className={`flex min-w-0 items-center gap-1.5 overflow-x-auto scrollbar-none ${className}`}>

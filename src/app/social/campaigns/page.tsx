@@ -245,7 +245,16 @@ export default function CampaignsPage() {
        * The sheet below stays exactly where it belongs: behind "ערוך" on a
        * campaign that already exists, for renaming it.
        */
-      headerAction={<ButtonLink href="/social/posts/new">+ קמפיין חדש</ButtonLink>}
+      /* The reference's primary: taller than the product's default button and
+         at the card radius rather than the button one, because on this screen
+         it sits beside a 26px title rather than inside a row of controls.
+         `!rounded-2xl` — BUTTON_BASE carries rounded-xl and both are one-class
+         radius utilities in the same layer. Same href, same destination. */
+      headerAction={
+        <ButtonLink href="/social/posts/new" size="lg" className="h-14 !rounded-2xl !px-5 text-[15px]">
+          + קמפיין חדש
+        </ButtonLink>
+      }
       paused={control?.paused ?? null}
       onControlChanged={load}
     >
@@ -261,7 +270,13 @@ export default function CampaignsPage() {
             the error banner — three numbers that came from a useMemo over an
             empty array, not from the database. House rule 1: a number on
             screen is read from the database or it does not exist. */}
+        {/* "Segmented Control אחד רחב עם 3 אפשרויות... Container לבן, border
+            עדין, 3 חלקים שווים, Tab פעיל: רקע סגול מלא." That is the `tabs`
+            variant in ui.tsx; the counts below are the ones this page already
+            computed, and they are still omitted rather than zeroed until the
+            list is known. */}
         <SegmentedControl
+          variant="tabs"
           label="סינון קמפיינים"
           value={filter}
           onChange={setFilter}

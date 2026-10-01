@@ -990,7 +990,19 @@ async function main(): Promise<void> {
    */
   {
     const camp = readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8');
-    pin('new-campaign button goes to the post editor', camp, 'headerAction={<ButtonLink href="/social/posts/new">+ קמפיין חדש</ButtonLink>}');
+    /* The DESTINATION, not the formatting. This pinned the whole one-line
+       element, so giving the button the design specification's height broke a
+       guard that is about where it leads. The two halves below are what the
+       owner's complaint was about: a ButtonLink (not a Button with an
+       onClick), and /social/posts/new (not this page's rename sheet). */
+    /* THE headerAction SLOT ALONE, because this page has a second
+       ButtonLink to the same place — the empty state's "כתבו את הפוסט
+       הראשון" — and a pin over the whole file passed with the header's own
+       destination changed. Verified by changing it: the slice fails, the
+       file-wide search did not. */
+    const headerAction = camp.slice(camp.indexOf('headerAction='), camp.indexOf('paused={'));
+    pin('new-campaign button goes to the post editor', headerAction, '<ButtonLink href="/social/posts/new"');
+    pin('new-campaign button is still the one labelled that', headerAction, '+ קמפיין חדש');
     expect(
       'guards',
       'source-drift',

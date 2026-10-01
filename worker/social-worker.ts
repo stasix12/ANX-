@@ -285,9 +285,11 @@ async function main(): Promise<void> {
   };
 
   // Jobs this worker was running when it died: never auto-retry (the post may exist).
+  // 'submitted' for that exact reason — it is what keeps the bulk "המשך סבב"
+  // off them too, and the error text already tells the owner to look first.
   await db
     .from('social_queue')
-    .update({ status: 'needs_attention', step: 'needs_attention', error: 'ה-worker הופסק באמצע העבודה. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".' })
+    .update({ status: 'needs_attention', step: 'submitted', error: 'ה-worker הופסק באמצע העבודה. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".' })
     .eq('worker_id', state.id)
     .in('status', ['publishing', 'awaiting_confirmation']);
 
@@ -1210,7 +1212,29 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
        * for their own reasons, and a sync that re-enabled it would be the
        * machine overruling a person.
        */
-      if (profile.canPost === false) {
+      /*
+       * AND NOT WHILE SIGNED IN AS A PAGE — the same guard runJob carries, by
+       * the other road, and the one this sweep was missing.
+       *
+       * "cannot post here" means "you have left the group" only for a personal
+       * profile. For a Page it usually means the group's admin does not allow
+       * Pages, which is true of most of them — see the long note on
+       * `state.asPage` in runJob, which says in full what happens without this:
+       * "one round published as a Page would have retired every group whose
+       * admin does not allow Pages — silently, permanently, and invisibly
+       * until the owner noticed their list had shrunk."
+       *
+       * This sweep is worse than that round, because nightlyGroupCheck clears
+       * last_synced_at on EVERY enabled group, so it walks the whole list
+       * between 02:00 and 04:00. Switching a group off here also destroys its
+       * queued publications: rules.ts turns every row for a disabled target
+       * into a terminal `skipped` on its next claim.
+       *
+       * So while a Page is signed in, a negative answer is not acted on at
+       * all. The group is left exactly as it is, and the publication path
+       * (runJob) still reports it per row, naming the Page.
+       */
+      if (profile.canPost === false && !state.asPage) {
         patch.enabled = false;
         patch.last_status = 'left';
         patch.last_error = 'פייסבוק אומרת שאי אפשר לפרסם בקבוצה הזו מהחשבון הזה — כנראה יצאתם ממנה. הקבוצה כובתה ולא ייכנסו אליה פרסומים חדשים.';
@@ -1597,7 +1621,22 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     .select('id');
   if (!claimed?.length) return;
   state.currentJob = item.id;
-  await heartbeat(state, 'online', jobEnv.browser.debugMode);
+  /* Both of these are in the same unguarded window as the rules below — see
+     the note there. heartbeat() calls workerDb(), which throws when a token
+     refresh fails, and a throw here left the row on 'publishing' with no way
+     back. Handing it straight back costs a minute and cannot double-post:
+     the browser has not been opened. */
+  try {
+    await heartbeat(state, 'online', jobEnv.browser.debugMode);
+  } catch (err) {
+    await db
+      .from('social_queue')
+      .update({ status: 'scheduled', step: 'pending', scheduled_at: new Date(Date.now() + 60_000).toISOString(), attempts: item.attempts, step_at: new Date().toISOString() })
+      .eq('id', item.id);
+    state.currentJob = null;
+    console.log(`[worker] ⏲ heartbeat נכשל אחרי התפיסה — השורה הוחזרה לתור. ${safeError(err)}`);
+    return;
+  }
 
   const [{ data: target }, { data: post }, { data: variant }] = await Promise.all([
     db.from('social_targets').select('*').eq('id', item.target_id).maybeSingle(),
@@ -1627,7 +1666,39 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     state.currentJob = null;
   };
 
-  const decision = await evaluateQueueItem(db, { item: { ...item, attempts }, target: t, post: p, variant: v, limits: jobEnv.limits, browser: jobEnv.browser });
+  /*
+   * ─── FROM THE CLAIM TO HERE, NOTHING HAS TOUCHED FACEBOOK ──────────────
+   *
+   * …and until now nothing caught a failure in between either. The claim flips
+   * the row to 'publishing' and stamps this worker on it; everything after
+   * that is Supabase round trips — the heartbeat, the three entity reads, and
+   * evaluateQueueItem's five to seven queries, four of which go through
+   * countPublished, which THROWS on any error.
+   *
+   * One transient failure there (a token refresh that did not land, a dropped
+   * connection on a home line) threw straight out of runJob, out of tick, into
+   * main's loop catch — and left the row on 'publishing' for ever. Nothing can
+   * recover it: 'publishing' is in neither RETRYABLE nor CANCELLABLE, so
+   * "נסה שוב" and "בטל" both miss it; the server sweep only frees rows whose
+   * worker has stopped heartbeating, and this one is alive. Worse, the group
+   * is then blocked from every future plan, because targetsAlreadyWaiting
+   * counts OPEN_STATUSES and 'publishing' is one — a relaunch to 28 groups
+   * quietly queues 27, and the card reads "רץ" indefinitely.
+   *
+   * So the window gets the same hand-back every "not yet" in this file uses.
+   * It is safe precisely because the browser has not been opened: there is no
+   * post to double.
+   */
+  let decision: Awaited<ReturnType<typeof evaluateQueueItem>>;
+  try {
+    decision = await evaluateQueueItem(db, { item: { ...item, attempts }, target: t, post: p, variant: v, limits: jobEnv.limits, browser: jobEnv.browser });
+  } catch (err) {
+    /* `attempts: item.attempts` — the value before the claim incremented it.
+       Nothing was tried, so nothing should be spent. */
+    await finish({ status: 'scheduled', step: 'pending', scheduled_at: new Date(Date.now() + 60_000).toISOString(), attempts: item.attempts });
+    console.log(`[worker] ⏲ "${t?.name ?? item.target_id}": לא הצלחתי לבדוק את הכללים — מנסה שוב בעוד דקה. ${safeError(err)}`);
+    return;
+  }
   if (decision.action === 'skip') {
     await finish({ status: 'skipped', step: '', skip_reason: decision.reason });
     await logActivity('warn', 'skipped', decision.reason, { queueId: item.id, target: t?.name });
@@ -1740,10 +1811,31 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
      */
     const raw = err instanceof Error ? err.message : String(err);
     const message = safeError(err);
+    /*
+     * ─── DID THE "פרסם" BUTTON ALREADY GET CLICKED? ────────────────────────
+     *
+     * `lastStep` is the composer's own progress, and the click sits between
+     * 'publishing' and 'verifying' (worker/facebook/composer.ts). So a row
+     * parked at either of those — or one whose PublishError says so outright
+     * — may ALREADY BE ON FACEBOOK, and re-running it would post the same
+     * text to the same group a second time.
+     *
+     * That matters because rules.ts cannot see it: its two duplicate guards
+     * both count rows with `status = 'published'`, and this row is about to
+     * be written as `needs_attention`. The publication happened; nothing in
+     * the database says so.
+     *
+     * The distinction is written into `step` so one screen can act on it:
+     * "המשך סבב" re-arms every needs_attention row in the queue at once, and
+     * must skip these. Per-row "נסה שוב" is untouched — the owner presses
+     * that while looking at this row and its screenshot, having checked the
+     * group, which is exactly the decision these rows need.
+     */
+    const mayAlreadyBePosted = lastStep === 'publishing' || lastStep === 'verifying';
     if (err instanceof SessionError) {
       state.attention = message;
       state.browserState = 'needs_auth';
-      await finish({ status: 'needs_attention', step: 'needs_attention', error: message, screenshot_path: screenshot });
+      await finish({ status: 'needs_attention', step: mayAlreadyBePosted ? 'submitted' : 'needs_attention', error: message, screenshot_path: screenshot });
       await db.from('social_targets').update({ last_status: 'needs_attention', last_error: message }).eq('id', tt.id);
       await heartbeat(state, 'needs_attention', jobEnv.browser.debugMode, 'needs_auth');
       await logActivity('error', 'needs_attention', `Facebook דורש פעולה ידנית (${tt.name}): ${message}`, { queueId: item.id, kind: err.kind, detail: raw });
@@ -1805,7 +1897,8 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     const afterSubmit = err instanceof PublishError && err.afterSubmit;
     if (afterSubmit) {
       // Never retry automatically once "Post" was clicked — the owner checks the group first.
-      await finish({ status: 'needs_attention', step: 'needs_attention', error: message, screenshot_path: screenshot });
+      // 'submitted' is what makes that true for the bulk "המשך סבב" as well; see above.
+      await finish({ status: 'needs_attention', step: 'submitted', error: message, screenshot_path: screenshot });
       await db.from('social_targets').update({ last_status: 'needs_attention', last_error: message }).eq('id', tt.id);
       await logActivity('error', 'needs_attention', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep, detail: raw });
       console.log(`[worker] ⚠ ${raw}`);
@@ -1840,6 +1933,34 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   }
 
   if (result.outcome === 'cancelled') {
+    /*
+     * A TIMEOUT IS "NOT NOW". A SHUTDOWN IS "NOT NOW". ONLY A PERSON IS "NO".
+     *
+     * This wrote a terminal `skipped` for all three, so a worker closed for
+     * the evening — or fifteen minutes with the dashboard in a pocket — threw
+     * the publication away for good, and told the owner it had been cancelled
+     * before the final click. `skipped` is terminal and the schedule is
+     * already stamped, so nothing re-creates the row.
+     *
+     * The two that are not a decision hand the row back instead, the same way
+     * every other "not yet" in this worker does: same row, same group, same
+     * place, five minutes later. confirmed_at is cleared with it so the next
+     * round still asks — see the gate in waitForConfirmation.
+     */
+    if (result.cancelReason === 'timeout' || result.cancelReason === 'stopped') {
+      const why = result.cancelReason === 'timeout' ? 'לא הספקתם לאשר — ננסה שוב בעוד חמש דקות.' : 'התוכנה נסגרה לפני האישור — נמשיך כשהיא תעלה.';
+      await finish({
+        status: 'scheduled',
+        step: 'pending',
+        scheduled_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+        attempts: item.attempts,
+        confirmed_at: null,
+        error: null,
+      });
+      await logActivity('info', 'deferred', `"${tt.name}": ${why}`, { queueId: item.id, reason: result.cancelReason });
+      console.log(`[worker] ⏲ "${tt.name}": ${why}`);
+      return;
+    }
     await finish({ status: 'skipped', step: '', skip_reason: 'לא אושר לפני הפרסום הסופי.' });
     await logActivity('warn', 'cancelled', `"${tt.name}": הפרסום בוטל לפני הלחיצה הסופית`, { queueId: item.id });
     return;
@@ -1909,7 +2030,20 @@ async function persist(write: () => Promise<unknown>): Promise<boolean> {
 }
 
 /** Parks the job as awaiting_confirmation with a screenshot and polls for the owner's click. */
-async function waitForConfirmation(queueId: string, page: Page): Promise<'confirmed' | 'cancelled' | 'timeout'> {
+/**
+ * THREE DIFFERENT ANSWERS, AND THEY USED TO BE ONE.
+ *
+ * This returns 'declined' only when the owner actually said no — the row left
+ * `awaiting_confirmation` under them. 'timeout' is fifteen minutes with nobody
+ * looking at the dashboard, and 'stopped' is the worker being shut down with
+ * the job in hand. All three used to come back as 'cancelled', composer.ts
+ * flattened them into one outcome, and runJob wrote a terminal `skipped` for
+ * all of them — so closing the worker window to go home, or not watching the
+ * screen for a quarter of an hour, DESTROYED the publication and wrote
+ * "הפרסום בוטל לפני הלחיצה הסופית" into the history, which is not what
+ * happened. `skipped` is terminal: the planner will not re-create the row.
+ */
+async function waitForConfirmation(queueId: string, page: Page): Promise<'confirmed' | 'declined' | 'timeout' | 'stopped'> {
   const db = await workerDb();
   const screenshot = await captureScreenshot(page, queueId, 'ready_to_publish');
   /*
@@ -1930,14 +2064,16 @@ async function waitForConfirmation(queueId: string, page: Page): Promise<'confir
   console.log('[worker]    ממתין לאישור סופי בלוח הבקרה…');
   const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (stopping) return 'cancelled';
+    if (stopping) return 'stopped';
     const { data } = await db.from('social_queue').select('status, confirmed_at').eq('id', queueId).maybeSingle();
-    if (!data) return 'cancelled';
+    /* The row is gone — deleted, or its campaign was. Nothing to hand back. */
+    if (!data) return 'declined';
     if (data.confirmed_at) {
       await db.from('social_queue').update({ status: 'publishing' }).eq('id', queueId);
       return 'confirmed';
     }
-    if (data.status !== 'awaiting_confirmation') return 'cancelled';
+    /* Somebody moved it: the panic button, a stop, a skip. That IS a decision. */
+    if (data.status !== 'awaiting_confirmation') return 'declined';
     await sleep(3000);
   }
   await db.from('social_queue').update({ status: 'publishing' }).eq('id', queueId);

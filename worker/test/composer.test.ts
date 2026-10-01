@@ -130,9 +130,13 @@ async function main() {
     onStep: async (s) => {
       steps.push(s);
     },
-    confirm: async () => 'cancelled',
+    /* 'declined' — the owner actually said no. The verdict is carried on the
+       result now, because a timeout and a worker shutdown also stop the click
+       and must NOT end the publication; runJob branches on it. */
+    confirm: async () => 'declined',
   });
   assert.equal(cancelled.outcome, 'cancelled');
+  assert.equal(cancelled.cancelReason, 'declined', 'and the reason reaches the caller, which is what decides whether the row survives');
   assert.ok(!steps.includes('publishing'));
   console.log('✓ declined confirmation never reaches the Post button');
 
@@ -173,7 +177,7 @@ async function main() {
       true,
     );
   });
-  await publishToGroup(page2, { groupUrl: fixture, text: 'שורה א\nשורה ב\nשורה ג', images: [], video: null, onStep: async () => undefined, confirm: async () => 'cancelled' });
+  await publishToGroup(page2, { groupUrl: fixture, text: 'שורה א\nשורה ב\nשורה ג', images: [], video: null, onStep: async () => undefined, confirm: async () => 'declined' });
   const enters = await page2.evaluate(() => (window as unknown as { __enterPresses: number }).__enterPresses);
   assert.equal(enters, 0, 'no bare Enter may be pressed while typing');
   const typed = await page2.evaluate(() => localStorage.getItem('mockFeed'));

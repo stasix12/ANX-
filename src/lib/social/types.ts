@@ -208,7 +208,22 @@ export type QueueStep =
   | 'verifying'
   | 'published'
   | 'failed'
-  | 'needs_attention';
+  | 'needs_attention'
+  /*
+   * PARKED AT OR PAST THE FINAL CLICK — the post may already be on Facebook.
+   *
+   * Written by the worker instead of 'needs_attention' whenever it stops a job
+   * at `publishing`/`verifying`, on a PublishError that says the button was
+   * pressed, or on the startup sweep of a job it died in the middle of. The
+   * row still carries `status: 'needs_attention'`; this says WHY it must not
+   * be re-run automatically.
+   *
+   * resumeNeedsAttention() — the bulk "המשך סבב" — skips exactly these. Both
+   * of rules.ts's duplicate guards count rows with `status = 'published'`, so
+   * a parked row is invisible to them: re-running one is a second post to the
+   * same group under the owner's own account, with nothing to stop it.
+   */
+  | 'submitted';
 
 /**
  * Hebrew only. This string is the live status line of a publication in flight,
@@ -231,6 +246,9 @@ export const QUEUE_STEP_LABEL: Record<QueueStep, string> = {
   published: 'פורסם',
   failed: 'נכשל',
   needs_attention: 'דורש טיפול',
+  /* The owner reads this on the row and in the history. It has to say what to
+     DO, because the row is waiting on a decision only they can make. */
+  submitted: 'נשלח — בדקו בקבוצה',
 };
 
 export interface QueueItem {

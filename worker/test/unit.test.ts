@@ -2150,7 +2150,12 @@ const scenario: { step: string; line: string }[] = [];
 
   /* --- a publication is never recorded twice, and never published twice ---- */
   const job = slice(pcWorker, 'async function runJob', '/** Three tries with a short backoff');
-  const publishTry = job.slice(job.indexOf('  try {\n    result = await adapter.publish('), job.indexOf('  } catch (err) {'));
+  /* The catch is found FROM the try, not from the top of runJob: the rules
+     check above now has a try/catch of its own (it used to have none, and a
+     transient failure there wedged the row on 'publishing' for ever), so a
+     search from zero found that one and handed slice() a backwards range. */
+  const publishTryAt = job.indexOf('  try {\n    result = await adapter.publish(');
+  const publishTry = job.slice(publishTryAt, job.indexOf('  } catch (err) {', publishTryAt));
   assert.ok(publishTry.includes('adapter.publish('), 'sanity: found the publish try block');
   assert.ok(
     !publishTry.includes("status: 'published'"),
@@ -3703,10 +3708,20 @@ const scenario: { step: string; line: string }[] = [];
       'asked of a page that is already open, so it adds no traffic to the account',
     );
 
-    /* ONLY ON A POSITIVE ANSWER, and never the other way. */
+    /*
+     * ONLY ON A POSITIVE ANSWER — AND ONLY FROM A PERSONAL PROFILE.
+     *
+     * The second half is new and is the whole point: "cannot post here" means
+     * "you have left the group" for a personal profile, and "this group does
+     * not allow Pages" for a Page — which is true of most of them. runJob has
+     * guarded this with state.asPage since it was written; this sweep did not,
+     * and it walks EVERY enabled group between 02:00 and 04:00, so one night
+     * signed in as a Page could retire the whole publishing list and, through
+     * rules.ts, destroy every publication queued to it.
+     */
     assert.ok(
-      /if \(profile\.canPost === false\) \{[\s\S]{0,400}patch\.enabled = false;/.test(localWorker),
-      'a group Facebook says cannot be posted in is switched off',
+      /if \(profile\.canPost === false && !state\.asPage\) \{[\s\S]{0,400}patch\.enabled = false;/.test(localWorker),
+      'a group Facebook says cannot be posted in is switched off — but never while signed in as a Page',
     );
     assert.ok(
       !/canPost === true[\s\S]{0,200}enabled = true/.test(localWorker),

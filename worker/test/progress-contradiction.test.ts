@@ -197,8 +197,23 @@ function fakeDb(rows: Row[]) {
 
 /* ------------------------------- the reads, copied from src/lib/social/*.ts */
 
-/** src/lib/social/client.ts:496 — `const CAMPAIGN_ROLLUP_LIMIT = 5000;` (not exported). */
-const CAMPAIGN_ROLLUP_LIMIT = 5000;
+/**
+ * src/lib/social/client.ts — `const CAMPAIGN_ROLLUP_LIMIT = 1000;` (not exported).
+ *
+ * IT WAS 5000, AND THAT IS WHY SCENARIO 10 BELOW USED TO BE A SIMULATION OF
+ * SOMETHING THAT COULD NOT HAPPEN IN PRODUCTION. PostgREST's `db-max-rows` is
+ * 1000 on this project, so the server never returned more than 1000 rows no
+ * matter what the client asked for — which made `rows.length >= 5000`
+ * permanently false and the `truncated` flag dead code. The card's
+ * `!state.truncated` clause, the one thing standing between a capped read and
+ * a green "הקמפיין הסתיים בהצלחה" over still-waiting publications, was
+ * unreachable.
+ *
+ * The ceiling is now the server's own, so `rows.length >= LIMIT` is true
+ * exactly when the server truncated, and this simulation reproduces the real
+ * cut rather than a hypothetical one.
+ */
+const CAMPAIGN_ROLLUP_LIMIT = 1000;
 
 /**
  * SIMULATION of client.ts campaignStates() (client.ts:504-528). Same select,
@@ -742,7 +757,8 @@ async function main(): Promise<void> {
    *    • the tiles ← countByStatus(), and "upcoming" ← listQueue(), both
    *                  unscoped and unaffected by that ceiling.
    *
-   *  A run whose still-future rows fall past the 5000th campaign row by
+   *  A run whose still-future rows fall past the last campaign row the server
+ *  will return (CAMPAIGN_ROLLUP_LIMIT, which is now PostgREST's own 1000) by
    *  scheduled_at therefore reports 100% on rows that are only the part of
    *  itself that fitted. Its own scheduled rows are simultaneously on screen
    *  as upcoming. campaignStates() reports no truncation flag at all — note
@@ -928,7 +944,22 @@ async function main(): Promise<void> {
   const pin = (name: string, haystack: string, needle: string) =>
     expect('guards', 'source-drift', `${name} still reads as this test simulates it`, haystack.includes(needle), true, NONE);
 
-  pin('client.ts CAMPAIGN_ROLLUP_LIMIT', client, 'const CAMPAIGN_ROLLUP_LIMIT = 5000;');
+  /*
+   * THIS PIN IS NOT JUST ABOUT THE NUMBER MATCHING. A rollup limit ABOVE the
+   * server's db-max-rows (1000) cannot be hit, so `truncated` would go back to
+   * being permanently false and scenario 10 would pass while testing a branch
+   * production can never take. If this ever has to move, it may only move
+   * DOWN, and this simulation must move with it.
+   */
+  pin('client.ts CAMPAIGN_ROLLUP_LIMIT', client, `const CAMPAIGN_ROLLUP_LIMIT = ${CAMPAIGN_ROLLUP_LIMIT};`);
+  expect(
+    'guards',
+    'source-drift',
+    'and it is at or under PostgREST db-max-rows, so a capped read can actually set `truncated`',
+    CAMPAIGN_ROLLUP_LIMIT > 0 && CAMPAIGN_ROLLUP_LIMIT <= 1000,
+    true,
+    NONE,
+  );
   pin('client.ts campaignStates truncation flag', client, 'const truncated = rows.length >= CAMPAIGN_ROLLUP_LIMIT;');
   pin('client.ts campaignStates campaign_id filter', client, ".not('campaign_id', 'is', null)");
   pin('client.ts listQueue order is the caller\'s', client, ".order('scheduled_at', { ascending: opts.order === 'asc' })");

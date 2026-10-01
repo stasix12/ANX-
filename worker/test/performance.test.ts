@@ -284,4 +284,79 @@ const code = (rel: string) =>
   eq(cityCounts.get('אחר'), all.filter((g) => cityOf(g) === 'אחר').length, 'the groups with no city of their own still land in "אחר", counted once each');
 }
 
+/* ------------------------------------------------------------------ *
+ * 8. THE FIVE THE FULL AUDIT FOUND — each one pinned where it lives.
+ *
+ * These are not performance findings; they are in this file because it is
+ * where the audit's fixes landed and because every one of them is a thing
+ * that was true, is no longer, and must not quietly become true again.
+ * ------------------------------------------------------------------ */
+{
+  const worker = code('worker/social-worker.ts');
+  const client = code('src/lib/social/client.ts');
+
+  /*
+   * A. THE DOUBLE-POST PATH. "המשך סבב" re-armed every needs_attention row,
+   * including the ones the worker parked at or past the final click — rows
+   * whose post may already be on Facebook. rules.ts cannot catch that: both
+   * its duplicate guards count rows with status = 'published', and a parked
+   * row is needs_attention.
+   */
+  is(/const mayAlreadyBePosted = lastStep === 'publishing' \|\| lastStep === 'verifying';/.test(worker), 'the worker knows whether the final click had happened — lastStep is the composer’s own progress');
+  is(/if \(afterSubmit\) \{[\s\S]{0,400}step: 'submitted'/.test(worker), 'a PublishError that says the button was pressed parks the row as submitted');
+  is(/\.in\('status', \['publishing', 'awaiting_confirmation'\]\)/.test(worker) && /step: 'submitted', error: 'ה-worker הופסק/.test(worker), 'and so does the startup sweep of a job the worker died inside');
+  is(/\.neq\('step', 'submitted'\)/.test(client), 'AND THE BULK RE-ARM SKIPS EXACTLY THOSE — this is the line between a retry and a second post to the same group');
+  /* The owner is not left without a way back: per-row retry still covers them. */
+  is(/const RETRYABLE: QueueItem\['status'\]\[\] = \[[^\]]*'needs_attention'/.test(client), 'the per-row "נסה שוב" still reaches them, which is the decision only the owner can make');
+
+  /*
+   * B. THE NIGHTLY SWEEP THAT COULD RETIRE THE LIST. "cannot post here" means
+   * "you left" only for a personal profile; for a Page it usually means the
+   * group does not allow Pages. runJob already guards this; the sweep did not,
+   * and it walks every enabled group between 02:00 and 04:00.
+   */
+  is(/if \(profile\.canPost === false && !state\.asPage\) \{/.test(worker), 'the nightly profile sweep does not switch groups off while signed in as a Page');
+
+  /*
+   * C. A TIMEOUT IS NOT A CANCELLATION. All three verdicts used to collapse
+   * into one and be written as terminal 'skipped', so closing the worker for
+   * the evening, or fifteen minutes away from the dashboard, destroyed the
+   * publication for good.
+   */
+  is(/Promise<'confirmed' \| 'declined' \| 'timeout' \| 'stopped'>/.test(worker), 'the three ways a confirmation can end are three different answers');
+  is(/if \(stopping\) return 'stopped';/.test(worker), 'a worker being shut down says so');
+  is(
+    /if \(result\.cancelReason === 'timeout' \|\| result\.cancelReason === 'stopped'\) \{[\s\S]{0,400}status: 'scheduled'/.test(worker),
+    'AND NEITHER OF THEM SKIPS THE ROW — it is handed back, like every other "not yet" in this worker',
+  );
+  is(/confirmed_at: null,/.test(worker), 'with the confirmation stamp cleared, so the next round still asks');
+  is(/status: 'skipped', step: '', skip_reason: 'לא אושר לפני הפרסום הסופי\.'/.test(worker), 'while the owner actually saying no still ends it, exactly as before');
+
+  /*
+   * D. THE WEDGE. Between the atomic claim and the browser opening there are
+   * ~10 Supabase round trips and nothing caught a failure in any of them — one
+   * transient error left the row on 'publishing' for ever, which no screen can
+   * retry or cancel, and which blocks that group from every future plan.
+   */
+  is(/let decision: Awaited<ReturnType<typeof evaluateQueueItem>>;[\s\S]{0,200}try \{/.test(worker), 'the rules check cannot throw the row away any more');
+  is(
+    /\} catch \(err\) \{[\s\S]{0,400}status: 'scheduled', step: 'pending'[\s\S]{0,200}attempts: item\.attempts \}\);[\s\S]{0,200}לא הצלחתי לבדוק את הכללים/.test(worker),
+    'it hands the row back instead — safe, because the browser has not been opened, so there is no post to double',
+  );
+  is(/לא הצלחתי לבדוק את הכללים|heartbeat נכשל אחרי התפיסה/.test(worker), 'and the heartbeat right after the claim is covered the same way');
+
+  /*
+   * E. THE TRUNCATION FLAG THAT COULD NEVER BE TRUE. Both rollups asked for
+   * 5000 rows from a server that caps at 1000, so `rows.length >= LIMIT` was
+   * never reached and the "these numbers are of a slice" flag was dead — which
+   * is the flag CampaignCard's green "finished successfully" depends on.
+   */
+  const rollup = Number(/const CAMPAIGN_ROLLUP_LIMIT = (\d+);/.exec(client)?.[1] ?? 0);
+  const usage = Number(/export const LIBRARY_USAGE_LIMIT = (\d+);/.exec(code('src/lib/social/library.ts'))?.[1] ?? 0);
+  const ceiling = 1000; // PostgREST db-max-rows, as countByStatus's own comment states
+  is(rollup > 0 && rollup <= ceiling, `the campaign rollup asks for ${rollup} rows from a server that returns at most ${ceiling} — above it, truncated can never be true`);
+  is(usage > 0 && usage <= ceiling, `and so does the library's usage rollup (${usage})`);
+  is(/const truncated = rows\.length >= CAMPAIGN_ROLLUP_LIMIT;/.test(client), 'and the flag is still set by comparing against that same limit');
+}
+
 console.log(`performance-pass guards OK — ${checks} assertions`);

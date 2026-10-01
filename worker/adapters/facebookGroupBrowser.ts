@@ -30,7 +30,7 @@ export interface GroupPublishInput {
   onHold?: () => Promise<void>;
   onStep: (step: ComposerStep) => Promise<void>;
   /** Present when the run must pause before the final click. */
-  confirm?: (page: Page) => Promise<'confirmed' | 'cancelled' | 'timeout'>;
+  confirm?: (page: Page) => Promise<'confirmed' | 'declined' | 'timeout' | 'stopped'>;
   /** Lets the caller grab a screenshot of the live page when something fails. */
   onPage?: (page: Page) => void;
   /** Called with the still-open page when the run throws, before it is closed. */

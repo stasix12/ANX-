@@ -204,7 +204,11 @@ export interface PostUsage {
 }
 
 /** Mirrors CAMPAIGN_ROLLUP_LIMIT (client.ts) — one screen never pulls an unbounded table. */
-export const LIBRARY_USAGE_LIMIT = 5000;
+/* 1000, for the reason CAMPAIGN_ROLLUP_LIMIT carries in full: PostgREST caps
+   at 1000, so a 5000 limit made `truncated` permanently false and the
+   library's "הנתונים חלקיים" notice unreachable — "פורסם 12 פעמים ב-9 קבוצות"
+   was then the last thousand rows presented as the post's whole history. */
+export const LIBRARY_USAGE_LIMIT = 1000;
 
 /**
  * Anything that has not happened yet but is meant to — from the single

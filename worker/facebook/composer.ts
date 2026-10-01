@@ -30,7 +30,7 @@ export interface ComposeInput {
   video: string | null;
   onStep: (step: ComposerStep) => Promise<void>;
   /** Called at "ready to publish" when the owner wants to approve the first runs by hand. */
-  confirm?: (page: Page) => Promise<'confirmed' | 'cancelled' | 'timeout'>;
+  confirm?: (page: Page) => Promise<'confirmed' | 'declined' | 'timeout' | 'stopped'>;
   /**
    * The earliest instant this post may be SUBMITTED — the spacing gap's own
    * moment, when the worker claimed this row before it had closed.
@@ -54,6 +54,14 @@ export interface ComposeInput {
 
 export interface ComposeResult {
   outcome: 'published' | 'cancelled';
+  /*
+   * WHY it was cancelled, because the three reasons are not one thing and the
+   * caller must treat them differently. 'declined' is the owner saying no —
+   * the only one that ends the publication. A confirmation that simply timed
+   * out, or a worker shut down with Ctrl+C, are both "not now", and the queue
+   * row has to survive them. Undefined on a published result.
+   */
+  cancelReason?: 'declined' | 'timeout' | 'stopped';
   /** The feed showed the new post text after publishing. */
   verified: boolean;
   /** Group moderates posts — it exists but waits for an admin. */
@@ -171,7 +179,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     const verdict = await input.confirm(page);
     if (verdict !== 'confirmed') {
       await discardComposer(page);
-      return { outcome: 'cancelled', verified: false, pendingApproval: false, groupTitle, permalink: '', publishedAt: '' };
+      return { outcome: 'cancelled', cancelReason: verdict, verified: false, pendingApproval: false, groupTitle, permalink: '', publishedAt: '' };
     }
   }
 

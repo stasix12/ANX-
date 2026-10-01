@@ -1124,7 +1124,24 @@ export async function resumeNeedsAttention(postId?: string): Promise<number> {
   let q = db()
     .from('social_queue')
     .update({ status: 'scheduled', step: 'pending', error: null, scheduled_at: new Date().toISOString(), attempts: 0, confirmed_at: null })
-    .eq('status', 'needs_attention');
+    .eq('status', 'needs_attention')
+    /*
+     * EXCEPT THE ROWS WHOSE POST MAY ALREADY BE ON FACEBOOK.
+     *
+     * The worker writes `step: 'submitted'` when it parks a row at or past
+     * the final click — see the note in worker/social-worker.ts. Those rows
+     * are the one case where re-running is not a retry but a second post to
+     * the same group, and rules.ts cannot catch it: both of its duplicate
+     * guards count rows with `status = 'published'`, and a parked row is
+     * `needs_attention`. The publication happened; nothing in the database
+     * says so.
+     *
+     * This button is "המשך סבב" — a secondary control with no confirmation
+     * and no count, pressed after clearing a Facebook checkpoint. It must not
+     * be able to repost. The owner's way back for these rows is the per-row
+     * "נסה שוב", pressed while looking at that row and its screenshot.
+     */
+    .neq('step', 'submitted');
   if (postId) q = q.eq('post_id', postId);
   const rows = unwrap<{ id: string }[]>(await q.select('id'));
   return rows.length;
@@ -1533,7 +1550,28 @@ export async function screenshotUrl(path: string): Promise<string | null> {
 /* ------------------------------------------------------------ campaigns */
 
 /** Ceiling for the cross-campaign rollup read. */
-const CAMPAIGN_ROLLUP_LIMIT = 5000;
+/*
+ * 1000 AND NOT 5000 — ABOVE THE SERVER'S OWN CEILING THE GUARD IS DEAD.
+ *
+ * PostgREST's `db-max-rows` is 1000 by default on Supabase; countByStatus's
+ * comment in this same file says so, and every other limit here sits at or
+ * under it (CAMPAIGN_QUEUE_LIMIT 1000, LIVE_QUEUE_LIMIT 500, CAP_SCAN_LIMIT
+ * 500, WAITING_FOR_YOU_LIMIT 200). This one asked for 5000, so the server
+ * returned 1000, `rows.length >= 5000` was false, and `truncated` could never
+ * become true.
+ *
+ * That is not a wasted flag. It is the flag CampaignCard's `finishedClean`
+ * depends on: this read is ordered by scheduled_at ascending, so what falls
+ * past the cut is the furthest-out SCHEDULED rows — a run whose pending rows
+ * are dropped reports published === total, resolves to 'completed', and the
+ * card draws a green "הקמפיין הסתיים בהצלחה" over publications that are still
+ * waiting to go out. The `!state.truncated` clause exists to block exactly
+ * that, and it has been unreachable.
+ *
+ * At the ceiling, `rows.length >= LIMIT` is true exactly when the server
+ * truncated — which is the shape CAMPAIGN_QUEUE_LIMIT already has.
+ */
+const CAMPAIGN_ROLLUP_LIMIT = 1000;
 
 /**
  * One full control-centre state per campaign, from the queue rows that carry

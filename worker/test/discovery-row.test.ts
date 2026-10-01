@@ -150,6 +150,32 @@ async function main(): Promise<void> {
               /* Whether a real <img> was drawn, or the letter tile. */
               hasPicture: !!r.querySelector('img'),
               /*
+               * ANY CONTROL THE DISMISS SITS ON TOP OF.
+               *
+               * The ✕ left the row's flow to buy height, and landed on the
+               * row's own button: 36×23px of overlap on "פתח להצטרפות" at all
+               * three widths, so a thumb aiming at the button would HIDE the
+               * group instead. Reserving the space on the name alone left
+               * every line below it free to run underneath.
+               *
+               * Two boxes overlapping is not something a class name can show,
+               * and it is the kind of mistake that costs the owner a group.
+               */
+              covered: (() => {
+                const x = r.querySelector('button[aria-label^="הסתר"]');
+                if (!x) return [];
+                const xb = x.getBoundingClientRect();
+                return [...r.querySelectorAll('a,button')]
+                  .filter((el) => el !== x)
+                  .map((el) => {
+                    const b = el.getBoundingClientRect();
+                    const w = Math.min(xb.right, b.right) - Math.max(xb.left, b.left);
+                    const h = Math.min(xb.bottom, b.bottom) - Math.max(xb.top, b.top);
+                    return w > 0 && h > 0 ? `${Math.round(w)}×${Math.round(h)} על "${(el.textContent || '').trim().slice(0, 20)}"` : '';
+                  })
+                  .filter(Boolean);
+              })(),
+              /*
                * WHAT THE ACTION ACTUALLY PAINTS, not which classes it carries.
                *
                * The brief asked for two button skins and the diff appeared to
@@ -186,6 +212,8 @@ async function main(): Promise<void> {
         assert.ok(r.nameInside, say(`row ${i}'s name is outside its own card`));
         assert.deepEqual(r.smallTargets, [], say(`row ${i} has a tap target under 40px — ${JSON.stringify(r.smallTargets)}`));
         assert.equal(r.escaped, 0, say(`row ${i} has ${r.escaped} controls outside the card`));
+        checks += 1;
+        assert.deepEqual(r.covered, [], say(`row ${i}: the ✕ sits on top of a control — ${r.covered.join(', ')}. A tap meant for it would hide the group.`));
       }
 
       /*

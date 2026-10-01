@@ -209,9 +209,25 @@ export async function searchGroups(page: Page, query: string, opts: { havePictur
  * picture shows its initial, which is what it did before and is not worth
  * failing a search over.
  */
+/**
+ * Whether these bytes begin like an image file.
+ *
+ * The four formats Facebook serves thumbnails in, by their own signatures —
+ * which is a stronger statement than any byte count, and the reason the size
+ * floor could be dropped to a sanity check.
+ */
+function looksLikeImage(b: Buffer): boolean {
+  if (b.length < 12) return false;
+  if (b[0] === 0xff && b[1] === 0xd8) return true; // JPEG
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return true; // PNG
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return true; // GIF
+  if (b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP') return true;
+  return false;
+}
+
 export async function fetchPictures(page: Page, groups: DiscoveredGroup[]): Promise<Map<string, CardPicture>> {
   const out = new Map<string, CardPicture>();
-  const todo = groups.filter((g) => /^https?:\/\//i.test(g.image)).slice(0, PICTURE_LIMIT);
+  const todo = groups.filter((g) => /^https?:\/\//i.test(g.image));
   const lanes = 4;
   let next = 0;
   await Promise.all(
@@ -224,11 +240,31 @@ export async function fetchPictures(page: Page, groups: DiscoveredGroup[]): Prom
         try {
           const res = await page.request.get(g.image, { timeout: 15_000 });
           if (!res.ok()) continue;
+          const type = res.headers()['content-type'] ?? '';
+          /*
+           * AN HTML PAGE WITH A 200 ON IT IS NOT A PICTURE. A redirect to a
+           * login wall or an error page answers 200 and is several kilobytes,
+           * so it sailed past a byte floor and was stored for ever — and a row
+           * that holds a picture is never fetched again.
+           */
+          if (type && !/^image\//i.test(type)) continue;
           const bytes = await res.body();
-          /* A one-pixel tracking gif or an error page is not a picture, and
-             storing it would replace an initial with a blank square. */
-          if (bytes.length < 500) continue;
-          out.set(g.externalId, { bytes, contentType: res.headers()['content-type'] ?? 'image/jpeg' });
+          /*
+           * JUDGED BY WHAT THE BYTES ARE, not by how many there are.
+           *
+           * The floor was 500 bytes, which throws away a real thumbnail that
+           * happens to compress well — permanently, because the row then never
+           * asks again. A file's first bytes say what it is: JPEG, PNG, GIF
+           * and WebP each have a signature, and a tracking pixel fails it or
+           * is a GIF of a few dozen bytes.
+           */
+          if (!looksLikeImage(bytes)) continue;
+          if (bytes.length < 120) continue;
+          out.set(g.externalId, { bytes, contentType: type || 'image/jpeg' });
+          /* Capped on what SUCCEEDED, not on what was attempted: a prefix of
+             cards whose picture cannot be fetched used to spend the whole
+             allowance and leave the rest as letters. */
+          if (out.size >= PICTURE_LIMIT) return;
         } catch {
           /* no picture for this one */
         }
@@ -317,7 +353,55 @@ async function readCards(page: Page): Promise<RawCard[]> {
         continue;
       }
 
-      const picture = box.querySelector('img');
+      /*
+       * THE BIGGEST REAL PICTURE ON THE CARD, not the first <img> element.
+       *
+       * This took `box.querySelector('img')` and read its `src` attribute.
+       * Facebook lazy-loads: until a card has scrolled into view its `src` is
+       * often a 1x1 placeholder or a data: URI, with the real address sitting
+       * in `currentSrc` or in `srcset` — and some cards draw the thumbnail as a
+       * CSS background or an <svg><image>, which have no <img> at all. The
+       * groups the owner is NOT in are the ones furthest down a scrolled list,
+       * so they are exactly the cards whose first <img> is a placeholder.
+       *
+       * So every candidate on the card is considered and the largest one as
+       * RENDERED wins — which on a group card is the group's own thumbnail,
+       * and never the little badge on a button.
+       */
+      let picture: string = '';
+      {
+        let bestArea = -1;
+        const consider = (url: string, w: number, h: number) => {
+          if (!/^https?:\/\//i.test(url)) return;
+          const area = w * h;
+          if (area <= bestArea) return;
+          bestArea = area;
+          picture = url;
+        };
+        for (const img of Array.from(box.querySelectorAll('img'))) {
+          const r = img.getBoundingClientRect();
+          /* currentSrc is what the browser actually chose; src is the fallback
+             for an image that has not loaded yet. */
+          const best = img.currentSrc || img.getAttribute('src') || '';
+          consider(best, r.width || 1, r.height || 1);
+          const set = img.getAttribute('srcset') || '';
+          for (const part of set.split(',')) {
+            const url = part.trim().split(/\s+/)[0] || '';
+            consider(url, r.width || 1, r.height || 1);
+          }
+        }
+        for (const node of Array.from(box.querySelectorAll('svg image'))) {
+          const r = (node as unknown as Element).getBoundingClientRect();
+          consider(node.getAttribute('href') || node.getAttribute('xlink:href') || '', r.width || 1, r.height || 1);
+        }
+        for (const node of Array.from(box.querySelectorAll('*')).slice(0, 60)) {
+          const bg = getComputedStyle(node as Element).backgroundImage;
+          const hit = /url\(["']?(https?:[^"')]+)/i.exec(bg || '');
+          if (!hit) continue;
+          const r = (node as Element).getBoundingClientRect();
+          consider(hit[1], r.width || 1, r.height || 1);
+        }
+      }
       const buttons = [];
       for (const b of Array.from(box.querySelectorAll<HTMLElement>('[role="button"], button, [aria-label]'))) {
         const label = (b.getAttribute('aria-label') || b.textContent || '').trim();
@@ -328,7 +412,7 @@ async function readCards(page: Page): Promise<RawCard[]> {
         key,
         href,
         name,
-        image: picture ? picture.getAttribute('src') || '' : '',
+        image: picture,
         text: (box.innerText || '').trim(),
         buttons: buttons.slice(0, 8),
       });

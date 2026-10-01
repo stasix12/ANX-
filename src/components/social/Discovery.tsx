@@ -159,7 +159,13 @@ export function GroupRow({
 
         <TargetAvatar name={row.name} imageUrl={row.image_url || fallbackImage || null} channel="facebook_group" size={52} />
 
-        <div className="min-w-0 flex-1">
+        {/* THE WHOLE COLUMN RESERVES THE ✕, not just the name.
+            Moving the ✕ out of the row's flow bought the height, and put it on
+            top of the row's own button: measured 36×23px of overlap on "פתח
+            להצטרפות" at all three widths — a thumb aiming at the button would
+            hide the group instead. Reserving the space on the name alone left
+            every line BELOW it free to run under the ✕. */}
+        <div className="min-w-0 flex-1 pe-10">
           {/*
             `data-group-name` is a measurement hook and nothing else.
 
@@ -175,7 +181,7 @@ export function GroupRow({
               in an ellipsis halfway through the town it names; the brief asks
               for up to two lines, and the row is measured at all three phone
               widths so the extra line cannot push the card out of shape. */}
-          <p data-group-name dir="auto" className="line-clamp-2 pe-10 text-sm font-extrabold leading-tight text-mist-100">
+          <p data-group-name dir="auto" className="line-clamp-2 text-sm font-extrabold leading-tight text-mist-100">
             {row.name}
           </p>
           {/* THE FACTS AND THE ACTION SHARE A LINE WHEN THEY FIT.

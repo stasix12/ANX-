@@ -608,7 +608,11 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(/storage\.from\('social-media'\)\.upload\(objectPath/.test(worker), 'the bytes are stored in the same bucket the groups screen already uses');
   is(/createHash\('sha1'\)\.update\(externalId\)/.test(worker), "and a group's own id is hashed rather than pasted into a storage path");
   is(/page\.request\.get\(g\.image/.test(browser), "the bytes are fetched through the browser's own session, which is what makes a signed URL answer at all");
-  is(/bytes\.length < 500/.test(browser), 'a tracking pixel or an error page is not a picture, and would replace an initial with a blank square');
+  /* Was `bytes.length < 500`. A byte count is a guess about what a file IS,
+     and it threw away real thumbnails that compress well — permanently, since
+     a row holding a picture is never fetched again. The signature check below
+     says the same thing and says it correctly. */
+  is(/looksLikeImage\(bytes\)/.test(browser), 'a tracking pixel or an error page is not a picture, and would replace an initial with a blank square');
 
   /* The count reaches the owner, so "still letters" can be told apart from
      "the upload was refused" — he is on a storage account over its quota. */
@@ -944,6 +948,29 @@ const eq = (a: unknown, b: unknown, msg: string) => {
      which on screen is the same purple letters he already reported once. */
   const reader = readFileSync(new URL('../facebook/discover.ts', import.meta.url), 'utf8');
   is(/const PICTURE_LIMIT = MAX_GROUPS;/.test(reader), 'the picture cap matches how many groups a search may return, so one run finishes the job');
+
+  /*
+   * "שיראה תמונות של קבוצות שאני עוד לא שם."
+   *
+   * The groups he is NOT in are the ones furthest down a scrolled list — and
+   * those are exactly the cards Facebook has not finished loading. The reader
+   * took `box.querySelector('img')` and read its `src` ATTRIBUTE, which on a
+   * lazy card is a placeholder or a data: URI while the real address sits in
+   * currentSrc or srcset; some cards draw the thumbnail as a CSS background or
+   * an <svg><image> and have no <img> at all.
+   */
+  is(/img\.currentSrc \|\| img\.getAttribute\('src'\)/.test(reader), 'the picture is what the browser actually chose, not the attribute it started with');
+  is(/getAttribute\('srcset'\)/.test(reader), 'a srcset is read too, because a lazy card often has only that');
+  is(/querySelectorAll\('svg image'\)/.test(reader), 'and an <svg><image>, which has no <img> to find');
+  is(/backgroundImage/.test(reader), 'and a CSS background, same reason');
+  is(/if \(area <= bestArea\) return;/.test(reader), "and the LARGEST as rendered wins — the group's own thumbnail, never a badge on a button");
+
+  /* What comes back has to be an image, judged by the bytes. A row that holds
+     a picture is never fetched again, so one wrong answer is permanent. */
+  is(/if \(type && !\/\^image\\\/\/i\.test\(type\)\) continue;/.test(reader), 'a 200 that is not an image is refused — a login wall answers 200 and is kilobytes long');
+  is(/function looksLikeImage/.test(reader), 'and the bytes themselves are checked against the four formats Facebook serves');
+  is(!/bytes\.length < 500/.test(reader), 'the 500-byte floor is gone — it threw away real thumbnails that compress well, permanently');
+  is(/if \(out\.size >= PICTURE_LIMIT\) return;/.test(reader), 'the cap counts what SUCCEEDED, so a run of unfetchable cards cannot spend the whole allowance');
 
   /*
    * AND NO WHITE LABEL MAY SIT ON brand-300.

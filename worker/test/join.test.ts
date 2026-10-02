@@ -169,10 +169,27 @@ async function main(): Promise<void> {
     {
       /* More than the cap: the extra are not attempted, and the caller is told
          so rather than being left to think it did all of them. */
-      const many = Array.from({ length: JOIN_RUN_CAP + 3 }, () => at('already'));
+      const many = Array.from({ length: JOIN_RUN_CAP + 3 }, () => at('joined'));
       const run = await joinGroups(page, many, { onEach: async () => undefined, gapMs: 0 });
-      eq(run.results.length, JOIN_RUN_CAP, `a run stops at ${JOIN_RUN_CAP} groups`);
+      eq(run.results.length, JOIN_RUN_CAP, `a run stops after ${JOIN_RUN_CAP} joins`);
       eq(run.stoppedBy, 'cap', 'and says that is why, so the screen can offer to continue');
+    }
+
+    {
+      /*
+       * THE CAP COUNTS JOINS, NOT ADDRESSES — "אני רוצה לכל מה שאני מסמן".
+       *
+       * The screen now sends everything he ticked, including groups he turns
+       * out to be in already. Those cost Facebook nothing — no click, no
+       * request, no gap — so they must not spend a cap that exists to keep the
+       * account out of trouble. A run of forty groups he is already in is not
+       * forty joins; it is none.
+       */
+      const mixed = [...Array.from({ length: JOIN_RUN_CAP + 10 }, () => at('already')), at('joined')];
+      const run = await joinGroups(page, mixed, { onEach: async () => undefined, gapMs: 0 });
+      eq(run.stoppedBy, '', 'a list of groups we are already in does not hit the cap');
+      eq(run.results.length, mixed.length, 'and every one of them is still looked at');
+      eq(run.results.filter((r) => r.outcome === 'joined').length, 1, 'with the one real join at the end still made');
     }
 
     {

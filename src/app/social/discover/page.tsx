@@ -555,28 +555,49 @@ export default function DiscoverPage() {
    * him the publishing too. So the confirmation says the pace and the cap in
    * words rather than starting quietly and explaining afterwards.
    */
-  const joinable = pickedRows.filter((r) => r.membership !== 'member');
+  /*
+   * EVERYTHING HE TICKED IS SENT — "אני רוצה לכל מה שאני מסמן".
+   *
+   * This used to strip the rows whose membership says 'member' before sending,
+   * so three ticks arrived at the machine as one and the button read "הצטרף
+   * ל-1" with nothing on screen saying why. Two things were wrong with that.
+   * It hid the arithmetic from him, and it trusted the membership flag — which
+   * this file's own notes record as having been wrong about his groups twice.
+   *
+   * So the whole selection goes, with the ones we believe he is NOT in first:
+   * the run's cap counts groups it actually pressed (see joinGroups), a group
+   * he is already in costs nothing and no gap, and the order is what makes
+   * sure the cap is spent on the ones that need it.
+   */
+  const joinOrder = [...pickedRows].sort(
+    (a, b) => Number(a.membership === 'member') - Number(b.membership === 'member'),
+  );
+  const alreadyMine = pickedRows.filter((r) => r.membership === 'member').length;
 
   async function joinPicked() {
-    if (!joinable.length || busyId === 'join') return;
+    if (!joinOrder.length || busyId === 'join') return;
     if (workerOnline === false) {
       toast('התוכנה במחשב לא פועלת, ולכן אי אפשר להצטרף לקבוצות.', 'error');
       return;
     }
-    const take = Math.min(joinable.length, JOIN_RUN_CAP);
+    const fresh = joinOrder.length - alreadyMine;
+    const take = Math.min(Math.max(fresh, 1), JOIN_RUN_CAP);
     const ok = await confirm.ask({
       title: `להצטרף ל-${take} קבוצות?`,
       body:
         `התוכנה תפתח קבוצה אחרי קבוצה ותלחץ "הצטרפות" — לאט, עם הפסקה של דקה עד שתיים בין אחת לשנייה, ` +
-        `כדי שפייסבוק לא יחסום את החשבון. זה ייקח בערך ${Math.round((take * 1.5) / 1) } דקות והכל ירוץ ברקע.\n\n` +
+        `כדי שפייסבוק לא יחסום את החשבון. זה ייקח בערך ${Math.max(1, Math.round(take * 1.5))} דקות והכל ירוץ ברקע.\n\n` +
+        /* The arithmetic in words, because the button's number is otherwise a
+           mystery: he ticked three and it offered one. */
+        (alreadyMine ? `סימנת ${joinOrder.length}; ב-${alreadyMine} אתה כבר חבר, אז אין שם מה ללחוץ.\n\n` : '') +
         `קבוצה שמבקשת לענות על שאלות הצטרפות — נדלג עליה ותענה בעצמך. אם פייסבוק יגביל, נעצור מיד.` +
-        (joinable.length > take ? `\n\nסימנת ${joinable.length}; ${take} זו המכסה לריצה אחת — הרץ שוב להמשך.` : ''),
+        (fresh > JOIN_RUN_CAP ? `\n\n${JOIN_RUN_CAP} זו המכסה לריצה אחת — הרץ שוב להמשך.` : ''),
       confirmLabel: 'התחל',
     });
     if (!ok) return;
     setBusyId('join');
     try {
-      const { id } = await startJoinGroups(workerId, joinable.map((r) => r.url));
+      const { id } = await startJoinGroups(workerId, joinOrder.map((r) => r.url));
       const done = await waitForWorkerCommand(id, JOIN_WAIT_MS);
       const [found, mine] = await Promise.all([active ? listDiscovered(active) : Promise.resolve(null), listJoined()]);
       if (found) setRows(found);
@@ -815,7 +836,13 @@ export default function DiscoverPage() {
               >
                 <CloseIcon aria-hidden className="h-4 w-4" />
               </button>
-              <p className="truncate text-sm font-extrabold text-on-brand">נבחרו {picked.size} קבוצות</p>
+              {/* The count, and — when the two differ — why the button offers
+                  fewer. "נבחרו 3" over a button saying 1 is the screen keeping
+                  its own arithmetic to itself. */}
+              <p className="truncate text-sm font-extrabold text-on-brand">
+                נבחרו {picked.size}
+                {alreadyMine > 0 && <span className="font-bold text-on-brand/75"> · ב-{alreadyMine} כבר חבר</span>}
+              </p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               {/*
@@ -824,14 +851,14 @@ export default function DiscoverPage() {
                 pages and find no button to press on any of them is worse than
                 no button: it spends the run's cap and reports nothing.
               */}
-              {joinable.length > 0 && (
+              {joinOrder.length > alreadyMine && (
                 <Button
                   busy={busyId === 'join'}
                   variant="secondary"
                   className="border-transparent bg-ink-900 text-brand-400 hover:bg-ink-800"
                   onClick={joinPicked}
                 >
-                  הצטרף ל-{Math.min(joinable.length, JOIN_RUN_CAP)}
+                  הצטרף ל-{Math.min(joinOrder.length - alreadyMine, JOIN_RUN_CAP)}
                 </Button>
               )}
               <Button

@@ -244,12 +244,32 @@ export async function joinGroups(
   },
 ): Promise<{ results: JoinResult[]; stoppedBy: '' | 'blocked' | 'unavailable' | 'cap' | 'stopped' }> {
   const results: JoinResult[] = [];
-  const todo = urls.slice(0, JOIN_RUN_CAP);
-  let stoppedBy: '' | 'blocked' | 'unavailable' | 'cap' | 'stopped' = urls.length > JOIN_RUN_CAP ? 'cap' : '';
+  let stoppedBy: '' | 'blocked' | 'unavailable' | 'cap' | 'stopped' = '';
+  /*
+   * THE CAP COUNTS JOINS, NOT ADDRESSES — and that is the difference between a
+   * limit and an obstacle.
+   *
+   * "למה הוא נותן להצתרף רק לאחד, אני רוצה לכל מה שאני מסמן." The screen used
+   * to strip the groups it believed he was already in before sending them, so
+   * a selection of three arrived as one and he was told nothing about the other
+   * two. Now everything he ticked is sent and this decides what counts.
+   *
+   * A group we turn out to be in already, or one with no join control, costs
+   * Facebook nothing — no click, no request, no gap — so it cannot sensibly
+   * spend a cap that exists to keep the account out of trouble. Only a group
+   * we actually pressed does.
+   *
+   * It also makes the run immune to a wrong membership flag, which matters
+   * here: the membership parser has been wrong about this owner's groups twice
+   * before, and a screen that silently drops a group on its say-so would hide
+   * exactly the group he meant to join.
+   */
+  let attempts = 0;
 
-  for (let i = 0; i < todo.length; i += 1) {
+  for (let i = 0; i < urls.length; i += 1) {
     if (hooks.stopped?.()) return { results, stoppedBy: 'stopped' };
-    const result = await joinOneGroup(page, todo[i]);
+    if (attempts >= JOIN_RUN_CAP) return { results, stoppedBy: 'cap' };
+    const result = await joinOneGroup(page, urls[i]);
     results.push(result);
     await hooks.onEach(result);
 
@@ -259,9 +279,12 @@ export async function joinGroups(
       return { results, stoppedBy: result.outcome };
     }
 
+    /* A group we did not press is not an attempt. */
+    if (result.outcome !== 'already' && result.outcome !== 'no-button') attempts += 1;
+
     /* No gap after the last one, and none after a group we did not touch:
        being already a member cost Facebook nothing. */
-    const last = i === todo.length - 1;
+    const last = i === urls.length - 1;
     if (last || result.outcome === 'already' || result.outcome === 'no-button') continue;
 
     let left = hooks.gapMs ?? gap();

@@ -9,4 +9,4 @@
  * fixed. The only evidence was a version number in one line of its terminal
  * output, which nobody reads.
  */
-export const WORKER_VERSION = '3.99.0';
+export const WORKER_VERSION = '4.0.0';

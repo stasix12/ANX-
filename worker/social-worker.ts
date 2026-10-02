@@ -1788,6 +1788,11 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       campaignId: item.campaign_id ?? pp.campaign_id,
       variantId: v?.id ?? null,
       headless: jobEnv.headless,
+      /* The id this worker signed in as. The composer uses it to verify the
+         post on `/groups/<id>/user/<our id>/` when the feed does not show it —
+         the same page the comment feature has relied on since the feed proved
+         unreliable on this machine. */
+      authorId: state.accountId ?? '',
       /* The rule's own instant, not a second reading of the same column: the
          gate above decides WHETHER to claim, rules.ts decides when the click
          may land, and only one of them may own that number. */

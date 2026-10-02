@@ -51,6 +51,19 @@
   /* A post the way Facebook builds one: an article, a comment button that
      REVEALS the box rather than showing it, and Enter to submit. */
   function addArticle(text) {
+    /*
+      A FEED THAT ACCEPTED THE POST AND DOES NOT SHOW IT.
+
+      This is the owner's actual situation, not a hypothetical: his groups pin
+      announcements to the top and Facebook virtualises what is under them, so
+      a post made a minute ago is real, visible to every member, and simply not
+      in the DOM of a feed nobody has scrolled. Verification looked only at
+      this feed and reported "לא הצלחתי לאמת" on nearly every publication.
+
+      The flag is set by the test with addInitScript, so the fixture is
+      unchanged for every other case that uses it.
+    */
+    if (window.__hidePublished) return;
     const art = document.createElement('div');
     art.setAttribute('role', 'article');
     const body = document.createElement('p');

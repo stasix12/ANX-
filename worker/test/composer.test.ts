@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
@@ -400,6 +400,82 @@ async function main() {
   const trapTruth = (await page10.evaluate(() => (window as unknown as { __truth: () => Truth }).__truth())) as Truth;
   assert.deepEqual(trapTruth.sent, [], 'and nothing at all is published');
   console.log('✓ a composer that mounts pictures of its own never passes for an attachment');
+
+  /* ─────────────────────────────────────────────────────────────────────
+   * "למה על כל פוסט הוא רושם לא הצלחתי לאמת ?"
+   *
+   * Because verification only ever looked at the GROUP FEED — the worst of
+   * the three places one of our posts can be found, and the one this file's
+   * own lookupPages() lists LAST with the note that it "failed on the owner's
+   * machine: the screen said 'לא מצאנו את הפוסט הזה בקבוצה' about posts that
+   * were plainly there". That lesson was learned for commenting and never
+   * reached publishing.
+   *
+   * Reproduced here exactly: a group that ACCEPTS the post and whose feed
+   * never shows it (pinned announcements on top, Facebook virtualising what
+   * is under them), and `/groups/<id>/user/<our id>/` — Facebook's own filter
+   * to one member's posts — where it is the first item.
+   *
+   * Served from facebook.com rather than file://, because the lookup is
+   * built with parseGroupUrl and that refuses anything else, as it should.
+   * ───────────────────────────────────────────────────────────────────── */
+  {
+    const groupHtml = readFileSync(path.resolve(__dirname, 'mock-group.html'), 'utf8');
+    const POST = 'ניקוי ספות וריפודים בבאר שבע מבצע החודש';
+    const ourPostsHtml = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+<title>באר שבע ביחד | Facebook</title></head><body><main>
+<div role="article"><p>${POST}</p>
+<a href="/groups/123/posts/4567/"><abbr>לפני דקה</abbr></a></div>
+</main></body></html>`;
+
+    const serve = async (target: import('playwright-core').Page) => {
+      await target.route('https://www.facebook.com/**', (route) => {
+        const url = route.request().url();
+        const body = url.includes('/user/777') ? ourPostsHtml : groupHtml;
+        return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body });
+      });
+      /* The feed takes the post and never renders it — see mock-group.html. */
+      await target.addInitScript(() => {
+        (window as unknown as { __hidePublished: boolean }).__hidePublished = true;
+      });
+    };
+
+    const pageA = await context.newPage();
+    await serve(pageA);
+    const found = await publishToGroup(pageA, {
+      groupUrl: 'https://www.facebook.com/groups/123',
+      text: POST,
+      images: [],
+      video: null,
+      onStep: async () => undefined,
+      authorId: '777',
+    });
+    assert.equal(found.outcome, 'published', 'the post went out');
+    assert.equal(found.verified, true, 'and is verified on our own posts page, which is where it is');
+    assert.equal(found.permalink, 'https://www.facebook.com/groups/123/posts/4567/', 'and that page gives the address the comment feature needs');
+    await pageA.close();
+    console.log('✓ a feed that never shows the post is no longer "לא הצלחתי לאמת" — our own posts page is');
+
+    /*
+     * THE CONTROL, and it is what proves the line above is the new page doing
+     * the work rather than something else: the identical publication with no
+     * account id cannot reach that page, and reports exactly what the owner
+     * has been seeing.
+     */
+    const pageB = await context.newPage();
+    await serve(pageB);
+    const blind = await publishToGroup(pageB, {
+      groupUrl: 'https://www.facebook.com/groups/123',
+      text: POST,
+      images: [],
+      video: null,
+      onStep: async () => undefined,
+    });
+    assert.equal(blind.outcome, 'published', 'the post still went out');
+    assert.equal(blind.verified, false, 'and without an account id there is nowhere left to look — which is the old behaviour, reproduced');
+    await pageB.close();
+    console.log('✓ and with no account id it still says so honestly, rather than guessing');
+  }
 
   await browser.close();
   console.log('composer tests OK');

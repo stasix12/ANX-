@@ -28,6 +28,8 @@ export interface GroupPublishInput {
   notBefore?: string | null;
   /** Called every few seconds while the post is held for `notBefore`. */
   onHold?: () => Promise<void>;
+  /** Our own Facebook user id, so the composer can verify on our posts page. */
+  authorId?: string;
   onStep: (step: ComposerStep) => Promise<void>;
   /** Present when the run must pause before the final click. */
   confirm?: (page: Page) => Promise<'confirmed' | 'declined' | 'timeout' | 'stopped'>;
@@ -78,6 +80,7 @@ export class FacebookGroupBrowserAdapter {
         confirm: input.confirm,
         notBefore: input.notBefore ?? null,
         onHold: input.onHold,
+        authorId: input.authorId ?? '',
       });
     } catch (err) {
       // Screenshot while the page still shows what went wrong.

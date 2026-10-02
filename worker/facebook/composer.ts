@@ -44,6 +44,15 @@ export interface ComposeInput {
   /** Called every few seconds while the post is held for `notBefore`. */
   onHold?: () => Promise<void>;
   /**
+   * OUR OWN Facebook user id — what turns "is it in the feed somewhere" into
+   * "is it on the page that lists only our posts".
+   *
+   * Empty is allowed and only costs the last lookup below; the account id is
+   * learned on sign-in and a worker that has not signed in yet has no post to
+   * verify either.
+   */
+  authorId?: string;
+  /**
    * Text to leave as the FIRST COMMENT on the post that was just published.
    *
    * Empty or absent means none. It exists because contact details in the body
@@ -300,10 +309,60 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     try {
       await page.goto(input.groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
       await page.waitForTimeout(1200);
-      article = await findPostArticle(page, input.text, 1, 6_000);
+      /*
+       * THREE PASSES, NOT ONE, because a group feed does not open on our post.
+       *
+       * Most of these groups pin one to three announcements to the top, and
+       * Facebook virtualises what is below them — so a post made ninety
+       * seconds ago can be real, visible to everyone, and simply not in the
+       * DOM yet on a page that has not been scrolled. One glance said "not
+       * there" and the owner got "לא הצלחתי לאמת" under a post he could see.
+       */
+      article = await findPostArticle(page, input.text, 3, 8_000);
     } catch {
       /* Best effort throughout: an unverified post is reported as unverified,
          never as a failure — it is on Facebook either way. */
+    }
+  }
+
+  /*
+   * ─── AND THE PAGE THAT ACTUALLY ANSWERS THE QUESTION ────────────────────
+   *
+   * "למה על כל פוסט הוא רושם לא הצלחתי לאמת?"
+   *
+   * Because until now verification only ever looked at the GROUP FEED, which
+   * is the worst of the three places a post of ours can be found — and this
+   * file already says so, in lookupPages() thirty lines down: the feed is
+   * listed LAST there, "only really useful for a post from minutes ago", and
+   * the owner's-own-posts page is listed FIRST with the note that the other
+   * two "both failed on the owner's machine: the screen said 'לא מצאנו את
+   * הפוסט הזה בקבוצה' about posts that were plainly there."
+   *
+   * That lesson was learned for commenting and never reached publishing.
+   * `/groups/<id>/user/<our id>/` is Facebook's own filter to one member's
+   * posts in one group: what loads is the three or four things WE put there,
+   * newest first, with nobody else's afternoon in between and nothing pinned
+   * above them. The post we made a minute ago is the first item on it.
+   *
+   * LAST, AND ONLY WHEN THE CHEAP LOOKS FAILED, so a publication that
+   * verified in six seconds still costs six seconds. And it is still best
+   * effort: not finding it here means we say we could not verify, exactly as
+   * before — never that the post failed, because it is on Facebook either way.
+   *
+   * IT ALSO BUYS THE PERMALINK. `permalink` is read off whichever article is
+   * found, and the comment feature and the counters both need that address;
+   * every post that reached this point used to lose it.
+   */
+  if (!article && input.authorId) {
+    try {
+      const group = parseGroupUrl(input.groupUrl);
+      if (group) {
+        await page.goto(`${group.url}/user/${input.authorId}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+        await page.waitForTimeout(2000);
+        article = await findPostArticle(page, input.text, 4, 8_000);
+      }
+    } catch {
+      /* Same rule as above. */
     }
   }
 

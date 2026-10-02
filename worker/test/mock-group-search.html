@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head><meta charset="utf-8"><title>חיפוש קבוצות | Facebook</title>
+<style>
+  body{font-family:sans-serif;background:#f0f2f5;margin:0}
+  main{max-width:680px;margin:0 auto;padding:12px}
+  .card{background:#fff;border-radius:8px;padding:12px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start;min-height:92px}
+  .card img{width:60px;height:60px;border-radius:8px;object-fit:cover;flex:0 0 auto}
+  .meta{min-width:0}
+  .title{font-weight:700;display:block;color:#050505;text-decoration:none}
+  .sub{color:#65676b;font-size:13px;min-height:18px}
+  .join{margin-top:6px}
+  /* A screenful, so most cards start well below the fold — which is the whole
+     point of this fixture. */
+  .spacer{height:900px}
+</style></head>
+<body>
+<main id="results"></main>
+<script>
+/*
+ * A FACEBOOK GROUP SEARCH RESULTS PAGE THAT LAZY-RENDERS, which is the one
+ * property of the real page that the reader has to survive and that no fixture
+ * in this suite had.
+ *
+ * On the real page a result card exists in the DOM — its link, its name — long
+ * before Facebook fills in "25 אלפי חברים · ציבורית" and swaps the avatar's
+ * placeholder for the real picture. Both happen when the card is scrolled near
+ * the viewport. A reader that walks the list once gets every group's NAME and
+ * almost none of their facts.
+ *
+ * So: every card renders its link and its title immediately, and reveals its
+ * counts line and its real picture only after it has been within a screenful
+ * of the viewport. That is reproduced with a scroll listener rather than an
+ * IntersectionObserver so it also works in a headless page that is scrolled
+ * with window.scrollBy, which is what the reader does.
+ */
+const GROUPS = [
+  { id: 'g1', name: 'באר שבע ביחד', sub: '25 אלפי חברים · ציבורית' },
+  { id: 'g2', name: 'דירות להשכרה בבאר שבע', sub: '12 אלף חברים · ציבורית' },
+  { id: 'g3', name: 'באר שבע נדל"ן', sub: '2 אלפי חברים · ציבורית' },
+  { id: 'g4', name: 'דרושים בבאר שבע', sub: '9 אלפי חברים · ציבורית' },
+  { id: 'g5', name: 'עדכונים באר שבע והסביבה', sub: '10 אלפי חברים · ציבורית' },
+  { id: 'g6', name: 'דירות למכירה בבאר שבע 0546329669', sub: '6 אלף חברים · ציבורית' },
+  { id: 'g7', name: 'באר שבע לכולם ! Беэр-Шева Для Всех', sub: '1 000 участников · Открытая группа' },
+  { id: 'g8', name: 'באר שבע העיר שלי', sub: '41 אלפי חברים · ציבורית' },
+  /*
+   * THE CARD WHOSE PICTURE IS ALREADY THERE AND WHOSE COUNT IS NOT.
+   *
+   * Facebook caches avatars, so a group the account has seen before draws its
+   * thumbnail on the first paint while its counts line still waits for the
+   * card to come into view. Such a card is invisible to a second pass that
+   * chases MISSING PICTURES — which is what that pass did — so it is the one
+   * case that proves the pass must also chase missing facts.
+   */
+  { id: 'g9', name: 'השכרת דירות בבאר שבע והסביבה', sub: '12 אלפי חברים · ציבורית', pictureReady: true },
+];
+
+/* A real picture, inline, so the fixture never reaches the network and the
+   reader's "is it bigger than 24px and does it start with http" test still has
+   something to decide about. A data: URI would be rejected by that test, which
+   is correct — so the served URL is an https one this test routes. */
+const PIC = 'https://scontent.example.com/group-avatar.png';
+const PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+
+const results = document.getElementById('results');
+const cards = [];
+for (const g of GROUPS) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML =
+    '<a href="/groups/' + g.id + '/" aria-label="' + g.name + '"><img src="' + (g.pictureReady ? PIC : PLACEHOLDER) + '" alt=""></a>' +
+    '<div class="meta">' +
+      '<a class="title" href="/groups/' + g.id + '/">' + g.name + '</a>' +
+      '<div class="sub"></div>' +
+      '<div class="join"><div role="button" aria-label="הצטרפות לקבוצה">הצטרפות לקבוצה</div></div>' +
+    '</div>';
+  results.appendChild(card);
+  const spacer = document.createElement('div');
+  spacer.className = 'spacer';
+  results.appendChild(spacer);
+  cards.push({ g, card, filled: false });
+}
+
+function reveal() {
+  for (const c of cards) {
+    if (c.filled) continue;
+    const r = c.card.getBoundingClientRect();
+    /* Within one screenful of the viewport, which is when the real page
+       commits a card's details. */
+    if (r.top > window.innerHeight * 2 || r.bottom < -window.innerHeight) continue;
+    c.card.querySelector('.sub').textContent = c.g.sub;
+    c.card.querySelector('img').setAttribute('src', PIC);
+    c.filled = true;
+  }
+}
+reveal();
+window.addEventListener('scroll', reveal, { passive: true });
+/* Facebook also fills a card in as its own fetches land, not only on scroll. */
+setInterval(reveal, 200);
+</script>
+</body>
+</html>

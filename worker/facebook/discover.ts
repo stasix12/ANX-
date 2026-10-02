@@ -1,5 +1,14 @@
 import type { Page } from 'playwright-core';
-import { dedupe, interpretCard, nameMatches, type DiscoveredGroup, type RawCard } from '../../src/lib/social/discovery';
+import {
+  dedupe,
+  interpretCard,
+  nameMatches,
+  parseMembers,
+  parsePrivacy,
+  withoutName,
+  type DiscoveredGroup,
+  type RawCard,
+} from '../../src/lib/social/discovery';
 
 /*
  * גילוי קבוצות, the browser half: OPEN FACEBOOK'S OWN SEARCH AND READ IT.
@@ -225,8 +234,38 @@ export async function searchGroups(page: Page, query: string, opts: { havePictur
    * Facebook — these are the same images the page loads for anyone scrolling
    * it — and nothing is opened that the search did not already open.
    */
+  /*
+   * ─── AND THE SAME PASS HAS TO RECOVER THE FACTS, NOT ONLY THE PICTURES ──
+   *
+   * "עדיין יש קבוצות שלא מראה את המספר חברים, וגם לא תמונות."
+   *
+   * The two symptoms are one bug, and the picture half of it was fixed alone.
+   * A card's "25 אלפי חברים · ציבורית" line is filled in by Facebook at the
+   * same moment as its avatar — when the card nears the viewport — so a card
+   * the collecting loop walked past before it rendered has neither.
+   *
+   * AND THE LOOP CANNOT NOTICE, because its stop condition counts GROUPS
+   * FOUND, not facts learned: a card's LINK is in the DOM from the first
+   * paint, so once every result has been seen once the loop breaks, with most
+   * of them still half-read. Measured against a lazy-rendering fixture
+   * (worker/test/discover-scan.test.ts): four of eight groups came back with
+   * no member count at all, and three rounds of fixes to parseMembers could
+   * never have reached a single one of them — the parser was never handed the
+   * text.
+   *
+   * So the second pass asks for both. Same scroll, same stops, same budget:
+   * the card is brought into view for its picture and its own line is read
+   * back while it is there.
+   */
   const wanted = new Set(
-    groups.filter((g) => !have.has(g.externalId) && !/^https?:\/\//i.test(g.image)).map((g) => g.externalId),
+    groups
+      .filter(
+        (g) =>
+          (!have.has(g.externalId) && !/^https?:\/\//i.test(g.image)) ||
+          g.members === null ||
+          g.privacy === 'unknown',
+      )
+      .map((g) => g.externalId),
   );
   await fillPictures(page, groups, wanted);
 
@@ -291,8 +330,15 @@ const PICTURE_SETTLE_MS = 450;
 /* ONE SEARCH FINISHES THE JOB, the same rule PICTURE_LIMIT is written to.
    A run that gives up halfway leaves rows drawing letters, which is
    indistinguishable on screen from the bug this pass exists to fix — so the
-   budget is generous and the number still unfilled is reported either way. */
-const PICTURE_BUDGET_MS = 45_000;
+   budget is generous and the number still unfilled is reported either way.
+
+   RAISED FROM 45s WITH THE PASS'S JOB: it now stops on cards that are missing
+   a member count as well as ones missing a picture, and on a results page
+   where Facebook had cached the avatars that is a set this pass never used to
+   visit at all. A search is something the owner asks for and waits for once;
+   coming back with nine groups and four of their counts is the thing he has
+   reported three times. */
+const PICTURE_BUDGET_MS = 75_000;
 
 async function fillPictures(page: Page, groups: DiscoveredGroup[], want: Set<string>): Promise<void> {
   if (!want.size) return;
@@ -331,31 +377,97 @@ async function fillPictures(page: Page, groups: DiscoveredGroup[], want: Set<str
     const seen = await page
       .evaluate((wanted: string[]) => {
         const want = new Set(wanted);
-        const found: Record<string, string> = {};
+        const found: Record<string, { image: string; text: string }> = {};
         for (const a of Array.from(document.querySelectorAll('a[href*="/groups/"]'))) {
           const hit = (a.getAttribute('href') || '').match(/\/groups\/([^/?#]+)/i);
           if (!hit || !want.has(hit[1]) || found[hit[1]]) continue;
-          let node: Element | null = a;
-          for (let up = 0; up < 4 && node && !found[hit[1]]; up += 1) {
-            for (const img of Array.from(node.querySelectorAll('img'))) {
-              const r = img.getBoundingClientRect();
-              /* A group's own thumbnail, never the little mark on a button. */
-              if (r.width < 24 || r.height < 24) continue;
-              const url = img.currentSrc || img.getAttribute('src') || '';
-              if (!/^https?:\/\//i.test(url)) continue;
-              found[hit[1]] = url;
-              break;
+          /*
+           * THE CARD'S BOX, BY THE SAME RULE readCards USES: climb while the
+           * subtree is still about ONE group, and stop at the parent that
+           * reaches a second one.
+           *
+           * A fixed number of levels does not work and the first version of
+           * this proved it: four parents up from a link in a short card is the
+           * results CONTAINER, whose innerText is every card on the page — so
+           * all four of the groups that were missing a count were given the
+           * FIRST card's count instead. Reading the wrong group's number is
+           * worse than reading none.
+           */
+          let box: Element = a;
+          let node: Element | null = a.parentElement;
+          for (let up = 0; up < 8 && node; up += 1) {
+            const ids = new Set<string>();
+            for (const link of Array.from(node.querySelectorAll('a[href*="/groups/"]'))) {
+              const other = (link.getAttribute('href') || '').match(/\/groups\/([^/?#]+)/i);
+              if (other) ids.add(other[1]);
             }
+            if (ids.size > 1) break;
+            box = node;
             node = node.parentElement;
           }
+
+          let image = '';
+          for (const img of Array.from(box.querySelectorAll('img'))) {
+            const r = img.getBoundingClientRect();
+            /* A group's own thumbnail, never the little mark on a button. */
+            if (r.width < 24 || r.height < 24) continue;
+            const url = img.currentSrc || img.getAttribute('src') || '';
+            if (!/^https?:\/\//i.test(url)) continue;
+            image = url;
+            break;
+          }
+          /* innerText and not textContent: only innerText reflects what is
+             actually RENDERED, which is the one thing this pass is about. */
+          const text = ((box as HTMLElement).innerText || '').trim();
+          found[hit[1]] = { image, text };
         }
         return found;
       }, [...want])
-      .catch(() => ({}) as Record<string, string>);
-    for (const [id, url] of Object.entries(seen)) {
+      .catch(() => ({}) as Record<string, { image: string; text: string }>);
+
+    for (const [id, card] of Object.entries(seen)) {
       const g = byId.get(id);
-      if (g) g.image = url;
-      want.delete(id);
+      if (!g) {
+        want.delete(id);
+        continue;
+      }
+      if (card.image) g.image = card.image;
+      /*
+       * A KNOWN VALUE IS NEVER REPLACED BY AN UNKNOWN ONE — the same rule
+       * dedupe() applies to two sightings of one card, for the same reason:
+       * this read can catch a card mid-render too, and a second half-read
+       * must not undo the first good one.
+       */
+      if (card.text) {
+        const without = withoutName(card.text, g.name);
+        if (g.members === null) {
+          const members = parseMembers(without);
+          if (members !== null) g.members = members;
+        }
+        if (g.privacy === 'unknown') {
+          const privacy = parsePrivacy(without);
+          if (privacy !== 'unknown') g.privacy = privacy;
+        }
+      }
+      /*
+       * WHO LEAVES THE SET, and it is the one rule that decides whether this
+       * pass terminates AND whether it finishes its job.
+       *
+       * A card is dropped when there is nothing left to learn about it, OR
+       * when it is the card this stop actually SCROLLED TO — it has had its
+       * turn, and a group whose card genuinely carries no count must not hold
+       * the loop for every remaining stop.
+       *
+       * Everything else stays. The first version dropped any card that came
+       * back with a picture and any text at all, and a card's text contains
+       * its NAME from the first paint — so a group whose avatar was cached and
+       * whose counts line had not rendered was dropped on the first stop,
+       * before it was ever brought into view. That is exactly the card this
+       * pass exists for, and it was the only one the fixture still failed on.
+       */
+      const stillWants =
+        !/^https?:\/\//i.test(g.image) || g.members === null || g.privacy === 'unknown';
+      if (!stillWants || id === next) want.delete(id);
     }
   }
 }

@@ -363,6 +363,27 @@ export async function startJoinedScan(workerId: string | null): Promise<{ id: st
 }
 
 /**
+ * ASK THE MACHINE TO JOIN THE GROUPS HE TICKED.
+ *
+ * "תוסיף לי אופציה שאני יכול לסמן את הקבוצות האלה שאני לא נמצא בהם, ושהתוכנה
+ *  תפתח קבוצה קבוצה ותצרתף אוטומטי."
+ *
+ * ADDRESSES AND NOT IDS, because the worker opens them: an id would have to be
+ * turned into an address somewhere, and the place that builds a URL a browser
+ * will visit with his live session should be the place that can be read for
+ * it. The worker checks every one of them again with parseGroupUrl before it
+ * opens anything — this list comes from a screen, and a screen is not
+ * evidence.
+ *
+ * A COMMAND OF ITS OWN rather than riding `discover`, which costs one line of
+ * SQL: the discover branch is documented "No join, no request, no click", and
+ * that sentence is what makes it safe to point at a box the owner types into.
+ */
+export async function startJoinGroups(workerId: string | null, urls: string[]): Promise<{ id: string }> {
+  return sendWorkerCommand(workerId, 'join', { urls: urls.slice(0, 200) });
+}
+
+/**
  * Everything that scan has ever found — AND ONLY WHAT IT CONFIRMED.
  *
  * The bucket alone is not enough. It was, and the owner watched ninety-three
@@ -1795,7 +1816,10 @@ export async function listWorkers(): Promise<(SocialWorker & { online: boolean }
 export async function sendWorkerCommand(
   workerId: string | null,
   command: WorkerCommandName,
-  payload?: Record<string, string>,
+  /* A list of addresses is a legitimate payload now (see startJoinGroups), so
+     this is no longer a map of strings. Still JSON and still one-time: the
+     worker empties the column in the same update that claims the command. */
+  payload?: Record<string, string | string[]>,
 ): Promise<{ id: string }> {
   return unwrap<{ id: string }>(
     await db()
@@ -1858,8 +1882,12 @@ export const COMMAND_WAIT_MS = 150_000;
  * A read that throws (a phone that lost signal for a moment) is not an answer
  * either and simply costs one tick.
  */
-export async function waitForWorkerCommand(id: string): Promise<WorkerCommand | null> {
-  for (let waited = 0; waited < COMMAND_WAIT_MS; waited += COMMAND_POLL_MS) {
+export async function waitForWorkerCommand(id: string, waitMs = COMMAND_WAIT_MS): Promise<WorkerCommand | null> {
+  /* The default suits a command that answers in seconds. A join run is paced
+     on purpose — a minute or two between groups — so its caller passes its own
+     ceiling rather than being told after thirty seconds that the machine is
+     slow, which it is not: it is being careful. */
+  for (let waited = 0; waited < waitMs; waited += COMMAND_POLL_MS) {
     await new Promise((done) => setTimeout(done, COMMAND_POLL_MS));
     const cmd = await getWorkerCommand(id).catch(() => null);
     if (cmd?.status === 'done' || cmd?.status === 'failed') return cmd;

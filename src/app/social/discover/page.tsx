@@ -12,6 +12,7 @@ import {
   ErrorState,
   Notice,
   SkeletonList,
+  useConfirm,
   useToast,
 } from '@/components/social/ui';
 import {
@@ -24,6 +25,7 @@ import {
   listTargetPictures,
   listWorkers,
   startDiscovery,
+  startJoinGroups,
   startJoinedScan,
   watchSearch,
   waitForWorkerCommand,
@@ -81,6 +83,13 @@ import { CloseIcon, EyeIcon, SearchIcon, UsersIcon } from '@/components/icons';
 const FILTERS: DiscoveryFilter[] = ['all', 'none', 'member', 'requested', 'public', 'private'];
 const SORTS: DiscoverySort[] = ['relevance', 'members', 'name'];
 
+/* The run's own ceiling, mirroring worker/facebook/join.ts. Fifteen groups at
+   roughly a minute and a half each is a little over twenty minutes, so the
+   screen waits half an hour before it stops watching — and says the run
+   continues rather than that it failed. */
+const JOIN_RUN_CAP = 15;
+const JOIN_WAIT_MS = 30 * 60_000;
+
 export default function DiscoverPage() {
   const [text, setText] = useState('');
   /** The phrase the rows on screen belong to. Not the same as `text`, which
@@ -110,6 +119,10 @@ export default function DiscoverPage() {
   const [workerOnline, setWorkerOnline] = useState<boolean | null>(null);
   const [workerId, setWorkerId] = useState<string | null>(null);
   const toast = useToast();
+  /* The product's own dialog, not window.confirm: a join run is the one action
+     here that changes his Facebook account, and the browser's native box is
+     unstyled, untranslated and blocked outright in some webviews. */
+  const confirm = useConfirm();
 
   /* The search that produced what is on screen, for "חדשות מאז החיפוש האחרון". */
   const activeSearch = useMemo(
@@ -491,6 +504,59 @@ export default function DiscoverPage() {
 
   const pickedRows = shown.filter((r) => picked.has(r.id));
 
+  /*
+   * ───────── הצטרפות אוטומטית לקבוצות שסומנו ──────────────────────────────
+   *
+   * "תוסיף לי אופציה שאני יכול לסמן את הקבוצות האלה שאני לא נמצא בהם, ושהתוכנה
+   *  תפתח קבוצה קבוצה ותצרתף אוטומטי."
+   *
+   * ONLY THE ONES HE IS NOT IN. A selection made on this screen can hold groups
+   * he already belongs to — he ticks a row to walk through it — and sending
+   * those would spend the run's cap on pages where there is no button to press.
+   *
+   * AND HE IS TOLD THE PRICE BEFORE IT STARTS. Joining is the fastest way there
+   * is to collect a temporary block on a Facebook account, and a block costs
+   * him the publishing too. So the confirmation says the pace and the cap in
+   * words rather than starting quietly and explaining afterwards.
+   */
+  const joinable = pickedRows.filter((r) => r.membership !== 'member');
+
+  async function joinPicked() {
+    if (!joinable.length || busyId === 'join') return;
+    if (workerOnline === false) {
+      toast('התוכנה במחשב לא פועלת, ולכן אי אפשר להצטרף לקבוצות.', 'error');
+      return;
+    }
+    const take = Math.min(joinable.length, JOIN_RUN_CAP);
+    const ok = await confirm.ask({
+      title: `להצטרף ל-${take} קבוצות?`,
+      body:
+        `התוכנה תפתח קבוצה אחרי קבוצה ותלחץ "הצטרפות" — לאט, עם הפסקה של דקה עד שתיים בין אחת לשנייה, ` +
+        `כדי שפייסבוק לא יחסום את החשבון. זה ייקח בערך ${Math.round((take * 1.5) / 1) } דקות והכל ירוץ ברקע.\n\n` +
+        `קבוצה שמבקשת לענות על שאלות הצטרפות — נדלג עליה ותענה בעצמך. אם פייסבוק יגביל, נעצור מיד.` +
+        (joinable.length > take ? `\n\nסימנת ${joinable.length}; ${take} זו המכסה לריצה אחת — הרץ שוב להמשך.` : ''),
+      confirmLabel: 'התחל',
+    });
+    if (!ok) return;
+    setBusyId('join');
+    try {
+      const { id } = await startJoinGroups(workerId, joinable.map((r) => r.url));
+      const done = await waitForWorkerCommand(id, JOIN_WAIT_MS);
+      const [found, mine] = await Promise.all([active ? listDiscovered(active) : Promise.resolve(null), listJoined()]);
+      if (found) setRows(found);
+      setJoined(mine);
+      setPicked(new Set());
+      if (done?.status === 'failed') toast(done.result || 'ההצטרפות נכשלה.', 'error');
+      else if (!done) toast('ההצטרפות רצה ברקע — היא לוקחת כמה דקות, והרשימה תתעדכן בהמשך.', 'info');
+      else if (done.result) toast(done.result, 'success');
+    } catch (err) {
+      toast(friendlyMessage(err, 'ההצטרפות נכשלה.'), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+
   return (
     <SocialShell
       title="גילוי קבוצות"
@@ -715,19 +781,39 @@ export default function DiscoverPage() {
               </button>
               <p className="truncate text-sm font-extrabold text-on-brand">נבחרו {picked.size} קבוצות</p>
             </div>
-            <Button
-              variant="secondary"
-              className="border-transparent bg-ink-900 text-brand-400 hover:bg-ink-800"
-              onClick={() => {
-                setWalk(pickedRows);
-                setWalkAt(0);
-              }}
-            >
-              עבור על הקבוצות
-            </Button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {/*
+                הצטרפות אוטומטית — offered only when the selection actually
+                holds groups he is not in. A button that would open fifteen
+                pages and find no button to press on any of them is worse than
+                no button: it spends the run's cap and reports nothing.
+              */}
+              {joinable.length > 0 && (
+                <Button
+                  busy={busyId === 'join'}
+                  variant="secondary"
+                  className="border-transparent bg-ink-900 text-brand-400 hover:bg-ink-800"
+                  onClick={joinPicked}
+                >
+                  הצטרף ל-{Math.min(joinable.length, JOIN_RUN_CAP)}
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                className="border-transparent bg-ink-900 text-brand-400 hover:bg-ink-800"
+                onClick={() => {
+                  setWalk(pickedRows);
+                  setWalkAt(0);
+                }}
+              >
+                עבור על הקבוצות
+              </Button>
+            </div>
           </div>
         </div>
       )}
+
+      {confirm.dialog}
 
       {/* ───────────────────────── one group at a time ───────────────────── */}
       {walk && walk.length > 0 && (

@@ -40,6 +40,7 @@ import type { AccountProfile } from './facebook/account';
 import type { FacebookProfile } from './facebook/profiles';
 import { importProfileFromCloud } from './profile-import';
 import { BrowserSession, SessionError, recentPageOpens } from './facebook/session';
+import { JOIN_RUN_CAP, type JoinResult } from './facebook/join';
 import { NO_ACCOUNT, queueScope } from '@/lib/social/account-scope';
 import { captureScreenshot } from './screenshots';
 
@@ -1285,7 +1286,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     .or(`worker_id.eq.${state.id},worker_id.is.null`)
     .order('created_at')
     .limit(5);
-  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string; source?: string } })[]) {
+  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string; source?: string ; urls?: unknown[] } })[]) {
     /*
      * CLAIMING A COMMAND ALSO EMPTIES IT.
      *
@@ -1575,6 +1576,75 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             result = found.groups.length
               ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${shots}${blind}${skipped}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
               : `לא נמצאו קבוצות ששמן מכיל "${phrase}".${skipped}`;
+          }
+        }
+      } else if (cmd.command === 'join') {
+        /*
+         * הצטרפות אוטומטית לקבוצות שהוא סימן.
+         *
+         * "תוסיף לי אופציה שאני יכול לסמן את הקבוצות האלה שאני לא נמצא בהם,
+         *  ושהתוכנה תפתח קבוצה קבוצה ותצרתף אוטומטי."
+         *
+         * A COMMAND OF ITS OWN, and that is deliberate even though it costs a
+         * line of SQL. `discover` would have carried it with no migration —
+         * that is how the joined-groups scan travels — but the discover branch
+         * is documented as "No join, no request, no click", and that sentence
+         * is the thing that makes it safe to point at a search box the owner
+         * types into. Smuggling a join into it would make the comment a lie
+         * and the branch a different risk.
+         *
+         * THE ADDRESSES ARE CHECKED HERE, not trusted. They arrive from the
+         * dashboard, so each one must parse as a Facebook group address and
+         * nothing else: this branch opens pages in a browser carrying his live
+         * session, and "whatever the payload said" is not an address.
+         */
+        const asked = Array.isArray(cmd.payload?.urls) ? (cmd.payload.urls as unknown[]) : [];
+        const urls: string[] = [];
+        for (const raw of asked.slice(0, 200)) {
+          const group = parseGroupUrl(String(raw ?? ''));
+          if (group && !urls.includes(group.url)) urls.push(group.url);
+        }
+        if (!urls.length) {
+          ok = false;
+          result = 'לא הגיעו כתובות קבוצות תקינות.';
+        } else {
+          let joined = 0;
+          let pending = 0;
+          const run = await session.joinGroups(headless, urls, {
+            /*
+             * WRITTEN DOWN AS IT HAPPENS. A run that is stopped halfway — by
+             * Facebook, by the owner, by the app closing — must leave behind
+             * what it already did. Collecting the outcomes and writing them at
+             * the end would lose exactly the runs worth keeping.
+             */
+            onEach: async (r) => {
+              if (r.outcome === 'joined') joined += 1;
+              if (r.outcome === 'pending') pending += 1;
+              await recordJoinOutcome(r);
+            },
+            /* The gap is longer than the ninety seconds after which the
+               dashboard calls this machine offline. Keep saying we are here. */
+            onWait: async () => {
+              await heartbeat(state, 'online');
+            },
+            stopped: () => stopping,
+          });
+          if (run.problem) {
+            ok = false;
+            result = run.problem;
+          } else {
+            const why =
+              run.stoppedBy === 'blocked'
+                ? ' — פייסבוק הגביל את ההצטרפויות, עצרנו.'
+                : run.stoppedBy === 'unavailable'
+                  ? ' — העמוד לא נפתח או שיש בדיקת אבטחה, עצרנו.'
+                  : run.stoppedBy === 'cap'
+                    ? ` — זו המכסה לריצה אחת (${JOIN_RUN_CAP}); הריצו שוב להמשך.`
+                    : run.stoppedBy === 'stopped'
+                      ? ' — נעצר.'
+                      : '';
+            result = `הצטרפנו ל-${joined}, ${pending} ממתינות לאישור מנהל${why}`;
+            ok = run.stoppedBy !== 'blocked';
           }
         }
       } else if (cmd.command === 'resume') {
@@ -2565,6 +2635,39 @@ async function storeDiscoveryPictures(pictures: Map<string, { bytes: Buffer; con
     );
   }
   return urls;
+}
+
+/**
+ * ONE GROUP'S JOIN OUTCOME, written down the moment it happens.
+ *
+ * Two places, because they answer two different questions. The discovery row's
+ * `membership` is what the groups screen reads — and it is raised to 'member'
+ * ONLY on a confirmed join, never on a request that is still waiting for an
+ * admin: a pending request treated as a membership would put the group in the
+ * publishing list and queue posts into somewhere this account cannot post yet.
+ * The activity log is the owner's own record of what the machine did on his
+ * account, which for an action like this is not optional.
+ */
+async function recordJoinOutcome(r: JoinResult): Promise<void> {
+  const db = await workerDb();
+  const group = parseGroupUrl(r.url);
+  if (group && (r.outcome === 'joined' || r.outcome === 'already')) {
+    await db.from('social_discovery_groups').update({ membership: 'member' }).eq('external_id', group.externalId);
+  }
+  const said: Record<JoinResult['outcome'], string> = {
+    joined: 'הצטרפנו לקבוצה',
+    pending: 'נשלחה בקשת הצטרפות — ממתינה לאישור מנהל',
+    already: 'כבר היינו חברים בקבוצה',
+    questions: 'הקבוצה שואלת שאלות הצטרפות — צריך לענות ידנית',
+    'no-button': 'לא נמצא כפתור הצטרפות',
+    blocked: 'פייסבוק הגביל את ההצטרפויות',
+    unavailable: 'הקבוצה לא נפתחה',
+  };
+  const level = r.outcome === 'blocked' ? 'error' : r.outcome === 'joined' || r.outcome === 'already' ? 'info' : 'warn';
+  await logActivity(level, 'group_join', `${said[r.outcome]}${r.detail ? ` — ${r.detail}` : ''}`, {
+    url: r.url,
+    outcome: r.outcome,
+  });
 }
 
 async function recordDiscovered(

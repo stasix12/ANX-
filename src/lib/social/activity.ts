@@ -40,6 +40,14 @@ const KIND: Record<string, ActivityKind> = {
      nightly_group_check is: it is the app doing what the owner pressed, and
      the line naming how many Pages arrived is the only evidence it ran. */
   targets_synced: 'success',
+  /*
+   * הצטרפות אוטומטית לקבוצה. 'success' and not 'system': it is the machine
+   * doing the thing the owner pressed, on his own account, and the line naming
+   * which group is the only record that it happened. A join that did NOT
+   * succeed carries its own words in the message — the kind is about the
+   * writer, and this writer only runs because he asked it to.
+   */
+  group_join: 'success',
 
   // Something did not.
   /* The worker deciding it is looping and stopping its own background work.

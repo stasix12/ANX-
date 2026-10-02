@@ -6,6 +6,7 @@ import { readAccountIdentity, readAccountProfile, type AccountProfile } from './
 import { readProfiles, switchProfile, type FacebookProfile } from './profiles';
 import { searchGroups, type SearchOutcome } from './discover';
 import { readMyGroups, type MyGroupsOutcome } from './mygroups';
+import { joinGroups, type JoinResult } from './join';
 import { env } from '../env';
 import { CHECKPOINT_PATHS, LOGIN_PATHS, fb, patterns } from './selectors';
 
@@ -397,6 +398,40 @@ export class BrowserSession {
         if (after === 'login') return { groups: [], pictures: new Map(), problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
       }
       return found;
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+
+  /**
+   * JOIN THE GROUPS HE PICKED, one at a time and slowly.
+   *
+   * The pacing, the cap and every stop condition live in ./join.ts; this is
+   * the session's half of it — the profile check, the browser page, and
+   * closing it however the run ends. The same shape as myGroups above, with
+   * one difference that matters: the page stays open for the whole run,
+   * because the run IS a sequence of pages and re-opening a browser tab
+   * between every group would be a far louder signal than the joins.
+   */
+  async joinGroups(
+    headless: boolean,
+    urls: string[],
+    hooks: {
+      onEach: (result: JoinResult) => Promise<void>;
+      onWait?: (msLeft: number) => Promise<void>;
+      stopped?: () => boolean;
+    },
+  ): Promise<{ results: JoinResult[]; stoppedBy: '' | 'blocked' | 'unavailable' | 'cap' | 'stopped'; problem: string }> {
+    if (!this.hasProfile()) return { results: [], stoppedBy: '', problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.' };
+    const page = await this.newPage(headless, 'הצטרפות לקבוצות');
+    try {
+      const kind = await classifyPage(page);
+      if (kind === 'checkpoint') return { results: [], stoppedBy: '', problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.' };
+      if (kind === 'login' || !(await this.hasLoginCookie())) {
+        return { results: [], stoppedBy: '', problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".' };
+      }
+      const run = await joinGroups(page, urls, hooks);
+      return { ...run, problem: '' };
     } finally {
       await page.close().catch(() => undefined);
     }

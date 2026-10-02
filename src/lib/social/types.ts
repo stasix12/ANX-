@@ -487,7 +487,7 @@ export interface DiscoverySearchRow {
   last_found: number;
 }
 
-export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume' | 'verify' | 'profiles' | 'switch' | 'discover';
+export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume' | 'verify' | 'profiles' | 'switch' | 'discover' | 'join';
 
 export interface WorkerCommand {
   id: string;

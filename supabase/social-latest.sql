@@ -1413,7 +1413,22 @@ alter table public.social_worker_commands
   drop constraint if exists social_worker_commands_command_check;
 alter table public.social_worker_commands
   add constraint social_worker_commands_command_check
-  check (command in ('login', 'check', 'logout', 'resume', 'verify', 'profiles', 'switch', 'discover'));
+  check (command in ('login', 'check', 'logout', 'resume', 'verify', 'profiles', 'switch', 'discover', 'join'));
+
+-- ─────────────────────────── join ───────────────────────────
+--
+-- "שהתוכנה תפתח קבוצה קבוצה ותצרתף אוטומטי."
+--
+-- A command of its own rather than another source on `discover`, and the extra
+-- line of SQL is the point: the discover branch in the worker is documented as
+-- "No join, no request, no click", which is what makes it safe to point at a
+-- search box somebody types into. A join is a different thing done to his
+-- account and it says so by name, here and in the activity log.
+--
+-- The payload carries the group addresses. The worker re-checks every one of
+-- them with parseGroupUrl before it opens anything: this list is built by a
+-- screen, and a screen is not evidence about what a browser carrying a live
+-- Facebook session should visit.
 
 
 -- ──────────────────────────── who may see them ─────────────────────────────

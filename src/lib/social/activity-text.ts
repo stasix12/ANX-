@@ -55,6 +55,11 @@ const TITLE: Record<string, string> = {
   worker_started: 'המחשב התחבר',
   worker_self_update: 'התוכנה עודכנה לגרסה חדשה',
   targets_synced: 'סונכרנו דפי פייסבוק',
+  /* One headline for every outcome, because the sentence underneath already
+     says which one it was — "הצטרפנו לקבוצה", "ממתינה לאישור מנהל", "פייסבוק
+     הגביל". A headline per outcome would be seven labels saying what the line
+     below them says better. */
+  group_join: 'הצטרפות לקבוצה',
 
   // Did not.
   publish_failed: 'פרסום נכשל',

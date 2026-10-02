@@ -138,6 +138,36 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   eq(parseMembers('1 000 участников'), 1_000, 'and a grouping space is still a grouping space');
   eq(parseMembers('1 234 567 members'), 1_234_567, 'including several of them');
 
+  /*
+   * ─── ANYTHING GLUED TO THE UNIT USED TO DROP THE ×1000 SILENTLY ─────────
+   *
+   * The suffix is captured as "every non-space non-digit up to the word for
+   * members", so "25 אלפי·חברים" arrives as the unit "אלפי·" and "1K+ members"
+   * as "K+". Both failed the anchored test and fell through to a multiplier of
+   * 1 — twenty-five thousand printed as 25, a thousand printed as 1. That is
+   * the owner's "1000/3000 ומראה לי 1/3", and it SURVIVED the fix that added
+   * "אלפי" to the list, because the string was never "אלפי".
+   */
+  eq(parseMembers('25 אלפי·חברים'), 25_000, 'a separator glued to the unit does not eat the thousand');
+  eq(parseMembers('25 אלפי-חברים'), 25_000, 'nor does a hyphen');
+  eq(parseMembers('25 אלף, חברים'), 25_000, 'nor a comma');
+  eq(parseMembers('1K+ members'), 1_000, 'and "1K+" is a thousand, not one');
+  eq(parseMembers('3 тыс.· участников'), 3_000, 'the Russian unit keeps its dot and loses what follows it');
+  eq(parseMembers('8 thousand members'), 8_000, 'the English word, which was never in the list at all');
+  eq(parseMembers('2 million members'), 2_000_000, 'and its million');
+
+  /*
+   * ─── AND A UNIT WE CANNOT READ IS NOT EVIDENCE OF "NO UNIT" ─────────────
+   *
+   * Falling through to 1 means every future wording Facebook invents divides a
+   * count by a thousand and prints it confidently. This product's rule is that
+   * no count beats a wrong one, so an unreadable unit refuses the candidate.
+   */
+  eq(parseMembers('25 גזילון חברים'), null, 'a unit nobody has seen is NOT read as "no unit" — it is read as "we did not read this card"');
+  eq(parseMembers('12 bazillion members'), null, 'in any language');
+  /* ...and the honest reading is still found when one is on the card. */
+  eq(parseMembers('12 bazillion posts · 54.3K members'), 54_300, 'and a real count later on the same card is still read');
+
   /* The refusals, which matter as much. */
   eq(parseMembers('Public group'), null, 'a card with no count reports NO COUNT — not zero, which would read as an empty group');
   eq(parseMembers(''), null, 'and neither does an empty card');

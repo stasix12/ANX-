@@ -88,9 +88,25 @@ function reveal() {
     /* Within one screenful of the viewport, which is when the real page
        commits a card's details. */
     if (r.top > window.innerHeight * 2 || r.bottom < -window.innerHeight) continue;
-    c.card.querySelector('.sub').textContent = c.g.sub;
-    c.card.querySelector('img').setAttribute('src', PIC);
     c.filled = true;
+    /*
+     * THE COUNTS LINE ARRIVES LATE, and that is the whole point of this
+     * fixture rather than a detail of it.
+     *
+     * Facebook does not render a card's details the instant it is near the
+     * viewport: it fetches them. The first version of this file filled them in
+     * synchronously inside the scroll handler, so a reader that looked once
+     * and moved on always found them — and the test could not fail, which is
+     * exactly what a ten-agent review found and proved: at a one-second delay,
+     * five of nine groups came back with no count at all.
+     *
+     * Two seconds is a slow-but-ordinary fetch on a phone, which is what
+     * the owner is on.
+     */
+    setTimeout(function () {
+      c.card.querySelector('.sub').textContent = c.g.sub;
+      c.card.querySelector('img').setAttribute('src', PIC);
+    }, 2000);
   }
 }
 reveal();

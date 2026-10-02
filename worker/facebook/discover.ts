@@ -325,7 +325,25 @@ function looksLikeImage(b: Buffer): boolean {
  * worker/test/discover-pictures.test.ts did. Avoiding the construct is the
  * second of the two independent reasons this code runs.
  */
-const PICTURE_STOPS = 60;
+/*
+ * ENOUGH STOPS TO VISIT EVERY CARD MORE THAN ONCE.
+ *
+ * Sixty stops for a hundred and twenty results meant the pass could not even
+ * see them all, let alone come back — and coming back is the whole job, since
+ * a card's details are FETCHED when it nears the viewport and do not always
+ * arrive inside one settle. The real ceiling is the budget below; this only
+ * has to be large enough not to be the thing that stops it first.
+ */
+const MAX_VISITS = 3;
+const PICTURE_STOPS = MAX_GROUPS * MAX_VISITS;
+/*
+ * How long to linger on a card before reading it, and how many times to come
+ * back. Measured: with the card's counts line arriving a second after it comes
+ * into view — an ordinary fetch on a phone — one 450ms look left five of nine
+ * groups with no count at all. The fix is not a longer wait (which would be
+ * paid on every card, including the ones that were ready) but another look,
+ * after the rest of the list has had its turn.
+ */
 const PICTURE_SETTLE_MS = 450;
 /* ONE SEARCH FINISHES THE JOB, the same rule PICTURE_LIMIT is written to.
    A run that gives up halfway leaves rows drawing letters, which is
@@ -338,12 +356,15 @@ const PICTURE_SETTLE_MS = 450;
    visit at all. A search is something the owner asks for and waits for once;
    coming back with nine groups and four of their counts is the thing he has
    reported three times. */
-const PICTURE_BUDGET_MS = 75_000;
+const PICTURE_BUDGET_MS = 120_000;
 
 async function fillPictures(page: Page, groups: DiscoveredGroup[], want: Set<string>): Promise<void> {
   if (!want.size) return;
   const byId = new Map(groups.map((g) => [g.externalId, g]));
   const deadline = Date.now() + PICTURE_BUDGET_MS;
+  /* How many times each card has been stopped on. A card is given up only
+     after MAX_VISITS of them — see the drop rule at the foot of the loop. */
+  const visits = new Map<string, number>();
   for (let stop = 0; stop < PICTURE_STOPS && want.size; stop += 1) {
     if (Date.now() > deadline) return;
     const next = want.values().next().value as string | undefined;
@@ -450,24 +471,39 @@ async function fillPictures(page: Page, groups: DiscoveredGroup[], want: Set<str
         }
       }
       /*
-       * WHO LEAVES THE SET, and it is the one rule that decides whether this
-       * pass terminates AND whether it finishes its job.
+       * WHO LEAVES THE SET — the one rule that decides whether this pass
+       * terminates AND whether it finishes its job. It has now been wrong
+       * twice, in opposite directions.
        *
-       * A card is dropped when there is nothing left to learn about it, OR
-       * when it is the card this stop actually SCROLLED TO — it has had its
-       * turn, and a group whose card genuinely carries no count must not hold
-       * the loop for every remaining stop.
+       * Too sticky: the first version dropped any card that came back with a
+       * picture and any text at all, and a card's text holds its NAME from the
+       * first paint — so a group whose avatar was cached and whose counts line
+       * had not arrived was dropped before it was ever brought into view.
        *
-       * Everything else stays. The first version dropped any card that came
-       * back with a picture and any text at all, and a card's text contains
-       * its NAME from the first paint — so a group whose avatar was cached and
-       * whose counts line had not rendered was dropped on the first stop,
-       * before it was ever brought into view. That is exactly the card this
-       * pass exists for, and it was the only one the fixture still failed on.
+       * Too eager: the second version dropped the card this stop had scrolled
+       * to, on the grounds that it had had its turn. But a turn is 450ms, and
+       * a card's details are FETCHED — at a one-second fetch, five of nine
+       * groups were still written down with no count. One look is not a turn.
+       *
+       * So: nothing left to learn → gone. Otherwise it goes to the BACK of the
+       * set and is tried again after every other card has had a stop, up to
+       * MAX_VISITS of them. A Set keeps its insertion order, so deleting and
+       * re-adding is what moves it to the end — and that is what turns this
+       * from a loop that spins on one card into a round-robin.
        */
       const stillWants =
         !/^https?:\/\//i.test(g.image) || g.members === null || g.privacy === 'unknown';
-      if (!stillWants || id === next) want.delete(id);
+      if (!stillWants) {
+        want.delete(id);
+        continue;
+      }
+      if (id !== next) continue;
+      const been = (visits.get(id) ?? 0) + 1;
+      visits.set(id, been);
+      want.delete(id);
+      /* Given up only after real looks, spread out. A card whose group simply
+         does not state a member count must not hold the budget for ever. */
+      if (been < MAX_VISITS) want.add(id);
     }
   }
 }

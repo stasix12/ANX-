@@ -119,8 +119,8 @@ export const groupUrl = (externalId: string): string => `https://www.facebook.co
  * the same three grammatical forms, or the next card with it reads a million
  * as one.
  */
-const THOUSAND = /^(k|אלף|אלפי|אלפים|тыс\.?|тысяч[аи]?)$/i;
-const MILLION = /^(m|mln|מיליון|מיליוני|מיליונים|מליון|מליוני|млн\.?|миллион[аов]*)$/i;
+const THOUSAND = /^(k|thousand|thousands|אלף|אלפי|אלפים|тыс\.?|тысяч[аи]?)$/i;
+const MILLION = /^(m|mln|million|millions|מיליון|מיליוני|מיליונים|מליון|מליוני|млн\.?|миллион[аов]*)$/i;
 
 /** The word for members, in the three languages, so a number that is about
     something else — "12 posts a day" — is not read as a membership count. */
@@ -207,24 +207,51 @@ export function parseMembers(text: string): number | null {
 }
 
 function readNumber(digits: string, suffix: string): number | null {
-  const unit = suffix.trim();
-  const multiplier = THOUSAND.test(unit) ? 1_000 : MILLION.test(unit) ? 1_000_000 : 1;
+  /*
+   * THE UNIT, WITH WHATEVER WAS GLUED TO IT TAKEN OFF.
+   *
+   * The suffix is captured as "every non-space non-digit up to the word for
+   * members", so a card that writes "25 אלפי·חברים" or "1K+ members" hands
+   * this "אלפי·" and "K+". Both fail the anchored test, and the line below
+   * used to fall through to a multiplier of 1 — printing 25 about a group of
+   * twenty-five thousand, and 1 about a group of a thousand. That is the
+   * owner's "1000/3000 ומראה לי 1/3", and it survived the 3.96.0 fix because
+   * "אלפי" being IN the list never helped when the string was not "אלפי".
+   *
+   * The trailing dot is kept on purpose: "тыс." and "млн." are the unit, dot
+   * included.
+   */
+  const unit = suffix.replace(/^[^\p{Letter}\d]+/gu, '').replace(/[^\p{Letter}\d.]+$/gu, '').trim();
+  /*
+   * AND A UNIT WE CANNOT READ IS NOT EVIDENCE OF "NO UNIT".
+   *
+   * Falling through to 1 means every future wording Facebook invents —
+   * another plural, another language, a word nobody here has seen — silently
+   * divides a count by a thousand and prints it with full confidence. That is
+   * the structural hole that produced three separate reports of the same bug.
+   * A letter we do not recognise means we did not read this card: parseMembers
+   * moves on to the next candidate, and failing that the group shows no count
+   * at all — which this product has always held to be the better answer.
+   */
+  let multiplier = 1;
+  if (THOUSAND.test(unit)) multiplier = 1_000;
+  else if (MILLION.test(unit)) multiplier = 1_000_000;
+  else if (/\p{Letter}/u.test(unit)) return null;
   /* Thin and non-breaking spaces are Russian's thousands separator and are
      invisible in every editor, so they are stripped before anything else. */
-  let raw = digits.replace(/[\s\u00a0\u202f]/g, '').replace(/[.,]$/, '');
+  const raw = digits.replace(/[\s\u00a0\u202f]/g, '').replace(/[.,]$/, '');
   if (!raw) return null;
 
   /*
-   * A trailing K or M glued to the digits — "54.3K" — which is how English
-   * Facebook writes it when the unit is not its own word.
+   * NO "GLUED K" BRANCH ANY MORE, and its absence is the point.
+   *
+   * There was one here, for "54.3K". It could never run: `digits` is captured
+   * by a class of digits and separators that cannot contain a letter, so the K
+   * is always in the SUFFIX and always was. What it actually did was tell the
+   * next person reading this function that the glued form is handled here —
+   * which is how a bug in the suffix path goes looking for itself in the wrong
+   * place. "54.3K" is a suffix of "K", and the lines above are where it lives.
    */
-  let glued = 1;
-  const tail = raw.match(/([km])$/i);
-  if (tail) {
-    glued = tail[1].toLowerCase() === 'k' ? 1_000 : 1_000_000;
-    raw = raw.slice(0, -1);
-  }
-
   const seps = raw.match(/[.,]/g) ?? [];
   let value: number;
   if (seps.length === 0) {
@@ -241,7 +268,7 @@ function readNumber(digits: string, suffix: string): number | null {
     value = Number(raw.replace(/[.,]/g, ''));
   }
   if (!Number.isFinite(value)) return null;
-  const total = Math.round(value * multiplier * glued);
+  const total = Math.round(value * multiplier);
   /* A card that claims a negative or absurd membership was misread, and a
      misread number printed with confidence is worse than no number. */
   if (total < 0 || total > 500_000_000) return null;

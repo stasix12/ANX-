@@ -90,6 +90,24 @@ const SORTS: DiscoverySort[] = ['relevance', 'members', 'name'];
 const JOIN_RUN_CAP = 15;
 const JOIN_WAIT_MS = 30 * 60_000;
 
+/*
+ * HOW LONG THE SCREEN WATCHES A SCAN, and why the default was the wrong number.
+ *
+ * waitForWorkerCommand gives up after 150 seconds. A group search is not a
+ * 150-second job and never was: it scrolls the results, then walks back
+ * through them to let each card render its picture and its member count (up
+ * to two minutes of budget on its own), then uploads a thumbnail per group.
+ * The joined scan does the same over four hundred groups.
+ *
+ * What made that a BUG rather than a short wait is what the screen did next:
+ * it re-read the table anyway — before the worker had written anything — and
+ * installed the PREVIOUS run's rows, under a message promising that the list
+ * would update when the machine finished. Nothing on this page ever re-reads,
+ * so it never did. Two correct fixes to the scan landed and the owner saw no
+ * change, because he was looking at the scan before them.
+ */
+const SCAN_WAIT_MS = 10 * 60_000;
+
 export default function DiscoverPage() {
   const [text, setText] = useState('');
   /** The phrase the rows on screen belong to. Not the same as `text`, which
@@ -219,13 +237,25 @@ export default function DiscoverPage() {
       setError(null);
       try {
         const { id } = await startDiscovery(workerId, phrase);
-        const done = await waitForWorkerCommand(id);
+        const done = await waitForWorkerCommand(id, SCAN_WAIT_MS);
         setActive(phrase);
         setPicked(new Set());
-        await load(phrase);
-        if (done?.status === 'failed') toast(done.result || 'החיפוש נכשל.', 'error');
-        else if (!done) toast('החיפוש נשלח למחשב ולוקח יותר מהרגיל — הרשימה תתעדכן כשהוא יסיים.', 'info');
-        else if (done.result) toast(done.result, 'success');
+        /*
+         * THE TABLE IS READ ONLY ONCE THE MACHINE HAS WRITTEN TO IT.
+         *
+         * Reading it on a timeout put the previous run's rows on screen under
+         * a line saying the list would update — the same groups, the same
+         * missing counts, the same missing pictures. That is what "עדיין יש
+         * קבוצות שלא מראה את המספר חברים" looked like after the scan itself
+         * had already been fixed.
+         */
+        if (!done) {
+          toast('החיפוש עדיין רץ במחשב. פתחו את המסך שוב בעוד כמה דקות — התוצאות יהיו כאן.', 'info');
+        } else {
+          await load(phrase);
+          if (done.status === 'failed') toast(done.result || 'החיפוש נכשל.', 'error');
+          else if (done.result) toast(done.result, 'success');
+        }
       } catch (err) {
         setError(friendlyMessage(err, 'החיפוש נכשל.'));
       } finally {
@@ -375,7 +405,7 @@ export default function DiscoverPage() {
     setScanning(true);
     try {
       const { id } = await startJoinedScan(workerId);
-      const done = await waitForWorkerCommand(id);
+      const done = await waitForWorkerCommand(id, SCAN_WAIT_MS);
       /*
        * THE SEARCH RESULTS ARE RE-READ TOO, because the scan now writes to
        * them. reconcileJoined lowers the membership of rows that are no longer
@@ -389,13 +419,19 @@ export default function DiscoverPage() {
         active ? listDiscovered(active) : Promise.resolve(null),
         listTargetPictures(),
       ]);
-      setJoined(mine);
-      setInSystem(targets);
-      setTargetPics(pics);
-      if (found) setRows(found);
-      if (done?.status === 'failed') toast(done.result || 'הקריאה נכשלה.', 'error');
-      else if (!done) toast('הבקשה נשלחה למחשב ולוקחת יותר מהרגיל — הרשימה תתעדכן כשהוא יסיים.', 'info');
-      else if (done.result) toast(done.result, 'success');
+      /* Same rule as the search above: nothing is read back until the machine
+         has written, so a slow scan cannot repaint the screen with what was
+         there before it started. */
+      if (!done) {
+        toast('הקריאה עדיין רצה במחשב. פתחו את המסך שוב בעוד כמה דקות.', 'info');
+      } else {
+        setJoined(mine);
+        setInSystem(targets);
+        setTargetPics(pics);
+        if (found) setRows(found);
+        if (done.status === 'failed') toast(done.result || 'הקריאה נכשלה.', 'error');
+        else if (done.result) toast(done.result, 'success');
+      }
     } catch (err) {
       toast(friendlyMessage(err, 'הקריאה נכשלה.'), 'error');
     } finally {

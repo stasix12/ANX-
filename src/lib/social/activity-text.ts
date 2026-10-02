@@ -54,6 +54,7 @@ const TITLE: Record<string, string> = {
   run_adopted_queue: 'הסבב אימץ פרסומים קיימים',
   worker_started: 'המחשב התחבר',
   worker_self_update: 'התוכנה עודכנה לגרסה חדשה',
+  targets_synced: 'סונכרנו דפי פייסבוק',
 
   // Did not.
   publish_failed: 'פרסום נכשל',
@@ -70,6 +71,14 @@ const TITLE: Record<string, string> = {
   page_not_allowed: 'הקבוצה לא מאפשרת פרסום בתור דף',
   avatar_upload_blocked: 'תמונת הפרופיל לא נשמרה',
   login_challenge_failed: 'אימות הפייסבוק נכשל',
+  /* The post went out and the button under it did not. Named for what the
+     owner will actually notice — a published post with no link on it. */
+  cta_dropped: 'הפוסט פורסם בלי כפתור הקישור',
+  rate_limit: 'פייסבוק הגביל זמנית את הפרסום',
+  /* The local disconnect worked and telling Facebook about it did not, which
+     means a token this product no longer holds may still be live there. The
+     headline says the part that needs doing, not the part that worked. */
+  revoke_remote_failed: 'ניתוק החיבור מצד פייסבוק לא הושלם',
 
   // A round's own life.
   planned: 'נבנה סבב פרסום',
@@ -113,6 +122,7 @@ const TITLE: Record<string, string> = {
   comment_claim_failed: 'תגובה לא ננעלה לעיבוד',
   discover_unread: 'לא זוהתה חברות בקבוצה',
   account_scope_narrowed: 'הגישה צומצמה לחשבון אחד',
+  disconnected: 'החיבור לפייסבוק נותק',
   metrics_columns_missing: 'חסר עדכון במסד הנתונים',
   commands_payload_missing: 'חסר עדכון במסד הנתונים',
 };

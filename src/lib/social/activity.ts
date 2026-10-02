@@ -36,6 +36,10 @@ const KIND: Record<string, ActivityKind> = {
      the app doing the thing the owner asked it to do, and the line that says
      how many groups are about to be looked at is the only evidence it ran. */
   nightly_group_check: 'success',
+  /* The Page list coming down from Facebook. 'success' for the reason
+     nightly_group_check is: it is the app doing what the owner pressed, and
+     the line naming how many Pages arrived is the only evidence it ran. */
+  targets_synced: 'success',
 
   // Something did not.
   /* The worker deciding it is looping and stopping its own background work.
@@ -77,6 +81,25 @@ const KIND: Record<string, ActivityKind> = {
    * would meet the change as a number that moved on its own.
    */
   target_left: 'failure',
+  /*
+   * ─── the Pages work merged in from the cloud-worker branch ─────────────
+   *
+   * Three events whose writers landed without an entry here, so they were
+   * falling through to their level — which files a `warn` as quiet system
+   * news, under a heading nobody opens.
+   *
+   * cta_dropped: the post went out and its call-to-action button did not.
+   * Filed with the failures and not the successes, for the reason
+   * `target_left` carries: nothing is broken, but something the owner asked
+   * for did not happen and this is the only line that says so.
+   */
+  cta_dropped: 'failure',
+  /* Facebook throttling us. The publication did not go out. */
+  rate_limit: 'failure',
+  /* Disconnecting locally worked and telling Facebook about it did not, so a
+     token this product no longer holds may still be live at their end. That is
+     exactly the kind of thing that must not be quiet. */
+  revoke_remote_failed: 'failure',
 
   // A round's own life: started, paused, resumed, stopped, reported.
   planned: 'round',
@@ -139,6 +162,9 @@ const KIND: Record<string, ActivityKind> = {
   discover_unread: 'system',
 
   account_scope_narrowed: 'system',
+  /* The owner disconnected Facebook and every token was deleted. System news
+     and not a failure: he asked for it, and it succeeded. */
+  disconnected: 'system',
   metrics_columns_missing: 'system',
   commands_payload_missing: 'system',
 };

@@ -67,6 +67,13 @@ const SYSTEM_BY_DESIGN = new Set([
      merits — and nothing was switched off, which is what separates it from
      target_left. */
   'page_not_allowed',
+  /* The owner pressed "disconnect" and every Facebook token was deleted. It
+     is filed as system news ON PURPOSE: he asked for it and it worked, so it
+     is neither a success worth a green line nor a failure. The things that go
+     WRONG around it — revoke_remote_failed, when the local delete worked and
+     telling Facebook did not — are classified as failures and are deliberately
+     not on this list. */
+  'disconnected',
 ]);
 
 let checks = 0;

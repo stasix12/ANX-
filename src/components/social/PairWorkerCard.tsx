@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { callSocialApi } from '@/lib/social/client';
+import { friendlyMessage } from '@/lib/social/errors';
 import { Button, Card } from '@/components/social/ui';
 
 /*
@@ -31,7 +32,11 @@ export function PairWorkerCard() {
       const res = await callSocialApi<{ code: string }>('/api/social/pair');
       setCode(res.code);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      /* Through friendlyMessage(), like every other catch in this module:
+         `err.message` here is whatever fetch or PostgREST said, and
+         "Failed to fetch" on a pairing screen tells the owner nothing he
+         can act on. layout.test.ts guards this across the whole app. */
+      setError(friendlyMessage(err, 'יצירת קוד החיבור נכשלה.'));
     } finally {
       setBusy(false);
     }

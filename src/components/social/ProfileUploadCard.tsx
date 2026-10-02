@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { friendlyMessage } from '@/lib/social/errors';
 import { supabase } from '@/lib/supabase';
 import { Button, Card } from '@/components/social/ui';
 
@@ -58,7 +59,11 @@ export function ProfileUploadCard() {
         text: 'הפרופיל הועלה. ה-worker בענן ייקח אותו בהפעלה הבאה שלו, ימחק אותו מהענן וימשיך מהסשן הקיים — בלי התחברות מחדש.',
       });
     } catch (err) {
-      setNote({ kind: 'err', text: err instanceof Error ? err.message : String(err) });
+      /* The two cases worth explaining are explained above and re-thrown
+         as their own sentences, so friendlyMessage() passes them through
+         untouched; everything else that reaches here is a raw transport
+         error, which is what this call keeps off the screen. */
+      setNote({ kind: 'err', text: friendlyMessage(err, 'העלאת הפרופיל נכשלה.') });
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';

@@ -2033,9 +2033,43 @@ const scenario: { step: string; line: string }[] = [];
    */
   pin('dashboard needs-you banner', dash, 'waitingIds.length === summary.needsHuman');
   pin('dashboard needs-you fallback', dash, 'unseen(waitingIds, seen).length : summary.needsHuman');
-  // The cap is never printed as a total.
-  pin('upcoming subtitle', dash, '`${summary.queued} ממתינים בתור`');
+  /*
+   * The cap is never printed as a total — and the rule got STRONGER when this
+   * card became a window on the next 24 hours rather than the whole queue.
+   *
+   * Two numbers are on it now and each has one honest source: how many are due
+   * inside the window (data.upcomingSoon, an exact head count from the
+   * database) and how many are waiting in all (summary.queued, the same figure
+   * the "בתור" tile reads). Neither may be `soon.length` or
+   * `data.upcoming.length` — both of those are the capped read.
+   */
+  pin('upcoming subtitle', dash, '`${data.upcomingSoon} ב-24 השעות הקרובות · ${summary.queued} ממתינים בתור`');
+  pin('upcoming window count is exact', dash, 'countWaitingWithin(');
+  pin('upcoming footer total', dash, 'total={data.upcomingSoon}');
   assert.ok(!dash.includes('data.upcoming.length} ממתינים'), 'a capped array length must not be printed as the queue');
+  assert.ok(!dash.includes('soon.length} ב-24'), 'nor may the window\'s own capped array length be printed as its total');
+  /*
+   * AND THE LIST IS THE WINDOW. Filtering in the component rather than the
+   * read is safe only because the read is ordered soonest-first, so everything
+   * inside the window is at the front of it; the guard holds both halves
+   * together, because either one alone is wrong.
+   */
+  pin('upcoming read stays ascending', dash, "order: 'asc' }");
+  pin('upcoming list is the window', dash, 'rows={soon}');
+  pin('the window is a day', dash, 'const UPCOMING_WINDOW_HOURS = 24;');
+  /*
+   * NO DESTRUCTIVE CONTROL IN THIS CARD'S HEADER. "למעלה תמחק אפס והכל."
+   * Both doors to discardQueue() that the owner kept are elsewhere on this
+   * screen — the "ממתינים בתור" tile's chip and the button at the foot — so
+   * this asserts the count, not its absence: losing them all would be losing
+   * the feature.
+   */
+  assert.equal(
+    (dash.match(/discardQueue\(/g) ?? []).length,
+    3,
+    'the reset lives on the queue tile and at the foot of the page — one definition, two doorways, and not in the upcoming card',
+  );
+  assert.ok(!/\{busy === 'discard' \? 'מאפס…' : 'אפס'\}/.test(dash), 'the upcoming card\'s own "אפס" button is gone');
   /*
    * AND THE CARD SAYS WHAT IS IN IT.
    *
@@ -2047,7 +2081,12 @@ const scenario: { step: string; line: string }[] = [];
    * restarted the worker, saw the same six lines, and reported that nothing
    * had changed — correctly, about the screen.
    */
-  pin('upcoming title', dash, "title={data.upcoming.length ? 'הפרסומים הקרובים' : 'מה קרה היום'}");
+  /* Re-pointed with the window: the title has to describe what is in the
+     card, and what is in the card is now the next 24 hours. A queue whose
+     soonest row is next Tuesday is NOT "הפרסומים הקרובים" on this screen —
+     the subtitle says so in words and the title steps aside. */
+  pin('upcoming title', dash, "title={soon.length ? 'הפרסומים הקרובים' : 'מה קרה היום'}");
+  pin('upcoming empty window says so', dash, '`אין פרסום ב-24 השעות הקרובות · ${summary.automaticWaiting} ממתינים אחר כך`');
   const timeline = readFileSync('src/components/social/Timeline.tsx', 'utf8');
   assert.ok(
     !/aria-label="הפרסומים הקרובים/.test(timeline),
@@ -4115,8 +4154,20 @@ const scenario: { step: string; line: string }[] = [];
    * whatever about the rule. Each prop is checked on its own so the formatting
    * is free to change and the rule is not.
    */
-  const timelineTag = dash.slice(dash.indexOf('<Timeline'), dash.indexOf('<Timeline') + 700);
-  for (const prop of ['rows={data.upcoming}', 'limit={UPCOMING_LIMIT}', 'scrollable', 'total={summary.automaticWaiting}']) {
+  /*
+   * RE-POINTED AT THE WINDOW. The card now shows the next 24 hours rather than
+   * the whole queue, so "every row it READ" became "every row it read that is
+   * inside the window" — `soon`, which is the ordered-ascending read filtered
+   * at its tail and therefore loses nothing the window contains.
+   *
+   * The rule itself is untouched and is the reason `total` moved with it: the
+   * strip must render all of what it was given and scroll, and the footer must
+   * count what is BEYOND it from a source that is not a capped array.
+   * data.upcomingSoon is a head count; summary.automaticWaiting would now be
+   * the wrong set entirely.
+   */
+  const timelineTag = dash.slice(dash.indexOf('<Timeline'), dash.indexOf('<Timeline') + 900);
+  for (const prop of ['rows={soon}', 'limit={UPCOMING_LIMIT}', 'scrollable', 'total={data.upcomingSoon}']) {
     assert.ok(timelineTag.includes(prop), `the dashboard timeline lost ${prop} — it must render the whole read and scroll, not cut off with the rest in a footer`);
   }
 

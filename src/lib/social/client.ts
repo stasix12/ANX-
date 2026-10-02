@@ -1950,6 +1950,31 @@ export async function countByStatus(): Promise<Record<QueueStatus, number>> {
 }
 
 /**
+ * HOW MANY WAITING PUBLICATIONS FALL INSIDE A WINDOW — an exact head count,
+ * no rows transferred.
+ *
+ * "כאן הפרסומים הקרובים להראות רק את מה שעומד להתפרסם בתווך זמן של 24 שעות."
+ *
+ * The dashboard's upcoming list is a capped read (UPCOMING_LIMIT rows, soonest
+ * first), so counting the window by filtering that array in JavaScript would
+ * print the CEILING as the total the moment more than forty rows were due —
+ * the exact fault this file's own comments keep naming. This asks the
+ * database, which is the only thing that knows.
+ *
+ * Same statuses as the list it describes (AUTOMATIC_WAITING_STATUSES), so the
+ * number under the card and the rows inside it count the same set.
+ */
+export async function countWaitingWithin(untilISO: string): Promise<number> {
+  const res = await db()
+    .from('social_queue')
+    .select('id', { count: 'exact', head: true })
+    .in('status', AUTOMATIC_WAITING_STATUSES as unknown as string[])
+    .lte('scheduled_at', untilISO);
+  if (res.error) throw friendlyError(res.error);
+  return res.count ?? 0;
+}
+
+/**
  * The same counts, rolled up through the single classification, plus the
  * invariant check on them. Every tile and every confirmation dialog on the
  * dashboard reads from this, so they cannot drift apart again.

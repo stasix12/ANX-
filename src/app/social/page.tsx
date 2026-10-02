@@ -33,6 +33,7 @@ import {
   listTimelineDone,
   listQueue,
   listTargets,
+  countWaitingWithin,
   listWaitingForYouIds,
   listWorkers,
   pauseCampaign,
@@ -66,6 +67,19 @@ import { AlertTriangleIcon, MessageIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIc
  * never shown as a total.
  */
 const UPCOMING_LIMIT = 40;
+
+/*
+ * HOW FAR AHEAD "הפרסומים הקרובים" LOOKS.
+ *
+ * "כאן הפרסומים הקרובים להראות רק את מה שעומד להתפרסם בתווך זמן של 24 שעות."
+ *
+ * The card read the queue's soonest forty rows whatever their date, so a run
+ * spread over a fortnight filled it with publications from next Tuesday under
+ * a heading that says "the upcoming ones". A day is the horizon the owner
+ * actually acts on: everything in it is his morning, and everything past it is
+ * the campaign screen's business.
+ */
+const UPCOMING_WINDOW_HOURS = 24;
 
 /**
  * The ceiling on TODAY's finished publications, and it is a safety bound
@@ -120,6 +134,10 @@ interface DashboardData {
   weekPublished: number;
   weekComments: number;
   upcoming: QueueRow[];
+  /** Waiting publications due inside UPCOMING_WINDOW_HOURS — an exact count
+      from the database, because `upcoming` is a capped read and its length
+      would print the ceiling as a total. */
+  upcomingSoon: number;
   /** Today's finished publications, newest first. Its own read, counted by
       nothing — the queue's numbers describe the queue, not this window. */
   doneToday: TimelineRow[];
@@ -298,7 +316,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -327,6 +345,10 @@ export default function SocialDashboard() {
         // and "הפרסומים הקרובים" would be showing the last publications while
         // calling the first of them the next one.
         listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' }),
+        /* How many of those fall inside the day the card shows. A head count:
+           no rows cross the wire, and it is the only honest source for the
+           footer's "ועוד N אחריהם" once the list is a window. */
+        countWaitingWithin(new Date(Date.now() + UPCOMING_WINDOW_HOURS * 3_600_000).toISOString()),
         /*
          * Today's finished rows, newest first — the strip turns them round.
          *
@@ -359,6 +381,7 @@ export default function SocialDashboard() {
         weekPublished,
         weekComments,
         upcoming,
+        upcomingSoon,
         doneToday,
         comments,
         commentsWaiting,
@@ -468,6 +491,22 @@ export default function SocialDashboard() {
    */
   const summary = data?.summary ?? EMPTY_QUEUE_SUMMARY;
   const pending = summary.cancellable;
+
+  /*
+   * THE DAY AHEAD — the rows "הפרסומים הקרובים" actually draws.
+   *
+   * Filtered here rather than in the read, and that is deliberate: `upcoming`
+   * is already ordered soonest-first and capped, so everything inside the
+   * window is at the front of it and nothing inside the window can be lost by
+   * cutting the tail. The exact count for the window comes from the database
+   * (data.upcomingSoon), because this array's length is a ceiling.
+   *
+   * A row with no instant at all cannot be placed in a window and is not
+   * dropped quietly — it keeps its place, because "soon" is a claim about
+   * when, and a row with no when has not made that claim either way.
+   */
+  const soonCutoff = Date.now() + UPCOMING_WINDOW_HOURS * 3_600_000;
+  const soon = (data?.upcoming ?? []).filter((r) => !r.scheduled_at || Date.parse(r.scheduled_at) <= soonCutoff);
 
   /*
    * "N פרסומים ממתינים לכם" — AND WHETHER HE HAS ALREADY BEEN SHOWN THEM.
@@ -1373,53 +1412,46 @@ export default function SocialDashboard() {
                * changed. They were right about the screen. The screen was
                * wrong about itself.
                */
-              title={data.upcoming.length ? 'הפרסומים הקרובים' : 'מה קרה היום'}
+              title={soon.length ? 'הפרסומים הקרובים' : 'מה קרה היום'}
               /* The exact queue count, not this array's length: the array is
                  capped at UPCOMING_LIMIT and printing its length as a total
                  was a ceiling presented as a fact. */
+              /*
+               * THE SUBTITLE SAYS WHAT THE LIST COVERS, because the list is now
+               * a window rather than the queue.
+               *
+               * It used to print `summary.queued` on its own — true about the
+               * queue and wrong about the card the moment the card stopped
+               * showing all of it. Both numbers are here: what is due in the
+               * next day, and how many are waiting in total, so the card and
+               * the "בתור" tile above it can never look like they disagree.
+               *
+               * AND THE CASE WITH NOTHING IN THE WINDOW GETS ITS OWN SENTENCE.
+               * A queue of fifty whose soonest row is next Tuesday would
+               * otherwise show an empty card over "50 ממתינים בתור" and read
+               * as a fault.
+               */
               subtitle={
-                data.upcoming.length
-                  ? `${summary.queued} ממתינים בתור`
-                  : data.doneToday.length
-                    ? 'התור ריק — אלה הפרסומים שהסתיימו היום'
-                    : undefined
+                soon.length
+                  ? `${data.upcomingSoon} ב-24 השעות הקרובות · ${summary.queued} ממתינים בתור`
+                  : summary.automaticWaiting
+                    ? `אין פרסום ב-24 השעות הקרובות · ${summary.automaticWaiting} ממתינים אחר כך`
+                    : data.doneToday.length
+                      ? 'התור ריק — אלה הפרסומים שהסתיימו היום'
+                      : undefined
               }
               /*
-               * THE RESET, WHERE THE QUEUE IS ACTUALLY LOOKED AT.
+               * NO CONTROLS IN THIS HEADER ANY MORE — "למעלה תמחק אפס והכל".
                *
-               * It went on the "ממתינים בתור" stat tile first, which is
-               * literally what was asked for and was the wrong place: that
-               * tile sits at the very top of a long dashboard, and the control
-               * is a 24px chip inside one of four ~84px boxes. The owner
-               * scrolled the whole page twice and reported it missing. It was
-               * not missing — the classes and the label are both in the built
-               * bundle — it was unfindable, which for a control is the same
-               * thing.
-               *
-               * This card is the one they screenshot when they think about the
-               * queue: it is the one with "33 ממתינים בתור" written on it. So
-               * the reset goes here too, beside "הכל", at full tap size and
-               * with a word on it. Both call the same discardQueue(), so there
-               * is still one implementation and one confirmation.
+               * It carried a red "אפס" (cancel every scheduled publication)
+               * and a "הכל" link, and both are still exactly where they were
+               * before this card borrowed them: the reset is the chip on the
+               * "ממתינים בתור" tile at the top of this same screen and the
+               * "עצור ומחק את כל הפרסומים" button at its foot, and "הכל" is
+               * the tile's own href into /social/history. Nothing became
+               * unreachable; a destructive control stopped sitting one
+               * mis-tap from a list the owner reads several times a day.
                */
-              action={
-                <div className="flex items-center gap-0.5">
-                  {pending ? (
-                    <button
-                      type="button"
-                      onClick={() => void discardQueue(false)}
-                      disabled={busy === 'discard'}
-                      className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-bold text-error-400 transition-colors hover:bg-error-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error-400 disabled:opacity-40"
-                    >
-                      <TrashIcon aria-hidden className="h-4 w-4" />
-                      {busy === 'discard' ? 'מאפס…' : 'אפס'}
-                    </button>
-                  ) : null}
-                  <Link href="/social/history" className="inline-flex min-h-11 min-w-11 items-center justify-center px-3 text-sm font-bold text-brand-400">
-                    הכל
-                  </Link>
-                </div>
-              }
             >
               {/* `total` counts the SAME SET as the rows: this list is read
                   with AUTOMATIC_WAITING_STATUSES, so its total is
@@ -1451,10 +1483,14 @@ export default function SocialDashboard() {
                   card headed מה קרה היום that needs a tap to become the day
                   is not what it says it is. */}
               <Timeline
-                rows={data.upcoming}
+                rows={soon}
                 limit={UPCOMING_LIMIT}
                 scrollable
-                total={summary.automaticWaiting}
+                /* The window's own total, from the database. summary.automaticWaiting
+                   is the WHOLE queue and would make the footer promise rows this
+                   list is no longer about; `soon.length` is the capped read and
+                   would print the ceiling as a fact. */
+                total={data.upcomingSoon}
                 done={data.doneToday}
                 onOpen={(row) => setDetail(row.id)}
               />

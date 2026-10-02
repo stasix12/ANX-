@@ -1675,6 +1675,44 @@ export async function runCoverMedia(campaignId: string): Promise<MediaItem[] | n
   return media && media.length ? media : null;
 }
 
+/**
+ * The same cover, for several runs, in ONE request.
+ *
+ * The dashboard used to feature exactly one run and read its cover on its own.
+ * It now shows every live run in a swipe strip, and the obvious way to fill
+ * that strip — runCoverMedia() per card — is N requests on the screen whose
+ * speed the owner complained about by name. This is one.
+ *
+ * SAME RULE PER CAMPAIGN as runCoverMedia(): the most recently updated
+ * non-archived post wins, and if that post has no media the answer is nothing
+ * rather than an older post's picture. Rows arrive newest-first, so the first
+ * one seen for a campaign is that post; `seen` is what keeps a later row from
+ * standing in for it.
+ *
+ * The ceiling is high enough to be irrelevant for a strip of a handful of runs
+ * and low enough that this can never pull a whole table: it is PostgREST's own
+ * cap, which is the only number here that is not ours to choose.
+ */
+export async function runCovers(campaignIds: string[]): Promise<Record<string, MediaItem[]>> {
+  if (!campaignIds.length) return {};
+  const { data } = await db()
+    .from('social_posts')
+    .select('campaign_id, media')
+    .in('campaign_id', campaignIds)
+    .neq('status', 'archived')
+    .order('updated_at', { ascending: false })
+    .limit(CAMPAIGN_ROLLUP_LIMIT);
+  const out: Record<string, MediaItem[]> = {};
+  const seen = new Set<string>();
+  for (const row of (data ?? []) as { campaign_id: string | null; media?: MediaItem[] }[]) {
+    const id = row.campaign_id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    if (row.media?.length) out[id] = row.media;
+  }
+  return out;
+}
+
 export async function campaignQueue(campaignId: string): Promise<QueueRow[]> {
   return (await campaignQueueWithStats(campaignId)).rows;
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
+import { CardSwiper } from '@/components/social/CardSwiper';
 import { LiveCampaignHero, LiveQueueHero, type SystemState } from '@/components/social/LiveCampaignHero';
 import { ActivityDetailSheet } from '@/components/social/ActivityDetailSheet';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
@@ -37,7 +38,7 @@ import {
   pauseCampaign,
   queueCampaignComment,
   queueSummary,
-  runCoverMedia,
+  runCovers,
   saveCampaign,
   sendWorkerCommand,
   setPaused,
@@ -221,11 +222,11 @@ export default function SocialDashboard() {
      not its id, because the sheet is seeded from the round's own stored
      wording and spacing — an id would mean looking it up again. */
   const [commentFor, setCommentFor] = useState<Campaign | null>(null);
-  /* The featured run's cover. Read on its own, and only when a run is
-     featured: the queue rows carry their post, but only while something is
-     still scheduled - a finished run would lose its picture exactly when the
-     owner looks to see what went out. */
-  const [featuredMedia, setFeaturedMedia] = useState<MediaItem[] | null>(null);
+  /* Every featured run's cover, by campaign id. Read on their own, because the
+     queue rows carry their post only while something is still scheduled — a
+     finished run would lose its picture exactly when the owner looks to see
+     what went out. One request for all of them; see runCovers(). */
+  const [covers, setCovers] = useState<Record<string, MediaItem[]>>({});
   /*
    * THE SCHEDULE THE OWNER HAS JUST CHANGED, until the server agrees.
    *
@@ -682,9 +683,31 @@ export default function SocialDashboard() {
     }
   }
 
-  /** The campaign worth putting at the top: running first, then most recently active. */
-  const featured = data
-    ? (data.campaigns
+  /*
+   * ───────── THE RUNS ON THIS SCREEN, in the order they deserve ───────────
+   *
+   * "עכשיו אם אני מריץ עוד קמפיין אני רוצה שיהיה ניתן לראות אותה גם בעמוד
+   *  הזה בסגנון SWIPE גלילה שמאלה ימינה."
+   *
+   * This used to pick ONE — `[0]` of exactly this sort — and a second live
+   * campaign simply was not on the dashboard at all. The sort is unchanged, so
+   * the card that was here yesterday is still the first one a thumb lands on;
+   * what changed is that the rest are now a swipe away instead of nowhere.
+   *
+   * THE SORT, UNTOUCHED: running first, then the one needing a person, then
+   * paused, then not started, then everything finished — and inside a rank,
+   * the least finished first, because a round at 10% is the one still worth
+   * watching.
+   *
+   * AND IT IS CAPPED. Each card draws a cover, a schedule block and a strip;
+   * twenty of them is a 9,000px scroll container built on every poll, on a
+   * screen whose speed is the thing the owner has complained about by name.
+   * Eight is well past what a swipe strip is for — "קמפיינים" lists them all,
+   * one tap away, and the tiles above already count them.
+   */
+  const FEATURED_LIMIT = 8;
+  const runs = data
+    ? data.campaigns
         .map((c) => ({ campaign: c, state: data.states[c.id] }))
         .filter((x): x is { campaign: Campaign; state: CampaignState } => Boolean(x.state?.progress.total))
         .sort((a, b) => {
@@ -692,19 +715,28 @@ export default function SocialDashboard() {
           const d = rank(a.state) - rank(b.state);
           if (d) return d;
           return percentFinished(a.state.progress) - percentFinished(b.state.progress);
-        })[0] ?? null)
-    : null;
+        })
+        .slice(0, FEATURED_LIMIT)
+    : [];
 
-  const featuredId = featured?.campaign.id ?? null;
+  /*
+   * EVERY CARD'S COVER, IN ONE READ.
+   *
+   * The id list is joined into a string so the effect compares by VALUE: the
+   * array is rebuilt on every render and a dependency on the array itself
+   * would re-read the covers several times a second.
+   */
+  const runIds = runs.map((r) => r.campaign.id).join(',');
   useEffect(() => {
-    if (!featuredId) {
-      setFeaturedMedia(null);
+    const ids = runIds ? runIds.split(',') : [];
+    if (!ids.length) {
+      setCovers({});
       return;
     }
     let alive = true;
-    runCoverMedia(featuredId)
+    runCovers(ids)
       .then((m) => {
-        if (alive) setFeaturedMedia(m);
+        if (alive) setCovers(m);
       })
       // A missing cover is not worth an error on screen: the card falls back
       // to the queue row's post, and failing that shows no tile at all.
@@ -712,7 +744,7 @@ export default function SocialDashboard() {
     return () => {
       alive = false;
     };
-  }, [featuredId]);
+  }, [runIds]);
 
   /*
    * How many DISTINCT groups the featured run publishes to.
@@ -730,9 +762,8 @@ export default function SocialDashboard() {
    * `targetCount` field — see the report; campaign.ts is not this task's to
    * edit.
    */
-  const featuredTargetCount = featured
-    ? new Set([...featured.state.upcoming, ...featured.state.done].map((r) => r.target_id)).size
-    : null;
+  const targetCountOf = (state: CampaignState): number =>
+    new Set([...state.upcoming, ...state.done].map((r) => r.target_id)).size;
 
   /*
    * ───────── writing the featured run's schedule ──────────────────────────
@@ -802,14 +833,16 @@ export default function SocialDashboard() {
     [toast],
   );
 
-  /* What the card draws: the stored row, with the owner's un-acknowledged
-     change laid over it. readSchedule() validates every field either way, so
-     a row written by an older version still resolves to a usable schedule. */
-  const featuredSchedule: CampaignSchedule | null = featured
-    ? readSchedule(
-        schedulePatch?.id === featured.campaign.id ? { ...featured.campaign, ...schedulePatch.columns } : featured.campaign,
-      )
-    : null;
+  /* What a card draws: the stored row, with the owner's un-acknowledged change
+     laid over it. readSchedule() validates every field either way, so a row
+     written by an older version still resolves to a usable schedule. */
+  const scheduleOf = (campaign: Campaign): CampaignSchedule =>
+    readSchedule(schedulePatch?.id === campaign.id ? { ...campaign, ...schedulePatch.columns } : campaign);
+
+  /* Which card is busy, rather than all of them. `act()` keys are now
+     "camp-pause:<id>", so a pause on one run cannot grey out the two beside
+     it in the strip. */
+  const campBusy = (id: string): boolean => Boolean(busy?.startsWith('camp') && busy.endsWith(`:${id}`));
 
   /**
    * The publication that should already have gone out, when nothing is there
@@ -1237,38 +1270,49 @@ export default function SocialDashboard() {
           />
 
 
-          {/* 3 — what the current round is doing. No countdown on this card:
-              its next instant comes from a different row than the system
-              card's, and two clocks 200px apart showing two times is the
-              contradiction this module exists to prevent. */}
-          {featured && (
-            <LiveCampaignHero
-              campaign={featured.campaign}
-              state={featured.state}
-              busy={busy?.startsWith('camp')}
-              onPause={() => act('camp-pause', () => pauseCampaign(featured.campaign.id, true), 'הסבב הושהה.')}
-              onResume={() => act('camp-resume', () => pauseCampaign(featured.campaign.id, false), 'הסבב ממשיך.')}
-              onReset={() => resetRun(featured.campaign.id, featured.campaign.name, featured.state)}
-              onTune={() => setTuner({ campaignId: featured.campaign.id })}
-              /* "Now" on that card is a claim about a machine, so it is made
-                 from a machine fact rather than from the clock. */
-              workerOnline={data.workerOnline}
-              /* ...and it must also know when EVERYTHING is held. Without this
-                 the card read "רץ" with a live dot directly under a header
-                 saying "המשך הכול". */
-              globalPaused={data.control.paused}
-              targetCount={featuredTargetCount}
-              startedAt={featured.state.startedAt}
-              /* The post this run publishes. listQueue already selects the post
-                 with its media, so the cover costs no extra read. */
-              media={featuredMedia ?? data.upcoming.find((r) => r.campaign_id === featured.campaign.id)?.post?.media ?? null}
-              /* "תזמון פרסום" and "הפרסום הבא יתחיל ב:", inside this card —
-                 the owner's reference image for THIS screen. The values are
-                 the campaign's own row; the write is the block above. */
-              schedule={featuredSchedule ?? undefined}
-              onScheduleChange={(next) => changeSchedule(featured.campaign, next)}
-              scheduleBusy={scheduleBusy}
-            />
+          {/* 3 — what the current rounds are doing, one per swipe. No countdown
+              on these cards: their next instant comes from a different row than
+              the system card's, and two clocks 200px apart showing two times is
+              the contradiction this module exists to prevent. */}
+          {runs.length > 0 && (
+            <CardSwiper
+              label="הסבבים שלכם"
+              itemLabel={(position, total) => `סבב ${position} מתוך ${total}`}
+            >
+              {runs.map((run) => (
+                <LiveCampaignHero
+                  key={run.campaign.id}
+                  campaign={run.campaign}
+                  state={run.state}
+                  /* Keyed by id, so pausing one run does not grey out the two
+                     beside it in the strip. */
+                  busy={campBusy(run.campaign.id)}
+                  onPause={() => act(`camp-pause:${run.campaign.id}`, () => pauseCampaign(run.campaign.id, true), 'הסבב הושהה.')}
+                  onResume={() => act(`camp-resume:${run.campaign.id}`, () => pauseCampaign(run.campaign.id, false), 'הסבב ממשיך.')}
+                  onReset={() => resetRun(run.campaign.id, run.campaign.name, run.state)}
+                  onTune={() => setTuner({ campaignId: run.campaign.id })}
+                  /* "Now" on that card is a claim about a machine, so it is made
+                     from a machine fact rather than from the clock. */
+                  workerOnline={data.workerOnline}
+                  /* ...and it must also know when EVERYTHING is held. Without this
+                     the card read "רץ" with a live dot directly under a header
+                     saying "המשך הכול". */
+                  globalPaused={data.control.paused}
+                  targetCount={targetCountOf(run.state)}
+                  startedAt={run.state.startedAt}
+                  /* The post this run publishes. One read filled every card's
+                     cover; the queue row's post is the fallback, and it costs
+                     nothing because listQueue already selected it. */
+                  media={covers[run.campaign.id] ?? data.upcoming.find((r) => r.campaign_id === run.campaign.id)?.post?.media ?? null}
+                  /* "תזמון פרסום" and "הפרסום הבא יתחיל ב:", inside this card —
+                     the owner's reference image for THIS screen. The values are
+                     the campaign's own row; the write is the block above. */
+                  schedule={scheduleOf(run.campaign)}
+                  onScheduleChange={(next) => changeSchedule(run.campaign, next)}
+                  scheduleBusy={scheduleBusy && schedulePatch?.id === run.campaign.id}
+                />
+              ))}
+            </CardSwiper>
           )}
 
           {/*

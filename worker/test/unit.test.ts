@@ -1257,8 +1257,13 @@ console.log('unit tests OK');
     2,
     'both the system panel and the run card must open the tuner — the run card alone disappears with the run',
   );
+  /* `run`, not `featured`: the dashboard now draws EVERY live round in a swipe
+     strip and maps over them, so the scope has to come from the card the tap
+     was on. The rule is unchanged and is stricter here than it was with one
+     card — reading the subject off anything outside the map would tune
+     whichever round the strip happened to start on. */
   assert.ok(
-    page.includes('onTune={() => setTuner({ campaignId: featured.campaign.id })}'),
+    page.includes('onTune={() => setTuner({ campaignId: run.campaign.id })}'),
     'the run card tunes ITS OWN run',
   );
   assert.ok(

@@ -60,7 +60,11 @@ function is(ok: boolean, claim: string): void {
    featured run; CampaignCard is the campaigns screen's. The block has to be in
    the first one, which is the whole point of this pass. */
 is(/<CampaignScheduleBoard/.test(hero), 'the dashboard run card renders the schedule block itself');
-is(/LiveCampaignHero/.test(page) && /schedule=\{featuredSchedule/.test(page), 'and the dashboard page hands it the featured run\'s own schedule');
+/* `scheduleOf(run.campaign)`, inside the map: the dashboard draws every live
+   round in a swipe strip now, so each card is handed ITS OWN campaign's
+   schedule. A value read from outside the map would write one round's days and
+   hours onto whichever card the strip happened to open on. */
+is(/LiveCampaignHero/.test(page) && /schedule=\{scheduleOf\(run\.campaign\)\}/.test(page), 'and the dashboard page hands each card its own run\'s schedule');
 
 /* NOT A MODAL, NOT A SHEET, NOT A ROUTE. The board and the editor under it are
    plain children of the card. A <Sheet> or a router push here would be the one

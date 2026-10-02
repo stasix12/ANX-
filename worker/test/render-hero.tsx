@@ -82,7 +82,9 @@ const camp = (id: string, name: string, status: 'active' | 'paused' = 'active') 
  *     the strip has to say so rather than invent one.
  *  7  no schedule passed at all, which is how any other caller mounts this
  *     card: no block, no strip, and the card exactly as it was.
- *  8  a long Hebrew name with three-figure counts, globally paused.
+ *  8  nothing queued and the switch OFF — the only state with no instant of
+ *     any kind, and the one "לא מתוזמן" is for.
+ *  9  a long Hebrew name with three-figure counts, globally paused.
  */
 const cases = [
   ['the reference image: finished with failures, 50 groups', camp('1', 'פרסומת לרוסים סבב ראשון'),
@@ -106,6 +108,11 @@ const cases = [
   ['no schedule at all — any other caller', camp('7', 'סבב פרסום'),
     st(prog({ total: 15, published: 5, skipped: 10, finished: 15 }), { state: 'stopped', startedAt: inHours(-30) }),
     15, null],
+  /* 9 — nothing queued AND the switch off. The only state left with no
+         instant of any kind to print, and the one "לא מתוזמן" is for. */
+  ['a finished round with the schedule off', camp('9', 'ניקוי דלתות'),
+    st(prog({ total: 20, published: 20, finished: 20 }), { state: 'completed', startedAt: inHours(-9) }),
+    20, sched.off],
   ['a long name, big numbers, publishing globally paused', camp('8', 'ניקוי ריפודי רכב ומושבים בבאר שבע והסביבה', 'paused'),
     st(prog({ total: 248, published: 120, scheduled: 100, skipped: 16, failed: 12, finished: 148 }), { state: 'paused', startedAt: inHours(-48), nextAt: inHours(4) }),
     124, sched.reference],

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
-import { nextPublishAt, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { nextAllowedAt, nextPublishAt, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { countdownTo } from '@/lib/social/countdown';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
@@ -260,6 +260,27 @@ export function LiveCampaignHero({
   const noDay = Boolean(schedule?.enabled && state.nextAt && !nextAt);
 
   /*
+   * WHEN THIS CAMPAIGN MAY NEXT PUBLISH, for a round with nothing in its queue.
+   *
+   * "אז ברגע שסיים שיראה את הסבב הקרוב .. הגיוני לא ?" It is, and this is the
+   * half of it that is true: a finished round has no publication waiting, so
+   * there is no instant at which anything goes out — but the schedule still
+   * says when the next window opens, and that is what he is asking to see.
+   *
+   * FROM THE SCHEDULE ALONE, with no last-published gap applied: the gap is
+   * about the distance between two publications and there is no first one to
+   * measure from. nextAllowedAt() is the same function nextPublishAt() ends in,
+   * so the window edge here and the window edge the engine enforces are the
+   * same arithmetic.
+   *
+   * The strip prints it under its own label — see the note there. It is not
+   * offered as "the next publication", because nothing will publish at it
+   * until a post is launched.
+   */
+  const windowOpensAt: string | null =
+    schedule?.enabled && !state.nextAt ? (nextAllowedAt(schedule, new Date())?.toISOString() ?? null) : null;
+
+  /*
    * "לחיצה על 'ערוך מועד' צריכה לפתוח את אפשרויות עריכת התזמון שכבר בנינו."
    *
    * IN THE CARD, NOT OVER IT. "אל תפתח Modal. אל תפתח Popup. אל תיצור מסך
@@ -374,6 +395,7 @@ export function LiveCampaignHero({
           onEdit={() => setEditingSchedule((v) => !v)}
           editing={editingSchedule}
           nextAt={nextAt}
+          windowOpensAt={windowOpensAt}
           noDay={noDay}
           campaignName={campaign.name}
           disabled={scheduleBusy}

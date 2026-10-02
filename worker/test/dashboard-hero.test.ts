@@ -255,7 +255,7 @@ async function main(): Promise<void> {
       });
 
       assert.equal(seen.overflow, false, `${width}: the page scrolls sideways`);
-      assert.equal(seen.cards.length, 8, `${width}: expected 8 cards, got ${seen.cards.length}`);
+      assert.equal(seen.cards.length, 9, `${width}: expected 9 cards, got ${seen.cards.length}`);
 
       seen.cards.forEach((c, i) => {
         const at = `${width}px, card ${i + 1}`;
@@ -280,11 +280,17 @@ async function main(): Promise<void> {
            360 is allowed the two-row fallback and nothing else is. */
         assert.equal(c.readoutRows, width >= 390 ? 1 : 2, `${at}: readouts on ${c.readoutRows} row(s)`);
         assert.ok(c.text.includes('תזמון פרסום'), `${at}: the block has lost its title`);
-        assert.ok(c.text.includes('הפרסום הבא יתחיל ב:'), `${at}: the strip has lost its label`);
+        /* One of the two labels — a queued publication's, or the window's for a
+           round with nothing waiting. Neither is optional: a strip with a bare
+           time and no label is a number nobody can act on. */
+        assert.ok(
+          c.text.includes('הפרסום הבא יתחיל ב:') || c.text.includes('חלון הפרסום הבא:'),
+          `${at}: the strip has lost its label`,
+        );
       });
 
       /* ─── what each case must, and must not, say ─────────────────────── */
-      const [reference, , , noDay, off, nothingQueued] = seen.cards;
+      const [reference, , , noDay, off, nothingQueued, , scheduleOff] = seen.cards;
 
       /* 1 — the reference's own card: a time, a date, and the day it falls on. */
       assert.match(reference.text, /הפרסום הבא יתחיל ב: ?\d{2}:\d{2}/, `${width}: the reference card prints no time`);
@@ -305,13 +311,30 @@ async function main(): Promise<void> {
       assert.ok(off.text.includes('כבוי'), `${width}: a schedule that is off must read "כבוי"`);
       assert.match(off.text, /יתחיל ב: ?\d{2}:\d{2}/, `${width}: a queued publication is still a fact when the schedule is off`);
 
-      /* 6 — a finished round with nothing queued. There is no next publication
-             and the strip says so rather than inventing one. */
-      assert.ok(nothingQueued.text.includes('לא מתוזמן'), `${width}: an empty queue must read "לא מתוזמן"`);
-      assert.doesNotMatch(nothingQueued.text, /יתחיל ב: ?\d{2}:\d{2}/, `${width}: an empty queue printed a time`);
+      /*
+       * 6 — A FINISHED ROUND WITH NOTHING QUEUED, and the schedule still on.
+       *
+       * "אז ברגע שסיים שיראה את הסבב הקרוב .. הגיוני לא ?" — so it shows when
+       * the window next opens. BOTH halves have to be on screen: the time on
+       * its own would read as a publication that is about to happen, and
+       * nothing will happen at it until a post is launched.
+       */
+      assert.ok(nothingQueued.text.includes('אין פרסום ממתין'), `${width}: an empty queue must say nothing is waiting`);
+      assert.ok(nothingQueued.text.includes('חלון הפרסום הבא:'), `${width}: and must name what the time beside it is`);
+      assert.match(nothingQueued.text, /חלון הפרסום הבא: ?\d{2}:\d{2}/, `${width}: the window's own instant is missing`);
+      /* And it may NOT borrow the words a queued publication uses. */
+      assert.doesNotMatch(nothingQueued.text, /הפרסום הבא יתחיל ב:/, `${width}: an empty queue promised a publication`);
+
+      /* 8 — nothing queued and the switch off. No queue, no window, no time. */
+      assert.ok(scheduleOff.text.includes('לא מתוזמן'), `${width}: with no queue and no schedule it must read "לא מתוזמן"`);
+      /* Scoped to the STRIP's own labels. A bare /\d\d:\d\d/ matches the
+         readout boxes above it — "08:00 – 22:00" is the window this campaign
+         is set to, and it is correct for it to be on screen. */
+      assert.doesNotMatch(scheduleOff.text, /יתחיל ב: ?\d{2}:\d{2}/, `${width}: a card with nothing scheduled printed a publication time`);
+      assert.ok(!scheduleOff.text.includes('חלון הפרסום הבא:'), `${width}: a switched-off schedule has no window to open`);
 
       await view.close();
-      checks += 9;
+      checks += 13;
     }
   } finally {
     await browser.close();

@@ -49,6 +49,7 @@ export function CampaignScheduleBoard({
   onToggle,
   onEdit,
   nextAt,
+  windowOpensAt,
   noDay,
   campaignName,
   disabled = false,
@@ -69,6 +70,23 @@ export function CampaignScheduleBoard({
    * second mechanism this file's header rules out.
    */
   nextAt: string | null;
+  /**
+   * When the schedule's window next opens, for a round with NOTHING waiting.
+   *
+   * "אז ברגע שסיים שיראה את הסבב הקרוב .. הגיוני לא ?" — it is, and this is
+   * the honest half of it. A finished round has no publication in the queue,
+   * so there is no instant at which anything will go out; what there IS, and
+   * what the owner is really asking for, is the next moment this campaign
+   * would be ALLOWED to publish. That is a fact about the schedule alone and
+   * is computed from it alone.
+   *
+   * It is deliberately NOT printed under the same words as a queued
+   * publication. A strip that said "הפרסום הבא יתחיל ב-19:00" over an empty
+   * queue would be the screen promising something that will not happen at
+   * 19:00 — the exact failure this module keeps being rewritten to prevent.
+   * The strip says both things: nothing is waiting, and when the window opens.
+   */
+  windowOpensAt: string | null;
   /**
    * The schedule is on and no day is chosen, so there is a waiting publication
    * that can never go out. A distinct state from "nothing waiting": one is a
@@ -233,7 +251,7 @@ export function CampaignScheduleBoard({
       </div>
 
       {/* ─── "הפרסום הבא יתחיל ב:" — its own container, as the image draws it ── */}
-      <NextPublishStrip nextAt={nextAt} noDay={noDay} />
+      <NextPublishStrip nextAt={nextAt} noDay={noDay} windowOpensAt={windowOpensAt} />
     </div>
   );
 }
@@ -307,8 +325,31 @@ function Box({
  * no day chosen (a setting), nothing queued (a finished round), and a round
  * that is simply waiting.
  */
-function NextPublishStrip({ nextAt, noDay }: { nextAt: string | null; noDay: boolean }) {
-  const blocked = noDay || !nextAt;
+function NextPublishStrip({
+  nextAt,
+  windowOpensAt,
+  noDay,
+}: {
+  nextAt: string | null;
+  windowOpensAt: string | null;
+  noDay: boolean;
+}) {
+  /*
+   * ONE OF THREE THINGS IS TRUE, and each gets its own words.
+   *
+   *   a publication is queued  → when it goes out
+   *   nothing is queued, but the schedule is on
+   *                            → nothing is waiting, AND when the window opens
+   *   nothing at all           → "לא מתוזמן"
+   *
+   * The middle one is the owner's own question: "אז ברגע שסיים שיראה את הסבב
+   * הקרוב". The date and the big figure are drawn identically in both of the
+   * first two — the layout is the reference's either way — and the only thing
+   * that changes is the label, which is the one place the difference between
+   * "this WILL go out at" and "this MAY go out from" can honestly live.
+   */
+  const shown = nextAt ?? (noDay ? null : windowOpensAt);
+  const isWindow = !nextAt && !!windowOpensAt && !noDay;
   return (
     <div
       /*
@@ -327,7 +368,19 @@ function NextPublishStrip({ nextAt, noDay }: { nextAt: string | null; noDay: boo
       }`}
     >
       <span data-must-fit className={`whitespace-nowrap text-[12px] font-bold leading-4 ${noDay ? 'text-warning-400' : 'text-brand-400'}`}>
-        הפרסום הבא יתחיל ב:
+        {isWindow ? (
+          /* TWO LINES, AND BOTH OF THEM MATTER. The first is why there is no
+             publication to name; the second is what the figure beside it IS.
+             Dropping either one is how this strip would start lying: without
+             the first it promises a publication, without the second it leaves
+             a bare time with nothing saying what happens at it. */
+          <>
+            <span className="block text-mist-300">אין פרסום ממתין</span>
+            <span className="block">חלון הפרסום הבא:</span>
+          </>
+        ) : (
+          'הפרסום הבא יתחיל ב:'
+        )}
       </span>
 
       <span className="min-w-0 text-center">
@@ -336,9 +389,9 @@ function NextPublishStrip({ nextAt, noDay }: { nextAt: string | null; noDay: boo
              design (rules.ts defers, it never drops) and indefinitely. The
              strip says the cause, because the fix is two taps above it. */
           <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">לא נבחר יום פרסום</span>
-        ) : nextAt ? (
+        ) : shown ? (
           <span data-must-fit dir="ltr" className="block truncate text-[22px] font-extrabold leading-7 tabular-nums text-brand-400">
-            {formatTimeHe(nextAt)}
+            {formatTimeHe(shown)}
           </span>
         ) : (
           <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-mist-300">לא מתוזמן</span>
@@ -349,12 +402,12 @@ function NextPublishStrip({ nextAt, noDay }: { nextAt: string | null; noDay: boo
           week in. Empty when there is no instant — a date with no time beside
           it would be the screen filling a gap with something. */}
       <span className="text-end">
-        {!blocked && nextAt && (
+        {shown && (
           <>
             <span data-must-fit dir="ltr" className="block text-[12px] font-extrabold leading-4 tabular-nums text-brand-400">
-              {formatDateHe(nextAt)}
+              {formatDateHe(shown)}
             </span>
-            <span data-must-fit className="block text-[10px] font-bold leading-[13px] text-mist-300">{dayRelativeHe(new Date(nextAt))}</span>
+            <span data-must-fit className="block text-[10px] font-bold leading-[13px] text-mist-300">{dayRelativeHe(new Date(shown))}</span>
           </>
         )}
       </span>

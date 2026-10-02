@@ -6,6 +6,8 @@ import {
   MAX_GAP_MINUTES,
   MIN_GAP_MINUTES,
   TIME_CHOICES,
+  WEEKDAY_SHORT,
+  dayRelativeHe,
   daysLabel,
   isAllowedAt,
   nextAllowedAt,
@@ -448,6 +450,39 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
 function ch(v: number): number {
   const c = v / 255;
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/* ─────────────────────── "מחר (חמישי)" — the line under the date ───────── */
+{
+  /*
+   * WHY THIS IS A CALENDAR COMPARISON AND NOT A SUBTRACTION. The dashboard
+   * strip prints a date and, under it, the day it falls on. 23:50 tonight and
+   * 00:10 after midnight are twenty minutes apart and are NOT the same day;
+   * a "less than 24 hours away" rule calls the second one "היום" and sends the
+   * owner looking for a publication on the wrong date.
+   */
+  const now = at('2026-10-01T23:50'); // a Thursday
+  eq(dayRelativeHe(at('2026-10-01T23:55'), now), 'היום (חמישי)', 'five minutes later is still today');
+  eq(dayRelativeHe(at('2026-10-02T00:10'), now), 'מחר (שישי)', 'twenty minutes later is tomorrow, because it is a different date');
+  eq(dayRelativeHe(at('2026-10-03T08:00'), now), 'מחרתיים (שבת)', 'and the day after that has its own word in Hebrew');
+  /* Beyond that a count would be arithmetic the owner has to do. The date is
+     beside it; the day name is what the date needs. */
+  eq(dayRelativeHe(at('2026-10-04T08:00'), now), 'יום ראשון', 'further out, the day is simply named');
+  eq(dayRelativeHe(at('2026-10-10T08:00'), now), 'שבת', 'and שבת is not called "יום שבת"');
+
+  /* THE CLOCK CHANGE DOES NOT MOVE A DAY BOUNDARY. 25.10.2026 is the Sunday
+     Israel goes back to +02:00 at 02:00, so that calendar day is 25 hours
+     long — a millisecond rule reads its last hour as the next day. */
+  const dst = at('2026-10-25T00:30');
+  eq(dayRelativeHe(at('2026-10-25T23:00'), dst), 'היום (ראשון)', 'the 25-hour day is still one day');
+  eq(dayRelativeHe(at('2026-10-26T00:30'), dst), 'מחר (שני)', 'and the day after it is tomorrow, not "מחרתיים"');
+
+  /* Seven names, in the same order the chips and zonedWeekday() use, and none
+     of them carrying the word "יום" — the caller's sentence supplies it. */
+  eq(WEEKDAY_SHORT.length, 7, 'seven weekday names');
+  is(!WEEKDAY_SHORT.some((n) => n.startsWith('יום')), 'none of them repeats the word the sentence around them already has');
+  eq(WEEKDAY_SHORT[0], 'ראשון', 'index 0 is Sunday, as zonedWeekday() numbers them');
+  eq(WEEKDAY_SHORT[6], 'שבת', 'and index 6 is Saturday');
 }
 
 console.log(`campaign schedule tests OK — ${checks} assertions`);

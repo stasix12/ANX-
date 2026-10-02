@@ -4,9 +4,12 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
+import { nextPublishAt, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { countdownTo } from '@/lib/social/countdown';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
+import { CampaignScheduleBoard } from './CampaignScheduleBoard';
+import { CampaignSchedulePanel } from './CampaignSchedulePanel';
 import { PostCover } from './PostCover';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
@@ -138,6 +141,9 @@ export function LiveCampaignHero({
   globalPaused = false,
   targetCount = null,
   startedAt = null,
+  schedule,
+  onScheduleChange,
+  scheduleBusy = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status'>;
   state: CampaignState;
@@ -175,6 +181,23 @@ export function LiveCampaignHero({
   targetCount?: number | null;
   /** First real publication (state.startedAt). Null until something went out. */
   startedAt?: string | null;
+  /*
+   * ───────── "תזמון פרסום", on the card the owner's reference draws it on ──
+   *
+   * BOTH OR NEITHER, AND THAT IS WHAT KEEPS THIS BACKWARD COMPATIBLE. Without
+   * them the card renders exactly as it did — no block, no strip, and "ערוך
+   * מועד" still opens the queue tuner it has always opened. The dashboard
+   * passes them; anything else that ever mounts this card does not have to.
+   */
+  schedule?: CampaignSchedule;
+  /**
+   * Writes the campaign's schedule columns. The page owns the write (it
+   * debounces it and puts the row back if it fails); this card owns nothing
+   * but the switch that calls it.
+   */
+  onScheduleChange?: (next: CampaignSchedule) => void;
+  /** While that write is in flight, so the controls cannot be raced. */
+  scheduleBusy?: boolean;
 }) {
   const { progress } = state;
   /*
@@ -204,6 +227,53 @@ export function LiveCampaignHero({
   // pause at all.
   const showPause = canPauseRun(progress, campaign.status);
   const showResume = canResumeRun(progress, campaign.status);
+
+  /*
+   * WHEN THE NEXT PUBLICATION ACTUALLY LANDS — the one number the reference's
+   * new strip is about, and the one this card must not work out for itself.
+   *
+   * THE SAME CALL rules.ts MAKES. nextPublishAt() applies the gap since this
+   * run last published, then snaps the result into the first moment the
+   * schedule permits — walking to the next chosen day when today's window has
+   * closed. That is why "אם עכשיו 21:55 וה-Interval 10 דקות ושעת הסיום 22:00"
+   * prints tomorrow's start and not 22:05: the engine would do the same, and
+   * both of them ask one function. The campaigns card derives its "הבא בתור"
+   * from these exact four lines.
+   *
+   * WITH THE SWITCH OFF THIS IS A NO-OP — the stored instant, unchanged, which
+   * is what the queue will genuinely do. A row really waiting for 14:30 is not
+   * "לא מתוזמן", and printing that over it would be the dashboard hiding a
+   * publication that is about to go out.
+   */
+  const lastPublishedAt = state.done.find((r) => r.published_at)?.published_at ?? null;
+  const nextAt: string | null = (() => {
+    if (!state.nextAt) return null;
+    if (!schedule?.enabled) return state.nextAt;
+    /* A row whose instant has already passed publishes at the next legal
+       moment from NOW, not from the moment it missed. */
+    const from = new Date(Math.max(new Date(state.nextAt).getTime(), Date.now()));
+    const at = nextPublishAt(schedule, from, lastPublishedAt ? new Date(lastPublishedAt) : null);
+    return at ? at.toISOString() : null;
+  })();
+  /* Something IS waiting and the schedule permits no day at all, which is a
+     setting rather than an empty queue and gets its own words. */
+  const noDay = Boolean(schedule?.enabled && state.nextAt && !nextAt);
+
+  /*
+   * "לחיצה על 'ערוך מועד' צריכה לפתוח את אפשרויות עריכת התזמון שכבר בנינו."
+   *
+   * IN THE CARD, NOT OVER IT. "אל תפתח Modal. אל תפתח Popup. אל תיצור מסך
+   *  חדש. אל תעביר את התזמון למסך אחר." So the editor is the panel this
+   * product already has, revealed directly under the action row that opened
+   * it — the owner sees what he pressed produce something below his thumb
+   * rather than a sheet over the screen he was reading.
+   *
+   * WITHOUT A SCHEDULE THE BUTTON IS UNTOUCHED and still opens the queue
+   * tuner, which is also still where it has always been on the system card
+   * above — nothing became unreachable.
+   */
+  const canSchedule = Boolean(schedule && onScheduleChange);
+  const [editingSchedule, setEditingSchedule] = useState(false);
 
   return (
     <HeroPanel ariaLabel="הסבב הפעיל" className="p-3.5">
@@ -281,6 +351,36 @@ export function LiveCampaignHero({
       </div>
 
       {/*
+        ─── "תזמון פרסום" + "הפרסום הבא יתחיל ב:" ──────────────────────────
+
+        Under the progress and above the actions, which is where the reference
+        image puts them and the order the brief spells out:
+
+          [Thumbnail] [שם הקמפיין] [סטטוס] [התחיל לפני X · N קבוצות]
+          [50 / 50 טופלו] [100%] [Progress Bar] [פורסמו / דולגו / נכשלו]
+          [תזמון פרסום]
+          [הפרסום הבא יתחיל ב:]
+          [ערוך מועד] [פתח סבב]
+
+        Nothing above this line moved: the cover, the name, the pill, the two
+        figures, the segmented bar and the breakdown are the card as it was.
+        "אל תעצב מחדש את המסך... השינוי המבוקש הוא בתוך כרטיס הקמפיין במסך
+         הראשי בלבד."
+      */}
+      {schedule && onScheduleChange && (
+        <CampaignScheduleBoard
+          schedule={schedule}
+          onToggle={(enabled) => onScheduleChange({ ...schedule, enabled })}
+          onEdit={() => setEditingSchedule((v) => !v)}
+          editing={editingSchedule}
+          nextAt={nextAt}
+          noDay={noDay}
+          campaignName={campaign.name}
+          disabled={scheduleBusy}
+        />
+      )}
+
+      {/*
         One row of three: what the run is doing, where to look at it, and when
         it goes out. They were a two-up grid with the tuner on a line of its
         own underneath, which read as an afterthought — and it is the control
@@ -288,7 +388,13 @@ export function LiveCampaignHero({
         forward. Three across at 375px leaves ~108px each, so these are `md`
         rather than `lg`: still a 44px target, with room for the words.
       */}
-      <div className="mt-3 grid grid-cols-3 gap-2 [&>*]:min-w-0">
+      {/* TWO COLUMNS WHEN THERE IS NOTHING TO PAUSE, which is what the
+          reference draws — a finished round, "פתח סבב" and "ערוך מועד" filling
+          the row. It used to be three columns with an empty cell in the
+          middle, so the two buttons sat at two thirds width with a hole
+          between them. No button appears or disappears; the row stops
+          reserving a slot for one that is not there. */}
+      <div className={`mt-3 grid gap-2 [&>*]:min-w-0 ${showResume || showPause ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <ButtonLink href={`/social/campaigns/${campaign.id}`} variant="secondary" size="md" className="justify-center">
           {/* "פתח סבב", the same words the runs list uses for the same URL. */}
           פתח סבב
@@ -305,10 +411,23 @@ export function LiveCampaignHero({
             <PauseIcon aria-hidden className="h-4 w-4" />
             השהה סבב
           </Button>
-        ) : (
-          <span />
-        )}
-        {onTune ? (
+        ) : null}
+        {canSchedule ? (
+          /* With a schedule on the card, this opens the schedule — which is
+             what the owner asked it to do by name. The queue tuner it used to
+             open is still one tap away inside that editor, and unchanged on
+             the system card above. */
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => setEditingSchedule((v) => !v)}
+            aria-expanded={editingSchedule}
+            className="justify-center gap-1.5"
+          >
+            <CalendarIcon aria-hidden className="h-4 w-4" />
+            ערוך מועד
+          </Button>
+        ) : onTune ? (
           <Button variant="secondary" size="md" onClick={onTune} className="justify-center gap-1.5">
             <CalendarIcon aria-hidden className="h-4 w-4" />
             ערוך מועד
@@ -317,6 +436,34 @@ export function LiveCampaignHero({
           <span />
         )}
       </div>
+
+      {/*
+        THE EDITOR, IN THE CARD, directly under the button that opened it.
+        The same panel the campaigns screen has carried since 3.84.0 — one
+        editor, one stored schedule, no second mechanism — and the queue's own
+        advanced settings kept reachable from inside it, so repointing the
+        button above cost nothing.
+      */}
+      {canSchedule && editingSchedule && schedule && onScheduleChange && (
+        <div className="mt-1">
+          <CampaignSchedulePanel
+            schedule={schedule}
+            onChange={onScheduleChange}
+            campaignName={campaign.name}
+            disabled={scheduleBusy}
+            /* The title and the switch are already in the readout block above
+               this one. Two live switches for one setting on one card is a
+               screen the owner cannot read. */
+            showHeader={false}
+          />
+          {onTune && (
+            <Button variant="secondary" size="sm" onClick={onTune} className="mt-1.5 w-full justify-center gap-1.5">
+              <RepeatIcon aria-hidden className="h-3.5 w-3.5" />
+              הגדרות תור מתקדמות
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* The counter belongs to this run, and this run is what the card is
           about. Closing it is how the owner says "that round is done" - the

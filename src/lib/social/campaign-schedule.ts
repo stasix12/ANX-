@@ -49,6 +49,46 @@ export const DAY_LABELS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳
 export const DAY_NAMES = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'שבת'] as const;
 
 /**
+ * The bare weekday, for the places a day is named inside a sentence that
+ * already supplies the word "יום" — "מחר (חמישי)" on the dashboard card.
+ *
+ * KEPT SEPARATE FROM DAY_NAMES RATHER THAN DERIVED FROM IT. DAY_NAMES is what
+ * a screen reader is handed, and שבת is not "יום שבת" there; stripping a "יום "
+ * prefix off six of seven entries and special-casing the seventh is the kind
+ * of cleverness that produces "(שבת)" in one place and "(יום שבת)" in another.
+ * Two short lists, each saying exactly what it is for.
+ */
+export const WEEKDAY_SHORT = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'] as const;
+
+/**
+ * "היום (רביעי)", "מחר (חמישי)", "מחרתיים (שישי)", or the plain day beyond
+ * that — the second line under the next publication's date.
+ *
+ * WHY THE WEEKDAY IS THERE AT ALL, next to a date that already carries it:
+ * "מחר" answers the question the owner actually has (is this today's problem
+ * or tomorrow's), and the day name is what he recognises his own week by —
+ * the schedule above it is a row of א׳…ש׳ chips, so a line that says only
+ * "מחר" cannot be checked against them at a glance.
+ *
+ * CALENDAR DAYS IN THE ZONE, NOT A MILLISECOND SUBTRACTION. 23:50 today and
+ * 00:10 tonight are twenty minutes apart and are not the same day; the two
+ * Israeli clock changes a year also make "24 hours" and "tomorrow" different
+ * questions. zonedDateISO + addDaysISO is the same discipline nextAllowedAt()
+ * uses, for the same reason.
+ */
+export function dayRelativeHe(at: Date, now: Date = new Date(), tz = TIMEZONE): string {
+  const day = zonedDateISO(at, tz);
+  const today = zonedDateISO(now, tz);
+  const weekday = WEEKDAY_SHORT[zonedWeekday(at, tz)];
+  if (day === today) return `היום (${weekday})`;
+  if (day === addDaysISO(today, 1)) return `מחר (${weekday})`;
+  if (day === addDaysISO(today, 2)) return `מחרתיים (${weekday})`;
+  /* Further out than that, "בעוד 5 ימים" is a count the owner would have to
+     do arithmetic on. The day name alone is what the date beside it needs. */
+  return DAY_NAMES[zonedWeekday(at, tz)];
+}
+
+/**
  * "הפרש בין פוסטים חייב להיות ניתן לבחירה בטווח 1–30 דקות. כל מספר שלם בין 1
  * ל-30 צריך להיות אפשרי." Every one of them, built rather than listed, so the
  * list and the clamp below cannot disagree about where it ends.

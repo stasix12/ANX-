@@ -52,6 +52,7 @@ export function CampaignSchedulePanel({
   onChange,
   campaignName,
   disabled = false,
+  showHeader = true,
 }: {
   schedule: CampaignSchedule;
   onChange: (next: CampaignSchedule) => void;
@@ -59,6 +60,17 @@ export function CampaignSchedulePanel({
   campaignName: string;
   /** While the campaign's own row is being written by something else. */
   disabled?: boolean;
+  /**
+   * Whether to draw the title and the switch.
+   *
+   * The dashboard's run card already has both, in its own readout block, and
+   * opens this panel underneath it as the editor. Drawing them again put TWO
+   * switches for one setting on one card, 300px apart — both live, both
+   * correct, and no way to tell from the screen that they were the same
+   * switch. The campaigns screen, where this panel is the whole feature, keeps
+   * them: the default is on, so no existing caller changes.
+   */
+  showHeader?: boolean;
 }) {
   const set = (patch: Partial<CampaignSchedule>) => onChange({ ...schedule, ...patch });
 
@@ -79,7 +91,7 @@ export function CampaignSchedulePanel({
   return (
     <div data-schedule className="mt-1.5 rounded-2xl bg-brand-300/10 p-2">
       {/* ─── 1. the header: clock, name, switch ─────────────────────────── */}
-      <div className="flex items-center gap-1.5">
+      <div className={`items-center gap-1.5 ${showHeader ? 'flex' : 'hidden'}`}>
         <ClockIcon aria-hidden className="h-3.5 w-3.5 shrink-0 text-brand-400" />
         <span className="text-[12px] font-extrabold leading-4 text-mist-100">תזמון פרסום</span>
         {/*

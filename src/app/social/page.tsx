@@ -38,6 +38,7 @@ import {
   queueCampaignComment,
   queueSummary,
   runCoverMedia,
+  saveCampaign,
   sendWorkerCommand,
   setPaused,
   stopCampaign,
@@ -47,6 +48,7 @@ import {
   type TimelineRow,
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
+import { readSchedule, scheduleColumns, type CampaignSchedule, type ScheduleFields } from '@/lib/social/campaign-schedule';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
 import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
@@ -224,6 +226,23 @@ export default function SocialDashboard() {
      still scheduled - a finished run would lose its picture exactly when the
      owner looks to see what went out. */
   const [featuredMedia, setFeaturedMedia] = useState<MediaItem[] | null>(null);
+  /*
+   * THE SCHEDULE THE OWNER HAS JUST CHANGED, until the server agrees.
+   *
+   * This screen re-reads itself on a timer, and a poll in flight when the
+   * switch is tapped returns the row as it was a second ago — so without this
+   * the toggle would flip, snap back, and flip again when the write landed.
+   * The patch is applied over the campaign on every render and dropped by the
+   * effect below the moment a read comes back carrying the same values, which
+   * is the only evidence that it is no longer needed.
+   *
+   * ONE CAMPAIGN AT A TIME, because one card draws it: the dashboard features
+   * exactly one run. The campaigns screen, which draws many, keys its own by
+   * id for the same reason.
+   */
+  const [schedulePatch, setSchedulePatch] = useState<{ id: string; columns: Required<ScheduleFields> } | null>(null);
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const scheduleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /* The instant the last read SUCCEEDED — not the instant a tick fired. It is
      the only honest input to the "עודכן לפני…" line, and it stays where it was
      when a read fails, so a failed refresh cannot make the screen look fresh. */
@@ -715,6 +734,83 @@ export default function SocialDashboard() {
     ? new Set([...featured.state.upcoming, ...featured.state.done].map((r) => r.target_id)).size
     : null;
 
+  /*
+   * ───────── writing the featured run's schedule ──────────────────────────
+   *
+   * DEBOUNCED, OPTIMISTIC, AND PUT BACK IF IT FAILS — the same three rules the
+   * campaigns screen writes this record by, because it is the same record and
+   * a second policy for it is a second truth.
+   *
+   * DEBOUNCED: the editor under the card is seven day chips and three selects,
+   * and a schedule is set by a burst of taps. One PATCH per tap would be ten
+   * writes to one row in four seconds, each one racing the last.
+   *
+   * OPTIMISTIC: the control answers the thumb, not the network.
+   *
+   * AND PUT BACK: a row that refused the write (most likely cause, and what
+   * errors.ts will say: supabase/social-latest.sql has not been run) must not
+   * leave the card showing a window the engine has never heard of. That is the
+   * screen promising something the machine will not do, which is the one class
+   * of bug this module keeps being rewritten to prevent.
+   */
+  useEffect(
+    () => () => {
+      if (scheduleTimer.current) clearTimeout(scheduleTimer.current);
+    },
+    [],
+  );
+
+  /* The patch has done its job once a read comes back carrying the same
+     values. Comparing what the row RESOLVES to rather than the raw columns:
+     a database that has not run the migration returns no columns at all, and
+     readSchedule() turning that into the defaults is the honest answer to
+     "what is this campaign set to". */
+  useEffect(() => {
+    if (!schedulePatch || !data) return;
+    const row = data.campaigns.find((c) => c.id === schedulePatch.id);
+    if (!row) return;
+    const live = scheduleColumns(readSchedule(row));
+    const want = schedulePatch.columns;
+    if (
+      live.schedule_enabled === want.schedule_enabled &&
+      live.schedule_start === want.schedule_start &&
+      live.schedule_end === want.schedule_end &&
+      live.schedule_gap_minutes === want.schedule_gap_minutes &&
+      live.schedule_days.join(',') === want.schedule_days.join(',')
+    ) {
+      setSchedulePatch(null);
+    }
+  }, [data, schedulePatch]);
+
+  const changeSchedule = useCallback(
+    (campaign: Pick<Campaign, 'id' | 'name'>, next: CampaignSchedule) => {
+      const columns = scheduleColumns(next);
+      setSchedulePatch({ id: campaign.id, columns });
+      if (scheduleTimer.current) clearTimeout(scheduleTimer.current);
+      scheduleTimer.current = setTimeout(async () => {
+        setScheduleBusy(true);
+        try {
+          await saveCampaign({ id: campaign.id, name: campaign.name, ...columns });
+        } catch (err) {
+          setSchedulePatch(null);
+          toast(friendlyMessage(err, 'שמירת התזמון נכשלה.'), 'error');
+        } finally {
+          setScheduleBusy(false);
+        }
+      }, 600);
+    },
+    [toast],
+  );
+
+  /* What the card draws: the stored row, with the owner's un-acknowledged
+     change laid over it. readSchedule() validates every field either way, so
+     a row written by an older version still resolves to a usable schedule. */
+  const featuredSchedule: CampaignSchedule | null = featured
+    ? readSchedule(
+        schedulePatch?.id === featured.campaign.id ? { ...featured.campaign, ...schedulePatch.columns } : featured.campaign,
+      )
+    : null;
+
   /**
    * The publication that should already have gone out, when nothing is there
    * to send it.
@@ -1166,6 +1262,12 @@ export default function SocialDashboard() {
               /* The post this run publishes. listQueue already selects the post
                  with its media, so the cover costs no extra read. */
               media={featuredMedia ?? data.upcoming.find((r) => r.campaign_id === featured.campaign.id)?.post?.media ?? null}
+              /* "תזמון פרסום" and "הפרסום הבא יתחיל ב:", inside this card —
+                 the owner's reference image for THIS screen. The values are
+                 the campaign's own row; the write is the block above. */
+              schedule={featuredSchedule ?? undefined}
+              onScheduleChange={(next) => changeSchedule(featured.campaign, next)}
+              scheduleBusy={scheduleBusy}
             />
           )}
 

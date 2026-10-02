@@ -50,6 +50,7 @@ export function CampaignScheduleBoard({
   onEdit,
   nextAt,
   windowOpensAt,
+  windowOpenUntil,
   noDay,
   campaignName,
   disabled = false,
@@ -87,6 +88,20 @@ export function CampaignScheduleBoard({
    * The strip says both things: nothing is waiting, and when the window opens.
    */
   windowOpensAt: string | null;
+  /**
+   * When the window the owner is ALREADY INSIDE closes — null unless it is
+   * open right now.
+   *
+   * "למה זה 17:12 הפרסום יסתיים כבר". With a round finished and the window
+   * open, `windowOpensAt` above is the present instant, because the first
+   * moment a schedule permits, when it permits this one, is this one. True,
+   * and unprintable: a strip that reads "חלון הפרסום הבא: 17:12" at 17:13 is
+   * announcing a time that has gone.
+   *
+   * So the two are a pair and this one wins where it exists: the window is
+   * open, and what the owner wants off the screen is how long he has got.
+   */
+  windowOpenUntil: string | null;
   /**
    * The schedule is on and no day is chosen, so there is a waiting publication
    * that can never go out. A distinct state from "nothing waiting": one is a
@@ -251,7 +266,7 @@ export function CampaignScheduleBoard({
       </div>
 
       {/* ─── "הפרסום הבא יתחיל ב:" — its own container, as the image draws it ── */}
-      <NextPublishStrip nextAt={nextAt} noDay={noDay} windowOpensAt={windowOpensAt} />
+      <NextPublishStrip nextAt={nextAt} noDay={noDay} windowOpensAt={windowOpensAt} windowOpenUntil={windowOpenUntil} />
     </div>
   );
 }
@@ -328,10 +343,12 @@ function Box({
 function NextPublishStrip({
   nextAt,
   windowOpensAt,
+  windowOpenUntil,
   noDay,
 }: {
   nextAt: string | null;
   windowOpensAt: string | null;
+  windowOpenUntil: string | null;
   noDay: boolean;
 }) {
   /*
@@ -348,8 +365,28 @@ function NextPublishStrip({
    * that changes is the label, which is the one place the difference between
    * "this WILL go out at" and "this MAY go out from" can honestly live.
    */
-  const shown = nextAt ?? (noDay ? null : windowOpensAt);
-  const isWindow = !nextAt && !!windowOpensAt && !noDay;
+  /*
+   * FOUR, SINCE 4.0.1 — the middle one split in two, because it was answering
+   * a question nobody had asked.
+   *
+   *   a publication is queued  → when it goes out
+   *   nothing queued, window OPEN
+   *                            → nothing is waiting, and until when it may
+   *   nothing queued, window shut
+   *                            → nothing is waiting, and when it next opens
+   *   nothing at all           → "לא מתוזמן"
+   *
+   * "למה זה 17:12 הפרסום יסתיים כבר". The third branch used to serve both of
+   * the middle two, and inside an open window the instant it names is the
+   * present one — so at 17:13 the strip announced 17:12 as the next window.
+   * The figure was right and the sentence around it was false, which is the
+   * one way this strip is allowed to fail and the reason it keeps being
+   * rewritten. Open windows now name their CLOSE, which is the half of the
+   * fact that is still ahead of him.
+   */
+  const openNow = !nextAt && !noDay && !!windowOpenUntil;
+  const shown = nextAt ?? (noDay ? null : openNow ? windowOpenUntil : windowOpensAt);
+  const isWindow = !nextAt && !noDay && !!shown;
   return (
     <div
       /*
@@ -376,7 +413,11 @@ function NextPublishStrip({
              a bare time with nothing saying what happens at it. */
           <>
             <span className="block text-mist-300">אין פרסום ממתין</span>
-            <span className="block">חלון הפרסום הבא:</span>
+            {/* "הבא" vs "פתוח עד" is the whole of the 4.0.1 fix, and it is in
+                the words rather than the layout: the figure beside it is a
+                window edge either way, and which edge it is is the only thing
+                that tells him whether he is waiting or has time left. */}
+            <span className="block">{openNow ? 'חלון הפרסום פתוח עד:' : 'חלון הפרסום הבא:'}</span>
           </>
         ) : (
           'הפרסום הבא יתחיל ב:'

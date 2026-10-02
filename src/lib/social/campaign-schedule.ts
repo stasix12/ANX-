@@ -236,6 +236,34 @@ export function nextAllowedAt(s: CampaignSchedule, from: Date, tz = TIMEZONE): D
 }
 
 /**
+ * IS THE WINDOW OPEN RIGHT NOW, AND UNTIL WHEN — the close of the window
+ * `from` falls inside, or null when it falls inside none.
+ *
+ * "למה זה 17:12 הפרסום יסתיים כבר" — because nextAllowedAt() answers "the
+ * first instant permitted at or after `from`", and when `from` is itself
+ * permitted that answer IS `from`. Correct, and useless to print: a screen
+ * that reads 17:13 showing "חלון הפרסום הבא: 17:12" is naming the moment the
+ * owner is standing in as if it were an appointment, and the only thing he can
+ * conclude from it is that the screen is wrong.
+ *
+ * So the strip needs the other half of the same fact, and it is a question
+ * nextAllowedAt() cannot be asked: not when the window opens, but when the one
+ * already open closes. A caller cannot derive it safely from the schedule
+ * either — `s.end` is a wall clock, and turning it into an instant means
+ * resolving it against the right calendar date in the right zone, which is
+ * precisely the arithmetic that lives in this file and nowhere else.
+ *
+ * NULL IS NOT "NEVER", IT IS "NOT NOW". Outside the window — before it opens,
+ * after it closes, or on a day that is not chosen — the honest reading is
+ * nextAllowedAt()'s, and the caller falls back to it.
+ */
+export function windowClosesAt(s: CampaignSchedule, from: Date, tz = TIMEZONE): Date | null {
+  if (!s.enabled) return null;
+  if (!isAllowedAt(s, from, tz)) return null;
+  return zonedToUtc(zonedDateISO(from, tz), s.end, tz);
+}
+
+/**
  * THE ONE ANSWER THE ENGINE AND THE CARD BOTH USE: the first instant this
  * campaign may publish at, given when it last published.
  *

@@ -13,6 +13,7 @@ import {
   nextAllowedAt,
   nextPublishAt,
   readSchedule,
+  windowClosesAt,
   scheduleColumns,
   scheduleSummary,
   type CampaignSchedule,
@@ -483,6 +484,55 @@ function ch(v: number): number {
   is(!WEEKDAY_SHORT.some((n) => n.startsWith('יום')), 'none of them repeats the word the sentence around them already has');
   eq(WEEKDAY_SHORT[0], 'ראשון', 'index 0 is Sunday, as zonedWeekday() numbers them');
   eq(WEEKDAY_SHORT[6], 'שבת', 'and index 6 is Saturday');
+}
+
+/* ───── "למה זה 17:12 הפרסום יסתיים כבר" — the window that is already open ── */
+{
+  /*
+   * THE QUESTION nextAllowedAt() CANNOT BE ASKED.
+   *
+   * It answers "the first instant this schedule permits at or after `from`",
+   * and when `from` is itself permitted that answer is `from`. Correct, and
+   * the dashboard printed it under "חלון הפרסום הבא:" — so at 17:13 his
+   * screen read 17:12, a minute that had gone, as if it were an appointment.
+   *
+   * windowClosesAt() is the other half of the same fact: not when the window
+   * opens, but when the one he is standing in shuts. Null means "not now",
+   * never "never" — outside the window nextAllowedAt() is the honest answer
+   * and the caller falls back to it.
+   */
+  eq(say(nextAllowedAt(ref, at('2026-09-30T10:00'))), say(at('2026-09-30T10:00')), 'inside the window, the first permitted instant IS now — the 17:12');
+  eq(say(windowClosesAt(ref, at('2026-09-30T10:00'))), say(at('2026-09-30T22:00')), 'and what is actually ahead of him is the close');
+
+  /* THE EDGES ARE INSIDE. The minute it opens and the minute it closes are
+     both permitted — isAllowedAt uses >= and <=, and a close that read "not
+     open" at 22:00 would blank the strip for one minute a day. */
+  eq(say(windowClosesAt(ref, at('2026-09-30T08:00'))), say(at('2026-09-30T22:00')), 'the opening minute is inside the window');
+  eq(say(windowClosesAt(ref, at('2026-09-30T22:00'))), say(at('2026-09-30T22:00')), 'and so is the closing minute');
+
+  /* NOT NOW, THREE WAYS — and every one of them must be null, because each is
+     a case where the strip has a real future opening to name instead. */
+  eq(windowClosesAt(ref, at('2026-09-30T07:59')), null, 'before it opens there is no open window');
+  eq(windowClosesAt(ref, at('2026-09-30T22:01')), null, 'after it closes there is no open window');
+  eq(windowClosesAt(ref, at('2026-10-02T12:00')), null, 'and Friday is not a chosen day, whatever the hour');
+
+  /* THE SWITCH OFF IS NOT AN OPEN WINDOW. isAllowedAt() answers `true` for a
+     disabled schedule — rightly, since nothing is restricting the queue — and
+     a close derived from that would put "חלון הפרסום פתוח עד: 22:00" on a card
+     with no schedule running at all. */
+  eq(windowClosesAt({ ...ref, enabled: false }, at('2026-09-30T10:00')), null, 'a switched-off schedule has no window to be inside');
+  eq(windowClosesAt({ ...ref, days: [] }, at('2026-09-30T10:00')), null, 'and neither has one with no day chosen');
+
+  /*
+   * THE CLOCK CHANGE. 25.10.2026 is the Sunday Israel goes back to +02:00 at
+   * 02:00, so that Sunday is 25 hours long. The close is a WALL CLOCK time
+   * resolved against the calendar date in the zone, so it is 22:00 local on
+   * both sides of the change — which a millisecond offset from "now" would
+   * get wrong by an hour exactly once a year, on a day the owner is as likely
+   * to be publishing as any other.
+   */
+  eq(say(windowClosesAt(ref, at('2026-10-25T10:00'))), say(at('2026-10-25T22:00')), 'the close is 22:00 local on the day the clock goes back');
+  eq(say(windowClosesAt(ref, at('2026-03-29T10:00'))), say(at('2026-03-29T22:00')), 'and on a summer-time Sunday too');
 }
 
 console.log(`campaign schedule tests OK — ${checks} assertions`);

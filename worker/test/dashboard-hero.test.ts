@@ -259,7 +259,7 @@ async function main(): Promise<void> {
       });
 
       assert.equal(seen.overflow, false, `${width}: the page scrolls sideways`);
-      assert.equal(seen.cards.length, 9, `${width}: expected 9 cards, got ${seen.cards.length}`);
+      assert.equal(seen.cards.length, 10, `${width}: expected 10 cards, got ${seen.cards.length}`);
 
       seen.cards.forEach((c, i) => {
         const at = `${width}px, card ${i + 1}`;
@@ -287,14 +287,19 @@ async function main(): Promise<void> {
         /* One of the two labels — a queued publication's, or the window's for a
            round with nothing waiting. Neither is optional: a strip with a bare
            time and no label is a number nobody can act on. */
+        /* One of the three — a queued publication's, the next window's, or the
+           open window's close. None is optional: a strip with a bare time and
+           no label is a number nobody can act on. */
         assert.ok(
-          c.text.includes('הפרסום הבא יתחיל ב:') || c.text.includes('חלון הפרסום הבא:'),
+          c.text.includes('הפרסום הבא יתחיל ב:') ||
+            c.text.includes('חלון הפרסום הבא:') ||
+            c.text.includes('חלון הפרסום פתוח עד:'),
           `${at}: the strip has lost its label`,
         );
       });
 
       /* ─── what each case must, and must not, say ─────────────────────── */
-      const [reference, , , noDay, off, nothingQueued, , scheduleOff] = seen.cards;
+      const [reference, , , noDay, off, nothingQueued, , scheduleOff, , windowOpen] = seen.cards;
 
       /* 1 — the reference's own card: a time, a date, and the day it falls on. */
       assert.match(reference.text, /הפרסום הבא יתחיל ב: ?\d{2}:\d{2}/, `${width}: the reference card prints no time`);
@@ -328,6 +333,35 @@ async function main(): Promise<void> {
       assert.match(nothingQueued.text, /חלון הפרסום הבא: ?\d{2}:\d{2}/, `${width}: the window's own instant is missing`);
       /* And it may NOT borrow the words a queued publication uses. */
       assert.doesNotMatch(nothingQueued.text, /הפרסום הבא יתחיל ב:/, `${width}: an empty queue promised a publication`);
+      /* Drawn at Friday noon against a Sunday–Thursday window, so the window
+         it names is genuinely ahead: 08:00 on Sunday, never the present
+         minute. Before 4.0.1 this card also produced the next assertion's
+         wording whenever the suite happened to run inside the window, and the
+         line above would have failed — which is exactly what the owner saw on
+         his screen and what the clock in render-hero.tsx now pins. */
+      assert.ok(!nothingQueued.text.includes('פתוח עד:'), `${width}: a shut window was called open`);
+
+      /*
+       * 10 — THE SAME EMPTY QUEUE, INSIDE AN OPEN WINDOW. The owner's 17:12.
+       *
+       * "למה זה 17:12 הפרסום יסתיים כבר" — nothing was queued, his window was
+       * open, and the strip printed the present minute under "חלון הפרסום
+       * הבא:". The instant was right and the sentence was false, and a minute
+       * later the instant was in the past too.
+       *
+       * Drawn at Wednesday 10:00 against 08:00–22:00, so there is no future
+       * opening to name and the only fact left is when it shuts. The close is
+       * what must be on screen — 22:00 — and the word must be "פתוח עד".
+       */
+      assert.ok(windowOpen.text.includes('אין פרסום ממתין'), `${width}: an open window with an empty queue must still say nothing is waiting`);
+      assert.ok(windowOpen.text.includes('חלון הפרסום פתוח עד:'), `${width}: an open window must say it is open, not when it opens`);
+      /* THE INSTANT IS THE CLOSE, NOT THE CLOCK. 22:00 is this schedule's own
+         end; 10:00 is the pinned minute, and printing it is the bug. */
+      assert.match(windowOpen.text, /חלון הפרסום פתוח עד: ?22:00/, `${width}: an open window did not print its closing time`);
+      assert.doesNotMatch(windowOpen.text, /פתוח עד: ?10:00/, `${width}: the strip printed the current minute as the window's edge`);
+      /* And neither of the two sentences it is not. */
+      assert.ok(!windowOpen.text.includes('חלון הפרסום הבא:'), `${width}: an open window was announced as the next one`);
+      assert.doesNotMatch(windowOpen.text, /הפרסום הבא יתחיל ב:/, `${width}: an open window promised a publication`);
 
       /* 8 — nothing queued and the switch off. No queue, no window, no time. */
       assert.ok(scheduleOff.text.includes('לא מתוזמן'), `${width}: with no queue and no schedule it must read "לא מתוזמן"`);
@@ -338,7 +372,7 @@ async function main(): Promise<void> {
       assert.ok(!scheduleOff.text.includes('חלון הפרסום הבא:'), `${width}: a switched-off schedule has no window to open`);
 
       await view.close();
-      checks += 13;
+      checks += 20;
     }
   } finally {
     await browser.close();

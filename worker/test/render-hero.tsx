@@ -49,6 +49,55 @@ const st = (p: unknown, extra: Partial<CampaignState> = {}): CampaignState =>
 const inHours = (h: number) => new Date(Date.now() + h * 3600e3).toISOString();
 
 /*
+ * A RENDER AT A KNOWN MINUTE, for the two cards whose words depend on whether
+ * a window is open RIGHT NOW.
+ *
+ * "למה זה 17:12 הפרסום יסתיים כבר" was a card that read differently depending
+ * on the clock, and so was the test that was supposed to catch it: case 6
+ * below carries the owner's Sun–Thu 08:00–22:00 window, so run on a Tuesday
+ * morning it said "פתוח עד" and run on a Friday it said "הבא" — and the suite
+ * asserted the Friday wording unconditionally. A test that passes on five days
+ * of the week is not a test of either branch.
+ *
+ * So those cards name the instant they are drawn at. Scoped to one render and
+ * restored in a `finally`: the card calls `new Date()` deep inside itself,
+ * through nextAllowedAt and windowClosesAt, and there is no prop to thread a
+ * clock down. Everything measured afterwards is the card as it was at that
+ * minute, which is the only way a strip about "now" can be measured at all.
+ */
+function atClock<T>(iso: string | null, run: () => T): T {
+  if (!iso) return run();
+  const Real = Date;
+  const fixed = new Real(iso).getTime();
+  class Pinned extends Real {
+    constructor(...a: unknown[]) {
+      super(...((a.length ? a : [fixed]) as [number]));
+    }
+    static now(): number {
+      return fixed;
+    }
+  }
+  (globalThis as { Date: unknown }).Date = Pinned;
+  try {
+    return run();
+  } finally {
+    (globalThis as { Date: unknown }).Date = Real;
+  }
+}
+
+/*
+ * The two minutes used below, both inside the owner's own window definition
+ * (`sched.reference`, Sunday–Thursday 08:00–22:00):
+ *
+ *   SHUT — Friday noon. Not a chosen day, so the next window is Sunday 08:00
+ *          and the strip says when it OPENS.
+ *   OPEN — Wednesday 10:00. A chosen day, inside the hours, so there is no
+ *          future opening to name and the strip says when it CLOSES.
+ */
+const WINDOW_SHUT = '2026-10-02T12:00:00+03:00';
+const WINDOW_OPEN = '2026-09-30T10:00:00+03:00';
+
+/*
  * THE WINDOWS, including the one the reference image is set to.
  *
  * `image` is literally what the attached screenshot shows lit — א׳ ב׳ ג׳ ה׳,
@@ -85,44 +134,63 @@ const camp = (id: string, name: string, status: 'active' | 'paused' = 'active') 
  *  8  nothing queued and the switch OFF — the only state with no instant of
  *     any kind, and the one "לא מתוזמן" is for.
  *  9  a long Hebrew name with three-figure counts, globally paused.
+ * 10  the same empty queue as 6, drawn at a minute when the window is OPEN —
+ *     the one card that must say when the window CLOSES rather than when the
+ *     next one opens, because there is no next one to name.
  */
 const cases = [
   ['the reference image: finished with failures, 50 groups', camp('1', 'פרסומת לרוסים סבב ראשון'),
     st(prog({ total: 50, published: 40, skipped: 6, failed: 4, finished: 50 }), { state: 'completed', startedAt: inHours(-6), nextAt: inHours(20) }),
-    50, sched.image],
+    50, sched.image, null],
   ['a live run mid-round', camp('2', 'ניקוי ספות באר שבע'),
     st(prog({ total: 40, published: 12, scheduled: 28, finished: 12 }), { state: 'running', startedAt: inHours(-2), nextAt: inHours(1), nextTargetName: 'באר שבע מדברת' }),
-    40, sched.reference],
+    40, sched.reference, null],
   ['every day, every hour, a one-minute gap', camp('3', 'ניקוי שטיחים'),
     st(prog({ total: 40, published: 12, scheduled: 28, finished: 12 }), { state: 'running', startedAt: inHours(-3), nextAt: inHours(1) }),
-    40, sched.all],
+    40, sched.all, null],
   ['no day chosen — nothing can go out', camp('4', 'ניקוי חלונות ערד'),
     st(prog({ total: 40, published: 12, scheduled: 28, finished: 12 }), { state: 'running', startedAt: inHours(-3), nextAt: inHours(1) }),
-    40, sched.none],
+    40, sched.none, null],
   ['the switch off — the card as it was before this feature', camp('5', 'ניקוי מרפסות'),
     st(prog({ total: 40, published: 12, scheduled: 28, finished: 12 }), { state: 'running', startedAt: inHours(-3), nextAt: inHours(1) }),
-    40, sched.off],
-  ['a finished round with nothing queued', camp('6', 'ניקוי ריפודי רכב'),
+    40, sched.off, null],
+  ['a finished round, nothing queued, window SHUT', camp('6', 'ניקוי ריפודי רכב'),
     st(prog({ total: 20, published: 20, finished: 20 }), { state: 'completed', startedAt: inHours(-9) }),
-    20, sched.reference],
+    20, sched.reference, WINDOW_SHUT],
   ['no schedule at all — any other caller', camp('7', 'סבב פרסום'),
     st(prog({ total: 15, published: 5, skipped: 10, finished: 15 }), { state: 'stopped', startedAt: inHours(-30) }),
-    15, null],
+    15, null, null],
   /* 9 — nothing queued AND the switch off. The only state left with no
          instant of any kind to print, and the one "לא מתוזמן" is for. */
   ['a finished round with the schedule off', camp('9', 'ניקוי דלתות'),
     st(prog({ total: 20, published: 20, finished: 20 }), { state: 'completed', startedAt: inHours(-9) }),
-    20, sched.off],
+    20, sched.off, null],
   ['a long name, big numbers, publishing globally paused', camp('8', 'ניקוי ריפודי רכב ומושבים בבאר שבע והסביבה', 'paused'),
     st(prog({ total: 248, published: 120, scheduled: 100, skipped: 16, failed: 12, finished: 148 }), { state: 'paused', startedAt: inHours(-48), nextAt: inHours(4) }),
-    124, sched.reference],
+    124, sched.reference, null],
+  /*
+   * 10 — A FINISHED ROUND WHOSE WINDOW IS OPEN RIGHT NOW. His own card.
+   *
+   * "למה זה 17:12 הפרסום יסתיים כבר" — a finished round, Friday lit, 05:00 to
+   * 22:00, and at 17:13 the strip read "חלון הפרסום הבא: 17:12". Nothing was
+   * wrong with the instant: the first moment a schedule permits, when it
+   * permits this one, is this one. It was wrong to CALL it the next window,
+   * and a minute later it was a time that had gone.
+   *
+   * Identical to case 6 in every respect but the minute it is drawn at, which
+   * is the whole claim: one schedule, one empty queue, two different true
+   * sentences depending only on whether the window is open.
+   */
+  ['a finished round, nothing queued, window OPEN NOW', camp('10', 'פרסומת לרוסים'),
+    st(prog({ total: 138, published: 125, failed: 13, finished: 138 }), { state: 'completed', startedAt: inHours(-9) }),
+    138, sched.reference, WINDOW_OPEN],
 ] as const;
 
 const body = cases
   .map(
-    ([label, c, s, targets, schedule]) => `
+    ([label, c, s, targets, schedule, clock]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
-  <div class="hero-probe">${renderToStaticMarkup(
+  <div class="hero-probe">${atClock((clock as string | null) ?? null, () => renderToStaticMarkup(
     /* createElement, NOT a direct call. The card holds `editingSchedule` in a
        useState now, and a component invoked as a plain function has no hook
        dispatcher — React throws before it renders a pixel. */
@@ -141,7 +209,7 @@ const body = cases
       schedule: (schedule as CampaignSchedule | null) ?? undefined,
       onScheduleChange: schedule ? () => {} : undefined,
     } as never),
-  )}</div>`,
+  ))}</div>`,
   )
   .join('');
 

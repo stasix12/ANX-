@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
-import { nextAllowedAt, nextPublishAt, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { nextAllowedAt, nextPublishAt, windowClosesAt, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { countdownTo } from '@/lib/social/countdown';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
@@ -281,6 +281,25 @@ export function LiveCampaignHero({
     schedule?.enabled && !state.nextAt ? (nextAllowedAt(schedule, new Date())?.toISOString() ?? null) : null;
 
   /*
+   * AND WHETHER THAT WINDOW IS THE ONE WE ARE ALREADY STANDING IN.
+   *
+   * "למה זה 17:12 הפרסום יסתיים כבר" — his round had finished, Friday was lit,
+   * the window was 05:00–22:00, and at 17:13 the strip read "חלון הפרסום הבא:
+   * 17:12". nextAllowedAt() had answered correctly: the first permitted instant
+   * at or after now, when now is permitted, is now. Printed as a future event
+   * it is nonsense, and worse than nonsense — a clock reading one minute in the
+   * past looks like the screen has lost track of the time.
+   *
+   * There is nothing to fix in the arithmetic. What is wrong is which fact gets
+   * printed: when the window is open the owner's question is not when it opens
+   * but how long he has got, so the strip is handed the close and says so.
+   * Null whenever the window is NOT open, and then windowOpensAt above is the
+   * true and useful answer, unchanged.
+   */
+  const windowOpenUntil: string | null =
+    schedule?.enabled && !state.nextAt ? (windowClosesAt(schedule, new Date())?.toISOString() ?? null) : null;
+
+  /*
    * "לחיצה על 'ערוך מועד' צריכה לפתוח את אפשרויות עריכת התזמון שכבר בנינו."
    *
    * IN THE CARD, NOT OVER IT. "אל תפתח Modal. אל תפתח Popup. אל תיצור מסך
@@ -396,6 +415,7 @@ export function LiveCampaignHero({
           editing={editingSchedule}
           nextAt={nextAt}
           windowOpensAt={windowOpensAt}
+          windowOpenUntil={windowOpenUntil}
           noDay={noDay}
           campaignName={campaign.name}
           disabled={scheduleBusy}

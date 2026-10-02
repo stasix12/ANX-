@@ -5,7 +5,7 @@ import path from 'node:path';
 import { chromium } from 'playwright-core';
 import type { SocialTarget } from '@/lib/social/types';
 import { FacebookGroupBrowserAdapter } from '../adapters/facebookGroupBrowser';
-import { PublishError, commentOnPost, publishToGroup } from '../facebook/composer';
+import { PublishError, commentOnPost, lookupPages, publishToGroup } from '../facebook/composer';
 import { matchPosts, ourPostsInGroup } from '../facebook/postIndex';
 import { SessionError } from '../facebook/session';
 
@@ -402,36 +402,50 @@ async function main() {
   console.log('✓ a composer that mounts pictures of its own never passes for an attachment');
 
   /* ─────────────────────────────────────────────────────────────────────
-   * "למה על כל פוסט הוא רושם לא הצלחתי לאמת ?"
+   * "למה על כל פוסט הוא רושם לא הצלחתי לאמת ?" — and then "לא הסתדר".
    *
-   * Because verification only ever looked at the GROUP FEED — the worst of
-   * the three places one of our posts can be found, and the one this file's
-   * own lookupPages() lists LAST with the note that it "failed on the owner's
-   * machine: the screen said 'לא מצאנו את הפוסט הזה בקבוצה' about posts that
-   * were plainly there". That lesson was learned for commenting and never
-   * reached publishing.
+   * Verification only ever looked at the GROUP FEED, the worst of the three
+   * places one of our posts can be found: this file's own lookupPages() lists
+   * it LAST, under a note that the other two exist because the feed "failed on
+   * the owner's machine: the screen said 'לא מצאנו את הפוסט הזה בקבוצה' about
+   * posts that were plainly there."
    *
-   * Reproduced here exactly: a group that ACCEPTS the post and whose feed
-   * never shows it (pinned announcements on top, Facebook virtualising what
-   * is under them), and `/groups/<id>/user/<our id>/` — Facebook's own filter
-   * to one member's posts — where it is the first item.
+   * The first attempt at this went straight to `/user/<id>/` and had a hole:
+   * that address needs our own Facebook user id, and with no id the whole
+   * block was skipped and nothing changed. Hence case 2 below, which is that
+   * exact machine.
    *
-   * Served from facebook.com rather than file://, because the lookup is
-   * built with parseGroupUrl and that refuses anything else, as it should.
+   * Served from facebook.com rather than file://, because the lookup is built
+   * with parseGroupUrl and that refuses anything else, as it should.
    * ───────────────────────────────────────────────────────────────────── */
   {
     const groupHtml = readFileSync(path.resolve(__dirname, 'mock-group.html'), 'utf8');
     const POST = 'ניקוי ספות וריפודים בבאר שבע מבצע החודש';
-    const ourPostsHtml = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+    const withPost = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
 <title>באר שבע ביחד | Facebook</title></head><body><main>
 <div role="article"><p>${POST}</p>
 <a href="/groups/123/posts/4567/"><abbr>לפני דקה</abbr></a></div>
 </main></body></html>`;
+    /* A page that loaded perfectly and simply does not hold our post — which
+       is what Facebook's group search returns for a post from one minute ago
+       more often than not. */
+    const withoutPost = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+<title>באר שבע ביחד | Facebook</title></head><body><main>
+<div role="article"><p>פוסט של מישהו אחר על חתול שאבד</p></div>
+</main></body></html>`;
 
-    const serve = async (target: import('playwright-core').Page) => {
+    const serve = async (target: import('playwright-core').Page, holds: { user: boolean; search: boolean }) => {
       await target.route('https://www.facebook.com/**', (route) => {
         const url = route.request().url();
-        const body = url.includes('/user/777') ? ourPostsHtml : groupHtml;
+        const body = url.includes('/user/777')
+          ? holds.user
+            ? withPost
+            : withoutPost
+          : url.includes('/search/')
+            ? holds.search
+              ? withPost
+              : withoutPost
+            : groupHtml;
         return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body });
       });
       /* The feed takes the post and never renders it — see mock-group.html. */
@@ -440,16 +454,21 @@ async function main() {
       });
     };
 
+    const publish = (target: import('playwright-core').Page, authorId?: string) =>
+      publishToGroup(target, {
+        groupUrl: 'https://www.facebook.com/groups/123',
+        text: POST,
+        images: [],
+        video: null,
+        onStep: async () => undefined,
+        ...(authorId ? { authorId } : {}),
+      });
+
+    /* 1 — the ordinary fixed case: we know who we are, so the one page that
+           lists only our posts answers it. */
     const pageA = await context.newPage();
-    await serve(pageA);
-    const found = await publishToGroup(pageA, {
-      groupUrl: 'https://www.facebook.com/groups/123',
-      text: POST,
-      images: [],
-      video: null,
-      onStep: async () => undefined,
-      authorId: '777',
-    });
+    await serve(pageA, { user: true, search: false });
+    const found = await publish(pageA, '777');
     assert.equal(found.outcome, 'published', 'the post went out');
     assert.equal(found.verified, true, 'and is verified on our own posts page, which is where it is');
     assert.equal(found.permalink, 'https://www.facebook.com/groups/123/posts/4567/', 'and that page gives the address the comment feature needs');
@@ -457,24 +476,42 @@ async function main() {
     console.log('✓ a feed that never shows the post is no longer "לא הצלחתי לאמת" — our own posts page is');
 
     /*
-     * THE CONTROL, and it is what proves the line above is the new page doing
-     * the work rather than something else: the identical publication with no
-     * account id cannot reach that page, and reports exactly what the owner
-     * has been seeing.
+     * 2 — THE HOLE THE FIRST FIX HAD, and the reason "לא הסתדר".
+     *
+     * No account id, so `/user/<id>/` cannot even be built. The group's own
+     * SEARCH needs no id and is the entry lookupPages() carries for exactly
+     * this case; before this round it was never reached from the publish path
+     * and the whole lookup was skipped.
      */
     const pageB = await context.newPage();
-    await serve(pageB);
-    const blind = await publishToGroup(pageB, {
-      groupUrl: 'https://www.facebook.com/groups/123',
-      text: POST,
-      images: [],
-      video: null,
-      onStep: async () => undefined,
-    });
-    assert.equal(blind.outcome, 'published', 'the post still went out');
-    assert.equal(blind.verified, false, 'and without an account id there is nowhere left to look — which is the old behaviour, reproduced');
+    await serve(pageB, { user: false, search: true });
+    const noId = await publish(pageB);
+    assert.equal(noId.outcome, 'published', 'the post went out');
+    assert.equal(noId.verified, true, 'and with no account id the group search is what verifies it');
     await pageB.close();
-    console.log('✓ and with no account id it still says so honestly, rather than guessing');
+    console.log('✓ and with no account id the group search answers it — the hole the first fix had');
+
+    /*
+     * 3 — AND WHEN IT REALLY IS NOWHERE, it still says so. The fix may not buy
+     * quiet by making everything quiet: a post that cannot be found is
+     * reported unverified, never as published-and-confirmed.
+     */
+    const pageC = await context.newPage();
+    await serve(pageC, { user: false, search: false });
+    const nowhere = await publish(pageC, '777');
+    assert.equal(nowhere.outcome, 'published', 'the post still went out — it is on Facebook either way');
+    assert.equal(nowhere.verified, false, 'and a post found nowhere is still reported as unverified');
+    /* Tied to lookupPages() itself rather than to two literals: the rule is
+       "the list it already has, minus the feed it has just looked at", and a
+       hand-copied pair of URLs would stop testing that the moment either the
+       search words or the order changed. */
+    assert.deepEqual(
+      nowhere.lookedIn,
+      lookupPages('https://www.facebook.com/groups/123', POST, '777').slice(0, 2),
+      'and it records where it looked, so the next report is answerable with data rather than a guess',
+    );
+    await pageC.close();
+    console.log('✓ a post that is genuinely nowhere is still reported honestly, with the addresses it tried');
   }
 
   await browser.close();

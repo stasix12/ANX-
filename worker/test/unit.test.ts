@@ -2939,10 +2939,19 @@ const scenario: { step: string; line: string }[] = [];
   const byFeed = order.indexOf('out.push(groupUrl)');
   assert.ok(byAuthor > 0 && bySearch > byAuthor, 'and it is tried before the search, which misses recent posts');
   assert.ok(byFeed > bySearch, 'with the feed last — twelve scrolls do not reach this afternoon');
-  /* The post's own address still wins over all three when we have one. */
+  /*
+   * The post's own address still wins over all three when we have one.
+   *
+   * SCOPED TO commentOnPost. There are two lookupPages() loops in this file
+   * now — publishing verifies a post it has just made with the same list —
+   * and a bare indexOf over the whole source found the publishing one, which
+   * has no permalink to prefer and nothing to do with this rule. The rule is
+   * about the comment path, so it is read inside the comment path.
+   */
+  const commentFn = composerSrc.slice(composerSrc.indexOf('export async function commentOnPost'));
   assert.ok(
-    composerSrc.indexOf("let permalink = /\\/(posts|permalink)\\//.test(url) ? url : '';") <
-      composerSrc.indexOf('for (const where of lookupPages('),
+    commentFn.indexOf("let permalink = /\\/(posts|permalink)\\//.test(url) ? url : '';") <
+      commentFn.indexOf('for (const where of lookupPages('),
     "the post's own address is used before anything is looked up",
   );
 

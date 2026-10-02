@@ -73,6 +73,16 @@ export interface ComposeResult {
   cancelReason?: 'declined' | 'timeout' | 'stopped';
   /** The feed showed the new post text after publishing. */
   verified: boolean;
+  /**
+   * The addresses verification looked at beyond the group's own feed.
+   *
+   * Written to the activity row's meta, and it is there because the last two
+   * rounds of this were spent guessing: with it, "לא הצלחתי לאמת" carries
+   * whether the owner's-posts page was even reachable, or whether there was no
+   * account id and only the search was tried. Empty means the post was found
+   * before it came to this — which is the ordinary case.
+   */
+  lookedIn?: string[];
   /** Group moderates posts — it exists but waits for an admin. */
   pendingApproval: boolean;
   groupTitle: string;
@@ -188,7 +198,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     const verdict = await input.confirm(page);
     if (verdict !== 'confirmed') {
       await discardComposer(page);
-      return { outcome: 'cancelled', cancelReason: verdict, verified: false, pendingApproval: false, groupTitle, permalink: '', publishedAt: '' };
+      return { outcome: 'cancelled', cancelReason: verdict, verified: false, pendingApproval: false, groupTitle, permalink: '', publishedAt: '', lookedIn: [] };
     }
   }
 
@@ -326,43 +336,59 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   }
 
   /*
-   * ─── AND THE PAGE THAT ACTUALLY ANSWERS THE QUESTION ────────────────────
+   * ─── AND THEN THE PAGES THAT ACTUALLY ANSWER THE QUESTION ───────────────
    *
-   * "למה על כל פוסט הוא רושם לא הצלחתי לאמת?"
+   * "למה על כל פוסט הוא רושם לא הצלחתי לאמת?" — and, after the first attempt
+   * at this, "לא הסתדר".
    *
-   * Because until now verification only ever looked at the GROUP FEED, which
-   * is the worst of the three places a post of ours can be found — and this
-   * file already says so, in lookupPages() thirty lines down: the feed is
-   * listed LAST there, "only really useful for a post from minutes ago", and
-   * the owner's-own-posts page is listed FIRST with the note that the other
-   * two "both failed on the owner's machine: the screen said 'לא מצאנו את
-   * הפוסט הזה בקבוצה' about posts that were plainly there."
+   * Verification only ever looked at the GROUP FEED, which is the worst of the
+   * three places one of our posts can be found, and this file says so itself
+   * in lookupPages() below: the feed is listed LAST there, "only really useful
+   * for a post from minutes ago", under a note that the other two were added
+   * because the feed "failed on the owner's machine: the screen said 'לא מצאנו
+   * את הפוסט הזה בקבוצה' about posts that were plainly there."
    *
-   * That lesson was learned for commenting and never reached publishing.
-   * `/groups/<id>/user/<our id>/` is Facebook's own filter to one member's
-   * posts in one group: what loads is the three or four things WE put there,
-   * newest first, with nobody else's afternoon in between and nothing pinned
-   * above them. The post we made a minute ago is the first item on it.
+   * THE FIRST FIX WENT STRAIGHT TO `/user/<id>/` AND HAD A HOLE IN IT. That
+   * address needs our own Facebook user id, which the worker learns from the
+   * `c_user` cookie — and when it has not got one, `authorId` is empty, the
+   * whole block was skipped, and nothing changed at all. A fix that silently
+   * does nothing on the machine it was written for is not a fix.
    *
-   * LAST, AND ONLY WHEN THE CHEAP LOOKS FAILED, so a publication that
-   * verified in six seconds still costs six seconds. And it is still best
-   * effort: not finding it here means we say we could not verify, exactly as
-   * before — never that the post failed, because it is on Facebook either way.
+   * So this asks lookupPages() for the list rather than hand-rolling one entry
+   * of it. With an account id that is the owner's own posts in this group,
+   * newest first, nothing pinned above them. Without one it is the group's own
+   * SEARCH for the post's distinctive words — which needs no id, and is the
+   * entry that exists precisely for this case. The feed is dropped from the
+   * list because the two looks above just made it.
    *
-   * IT ALSO BUYS THE PERMALINK. `permalink` is read off whichever article is
-   * found, and the comment feature and the counters both need that address;
-   * every post that reached this point used to lose it.
+   * STILL LAST, STILL BEST EFFORT: a publication that verified in six seconds
+   * never reaches this, and a post found nowhere is still reported as
+   * unverified rather than as a failure — it is on Facebook either way.
+   *
+   * IT ALSO BUYS THE PERMALINK, which is not a side benefit: `permalink` is
+   * read off whichever article is found, and the comment feature and the
+   * counters both need that address. Every post that reached this point used
+   * to lose it.
    */
-  if (!article && input.authorId) {
-    try {
-      const group = parseGroupUrl(input.groupUrl);
-      if (group) {
-        await page.goto(`${group.url}/user/${input.authorId}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-        await page.waitForTimeout(2000);
-        article = await findPostArticle(page, input.text, 4, 8_000);
+  const tried: string[] = [];
+  if (!article) {
+    const group = parseGroupUrl(input.groupUrl);
+    if (group) {
+      for (const where of lookupPages(group.url, input.text, input.authorId ?? '').filter((u) => u !== group.url)) {
+        tried.push(where);
+        try {
+          await page.goto(where, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+          await page.waitForTimeout(2000);
+          /* A checkpoint or a login wall here is not an answer about the post;
+             it is a different problem, and one the next publication will meet
+             properly. Never treated as "not there". */
+          if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') continue;
+          article = await findPostArticle(page, input.text, 4, 8_000);
+          if (article) break;
+        } catch {
+          /* Same rule as the feed look above. */
+        }
       }
-    } catch {
-      /* Same rule as above. */
     }
   }
 
@@ -381,7 +407,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   const probe = pageProbe(input.text);
   const verified = Boolean(article) || (Boolean(probe) && (await page.getByText(probe, { exact: false }).first().isVisible().catch(() => false)));
   const permalink = article ? await permalinkOf(article) : '';
-  return { outcome: 'published', verified, pendingApproval, groupTitle, permalink, publishedAt };
+  return { outcome: 'published', verified, pendingApproval, groupTitle, permalink, publishedAt, lookedIn: tried };
 }
 
 /**

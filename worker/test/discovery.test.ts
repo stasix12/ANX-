@@ -102,6 +102,42 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   eq(parseMembers('54\u00a0300 участников'), 54_300, 'including when it is a non-breaking one');
   eq(parseMembers('54\u202f300 участников'), 54_300, 'and a narrow no-break space, which is what Facebook actually emits');
 
+  /*
+   * ─── "אלפי" — THE CONSTRUCT FORM, which is what the owner's cards say ────
+   *
+   * "כאן טיפלת במספר חברים חלקית, עדיין יש קבוצות עם 1000/3000 חברים ומראה
+   *  לי 1/3."
+   *
+   * The unit list held אלף and אלפים and not אלפי, so a card reading "25 אלפי
+   * חברים" failed the anchored test, kept a multiplier of 1, and a group of
+   * twenty-five thousand was written down as having twenty-five members. Every
+   * number on his screen — 2, 6, 9, 11, 14, 25 — was a thousands count with
+   * its thousand eaten.
+   */
+  eq(parseMembers('11 אלפי חברים'), 11_000, 'אלפי, the form these cards actually use');
+  eq(parseMembers('25 אלפי חברים · ציבורית'), 25_000, 'with the privacy word after it, as the card is really laid out');
+  eq(parseMembers('2 אלפי חברים'), 2_000, 'and a small thousands count, which is where it looked most wrong');
+  eq(parseMembers('1.4 אלפי חברים'), 1_400, 'a decimal with the construct form');
+  eq(parseMembers('2 מיליוני חברים'), 2_000_000, 'and the same grammatical form of מיליון, so the two lists cover the same three shapes');
+  eq(parseMembers('3 חברים שלך בקבוצה · 14 אלפי חברים'), 14_000, "and the owner's own friend-count is still skipped in front of it");
+
+  /*
+   * ─── A NUMBER IN THE GROUP'S NAME MUST NOT SWALLOW THE COUNT ────────────
+   *
+   * The digit run was allowed to contain any whitespace, including the NEWLINE
+   * between a card's title and its counts — so a group that advertises its
+   * phone number in its name read as one impossible number, failed the sanity
+   * check, and showed no membership at all.
+   *
+   * The space cannot simply be banned: Russian really does group with one (the
+   * four cases above). It joins the number only where it IS part of it —
+   * before exactly three digits.
+   */
+  eq(parseMembers('דירות למכירה בבאר שבע 0546329669\n6 אלף חברים · ציבורית'), 6_000, 'A PHONE NUMBER IN THE NAME IS NOT PART OF THE COUNT');
+  eq(parseMembers('קבוצה 2024\n11 אלפי חברים'), 11_000, 'nor is a year in it');
+  eq(parseMembers('1 000 участников'), 1_000, 'and a grouping space is still a grouping space');
+  eq(parseMembers('1 234 567 members'), 1_234_567, 'including several of them');
+
   /* The refusals, which matter as much. */
   eq(parseMembers('Public group'), null, 'a card with no count reports NO COUNT — not zero, which would read as an empty group');
   eq(parseMembers(''), null, 'and neither does an empty card');

@@ -105,8 +105,22 @@ export const groupUrl = (externalId: string): string => `https://www.facebook.co
  * as having 543. So the rule is about what FOLLOWS the comma: three digits and
  * it is a separator, one or two and it is a decimal point.
  */
-const THOUSAND = /^(k|אלף|אלפים|тыс\.?|тысяч[аи]?)$/i;
-const MILLION = /^(m|mln|מיליון|מליון|млн\.?|миллион[аов]*)$/i;
+/*
+ * "אלפי" IS THE ONE THAT WAS MISSING, and it is the form Hebrew Facebook
+ * actually writes on most of these cards.
+ *
+ * "25 אלפי חברים" is twenty-five thousand members; without the construct form
+ * in this list the unit failed the anchored test, the multiplier stayed 1, and
+ * the card said "25 חברים" about a group of 25,000 — "יש קבוצות עם 1000/3000
+ * חברים ומראה לי 1/3". Every number in the owner's screenshot (2, 6, 9, 11,
+ * 14, 25) is a thousands count with its thousand eaten.
+ *
+ * The plural "מיליוני" joins for the same reason: the two lists have to cover
+ * the same three grammatical forms, or the next card with it reads a million
+ * as one.
+ */
+const THOUSAND = /^(k|אלף|אלפי|אלפים|тыс\.?|тысяч[аи]?)$/i;
+const MILLION = /^(m|mln|מיליון|מיליוני|מיליונים|מליון|מליוני|млн\.?|миллион[аов]*)$/i;
 
 /** The word for members, in the three languages, so a number that is about
     something else — "12 posts a day" — is not read as a membership count. */
@@ -156,7 +170,26 @@ export function parseMembers(text: string): number | null {
    * first one is not reliably the membership. This is also why the search is
    * for the pair rather than for a number anywhere on the card.
    */
-  const re = /([\d][\d.,\u00a0\u202f\s]*)\s*([^\s\d]*)\s*(members?|חברים|חברות|משתתפים|участник\w*)/giu;
+  /*
+   * A SPACE INSIDE THE NUMBER ONLY WHEN IT IS GROUPING THREE DIGITS.
+   *
+   * This class used to hold a bare `\s`, which matched the NEWLINE between a
+   * card's title and its counts: "דירות למכירה בבאר שבע 0546329669\n6 אלף
+   * חברים" read as the single number 05463296696 — absurd, rejected by the
+   * sanity check, and the card ended up with no membership at all. A phone
+   * number in a group's name is not unusual; it is how half of them advertise.
+   *
+   * But an ordinary space cannot simply be dropped either: Russian Facebook
+   * really does write "54 300 участников", and removing it read that as 300.
+   * Trading one wrong number for another is not a fix.
+   *
+   * So a space joins the number only in the one shape where it IS part of it —
+   * followed by exactly three digits. A newline never groups, and neither does
+   * a space before a one- or two-digit run, which is what the title case was.
+   * The non-breaking and narrow no-break spaces stay in the class outright:
+   * they have no other job in any of these three languages.
+   */
+  const re = /([\d][\d.,\u00a0\u202f]*(?: \d{3})*)\s*([^\s\d]*)\s*(members?|חברים|חברות|משתתפים|участник\w*)/giu;
   for (const m of text.matchAll(re)) {
     /* What sits around the word decides whose count this is. */
     if (MINE_AFTER.test(text.slice((m.index ?? 0) + m[0].length))) continue;
@@ -165,7 +198,7 @@ export function parseMembers(text: string): number | null {
     if (value !== null) return value;
   }
   /* Hebrew and Russian also put the word FIRST: "חברים: 54.3 אלף". */
-  const re2 = new RegExp(`(?:${MEMBER_WORD.source})\\s*[:：]?\\s*([\\d][\\d.,\\u00a0\\u202f\\s]*)\\s*([^\\s\\d]*)`, 'giu');
+  const re2 = new RegExp(`(?:${MEMBER_WORD.source})\\s*[:：]?\\s*([\\d][\\d.,\\u00a0\\u202f]*(?: \\d{3})*)\\s*([^\\s\\d]*)`, 'giu');
   for (const m of text.matchAll(re2)) {
     const value = readNumber(m[1], m[2]);
     if (value !== null) return value;

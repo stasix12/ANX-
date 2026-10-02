@@ -103,6 +103,31 @@ export function TargetPicker({
   /** "Only Be'er Sheva" means only Be'er Sheva — it replaces, it does not merge. */
   const only = (items: SocialTarget[]) => onChange(capped(enabledIds(items)));
   const also = (items: SocialTarget[]) => onChange(capped(Array.from(new Set([...selected, ...enabledIds(items)]))));
+  /*
+   * TAKE A WHOLE SET OUT, leaving the rest of the selection alone.
+   *
+   * "תוסיף כאן גם את האופציה להסיר את הקטגוריה כמו הדוברי רוסית."
+   *
+   * Until now the only subtraction on this screen was "נקה הכל", which throws
+   * away everything: picking 250 groups and then deciding the Russian-speaking
+   * ones should not get this post meant starting the whole selection again, or
+   * un-ticking them one at a time down a list of 138.
+   *
+   * NOT `enabledIds`. The add and replace sides deliberately skip a switched-
+   * off target — there is no sense adding somewhere that cannot publish — but
+   * removing one that is somehow already selected is exactly what the owner is
+   * asking for, and refusing to would leave a target he can see ticked and
+   * cannot untick from here. Subtraction takes the set as it is.
+   *
+   * NO CAP APPLIED: `capped()` trims a list down to the test-mode ceiling, and
+   * a list that just got shorter cannot have crossed it.
+   */
+  const less = (items: SocialTarget[]) => {
+    const drop = new Set(items.map((t) => t.id));
+    onChange(selected.filter((id) => !drop.has(id)));
+  };
+  /** How many of this set are actually selected — what "−" would take away. */
+  const chosenIn = (items: SocialTarget[]) => items.filter((t) => selected.includes(t.id)).length;
 
   /*
    * Selected targets the current filter hides. Without this the picker could
@@ -118,8 +143,24 @@ export function TargetPicker({
    * favourites set as "white medium star מועדפות". The mark is an icon now,
    * and it is drawn, not spoken.
    */
+  /*
+   * WHAT THE FIRST SET IS ACTUALLY MADE OF.
+   *
+   * It is `visible`, which is narrowed by the city, the category, the channel
+   * AND the search box — but the chip was labelled with the city alone. With
+   * "דוברי רוסית" chosen it read "רק באר שבע (18)" over a set that was not
+   * Be'er Sheva but the Russian-speaking part of it, and pressing it replaced
+   * the whole selection with that. A button that names one thing and does
+   * another is worse than a missing button.
+   *
+   * A search box narrows by words nobody can fit on a chip, so when one is in
+   * use the label steps back to the honest "המוצגים" — what is on screen —
+   * and the count beside it says how many that is.
+   */
+  const shownLabel = query.trim() ? 'המוצגים' : [city, category].filter(Boolean).join(' · ') || 'כל המוצגים';
+
   const quickSets: { label: string; icon?: React.ReactNode; items: SocialTarget[] }[] = [
-    { label: city || 'כל המוצגים', items: visible },
+    { label: shownLabel, items: visible },
     {
       label: 'מועדפות',
       icon: <StarIcon className="h-3.5 w-3.5" fill="currentColor" />,
@@ -186,6 +227,26 @@ export function TargetPicker({
                 onClick={() => also(q.items)}
               >
                 +
+              </Button>
+            )}
+            {/*
+              "−", AND ONLY WHEN IT WOULD TAKE SOMETHING AWAY.
+              `chosenIn` is how many of this set are currently ticked; at zero
+              the button could only do nothing, and a control that does nothing
+              is the one the owner presses twice and then reports as broken.
+              The count is in its name rather than on its face, because the
+              face has to stay the width of a "+" beside it.
+            */}
+            {chosenIn(q.items) > 0 && (
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label={`הסר את ${q.label} מהבחירה (${chosenIn(q.items)})`}
+                title={`הסר את ${q.label} מהבחירה (${chosenIn(q.items)})`}
+                className="!rounded-none border-s border-ink-600 !px-2.5"
+                onClick={() => less(q.items)}
+              >
+                −
               </Button>
             )}
           </span>

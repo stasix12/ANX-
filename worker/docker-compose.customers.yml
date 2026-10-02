@@ -1,0 +1,67 @@
+# חמישה לקוחות על שרת אחד — worker לכל אחד, כלום משותף.
+#
+# Run from the repository root:
+#   docker compose -f worker/docker-compose.customers.yml up -d --build
+#
+# EACH CUSTOMER IS: one service + one volume + one env file. The env file
+# holds that customer's app login (the account they signed up with on
+# /social/login) — it is what scopes every row the worker touches to THEIR
+# business, so two customers can never see each other's groups, posts or
+# Facebook session. The Facebook profile itself arrives through the dashboard
+# upload card (worker/profile-import.ts), per customer, from their own PC.
+#
+# To onboard customer N:
+#   1. they sign up at /social/login (business name included);
+#   2. copy worker/customers/customer1.env.example → customerN.env, fill it;
+#   3. uncomment / add the service block below;
+#   4. docker compose -f worker/docker-compose.customers.yml up -d
+#
+# A 16GB VPS holds 8–10 of these comfortably: the Node side idles at
+# ~200MB and Chromium's 1–1.5GB only exists while a batch is publishing.
+#
+# The anchor is the entire sameness. Three lines differ per customer — name,
+# env file, volume — and if a fourth ever differs, it belongs in the env file,
+# not in a drifting copy of the block.
+x-worker: &worker
+  build:
+    context: ..
+    dockerfile: worker/Dockerfile
+  restart: unless-stopped
+  # A browser needs more shared memory than Docker's 64MB default; without it
+  # Chromium dies mid-upload and the failure reads as Facebook rejecting the
+  # post. (The Dockerfile's --disable-dev-shm-usage covers hosts where this
+  # knob does not exist; here we have the knob, so both hold.)
+  shm_size: 1gb
+
+services:
+  customer1:
+    <<: *worker
+    env_file: [customers/customer1.env]
+    volumes: ['fb-profile-1:/data']
+
+  customer2:
+    <<: *worker
+    env_file: [customers/customer2.env]
+    volumes: ['fb-profile-2:/data']
+
+  customer3:
+    <<: *worker
+    env_file: [customers/customer3.env]
+    volumes: ['fb-profile-3:/data']
+
+  customer4:
+    <<: *worker
+    env_file: [customers/customer4.env]
+    volumes: ['fb-profile-4:/data']
+
+  customer5:
+    <<: *worker
+    env_file: [customers/customer5.env]
+    volumes: ['fb-profile-5:/data']
+
+volumes:
+  fb-profile-1:
+  fb-profile-2:
+  fb-profile-3:
+  fb-profile-4:
+  fb-profile-5:

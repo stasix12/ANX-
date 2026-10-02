@@ -77,6 +77,16 @@ export const env = {
   get workerPasswordOptional() {
     return process.env.SOCIAL_WORKER_PASSWORD ?? '';
   },
+  /*
+   * A one-time pairing code minted by the dashboard (/api/social/pair) —
+   * how a cloud container with no screen becomes the customer's worker
+   * WITHOUT anybody handling the customer's password. Exchanged for a
+   * session exactly once; after that the saved session wins and a stale
+   * value here is never even looked at.
+   */
+  get pairingTokenOptional() {
+    return process.env.SOCIAL_WORKER_PAIRING?.trim() ?? '';
+  },
   /** 'chrome' uses the installed Google Chrome; 'chromium' uses Playwright's build. */
   get browserChannel() {
     return (process.env.SOCIAL_BROWSER_CHANNEL ?? 'chrome') as 'chrome' | 'msedge' | 'chromium';
@@ -87,6 +97,15 @@ export const env = {
   /** Force headed regardless of the dashboard setting. */
   get forceHeaded() {
     return process.env.SOCIAL_BROWSER_HEADED === '1';
+  },
+  /*
+   * Managed container hosts (Railway, Render) give /dev/shm Docker's 64MB
+   * default and no shm_size knob. Chromium then dies mid-upload in a way that
+   * looks exactly like Facebook rejecting the post. The flag moves shared
+   * memory to /tmp; the worker's Dockerfile sets it, desktops are unaffected.
+   */
+  get disableDevShm() {
+    return process.env.SOCIAL_BROWSER_DISABLE_DEV_SHM === '1';
   },
   get pollMs() {
     return Number(process.env.SOCIAL_WORKER_POLL_MS ?? 5000);

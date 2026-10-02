@@ -47,3 +47,6 @@ dev.log
 # The packaged desktop app. Built by scripts/build-app.mjs and
 # electron-builder; hundreds of megabytes, and rebuilt from source every time.
 /dist
+
+# פרטי כניסה של לקוחות ל-workers בענן — סודות, לעולם לא לריפו.
+worker/customers/*.env

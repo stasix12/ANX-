@@ -104,6 +104,29 @@ export async function workerDb(): Promise<SupabaseClient> {
     forgetSession();
   }
 
+  /*
+   * No saved session — a pairing code, if one was provided, goes first. It is
+   * the headless twin of the prompt below: the customer generated it in their
+   * own account page, the operator pasted it into the container's variables,
+   * and this exchange is the one and only time it is good for. From here on
+   * the session file on the volume is the identity; an expired leftover in
+   * the environment is never consulted again (the session check above returns
+   * before this line runs).
+   */
+  const pairing = env.pairingTokenOptional;
+  if (pairing) {
+    const { error } = await c.auth.verifyOtp({ type: 'magiclink', token_hash: pairing });
+    if (!error) {
+      console.log('[worker] קוד החיבור התקבל — המכונה הזאת מחוברת עכשיו לחשבון הלקוח.');
+      client = c;
+      return c;
+    }
+    throw new Error(
+      `קוד החיבור (SOCIAL_WORKER_PAIRING) נדחה: ${error.message}\n` +
+        'הקוד חד-פעמי ותקף לשעה. צרו קוד חדש בעמוד החשבון (כרטיס "חיבור worker בענן") והחליפו את המשתנה.',
+    );
+  }
+
   await signInInteractively(c);
   client = c;
   return c;

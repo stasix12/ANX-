@@ -88,6 +88,9 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   eq(parseMembers('54,300 חברים'), 54_300, 'and the Hebrew card uses the English separator');
   eq(parseMembers('1.2 מיליון חברים'), 1_200_000, 'מיליון');
   eq(parseMembers('\u200f543 חברים'), 543, 'a bidi mark in front of the number does not hide it');
+  eq(parseMembers('\u200f9.4K\u200f חברים בקבוצה'), 9_400, 'BIDI MARKS AROUND THE NUMBER DO NOT EAT THE K — the 9,400 written down as 9');
+  eq(parseMembers('9.4 \u200fאלף\u200f חברים'), 9_400, 'nor do they eat אלף when it is its own word');
+  eq(parseMembers('\u2066 9.4K \u2069 חברים בקבוצה'), 9_400, 'isolate marks, the other spelling of the same trap');
   eq(parseMembers('חברים: 54.3 אלף'), 54_300, 'and Hebrew sometimes puts the word first');
 
   /* Russian — the one that pays for this whole function. */

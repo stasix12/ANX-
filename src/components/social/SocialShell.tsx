@@ -16,6 +16,7 @@ import {
   SearchIcon,
   SparklesIcon,
   SpinnerIcon,
+  TargetIcon,
   UsersIcon,
 } from '@/components/icons';
 import { signOut, useAdminSession } from '@/lib/adminAuth';
@@ -69,6 +70,7 @@ const nav = [
      owner can reach and then never find again. */
   { href: '/social/activity', label: 'פעילות', icon: ClockIcon, exact: false },
   { href: '/social/library', label: 'ספרייה', icon: ClipboardListIcon, exact: false },
+  { href: '/social/targets', label: 'דפי פייסבוק', icon: TargetIcon, exact: false },
   { href: '/social/settings', label: 'הגדרות', icon: GearIcon, exact: false },
 ];
 

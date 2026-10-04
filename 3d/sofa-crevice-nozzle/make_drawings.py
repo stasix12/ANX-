@@ -88,7 +88,7 @@ ext(ax, 250, -23, 250, -28)
 dim_v(ax, -4, -6, 6, "12", side=-1)
 dim_v(ax, B.X_BODY - 3, -10, 10, "20", side=-1)
 dim_v(ax, 254, -23, 23, "Ø46 OD")
-dim_v(ax, 238, -B.BORE_D_MOUTH / 2 + 0.4, B.BORE_D_MOUTH / 2 - 0.4, "Ø36.5 > Ø36.0\n(friction taper)", side=-1)
+dim_v(ax, 238, -B.BORE_D_MOUTH / 2 + 0.4, B.BORE_D_MOUTH / 2 - 0.4, "Ø36.0 straight bore\n(1 mm lead-in chamfer)", side=-1)
 ax.text(30, -14, "wall 3.0 at tip  >  4.0 at x=125  >  4.0-6.7 in transition (8 at hose stop)  >  4.75-5.0 collar",
         fontsize=8.5, color=DARK)
 ax.text(181, 6.5, "air path", fontsize=8, color=DARK, ha="center")

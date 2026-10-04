@@ -27,8 +27,8 @@ R_COLLAR = 23.0           # collar outer radius  (OD 46 -> 5 mm wall on 36 bore)
 R_TRANS0 = 21.6           # transition outer radius at collar (1.4 mm 45deg step = visible collar edge, as on the reference)
 
 # hose socket (female, slides over a 36 mm wand/hose end)
-BORE_D_MOUTH = 36.5       # at the open end (incl. FDM clearance)
-BORE_D_BOTTOM = 36.0      # at the stop -> friction taper, no wobble
+BORE_D_MOUTH = 36.0       # at the open end - straight 36 mm bore to match the existing 36 mm handle
+BORE_D_BOTTOM = 36.0      # at the stop (same as mouth = straight bore)
 BORE_DEPTH = 38.0         # insertion length
 STOP_R = 15.0             # stop-shoulder inner radius (3 mm wide hose stop)
 LEAD_IN = 1.0             # entry chamfer

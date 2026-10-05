@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { StarIcon } from '@/components/icons';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { agree, counted } from '@/lib/social/time';
@@ -130,6 +130,59 @@ export function TargetPicker({
   const chosenIn = (items: SocialTarget[]) => items.filter((t) => selected.includes(t.id)).length;
 
   /*
+   * EVERYTHING EXCEPT THIS SET — the one shape of the question this screen
+   * could not be asked.
+   *
+   * "אני רוצה לפרסם את זה בכל הקבוצות אבל לא נותן לי למחוק קטגוריות רק (רק
+   *  להוסיף)."
+   *
+   * He is right, and "−" was not the answer. Every action here started from
+   * the selection: "רק" replaces it, "+" adds to it, "−" takes out of it. From
+   * an empty selection — which is where this screen opens, and what his
+   * screenshot shows, "נבחרו 0" — subtraction has nothing to subtract from, so
+   * "−" is correctly not drawn and the only button left on the row is an
+   * additive one. "Publish to all of them except the Russian-speaking ones"
+   * was reachable only by knowing to select all 269 first, then changing the
+   * filter, then finding a one-character button that had appeared meanwhile.
+   * Three steps, none of them visible from the state he was in. A feature
+   * nobody can find is not a feature, and he reported it as missing because
+   * from where he was standing it was.
+   *
+   * So the complement is its own action, and it starts from nothing: the set
+   * on screen is named, and beside it the whole list minus that set.
+   *
+   * ENABLED ONLY, like "רק" and "+" and unlike "−". This one SELECTS targets,
+   * and selecting somewhere that cannot publish is the thing that rule exists
+   * to prevent. Subtraction is the exception there, not the model.
+   */
+  const complementOf = (items: SocialTarget[]) => {
+    const inSet = new Set(items.map((t) => t.id));
+    return enabledIds(targets.filter((t) => !inSet.has(t.id)));
+  };
+  const except = (items: SocialTarget[]) => {
+    onChange(capped(complementOf(items)));
+    /*
+     * AND THE FILTER STEPS ASIDE, because it has just finished its job.
+     *
+     * Without this the one tap he wanted ends on a screen that looks broken:
+     * every target it selected is, by definition, outside the filter that
+     * named the set — so all 151 of them are hidden, and the "יעדים נבחרים לא
+     * מוצגים" bar appears over a perfectly correct result, offering "הסר
+     * אותם" as the fix. A warning that fires on success, beside a button that
+     * undoes it, is worse than no warning at all.
+     *
+     * Every filter, not just the category: the complement is taken over the
+     * whole list, so a city or a channel still set would hide part of it too.
+     * This is exactly what that bar's own "הצג אותם" button does, done before
+     * there is anything to warn about.
+     */
+    setQuery('');
+    setCity('');
+    setCategory('');
+    setChannel('all');
+  };
+
+  /*
    * Selected targets the current filter hides. Without this the picker could
    * strand a selection out of sight: pick "all of Be'er Sheva" while a post
    * still carried Arad from an earlier campaign and the Arad groups stayed
@@ -159,8 +212,21 @@ export function TargetPicker({
    */
   const shownLabel = query.trim() ? 'המוצגים' : [city, category].filter(Boolean).join(' · ') || 'כל המוצגים';
 
-  const quickSets: { label: string; icon?: React.ReactNode; items: SocialTarget[] }[] = [
-    { label: shownLabel, items: visible },
+  /*
+   * `except` MARKS THE ONE SET WHOSE COMPLEMENT IS A DECISION, and it is a
+   * flag on the set rather than "the first one" at the call site: when the
+   * filter matches nothing this list drops its first entry, and an index test
+   * would then start offering "הכל חוץ ממועדפות" under the filter's name.
+   *
+   * Only the filtered set gets it. Its membership is what he just chose on
+   * screen, so "everything except that" is the other half of a choice he is
+   * already making. The other two are fixed collections: "הכל חוץ מדפים" is
+   * the "קבוצות" button three rows up, and "הכל חוץ ממועדפות" is a sentence
+   * nobody has ever needed. Both were drawn for one commit and both were
+   * clutter on a row he reads every time he sends a post.
+   */
+  const quickSets: { label: string; icon?: React.ReactNode; items: SocialTarget[]; except?: boolean }[] = [
+    { label: shownLabel, items: visible, except: true },
     {
       label: 'מועדפות',
       icon: <StarIcon className="h-3.5 w-3.5" fill="currentColor" />,
@@ -213,43 +279,63 @@ export function TargetPicker({
 
       <div className="flex flex-wrap items-center gap-1.5">
         {quickSets.map((q) => (
-          <span key={q.label} className="inline-flex overflow-hidden rounded-xl">
-            <Button size="sm" variant="secondary" className="!rounded-none" onClick={() => only(q.items)}>
-              {q.icon}רק {q.label} ({q.items.length})
-            </Button>
-            {selected.length > 0 && (
-              <Button
-                size="sm"
-                variant="secondary"
-                aria-label={`הוסף את ${q.label} לבחירה הקיימת`}
-                title={`הוסף את ${q.label} לבחירה הקיימת`}
-                className="!rounded-none border-s border-ink-600 !px-2.5"
-                onClick={() => also(q.items)}
-              >
-                +
+          <Fragment key={q.label}>
+            <span className="inline-flex overflow-hidden rounded-xl">
+              <Button size="sm" variant="secondary" className="!rounded-none" onClick={() => only(q.items)}>
+                {q.icon}רק {q.label} ({q.items.length})
               </Button>
-            )}
+              {selected.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  aria-label={`הוסף את ${q.label} לבחירה הקיימת`}
+                  title={`הוסף את ${q.label} לבחירה הקיימת`}
+                  className="!rounded-none border-s border-ink-600 !px-2.5"
+                  onClick={() => also(q.items)}
+                >
+                  +
+                </Button>
+              )}
+              {/*
+                "−", AND ONLY WHEN IT WOULD TAKE SOMETHING AWAY.
+                `chosenIn` is how many of this set are currently ticked; at zero
+                the button could only do nothing, and a control that does nothing
+                is the one the owner presses twice and then reports as broken.
+                The count is in its name rather than on its face, because the
+                face has to stay the width of a "+" beside it.
+              */}
+              {chosenIn(q.items) > 0 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  aria-label={`הסר את ${q.label} מהבחירה (${chosenIn(q.items)})`}
+                  title={`הסר את ${q.label} מהבחירה (${chosenIn(q.items)})`}
+                  className="!rounded-none border-s border-ink-600 !px-2.5"
+                  onClick={() => less(q.items)}
+                >
+                  −
+                </Button>
+              )}
+            </span>
             {/*
-              "−", AND ONLY WHEN IT WOULD TAKE SOMETHING AWAY.
-              `chosenIn` is how many of this set are currently ticked; at zero
-              the button could only do nothing, and a control that does nothing
-              is the one the owner presses twice and then reports as broken.
-              The count is in its name rather than on its face, because the
-              face has to stay the width of a "+" beside it.
+              "הכל חוץ מ…", ITS OWN CHIP AND NOT A FOURTH SEGMENT.
+              The three above are one control because they are three verbs on
+              the same selection — replace it, add to it, take out of it. This
+              one is a different sentence about a different set, and run
+              together with them it would read as another modifier of "רק".
+
+              DRAWN ONLY WHEN THERE IS SOMETHING LEFT OVER. With no filter on,
+              the first set IS every target and its complement is empty, so the
+              button would select nothing at all and the row stays as he knows
+              it. The count is on its face rather than in a tooltip because it
+              is the whole decision: "219" is why he would press it.
             */}
-            {chosenIn(q.items) > 0 && (
-              <Button
-                size="sm"
-                variant="secondary"
-                aria-label={`הסר את ${q.label} מהבחירה (${chosenIn(q.items)})`}
-                title={`הסר את ${q.label} מהבחירה (${chosenIn(q.items)})`}
-                className="!rounded-none border-s border-ink-600 !px-2.5"
-                onClick={() => less(q.items)}
-              >
-                −
+            {q.except && complementOf(q.items).length > 0 && (
+              <Button size="sm" variant="secondary" onClick={() => except(q.items)}>
+                הכל חוץ מ{q.label} ({complementOf(q.items).length})
               </Button>
             )}
-          </span>
+          </Fragment>
         ))}
         {selected.length > 0 && (
           <Button size="sm" variant="ghost" onClick={() => onChange([])}>
@@ -376,7 +462,8 @@ export function TargetPicker({
             הצג עוד {Math.min(CHUNK, visible.length - page.length)}
           </Button>
           <p className="text-[11px] text-mist-500">
-            מוצגים {page.length} מתוך {visible.length}. &quot;רק…&quot; ו-&quot;+&quot; פועלים על כל {visible.length}.
+            מוצגים {page.length} מתוך {visible.length}. &quot;רק…&quot;, &quot;הכל חוץ מ…&quot;, &quot;+&quot; ו-&quot;−&quot; פועלים על כל{' '}
+            {visible.length}.
           </p>
         </div>
       )}

@@ -40,6 +40,8 @@ import {
   queueCampaignComment,
   queueSummary,
   runCovers,
+  getBrowserSettings,
+  lastPublishedAt,
   saveCampaign,
   setCampaignRepeat,
   sendWorkerCommand,
@@ -58,7 +60,7 @@ import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSee
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { agree, counted, startOfZonedDay, startOfZonedWeek } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
-import type { ActivityEntry, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
+import type { ActivityEntry, BrowserSettings, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { AlertTriangleIcon, MessageIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
@@ -152,6 +154,9 @@ interface DashboardData {
   /** The successes, newest first, behind the card's green tile. */
   commentsDone: QueueRow[];
   limits: LimitsSettings;
+  /** For the account-wide spacing rule the cards must respect — see scheduleReadout. */
+  browser: BrowserSettings;
+  lastPublished: string | null;
   control: ControlSettings;
   /**
    * Enabled targets, or null when the read was skipped.
@@ -317,7 +322,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, browser, lastPublished] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -371,6 +376,14 @@ export default function SocialDashboard() {
         /* The same midnight every other "today" on this screen uses. */
         commentTotalsSince(startOfZonedDay(now).toISOString()),
         listCommentsDone(),
+        /* THE OTHER HALF OF "הבא בתור". rules.ts holds a row for the later of
+           the campaign's own gap and an account-wide one, and the cards knew
+           only the first — so they printed a minute the engine would not
+           publish at. Two cheap reads, in the same round trip as everything
+           else, and scheduleReadout can answer the question the engine
+           actually asks. */
+        getBrowserSettings(),
+        lastPublishedAt()
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
       const next: DashboardData = {
@@ -390,6 +403,8 @@ export default function SocialDashboard() {
         commentsToday,
         commentsDone,
         limits,
+        browser,
+        lastPublished,
         control,
         activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
         waitingForYou,
@@ -1383,6 +1398,11 @@ export default function SocialDashboard() {
                      the campaign's own row; the write is the block above. */
                   schedule={scheduleOf(run.campaign)}
                   onScheduleChange={(next) => changeSchedule(run.campaign, next)}
+                  spacing={{
+                    minGapMinutes: data.limits.minGapMinutes,
+                    groupMinGapMinutes: data.browser.groupMinGapMinutes,
+                    lastPublishedAt: data.lastPublished,
+                  }}
                   repeat={readRepeat(run.campaign)}
                   onRepeatChange={(next) => void changeRepeat(run.campaign, next)}
                   scheduleBusy={scheduleBusy && schedulePatch?.id === run.campaign.id}

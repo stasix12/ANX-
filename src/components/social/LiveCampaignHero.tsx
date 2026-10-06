@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
-import { scheduleReadout } from '@/lib/social/schedule-readout';
+import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { countdownTo } from '@/lib/social/countdown';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
@@ -146,6 +146,7 @@ export function LiveCampaignHero({
   onScheduleChange,
   repeat,
   onRepeatChange,
+  spacing,
   scheduleBusy = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status'>;
@@ -206,6 +207,15 @@ export function LiveCampaignHero({
    */
   repeat?: CampaignRepeat;
   onRepeatChange?: (next: CampaignRepeat) => void;
+  /**
+   * The account-wide spacing rule, which the card cannot see from the campaign
+   * alone — rules.ts holds a row for the later of this and the campaign's own
+   * gap, so a card without it prints a minute the engine will not publish at.
+   * Optional: a caller that cannot supply it gets the behaviour this card had
+   * before, which is wrong in the same way it has always been wrong rather
+   * than newly wrong.
+   */
+  spacing?: AccountSpacing;
   /** While that write is in flight, so the controls cannot be raced. */
   scheduleBusy?: boolean;
 }) {
@@ -270,7 +280,7 @@ export function LiveCampaignHero({
    * scheduleReadout() is that missing responsibility, and it is one function
    * with one rule — name an instant only when something will happen at it.
    */
-  const readout = scheduleReadout(schedule, state, undefined, repeat);
+  const readout = scheduleReadout(schedule, state, undefined, repeat, spacing);
 
   /*
    * "לחיצה על 'ערוך מועד' צריכה לפתוח את אפשרויות עריכת התזמון שכבר בנינו."

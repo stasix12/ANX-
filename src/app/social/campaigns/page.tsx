@@ -27,6 +27,9 @@ import {
   pauseCampaign,
   queueCampaignComment,
   reopenCampaign,
+  getBrowserSettings,
+  getLimits,
+  lastPublishedAt,
   saveCampaign,
   setCampaignRepeat,
   stopCampaign,
@@ -34,6 +37,7 @@ import {
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { type AccountSpacing } from '@/lib/social/schedule-readout';
 import type { Campaign, ControlSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { MegaphoneIcon } from '@/components/icons';
@@ -83,6 +87,7 @@ export default function CampaignsPage() {
    * runBadge() in campaign.ts decides what they mean — the cards only render it.
    */
   const [control, setControl] = useState<ControlSettings | null>(seed?.control ?? null);
+  const [spacing, setSpacing] = useState<AccountSpacing | undefined>(undefined);
   const [workerOnline, setWorkerOnline] = useState<boolean | undefined>(seed?.workerOnline);
   /*
    * WHICH ROUND THE COMMENT SHEET IS ABOUT — and null when it is closed, so
@@ -111,13 +116,21 @@ export default function CampaignsPage() {
        * had exactly this bug and listPostsForCampaign() was written for it;
        * this is the list screen's version of the same fix.
        */
-      const [c, p, st, ctrl, workers] = await Promise.all([
+      const [c, p, st, ctrl, workers, lim, brw, lastPub] = await Promise.all([
         listCampaigns(),
         listCampaignPosts(),
         campaignStates(),
         getControl(),
         listWorkers(),
+        /* THE OTHER HALF OF "הבא בתור" — rules.ts holds a row for the later of
+           the campaign's own gap and an account-wide one, and this list knew
+           only the first. Three cheap reads inside the round trip this screen
+           already makes. */
+        getLimits(),
+        getBrowserSettings(),
+        lastPublishedAt(),
       ]);
+      setSpacing({ minGapMinutes: lim.minGapMinutes, groupMinGapMinutes: brw.groupMinGapMinutes, lastPublishedAt: lastPub });
       const online = workers.some((w) => w.online);
       setCampaigns(c);
       setPosts(p);
@@ -481,6 +494,7 @@ export default function CampaignsPage() {
                  */
                 schedule={readSchedule(c)}
                 onScheduleChange={(next) => changeSchedule(c, next)}
+                spacing={spacing}
                 repeat={readRepeat(c)}
                 onRepeatChange={(next) => void changeRepeat(c, next)}
                 scheduleBusy={scheduleBusy[c.id] ?? false}

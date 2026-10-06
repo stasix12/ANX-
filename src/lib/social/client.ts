@@ -2055,6 +2055,39 @@ export async function countFailuresSince(sinceISO: string): Promise<{ failed: nu
   return { failed, skipped };
 }
 
+/**
+ * WHEN THIS ACCOUNT LAST PUBLISHED ANYTHING — the instant rules.ts measures its
+ * spacing rule from, read the same way rules.ts reads it.
+ *
+ * "הפרש בין פוסטים: כל דקה" is the campaign's own gap, and the engine enforces
+ * a second one on top: limits.minGapMinutes, plus browser.groupMinGapMinutes
+ * for a group, counted from the most recent publication of the WHOLE account.
+ * Without this instant a card can only ever know half the answer, and the half
+ * it knew was the smaller one — so it printed a minute the engine would not
+ * honour, and a worker holding for that gap claims nothing, writes no
+ * deferral, and leaves the wrong minute on screen for the whole wait.
+ *
+ * NOT SCOPED BY CAMPAIGN, and not by account either — deliberately the same
+ * unscoped read as rules.ts and the worker's spacingGate, whose own comment
+ * explains why ("DELIBERATELY NOT SCOPED BY ACCOUNT"). A narrower read here
+ * would answer a different question from the one being enforced, which is how
+ * the two drifted apart in the first place.
+ *
+ * One row, one column. Null on a database that has never published.
+ */
+export async function lastPublishedAt(): Promise<string | null> {
+  const res = await db()
+    .from('social_queue')
+    .select('published_at')
+    .eq('status', 'published')
+    .not('published_at', 'is', null)
+    .order('published_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (res.error) throw friendlyError(res.error);
+  return (res.data as { published_at: string } | null)?.published_at ?? null;
+}
+
 export async function countPublishedSince(sinceISO: string): Promise<number> {
   const res = await db().from('social_queue').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('published_at', sinceISO);
   if (res.error) throw friendlyError(res.error);

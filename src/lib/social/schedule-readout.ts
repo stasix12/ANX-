@@ -104,11 +104,63 @@ export type ScheduleReadout =
  * a true statement about an irrelevant thing, printed where the answer goes.
  * And 1 outranks everything, for the reason given at the check itself.
  */
+/**
+ * THE OTHER GAP — the one the card did not know about.
+ *
+ * "הפרש בין פוסטים: כל דקה" is the campaign's own setting, and it is not the
+ * only floor the engine applies. rules.ts measures a SECOND interval against
+ * the most recent publication of the WHOLE ACCOUNT —
+ * `limits.minGapMinutes + (group ? browser.groupMinGapMinutes : 0)`, 45 + 20 by
+ * default — and holds the row for whichever of the two is later. Nothing in
+ * campaign-schedule.ts has ever heard of it.
+ *
+ * So a card reading "כל דקה · הבא בתור 10:13" could sit over an engine that
+ * will not publish before 11:17, which is word for word the failure that
+ * module's header says it exists to prevent. And it does not correct itself: a
+ * worker whose spacing gate is shut claims nothing at all, so no deferral is
+ * written and the wrong minute stays on screen for the whole gap.
+ */
+export interface AccountSpacing {
+  /** limits.minGapMinutes — between any two publications, whatever the channel. */
+  minGapMinutes: number;
+  /** browser.groupMinGapMinutes — added on top of it for a facebook_group. */
+  groupMinGapMinutes: number;
+  /** The account's most recent publication. NOT this campaign's. */
+  lastPublishedAt: string | null;
+}
+
+/**
+ * Unknown by default, and unknown means "adds nothing".
+ *
+ * A caller that cannot supply the account's last publication gets exactly the
+ * behaviour this module had before — the campaign's own gap and nothing else.
+ * That is the wrong answer in the cases above, but it is the SAME wrong answer
+ * every screen has always given, and a default that invented a floor out of
+ * nothing would be worse: it would push every card's instant forward by an
+ * hour on a database that has simply never published.
+ */
+const NO_SPACING: AccountSpacing = { minGapMinutes: 0, groupMinGapMinutes: 0, lastPublishedAt: null };
+
+/** The instant the account-wide rule will not let anything publish before. */
+function accountFloorMs(spacing: AccountSpacing, channel: string | null): number {
+  if (!spacing.lastPublishedAt) return 0;
+  /* The group surcharge is applied exactly where rules.ts applies it: on a
+     facebook_group target and nowhere else. An unknown channel gets the plain
+     floor rather than the larger one — guessing upwards would hold a page's
+     publication behind a rule that does not govern it. */
+  const extra = channel === 'facebook_group' ? Math.max(0, spacing.groupMinGapMinutes) : 0;
+  const minutes = Math.max(0, spacing.minGapMinutes) + extra;
+  if (!minutes) return 0;
+  const last = new Date(spacing.lastPublishedAt).getTime();
+  return Number.isNaN(last) ? 0 : last + minutes * 60_000;
+}
+
 export function scheduleReadout(
   schedule: CampaignSchedule | null | undefined,
-  state: Pick<CampaignState, 'state' | 'nextAt' | 'done' | 'progress'> & { truncated?: boolean },
+  state: Pick<CampaignState, 'state' | 'nextAt' | 'done' | 'progress'> & { truncated?: boolean; nextChannel?: string | null },
   now: Date = new Date(),
   repeat: CampaignRepeat = DEFAULT_CAMPAIGN_REPEAT,
+  spacing: AccountSpacing = NO_SPACING,
 ): ScheduleReadout {
   const on = Boolean(schedule?.enabled);
 
@@ -168,9 +220,19 @@ export function scheduleReadout(
   if (state.state === 'paused') return { kind: 'paused' };
 
   if (state.nextAt) {
-    if (!on || !schedule) return { kind: 'due', at: state.nextAt };
+    /*
+     * BOTH FLOORS, COMPOSED THE WAY THE ENGINE COMPOSES THEM: the account-wide
+     * rule says "not before X", the stored instant says "not before Y", and the
+     * window then answers "the first legal moment at or after the later of the
+     * two". Folding the account floor into `from` rather than taking a max
+     * afterwards is what makes the window apply to it — an instant pushed past
+     * 22:00 by the account gap has to roll to the next chosen day, exactly as
+     * it would for any other reason.
+     */
+    const base = Math.max(new Date(state.nextAt).getTime(), accountFloorMs(spacing, state.nextChannel ?? null));
+    if (!on || !schedule) return { kind: 'due', at: new Date(base).toISOString() };
     const lastPublishedAt = state.done.find((r) => r.published_at)?.published_at ?? null;
-    const from = new Date(Math.max(new Date(state.nextAt).getTime(), now.getTime()));
+    const from = new Date(Math.max(base, now.getTime()));
     const at = nextPublishAt(schedule, from, lastPublishedAt ? new Date(lastPublishedAt) : null, undefined);
     /* 2 — null here means one thing only: no day is selected, so the row is
            held indefinitely. The stored instant may NOT be printed over it. */

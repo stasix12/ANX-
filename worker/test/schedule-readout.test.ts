@@ -60,11 +60,12 @@ const prog = (o: Record<string, number> = {}) =>
 const st = (
   state: CampaignState['state'],
   nextAt: string | null,
-  extra: { manual?: number; lastPublished?: string; truncated?: boolean } = {},
+  extra: { manual?: number; lastPublished?: string; truncated?: boolean; channel?: string } = {},
 ) =>
   ({
     state,
     nextAt,
+    nextChannel: extra.channel ?? 'facebook_group',
     truncated: extra.truncated ?? false,
     progress: prog({ manual: extra.manual ?? 0 }),
     done: extra.lastPublished ? [{ published_at: extra.lastPublished }] : [],
@@ -384,7 +385,125 @@ const st = (
   eq(scheduleReadout(ref, st('paused', null, { truncated: true }), now), { kind: 'paused' }, 'and a capped read does not hide it');
 }
 
-/* ──────────── 11. and no component may do this arithmetic itself ───────── */
+/* ──────────── 11. THE OTHER GAP — the account-wide one ─────────────────── */
+{
+  /*
+   * "הפרש בין פוסטים: כל דקה · הבא בתור: היום, 10:13" — over an engine that
+   * would not publish before 11:17.
+   *
+   * The campaign's gap is not the only floor. rules.ts:410-412 measures a
+   * SECOND interval against the most recent publication of the WHOLE ACCOUNT —
+   * limits.minGapMinutes, plus browser.groupMinGapMinutes for a group, 45 + 20
+   * by default — and holds the row for whichever of the two is later. Nothing
+   * in campaign-schedule.ts has ever heard of it, so the card printed the
+   * smaller one.
+   *
+   * AND IT DOES NOT CORRECT ITSELF. worker/social-worker.ts:738-745: when that
+   * gate is shut and the wait is longer than PREP_LEAD_MS the tick claims
+   * nothing at all — rules.ts never runs, no deferral is written, and the
+   * stored instant stays put. So the wrong minute is not on screen for one
+   * poll; it is there for the whole gap.
+   */
+  const now = at('2026-10-07T10:12');
+  const minute: CampaignSchedule = { ...ref, gapMinutes: 1 };
+  const defaults = { minGapMinutes: 45, groupMinGapMinutes: 20, lastPublishedAt: at('2026-10-07T10:12').toISOString() };
+
+  /* What the card said before: the campaign's minute, and nothing else. */
+  eq(
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT),
+    { kind: 'due', at: at('2026-10-07T10:13').toISOString() },
+    'without the account rule the card prints the campaign gap alone — the old answer',
+  );
+  /* What the engine will actually do: 10:12 + 65 minutes. */
+  eq(
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    { kind: 'due', at: at('2026-10-07T11:17').toISOString() },
+    'THE OWNER\'S "כל דקה": the account-wide floor is 65 minutes and the card must say so',
+  );
+
+  /* A PAGE IS NOT A GROUP. The surcharge is applied exactly where rules.ts
+     applies it, so a page waits 45 minutes and not 65. */
+  eq(
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString(), { channel: 'facebook_page' }), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    { kind: 'due', at: at('2026-10-07T10:57').toISOString() },
+    'a page target carries limits.minGapMinutes without the group surcharge',
+  );
+  /* An unknown channel takes the plain floor rather than the larger one:
+     guessing upwards would hold a publication behind a rule that may not
+     govern it. */
+  eq(
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString(), { channel: '' }), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    { kind: 'due', at: at('2026-10-07T10:57').toISOString() },
+    'an unknown channel is not assumed to be a group',
+  );
+
+  /* THE LATER OF THE TWO, NOT THE ACCOUNT ONE. A campaign gap of three hours
+     outranks a 65-minute account floor — the engine takes the max and so must
+     the card. */
+  const slow: CampaignSchedule = { ...ref, gapMinutes: 30 };
+  const r = scheduleReadout(slow, st('running', at('2026-10-07T13:00').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, defaults);
+  eq(r, { kind: 'due', at: at('2026-10-07T13:00').toISOString() }, 'a stored instant beyond both floors is left alone');
+
+  /*
+   * AND THE WINDOW STILL APPLIES TO IT. An instant pushed past 22:00 by the
+   * account gap has to roll to the next chosen day, exactly as it would for
+   * any other reason — which is why the floor is folded into `from` rather
+   * than maxed in afterwards.
+   */
+  const late = {
+    minGapMinutes: 45,
+    groupMinGapMinutes: 20,
+    lastPublishedAt: at('2026-10-07T21:30').toISOString(),
+  };
+  eq(
+    scheduleReadout(minute, st('running', at('2026-10-07T21:35').toISOString()), at('2026-10-07T21:35'), DEFAULT_CAMPAIGN_REPEAT, late),
+    { kind: 'due', at: at('2026-10-08T08:00').toISOString() },
+    'an account floor past the window rolls to the next chosen day, it does not land at 22:35',
+  );
+
+  /* NOTHING PUBLISHED YET — no floor at all, and certainly not one invented
+     out of an epoch. A database that has never published must not have every
+     card's instant pushed forward by an hour. */
+  eq(
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, { ...defaults, lastPublishedAt: null }),
+    { kind: 'due', at: at('2026-10-07T10:13').toISOString() },
+    'an account that has never published imposes no floor');
+  eq(
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, { ...defaults, minGapMinutes: 0, groupMinGapMinutes: 0 }),
+    { kind: 'due', at: at('2026-10-07T10:13').toISOString() },
+    'and neither does a gap of zero');
+
+  /*
+   * AND A LAST-PUBLISHED THAT CANNOT BE PARSED MUST NOT POISON THE ANSWER.
+   * `Math.max(anything, NaN)` is NaN, and a NaN milliseconds reaches the card
+   * as "Invalid Date" — a strip that has spent three versions learning not to
+   * print a wrong time would print no time at all, which is worse. The column
+   * is a timestamp and should never be garbage; "should never" is exactly the
+   * assumption this file exists to stop relying on.
+   */
+  eq(
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, { ...defaults, lastPublishedAt: 'not-a-date' }),
+    { kind: 'due', at: at('2026-10-07T10:13').toISOString() },
+    'an unparseable last-publication imposes no floor rather than an invalid one',
+  );
+
+  /* WITH THE CAMPAIGN SCHEDULE OFF IT STILL APPLIES. The window is what the
+     switch turns off; the account rule is a different rule and the engine
+     enforces it either way. */
+  eq(
+    scheduleReadout(off, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    { kind: 'due', at: at('2026-10-07T11:17').toISOString() },
+    'the account floor is not the campaign window and does not switch off with it',
+  );
+  /* And with no schedule at all. */
+  eq(
+    scheduleReadout(null, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    { kind: 'due', at: at('2026-10-07T11:17').toISOString() },
+    'nor with a campaign that has no schedule',
+  );
+}
+
+/* ──────────── 12. and no component may do this arithmetic itself ───────── */
 {
   /*
    * THE INVARIANT THAT KEEPS IT FIXED. Two cards each held a copy of the

@@ -65,6 +65,15 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
   estimatedCompletionAt: string | null;
   nextAt: string | null;
   nextTargetName: string | null;
+  /**
+   * The channel of that next row, because the account-wide spacing rule costs
+   * a group more than a page.
+   *
+   * rules.ts adds browser.groupMinGapMinutes on top of limits.minGapMinutes
+   * only when the target is a facebook_group, so a card that wants to print an
+   * instant the engine will honour has to know which of the two this row is.
+   */
+  nextChannel: string | null;
   /** The soonest still-unfinished rows, ascending — feeds the timeline. */
   upcoming: T[];
   /** Everything finished, newest first. */
@@ -127,6 +136,7 @@ export function campaignState<T extends CampaignQueueRow>(
     estimatedCompletionAt: last?.scheduled_at ?? null,
     nextAt: next?.scheduled_at ?? null,
     nextTargetName: next?.target?.name ?? null,
+    nextChannel: next?.target?.channel ?? null,
     upcoming: unfinished,
     done,
     now,

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { canPauseRun, canResumeRun, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
-import { scheduleReadout } from '@/lib/social/schedule-readout';
+import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { counted, formatDayMonthHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem } from '@/lib/social/types';
@@ -79,6 +79,7 @@ export function CampaignCard({
   onScheduleChange,
   repeat,
   onRepeatChange,
+  spacing,
   scheduleBusy = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status' | 'created_at'>;
@@ -149,6 +150,15 @@ export function CampaignCard({
    */
   repeat?: CampaignRepeat;
   onRepeatChange?: (next: CampaignRepeat) => void;
+  /**
+   * The account-wide spacing rule, which the card cannot see from the campaign
+   * alone — rules.ts holds a row for the later of this and the campaign's own
+   * gap, so a card without it prints a minute the engine will not publish at.
+   * Optional: a caller that cannot supply it gets the behaviour this card had
+   * before, which is wrong in the same way it has always been wrong rather
+   * than newly wrong.
+   */
+  spacing?: AccountSpacing;
   /** The campaign's row is being written; the panel's controls hold still. */
   scheduleBusy?: boolean;
 }) {
@@ -235,7 +245,7 @@ export function CampaignCard({
    * that were waiting for a PERSON, with no way to tell him so. One function,
    * one answer, and a state added to it reaches both cards at once.
    */
-  const readout = scheduleReadout(schedule, state, undefined, repeat);
+  const readout = scheduleReadout(schedule, state, undefined, repeat, spacing);
   const nextAt = readout.kind === 'due' ? readout.at : null;
 
   /*

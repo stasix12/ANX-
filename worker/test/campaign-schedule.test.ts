@@ -343,7 +343,23 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   const readout = readFileSync(new URL('../../src/lib/social/schedule-readout.ts', import.meta.url), 'utf8');
   is(/scheduleReadout\(schedule, state/.test(card), '"הבא בתור" asks the one module that decides what a card may say about time');
   is(/nextPublishAt\(schedule, from, lastPublishedAt/.test(readout), 'and that module computes it with the engine’s own function, not a second copy of these rules');
-  is(/if \(!on \|\| !schedule\) return \{ kind: 'due', at: state\.nextAt \};/.test(readout), 'and with the switch off it reports the stored instant exactly as it did before this feature');
+  /*
+   * WITH THE SWITCH OFF, THE WINDOW IS NOT APPLIED — which is what the switch
+   * means, and it is still true. The line that used to be pinned here returned
+   * `state.nextAt` verbatim; it now returns the later of that and the
+   * ACCOUNT-WIDE floor, because rules.ts enforces that one whatever the
+   * campaign's window is set to. Pinning the old literal would have pinned a
+   * second bug in place: a card reading "כל דקה · 10:13" over an engine that
+   * will not publish before 11:17.
+   *
+   * So the claim is pinned as what it actually is — the off path reaches no
+   * window arithmetic at all — rather than as one exact expression.
+   */
+  const offPath = readout.slice(readout.indexOf('if (!on || !schedule)'), readout.indexOf('if (!on || !schedule)') + 120);
+  is(/return \{ kind: 'due'/.test(offPath), 'with the switch off the queued row is reported as due, not held');
+  is(!/nextPublishAt|nextAllowedAt|windowClosesAt/.test(offPath), 'and no window arithmetic is applied to it — that is what "off" means');
+  /* And the floor that is NOT the window still reaches it. */
+  is(/accountFloorMs\(spacing, state\.nextChannel/.test(readout), 'the account-wide spacing floor is applied whether the campaign window is on or off');
   is(/לא נבחר יום פרסום/.test(card), 'with no day chosen it says so rather than printing an instant the engine will not publish at');
   is(/<CampaignSchedulePanel/.test(card), 'the panel is rendered by the card itself — "אל תפתח Modal. אל תפתח Popup. אל תיצור מסך חדש"');
 

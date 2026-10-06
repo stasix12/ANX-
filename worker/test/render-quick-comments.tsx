@@ -44,6 +44,7 @@ const st = (published: number, iso: string, channel?: string): CampaignState =>
     estimatedCompletionAt: null,
     nextAt: null,
     nextTargetName: null,
+    nextChannel: null,
     upcoming: [],
     done: done(iso, channel),
     now: [],

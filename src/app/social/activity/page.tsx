@@ -107,7 +107,7 @@ export default function ActivityPage() {
   const visible = filterActivity(all, filter);
 
   return (
-    <SocialShell title="מרכז פעילות" lede="כל מה שהמערכת עשתה, מהחדש לישן">
+    <SocialShell title="מרכז פעילות" lede="כל מה שהמערכת עשתה, מהחדש לישן" onRefresh={load}>
       <div className="space-y-4">
         {error && <ErrorState message={error} onRetry={load} />}
 

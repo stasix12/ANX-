@@ -407,6 +407,8 @@ export default function GroupsPage() {
 
   return (
     <SocialShell
+      /* PULL DOWN TO RELOAD — the same loader this screen's own actions call. */
+      onRefresh={load}
       title="קבוצות"
       lede="היעדים שאליהם המערכת מפרסמת"
       headerAction={

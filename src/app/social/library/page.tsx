@@ -303,6 +303,8 @@ export default function LibraryPage() {
 
   return (
     <SocialShell
+      /* PULL DOWN TO RELOAD — the same loader this screen's own actions call. */
+      onRefresh={load}
       title="ספריית תוכן"
       lede="בחר פוסט מוכן לפרסום"
       headerAction={

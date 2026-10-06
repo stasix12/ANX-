@@ -1078,6 +1078,10 @@ export default function SocialDashboard() {
   return (
     <SocialShell
       title="לוח בקרה"
+      /* PULL DOWN TO RELOAD. The same loader the timer and every action on
+         this screen already call, so a pulled refresh and an automatic one
+         cannot disagree about what "current" means. */
+      onRefresh={load}
       /*
        * No lede, no headerAction, no title block on THIS screen.
        *

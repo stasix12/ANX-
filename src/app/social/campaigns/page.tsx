@@ -333,6 +333,8 @@ export default function CampaignsPage() {
 
   return (
     <SocialShell
+      /* PULL DOWN TO RELOAD — the same loader this screen's own actions call. */
+      onRefresh={load}
       title="קמפיינים"
       lede="כל קמפיין שהפעלתם — מה יצא, מה עוד יוצא, ומה אפשר לעצור"
       /*

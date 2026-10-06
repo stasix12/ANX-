@@ -1,5 +1,6 @@
 'use client';
 
+import { PullToRefresh } from './PullToRefresh';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -128,6 +129,7 @@ export function SocialShell({
   account,
   systemState,
   onControlChanged,
+  onRefresh,
   children,
 }: {
   title: string;
@@ -145,6 +147,18 @@ export function SocialShell({
    * still shows its title, so this is a prop rather than a deletion.
    */
   hideTitle?: boolean;
+  /**
+   * PULL DOWN AT THE TOP TO RELOAD THIS SCREEN.
+   *
+   * "שאני גולל למעלה אני רוצה שזה יעשה ריסטרט לעמוד."
+   *
+   * Optional, and that is the whole of the wiring: a screen hands over the
+   * same loader its own buttons call, and the gesture appears. A screen that
+   * passes nothing behaves exactly as it does today — there is no shell-level
+   * guess at what "reload this page" means, because the shell does not know
+   * what any screen reads.
+   */
+  onRefresh?: () => Promise<unknown>;
   /**
    * The global pause state, when the screen already reads it.
    *
@@ -535,7 +549,10 @@ export function SocialShell({
    * is the same constant the floating selection bars are anchored to, so the
    * bottom of the product is one number.
    */
-  return (
+  /* The gesture wraps the whole shell, header included, so the bar comes down
+     with the page — a header that stayed nailed in place while the content
+     slid under it would read as two screens, not one being pulled. */
+  const shell = (
     <div className="min-h-dvh bg-ink-950 pb-[calc(4.5rem+var(--safe-b))] md:pb-10">
       {/*
         A quiet identity bar, and identity here means the OWNER's, not the
@@ -1136,4 +1153,6 @@ export function SocialShell({
       {confirm.dialog}
     </div>
   );
+
+  return onRefresh ? <PullToRefresh onRefresh={onRefresh}>{shell}</PullToRefresh> : shell;
 }

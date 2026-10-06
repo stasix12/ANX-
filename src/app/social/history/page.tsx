@@ -183,7 +183,7 @@ function HistoryScreen() {
   };
 
   return (
-    <SocialShell title="היסטוריה" lede="כל מה שיצא, ומה שנכשל">
+    <SocialShell title="היסטוריה" lede="כל מה שיצא, ומה שנכשל" onRefresh={load}>
       <div className="space-y-4">
         {/* A failed first read used to leave `rows` null for ever: the banner
             sat above a skeleton that shimmered indefinitely, and the only way

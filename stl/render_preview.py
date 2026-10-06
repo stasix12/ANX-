@@ -2,7 +2,7 @@ import trimesh, numpy as np, matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 R = trimesh.transformations.rotation_matrix
-tube = trimesh.load('tube_D40_L250_threaded.stl'); nip = trimesh.load('threaded_connector_M32.stl')
+tube = trimesh.load('tube_D40_L250_threaded_spigot38.stl'); nip = trimesh.load('threaded_connector_M32.stl')
 tube = trimesh.Trimesh(*trimesh.remesh.subdivide_to_size(tube.vertices, tube.faces, 10))
 def tubes_and_nipple(gap):
     a = tube.copy(); a.apply_transform(R(np.pi/2, [0, 1, 0])); a.apply_translation([-250-gap, 0, 0])   # threaded end at x=-gap
@@ -27,14 +27,14 @@ def draw(ax, parts, elev, azim, title):
     ax.autoscale(); ax.set_aspect('equal'); ax.axis('off'); ax.set_title(title, fontsize=13)
 fig = plt.figure(figsize=(16, 15)); gs = fig.add_gridspec(4, 2, height_ratios=[1, 1, 1.1, 1.4])
 a, b, n = tubes_and_nipple(0)
-draw(fig.add_subplot(gs[0, :]), [(a, GREY), (b, GREY)], -65, -15, 'Assembled: 2 tubes OD 40 x 250 mm, screwed together = 500 mm (connector hidden inside)')
+draw(fig.add_subplot(gs[0, :]), [(a, GREY), (b, GREY)], -65, -15, 'Assembled 500 mm:  [38 mm end -> suction head]  ...  OD 40 tubes, screwed together  ...  [38 mm end -> steel pipe]')
 a, b, n = tubes_and_nipple(90)
 draw(fig.add_subplot(gs[1, :]), [(a, GREY), (n, ORANGE), (b, GREY)], -65, -15, 'Exploded: threaded connector screws 30 mm into each tube - no bolts')
 a, b, n = tubes_and_nipple(0)
 sec = [(cut(m), c) for m, c in ((a, GREY), (b, GREY), (n, ORANGE))]
 ax = fig.add_subplot(gs[2, :]); draw(ax, sec, 90, 0, 'Cross-section at the joint (wall 7 mm, thread M32 x 3)')
 ax.set_xlim(-90, 90)
-draw(fig.add_subplot(gs[3, 0]), [(nip, ORANGE)], -70, -30, 'Connector: thread OD 32, pitch 3, length 60, bore 18')
-t = trimesh.load('tube_D40_L250_threaded.stl'); b = trimesh.creation.box(extents=[100, 100, 200]); b.apply_translation([0, 0, 100]); t = trimesh.boolean.difference([t, b])
-draw(fig.add_subplot(gs[3, 1]), [(t, GREY)], -35, -30, 'Tube end: OD 40, ID 26, internal thread 32 mm deep')
+draw(fig.add_subplot(gs[3, 0]), [(nip, ORANGE)], -70, -30, 'Connector: thread OD 32, pitch 3, length 60, bore 22')
+t = trimesh.load('tube_D40_L250_threaded_spigot38.stl'); b = trimesh.creation.box(extents=[100, 100, 200]); b.apply_translation([0, 0, 170]); t = trimesh.boolean.difference([t, b])
+draw(fig.add_subplot(gs[3, 1]), [(t.apply_transform(R(np.pi, [1, 0, 0])), GREY)], -35, -30, 'Free end: 38 mm push-in spigot (37.4 -> 37.9 taper, 40 long), ID 26')
 plt.tight_layout(); plt.savefig('preview.png', dpi=110)

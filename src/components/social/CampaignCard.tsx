@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { canPauseRun, canResumeRun, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
-import { nextPublishAt, type CampaignSchedule } from '@/lib/social/campaign-schedule';
-import { formatDayMonthHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
+import { type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { scheduleReadout } from '@/lib/social/schedule-readout';
+import { counted, formatDayMonthHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem } from '@/lib/social/types';
 import {
@@ -214,16 +215,19 @@ export function CampaignCard({
    * unchanged, `from` is the stored instant, and the line prints exactly what
    * it printed before this feature existed.
    */
-  const lastPublishedAt = state.done.find((r) => r.published_at)?.published_at ?? null;
-  const nextAt: string | null = (() => {
-    if (!state.nextAt) return null;
-    if (!schedule?.enabled) return state.nextAt;
-    /* A row whose instant has already passed publishes at the next legal
-       moment from NOW, not from the moment it missed. */
-    const from = new Date(Math.max(new Date(state.nextAt).getTime(), Date.now()));
-    const at = nextPublishAt(schedule, from, lastPublishedAt ? new Date(lastPublishedAt) : null);
-    return at ? at.toISOString() : null;
-  })();
+  /*
+   * AND IT IS THE SAME CALL THE DASHBOARD'S RUN CARD MAKES — scheduleReadout(),
+   * which holds the four lines that used to be copied here.
+   *
+   * "תסדר את הבעית שורש הזאת פעם אחת ולתמיד ובכל הקמפיינים שיש." Two cards
+   * answered "when next" for the same campaign out of two copies of this
+   * derivation, and they drifted: the dashboard learned that a finished round
+   * has no instant, and this one went on printing "אין פרסום ממתין" over rows
+   * that were waiting for a PERSON, with no way to tell him so. One function,
+   * one answer, and a state added to it reaches both cards at once.
+   */
+  const readout = scheduleReadout(schedule, state);
+  const nextAt = readout.kind === 'due' ? readout.at : null;
 
   /*
    * EVERYTHING ELSE, ONE TAP AWAY.
@@ -559,11 +563,28 @@ export function CampaignCard({
           <div className="flex min-w-0 grow items-center justify-end gap-1.5 text-[11px] font-semibold leading-4">
             <span className="min-w-0 text-end">
               <span className="block text-mist-500">הבא בתור:</span>
-              {state.nextAt && !nextAt ? (
+              {readout.kind === 'no-day' ? (
                 /* The schedule permits no day at all, so the stored instant is
                    not when this will publish — and printing it would be the
                    screen promising something the engine will not do. */
                 <span className="block truncate text-warning-400">לא נבחר יום פרסום</span>
+              ) : readout.kind === 'ended' ? (
+                /*
+                 * THE ROUND IS OVER, AND "אין פרסום ממתין" was not enough.
+                 *
+                 * It is true and it reads as a lull — something that will pass.
+                 * Nothing will pass: a finished round does not restart itself,
+                 * and the owner spent weeks believing an active schedule meant
+                 * his campaign was still going out daily. The list says what
+                 * the dashboard card now says, in the room a list row has.
+                 */
+                <span className="block truncate text-mist-500">{readout.stopped ? 'הסבב הופסק' : 'הסבב הסתיים'}</span>
+              ) : readout.kind === 'manual' ? (
+                /* Publications ARE waiting — on him. "אין פרסום ממתין" over
+                   these was the list reporting them as nothing. */
+                <span className="block truncate text-warning-400">
+                  {counted(readout.waiting, 'פרסום אחד ממתין לך', 'פרסומים ממתינים לך', 'שני פרסומים ממתינים לך')}
+                </span>
               ) : nextAt ? (
                 <span className="flex min-w-0 items-center gap-1">
                   <span dir="ltr" className="shrink-0 tabular-nums text-mist-100">{whenLabel(nextAt)}</span>

@@ -330,8 +330,20 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   is(/if \(full\.error\)[\s\S]{0,260}select\('status'\)/.test(rules), 'A DATABASE WITHOUT THE v24 COLUMNS STILL PUBLISHES — the read falls back to the status alone rather than refusing');
 
   const card = readFileSync(new URL('../../src/components/social/CampaignCard.tsx', import.meta.url), 'utf8');
-  is(/nextPublishAt\(schedule, from, lastPublishedAt/.test(card), '"הבא בתור" is computed with the engine’s own function, not a second copy of these rules');
-  is(/if \(!schedule\?\.enabled\) return state\.nextAt;/.test(card), 'and with the switch off it prints the stored instant exactly as it did before this feature');
+  /*
+   * THE SAME TWO CLAIMS, NOW ABOUT THE MODULE THAT HOLDS THEM.
+   *
+   * Both of these lines used to live inside CampaignCard, and so did a copy of
+   * them inside LiveCampaignHero — which is how the two cards came to disagree
+   * about the same campaign, one of them printing a window edge over a spent
+   * queue. The derivation moved to schedule-readout.ts, which every card now
+   * asks; the rules it must obey did not change, so the pins follow it rather
+   * than being deleted.
+   */
+  const readout = readFileSync(new URL('../../src/lib/social/schedule-readout.ts', import.meta.url), 'utf8');
+  is(/scheduleReadout\(schedule, state\)/.test(card), '"הבא בתור" asks the one module that decides what a card may say about time');
+  is(/nextPublishAt\(schedule, from, lastPublishedAt/.test(readout), 'and that module computes it with the engine’s own function, not a second copy of these rules');
+  is(/if \(!on \|\| !schedule\) return \{ kind: 'due', at: state\.nextAt \};/.test(readout), 'and with the switch off it reports the stored instant exactly as it did before this feature');
   is(/לא נבחר יום פרסום/.test(card), 'with no day chosen it says so rather than printing an instant the engine will not publish at');
   is(/<CampaignSchedulePanel/.test(card), 'the panel is rendered by the card itself — "אל תפתח Modal. אל תפתח Popup. אל תיצור מסך חדש"');
 

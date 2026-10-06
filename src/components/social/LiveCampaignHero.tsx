@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
-import { nextAllowedAt, nextPublishAt, windowClosesAt, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { scheduleReadout } from '@/lib/social/schedule-readout';
 import { countdownTo } from '@/lib/social/countdown';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
@@ -245,59 +246,22 @@ export function LiveCampaignHero({
    * "לא מתוזמן", and printing that over it would be the dashboard hiding a
    * publication that is about to go out.
    */
-  const lastPublishedAt = state.done.find((r) => r.published_at)?.published_at ?? null;
-  const nextAt: string | null = (() => {
-    if (!state.nextAt) return null;
-    if (!schedule?.enabled) return state.nextAt;
-    /* A row whose instant has already passed publishes at the next legal
-       moment from NOW, not from the moment it missed. */
-    const from = new Date(Math.max(new Date(state.nextAt).getTime(), Date.now()));
-    const at = nextPublishAt(schedule, from, lastPublishedAt ? new Date(lastPublishedAt) : null);
-    return at ? at.toISOString() : null;
-  })();
-  /* Something IS waiting and the schedule permits no day at all, which is a
-     setting rather than an empty queue and gets its own words. */
-  const noDay = Boolean(schedule?.enabled && state.nextAt && !nextAt);
-
   /*
-   * WHEN THIS CAMPAIGN MAY NEXT PUBLISH, for a round with nothing in its queue.
+   * WHAT THIS CARD MAY SAY ABOUT TIME — one call, shared with the campaigns
+   * list, so the two cards cannot reach different conclusions about the same
+   * campaign.
    *
-   * "אז ברגע שסיים שיראה את הסבב הקרוב .. הגיוני לא ?" It is, and this is the
-   * half of it that is true: a finished round has no publication waiting, so
-   * there is no instant at which anything goes out — but the schedule still
-   * says when the next window opens, and that is what he is asking to see.
-   *
-   * FROM THE SCHEDULE ALONE, with no last-published gap applied: the gap is
-   * about the distance between two publications and there is no first one to
-   * measure from. nextAllowedAt() is the same function nextPublishAt() ends in,
-   * so the window edge here and the window edge the engine enforces are the
-   * same arithmetic.
-   *
-   * The strip prints it under its own label — see the note there. It is not
-   * offered as "the next publication", because nothing will publish at it
-   * until a post is launched.
+   * It used to be derived here: the queued instant snapped through
+   * nextPublishAt(), then two window edges, then a no-day flag — four
+   * expressions the strip had to recombine, and the campaigns card had its own
+   * copy of the first one. That is how "חלון הפרסום פתוח עד: 22:00" came to be
+   * printed over a round with 219 of 219 handled: the window edges were
+   * computed from the SCHEDULE, which does not know whether anything is left to
+   * publish, and nothing in the chain was responsible for noticing.
+   * scheduleReadout() is that missing responsibility, and it is one function
+   * with one rule — name an instant only when something will happen at it.
    */
-  const windowOpensAt: string | null =
-    schedule?.enabled && !state.nextAt ? (nextAllowedAt(schedule, new Date())?.toISOString() ?? null) : null;
-
-  /*
-   * AND WHETHER THAT WINDOW IS THE ONE WE ARE ALREADY STANDING IN.
-   *
-   * "למה זה 17:12 הפרסום יסתיים כבר" — his round had finished, Friday was lit,
-   * the window was 05:00–22:00, and at 17:13 the strip read "חלון הפרסום הבא:
-   * 17:12". nextAllowedAt() had answered correctly: the first permitted instant
-   * at or after now, when now is permitted, is now. Printed as a future event
-   * it is nonsense, and worse than nonsense — a clock reading one minute in the
-   * past looks like the screen has lost track of the time.
-   *
-   * There is nothing to fix in the arithmetic. What is wrong is which fact gets
-   * printed: when the window is open the owner's question is not when it opens
-   * but how long he has got, so the strip is handed the close and says so.
-   * Null whenever the window is NOT open, and then windowOpensAt above is the
-   * true and useful answer, unchanged.
-   */
-  const windowOpenUntil: string | null =
-    schedule?.enabled && !state.nextAt ? (windowClosesAt(schedule, new Date())?.toISOString() ?? null) : null;
+  const readout = scheduleReadout(schedule, state);
 
   /*
    * "לחיצה על 'ערוך מועד' צריכה לפתוח את אפשרויות עריכת התזמון שכבר בנינו."
@@ -413,10 +377,7 @@ export function LiveCampaignHero({
           onToggle={(enabled) => onScheduleChange({ ...schedule, enabled })}
           onEdit={() => setEditingSchedule((v) => !v)}
           editing={editingSchedule}
-          nextAt={nextAt}
-          windowOpensAt={windowOpensAt}
-          windowOpenUntil={windowOpenUntil}
-          noDay={noDay}
+          readout={readout}
           campaignName={campaign.name}
           disabled={scheduleBusy}
         />

@@ -1,6 +1,7 @@
 'use client';
 
 import { CalendarIcon, ClockIcon, RepeatIcon } from '@/components/icons';
+import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 import {
   DAY_LABELS,
   DAY_NAMES,
@@ -9,7 +10,7 @@ import {
   gapLabel,
   type CampaignSchedule,
 } from '@/lib/social/campaign-schedule';
-import { formatDateHe, formatTimeHe } from '@/lib/social/time';
+import { counted, formatDateHe, formatTimeHe } from '@/lib/social/time';
 import { Toggle } from './ui';
 
 /**
@@ -48,10 +49,7 @@ export function CampaignScheduleBoard({
   schedule,
   onToggle,
   onEdit,
-  nextAt,
-  windowOpensAt,
-  windowOpenUntil,
-  noDay,
+  readout,
   campaignName,
   disabled = false,
   editing = false,
@@ -62,52 +60,23 @@ export function CampaignScheduleBoard({
   /** Opens the editor — the three boxes and "ערוך מועד" share it. */
   onEdit: () => void;
   /**
-   * The next publication's real instant, ALREADY run through nextPublishAt()
-   * by the card, or null when there is none waiting.
+   * WHAT THIS CARD MAY SAY ABOUT TIME, decided by scheduleReadout() and only
+   * drawn here.
    *
-   * Resolved by the caller rather than here because the caller is the one that
-   * holds the run's rows — when it last published, and whether anything is
-   * still queued. A readout that worked that out for itself would be the
-   * second mechanism this file's header rules out.
+   * "למה זה מראה לי שסבב פרסום מתחיל ב-22:00? מה זה כל הבאגים האלה של
+   *  התזמונים!"
+   *
+   * It used to be six props — a queued instant, two window edges, a no-day
+   * flag, the run's state, a count — and this component recombined them into a
+   * sentence. Every one of them was individually correct on the screen he sent;
+   * what was wrong was the combination, and nothing owned the combination. Now
+   * one value arrives already decided, the strip below is a switch over its
+   * seven shapes, and the rule it enforces — name an instant only when
+   * something will happen at it — lives in a module that can be unit-tested
+   * without a browser, and is shared with the campaigns list so the two cards
+   * cannot disagree about the same campaign.
    */
-  nextAt: string | null;
-  /**
-   * When the schedule's window next opens, for a round with NOTHING waiting.
-   *
-   * "אז ברגע שסיים שיראה את הסבב הקרוב .. הגיוני לא ?" — it is, and this is
-   * the honest half of it. A finished round has no publication in the queue,
-   * so there is no instant at which anything will go out; what there IS, and
-   * what the owner is really asking for, is the next moment this campaign
-   * would be ALLOWED to publish. That is a fact about the schedule alone and
-   * is computed from it alone.
-   *
-   * It is deliberately NOT printed under the same words as a queued
-   * publication. A strip that said "הפרסום הבא יתחיל ב-19:00" over an empty
-   * queue would be the screen promising something that will not happen at
-   * 19:00 — the exact failure this module keeps being rewritten to prevent.
-   * The strip says both things: nothing is waiting, and when the window opens.
-   */
-  windowOpensAt: string | null;
-  /**
-   * When the window the owner is ALREADY INSIDE closes — null unless it is
-   * open right now.
-   *
-   * "למה זה 17:12 הפרסום יסתיים כבר". With a round finished and the window
-   * open, `windowOpensAt` above is the present instant, because the first
-   * moment a schedule permits, when it permits this one, is this one. True,
-   * and unprintable: a strip that reads "חלון הפרסום הבא: 17:12" at 17:13 is
-   * announcing a time that has gone.
-   *
-   * So the two are a pair and this one wins where it exists: the window is
-   * open, and what the owner wants off the screen is how long he has got.
-   */
-  windowOpenUntil: string | null;
-  /**
-   * The schedule is on and no day is chosen, so there is a waiting publication
-   * that can never go out. A distinct state from "nothing waiting": one is a
-   * finished round, the other is a setting that needs a tap.
-   */
-  noDay: boolean;
+  readout: ScheduleReadout;
   /** For the accessible names — the dashboard draws one of these, lists draw many. */
   campaignName: string;
   disabled?: boolean;
@@ -266,7 +235,7 @@ export function CampaignScheduleBoard({
       </div>
 
       {/* ─── "הפרסום הבא יתחיל ב:" — its own container, as the image draws it ── */}
-      <NextPublishStrip nextAt={nextAt} noDay={noDay} windowOpensAt={windowOpensAt} windowOpenUntil={windowOpenUntil} />
+      <NextPublishStrip readout={readout} scheduleOn={schedule.enabled} />
     </div>
   );
 }
@@ -340,53 +309,64 @@ function Box({
  * no day chosen (a setting), nothing queued (a finished round), and a round
  * that is simply waiting.
  */
-function NextPublishStrip({
-  nextAt,
-  windowOpensAt,
-  windowOpenUntil,
-  noDay,
-}: {
-  nextAt: string | null;
-  windowOpensAt: string | null;
-  windowOpenUntil: string | null;
-  noDay: boolean;
-}) {
+function NextPublishStrip({ readout, scheduleOn }: { readout: ScheduleReadout; scheduleOn: boolean }) {
   /*
-   * ONE OF THREE THINGS IS TRUE, and each gets its own words.
+   * A WINDOW IS NOT AN EVENT, AND THE RUN DECIDES WHICH OF THE TWO THIS IS.
    *
-   *   a publication is queued  → when it goes out
-   *   nothing is queued, but the schedule is on
-   *                            → nothing is waiting, AND when the window opens
-   *   nothing at all           → "לא מתוזמן"
+   * "למה זה מראה לי שסבב פרסום מתחיל ב-22:00? מה זה כל הבאגים האלה של
+   *  התזמונים!"
    *
-   * The middle one is the owner's own question: "אז ברגע שסיים שיראה את הסבב
-   * הקרוב". The date and the big figure are drawn identically in both of the
-   * first two — the layout is the reference's either way — and the only thing
-   * that changes is the label, which is the one place the difference between
-   * "this WILL go out at" and "this MAY go out from" can honestly live.
+   * Because every instant this strip had to offer came out of the SCHEDULE,
+   * and a schedule does not know whether anything is left to publish. His
+   * round had finished — 219 of 219 handled — so there was no publication to
+   * constrain and no instant at which anything would happen; the strip printed
+   * the window's closing time anyway, in the place where a publication time
+   * goes, and he read it the only way it can be read.
+   *
+   * THE RULE THIS NOW FOLLOWS, and the one the last three fixes to this strip
+   * were each half of: print a time only when something will happen at it.
+   * Everything below is that rule applied to the states a campaign can be in,
+   * in the order the states outrank each other:
+   *
+   *   a publication is queued      → when it goes out          (an event)
+   *   no day chosen                → the setting that holds it
+   *   THE ROUND IS OVER            → it is over, and nothing is coming
+   *   rows waiting for a person    → they are waiting for HIM, not the clock
+   *   nothing queued, window open  → until when it may, if he starts one
+   *   nothing queued, window shut  → when it next may
+   *   nothing at all               → "לא מתוזמן"
+   *
+   * THIS LIST HAS GROWN THREE TIMES AND ALWAYS THE SAME WAY: a state that was
+   * being served by a neighbour's words. "אין פרסום ממתין" was added when a
+   * finished round borrowed the sentence a queued one uses; "פתוח עד" when an
+   * already-open window was announced as the next one; and these two now,
+   * because a window was being offered as an answer in states where no answer
+   * about time exists. Each was a true number under a false sentence, which is
+   * the only way this strip has ever failed.
    */
   /*
-   * FOUR, SINCE 4.0.1 — the middle one split in two, because it was answering
-   * a question nobody had asked.
+   * ONE VALUE, SEVEN SHAPES, AND NO ARITHMETIC LEFT IN THIS FILE.
    *
-   *   a publication is queued  → when it goes out
-   *   nothing queued, window OPEN
-   *                            → nothing is waiting, and until when it may
-   *   nothing queued, window shut
-   *                            → nothing is waiting, and when it next opens
-   *   nothing at all           → "לא מתוזמן"
-   *
-   * "למה זה 17:12 הפרסום יסתיים כבר". The third branch used to serve both of
-   * the middle two, and inside an open window the instant it names is the
-   * present one — so at 17:13 the strip announced 17:12 as the next window.
-   * The figure was right and the sentence around it was false, which is the
-   * one way this strip is allowed to fail and the reason it keeps being
-   * rewritten. Open windows now name their CLOSE, which is the half of the
-   * fact that is still ahead of him.
+   * The contradictions this strip kept producing — a window edge in the place a
+   * publication time goes, and nearly "הסבב הסתיים" over a publication time —
+   * were the same kind of fault twice: two expressions reading different halves
+   * of the state and agreeing only by luck. A discriminated union cannot do
+   * that. The label, the figure and the note below are three views of ONE
+   * decision, and a state that has no instant has no way to produce one.
    */
-  const openNow = !nextAt && !noDay && !!windowOpenUntil;
-  const shown = nextAt ?? (noDay ? null : openNow ? windowOpenUntil : windowOpensAt);
-  const isWindow = !nextAt && !noDay && !!shown;
+  const over = readout.kind === 'ended';
+  const manual = readout.kind === 'manual';
+  const noDay = readout.kind === 'no-day';
+  const openNow = readout.kind === 'window-open';
+  const isWindow = openNow || readout.kind === 'window-next';
+  const shown =
+    readout.kind === 'due'
+      ? readout.at
+      : readout.kind === 'window-open'
+        ? readout.until
+        : readout.kind === 'window-next'
+          ? readout.opens
+          : null;
   return (
     <div
       /*
@@ -405,7 +385,27 @@ function NextPublishStrip({
       }`}
     >
       <span data-must-fit className={`whitespace-nowrap text-[12px] font-bold leading-4 ${noDay ? 'text-warning-400' : 'text-brand-400'}`}>
-        {isWindow ? (
+        {over ? (
+          /*
+           * THE ROUND IS OVER, AND THAT IS THE WHOLE ANSWER. No time, because
+           * there is no instant: a finished round does not restart itself, and
+           * the words say so where the clock used to be.
+           *
+           * BOTH LINES HERE RATHER THAN ONE EACH SIDE OF THE MIDDLE COLUMN.
+           * Measured: at 360px "אין פרסום מתוזמן" in the centre, squeezed
+           * between this label and the note at the end, clipped to "אין פרסום
+           * מתוז…" — and a sentence about nothing happening, cut off, is
+           * exactly the kind of half-read line this card keeps being fixed
+           * for. Stacked, they are one statement in one column and the centre
+           * is free to be what it honestly is: empty.
+           */
+          <>
+            <span className="block">{readout.kind === 'ended' && readout.stopped ? 'הסבב הופסק' : 'הסבב הסתיים'}</span>
+            <span className="block text-mist-300">אין פרסום מתוזמן</span>
+          </>
+        ) : manual ? (
+          'ממתין לטיפול ידני'
+        ) : isWindow ? (
           /* TWO LINES, AND BOTH OF THEM MATTER. The first is why there is no
              publication to name; the second is what the figure beside it IS.
              Dropping either one is how this strip would start lying: without
@@ -430,6 +430,22 @@ function NextPublishStrip({
              design (rules.ts defers, it never drops) and indefinitely. The
              strip says the cause, because the fix is two taps above it. */
           <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">לא נבחר יום פרסום</span>
+        ) : over ? (
+          /*
+           * EMPTY, AND THAT IS THE ANSWER TO HIS QUESTION.
+           *
+           * "הקמפיין פעיל, אמור לצאת כל יום" — it is not. The schedule is a
+           * WINDOW on a round that is running, not a recurrence: when a round
+           * ends nothing publishes again until he opens the next one, and no
+           * amount of "פעיל" on the switch above changes that. This column is
+           * where the 22:00 was, and the only honest thing to put in it is
+           * nothing. The words are in the label beside it.
+           */
+          null
+        ) : manual ? (
+          <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">
+            {readout.kind === 'manual' && counted(readout.waiting, 'פרסום אחד ממתין לך', 'פרסומים ממתינים לך', 'שני פרסומים ממתינים לך')}
+          </span>
         ) : shown ? (
           <span data-must-fit dir="ltr" className="block truncate text-[22px] font-extrabold leading-7 tabular-nums text-brand-400">
             {formatTimeHe(shown)}
@@ -443,6 +459,19 @@ function NextPublishStrip({
           week in. Empty when there is no instant — a date with no time beside
           it would be the screen filling a gap with something. */}
       <span className="text-end">
+        {over && (
+          /*
+           * AND WHAT THE SETTING ABOVE ACTUALLY DOES NOW — the other half of
+           * his misunderstanding. The three boxes still read "א׳ ב׳ ג׳ ד׳ ה׳ ·
+           * 08:00 – 22:00 · כל דקה" over a finished round, and with no line
+           * like this one they read as a promise about today. They are the
+           * terms the NEXT round will run under, which is a true and useful
+           * thing to say, and the button that starts it is directly below.
+           */
+          <span data-must-fit className="block text-[10px] font-bold leading-[13px] text-mist-300">
+            {scheduleOn ? 'התזמון יחול על הסבב הבא' : 'התזמון כבוי'}
+          </span>
+        )}
         {shown && (
           <>
             <span data-must-fit dir="ltr" className="block text-[12px] font-extrabold leading-4 tabular-nums text-brand-400">

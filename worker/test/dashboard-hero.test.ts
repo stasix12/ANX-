@@ -72,11 +72,34 @@ is(/LiveCampaignHero/.test(page) && /schedule=\{scheduleOf\(run\.campaign\)\}/.t
 is(!/<Sheet/.test(board) && !/<Sheet/.test(hero.slice(hero.indexOf('CampaignScheduleBoard'))), 'the block opens no sheet');
 is(!/useRouter|router\.push/.test(board), 'and navigates nowhere');
 
-/* ONE SCHEDULING MECHANISM. "אל תיצור מנגנון תזמון שני במקביל." Every value
-   the board prints comes out of campaign-schedule.ts, and the next instant is
-   nextPublishAt() — the same call rules.ts makes before releasing a row. */
-is(/from '@\/lib\/social\/campaign-schedule'/.test(board), 'the board reads the shared scheduling module');
-is(/nextPublishAt\(schedule, from, lastPublishedAt/.test(hero), 'and the next instant is the engine\'s own function, not a second rule');
+/*
+ * ONE SCHEDULING MECHANISM — "אל תיצור מנגנון תזמון שני במקביל" — AND NOW ONE
+ * PLACE THAT DECIDES WHAT TO SAY ABOUT IT.
+ *
+ * "תסדר את הבעית שורש הזאת פעם אחת ולתמיד ובכל הקמפיינים שיש."
+ *
+ * The rule used to be "the cards call the engine's own function", and both of
+ * them did — and both were wrong in the same way, separately. nextPublishAt()
+ * answers "when would this row be allowed out"; nobody owned the question
+ * BEFORE it, which is whether there is a row at all. So the dashboard printed
+ * a window edge over a spent queue and the campaigns list printed "אין פרסום
+ * ממתין" over rows waiting for a person, and fixing either left the other.
+ *
+ * So the invariant is stronger than an import: NO COMPONENT MAY COMPUTE AN
+ * INSTANT. campaign-schedule.ts holds the arithmetic, schedule-readout.ts
+ * holds the decision, and every card is a switch over the result. The negative
+ * checks below are what make that true rather than intended — and they run on
+ * comment-stripped source, so the paragraph you are reading cannot satisfy
+ * them.
+ */
+const readoutSrc = code('src/lib/social/schedule-readout.ts');
+const listCard = code('src/components/social/CampaignCard.tsx');
+is(/scheduleReadout\(schedule, state\)/.test(hero), 'the dashboard card asks scheduleReadout what to say');
+is(/scheduleReadout\(schedule, state\)/.test(listCard), 'and so does the campaigns list, from the same call');
+is(/nextPublishAt\(schedule, from, lastPublishedAt/.test(readoutSrc), 'which resolves the instant with the engine\'s own function, not a second rule');
+for (const [name, src] of [['LiveCampaignHero', hero], ['CampaignScheduleBoard', board], ['CampaignCard', listCard]] as const) {
+  is(!/nextPublishAt\(|nextAllowedAt\(|windowClosesAt\(/.test(src), `${name} computes no instant of its own`);
+}
 is(!/setHours|\+ 7 \* 24|86400000|getDay\(\)/.test(board), 'the board does no date arithmetic of its own');
 
 /* NOTHING HARDCODED. "אסור לקודד Hardcoded: 08:10 / 01.10.2026 / 08:00–22:00 /
@@ -220,6 +243,18 @@ async function main(): Promise<void> {
             return {
               height: Math.round(box.height),
               text: (c.textContent || '').replace(/\s+/g, ' '),
+              /*
+               * THE STRIP'S OWN TEXT, SEPARATELY FROM THE CARD'S.
+               *
+               * "a finished round prints no time" cannot be asserted against
+               * the whole card: the readout boxes above the strip legitimately
+               * carry "08:00 – 22:00", which is the setting and not a promise.
+               * Scoped here, the assertion is the real rule — no clock reading
+               * in the place that answers "when" — and a future state that
+               * invents a fourth way to print one fails it without anyone
+               * having to list the sentence.
+               */
+              strip: (strip?.textContent || '').replace(/\s+/g, ' '),
               hasBoard: !!b,
               /* INSIDE the card, within its padding, on both edges. */
               inside: br ? br.left >= box.left - 1 && br.right <= box.right + 1 : true,
@@ -259,7 +294,7 @@ async function main(): Promise<void> {
       });
 
       assert.equal(seen.overflow, false, `${width}: the page scrolls sideways`);
-      assert.equal(seen.cards.length, 10, `${width}: expected 10 cards, got ${seen.cards.length}`);
+      assert.equal(seen.cards.length, 13, `${width}: expected 13 cards, got ${seen.cards.length}`);
 
       seen.cards.forEach((c, i) => {
         const at = `${width}px, card ${i + 1}`;
@@ -293,13 +328,16 @@ async function main(): Promise<void> {
         assert.ok(
           c.text.includes('הפרסום הבא יתחיל ב:') ||
             c.text.includes('חלון הפרסום הבא:') ||
-            c.text.includes('חלון הפרסום פתוח עד:'),
+            c.text.includes('חלון הפרסום פתוח עד:') ||
+            c.text.includes('הסבב הסתיים') ||
+            c.text.includes('הסבב הופסק') ||
+            c.text.includes('ממתין לטיפול ידני'),
           `${at}: the strip has lost its label`,
         );
       });
 
       /* ─── what each case must, and must not, say ─────────────────────── */
-      const [reference, , , noDay, off, nothingQueued, , scheduleOff, , windowOpen] = seen.cards;
+      const [reference, , , noDay, off, nothingQueued, , scheduleOff, , windowOpen, ended, halted, awaitingHand] = seen.cards;
 
       /* 1 — the reference's own card: a time, a date, and the day it falls on. */
       assert.match(reference.text, /הפרסום הבא יתחיל ב: ?\d{2}:\d{2}/, `${width}: the reference card prints no time`);
@@ -371,8 +409,55 @@ async function main(): Promise<void> {
       assert.doesNotMatch(scheduleOff.text, /יתחיל ב: ?\d{2}:\d{2}/, `${width}: a card with nothing scheduled printed a publication time`);
       assert.ok(!scheduleOff.text.includes('חלון הפרסום הבא:'), `${width}: a switched-off schedule has no window to open`);
 
+      /*
+       * ───── 11 — HIS SCREEN, AND THE RULE THE WHOLE STRIP NOW OBEYS ──────
+       *
+       * "הקמפיין פעיל, אמור לצאת כל יום מ-8 בבוקר עד 22 בלילה כל דקה. למה זה
+       *  מראה לי שסבב פרסום מתחיל ב-22:00? מה זה כל הבאגים האלה של התזמונים!"
+       *
+       * 219 of 219 handled, the switch on, Tuesday 10:12 inside 08:00–22:00.
+       * Card 10 above is the SAME schedule at the SAME minute and it correctly
+       * prints "חלון הפרסום פתוח עד: 22:00"; the only difference here is that
+       * this round has ended. So the pair is the claim: a window is a fact
+       * about publications that exist, and with none left it is not an answer
+       * to any question the owner is asking.
+       *
+       * THE STRIP MAY PRINT NO TIME AT ALL. That is the assertion that
+       * matters, and it is written as "no clock reading anywhere in the strip"
+       * rather than as a list of forbidden sentences — a future state that
+       * invents a fourth way to print 22:00 has to fail this too.
+       */
+      assert.ok(ended.text.includes('הסבב הסתיים'), `${width}: a finished round must say so where the clock used to be`);
+      assert.ok(ended.text.includes('אין פרסום מתוזמן'), `${width}: and must say that nothing is coming`);
+      /* THE OTHER HALF OF HIS MISUNDERSTANDING. The three boxes above still
+         read "א׳…ה׳ · 08:00 – 22:00 · כל דקה" over a spent queue; without this
+         line they read as a promise about today. */
+      assert.ok(ended.text.includes('התזמון יחול על הסבב הבא'), `${width}: the card does not say what the setting above it still does`);
+      assert.doesNotMatch(ended.strip, /\d{1,2}:\d{2}/, `${width}: THE BUG — a finished round printed a time: "${ended.strip.replace(/\s+/g, ' ')}"`);
+      assert.ok(!ended.text.includes('חלון הפרסום'), `${width}: a finished round was told about a window`);
+      /* And the numbers above it did not move. */
+      assert.ok(ended.text.includes('196 מתוך 219 פורסמו'), `${width}: the breakdown line changed`);
+      /* A ROUND CANNOT HAVE STARTED IN THE FUTURE, and a card that says it did
+         is a card drawn at a minute the fixture does not agree with. This
+         caught exactly that: "התחיל בעוד 5 ימים" over a finished round. */
+      assert.doesNotMatch(ended.text, /התחיל בעוד/, `${width}: a finished round reports that it starts in the future`);
+      assert.doesNotMatch(halted.text, /התחיל בעוד/, `${width}: a stopped round reports that it starts in the future`);
+
+      /* 12 — stopped by hand. Same silence about time, its own word. */
+      assert.ok(halted.text.includes('הסבב הופסק'), `${width}: a round he stopped must say it was stopped, not that it finished`);
+      assert.doesNotMatch(halted.strip, /\d{1,2}:\d{2}/, `${width}: a stopped round printed a time`);
+
+      /*
+       * 13 — WAITING ON A PERSON, which the window sentences called "אין פרסום
+       * ממתין". Seven publications were waiting; they were waiting for him.
+       */
+      assert.ok(awaitingHand.text.includes('ממתין לטיפול ידני'), `${width}: rows waiting for a person were not named`);
+      assert.match(awaitingHand.text, /7 פרסומים ממתינים לך/, `${width}: and the strip does not say how many`);
+      assert.ok(!awaitingHand.text.includes('אין פרסום ממתין'), `${width}: publications that ARE waiting were reported as none`);
+      assert.doesNotMatch(awaitingHand.strip, /\d{1,2}:\d{2}/, `${width}: a hand-waiting round printed a clock time`);
+
       await view.close();
-      checks += 20;
+      checks += 32;
     }
   } finally {
     await browser.close();

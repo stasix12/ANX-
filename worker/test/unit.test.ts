@@ -499,7 +499,10 @@ console.log('unit tests OK');
 
   /* The retirement in each branch must sit AFTER that bail-out. A guard that
      runs after the stamp is a guard that does nothing. */
-  const repeatTail = plan.slice(plan.indexOf('await noteDropped(db, note, schedule.id, dropped);'));
+  /* Anchored on the call, which now carries the per-schedule count it needs to
+     stay quiet on a pass that planned nothing (see noteDropped). The claim
+     below is unchanged: the bail-out must sit before the stamp. */
+  const repeatTail = plan.slice(plan.indexOf('await noteDropped(db, note, schedule.id, dropped, made);'));
   const repeatGuard = repeatTail.indexOf('if (failed) {');
   const repeatStamp = repeatTail.indexOf("update({ planned_until: until.toISOString() })");
   assert.ok(repeatGuard >= 0 && repeatStamp >= 0 && repeatGuard < repeatStamp, 'the recurring branch checks before it stamps');

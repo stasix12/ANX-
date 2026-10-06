@@ -189,6 +189,9 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      * the schedule exactly as it found it.
      */
     let failed = 0;
+    /* Rows this schedule wrote in THIS pass — the global `created` counts every
+       schedule, and the question noteDropped asks is about this one. */
+    let made = 0;
     for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
       // Something is already waiting for this group — see targetsAlreadyWaiting().
       if (waiting.has(targetId)) {
@@ -245,12 +248,13 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
           taken.add(slotKey(targetId, slot));
           waiting.add(targetId);
           created += 1;
+          made += 1;
           rotation += 1;
         }
       }
     }
 
-    await noteDropped(db, note, schedule.id, dropped);
+    await noteDropped(db, note, schedule.id, dropped, made);
     /*
      * MARKED PLANNED ONLY IF IT WAS. The stamp and the retirement below are
      * what make a round final; writing them after a failure is what killed his.
@@ -391,8 +395,34 @@ async function targetsAlreadyWaiting(db: SupabaseClient): Promise<Set<string>> {
  */
 const DROPPED_NAMES_SHOWN = 8;
 
-async function noteDropped(db: SupabaseClient, note: PlanLogger, scheduleId: string, targetIds: string[]): Promise<void> {
-  if (!targetIds.length) return;
+/**
+ * AND IT IS SAID WHEN SOMETHING ACTUALLY HAPPENED, NOT EVERY MINUTE.
+ *
+ * "קבוצות לא נכנסו לסבב · 219 · לפני פחות מדקה" — four times, in one minute,
+ * for ever.
+ *
+ * planQueue runs every 60 seconds (PLAN_EVERY_MS) and re-plans its whole
+ * 48-hour window each pass, so a RECURRING schedule re-derives the same slots,
+ * finds the same groups still busy with the round that is already running, and
+ * had been writing the same warning every minute of every day. For a one-off
+ * launch that never showed, because the schedule retires itself at the end of
+ * its first pass — the drip of repeats arrived with CHZARA, and it buries the
+ * log and the notification bell under a fact that has not changed since the
+ * last time it was written.
+ *
+ * `made` IS THE WHOLE FIX: rows this pass actually wrote for this schedule.
+ *
+ *   made > 0   a genuinely partial occasion — "27 of 28 went in, #7 did not",
+ *              which is the message this function was written for. It is said
+ *              ONCE, because the next pass writes nothing and falls silent.
+ *   made === 0 nothing was planned, so there was no "הפעלה" for anything to be
+ *              left out of. The sentence says "בהפעלה הזו" and there wasn't one.
+ *
+ * The information is not lost, only the repetition: the pass that first finds
+ * a group busy is the pass that names it.
+ */
+async function noteDropped(db: SupabaseClient, note: PlanLogger, scheduleId: string, targetIds: string[], made: number): Promise<void> {
+  if (!targetIds.length || made <= 0) return;
   const { data } = await db.from('social_targets').select('name').in('id', targetIds.slice(0, DROPPED_NAMES_SHOWN));
   const names = ((data ?? []) as { name: string | null }[]).map((t) => t.name).filter(Boolean);
   const rest = targetIds.length - names.length;
@@ -469,6 +499,8 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   const taken = await occupiedSlots(db, post.id);
   const waiting = await targetsAlreadyWaiting(db);
   let created = 0;
+  /* Rows this drip wrote in THIS pass — see noteDropped. */
+  let made = 0;
   let last = now;
 
   const dropped: string[] = [];
@@ -524,9 +556,10 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
       taken.add(slotKey(targetId, at));
       waiting.add(targetId);
       created += 1;
+      made += 1;
     }
   }
-  await noteDropped(db, note, schedule.id, dropped);
+  await noteDropped(db, note, schedule.id, dropped, made);
   if (failed) {
     await note(
       'warn',

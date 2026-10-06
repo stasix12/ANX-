@@ -638,16 +638,32 @@ export default function SocialDashboard() {
    * next launch of that post opens a new run whose count starts at zero
    * (library.ts quickPublish).
    */
-  async function resetRun(id: string, name: string, state: CampaignState) {
+  async function resetRun(id: string, name: string, state: CampaignState, repeats = false) {
     // Exactly what stopCampaign() will cancel — a publication already in
     // flight is left to finish, so it is not part of the promise.
     const waiting = cancellableRows(state.progress);
     const ok = await confirm.ask({
       title: 'לסיים את הסבב?',
       body:
-        waiting > 0
+        (waiting > 0
           ? `${waiting === 1 ? 'פרסום אחד שטרם יצא יבוטל' : `${waiting} פרסומים שטרם יצאו יבוטלו`}. מה שכבר פורסם נשאר בהיסטוריה, והמונה יתחיל מאפס בפעם הבאה שתפרסמו את הפוסט הזה.`
-          : 'שום דבר לא ממתין לצאת. מה שכבר פורסם נשאר בהיסטוריה, והמונה יתחיל מאפס בפעם הבאה שתפרסמו את הפוסט הזה.',
+          : 'שום דבר לא ממתין לצאת. מה שכבר פורסם נשאר בהיסטוריה, והמונה יתחיל מאפס בפעם הבאה שתפרסמו את הפוסט הזה.') +
+        /*
+         * AND IT SWITCHES OFF THE DAILY REPEAT, which this dialog did not say.
+         *
+         * stopCampaign() deactivates every schedule row of the round's posts
+         * (client.ts), and CHZARA's recurrence IS one of those rows — rightly,
+         * because a round that reopened itself tomorrow would mean "stop" did
+         * not stop. But the button is labelled "סיים את הסבב ואפס את המונה",
+         * so an owner reaching for a tidier counter would have switched off the
+         * feature he had just turned on, and found out the next morning when
+         * nothing published.
+         *
+         * The behaviour is right and the words were missing. Only said when it
+         * is true: a round that does not repeat has nothing to lose here, and a
+         * warning about a feature he is not using is noise.
+         */
+        (repeats ? ' שימו לב: גם החזרה היומית תכבה — הסבב לא ייפתח מחר מעצמו.' : ''),
       confirmLabel: 'סיים ואפס',
       danger: true,
     });
@@ -1419,7 +1435,7 @@ export default function SocialDashboard() {
                   busy={campBusy(run.campaign.id)}
                   onPause={() => act(`camp-pause:${run.campaign.id}`, () => pauseCampaign(run.campaign.id, true), 'הסבב הושהה.')}
                   onResume={() => act(`camp-resume:${run.campaign.id}`, () => pauseCampaign(run.campaign.id, false), 'הסבב ממשיך.')}
-                  onReset={() => resetRun(run.campaign.id, run.campaign.name, run.state)}
+                  onReset={() => resetRun(run.campaign.id, run.campaign.name, run.state, readRepeat(run.campaign).enabled)}
                   onTune={() => setTuner({ campaignId: run.campaign.id })}
                   /* "Now" on that card is a claim about a machine, so it is made
                      from a machine fact rather than from the clock. */

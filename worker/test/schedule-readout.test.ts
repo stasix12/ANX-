@@ -527,6 +527,24 @@ const st = (
        turn an edit into a recurrence he never asked for. */
     is(/const repeat = readRepeat\(campaign/.test(src), `${f} reads the repeat before deciding to, rather than assuming`);
   }
+  /*
+   * AND "סיים את הסבב ואפס את המונה" SAYS THAT IT ALSO SWITCHES OFF THE REPEAT.
+   *
+   * stopCampaign() deactivates every schedule row of the round's posts, and
+   * CHZARA's recurrence is one of those rows — rightly, because a round that
+   * reopened itself tomorrow would mean "stop" did not stop. But the button is
+   * labelled as a counter reset, so an owner reaching for a tidier number would
+   * have switched off the feature he had just turned on and found out the next
+   * morning, when nothing published. The behaviour is right; the words were
+   * missing.
+   */
+  const dash = code('src/app/social/page.tsx');
+  is(/גם החזרה היומית תכבה/.test(dash), 'ending a round warns that the daily repeat goes with it');
+  is(/repeats \? ' שימו לב/.test(dash), 'and only when there is a repeat to lose — a warning about a feature he is not using is noise');
+  is(/readRepeat\(run\.campaign\)\.enabled/.test(dash), 'and the warning is driven by the campaign row, not by a guess');
+  const client2 = code('src/lib/social/client.ts');
+  is(/from\('social_schedules'\)\.update\(\{ active: false \}\)\.in\('post_id', postIds\)/.test(client2), 'because stopping a round really does deactivate its schedules');
+
   /* And the one place that builds the weekly plan still builds it from both. */
   const client = code('src/lib/social/client.ts');
   is(/for \(const day of schedule\.days\) weekly\[String\(day\)\] = \[schedule\.start\];/.test(client), 'the weekly plan is one occasion per chosen day, at the window’s opening hour');

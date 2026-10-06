@@ -2397,7 +2397,10 @@ const scenario: { step: string; line: string }[] = [];
    * The invariant the old pin protected is unchanged and is asserted above,
    * over both figures.
    */
-  pin('the run card bar counts handled rows through campaign.ts', cards, 'runProgress(progress)');
+  /* The claim is unchanged — the bar is the ROUND'S progress, built once in
+     campaign.ts — but the call now carries the scope beside the numbers, so a
+     repeating round's figures and the "היום" on them cannot come apart. */
+  pin('the run card bar counts handled rows through campaign.ts', cards, 'runProgress(progress, state.todayOnly)');
   pin('...and publications stay a separate, labelled figure on the same card', cards, 'view.publishedLabel');
   pin('the system state is decided once, by the page', dash, 'const systemState: SystemState =');
   /*

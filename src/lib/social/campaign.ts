@@ -59,6 +59,22 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
    * waiting. Set by the caller that knows its own limit (client.ts).
    */
   truncated: boolean;
+  /**
+   * These rows are TODAY'S, not the round's whole history.
+   *
+   * "מה זה ה-497 הזה?" — 219 groups and 497 rows, because a repeating round
+   * plans the same groups again every day and the counter was the campaign's
+   * lifetime. With the daily repeat on it grows by a round a day for ever, and
+   * a percentage of a number that never ends is not a percentage of anything.
+   *
+   * So a repeating round is counted for today and resets by construction, like
+   * the dashboard's daily bar. The flag travels WITH the numbers rather than
+   * being re-derived by each card, because a card that printed "היום" over
+   * lifetime figures — or lifetime figures with no "היום" — would be the same
+   * fault as every other one in this module: a true number under a false
+   * sentence.
+   */
+  todayOnly: boolean;
   /** First real publication. Null until something has actually gone out. */
   startedAt: string | null;
   /** Last scheduled_at still ahead of us — the plan's own end, not a guess. */
@@ -89,7 +105,7 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
 export function campaignState<T extends CampaignQueueRow>(
   rows: T[],
   campaign?: Pick<Campaign, 'status'> | null,
-  opts: { truncated?: boolean } = {},
+  opts: { truncated?: boolean; todayOnly?: boolean } = {},
 ): CampaignState<T> {
   const progress: CampaignProgress = { ...EMPTY_PROGRESS, total: rows.length };
   for (const r of rows) {
@@ -129,6 +145,7 @@ export function campaignState<T extends CampaignQueueRow>(
     // computed from one value and cannot disagree.
     state: resolveState(progress, campaign?.status, rows.length, startedAt !== null),
     truncated: opts.truncated ?? false,
+    todayOnly: opts.todayOnly ?? false,
     startedAt,
     // The plan already assigns every remaining row an instant; the last one
     // is when the campaign finishes, assuming nothing is deferred by the
@@ -223,10 +240,10 @@ function resolveState(
  */
 export function campaignHeadline(state: CampaignState): string {
   const { progress } = state;
-  if (!progress.total) return 'אין פרסומים מתוכננים';
+  if (!progress.total) return state.todayOnly ? 'אין פרסומים מתוכננים להיום' : 'אין פרסומים מתוכננים';
   // "1 מתוך 84 פורסמו" — the verb has to follow the count, and the count is 1
   // exactly when the owner is watching hardest: the run's first success.
-  const head = `${progress.published} מתוך ${progress.total} ${agree(progress.published, 'פורסם', 'פורסמו')}`;
+  const head = `${progress.published} מתוך ${progress.total} ${agree(progress.published, 'פורסם', 'פורסמו')}${state.todayOnly ? ' היום' : ''}`;
   const rest = unpublishedNote(progress);
   return rest ? `${head} · ${rest}` : head;
 }
@@ -320,10 +337,21 @@ export interface RunProgressView {
   ariaLabel: string;
 }
 
-export function runProgress(progress: CampaignProgress): RunProgressView {
+export function runProgress(progress: CampaignProgress, todayOnly = false): RunProgressView {
   const { total, published, finished } = progress;
   const percent = percentFinished(progress);
-  const handledLabel = total ? `${finished} מתוך ${total} ${agree(finished, 'טופל', 'טופלו')}` : 'אין פרסומים מתוכננים';
+  /*
+   * "היום" IS PART OF THE SENTENCE, NOT AN EXTRA LINE BESIDE IT.
+   *
+   * A repeating round's figures are today's (see CampaignState.todayOnly), and
+   * "185 מתוך 219 טופלו" with no "היום" over a campaign that has published
+   * three thousand times is the same class of fault as every other one this
+   * module has been fixed for: a true number under a sentence that does not
+   * say what it is about. The default is false, so every existing caller reads
+   * exactly as it did.
+   */
+  const scope = todayOnly ? ' היום' : '';
+  const handledLabel = total ? `${finished} מתוך ${total} ${agree(finished, 'טופל', 'טופלו')}${scope}` : 'אין פרסומים מתוכננים';
   return {
     total,
     handled: finished,

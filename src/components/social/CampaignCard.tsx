@@ -175,7 +175,7 @@ export function CampaignCard({
      toasted "הסבב הושהה." over a write that could not move a row. */
   const showPause = canPauseRun(state.progress, campaign.status);
   const showResume = canResumeRun(state.progress, campaign.status);
-  const view = runProgress(state.progress);
+  const view = runProgress(state.progress, state.todayOnly);
   const { total, published, skipped, failed } = state.progress;
   /* The same line the dashboard hero prints, from the same two pieces, and
      neither of them ever invents a zero. */

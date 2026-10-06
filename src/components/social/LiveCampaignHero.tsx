@@ -230,7 +230,7 @@ export function LiveCampaignHero({
    * round's PROGRESS (published + failed + skipped); `view.publishedLabel` is
    * its SUCCESS, on its own line under the bar and never folded in.
    */
-  const view = runProgress(progress);
+  const view = runProgress(progress, state.todayOnly);
   const open = openRows(progress);
   /*
    * One opinion about the state — the label, the colour, and whether the dot

@@ -3,7 +3,8 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
-import { repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
+import { zonedDateISO } from './time';
+import { readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
@@ -1740,10 +1741,32 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
   // cannot tell which campaign lost rows, so every state built from a capped
   // read is marked, and the card stops presenting its numbers as totals.
   const truncated = rows.length >= CAMPAIGN_ROLLUP_LIMIT;
+  /*
+   * A REPEATING ROUND IS COUNTED FOR TODAY. "מה זה ה-497 הזה?"
+   *
+   * 219 groups and 497 rows, because the round had been planned more than once
+   * into the same campaign — which is deliberate (ensureRunForPost reuses the
+   * run so "פורסם N פעמים" accumulates) and was readable while a round was a
+   * one-off. With CHZARA on it is not: the total grows by a round a day for
+   * ever, and a percentage of a number that never ends is not a percentage of
+   * anything.
+   *
+   * So for a repeating round the rows are today's, and it resets by
+   * construction rather than by a job — tomorrow the boundary is tomorrow's.
+   * Every other campaign is untouched, because for a round that runs once the
+   * lifetime figure IS the round.
+   *
+   * SCOPED ON scheduled_at AND NOT ON published_at, because the question the
+   * card answers is "how is today's round going", and a row that belongs to
+   * today's round but has not gone out yet is part of that answer.
+   */
+  const todayISO = zonedDateISO(new Date());
   const out: Record<string, CampaignState> = {};
-  for (const [id, list] of grouped) {
+  for (const [id, all] of grouped) {
     const campaign = byId.get(id) ?? null;
-    const state = campaignState(list, campaign, { truncated });
+    const todayOnly = readRepeat(campaign).enabled;
+    const list = todayOnly ? all.filter((r) => zonedDateISO(new Date(r.scheduled_at)) === todayISO) : all;
+    const state = campaignState(list, campaign, { truncated, todayOnly });
     out[id] = state;
     if (!truncated) {
       await reportViolations(checkCampaignInvariants(state, { campaignId: id, campaignName: campaign?.name ?? null }), `campaign:${id}`);

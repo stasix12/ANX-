@@ -40,6 +40,7 @@ const st = (published: number, iso: string, channel?: string): CampaignState =>
     progress: prog(published),
     state: 'completed',
     truncated: false,
+  todayOnly: false,
     startedAt: iso,
     estimatedCompletionAt: null,
     nextAt: null,

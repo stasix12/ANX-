@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { LiveQueueHero } from '../../src/components/social/LiveCampaignHero';
 import { addDaysISO, zonedDateISO, zonedToUtc } from '../../src/lib/social/time';
+import { campaignHeadline, runProgress } from '../../src/lib/social/campaign';
 
 /**
  * "כל יום רק את הכמות פוסטים המתוזמנים לאותו היום ואז יתאפס."
@@ -149,7 +150,51 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
   );
 }
 
-/* ───────── 5. and the page really asks for that boundary ──────────────── */
+/* ───────── 5. a repeating round is counted for today, and says so ──────── */
+{
+  /*
+   * "מה זה ה-497 הזה?" — 219 groups and 497 rows, because a repeating round
+   * plans the same groups again every day into the same campaign. That is
+   * deliberate and was readable while a round ran once; with CHZARA on, the
+   * total grows by a round a day for ever and the percentage beside it is a
+   * percentage of a number that never ends.
+   */
+  const prog = { total: 219, published: 185, failed: 4, skipped: 0, scheduled: 30, running: 0, manual: 0, finished: 189 } as never;
+  const today = runProgress(prog, true);
+  const lifetime = runProgress(prog, false);
+
+  /* THE FIGURES ARE THE SAME; WHAT CHANGES IS WHETHER THE SENTENCE SAYS WHAT
+     THEY ARE ABOUT. A card printing today's numbers without "היום" over a
+     campaign that has published three thousand times is the same fault this
+     module keeps being fixed for. */
+  is(today.handledLabel.includes('היום'), `a repeating round's progress says it is today's — got "${today.handledLabel}"`);
+  is(!lifetime.handledLabel.includes('היום'), `and a round that runs once does not — got "${lifetime.handledLabel}"`);
+  eq(today.handled, lifetime.handled, 'the arithmetic is untouched either way');
+  eq(today.percent, lifetime.percent, 'and so is the percentage');
+
+  /* The empty case has to say it too, or "אין פרסומים מתוכננים" on a repeating
+     round reads as "this campaign is over" when it opens again tomorrow. */
+  const none = { ...(prog as object), total: 0, published: 0, finished: 0, scheduled: 0, failed: 0 } as never;
+  is(campaignHeadline({ progress: none, todayOnly: true } as never).includes('להיום'), 'an empty day on a repeating round is empty FOR TODAY, not over');
+  is(!campaignHeadline({ progress: none, todayOnly: false } as never).includes('להיום'), 'and a one-off round with nothing in it is simply not scheduled');
+}
+
+/* ───────── 6. and the rows really are scoped, by the campaign's own flag ── */
+{
+  const client = readFileSyncStripped('src/lib/social/client.ts');
+  is(/const todayOnly = readRepeat\(campaign\)\.enabled;/.test(client), 'the scope is decided by the campaign row, not guessed');
+  is(
+    /const list = todayOnly \? all\.filter\(\(r\) => zonedDateISO\(new Date\(r\.scheduled_at\)\) === todayISO\) : all;/.test(client),
+    "a repeating round's rows are today's, and every other campaign keeps its whole history",
+  );
+  /* SCHEDULED, NOT PUBLISHED. The card answers "how is today's round going",
+     and a row that belongs to today and has not gone out yet is part of that
+     answer — scoping on published_at would drop every one of them. */
+  is(!/published_at\)\) === todayISO/.test(client), 'scoped on when a row is DUE, not on when it published');
+  is(/campaignState\(list, campaign, \{ truncated, todayOnly \}\)/.test(client), 'and the state carries the scope with the numbers');
+}
+
+/* ───────── 7. and the page really asks for that boundary ──────────────── */
 {
   const page = readFileSyncStripped('src/app/social/page.tsx');
   is(

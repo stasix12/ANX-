@@ -8,7 +8,7 @@ OD, ID, L = 40.0, 26.0, 250.0            # tube: wall 7 mm
 P, R_MAJ, DEPTH = 3.0, 16.0, 1.5          # thread: M32x3 trapezoid-ish
 NIP_L, NIP_BORE = 60.0, 22.0              # nipple: 30 mm into each tube (wide bore for airflow)
 # tapered push-in ends: (length, tip dia, root dia)
-SPIGOT_SUCTION = (40.0, 37.4, 37.9)       # suction head inlet 38 mm
+SPIGOT_SUCTION = (40.0, 37.6, 38.3)       # suction head inlet 38 mm: press fit, wedges ~23 mm in
 SPIGOT_STEEL = (50.0, 35.4, 37.0)         # steel pipe ID ~36-37 mm: wedges wherever it meets the bore
 THREAD_DEPTH_IN_TUBE = 32.0
 CLEAR = 0.25                              # radial clearance for printing

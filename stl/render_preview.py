@@ -40,6 +40,6 @@ draw(fig.add_subplot(gs[3, 0]), [(nip, ORANGE)], -70, -30, 'Connector: M32 x 3, 
 def spig_end(f):
     t = trimesh.load(f); b = trimesh.creation.box(extents=[100, 100, 200]); b.apply_translation([0, 0, 170])
     t = trimesh.boolean.difference([t, b]); t.apply_transform(R(np.pi, [1, 0, 0])); return t
-draw(fig.add_subplot(gs[3, 1]), [(spig_end(FA), GREY)], -35, -30, 'Tube A end -> suction head\n37.4 -> 37.9 taper, 40 long')
+draw(fig.add_subplot(gs[3, 1]), [(spig_end(FA), GREY)], -35, -30, 'Tube A end -> suction head\n37.6 -> 38.3 taper (press fit), 40 long')
 draw(fig.add_subplot(gs[3, 2]), [(spig_end(FB), GREY)], -35, -30, 'Tube B end -> steel pipe (ID 36-37)\n35.4 -> 37.0 taper, 50 long')
 plt.tight_layout(); plt.savefig('preview.png', dpi=110)

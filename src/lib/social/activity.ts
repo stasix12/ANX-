@@ -120,6 +120,11 @@ const KIND: Record<string, ActivityKind> = {
   campaign_paused: 'round',
   campaign_resumed: 'round',
   campaign_stopped: 'round',
+  /* CHZARA — arming or disarming a round's daily repeat is a fact about the
+     ROUND, and the one activity line that says his account is about to publish
+     the same post again tomorrow. */
+  campaign_repeat_on: 'round',
+  campaign_repeat_off: 'round',
   campaign_deleted: 'round',
   stopped_campaign_swept: 'round',
   worker_run: 'round',

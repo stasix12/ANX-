@@ -196,6 +196,66 @@ export function scheduleColumns(s: CampaignSchedule): Required<ScheduleFields> {
   };
 }
 
+/**
+ * CHZARA — "לפרסם את אותו פוסט שוב, בכל יום פרסום."
+ *
+ * A SEPARATE OBJECT FROM THE WINDOW ABOVE, deliberately. They sit in the same
+ * row and the same panel edits both, but they are opposite in kind: the window
+ * can only ever PREVENT a publication, and this can only ever PERMIT one. The
+ * one time this product has reliably hurt itself is by folding two meanings
+ * into one value, and the owner's whole misunderstanding — "פעיל" read as "the
+ * campaign is running" — is what that costs.
+ */
+export interface CampaignRepeat {
+  /** Off: the same post never reaches the same group twice. The default. */
+  enabled: boolean;
+  /**
+   * Hours that must pass between one publication of this post to a group and
+   * the next to that same group.
+   *
+   * THE GUARD IS NOT REMOVED, IT IS GIVEN A CLOCK. Off, rules.ts refuses a
+   * repeat for ever; on, it refuses one inside this many hours. A round that
+   * ran twice by accident, or a retry after a failure, still cannot double-post
+   * — which is the half of the old rule worth keeping.
+   */
+  minHours: number;
+}
+
+/**
+ * 12 AT THE BOTTOM, so "daily" cannot be set to something that publishes the
+ * same advertisement into the same group twice in one morning.
+ *
+ * AND 20 AS THE DEFAULT, NOT 24. The owner publishes inside a daily window; a
+ * round that opens at 08:00 and takes four hours ends at noon, and a 24-hour
+ * rule would then hold tomorrow's 08:00 row until 12:00, and the day after
+ * until 16:00, walking the round later every day until it fell out of the
+ * window and stopped. 20 is the longest value that keeps a daily round at the
+ * hour the owner chose.
+ */
+export const MIN_REPEAT_HOURS = 12;
+export const MAX_REPEAT_HOURS = 168;
+export const DEFAULT_CAMPAIGN_REPEAT: CampaignRepeat = { enabled: false, minHours: 20 };
+
+/** The two columns → the object, for a row written by any version of this app. */
+export function readRepeat(c: Partial<Campaign> | null | undefined): CampaignRepeat {
+  const hours = Number(c?.repeat_min_hours ?? DEFAULT_CAMPAIGN_REPEAT.minHours);
+  return {
+    /*
+     * A DATABASE THAT HAS NOT RUN v25 READS `false`, exactly like one whose
+     * owner has never pressed the switch. Nothing about an existing round
+     * changes until it is pressed, which is the whole backward-compatibility
+     * story for this feature.
+     */
+    enabled: c?.repeat_enabled === true,
+    minHours: Number.isFinite(hours) ? Math.min(MAX_REPEAT_HOURS, Math.max(MIN_REPEAT_HOURS, Math.round(hours))) : DEFAULT_CAMPAIGN_REPEAT.minHours,
+  };
+}
+
+/** The object → the two columns, for saveCampaign(). */
+export function repeatColumns(r: CampaignRepeat): { repeat_enabled: boolean; repeat_min_hours: number } {
+  return { repeat_enabled: r.enabled, repeat_min_hours: Math.min(MAX_REPEAT_HOURS, Math.max(MIN_REPEAT_HOURS, Math.round(r.minHours))) };
+}
+
 /** Whether `at` falls on a chosen day, inside the daily window. */
 export function isAllowedAt(s: CampaignSchedule, at: Date, tz = TIMEZONE): boolean {
   if (!s.enabled) return true;

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { canPauseRun, canResumeRun, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
-import { type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout } from '@/lib/social/schedule-readout';
 import { counted, formatDayMonthHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from './DateTime';
@@ -77,6 +77,8 @@ export function CampaignCard({
   onDelete,
   schedule,
   onScheduleChange,
+  repeat,
+  onRepeatChange,
   scheduleBusy = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status' | 'created_at'>;
@@ -140,6 +142,13 @@ export function CampaignCard({
    */
   schedule?: CampaignSchedule | null;
   onScheduleChange?: (next: CampaignSchedule) => void;
+  /**
+   * CHZARA — passed straight through to the panel, which draws it only when
+   * BOTH arrive: the switch's effect is a weekly schedule row, so a caller that
+   * cannot write one must not offer it.
+   */
+  repeat?: CampaignRepeat;
+  onRepeatChange?: (next: CampaignRepeat) => void;
   /** The campaign's row is being written; the panel's controls hold still. */
   scheduleBusy?: boolean;
 }) {
@@ -226,7 +235,7 @@ export function CampaignCard({
    * that were waiting for a PERSON, with no way to tell him so. One function,
    * one answer, and a state added to it reaches both cards at once.
    */
-  const readout = scheduleReadout(schedule, state);
+  const readout = scheduleReadout(schedule, state, undefined, repeat);
   const nextAt = readout.kind === 'due' ? readout.at : null;
 
   /*
@@ -510,6 +519,8 @@ export function CampaignCard({
             <CampaignSchedulePanel
               schedule={schedule}
               onChange={onScheduleChange}
+              repeat={repeat}
+              onRepeatChange={onRepeatChange}
               campaignName={campaign.name}
               disabled={scheduleBusy}
             />
@@ -579,6 +590,13 @@ export function CampaignCard({
                  * the dashboard card now says, in the room a list row has.
                  */
                 <span className="block truncate text-mist-500">{readout.stopped ? 'הסבב הופסק' : 'הסבב הסתיים'}</span>
+              ) : readout.kind === 'paused' ? (
+                /* Every row of a paused round is handed straight back by
+                   rules.ts, so the stored instant is not when it publishes —
+                   nothing does, until he presses resume. */
+                <span className="block truncate text-warning-400">מושהה — אין פרסום עד שתמשיכו</span>
+              ) : readout.kind === 'partial' ? (
+                <span className="block truncate text-mist-500">הסבב גדול מדי לספירה כאן</span>
               ) : readout.kind === 'manual' ? (
                 /* Publications ARE waiting — on him. "אין פרסום ממתין" over
                    these was the list reporting them as nothing. */

@@ -110,6 +110,21 @@ export interface Campaign {
   schedule_end?: string;
   /** Minutes between one publication of this campaign and the next, 1–30. */
   schedule_gap_minutes?: number;
+  /*
+   * CHZARA — whether this round publishes the SAME post to the SAME groups
+   * again, and the minimum that must pass before it may.
+   *
+   * "הקמפיין פעיל, אמור לצאת כל יום מ-8 בבוקר עד 22 בלילה כל דקה." The five
+   * columns above cannot do that: they are a window, and a window only ever
+   * prevents. These two are the recurrence, and they are off unless asked for.
+   *
+   * repeat_min_hours is not a cosmetic number. With the switch off, rules.ts
+   * refuses the same post to the same group for ever; with it on, that rule
+   * becomes "not again within N hours" — weaker on purpose, and still a rule.
+   * src/lib/social/campaign-schedule.ts owns both; nothing reads them raw.
+   */
+  repeat_enabled?: boolean;
+  repeat_min_hours?: number;
   created_at: string;
 }
 

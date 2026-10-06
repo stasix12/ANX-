@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { scheduleReadout } from '../../src/lib/social/schedule-readout';
-import type { CampaignSchedule } from '../../src/lib/social/campaign-schedule';
+import { DEFAULT_CAMPAIGN_REPEAT, readRepeat, repeatColumns, MIN_REPEAT_HOURS, MAX_REPEAT_HOURS, type CampaignRepeat, type CampaignSchedule } from '../../src/lib/social/campaign-schedule';
 import type { CampaignState } from '../../src/lib/social/campaign';
 
 /**
@@ -60,11 +60,12 @@ const prog = (o: Record<string, number> = {}) =>
 const st = (
   state: CampaignState['state'],
   nextAt: string | null,
-  extra: { manual?: number; lastPublished?: string } = {},
+  extra: { manual?: number; lastPublished?: string; truncated?: boolean } = {},
 ) =>
   ({
     state,
     nextAt,
+    truncated: extra.truncated ?? false,
     progress: prog({ manual: extra.manual ?? 0 }),
     done: extra.lastPublished ? [{ published_at: extra.lastPublished }] : [],
   }) as never;
@@ -83,7 +84,7 @@ const st = (
    */
   const now = at('2026-10-06T10:12');
   const r = scheduleReadout(ref, st('completed', null), now);
-  eq(r, { kind: 'ended', stopped: false }, 'a finished round inside an open window must name no instant');
+  eq(r, { kind: 'ended', stopped: false, repeats: false }, 'a finished round inside an open window must name no instant');
 
   /*
    * AND THE PROOF THAT IT IS THE ROUND, NOT THE CLOCK, THAT DECIDES. Same
@@ -159,7 +160,7 @@ const st = (
    */
   eq(scheduleReadout(noDays, st('running', at('2026-10-06T10:20').toISOString()), now), { kind: 'no-day' }, 'a schedule with no day names no instant');
   /* Stopped by hand reads differently from finished, because it is. */
-  eq(scheduleReadout(ref, st('stopped', null), now), { kind: 'ended', stopped: true }, 'a round he stopped says it was stopped');
+  eq(scheduleReadout(ref, st('stopped', null), now), { kind: 'ended', stopped: true, repeats: false }, 'a round he stopped says it was stopped');
   /*
    * WAITING ON A PERSON. Every window sentence called this "אין פרסום ממתין".
    * Seven publications were waiting; they were waiting for him.
@@ -224,13 +225,18 @@ const st = (
   const schedules = [ref, off, noDays, null];
   const queues = [null, at('2026-10-06T10:20').toISOString(), at('2026-10-06T23:40').toISOString()];
   const clocks = ['2026-10-06T10:12', '2026-10-02T12:00', '2026-10-06T23:30', '2026-10-25T10:00'];
+  /* Truncation is a dimension of the sweep and not a case beside it: the rule
+     "no instant unless something happens at it" has to hold over a capped read
+     as well, and that is exactly where the counts stop being trustworthy. */
+  const caps = [false, true];
   let seen = 0;
   const kinds = new Set<string>();
   for (const s of states)
     for (const sc of schedules)
       for (const q of queues)
-        for (const c of clocks) {
-          const r = scheduleReadout(sc, st(s, q, { manual: s === 'needs_attention' ? 3 : 0 }), at(c));
+        for (const c of clocks)
+        for (const cap of caps) {
+          const r = scheduleReadout(sc, st(s, q, { manual: s === 'needs_attention' ? 3 : 0, truncated: cap }), at(c));
           seen += 1;
           kinds.add(r.kind);
           const carries = 'at' in r ? r.at : 'until' in r ? r.until : 'opens' in r ? r.opens : null;
@@ -240,14 +246,145 @@ const st = (
              A 'due' row may be due now, which is the engine saying "go". */
           is(!Number.isNaN(new Date(carries).getTime()), `${s}/${c}: a printed instant must be a real date`);
           if (r.kind !== 'due') is(new Date(carries) > at(c), `${s}/${c}: ${r.kind} named ${carries}, which is not ahead of now`);
-          /* AND A ROUND THAT IS OVER MAY NEVER REACH THIS LINE. */
-          is(s !== 'completed' && s !== 'stopped', `${s}: a round that has ended printed ${r.kind} = ${carries}`);
+          /*
+           * AND A ROUND THAT IS OVER MAY NEVER REACH THIS LINE — unless the
+           * read was capped, in which case "over" is precisely the claim that
+           * cannot be trusted and a row we can SEE outranks it. That exception
+           * is the whole design of the truncation branch, so it is written
+           * here rather than worked around.
+           */
+          if (!cap) is(s !== 'completed' && s !== 'stopped', `${s}: a round that has ended printed ${r.kind} = ${carries}`);
+          is(s !== 'paused', `${s}: a paused round printed ${r.kind} = ${carries}`);
+          /* A capped read may name an instant only when it is a row it can
+             actually see — never one derived from a count it does not have. */
+          if (cap) is(r.kind === 'due', `truncated/${s}: a capped read printed ${r.kind} = ${carries}`);
         }
-  is(seen === states.length * schedules.length * queues.length * clocks.length, 'the sweep covered every combination');
+  is(seen === states.length * schedules.length * queues.length * clocks.length * caps.length, 'the sweep covered every combination');
   is(kinds.size >= 6, `the sweep reached ${kinds.size} of the readout's shapes`);
 }
 
-/* ──────────── 8. and no component may do this arithmetic itself ────────── */
+/* ──────────── 8. CHZARA — a round that comes back on its own ───────────── */
+{
+  /*
+   * "אותו פוסט לאותן קבוצות כל יום."
+   *
+   * With the repeat armed, "אין פרסום מתוזמן" becomes the wrong answer in the
+   * other direction: another round IS coming, tomorrow morning, and a card
+   * that said nothing was scheduled would be understating what his account is
+   * about to do. The readout carries it so the card can say so in amber.
+   */
+  const now = at('2026-10-06T10:12');
+  const on: CampaignRepeat = { enabled: true, minHours: 20 };
+  eq(
+    scheduleReadout(ref, st('completed', null), now, on),
+    { kind: 'ended', stopped: false, repeats: true },
+    'a finished round that repeats says another one is coming',
+  );
+  eq(
+    scheduleReadout(ref, st('completed', null), now, DEFAULT_CAMPAIGN_REPEAT),
+    { kind: 'ended', stopped: false, repeats: false },
+    'and one that does not, does not — the default is off',
+  );
+  /*
+   * A ROUND HE STOPPED DOES NOT COME BACK, whatever the switch says. Stopping
+   * is him saying "not this"; a card answering "it runs again tomorrow" would
+   * be the screen overruling the owner, which is worse than any wrong time.
+   */
+  eq(
+    scheduleReadout(ref, st('stopped', null), now, on),
+    { kind: 'ended', stopped: true, repeats: false },
+    'a round he STOPPED does not repeat, even with the switch on',
+  );
+  /* And the switch changes nothing about any other state's answer. */
+  for (const s of ['not_started', 'running'] as const) {
+    eq(
+      scheduleReadout(ref, st(s, null), now, on),
+      scheduleReadout(ref, st(s, null), now, DEFAULT_CAMPAIGN_REPEAT),
+      `the repeat switch does not change what a ${s} round says`,
+    );
+  }
+}
+
+/* ──────────── 9. reading and writing the two columns ───────────────────── */
+{
+  /* A DATABASE THAT HAS NOT RUN v25 READS "OFF", exactly like a campaign whose
+     owner never pressed the switch. That equivalence is the whole backward-
+     compatibility story: nothing an existing round does changes. */
+  eq(readRepeat(null), DEFAULT_CAMPAIGN_REPEAT, 'no row at all reads as off');
+  eq(readRepeat({}), DEFAULT_CAMPAIGN_REPEAT, 'a row without the columns reads as off');
+  is(DEFAULT_CAMPAIGN_REPEAT.enabled === false, 'and the default is off, for every campaign that already exists');
+  /* ONLY `true` IS ON. A string, a 1, a null — anything a loose read could
+     turn into "yes" — must not switch on a feature that republishes. */
+  for (const v of [1, 'true', 'yes', {}, [], null, undefined]) {
+    is(readRepeat({ repeat_enabled: v } as never).enabled === false, `repeat_enabled = ${JSON.stringify(v)} is not "on"`);
+  }
+  is(readRepeat({ repeat_enabled: true } as never).enabled === true, 'and true is');
+
+  /*
+   * THE FLOOR IS ENFORCED ON THE WAY IN AND ON THE WAY OUT.
+   *
+   * Under twelve hours is not "daily": it is the same advertisement reaching
+   * the same group twice in one publishing morning, which is the shape that
+   * gets an account restricted fastest. The database has the same check — this
+   * is the half that keeps a bad value from ever being sent.
+   */
+  eq(readRepeat({ repeat_min_hours: 1 } as never).minHours, MIN_REPEAT_HOURS, 'an hour is raised to the floor');
+  eq(readRepeat({ repeat_min_hours: 0 } as never).minHours, MIN_REPEAT_HOURS, 'and so is zero');
+  eq(readRepeat({ repeat_min_hours: -5 } as never).minHours, MIN_REPEAT_HOURS, 'and a negative');
+  eq(readRepeat({ repeat_min_hours: 9999 } as never).minHours, MAX_REPEAT_HOURS, 'and a week is the ceiling');
+  eq(readRepeat({ repeat_min_hours: 'x' } as never).minHours, DEFAULT_CAMPAIGN_REPEAT.minHours, 'and nonsense falls back to the default');
+  eq(repeatColumns({ enabled: true, minHours: 2 }).repeat_min_hours, MIN_REPEAT_HOURS, 'and a write is clamped too, not only a read');
+  eq(repeatColumns({ enabled: true, minHours: 20 }), { repeat_enabled: true, repeat_min_hours: 20 }, 'a legal value survives the round trip');
+  /*
+   * 20 AND NOT 24, and this is the arithmetic behind that choice: a round that
+   * opens at 08:00 and takes four hours ends at 12:00, so a 24-hour rule holds
+   * tomorrow's 08:00 row until noon, and the day after until 16:00 — walking
+   * the round later every day until it falls out of the window and stops.
+   */
+  is(DEFAULT_CAMPAIGN_REPEAT.minHours < 24, 'the default interval is under a day, so a daily round keeps its hour');
+  is(DEFAULT_CAMPAIGN_REPEAT.minHours >= MIN_REPEAT_HOURS, 'and is not under the floor');
+}
+
+/* ──────────── 10. a capped read, and the owner's own pause ─────────────── */
+{
+  const now = at('2026-10-06T10:12');
+  /*
+   * A CAPPED READ MAKES A ROUND LOOK MORE FINISHED THAN IT IS, in client.ts's
+   * own words: campaignStates() reads ordered by scheduled_at ascending and
+   * cuts at the ceiling, so what it drops is the rows that have not happened.
+   * Every answer below 'due' is derived from that count, and all of them lean
+   * the same way — so on a big enough round the card would announce "הסבב
+   * הסתיים · אין פרסום מתוזמן" over a round still publishing.
+   */
+  eq(scheduleReadout(ref, st('completed', null, { truncated: true }), now), { kind: 'partial' }, 'a capped read may NOT claim the round ended');
+  eq(scheduleReadout(ref, st('not_started', null, { truncated: true }), now), { kind: 'partial' }, 'nor may it answer from a count it does not have');
+  eq(
+    scheduleReadout(ref, st('needs_attention', null, { truncated: true, manual: 7 }), now),
+    { kind: 'partial' },
+    'nor count what is waiting',
+  );
+  /*
+   * BUT A ROW IT CAN SEE IS A FACT, and nothing a cap drops makes it false.
+   * Disabling the whole function on a capped read would throw away the one
+   * answer that survives it.
+   */
+  const due = scheduleReadout(ref, st('running', at('2026-10-06T10:20').toISOString(), { truncated: true }), now);
+  eq(due, { kind: 'due', at: at('2026-10-06T10:20').toISOString() }, 'a queued row survives a capped read');
+
+  /*
+   * AND THE OWNER'S OWN PAUSE. rules.ts hands every row of a paused round
+   * straight back and pushes it forward again on each poll, so the stored
+   * instant is not when it publishes — nothing publishes until he resumes. The
+   * card printing it was a countdown to a moment that arrives and passes with
+   * the queue untouched: the same fault as the 22:00, and harder to see,
+   * because the time it shows is real and merely never happens.
+   */
+  eq(scheduleReadout(ref, st('paused', at('2026-10-06T10:20').toISOString()), now), { kind: 'paused' }, 'a paused round names no instant');
+  eq(scheduleReadout(off, st('paused', at('2026-10-06T10:20').toISOString()), now), { kind: 'paused' }, 'with the schedule off too — the pause is what holds it');
+  eq(scheduleReadout(ref, st('paused', null, { truncated: true }), now), { kind: 'paused' }, 'and a capped read does not hide it');
+}
+
+/* ──────────── 11. and no component may do this arithmetic itself ───────── */
 {
   /*
    * THE INVARIANT THAT KEEPS IT FIXED. Two cards each held a copy of the

@@ -8,9 +8,10 @@ import {
   daysLabel,
   gapLabel,
   scheduleSummary,
+  type CampaignRepeat,
   type CampaignSchedule,
 } from '@/lib/social/campaign-schedule';
-import { CalendarIcon, ChevronDownIcon, ClockIcon } from '@/components/icons';
+import { CalendarIcon, ChevronDownIcon, ClockIcon, RepeatIcon } from '@/components/icons';
 import { Toggle } from './ui';
 
 /**
@@ -52,10 +53,22 @@ export function CampaignSchedulePanel({
   onChange,
   campaignName,
   disabled = false,
+  repeat,
+  onRepeatChange,
   showHeader = true,
 }: {
   schedule: CampaignSchedule;
   onChange: (next: CampaignSchedule) => void;
+  /**
+   * CHZARA — the round's daily repeat, when the caller supports it.
+   *
+   * "אותו פוסט לאותן קבוצות כל יום." Optional, because a caller that cannot
+   * ARM it must not draw it: the switch's effect is a weekly schedule row, and
+   * a screen that flipped the two columns without writing that row would show
+   * a repeat that never repeats. Pass both or neither.
+   */
+  repeat?: CampaignRepeat;
+  onRepeatChange?: (next: CampaignRepeat) => void;
   /** Only for the accessible names — four controls per card in a list of them. */
   campaignName: string;
   /** While the campaign's own row is being written by something else. */
@@ -73,6 +86,7 @@ export function CampaignSchedulePanel({
   showHeader?: boolean;
 }) {
   const set = (patch: Partial<CampaignSchedule>) => onChange({ ...schedule, ...patch });
+  const canRepeat = Boolean(repeat && onRepeatChange);
 
   /*
    * MULTI SELECT, and a tap is a toggle in both directions — including the
@@ -249,6 +263,64 @@ export function CampaignSchedulePanel({
           <span className="min-w-0 truncate">התזמון כבוי — הקמפיין מפרסם ללא הגבלת ימים ושעות</span>
         )}
       </p>
+
+      {/* ─── 5. חזרה יומית — the one control here that makes something happen ─ */}
+      {canRepeat && repeat && onRepeatChange && (
+        /*
+         * "הקמפיין פעיל, אמור לצאת כל יום מ-8 בבוקר עד 22 בלילה כל דקה."
+         *
+         * He thought the panel above did this. It cannot: every setting in it
+         * can only ever PREVENT a publication, and a round whose queue empties
+         * is finished for good. This is the switch that actually makes a round
+         * happen again — and it is deliberately the last thing on the panel,
+         * below the summary, because it is the only one with a consequence
+         * outside the campaign.
+         *
+         * IT SAYS WHAT IT RISKS, IN HIS WORDS AND WITHOUT SOFTENING IT.
+         * Publishing the same advertisement into the same groups day after day
+         * is what group admins remove people for and what Meta's spam systems
+         * look for. The product's job is not to refuse him his own account — it
+         * is to make sure the decision is an informed one, every time he looks
+         * at this panel and not only on the day he first pressed it.
+         */
+        /*
+           AMBER ON WHITE, NOT ON AN AMBER TINT. This theme's warning-400 is a
+           dark amber (#b54708) and over 10% of itself it measures 4.18:1 —
+           under the 4.5 that 10.5px text asks for, and the exact pair the
+           guard in campaign-schedule.test.ts exists to catch. It caught this
+           block. On ink-900 the same amber is 5.43, and the border carries the
+           colour instead, which is what the summary line above already does.
+        */
+        <div className="mt-2 rounded-xl border border-warning-400/40 bg-ink-900 p-2">
+          <div className="flex items-center gap-2">
+            <RepeatIcon aria-hidden className="h-3.5 w-3.5 shrink-0 text-warning-400" />
+            <span className="text-[11px] font-extrabold leading-4 text-warning-400">חזרה יומית</span>
+            <span className="ms-auto">
+              <Toggle
+                checked={repeat.enabled}
+                onChange={(enabled) => !disabled && onRepeatChange({ ...repeat, enabled })}
+                label={`חזרה יומית עבור ${campaignName}`}
+              />
+            </span>
+          </div>
+          <p className="mt-1 text-[10.5px] font-bold leading-4 text-mist-300">
+            {repeat.enabled ? (
+              <>
+                אותו פוסט יפורסם שוב לאותן קבוצות בכל יום פרסום, החל מהשעה{' '}
+                <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. לא יותר מפעם ב-{repeat.minHours} שעות לאותה
+                קבוצה.
+                {/* The consequence, not the mechanism. He is the one whose
+                    account carries it, so he is the one who has to read it. */}
+                <span className="mt-0.5 block text-warning-400">
+                  פרסום חוזר של אותה מודעה לאותן קבוצות עלול לגרום להסרה מהקבוצות או להגבלת החשבון שלכם בפייסבוק.
+                </span>
+              </>
+            ) : (
+              'כבוי — הסבב רץ פעם אחת ונגמר. אותו פוסט לא יפורסם שוב לאותה קבוצה.'
+            )}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,11 @@
-import { nextAllowedAt, nextPublishAt, windowClosesAt, type CampaignSchedule } from './campaign-schedule';
+import {
+  DEFAULT_CAMPAIGN_REPEAT,
+  nextAllowedAt,
+  nextPublishAt,
+  windowClosesAt,
+  type CampaignRepeat,
+  type CampaignSchedule,
+} from './campaign-schedule';
 import type { CampaignState } from './campaign';
 
 /**
@@ -39,22 +46,52 @@ export type ScheduleReadout =
   | { kind: 'due'; at: string }
   /** The switch is on, no day is lit: the queue is held, by design and forever. */
   | { kind: 'no-day' }
-  /** The round is over. Nothing is coming until he opens another one. */
-  | { kind: 'ended'; stopped: boolean }
+  /**
+   * The round is over.
+   *
+   * `repeats` is whether another one is coming on its own — the CHZARA switch.
+   * Without it the card would say "אין פרסום מתוזמן" over a round that is in
+   * fact due again tomorrow morning, which is the same class of wrong answer
+   * as the window edge it replaced, pointing the other way.
+   */
+  | { kind: 'ended'; stopped: boolean; repeats: boolean }
   /** Rows are waiting — on him, not on the clock. */
   | { kind: 'manual'; waiting: number }
+  /** Held by the owner's own pause. No instant: the engine publishes none. */
+  | { kind: 'paused' }
   /** Nothing queued and the window is open: until when it would be allowed. */
   | { kind: 'window-open'; until: string }
   /** Nothing queued and the window is shut: when it next opens. */
   | { kind: 'window-next'; opens: string }
   /** Nothing queued and no schedule to describe. */
-  | { kind: 'none' };
+  | { kind: 'none' }
+  /**
+   * THE READ WAS CAPPED, SO THE ANSWER IS NOT KNOWN — and saying so is the
+   * only honest thing left.
+   *
+   * campaignStates() caps at CAMPAIGN_ROLLUP_LIMIT rows, ordered by
+   * scheduled_at ascending, so what a capped read drops is the FURTHEST-OUT
+   * rows — exactly the ones that have not happened yet. client.ts says it in
+   * its own words: "a truncated read therefore makes a run look MORE finished
+   * than it is". Every state below 'due' is derived from that count, so on a
+   * big enough round they are all derived from a lie that leans one way: the
+   * card would announce "הסבב הסתיים · אין פרסום מתוזמן" over a round still
+   * publishing.
+   *
+   * A QUEUED ROW SURVIVES IT, which is why 'due' is checked first and this is
+   * not: a row we can SEE is a fact, and nothing a cap drops can make it
+   * false.
+   */
+  | { kind: 'partial' };
 
 /**
  * The order below is the whole of this module, and each line is a state that
  * was previously served by a neighbour's words:
  *
+ *   0  the read was CAPPED           → nothing below is known (except a row
+ *                                     we can see, which is checked above it)
  *   1  the round has ENDED           → no instant exists, whatever else is true
+ *   1b the round is PAUSED           → the engine publishes at no instant
  *   2  something IS queued           → the instant the engine will use
  *   3  queued but no day is chosen   → the setting that holds it
  *   4  rows waiting for a person     → they are waiting, and not for the clock
@@ -69,8 +106,9 @@ export type ScheduleReadout =
  */
 export function scheduleReadout(
   schedule: CampaignSchedule | null | undefined,
-  state: Pick<CampaignState, 'state' | 'nextAt' | 'done' | 'progress'>,
+  state: Pick<CampaignState, 'state' | 'nextAt' | 'done' | 'progress'> & { truncated?: boolean },
   now: Date = new Date(),
+  repeat: CampaignRepeat = DEFAULT_CAMPAIGN_REPEAT,
 ): ScheduleReadout {
   const on = Boolean(schedule?.enabled);
 
@@ -99,9 +137,35 @@ export function scheduleReadout(
    * written to end. So the rule that cannot be bent — never promise a
    * publication that will not happen — decides the order.
    */
-  if (state.state === 'completed' || state.state === 'stopped') {
-    return { kind: 'ended', stopped: state.state === 'stopped' };
+  /*
+   * `!state.truncated` IS PART OF THIS CONDITION, not a separate check above
+   * it, and the difference matters: a capped read must disable the ENDED claim
+   * without also disabling the ones that are still true. Written as an early
+   * return it also swallowed 'due' and 'paused', which survive a cap — a row
+   * we can see is a fact, and so is the owner's own pause.
+   */
+  if (!state.truncated && (state.state === 'completed' || state.state === 'stopped')) {
+    /*
+     * A ROUND HE STOPPED DOES NOT REPEAT, whatever the switch says. Stopping is
+     * the owner saying "not this", and a card that answered "it will run again
+     * tomorrow" would be the screen overruling him — the one thing worse than
+     * the window edge this module was written to remove.
+     */
+    return { kind: 'ended', stopped: state.state === 'stopped', repeats: repeat.enabled && state.state === 'completed' };
   }
+
+  /*
+   * A PAUSED ROUND PUBLISHES AT NO INSTANT AT ALL, and the row's own stamp is
+   * the most convincing wrong answer on this card.
+   *
+   * rules.ts:185 returns `wait` for every row of a paused campaign and pushes
+   * it forward again on each poll, so the stored instant is not when it goes
+   * out — nothing goes out until he presses resume. The strip printing it was
+   * a countdown to a moment that would arrive and pass with the queue
+   * untouched, which is the same fault as the 22:00 and harder to notice,
+   * because the time it shows is real and merely never happens.
+   */
+  if (state.state === 'paused') return { kind: 'paused' };
 
   if (state.nextAt) {
     if (!on || !schedule) return { kind: 'due', at: state.nextAt };
@@ -112,6 +176,15 @@ export function scheduleReadout(
            held indefinitely. The stored instant may NOT be printed over it. */
     return at ? { kind: 'due', at: at.toISOString() } : { kind: 'no-day' };
   }
+
+  /*
+   * AND HERE IS WHERE A CAPPED READ RUNS OUT OF THINGS IT KNOWS. Everything
+   * below rests on the row count — how many are waiting, whether any are — and
+   * a cap drops the furthest-out rows, so that count always errs towards
+   * "finished". The card is told it cannot answer rather than handed an answer
+   * that leans one way.
+   */
+  if (state.truncated) return { kind: 'partial' };
 
   if (state.progress.manual > 0) return { kind: 'manual', waiting: state.progress.manual };
 

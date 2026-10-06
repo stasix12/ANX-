@@ -94,6 +94,12 @@ const TITLE: Record<string, string> = {
   worker_window_storm: 'ריבוי חלונות דפדפן — פעולות הרקע נעצרו',
   nightly_group_check: 'בדיקה יומית של הקבוצות',
   campaign_paused: 'הסבב הושהה',
+  /* CHZARA. Two headlines rather than one with a word swapped: this is the
+     line in his history that says his account began republishing by itself,
+     and it has to read as its own event when he scrolls past it a week later
+     wondering where the repeats came from. */
+  campaign_repeat_on: 'חזרה יומית הופעלה',
+  campaign_repeat_off: 'חזרה יומית כובתה',
   campaign_resumed: 'הסבב חודש',
   campaign_stopped: 'הסבב נעצר',
   campaign_deleted: 'הסבב נמחק',

@@ -94,8 +94,8 @@ is(!/useRouter|router\.push/.test(board), 'and navigates nowhere');
  */
 const readoutSrc = code('src/lib/social/schedule-readout.ts');
 const listCard = code('src/components/social/CampaignCard.tsx');
-is(/scheduleReadout\(schedule, state\)/.test(hero), 'the dashboard card asks scheduleReadout what to say');
-is(/scheduleReadout\(schedule, state\)/.test(listCard), 'and so does the campaigns list, from the same call');
+is(/scheduleReadout\(schedule, state/.test(hero), 'the dashboard card asks scheduleReadout what to say');
+is(/scheduleReadout\(schedule, state/.test(listCard), 'and so does the campaigns list, from the same call');
 is(/nextPublishAt\(schedule, from, lastPublishedAt/.test(readoutSrc), 'which resolves the instant with the engine\'s own function, not a second rule');
 for (const [name, src] of [['LiveCampaignHero', hero], ['CampaignScheduleBoard', board], ['CampaignCard', listCard]] as const) {
   is(!/nextPublishAt\(|nextAllowedAt\(|windowClosesAt\(/.test(src), `${name} computes no instant of its own`);
@@ -331,7 +331,9 @@ async function main(): Promise<void> {
             c.text.includes('חלון הפרסום פתוח עד:') ||
             c.text.includes('הסבב הסתיים') ||
             c.text.includes('הסבב הופסק') ||
-            c.text.includes('ממתין לטיפול ידני'),
+            c.text.includes('ממתין לטיפול ידני') ||
+            c.text.includes('הסבב מושהה') ||
+            c.text.includes('הסבב גדול מדי לספירה'),
           `${at}: the strip has lost its label`,
         );
       });
@@ -443,6 +445,20 @@ async function main(): Promise<void> {
       assert.doesNotMatch(ended.text, /התחיל בעוד/, `${width}: a finished round reports that it starts in the future`);
       assert.doesNotMatch(halted.text, /התחיל בעוד/, `${width}: a stopped round reports that it starts in the future`);
 
+      /*
+       * ───── 9 — A PAUSED ROUND, which was promising a time all along ─────
+       *
+       * rules.ts:185 hands every row of a paused round straight back and
+       * pushes it forward again on each poll, so its stored instant is not
+       * when it publishes — nothing publishes until he presses resume. The
+       * card counted down to it anyway, which is the same fault as the 22:00
+       * and harder to notice: the time is real, it simply never happens.
+       */
+      const [, , , , , , , , bigPaused] = seen.cards;
+      assert.ok(bigPaused.text.includes('הסבב מושהה'), `${width}: a paused round must say so where the clock was`);
+      assert.ok(bigPaused.text.includes('אין פרסום עד שתמשיכו'), `${width}: and must say that nothing goes out meanwhile`);
+      assert.doesNotMatch(bigPaused.strip, /\d{1,2}:\d{2}/, `${width}: a paused round printed a time it will not publish at`);
+
       /* 12 — stopped by hand. Same silence about time, its own word. */
       assert.ok(halted.text.includes('הסבב הופסק'), `${width}: a round he stopped must say it was stopped, not that it finished`);
       assert.doesNotMatch(halted.strip, /\d{1,2}:\d{2}/, `${width}: a stopped round printed a time`);
@@ -457,7 +473,7 @@ async function main(): Promise<void> {
       assert.doesNotMatch(awaitingHand.strip, /\d{1,2}:\d{2}/, `${width}: a hand-waiting round printed a clock time`);
 
       await view.close();
-      checks += 32;
+      checks += 35;
     }
   } finally {
     await browser.close();

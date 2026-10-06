@@ -41,6 +41,7 @@ import {
   queueSummary,
   runCovers,
   saveCampaign,
+  setCampaignRepeat,
   sendWorkerCommand,
   setPaused,
   stopCampaign,
@@ -50,7 +51,7 @@ import {
   type TimelineRow,
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
-import { readSchedule, scheduleColumns, type CampaignSchedule, type ScheduleFields } from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields } from '@/lib/social/campaign-schedule';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
 import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
@@ -878,6 +879,40 @@ export default function SocialDashboard() {
   const scheduleOf = (campaign: Campaign): CampaignSchedule =>
     readSchedule(schedulePatch?.id === campaign.id ? { ...campaign, ...schedulePatch.columns } : campaign);
 
+  /*
+   * CHZARA — written straight through, with NO debounce, and that difference
+   * is deliberate.
+   *
+   * The schedule above is five controls the owner drags around, so it is
+   * coalesced into one write 600ms after he stops. This is one switch with one
+   * consequence outside the campaign — a weekly schedule row that will publish
+   * to two hundred groups tomorrow morning — and a change like that is
+   * confirmed the moment it is made, not six hundred milliseconds later when
+   * he may already be on another screen. The reload afterwards is what makes
+   * the card show the next round it just armed.
+   */
+  const changeRepeat = useCallback(
+    async (campaign: Pick<Campaign, 'id' | 'name'>, next: CampaignRepeat) => {
+      setScheduleBusy(true);
+      try {
+        await setCampaignRepeat(campaign, next, scheduleOf(campaign as Campaign));
+        await load();
+        toast(
+          next.enabled
+            ? `"${campaign.name}" יחזור על עצמו בכל יום פרסום`
+            : `החזרה היומית של "${campaign.name}" כובתה — הסבב הנוכחי ימשיך כרגיל`,
+          next.enabled ? 'info' : 'success',
+        );
+      } catch (err) {
+        toast(friendlyMessage(err, 'שמירת החזרה נכשלה.'), 'error');
+      } finally {
+        setScheduleBusy(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [toast],
+  );
+
   /* Which card is busy, rather than all of them. `act()` keys are now
      "camp-pause:<id>", so a pause on one run cannot grey out the two beside
      it in the strip. */
@@ -1348,6 +1383,8 @@ export default function SocialDashboard() {
                      the campaign's own row; the write is the block above. */
                   schedule={scheduleOf(run.campaign)}
                   onScheduleChange={(next) => changeSchedule(run.campaign, next)}
+                  repeat={readRepeat(run.campaign)}
+                  onRepeatChange={(next) => void changeRepeat(run.campaign, next)}
                   scheduleBusy={scheduleBusy && schedulePatch?.id === run.campaign.id}
                 />
               ))}

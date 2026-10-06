@@ -1,5 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isAllowedAt, nextPublishAt, readSchedule, scheduleSummary, type ScheduleFields } from './campaign-schedule';
+import {
+  DEFAULT_CAMPAIGN_REPEAT,
+  isAllowedAt,
+  nextPublishAt,
+  readRepeat,
+  readSchedule,
+  scheduleSummary,
+  type CampaignRepeat,
+  type ScheduleFields,
+} from './campaign-schedule';
 import { startOfZonedDay } from './time';
 import type { BrowserSettings, Campaign, LimitsSettings, Post, QueueItem, SocialTarget, Variant } from './types';
 
@@ -141,6 +150,14 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   };
 
   // Campaign pause/stop: leave the row alone until the owner resumes.
+  /*
+   * HOISTED, because the repeat guard that uses it is two hundred lines below
+   * and outside this block, and because its DEFAULT is the safe one: a row
+   * with no campaign, or a campaign whose read failed, gets "never twice" —
+   * the behaviour this engine has always had. A permission is not something to
+   * fall back into.
+   */
+  let repeat: CampaignRepeat = DEFAULT_CAMPAIGN_REPEAT;
   const campaignId = item.campaign_id ?? post.campaign_id;
   if (campaignId) {
     /*
@@ -151,18 +168,19 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
      * An engine that stops working because a column is missing is a worse
      * outcome than an engine that ignores a window nobody has set yet.
      */
-    let campaign: (Pick<Campaign, 'status'> & ScheduleFields) | null = null;
+    let campaign: (Pick<Campaign, 'status'> & ScheduleFields & Pick<Campaign, 'repeat_enabled' | 'repeat_min_hours'>) | null = null;
     const full = await db
       .from('social_campaigns')
-      .select('status, schedule_enabled, schedule_days, schedule_start, schedule_end, schedule_gap_minutes')
+      .select('status, schedule_enabled, schedule_days, schedule_start, schedule_end, schedule_gap_minutes, repeat_enabled, repeat_min_hours')
       .eq('id', campaignId)
       .maybeSingle();
     if (full.error) {
       const { data } = await db.from('social_campaigns').select('status').eq('id', campaignId).maybeSingle();
       campaign = (data as Pick<Campaign, 'status'> | null) ?? null;
     } else {
-      campaign = (full.data as (Pick<Campaign, 'status'> & ScheduleFields) | null) ?? null;
+      campaign = (full.data as (Pick<Campaign, 'status'> & ScheduleFields & Pick<Campaign, 'repeat_enabled' | 'repeat_min_hours'>) | null) ?? null;
     }
+    if (campaign) repeat = readRepeat(campaign);
     if (campaign?.status === 'paused') {
       return { action: 'wait', until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(), reason: 'הסבב מושהה.' };
     }
@@ -285,35 +303,99 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   }
 
   /*
-   * Same post already went to this target (any variant) → never twice.
+   * Same post already went to this target (any variant) → never twice, unless
+   * this round is one the owner has explicitly set to repeat.
    *
-   * There is no time window here on purpose: this is "ever", not "recently".
-   * It is now the owner's switch rather than a law, because an owner who
-   * republishes the same seasonal offer every month had no way to say so and
-   * simply watched every row skip. Turning it off leaves dedupeDays below as
-   * the guard, which IS time-boxed. The default stays on: group publishing
-   * runs through the owner's own browser session, so repeating identical
-   * content to one group risks THEIR account, not a service's.
+   * THE "EVER" RULE IS THE DEFAULT AND STAYS THE DEFAULT. Group publishing runs
+   * through the owner's own browser session, so repeating identical content to
+   * one group risks THEIR account, not a service's. `!== false` rather than a
+   * truthy test, so a settings row written before that key existed keeps the
+   * old behaviour instead of silently losing it.
    *
-   * `!== false` rather than a truthy test, so a settings row written before
-   * this key existed keeps the old behaviour instead of silently losing it.
+   * CHZARA GIVES THE RULE A CLOCK; IT DOES NOT REMOVE IT.
+   *
+   * "אמור לצאת כל יום מ-8 בבוקר עד 22 בלילה." A round set to repeat asks for
+   * exactly what this line refuses, so the refusal becomes "not again within
+   * repeat_min_hours" instead of "not again". That is weaker, and it is still a
+   * rule with real work to do: a plan that ran twice, a retry after a failure,
+   * two schedules pointed at one post — all of those double-post without it,
+   * and all of them have happened.
+   *
+   * THE RECENCY IS MEASURED, NOT ASSUMED. The count becomes a read of the most
+   * recent publication's instant, because "has it ever" and "how long ago" are
+   * different questions and only the second one can answer this.
    */
   if (limits.blockRepeatToSameTarget !== false) {
-    const { count: samePost } = await db
+    const { data: previous } = await db
       .from('social_queue')
-      .select('id', { count: 'exact', head: true })
+      .select('published_at')
       .eq('status', 'published')
       .eq('post_id', post.id)
       .eq('target_id', target.id)
-      .neq('id', item.id);
-    if ((samePost ?? 0) > 0) return { action: 'skip', reason: `הפוסט הזה כבר פורסם ל-"${target.name}".` };
+      .neq('id', item.id)
+      .order('published_at', { ascending: false })
+      .limit(1);
+    const last = previous?.[0]?.published_at ?? null;
+    if (previous && previous.length > 0) {
+      if (!repeat.enabled) return { action: 'skip', reason: `הפוסט הזה כבר פורסם ל-"${target.name}".` };
+      /*
+       * A published row with no instant cannot be dated, and an undatable
+       * publication must count as "just now" rather than as "long ago" — the
+       * safe reading of a missing value is the one that holds the post back.
+       */
+      const since = last ? now.getTime() - new Date(last).getTime() : 0;
+      const needed = repeat.minHours * 3_600_000;
+      if (since < needed) {
+        const hours = Math.max(1, Math.ceil((needed - since) / 3_600_000));
+        return {
+          action: 'defer',
+          until: new Date(now.getTime() + needed - since + DEFER_CUSHION_MS).toISOString(),
+          /*
+           * DEFERRED, NOT SKIPPED. The round repeats, so this group's turn is
+           * coming — dropping the row would quietly shrink every round after
+           * the first, and the owner would see a campaign that reached 219
+           * groups on Monday and 180 on Tuesday with no reason on any screen.
+           */
+          reason: `פורסם לקבוצה הזו לאחרונה — החזרה הבאה בעוד כ-${hours} שעות.`,
+        };
+      }
+    }
   }
 
-  // Same content hash to this target inside the dedupe window (catches copies).
+  /*
+   * Same content hash to this target inside the dedupe window (catches copies).
+   *
+   * AND IT IS THE SAME WINDOW THE REPEAT USES, on a round that repeats.
+   *
+   * This guard is per-target too — the hash is built from the target, the text
+   * and the media — so on a repeating round it asks the question above a second
+   * time, with a window of days instead of hours. Left alone it would refuse
+   * every repeat for a week and the switch would appear to do nothing at all:
+   * the owner turns on "חזרה יומית", tomorrow's round runs, and every single
+   * row skips with a sentence about content he deliberately chose to repeat.
+   *
+   * So on a repeating round the window IS the repeat interval. That is not a
+   * loosening beyond what the switch already granted — the rule above has
+   * already allowed exactly this publication at exactly this distance — and
+   * everything the hash catches that the rule above does not, namely the SAME
+   * TEXT sent under a different post, is still caught, just inside hours rather
+   * than days.
+   */
   if (item.dedupe_hash) {
-    const since = new Date(now.getTime() - limits.dedupeDays * 86_400_000).toISOString();
+    const windowMs = repeat.enabled ? repeat.minHours * 3_600_000 : limits.dedupeDays * 86_400_000;
+    const since = new Date(now.getTime() - windowMs).toISOString();
     const dupes = await countPublished(db, (q) => q.eq('dedupe_hash', item.dedupe_hash).neq('id', item.id).gte('published_at', since));
-    if (dupes > 0) return { action: 'skip', reason: `אותו תוכן כבר פורסם ליעד הזה ב-${limits.dedupeDays} הימים האחרונים.` };
+    if (dupes > 0) {
+      return repeat.enabled
+        ? {
+            /* Deferred for the same reason the repeat guard defers: this
+               group's turn is coming, and a skip would shrink the round. */
+            action: 'defer',
+            until: new Date(now.getTime() + windowMs + DEFER_CUSHION_MS).toISOString(),
+            reason: `אותו תוכן כבר פורסם ליעד הזה לאחרונה — החזרה הבאה בעוד כ-${repeat.minHours} שעות.`,
+          }
+        : { action: 'skip', reason: `אותו תוכן כבר פורסם ליעד הזה ב-${limits.dedupeDays} הימים האחרונים.` };
+    }
   }
 
   // Minimum spacing between any two publications (groups get extra spacing).

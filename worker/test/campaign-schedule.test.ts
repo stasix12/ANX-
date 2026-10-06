@@ -341,7 +341,7 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    * than being deleted.
    */
   const readout = readFileSync(new URL('../../src/lib/social/schedule-readout.ts', import.meta.url), 'utf8');
-  is(/scheduleReadout\(schedule, state\)/.test(card), '"הבא בתור" asks the one module that decides what a card may say about time');
+  is(/scheduleReadout\(schedule, state/.test(card), '"הבא בתור" asks the one module that decides what a card may say about time');
   is(/nextPublishAt\(schedule, from, lastPublishedAt/.test(readout), 'and that module computes it with the engine’s own function, not a second copy of these rules');
   is(/if \(!on \|\| !schedule\) return \{ kind: 'due', at: state\.nextAt \};/.test(readout), 'and with the switch off it reports the stored instant exactly as it did before this feature');
   is(/לא נבחר יום פרסום/.test(card), 'with no day chosen it says so rather than printing an instant the engine will not publish at');

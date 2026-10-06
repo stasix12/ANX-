@@ -3,6 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
+import { repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
@@ -25,7 +26,9 @@ import {
   WORKER_OFFLINE_AFTER_SECONDS,
   parseGroupUrl,
   parseGroupShareUrl,
+  TIMEZONE,
   type ActivityEntry,
+  type WeeklyPlan,
   type BrowserSettings,
   type BusinessSettings,
   type Campaign,
@@ -889,6 +892,108 @@ export async function removeMedia(item: MediaItem): Promise<void> {
 /* ------------------------------------------------------------ schedules */
 
 export type ScheduleInput = Omit<Schedule, 'id' | 'created_at' | 'planned_until' | 'active'>;
+
+/**
+ * CHZARA — arm or disarm a round's daily repeat, and the schedule row behind it.
+ *
+ * "הקמפיין פעיל, אמור לצאת כל יום מ-8 בבוקר עד 22 בלילה כל דקה."
+ *
+ * TWO WRITES, AND THE SECOND ONE IS THE FEATURE. The two columns on the
+ * campaign only tell rules.ts that a repeat is PERMITTED; by themselves they
+ * publish nothing, exactly like the window columns beside them. What actually
+ * makes a round happen again is a schedule row, and the shape that recurs
+ * already exists and is already planned by planQueue(): mode 'weekly' is read
+ * on every pass (it is `active = true` and, unlike 'now'/'once'/'drip', never
+ * retires itself), slotsFor() produces one occasion per chosen weekday, and
+ * plan.ts staggers that occasion's targets apart. Nothing new had to be built
+ * for the recurrence; it had to be ASKED FOR.
+ *
+ * THE DAYS AND THE HOUR ARE HIS, NOT A SECOND SETTING. The weekly plan is built
+ * out of the campaign's own `schedule_days` and `schedule_start` — the chips
+ * and the hour already on the card. A separate "which days does it repeat on"
+ * control would be a second scheduling mechanism, which this product has a
+ * standing rule against and has been bitten by once already.
+ *
+ * THE TARGETS ARE THE ROUND'S OWN, carried from the schedule that launched it.
+ * A repeat that quietly published somewhere the round never did would be the
+ * worst possible shape for this feature.
+ *
+ * TURNING IT OFF STOPS THE NEXT ROUND AND NOTHING ELSE. The weekly row is
+ * deactivated, so no further occasions are planned; rows already in the queue
+ * keep their instants, because "אין לאפס את התור" and because a publication the
+ * owner has already been promised is not something a settings change may
+ * cancel.
+ */
+export async function setCampaignRepeat(
+  campaign: Pick<Campaign, 'id' | 'name'>,
+  repeat: CampaignRepeat,
+  schedule: CampaignSchedule,
+): Promise<void> {
+  unwrap(await db().from('social_campaigns').update(repeatColumns(repeat)).eq('id', campaign.id));
+
+  const posts = unwrap<{ id: string }[]>(await db().from('social_posts').select('id').eq('campaign_id', campaign.id));
+  const postIds = posts.map((p) => p.id);
+  if (!postIds.length) return;
+
+  /* Every weekly row this function has ever armed for this round. Matched on
+     the mode as well as the post, so a one-off or a drip the owner set up
+     himself is never touched by this switch. */
+  const existing = unwrap<{ id: string; post_id: string; target_ids: string[] }[]>(
+    await db().from('social_schedules').select('id, post_id, target_ids').in('post_id', postIds).eq('mode', 'weekly'),
+  );
+
+  if (!repeat.enabled) {
+    if (existing.length) unwrap(await db().from('social_schedules').update({ active: false }).in('id', existing.map((r) => r.id)));
+    await logClientActivity('info', 'campaign_repeat_off', `החזרה היומית של "${campaign.name}" כובתה`, { campaignId: campaign.id });
+    return;
+  }
+
+  /*
+   * ONE OCCASION PER CHOSEN DAY, AT THE WINDOW'S OPENING HOUR.
+   *
+   * Not at "now", and not at the hour the owner happened to press the switch:
+   * the round is supposed to start when his publishing day starts, and
+   * `schedule_start` is where he already said that is. A repeat that began at
+   * 21:50 because that is when he turned it on would publish four groups and
+   * then defer two hundred to tomorrow.
+   */
+  const weekly: WeeklyPlan = {};
+  for (const day of schedule.days) weekly[String(day)] = [schedule.start];
+
+  for (const postId of postIds) {
+    const mine = existing.filter((r) => r.post_id === postId);
+    if (mine.length) {
+      unwrap(await db().from('social_schedules').update({ mode: 'weekly', weekly, active: true }).in('id', mine.map((r) => r.id)));
+      continue;
+    }
+    /*
+     * NO WEEKLY ROW YET, so this round was launched once and the targets have
+     * to come from the row that launched it. Newest first: a round relaunched
+     * to a different list repeats the list it last went out to, which is the
+     * one the owner is looking at on the card.
+     */
+    const source = unwrap<{ target_ids: string[] }[]>(
+      await db().from('social_schedules').select('target_ids').eq('post_id', postId).order('created_at', { ascending: false }).limit(1),
+    );
+    const targetIds = source[0]?.target_ids ?? [];
+    /* A round with no targets to repeat is not armed at all. An empty weekly
+       row would sit there active for ever, planning nothing, and the card would
+       promise a round that could never produce a publication. */
+    if (!targetIds.length) continue;
+    unwrap(
+      await db()
+        .from('social_schedules')
+        .insert({ post_id: postId, mode: 'weekly', timezone: TIMEZONE, run_at: null, weekly, interval_days: null, interval_time: null, target_ids: targetIds, active: true }),
+    );
+  }
+
+  await logClientActivity(
+    'warn',
+    'campaign_repeat_on',
+    `"${campaign.name}" יחזור על עצמו בכל יום פרסום — אותו פוסט לאותן קבוצות, לא יותר מפעם ב-${repeat.minHours} שעות`,
+    { campaignId: campaign.id, minHours: repeat.minHours },
+  );
+}
 
 export async function createSchedule(input: ScheduleInput): Promise<Schedule> {
   return unwrap<Schedule>(await db().from('social_schedules').insert({ ...input, active: true }).select('*').single());

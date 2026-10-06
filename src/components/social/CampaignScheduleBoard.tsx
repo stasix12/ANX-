@@ -356,6 +356,8 @@ function NextPublishStrip({ readout, scheduleOn }: { readout: ScheduleReadout; s
    */
   const over = readout.kind === 'ended';
   const manual = readout.kind === 'manual';
+  const paused = readout.kind === 'paused';
+  const partial = readout.kind === 'partial';
   const noDay = readout.kind === 'no-day';
   const openNow = readout.kind === 'window-open';
   const isWindow = openNow || readout.kind === 'window-next';
@@ -403,6 +405,13 @@ function NextPublishStrip({ readout, scheduleOn }: { readout: ScheduleReadout; s
             <span className="block">{readout.kind === 'ended' && readout.stopped ? 'הסבב הופסק' : 'הסבב הסתיים'}</span>
             <span className="block text-mist-300">אין פרסום מתוזמן</span>
           </>
+        ) : paused ? (
+          /* The owner's own pause. rules.ts hands every row of a paused round
+             straight back, so there is no instant — the stored one would be a
+             countdown to a moment that arrives and passes untouched. */
+          'הסבב מושהה'
+        ) : partial ? (
+          'הסבב גדול מדי לספירה'
         ) : manual ? (
           'ממתין לטיפול ידני'
         ) : isWindow ? (
@@ -442,6 +451,12 @@ function NextPublishStrip({ readout, scheduleOn }: { readout: ScheduleReadout; s
            * nothing. The words are in the label beside it.
            */
           null
+        ) : paused ? (
+          <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">אין פרסום עד שתמשיכו</span>
+        ) : partial ? (
+          /* A capped read drops the furthest-out rows, so every count here
+             errs towards "finished". Saying so is the only honest answer. */
+          <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-mist-300">לא ניתן לחשב כאן</span>
         ) : manual ? (
           <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">
             {readout.kind === 'manual' && counted(readout.waiting, 'פרסום אחד ממתין לך', 'פרסומים ממתינים לך', 'שני פרסומים ממתינים לך')}
@@ -468,8 +483,22 @@ function NextPublishStrip({ readout, scheduleOn }: { readout: ScheduleReadout; s
            * terms the NEXT round will run under, which is a true and useful
            * thing to say, and the button that starts it is directly below.
            */
-          <span data-must-fit className="block text-[10px] font-bold leading-[13px] text-mist-300">
-            {scheduleOn ? 'התזמון יחול על הסבב הבא' : 'התזמון כבוי'}
+          <span
+            data-must-fit
+            className={`block text-[10px] font-bold leading-[13px] ${
+              readout.kind === 'ended' && readout.repeats ? 'text-warning-400' : 'text-mist-300'
+            }`}
+          >
+            {readout.kind === 'ended' && readout.repeats
+              ? /* CHZARA IS ON, so another round IS coming — and it says so in
+                   the amber it is set in everywhere else, because a round that
+                   re-publishes the same post to the same groups on its own is
+                   the one state on this card worth noticing from across a
+                   room. */
+                'חזרה יומית פעילה — הסבב הבא ייפתח לבד'
+              : scheduleOn
+                ? 'התזמון יחול על הסבב הבא'
+                : 'התזמון כבוי'}
           </span>
         )}
         {shown && (

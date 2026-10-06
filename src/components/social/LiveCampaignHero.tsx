@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
-import { type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout } from '@/lib/social/schedule-readout';
 import { countdownTo } from '@/lib/social/countdown';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
@@ -144,6 +144,8 @@ export function LiveCampaignHero({
   startedAt = null,
   schedule,
   onScheduleChange,
+  repeat,
+  onRepeatChange,
   scheduleBusy = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status'>;
@@ -197,6 +199,13 @@ export function LiveCampaignHero({
    * but the switch that calls it.
    */
   onScheduleChange?: (next: CampaignSchedule) => void;
+  /**
+   * CHZARA — passed straight through to the panel, which draws it only when
+   * BOTH arrive: the switch's effect is a weekly schedule row, so a caller that
+   * cannot write one must not offer it.
+   */
+  repeat?: CampaignRepeat;
+  onRepeatChange?: (next: CampaignRepeat) => void;
   /** While that write is in flight, so the controls cannot be raced. */
   scheduleBusy?: boolean;
 }) {
@@ -261,7 +270,7 @@ export function LiveCampaignHero({
    * scheduleReadout() is that missing responsibility, and it is one function
    * with one rule — name an instant only when something will happen at it.
    */
-  const readout = scheduleReadout(schedule, state);
+  const readout = scheduleReadout(schedule, state, undefined, repeat);
 
   /*
    * "לחיצה על 'ערוך מועד' צריכה לפתוח את אפשרויות עריכת התזמון שכבר בנינו."
@@ -452,6 +461,8 @@ export function LiveCampaignHero({
           <CampaignSchedulePanel
             schedule={schedule}
             onChange={onScheduleChange}
+            repeat={repeat}
+            onRepeatChange={onRepeatChange}
             campaignName={campaign.name}
             disabled={scheduleBusy}
             /* The title and the switch are already in the readout block above

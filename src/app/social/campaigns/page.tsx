@@ -28,11 +28,12 @@ import {
   queueCampaignComment,
   reopenCampaign,
   saveCampaign,
+  setCampaignRepeat,
   stopCampaign,
 } from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
-import { readSchedule, scheduleColumns, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import type { Campaign, ControlSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { MegaphoneIcon } from '@/components/icons';
@@ -227,6 +228,36 @@ export default function CampaignsPage() {
       }, 600);
     },
     [campaigns, toast],
+  );
+
+  /*
+   * CHZARA — the same switch the dashboard carries, on the screen where this
+   * panel is the whole feature.
+   *
+   * NO DEBOUNCE, unlike the five controls above it. Those are dragged; this is
+   * one press with a consequence outside the campaign — a weekly schedule row
+   * that publishes to every group in the round tomorrow morning — and it is
+   * written and reloaded immediately so the card shows what it just armed.
+   */
+  const changeRepeat = useCallback(
+    async (campaign: Campaign, next: CampaignRepeat) => {
+      setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
+      try {
+        await setCampaignRepeat(campaign, next, readSchedule(campaign));
+        setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? { ...c, ...repeatColumns(next) } : c)));
+        toast(
+          next.enabled
+            ? `"${campaign.name}" יחזור על עצמו בכל יום פרסום`
+            : `החזרה היומית של "${campaign.name}" כובתה — הסבב הנוכחי ימשיך כרגיל`,
+          next.enabled ? 'info' : 'success',
+        );
+      } catch (err) {
+        toast(friendlyMessage(err, 'שמירת החזרה נכשלה.'), 'error');
+      } finally {
+        setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
+      }
+    },
+    [toast],
   );
 
   async function act(key: string, fn: () => Promise<unknown>, done: string) {
@@ -450,6 +481,8 @@ export default function CampaignsPage() {
                  */
                 schedule={readSchedule(c)}
                 onScheduleChange={(next) => changeSchedule(c, next)}
+                repeat={readRepeat(c)}
+                onRepeatChange={(next) => void changeRepeat(c, next)}
                 scheduleBusy={scheduleBusy[c.id] ?? false}
               />            );
           })}

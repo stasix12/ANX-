@@ -2369,7 +2369,21 @@ const scenario: { step: string; line: string }[] = [];
   pin('the day figure', dash, 'publishedToday={data.today}');
   pin('the ceiling is the owner\'s setting', dash, 'dailyTarget={data.limits.maxPerDay}');
   pin('and the screen says so, beside the bar', cards, 'היא לא מכסה רשמית של פייסבוק');
-  pin('the bar clamps its width only', cards, 'Math.min(publishedToday, dailyTarget)');
+  /*
+   * RE-POINTED, not weakened. The clamp is the same rule — the figure prints
+   * the true count while only the FILL is bounded — but it is no longer
+   * bounded by the settings ceiling.
+   *
+   * "אני רוצה שיספור לי כל יום רק את הכמות פוסטים המתוזמנים לאותו היום ואז
+   *  יתאפס." maxPerDay is a number he typed once; measuring against it made a
+   * day with 48 publications in it read as 7% done at 22. The denominator is
+   * now what today actually holds — gone out plus still waiting — and the
+   * ceiling says what it is in words beside the bar (pinned above).
+   * worker/test/today-count.test.ts drives the rest of it.
+   */
+  pin('the bar clamps its width only', cards, 'Math.min(publishedToday, plannedToday)');
+  pin("and it is measured against today's own total", cards, 'total={plannedToday}');
+  pin("which the dashboard builds from what went out plus what is still to go", dash, 'plannedToday: today + waitingToday');
   pin('the run card counts open rows through campaign.ts', cards, 'openRows(progress)');
   /*
    * RE-POINTED, not weakened. This pinned `percentPublished(progress)` — "the

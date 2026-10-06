@@ -519,6 +519,7 @@ export function LiveQueueHero({
   systemState,
   publishedToday,
   dailyTarget,
+  plannedToday,
   pendingCancellable,
   nextAt,
   nextTargetName,
@@ -542,6 +543,23 @@ export function LiveQueueHero({
   systemState: SystemState;
   publishedToday: number;
   dailyTarget: number;
+  /**
+   * HOW MANY PUBLICATIONS TODAY HAS — done plus still waiting, and nothing else.
+   *
+   * "אני רוצה שיספור לי כל יום רק את הכמות פוסטים המתוזמנים לאותו היום ואז
+   *  יתאפס."
+   *
+   * The bar measured against `dailyTarget`, which is the ceiling in settings —
+   * a number he typed once, months ago, that says nothing about today. "22 מתוך
+   * 300" over a day with 48 publications in it reads as 7% done when he is
+   * nearly half way, and it never moves relative to anything he recognises.
+   *
+   * This is the number he actually asked for: what today holds. It resets by
+   * construction rather than by a job — tomorrow's publications are not in it
+   * and today's are gone from it — and it can never be smaller than what has
+   * already gone out, because what has gone out is one of its two halves.
+   */
+  plannedToday: number;
   /** summary.cancellable — exactly what "delete the queue" would delete. */
   pendingCancellable: number;
   nextAt: string | null;
@@ -849,7 +867,14 @@ export function LiveQueueHero({
       </div>
 
       <div className="mt-3.5">
-        <Ratio done={publishedToday} total={dailyTarget} suffix={`${agree(publishedToday, 'פורסם', 'פורסמו')} היום, מתוך התקרה שהגדרתם`} />
+        {plannedToday > 0 ? (
+          <Ratio done={publishedToday} total={plannedToday} suffix={`${agree(publishedToday, 'פורסם', 'פורסמו')} מתוך המתוכננים להיום`} />
+        ) : (
+          /* Nothing today: a ratio out of zero is a bar that is either empty
+             or full depending on how the division is written, and neither is
+             a fact. The sentence is. */
+          <p className="text-[13px] font-bold leading-5 text-mist-300">אין פרסומים מתוכננים להיום</p>
+        )}
         {/*
           The bar CLAMPS ITS WIDTH AND NEVER ITS NUMBER. `today > maxPerDay` is
           reachable in real data — markManualPublished() and publishNow() go
@@ -858,21 +883,24 @@ export function LiveQueueHero({
           only the fill is bounded. ProgressBar's own Math.max(1, total) keeps
           a cap of 0 from dividing.
         */}
-        <div className="mt-2">
-          <ProgressBar
-            segments={[{ value: Math.min(publishedToday, dailyTarget), className: paused ? 'bg-mist-500' : 'bg-success-400' }]}
-            total={dailyTarget}
-            ariaLabel={`${publishedToday} מתוך ${dailyTarget} ${agree(publishedToday, 'פורסם', 'פורסמו')} היום`}
-            height="h-2.5"
-          />
-        </div>
+        {plannedToday > 0 && (
+          <div className="mt-2">
+            <ProgressBar
+              segments={[{ value: Math.min(publishedToday, plannedToday), className: paused ? 'bg-mist-500' : 'bg-success-400' }]}
+              total={plannedToday}
+              ariaLabel={`${publishedToday} מתוך ${plannedToday} ${agree(publishedToday, 'פורסם', 'פורסמו')} מהמתוכננים להיום`}
+              height="h-2.5"
+            />
+          </div>
+        )}
         {ceilingReached && (
           <p className="mt-1.5 text-[11px] font-bold leading-[15px] text-warning-400">
             הגעתם לתקרה היומית שהגדרתם. פרסומים שזמנם יגיע היום ימתינו למחר — אפשר להעלות את התקרה בהגדרות.
           </p>
         )}
-        {/* House rule 2, verbatim, and now directly under the ceiling it is
-            about instead of 11px-tall under a grid of four tiles. */}
+        {/* House rule 2, verbatim. The ceiling is no longer the bar's
+            denominator — it is a limit, not a plan — so it says here what it
+            is, which is all it was ever able to tell him. */}
         <p className="mt-1.5 text-[11px] leading-[15px] text-mist-500">
           המגבלה היומית ({dailyTarget}) היא מספר שאתם קובעים בהגדרות — היא לא מכסה רשמית של פייסבוק.
         </p>

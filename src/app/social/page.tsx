@@ -58,7 +58,7 @@ import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
 import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
-import { agree, counted, startOfZonedDay, startOfZonedWeek } from '@/lib/social/time';
+import { addDaysISO, agree, counted, startOfZonedDay, startOfZonedWeek, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { ActivityEntry, BrowserSettings, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -157,6 +157,8 @@ interface DashboardData {
   /** For the account-wide spacing rule the cards must respect — see scheduleReadout. */
   browser: BrowserSettings;
   lastPublished: string | null;
+  /** Publications today has: gone out + still waiting before the next midnight. */
+  plannedToday: number;
   control: ControlSettings;
   /**
    * Enabled targets, or null when the read was skipped.
@@ -322,7 +324,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, browser, lastPublished] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, browser, lastPublished, waitingToday] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -383,7 +385,22 @@ export default function SocialDashboard() {
            else, and scheduleReadout can answer the question the engine
            actually asks. */
         getBrowserSettings(),
-        lastPublishedAt()
+        lastPublishedAt(),
+        /*
+         * WHAT TODAY STILL HOLDS — "ואז יתאפס".
+         *
+         * Rows waiting whose instant falls before the NEXT local midnight,
+         * which with countPublishedSince above makes "how many publications
+         * today has": the ones that went out plus the ones still to go.
+         *
+         * The boundary is built from the calendar date in the zone and not
+         * from `now + 24h`: the two Israeli clock changes make one day 23
+         * hours and another 25, and "today" is a date either way. It is also
+         * why this resets with no job to reset it — tomorrow the boundary is
+         * tomorrow's, and this morning's publications are no longer counted
+         * by countPublishedSince.
+         */
+        countWaitingWithin(zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').toISOString())
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
       const next: DashboardData = {
@@ -405,6 +422,9 @@ export default function SocialDashboard() {
         limits,
         browser,
         lastPublished,
+        /* Done plus still to come. Never smaller than what has gone out,
+           because what has gone out is one of its two halves. */
+        plannedToday: today + waitingToday,
         control,
         activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
         waitingForYou,
@@ -1333,6 +1353,7 @@ export default function SocialDashboard() {
             systemState={systemState}
             publishedToday={data.today}
             dailyTarget={data.limits.maxPerDay}
+            plannedToday={data.plannedToday}
             pendingCancellable={pending}
             nextAt={data.upcoming[0]?.scheduled_at ?? null}
             nextTargetName={data.upcoming[0]?.target?.name ?? null}

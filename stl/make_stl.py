@@ -1,13 +1,15 @@
 """Two hollow tubes (OD 40, L 250, thick wall) joined by a screw-in threaded nipple (no bolts).
 The free end of each tube is a tapered 38 mm spigot: one goes into the suction head (38 mm inlet),
-the other into the 38 mm steel pipe."""
+the other into the steel pipe (ID ~36-37 mm)."""
 import numpy as np, trimesh
 from trimesh.creation import cylinder
 
 OD, ID, L = 40.0, 26.0, 250.0            # tube: wall 7 mm
 P, R_MAJ, DEPTH = 3.0, 16.0, 1.5          # thread: M32x3 trapezoid-ish
 NIP_L, NIP_BORE = 60.0, 22.0              # nipple: 30 mm into each tube (wide bore for airflow)
-SPIG_L, SPIG_TIP, SPIG_ROOT = 40.0, 37.4, 37.9   # tapered push-in end for 38 mm sockets
+# tapered push-in ends: (length, tip dia, root dia)
+SPIGOT_SUCTION = (40.0, 37.4, 37.9)       # suction head inlet 38 mm
+SPIGOT_STEEL = (50.0, 35.4, 37.0)         # steel pipe ID ~36-37 mm: wedges wherever it meets the bore
 THREAD_DEPTH_IN_TUBE = 32.0
 CLEAR = 0.25                              # radial clearance for printing
 NT, DZ = 160, 0.15
@@ -56,18 +58,23 @@ def threaded_solid(r_maj, length, bore_r=None, chamfer=True):
 nipple = threaded_solid(R_MAJ, NIP_L, bore_r=NIP_BORE/2)
 nipple.export('threaded_connector_M32.stl')
 
-# --- tube with internal thread at one end ---
-outline = [[0, 0], [SPIG_TIP/2 - 0.8, 0], [SPIG_TIP/2, 0.8], [SPIG_ROOT/2, SPIG_L],
-           [OD/2, SPIG_L], [OD/2, L], [0, L]]          # (radius, z): spigot at z=0, thread at z=L
-tube = trimesh.creation.revolve(outline, sections=NT)
-bore = cylinder(radius=ID/2, height=L+2, sections=NT); bore.apply_translation([0, 0, L/2])
-cutter = threaded_solid(R_MAJ+CLEAR, THREAD_DEPTH_IN_TUBE+1, chamfer=False)
-cutter.apply_translation([0, 0, L-THREAD_DEPTH_IN_TUBE])
-entry = trimesh.creation.cone(radius=R_MAJ+CLEAR+1.3, height=R_MAJ+CLEAR+1.3, sections=NT+7)
-entry.apply_transform(trimesh.transformations.rotation_matrix(np.pi, [1, 0, 0]))
-entry.apply_translation([0, 0, L+0.3])   # small chamfer at the thread entrance
-tube = trimesh.boolean.difference([tube, bore, cutter, entry])
-tube.export('tube_D40_L250_threaded_spigot38.stl')
+# --- tube: tapered spigot at z=0, internal thread at z=L ---
+def build_tube(spigot, filename):
+    sl, tip, root = spigot
+    outline = [[0, 0], [tip/2 - 0.8, 0], [tip/2, 0.8], [root/2, sl],
+               [OD/2, sl], [OD/2, L], [0, L]]          # (radius, z)
+    tube = trimesh.creation.revolve(outline, sections=NT)
+    bore = cylinder(radius=ID/2, height=L+2, sections=NT); bore.apply_translation([0, 0, L/2])
+    cutter = threaded_solid(R_MAJ+CLEAR, THREAD_DEPTH_IN_TUBE+1, chamfer=False)
+    cutter.apply_translation([0, 0, L-THREAD_DEPTH_IN_TUBE])
+    entry = trimesh.creation.cone(radius=R_MAJ+CLEAR+1.3, height=R_MAJ+CLEAR+1.3, sections=NT+7)
+    entry.apply_transform(trimesh.transformations.rotation_matrix(np.pi, [1, 0, 0]))
+    entry.apply_translation([0, 0, L+0.3])   # small chamfer at the thread entrance
+    trimesh.boolean.difference([tube, bore, cutter, entry]).export(filename)
 
-for n in ('tube_D40_L250_threaded_spigot38.stl', 'threaded_connector_M32.stl'):
+TUBES = {'tube_A_suction_head_38.stl': SPIGOT_SUCTION, 'tube_B_steel_pipe_36-37.stl': SPIGOT_STEEL}
+for name, spigot in TUBES.items():
+    build_tube(spigot, name)
+
+for n in (*TUBES, 'threaded_connector_M32.stl'):
     m = trimesh.load(n); print(n, 'watertight:', m.is_watertight, 'size:', np.round(m.extents, 1))

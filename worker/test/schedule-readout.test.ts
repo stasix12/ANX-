@@ -503,7 +503,36 @@ const st = (
   );
 }
 
-/* ──────────── 12. and no component may do this arithmetic itself ───────── */
+/* ──────────── 12. CHZARA stays in step with the hours on the card ──────── */
+{
+  /*
+   * THE WEEKLY ROW IS BUILT FROM THE DAYS AND THE START HOUR, at the moment
+   * the switch is flipped — so changing the window afterwards has to re-arm it.
+   *
+   * Without that, the card reads "08:00 – 22:00" while the round it opens by
+   * itself still fires at 13:30: the engine doing one thing and the screen
+   * saying another, which is this file's whole subject wearing a different hat.
+   * It is a wiring claim rather than an arithmetic one, so it is pinned on the
+   * two screens that own the wiring — on comment-stripped source, so the
+   * paragraph above cannot satisfy it.
+   */
+  const code = (f: string) =>
+    readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1 ');
+  for (const f of ['src/app/social/page.tsx', 'src/app/social/campaigns/page.tsx']) {
+    const src = code(f);
+    is(/if \(repeat\.enabled\) await setCampaignRepeat\(campaign, repeat, next\);/.test(src), `${f} re-arms the daily repeat when the hours change`);
+    /* ONLY when it is on. Arming a weekly row from a change of hours would
+       turn an edit into a recurrence he never asked for. */
+    is(/const repeat = readRepeat\(campaign/.test(src), `${f} reads the repeat before deciding to, rather than assuming`);
+  }
+  /* And the one place that builds the weekly plan still builds it from both. */
+  const client = code('src/lib/social/client.ts');
+  is(/for \(const day of schedule\.days\) weekly\[String\(day\)\] = \[schedule\.start\];/.test(client), 'the weekly plan is one occasion per chosen day, at the window’s opening hour');
+}
+
+/* ──────────── 13. and no component may do this arithmetic itself ───────── */
 {
   /*
    * THE INVARIANT THAT KEEPS IT FIXED. Two cards each held a copy of the

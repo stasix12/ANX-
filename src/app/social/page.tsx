@@ -889,7 +889,7 @@ export default function SocialDashboard() {
   }, [data, schedulePatch]);
 
   const changeSchedule = useCallback(
-    (campaign: Pick<Campaign, 'id' | 'name'>, next: CampaignSchedule) => {
+    (campaign: Campaign, next: CampaignSchedule) => {
       const columns = scheduleColumns(next);
       setSchedulePatch({ id: campaign.id, columns });
       if (scheduleTimer.current) clearTimeout(scheduleTimer.current);
@@ -897,6 +897,22 @@ export default function SocialDashboard() {
         setScheduleBusy(true);
         try {
           await saveCampaign({ id: campaign.id, name: campaign.name, ...columns });
+          /*
+           * AND THE REPEAT IS RE-ARMED WITH THE NEW HOURS.
+           *
+           * CHZARA builds its weekly schedule row out of the campaign's days
+           * and its START HOUR, at the moment the switch is flipped. Changing
+           * the window afterwards wrote the campaign's five columns and left
+           * that row alone — so the card read "08:00 – 22:00" while the round
+           * it opens by itself still fired at 13:30, which is this session's
+           * whole subject wearing a different hat.
+           *
+           * Only when the repeat is on: a campaign that does not repeat has no
+           * weekly row to re-arm, and writing one here would turn a change of
+           * hours into a recurrence he never asked for.
+           */
+          const repeat = readRepeat(campaign as Campaign);
+          if (repeat.enabled) await setCampaignRepeat(campaign, repeat, next);
         } catch (err) {
           setSchedulePatch(null);
           toast(friendlyMessage(err, 'שמירת התזמון נכשלה.'), 'error');

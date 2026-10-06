@@ -231,6 +231,11 @@ export default function CampaignsPage() {
         setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
         try {
           await saveCampaign({ id: campaign.id, name: campaign.name, ...columns });
+          /* And the repeat is re-armed with the new hours — see the note on the
+             dashboard's copy of this. A weekly row built from the OLD start
+             hour is the card saying one thing while the engine does another. */
+          const repeat = readRepeat(campaign);
+          if (repeat.enabled) await setCampaignRepeat(campaign, repeat, next);
         } catch (err) {
           /* Put the row back exactly as it was before this burst of taps. */
           setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? (before.find((o) => o.id === c.id) ?? c) : c)));

@@ -35,21 +35,41 @@ const prog = (published: number) =>
 const done = (iso: string, channel = 'facebook_group') =>
   [{ id: 'r', status: 'published', scheduled_at: iso, published_at: iso, target: { id: 't', name: 'g', channel, image_url: null } }] as never;
 
-const st = (published: number, iso: string, channel?: string): CampaignState =>
-  ({
-    progress: prog(published),
+/**
+ * `today` is what the campaign card counts; `ever` is what this strip counts.
+ *
+ * They were the same field until the daily repeat arrived, and then they were
+ * not: a repeating round's progress is scoped to TODAY, so between midnight
+ * and the day's first publication it reads zero while the round has hundreds of
+ * publications behind it. Campaign 3 below is exactly that state.
+ */
+const st = (
+  today: number,
+  iso: string,
+  channel?: string,
+  opts: { todayOnly?: boolean; ever?: number } = {},
+): CampaignState => {
+  const ever = opts.ever ?? today;
+  return {
+    progress: prog(today),
     state: 'completed',
     truncated: false,
-  todayOnly: false,
+    todayOnly: opts.todayOnly ?? false,
     startedAt: iso,
+    everPublished: ever,
+    lastPublishedAt: ever > 0 ? iso : null,
+    lastPublishedChannel: ever > 0 ? (channel ?? 'facebook_group') : null,
     estimatedCompletionAt: null,
     nextAt: null,
     nextTargetName: null,
     nextChannel: null,
     upcoming: [],
-    done: done(iso, channel),
+    /* Today's finished rows. Empty for the repeating round below, which is the
+       whole point: the strip must not be reading this. */
+    done: today > 0 ? done(iso, channel) : ([] as never),
     now: [],
-  }) as CampaignState;
+  } as CampaignState;
+};
 
 const mk = (id: string, name: string): Campaign =>
   ({ id, name, service: '', city: '', language: 'he', status: 'active', notes: '' }) as Campaign;
@@ -69,7 +89,20 @@ const campaigns: Campaign[] = [
 const states: Record<string, CampaignState> = {
   '1': st(28, '2026-09-25T11:20:00Z'),
   '2': st(1, '2026-09-24T08:15:00Z'),
-  '3': st(122, '2026-09-23T13:40:00Z'),
+  /*
+   * THE REGRESSION, kept in the fixture rather than described in a comment.
+   *
+   * "לאן נעלם המשבצת של התגובות מהירות?" — a repeating round at 11:55, whose
+   * next round is at 12:00 and whose 122 publications all happened on earlier
+   * days. TODAY it has published nothing. Read that number and this card
+   * vanishes from the dashboard every night and returns at lunchtime, which is
+   * how it went a week without being reported as a bug.
+   *
+   * It is campaign 3 and not a seventh entry on purpose: the strip keeps six,
+   * so "the strip drew 6 cards" below is now also the assertion that this one
+   * is still in it.
+   */
+  '3': st(0, '2026-09-23T13:40:00Z', 'facebook_group', { todayOnly: true, ever: 122 }),
   '4': st(15, '2026-09-22T07:30:00Z'),
   '5': st(9, '2026-09-21T06:12:00Z'),
   '6': st(41, '2026-09-20T06:12:00Z'),

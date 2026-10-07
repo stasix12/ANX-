@@ -113,12 +113,22 @@ export function QuickCommentsCard({
       .filter((c) => c.status !== 'archived')
       .map((c) => {
         const s = states[c.id];
-        const lastAt = s?.done.reduce<string | null>((best, r) => {
-          const at = r.published_at;
-          if (!at) return best;
-          return !best || at > best ? at : best;
-        }, null) ?? null;
-        return { campaign: c, published: s?.progress.published ?? 0, lastAt, channel: s?.done[0]?.target?.channel ?? null };
+        /*
+         * everPublished / lastPublishedAt, NOT progress.published and `done`.
+         *
+         * Those two are scoped to today for a repeating round — which is what
+         * the counter on the campaign card wants and the exact opposite of what
+         * this strip wants. Reading them here meant that from midnight until
+         * the day's first publication every repeating round counted as having
+         * published nothing, `recent` came back empty, and the whole card
+         * returned null: "לאן נעלם המשבצת של התגובות מהירות?"
+         */
+        return {
+          campaign: c,
+          published: s?.everPublished ?? 0,
+          lastAt: s?.lastPublishedAt ?? null,
+          channel: s?.lastPublishedChannel ?? null,
+        };
       })
       .filter((x) => x.published > 0 && x.lastAt);
     withLast.sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? ''));

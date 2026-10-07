@@ -77,6 +77,28 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
   todayOnly: boolean;
   /** First real publication. Null until something has actually gone out. */
   startedAt: string | null;
+  /**
+   * THE ROUND'S WHOLE LIFE, not today's slice — and the one pair of numbers
+   * here that `todayOnly` does not touch.
+   *
+   * "לאן נעלם המשבצת של התגובות מהירות?" The quick-comments strip shows the
+   * runs that have something to comment under, and it decided that from
+   * `progress.published`. The moment the daily repeat was switched on, that
+   * number became TODAY'S — so between midnight and the day's first
+   * publication it is zero for every repeating round, and the strip vanished
+   * from the dashboard. It came back by itself at noon, which is exactly how a
+   * bug like this stays unreported for a week.
+   *
+   * Two readings of "has this round published anything" were always needed and
+   * only one existed. The counter on the card is a question about today; the
+   * comment strip is a question about ever. They are separate fields now so
+   * neither can be answered with the other's number.
+   */
+  everPublished: number;
+  /** The most recent publication of this round, whatever day it was. */
+  lastPublishedAt: string | null;
+  /** And its channel, for the strip's badge. */
+  lastPublishedChannel: string | null;
   /** Last scheduled_at still ahead of us — the plan's own end, not a guess. */
   estimatedCompletionAt: string | null;
   nextAt: string | null;
@@ -105,7 +127,16 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
 export function campaignState<T extends CampaignQueueRow>(
   rows: T[],
   campaign?: Pick<Campaign, 'status'> | null,
-  opts: { truncated?: boolean; todayOnly?: boolean } = {},
+  opts: {
+    truncated?: boolean;
+    todayOnly?: boolean;
+    /**
+     * Every row of the round, when `rows` is only a slice of it. Defaults to
+     * `rows`, so a caller that scopes nothing gets the same answer either way
+     * and nothing has to remember to pass it.
+     */
+    lifetime?: T[];
+  } = {},
 ): CampaignState<T> {
   const progress: CampaignProgress = { ...EMPTY_PROGRESS, total: rows.length };
   for (const r of rows) {
@@ -134,6 +165,12 @@ export function campaignState<T extends CampaignQueueRow>(
   const unfinished = rows
     .filter((r) => !isTerminal(r.status))
     .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+  /* Computed off the UNSCOPED rows — see everPublished on the type. */
+  const lifetime = opts.lifetime ?? rows;
+  const everPublishedRows = lifetime
+    .filter((r) => r.status === 'published' && r.published_at)
+    .sort((a, b) => (b.published_at as string).localeCompare(a.published_at as string));
+
   const done = rows
     .filter((r) => TERMINAL_STATUSES.includes(r.status))
     .sort((a, b) => (b.published_at ?? b.scheduled_at).localeCompare(a.published_at ?? a.scheduled_at));
@@ -147,6 +184,9 @@ export function campaignState<T extends CampaignQueueRow>(
     truncated: opts.truncated ?? false,
     todayOnly: opts.todayOnly ?? false,
     startedAt,
+    everPublished: everPublishedRows.length,
+    lastPublishedAt: everPublishedRows[0]?.published_at ?? null,
+    lastPublishedChannel: everPublishedRows[0]?.target?.channel ?? null,
     // The plan already assigns every remaining row an instant; the last one
     // is when the campaign finishes, assuming nothing is deferred by the
     // anti-spam rules. Anything else would be a guess.

@@ -141,6 +141,19 @@ async function main(): Promise<void> {
        * each card writes a comment onto published posts.
        */
       assert.equal(seen.cards, 6, `${width}px: the strip drew ${seen.cards} cards — a run with nothing published must not appear`);
+      /*
+       * AND THE REPEATING ROUND IS ONE OF THEM. "לאן נעלם המשבצת של התגובות
+       * מהירות?" — campaign 3 in the fixture has published nothing TODAY and a
+       * hundred and twenty-two times before today, which is every repeating
+       * round between midnight and its first publication of the day. A card
+       * that asks `progress.published` instead of `everPublished` drops it, the
+       * strip falls to five, and on the owner's dashboard — where every round
+       * was repeating — the whole card returned null.
+       */
+      assert.ok(
+        seen.names.some((n) => n.includes('ספות') && !n.includes('פינתיות')),
+        `${width}px: the repeating round that has not published YET TODAY is missing — this card must read the round's whole life, not today's slice. Saw: ${JSON.stringify(seen.names)}`,
+      );
       assert.deepEqual(seen.clipped, [], `${width}px: text is cut off — ${JSON.stringify(seen.clipped)}`);
       assert.deepEqual(seen.smallTargets, [], `${width}px: tap target under 40px — ${JSON.stringify(seen.smallTargets)}`);
       assert.equal(seen.firstAtRight, true, `${width}px: the newest card must start at the RIGHT edge — the strip is not laying out RTL`);

@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { LiveQueueHero } from '../../src/components/social/LiveCampaignHero';
 import { addDaysISO, zonedDateISO, zonedToUtc } from '../../src/lib/social/time';
-import { campaignHeadline, runProgress } from '../../src/lib/social/campaign';
+import { campaignHeadline, campaignState, runProgress } from '../../src/lib/social/campaign';
 
 /**
  * "כל יום רק את הכמות פוסטים המתוזמנים לאותו היום ואז יתאפס."
@@ -191,7 +191,64 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
      and a row that belongs to today and has not gone out yet is part of that
      answer — scoping on published_at would drop every one of them. */
   is(!/published_at\)\) === todayISO/.test(client), 'scoped on when a row is DUE, not on when it published');
-  is(/campaignState\(list, campaign, \{ truncated, todayOnly \}\)/.test(client), 'and the state carries the scope with the numbers');
+  /*
+   * AND THE UNSCOPED ROWS TRAVEL WITH THEM. `lifetime: all` is not decoration:
+   * without it everPublished is today's count again, and the quick-comments
+   * strip disappears from the dashboard every midnight — see section 6b.
+   */
+  is(
+    /campaignState\(list, campaign, \{ truncated, todayOnly, lifetime: all \}\)/.test(client),
+    'the state carries the scope WITH the numbers, and the whole round’s rows alongside them',
+  );
+}
+
+/* ───────── 6b. "today" and "ever" are two questions, answered apart ────── */
+/*
+ * "לאן נעלם המשבצת של התגובות מהירות?"
+ *
+ * The daily-repeat scope above is right for the counter on the card and wrong
+ * for everything that asks "has this round published anything at all". The
+ * quick-comments strip asked the scoped number, so from midnight until the
+ * day's first publication every repeating round read as never having
+ * published, and the card rendered nothing. It reappeared by itself at
+ * lunchtime, which is why it went a week unreported.
+ *
+ * Executed against the real campaignState, on the shape that produced it: a
+ * round at 11:55 whose rows for today are all still scheduled for 12:00, and
+ * whose two hundred publications all happened yesterday.
+ */
+{
+  const row = (id: string, day: string, status: string, publishedAt: string | null) =>
+    ({
+      id,
+      status,
+      scheduled_at: `${day}T12:00:00Z`,
+      published_at: publishedAt,
+      target: { id: `t${id}`, name: 'קבוצה', channel: 'facebook_group', image_url: null },
+    }) as never;
+
+  const yesterday = [row('a', '2026-10-06', 'published', '2026-10-06T12:04:00Z'), row('b', '2026-10-06', 'published', '2026-10-06T12:51:00Z')];
+  const today = [row('c', '2026-10-07', 'scheduled', null), row('d', '2026-10-07', 'scheduled', null)];
+  const all = [...yesterday, ...today];
+
+  const scoped = campaignState(today, { status: 'active' }, { todayOnly: true, lifetime: all });
+  eq(scoped.progress.published, 0, "TODAY nothing has gone out yet — which is true, and is what the campaign card must say");
+  eq(scoped.done.length, 0, 'and today has no finished rows');
+  eq(scoped.everPublished, 2, 'but the ROUND has published twice — the question the comment strip asks, and the one that used to be answered with the zero above');
+  eq(scoped.lastPublishedAt, '2026-10-06T12:51:00Z', 'with the latest of them, newest first, whatever day it fell on');
+  eq(scoped.lastPublishedChannel, 'facebook_group', 'and its channel, for the badge on the strip');
+
+  /* A round that has genuinely never published still reads zero — the strip
+     offers to add a comment, and a comment needs posts to land on. */
+  const virgin = campaignState(today, { status: 'active' }, { todayOnly: true, lifetime: today });
+  eq(virgin.everPublished, 0, 'a round that has never published is still absent from the strip');
+  eq(virgin.lastPublishedAt, null, 'with no timestamp to sort it by');
+
+  /* And a campaign that is not repeating needs no second list: the default is
+     the rows themselves, so nothing has to remember to pass it. */
+  const plain = campaignState(all, { status: 'active' });
+  eq(plain.everPublished, 2, 'an unscoped campaign answers the same without being handed anything extra');
+  eq(plain.progress.published, 2, 'and its two numbers agree, because there is only one scope');
 }
 
 /* ───────── 7. and the page really asks for that boundary ──────────────── */

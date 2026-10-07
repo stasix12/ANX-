@@ -1796,7 +1796,11 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
     const campaign = byId.get(id) ?? null;
     const todayOnly = readRepeat(campaign).enabled;
     const list = todayOnly ? all.filter((r) => zonedDateISO(new Date(r.scheduled_at)) === todayISO) : all;
-    const state = campaignState(list, campaign, { truncated, todayOnly });
+    /* `lifetime: all` — the slice above is today's, and "has this round ever
+       published" must not be answered from it. See CampaignState.everPublished:
+       scoping that number to today is what made the quick-comments strip
+       disappear from the dashboard every midnight. */
+    const state = campaignState(list, campaign, { truncated, todayOnly, lifetime: all });
     out[id] = state;
     if (!truncated) {
       await reportViolations(checkCampaignInvariants(state, { campaignId: id, campaignName: campaign?.name ?? null }), `campaign:${id}`);

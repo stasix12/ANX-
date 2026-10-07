@@ -1899,6 +1899,139 @@ body:has(.social-theme) .site-backdrop {
 }
 
 /*
+ * ────────────────────────────────────────────────────────────────────────────
+ * THE DAY IS OVER AND THE ROBOT IS CELEBRATING.
+ *
+ * "מתי שזה מסיים את כל המטלות פרסום … תעשה אנימציה שלו רוקד וקונפטי באוויר."
+ *
+ * This is the one state in the scene that is pure celebration, so it is also
+ * the one that has to be hardest to reach by accident: it is switched on only
+ * when nothing is left waiting for today AND nothing is in a worker's hands,
+ * which LiveCampaignHero works out from the same two numbers printed under the
+ * bar. A dancing robot over a queue that still has rows in it would be the
+ * screen telling him the day is done while the worker is mid-publication.
+ *
+ * THE DANCE IS A DIFFERENT MOVEMENT, not a faster float. The float is half a
+ * degree over five seconds — a thing hanging in the air. This is a side-to-side
+ * bounce over 1.3 seconds with two hops in it, because a celebration that is
+ * just the idle sped up reads as the robot being nervous.
+ *
+ * MOST OF IT IS TRAVEL AND LITTLE OF IT IS ROTATION, and that is forced by the
+ * asset rather than chosen. public/social/robot.webp is a CROP whose haze is
+ * ramped to white inside a rectangle; tilt that rectangle far enough and its
+ * corners come off the white card as a faint leaning box behind the robot. Six
+ * degrees showed it plainly. Two and a half does not, and the sway and the hop
+ * carry the dance instead. Swap in the original transparent PNG and the angle
+ * can go back up — the limit is the picture, not the taste.
+ */
+@keyframes anx-dance {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-2.5deg);
+  }
+  25% {
+    transform: translate(-5px, -11px) rotate(2.5deg);
+  }
+  50% {
+    transform: translate(0, -2px) rotate(-1.8deg);
+  }
+  75% {
+    transform: translate(5px, -9px) rotate(2.5deg);
+  }
+}
+.anx-dance {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: anx-dance 1.3s ease-in-out infinite;
+}
+
+/* The cheer, on the INNER group for the same reason the throw is: two
+   animations cannot share `transform` on one element, and a raster robot has
+   no limb of its own to raise. A 4% swell on the dance's own clock is all it
+   is — enough to read as a body pushing up into the jump rather than a sprite
+   being rotated. */
+@keyframes anx-cheer {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.045);
+  }
+  60% {
+    transform: scale(0.985);
+  }
+}
+.anx-cheer {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: anx-cheer 1.3s ease-in-out infinite;
+}
+
+/* And the shadow keeps doing the opposite — on the dance's clock now, with a
+   deeper swing, because the robot is leaving the ground by nine units rather
+   than five. Without this the dance reads as a picture being rotated. */
+@keyframes anx-shadow-dance {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.14;
+  }
+  25% {
+    transform: scale(0.76);
+    opacity: 0.05;
+  }
+  50% {
+    transform: scale(0.97);
+    opacity: 0.12;
+  }
+  75% {
+    transform: scale(0.8);
+    opacity: 0.06;
+  }
+}
+.anx-shadow-dance {
+  transform-box: fill-box;
+  animation: anx-shadow-dance 1.3s ease-in-out infinite;
+}
+
+/*
+ * THE CONFETTI.
+ *
+ * Every piece runs the same keyframe and differs only in four custom
+ * properties set on the element — sideways drift, spin, delay and duration —
+ * so fourteen pieces cost one keyframe and no JavaScript. The values are
+ * written out in the component as a fixed table rather than drawn from
+ * Math.random(): this component renders on the server first, and a random
+ * number picked during render is a different number in the browser, which
+ * React reports as a hydration mismatch.
+ *
+ * It falls from above the viewBox and ends below it, fading at both ends, so
+ * there is no frame where a piece pops into or out of existence mid-air.
+ */
+@keyframes anx-confetti {
+  0% {
+    transform: translate(0, -30px) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--anx-cx, 0px), 215px) rotate(var(--anx-cr, 360deg));
+    opacity: 0;
+  }
+}
+.anx-confetti {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: anx-confetti var(--anx-cd, 3.4s) linear var(--anx-cl, 0s) infinite;
+}
+
+/*
  * THE REAL COUNTER, when it really moves.
  *
  * The old figure leaves upwards and the new one arrives from below, 300ms.
@@ -2016,6 +2149,10 @@ body:has(.social-theme) .site-backdrop {
   .anx-halo,
   .anx-land,
   .anx-tick,
+  .anx-dance,
+  .anx-cheer,
+  .anx-shadow-dance,
+  .anx-confetti,
   .anx-bar-live,
   .anx-num-out,
   .anx-num-in {

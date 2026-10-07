@@ -142,7 +142,7 @@ async function main(): Promise<void> {
 
     /* ── 4. THE FOUR STATES ARE TOLD APART ──────────────────────────────── */
     {
-      const seenIn = async (mode: 'sending' | 'waiting' | 'paused' | 'idle') => {
+      const seenIn = async (mode: 'sending' | 'waiting' | 'paused' | 'idle' | 'done') => {
         await page.evaluate((m) => window.__mode(m), mode);
         await page.waitForTimeout(150);
         return page.evaluate(() => ({
@@ -152,6 +152,9 @@ async function main(): Promise<void> {
           bot: document.querySelectorAll('.anx-bot').length,
           botMin: document.querySelectorAll('.anx-bot-min').length,
           active: document.querySelectorAll('[data-active]').length,
+          dancing: document.querySelectorAll('.anx-dance').length,
+          cheering: document.querySelectorAll('.anx-cheer').length,
+          confetti: document.querySelectorAll('[data-confetti]').length,
         }));
       };
 
@@ -180,6 +183,32 @@ async function main(): Promise<void> {
 
       const idle = await seenIn('idle');
       eq(idle.bot + idle.botMin, 0, 'IDLE: with nothing scheduled at all, even that stops');
+
+      /*
+       * DONE — the one state that congratulates, and therefore the one with
+       * the most to get wrong. It must not look like work: no card in the
+       * air, no trail flowing, no group named as a destination and no group
+       * pulsing, because nothing is on its way to one. What it adds is the
+       * dance and the confetti, and nothing else.
+       */
+      const done = await seenIn('done');
+      eq(done.fly, 0, 'DONE: nothing travels — the day has nothing left to send');
+      eq(done.trail, 0, 'nothing flows towards a group');
+      eq(done.breathing, 0, 'and no group pulses');
+      eq(done.active, 0, 'and none is named as the next destination, because there is no next one');
+      eq(done.bot, 0, 'the working float stops');
+      eq(done.botMin, 0, 'and so does the paused one — finished is neither of those');
+      eq(done.dancing, 1, 'the robot dances instead');
+      eq(done.cheering, 1, 'with the cheer nested inside the dance, for the same reason the throw is nested inside the float');
+      is(done.confetti >= 10, `and there is confetti in the air — ${done.confetti} pieces`);
+
+      /* And every other state has NONE of it. A celebration that leaks into
+         a working afternoon is worse than no celebration at all. */
+      for (const m of ['sending', 'waiting', 'paused', 'idle'] as const) {
+        const other = await seenIn(m);
+        eq(other.confetti, 0, `${m.toUpperCase()}: not one piece of confetti — the day is not over`);
+        eq(other.dancing, 0, `${m.toUpperCase()}: and the robot is not dancing`);
+      }
     }
 
     /* ── 4b. THE CARD IS BIGGER, AND VISIBLE THE WHOLE WAY ──────────────── */
@@ -406,6 +435,128 @@ async function main(): Promise<void> {
       await page.waitForTimeout(120);
     }
 
+    /* ── 5f. "הרובוט סיים לפרסם" — AND ONLY WHEN HE HAS ─────────────────── */
+    /*
+     * "מתי שזה מסיים את כל המטלות פרסום, תרשום הרובוט סיים לפרסם, ותעשה
+     *  אנימציה שלו רוקד וקונפטי באוויר."
+     *
+     * Driven through the REAL panel, because the decision lives there: the
+     * scene is handed a mode, and whether that mode is `done` is worked out in
+     * LiveCampaignHero from publishedToday, plannedToday and inFlight. A test
+     * that rendered <PublishingScene mode="done"> would prove the dance works
+     * and nothing about when it is allowed to run — which is the only part
+     * that can mislead him.
+     *
+     * The three ways it must stay silent are each a real afternoon:
+     *   mid-round          — 170 of 248, the common case
+     *   last row in hand   — the count has caught up but a worker is holding
+     *                        the final post; the day is not over yet
+     *   paused             — he switched it off; nothing finished
+     */
+    {
+      const panel = () =>
+        page.evaluate(() => {
+          const p = document.querySelector('[data-panel]') as HTMLElement;
+          const svg = p.querySelector('svg');
+          return {
+            title: (p.querySelector('h2')?.textContent ?? '').trim(),
+            line: (p.querySelector('[data-done]')?.textContent ?? '').trim(),
+            dancing: p.querySelectorAll('.anx-dance').length,
+            cheering: p.querySelectorAll('.anx-cheer').length,
+            confetti: p.querySelectorAll('[data-confetti]').length,
+            fly: p.querySelectorAll('.anx-fly').length,
+            active: p.querySelectorAll('[data-active]').length,
+            label: svg?.getAttribute('aria-label') ?? '',
+          };
+        });
+
+      /* MID-ROUND. */
+      await page.evaluate(() => { window.__mode('sending'); window.__plan(170, 248); });
+      await page.waitForTimeout(150);
+      const mid = await panel();
+      eq(mid.title, 'רובוט בפעולה', 'MID-ROUND: the working title');
+      eq(mid.confetti, 0, 'and no confetti over 78 posts that have not gone out yet');
+      eq(mid.dancing, 0, 'and no dance');
+      eq(mid.line, '', 'and nothing claiming the queue is empty');
+
+      /* THE LAST ROW IS IN A WORKER'S HANDS. The figures have caught up —
+         248 of 248 — but the publication is still happening. This is the one
+         the guard exists for, and the one a count-only check gets wrong. */
+      await page.evaluate(() => { window.__mode('sending'); window.__plan(248, 248); });
+      await page.waitForTimeout(150);
+      const inHand = await panel();
+      eq(inHand.confetti, 0, 'LAST ROW IN FLIGHT: still no confetti — a row a worker is holding is a row that has not landed');
+      eq(inHand.dancing, 0, 'and still no dance');
+      is(inHand.title !== 'הרובוט סיים לפרסם', `and the title does not say he finished (it says "${inHand.title}")`);
+
+      /* NOW IT IS OVER: nothing waiting and nobody holding anything. */
+      await page.evaluate(() => { window.__mode('waiting'); window.__plan(248, 248); });
+      await page.waitForTimeout(200);
+      const over = await panel();
+      eq(over.title, 'הרובוט סיים לפרסם', 'FINISHED: the exact sentence he asked for');
+      eq(over.line, 'אין עוד פרסומים שממתינים לצאת היום', 'and said in words under the scene — precisely, because posts that FAILED are not in this sum');
+      eq(over.dancing, 1, 'the robot dances');
+      eq(over.cheering, 1, 'and cheers inside the dance');
+      is(over.confetti >= 10, `with confetti in the air — ${over.confetti} pieces`);
+      eq(over.fly, 0, 'and nothing is being thrown at a group any more');
+      eq(over.active, 0, 'and no group is named as the next destination');
+      is(over.label.includes('הרובוט סיים לפרסם'), 'and a screen reader is told the same thing, not "מפרסם לקבוצות"');
+
+      /* THE ANIMATIONS REALLY RUN — the same question section 5b asks of the
+         working state, for the same reason: a stylesheet with no keyframes in
+         it passes every "is it off under reduced motion" check perfectly. */
+      const spin = await page.evaluate(() => {
+        const p = document.querySelector('[data-panel]') as HTMLElement;
+        const names = ['.anx-dance', '.anx-cheer', '.anx-shadow-dance', '[data-confetti]'].map((sel) => {
+          const el = p.querySelector(sel);
+          return el ? getComputedStyle(el).animationName : 'absent';
+        });
+        const bits = Array.from(p.querySelectorAll('[data-confetti]')).map((el) => ({
+          delay: getComputedStyle(el).animationDelay,
+          dur: getComputedStyle(el).animationDuration,
+        }));
+        return {
+          dance: names[0],
+          cheer: names[1],
+          shadow: names[2],
+          confetti: names[3],
+          delays: new Set(bits.map((b) => b.delay)).size,
+          durs: new Set(bits.map((b) => b.dur)).size,
+        };
+      });
+      eq(spin.dance, 'anx-dance', 'the dance is a real animation and not a class nothing styles');
+      eq(spin.cheer, 'anx-cheer', 'and so is the cheer');
+      eq(spin.shadow, 'anx-shadow-dance', 'with the shadow swinging on the dance’s clock — without it the dance reads as a picture being rotated');
+      eq(spin.confetti, 'anx-confetti', 'and the confetti really falls');
+      is(spin.delays > 4, `the pieces start at different moments (${spin.delays} distinct delays) — fourteen in lockstep is a falling comb, not confetti`);
+      is(spin.durs > 3, `and fall at different speeds (${spin.durs} distinct durations)`);
+
+      /* PAUSED, with the day's figures still complete: he switched it off, and
+         switched off is not finished. */
+      await page.evaluate(() => { window.__mode('paused'); window.__plan(248, 248); });
+      await page.waitForTimeout(150);
+      const off = await panel();
+      eq(off.confetti, 0, 'PAUSED: no confetti — a round the owner stopped did not finish');
+      eq(off.dancing, 0, 'and no dance');
+      eq(off.line, '', 'and no line saying the queue is empty');
+
+      /*
+       * A DAY THAT PLANNED NOTHING FINISHED NOTHING. 0 of 0 satisfies
+       * `published >= planned` perfectly, which is why this case is written
+       * down: without the `plannedToday > 0` guard the panel would
+       * congratulate him every morning before the first post was due, and
+       * every day the PC stayed off.
+       */
+      await page.evaluate(() => { window.__mode('waiting'); window.__plan(0, 0); });
+      await page.waitForTimeout(150);
+      const empty = await panel();
+      is(empty.title !== 'הרובוט סיים לפרסם', `EMPTY DAY: nothing was planned, so nothing finished (title: "${empty.title}")`);
+      eq(empty.line, '', 'and no line claiming the day is clear');
+
+      await page.evaluate(() => { window.__mode('sending'); window.__plan(0, 0); });
+      await page.waitForTimeout(120);
+    }
+
     /* ── 6. AND IT STOPS FOR SOMEBODY WHO ASKED IT TO ───────────────────── */
     {
       const quiet = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
@@ -423,6 +574,29 @@ async function main(): Promise<void> {
         is(n === 'none' || n === 'absent', `reduced motion: nothing animates (${['bot', 'fly', 'trail', 'shadow', 'bar'][i]} = ${n})`);
       }
       is((await ticks(quiet)) > 0, 'but the scene is still drawn, and every tick that was earned is still there — the state was never in the motion');
+
+      /*
+       * AND THE CELEBRATION STOPS TOO. A dance and fourteen falling pieces
+       * are the loudest thing in the panel, so they are the thing a reader who
+       * asked their phone for less motion most needs switched off — and the
+       * confetti is still DRAWN, scattered where it was placed, so the day
+       * still reads as finished without anything moving.
+       */
+      await quiet.evaluate(() => window.__mode('done'));
+      await quiet.waitForTimeout(150);
+      const party = await quiet.evaluate(() =>
+        ['.anx-dance', '.anx-cheer', '.anx-shadow-dance', '[data-confetti]'].map((sel) => {
+          const el = document.querySelector(sel);
+          return el ? getComputedStyle(el).animationName : 'absent';
+        }),
+      );
+      for (const [i, n] of party.entries()) {
+        eq(n, 'none', `reduced motion: the celebration is still (${['dance', 'cheer', 'shadow', 'confetti'][i]} = ${n})`);
+      }
+      is(
+        (await quiet.locator('[data-confetti]').count()) >= 10,
+        'and the confetti is still on the page — switched off, not hidden: the day is still finished',
+      );
       await quiet.close();
     }
 
@@ -449,6 +623,22 @@ async function main(): Promise<void> {
       is(/setTimeout\(\(\) => setShown\(\(s\) => s \+ 1\), SUCCESS_HOLD_MS\)/.test(code), 'the one timer here advances the PRESENTATION, which can only ever catch up to the real count');
       is(/seen\.current/.test(code) && /published - seen\.current/.test(code), 'and it advances on a RISE in that count, not on a render');
       is(!/\.(gif|mp4|webm|png|jpg)/i.test(code), 'every mark is drawn, not fetched — the scene costs no egress on an account that has already been cut off for it');
+      /*
+       * THE CELEBRATION CANNOT ROLL ITS OWN DICE. This component renders on
+       * the server first; a number drawn during that render is a different
+       * number in the browser, and React answers a hydration mismatch by
+       * throwing the tree away — which on this panel means the robot
+       * disappearing on first paint.
+       */
+      is(!/Math\.random/.test(code), 'the confetti scatter is a written table, not a roll — a random number picked during render does not survive hydration');
+      is(/CONFETTI\.map/.test(code) && /celebrating &&/.test(code), 'and it is drawn only while the day is actually finished');
+      /*
+       * AND `done` IS NOT DECIDED HERE. The scene is handed a mode; the
+       * question of whether the day is over is answered in the panel, from
+       * the same two numbers it prints under the bar. If that ever moved into
+       * this file it would be answered twice, and the two answers would drift.
+       */
+      is(!/plannedToday|inFlight/.test(code), 'the scene never works out for itself whether the day is over — it is told');
     }
 
     eq(crashes, [], 'the scene threw');

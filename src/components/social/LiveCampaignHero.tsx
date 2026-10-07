@@ -736,23 +736,60 @@ export function LiveQueueHero({
    */
   const ceilingReached = dailyTarget > 0 && publishedToday >= dailyTarget;
   /*
+   * ──────────────────────────────────────────────────────────────────────
+   * "מתי שזה מסיים את כל המטלות פרסום, תרשום הרובוט סיים לפרסם."
+   *
+   * THE ONE CLAIM THIS PANEL MAKES THAT IS ABOUT THE WHOLE DAY, so it is
+   * built out of the two numbers printed six lines below it and nothing else:
+   *
+   *   plannedToday = what has gone out + what is still waiting for today
+   *                  (page.tsx: `today + waitingToday`)
+   *   publishedToday = what has gone out
+   *
+   * so `publishedToday >= plannedToday` is exactly `waitingToday === 0` —
+   * today has no row left waiting. That is a database fact, re-read every
+   * thirty seconds, not a timer and not a guess.
+   *
+   * THE THREE GUARDS, each of which has a scenario behind it:
+   *
+   *   `inFlight === 0` — a row a worker is HOLDING is not waiting, so it is
+   *     not in plannedToday. Without this the panel would dance while the
+   *     worker was mid-publication on the last post of the day.
+   *   `plannedToday > 0` — a day that planned nothing did not finish
+   *     anything. "הרובוט סיים לפרסם" over a day with no posts in it is a
+   *     congratulation for doing nothing.
+   *   `systemState === 'active'` — paused, empty and needs-attention each
+   *     have something truer to say, and they already say it.
+   *
+   * WHAT IT DOES NOT CLAIM, stated here so nobody reads more into it later:
+   * it does not say every post SUCCEEDED. Rows that failed are neither
+   * published nor waiting, so they leave this sum entirely — the red
+   * "נכשלו היום" tile above is where they are counted, and it keeps counting
+   * them while this says the queue is empty. Both are true at once.
+   */
+  const dayDone = systemState === 'active' && plannedToday > 0 && publishedToday >= plannedToday && inFlight === 0;
+  /*
    * WHAT THE SCENE IS ALLOWED TO SHOW, from the same facts the sentence above
    * the panel is made of — never from a timer of its own.
    *
    * `sending` is `inFlight`, which is a row a worker is holding right now.
    * `waiting` is the system running between publications, which is most of the
-   * day: the robot stays alive and nothing travels, because nothing is. Paused
-   * and idle stop it entirely. A scene that animated on a clock would be
-   * telling him his posts were going out on an afternoon when the PC was off.
+   * day: the robot stays alive and nothing travels, because nothing is. `done`
+   * is `dayDone` above and is asked FIRST, so an empty evening queue reads as
+   * finished rather than as an endless `waiting`. Paused and idle stop it
+   * entirely. A scene that animated on a clock would be telling him his posts
+   * were going out on an afternoon when the PC was off.
    */
   const sceneMode: SceneMode =
     systemState === 'paused'
       ? 'paused'
       : systemState !== 'active'
         ? 'idle'
-        : inFlight > 0
-          ? 'sending'
-          : 'waiting';
+        : dayDone
+          ? 'done'
+          : inFlight > 0
+            ? 'sending'
+            : 'waiting';
   const due = Boolean(nextAt) && !paused && new Date(nextAt as string).getTime() <= now;
   /*
    * AT ZERO, THE DATABASE DECIDES WHAT COMES NEXT.
@@ -819,10 +856,19 @@ export function LiveQueueHero({
       */}
       <div className="flex items-center">
         <h2 dir="auto" className="min-w-0 text-[17px] font-extrabold leading-[22px] text-mist-100">
+          {/*
+            The finished day is checked BEFORE `live`, and that order is the
+            whole of it: `live` is true whenever the worker's heartbeat is
+            fresh, which it is for hours after the last post of the day goes
+            out. Asked in the other order the title would read "רובוט בפעולה"
+            over an empty queue every evening.
+          */}
           {systemState === 'active'
-            ? live
-              ? 'רובוט בפעולה'
-              : 'התור מלא — ממתין לתורו של הפרסום הבא'
+            ? dayDone
+              ? 'הרובוט סיים לפרסם'
+              : live
+                ? 'רובוט בפעולה'
+                : 'התור מלא — ממתין לתורו של הפרסום הבא'
             : systemState === 'paused'
               ? 'שום דבר לא יוצא עד שתפעילו'
               : systemState === 'empty'
@@ -846,6 +892,19 @@ export function LiveQueueHero({
       {plannedToday > 0 && (
         <div className="mt-2">
           <PublishingScene mode={sceneMode} published={publishedToday} total={plannedToday} />
+          {/*
+            SAID IN WORDS TOO, because a dancing robot is a mood and not a
+            sentence. This is the precise form of what `dayDone` knows — the
+            queue has nothing left for today — and deliberately not "הכול
+            הצליח": posts that failed are counted in the red tile above and
+            are not in this sum. A line that implied otherwise would be the
+            panel contradicting the tile two inches above it.
+          */}
+          {dayDone && (
+            <p data-done className="mt-1 text-center text-[12.5px] font-extrabold leading-[17px] text-success-400">
+              אין עוד פרסומים שממתינים לצאת היום
+            </p>
+          )}
         </div>
       )}
 

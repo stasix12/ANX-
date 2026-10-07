@@ -58,7 +58,16 @@ function Harness() {
           nextAt={new Date(Date.now() + 600000).toISOString()}
           nextTargetName="קבוצה"
           workerOnline
-          inFlight={1}
+          /*
+            TIED TO THE MODE, so the panel's own "today is finished" test can
+            be driven without a fourth control: a row in a worker's hands is
+            exactly what `sending` means, and a finished day is one where
+            nobody is holding anything. A fixed 1 here would have made the
+            done state unreachable from this mount — which is to say,
+            untestable, which is to say, the test would have been written
+            against hand-written markup instead of the real panel.
+          */
+          inFlight={mode === 'sending' ? 1 : 0}
           fbAccount={{ name: 'Stas Terehin', avatar: 'https://example.invalid/a.jpg' }}
           profiles={[
             { name: 'Stas Terehin', kind: 'profile', image: 'https://example.invalid/a.jpg' },

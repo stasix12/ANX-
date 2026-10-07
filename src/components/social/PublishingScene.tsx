@@ -55,6 +55,71 @@ import { useEffect, useRef, useState } from 'react';
 const TILES = 4;
 const SUCCESS_HOLD_MS = 2400;
 
+/**
+ * THE CONFETTI, WRITTEN DOWN RATHER THAN ROLLED.
+ *
+ * Twenty-six pieces, each with where it starts, how far it drifts sideways, how
+ * far it spins, how long it takes and when it joins in. Math.random() would be
+ * the obvious way to get this scatter and it is the wrong one: this component
+ * renders on the server first, and a number drawn during that render is a
+ * different number in the browser — React calls that a hydration mismatch and
+ * throws the whole tree away. A fixed table is the same scatter, every time,
+ * on both sides.
+ *
+ * They start spread DOWN the scene and not in a line at the top, so that with
+ * the animation switched off (prefers-reduced-motion) what is left is a
+ * scattered sprinkle over the panel rather than fourteen dots in a row.
+ */
+type Piece = {
+  /** Where it sits in the viewBox before it starts falling. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Its resting tilt — what is left of it with the animation switched off. */
+  r: number;
+  /** How far it drifts sideways, and how far it spins, on the way down. */
+  cx: number;
+  cr: number;
+  /** How long one fall takes, and how long it waits before joining in. */
+  d: number;
+  l: number;
+  round?: boolean;
+};
+const CONFETTI: readonly Piece[] = [
+  { x: 24, y: 14, w: 7, h: 11, r: -18, cx: -14, cr: 520, d: 3.4, l: 0 },
+  { x: 46, y: 150, w: 6, h: 6, r: 0, cx: 11, cr: -380, d: 3.7, l: 2.9, round: true },
+  { x: 62, y: 96, w: 6, h: 6, r: 0, cx: 10, cr: -400, d: 4.1, l: 1.5, round: true },
+  { x: 82, y: 164, w: 8, h: 5, r: -52, cx: -12, cr: 440, d: 3.3, l: 1.2 },
+  { x: 96, y: 36, w: 9, h: 5, r: 24, cx: 16, cr: 620, d: 3.0, l: 0.7 },
+  { x: 118, y: 72, w: 6, h: 6, r: 0, cx: -10, cr: 560, d: 4.4, l: 2.7, round: true },
+  { x: 130, y: 128, w: 6, h: 10, r: -40, cx: -9, cr: -560, d: 3.8, l: 2.2 },
+  { x: 150, y: 44, w: 8, h: 5, r: 62, cx: 13, cr: -500, d: 3.5, l: 1.6 },
+  { x: 164, y: 8, w: 5, h: 5, r: 0, cx: 12, cr: 480, d: 3.3, l: 1.1, round: true },
+  { x: 180, y: 158, w: 7, h: 10, r: 16, cx: -16, cr: 600, d: 4.1, l: 0.2 },
+  { x: 192, y: 70, w: 9, h: 6, r: 34, cx: -17, cr: -620, d: 4.3, l: 0.3 },
+  { x: 210, y: 104, w: 6, h: 6, r: 0, cx: 14, cr: -440, d: 3.6, l: 2.5, round: true },
+  { x: 222, y: 142, w: 6, h: 11, r: 12, cx: 14, cr: 540, d: 3.1, l: 1.8 },
+  { x: 240, y: 62, w: 8, h: 5, r: -34, cx: -12, cr: 520, d: 4.0, l: 3.1 },
+  { x: 252, y: 20, w: 7, h: 7, r: -28, cx: -11, cr: -480, d: 3.9, l: 2.6 },
+  { x: 272, y: 150, w: 6, h: 10, r: 48, cx: 12, cr: -580, d: 3.4, l: 1.4 },
+  { x: 286, y: 110, w: 5, h: 5, r: 0, cx: 15, cr: 600, d: 3.5, l: 0.9, round: true },
+  { x: 300, y: 10, w: 8, h: 5, r: 18, cx: -14, cr: 460, d: 4.4, l: 2.1 },
+  { x: 312, y: 54, w: 9, h: 5, r: 44, cx: -13, cr: -520, d: 3.2, l: 2.0 },
+  { x: 330, y: 88, w: 6, h: 6, r: 0, cx: 11, cr: -500, d: 3.8, l: 0.6, round: true },
+  { x: 340, y: 132, w: 6, h: 10, r: -16, cx: 9, cr: 580, d: 4.0, l: 0.5 },
+  { x: 358, y: 166, w: 8, h: 5, r: 56, cx: -10, cr: 540, d: 3.6, l: 2.8 },
+  { x: 366, y: 26, w: 7, h: 6, r: 20, cx: -15, cr: -460, d: 3.6, l: 1.3 },
+  { x: 384, y: 88, w: 5, h: 5, r: 0, cx: -8, cr: 500, d: 3.0, l: 2.4, round: true },
+  { x: 10, y: 62, w: 7, h: 11, r: 38, cx: 13, cr: -540, d: 4.2, l: 1.9 },
+  { x: 6, y: 126, w: 6, h: 6, r: 0, cx: 9, cr: 420, d: 3.9, l: 0.4, round: true },
+];
+
+/** Brand violet, brand blue, the tick's green and a warm accent — the same
+    four colours the panel already uses, so the celebration does not introduce
+    a palette of its own. */
+const CONFETTI_FILL = ['#7c3aed', '#4a5cfb', '#22c55e', '#f59e0b'];
+
 /** The robot, placed to the measurements taken off the reference recording. */
 const BOT = { x: 18, y: 2, w: 212, h: 174 };
 /** Its antenna light, so the one part of a flat image that should glow can. */
@@ -87,7 +152,16 @@ function arc(i: number): string {
   return `M ${HAND.x} ${HAND.y} Q ${mx} ${my} ${end.x} ${end.y}`;
 }
 
-export type SceneMode = 'sending' | 'waiting' | 'paused' | 'idle';
+/**
+ * WHAT THE SCENE IS SHOWING.
+ *
+ * `done` is the only one of these that CONGRATULATES, so it is the only one
+ * whose meaning is worth spelling out here: it is "today has nothing left" —
+ * every row the day planned has been through a worker and no row is in a
+ * worker's hands right now. LiveCampaignHero works it out from the two numbers
+ * printed under the bar, so the dance and the figures can never disagree.
+ */
+export type SceneMode = 'sending' | 'waiting' | 'paused' | 'idle' | 'done';
 
 export function PublishingScene({
   mode,
@@ -127,7 +201,16 @@ export function PublishingScene({
     return () => clearTimeout(t);
   }, [success, shown]);
 
+  /*
+   * `done` is a working state too — the robot is awake, it simply has nothing
+   * left to carry. What it is NOT is `running`: no group is named as a
+   * destination, nothing breathes and nothing travels, because nothing is on
+   * its way anywhere. `alive` is the smaller claim the two share, which is
+   * only that the robot is on screen and moving.
+   */
+  const celebrating = mode === 'done';
   const running = mode === 'sending' || mode === 'waiting';
+  const alive = running || celebrating;
   const travelling = mode === 'sending' && !success;
   const to = centre(active);
 
@@ -140,7 +223,9 @@ export function PublishingScene({
           ? 'הפרסום מושהה'
           : mode === 'idle'
             ? 'אין פרסום פעיל'
-            : `מפרסם לקבוצות — ${published} מתוך ${total} היום`
+            : celebrating
+              ? `הרובוט סיים לפרסם — ${published} מתוך ${total} היום`
+              : `מפרסם לקבוצות — ${published} מתוך ${total} היום`
       }
       className="block w-full"
     >
@@ -208,7 +293,7 @@ export function PublishingScene({
       */}
       {mode !== 'idle' && (
         <ellipse
-          className={running ? 'anx-shadow' : undefined}
+          className={celebrating ? 'anx-shadow-dance' : running ? 'anx-shadow' : undefined}
           cx={BOT.x + BOT.w / 2 - 12}
           cy="166"
           rx="46"
@@ -218,8 +303,16 @@ export function PublishingScene({
           style={{ transformOrigin: `${BOT.x + BOT.w / 2 - 12}px 166px` }}
         />
       )}
-      <g className={mode === 'idle' ? undefined : running ? 'anx-bot' : 'anx-bot-min'} style={{ transformOrigin: '120px 110px' }}>
-        <g className={travelling ? 'anx-send' : undefined} style={{ transformOrigin: '120px 110px' }}>
+      <g
+        className={
+          mode === 'idle' ? undefined : celebrating ? 'anx-dance' : running ? 'anx-bot' : 'anx-bot-min'
+        }
+        style={{ transformOrigin: '120px 110px' }}
+      >
+        <g
+          className={celebrating ? 'anx-cheer' : travelling ? 'anx-send' : undefined}
+          style={{ transformOrigin: '120px 110px' }}
+        >
           <image
             href="/social/robot.webp"
             x={BOT.x}
@@ -231,7 +324,7 @@ export function PublishingScene({
         </g>
         {/* The antenna light. A flat picture cannot pulse on its own, so the
             one part of it that should is given a soft lamp over the ball. */}
-        {running && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="10" fill="url(#anx-lamp)" />}
+        {alive && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="10" fill="url(#anx-lamp)" />}
       </g>
 
       {/* ── the card in flight ─────────────────────────────────────────── */}
@@ -320,6 +413,59 @@ export function PublishingScene({
           </g>
         );
       })}
+
+      {/* ── the confetti ───────────────────────────────────────────────── */}
+      {/*
+        LAST IN THE DOCUMENT, so it falls in FRONT of the robot and the groups
+        — SVG has no z-index, paint order is document order, and confetti that
+        goes behind everything reads as a pattern on the card rather than as
+        something in the air.
+
+        It is drawn only in `done`. There is no "celebrate for a few seconds
+        and stop": the state it marks is not a moment, it is how the rest of
+        the day looks, and a dashboard he opens at 20:00 should still tell him
+        the round finished. It costs fourteen elements animating transform and
+        opacity, which is the pair the compositor handles without laying the
+        page out again.
+      */}
+      {celebrating &&
+        CONFETTI.map((c, i) => {
+          const style = {
+            ['--anx-cx' as string]: `${c.cx}px`,
+            ['--anx-cr' as string]: `${c.cr}deg`,
+            ['--anx-cd' as string]: `${c.d}s`,
+            ['--anx-cl' as string]: `${c.l}s`,
+          };
+          const fill = CONFETTI_FILL[i % CONFETTI_FILL.length];
+          return c.round ? (
+            <circle
+              key={`c${i}`}
+              data-confetti=""
+              className="anx-confetti"
+              cx={c.x}
+              cy={c.y}
+              r={c.w / 2}
+              fill={fill}
+              opacity="0.9"
+              style={style}
+            />
+          ) : (
+            <rect
+              key={`c${i}`}
+              data-confetti=""
+              className="anx-confetti"
+              x={c.x}
+              y={c.y}
+              width={c.w}
+              height={c.h}
+              rx="1.4"
+              fill={fill}
+              opacity="0.9"
+              transform={`rotate(${c.r} ${c.x + c.w / 2} ${c.y + c.h / 2})`}
+              style={style}
+            />
+          );
+        })}
     </svg>
   );
 }

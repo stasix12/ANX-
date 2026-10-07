@@ -152,7 +152,17 @@ async function main(): Promise<void> {
        */
       assert.ok(
         seen.names.some((n) => n.includes('ספות') && !n.includes('פינתיות')),
-        `${width}px: the repeating round that has not published YET TODAY is missing — this card must read the round's whole life, not today's slice. Saw: ${JSON.stringify(seen.names)}`,
+        `${width}px: the round that published at 00:05 today, while today's scoped counter still reads zero, is missing — the strip must ask WHEN it published, not today's slice. Saw: ${JSON.stringify(seen.names)}`,
+      );
+      /*
+       * AND YESTERDAY'S ROUND IS NOT IN IT. "להציע תגובות מהירות רק לקמפיינים
+       * שפורסמו באותו היום." Campaign 8 published at 15:00 yesterday — inside a
+       * `now - 24h` window at the fixture's 15:00, and outside the local day,
+       * which is the rule.
+       */
+      assert.ok(
+        !seen.names.some((n) => n.includes('אתמול')),
+        `${width}px: a round that published YESTERDAY is still on the strip. Saw: ${JSON.stringify(seen.names)}`,
       );
       assert.deepEqual(seen.clipped, [], `${width}px: text is cut off — ${JSON.stringify(seen.clipped)}`);
       assert.deepEqual(seen.smallTargets, [], `${width}px: tap target under 40px — ${JSON.stringify(seen.smallTargets)}`);

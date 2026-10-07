@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { LiveQueueHero } from '../../src/components/social/LiveCampaignHero';
+import { QuickCommentsCard } from '../../src/components/social/QuickCommentsCard';
 import { addDaysISO, zonedDateISO, zonedToUtc } from '../../src/lib/social/time';
 import { campaignHeadline, campaignState, runProgress } from '../../src/lib/social/campaign';
 
@@ -249,6 +250,86 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
   const plain = campaignState(all, { status: 'active' });
   eq(plain.everPublished, 2, 'an unscoped campaign answers the same without being handed anything extra');
   eq(plain.progress.published, 2, 'and its two numbers agree, because there is only one scope');
+}
+
+/* ───────── 6c. the strip is today's, and it never vanishes ────────────── */
+/*
+ * "עכשיו בכרטיסייה הזאת להציע תגובות מהירות רק לקמפיינים שפורסמו באותו היום."
+ *
+ * Filtering to today makes EMPTY the ordinary morning state — every day, until
+ * the day's first publication. A card that returns null on empty would then
+ * stage the disappearance he already reported once, daily and by design. So the
+ * two states are rendered here and both are checked: what is in the strip, and
+ * that the card is still on the screen when the strip holds nothing.
+ */
+{
+  const NOW = new Date('2026-09-25T12:00:00Z'); /* 15:00 in Israel */
+  const camp = (id: string, name: string) => ({ id, name, service: '', city: '', language: 'he', status: 'active', notes: '' }) as never;
+  const state = (ever: number, lastAt: string | null) =>
+    ({
+      progress: { total: 0, published: 0, failed: 0, skipped: 0, scheduled: 0, running: 0, manual: 0, finished: 0 },
+      state: 'completed',
+      truncated: false,
+      todayOnly: true,
+      startedAt: lastAt,
+      everPublished: ever,
+      lastPublishedAt: lastAt,
+      lastPublishedChannel: lastAt ? 'facebook_group' : null,
+      estimatedCompletionAt: null,
+      nextAt: null,
+      nextTargetName: null,
+      nextChannel: null,
+      upcoming: [],
+      done: [],
+      now: [],
+    }) as never;
+
+  const draw = (campaigns: unknown[], states: Record<string, unknown>) =>
+    renderToStaticMarkup(
+      createElement(QuickCommentsCard, {
+        campaigns: campaigns as never,
+        states: states as never,
+        now: NOW,
+        onComment: () => {},
+      } as never),
+    );
+
+  /* A. published today → the strip has it, and the button is there. */
+  {
+    const html = draw([camp('a', 'סבב של היום')], { a: state(12, '2026-09-25T09:00:00Z') });
+    is(html.includes('סבב של היום'), 'a round that published today is on the strip');
+    is(html.includes('הוסף תגובה מהירה'), 'and the button that attaches a comment to it is there');
+  }
+
+  /* B. published only YESTERDAY → off the strip, and the card STAYS. */
+  {
+    const html = draw([camp('b', 'סבב של אתמול')], { b: state(12, '2026-09-24T12:00:00Z') });
+    is(!html.includes('סבב של אתמול'), 'a round that published yesterday is not offered — the strip is about today');
+    is(html.includes('תגובות מהירות'), 'but the CARD is still on the dashboard — returning null here is the disappearance he reported, restaged every morning');
+    is(html.includes('עוד לא יצא פרסום היום'), 'and it says which silence this is');
+    is(!html.includes('הוסף תגובה מהירה'), 'with no button, because there is nothing today to attach a comment to');
+  }
+
+  /* C. never published at all → a different sentence, not the same one. */
+  {
+    const html = draw([camp('c', 'סבב חדש')], { c: state(0, null) });
+    is(html.includes('תגובות מהירות'), 'a brand-new account still sees the card');
+    is(!html.includes('עוד לא יצא פרסום היום'), 'but not a sentence about today — there has never been a publication at all');
+    is(html.includes('הפרסום הראשון'), 'it is told what will put something here');
+  }
+
+  /* D. and "today" is the LOCAL day, not the last twenty-four hours. A round
+     published at 23:50 Israel time yesterday is yesterday's at 15:00 today,
+     though it is barely fifteen hours old. */
+  {
+    const html = draw([camp('d', 'סבב של אמש')], { d: state(5, '2026-09-24T20:50:00Z') });
+    is(!html.includes('סבב של אמש'), 'late last night is still last night — a now-24h window would call it today for another nine hours');
+  }
+  /* And the other side of that boundary: 00:05 this morning IS today. */
+  {
+    const html = draw([camp('e', 'סבב של חצות')], { e: state(5, '2026-09-24T21:05:00Z') });
+    is(html.includes('סבב של חצות'), 'and five minutes past midnight is today, however few hours ago it was');
+  }
 }
 
 /* ───────── 7. and the page really asks for that boundary ──────────────── */

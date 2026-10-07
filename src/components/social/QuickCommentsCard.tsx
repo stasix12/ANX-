@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { listRecentPosts } from '@/lib/social/client';
 import type { Campaign, MediaItem, Post } from '@/lib/social/types';
 import type { CampaignState } from '@/lib/social/campaign';
+import { zonedDateISO } from '@/lib/social/time';
 import { ChevronDownIcon, MessageIcon, PlusIcon } from '@/components/icons';
 import { PostCover } from './PostCover';
 import { Card, OverflowMenu } from './ui';
@@ -71,12 +72,23 @@ export function QuickCommentsCard({
   campaigns,
   states,
   onComment,
+  now,
 }: {
   campaigns: Campaign[];
   states: Record<string, CampaignState>;
   /** Opens the app's existing comment sheet for this round. */
   onComment: (campaign: Campaign) => void;
+  /**
+   * Which day "today" is. Defaults to the clock; the layout fixture pins it,
+   * because a strip filtered by the real date would be empty on every day but
+   * the one its dates were written on.
+   */
+  now?: Date;
 }) {
+  /* Pinned once per mount: a bare `new Date()` inside the memo below would make
+     the list recompute on every render and change its mind at midnight without
+     anything telling it to. */
+  const [today] = useState(() => now ?? new Date());
   const [posts, setPosts] = useState<Post[] | null>(null);
 
   useEffect(() => {
@@ -131,9 +143,21 @@ export function QuickCommentsCard({
         };
       })
       .filter((x) => x.published > 0 && x.lastAt);
-    withLast.sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? ''));
-    return withLast.slice(0, 6);
-  }, [campaigns, states]);
+    /*
+     * TODAY'S ROUNDS ONLY — "עכשיו בכרטיסייה הזאת להציע תגובות מהירות רק
+     * לקמפיינים שפורסמו באותו היום".
+     *
+     * The local day, not the last twenty-four hours: a round that went out at
+     * 23:50 yesterday is yesterday's, and `now - 24h` would call it today's
+     * until nearly midnight. The same rule the dashboard's daily counter uses,
+     * and the same reason — see time.ts on the two days a year when a day is
+     * not twenty-four hours long.
+     */
+    const todayISO = zonedDateISO(today);
+    const mine = withLast.filter((x) => zonedDateISO(new Date(x.lastAt as string)) === todayISO);
+    mine.sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? ''));
+    return mine.slice(0, 6);
+  }, [campaigns, states, today]);
 
   /* One pass over the posts, not a find() per card: the library read is
      bounded at twelve but the shape should not depend on that staying true. */
@@ -146,9 +170,20 @@ export function QuickCommentsCard({
     return byCampaign;
   }, [posts]);
 
-  if (!recent.length) return null;
-
-  const newest = recent[0].campaign;
+  /*
+   * EMPTY, NOT ABSENT — and this is not a style preference.
+   *
+   * This card returned null when it had nothing to show, and that is exactly
+   * how it disappeared from the dashboard for a week: "לאן נעלם המשבצת של
+   * התגובות מהירות?" Filtering to today makes the empty case ORDINARY — every
+   * morning, until the day's first publication — so a card that vanishes on it
+   * would stage that same disappearance daily, by design.
+   *
+   * It stays, with its heading and its link, and says which of the two silences
+   * this is: nothing published today yet, or no round has ever run.
+   */
+  const everRan = campaigns.some((c) => (states[c.id]?.everPublished ?? 0) > 0);
+  const newest = recent[0]?.campaign ?? null;
 
   return (
     <Card
@@ -162,7 +197,7 @@ export function QuickCommentsCard({
           <span className="truncate">תגובות מהירות</span>
         </span>
       }
-      subtitle="הפרסומים האחרונים שלי"
+      subtitle="מה שפורסם היום"
       action={
         <Link
           href="/social/campaigns"
@@ -192,6 +227,19 @@ export function QuickCommentsCard({
        * card's focus ring room without the strip inheriting the card padding
        * as dead space at either end.
        */}
+      {!newest && (
+        /*
+         * The two silences, told apart. "אין פרסומים היום" on a brand-new
+         * account would be true and useless — there has never been one — and
+         * on a working account at nine in the morning it is the whole answer.
+         */
+        <p dir="auto" className="rounded-xl border border-dashed border-ink-700 px-3 py-4 text-center text-[13px] leading-relaxed text-mist-500">
+          {everRan
+            ? 'עוד לא יצא פרסום היום. ברגע שהסבב של היום יתחיל, הוא יופיע כאן ואפשר יהיה לצרף לו תגובה.'
+            : 'אחרי הפרסום הראשון שלכם, הסבבים של אותו יום יופיעו כאן — עם כפתור לצרף תגובה לכל אחד מהם.'}
+        </p>
+      )}
+
       <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 [&>*]:min-w-0">
         {recent.map(({ campaign, published, lastAt, channel }) => (
           <li key={campaign.id} className="shrink-0 snap-start">
@@ -275,17 +323,24 @@ export function QuickCommentsCard({
        * outline in the accent — the "add another" shape the app uses for
        * adding a row, not the shape of a primary action.
        */}
-      <button
-        type="button"
-        onClick={() => onComment(newest)}
-        className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-500/40 bg-brand-500/5 px-4 text-sm font-extrabold text-brand-400 transition-colors hover:bg-brand-500/15 active:bg-brand-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
-      >
-        <PlusIcon aria-hidden className="h-4 w-4" />
-        הוסף תגובה מהירה
-      </button>
-      <p dir="auto" className="mt-1.5 truncate text-center text-[11px] text-mist-500">
-        לפרסום האחרון: {newest.name}
-      </p>
+      {/* No round today means nothing to attach a comment to, so the button is
+          absent rather than disabled: a control that opens a sheet listing no
+          publications is worse than no control. */}
+      {newest && (
+        <>
+          <button
+            type="button"
+            onClick={() => onComment(newest)}
+            className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-500/40 bg-brand-500/5 px-4 text-sm font-extrabold text-brand-400 transition-colors hover:bg-brand-500/15 active:bg-brand-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+          >
+            <PlusIcon aria-hidden className="h-4 w-4" />
+            הוסף תגובה מהירה
+          </button>
+          <p dir="auto" className="mt-1.5 truncate text-center text-[11px] text-mist-500">
+            לפרסום האחרון: {newest.name}
+          </p>
+        </>
+      )}
     </Card>
   );
 }

@@ -2512,12 +2512,31 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(/upsert: true/.test(localWorker) && /fb_avatar_url.*publicUrl.*\?v=/.test(localWorker), 'the avatar is copied and cache-busted, never hotlinked');
 
   /*
-   * ON SCREEN: the colour is the MACHINE, the face is the ACCOUNT. With no
-   * account reported the chip must say exactly what it always said, and must
-   * not invent a face or a name to fill the space.
+   * ON SCREEN — RE-POINTED, NOT DELETED.
+   *
+   * These two held the rule that the publishing panel must never invent a face
+   * or a name when the account is unknown: it rendered `fbAccount ? …` and
+   * fell back to the machine's own "מחובר / לא מחובר".
+   *
+   * The owner asked for the whole chip gone from that card — "הסר מהכרטיסייה
+   * את כל המשבצת הירוקה של בחירת המשתמש" — so there is nothing left there that
+   * COULD invent one, and an assertion that the chip behaves well is an
+   * assertion about a thing that is not there. The rule that replaces it is
+   * the stronger one the card now promises, and it is what a regression would
+   * break: the panel draws the account NOWHERE.
+   *
+   * Switching profiles is untouched. /social/account owns it, and it still
+   * reads the same fields from the same place — this was a display change.
    */
-  assert.ok(/fbAccount \?/.test(hero), 'the chip renders the account only when there is one');
-  assert.ok(/'מחובר' : 'לא מחובר'/.test(hero), 'and falls back to the machine state when there is not');
+  assert.ok(!/fbAccount\.(name|avatar)/.test(hero), 'the publishing panel draws no account face and no account name');
+  assert.ok(!/'מחובר' : 'לא מחובר'/.test(hero), 'and no chip is left there to fall back to the machine state');
+  {
+    const accountScreen = readFileSync(new URL('../../src/app/social/account/page.tsx', import.meta.url), 'utf8');
+    assert.ok(
+      /profiles/.test(accountScreen),
+      'and the screen that DOES switch profiles still does — removing the shortcut must not remove the capability',
+    );
+  }
 
   /*
    * AND THE CONSEQUENCE OF REMOVING PAGES.
@@ -4003,7 +4022,18 @@ const scenario: { step: string; line: string }[] = [];
 
   const accountPage = readFileSync(new URL('../../src/app/social/account/page.tsx', import.meta.url), 'utf8');
   const clientSrc = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
-  assert.ok(/href="\/social\/account"/.test(hero), 'the account chip must lead somewhere, not to an anchor on the same screen');
+  /*
+   * RE-POINTED WITH ITS SIBLINGS ABOVE. This held that the chip's way out led
+   * to a real screen rather than to an anchor on the one it was already on.
+   * The chip is gone from the publishing panel by request, so the claim moves
+   * to the thing that still has to be true: the account screen is still the
+   * place that owns profiles, and it is still reachable from the app.
+   */
+  assert.ok(!/href="\/social\/account"/.test(hero), 'the publishing panel no longer links out of itself for an account it does not draw');
+  {
+    const shell = readFileSync(new URL('../../src/components/social/SocialShell.tsx', import.meta.url), 'utf8');
+    assert.ok(/\/social\/account/.test(shell), 'and the account screen is still reachable from the app’s own navigation');
+  }
 
   /*
    * THIS RULE REPLACES "no password may be typed into this product", and the

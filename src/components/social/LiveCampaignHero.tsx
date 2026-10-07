@@ -719,17 +719,9 @@ export function LiveQueueHero({
   const paused = systemState === 'paused';
   const now = useTick(Boolean(nextAt) && !paused);
   const tone = SYSTEM_STATE_TONE[systemState];
-  const [pickerOpen, setPickerOpen] = useState(false);
-  /* Escape closes it, like every other overlay in this app. Bound only while
-     it is open, so the screen is not listening for a key nobody pressed. */
-  useEffect(() => {
-    if (!pickerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPickerOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [pickerOpen]);
+  /* The profile picker's open state and its Escape handler lived here. Both
+     went with the chip — a window listening for a key that can no longer open
+     anything is the kind of thing that outlives three refactors. */
   /*
    * "Live" is a claim about a machine, so it is made from a machine fact: a
    * row in flight, or a worker heartbeat. A queue with rows in it only ever
@@ -800,164 +792,43 @@ export function LiveQueueHero({
         "+ פוסט חדש" used to live here too. It moved up into the pair of
         primary actions above this panel, so the screen offers it once.
       */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="min-w-0">
-            <h2 dir="auto" className="min-w-0 truncate text-[17px] font-extrabold leading-[22px] text-mist-100">
-              {systemState === 'active'
-                ? live
-                  ? 'מפרסם כעת לקבוצות פייסבוק'
-                  : 'התור מלא — ממתין לתורו של הפרסום הבא'
-                : systemState === 'paused'
-                  ? 'שום דבר לא יוצא עד שתפעילו'
-                  : systemState === 'empty'
-                    ? 'אין פרסום מתוזמן'
-                    : (intervention?.title ?? 'נדרשת פעולה שלכם')}
-            </h2>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {onRefresh && (
-            <button
-              type="button"
-              disabled={refreshing}
-              onClick={onRefresh}
-              aria-label={updatedAt ? `רענן עכשיו — הנתונים עודכנו ${relativeHe(updatedAt.toISOString())}` : 'רענן עכשיו'}
-              className="grid h-11 w-11 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-ink-900 hover:text-mist-300 disabled:opacity-60"
-            >
-              <RepeatIcon aria-hidden className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-          )}
-        {/*
-          TWO FACTS, ONE CHIP, AND THEY ARE NOT THE SAME FACT.
-
-          The colour is about the MACHINE — whether the PC that publishes to
-          groups has sent a heartbeat. The face and the name are about the
-          ACCOUNT its browser is signed in as, which is what every group post
-          goes out under. A shared computer, or somebody signing in as the
-          wrong person, makes those two answers diverge, and the chip used to
-          be able to say only the first.
-
-          With no account reported the chip is exactly what it was. It never
-          fills that gap with a placeholder face or a guessed name.
-        */}
-        {/*
-         * THE CHIP IS THE SWITCHER, not a way to a screen that has one.
-         *
-         * "אני לוחץ למעלה במסך הראשי … אני רוצה שיפתח חלון צף אם המשתמשים /
-         * דפים שאני יכול לעבור אליהם." It already carries a swap icon and
-         * already names the identity every post goes out under, so sending
-         * somebody two screens away to change it was the wrong shape: the
-         * control that states the fact is the one that should change it.
-         *
-         * The full screen stays, and this panel links to it. What lives only
-         * there is everything switching is NOT — signing in, disconnecting,
-         * answering a security check.
-         */}
-        <div className="relative">
-        <button
-          type="button"
-          onClick={() => setPickerOpen((v) => !v)}
-          aria-expanded={pickerOpen}
-          aria-haspopup="menu"
-          aria-label={fbAccount ? `מפרסם בתור ${fbAccount.name} — החלפת פרופיל` : 'בחירת פרופיל'}
-          className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl ps-1.5 pe-2 text-[13px] font-extrabold ${
-            workerOnline ? 'bg-success-400/12 text-success-400' : 'bg-warning-400/12 text-warning-400'
-          }`}
-        >
-          {fbAccount ? (
-            <>
-              {fbAccount.avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={fbAccount.avatar} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
-              ) : (
-                <TargetAvatar name={fbAccount.name} size={24} />
-              )}
-              <span dir="auto" className="max-w-[7.5rem] truncate">{fbAccount.name}</span>
-            </>
-          ) : (
-            <span className="ps-1">{workerOnline ? 'מחובר' : 'לא מחובר'}</span>
-          )}
-          <ChevronIcon aria-hidden className={`h-4 w-4 transition-transform ${pickerOpen ? '-rotate-90' : 'rtl:rotate-180'}`} />
-        </button>
-        {pickerOpen && (
-          <>
-            {/*
-              `fixed` would be wrong here and it is worth saying why: an
-              ancestor with backdrop-filter becomes the containing block for
-              fixed children, and this card sits inside one. The backdrop would
-              size itself to the header instead of the screen, and a tap
-              outside would land on nothing.
-            */}
-            <button
-              type="button"
-              aria-label="סגירה"
-              onClick={() => setPickerOpen(false)}
-              className="absolute inset-x-0 top-full z-40 h-screen w-screen cursor-default"
-            />
-            {/* The same frosted panel as the bar's — this is the same switcher,
-                reached from the card instead of from the picture. Two looks for
-                one popup is the thing that would need explaining. */}
-            <div
-              role="menu"
-              className="glass-switcher absolute end-0 top-full z-50 mt-1.5 w-64 rounded-2xl border border-ink-700 p-1.5 motion-safe:animate-[rise_0.18s_ease-out]"
-            >
-              {profiles.length ? (
-                profiles.map((p) => {
-                  const active = Boolean(fbAccount?.name) && p.name === fbAccount?.name;
-                  return (
-                    <button
-                      key={p.name}
-                      type="button"
-                      role="menuitem"
-                      disabled={active || !onSwitchProfile}
-                      onClick={() => {
-                        setPickerOpen(false);
-                        onSwitchProfile?.(p.name);
-                      }}
-                      className={`flex w-full min-h-11 items-center gap-2 rounded-xl px-2 text-start text-[13px] font-bold ${
-                        /* Same as the bar's picker: on a panel that lets light
-                           through, 12% is half a tint. */
-                        active ? 'bg-success-400/20 text-success-400' : 'text-mist-100 hover:bg-ink-800'
-                      }`}
-                    >
-                      {/* That identity's own logo when the computer
-                          photographed one out of Facebook's menu; the generated
-                          circle otherwise. The same rule as the header's picker
-                          — a real picture or an initial, never a stand-in face. */}
-                      {p.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.image} alt="" className="h-[22px] w-[22px] shrink-0 rounded-full object-cover ring-1 ring-ink-700" />
-                      ) : (
-                        <TargetAvatar name={p.name} size={22} />
-                      )}
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span dir="auto" className="truncate">{p.name}</span>
-                        {p.kind === 'page' && <span className="text-[10px] font-bold text-mist-500">דף עסקי</span>}
-                      </span>
-                      {active && <span className="shrink-0 text-[10px] font-extrabold">מפרסם</span>}
-                    </button>
-                  );
-                })
-              ) : (
-                /* Never "you have only one" — nobody has looked yet, and the
-                   screen that can look says so in its own words. */
-                <p className="px-2 py-3 text-[12px] leading-relaxed text-mist-300">
-                  עוד לא קראנו אילו פרופילים יש בחשבון. פתחו את מסך החשבון ולחצו "חפש פרופילים".
-                </p>
-              )}
-              <Link
-                href="/social/account"
-                onClick={() => setPickerOpen(false)}
-                className="mt-1 flex min-h-11 items-center justify-center rounded-xl text-[12px] font-bold text-brand-400 hover:bg-ink-800"
-              >
-                מסך החשבון
-              </Link>
-            </div>
-          </>
-        )}
-        </div>
-        </div>
+      {/*
+        THE HEADER IS THE TITLE AND NOTHING ELSE.
+        
+        What stood to its left is gone, by name: the green chip carrying the
+        Facebook account's face and name, its swap icon, and the refresh button
+        beside it. "השאר את האזור שהתפנה לבן ונקי … אל תוסיף בו כפתור, טקסט או
+        אייקון חלופי."
+        
+        WHAT WENT WITH THEM, said plainly rather than discovered later:
+        
+          * SWITCHING PROFILES is no longer possible from this panel. The
+            mechanism is untouched — /social/account still lists the profiles
+            and switches between them, and the active profile, the campaigns'
+            ownership and everything the worker reads are exactly as they were.
+            This removed a shortcut, not a capability. He asked for exactly
+            that: "הסרת בורר המשתמש כאן היא שינוי בתצוגה בלבד."
+          * THE MANUAL REFRESH went with it. Pulling the screen down still
+            re-reads everything (PullToRefresh), and the dashboard re-reads
+            itself on its own every thirty seconds, so what is lost is the
+            button and not the refresh.
+        
+        `min-w-0` and no truncation on a twelve-character title: it fits at
+        320px with room to spare now that nothing shares the row, and the
+        measured test says so rather than this comment.
+      */}
+      <div className="flex items-center">
+        <h2 dir="auto" className="min-w-0 text-[17px] font-extrabold leading-[22px] text-mist-100">
+          {systemState === 'active'
+            ? live
+              ? 'רובוט בפעולה'
+              : 'התור מלא — ממתין לתורו של הפרסום הבא'
+            : systemState === 'paused'
+              ? 'שום דבר לא יוצא עד שתפעילו'
+              : systemState === 'empty'
+                ? 'אין פרסום מתוזמן'
+                : (intervention?.title ?? 'נדרשת פעולה שלכם')}
+        </h2>
       </div>
 
       {/*

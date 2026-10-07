@@ -319,6 +319,45 @@ async function main(): Promise<void> {
       await page.setViewportSize({ width: 390, height: 844 });
     }
 
+    /* ── 5d. THE HEADER IS THE TITLE AND NOTHING ELSE ───────────────────── */
+    /*
+     * "החלף את הכותרת … בכותרת המדויקת: רובוט בפעולה" … "הסר מהכרטיסייה את כל
+     *  המשבצת הירוקה של בחירת המשתמש" … "הסר גם את אייקון שני החצים האפור".
+     *
+     * The panel is mounted with everything the chip used to read — a face, a
+     * name, a second profile to switch to, a refresh handler — so what is
+     * asserted is that it no longer DRAWS them, not that nobody hands them
+     * over. A test that simply passed `null` would pass against a panel that
+     * still had the chip in it.
+     */
+    {
+      for (const width of [320, 360, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.waitForTimeout(90);
+        const head = await page.evaluate(() => {
+          const panel = document.querySelector('[data-panel]') as HTMLElement;
+          const h2 = panel.querySelector('h2') as HTMLElement;
+          const text = (panel.textContent || '').replace(/\s+/g, ' ');
+          return {
+            title: (h2.textContent || '').trim(),
+            clipped: h2.scrollWidth > h2.clientWidth + 1,
+            ellipsis: getComputedStyle(h2).textOverflow,
+            align: getComputedStyle(h2).direction,
+            hasName: text.includes('Stas Terehin'),
+            images: panel.querySelectorAll('img').length,
+            controls: panel.querySelectorAll('button, a').length,
+          };
+        });
+        eq(head.title, 'רובוט בפעולה', `${width}px: the exact title, whole`);
+        is(!head.clipped, `${width}px: and not cut — "רובוט בפ…" is the thing this change was made to stop`);
+        is(head.ellipsis !== 'ellipsis', `${width}px: with no ellipsis waiting to appear`);
+        is(!head.hasName, `${width}px: the account's name is gone from the card`);
+        eq(head.images, 0, `${width}px: and its face with it — no <img> is left in the panel`);
+        eq(head.controls, 0, `${width}px: and not one control is left in the header — no chip, no swap icon, no refresh button`);
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+    }
+
     /* ── 6. AND IT STOPS FOR SOMEBODY WHO ASKED IT TO ───────────────────── */
     {
       const quiet = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });

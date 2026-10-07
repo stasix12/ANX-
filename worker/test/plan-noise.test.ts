@@ -98,7 +98,25 @@ function world(plans: Plan[]) {
     chain.update = (patch: Record<string, unknown>) => add('update', patch);
 
     const answer = (): { data: unknown; error: null; count: number } => {
-      if (table === 'social_schedules') return { data: f.has('update') ? [] : schedules, error: null, count: 0 };
+      if (table === 'social_schedules') {
+        /*
+         * THE UPDATE IS APPLIED, not swallowed.
+         *
+         * `planned_until` was a no-op in this fake, so every pass looked like a
+         * schedule's first — and the difference between building a round and
+         * topping one up is read from exactly that column. A fake that drops
+         * the one write the behaviour turns on can only ever test half of it.
+         */
+        const patch = f.get('update') as Record<string, unknown> | undefined;
+        if (patch) {
+          const id = f.get('eq:id');
+          for (const row of schedules) {
+            if (id === undefined || row.id === id) Object.assign(row, patch);
+          }
+          return { data: [], error: null, count: 0 };
+        }
+        return { data: schedules.filter((r) => r.active), error: null, count: 0 };
+      }
       if (table === 'social_posts') {
         const id = String(f.get('eq:id') ?? 'p1');
         return { data: { id, status: 'ready', campaign_id: `c-${id}`, base_text: 'מבצע', media: [] }, error: null, count: 0 };
@@ -107,7 +125,13 @@ function world(plans: Plan[]) {
       if (table === 'social_settings') return { data: [], error: null, count: 0 };
       if (table === 'social_variants') return { data: [], error: null, count: 0 };
       if (table === 'social_targets') return { data: allTargets.map((t) => ({ name: `קבוצה ${t}` })), error: null, count: 0 };
-      if (table === 'social_queue') return { data: queue, error: null, count: queue.length };
+      if (table === 'social_queue') {
+        /* `.in('status', OPEN_STATUSES)` decides which groups are busy, so a
+           fake that ignores it can never let one finish. */
+        const statuses = f.get('in:status') as string[] | undefined;
+        const rows = statuses ? queue.filter((r) => statuses.includes(r.status)) : queue;
+        return { data: rows, error: null, count: rows.length };
+      }
       return { data: [], error: null, count: 0 };
     };
     chain.maybeSingle = () => Promise.resolve({ data: (answer().data as unknown[])?.length === undefined ? answer().data : null, error: null });
@@ -136,6 +160,7 @@ function world(plans: Plan[]) {
 }
 
 const skips = (log: { event: string }[]) => log.filter((e) => e.event === 'plan_targets_skipped').length;
+const builds = (log: { event: string }[]) => log.filter((e) => e.event === 'planned').length;
 
 async function main(): Promise<void> {
   /* ── 1. THE BUG: every group already busy, nothing to plan ───────────── */
@@ -191,6 +216,67 @@ async function main(): Promise<void> {
     const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2'], busy: [], hour: '09:00' }]);
     await planQueue({ db: w.db, log: w.note as never });
     eq(skips(w.log), 0, 'a clean pass says nothing about groups it did not skip');
+  }
+
+  /* ── 5b. A REFILL IS NOT A ROUND ─────────────────────────────────────── */
+  /*
+   * "מה זה הסבב פרסום שיצא עכשיו? לא הרצתי כלום."
+   *
+   * He had not. A repeating schedule does not retire, so every minute it walks
+   * its groups, finds all but one still holding an open publication, and writes
+   * a single row for the one that just finished. The log called each of those
+   * "נבנה סבב פרסום · נוצרו 1 פרסומים בתור" — once a minute, for hours — which
+   * reads as an account that began publishing by itself.
+   *
+   * The sequence is the claim, so the fake database remembers: pass one builds
+   * the round and says so; a group then finishes; pass two refills it and says
+   * nothing — while still refilling it, which is the half that must not be lost
+   * to the silence.
+   */
+  {
+    const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2', 't3'], busy: ['t2', 't3'], hour: '09:00' }]);
+    await planQueue({ db: w.db, log: w.note as never });
+    eq(builds(w.log), 1, 'the pass that plans an occasion says a round was built');
+    eq(skips(w.log), 1, 'and names the groups it could not fit in');
+    const afterRound = w.queue.length;
+
+    /* One publication finishes, exactly as it does all afternoon. */
+    w.queue.find((r) => r.target_id === 't2')!.status = 'published';
+
+    const made = await planQueue({ db: w.db, log: w.note as never });
+    /* One row per occasion inside the 48-hour horizon, so a daily schedule
+       refills two — the number is not the claim, that it refilled at all is. */
+    is(made > 0, 'the next pass DOES refill the group that freed — silence must not mean the planner stopped');
+    eq(w.queue.length, afterRound + made, 'and the rows really are in the queue');
+    eq(builds(w.log), 1, 'but it does NOT announce a round — this is the line he read as his account publishing by itself');
+    eq(skips(w.log), 1, 'nor repeats which groups are still busy, which is the steady state of every repeating round');
+
+    /* And again, and again, as it does every minute until the round ends. */
+    w.queue.find((r) => r.target_id === 't3')!.status = 'published';
+    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, log: w.note as never });
+    eq(builds(w.log), 1, 'still one round announced, however many refills follow it');
+    eq(skips(w.log), 1, 'and still one list of skipped groups');
+  }
+
+  /* ── 5c. BUT TOMORROW'S ROUND IS A ROUND ─────────────────────────────── */
+  /*
+   * The silence above is scoped to a horizon that has already been planned. Once
+   * the clock passes it, the next occasion is a genuine round again and has to
+   * say so — otherwise a daily repeat would announce itself once and never
+   * again, and "did today's round go out?" would have no answer in the log.
+   */
+  {
+    const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2'], busy: [], hour: '09:00' }]);
+    const t0 = new Date();
+    await planQueue({ db: w.db, now: t0, log: w.note as never });
+    eq(builds(w.log), 1, 'the first round is announced');
+
+    /* Past the 48-hour horizon the first pass planned to. */
+    const later = new Date(t0.getTime() + 49 * 3_600_000);
+    w.queue.forEach((r) => (r.status = 'published'));
+    await planQueue({ db: w.db, now: later, log: w.note as never });
+    eq(builds(w.log), 2, 'and so is the next one, once the clock is past what was already planned');
   }
 
   /* ── 6. TWO CAMPAIGNS, AND THE COUNT IS PER SCHEDULE ────────────────── */

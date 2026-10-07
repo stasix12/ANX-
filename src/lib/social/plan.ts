@@ -140,10 +140,34 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
   const { data: schedules, error } = await db.from('social_schedules').select('*').eq('active', true);
   if (error) throw new Error(error.message);
   let created = 0;
+  /*
+   * ROWS THAT BUILT A ROUND, as opposed to rows that TOPPED ONE UP.
+   *
+   * "מה זה הסבב פרסום שיצא עכשיו? לא הרצתי כלום." He had not. What he was
+   * reading was this line — "נבנה סבב פרסום · נוצרו 1 פרסומים בתור" — written
+   * once a minute, every minute, by a round that had been running since noon.
+   *
+   * A repeating schedule does not retire. Every pass it walks its groups, finds
+   * all but one still holding an open publication (v20 allows one per group),
+   * and writes a single row for the one that just finished. That is the daily
+   * repeat working exactly as asked. It is not a round being built, and calling
+   * it one tells the owner his account started publishing by itself.
+   *
+   * So the headline is kept for what it describes: a schedule planned to a
+   * horizon it had not reached before. The steady trickle after it is the queue
+   * refilling itself, it is visible on every queue screen in the product, and
+   * it is not news. Errors still log — plan_failed and plan_retry are
+   * untouched — so silence here never hides a planner that stopped working.
+   */
+  let built = 0;
 
   for (const schedule of (schedules ?? []) as Schedule[]) {
     if (schedule.mode === 'drip') {
-      created += await planDrip(db, schedule, now, note, stopped);
+      /* Drip retires itself, so every row it writes belongs to a round being
+         built. Counted as before. */
+      const dripped = await planDrip(db, schedule, now, note, stopped);
+      created += dripped;
+      built += dripped;
       continue;
     }
     const slots = slotsFor(schedule, from, until);
@@ -172,6 +196,15 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     const media = (post.media ?? []) as MediaItem[];
     const taken = await occupiedSlots(db, post.id);
     const waiting = await targetsAlreadyWaiting(db);
+
+    /*
+     * HAS THIS SCHEDULE ALREADY BEEN PLANNED past the end of this window?
+     *
+     * `planned_until` is stamped at the end of every successful pass, so it is
+     * null (or behind us) exactly once per occasion — on the pass that plans
+     * it. Read BEFORE the pass writes its own stamp, which is the whole point.
+     */
+    const plannedAhead = Boolean(schedule.planned_until) && new Date(schedule.planned_until as string) > now;
 
     const dropped: string[] = [];
     /*
@@ -254,7 +287,15 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
       }
     }
 
-    await noteDropped(db, note, schedule.id, dropped, made);
+    /*
+     * `plannedAhead ? 0 : made` — on a top-up the groups left out are the ones
+     * still busy with the round already running, which is the steady state of
+     * every repeating campaign and has not changed since the last minute. The
+     * `made <= 0` guard inside noteDropped already silences a pass that planned
+     * nothing; this silences the one that planned a single refill.
+     */
+    await noteDropped(db, note, schedule.id, dropped, plannedAhead ? 0 : made);
+    if (!plannedAhead) built += made;
     /*
      * MARKED PLANNED ONLY IF IT WAS. The stamp and the retirement below are
      * what make a round final; writing them after a failure is what killed his.
@@ -277,7 +318,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     }
   }
 
-  if (created) await note('info', 'planned', `נוצרו ${created} פרסומים בתור`, { created });
+  if (built) await note('info', 'planned', `נוצרו ${built} פרסומים בתור`, { created: built });
   return created;
 }
 

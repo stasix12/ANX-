@@ -1,7 +1,7 @@
 'use client';
 
 import { supabase } from '@/lib/supabase';
-import { friendlyMessage } from './errors';
+import { signInTrouble, type Blame } from './auth-trouble';
 
 /**
  * Signing in to the publishing module, and — new — signing UP for it.
@@ -38,11 +38,23 @@ import { friendlyMessage } from './errors';
  */
 export { useAdminSession as useSocialSession, signOut as signOutSocial } from '@/lib/adminAuth';
 
+/*
+ * A REFUSAL CARRIES WHO CAN FIX IT, not only a sentence.
+ *
+ * The login screen behaves differently for the two halves: a wrong password is
+ * the person's to fix and needs nothing but the sentence, while everything else
+ * is somebody else's and needs the technical tail and the offer of a connection
+ * check. Deciding that on the screen by reading the Hebrew back would be the
+ * worst possible place for it, so the classifier's own answer travels along.
+ */
 export type AuthOutcome =
   | { ok: true; needsEmailConfirm: boolean }
-  | { ok: false; message: string };
+  | { ok: false; message: string; blame: Blame; detail: string };
 
-const NO_CLIENT = 'המערכת אינה מחוברת ל-Supabase.';
+const refuse = (blame: Blame, message: string, detail = ''): AuthOutcome => ({ ok: false, message, blame, detail });
+
+const NO_CLIENT =
+  'האתר הזה נבנה בלי הגדרות Supabase, ולכן אין לאן להתחבר. צריך להגדיר ב-Vercel את NEXT_PUBLIC_SUPABASE_URL ו-NEXT_PUBLIC_SUPABASE_ANON_KEY ואז Redeploy.';
 
 /* Says the account was made, because it was — GoTrue created it before any of
    this ran, and a person told "we could not open an account" who then gets
@@ -120,18 +132,27 @@ async function seesSomebodyElsesData(): Promise<boolean> {
 }
 
 export async function signInToSocial(email: string, password: string): Promise<AuthOutcome> {
-  if (!supabase) return { ok: false, message: NO_CLIENT };
+  if (!supabase) return refuse('project', NO_CLIENT);
   const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-  if (error) return { ok: false, message: authMessage(error.message) };
+  /* The WHOLE error, not error.message: `code` and `status` are the only parts
+     that are a contract, and reading the prose was how a paused project came
+     out as "נסו שוב". See auth-trouble.ts. */
+  if (error) {
+    const t = signInTrouble(error);
+    return refuse(t.blame, t.message, t.detail);
+  }
   /* Result ignored on purpose — see claimWorkspace. */
   await claimWorkspace('');
   return { ok: true, needsEmailConfirm: false };
 }
 
 export async function signUpToSocial(email: string, password: string, businessName: string): Promise<AuthOutcome> {
-  if (!supabase) return { ok: false, message: NO_CLIENT };
+  if (!supabase) return refuse('project', NO_CLIENT);
   const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
-  if (error) return { ok: false, message: authMessage(error.message) };
+  if (error) {
+    const t = signInTrouble(error);
+    return refuse(t.blame, t.message, t.detail);
+  }
   /*
    * TWO ENDINGS, and which one happens is a Supabase project setting nobody
    * here controls. With email confirmation off, signUp returns a session and
@@ -160,29 +181,7 @@ export async function signUpToSocial(email: string, password: string, businessNa
   const leaking = await seesSomebodyElsesData();
   if (!claimed || leaking) {
     await supabase.auth.signOut();
-    return { ok: false, message: NOT_ISOLATED };
+    return refuse('settings', NOT_ISOLATED);
   }
   return { ok: true, needsEmailConfirm: false };
-}
-
-/**
- * Supabase's auth errors, in the language of the person reading them.
- *
- * Kept apart from friendlyError() in errors.ts, which maps DATABASE failures:
- * these strings come from GoTrue, they are short, and there are only a handful
- * that a person can actually hit on a login form.
- */
-function authMessage(raw: string): string {
-  const text = raw.toLowerCase();
-  if (text.includes('invalid login credentials')) return 'המייל או הסיסמה לא נכונים.';
-  if (text.includes('email not confirmed')) return 'צריך לאשר את המייל קודם — חפשו הודעה מאיתנו בתיבה.';
-  if (text.includes('already registered') || text.includes('already been registered')) {
-    return 'כבר קיים חשבון עם המייל הזה. אפשר להיכנס איתו.';
-  }
-  if (text.includes('password') && text.includes('6')) return 'הסיסמה קצרה מדי — לפחות 6 תווים.';
-  if (text.includes('rate limit') || text.includes('too many')) return 'יותר מדי ניסיונות. נסו שוב בעוד דקה.';
-  if (text.includes('signups not allowed') || text.includes('signup is disabled')) {
-    return 'פתיחת חשבונות חדשים כבויה כרגע בהגדרות. פנו למי שהקים את המערכת.';
-  }
-  return friendlyMessage(new Error(raw), 'לא הצלחנו להשלים את הפעולה. נסו שוב.');
 }

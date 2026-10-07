@@ -5,6 +5,8 @@ import { Suspense, useEffect, useState } from 'react';
 import { CheckCircleIcon, EyeIcon, EyeOffIcon, SendIcon, SpinnerIcon } from '@/components/icons';
 import { Button, Field } from '@/components/social/ui';
 import { signInToSocial, signUpToSocial, useSocialSession } from '@/lib/social/auth';
+import type { Blame } from '@/lib/social/auth-trouble';
+import { checkConnection, verdictText } from '@/lib/social/connection-check';
 
 /**
  * The door /social never had.
@@ -36,6 +38,18 @@ function LoginScreen() {
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /*
+   * WHO WAS REFUSED, alongside the sentence saying so.
+   *
+   * A wrong password gets the sentence and nothing else. Everything else gets
+   * the server's own words and a button that asks the project whether it is
+   * even there — because the failure this screen was shipped unable to explain
+   * was one of those, and the owner spent a morning retyping a correct
+   * password at it.
+   */
+  const [trouble, setTrouble] = useState<{ blame: Blame; detail: string } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [verdict, setVerdict] = useState('');
   const [sent, setSent] = useState(false);
 
   /* Already in? Then this screen is a dead end. `replace`, not `push`, so Back
@@ -60,10 +74,13 @@ function LoginScreen() {
     if (busy) return;
     setBusy(true);
     setError('');
+    setTrouble(null);
+    setVerdict('');
     try {
       const result = up ? await signUpToSocial(email, password, business) : await signInToSocial(email, password);
       if (!result.ok) {
         setError(result.message);
+        setTrouble({ blame: result.blame, detail: result.detail });
         return;
       }
       /* Confirmation is on in this project: there is no session yet and the
@@ -75,6 +92,30 @@ function LoginScreen() {
       router.replace(next && next.startsWith('/social') ? next : '/social');
     } finally {
       setBusy(false);
+    }
+  }
+
+  /*
+   * ASKS THE PROJECT, rather than guessing from here.
+   *
+   * The key is read from the bundle the same way every other request on this
+   * site reads it, travels in a header, and is never rendered — see
+   * connection-check.ts. What appears on screen is the project reference and
+   * the verdict.
+   */
+  async function runCheck() {
+    if (checking) return;
+    setChecking(true);
+    setVerdict('');
+    try {
+      const v = await checkConnection(
+        process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+        (url, init) => fetch(url, { ...init, cache: 'no-store' }),
+      );
+      setVerdict(verdictText(v));
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -168,9 +209,42 @@ function LoginScreen() {
           </Field>
 
           {error && (
-            <p dir="auto" role="alert" className="rounded-xl bg-error-500/10 px-3 py-2 text-[13px] font-bold text-error-400">
-              {error}
-            </p>
+            <div role="alert" className="grid gap-2 rounded-xl bg-error-500/10 px-3 py-2.5">
+              <p dir="auto" className="text-[13px] font-bold leading-relaxed text-error-400">
+                {error}
+              </p>
+              {/* Not for a wrong password and not for a rate limit: one is the
+                  person's to fix by retyping, the other fixes itself in a
+                  minute. The rest are somebody else's, and for those the raw
+                  answer and the check are the whole value of this block. */}
+              {trouble && trouble.blame !== 'you' && trouble.blame !== 'wait' && (
+                <>
+                  {/* `!error.includes` because the unrecognised case already
+                      carries the server's words inside its sentence — the one
+                      ending where printing them twice would be the second
+                      thing on screen, and the first thing he screenshots. */}
+                  {trouble.detail && !error.includes(trouble.detail) && (
+                    <p dir="ltr" className="break-words text-start font-mono text-[11px] leading-snug text-mist-500">
+                      {trouble.detail}
+                    </p>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    busy={checking}
+                    onClick={runCheck}
+                    className="w-full justify-center"
+                  >
+                    {checking ? 'בודק את החיבור…' : 'בדיקת חיבור לשרת'}
+                  </Button>
+                </>
+              )}
+              {verdict && (
+                <p dir="auto" className="rounded-lg bg-ink-900 px-2.5 py-2 text-[12.5px] leading-relaxed text-mist-100">
+                  {verdict}
+                </p>
+              )}
+            </div>
           )}
 
           <Button type="submit" busy={busy} className="mt-1 min-h-12 w-full justify-center text-[15px]">
@@ -182,7 +256,7 @@ function LoginScreen() {
           {up ? 'כבר יש לכם חשבון? ' : 'אין לכם עדיין חשבון? '}
           <button
             type="button"
-            onClick={() => { setMode(up ? 'in' : 'up'); setError(''); }}
+            onClick={() => { setMode(up ? 'in' : 'up'); setError(''); setTrouble(null); setVerdict(''); }}
             className="font-bold text-brand-400 underline underline-offset-2"
           >
             {up ? 'כניסה' : 'פתחו חשבון'}

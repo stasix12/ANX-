@@ -1954,10 +1954,17 @@ body:has(.social-theme) .site-backdrop {
  * different object. A sheen leaves the gradient exactly as it is and adds the
  * one thing a still bar cannot say, which is that the round is still going.
  *
- * It travels RIGHT TO LEFT, the way this bar fills. `background-position` is
- * physical rather than logical, so the direction is written out here rather
- * than inherited from `dir` — in an RTL document a sheen running the other way
- * reads as the progress undoing itself.
+ * IT TRAVELS LEFT TO RIGHT, because that is the way round he wanted it.
+ *
+ * My first pass ran it right to left, matching the direction this bar actually
+ * fills in an RTL document, on the reasoning that a sheen going the other way
+ * reads as the progress undoing itself. He watched it and asked for it
+ * reversed, which settles it: the one thing neither of us can measure from
+ * here is how it reads to the person looking at it every day.
+ *
+ * `background-position` is physical rather than logical, so the direction is
+ * written out here rather than inherited from `dir`. Swapping these two
+ * percentages is the whole of it.
  *
  * `.anx-bar-live` and not `.anx-bar`: the fill keeps its colour when the day
  * is finished or the system is paused, and only loses the light. A bar that
@@ -1968,12 +1975,12 @@ body:has(.social-theme) .site-backdrop {
 @keyframes anx-bar-sheen {
   from {
     background-position:
-      130% 0,
+      -130% 0,
       0 0;
   }
   to {
     background-position:
-      -130% 0,
+      130% 0,
       0 0;
   }
 }

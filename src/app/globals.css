@@ -1911,88 +1911,171 @@ body:has(.social-theme) .site-backdrop {
  * bar. A dancing robot over a queue that still has rows in it would be the
  * screen telling him the day is done while the worker is mid-publication.
  *
- * THE DANCE IS A DIFFERENT MOVEMENT, not a faster float. The float is half a
- * degree over five seconds — a thing hanging in the air. This is a side-to-side
- * bounce over 1.3 seconds with two hops in it, because a celebration that is
- * just the idle sped up reads as the robot being nervous.
+ * THE DANCE IS A JUMP, AND A JUMP IS NOT A LIFT.
  *
- * MOST OF IT IS TRAVEL AND LITTLE OF IT IS ROTATION, and that is forced by the
- * asset rather than chosen. public/social/robot.webp is a CROP whose haze is
- * ramped to white inside a rectangle; tilt that rectangle far enough and its
- * corners come off the white card as a faint leaning box behind the robot. Six
- * degrees showed it plainly. Two and a half does not, and the sway and the hop
- * carry the dance instead. Swap in the original transparent PNG and the angle
- * can go back up — the limit is the picture, not the taste.
+ * "בריקוד שיראו גם את הרגלים שלו" — and the robot has none. His own reference
+ * design draws it as a flying robot: the body ends in a rounded hull and fades
+ * into the purple haze, with nothing below the waist in any frame of the
+ * recording or any version of the picture. So the legs cannot be shown, and
+ * drawing a pair would be inventing a different robot, which is the one thing
+ * he ruled out by name. What was asked for underneath the request — that it
+ * read as the WHOLE BODY dancing rather than a picture being nudged — is what
+ * these three keyframes do, and they do it the way animators do it without
+ * legs: anticipation, squash and stretch, and a shadow that leaves.
+ *
+ * THE CROUCH IS WHERE THE HEIGHT COMES FROM. The antenna's tip sits 12 scene
+ * units below the top of the viewBox (measured off the asset: 22px of its own
+ * 374), and an SVG clips to its viewBox, so a lift of more than about eleven
+ * cuts the antenna off. Starting each hop three units BELOW the resting line
+ * buys travel the frame does not have to pay for: the body moves fourteen
+ * units while its highest point still clears the edge.
+ *
+ * AND THE STRETCH IS CAPPED FOR THE SAME REASON. `.anx-cheer` is anchored at
+ * the feet, so a scaleY above 1 raises the top of the picture — 1.03 adds
+ * about five units. It is therefore allowed only at take-off, where the body
+ * is four units up, and never at the apex, where there is nothing left to
+ * spend.
+ *
+ * THE ROTATION STAYS AT 2.5°, which is the asset's limit rather than taste:
+ * robot.webp is a crop whose haze is ramped to white inside a rectangle, and
+ * past about four degrees the rectangle's corners come off the white card as a
+ * faint leaning box. The original transparent PNG would lift every one of
+ * these ceilings at once.
  */
 @keyframes anx-dance {
   0%,
   100% {
-    transform: translate(0, 0) rotate(-2.5deg);
+    transform: translate(0, 3px) rotate(0deg);
   }
-  25% {
-    transform: translate(-5px, -11px) rotate(2.5deg);
+  8% {
+    transform: translate(-1px, -4px) rotate(-1.2deg);
+  }
+  20% {
+    transform: translate(-4px, -10px) rotate(-2.5deg);
+  }
+  34% {
+    transform: translate(-3px, -1px) rotate(-1deg);
+  }
+  42% {
+    transform: translate(0, 3px) rotate(0deg);
   }
   50% {
-    transform: translate(0, -2px) rotate(-1.8deg);
+    transform: translate(2px, -4px) rotate(1.4deg);
   }
-  75% {
-    transform: translate(5px, -9px) rotate(2.5deg);
+  62% {
+    transform: translate(5px, -8px) rotate(2.5deg);
+  }
+  76% {
+    transform: translate(4px, 0) rotate(1deg);
+  }
+  88% {
+    transform: translate(0, 3px) rotate(0deg);
   }
 }
 .anx-dance {
   transform-box: fill-box;
   transform-origin: center;
-  animation: anx-dance 1.3s ease-in-out infinite;
+  animation: anx-dance 1.25s ease-in-out infinite;
 }
 
-/* The cheer, on the INNER group for the same reason the throw is: two
-   animations cannot share `transform` on one element, and a raster robot has
-   no limb of its own to raise. A 4% swell on the dance's own clock is all it
-   is — enough to read as a body pushing up into the jump rather than a sprite
-   being rotated. */
+/*
+ * SQUASH AND STRETCH, on the INNER group for the same reason the throw is:
+ * two animations cannot share `transform` on one element, and a raster robot
+ * has no limb of its own to bend.
+ *
+ * ANCHORED AT THE FEET (`transform-origin: 50% 100%`), which is the whole
+ * trick. Squash from the centre makes a picture pulse; squash from the ground
+ * makes a body press into it. Compressed at the bottom of each hop, briefly
+ * drawn out at take-off, and exactly 1 in the air — a body in flight is not
+ * being squeezed by anything.
+ */
 @keyframes anx-cheer {
   0%,
   100% {
-    transform: scale(1);
+    transform: scale(1.08, 0.9);
   }
-  25% {
-    transform: scale(1.045);
+  8% {
+    transform: scale(0.97, 1.03);
   }
-  60% {
-    transform: scale(0.985);
+  20% {
+    transform: scale(0.99, 1);
+  }
+  34% {
+    transform: scale(1, 1);
+  }
+  42% {
+    transform: scale(1.08, 0.9);
+  }
+  50% {
+    transform: scale(0.97, 1.03);
+  }
+  62% {
+    transform: scale(0.99, 1);
+  }
+  76% {
+    transform: scale(1, 1);
+  }
+  88% {
+    transform: scale(1.06, 0.93);
   }
 }
 .anx-cheer {
   transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-cheer 1.3s ease-in-out infinite;
+  transform-origin: 50% 100%;
+  animation: anx-cheer 1.25s ease-in-out infinite;
 }
 
-/* And the shadow keeps doing the opposite — on the dance's clock now, with a
-   deeper swing, because the robot is leaving the ground by nine units rather
-   than five. Without this the dance reads as a picture being rotated. */
+/*
+ * AND THE SHADOW IS THE FLOOR.
+ *
+ * This is the element that says there IS a ground, which is what a jump needs
+ * and a hover does not: it spreads and darkens as the body presses into it and
+ * collapses to almost nothing at the apex. On the same 1.25s clock and the
+ * same percentages as the two above, so the three read as one movement rather
+ * than three loops that happen to be the same length.
+ */
 @keyframes anx-shadow-dance {
   0%,
   100% {
-    transform: scale(1);
-    opacity: 0.14;
+    transform: scale(1.12);
+    opacity: 0.17;
   }
-  25% {
-    transform: scale(0.76);
-    opacity: 0.05;
+  8% {
+    transform: scale(0.95);
+    opacity: 0.12;
+  }
+  20% {
+    transform: scale(0.52);
+    opacity: 0.04;
+  }
+  34% {
+    transform: scale(0.9);
+    opacity: 0.11;
+  }
+  42% {
+    transform: scale(1.12);
+    opacity: 0.17;
   }
   50% {
     transform: scale(0.97);
     opacity: 0.12;
   }
-  75% {
-    transform: scale(0.8);
-    opacity: 0.06;
+  62% {
+    transform: scale(0.6);
+    opacity: 0.05;
+  }
+  76% {
+    transform: scale(0.95);
+    opacity: 0.12;
+  }
+  88% {
+    transform: scale(1.1);
+    opacity: 0.16;
   }
 }
 .anx-shadow-dance {
   transform-box: fill-box;
-  animation: anx-shadow-dance 1.3s ease-in-out infinite;
+  animation: anx-shadow-dance 1.25s ease-in-out infinite;
 }
 
 /*

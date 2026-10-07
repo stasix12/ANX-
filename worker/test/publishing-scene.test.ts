@@ -531,6 +531,74 @@ async function main(): Promise<void> {
       is(spin.delays > 4, `the pieces start at different moments (${spin.delays} distinct delays) — fourteen in lockstep is a falling comb, not confetti`);
       is(spin.durs > 3, `and fall at different speeds (${spin.durs} distinct durations)`);
 
+      /*
+       * AND THE JUMP STAYS IN THE FRAME.
+       *
+       * "בריקוד שיראו גם את הרגלים שלו." The robot has no legs — his own
+       * reference draws it as a flying body that fades into the haze — so the
+       * jump is what carries the dance, and a jump is the one movement that
+       * can throw the antenna out of the top of the scene. An SVG clips to
+       * its viewBox, so that failure is silent: the robot loses the tip of its
+       * antenna for a fifth of a second, twice a second, and nothing errors.
+       *
+       * MEASURED AT THE ANTENNA ITSELF, through getScreenCTM(), not off the
+       * element's bounding rectangle. A rotated element's bounding rectangle
+       * is the box around the tilt, so it rises several pixels above anything
+       * actually drawn — the first version of this check failed by a quarter
+       * of a pixel on a robot that was comfortably inside the frame. The CTM
+       * carries every transform on the way down (the dance's translate, the
+       * cheer's squash, the viewBox's own scale), so transforming one point
+       * through it gives where that point really is.
+       *
+       * The point is the asset's topmost pixel, measured off robot.webp:
+       * (239, 22) of 470×374, which is the ball on the antenna.
+       *
+       * Sampled across two and a half cycles rather than at one instant,
+       * because the apex is a fifth of the way through a 1.25s loop and a
+       * single read lands on it roughly never.
+       */
+      {
+        const TIP = { fx: 239 / 470, fy: 22 / 374 };
+        const seen: { gap: number; ty: number }[] = [];
+        for (let i = 0; i < 26; i += 1) {
+          seen.push(
+            await page.evaluate((tip) => {
+              const p = document.querySelector('[data-panel]') as HTMLElement;
+              const img = p.querySelector('svg image') as SVGImageElement;
+              const svg = p.querySelector('svg') as SVGSVGElement;
+              const x = Number(img.getAttribute('x')) + tip.fx * Number(img.getAttribute('width'));
+              const y = Number(img.getAttribute('y')) + tip.fy * Number(img.getAttribute('height'));
+              const m = img.getScreenCTM()!;
+              /* DOMPoint.matrixTransform, rather than doing the arithmetic
+                 here: the CTM is a full 2D matrix and the dance rotates. */
+              const at = new DOMPoint(x, y).matrixTransform(m);
+              /* And the dance's OWN vertical travel, read off its matrix in
+                 the scene's own units — see the assertion below for why this
+                 is measured separately from the antenna. */
+              const dance = new DOMMatrixReadOnly(getComputedStyle(p.querySelector('.anx-dance')!).transform);
+              return { gap: at.y - svg.getBoundingClientRect().top, ty: dance.f };
+            }, TIP),
+          );
+          await page.waitForTimeout(120);
+        }
+        const lowest = Math.min(...seen.map((f) => f.gap));
+        is(lowest >= 0, `the jump never puts the antenna through the top of the scene (closest it came: ${lowest.toFixed(1)}px below the edge)`);
+        /*
+         * AND THE JUMP IS REALLY A JUMP, measured on the dance's own matrix
+         * rather than on where the antenna ends up.
+         *
+         * The first version of this asked only that the antenna move, and a
+         * mutation that emptied the dance keyframe entirely SURVIVED it: the
+         * squash alone, anchored at the feet, moves the top of the robot
+         * about ten pixels on its own. "Something moved" is not the claim.
+         * The claim is that the body leaves the ground — the keyframe travels
+         * from three units below the resting line to ten above it — so it is
+         * the dance's own translate that is read here.
+         */
+        const travel = Math.max(...seen.map((f) => f.ty)) - Math.min(...seen.map((f) => f.ty));
+        is(travel > 9, `and the body really leaves the ground — ${travel.toFixed(1)} scene units between the crouch and the apex, not a squash pretending to be a jump`);
+      }
+
       /* PAUSED, with the day's figures still complete: he switched it off, and
          switched off is not finished. */
       await page.evaluate(() => { window.__mode('paused'); window.__plan(248, 248); });

@@ -136,7 +136,7 @@ function HistoryScreen() {
       } else if (days !== null && days !== undefined) {
         fromISO = new Date(Date.now() - Math.max(days, 1) * 86_400_000).toISOString();
       }
-      setRows(await listQueue({ status: statuses.length ? statuses : undefined, since: fromISO, until: toISO, limit: 500 }));
+      setRows(await listQueue({ status: statuses.length ? statuses : undefined, since: fromISO, until: toISO, limit: 500, withText: true }));
       setError(null);
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));

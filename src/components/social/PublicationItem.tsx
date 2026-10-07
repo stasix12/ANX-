@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import type { QueueRow } from '@/lib/social/client';
+import { useEffect, useState } from 'react';
+import { getQueueItem, type QueueRow } from '@/lib/social/client';
 import { formatDayMonthHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { CANCELLABLE_STATUSES } from '@/lib/social/status';
 import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
@@ -69,6 +69,27 @@ export function PublicationItem({
   busy?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  /*
+   * The body text on demand. Lists fetch rows WITHOUT rendered_text now
+   * (QUEUE_SELECT_LITE — it was two hundred full post bodies polled every four
+   * seconds), so when a row is opened and its body was not already loaded, this
+   * pulls that one row's text. A row that arrived WITH the text (the history
+   * screen, which searches it) shows it immediately and never fetches.
+   */
+  const [fetchedText, setFetchedText] = useState<string | null>(null);
+  const bodyText = row.rendered_text ?? fetchedText;
+  useEffect(() => {
+    if (!open || row.rendered_text || fetchedText !== null) return;
+    let alive = true;
+    getQueueItem(row.id)
+      .then((full) => {
+        if (alive && full) setFetchedText(full.rendered_text ?? '');
+      })
+      .catch(() => alive && setFetchedText(''));
+    return () => {
+      alive = false;
+    };
+  }, [open, row.id, row.rendered_text, fetchedText]);
   const line = statusLine(row);
   const running = row.status === 'publishing';
   /*
@@ -149,13 +170,16 @@ export function PublicationItem({
             <Detail label="ניסיונות">{row.attempts}</Detail>
           </dl>
           {(row.error || row.skip_reason) && <ErrorDetail row={row} technical />}
-          {row.rendered_text && (
+          {bodyText !== null && bodyText !== '' && (
             <div>
               <p className="mb-1 text-xs font-bold text-mist-500">הטקסט שיוצא / יצא</p>
               <p dir="auto" className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl border border-ink-700 bg-ink-900 p-3 text-sm leading-relaxed text-mist-100">
-                {row.rendered_text}
+                {bodyText}
               </p>
             </div>
+          )}
+          {open && bodyText === null && (
+            <p className="text-xs text-mist-500">טוען את הטקסט…</p>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
             {row.permalink && (

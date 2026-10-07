@@ -879,7 +879,14 @@ export async function uploadMedia(file: File): Promise<MediaItem> {
     throw new Error('אפשר להעלות תמונות (JPG, PNG, GIF, WEBP, HEIC) או סרטונים (MP4, MOV, WEBM) בלבד.');
   }
   const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${resolved.ext}`;
-  const { error } = await client.storage.from('social-media').upload(path, file, { contentType, upsert: false });
+  /* A year's cache: the path carries a random UUID, so the bytes at it never
+     change — a new image is a new path. Supabase's default is one hour, which
+     re-serves every image from storage hourly per viewer; immutable caching
+     turns a group avatar or a post cover into a single download that the
+     dashboard's pollers then read from cache instead of re-fetching. */
+  const { error } = await client.storage
+    .from('social-media')
+    .upload(path, file, { contentType, upsert: false, cacheControl: '31536000' });
   if (error) throw friendlyError(error);
   const { data } = client.storage.from('social-media').getPublicUrl(path);
   return { kind: resolved.kind, url: data.publicUrl, path, name: file.name };
@@ -1070,6 +1077,26 @@ export interface QueueRow extends QueueItem {
 const QUEUE_SELECT =
   '*, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
 
+/*
+ * THE SAME ROW WITHOUT `rendered_text` — and that one column is why this
+ * exists.
+ *
+ * rendered_text is the ENTIRE published post, stored per queue row. `*` carries
+ * it, and the live board polls `*` every four seconds for up to two hundred
+ * rows, on a phone, while the only place the text is ever shown is one row a
+ * person has tapped open (PublicationItem, behind `open`). So every tick shipped
+ * two hundred full post bodies to draw a list that shows a name, a time and a
+ * status — the single biggest source of Supabase egress in this app, and the
+ * thing that put a free project over its 5GB cap with two users.
+ *
+ * Columns are listed explicitly (PostgREST has no "all but one") straight off
+ * QueueItem, minus rendered_text. The three joins are identical to QUEUE_SELECT,
+ * so every consumer that reads a joined target/post/variant is unaffected; only
+ * the body is gone, and PublicationItem fetches it on demand when a row opens.
+ */
+const QUEUE_SELECT_LITE =
+  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, method, metrics_seen, metrics_views, metrics_reactions, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
+
 /**
  * `order` matters more than it looks: the limit is applied AFTER the sort, so
  * a descending read with a limit returns the FURTHEST-OUT rows. The dashboard
@@ -1120,11 +1147,14 @@ export async function listTimelineDone(opts: { since: string; until: string; lim
 }
 
 export async function listQueue(
-  opts: { status?: QueueItem['status'][]; since?: string; until?: string; limit?: number; order?: 'asc' | 'desc' } = {},
+  opts: { status?: QueueItem['status'][]; since?: string; until?: string; limit?: number; order?: 'asc' | 'desc'; withText?: boolean } = {},
 ): Promise<QueueRow[]> {
+  /* Lean by default: only the history screen, which SEARCHES the body text
+     client-side, asks for it (withText). Everyone else draws collapsed rows
+     and fetches a body only when one is opened. */
   let q = db()
     .from('social_queue')
-    .select(QUEUE_SELECT)
+    .select(opts.withText ? QUEUE_SELECT : QUEUE_SELECT_LITE)
     .order('scheduled_at', { ascending: opts.order === 'asc' })
     .limit(opts.limit ?? 200);
   if (opts.status?.length) q = q.in('status', opts.status);
@@ -1287,7 +1317,7 @@ export async function listLiveQueue(): Promise<QueueRow[]> {
   return unwrap<QueueRow[]>(
     await db()
       .from('social_queue')
-      .select(QUEUE_SELECT)
+      .select(QUEUE_SELECT_LITE)
       // Every open row (status.ts), not a hand-written subset: manual_pending
       // was missing, so the board's "דורשים אתכם" section — whose whole point
       // is "nothing moves until you act" — could never show one.

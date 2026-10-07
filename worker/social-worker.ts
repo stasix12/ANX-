@@ -1193,7 +1193,7 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
       if (profile.image) {
         const ext = profile.image.contentType.includes('png') ? 'png' : 'jpg';
         const objectPath = `groups/${target.id}.${ext}`;
-        const { error } = await db.storage.from('social-media').upload(objectPath, profile.image.bytes, { contentType: profile.image.contentType, upsert: true });
+        const { error } = await db.storage.from('social-media').upload(objectPath, profile.image.bytes, { contentType: profile.image.contentType, upsert: true, cacheControl: '86400' });
         /*
          * This used to be `if (!error)` and nothing else, so the same missing
          * UPDATE policy that blocked the avatar also quietly stopped a group
@@ -2346,7 +2346,7 @@ async function recordAccount(
     const objectPath = `workers/${state.id}.png`;
     const { error } = await db.storage
       .from('social-media')
-      .upload(objectPath, account.image.bytes, { contentType: account.image.contentType, upsert: true });
+      .upload(objectPath, account.image.bytes, { contentType: account.image.contentType, upsert: true, cacheControl: '86400' });
     // The cache-buster matters: the object path is stable, so without it the
     // dashboard keeps showing the previous owner's face after a re-login.
     if (error) {
@@ -2607,7 +2607,7 @@ async function storeDiscoveryPictures(pictures: Map<string, { bytes: Buffer; con
     /* The id is Facebook's own and can hold anything a vanity name can, so it
        is hashed rather than pasted into a storage path. */
     const objectPath = `discovery/${createHash('sha1').update(externalId).digest('hex').slice(0, 20)}.${ext}`;
-    const { error } = await db.storage.from('social-media').upload(objectPath, pic.bytes, { contentType: pic.contentType, upsert: true });
+    const { error } = await db.storage.from('social-media').upload(objectPath, pic.bytes, { contentType: pic.contentType, upsert: true, cacheControl: '86400' });
     if (error) {
       console.error(`[worker] ✗ העלאת תמונת קבוצה מהחיפוש נכשלה:`, error.message);
       if (!refused) refused = error.message;
@@ -2827,7 +2827,7 @@ async function recordProfiles(state: WorkerState, profiles: FacebookProfile[]): 
       const objectPath = `workers/${state.id}-p-${slug}.png`;
       const up = await db.storage
         .from('social-media')
-        .upload(objectPath, p.image.bytes, { contentType: p.image.contentType, upsert: true });
+        .upload(objectPath, p.image.bytes, { contentType: p.image.contentType, upsert: true, cacheControl: '86400' });
       if (up.error) {
         /* Reported and then ignored, in the terminal only: the names are the
            feature and they are already in hand. The avatar's own upload failure

@@ -1608,150 +1608,279 @@ body:has(.social-theme) .site-backdrop {
 /* ===========================================================================
  * THE PUBLISHING SCENE — src/components/social/PublishingScene.tsx
  *
- * Every mark in that panel is SVG; these are the only moving parts, and they
- * are kept here rather than inline for the reason the rest of this file exists:
- * one place where a reduced-motion reader can switch all of it off, which the
+ * Every mark in that panel is SVG; these are its only moving parts, and they
+ * live here rather than inline for the reason the rest of this file exists:
+ * one place where a reduced-motion reader switches all of it off, which the
  * block at the end of this section does.
  *
- * Nothing below changes a number. The ticks in the scene are React state fed by
- * the real publication count — motion only makes an arrival legible once it has
- * already happened.
+ * NOTHING BELOW CHANGES A NUMBER. The tick in the scene is React state fed by
+ * the real publication count. Motion only makes an arrival legible once it has
+ * already happened — see the header of PublishingScene.tsx.
+ *
+ * The brief: "premium, smooth, alive" and "must NOT bounce constantly, must
+ * NOT look like a children's cartoon". So the amplitudes here are small and
+ * the periods are long: 3px over four seconds reads as breathing at a glance
+ * and disappears while the figures underneath are being read.
  * ======================================================================== */
 
-/* The body breathes. Four pixels over three seconds: present at a glance,
-   invisible while reading the figures underneath it. */
+/* The body. 3px, four seconds — the "quietly working in the background" end
+   of the range, not the bouncing end. */
 @keyframes anx-bot-bob {
   0%,
   100% {
-    transform: translateY(0) rotate(0deg);
+    transform: translateY(0);
   }
   50% {
-    transform: translateY(-4px) rotate(-0.6deg);
+    transform: translateY(-3px);
   }
 }
 .anx-bot {
   transform-box: fill-box;
   transform-origin: center;
-  animation: anx-bot-bob 3s ease-in-out infinite;
+  animation: anx-bot-bob 4s ease-in-out infinite;
 }
 
-/* The antenna light, on the same slow pulse as the system dot elsewhere. */
+/* Paused keeps a breath, slower and half the distance: switched off is not
+   broken, and a frozen robot reads as broken. */
+.anx-bot-min {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: anx-bot-bob 7s ease-in-out infinite;
+  --anx-min: 1;
+}
+.anx-bot-min {
+  animation-name: anx-bot-bob-min;
+}
+@keyframes anx-bot-bob-min {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+/* The head, a degree and a half out of phase with the body. Sub-degree
+   rotation is what stops a bob from reading as a bounce. */
+@keyframes anx-head {
+  0%,
+  100% {
+    transform: rotate(-0.8deg);
+  }
+  50% {
+    transform: rotate(0.8deg);
+  }
+}
+.anx-head {
+  transform-box: fill-box;
+  animation: anx-head 6.5s ease-in-out infinite;
+}
+
+/* The antenna light. */
 @keyframes anx-blip {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.45;
   }
 }
 .anx-blip {
-  animation: anx-blip 2.2s ease-in-out infinite;
+  animation: anx-blip 2.4s ease-in-out infinite;
 }
 
-/* A blink, rarely. Held closed for a twentieth of the cycle so it reads as a
-   blink and not as a flicker. */
+/* A blink, rarely, and held closed for a twentieth of the cycle so it reads
+   as a blink rather than a flicker. */
 @keyframes anx-eyes {
   0%,
-  92%,
+  93%,
   100% {
     transform: scaleY(1);
   }
-  95% {
+  96% {
     transform: scaleY(0.12);
   }
 }
 .anx-eyes {
   transform-box: fill-box;
   transform-origin: center;
-  animation: anx-eyes 5.5s ease-in-out infinite;
+  animation: anx-eyes 6s ease-in-out infinite;
 }
 
-/* The throwing arm, only while something is actually in flight. */
+/* THROWING — only while a row is really in flight. */
 @keyframes anx-arm {
   0%,
   100% {
     transform: rotate(0deg);
   }
-  30% {
-    transform: rotate(-13deg);
+  26% {
+    transform: rotate(-12deg);
   }
-  55% {
-    transform: rotate(4deg);
+  48% {
+    transform: rotate(3deg);
   }
 }
 .anx-arm {
   transform-box: fill-box;
-  animation: anx-arm 1.8s ease-in-out infinite;
+  animation: anx-arm 2.4s ease-in-out infinite;
 }
 
-/* The dotted trail runs TOWARDS the group, which is the whole reason it is
-   dashed rather than solid: direction is the information. */
+/* PREPARING — the smaller movement between publications. Half the angle and
+   twice the period, so the two states are told apart at a glance without
+   anybody having to read a label. */
+@keyframes anx-prep {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-2.5deg) translateY(-1.5px);
+  }
+}
+.anx-prep {
+  transform-box: fill-box;
+  animation: anx-prep 5s ease-in-out infinite;
+}
+
+/* The trail flows TOWARDS the group. Direction is the information. */
 @keyframes anx-trail {
   to {
-    stroke-dashoffset: -40;
+    stroke-dashoffset: -44;
   }
 }
 .anx-trail {
-  animation: anx-trail 1.1s linear infinite;
+  animation: anx-trail 1.3s linear infinite;
 }
 
 /*
  * THE CARD'S FLIGHT, in viewBox units.
  *
- * --dx/--dy are set per destination on the element, so one keyframe set serves
- * all four tiles and the arc is the same shape wherever it lands. It lifts at
- * the midpoint rather than travelling the straight line, to match the curve of
- * the trail under it.
+ * --dx/--dy are set per destination on the wrapper, so one keyframe set serves
+ * all four tiles and the arc keeps its shape wherever it lands. It lifts at the
+ * midpoint to follow the curve of the trail under it, and it is NEVER fully
+ * transparent in the middle of its journey: "clearly visible during the entire
+ * movement, never suddenly appears or disappears" is the brief, so the fade is
+ * spent inside the first and last eighth and the card is solid between them.
+ *
+ * 2.4s with a long ease at both ends: "do NOT make it too fast".
  */
 @keyframes anx-fly {
   0% {
-    transform: translate(0, 0) scale(0.55);
+    transform: translate(0, 0) scale(0.7);
     opacity: 0;
   }
-  14% {
+  12% {
+    transform: translate(calc(var(--dx) * 0.12), calc(var(--dy) * 0.12 - 5px)) scale(1);
     opacity: 1;
   }
   50% {
-    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5 - 16px)) scale(1);
+    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5 - 18px)) scale(1.06);
+    opacity: 1;
   }
-  86% {
+  88% {
+    transform: translate(calc(var(--dx) * 0.94), calc(var(--dy) * 0.94)) scale(0.96);
     opacity: 1;
   }
   100% {
-    transform: translate(var(--dx), var(--dy)) scale(0.5);
+    transform: translate(var(--dx), var(--dy)) scale(0.72);
     opacity: 0;
   }
 }
 .anx-fly {
   transform-box: fill-box;
   transform-origin: center;
-  animation: anx-fly 1.8s cubic-bezier(0.37, 0, 0.42, 1) infinite;
+  animation: anx-fly 2.4s cubic-bezier(0.45, 0, 0.3, 1) infinite;
 }
 
-/* The group takes the delivery: one soft swell, once, when the real count
-   moved. Not a loop — a loop would say it is still arriving. */
-@keyframes anx-land {
+/* The small light that runs just ahead of it, on the same arc and the same
+   clock, a tenth of a cycle in front. */
+@keyframes anx-spark {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  14% {
+    opacity: 0.55;
+  }
+  50% {
+    transform: translate(calc(var(--dx) * 0.6), calc(var(--dy) * 0.6 - 17px));
+    opacity: 0.5;
+  }
+  86% {
+    opacity: 0.25;
+  }
+  99% {
+    transform: translate(var(--dx), var(--dy));
+  }
+}
+.anx-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: anx-spark 2.4s cubic-bezier(0.45, 0, 0.3, 1) infinite;
+}
+
+/* THE ACTIVE DESTINATION — 1.00 → 1.04 → 1.00, which is as far as this is
+   allowed to go. A tile that moved more would compete with the card. */
+@keyframes anx-breathe {
   0%,
   100% {
     transform: scale(1);
   }
-  40% {
-    transform: scale(1.07);
+  50% {
+    transform: scale(1.04);
+  }
+}
+.anx-breathe {
+  transform-box: fill-box;
+  animation: anx-breathe 2.4s ease-in-out infinite;
+}
+
+/* And the ring around it, breathing out of phase so the two do not pulse as
+   one block. */
+@keyframes anx-halo {
+  0%,
+  100% {
+    transform: scale(0.97);
+    stroke-opacity: 0.2;
+  }
+  50% {
+    transform: scale(1.03);
+    stroke-opacity: 0.5;
+  }
+}
+.anx-halo {
+  transform-box: fill-box;
+  animation: anx-halo 2.4s ease-in-out infinite;
+}
+
+/* The group takes the delivery: one swell, once. A loop here would say it is
+   still arriving. */
+@keyframes anx-land {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 .anx-land {
-  animation: anx-land 0.6s ease-out 1;
+  transform-box: fill-box;
+  animation: anx-land 0.5s ease-out 1;
 }
 
-/* And the tick lands with it, rather than appearing between two frames. */
+/* And the tick lands with it: 0 → 1.15 → 1, 320ms. */
 @keyframes anx-tick {
   0% {
-    transform: scale(0.2);
+    transform: scale(0);
     opacity: 0;
   }
-  60% {
-    transform: scale(1.18);
+  55% {
+    transform: scale(1.15);
     opacity: 1;
   }
   100% {
@@ -1760,25 +1889,70 @@ body:has(.social-theme) .site-backdrop {
   }
 }
 .anx-tick {
-  animation: anx-tick 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 1;
+  transform-box: fill-box;
+  animation: anx-tick 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) 1;
+}
+
+/*
+ * THE REAL COUNTER, when it really moves.
+ *
+ * The old figure leaves upwards and the new one arrives from below, 300ms.
+ * This fires on a CHANGE of the number the database reported — there is no
+ * timer behind it, and a render that carries the same figure produces no
+ * movement at all.
+ */
+.anx-num {
+  position: relative;
+  display: inline-block;
+}
+.anx-num > .anx-num-out {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 0;
+}
+@keyframes anx-num-out {
+  to {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+}
+@keyframes anx-num-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+.anx-num-out {
+  animation: anx-num-out 0.3s ease-in forwards;
+}
+.anx-num-in {
+  animation: anx-num-in 0.3s ease-out;
 }
 
 /*
  * SWITCHED OFF, NOT HIDDEN.
  *
  * A reader who asked their phone for less motion still gets the whole scene —
- * the robot, the groups, and every tick that was earned. What they do not get
- * is anything that moves. The state was never in the motion.
+ * the robot, the groups, the ring around the active destination and the tick
+ * on an arrival that happened. What they do not get is anything that moves.
  */
 @media (prefers-reduced-motion: reduce) {
   .anx-bot,
+  .anx-bot-min,
+  .anx-head,
   .anx-blip,
   .anx-eyes,
   .anx-arm,
+  .anx-prep,
   .anx-trail,
   .anx-fly,
+  .anx-spark,
+  .anx-breathe,
+  .anx-halo,
   .anx-land,
-  .anx-tick {
+  .anx-tick,
+  .anx-num-out,
+  .anx-num-in {
     animation: none !important;
   }
 }

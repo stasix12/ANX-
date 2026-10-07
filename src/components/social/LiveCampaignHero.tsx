@@ -85,11 +85,56 @@ function StatePill({ tone, label, live }: { tone: Tone; label: string; live: boo
 const toneOf = (t: RunTone): Tone => (t === 'info' ? 'brand' : t);
 
 /** "18 / 125" is digits around a neutral slash, which an RTL line reorders. */
+/**
+ * THE FIGURE, ANIMATED ONLY WHEN IT REALLY MOVES.
+ *
+ * "The counter MUST NOT change because of the visual animation. It may ONLY
+ * change after the application receives REAL confirmation that the post was
+ * successfully published."
+ *
+ * Which is what this is: there is no timer here and no interval. It renders
+ * the number it is handed, and when a LATER render hands it a different one —
+ * which, on this screen, only happens after the queue has been re-read from
+ * the database — the old figure leaves upwards and the new one arrives from
+ * below. A render carrying the same figure produces no movement at all, and
+ * nothing in this component can make the number go up on its own.
+ *
+ * `tabular-nums` is on the wrapper rather than each span so the two figures
+ * occupy the same width while they cross, and the slash beside them does not
+ * shuffle. The outgoing one is aria-hidden: a screen reader must hear one
+ * number, not two.
+ */
+function RollingNumber({ value, className }: { value: number; className: string }) {
+  const [shown, setShown] = useState(value);
+  const [leaving, setLeaving] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (value === shown) return;
+    setLeaving(shown);
+    setShown(value);
+    const t = setTimeout(() => setLeaving(null), 320);
+    return () => clearTimeout(t);
+  }, [value, shown]);
+
+  return (
+    <span className={`anx-num ${className}`}>
+      {leaving !== null && (
+        <span key={`out-${leaving}`} aria-hidden className="anx-num-out">
+          {leaving}
+        </span>
+      )}
+      <span key={`in-${shown}`} className={leaving !== null ? 'anx-num-in' : undefined}>
+        {shown}
+      </span>
+    </span>
+  );
+}
+
 function Ratio({ done, total, suffix }: { done: number; total: number; suffix: string }) {
   return (
     <p className="text-sm font-bold text-mist-500">
       <span dir="ltr" className="inline-block">
-        <span className="text-[28px] font-extrabold leading-none tabular-nums text-mist-100">{done}</span>
+        <RollingNumber value={done} className="text-[28px] font-extrabold leading-none tabular-nums text-mist-100" />
         <span> / {total}</span>
       </span>
       <span> {suffix}</span>
@@ -994,18 +1039,23 @@ export function LiveQueueHero({
         runs one worker tick over rows whose time has already come, and it
         appears only in the minutes when there is such a row.
       */}
-      {nextAt && onTune && !paused && systemState !== 'empty' && (
-        <Button variant="secondary" size="md" className="mt-3 w-full justify-center gap-1.5" onClick={onTune}>
-          <CalendarIcon aria-hidden className="h-4 w-4" />
-          ערוך מועד ומרווח
-        </Button>
-      )}
+      {/*
+        THE TWO BUTTONS THAT STOOD HERE ARE GONE — "ערוך מועד ומרווח" and
+        "הרץ עכשיו" — because he asked for them gone, in those words.
 
-      {due && onRunNow && !paused && systemState !== 'empty' && (
-        <Button variant="secondary" size="md" className="mt-2 w-full" busy={busy} onClick={onRunNow}>
-          הרץ עכשיו
-        </Button>
-      )}
+        WHAT WENT WITH THEM, said plainly rather than discovered later: the
+        tuner is still reachable from the campaign screen, and "הרץ עכשיו" ran
+        ONE worker tick over rows whose time had already come. This panel was
+        the only place that offered that; the "הרץ עכשיו" in a publication
+        row's ⋯ menu is a different action, which re-queues a single row. So a
+        slot that has arrived while the worker is mid-sleep now waits for its
+        next tick instead of being nudged. That is a minute, not a day.
+
+        `onDue` is untouched: the effect that re-reads the queue the instant a
+        slot arrives still runs, so what replaces a finished countdown is still
+        READ rather than assumed. The props stay on the component — the screen
+        still passes them and the campaign screen still uses them.
+      */}
     </HeroPanel>
   );
 }

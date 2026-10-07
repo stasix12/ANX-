@@ -86,62 +86,115 @@ async function main(): Promise<void> {
       eq(await ticks(page), 0, 'nothing published, nothing ticked');
       is((await flying(page)) > 0, 'and yet the card IS flying — "busy" is allowed to be decorative, because it claims nothing');
 
-      /* The busiest state the scene has, for longer than three full flights. */
-      await page.waitForTimeout(3000);
+      /* The busiest state the scene has, for longer than a full flight. */
+      await page.waitForTimeout(3200);
       eq(
         await ticks(page),
         0,
         'THREE SECONDS OF A ROBOT THROWING CARDS AND NOT ONE TICK — the animation may never stand in for a publication that did not happen',
       );
+      eq(await page.locator('[data-active]').count(), 1, 'and exactly one group is the destination — never two, never none');
     }
 
-    /* ── 2. AND IT DOES MARK A REAL ONE ─────────────────────────────────── */
+    /* ── 2. A REAL ONE IS MARKED, AND THE MARK DOES NOT STAY FOR EVER ───── */
     {
+      /*
+       * "Do NOT permanently show green checkmarks on all group cards." The
+       * first build seeded one per publication already finished today, so by
+       * noon all four wore a tick and the mark meant nothing. A tick is an
+       * EVENT: it appears on an arrival, it is held, and it goes.
+       */
+      const before = await page.locator('[data-active]').getAttribute('x');
       await page.evaluate(() => window.__publish(1));
-      await page.waitForTimeout(120);
+      await page.waitForTimeout(150);
       eq(await ticks(page), 1, 'one real publication, one tick');
+      eq(await page.locator('[data-tick]').count(), 1, 'on exactly one group — the one it was sent to');
+      eq(await flying(page), 0, 'and nothing is still travelling, because it has arrived');
 
-      await page.evaluate(() => window.__publish(2));
-      await page.waitForTimeout(120);
-      eq(await ticks(page), 2, 'and the next one lands on the next group');
-
-      /* A re-render that does not move the number must not add a tick — the
-         dashboard re-renders on a timer, and a scene that counted renders
-         would fill itself in while the worker sat idle. */
-      await page.evaluate(() => window.__mode('sending'));
-      await page.waitForTimeout(400);
-      eq(await ticks(page), 2, 'a re-render with the same count adds nothing');
+      /* Held, then gone — and the next group takes over. */
+      await page.waitForTimeout(2600);
+      eq(await ticks(page), 0, 'the tick is held for a beat and then goes: a mark that never leaves cannot report an arrival');
+      const after = await page.locator('[data-active]').getAttribute('x');
+      is(before !== after, 'and the active destination has moved on to the next group');
+      eq(await page.locator('[data-active]').count(), 1, 'still exactly one');
+      is((await flying(page)) > 0, 'with the card travelling again, towards it');
     }
 
-    /* ── 3. FOUR TILES, AND THE FIFTH STARTS THE ROW AGAIN ──────────────── */
+    /* ── 3. THE NEXT DESTINATION IS BARE UNTIL SOMETHING LANDS ──────────── */
     {
-      await page.evaluate(() => window.__publish(4));
-      await page.waitForTimeout(120);
-      eq(await ticks(page), 4, 'four groups, four ticks');
-      await page.evaluate(() => window.__publish(5));
-      await page.waitForTimeout(120);
+      await page.waitForTimeout(400);
       eq(
         await ticks(page),
-        1,
-        'the fifth wraps rather than overflowing — four tiles cannot hold 279 groups, and pretending they can would be the progress bar lying in a second place',
+        0,
+        'NO green tick on the active destination before the publication succeeds — the tick is the claim, and nothing has been claimed yet',
       );
+      /* Three arrivals at once are presented one after another, not collapsed
+         into one: the dashboard re-reads every thirty seconds and the worker
+         can publish faster than that. */
+      await page.evaluate(() => window.__publish(4));
+      await page.waitForTimeout(150);
+      eq(await ticks(page), 1, 'a burst shows its first arrival');
+      await page.waitForTimeout(2600);
+      eq(await ticks(page), 1, 'then the next, on the next group');
+      await page.waitForTimeout(2600);
+      eq(await ticks(page), 1, 'and the next — one at a time, rather than three collapsed into one');
     }
 
-    /* ── 4. STOPPED MEANS STOPPED ───────────────────────────────────────── */
+    /* ── 4. THE FOUR STATES ARE TOLD APART ──────────────────────────────── */
     {
-      for (const mode of ['paused', 'idle', 'waiting'] as const) {
+      const seenIn = async (mode: 'sending' | 'waiting' | 'paused' | 'idle') => {
         await page.evaluate((m) => window.__mode(m), mode);
-        await page.waitForTimeout(120);
-        eq(await flying(page), 0, `nothing travels while the system is "${mode}" — the card means a row is in flight`);
-      }
-      /* But the groups it already reached keep their ticks: the state is in the
-         shapes, not in the motion. */
-      is((await ticks(page)) > 0, 'and the ticks already earned stay, whatever the system is doing now');
-      await page.evaluate(() => window.__mode('waiting'));
-      eq(await page.locator('.anx-bot').count(), 1, 'a running system keeps the robot alive between publications');
-      await page.evaluate(() => window.__mode('paused'));
-      await page.waitForTimeout(80);
-      eq(await page.locator('.anx-bot').count(), 0, 'a paused one does not');
+        await page.waitForTimeout(150);
+        return page.evaluate(() => ({
+          fly: document.querySelectorAll('.anx-fly').length,
+          trail: document.querySelectorAll('.anx-trail').length,
+          throwing: document.querySelectorAll('.anx-arm').length,
+          preparing: document.querySelectorAll('.anx-prep').length,
+          breathing: document.querySelectorAll('.anx-breathe').length,
+          bot: document.querySelectorAll('.anx-bot').length,
+          botMin: document.querySelectorAll('.anx-bot-min').length,
+          active: document.querySelectorAll('[data-active]').length,
+        }));
+      };
+
+      /* Let the burst above finish so `sending` is genuinely sending. */
+      await page.waitForTimeout(2800);
+
+      const sending = await seenIn('sending');
+      is(sending.fly === 1 && sending.trail === 1 && sending.throwing === 1, 'SENDING: the card travels, the trail flows, the arm throws');
+      eq(sending.breathing, 1, 'and exactly one group breathes');
+
+      const waiting = await seenIn('waiting');
+      eq(waiting.fly, 0, 'WAITING: nothing travels — the gap between publications is not a publication');
+      eq(waiting.trail, 0, 'and the trail is still');
+      eq(waiting.preparing, 1, 'but the arm is readying the next post, which is what tells the two states apart at a glance');
+      eq(waiting.active, 1, 'and the next destination is still named');
+      eq(waiting.bot, 1, 'the robot is alive');
+
+      const paused = await seenIn('paused');
+      eq(paused.fly, 0, 'PAUSED: nothing travels');
+      eq(paused.trail, 0, 'nothing flows');
+      eq(paused.breathing, 0, 'nothing pulses');
+      eq(paused.active, 0, 'and no group is named as a destination — nothing is going anywhere');
+      eq(paused.bot, 0, 'the full idle stops');
+      eq(paused.botMin, 1, 'and a smaller, slower breath replaces it — switched off is not broken, and a frozen robot reads as broken');
+
+      const idle = await seenIn('idle');
+      eq(idle.bot + idle.botMin, 0, 'IDLE: with nothing scheduled at all, even that stops');
+    }
+
+    /* ── 4b. THE CARD IS BIGGER, AND VISIBLE THE WHOLE WAY ──────────────── */
+    {
+      await page.evaluate(() => window.__mode('sending'));
+      await page.waitForTimeout(150);
+      const card = await page.evaluate(() => {
+        const r = document.querySelector('[data-card] rect') as SVGRectElement;
+        return { w: Number(r.getAttribute('width')), h: Number(r.getAttribute('height')) };
+      });
+      /* It was 22×26. "approximately 20–30% larger" — measured, not asserted
+         by eye, because "looks bigger" is how a 4% change ships. */
+      is(card.w / 22 >= 1.2 && card.w / 22 <= 1.32, `the card grew by ${Math.round((card.w / 22 - 1) * 100)}% — the brief asked for 20–30`);
+      is(card.h / 26 >= 1.2 && card.h / 26 <= 1.32, 'in both directions, so it is not stretched');
     }
 
     /* ── 5. IT FITS, AT EVERY WIDTH ─────────────────────────────────────── */
@@ -223,8 +276,24 @@ async function main(): Promise<void> {
     {
       const src = readFileSync(new URL('../../src/components/social/PublishingScene.tsx', import.meta.url), 'utf8');
       const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-      is(!/setInterval|setTimeout/.test(code), 'no timer drives the ticks — the publication count is the only thing that may move them');
-      is(/seen\.current/.test(code) && /published <= seen\.current/.test(code), 'and it advances on a RISE in that count, not on a render');
+      /*
+       * RE-POINTED, NOT DELETED. This used to read "no setTimeout anywhere",
+       * which was true of the first build and is the wrong claim: holding an
+       * arrival on screen for a beat NEEDS a timer. What must never be on a
+       * timer is the COUNT of arrivals. So the claim is now stated where it
+       * belongs — on `target`, the only number that may rise.
+       */
+      is(!/setInterval/.test(code), 'nothing polls');
+      const rise = code.slice(code.indexOf('const gained'), code.indexOf('}, [published]);'));
+      is(rise.length > 40 && rise.length < 700, 'the effect that watches the real count is still one effect, and this slice is it');
+      eq(
+        (code.match(/setTarget\(/g) ?? []).length,
+        (rise.match(/setTarget\(/g) ?? []).length,
+        'EVERY change to the arrival count happens inside the effect watching `published` — nowhere else in the file may touch it',
+      );
+      is(/const success = shown < target;/.test(code), 'and the presentation can never run ahead of it: a tick exists only while fewer have been shown than really happened');
+      is(/setTimeout\(\(\) => setShown\(\(s\) => s \+ 1\), SUCCESS_HOLD_MS\)/.test(code), 'the one timer here advances the PRESENTATION, which can only ever catch up to the real count');
+      is(/seen\.current/.test(code) && /published - seen\.current/.test(code), 'and it advances on a RISE in that count, not on a render');
       is(!/\.(gif|mp4|webm|png|jpg)/i.test(code), 'every mark is drawn, not fetched — the scene costs no egress on an account that has already been cut off for it');
     }
 

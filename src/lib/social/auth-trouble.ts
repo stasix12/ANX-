@@ -64,6 +64,33 @@ export type SignInTrouble = {
    of these that is the one move that cannot work. */
 const NOT_YOU = 'זה לא המייל ולא הסיסמה';
 
+/**
+ * WHICH MEASURE WAS EXCEEDED, by name.
+ *
+ * Supabase restricts a whole project with a 402 and a sentence of the shape
+ * "Service for this project is restricted due to the following violations:
+ * exceed_cached_egress_quota." Which measure it is decides what to do about it
+ * — pictures being re-downloaded is a different job from a database that grew
+ * — so it is read out rather than rounded off to "over quota".
+ */
+const QUOTA_NAMES: Record<string, string> = {
+  cached_egress: 'התעבורה (הורדות של תמונות וקבצים)',
+  egress: 'התעבורה',
+  storage_egress: 'התעבורה של אחסון הקבצים',
+  db_egress: 'התעבורה של מסד הנתונים',
+  realtime_egress: 'התעבורה של העדכונים החיים',
+  storage_size: 'נפח אחסון הקבצים',
+  db_size: 'גודל מסד הנתונים',
+  monthly_active_users: 'מספר המשתמשים החודשי',
+  realtime_peak_connections: 'מספר החיבורים במקביל',
+};
+
+export function quotaExceeded(message: string): string {
+  const m = /exceed_([a-z_]+?)_quota/i.exec(message);
+  if (!m) return '';
+  return QUOTA_NAMES[m[1].toLowerCase()] ?? m[1].toLowerCase().replace(/_/g, ' ');
+}
+
 function technical(code: string, status: number, message: string): string {
   const bits: string[] = [];
   if (code) bits.push(code);
@@ -188,6 +215,22 @@ export function signInTrouble(err: unknown): SignInTrouble {
    * querying schema" is the most common wording and it is the reason this
    * branch exists: it matched none of the old rules, so it printed nothing.
    */
+  /*
+   * 402 — THE PROJECT IS RESTRICTED, and this is the one that actually
+   * happened. Supabase stops serving a project that passed a plan limit, the
+   * gateway answers every request with 402, and nothing in the product works:
+   * not the dashboard, not the login, not the PC that publishes. It is not a
+   * 5xx and it is not a key, so it used to land in the ending that recognised
+   * nothing — which is exactly how it was finally identified, and exactly why
+   * it should not have had to be.
+   */
+  if (status === 402 || has('exceed_', 'restricted due to the following violations')) {
+    const which = quotaExceeded(message);
+    return out(
+      'project',
+      `${NOT_YOU}: Supabase חסמה את הפרויקט כי הוא עבר את מכסת${which ? ` ${which}` : ' השימוש'} החודשית. כל המערכת מושבתת עד שמשדרגים את התוכנית ב-Supabase או עד שהמכסה מתאפסת במחזור החיוב הבא — גם המחשב לא מפרסם בינתיים.`,
+    );
+  }
   if (status >= 500 || code === 'unexpected_failure' || has('database error')) {
     return out(
       'project',

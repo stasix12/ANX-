@@ -33,7 +33,9 @@ export type ConnectionVerdict =
   | { kind: 'unreachable'; project: string }
   /** It answered, and refused the key. */
   | { kind: 'bad-key'; project: string; status: number }
-  /** It answered with a failure of its own: paused, over quota, broken. */
+  /** Supabase stopped serving it: a plan limit was passed. */
+  | { kind: 'restricted'; project: string }
+  /** It answered with a failure of its own: paused, broken. */
   | { kind: 'project-down'; project: string; status: number }
   /** The sign-in server is up and accepts this site's key. */
   | { kind: 'reachable'; project: string };
@@ -68,6 +70,11 @@ export async function checkConnection(url: string, key: string, fetcher: Fetcher
     const status = typeof res?.status === 'number' ? res.status : 0;
     if (res?.ok) return { kind: 'reachable', project };
     if (status === 401 || status === 403) return { kind: 'bad-key', project, status };
+    /* 402 is Supabase refusing to serve the project at all, and it is a
+       different answer from "down": nothing here recovers it, somebody has to
+       settle the plan. The probe reads the status, not the body, so it says
+       which measure only in the sign-in error — see quotaExceeded(). */
+    if (status === 402) return { kind: 'restricted', project };
     if (status >= 500 || status === 0) return { kind: 'project-down', project, status };
     /*
      * 404 and the other 4xx. The host answered and it is not this key being
@@ -89,6 +96,8 @@ export function verdictText(v: ConnectionVerdict): string {
       return `לא הצלחנו להגיע בכלל לשרת (${v.project}). בדקו את האינטרנט בטלפון; אם האינטרנט עובד — הכתובת שהאתר מוגדר אליה לא קיימת.`;
     case 'bad-key':
       return `השרת (${v.project}) עובד, אבל דחה את המפתח שהאתר מחזיק (${v.status}). זאת הסיבה שאי אפשר להיכנס, והסיסמה שלכם בסדר. צריך לעדכן ב-Vercel את NEXT_PUBLIC_SUPABASE_ANON_KEY מ-Supabase → Settings → API Keys ואז Redeploy.`;
+    case 'restricted':
+      return `Supabase חסמה את הפרויקט (${v.project}) כי הוא עבר מכסה חודשית (402). זאת הסיבה שאי אפשר להיכנס, והסיסמה שלכם בסדר. צריך להיכנס ללוח הבקרה של Supabase, לראות ב-Reports → Usage איזו מכסה נגמרה, ולשדרג את התוכנית או לחכות למחזור החיוב הבא.`;
     case 'project-down':
       return `הפרויקט ב-Supabase (${v.project}) לא עונה כמו שצריך (${v.status}). לרוב זה פרויקט מושהה או שעבר את המכסה. היכנסו ללוח הבקרה של Supabase, ודאו שהפרויקט פעיל, ונסו שוב.`;
     case 'reachable':

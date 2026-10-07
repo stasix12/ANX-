@@ -31,7 +31,7 @@
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { signInTrouble, type Blame } from '../../src/lib/social/auth-trouble';
+import { signInTrouble, quotaExceeded, type Blame } from '../../src/lib/social/auth-trouble';
 import { checkConnection, projectRef, verdictText, type ConnectionVerdict } from '../../src/lib/social/connection-check';
 
 let checks = 0;
@@ -51,6 +51,16 @@ const checker = read('../../src/lib/social/connection-check.ts');
 /* The sentence in the screenshot. It is the one string this whole file exists
    to make unreachable, so it is also the one string that may not come back. */
 const DEAD = 'לא הצלחנו להשלים את הפעולה';
+
+/*
+ * THE ANSWER, VERBATIM. This is what the rebuilt screen printed on the morning
+ * it shipped — the first time in weeks the product said anything true about why
+ * it was refusing its owner. It is kept here exactly as it arrived, because the
+ * ending that produced it was the "recognised nothing" one, and a cause this
+ * product has now met deserves a sentence of its own rather than a raw dump.
+ */
+const RESTRICTED =
+  'Service for this project is restricted due to the following violations: exceed_cached_egress_quota. The project owner must resolve the issue to restore service.';
 
 /* ======================================================= 1. nothing is swallowed */
 
@@ -96,6 +106,7 @@ const EVERY: { name: string; err: unknown; blame: Blame }[] = [
   { name: 'bad api key', err: { message: 'Invalid API key', status: 401 }, blame: 'project' },
   { name: 'bad jwt', err: { message: 'invalid claim', status: 401, code: 'bad_jwt' }, blame: 'project' },
   { name: 'auth database down', err: { message: 'Database error querying schema', status: 500, code: 'unexpected_failure' }, blame: 'project' },
+  { name: 'project restricted over quota', err: { message: RESTRICTED, status: 402 }, blame: 'project' },
   { name: 'html instead of json', err: { message: `Unexpected token '<', "<!DOCTYPE "... is not valid JSON`, status: 0 }, blame: 'project' },
   { name: 'no connection', err: { message: 'Failed to fetch', status: 0 }, blame: 'network' },
 ];
@@ -234,6 +245,32 @@ for (const err of [{ code: 'over_email_send_rate_limit', message: 'email rate li
   eq(signInTrouble(err).blame, 'wait', `${JSON.stringify(err)} is a limit that lifts by itself`);
 }
 
+/* ============================= 3b. the one that actually happened: 402, over quota */
+
+{
+  const t = signInTrouble({ message: RESTRICTED, status: 402 });
+  eq(t.blame, 'project', 'a restricted project is the project’s, and no password reaches it');
+  is(t.message.includes('מכסת התעבורה'), 'and it names the measure that ran out — pictures being re-downloaded is a different job from a database that grew');
+  is(t.message.includes('Supabase'), 'and who is doing the restricting, since the fix is in their dashboard and nowhere in this product');
+  is(t.message.includes('המחשב'), 'and that the PC has stopped publishing too, which is the half he would otherwise discover later');
+  is(!t.message.includes('exceed_cached_egress_quota'), 'the English is not dumped into the sentence — it still rides along in the technical line underneath');
+  is(t.detail.includes('exceed_cached_egress_quota'), 'where it stays readable, because that string is what a support page is searched for');
+}
+/* The status alone is enough: some deployments answer 402 with no body at all. */
+eq(signInTrouble({ message: '', status: 402 }).blame, 'project', 'a bare 402 is still a restricted project');
+is(signInTrouble({ message: '', status: 402 }).message.includes('מכסת השימוש'), 'and says so without naming a measure it was not told');
+
+for (const [raw, named] of [
+  ['exceed_cached_egress_quota', 'התעבורה (הורדות של תמונות וקבצים)'],
+  ['exceed_db_size_quota', 'גודל מסד הנתונים'],
+  ['exceed_storage_size_quota', 'נפח אחסון הקבצים'],
+  ['exceed_monthly_active_users_quota', 'מספר המשתמשים החודשי'],
+] as const) {
+  eq(quotaExceeded(`violations: ${raw}.`), named, `${raw} is read out by name`);
+}
+eq(quotaExceeded('violations: exceed_something_nobody_mapped_quota.'), 'something nobody mapped', 'a measure this file has never seen is still reported, unmapped, rather than dropped');
+eq(quotaExceeded('Invalid login credentials'), '', 'and a message that names no quota names none');
+
 /* ================================================ 4. the key is sent, never shown */
 
 eq(projectRef('https://atcsfvkulltkaadanplv.supabase.co'), 'atcsfvkulltkaadanplv', 'the project reference is the subdomain');
@@ -269,7 +306,7 @@ async function main() {
 
 /* THE WHOLE POINT OF THE CHECK: these three are indistinguishable from the
    sign-in error alone, and the check tells them apart. */
-for (const [status, kind] of [[401, 'bad-key'], [403, 'bad-key'], [500, 'project-down'], [503, 'project-down'], [404, 'project-down']] as const) {
+for (const [status, kind] of [[401, 'bad-key'], [403, 'bad-key'], [402, 'restricted'], [500, 'project-down'], [503, 'project-down'], [404, 'project-down']] as const) {
   const v = await checkConnection(URL_OK, KEY, fakeFetch({ ok: false, status }, []));
   eq(v.kind, kind, `the check reads HTTP ${status} as ${kind}`);
 }
@@ -291,6 +328,7 @@ const ALL_VERDICTS: ConnectionVerdict[] = [
   { kind: 'unconfigured' },
   { kind: 'unreachable', project: 'proj1234' },
   { kind: 'bad-key', project: 'proj1234', status: 401 },
+  { kind: 'restricted', project: 'proj1234' },
   { kind: 'project-down', project: 'proj1234', status: 503 },
   { kind: 'reachable', project: 'proj1234' },
 ];
@@ -302,6 +340,8 @@ for (const v of ALL_VERDICTS) {
   is(!JSON.stringify(v).includes(KEY), `${v.kind} does not carry the key in the verdict either`);
 }
 is(verdictText({ kind: 'bad-key', project: 'proj1234', status: 401 }).includes('הסיסמה שלכם בסדר'), 'a refused key says the password is fine, which is the one thing the person needs to hear');
+is(verdictText({ kind: 'restricted', project: 'proj1234' }).includes('Reports → Usage'), 'and a restricted project points at the one page that says WHICH quota ran out — guessing that is how a month gets spent optimising the wrong thing');
+is(verdictText({ kind: 'restricted', project: 'proj1234' }).includes('הסיסמה שלכם בסדר'), 'it too says the details are fine');
 is(verdictText({ kind: 'reachable', project: 'proj1234' }).includes('פרטי הכניסה'), 'and a healthy project points back at the details, because then that really is what is left');
 for (const v of ALL_VERDICTS.filter((x) => x.kind !== 'unconfigured')) {
   is(verdictText(v).includes('proj1234'), `${v.kind} names which project it asked — "which database am I on" is a question this product has had to answer before`);

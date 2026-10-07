@@ -358,21 +358,69 @@ async function main(): Promise<void> {
       await page.setViewportSize({ width: 390, height: 844 });
     }
 
+    /* ── 5e. THE BAR LOOKS LIKE IT IS WORKING, AND ONLY WHEN IT IS ──────── */
+    /*
+     * "תוסיף לו אנימציה כאילו הוא נטען."
+     *
+     * The light is allowed to run while the round is running, because that is
+     * true. It must stop when the day is finished and when the owner has
+     * switched publishing off — a bar that still shimmers over a paused round
+     * is the screen saying something is happening while nothing is, which is
+     * the one thing nothing in this panel may do.
+     *
+     * Driven through the real panel rather than a copy of its markup: the
+     * class is chosen in LiveCampaignHero from publishedToday and plannedToday,
+     * and a test that hand-wrote the class would prove only that CSS works.
+     */
+    {
+      const fill = () =>
+        page.evaluate(() => {
+          const el = document.querySelector('[data-panel] [role="img"] span') as HTMLElement | null;
+          if (!el) return null;
+          const cs = getComputedStyle(el);
+          return { anim: cs.animationName, cls: el.className, width: el.getBoundingClientRect().width };
+        });
+
+      await page.evaluate(() => window.__plan(170, 248));
+      await page.waitForTimeout(150);
+      const mid = await fill();
+      is(mid !== null, 'the bar is drawn once the day has publications in it');
+      eq(mid!.anim, 'anx-bar-sheen', 'MID-ROUND: the light runs along the fill');
+      is(mid!.width > 0, 'over a fill that has width');
+
+      /* Finished: the colour stays, the light goes. */
+      await page.evaluate(() => window.__plan(248, 248));
+      await page.waitForTimeout(150);
+      const done = await fill();
+      eq(done!.anim, 'none', 'FINISHED: the light stops — nothing is still loading');
+      is(/anx-bar\b/.test(done!.cls), 'but the fill keeps the gradient it had');
+
+      /* Paused: grey, and certainly not shimmering. */
+      await page.evaluate(() => { window.__plan(170, 248); window.__mode('paused'); });
+      await page.waitForTimeout(150);
+      const off = await fill();
+      eq(off!.anim, 'none', 'PAUSED: no light over a round the owner switched off');
+      is(!/anx-bar/.test(off!.cls), 'and not the brand gradient either — a paused round that wore it would look like it was running');
+
+      await page.evaluate(() => { window.__mode('sending'); window.__plan(0, 0); });
+      await page.waitForTimeout(120);
+    }
+
     /* ── 6. AND IT STOPS FOR SOMEBODY WHO ASKED IT TO ───────────────────── */
     {
       const quiet = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
       await quiet.goto(`file://${path.join(dir, 'index.html')}`);
       await quiet.waitForSelector('svg');
-      await quiet.evaluate(() => window.__publish(3));
+      await quiet.evaluate(() => { window.__publish(3); window.__plan(170, 248); });
       await quiet.waitForTimeout(150);
       const names = await quiet.evaluate(() =>
-        ['.anx-bot', '.anx-fly', '.anx-trail', '.anx-shadow'].map((sel) => {
+        ['.anx-bot', '.anx-fly', '.anx-trail', '.anx-shadow', '.anx-bar-live'].map((sel) => {
           const el = document.querySelector(sel);
           return el ? getComputedStyle(el).animationName : 'absent';
         }),
       );
       for (const [i, n] of names.entries()) {
-        is(n === 'none' || n === 'absent', `reduced motion: nothing animates (${['bot', 'fly', 'trail', 'shadow'][i]} = ${n})`);
+        is(n === 'none' || n === 'absent', `reduced motion: nothing animates (${['bot', 'fly', 'trail', 'shadow', 'bar'][i]} = ${n})`);
       }
       is((await ticks(quiet)) > 0, 'but the scene is still drawn, and every tick that was earned is still there — the state was never in the motion');
       await quiet.close();

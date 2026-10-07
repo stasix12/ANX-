@@ -880,7 +880,16 @@ export function LiveQueueHero({
               segments={[
                 {
                   value: Math.min(publishedToday, plannedToday),
-                  className: paused ? 'rounded-full bg-mist-500' : 'rounded-full anx-bar',
+                  /*
+                   * THE LIGHT RUNS ONLY WHILE THE ROUND DOES. Paused keeps the
+                   * grey it always had; a finished day keeps the gradient and
+                   * loses the sheen. A bar that still shimmered over a round
+                   * that is over — or one the owner switched off — would be
+                   * this panel saying something is happening while nothing is.
+                   */
+                  className: paused
+                    ? 'rounded-full bg-mist-500'
+                    : `rounded-full anx-bar${publishedToday >= plannedToday ? '' : ' anx-bar-live'}`,
                 },
               ]}
               total={plannedToday}

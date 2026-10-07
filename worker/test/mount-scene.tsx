@@ -17,14 +17,19 @@ declare global {
   interface Window {
     __publish: (n: number) => void;
     __mode: (m: SceneMode) => void;
+    /* The panel's day. 0 draws no bar and no second scene, which is how the
+       scene assertions keep counting one robot; the bar test raises it. */
+    __plan: (done: number, total: number) => void;
   }
 }
 
 function Harness() {
   const [published, setPublished] = useState(0);
   const [mode, setMode] = useState<SceneMode>('sending');
+  const [day, setDay] = useState<[number, number]>([0, 0]);
   window.__publish = setPublished;
   window.__mode = setMode;
+  window.__plan = (done, total) => setDay([done, total]);
   return (
     <div style={{ padding: 12 }}>
       <PublishingScene mode={mode} published={published} total={279} />
@@ -42,13 +47,13 @@ function Harness() {
       */}
       <div data-panel style={{ width: '100%', marginTop: 12 }}>
         <LiveQueueHero
-          systemState="active"
-          publishedToday={144}
+          systemState={mode === 'paused' ? 'paused' : 'active'}
+          publishedToday={day[0]}
           dailyTarget={300}
           /* Zero on purpose: the panel then draws no scene of its own, so the
              scene assertions above keep counting ONE robot and one active
              destination. The header is what this mount is for. */
-          plannedToday={0}
+          plannedToday={day[1]}
           pendingCancellable={120}
           nextAt={new Date(Date.now() + 600000).toISOString()}
           nextTargetName="קבוצה"

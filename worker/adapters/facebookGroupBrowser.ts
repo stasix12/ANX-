@@ -2,7 +2,7 @@ import type { Page } from 'playwright-core';
 import { parseGroupUrl, type MediaItem, type SocialTarget } from '@/lib/social/types';
 import { PublishError, publishToGroup, type ComposeResult, type ComposerStep } from '../facebook/composer';
 import type { BrowserSession } from '../facebook/session';
-import { cleanupMedia, downloadMedia, type LocalMedia } from '../media';
+import { downloadMedia, type LocalMedia } from '../media';
 
 /**
  * FacebookGroupBrowserAdapter — the Groups counterpart of the server-side
@@ -70,7 +70,11 @@ export class FacebookGroupBrowserAdapter {
     const page = await this.session.newPage(input.headless, 'פרסום לקבוצה');
     input.onPage?.(page);
     try {
-      local = input.media.length ? await downloadMedia(input.queueId, input.media) : null;
+      /* Shared across the whole round — see worker/media.ts. It is NOT deleted
+         in the finally below: these files belong to the three hundred groups
+         still queued behind this one, and deleting them per publication is the
+         bug that took the project off the air. */
+      local = input.media.length ? await downloadMedia(input.media) : null;
       return await publishToGroup(page, {
         groupUrl: group.url,
         text: input.text,
@@ -87,7 +91,6 @@ export class FacebookGroupBrowserAdapter {
       await input.onError?.(page, err).catch(() => undefined);
       throw err;
     } finally {
-      cleanupMedia(local);
       // Keep the page open in debug mode for a few seconds so the owner sees the result.
       if (!input.headless) await page.waitForTimeout(4000).catch(() => undefined);
       await page.close().catch(() => undefined);

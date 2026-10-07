@@ -34,7 +34,7 @@ import { env } from './env';
 import { PublishError } from './facebook/composer';
 import { commentOnPost, type CommentOutcome } from './facebook/composer';
 import { matchPosts, ourPostsInGroup } from './facebook/postIndex';
-import { cleanupMedia, downloadMedia, type LocalMedia } from './media';
+import { downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
 import type { FacebookProfile } from './facebook/profiles';
@@ -3360,7 +3360,7 @@ async function runCampaignComments(state: WorkerState, headless: boolean, roomMs
     let page: Page | null = null;
     try {
       page = await session.newPage(headless, 'תגובה לפוסט');
-      local = media.length ? await downloadMedia(`${row.id}-comment`, media).catch(() => null) : null;
+      local = media.length ? await downloadMedia(media).catch(() => null) : null;
       /*
        * THE PICTURE HAS TO GET AS FAR AS THIS MACHINE FIRST.
        *
@@ -3414,7 +3414,6 @@ async function runCampaignComments(state: WorkerState, headless: boolean, roomMs
       await saveCommentOutcome(db, row.id, { ok: false, reason: `התוכנה נתקלה בתקלה: ${detail}`, permalink: '', tried: [], step: 'not-sent' }, row.permalink, shot);
       console.error('[worker] ✗ הוספת תגובה נכשלה:', detail);
     } finally {
-      cleanupMedia(local);
       await page?.close().catch(() => undefined);
       /*
        * SAID OUT LOUD, because a comment can take most of a minute and the

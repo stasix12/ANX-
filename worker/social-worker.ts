@@ -1925,7 +1925,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       await finish({ status: 'needs_attention', step: mayAlreadyBePosted ? 'submitted' : 'needs_attention', error: message, screenshot_path: screenshot });
       await db.from('social_targets').update({ last_status: 'needs_attention', last_error: message }).eq('id', tt.id);
       await heartbeat(state, 'needs_attention', jobEnv.browser.debugMode, 'needs_auth');
-      await logActivity('error', 'needs_attention', `Facebook דורש פעולה ידנית (${tt.name}): ${message}`, { queueId: item.id, kind: err.kind, detail: raw });
+      await logActivity('error', 'needs_attention', `Facebook דורש פעולה ידנית (${tt.name}): ${message}`, { queueId: item.id, kind: err.kind, detail: raw, targetUrl: tt.url ?? null });
       console.log(`[worker] ⚠ ${raw}`);
       return;
     }
@@ -1987,7 +1987,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       // 'submitted' is what makes that true for the bulk "המשך סבב" as well; see above.
       await finish({ status: 'needs_attention', step: 'submitted', error: message, screenshot_path: screenshot });
       await db.from('social_targets').update({ last_status: 'needs_attention', last_error: message }).eq('id', tt.id);
-      await logActivity('error', 'needs_attention', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep, detail: raw });
+      await logActivity('error', 'needs_attention', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep, detail: raw, targetUrl: tt.url ?? null });
       console.log(`[worker] ⚠ ${raw}`);
       return;
     }
@@ -2014,7 +2014,22 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     }
     await finish({ status: 'failed', step: 'failed', error: message, screenshot_path: screenshot });
     await db.from('social_targets').update({ last_status: 'failed', last_error: message }).eq('id', tt.id);
-    await logActivity('error', 'publish_failed', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep, detail: raw });
+    /*
+     * THE GROUP'S OWN ADDRESS GOES IN THE LOG LINE.
+     *
+     * "שיש שגיאה לא מצאתי כתוב משהו לצרף לינק קישור לקבוצה." Every answer this
+     * error has is on Facebook — is the account still a member, is posting
+     * still allowed, has the group changed its posting rules — and the owner
+     * was reading the group's NAME on a phone and then hunting for it by hand.
+     * The address is sitting right here in the row the worker just failed on.
+     *
+     * In `meta` rather than in the sentence: the sentence is read aloud in
+     * three places and a URL in the middle of it would be noise in all of
+     * them. The dashboard turns this into a button. Rows written before this
+     * carry no targetUrl and get no button — a link that is guessed is worse
+     * than none, and the group page in the app still reaches it.
+     */
+    await logActivity('error', 'publish_failed', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep, detail: raw, targetUrl: tt.url ?? null });
     console.log(`[worker] ✖ ${raw}`);
     return;
   }

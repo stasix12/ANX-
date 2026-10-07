@@ -36,12 +36,25 @@ const row = (o: Partial<QueueRow> & { id: string }): QueueRow =>
   }) as QueueRow;
 
 /*
- * MINUTES AGO, NOT A FIXED DATE. The card shows the last 24 hours only, so a
- * fixture pinned to 2026-09-29 would fall outside the window the moment the
- * clock passed it and this file would measure the empty state while claiming
- * to measure the list. Everything finished is placed relative to now.
+ * A FIXED CLOCK, AND EVERY ROW PLACED AGAINST IT.
+ *
+ * The card's window used to be a rolling 24 hours, so this file placed rows
+ * against the real clock — a date literal would have fallen out of the window
+ * the moment the machine's clock passed it, and the file would have measured
+ * the empty state while claiming to measure the list.
+ *
+ * The window is now the local DAY, and "the local day" moves: a row twenty
+ * hours old is yesterday at half past six in the evening and today at half
+ * past two in the morning. Against the real clock this fixture would pass all
+ * afternoon and fail at night. So the component is handed this instant as its
+ * `now` and every row is placed against the same one.
+ *
+ * 18:30 Israel time on purpose: it puts the twenty-hour-old row at 22:30 the
+ * previous evening — INSIDE the old rolling window and OUTSIDE today, which
+ * is the one row that tells the two windows apart.
  */
-const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+export const NOW = new Date('2026-09-29T18:30:00+03:00');
+const ago = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000).toISOString();
 
 /*
  * THE TWO EXCEPTION STATES ARE THE NEWEST ON PURPOSE. The finished list folds
@@ -60,7 +73,12 @@ const done: QueueRow[] = [
     permalink: 'https://facebook.com/groups/1/posts/9',
     target: { id: '1', name: 'באר שבע והסביבה ביחד', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/1' } as never,
   }),
-  /* Yesterday, so the day heading has to appear. */
+  /*
+   * TWENTY HOURS OLD — 22:30 the previous evening against this fixture's
+   * clock. Inside a rolling 24-hour window and outside today, so it is the row
+   * that tells the old window from the new one: it must NOT be drawn, and it
+   * must be counted in the "תגובות קודמות לא מוצגות" line rather than vanish.
+   */
   row({
     id: 'b',
     comment_status: 'done',
@@ -120,9 +138,9 @@ const waiting: QueueRow[] = [
 ];
 
 /*
- * ONE FROM THE DAY BEFORE, which must NOT appear. Without it the 24-hour
- * filter is asserted only by the absence of rows it was never given, which is
- * no assertion at all.
+ * ONE FROM THE DAY BEFORE, which must NOT appear. Without it the window is
+ * asserted only by the absence of rows it was never given, which is no
+ * assertion at all.
  */
 done.push(
   row({
@@ -170,6 +188,16 @@ for (let i = 0; i < 3; i += 1) {
 const totals = { pending: 126, done: 18, failed: 124, unverified: 3 };
 
 /*
+ * AND TODAY'S OWN OUTCOMES, which are a different scope and deliberately a
+ * much smaller number — "ציר זמן לעשות נתונים רק מה שקשור לאותו היום".
+ *
+ * Nothing like `totals` on purpose: if the card ever fell back to the lifetime
+ * figures the rendered line would read 18 rather than 9, and a test that gave
+ * both the same numbers could not tell the two apart.
+ */
+const today = { done: 9, failed: 2, unverified: 1 };
+
+/*
  * PUBLICATIONS STILL DUE, and only some of them are owed a comment.
  *
  * Two rounds: one carrying `comment_text` and one with none. Both have posts
@@ -181,7 +209,7 @@ const totals = { pending: 126, done: 18, failed: 124, unverified: 3 };
  * The hours are in the future, because these are the one list on this card
  * that prints a real clock.
  */
-const soon = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
+const soon = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000).toISOString();
 
 const campaigns = [
   { id: 'r1', name: 'סבב עם תגובה', service: '', city: '', language: 'he', status: 'active', notes: '', comment_text: 'מחיר: 299 ש"ח' },
@@ -202,11 +230,26 @@ const upcoming: QueueRow[] = [
   /* Its round has no comment text, so no comment is coming: it must NOT be
      drawn, however imminent its publication is. */
   row({ id: 'u3', status: 'scheduled', campaign_id: 'r2', scheduled_at: soon(5), published_at: null, comment_status: '' }),
+  /*
+   * TOMORROW LUNCHTIME, in a round that DOES carry a comment. Real work, and
+   * not this rail's: "ציר זמן לעשות נתונים רק מה שקשור לאותו היום". Without
+   * it the look-ahead's day boundary is asserted only by the absence of rows
+   * the fixture never offered, which is no assertion at all.
+   */
+  row({
+    id: 'u4',
+    status: 'scheduled',
+    campaign_id: 'r1',
+    scheduled_at: soon(18 * 60),
+    published_at: null,
+    comment_status: '',
+    target: { id: '10', name: 'קבוצה של מחר', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/10' } as never,
+  }),
 ];
 
 
 const body = renderToStaticMarkup(
-  createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, waiting, done, totals, upcoming, campaigns })),
+  createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, waiting, done, totals, today, upcoming, campaigns, now: NOW })),
 );
 
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">

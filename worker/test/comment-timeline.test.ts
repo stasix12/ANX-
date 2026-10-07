@@ -173,7 +173,7 @@ async function main(): Promise<void> {
        * folding. Seven finished inside the 24-hour window, seven queued, and
        * two publications still due whose round is owed a comment.
        */
-      assert.equal(seen.rows, 16, `${width}px: the rail drew ${seen.rows} rows — 7 finished + 7 queued + 2 scheduled ahead`);
+      assert.equal(seen.rows, 15, `${width}px: the rail drew ${seen.rows} rows — 6 finished today + 7 queued + 2 scheduled ahead`);
       /*
        * TWENTY-FOUR HOURS ONLY. The fixture carries a comment from forty hours
        * ago; it must not be drawn. Checked by NAME rather than by a count, so
@@ -189,15 +189,35 @@ async function main(): Promise<void> {
        * filtered set — eight finished are loaded, seven are inside the window
        * — so it moves the moment the filter does.
        */
+      /*
+       * RE-POINTED, NOT DELETED. This used to say "the one comment the
+       * 24-hour window excluded". The window is now the local DAY — "ציר זמן
+       * לעשות נתונים רק מה שקשור לאותו היום" — so there are two: the one from
+       * the day before, and the twenty-hour-old one that was inside the
+       * rolling window and is outside today. The PLURAL is the assertion: the
+       * singular wording would still pass against a card that had quietly
+       * gone back to 24 hours.
+       */
       assert.ok(
-        seen.text.includes('תגובה קודמת לא מוצגת'),
-        `${width}px: the one comment the 24-hour window excluded must be accounted for, not silently dropped`,
+        seen.text.includes('2 תגובות קודמות לא מוצגות'),
+        `${width}px: both comments outside today must be accounted for, not silently dropped — ${seen.text.slice(0, 200)}`,
       );
       assert.ok(
         !seen.names.includes('קבוצה מלפני יומיים'),
         `${width}px: a comment older than a day is on the list — ${JSON.stringify(seen.names)}`,
       );
-      assert.ok(seen.text.includes('24 השעות האחרונות'), `${width}px: the window must be stated, not silently applied`);
+      assert.ok(
+        !seen.names.includes('АРАД НАШ И РЕШАЕМ МЫ'),
+        `${width}px: a comment from 22:30 last night is on today's rail — it is inside a rolling 24 hours and outside today, which is the whole of this change`,
+      );
+      /* Re-pointed with the window itself: the card used to state "24
+         השעות האחרונות". It must still state its scope — a filter nobody is
+         told about reads as data going missing. */
+      assert.ok(seen.text.includes('מציגים את היום'), `${width}px: the window must be stated, not silently applied`);
+      assert.ok(
+        seen.text.includes('התור כפי שהוא עכשיו'),
+        `${width}px: and the one number that is NOT scoped to today — the queue — must say so, or the line is a claim the card does not keep`,
+      );
 
       /*
        * SCHEDULED AHEAD — "וגם את התגובות המתוזמנות קדימה". A comment is
@@ -217,6 +237,10 @@ async function main(): Promise<void> {
       assert.ok(
         seen.names.includes('ניקוי מזגנים — באר שבע'),
         `${width}px: a scheduled-ahead row must name its group — ${JSON.stringify(seen.names)}`,
+      );
+      assert.ok(
+        !seen.names.includes('קבוצה של מחר'),
+        `${width}px: a comment following a post due TOMORROW is on today's rail — ${JSON.stringify(seen.names)}`,
       );
       assert.deepEqual(seen.clipped, [], `${width}px: text is cut off — ${JSON.stringify(seen.clipped)}`);
       assert.deepEqual(seen.smallTargets, [], `${width}px: tap target under 40px — ${JSON.stringify(seen.smallTargets)}`);
@@ -327,12 +351,27 @@ async function main(): Promise<void> {
        * report "3 מתוך 6" to an owner holding 271 comments.
        */
       assert.ok(seen.bar, `${width}px: the progress bar is missing`);
-      assert.ok(
-        seen.text.includes('18 מתוך 271 הגיבו'),
-        `${width}px: the bar's line must read the database's own totals (done 18 of 271)`,
-      );
-      assert.ok(seen.text.includes('126 בתור'), `${width}px: it must say how many are still queued`);
-      assert.ok(seen.text.includes('127 דורשות טיפול'), `${width}px: failed and unverified are counted together as needing a person`);
+      /*
+       * RE-POINTED, NOT DELETED. It used to read "18 מתוך 271 הגיבו · 126
+       * בתור · 127 דורשות טיפול" — lifetime counts on a card whose every other
+       * number is about one day, and 127 in particular is every comment that
+       * ever needed a person, back to the first week. "ציר זמן לעשות נתונים
+       * רק מה שקשור לאותו היום."
+       *
+       * The fixture's `today` is nothing like its `totals` on purpose: if the
+       * card ever fell back to the lifetime figures these three numbers would
+       * read 18 and 127 instead of 9 and 3, so the assertion moves the moment
+       * the scope does.
+       *
+       * THE QUEUE IS STILL THE WHOLE QUEUE, and that is the one deliberate
+       * exception: a comment owed on last night's post is still owed this
+       * morning, and scoping it to today would shrink the number at midnight
+       * while the work behind it had not moved at all.
+       */
+      assert.ok(seen.text.includes('9 הגיבו היום'), `${width}px: the bar's line must count TODAY's comments, not every comment ever written`);
+      assert.ok(!seen.text.includes('18 מתוך'), `${width}px: the lifetime total is back on the line`);
+      assert.ok(seen.text.includes('126 בתור'), `${width}px: it must say how many are still queued — the queue has no day`);
+      assert.ok(seen.text.includes('3 דורשות טיפול היום'), `${width}px: failed and unverified are counted together as needing a person, for today`);
 
       /* "צריך לבדוק", never "לא הצליח": an unverified comment may already be
          under the post, and wording it as a failure is what put it in the bulk

@@ -78,6 +78,16 @@ export function ActivityDetailSheet({
   }
 
   const failure = row ? explainFailure(row) : null;
+  const fbUrl = ((): string | null => {
+    const raw = row?.target?.url;
+    if (!raw) return null;
+    try {
+      const u = new URL(raw);
+      return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : null;
+    } catch {
+      return null;
+    }
+  })();
 
   return (
     <Sheet open={Boolean(queueId)} onClose={onClose} title="פרטי הפרסום">
@@ -134,16 +144,42 @@ export function ActivityDetailSheet({
               </div>
             )}
 
-            {row.permalink && (
-              <a
-                href={row.permalink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex min-h-11 items-center px-1 text-sm font-bold text-brand-400"
-              >
-                פתח את הפוסט בפייסבוק
-              </a>
-            )}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4">
+              {row.permalink && (
+                <a
+                  href={row.permalink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center px-1 text-sm font-bold text-brand-400"
+                >
+                  פתח את הפוסט בפייסבוק
+                </a>
+              )}
+              {/*
+                THE GROUP ITSELF, AND NOT ONLY THE POST.
+                
+                "שיש שגיאה לא מצאתי כתוב משהו לצרף לינק קישור לקבוצה." On a
+                failure there IS no post to open — that is what failed — and
+                every answer the error has is inside the group: whether the
+                account is still a member, whether posting is still allowed,
+                whether the group changed its rules. This sheet already holds
+                the address, from the row it fetched.
+                
+                `fbUrl` and not `row.target.url` straight into the href: the
+                value comes from the database, and anything that is not http
+                or https in an href is a hole rather than a link.
+              */}
+              {fbUrl && (
+                <a
+                  href={fbUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center px-1 text-sm font-bold text-brand-400"
+                >
+                  פתח את הקבוצה בפייסבוק
+                </a>
+              )}
+            </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {failure?.canRetry && (

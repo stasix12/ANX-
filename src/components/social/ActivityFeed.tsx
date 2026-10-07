@@ -10,12 +10,13 @@ import {
   PauseIcon,
   RepeatIcon,
   SendIcon,
+  ShareIcon,
   ShieldIcon,
   TargetIcon,
   UsersIcon,
   XCircleIcon,
 } from '@/components/icons';
-import { canRetry, queueIdOf } from '@/lib/social/activity';
+import { canRetry, queueIdOf, targetUrlOf } from '@/lib/social/activity';
 import { activityText, hasTechnicalDetail } from '@/lib/social/activity-text';
 import { retryQueueItem } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -201,6 +202,19 @@ export function ActivityFeed({
         const mark = EVENT_MARK[e.event] ?? LEVEL_MARK[e.level] ?? LEVEL_MARK.info;
         const Icon = mark.icon;
         const queueId = queueIdOf(e);
+        /*
+         * THE WAY INTO THE GROUP, on the rows that need it.
+         *
+         * "שיש שגיאה לא מצאתי כתוב משהו לצרף לינק קישור לקבוצה." The advice
+         * under this failure has always been "open the group and check you can
+         * post in it", and there was nothing to tap: the owner read a group
+         * name on a phone and then went looking for it by hand.
+         *
+         * Only on errors and warnings. On a row that says a post went out, a
+         * link to the group is a second thing to tap beside the post itself,
+         * which is the one that actually shows the result.
+         */
+        const groupUrl = e.level === 'info' ? null : targetUrlOf(e);
         const openable = Boolean(onOpen && queueId);
         const retryable = Boolean(onChanged && canRetry(e));
         /*
@@ -292,6 +306,17 @@ export function ActivityFeed({
                     <RepeatIcon aria-hidden className="h-4 w-4" />
                     {busy === queueId ? 'מחזיר…' : 'נסה שוב'}
                   </button>
+                )}
+                {groupUrl && (
+                  <a
+                    href={groupUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-xl px-1 text-xs font-bold text-brand-400 transition-colors hover:bg-ink-800"
+                  >
+                    <ShareIcon aria-hidden className="h-4 w-4" />
+                    פתח את הקבוצה
+                  </a>
                 )}
                 {technical && hasTechnicalDetail(e) && (
                   <button

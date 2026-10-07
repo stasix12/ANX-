@@ -1688,6 +1688,7 @@ export default function SocialDashboard() {
             waiting={data.commentsWaiting}
             done={data.commentsDone}
             totals={data.commentTotals}
+            today={data.commentsToday}
             upcoming={data.upcoming}
             campaigns={data.campaigns}
           />

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import type { Campaign } from '@/lib/social/types';
 import { COMMENT_TONE, commentLabel, commentNeedsHuman } from '@/lib/social/comments';
-import { agree, formatDateHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
+import { addDaysISO, agree, formatDateHe, formatTimeHe, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { MessageIcon, ShareIcon } from '@/components/icons';
 import { TargetAvatar } from './TargetAvatar';
 import { Card, EmptyState, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
@@ -92,6 +92,8 @@ export function CommentTimeline({
   totals,
   upcoming,
   campaigns,
+  today,
+  now: nowProp,
 }: {
   /** Everything carrying a comment state — the dashboard's existing read. */
   rows: QueueRow[];
@@ -113,7 +115,23 @@ export function CommentTimeline({
   upcoming: QueueRow[];
   /** Read only for comment_text: which rounds have a comment waiting to follow. */
   campaigns: Campaign[];
+  /**
+   * TODAY'S OUTCOMES, counted in the database — commentTotalsSince(midnight).
+   *
+   * Separate from `totals` because they answer different questions and the
+   * card needs both: this is what happened today, `totals.pending` is what is
+   * still queued, and a queue has no day (a comment owed on last night's post
+   * is still owed this morning). The same split is already documented on
+   * commentTotalsSince in client.ts.
+   */
+  today: { done: number; failed: number; unverified: number };
+  /** The clock, injectable so "today" can be tested across a date boundary. */
+  now?: Date;
 }) {
+  /* One instant for the whole render: the day boundary, the "is this today"
+     labels and the end of the look-ahead all have to agree, and three calls
+     to `new Date()` inside one function can straddle midnight. */
+  const now = nowProp ?? new Date();
   /*
    * ONE ROW PER PUBLICATION, however many reads it arrived in.
    *
@@ -127,18 +145,26 @@ export function CommentTimeline({
   const all = [...byId.values()];
 
   /*
-   * TWENTY-FOUR HOURS, AND NOT A ROW OLDER — "תגובות טיימלין של 24 שעות בלבד".
+   * TODAY, AND NOT A ROW OLDER — "ציר זמן לעשות נתונים רק מה שקשור לאותו היום
+   * כבר דיברנו על זה".
    *
-   * The owner is past six hundred comments; a rail reaching back to the start
-   * is a scroll through a month to find out what happened tonight, and "what
-   * happened today" is the whole question a timeline on a dashboard answers.
+   * IT USED TO BE A ROLLING TWENTY-FOUR HOURS, from "תגובות טיימלין של 24
+   * שעות בלבד". That is a different window from the one every other figure on
+   * this screen uses, and the difference is visible: at ten at night the rail
+   * carried last night's comments while the tiles beside it had reset at
+   * midnight, so two parts of one dashboard disagreed about what "today"
+   * means. The boundary is now the same local midnight the tiles, the hero and
+   * the quick-comments card all read — Asia/Jerusalem, resolved as a DATE and
+   * not as `now - 24h`, because the two Israeli clock changes make one day 23
+   * hours long and another 25.
+   *
    * Everything older is still in "תגובות לפרסומים" above, which keeps the full
    * history, and the line under the bar says how many were left out rather
    * than dropping them silently.
    *
-   * Oldest first: this is a rail, and a rail reads down the afternoon.
+   * Oldest first: this is a rail, and a rail reads down the day.
    */
-  const since = Date.now() - 24 * 3_600_000;
+  const since = startOfZonedDay(now).getTime();
   const recent = all.filter((r) => happened(r.comment_status));
   const past = recent
     .filter((r) => {
@@ -174,8 +200,13 @@ export function CommentTimeline({
    * would be a lookalike that drifts.
    */
   const rounds = new Map(campaigns.map((c) => [c.id, c]));
+  /* The far end of the same day. A comment that follows a post due tomorrow
+     lunchtime is real work and belongs on tomorrow's rail, not on this one. */
+  const until = zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').getTime();
   const ahead = upcoming
     .filter((r) => {
+      const at = Date.parse(r.scheduled_at);
+      if (!Number.isFinite(at) || at >= until) return false;
       /* Not already counted: a row cannot be both waiting to publish and
          carrying a finished comment, but the guard costs nothing and this card
          has already been bitten once by two reads that overlap. */
@@ -262,9 +293,26 @@ export function CommentTimeline({
    * comments. `totals` is four COUNT queries, which is the truth.
    */
   const next = waiting[0] ?? null;
-  const real = totals.done + totals.failed + totals.unverified + totals.pending;
-  const needsHuman = totals.failed + totals.unverified;
-  const today = zonedDateISO(new Date());
+  /*
+   * THE BAR COUNTS TODAY AND THE QUEUE — not the whole history.
+   *
+   * It used to read "425 מתוך 1130 הגיבו · 441 בתור · 264 דורשות טיפול",
+   * which are lifetime counts sitting on a card whose every other number is
+   * about one day. The 264 in particular is a figure nobody can act on: it is
+   * every comment that ever needed a person, back to the first week.
+   *
+   * WHAT EACH HALF IS, because they are deliberately different scopes and the
+   * line under the bar says so:
+   *   `today`  — comments that FINISHED since local midnight, counted in the
+   *              database by commentTotalsSince().
+   *   pending  — the queue as it stands right now. A queue has no day: a
+   *              comment owed on last night's post is still owed this
+   *              morning, and scoping it to today would shrink the number at
+   *              midnight while the work behind it had not moved at all.
+   */
+  const needsHuman = today.failed + today.unverified;
+  const real = today.done + needsHuman + totals.pending;
+  const dayISO = zonedDateISO(now);
 
   /** The instant a row is placed at — null for a queue that has no clock. */
   const stampOf = (it: { row: QueueRow; kind: Kind }): string | null =>
@@ -287,14 +335,14 @@ export function CommentTimeline({
         height="h-2.5"
       />
       <p className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11.5px] font-bold">
-        <span className={TONE_TEXT.good}>{`${totals.done} מתוך ${real} הגיבו`}</span>
+        <span className={TONE_TEXT.good}>{`${today.done} הגיבו היום`}</span>
         {totals.pending > 0 && <span className="text-mist-500">{`${totals.pending} בתור`}</span>}
-        {needsHuman > 0 && <span className={TONE_TEXT.warn}>{`${needsHuman} דורשות טיפול`}</span>}
+        {needsHuman > 0 && <span className={TONE_TEXT.warn}>{`${needsHuman} דורשות טיפול היום`}</span>}
       </p>
       {/* The rail's scope, said once. Without it the bar reads 271 over a list
           of nine and the only available conclusion is that something is lost. */}
       <p className="mt-1 text-[11px] text-mist-500">
-        הציר מציג את 24 השעות האחרונות
+        הציר והמספרים מציגים את היום — חוץ מ&quot;בתור&quot;, שהוא התור כפי שהוא עכשיו
         {older > 0 && ` · ${older} ${agree(older, 'תגובה קודמת לא מוצגת', 'תגובות קודמות לא מוצגות')} כאן`}
       </p>
 
@@ -365,7 +413,7 @@ export function CommentTimeline({
             const href = item.kind === 'ahead' ? '' : row.permalink || row.target?.url || '';
             const day = at ? zonedDateISO(new Date(at)) : '';
             const prev = i > 0 ? stampOf(items[i - 1]) : null;
-            const showDay = Boolean(day) && day !== today && (i === 0 || (prev ? zonedDateISO(new Date(prev)) : '') !== day);
+            const showDay = Boolean(day) && day !== dayISO && (i === 0 || (prev ? zonedDateISO(new Date(prev)) : '') !== day);
             /* Where in the line this one is — 1 for the next comment out.
                Counted from the start of the queued block, not from the whole
                rail, or the first one queued would be numbered after every

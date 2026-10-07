@@ -22,7 +22,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ACTIVITY_FILTERS, activityKind, canRetry, filterActivity, queueIdOf } from '../../src/lib/social/activity';
+import { ACTIVITY_FILTERS, activityKind, canRetry, filterActivity, queueIdOf, targetUrlOf } from '../../src/lib/social/activity';
 import type { ActivityEntry } from '../../src/lib/social/types';
 
 /*
@@ -205,6 +205,32 @@ ok(!canRetry(row('publish_failed', 'error')), 'but not one with no row to act on
 ok(!canRetry(row('worker_error', 'error', { queueId: 'abc' })), 'and a worker crash is not a publication');
 ok(!canRetry(row('published', 'info', { queueId: 'abc' })), 'and what went out is not retried');
 
+/* ------------------------------------- 4b. the way into the group */
+/*
+ * "שיש שגיאה לא מצאתי כתוב משהו לצרף לינק קישור לקבוצה."
+ *
+ * Every answer the "לא מצאתי את תיבת כתבו משהו" failure has is inside the
+ * group — membership, posting permission, a group that changed its rules — and
+ * the owner was reading a name on a phone and then hunting for it by hand. The
+ * worker stamps the address on the failures it writes about a group.
+ *
+ * THE REFUSALS ARE THE POINT OF THIS BLOCK. The value comes out of the
+ * database and goes into an href, and an href is the one place where a string
+ * nobody checked stops being text and starts being behaviour: `javascript:`
+ * runs on a tap, `data:` renders a page of somebody else's choosing. So the
+ * reader allows two schemes and refuses everything else, including the shapes
+ * that look like a link and are not.
+ */
+eq(targetUrlOf(row('publish_failed', 'error', { targetUrl: 'https://facebook.com/groups/7' })), 'https://facebook.com/groups/7', 'a group address survives');
+eq(targetUrlOf(row('publish_failed', 'error', { targetUrl: 'http://facebook.com/groups/7' })), 'http://facebook.com/groups/7', 'and so does plain http — old rows carry it');
+eq(targetUrlOf(row('publish_failed', 'error')), null, 'a row written before the worker carried it gets no link, rather than a guessed one');
+eq(targetUrlOf(row('publish_failed', 'error', { targetUrl: '' })), null, 'and neither does an empty one');
+eq(targetUrlOf(row('publish_failed', 'error', { targetUrl: 7 })), null, 'a non-string is not an address');
+eq(targetUrlOf(row('publish_failed', 'error', { targetUrl: 'javascript:alert(1)' })), null, 'JAVASCRIPT: IS REFUSED — this value becomes an href, and an href runs it');
+eq(targetUrlOf(row('publish_failed', 'error', { targetUrl: 'data:text/html,<h1>hi' })), null, 'and so is data:, which would render a page of somebody else’s choosing');
+eq(targetUrlOf(row('publish_failed', 'error', { targetUrl: 'facebook.com/groups/7' })), null, 'a bare host is not a URL — it would resolve against the dashboard’s own origin');
+eq(targetUrlOf(row('publish_failed', 'error', { targetUrl: '//evil.example/x' })), null, 'and neither is a protocol-relative address');
+
 /*
  * The guard is the database's, not this list's: retryQueueItem() matches on
  * status and returns false when the row has moved on. Pinned so the button
@@ -215,5 +241,29 @@ ok(
   client.includes("const RETRYABLE: QueueItem['status'][] = ['failed', 'skipped', 'needs_attention', 'scheduled', 'paused'];"),
   'retryQueueItem is still guarded on status',
 );
+
+/*
+ * AND THE WORKER REALLY STAMPS IT. targetUrlOf can only read what a writer
+ * wrote; without this, every assertion above would keep passing against a
+ * worker that had stopped stamping the address and a dashboard that therefore
+ * never drew the button.
+ */
+const workerSrc = readFileSync('worker/social-worker.ts', 'utf8');
+for (const event of ['publish_failed', 'needs_attention']) {
+  const lines = workerSrc.split('\n').filter((l) => l.includes(`'${event}'`) && l.includes('logActivity'));
+  ok(lines.length > 0, `the worker still writes ${event}`);
+  for (const l of lines) {
+    ok(l.includes('targetUrl: tt.url'), `${event} carries the group's own address: ${l.trim().slice(0, 90)}`);
+  }
+}
+
+/*
+ * The screen shows it on failures only. On a row that says a post went out, a
+ * link to the GROUP is a second thing to tap beside the post itself, which is
+ * the one that shows the result.
+ */
+const feedSrc = readFileSync('src/components/social/ActivityFeed.tsx', 'utf8');
+ok(feedSrc.includes("const groupUrl = e.level === 'info' ? null : targetUrlOf(e);"), 'the feed asks for the address only on a row that went wrong');
+ok(feedSrc.includes('rel="noopener noreferrer"'), 'and opens it without handing the new tab a reference back');
 
 console.log(`activity-log classification tests OK — ${checks} assertions, ${emitted.size} writers walked`);

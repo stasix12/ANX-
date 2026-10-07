@@ -210,6 +210,35 @@ export function queueIdOf(entry: ActivityEntry): string | null {
 }
 
 /**
+ * THE GROUP'S OWN ADDRESS ON FACEBOOK, when the row carries one.
+ *
+ * "שיש שגיאה לא מצאתי כתוב משהו לצרף לינק קישור לקבוצה." Every answer the
+ * "לא מצאתי את תיבת כתבו משהו" failure has is inside the group — membership,
+ * posting permission, a group that changed its rules — so the one thing the
+ * owner needs at that moment is a way in. The worker stamps `targetUrl` on the
+ * failures it writes about a group (social-worker.ts).
+ *
+ * NARROW ON PURPOSE. Only http(s), because this becomes an href and anything
+ * else in an href is a hole rather than a link: `javascript:` runs, `data:`
+ * renders a page of someone else's choosing. The value travels from the
+ * database, so it is treated as input and not as something this app wrote.
+ *
+ * A row written before the worker carried this returns null and the screen
+ * shows no button. A guessed link is worse than none — the group page inside
+ * the app still reaches the real one.
+ */
+export function targetUrlOf(entry: ActivityEntry): string | null {
+  const raw = (entry.meta as { targetUrl?: unknown } | null | undefined)?.targetUrl;
+  if (typeof raw !== 'string' || !raw) return null;
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Which failures a "נסה שוב" can actually act on.
  *
  * retryQueueItem() re-arms a row only from failed / skipped / needs_attention /

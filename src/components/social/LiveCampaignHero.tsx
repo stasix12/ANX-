@@ -14,6 +14,7 @@ import { CampaignSchedulePanel } from './CampaignSchedulePanel';
 import { PostCover } from './PostCover';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
+import { PublishingScene, type SceneMode } from './PublishingScene';
 import { SYSTEM_STATE_TONE, type SystemState } from './systemState';
 
 /**
@@ -667,6 +668,24 @@ export function LiveQueueHero({
    * the number is theirs, not Meta's.
    */
   const ceilingReached = dailyTarget > 0 && publishedToday >= dailyTarget;
+  /*
+   * WHAT THE SCENE IS ALLOWED TO SHOW, from the same facts the sentence above
+   * the panel is made of — never from a timer of its own.
+   *
+   * `sending` is `inFlight`, which is a row a worker is holding right now.
+   * `waiting` is the system running between publications, which is most of the
+   * day: the robot stays alive and nothing travels, because nothing is. Paused
+   * and idle stop it entirely. A scene that animated on a clock would be
+   * telling him his posts were going out on an afternoon when the PC was off.
+   */
+  const sceneMode: SceneMode =
+    systemState === 'paused'
+      ? 'paused'
+      : systemState !== 'active'
+        ? 'idle'
+        : inFlight > 0
+          ? 'sending'
+          : 'waiting';
   const due = Boolean(nextAt) && !paused && new Date(nextAt as string).getTime() <= now;
   /*
    * AT ZERO, THE DATABASE DECIDES WHAT COMES NEXT.
@@ -865,6 +884,21 @@ export function LiveQueueHero({
         </div>
         </div>
       </div>
+
+      {/*
+        THE SCENE SITS ABOVE THE FIGURES, not instead of them.
+        
+        It is the only part of this panel that was redesigned: the ratio, the
+        bar, the ceiling line and both buttons below are untouched and still
+        read from the same props. Drawn only while there is a day to draw —
+        a robot throwing cards at four groups over "אין פרסומים מתוכננים
+        להיום" would be the screen contradicting itself in two places at once.
+      */}
+      {plannedToday > 0 && (
+        <div className="mt-3 overflow-hidden rounded-2xl border border-ink-700 bg-ink-900/60 px-2 pb-1 pt-2">
+          <PublishingScene mode={sceneMode} published={publishedToday} total={plannedToday} />
+        </div>
+      )}
 
       <div className="mt-3.5">
         {plannedToday > 0 ? (

@@ -939,8 +939,11 @@ export function LiveQueueHero({
         a robot throwing cards at four groups over "אין פרסומים מתוכננים
         להיום" would be the screen contradicting itself in two places at once.
       */}
+      {/* No box and no border: the reference is the scene sitting straight on
+          the white card, and the grey tray I had wrapped it in was the one
+          thing in the panel that is not in the design. */}
       {plannedToday > 0 && (
-        <div className="mt-3 overflow-hidden rounded-2xl border border-ink-700 bg-ink-900/60 px-2 pb-1 pt-2">
+        <div className="mt-2">
           <PublishingScene mode={sceneMode} published={publishedToday} total={plannedToday} />
         </div>
       )}

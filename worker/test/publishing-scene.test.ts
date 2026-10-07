@@ -148,8 +148,6 @@ async function main(): Promise<void> {
         return page.evaluate(() => ({
           fly: document.querySelectorAll('.anx-fly').length,
           trail: document.querySelectorAll('.anx-trail').length,
-          throwing: document.querySelectorAll('.anx-arm').length,
-          preparing: document.querySelectorAll('.anx-prep').length,
           breathing: document.querySelectorAll('.anx-breathe').length,
           bot: document.querySelectorAll('.anx-bot').length,
           botMin: document.querySelectorAll('.anx-bot-min').length,
@@ -161,14 +159,15 @@ async function main(): Promise<void> {
       await page.waitForTimeout(2800);
 
       const sending = await seenIn('sending');
-      is(sending.fly === 1 && sending.trail === 1 && sending.throwing === 1, 'SENDING: the card travels, the trail flows, the arm throws');
+      is(sending.fly === 1 && sending.trail === 1, 'SENDING: the card travels and the trail flows towards the group it is going to');
       eq(sending.breathing, 1, 'and exactly one group breathes');
+      eq(sending.bot, 1, 'with the robot hovering');
 
       const waiting = await seenIn('waiting');
       eq(waiting.fly, 0, 'WAITING: nothing travels — the gap between publications is not a publication');
       eq(waiting.trail, 0, 'and the trail is still');
-      eq(waiting.preparing, 1, 'but the arm is readying the next post, which is what tells the two states apart at a glance');
-      eq(waiting.active, 1, 'and the next destination is still named');
+      eq(waiting.breathing, 0, 'and no group pulses — nothing is on its way to one');
+      eq(waiting.active, 1, 'but the next destination is still named');
       eq(waiting.bot, 1, 'the robot is alive');
 
       const paused = await seenIn('paused');
@@ -191,10 +190,25 @@ async function main(): Promise<void> {
         const r = document.querySelector('[data-card] rect') as SVGRectElement;
         return { w: Number(r.getAttribute('width')), h: Number(r.getAttribute('height')) };
       });
-      /* It was 22×26. "approximately 20–30% larger" — measured, not asserted
-         by eye, because "looks bigger" is how a 4% change ships. */
-      is(card.w / 22 >= 1.2 && card.w / 22 <= 1.32, `the card grew by ${Math.round((card.w / 22 - 1) * 100)}% — the brief asked for 20–30`);
-      is(card.h / 26 >= 1.2 && card.h / 26 <= 1.32, 'in both directions, so it is not stretched');
+      /*
+       * MEASURED OFF THE REFERENCE RECORDING, not chosen by eye. In the frame
+       * where the card is landing on a group it is about 100×115 of a 1100×480
+       * panel, which in this viewBox is 36×42. "Looks about right" is how a
+       * card half the size of the design ships.
+       */
+      is(card.w >= 31 && card.w <= 38, `the travelling card is ${card.w} wide — the reference's is about 36`);
+      is(card.h >= 36 && card.h <= 44, `and ${card.h} tall — the reference's is about 42`);
+      const img = await page.evaluate(() => {
+        const i = document.querySelector('svg image') as SVGImageElement;
+        return { href: i?.getAttribute('href') ?? '', w: Number(i?.getAttribute('width')) };
+      });
+      /*
+       * AND THE ROBOT IS HIS ROBOT. "אל תחליף אותו ברובוט מצויר, אייקון,
+       * אימוג׳י או דמות דומה" — the first build drew one in SVG paths, which is
+       * a drawing OF his robot and therefore exactly what was ruled out.
+       */
+      is(img.href.includes('robot'), 'the robot is the rendered asset, not paths pretending to be it');
+      is(img.w > 150, `and it is drawn at ${img.w} of a 400-unit scene, the share it has in the reference`);
     }
 
     /* ── 5. IT FITS, AT EVERY WIDTH ─────────────────────────────────────── */
@@ -219,7 +233,7 @@ async function main(): Promise<void> {
            what makes the robot the same size relative to the groups on a phone
            and on a desktop, with no breakpoint anywhere. */
         is(
-          Math.abs(seen.w / seen.h - 400 / 230) < 0.02,
+          Math.abs(seen.w / seen.h - 400 / 180) < 0.03,
           `${width}px: the scene keeps the reference's proportions (measured ${seen.w}×${seen.h})`,
         );
       }
@@ -243,13 +257,13 @@ async function main(): Promise<void> {
           bot: getComputedStyle(document.querySelector('.anx-bot')!).animationName,
           fly: getComputedStyle(document.querySelector('.anx-fly')!).animationName,
           trail: getComputedStyle(document.querySelector('.anx-trail')!).animationName,
-          arm: getComputedStyle(document.querySelector('.anx-arm')!).animationName,
+          halo: getComputedStyle(document.querySelector('.anx-halo')!).animationName,
         }),
       );
       eq(running.bot, 'anx-bot-bob', 'the robot is actually animated — not merely rendered with a class nothing styles');
       eq(running.fly, 'anx-fly', 'the card in flight really moves');
       eq(running.trail, 'anx-trail', 'and the dotted trail runs towards the group');
-      eq(running.arm, 'anx-arm', 'and the arm throws');
+      eq(running.halo, 'anx-halo', 'and the ring around the active destination breathes');
     }
 
     /* ── 6. AND IT STOPS FOR SOMEBODY WHO ASKED IT TO ───────────────────── */
@@ -260,13 +274,13 @@ async function main(): Promise<void> {
       await quiet.evaluate(() => window.__publish(3));
       await quiet.waitForTimeout(150);
       const names = await quiet.evaluate(() =>
-        ['.anx-bot', '.anx-fly', '.anx-trail', '.anx-blip'].map((sel) => {
+        ['.anx-bot', '.anx-fly', '.anx-trail', '.anx-halo'].map((sel) => {
           const el = document.querySelector(sel);
           return el ? getComputedStyle(el).animationName : 'absent';
         }),
       );
       for (const [i, n] of names.entries()) {
-        is(n === 'none' || n === 'absent', `reduced motion: nothing animates (${['bot', 'fly', 'trail', 'blip'][i]} = ${n})`);
+        is(n === 'none' || n === 'absent', `reduced motion: nothing animates (${['bot', 'fly', 'trail', 'halo'][i]} = ${n})`);
       }
       is((await ticks(quiet)) > 0, 'but the scene is still drawn, and every tick that was earned is still there — the state was never in the motion');
       await quiet.close();

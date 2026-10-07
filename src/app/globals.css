@@ -1661,22 +1661,6 @@ body:has(.social-theme) .site-backdrop {
   }
 }
 
-/* The head, a degree and a half out of phase with the body. Sub-degree
-   rotation is what stops a bob from reading as a bounce. */
-@keyframes anx-head {
-  0%,
-  100% {
-    transform: rotate(-0.8deg);
-  }
-  50% {
-    transform: rotate(0.8deg);
-  }
-}
-.anx-head {
-  transform-box: fill-box;
-  animation: anx-head 6.5s ease-in-out infinite;
-}
-
 /* The antenna light. */
 @keyframes anx-blip {
   0%,
@@ -1707,41 +1691,6 @@ body:has(.social-theme) .site-backdrop {
   transform-box: fill-box;
   transform-origin: center;
   animation: anx-eyes 6s ease-in-out infinite;
-}
-
-/* THROWING — only while a row is really in flight. */
-@keyframes anx-arm {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-  26% {
-    transform: rotate(-12deg);
-  }
-  48% {
-    transform: rotate(3deg);
-  }
-}
-.anx-arm {
-  transform-box: fill-box;
-  animation: anx-arm 2.4s ease-in-out infinite;
-}
-
-/* PREPARING — the smaller movement between publications. Half the angle and
-   twice the period, so the two states are told apart at a glance without
-   anybody having to read a label. */
-@keyframes anx-prep {
-  0%,
-  100% {
-    transform: rotate(0deg) translateY(0);
-  }
-  50% {
-    transform: rotate(-2.5deg) translateY(-1.5px);
-  }
-}
-.anx-prep {
-  transform-box: fill-box;
-  animation: anx-prep 5s ease-in-out infinite;
 }
 
 /* The trail flows TOWARDS the group. Direction is the information. */
@@ -1939,11 +1888,8 @@ body:has(.social-theme) .site-backdrop {
 @media (prefers-reduced-motion: reduce) {
   .anx-bot,
   .anx-bot-min,
-  .anx-head,
   .anx-blip,
   .anx-eyes,
-  .anx-arm,
-  .anx-prep,
   .anx-trail,
   .anx-fly,
   .anx-spark,

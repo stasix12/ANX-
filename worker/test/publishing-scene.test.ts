@@ -502,6 +502,37 @@ async function main(): Promise<void> {
       eq(over.active, 0, 'and no group is named as the next destination');
       is(over.label.includes('הרובוט סיים לפרסם'), 'and a screen reader is told the same thing, not "מפרסם לקבוצות"');
 
+      /*
+       * AND IT IS THE ROBOT WITH LEGS, which is the whole of what he asked
+       * for: "בריקוד שיראו גם את הרגלים שלו". The working robot is a crop of
+       * his design where the body flies and fades into the haze at the waist,
+       * so the dance draws the full-body render he then sent instead.
+       *
+       * Both halves are asserted. A test that only checked the dance would
+       * pass against a build that had swapped the picture everywhere and
+       * quietly lost the card the flier holds out to a group, which is the
+       * entire working scene.
+       */
+      const pictures = await page.evaluate(() => {
+        const p = document.querySelector('[data-panel]') as HTMLElement;
+        return Array.from(p.querySelectorAll('svg image')).map((i) => i.getAttribute('href') ?? '');
+      });
+      eq(pictures.length, 1, 'FINISHED: one robot on the card');
+      is(pictures[0].includes('robot-dance'), `and it is the standing one, with feet to leave the ground (${pictures[0]})`);
+
+      await page.evaluate(() => { window.__mode('sending'); window.__plan(170, 248); });
+      await page.waitForTimeout(150);
+      const working = await page.evaluate(() => {
+        const p = document.querySelector('[data-panel]') as HTMLElement;
+        return Array.from(p.querySelectorAll('svg image')).map((i) => i.getAttribute('href') ?? '');
+      });
+      is(
+        working.length === 1 && working[0].includes('robot.webp'),
+        `MID-ROUND: and the working scene still draws the flier holding a card out to a group (${working[0] ?? 'none'})`,
+      );
+      await page.evaluate(() => { window.__mode('waiting'); window.__plan(248, 248); });
+      await page.waitForTimeout(200);
+
       /* THE ANIMATIONS REALLY RUN — the same question section 5b asks of the
          working state, for the same reason: a stylesheet with no keyframes in
          it passes every "is it off under reduced motion" check perfectly. */
@@ -534,10 +565,10 @@ async function main(): Promise<void> {
       /*
        * AND THE JUMP STAYS IN THE FRAME.
        *
-       * "בריקוד שיראו גם את הרגלים שלו." The robot has no legs — his own
-       * reference draws it as a flying body that fades into the haze — so the
-       * jump is what carries the dance, and a jump is the one movement that
-       * can throw the antenna out of the top of the scene. An SVG clips to
+       * "בריקוד שיראו גם את הרגלים שלו." The dance draws his full-body
+       * render — a different picture from the flier, with feet to leave the
+       * ground with — and a jump is the one movement in this scene that can
+       * throw the antenna out of the top of the frame. An SVG clips to
        * its viewBox, so that failure is silent: the robot loses the tip of its
        * antenna for a fifth of a second, twice a second, and nothing errors.
        *
@@ -558,7 +589,11 @@ async function main(): Promise<void> {
        * single read lands on it roughly never.
        */
       {
-        const TIP = { fx: 239 / 470, fy: 22 / 374 };
+        /* robot-dance.webp is trimmed to its content, so the antenna's ball
+           is the top edge of the picture (fy = 0) and sits just off centre
+           (199 of its 392 columns). Measured off the file, like the flier's
+           was, rather than guessed. */
+        const TIP = { fx: 199 / 392, fy: 0 };
         const seen: { gap: number; ty: number }[] = [];
         for (let i = 0; i < 26; i += 1) {
           seen.push(

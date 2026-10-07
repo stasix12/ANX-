@@ -127,6 +127,35 @@ const LAMP = { x: 115, y: 24 };
 /** The card it presents — where everything leaves from. */
 const HAND = { x: 200, y: 96 };
 
+/**
+ * AND THE ROBOT THAT DANCES, WHICH IS A DIFFERENT PICTURE ON PURPOSE.
+ *
+ * "בריקוד שיראו גם את הרגלים שלו." The working robot has none: it is a crop
+ * of his design, where the body is drawn flying and fades into the haze at the
+ * waist. He then sent the full-body render — the same character, standing,
+ * with a transparent background — and that is this box.
+ *
+ * TWO PICTURES RATHER THAN ONE, because they are two poses and each is right
+ * for one thing. The flying one is holding a card out towards a group, which
+ * is the whole of the working scene; a standing figure cannot present
+ * anything. The standing one has feet to leave the ground with, which is the
+ * whole of the dance. Swapping either into the other's state would lose the
+ * thing that state is about.
+ *
+ * THE NUMBERS ARE THE JUMP'S BUDGET, not a layout preference. The asset is
+ * trimmed to its content, so the antenna is at the top of this box and the
+ * soles are at the bottom: feet at y+h = 168, just above the floor shadow, and
+ * an eighteen-unit gap above the head for the hop to spend. The viewBox clips,
+ * so that gap is the ceiling on how high the dance may go — see the keyframes
+ * in globals.css, and the test that measures the antenna against the frame.
+ */
+const DANCER = { x: 68, y: 18, w: 113, h: 150 };
+/** The floor it lands on, under its own feet rather than under the flier. */
+const FLOOR = { x: DANCER.x + DANCER.w / 2, y: 173 };
+/** Its antenna ball, which sits where this asset's does and not where the
+    flying one's did. */
+const DANCE_LAMP = { x: DANCER.x + 0.509 * DANCER.w, y: DANCER.y + 5 };
+
 /** The four groups, in the staggered arrangement of the reference. */
 const TILE = [
   { x: 240, y: 26 },
@@ -210,7 +239,6 @@ export function PublishingScene({
    */
   const celebrating = mode === 'done';
   const running = mode === 'sending' || mode === 'waiting';
-  const alive = running || celebrating;
   const travelling = mode === 'sending' && !success;
   const to = centre(active);
 
@@ -256,7 +284,11 @@ export function PublishingScene({
       </defs>
 
       {/* ── the trails ──────────────────────────────────────────────────── */}
-      {TILE.map((_, i) => {
+      {/* Not while the day is finished. They are the path a post takes to a
+          group, and nothing is taking it: four dim arrows aimed out of an
+          empty space — the flier is not even on screen in that state — read as
+          a diagram of something about to happen. */}
+      {!celebrating && TILE.map((_, i) => {
         const hot = i === active && travelling;
         return (
           <path
@@ -294,37 +326,69 @@ export function PublishingScene({
       {mode !== 'idle' && (
         <ellipse
           className={celebrating ? 'anx-shadow-dance' : running ? 'anx-shadow' : undefined}
-          cx={BOT.x + BOT.w / 2 - 12}
-          cy="166"
-          rx="46"
-          ry="6"
+          cx={celebrating ? FLOOR.x : BOT.x + BOT.w / 2 - 12}
+          cy={celebrating ? FLOOR.y : 166}
+          rx={celebrating ? 40 : 46}
+          ry={celebrating ? 5.5 : 6}
           fill="#7c3aed"
           opacity="0.11"
-          style={{ transformOrigin: `${BOT.x + BOT.w / 2 - 12}px 166px` }}
+          /* The hover's shadow keeps the origin it has always had. The dance's
+             is left to the stylesheet, which puts it at the centre of the
+             ellipse's own box — correct for something that collapses in place
+             under a body leaving the ground. */
+          style={celebrating ? undefined : { transformOrigin: `${BOT.x + BOT.w / 2 - 12}px 166px` }}
         />
       )}
       <g
         className={
           mode === 'idle' ? undefined : celebrating ? 'anx-dance' : running ? 'anx-bot' : 'anx-bot-min'
         }
-        style={{ transformOrigin: '120px 110px' }}
+        /*
+          THE HOVER KEEPS ITS ORIGIN; THE DANCE TAKES THE STYLESHEET'S.
+          
+          `transform-box: fill-box` makes these px offsets relative to the
+          group's own box, and the two boxes are different pictures — 120,110
+          lands near the middle of the 212×174 flier and well outside the
+          113×150 dancer, which would swing it round a point past its own
+          shoulder. The classes carry the right origin for each: `center` for
+          the dance, and the feet for the squash below.
+        */
+        style={celebrating ? undefined : { transformOrigin: '120px 110px' }}
       >
         <g
           className={celebrating ? 'anx-cheer' : travelling ? 'anx-send' : undefined}
-          style={{ transformOrigin: '120px 110px' }}
+          style={celebrating ? undefined : { transformOrigin: '120px 110px' }}
         >
-          <image
-            href="/social/robot.webp"
-            x={BOT.x}
-            y={BOT.y}
-            width={BOT.w}
-            height={BOT.h}
-            preserveAspectRatio="xMidYMid meet"
-          />
+          {celebrating ? (
+            <>
+              <image
+                href="/social/robot-dance.webp"
+                x={DANCER.x}
+                y={DANCER.y}
+                width={DANCER.w}
+                height={DANCER.h}
+                preserveAspectRatio="xMidYMid meet"
+              />
+              {/* Inside the squash, unlike the flier's: this one is anchored at
+                  the feet, so the head travels when the body compresses, and a
+                  lamp left outside would drift off the antenna by a tenth of
+                  the robot's height at the bottom of every hop. */}
+              <circle className="anx-blip" cx={DANCE_LAMP.x} cy={DANCE_LAMP.y} r="9" fill="url(#anx-lamp)" />
+            </>
+          ) : (
+            <image
+              href="/social/robot.webp"
+              x={BOT.x}
+              y={BOT.y}
+              width={BOT.w}
+              height={BOT.h}
+              preserveAspectRatio="xMidYMid meet"
+            />
+          )}
         </g>
         {/* The antenna light. A flat picture cannot pulse on its own, so the
             one part of it that should is given a soft lamp over the ball. */}
-        {alive && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="10" fill="url(#anx-lamp)" />}
+        {running && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="10" fill="url(#anx-lamp)" />}
       </g>
 
       {/* ── the card in flight ─────────────────────────────────────────── */}

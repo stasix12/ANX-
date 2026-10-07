@@ -1913,63 +1913,54 @@ body:has(.social-theme) .site-backdrop {
  *
  * THE DANCE IS A JUMP, AND A JUMP IS NOT A LIFT.
  *
- * "בריקוד שיראו גם את הרגלים שלו" — and the robot has none. His own reference
- * design draws it as a flying robot: the body ends in a rounded hull and fades
- * into the purple haze, with nothing below the waist in any frame of the
- * recording or any version of the picture. So the legs cannot be shown, and
- * drawing a pair would be inventing a different robot, which is the one thing
- * he ruled out by name. What was asked for underneath the request — that it
- * read as the WHOLE BODY dancing rather than a picture being nudged — is what
- * these three keyframes do, and they do it the way animators do it without
- * legs: anticipation, squash and stretch, and a shadow that leaves.
+ * "בריקוד שיראו גם את הרגלים שלו" — and he then sent the legs. The working
+ * robot is a crop of his design where the body flies and fades into the haze
+ * at the waist; the one that dances is his full-body render, standing, with a
+ * real transparent background. PublishingScene swaps the picture for the
+ * `done` state alone, and these keyframes are written for that picture.
  *
- * THE CROUCH IS WHERE THE HEIGHT COMES FROM. The antenna's tip sits 12 scene
- * units below the top of the viewBox (measured off the asset: 22px of its own
- * 374), and an SVG clips to its viewBox, so a lift of more than about eleven
- * cuts the antenna off. Starting each hop three units BELOW the resting line
- * buys travel the frame does not have to pay for: the body moves fourteen
- * units while its highest point still clears the edge.
+ * WHAT THE TRANSPARENT ASSET BOUGHT, since the earlier numbers here were set
+ * by the crop and not by taste: the rotation is 5° rather than 2.5°, because
+ * there is no longer a rectangle of ramped-to-white haze whose corners come
+ * off the card when it leans. The jump is thirteen units rather than ten,
+ * because the standing robot is shorter than the flier and leaves eighteen
+ * units of frame above its antenna.
  *
- * AND THE STRETCH IS CAPPED FOR THE SAME REASON. `.anx-cheer` is anchored at
- * the feet, so a scaleY above 1 raises the top of the picture — 1.03 adds
- * about five units. It is therefore allowed only at take-off, where the body
- * is four units up, and never at the apex, where there is nothing left to
- * spend.
- *
- * THE ROTATION STAYS AT 2.5°, which is the asset's limit rather than taste:
- * robot.webp is a crop whose haze is ramped to white inside a rectangle, and
- * past about four degrees the rectangle's corners come off the white card as a
- * faint leaning box. The original transparent PNG would lift every one of
- * these ceilings at once.
+ * THE CROUCH IS STILL WHERE THE HEIGHT COMES FROM. An SVG clips to its
+ * viewBox, so everything above the dancer's head is the whole budget. Starting
+ * each hop four units BELOW the resting line buys travel the frame does not
+ * have to pay for: the body moves seventeen units while its highest point
+ * still clears the edge. The test measures the antenna against that edge on
+ * every sample, because clipping here is silent.
  */
 @keyframes anx-dance {
   0%,
   100% {
-    transform: translate(0, 3px) rotate(0deg);
+    transform: translate(0, 4px) rotate(0deg);
   }
   8% {
-    transform: translate(-1px, -4px) rotate(-1.2deg);
+    transform: translate(-2px, -5px) rotate(-3deg);
   }
   20% {
-    transform: translate(-4px, -10px) rotate(-2.5deg);
+    transform: translate(-6px, -13px) rotate(-5deg);
   }
   34% {
-    transform: translate(-3px, -1px) rotate(-1deg);
+    transform: translate(-4px, -1px) rotate(-2deg);
   }
   42% {
-    transform: translate(0, 3px) rotate(0deg);
+    transform: translate(0, 4px) rotate(0deg);
   }
   50% {
-    transform: translate(2px, -4px) rotate(1.4deg);
+    transform: translate(2px, -5px) rotate(3deg);
   }
   62% {
-    transform: translate(5px, -8px) rotate(2.5deg);
+    transform: translate(6px, -11px) rotate(5deg);
   }
   76% {
-    transform: translate(4px, 0) rotate(1deg);
+    transform: translate(4px, 0) rotate(2deg);
   }
   88% {
-    transform: translate(0, 3px) rotate(0deg);
+    transform: translate(0, 4px) rotate(0deg);
   }
 }
 .anx-dance {
@@ -1980,8 +1971,9 @@ body:has(.social-theme) .site-backdrop {
 
 /*
  * SQUASH AND STRETCH, on the INNER group for the same reason the throw is:
- * two animations cannot share `transform` on one element, and a raster robot
- * has no limb of its own to bend.
+ * two animations cannot share `transform` on one element. The robot now has
+ * legs in this state, but it is still one flat picture — they cannot bend, so
+ * the knees are implied by the body pressing down rather than drawn.
  *
  * ANCHORED AT THE FEET (`transform-origin: 50% 100%`), which is the whole
  * trick. Squash from the centre makes a picture pulse; squash from the ground

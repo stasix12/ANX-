@@ -229,7 +229,7 @@ async function main(): Promise<void> {
       is(card.h >= 36 && card.h <= 44, `and ${card.h} tall — the reference's is about 42`);
       const img = await page.evaluate(() => {
         const i = document.querySelector('svg image') as SVGImageElement;
-        return { href: i?.getAttribute('href') ?? '', w: Number(i?.getAttribute('width')) };
+        return { href: i?.getAttribute('href') ?? '', w: Number(i?.getAttribute('width')), h: Number(i?.getAttribute('height')) };
       });
       /*
        * AND THE ROBOT IS HIS ROBOT. "אל תחליף אותו ברובוט מצויר, אייקון,
@@ -237,7 +237,114 @@ async function main(): Promise<void> {
        * a drawing OF his robot and therefore exactly what was ruled out.
        */
       is(img.href.includes('robot'), 'the robot is the rendered asset, not paths pretending to be it');
-      is(img.w > 150, `and it is drawn at ${img.w} of a 400-unit scene, the share it has in the reference`);
+      /*
+       * RE-POINTED, NOT DELETED. This used to read `width > 150`, and the
+       * claim behind that number was never about width: it was that the robot
+       * is a figure in the scene rather than a thumbnail beside it. The crop
+       * it was written for is a body flying across the frame, 212 wide of 400
+       * and 174 tall of 180. The full-body render that replaced it is the same
+       * character STANDING, so it is narrower and the same claim has to be
+       * made on its height. A test left at the old number would have failed
+       * for the one reason that is not a fault.
+       */
+      is(img.h > 130, `the robot fills ${img.h} of the scene's 180 units — a figure in it, not an icon beside it`);
+      is(img.w > 95, `and ${img.w} of its 400 across`);
+
+      /*
+       * AND IT LEAVES THE ROBOT'S HAND AND ARRIVES AT THE GROUP.
+       *
+       * THIS CAUGHT A REAL BUG, which is why it is measured rather than
+       * assumed. The card carried both a `transform` attribute (where it
+       * starts) and a CSS animation that also sets `transform`. They are the
+       * same property and the animated one does not compose with the
+       * attribute — it replaces it. So the card ignored the hand entirely and
+       * flew out of the scene's own origin, the empty top-left corner of the
+       * panel. Nobody noticed for as long as the robot drawn here was the
+       * crop of his design, which is painted holding posts of its own: there
+       * was always a card near its hand, just not the one that moves.
+       *
+       * Both ends are checked, because either alone passes something wrong: a
+       * card that starts right and goes nowhere, or one that lands right from
+       * the wrong place. The flight is PAUSED at a chosen moment rather than
+       * sampled on a timer — 2.4 seconds is long enough that a timed read
+       * lands wherever it likes.
+       */
+      {
+        /*
+          THE FLIGHT IS MOVED TO AN EXACT MOMENT, through the Web Animations
+          API rather than through `animation-play-state` and a negative
+          `animation-delay`. Pausing a CSS animation freezes it wherever it
+          happens to be — which, by this point in the run, is an arbitrary
+          moment several cycles in — and the delay only shifts that. The first
+          version of this check did exactly that and read the card at 12% of
+          its flight while believing it was at 2%. `currentTime` says which
+          millisecond, and means it.
+        */
+        const at = async (ms: number) => {
+          await page.evaluate((t) => {
+            document.querySelectorAll('.anx-fly').forEach((el) => {
+              el.getAnimations().forEach((a) => {
+                a.pause();
+                a.currentTime = t;
+              });
+            });
+          }, ms);
+          await page.waitForTimeout(80);
+          return page.evaluate(() => {
+            const boxes = ['[data-card]', '[data-active]'].map((sel) => {
+              const el = document.querySelector(sel);
+              if (!el) return null;
+              const r = el.getBoundingClientRect();
+              return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+            });
+            /*
+              The hand, where the component puts it: 0.90 across the robot
+              picture and 0.69 down it, measured off the asset.
+              
+              Pushed through the SVG ROOT's matrix and not the image's. The
+              image carries the float and the throw, so its matrix is where
+              the hand is at this instant — tilted up to six degrees about the
+              feet, which swings it a dozen units. The card is a sibling of
+              that group and leaves from the hand's RESTING place, so that is
+              what this compares against. (Hanging the card inside the throw
+              would track the lean, at the cost of a transform the flight
+              would then have to undo.)
+            */
+            const svg = document.querySelector('svg') as SVGSVGElement;
+            const img = svg.querySelector('image') as SVGImageElement;
+            const hx = Number(img.getAttribute('x')) + 0.9 * Number(img.getAttribute('width'));
+            const hy = Number(img.getAttribute('y')) + 0.69 * Number(img.getAttribute('height'));
+            const m = svg.getScreenCTM()!;
+            const hand = new DOMPoint(hx, hy).matrixTransform(m);
+            const unit = Math.hypot(m.a, m.b) || 1;
+            return { card: boxes[0], tile: boxes[1], hand: { x: hand.x, y: hand.y }, unit };
+          });
+        };
+
+        /* 60ms in — 2.5% of the 2.4s flight: it has barely left the hand. */
+        const leaving = await at(60);
+        const c = leaving.card!;
+        const off = Math.hypot(c.x - leaving.hand.x, c.y - leaving.hand.y) / leaving.unit;
+        is(
+          off < 12,
+          `the post leaves the robot's hand (${off.toFixed(1)} scene units from it — it flew out of the panel's top-left corner before this was measured)`,
+        );
+        /* And near the end of the flight: on the group it was addressed to. */
+        const arriving = await at(2150);
+        const t = arriving.tile!;
+        const c2 = arriving.card!;
+        is(
+          Math.hypot(c2.x - t.x, c2.y - t.y) < t.w,
+          `and finishes on the group it was sent to (${Math.hypot(c2.x - t.x, c2.y - t.y).toFixed(0)}px from its centre, tile ${t.w.toFixed(0)}px wide)`,
+        );
+        /* Let it run again for everything after this. */
+        await page.evaluate(() => {
+          document.querySelectorAll('.anx-fly').forEach((el) => {
+            el.getAnimations().forEach((a) => a.play());
+          });
+        });
+        await page.waitForTimeout(120);
+      }
     }
 
     /* ── 5. IT FITS, AT EVERY WIDTH ─────────────────────────────────────── */
@@ -503,33 +610,49 @@ async function main(): Promise<void> {
       is(over.label.includes('הרובוט סיים לפרסם'), 'and a screen reader is told the same thing, not "מפרסם לקבוצות"');
 
       /*
-       * AND IT IS THE ROBOT WITH LEGS, which is the whole of what he asked
-       * for: "בריקוד שיראו גם את הרגלים שלו". The working robot is a crop of
-       * his design where the body flies and fades into the haze at the waist,
-       * so the dance draws the full-body render he then sent instead.
+       * AND IT IS THE ROBOT WITH LEGS, IN BOTH STATES.
        *
-       * Both halves are asserted. A test that only checked the dance would
-       * pass against a build that had swapped the picture everywhere and
-       * quietly lost the card the flier holds out to a group, which is the
-       * entire working scene.
+       * RE-POINTED, NOT DELETED. This used to assert that the two states drew
+       * DIFFERENT pictures — the standing render for the dance, the crop of
+       * his design for the working scene — because at the time they did. He
+       * then asked for the whole body while it is publishing too ("עכשיו גם
+       * שהוא שולח פוסטים … תעשה אותו אם כל הגוף שולח הודעות לקבוצות"), so the
+       * claim is now the opposite one and is written out rather than dropped:
+       * ONE picture, in every state, and it is the one with feet.
+       *
+       * What tells the two states apart is no longer the robot. It is the
+       * post: in the working scene a card leaves its hand, and on a finished
+       * day nothing does. That is asserted here as well, because "same robot
+       * everywhere" on its own would pass against a scene that had quietly
+       * stopped sending anything.
        */
-      const pictures = await page.evaluate(() => {
+      const shown = await page.evaluate(() => {
         const p = document.querySelector('[data-panel]') as HTMLElement;
-        return Array.from(p.querySelectorAll('svg image')).map((i) => i.getAttribute('href') ?? '');
+        return {
+          pictures: Array.from(p.querySelectorAll('svg image')).map((i) => i.getAttribute('href') ?? ''),
+          cards: p.querySelectorAll('[data-card]').length,
+        };
       });
-      eq(pictures.length, 1, 'FINISHED: one robot on the card');
-      is(pictures[0].includes('robot-dance'), `and it is the standing one, with feet to leave the ground (${pictures[0]})`);
+      eq(shown.pictures.length, 1, 'FINISHED: one robot on the card');
+      is(shown.pictures[0].includes('robot-full'), `and it is the full body, with feet to leave the ground (${shown.pictures[0]})`);
+      eq(shown.cards, 0, 'and nothing is leaving its hand, because the day has nothing left to send');
 
       await page.evaluate(() => { window.__mode('sending'); window.__plan(170, 248); });
       await page.waitForTimeout(150);
-      const working = await page.evaluate(() => {
+      const mid2 = await page.evaluate(() => {
         const p = document.querySelector('[data-panel]') as HTMLElement;
-        return Array.from(p.querySelectorAll('svg image')).map((i) => i.getAttribute('href') ?? '');
+        return {
+          pictures: Array.from(p.querySelectorAll('svg image')).map((i) => i.getAttribute('href') ?? ''),
+          cards: p.querySelectorAll('[data-card]').length,
+          throwing: p.querySelectorAll('.anx-send').length,
+        };
       });
       is(
-        working.length === 1 && working[0].includes('robot.webp'),
-        `MID-ROUND: and the working scene still draws the flier holding a card out to a group (${working[0] ?? 'none'})`,
+        mid2.pictures.length === 1 && mid2.pictures[0].includes('robot-full'),
+        `MID-ROUND: the same whole body is publishing (${mid2.pictures[0] ?? 'none'})`,
       );
+      eq(mid2.cards, 1, 'with a post leaving its hand');
+      eq(mid2.throwing, 1, 'and the body throwing it — a picture with its arms down has to put the gesture in the motion');
       await page.evaluate(() => { window.__mode('waiting'); window.__plan(248, 248); });
       await page.waitForTimeout(200);
 

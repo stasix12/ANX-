@@ -120,41 +120,47 @@ const CONFETTI: readonly Piece[] = [
     a palette of its own. */
 const CONFETTI_FILL = ['#7c3aed', '#4a5cfb', '#22c55e', '#f59e0b'];
 
-/** The robot, placed to the measurements taken off the reference recording. */
-const BOT = { x: 18, y: 2, w: 212, h: 174 };
-/** Its antenna light, so the one part of a flat image that should glow can. */
-const LAMP = { x: 115, y: 24 };
-/** The card it presents — where everything leaves from. */
-const HAND = { x: 200, y: 96 };
-
 /**
- * AND THE ROBOT THAT DANCES, WHICH IS A DIFFERENT PICTURE ON PURPOSE.
+ * THE ROBOT — ONE PICTURE, EVERY STATE.
  *
- * "בריקוד שיראו גם את הרגלים שלו." The working robot has none: it is a crop
- * of his design, where the body is drawn flying and fades into the haze at the
- * waist. He then sent the full-body render — the same character, standing,
- * with a transparent background — and that is this box.
+ * It is his full-body render: the same character as the reference design,
+ * standing, with a real transparent background.
  *
- * TWO PICTURES RATHER THAN ONE, because they are two poses and each is right
- * for one thing. The flying one is holding a card out towards a group, which
- * is the whole of the working scene; a standing figure cannot present
- * anything. The standing one has feet to leave the ground with, which is the
- * whole of the dance. Swapping either into the other's state would lose the
- * thing that state is about.
+ * IT USED TO BE TWO. The working scene drew a CROP of his reference design,
+ * where the robot is painted flying and fades into a haze at the waist, and
+ * only the finished day drew this one. He asked for the whole body in both —
+ * "עכשיו גם שהוא שולח פוסטים … תעשה אותו אם כל הגוף שולח הודעות לקבוצות" — so
+ * the crop is no longer drawn anywhere. The file is still in public/social as
+ * robot.webp; putting it back is this constant and one href.
+ *
+ * WHAT THAT COSTS, said plainly rather than discovered later: in the reference
+ * design the robot HOLDS a post out towards a group, and this one has its arms
+ * at its sides. The post is still drawn, still leaves from its hand, and the
+ * body now throws rather than presents — see `anx-send` in globals.css. That
+ * is a different gesture from the design, and it is the gesture he asked for.
  *
  * THE NUMBERS ARE THE JUMP'S BUDGET, not a layout preference. The asset is
- * trimmed to its content, so the antenna is at the top of this box and the
- * soles are at the bottom: feet at y+h = 168, just above the floor shadow, and
- * an eighteen-unit gap above the head for the hop to spend. The viewBox clips,
- * so that gap is the ceiling on how high the dance may go — see the keyframes
- * in globals.css, and the test that measures the antenna against the frame.
+ * trimmed to its content, so the antenna is the top of this box and the soles
+ * are the bottom: feet at y+h = 168, just above the floor, and an eighteen-
+ * unit gap above the head for the celebration's hop to spend. The viewBox
+ * clips in silence, so that gap is the ceiling on how high the dance may go —
+ * see the keyframes in globals.css and the test that measures the antenna
+ * against the frame on every sample.
  */
-const DANCER = { x: 68, y: 18, w: 113, h: 150 };
-/** The floor it lands on, under its own feet rather than under the flier. */
-const FLOOR = { x: DANCER.x + DANCER.w / 2, y: 173 };
-/** Its antenna ball, which sits where this asset's does and not where the
-    flying one's did. */
-const DANCE_LAMP = { x: DANCER.x + 0.509 * DANCER.w, y: DANCER.y + 5 };
+const ROBOT = { x: 68, y: 18, w: 113, h: 150 };
+/** The floor it stands on and lands back onto. */
+const FLOOR = { x: ROBOT.x + ROBOT.w / 2, y: 173 };
+/** Its antenna ball, so the one part of a flat picture that should glow can.
+    Read off the asset: the ball spans its top edge, just right of centre. */
+const LAMP = { x: ROBOT.x + 0.509 * ROBOT.w, y: ROBOT.y + 5 };
+/**
+ * ITS RIGHT HAND — where a post leaves from.
+ *
+ * Measured off the asset rather than placed by eye (0.90 across, 0.69 down),
+ * because every dashed path in this scene starts here and a hand-picked point
+ * that misses by five units makes four arrows that begin in mid-air.
+ */
+const HAND = { x: ROBOT.x + 0.9 * ROBOT.w, y: ROBOT.y + 0.69 * ROBOT.h };
 
 /** The four groups, in the staggered arrangement of the reference. */
 const TILE = [
@@ -326,69 +332,45 @@ export function PublishingScene({
       {mode !== 'idle' && (
         <ellipse
           className={celebrating ? 'anx-shadow-dance' : running ? 'anx-shadow' : undefined}
-          cx={celebrating ? FLOOR.x : BOT.x + BOT.w / 2 - 12}
-          cy={celebrating ? FLOOR.y : 166}
-          rx={celebrating ? 40 : 46}
-          ry={celebrating ? 5.5 : 6}
+          cx={FLOOR.x}
+          cy={FLOOR.y}
+          rx="40"
+          ry="5.5"
           fill="#7c3aed"
           opacity="0.11"
-          /* The hover's shadow keeps the origin it has always had. The dance's
-             is left to the stylesheet, which puts it at the centre of the
-             ellipse's own box — correct for something that collapses in place
-             under a body leaving the ground. */
-          style={celebrating ? undefined : { transformOrigin: `${BOT.x + BOT.w / 2 - 12}px 166px` }}
         />
       )}
+      {/*
+        NO INLINE transform-origin ANYWHERE IN HERE, and that is a fix rather
+        than a tidy-up. `transform-box: fill-box` makes a px origin relative to
+        the element's own box, and the old `120px 110px` was chosen for the
+        212×174 flier. On this 113-wide picture the same offset lands past the
+        robot's own shoulder, which would swing every rotation round a point
+        outside its body. Each class carries the origin its movement needs:
+        `center` for the hover and the dance, the feet for the throw and the
+        squash — a body pivots from the ground, not from its waist.
+      */}
       <g
         className={
           mode === 'idle' ? undefined : celebrating ? 'anx-dance' : running ? 'anx-bot' : 'anx-bot-min'
         }
-        /*
-          THE HOVER KEEPS ITS ORIGIN; THE DANCE TAKES THE STYLESHEET'S.
-          
-          `transform-box: fill-box` makes these px offsets relative to the
-          group's own box, and the two boxes are different pictures — 120,110
-          lands near the middle of the 212×174 flier and well outside the
-          113×150 dancer, which would swing it round a point past its own
-          shoulder. The classes carry the right origin for each: `center` for
-          the dance, and the feet for the squash below.
-        */
-        style={celebrating ? undefined : { transformOrigin: '120px 110px' }}
       >
-        <g
-          className={celebrating ? 'anx-cheer' : travelling ? 'anx-send' : undefined}
-          style={celebrating ? undefined : { transformOrigin: '120px 110px' }}
-        >
-          {celebrating ? (
-            <>
-              <image
-                href="/social/robot-dance.webp"
-                x={DANCER.x}
-                y={DANCER.y}
-                width={DANCER.w}
-                height={DANCER.h}
-                preserveAspectRatio="xMidYMid meet"
-              />
-              {/* Inside the squash, unlike the flier's: this one is anchored at
-                  the feet, so the head travels when the body compresses, and a
-                  lamp left outside would drift off the antenna by a tenth of
-                  the robot's height at the bottom of every hop. */}
-              <circle className="anx-blip" cx={DANCE_LAMP.x} cy={DANCE_LAMP.y} r="9" fill="url(#anx-lamp)" />
-            </>
-          ) : (
-            <image
-              href="/social/robot.webp"
-              x={BOT.x}
-              y={BOT.y}
-              width={BOT.w}
-              height={BOT.h}
-              preserveAspectRatio="xMidYMid meet"
-            />
-          )}
+        <g className={celebrating ? 'anx-cheer' : travelling ? 'anx-send' : undefined}>
+          <image
+            href="/social/robot-full.webp"
+            x={ROBOT.x}
+            y={ROBOT.y}
+            width={ROBOT.w}
+            height={ROBOT.h}
+            preserveAspectRatio="xMidYMid meet"
+          />
+          {/* The antenna light, INSIDE the group that squashes and throws. A
+              flat picture cannot pulse on its own, so the one part of it that
+              should is given a soft lamp over the ball — and a lamp left
+              outside this group would drift off the antenna by a tenth of the
+              robot's height at the bottom of every hop. */}
+          {mode !== 'idle' && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="9" fill="url(#anx-lamp)" />}
         </g>
-        {/* The antenna light. A flat picture cannot pulse on its own, so the
-            one part of it that should is given a soft lamp over the ball. */}
-        {running && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="10" fill="url(#anx-lamp)" />}
       </g>
 
       {/* ── the card in flight ─────────────────────────────────────────── */}
@@ -397,12 +379,28 @@ export function PublishingScene({
         purple picture block, same two grey lines — because "אין להחליפו
         במעטפה או באייקון אחר".
       */}
+      {/*
+        THE STARTING PLACE IS ON THE OUTER GROUP, AND IT HAS TO BE.
+        
+        A `transform` ATTRIBUTE and a CSS `transform` are the same property,
+        and the animated one wins outright — it does not compose with the
+        attribute, it replaces it. With both on one element the card ignored
+        where it was put and flew out of the scene's own origin instead, which
+        on this layout is the empty top-left corner of the panel. It went
+        unnoticed for as long as it did because the robot that used to be
+        drawn here is painted holding posts of its own: there was always a
+        card near its hand, just not this one.
+        
+        So the hand is a plain translate on a group the animation never
+        touches, and `anx-fly` owns the transform of the group inside it.
+      */}
       {travelling && (
         <g
           key={`fly-${active}`}
+          transform={`translate(${HAND.x - 17} ${HAND.y - 20})`}
           style={{ ['--dx' as string]: `${to.x - HAND.x}px`, ['--dy' as string]: `${to.y - HAND.y}px` }}
         >
-          <g data-card="" className="anx-fly" transform={`translate(${HAND.x - 17} ${HAND.y - 20})`}>
+          <g data-card="" className="anx-fly">
             <rect x="0" y="0" width="34" height="40" rx="5" fill="#ffffff" filter="url(#anx-soft)" />
             <rect x="4.5" y="4.5" width="25" height="15" rx="3" fill="#c7b6f7" />
             <rect x="9" y="8" width="7" height="7" rx="1.5" fill="#8b7bea" />

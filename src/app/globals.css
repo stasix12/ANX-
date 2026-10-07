@@ -1649,21 +1649,41 @@ body:has(.social-theme) .site-backdrop {
 
 /*
  * THE THROW, on an INNER group so it can run at its own speed inside the
- * float — two animations cannot share `transform` on one element, and a raster
- * robot has no limb to move on its own. 2.4s, the card's own flight, so the
- * recoil lands as the card leaves and the follow-through happens while it is
- * on its way rather than drifting against it.
+ * float — two animations cannot share `transform` on one element, and a flat
+ * picture has no arm to swing on its own. 2.4s, the card's own flight, so the
+ * wind-up and the release line up with the post leaving the hand rather than
+ * drifting against it.
+ *
+ * IT IS NOW A THROW AND NOT A NUDGE, because the robot is now a whole body.
+ * The old numbers (two pixels and under two degrees) were right for the crop
+ * of his design, where the robot is already drawn mid-flight with a post held
+ * out towards the group: there, the gesture is in the picture and the motion
+ * only had to keep it alive. This picture stands with its arms at its sides,
+ * so the gesture has to be IN THE MOTION — wind up away from the groups, then
+ * swing towards them — or there is nothing on screen that says the post was
+ * sent rather than dropped.
+ *
+ * THE GROUPS ARE TO THE RIGHT, so the throw leans right: positive rotation in
+ * SVG is clockwise, and the body tips the way the post goes. The wind-up is
+ * the opposite lean and is what makes the swing read as deliberate.
+ *
+ * PIVOTED AT THE FEET (`transform-origin: 50% 100%`), which is the whole
+ * difference between a body throwing and a picture being rotated. The soles
+ * stay on the floor the shadow draws; everything above them moves.
  */
 @keyframes anx-send {
   0%,
   100% {
     transform: translate(0, 0) rotate(0deg);
   }
-  9% {
-    transform: translate(-2px, 1.5px) rotate(-1.7deg);
+  10% {
+    transform: translate(-3px, 1px) rotate(-4deg);
   }
-  27% {
-    transform: translate(1.5px, -1px) rotate(1.2deg);
+  24% {
+    transform: translate(4px, -2px) rotate(6deg);
+  }
+  40% {
+    transform: translate(1.5px, 0) rotate(2deg);
   }
   62% {
     transform: translate(0, 0) rotate(0deg);
@@ -1671,9 +1691,9 @@ body:has(.social-theme) .site-backdrop {
 }
 .anx-send {
   transform-box: fill-box;
+  transform-origin: 50% 100%;
   animation: anx-send 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
-
 /*
  * AND THE SHADOW DOES THE OPPOSITE, on the same five-second clock. This is the
  * cue that turns a moving picture into a floating one, and it costs one

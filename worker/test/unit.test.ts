@@ -499,10 +499,22 @@ console.log('unit tests OK');
 
   /* The retirement in each branch must sit AFTER that bail-out. A guard that
      runs after the stamp is a guard that does nothing. */
-  /* Anchored on the call, which now carries the per-schedule count it needs to
-     stay quiet on a pass that planned nothing (see noteDropped). The claim
-     below is unchanged: the bail-out must sit before the stamp. */
-  const repeatTail = plan.slice(plan.indexOf('await noteDropped(db, note, schedule.id, dropped, made);'));
+  /*
+   * Anchored on the call, which now carries the per-schedule count it needs to
+   * stay quiet — first on a pass that planned nothing (noteDropped's own
+   * guard), and now on a pass that only REFILLED one, which is what a repeating
+   * round does every minute. The claim below is unchanged: the bail-out must
+   * sit before the stamp.
+   *
+   * RE-POINTED, NOT DELETED, for the third time in this suite. The anchor is a
+   * literal, so it goes stale whenever that line is edited — and an anchor that
+   * misses makes `slice(-1)` of the file, which fails this assertion for a
+   * reason that has nothing to do with what it checks. The indexOf is asserted
+   * below so the next miss says so plainly instead.
+   */
+  const repeatAnchor = 'await noteDropped(db, note, schedule.id, dropped, plannedAhead ? 0 : made);';
+  assert.ok(plan.includes(repeatAnchor), 'the noteDropped anchor still exists — a missed anchor fails the NEXT assertion for the wrong reason');
+  const repeatTail = plan.slice(plan.indexOf(repeatAnchor));
   const repeatGuard = repeatTail.indexOf('if (failed) {');
   const repeatStamp = repeatTail.indexOf("update({ planned_until: until.toISOString() })");
   assert.ok(repeatGuard >= 0 && repeatStamp >= 0 && repeatGuard < repeatStamp, 'the recurring branch checks before it stamps');

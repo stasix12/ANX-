@@ -130,14 +130,44 @@ function RollingNumber({ value, className }: { value: number; className: string 
   );
 }
 
-function Ratio({ done, total, suffix }: { done: number; total: number; suffix: string }) {
+/**
+ * THE COUNT, CENTRED AND ON ONE LINE — "לשים באמצע אם אוטו פונט".
+ *
+ * `clamp()` rather than a breakpoint: the sentence carries two numbers whose
+ * width is data, not design — "9 / 12" and "118 / 2655" are not the same
+ * string — so a size chosen for one of them wraps on the other. The floor is
+ * what fits at 320px with four digits on each side; the ceiling is exactly the
+ * size this line has always been, so nothing changes on a phone that has room.
+ *
+ * `vw` and not a container query because this panel is full-bleed on a phone,
+ * which is the only width where the line is ever tight; on a desktop the clamp
+ * is pinned at its maximum long before the viewport stops growing.
+ */
+/* Exported for worker/test/publishing-scene.test.ts, which measures the real
+   line in a browser rather than a copy of its markup. */
+export function Ratio({ done, total, suffix }: { done: number; total: number; suffix: string }) {
   return (
-    <p className="text-sm font-bold text-mist-500">
-      <span dir="ltr" className="inline-block">
-        <RollingNumber value={done} className="text-[28px] font-extrabold leading-none tabular-nums text-mist-100" />
-        <span> / {total}</span>
+    <p
+      dir="auto"
+      className="flex items-baseline justify-center gap-x-1.5 whitespace-nowrap text-center text-[clamp(11px,3.3vw,14px)] font-bold text-mist-500"
+    >
+      <span dir="ltr" className="inline-flex items-baseline gap-x-1">
+        <RollingNumber
+          value={done}
+          className="text-[clamp(19px,6.6vw,28px)] font-extrabold leading-none tabular-nums text-mist-100"
+        />
+        {/*
+          THE SPACE IS IN THE TEXT, and the gap beside it is in the CSS.
+          
+          Moving it to `gap-x-1` alone changed what the card SAYS — "50/ 50"
+          instead of "50 / 50" — and a guard whose whole job is "the figures on
+          this card did not move" caught it, correctly. A flex container trims
+          the leading space when it lays the run out, so the gap is what shows;
+          the space is what the DOM and a screen reader read.
+        */}
+        <span>{' / '}{total}</span>
       </span>
-      <span> {suffix}</span>
+      <span>{suffix}</span>
     </p>
   );
 }
@@ -967,11 +997,24 @@ export function LiveQueueHero({
         */}
         {plannedToday > 0 && (
           <div className="mt-2">
+            {/*
+              THE BAR OF THE REFERENCE, measured off it rather than guessed:
+              a 18px track, a fill rounded at BOTH ends so it reads as a pill
+              inside the track rather than as a block filling it, and the
+              violet-to-blue gradient sampled from the recording (#6d2ffd →
+              #4a5cfb). Paused keeps the grey it always had — a paused round
+              that still wore the brand gradient would look like it was running.
+            */}
             <ProgressBar
-              segments={[{ value: Math.min(publishedToday, plannedToday), className: paused ? 'bg-mist-500' : 'bg-success-400' }]}
+              segments={[
+                {
+                  value: Math.min(publishedToday, plannedToday),
+                  className: paused ? 'rounded-full bg-mist-500' : 'rounded-full anx-bar',
+                },
+              ]}
               total={plannedToday}
               ariaLabel={`${publishedToday} מתוך ${plannedToday} ${agree(publishedToday, 'פורסם', 'פורסמו')} מהמתוכננים להיום`}
-              height="h-2.5"
+              height="h-[18px]"
             />
           </div>
         )}

@@ -191,22 +191,47 @@ export function PublishingScene({
 
       {/* ── the robot ───────────────────────────────────────────────────── */}
       {/*
-        One <image>, inside the viewBox, so it keeps its place and its size
-        relative to the groups at every width — the same reason everything else
-        here is in this viewBox and not in a flex row.
+        ONE PICTURE, THREE MOTIONS, AND THEY HAVE TO BE SEPARATE ELEMENTS.
+        
+        A raster robot cannot move a limb, so everything it does is a transform
+        on the whole of it — and two animations cannot share `transform` on one
+        element. So the float is on the outer group, the throw is on an inner
+        one, and the shadow below is a third element that does the opposite of
+        the float. Nesting is what lets them run at once and at their own
+        speeds: a 5-second drift with a 2.4-second throw inside it, which is
+        the rhythm the recording has.
+        
+        THE SHADOW IS WHAT SELLS IT. A body that rises and falls on its own
+        reads as a sprite sliding; the same body over a shadow that shrinks and
+        fades as it rises reads as a thing in the air. It is the cheapest cue
+        in the scene and the one doing most of the work.
       */}
-      <g className={mode === 'idle' ? undefined : running ? 'anx-bot' : 'anx-bot-min'} style={{ transformOrigin: '120px 100px' }}>
-        <image
-          href="/social/robot.webp"
-          x={BOT.x}
-          y={BOT.y}
-          width={BOT.w}
-          height={BOT.h}
-          preserveAspectRatio="xMidYMid meet"
+      {mode !== 'idle' && (
+        <ellipse
+          className={running ? 'anx-shadow' : undefined}
+          cx={BOT.x + BOT.w / 2 - 12}
+          cy="166"
+          rx="46"
+          ry="6"
+          fill="#7c3aed"
+          opacity="0.11"
+          style={{ transformOrigin: `${BOT.x + BOT.w / 2 - 12}px 166px` }}
         />
+      )}
+      <g className={mode === 'idle' ? undefined : running ? 'anx-bot' : 'anx-bot-min'} style={{ transformOrigin: '120px 110px' }}>
+        <g className={travelling ? 'anx-send' : undefined} style={{ transformOrigin: '120px 110px' }}>
+          <image
+            href="/social/robot.webp"
+            x={BOT.x}
+            y={BOT.y}
+            width={BOT.w}
+            height={BOT.h}
+            preserveAspectRatio="xMidYMid meet"
+          />
+        </g>
         {/* The antenna light. A flat picture cannot pulse on its own, so the
             one part of it that should is given a soft lamp over the ball. */}
-        {running && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="9" fill="url(#anx-lamp)" />}
+        {running && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="10" fill="url(#anx-lamp)" />}
       </g>
 
       {/* ── the card in flight ─────────────────────────────────────────── */}

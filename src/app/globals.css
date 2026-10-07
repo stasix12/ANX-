@@ -1623,21 +1623,77 @@ body:has(.social-theme) .site-backdrop {
  * and disappears while the figures underneath are being read.
  * ======================================================================== */
 
-/* The body. 3px, four seconds — the "quietly working in the background" end
-   of the range, not the bouncing end. */
+/*
+ * THE FLOAT. Five pixels and a degree either way, over five seconds.
+ *
+ * The first pass moved three pixels straight up and down and read as nothing
+ * at all: three viewBox units is under three device pixels on a phone, and a
+ * body that only rises and falls looks like a picture being slid anyway. The
+ * tilt is what makes a small movement legible — a thing that leans as it rises
+ * reads as hanging in the air. It stays under a degree, because two is a toy.
+ */
 @keyframes anx-bot-bob {
   0%,
   100% {
-    transform: translateY(0);
+    transform: translateY(0) rotate(-0.9deg);
   }
   50% {
-    transform: translateY(-3px);
+    transform: translateY(-5px) rotate(0.9deg);
   }
 }
 .anx-bot {
   transform-box: fill-box;
   transform-origin: center;
-  animation: anx-bot-bob 4s ease-in-out infinite;
+  animation: anx-bot-bob 5s ease-in-out infinite;
+}
+
+/*
+ * THE THROW, on an INNER group so it can run at its own speed inside the
+ * float — two animations cannot share `transform` on one element, and a raster
+ * robot has no limb to move on its own. 2.4s, the card's own flight, so the
+ * recoil lands as the card leaves and the follow-through happens while it is
+ * on its way rather than drifting against it.
+ */
+@keyframes anx-send {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  9% {
+    transform: translate(-2px, 1.5px) rotate(-1.7deg);
+  }
+  27% {
+    transform: translate(1.5px, -1px) rotate(1.2deg);
+  }
+  62% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+.anx-send {
+  transform-box: fill-box;
+  animation: anx-send 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/*
+ * AND THE SHADOW DOES THE OPPOSITE, on the same five-second clock. This is the
+ * cue that turns a moving picture into a floating one, and it costs one
+ * ellipse: a body over a shadow that shrinks as it rises is in the air; the
+ * same body over nothing is a sprite being slid.
+ */
+@keyframes anx-shadow {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.13;
+  }
+  50% {
+    transform: scale(0.88);
+    opacity: 0.07;
+  }
+}
+.anx-shadow {
+  transform-box: fill-box;
+  animation: anx-shadow 5s ease-in-out infinite;
 }
 
 /* Paused keeps a breath, slower and half the distance: switched off is not
@@ -1879,6 +1935,18 @@ body:has(.social-theme) .site-backdrop {
 }
 
 /*
+ * THE PROGRESS FILL OF THE REFERENCE. Sampled off the recording rather than
+ * picked: #5248fb at the top of the pill, #662efe at its foot, #4361fc along
+ * it — one violet-to-blue sweep. It is a background-image and not a token
+ * because no token in this palette is a gradient, and inventing one for a
+ * single bar would put a second answer to "what is the brand fill" in the
+ * stylesheet.
+ */
+.anx-bar {
+  background-image: linear-gradient(135deg, #6d2ffd 0%, #4a5cfb 100%);
+}
+
+/*
  * SWITCHED OFF, NOT HIDDEN.
  *
  * A reader who asked their phone for less motion still gets the whole scene —
@@ -1888,6 +1956,8 @@ body:has(.social-theme) .site-backdrop {
 @media (prefers-reduced-motion: reduce) {
   .anx-bot,
   .anx-bot-min,
+  .anx-send,
+  .anx-shadow,
   .anx-blip,
   .anx-eyes,
   .anx-trail,

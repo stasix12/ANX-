@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PublishingScene, type SceneMode } from '@/components/social/PublishingScene';
+import { Ratio } from '@/components/social/LiveCampaignHero';
 
 declare global {
   interface Window {
@@ -27,6 +28,12 @@ function Harness() {
   return (
     <div style={{ padding: 12 }}>
       <PublishingScene mode={mode} published={published} total={279} />
+      {/* The real counter line, so "auto font" can be MEASURED rather than
+          eyeballed. The widest shape the data can take — four digits on each
+          side — is the one that decides whether it fits. */}
+      <div data-ratio style={{ width: '100%' }}>
+        <Ratio done={1180} total={2655} suffix="פורסמו מתוך המתוכננים להיום" />
+      </div>
     </div>
   );
 }

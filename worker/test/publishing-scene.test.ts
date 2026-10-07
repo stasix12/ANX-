@@ -258,12 +258,65 @@ async function main(): Promise<void> {
           fly: getComputedStyle(document.querySelector('.anx-fly')!).animationName,
           trail: getComputedStyle(document.querySelector('.anx-trail')!).animationName,
           halo: getComputedStyle(document.querySelector('.anx-halo')!).animationName,
+          send: getComputedStyle(document.querySelector('.anx-send')!).animationName,
+          shadow: getComputedStyle(document.querySelector('.anx-shadow')!).animationName,
         }),
       );
       eq(running.bot, 'anx-bot-bob', 'the robot is actually animated — not merely rendered with a class nothing styles');
       eq(running.fly, 'anx-fly', 'the card in flight really moves');
       eq(running.trail, 'anx-trail', 'and the dotted trail runs towards the group');
       eq(running.halo, 'anx-halo', 'and the ring around the active destination breathes');
+      /*
+       * THE ROBOT'S OWN THREE. A raster robot has no limb to move, so all of it
+       * is transforms — and two animations cannot share `transform` on one
+       * element, which is why these are three nested elements and not one with
+       * a cleverer keyframe. If they ever collapse onto one, two of these three
+       * silently stop and the robot goes back to sliding.
+       */
+      eq(running.bot, 'anx-bot-bob', 'the robot floats');
+      eq(running.send, 'anx-send', 'and throws, inside that float, on the card’s own clock');
+      eq(running.shadow, 'anx-shadow', 'over a shadow that shrinks as it rises — the cue that makes it float rather than slide');
+      const sep = await page.evaluate(() => {
+        const bot = document.querySelector('.anx-bot');
+        const send = document.querySelector('.anx-send');
+        return { nested: Boolean(bot && send && bot.contains(send) && bot !== send) };
+      });
+      is(sep.nested, 'the throw really is nested inside the float, rather than both being asked of one element');
+    }
+
+    /* ── 5c. THE COUNT IS CENTRED, AND IT FITS ──────────────────────────── */
+    /*
+     * "רק את המספר של הפרסומים לשים באמצע אם אוטו פונט."
+     *
+     * "Auto font" is a claim about pixels at a width, so it is measured at the
+     * widths a phone actually is, against the WIDEST shape the data can take —
+     * 1180 / 2655, four digits on each side. A size chosen for "9 / 12" wraps
+     * on that and nobody finds out until a busy day.
+     */
+    {
+      for (const width of [320, 360, 390, 430]) {
+        await page.setViewportSize({ width, height: 844 });
+        await page.waitForTimeout(90);
+        const line = await page.evaluate(() => {
+          const p = document.querySelector('[data-ratio] p') as HTMLElement;
+          const box = p.getBoundingClientRect();
+          const host = (p.parentElement as HTMLElement).getBoundingClientRect();
+          const cs = getComputedStyle(p);
+          return {
+            overflowed: p.scrollWidth > p.clientWidth + 1,
+            lines: Math.round(box.height / parseFloat(cs.lineHeight || '18')),
+            centred: Math.abs((box.left - host.left) - (host.right - box.right)) < 2,
+            justify: cs.justifyContent,
+            size: Math.round(parseFloat(cs.fontSize)),
+            wider: Math.round(box.width) > Math.round(host.width) + 1,
+          };
+        });
+        is(!line.overflowed && !line.wider, `${width}px: the count line fits — it must never be cut, a "118 / 26…" is a figure nobody can act on`);
+        eq(line.justify, 'center', `${width}px: and it is centred`);
+        is(line.centred, `${width}px: really centred, measured off both margins and not just asserted by a class`);
+        is(line.size >= 11 && line.size <= 14, `${width}px: the shrink has a floor — ${line.size}px is still readable, and it never grows past the 14px this line has always been`);
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
     }
 
     /* ── 6. AND IT STOPS FOR SOMEBODY WHO ASKED IT TO ───────────────────── */
@@ -274,13 +327,13 @@ async function main(): Promise<void> {
       await quiet.evaluate(() => window.__publish(3));
       await quiet.waitForTimeout(150);
       const names = await quiet.evaluate(() =>
-        ['.anx-bot', '.anx-fly', '.anx-trail', '.anx-halo'].map((sel) => {
+        ['.anx-bot', '.anx-fly', '.anx-trail', '.anx-shadow'].map((sel) => {
           const el = document.querySelector(sel);
           return el ? getComputedStyle(el).animationName : 'absent';
         }),
       );
       for (const [i, n] of names.entries()) {
-        is(n === 'none' || n === 'absent', `reduced motion: nothing animates (${['bot', 'fly', 'trail', 'halo'][i]} = ${n})`);
+        is(n === 'none' || n === 'absent', `reduced motion: nothing animates (${['bot', 'fly', 'trail', 'shadow'][i]} = ${n})`);
       }
       is((await ticks(quiet)) > 0, 'but the scene is still drawn, and every tick that was earned is still there — the state was never in the motion');
       await quiet.close();

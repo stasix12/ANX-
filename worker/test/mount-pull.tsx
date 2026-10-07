@@ -67,6 +67,20 @@ function Harness() {
         {/* Tall enough that the document really scrolls — without this the
             "only at the very top" rule has nothing to be true about. */}
         <div style={{ height: 2400 }} />
+        {/*
+          THE BOTTOM BAR, carried exactly as SocialShell carries it: `fixed`,
+          inside the children of this component. It is here because it stopped
+          being fixed — a transform on an ancestor makes it the containing
+          block for fixed descendants, and the wrapper used to carry one at all
+          times. Without a fixed element in this harness the regression was
+          invisible to every assertion in the suite.
+        */}
+        <nav
+          data-bar
+          style={{ position: 'fixed', left: 0, right: 0, bottom: 0, height: 56, background: '#fff', borderTop: '1px solid #ddd' }}
+        >
+          ניווט
+        </nav>
       </div>
     </PullToRefresh>
   );

@@ -244,6 +244,81 @@ async function main(): Promise<void> {
       is((await scrollY()) > 400, 'and ordinary scrolling still works');
     }
 
+    /* ── 7. THE REGRESSION: it must not unpin what is pinned ──────────── */
+    /*
+     * "הסרגל כלים למטה לא מקובע .. כמו שהיה לפני."
+     *
+     * This feature shipped and the bottom navigation bar stopped being fixed
+     * to the screen — it scrolled away with the page. A `transform` makes an
+     * element the containing block for every `position: fixed` DESCENDANT, and
+     * `translateY(0px)` is a transform, so the wrapper carried one at all
+     * times and the bar was positioned against IT rather than against the
+     * viewport. The whole shell is inside this component, so this was true of
+     * every sheet and overlay in the product, not only the bar.
+     *
+     * Nothing in sections 1-6 could see it: the harness had no fixed element
+     * in it. It has one now.
+     *
+     * THE WAIT BELOW IS NOT PADDING. The snap-back is a 220ms transition on
+     * the transform, and a transform mid-transition is still a containing
+     * block — so a read taken the instant the spinner appears finds the bar at
+     * 2718 and looks exactly like the bug. The promise this section holds is
+     * about the states that LAST: at rest, and for the seconds a reload takes.
+     */
+    {
+      const bar = '[data-bar]';
+      const barBottom = () => page.evaluate((sel) => document.querySelector(sel)!.getBoundingClientRect().bottom, bar);
+      const viewport = await page.evaluate(() => window.innerHeight);
+      const settled = () =>
+        page.waitForFunction(
+          (sel) => getComputedStyle(document.querySelector(sel)!.parentElement!.parentElement!).transform === 'none',
+          bar,
+          { timeout: 3000 },
+        );
+
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForFunction(() => window.scrollY === 0, undefined, { timeout: 3000 });
+      await settled();
+      eq(Math.round(await barBottom()), viewport, 'at rest the bar sits on the bottom edge of the screen');
+
+      /* THE ASSERTION HE WOULD HAVE MADE. Scroll a long way; a bar that is
+         really fixed has not moved a pixel. */
+      await page.evaluate(() => window.scrollTo(0, 900));
+      await page.waitForFunction(() => window.scrollY > 800, undefined, { timeout: 3000 });
+      eq(
+        Math.round(await barBottom()),
+        viewport,
+        'and it is STILL on the bottom edge after scrolling nine hundred pixels — this is the bug he photographed',
+      );
+      /* The mechanism behind it: `none` and `translateY(0)` look identical and
+         only one of them stops being a containing block. */
+      is(
+        (await page.evaluate(
+          (sel) => getComputedStyle(document.querySelector(sel)!.parentElement!.parentElement!).transform,
+          bar,
+        )) === 'none',
+        'the wrapper carries NO transform at rest — translateY(0) would pin the bar to the wrapper just as firmly as translateY(56px)',
+      );
+
+      /*
+       * AND FOR THE WHOLE RELOAD, which is the part that lasts. A pull is a
+       * moment with a thumb on the glass; a reload on 4G is seconds, and a
+       * navigation bar pushed off the bottom of the screen for seconds is the
+       * same bug wearing a stopwatch. So the page sits back down as soon as
+       * the reload starts and only the circle stays out.
+       */
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForFunction(() => window.scrollY === 0, undefined, { timeout: 3000 });
+      await drag(page, { x: 195, y: 120 }, { x: 195, y: 420 }, 16);
+      await page.waitForSelector('.animate-spin');
+      await settled();
+      is((await page.locator('.animate-spin').count()) > 0, 'the reload is still running');
+      eq(Math.round(await barBottom()), viewport, 'and the bar is back on the bottom edge while it runs, rather than waiting it out off-screen');
+      await finish();
+      await settled();
+      eq(Math.round(await barBottom()), viewport, 'and it is there afterwards');
+    }
+
     eq(crashes, [], 'the gesture threw');
     await page.close();
   } finally {

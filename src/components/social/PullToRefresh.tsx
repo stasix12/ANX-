@@ -158,6 +158,41 @@ export function PullToRefresh({ onRefresh, children }: { onRefresh: () => Promis
   const ready = pull >= THRESHOLD;
   const showing = pull > 0 || refreshing;
 
+  /*
+   * ─────────────────────────────────────────────────────────────────────────
+   * 5. AND IT MUST NOT UNPIN THE THINGS THAT ARE PINNED.
+   *
+   * THIS SHIPPED BROKEN AND HE FOUND IT: "הסרגל כלים למטה לא מקובע .. כמו שהיה
+   * לפני." The bottom navigation bar had stopped being fixed to the screen and
+   * scrolled away with the page.
+   *
+   * A `transform` on an element makes it the containing block for every
+   * `position: fixed` DESCENDANT — and `translateY(0px)` is a transform. This
+   * component wraps the entire shell (SocialShell's last line), so the wrapper
+   * below was permanently transformed and the bar, the sheets and every other
+   * fixed overlay inside it were being positioned against IT instead of
+   * against the viewport. The file two directories up already carries two
+   * comments about this exact trap with backdrop-filter. I walked into it with
+   * transform.
+   *
+   * So the page is lifted ONLY while there is something to lift:
+   *
+   *   * AT REST the property is not written at all — not `none`, absent — and
+   *     the subtree behaves exactly as it did before this component existed.
+   *     That is the state the app is in except for a few hundred milliseconds
+   *     a day, and it is the state he was looking at.
+   *   * DURING THE RELOAD the page sits back down and only the circle stays
+   *     out. The reload can take seconds on 4G, and a navigation bar pushed
+   *     fifty-six pixels off the bottom of the screen for seconds is the bug
+   *     again, briefly.
+   *   * DURING THE DRAG ITSELF the page does move, and the bar moves with it.
+   *     That is a few hundred milliseconds with a thumb on the glass, it reads
+   *     as the page being pulled, and the alternative — animating `top`, which
+   *     does not create a containing block — relays out the whole list on
+   *     every frame of the gesture.
+   */
+  const lift = refreshing ? 0 : pull;
+
   return (
     <>
       {/*
@@ -201,7 +236,11 @@ export function PullToRefresh({ onRefresh, children }: { onRefresh: () => Promis
       */}
       <div
         style={{
-          transform: `translateY(${showing ? pull : 0}px)`,
+          /* `undefined`, not 'none' and not translateY(0): the property has to
+             be ABSENT, or the wrapper is still a containing block for every
+             fixed child. Snapping back still animates — a transform list
+             transitions to no-transform as to the identity. */
+          transform: lift > 0 ? `translateY(${lift}px)` : undefined,
           transition: g.current.active ? 'none' : 'transform 0.22s cubic-bezier(0.22,1,0.36,1)',
         }}
       >

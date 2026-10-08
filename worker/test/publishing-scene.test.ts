@@ -155,9 +155,9 @@ async function main(): Promise<void> {
           dancing: document.querySelectorAll('.anx-dance').length,
           cheering: document.querySelectorAll('.anx-cheer').length,
           confetti: document.querySelectorAll('[data-confetti]').length,
-          resting: document.querySelectorAll('.anx-rest').length,
-          sofa: document.querySelectorAll('[data-sofa]').length,
-          posed: document.querySelectorAll('[data-pose="lounging"]').length,
+          dribbling: document.querySelectorAll('.anx-dribble').length,
+          ball: document.querySelectorAll('[data-ball]').length,
+          bounce: document.querySelectorAll('.anx-bounce').length,
         }));
       };
 
@@ -188,9 +188,76 @@ async function main(): Promise<void> {
       eq(waiting.breathing, 0, 'and no group pulses — nothing is on its way to one');
       eq(waiting.active, 1, 'but the next destination is still named');
       eq(waiting.bot, 0, 'the WORKING hover stops — it is the same movement the robot makes while publishing, and nothing is being published');
-      eq(waiting.sofa, 1, 'the robot is sitting down instead');
-      eq(waiting.posed, 1, 'in a pose of its own, on a group no animation touches — a CSS transform would replace this attribute, not compose with it');
-      eq(waiting.resting, 1, 'and it is still breathing: resting between jobs is not the same as broken');
+      eq(waiting.ball, 1, 'the robot is bouncing a ball instead — "תעשה אותו שהוא מקפיץ כדור שאין כלום ואין פרסום"');
+      eq(waiting.bounce, 1, 'and the ball really bounces, on an element of its own: its floor mark runs the opposite way round the same clock, and one element cannot hold two animations on transform');
+      eq(waiting.dribbling, 1, 'with the robot keeping the beat, standing on the floor rather than hovering over it');
+      /* And all three really run — see 5b: a missing @keyframes leaves the
+         name in place and animates nothing. */
+      const beat = await page.evaluate(() =>
+        ['.anx-bounce', '.anx-bounce-mark', '.anx-dribble'].map((sel) => {
+          const el = document.querySelector(sel);
+          return { sel, n: el ? el.getAnimations().length : -1 };
+        }),
+      );
+      for (const a of beat) {
+        is(a.n >= 1, `${a.sel} is really animating, not just named (${a.n})`);
+      }
+
+      /*
+       * AND THE BALL LANDS ON THE FLOOR THE ROBOT STANDS ON.
+       *
+       * MEASURED, because the alternative is a number that agrees with the
+       * geometry today. The drop is derived in the component from the gap
+       * between the ball's rest height and the sole of the robot's own feet;
+       * a literal in its place looks identical in review and leaves the ball
+       * sinking through the floor or stopping in mid-air the first time
+       * anything about the robot moves — silently, because an SVG does not
+       * complain.
+       *
+       * Driven to the bottom of the bounce through the Web Animations API:
+       * `animation-play-state: paused` freezes a CSS animation wherever it
+       * happens to be, which by this point in the run is nowhere in
+       * particular. 400ms of an 850ms loop is 47%, inside the window where
+       * the ball is on the ground.
+       */
+      await page.evaluate(() => window.__mode('waiting'));
+      await page.waitForTimeout(120);
+      /*
+       * PAUSE IN ONE TASK, MEASURE IN THE NEXT.
+       *
+       * The first version did both inside one page.evaluate and failed about
+       * one run in three — always reporting the ball at the TOP of its
+       * bounce, which is where it had been before the pause. Setting
+       * `currentTime` updates the animation; whether the new value has
+       * reached layout by the time getBoundingClientRect() runs in the same
+       * JS task is not something to rely on. A frame in between removes the
+       * question, and a flaky assertion is worse than none — it teaches
+       * everybody to re-run the suite.
+       */
+      await page.evaluate(() => {
+        document.querySelectorAll('.anx-bounce').forEach((el) => {
+          el.getAnimations().forEach((a) => {
+            a.pause();
+            a.currentTime = 400;
+          });
+        });
+      });
+      await page.waitForTimeout(120);
+      const landing = await page.evaluate(() => {
+        const svg = document.querySelector('svg') as SVGSVGElement;
+        const img = svg.querySelector('image') as SVGImageElement;
+        const sole = new DOMPoint(0, Number(img.getAttribute('y')) + Number(img.getAttribute('height'))).matrixTransform(svg.getScreenCTM()!);
+        const ball = (svg.querySelector('.anx-bounce') as SVGGElement).getBoundingClientRect();
+        const m = svg.getScreenCTM()!;
+        return { gap: (ball.bottom - sole.y) / (Math.hypot(m.a, m.b) || 1) };
+      });
+      is(
+        Math.abs(landing.gap) < 2.5,
+        `the ball lands on the floor the robot stands on (${landing.gap.toFixed(1)} scene units ${landing.gap > 0 ? 'through it' : 'above it'})`,
+      );
+      await page.evaluate(() => {
+        document.querySelectorAll('.anx-bounce').forEach((el) => el.getAnimations().forEach((a) => a.play()));
+      });
 
       const paused = await seenIn('paused');
       eq(paused.fly, 0, 'PAUSED: nothing travels');
@@ -199,7 +266,7 @@ async function main(): Promise<void> {
       eq(paused.active, 0, 'and no group is named as a destination — nothing is going anywhere');
       eq(paused.bot, 0, 'the full idle stops');
       eq(paused.botMin, 1, 'and a smaller, slower breath replaces it — switched off is not broken, and a frozen robot reads as broken');
-      eq(paused.sofa, 0, 'and no sofa: paused is the owner switching the system off, which is a different thing from the robot having nothing to do');
+      eq(paused.ball, 0, 'and no ball: paused is the owner switching the system off, which is a different thing from the robot having nothing to do');
 
       const idle = await seenIn('idle');
       eq(idle.bot + idle.botMin, 0, 'IDLE: with nothing scheduled at all, even that stops');
@@ -220,7 +287,7 @@ async function main(): Promise<void> {
       eq(done.botMin, 0, 'and so does the paused one — finished is neither of those');
       eq(done.dancing, 1, 'the robot dances instead');
       eq(done.cheering, 1, 'with the cheer nested inside the dance, for the same reason the throw is nested inside the float');
-      eq(done.sofa, 0, 'and it is not on the sofa — it finished, it did not sit out the day');
+      eq(done.ball, 0, 'and it is not bouncing a ball — it finished the day, it did not sit it out');
       is(done.confetti >= 10, `and there is confetti in the air — ${done.confetti} pieces`);
 
       /* And every other state has NONE of it. A celebration that leaks into
@@ -230,13 +297,13 @@ async function main(): Promise<void> {
         eq(other.confetti, 0, `${m.toUpperCase()}: not one piece of confetti — the day is not over`);
         eq(other.dancing, 0, `${m.toUpperCase()}: and the robot is not dancing`);
       }
-      /* And the sofa belongs to exactly one state. A robot sitting down while
+      /* And the ball belongs to exactly one state. A robot killing time while
          a post is in a worker's hands would be this panel saying nothing is
          happening while something is — the same lie as the old headline, in
          the other direction. */
       for (const m of ['sending', 'paused', 'idle'] as const) {
         const other = await seenIn(m);
-        eq(other.sofa, 0, `${m.toUpperCase()}: no sofa — the robot sits down only when it has nothing in its hands`);
+        eq(other.ball, 0, `${m.toUpperCase()}: no ball — it kills time only when its hands are empty`);
       }
     }
 
@@ -431,6 +498,30 @@ async function main(): Promise<void> {
       eq(running.fly, 'anx-fly', 'the card in flight really moves');
       eq(running.trail, 'anx-trail', 'and the dotted trail runs towards the group');
       eq(running.halo, 'anx-halo', 'and the ring around the active destination breathes');
+
+      /*
+       * A NAME IS NOT AN ANIMATION, and this cost an afternoon.
+       *
+       * `animation-name` computes to whatever the stylesheet says even when
+       * the matching `@keyframes` is not in the build: the browser resolves
+       * the name, finds no keyframes, and runs nothing. Every check above
+       * reads the NAME, so all of them pass over that. It is not theoretical
+       * — the production CSS minifier emitted one of this scene's keyframes
+       * as `@keyframes anx-ball-DELETED`, and the element sat there with
+       * `animation-name: anx-ball`, `transform: none` and no animation at
+       * all. Renaming it fixed it; nothing warned.
+       *
+       * getAnimations() is the question that cannot be answered by a name.
+       */
+      const alive = await page.evaluate(() =>
+        ['.anx-bot', '.anx-fly', '.anx-trail', '.anx-halo', '.anx-send', '.anx-shadow'].map((sel) => {
+          const el = document.querySelector(sel);
+          return { sel, n: el ? el.getAnimations().length : -1 };
+        }),
+      );
+      for (const a of alive) {
+        is(a.n >= 1, `${a.sel} has a name AND a running animation behind it (${a.n})`);
+      }
       /*
        * THE ROBOT'S OWN THREE. A raster robot has no limb to move, so all of it
        * is transforms — and two animations cannot share `transform` on one
@@ -600,7 +691,7 @@ async function main(): Promise<void> {
             dancing: p.querySelectorAll('.anx-dance').length,
             cheering: p.querySelectorAll('.anx-cheer').length,
             confetti: p.querySelectorAll('[data-confetti]').length,
-            sofa: p.querySelectorAll('[data-sofa]').length,
+            ball: p.querySelectorAll('[data-ball]').length,
             fly: p.querySelectorAll('.anx-fly').length,
             active: p.querySelectorAll('[data-active]').length,
             label: svg?.getAttribute('aria-label') ?? '',
@@ -806,7 +897,7 @@ async function main(): Promise<void> {
       eq(idle.title, 'מחכה לעבודות', 'BETWEEN PUBLICATIONS: it says it is waiting, because it is');
       eq(idle.fly, 0, 'and nothing is leaving its hand');
       eq(idle.line, '', 'and it does NOT claim the day is clear — 78 posts are still owed');
-      eq(idle.sofa, 1, 'the robot is sitting down');
+      eq(idle.ball, 1, 'the robot is bouncing a ball');
       is(idle.confetti === 0, 'and there is nothing to celebrate yet');
 
       /* PAUSED, with the day's figures still complete: he switched it off, and
@@ -863,15 +954,20 @@ async function main(): Promise<void> {
       await quiet.evaluate(() => window.__mode('waiting'));
       await quiet.waitForTimeout(150);
       const rest = await quiet.evaluate(() => {
-        const el = document.querySelector('.anx-rest');
-        return { anim: el ? getComputedStyle(el).animationName : 'absent', sofa: document.querySelectorAll('[data-sofa]').length };
+        const names = ['.anx-dribble', '.anx-bounce', '.anx-bounce-mark'].map((sel) => {
+          const el = document.querySelector(sel);
+          return el ? getComputedStyle(el).animationName : 'absent';
+        });
+        return { names, ball: document.querySelectorAll('[data-ball]').length };
       });
-      eq(rest.anim, 'none', `reduced motion: the resting breath is still (${rest.anim})`);
+      for (const [i, n] of rest.names.entries()) {
+        eq(n, 'none', `reduced motion: the idle game is still (${['beat', 'ball', 'floor mark'][i]} = ${n})`);
+      }
       /* `>= 1` and not `=== 1`: this page has the panel mounted below the
          standalone scene and the panel's own day is mid-round, so both are
-         resting and both draw one. The claim is that the sofa is still THERE
+         waiting and both draw one. The claim is that the ball is still THERE
          with the motion off — switched off, not hidden. */
-      is(rest.sofa >= 1, 'and the robot is still sitting on the sofa — switched off, not hidden');
+      is(rest.ball >= 1, 'and the ball is still on screen, at rest — switched off, not hidden');
 
       await quiet.evaluate(() => window.__mode('done'));
       await quiet.waitForTimeout(150);
@@ -931,23 +1027,22 @@ async function main(): Promise<void> {
        */
       is(!/plannedToday|inFlight/.test(code), 'the scene never works out for itself whether the day is over — it is told');
       /*
-       * AND THE LOUNGING POSE IS AN ATTRIBUTE ON A GROUP NOTHING ANIMATES.
+       * AND THE BOUNCE'S DISTANCE IS NOT IN THE STYLESHEET.
        *
-       * A CSS animation and a `transform` attribute are one property, and the
-       * animated one REPLACES the attribute rather than composing with it.
-       * This repo has already paid for that once: the post in flight carried
-       * both and spent weeks flying out of the empty corner of the panel
-       * instead of leaving the robot's hand. If the pose and the breathing
-       * ever land on one element the robot stands bolt upright on the sofa
-       * and nothing errors.
+       * The drop is the gap between the robot's hand and the floor it stands
+       * on, and both come from the robot's own box. A number typed into
+       * globals.css would be right until the first time anything about the
+       * robot moved, and then the ball would bounce through the floor or stop
+       * short of it — silently, because nothing errors.
        */
+      is(/--anx-drop/.test(code), 'the stylesheet is told how far to fall rather than deciding it');
       is(
-        /<g transform=\{resting \? lounge\(\) : undefined\} data-pose=/.test(code),
-        'the pose is its own group, carrying no animation class',
+        /const BALL_DROP = BALL_FLOOR - BALL\.r - BALL\.y;/.test(code),
+        'and the distance is DERIVED from the floor and the ball, not a literal that happens to agree with them today',
       );
       is(
-        !/className=\{[^}]*anx-rest[^}]*\}[^>]*transform=/.test(code),
-        'and nothing carries the resting animation and a transform attribute at once',
+        /const BALL_FLOOR = ROBOT\.y \+ ROBOT\.h/.test(code),
+        'and the floor it lands on is the sole of the robot’s own feet, not a number that agrees with them today',
       );
     }
 

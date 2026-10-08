@@ -1717,31 +1717,120 @@ body:has(.social-theme) .site-backdrop {
 }
 
 /*
- * LYING DOWN, BREATHING.
+ * ────────────────────────────────────────────────────────────────────────────
+ * KILLING TIME: THE BALL, ITS SHADOW, AND THE BEAT THE ROBOT KEEPS.
  *
- * "שהרובוט לא בפעולה … והרובוט עצמו שוכב על ספה." Most of the day nothing is
- * being published, and this is what that looks like. The movement is tiny and
- * slow on purpose: a robot resting between jobs is not a robot that has
- * stopped, and the one thing this panel must never do is read as broken.
+ * "תעשה אותו שהוא מקפיץ כדור שאין כלום ואין פרסום."
  *
- * NO ROTATION IN HERE. The lounging pose is a `transform` ATTRIBUTE on a group
- * inside this one, and a CSS transform replaces an attribute rather than
- * composing with it — rotate here and the robot would stand bolt upright on
- * the sofa. This group only drifts; the pose lives one level down.
+ * Three animations on one 0.85s clock and the same percentages, because they
+ * are one event seen three ways: the ball falls, the mark under it arrives
+ * with it, and the robot's hand pushes down as it goes.
+ *
+ * THE EASING IS WHERE THE WEIGHT IS. A bounce on one curve is a yo-yo on a
+ * string. Falling accelerates and rising decelerates, so the timing function
+ * is set INSIDE the keyframes — it applies from each stop to the next — and
+ * the ball spends most of the loop near the top, which is what makes it look
+ * like gravity rather than like a loop.
+ *
+ * THE SQUASH IS ANCHORED AT THE BOTTOM of the ball (`50% 100%`), so it
+ * flattens against the floor instead of shrinking towards its own middle,
+ * and it lasts three hundredths of the cycle. Longer than that and it reads
+ * as rubber.
+ *
+ * THE DISTANCE IS NOT IN HERE. --anx-drop is set on the element from
+ * PublishingScene, where the gap between the hand and the floor is derived
+ * from the robot's own box. Hard-coding it here is how a ball ends up going
+ * through the floor the first time anything moves.
+ *
+ * AND THE NAME IS `anx-bounce`, NOT `anx-ball`, WHICH IS NOT A PREFERENCE.
+ * Under that name the production CSS minifier emitted it as
+ * `@keyframes anx-ball-DELETED` while leaving `.anx-ball { animation: … 
+ * anx-ball }` pointing at it. The browser then resolves the name, finds no
+ * keyframes and runs nothing: `animation-name` still computes to `anx-ball`,
+ * `transform` stays `none`, and no tool anywhere says a word. It only
+ * surfaced because a test measures where the ball actually lands. If one of
+ * these ever goes quiet again, that is the first thing to check — and
+ * publishing-scene.test.ts now asks getAnimations() rather than the name.
  */
-@keyframes anx-rest {
-  0%,
-  100% {
-    transform: translate(0, 0);
+@keyframes anx-bounce {
+  0% {
+    transform: translateY(0) scale(1, 1);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
   }
-  50% {
-    transform: translate(0, -2.5px);
+  44% {
+    transform: translateY(var(--anx-drop, 40px)) scale(1, 1);
+    animation-timing-function: linear;
+  }
+  48% {
+    transform: translateY(var(--anx-drop, 40px)) scale(1.18, 0.82);
+    animation-timing-function: linear;
+  }
+  52% {
+    transform: translateY(var(--anx-drop, 40px)) scale(1, 1);
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  100% {
+    transform: translateY(0) scale(1, 1);
   }
 }
-.anx-rest {
+.anx-bounce {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: anx-bounce 0.85s infinite;
+}
+
+/* The mark on the floor is widest and darkest at the instant the ball
+   reaches it, and almost gone while the ball is up. It is a separate element
+   because it runs the opposite way round the same clock, and one element
+   cannot hold two animations on `transform`. */
+@keyframes anx-bounce-mark {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.05;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  44% {
+    transform: scale(1);
+    opacity: 0.18;
+  }
+  52% {
+    transform: scale(1);
+    opacity: 0.18;
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  100% {
+    transform: scale(0.55);
+    opacity: 0.05;
+  }
+}
+.anx-bounce-mark {
   transform-box: fill-box;
   transform-origin: center;
-  animation: anx-rest 6.5s ease-in-out infinite;
+  animation: anx-bounce-mark 0.85s infinite;
+}
+
+/*
+ * AND THE ROBOT KEEPS THE BEAT. Two pixels and under a degree, pushing DOWN
+ * as the ball goes down — the robot is standing on the floor here, not
+ * hovering, so it may not rise. The hover is the movement it makes while it
+ * is publishing, and this state exists precisely because it is not.
+ */
+@keyframes anx-dribble {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  44% {
+    transform: translateY(2px) rotate(-0.8deg);
+  }
+  70% {
+    transform: translateY(-0.5px) rotate(0.3deg);
+  }
+}
+.anx-dribble {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: anx-dribble 0.85s ease-in-out infinite;
 }
 
 /* Paused keeps a breath, slower and half the distance: switched off is not
@@ -2273,7 +2362,9 @@ body:has(.social-theme) .site-backdrop {
   .anx-land,
   .anx-tick,
   .anx-dance,
-  .anx-rest,
+  .anx-dribble,
+  .anx-bounce,
+  .anx-bounce-mark,
   .anx-cheer,
   .anx-shadow-dance,
   .anx-confetti,

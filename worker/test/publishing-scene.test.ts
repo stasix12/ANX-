@@ -155,6 +155,9 @@ async function main(): Promise<void> {
           dancing: document.querySelectorAll('.anx-dance').length,
           cheering: document.querySelectorAll('.anx-cheer').length,
           confetti: document.querySelectorAll('[data-confetti]').length,
+          resting: document.querySelectorAll('.anx-rest').length,
+          sofa: document.querySelectorAll('[data-sofa]').length,
+          posed: document.querySelectorAll('[data-pose="lounging"]').length,
         }));
       };
 
@@ -166,12 +169,28 @@ async function main(): Promise<void> {
       eq(sending.breathing, 1, 'and exactly one group breathes');
       eq(sending.bot, 1, 'with the robot hovering');
 
+      /*
+       * WAITING — most of the day, and the state this panel was worst at.
+       *
+       * "שהרובוט לא בפעולה תרשום מחכה לעבודות, והרובוט עצמו שוכב על ספה." It
+       * drew the robot hovering exactly as it does while publishing, under a
+       * headline that said "רובוט בפעולה", so the one screen whose job is to
+       * answer "is it actually publishing?" said yes through every gap
+       * between publications — which on his own screenshot was the whole
+       * morning, with 0 of 268 out.
+       *
+       * RE-POINTED, NOT DELETED: `bot` used to be asserted at 1 here and is
+       * now asserted at 0, because the hover is what it must no longer do.
+       */
       const waiting = await seenIn('waiting');
       eq(waiting.fly, 0, 'WAITING: nothing travels — the gap between publications is not a publication');
       eq(waiting.trail, 0, 'and the trail is still');
       eq(waiting.breathing, 0, 'and no group pulses — nothing is on its way to one');
       eq(waiting.active, 1, 'but the next destination is still named');
-      eq(waiting.bot, 1, 'the robot is alive');
+      eq(waiting.bot, 0, 'the WORKING hover stops — it is the same movement the robot makes while publishing, and nothing is being published');
+      eq(waiting.sofa, 1, 'the robot is sitting down instead');
+      eq(waiting.posed, 1, 'in a pose of its own, on a group no animation touches — a CSS transform would replace this attribute, not compose with it');
+      eq(waiting.resting, 1, 'and it is still breathing: resting between jobs is not the same as broken');
 
       const paused = await seenIn('paused');
       eq(paused.fly, 0, 'PAUSED: nothing travels');
@@ -180,6 +199,7 @@ async function main(): Promise<void> {
       eq(paused.active, 0, 'and no group is named as a destination — nothing is going anywhere');
       eq(paused.bot, 0, 'the full idle stops');
       eq(paused.botMin, 1, 'and a smaller, slower breath replaces it — switched off is not broken, and a frozen robot reads as broken');
+      eq(paused.sofa, 0, 'and no sofa: paused is the owner switching the system off, which is a different thing from the robot having nothing to do');
 
       const idle = await seenIn('idle');
       eq(idle.bot + idle.botMin, 0, 'IDLE: with nothing scheduled at all, even that stops');
@@ -200,6 +220,7 @@ async function main(): Promise<void> {
       eq(done.botMin, 0, 'and so does the paused one — finished is neither of those');
       eq(done.dancing, 1, 'the robot dances instead');
       eq(done.cheering, 1, 'with the cheer nested inside the dance, for the same reason the throw is nested inside the float');
+      eq(done.sofa, 0, 'and it is not on the sofa — it finished, it did not sit out the day');
       is(done.confetti >= 10, `and there is confetti in the air — ${done.confetti} pieces`);
 
       /* And every other state has NONE of it. A celebration that leaks into
@@ -208,6 +229,14 @@ async function main(): Promise<void> {
         const other = await seenIn(m);
         eq(other.confetti, 0, `${m.toUpperCase()}: not one piece of confetti — the day is not over`);
         eq(other.dancing, 0, `${m.toUpperCase()}: and the robot is not dancing`);
+      }
+      /* And the sofa belongs to exactly one state. A robot sitting down while
+         a post is in a worker's hands would be this panel saying nothing is
+         happening while something is — the same lie as the old headline, in
+         the other direction. */
+      for (const m of ['sending', 'paused', 'idle'] as const) {
+        const other = await seenIn(m);
+        eq(other.sofa, 0, `${m.toUpperCase()}: no sofa — the robot sits down only when it has nothing in its hands`);
       }
     }
 
@@ -571,6 +600,7 @@ async function main(): Promise<void> {
             dancing: p.querySelectorAll('.anx-dance').length,
             cheering: p.querySelectorAll('.anx-cheer').length,
             confetti: p.querySelectorAll('[data-confetti]').length,
+            sofa: p.querySelectorAll('[data-sofa]').length,
             fly: p.querySelectorAll('.anx-fly').length,
             active: p.querySelectorAll('[data-active]').length,
             label: svg?.getAttribute('aria-label') ?? '',
@@ -757,6 +787,28 @@ async function main(): Promise<void> {
         is(travel > 9, `and the body really leaves the ground — ${travel.toFixed(1)} scene units between the crouch and the apex, not a squash pretending to be a jump`);
       }
 
+      /*
+       * BETWEEN PUBLICATIONS — the state the panel described wrongly for
+       * months, and the one it is in for most of a day.
+       *
+       * "שהרובוט לא בפעולה תרשום מחכה לעבודות." The headline used to be
+       * decided by a heartbeat: the PC is awake, therefore "רובוט בפעולה".
+       * His own screenshot is that bug — six in the morning, 0 of 268
+       * published, and the panel reporting the robot in action.
+       *
+       * Driven with work still to do (170 of 248) so it cannot be confused
+       * with the finished day above: nothing is in a worker's hands, and 78
+       * posts are still owed.
+       */
+      await page.evaluate(() => { window.__mode('waiting'); window.__plan(170, 248); });
+      await page.waitForTimeout(200);
+      const idle = await panel();
+      eq(idle.title, 'מחכה לעבודות', 'BETWEEN PUBLICATIONS: it says it is waiting, because it is');
+      eq(idle.fly, 0, 'and nothing is leaving its hand');
+      eq(idle.line, '', 'and it does NOT claim the day is clear — 78 posts are still owed');
+      eq(idle.sofa, 1, 'the robot is sitting down');
+      is(idle.confetti === 0, 'and there is nothing to celebrate yet');
+
       /* PAUSED, with the day's figures still complete: he switched it off, and
          switched off is not finished. */
       await page.evaluate(() => { window.__mode('paused'); window.__plan(248, 248); });
@@ -808,6 +860,19 @@ async function main(): Promise<void> {
        * confetti is still DRAWN, scattered where it was placed, so the day
        * still reads as finished without anything moving.
        */
+      await quiet.evaluate(() => window.__mode('waiting'));
+      await quiet.waitForTimeout(150);
+      const rest = await quiet.evaluate(() => {
+        const el = document.querySelector('.anx-rest');
+        return { anim: el ? getComputedStyle(el).animationName : 'absent', sofa: document.querySelectorAll('[data-sofa]').length };
+      });
+      eq(rest.anim, 'none', `reduced motion: the resting breath is still (${rest.anim})`);
+      /* `>= 1` and not `=== 1`: this page has the panel mounted below the
+         standalone scene and the panel's own day is mid-round, so both are
+         resting and both draw one. The claim is that the sofa is still THERE
+         with the motion off — switched off, not hidden. */
+      is(rest.sofa >= 1, 'and the robot is still sitting on the sofa — switched off, not hidden');
+
       await quiet.evaluate(() => window.__mode('done'));
       await quiet.waitForTimeout(150);
       const party = await quiet.evaluate(() =>
@@ -865,6 +930,25 @@ async function main(): Promise<void> {
        * this file it would be answered twice, and the two answers would drift.
        */
       is(!/plannedToday|inFlight/.test(code), 'the scene never works out for itself whether the day is over — it is told');
+      /*
+       * AND THE LOUNGING POSE IS AN ATTRIBUTE ON A GROUP NOTHING ANIMATES.
+       *
+       * A CSS animation and a `transform` attribute are one property, and the
+       * animated one REPLACES the attribute rather than composing with it.
+       * This repo has already paid for that once: the post in flight carried
+       * both and spent weeks flying out of the empty corner of the panel
+       * instead of leaving the robot's hand. If the pose and the breathing
+       * ever land on one element the robot stands bolt upright on the sofa
+       * and nothing errors.
+       */
+      is(
+        /<g transform=\{resting \? lounge\(\) : undefined\} data-pose=/.test(code),
+        'the pose is its own group, carrying no animation class',
+      );
+      is(
+        !/className=\{[^}]*anx-rest[^}]*\}[^>]*transform=/.test(code),
+        'and nothing carries the resting animation and a transform attribute at once',
+      );
     }
 
     eq(crashes, [], 'the scene threw');

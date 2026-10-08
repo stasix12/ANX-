@@ -703,6 +703,19 @@ export function LiveQueueHero({
   onSwitchProfile?: (name: string) => void;
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
+  /**
+   * STILL ACCEPTED, NO LONGER READ HERE — and left in deliberately.
+   *
+   * It used to decide the headline, and that was the bug: a heartbeat says
+   * the PC is awake, which it is for most of a day in which almost nothing is
+   * being published. The sleeping-PC case it was guarding is handled upstream
+   * now, where it is stronger: page.tsx turns an offline worker with a queue
+   * into `needs_intervention` before this panel is asked anything.
+   *
+   * The prop stays because every caller passes it and because the next fact
+   * this panel needs about the machine will want it. Removing it would be a
+   * change to four call sites for nothing.
+   */
   workerOnline?: boolean;
   /**
    * What needs a person, and the one place to go and do it.
@@ -723,11 +736,22 @@ export function LiveQueueHero({
      went with the chip — a window listening for a key that can no longer open
      anything is the kind of thing that outlives three refactors. */
   /*
-   * "Live" is a claim about a machine, so it is made from a machine fact: a
-   * row in flight, or a worker heartbeat. A queue with rows in it only ever
-   * said that rows exist — which is equally true of a queue stuck since Friday.
+   * "IN ACTION" IS A ROW IN A WORKER'S HANDS, AND NOTHING ELSE.
+   *
+   * This used to be `inFlight > 0 || workerOnline === true` — a heartbeat
+   * counted. On his own screen that read "רובוט בפעולה" over 0 of 268
+   * published, at six in the morning, because the PC was switched on. The
+   * heartbeat is a true fact about the machine and the wrong fact for this
+   * sentence: it is awake almost all day, and the gaps between publications
+   * are most of that day.
+   *
+   * The sleeping-PC case the heartbeat was guarding is not lost — it moved
+   * upstream and got stronger. page.tsx turns an offline worker with a queue
+   * into `needs_intervention` outright, so by the time this panel is in its
+   * `active` branch the machine is up; what is left to say is whether it is
+   * carrying anything.
    */
-  const live = systemState === 'active' && (inFlight > 0 || workerOnline === true);
+  const publishing = inFlight > 0;
   /*
    * The owner's own ceiling has been reached. rules.ts SKIPS a row whose slot
    * arrives past the cap, so this is not a pause that catches up later — and
@@ -857,18 +881,24 @@ export function LiveQueueHero({
       <div className="flex items-center">
         <h2 dir="auto" className="min-w-0 text-[17px] font-extrabold leading-[22px] text-mist-100">
           {/*
-            The finished day is checked BEFORE `live`, and that order is the
-            whole of it: `live` is true whenever the worker's heartbeat is
-            fresh, which it is for hours after the last post of the day goes
-            out. Asked in the other order the title would read "רובוט בפעולה"
-            over an empty queue every evening.
+            THREE SENTENCES, AND THE ORDER IS THE WHOLE OF IT.
+            
+            "שהרובוט לא בפעולה תרשום מחכה לעבודות." The middle one used to be
+            the default and read "רובוט בפעולה" whenever the PC was awake —
+            which is most of the day, including the morning he screenshotted
+            with nothing published at all. It is now the narrow case: a row is
+            in a worker's hands RIGHT NOW. Everything else that is still a
+            running system is the robot waiting for its next job, and says so.
+            
+            The finished day is asked first, or an evening with an empty queue
+            would read as waiting for work that is not coming.
           */}
           {systemState === 'active'
             ? dayDone
               ? 'הרובוט סיים לפרסם'
-              : live
+              : publishing
                 ? 'רובוט בפעולה'
-                : 'התור מלא — ממתין לתורו של הפרסום הבא'
+                : 'מחכה לעבודות'
             : systemState === 'paused'
               ? 'שום דבר לא יוצא עד שתפעילו'
               : systemState === 'empty'

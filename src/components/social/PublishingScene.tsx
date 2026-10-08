@@ -162,6 +162,61 @@ const LAMP = { x: ROBOT.x + 0.509 * ROBOT.w, y: ROBOT.y + 5 };
  */
 const HAND = { x: ROBOT.x + 0.9 * ROBOT.w, y: ROBOT.y + 0.69 * ROBOT.h };
 
+/**
+ * THE SOFA, AND THE POSE THAT GOES ON IT.
+ *
+ * "שהרובוט לא בפעולה תרשום מחכה לעבודות, והרובוט עצמו שוכב על ספה רגל על רגל."
+ *
+ * Most of the day nothing is being published: the queue has rows in it and the
+ * next slot has not come round yet. The panel drew the robot hovering through
+ * all of it, over a title that read "רובוט בפעולה", so the one screen whose
+ * job is to answer "is it actually publishing?" said yes for hours at a time
+ * while nothing left the machine. Lying down is the honest picture of that,
+ * and the title now says it in words.
+ *
+ * WHAT IS DRAWN AND WHAT IS THE ASSET. The sofa is drawn here, like the group
+ * tiles and the post in flight — it is furniture, not his character, and the
+ * rule that has held all along is about the ROBOT. The robot is still his own
+ * render, turned onto its back.
+ *
+ * WHAT IS MISSING, said here rather than in a message that scrolls away: THE
+ * LEGS ARE NOT CROSSED. robot-full.webp is one flat picture of a standing
+ * robot — rotating it lays the whole body down together, and no transform
+ * crosses one leg over the other. That needs a render of the robot in that
+ * pose, and it would replace this one constant and one href. I have not drawn
+ * a different robot to fake it.
+ */
+const SOFA = { x: 26, y: 40, w: 196, h: 134 };
+/**
+ * The lounging transform, written as numbers rather than guessed:
+ *
+ *   -74°  lays the body down with the head to the LEFT and the feet to the
+ *         right, which is the way round the sofa is built — the arm rest the
+ *         head rests on is the left one.
+ *   0.78  so the 150-unit body becomes a 117-unit figure, which is what fits
+ *         between the two arm rests with the shoulders clear of both.
+ *   the translate puts the middle of the body on the middle of the seat.
+ *
+ * ON ITS OWN GROUP, which is not a detail. A CSS animation and a `transform`
+ * attribute are the same property and the animated one REPLACES the
+ * attribute — the post in flight already shipped that bug once, and it left
+ * the post flying out of the corner of the panel. The sway is on the group
+ * outside this one; nothing animated touches this transform.
+ */
+/** The angle, the size and where the middle of the body lands on the seat. */
+const LOUNGE_TILT = -5;
+const LOUNGE_SCALE = 0.80;
+const LOUNGE_AT = { x: 124, y: 100 };
+const lounge = (): string => {
+  const cx = ROBOT.x + ROBOT.w / 2;
+  const cy = ROBOT.y + ROBOT.h / 2;
+  return [
+    `translate(${(LOUNGE_AT.x - cx).toFixed(2)} ${(LOUNGE_AT.y - cy).toFixed(2)})`,
+    `rotate(${LOUNGE_TILT} ${cx} ${cy})`,
+    `translate(${cx} ${cy}) scale(${LOUNGE_SCALE}) translate(${-cx} ${-cy})`,
+  ].join(' ');
+};
+
 /** The four groups, in the staggered arrangement of the reference. */
 const TILE = [
   { x: 240, y: 26 },
@@ -244,7 +299,13 @@ export function PublishingScene({
    * only that the robot is on screen and moving.
    */
   const celebrating = mode === 'done';
-  const running = mode === 'sending' || mode === 'waiting';
+  /*
+   * NOTHING IS GOING OUT THIS SECOND, and the system is running — which is
+   * most of the day. The robot lies down for it. See SOFA above for what is
+   * drawn and what is still missing.
+   */
+  const resting = mode === 'waiting';
+  const running = mode === 'sending' || resting;
   const travelling = mode === 'sending' && !success;
   const to = centre(active);
 
@@ -259,7 +320,9 @@ export function PublishingScene({
             ? 'אין פרסום פעיל'
             : celebrating
               ? `הרובוט סיים לפרסם — ${published} מתוך ${total} היום`
-              : `מפרסם לקבוצות — ${published} מתוך ${total} היום`
+              : resting
+                ? `מחכה לעבודות — ${published} מתוך ${total} פורסמו היום`
+                : `מפרסם לקבוצות — ${published} מתוך ${total} היום`
       }
       className="block w-full"
     >
@@ -329,7 +392,7 @@ export function PublishingScene({
         fades as it rises reads as a thing in the air. It is the cheapest cue
         in the scene and the one doing most of the work.
       */}
-      {mode !== 'idle' && (
+      {mode !== 'idle' && !resting && (
         <ellipse
           className={celebrating ? 'anx-shadow-dance' : running ? 'anx-shadow' : undefined}
           cx={FLOOR.x}
@@ -340,6 +403,32 @@ export function PublishingScene({
           opacity="0.11"
         />
       )}
+
+      {/* ── the sofa ───────────────────────────────────────────────────── */}
+      {/*
+        BEHIND THE ROBOT, except for the front of the seat, which is drawn
+        after it further down — that one strip is what makes the body look
+        sunk INTO the cushion rather than laid on top of a picture of one.
+      */}
+      {resting && (
+        <g data-sofa="">
+          {/* the shadow the sofa casts, not the robot's */}
+          <ellipse cx={SOFA.x + SOFA.w / 2} cy={SOFA.y + SOFA.h + 2} rx={SOFA.w / 2 - 4} ry="5" fill="#4c1d95" opacity="0.1" />
+          {/* back rest, with a seam so it reads as upholstery and not a slab */}
+          <rect x={SOFA.x + 16} y={SOFA.y} width={SOFA.w - 32} height="78" rx="20" fill="#c3b5f7" />
+          <rect x={SOFA.x + 26} y={SOFA.y + 9} width={SOFA.w - 52} height="58" rx="15" fill="#ddd5fc" />
+          <path d={`M ${SOFA.x + SOFA.w / 2} ${SOFA.y + 12} v 52`} stroke="#c3b5f7" strokeWidth="2.5" strokeLinecap="round" />
+          {/* arm rests */}
+          <rect x={SOFA.x} y={SOFA.y + 44} width="34" height="76" rx="16" fill="#b4a2f2" />
+          <rect x={SOFA.x + SOFA.w - 34} y={SOFA.y + 44} width="34" height="76" rx="16" fill="#b4a2f2" />
+          {/* the seat */}
+          <rect x={SOFA.x + 12} y={SOFA.y + 72} width={SOFA.w - 24} height="48" rx="16" fill="#d4c9f9" />
+          {/* feet */}
+          <rect x={SOFA.x + 20} y={SOFA.y + 116} width="13" height="14" rx="4" fill="#8f7ae8" />
+          <rect x={SOFA.x + SOFA.w - 33} y={SOFA.y + 116} width="13" height="14" rx="4" fill="#8f7ae8" />
+        </g>
+      )}
+
       {/*
         NO INLINE transform-origin ANYWHERE IN HERE, and that is a fix rather
         than a tidy-up. `transform-box: fill-box` makes a px origin relative to
@@ -352,10 +441,28 @@ export function PublishingScene({
       */}
       <g
         className={
-          mode === 'idle' ? undefined : celebrating ? 'anx-dance' : running ? 'anx-bot' : 'anx-bot-min'
+          mode === 'idle'
+            ? undefined
+            : celebrating
+              ? 'anx-dance'
+              : resting
+                ? 'anx-rest'
+                : running
+                  ? 'anx-bot'
+                  : 'anx-bot-min'
         }
       >
         <g className={celebrating ? 'anx-cheer' : travelling ? 'anx-send' : undefined}>
+          {/*
+            THE POSE IS AN ATTRIBUTE ON A GROUP NOTHING ANIMATES.
+            
+            A CSS animation and a `transform` attribute are one property and
+            the animated one REPLACES the attribute rather than composing with
+            it. The post in flight already shipped that bug once and spent
+            weeks flying out of the empty corner of the panel. So the lounge
+            is here, with the breathing on the group outside it.
+          */}
+          <g transform={resting ? lounge() : undefined} data-pose={resting ? 'lounging' : undefined}>
           <image
             href="/social/robot-full.webp"
             x={ROBOT.x}
@@ -370,8 +477,22 @@ export function PublishingScene({
               outside this group would drift off the antenna by a tenth of the
               robot's height at the bottom of every hop. */}
           {mode !== 'idle' && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="9" fill="url(#anx-lamp)" />}
+          </g>
         </g>
       </g>
+      {/* The front of the seat, over the robot: the one strip that makes the
+          body look sunk into the cushion rather than laid on a picture of
+          one. Drawn after the robot for exactly that reason. */}
+      {resting && (
+        <g data-seat-front="">
+          <rect x={SOFA.x + 12} y={SOFA.y + 100} width={SOFA.w - 24} height="22" rx="11" fill="#c3b5f7" />
+          {/* the two arm rests again, in front of the body: an arm resting ON
+              one is the cue that says "sitting in it" rather than "standing
+              behind it". */}
+          <rect x={SOFA.x} y={SOFA.y + 44} width="34" height="76" rx="16" fill="#b4a2f2" />
+          <rect x={SOFA.x + SOFA.w - 34} y={SOFA.y + 44} width="34" height="76" rx="16" fill="#b4a2f2" />
+        </g>
+      )}
 
       {/* ── the card in flight ─────────────────────────────────────────── */}
       {/*

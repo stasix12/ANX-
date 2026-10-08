@@ -110,4 +110,95 @@ is(typeof readable(undefined) === 'string', 'nor must nothing at all');
   );
 }
 
-console.log(`update message tests OK — ${checks} assertions`);
+
+/* ====================================================================== *
+ * AUTOMATIC ON THE CUSTOMER'S MACHINE, THE WAY IT ALWAYS WAS ON THE
+ * OWNER'S.
+ *
+ * "כל פעם שאני עושה עדכון תוכנה , זה מנתקת את הלקוח - לא מתאים אני רוצה
+ *  שזה יעבוד אצלו אוטמט בדיוק כמו אצלי !"
+ *
+ * Two different things were wrong and they compounded into one complaint.
+ *
+ * NOTHING INSTALLED WITHOUT A HUMAN. updates.ts downloaded by itself and then
+ * waited for a button. Its advertised fallback — autoInstallOnAppQuit — is
+ * unreachable in this app, which is built not to quit: closing the window
+ * hides it to the tray and window-all-closed does not quit while keepRunning
+ * is on. So a finished download could sit for days.
+ *
+ * AND THE INSTALL LOOKED LIKE A BREAKDOWN. The engine was killed and the
+ * process replaced with nothing written anywhere, and the dashboard calls a
+ * machine offline after ninety seconds of silence — so the owner watched a
+ * customer's PC "disconnect", on a card whose only advice was to go and run a
+ * file that does not exist on that machine.
+ *
+ * The owner's own machine has never had either problem, and not by luck: the
+ * engine picks a clear moment, marks itself offline, and says so in the log.
+ * These assertions are that the packaged path now does the same.
+ * ====================================================================== */
+{
+  const updates = readFileSync(new URL('../../desktop/updates.ts', import.meta.url), 'utf8');
+  const main = readFileSync(new URL('../../desktop/main.ts', import.meta.url), 'utf8');
+
+  /* ---- 1. it installs itself, and only when told it is clear ---------- */
+  is(/safeToInstall: \(waitedMs: number\) => Promise<\{ ok: boolean; why: string \}>/.test(updates), 'the updater asks whether now is a clear moment');
+  is(/function waitForAClearMoment\(\)/.test(updates), 'and a finished download keeps asking rather than waiting for a press');
+  is(/autoUpdater\.on\('update-downloaded'[\s\S]{0,900}waitForAClearMoment\(\);/.test(updates), 'the asking starts the moment the download finishes');
+  is(/verdict = \{ ok: false, why: `לא הצלחתי לבדוק/.test(updates), 'A FAILED CHECK IS NOT PERMISSION — a machine that cannot say whether a post is going out is assumed to be sending one');
+  is(/if \(!w\.autoEnabled\(\)\) return;/.test(updates), 'and "עדכונים אוטומטיים" off still means it waits to be asked — the one place a person can say "not by yourself"');
+
+  /* ---- 2. the two rules, and only one of them ever relaxes ----------- */
+  is(/\['publishing', 'awaiting_confirmation'\]/.test(main), 'THE HARD RULE: nothing in flight. A half-typed post costs a human a trip to Facebook to find out whether it went');
+  is(/const busy = \(machines\.data \?\? \[\]\)\.some\(\(m\) => \(m as \{ current_job_id: string \| null \}\)\.current_job_id\);/.test(main), 'including a job claimed a moment ago whose row is not stamped yet — the engine’s own word for it');
+  is(/const patient = waitedMs >= PATIENCE_MS;/.test(main), 'THE SOFT RULE relaxes with patience, because a thirty-second queue may never go quiet');
+  const atFlight = main.indexOf('if ((flight.count ?? 0) > 0) return { ok: false');
+  const atPatient = main.indexOf('const patient = waitedMs >= PATIENCE_MS;');
+  is(atFlight >= 0 && atPatient >= 0, 'both the in-flight test and the patience line exist');
+  is(atFlight < atPatient, 'and the hard rule is decided BEFORE patience is consulted, so no amount of waiting can override it');
+  is(!/patient[\s\S]{0,400}publishing/.test(main), 'patience must never appear in the in-flight test at all');
+
+  /* ---- 3. a restart that says it is a restart ------------------------- */
+  is(/async function announceRestart\(\)/.test(main), 'the install announces itself before the process goes');
+  is(/אין צורך לגעת במחשב/.test(main), 'in the same words the owner’s own machine already logs');
+  is(/event: 'worker_self_update'/.test(main), 'under the same activity event, so the feed renders it with the icon it already has');
+  is(/status: 'offline', attention_message: message/.test(main), 'and marks the engine offline WITH A REASON, so ninety seconds of silence is not read as a breakdown');
+  /* Both offsets proved present FIRST. `indexOf` answers -1 for a line that
+     is not there at all, and -1 is less than everything — so an ordering
+     check on its own passes loudest exactly when the call it is about has
+     been deleted. Same trap as in account-gap.test.ts, same fix. */
+  const atAnnounce = main.indexOf('await announceRestart();');
+  const atStop = main.indexOf('await stopWorkerAndWait();');
+  is(atAnnounce >= 0, 'the install announces itself at all');
+  is(atStop >= 0, 'and waits for the engine at all');
+  is(atAnnounce < atStop, 'ANNOUNCED BEFORE THE KILL — afterwards there is no engine left to explain the gap');
+
+  /* ---- 4. the installer does not race the engine out the door -------- */
+  is(/function stopWorkerAndWait\(graceMs = 8_000\)/.test(main), 'the engine is waited for, not merely signalled');
+  is(/child\.once\('exit', done\);/.test(main), 'on its real exit');
+  is(/ממשיך בהתקנה בכל זאת/.test(main), 'but bounded — an install that never happens is worse than one that starts a second early');
+  is(/await wiring\?\.beforeInstall\(\);/.test(updates), 'and the installer waits for all of that');
+  is(/stopWaiting\(\);\s*set\(\{ message: 'מתקין/.test(updates), 'the poll is stopped first, so the button and the timer cannot both fire quitAndInstall');
+
+  /* ---- 5. the owner's own machine is untouched ------------------------ */
+  is(/SOCIAL_WORKER_MANAGED: '1',/.test(main), 'the engine is still told to leave updating alone inside the packaged shell');
+  const selfUpdate = readFileSync(new URL('../self-update.ts', import.meta.url), 'utf8');
+  is(
+    /if \(process\.env\.SOCIAL_WORKER_MANAGED === '1'\) return \{ ready: false, problem: '', detail: '' \};/.test(selfUpdate),
+    'and the git-checkout self-update is unchanged — one updater per program, and this change touched only the other one',
+  );
+
+  /* ---- 6. the hour, and why it is not six ---------------------------- */
+  is(/const CHECK_EVERY = 60 \* 60 \* 1000;/.test(updates), 'it checks hourly — six hours was six hours of a customer looking stale on the owner’s screen');
+  is(!/SIX_HOURS/.test(updates), 'and the old figure is gone rather than left beside the new one');
+
+  /* ---- 7. nothing on screen tells a customer to run a file they have
+   *         not got. The packaged app ships no .cmd at all. ------------- */
+  const card = readFileSync(new URL('../../src/components/social/BrowserStatusCard.tsx', import.meta.url), 'utf8');
+  const notice = card.slice(card.indexOf('{stale && ('), card.indexOf('{needsHuman && ('));
+  is(notice.length > 100, 'the stale-version notice was located');
+  is(!/start-worker\.cmd/.test(notice), 'THE STALE NOTICE NAMES NO FILE — on a customer’s machine there is none, and the same mistake is already recorded in self-update.ts');
+  is(!/כל עשר דקות/.test(notice), 'and does not promise a ten-minute check, which is the git path’s figure and was never the packaged one');
+  is(/ברגע שלא יוצא פרסום/.test(notice), 'it says what actually happens: it installs when no post is going out');
+}
+
+console.log(`update tests OK — ${checks} assertions`);

@@ -440,6 +440,166 @@ function stopWorker(): void {
   send('worker:state', workerState());
 }
 
+/**
+ * Stop the engine and WAIT for the process to actually be gone.
+ *
+ * stopWorker() above returns the instant kill() is called. On Windows that is
+ * a TerminateProcess and the child really is gone — but Chrome is the child's
+ * own child and outlives it by a moment, and the engine is a second live
+ * instance of the very executable the installer is about to replace. Firing
+ * the installer on the next tick regardless was an assumption about all of
+ * that which nothing enforced.
+ *
+ * Bounded, because an install that never happens is worse than one that
+ * starts a second early: if the child has not gone in this long, something is
+ * wrong with it that waiting longer will not fix.
+ */
+function stopWorkerAndWait(graceMs = 8_000): Promise<void> {
+  const child = worker;
+  if (!child) {
+    stopWorker();
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      say('מנוע הפרסום לא נסגר בזמן — ממשיך בהתקנה בכל זאת.', 'err');
+      done();
+    }, graceMs);
+    child.once('exit', done);
+    child.once('error', done);
+    stopWorker();
+  });
+}
+
+/* ------------------------------------------------- updating without a human */
+
+/**
+ * ─── IS NOW A MOMENT WHEN RESTARTING COSTS NOTHING? ─────────────────────
+ *
+ * The owner's own machine has had this judgement for months, inside the
+ * engine: worker/social-worker.ts only stands down for an update when
+ * roomBeforeNextPublish() says there is a clear window and no job is in
+ * flight. A customer's machine never reached that code — the engine is told
+ * to leave updating alone in here (SOCIAL_WORKER_MANAGED) — so the same
+ * judgement is made HERE, which is the side that can read the queue.
+ *
+ * TWO RULES, AND ONLY ONE OF THEM IS EVER RELAXED.
+ *
+ * The hard one: nothing may be in flight. A row at 'publishing' is a post
+ * that may be half-typed into a group, or submitted and not yet recorded, and
+ * killing the engine there costs a human a trip to Facebook to find out which
+ * — the startup sweep parks it as needs_attention precisely because nothing
+ * can safely guess. A row at 'awaiting_confirmation' is worse: somebody is
+ * being asked a question that would vanish. This rule has no deadline and no
+ * override.
+ *
+ * The soft one: the next post should be far enough away that the restart fits
+ * before it. A dense queue — the thirty-second gaps this product now offers —
+ * may never give that, and an update that waits for a quiet queue on a busy
+ * account waits for ever. So after PATIENCE_MS the lead requirement is
+ * dropped: the first in-flight-free moment is taken, and a scheduled row that
+ * has not been claimed yet is not harmed by the engine restarting under it.
+ * It is still 'scheduled', it is still due, and the new copy claims it a few
+ * seconds later.
+ */
+const SAFE_LEAD_MS = 120_000;
+const PATIENCE_MS = 90 * 60_000;
+
+async function safeToInstall(waitedMs: number): Promise<{ ok: boolean; why: string }> {
+  const session = readSession();
+  /* No session means no reader, and no reader means we cannot tell. A machine
+     that cannot answer "is a post going out right now" is assumed to be
+     sending one — see the catch in waitForAClearMoment. */
+  if (!session) return { ok: false, why: 'אין חשבון מחובר במחשב, ואי אפשר לבדוק אם יוצא פרסום כרגע' };
+  const db = readerFor(session.access_token);
+
+  /* Deliberately a fresh read rather than the polled snapshot: that one is
+     throttled to when a window is visible, and this decision is taken most
+     often with no window open at all. */
+  const [flight, soonest, machines] = await Promise.all([
+    db.from('social_queue').select('id', { count: 'exact', head: true }).in('status', ['publishing', 'awaiting_confirmation']),
+    db
+      .from('social_queue')
+      .select('scheduled_at')
+      .eq('status', 'scheduled')
+      .order('scheduled_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    db.from('social_workers').select('name, current_job_id').limit(5),
+  ]);
+
+  if (flight.error) return { ok: false, why: `לא הצלחתי לבדוק אם יוצא פרסום (${flight.error.message})` };
+  if ((flight.count ?? 0) > 0) return { ok: false, why: 'יש פרסום באוויר כרגע' };
+
+  /* The engine's own word for it, which closes a gap the two queries above
+     cannot: a job claimed a moment ago whose row has not been stamped yet. */
+  const busy = (machines.data ?? []).some((m) => (m as { current_job_id: string | null }).current_job_id);
+  if (busy) return { ok: false, why: 'מנוע הפרסום באמצע עבודה' };
+
+  const patient = waitedMs >= PATIENCE_MS;
+  const nextAt = (soonest.data as { scheduled_at: string } | null)?.scheduled_at ?? null;
+  if (nextAt && !patient) {
+    const room = Date.parse(nextAt) - Date.now();
+    /* An unparseable stamp is a corrupt row, not permission. */
+    if (!Number.isFinite(room)) return { ok: false, why: 'לא הצלחתי לקרוא את מועד הפרסום הבא' };
+    if (room < SAFE_LEAD_MS) {
+      return { ok: false, why: `הפרסום הבא בעוד ${Math.max(0, Math.round(room / 1000))} שניות — קרוב מדי להפעלה מחדש` };
+    }
+  }
+  return { ok: true, why: patient && nextAt ? 'אין פרסום באוויר (ממתין מזמן, מתקין בהזדמנות הראשונה)' : 'אין פרסום באוויר ואין פרסום קרוב' };
+}
+
+/**
+ * ─── SAY IT IS A RESTART, NOT A DISCONNECTION ───────────────────────────
+ *
+ * "זה מנתקת את הלקוח." It did, and this is the line that did it: the engine
+ * was killed and the process replaced, and nothing anywhere said why. The
+ * dashboard calls a machine offline after ninety seconds of silence, so the
+ * install — a kill, an installer, a relaunch — read as a PC that stopped
+ * answering, on a card whose only advice was to go and run a file the
+ * customer does not have.
+ *
+ * The owner's own machine has never had that problem, and not by luck: before
+ * it exits for an update the engine marks itself offline and writes the log
+ * line "ירדה גרסה חדשה של התוכנה במחשב. היא מתקינה אותה ומפעילה את עצמה
+ * מחדש — אין צורך לגעת במחשב." The same two writes, from here, so the two
+ * paths look identical on the screen the owner actually reads.
+ *
+ * Best effort throughout: an install must never be blocked by its own
+ * announcement. The caller catches, logs and carries on.
+ */
+async function announceRestart(): Promise<void> {
+  const session = readSession();
+  if (!session) return;
+  const db = readerFor(session.access_token);
+  const next = updateState().next ?? '';
+  const message = `ירדה גרסה חדשה של התוכנה במחשב${next ? ` (${next})` : ''}. היא מתקינה אותה ומפעילה את עצמה מחדש — אין צורך לגעת במחשב.`;
+
+  /* The engine's own row, so the card stops short of calling it offline for
+     an unknown reason. `status: 'offline'` is what the engine writes on the
+     owner's machine for the same instant; attention_message carries the why,
+     and the next heartbeat from the new copy overwrites both. */
+  const rows = await db.from('social_workers').select('name').limit(5);
+  await Promise.all(
+    (rows.data ?? []).map((r) =>
+      db
+        .from('social_workers')
+        .update({ status: 'offline', attention_message: message, last_seen_at: new Date().toISOString() })
+        .eq('name', (r as { name: string }).name),
+    ),
+  );
+  /* And in the log, under the SAME event the owner's machine uses, so the feed
+     renders it with the icon and wording it already has. */
+  await db.from('social_activity_log').insert({ level: 'info', event: 'worker_self_update', message, meta: { version: next, managed: true } });
+}
+
 /* ------------------------------------------------------------- the data */
 
 /*
@@ -903,8 +1063,14 @@ if (!app.requestSingleInstanceLock()) {
          child that outlives the parent would fight the new copy for the same
          queue rows — two browsers, one post, both convinced they should send
          it. So it is stopped first, and `quitting` is set so the window's
-         close handler hides nothing and the quit actually completes. */
-      beforeInstall: () => { quitting = true; stopWorker(); },
+         close handler hides nothing and the quit actually completes.
+         AND IT SAYS SO ON THE DASHBOARD BEFORE IT GOES — see announceRestart. */
+      beforeInstall: async () => {
+        quitting = true;
+        await announceRestart();
+        await stopWorkerAndWait();
+      },
+      safeToInstall,
     });
 
     if (readSession()) {

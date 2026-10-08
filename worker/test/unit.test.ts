@@ -845,8 +845,26 @@ console.log('unit tests OK');
   /* Once per reason, never once per tick: this runs every ten minutes for as
      long as the machine is on. */
   assert.ok(/if \(state\.updateProblem !== check\.problem\)/.test(localWorker), 'said once per reason, not once per check');
-  /* The screen no longer tells them to go and do it by hand as the first move. */
-  assert.ok(/מתקינה אותה בעצמה/.test(card), 'the stale-version notice describes a wait, not a chore');
+  /*
+   * The screen no longer tells them to go and do it by hand as the first move
+   * — AND IT NO LONGER NAMES A FILE AT ALL.
+   *
+   * This used to match the literal phrase "מתקינה אותה בעצמה", which pinned
+   * the wording rather than the promise. The notice has since had to change,
+   * because it was describing only the GIT-CHECKOUT path to everybody: a
+   * ten-minute check that on a packaged copy is an hour, and a fallback that
+   * named start-worker.cmd — a file a customer's machine does not contain.
+   * So the claim is now the invariant instead of the sentence: it says the
+   * program handles it, and it asks nothing of the reader.
+   */
+  {
+    const notice = card.slice(card.indexOf('{stale && ('), card.indexOf('{needsHuman && ('));
+    assert.ok(notice.length > 100, 'the stale-version notice was located');
+    assert.ok(/בעצמה/.test(notice), 'the stale-version notice describes a wait, not a chore');
+    assert.ok(/אין צורך לגעת במחשב/.test(notice), 'and says so in as many words');
+    assert.ok(!/start-worker\.cmd/.test(notice), 'and names no file — on a customer\u2019s machine there is none');
+    assert.ok(!/עשר דקות/.test(notice), 'and promises no ten-minute check, which was never the packaged path\u2019s figure');
+  }
 
   console.log('worker-freshness tests OK');
 }

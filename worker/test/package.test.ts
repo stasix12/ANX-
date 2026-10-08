@@ -394,11 +394,46 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
   const updates = readFileSync(path.join(root, 'desktop', 'updates.ts'), 'utf8');
   is(/autoUpdater\.autoDownload = false/.test(updates), 'the download is started deliberately, so the "עדכונים אוטומטיים" toggle actually decides');
   is(/autoUpdater\.autoInstallOnAppQuit = true/.test(updates), 'a downloaded version installs on the next ordinary quit, so doing nothing still gets you there');
+  /*
+   * ─── ONE DOOR TO A RESTART, AND A GATE IN FRONT OF IT ──────────────────
+   *
+   * This used to read "nothing outside install() may restart the app — an
+   * update that interrupts a publication is worse than no update", and it
+   * sliced the file at `export function install`. Both halves had to change,
+   * and only one of them was a rule.
+   *
+   * The RULE is unchanged and still pinned below: quitAndInstall appears in
+   * exactly one place. What changed is who may walk through it. The app now
+   * installs WITHOUT a human — "אני רוצה שזה יעבוד אצלו אוטמט בדיוק כמו אצלי"
+   * — because the old rule was protecting the wrong thing: it stopped the
+   * restart from being automatic, when what matters is that the restart never
+   * lands on a publication. The owner's own machine has been automatic for
+   * months precisely because it CHOOSES ITS MOMENT.
+   *
+   * So the claim is now two claims: still one door, and a safety gate in
+   * front of it that no caller can skip.
+   *
+   * (The slice is also anchored differently. `install` became async, so a
+   * pattern naming `export function install` silently matched nothing and the
+   * check began reading the whole file — passing for a while, then failing for
+   * a reason that had nothing to do with the rule. Anchored on the name alone
+   * now, and asserted to have actually found it.)
+   */
+  const beforeInstallFn = updates.replace(/export async function install[\s\S]*$/, '');
+  is(beforeInstallFn.length < updates.length, 'the install function was located, so the slice below is a real slice');
   is(
-    !/quitAndInstall/.test(updates.replace(/export function install[\s\S]*$/, '')),
-    'and nothing outside install() may restart the app — an update that interrupts a publication is worse than no update',
+    !/quitAndInstall/.test(beforeInstallFn),
+    'nothing outside install() may restart the app — one door, so the gate in front of it cannot be walked around',
   );
-  is(/beforeInstall\(\)/.test(updates), 'installing must stop the engine first, or the old child outlives its parent and fights the new copy for the same rows');
+  is(/await wiring\?\.beforeInstall\(\);/.test(updates), 'installing must stop the engine first AND WAIT FOR IT — the old child outlives its parent and fights the new copy for the same rows');
+  is(
+    /verdict = await w\.safeToInstall\(Date\.now\(\) - readyAt\);/.test(updates),
+    'AND THE GATE: an automatic install asks whether a post is going out before it takes the app down',
+  );
+  is(
+    /if \(!verdict\.ok\)/.test(updates) && /stopWaiting\(\);\s*w\.say/.test(updates),
+    'and only installs on a yes — a no keeps waiting rather than falling through',
+  );
 
   /* The bundle must actually contain the updater. esbuild leaving it as a bare
      require would produce a package that builds, installs, and throws the

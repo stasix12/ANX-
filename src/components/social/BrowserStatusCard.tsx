@@ -86,11 +86,27 @@ export function BrowserStatusCard({
    * machine unused. Say so here, where the light is, rather than leaving it in
    * a line of terminal output.
    *
-   * It now resolves itself: the worker compares its checkout against the
-   * repository every ten minutes and stands down so the launcher can install
-   * the newer version. So this notice names the wait rather than a chore —
-   * the owner asked for this while away from the computer, and "go and restart
-   * it" was the wrong instruction to be giving them at all.
+   * It now resolves itself on BOTH kinds of machine, which is what the wording
+   * below had wrong. The owner's own PC is a git checkout: the engine compares
+   * it against the repository every ten minutes and stands down so
+   * start-worker.cmd can install the newer version. A CUSTOMER'S PC is the
+   * packaged app, where the engine is told to leave updating alone and the
+   * shell owns it (desktop/updates.ts) — it checks hourly, downloads by
+   * itself, and installs at the first moment no post is going out.
+   *
+   * THIS NOTICE USED TO DESCRIBE ONLY THE FIRST ONE, to everybody. It
+   * promised a ten-minute check that on a packaged copy is six hours — now an
+   * hour — and then told the reader to go and double-click start-worker.cmd,
+   * a file that does not exist on a customer's machine at all. Which is the
+   * same mistake worker/self-update.ts:52 already records having made once,
+   * when the packaged copy was telling customers to reinstall from the
+   * original link while the app around it updated itself perfectly.
+   *
+   * There is no flag on the heartbeat saying which kind of machine reported,
+   * so this cannot branch — and inventing a column for a sentence would be
+   * the wrong trade. Instead it says what is TRUE OF BOTH: it handles itself,
+   * here is roughly how long, and come to us if it does not. Nothing a reader
+   * is told to do, because on one of the two paths there is nothing they can.
    */
   const stale = Boolean(worker?.online && worker.version && worker.version !== WORKER_VERSION);
 
@@ -247,8 +263,8 @@ export function BrowserStatusCard({
         <div className="mt-3">
           <Notice tone="warn">
             <strong>התוכנה במחשב מריצה גרסה ישנה</strong> (<span dir="ltr">{worker?.version}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>).
-            {' '}היא בודקת אם ירדה גרסה חדשה כל עשר דקות ומתקינה אותה בעצמה — אין צורך לגעת במחשב. אם זה לא קרה גם אחרי חצי שעה, סגרו את החלון השחור והפעילו שוב את{' '}
-            <code dir="ltr">start-worker.cmd</code>.
+            {' '}היא מורידה את הגרסה החדשה בעצמה ומתקינה אותה ברגע שלא יוצא פרסום — אין צורך לגעת במחשב. זה לוקח עד שעה. אם המספר לא התחלף גם אחרי כמה שעות, כתבו
+            לנו — יש משהו שחוסם את העדכון, וזה לא משהו שצריך לטפל בו מהמחשב.
           </Notice>
         </div>
       )}

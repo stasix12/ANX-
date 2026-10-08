@@ -1753,84 +1753,454 @@ body:has(.social-theme) .site-backdrop {
  * publishing-scene.test.ts now asks getAnimations() rather than the name.
  */
 @keyframes anx-bounce {
+  /* in the hand */
   0% {
-    transform: translateY(0) scale(1, 1);
+    transform: translate(0, 0);
     animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
   }
-  44% {
-    transform: translateY(var(--anx-drop, 40px)) scale(1, 1);
-    animation-timing-function: linear;
-  }
-  48% {
-    transform: translateY(var(--anx-drop, 40px)) scale(1.18, 0.82);
-    animation-timing-function: linear;
-  }
-  52% {
-    transform: translateY(var(--anx-drop, 40px)) scale(1, 1);
+  /* floor */
+  5% {
+    transform: translate(0, var(--anx-drop, 39px));
     animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
   }
+  /* hand */
+  10% {
+    transform: translate(0, 0);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  /* floor */
+  15% {
+    transform: translate(0, var(--anx-drop, 39px));
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  /* hand, then flicked across */
+  20% {
+    transform: translate(0, 0);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
+  }
+  /* mid-air */
+  25% {
+    transform: translate(calc(var(--anx-fx, -35px) * 0.5), -18px);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  /* down onto the boot */
+  30% {
+    transform: translate(var(--anx-fx, -35px), var(--anx-fy, 25px));
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  /* keepy-uppy */
+  35% {
+    transform: translate(var(--anx-fx, -35px), var(--anx-uy, -28px));
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  /* boot */
+  40% {
+    transform: translate(var(--anx-fx, -35px), var(--anx-fy, 25px));
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  /* keepy-uppy */
+  45% {
+    transform: translate(var(--anx-fx, -35px), var(--anx-uy, -28px));
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  /* boot, then launched */
+  50% {
+    transform: translate(var(--anx-fx, -35px), var(--anx-fy, 25px));
+    animation-timing-function: cubic-bezier(0.25, 0, 0.5, 1);
+  }
+  /* rising */
+  56% {
+    transform: translate(calc((var(--anx-fx, -35px) + var(--anx-hx, -52px)) / 2), calc(var(--anx-hy, -92px) + 16px));
+    animation-timing-function: cubic-bezier(0.4, 0, 0.9, 0.6);
+  }
+  /* the header */
+  62% {
+    transform: translate(var(--anx-hx, -52px), var(--anx-hy, -92px));
+    animation-timing-function: cubic-bezier(0.1, 0.4, 0.5, 1);
+  }
+  /* rebound */
+  68% {
+    transform: translate(calc(var(--anx-hx, -52px) * 0.6), calc(var(--anx-hy, -92px) - 14px));
+    animation-timing-function: cubic-bezier(0.45, 0, 0.75, 0.9);
+  }
+  /* caught on a fingertip */
+  76% {
+    transform: translate(0, var(--anx-sy, -26px));
+    animation-timing-function: linear;
+  }
+  /* still spinning */
+  92% {
+    transform: translate(0, var(--anx-sy, -26px));
+    animation-timing-function: cubic-bezier(0.5, 0, 0.6, 1);
+  }
+  /* back in the hand */
   100% {
-    transform: translateY(0) scale(1, 1);
+    transform: translate(0, 0);
   }
 }
 .anx-bounce {
   transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: anx-bounce 0.85s infinite;
+  animation: anx-bounce 9s infinite;
 }
 
-/* The mark on the floor is widest and darkest at the instant the ball
-   reaches it, and almost gone while the ball is up. It is a separate element
-   because it runs the opposite way round the same clock, and one element
-   cannot hold two animations on `transform`. */
-@keyframes anx-bounce-mark {
+/*
+ * THREE GROUPS, AND THE ORDER IS PHYSICS RATHER THAN TIDINESS.
+ *
+ * A bouncing, spinning ball does three things at once and they do not
+ * commute. Outermost is WHERE IT IS. Inside that is the SQUASH, which has to
+ * stay world-vertical — it is the floor flattening the ball, and the floor
+ * does not tilt. Innermost is the SPIN, about the ball's own middle.
+ *
+ * Collapse any two of them and it goes wrong in a way that is easy to miss,
+ * and did: with the spin and the squash sharing one element the pivot sat at
+ * the point of contact, so the whole sphere swung off its own path — the test
+ * that measures where it lands caught it ten units out. Nest them the other
+ * way round and the squash turns with the spin, so the ball flattens sideways
+ * against a floor that is not tilted.
+ *
+ * One `transform` per element, one `transform-origin` per element. All three
+ * keyframe blocks are generated from one table of stops, so they cannot drift
+ * apart.
+ */
+@keyframes anx-bounce-squash {
+  /* in the hand */
   0% {
-    transform: scale(0.55);
-    opacity: 0.05;
+    transform: scale(1, 1);
     animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
   }
-  44% {
-    transform: scale(1);
-    opacity: 0.18;
-  }
-  52% {
-    transform: scale(1);
-    opacity: 0.18;
+  /* floor */
+  5% {
+    transform: scale(1.16, 0.84);
     animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
   }
+  /* hand */
+  10% {
+    transform: scale(1, 1);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  /* floor */
+  15% {
+    transform: scale(1.16, 0.84);
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  /* hand, then flicked across */
+  20% {
+    transform: scale(1, 1);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
+  }
+  /* mid-air */
+  25% {
+    transform: scale(0.96, 1.04);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  /* down onto the boot */
+  30% {
+    transform: scale(1.12, 0.88);
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  /* keepy-uppy */
+  35% {
+    transform: scale(0.96, 1.04);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  /* boot */
+  40% {
+    transform: scale(1.12, 0.88);
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  /* keepy-uppy */
+  45% {
+    transform: scale(0.96, 1.04);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  /* boot, then launched */
+  50% {
+    transform: scale(1.12, 0.88);
+    animation-timing-function: cubic-bezier(0.25, 0, 0.5, 1);
+  }
+  /* rising */
+  56% {
+    transform: scale(0.94, 1.06);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.9, 0.6);
+  }
+  /* the header */
+  62% {
+    transform: scale(1.1, 0.9);
+    animation-timing-function: cubic-bezier(0.1, 0.4, 0.5, 1);
+  }
+  /* rebound */
+  68% {
+    transform: scale(0.95, 1.05);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.75, 0.9);
+  }
+  /* caught on a fingertip */
+  76% {
+    transform: scale(1, 1);
+    animation-timing-function: linear;
+  }
+  /* still spinning */
+  92% {
+    transform: scale(1, 1);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.6, 1);
+  }
+  /* back in the hand */
   100% {
-    transform: scale(0.55);
+    transform: scale(1, 1);
+  }
+}
+.anx-bounce-squash {
+  /*
+   * AN EXACT ORIGIN IN SCENE UNITS, not `50% 100%` of a fill box.
+   *
+   * A group's fill box is the union of its children's boxes AFTER their own
+   * transforms — and the child here is the spin, so at 70° the box is the
+   * 18-unit ball's box rotated, which is 23 units tall. The anchor therefore
+   * MOVED with the spin, and the ball sank two and a half units into the
+   * floor at the moment of impact: a bug you cannot see and the measurement
+   * in publishing-scene.test.ts can.
+   *
+   * `view-box` makes these lengths plain scene units, and the component hands
+   * over the exact point where the ball meets the ground — derived from the
+   * ball, like everything else in this routine.
+   */
+  transform-box: view-box;
+  transform-origin: var(--anx-ox, 177px) var(--anx-oy, 127px);
+  animation: anx-bounce-squash 9s infinite;
+}
+
+@keyframes anx-bounce-spin {
+  /* in the hand */
+  0% {
+    transform: rotate(0deg);
+  }
+  /* floor */
+  5% {
+    transform: rotate(70deg);
+  }
+  /* hand */
+  10% {
+    transform: rotate(140deg);
+  }
+  /* floor */
+  15% {
+    transform: rotate(210deg);
+  }
+  /* hand, then flicked across */
+  20% {
+    transform: rotate(280deg);
+  }
+  /* mid-air */
+  25% {
+    transform: rotate(360deg);
+  }
+  /* down onto the boot */
+  30% {
+    transform: rotate(430deg);
+  }
+  /* keepy-uppy */
+  35% {
+    transform: rotate(500deg);
+  }
+  /* boot */
+  40% {
+    transform: rotate(570deg);
+  }
+  /* keepy-uppy */
+  45% {
+    transform: rotate(640deg);
+  }
+  /* boot, then launched */
+  50% {
+    transform: rotate(710deg);
+  }
+  /* rising */
+  56% {
+    transform: rotate(800deg);
+  }
+  /* the header */
+  62% {
+    transform: rotate(880deg);
+  }
+  /* rebound */
+  68% {
+    transform: rotate(960deg);
+  }
+  /* caught on a fingertip */
+  76% {
+    transform: rotate(1060deg);
+  }
+  /* still spinning */
+  92% {
+    transform: rotate(1700deg);
+  }
+  /* back in the hand */
+  100% {
+    transform: rotate(1800deg);
+  }
+}
+.anx-bounce-spin {
+  /* The ball's own middle, in the same scene units and for the same reason:
+     a percentage here would be read off a box that the squash above is busy
+     changing. */
+  transform-box: view-box;
+  transform-origin: var(--anx-ox, 177px) var(--anx-cy, 118px);
+  animation: anx-bounce-spin 9s linear infinite;
+}
+
+/*
+ * THE MARK ON THE FLOOR follows the ball across and is only really there
+ * when the ball is low — widest and darkest at the instant it arrives,
+ * almost nothing while the ball is up at head height. Its own element on the
+ * same clock and the same stops: it disagrees with the ball about nearly
+ * every frame, which is the point, and one element cannot hold two
+ * animations on `transform`.
+ */
+@keyframes anx-bounce-mark {
+  0% {
+    transform: translateX(0) scale(0.5);
+    opacity: 0.04;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  5% {
+    transform: translateX(0) scale(1.0);
+    opacity: 0.2;
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  10% {
+    transform: translateX(0) scale(0.5);
+    opacity: 0.04;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+  }
+  15% {
+    transform: translateX(0) scale(1.0);
+    opacity: 0.2;
+    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
+  }
+  20% {
+    transform: translateX(0) scale(0.5);
+    opacity: 0.04;
+  }
+  25% {
+    transform: translateX(calc(var(--anx-fx, -35px) * 0.5)) scale(0.46);
+    opacity: 0.04;
+  }
+  30% {
+    transform: translateX(var(--anx-fx, -35px)) scale(0.62);
+    opacity: 0.1;
+  }
+  35% {
+    transform: translateX(var(--anx-fx, -35px)) scale(0.42);
+    opacity: 0.03;
+  }
+  40% {
+    transform: translateX(var(--anx-fx, -35px)) scale(0.62);
+    opacity: 0.1;
+  }
+  45% {
+    transform: translateX(var(--anx-fx, -35px)) scale(0.42);
+    opacity: 0.03;
+  }
+  50% {
+    transform: translateX(var(--anx-fx, -35px)) scale(0.62);
+    opacity: 0.1;
+  }
+  56% {
+    transform: translateX(calc((var(--anx-fx, -35px) + var(--anx-hx, -52px)) / 2)) scale(0.32);
+    opacity: 0.02;
+  }
+  62% {
+    transform: translateX(var(--anx-hx, -52px)) scale(0.28);
+    opacity: 0.02;
+  }
+  68% {
+    transform: translateX(calc(var(--anx-hx, -52px) * 0.6)) scale(0.28);
+    opacity: 0.02;
+  }
+  76% {
+    transform: translateX(0) scale(0.42);
     opacity: 0.05;
+  }
+  92% {
+    transform: translateX(0) scale(0.42);
+    opacity: 0.05;
+  }
+  100% {
+    transform: translateX(0) scale(0.5);
+    opacity: 0.04;
   }
 }
 .anx-bounce-mark {
   transform-box: fill-box;
   transform-origin: center;
-  animation: anx-bounce-mark 0.85s infinite;
+  animation: anx-bounce-mark 9s infinite;
 }
 
 /*
- * AND THE ROBOT KEEPS THE BEAT. Two pixels and under a degree, pushing DOWN
- * as the ball goes down — the robot is standing on the floor here, not
- * hovering, so it may not rise. The hover is the movement it makes while it
- * is publishing, and this state exists precisely because it is not.
+ * AND THE ROBOT PLAYS ALONG, on the same nine seconds and the same stops.
+ *
+ * It is one flat picture, so it has no knee to lift and no neck to nod: every
+ * beat here is the whole body, two or three pixels of it. That is enough
+ * BECAUSE the ball is doing the acting — the body only has to agree with it.
+ * It pushes DOWN on the floor bounces and the boot touches, hops for the
+ * launch and the header, and goes still for the finger spin. It never rises
+ * on the bounces: the hover is the movement it makes while it is publishing,
+ * and this whole state exists because it is not.
  */
-@keyframes anx-dribble {
-  0%,
+@keyframes anx-tricks {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  5% {
+    transform: translateY(2px) rotate(-0.8deg);
+  }
+  10% {
+    transform: translateY(0) rotate(0deg);
+  }
+  15% {
+    transform: translateY(2px) rotate(-0.8deg);
+  }
+  20% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-1px) rotate(1deg);
+  }
+  30% {
+    transform: translateY(1.5px) rotate(-0.6deg);
+  }
+  35% {
+    transform: translateY(-1px) rotate(0.5deg);
+  }
+  40% {
+    transform: translateY(1.5px) rotate(-0.6deg);
+  }
+  45% {
+    transform: translateY(-1px) rotate(0.5deg);
+  }
+  50% {
+    transform: translateY(1.5px) rotate(-0.6deg);
+  }
+  56% {
+    transform: translateY(-2.5px) rotate(1.4deg);
+  }
+  62% {
+    transform: translateY(-3px) rotate(-1.6deg);
+  }
+  68% {
+    transform: translateY(0) rotate(-0.4deg);
+  }
+  76%,
+  92% {
+    transform: translateY(0) rotate(0deg);
+  }
   100% {
     transform: translateY(0) rotate(0deg);
   }
-  44% {
-    transform: translateY(2px) rotate(-0.8deg);
-  }
-  70% {
-    transform: translateY(-0.5px) rotate(0.3deg);
-  }
 }
-.anx-dribble {
+.anx-tricks {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  animation: anx-dribble 0.85s ease-in-out infinite;
+  animation: anx-tricks 9s ease-in-out infinite;
 }
 
 /* Paused keeps a breath, slower and half the distance: switched off is not
@@ -2362,8 +2732,10 @@ body:has(.social-theme) .site-backdrop {
   .anx-land,
   .anx-tick,
   .anx-dance,
-  .anx-dribble,
+  .anx-tricks,
   .anx-bounce,
+  .anx-bounce-squash,
+  .anx-bounce-spin,
   .anx-bounce-mark,
   .anx-cheer,
   .anx-shadow-dance,

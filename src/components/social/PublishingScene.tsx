@@ -191,6 +191,41 @@ const BALL = { x: HAND.x + 7, y: 118, r: 9 };
 const BALL_FLOOR = ROBOT.y + ROBOT.h - 2;
 const BALL_DROP = BALL_FLOOR - BALL.r - BALL.y;
 
+/**
+ * AND THE REST OF THE ROUTINE — "תעשה אותו גם מקפיץ אם הרגל ועושה פעלולים".
+ *
+ * Nine seconds, six tricks: two bounces off the floor, a flick across to the
+ * boot, three keepy-uppies, a header, and the ball spinning on a fingertip
+ * before it drops back into the hand. Long on purpose — this is the state the
+ * panel is in for most of the day, and a two-second loop becomes wallpaper by
+ * lunchtime.
+ *
+ * EVERY POINT THE BALL TOUCHES IS READ OFF THE ROBOT, not typed in. The boot
+ * and the crown of the head are fractions MEASURED on robot-full.webp (its
+ * shoe starts 88.5% down the picture, the dome 13.3%, their centres 68.9% and
+ * 50.1% across), so the whole routine moves with the robot if it is ever
+ * resized or shifted. Numbers that agree with the art today are how a ball
+ * ends up kicking thin air six inches from a foot — and an SVG does not
+ * complain, it just looks wrong.
+ *
+ * The stylesheet gets these as custom properties and owns only the TIMING.
+ */
+const BOOT = { x: ROBOT.x + 0.689 * ROBOT.w, y: ROBOT.y + 0.885 * ROBOT.h };
+const CROWN = { x: ROBOT.x + 0.501 * ROBOT.w, y: ROBOT.y + 0.133 * ROBOT.h };
+/** Each one is where the BALL'S CENTRE goes, as an offset from where it rests
+    in the hand — which is what the keyframes translate by. */
+const TRICK = {
+  /** Resting on the boot, and the top of each keepy-uppy above it. */
+  footX: BOOT.x - BALL.x,
+  footY: BOOT.y - BALL.r - BALL.y,
+  upY: BOOT.y - BALL.r - BALL.y - 54,
+  /** Meeting the head, and the rebound off it. */
+  headX: CROWN.x - BALL.x,
+  headY: CROWN.y - BALL.r - BALL.y,
+  /** Spinning on a fingertip, just clear of the hand. */
+  spinY: -26,
+};
+
 /** The four groups, in the staggered arrangement of the reference. */
 const TILE = [
   { x: 240, y: 26 },
@@ -403,7 +438,7 @@ export function PublishingScene({
             : celebrating
               ? 'anx-dance'
               : resting
-                ? 'anx-dribble'
+                ? 'anx-tricks'
                 : running
                   ? 'anx-bot'
                   : 'anx-bot-min'
@@ -445,7 +480,26 @@ export function PublishingScene({
         instead of leaving the ball going through the floor.
       */}
       {resting && (
-        <g data-ball="" style={{ ['--anx-drop' as string]: `${BALL_DROP}px` }}>
+        <g
+          data-ball=""
+          style={{
+            ['--anx-drop' as string]: `${BALL_DROP}px`,
+            ['--anx-fx' as string]: `${TRICK.footX.toFixed(1)}px`,
+            ['--anx-fy' as string]: `${TRICK.footY.toFixed(1)}px`,
+            ['--anx-uy' as string]: `${TRICK.upY.toFixed(1)}px`,
+            ['--anx-hx' as string]: `${TRICK.headX.toFixed(1)}px`,
+            ['--anx-hy' as string]: `${TRICK.headY.toFixed(1)}px`,
+            ['--anx-sy' as string]: `${TRICK.spinY}px`,
+            /* The two pivots, in scene units: where the ball meets the
+               ground (the squash anchors there) and its own middle (the spin
+               turns about it). Handed over rather than left to a percentage,
+               because a percentage is read off a box the other transform is
+               busy changing — see the note on .anx-bounce-squash. */
+            ['--anx-ox' as string]: `${BALL.x}px`,
+            ['--anx-oy' as string]: `${BALL.y + BALL.r}px`,
+            ['--anx-cy' as string]: `${BALL.y}px`,
+          }}
+        >
           <ellipse
             data-ball-shadow=""
             className="anx-bounce-mark"
@@ -457,6 +511,11 @@ export function PublishingScene({
             opacity="0.16"
           />
           <g className="anx-bounce">
+            {/* THREE GROUPS: position, then squash, then spin — see the
+                keyframes in globals.css for why that order and not another.
+                One transform and one transform-origin per element. */}
+            <g className="anx-bounce-squash">
+            <g className="anx-bounce-spin">
             <circle cx={BALL.x} cy={BALL.y} r={BALL.r} fill="url(#anx-bounce-skin)" />
             {/* the seam, so a circle reads as a ball rather than a dot */}
             <path
@@ -468,6 +527,8 @@ export function PublishingScene({
               strokeLinecap="round"
             />
             <circle cx={BALL.x - 3} cy={BALL.y - 3.5} r="2.2" fill="#ffffff" opacity="0.5" />
+            </g>
+            </g>
           </g>
         </g>
       )}

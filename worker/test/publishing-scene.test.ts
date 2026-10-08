@@ -155,7 +155,7 @@ async function main(): Promise<void> {
           dancing: document.querySelectorAll('.anx-dance').length,
           cheering: document.querySelectorAll('.anx-cheer').length,
           confetti: document.querySelectorAll('[data-confetti]').length,
-          dribbling: document.querySelectorAll('.anx-dribble').length,
+          dribbling: document.querySelectorAll('.anx-tricks').length,
           ball: document.querySelectorAll('[data-ball]').length,
           bounce: document.querySelectorAll('.anx-bounce').length,
         }));
@@ -194,7 +194,7 @@ async function main(): Promise<void> {
       /* And all three really run — see 5b: a missing @keyframes leaves the
          name in place and animates nothing. */
       const beat = await page.evaluate(() =>
-        ['.anx-bounce', '.anx-bounce-mark', '.anx-dribble'].map((sel) => {
+        ['.anx-bounce', '.anx-bounce-squash', '.anx-bounce-spin', '.anx-bounce-mark', '.anx-tricks'].map((sel) => {
           const el = document.querySelector(sel);
           return { sel, n: el ? el.getAnimations().length : -1 };
         }),
@@ -204,59 +204,102 @@ async function main(): Promise<void> {
       }
 
       /*
-       * AND THE BALL LANDS ON THE FLOOR THE ROBOT STANDS ON.
+       * AND THE ROUTINE ACTUALLY HITS WHAT IT IS AIMING AT.
        *
-       * MEASURED, because the alternative is a number that agrees with the
-       * geometry today. The drop is derived in the component from the gap
-       * between the ball's rest height and the sole of the robot's own feet;
-       * a literal in its place looks identical in review and leaves the ball
-       * sinking through the floor or stopping in mid-air the first time
-       * anything about the robot moves — silently, because an SVG does not
-       * complain.
+       * "תעשה אותו גם מקפיץ אם הרגל ועושה פעלולים." Nine seconds, six tricks,
+       * and every point the ball touches is read off the robot picture rather
+       * than typed in — the boot 88.5% down it, the crown 13.3%. MEASURED
+       * here for the same reason: numbers that agree with the art today are
+       * how a ball ends up kicking thin air six inches from a foot, and an
+       * SVG does not complain about that, it just looks wrong.
        *
-       * Driven to the bottom of the bounce through the Web Animations API:
-       * `animation-play-state: paused` freezes a CSS animation wherever it
-       * happens to be, which by this point in the run is nowhere in
-       * particular. 400ms of an 850ms loop is 47%, inside the window where
-       * the ball is on the ground.
+       * Three contacts are checked, one per surface the ball is supposed to
+       * meet. The percentages are the keyframe's own stops.
+       *
+       * PAUSE IN ONE TASK, MEASURE IN THE NEXT. The first version did both
+       * inside one page.evaluate and failed about one run in three, always
+       * reporting the ball where it had been BEFORE the pause: setting
+       * `currentTime` updates the animation, and whether that has reached
+       * layout by the time getBoundingClientRect() runs in the same JS task
+       * is not something to rely on. A flaky assertion is worse than none —
+       * it teaches everybody to re-run the suite.
        */
-      await page.evaluate(() => window.__mode('waiting'));
-      await page.waitForTimeout(120);
-      /*
-       * PAUSE IN ONE TASK, MEASURE IN THE NEXT.
-       *
-       * The first version did both inside one page.evaluate and failed about
-       * one run in three — always reporting the ball at the TOP of its
-       * bounce, which is where it had been before the pause. Setting
-       * `currentTime` updates the animation; whether the new value has
-       * reached layout by the time getBoundingClientRect() runs in the same
-       * JS task is not something to rely on. A frame in between removes the
-       * question, and a flaky assertion is worse than none — it teaches
-       * everybody to re-run the suite.
-       */
-      await page.evaluate(() => {
-        document.querySelectorAll('.anx-bounce').forEach((el) => {
-          el.getAnimations().forEach((a) => {
-            a.pause();
-            a.currentTime = 400;
+      const contactAt = async (pct: number) => {
+        await page.evaluate((t) => {
+          /* ALL THREE, not just the path. The position, the squash and the
+             spin are three elements on one clock; freezing only the first
+             leaves the other two running, and the ball's measured bottom
+             then depends on whatever scale the squash happened to be at —
+             which read 3.7 units through the floor and was the test's fault,
+             not the scene's. */
+          document.querySelectorAll('.anx-bounce, .anx-bounce-squash, .anx-bounce-spin').forEach((el) => {
+            el.getAnimations().forEach((a) => {
+              a.pause();
+              a.currentTime = t;
+            });
           });
+        }, Math.round((9000 * pct) / 100));
+        await page.waitForTimeout(120);
+        return page.evaluate(() => {
+          const svg = document.querySelector('svg') as SVGSVGElement;
+          const img = svg.querySelector('image') as SVGImageElement;
+          const y0 = Number(img.getAttribute('y'));
+          const h = Number(img.getAttribute('height'));
+          const m = svg.getScreenCTM()!;
+          const unit = Math.hypot(m.a, m.b) || 1;
+          const origin = new DOMPoint(0, 0).matrixTransform(m);
+          /* The three surfaces, in the same fractions the component uses. */
+          const [floorY, bootY, crownY] = [(h - 2) / h, 0.885, 0.133].map((f) => y0 + f * h);
+          /*
+           * THE BALL'S LOWEST POINT, BUILT RATHER THAN READ OFF ITS RECT.
+           *
+           * getBoundingClientRect() of a rotated element is the axis-aligned
+           * box of its rotated BOX, not of its rotated shape — so a spinning
+           * circle reports a rect 1.28x too tall at 70 degrees, and its
+           * bottom edge sits two units below anything that is drawn. An
+           * earlier version of this measured that edge and accused a
+           * correctly placed ball of sinking into the floor; the bug was
+           * here, not in the scene.
+           *
+           * The CENTRE of that rect is exact — turning a circle about its
+           * own middle does not move the middle — and the vertical radius is
+           * the circle's own r times the squash's y-scale, read off its
+           * computed matrix. The spin cannot change either.
+           */
+          const dot = svg.querySelector('.anx-bounce-spin circle') as SVGCircleElement;
+          const box = dot.getBoundingClientRect();
+          const squash = new DOMMatrixReadOnly(getComputedStyle(svg.querySelector('.anx-bounce-squash')!).transform);
+          const bottom = (box.top + box.height / 2 - origin.y) / unit + Number(dot.getAttribute('r')) * squash.d;
+          return { unit, floor: bottom - floorY, boot: bottom - bootY, crown: bottom - crownY };
         });
-      });
-      await page.waitForTimeout(120);
-      const landing = await page.evaluate(() => {
-        const svg = document.querySelector('svg') as SVGSVGElement;
-        const img = svg.querySelector('image') as SVGImageElement;
-        const sole = new DOMPoint(0, Number(img.getAttribute('y')) + Number(img.getAttribute('height'))).matrixTransform(svg.getScreenCTM()!);
-        const ball = (svg.querySelector('.anx-bounce') as SVGGElement).getBoundingClientRect();
-        const m = svg.getScreenCTM()!;
-        return { gap: (ball.bottom - sole.y) / (Math.hypot(m.a, m.b) || 1) };
-      });
+      };
+
+      const onFloor = await contactAt(5);
       is(
-        Math.abs(landing.gap) < 2.5,
-        `the ball lands on the floor the robot stands on (${landing.gap.toFixed(1)} scene units ${landing.gap > 0 ? 'through it' : 'above it'})`,
+        Math.abs(onFloor.floor) < 1.5,
+        `the ball lands on the floor the robot stands on (${onFloor.floor.toFixed(1)} scene units off)`,
+      );
+      const onBoot = await contactAt(30);
+      is(
+        Math.abs(onBoot.boot) < 1.5,
+        `and it comes down onto the BOOT, not next to it (${onBoot.boot.toFixed(1)} scene units off the top of the shoe)`,
+      );
+      const onHead = await contactAt(62);
+      is(
+        Math.abs(onHead.crown) < 1.5,
+        `and the header meets the crown of its head (${onHead.crown.toFixed(1)} scene units off)`,
+      );
+      /* And the tricks are not all the same trick: the three contacts are at
+         three different heights, which is what makes it a routine rather than
+         a bounce with extra steps. */
+      is(
+        onFloor.floor - onBoot.boot !== 0 && Math.abs(onBoot.boot - onHead.crown) < 6,
+        'the three contacts are read off three different parts of the robot',
       );
       await page.evaluate(() => {
-        document.querySelectorAll('.anx-bounce').forEach((el) => el.getAnimations().forEach((a) => a.play()));
+        document
+          .querySelectorAll('.anx-bounce, .anx-bounce-squash, .anx-bounce-spin')
+          .forEach((el) => el.getAnimations().forEach((a) => a.play()));
       });
 
       const paused = await seenIn('paused');
@@ -954,14 +997,14 @@ async function main(): Promise<void> {
       await quiet.evaluate(() => window.__mode('waiting'));
       await quiet.waitForTimeout(150);
       const rest = await quiet.evaluate(() => {
-        const names = ['.anx-dribble', '.anx-bounce', '.anx-bounce-mark'].map((sel) => {
+        const names = ['.anx-tricks', '.anx-bounce', '.anx-bounce-squash', '.anx-bounce-spin', '.anx-bounce-mark'].map((sel) => {
           const el = document.querySelector(sel);
           return el ? getComputedStyle(el).animationName : 'absent';
         });
         return { names, ball: document.querySelectorAll('[data-ball]').length };
       });
       for (const [i, n] of rest.names.entries()) {
-        eq(n, 'none', `reduced motion: the idle game is still (${['beat', 'ball', 'floor mark'][i]} = ${n})`);
+        eq(n, 'none', `reduced motion: the idle game is still (${['beat', 'path', 'squash', 'spin', 'floor mark'][i]} = ${n})`);
       }
       /* `>= 1` and not `=== 1`: this page has the panel mounted below the
          standalone scene and the panel's own day is mid-round, so both are

@@ -125,16 +125,28 @@ function isoParts(iso: string): [number, number, number] {
  * Deterministic in targetIndex, so re-planning reproduces the same instants and
  * the unique (schedule, target, scheduled_at) index still does its job.
  */
-export function staggerAt(slot: Date, targetIndex: number, gapMinutes: number): Date {
-  const gap = Math.max(0, Math.round(gapMinutes));
-  return gap ? new Date(slot.getTime() + targetIndex * gap * 60_000) : slot;
+/*
+ * SECONDS, NOT MINUTES — and the unit was the bug.
+ *
+ * This took whole minutes, because the two settings it reads were whole
+ * minutes and a minute was the smallest gap anything in this product could
+ * express. "תעשה אופציה של 30 40 50 שניות בין פוסט לפוסט" ended that, and a
+ * stagger that still rounded to the minute was the FOURTH gate standing in the
+ * way of it: with a thirty-second floor the rows themselves were still written
+ * SIXTY seconds apart, so the engine was never even asked to publish faster
+ * than one a minute. Every gate has to speak the same unit or the coarsest one
+ * decides.
+ */
+export function staggerAt(slot: Date, targetIndex: number, gapSeconds: number): Date {
+  const gap = Math.max(0, Math.round(gapSeconds));
+  return gap ? new Date(slot.getTime() + targetIndex * gap * 1000) : slot;
 }
 
 /** Every instant an occasion produces for `targetCount` targets, in order. */
-export function staggeredSlots(slots: Date[], targetCount: number, gapMinutes: number): Date[] {
+export function staggeredSlots(slots: Date[], targetCount: number, gapSeconds: number): Date[] {
   const out: Date[] = [];
   for (const slot of slots) {
-    for (let i = 0; i < Math.max(0, targetCount); i += 1) out.push(staggerAt(slot, i, gapMinutes));
+    for (let i = 0; i < Math.max(0, targetCount); i += 1) out.push(staggerAt(slot, i, gapSeconds));
   }
   return out.sort((a, b) => a.getTime() - b.getTime());
 }

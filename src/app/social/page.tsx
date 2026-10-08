@@ -42,6 +42,7 @@ import {
   runCovers,
   getBrowserSettings,
   lastPublishedAt,
+  matchAccountGapTo,
   saveCampaign,
   setCampaignRepeat,
   sendWorkerCommand,
@@ -54,6 +55,7 @@ import {
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields } from '@/lib/social/campaign-schedule';
+import { accountGapLabel } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
 import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
@@ -933,6 +935,32 @@ export default function SocialDashboard() {
            */
           const repeat = readRepeat(campaign as Campaign);
           if (repeat.enabled) await setCampaignRepeat(campaign, repeat, next);
+
+          /*
+           * AND THE ACCOUNT-WIDE FLOOR COMES DOWN WITH IT.
+           *
+           * "תשנה גם את המרווח המינימלי הגלובלי ברגע שמשנים את הזמנים בקמפיין".
+           * Choosing 30 seconds here used to change nothing he could see: the
+           * campaign's own gap is only the FIRST of the gates, and the second
+           * one — minGap + groupMinGap, 65 minutes out of the box — is an
+           * ACCOUNT setting, so the row sat in the queue for an hour anyway
+           * and the card showed a number that never happened.
+           *
+           * matchAccountGapTo only ever LOWERS it, and only to exactly what
+           * was asked for, so a campaign set to 10 minutes does not drag a
+           * floor that the owner deliberately raised back down with it.
+           *
+           * AFTER saveCampaign, never before: if the campaign write fails the
+           * floor must stay where it was, or a failed save would still have
+           * loosened the whole account.
+           */
+          const floor = await matchAccountGapTo(next.gapSeconds);
+          if (floor.changed) {
+            toast(
+              `המרווח המינימלי של כל החשבון ירד מ-${accountGapLabel(floor.wasSeconds)} ל-${accountGapLabel(floor.nowSeconds)} — זה חל על כל הסבבים, לא רק על זה`,
+              'info',
+            );
+          }
         } catch (err) {
           setSchedulePatch(null);
           toast(friendlyMessage(err, 'שמירת התזמון נכשלה.'), 'error');
@@ -1462,6 +1490,12 @@ export default function SocialDashboard() {
                   spacing={{
                     minGapMinutes: data.limits.minGapMinutes,
                     groupMinGapMinutes: data.browser.groupMinGapMinutes,
+                    /* The seconds beside the minutes, so a floor the panel
+                       above just lowered to 30s is the floor this card counts
+                       down to. Without them the card rounds up to a minute and
+                       promises later than the engine publishes. */
+                    minGapSeconds: data.limits.minGapSeconds,
+                    groupMinGapSeconds: data.browser.groupMinGapSeconds,
                     lastPublishedAt: data.lastPublished,
                   }}
                   repeat={readRepeat(run.campaign)}

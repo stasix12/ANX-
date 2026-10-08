@@ -30,6 +30,7 @@ import {
   getBrowserSettings,
   getLimits,
   lastPublishedAt,
+  matchAccountGapTo,
   saveCampaign,
   setCampaignRepeat,
   stopCampaign,
@@ -37,6 +38,7 @@ import {
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { accountGapLabel } from '@/lib/social/rules';
 import { type AccountSpacing } from '@/lib/social/schedule-readout';
 import type { Campaign, ControlSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -130,7 +132,15 @@ export default function CampaignsPage() {
         getBrowserSettings(),
         lastPublishedAt(),
       ]);
-      setSpacing({ minGapMinutes: lim.minGapMinutes, groupMinGapMinutes: brw.groupMinGapMinutes, lastPublishedAt: lastPub });
+      setSpacing({
+        minGapMinutes: lim.minGapMinutes,
+        groupMinGapMinutes: brw.groupMinGapMinutes,
+        /* And the seconds, which are the canonical pair once the account has
+           them — a 30-second floor is not expressible in the minutes. */
+        minGapSeconds: lim.minGapSeconds,
+        groupMinGapSeconds: brw.groupMinGapSeconds,
+        lastPublishedAt: lastPub,
+      });
       const online = workers.some((w) => w.online);
       setCampaigns(c);
       setPosts(p);
@@ -236,6 +246,18 @@ export default function CampaignsPage() {
              hour is the card saying one thing while the engine does another. */
           const repeat = readRepeat(campaign);
           if (repeat.enabled) await setCampaignRepeat(campaign, repeat, next);
+
+          /* And the account-wide floor comes down with it, exactly as on the
+             dashboard — see the long note on the dashboard's copy. Without it
+             the gap chosen here is only the first of two gates and the second
+             one, 65 minutes out of the box, decides. */
+          const floor = await matchAccountGapTo(next.gapSeconds);
+          if (floor.changed) {
+            toast(
+              `המרווח המינימלי של כל החשבון ירד מ-${accountGapLabel(floor.wasSeconds)} ל-${accountGapLabel(floor.nowSeconds)} — זה חל על כל הסבבים, לא רק על זה`,
+              'info',
+            );
+          }
         } catch (err) {
           /* Put the row back exactly as it was before this burst of taps. */
           setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? (before.find((o) => o.id === c.id) ?? c) : c)));

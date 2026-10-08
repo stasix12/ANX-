@@ -3,7 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { dedupeKey, renderPostText } from './compose';
 import { dripSlots, slotsFor, staggerAt } from './slots';
 import { CANCELLABLE_STATUSES, OPEN_STATUSES } from './status';
-import { DEFAULT_BROWSER, DEFAULT_LIMITS, type LimitsSettings, type MediaItem, type Post, type Schedule, type SocialTarget, type Variant } from './types';
+import { DEFAULT_BROWSER, DEFAULT_LIMITS, type BrowserSettings, type LimitsSettings, type MediaItem, type Post, type Schedule, type SocialTarget, type Variant } from './types';
+import { accountGapSeconds } from './rules';
 import { pickVariant } from './variants';
 
 /**
@@ -131,7 +132,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
    * fall back to the same defaults the workers use, never to zero, because zero
    * is what stacks a whole campaign on one instant.
    */
-  const spacingMinutes = await enforcedSpacing(db);
+  const spacingSeconds = await enforcedSpacing(db);
 
   /* The rounds an earlier failure buried — brought back before this pass reads
      the list, so they are planned in the same run that finds them. */
@@ -241,7 +242,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
       for (const rawSlot of slots) {
         // Each target gets its own instant inside the occasion, so a weekly
         // campaign publishes instead of deferring itself into skips.
-        const slot = staggerAt(rawSlot, targetIndex, spacingMinutes);
+        const slot = staggerAt(rawSlot, targetIndex, spacingSeconds);
         // Already planned for this post by some other schedule.
         if (taken.has(slotKey(targetId, slot))) continue;
         const variant = pickVariant(approved, schedule, targetId, targetIndex, rotation);
@@ -347,13 +348,22 @@ async function occupiedSlots(db: SupabaseClient, postId: string): Promise<Set<st
 
 const slotKey = (targetId: string, at: string | Date) => `${targetId}|${new Date(at).toISOString()}`;
 
-/** limits.minGapMinutes + browser.groupMinGapMinutes — what rules.ts demands. */
+/**
+ * The account-wide floor rules.ts will enforce, IN SECONDS.
+ *
+ * It used to add the two minute columns up itself, and that duplicated the
+ * rule — then the two copies disagreed the moment seconds existed. Now it asks
+ * accountGapSeconds(), which is the single place that decides what the pair
+ * means, so a thirty-second floor arrives here as 30 rather than being rounded
+ * up to a minute by a reader that only knew about minutes. That rounding was
+ * the fourth gate: see staggerAt() in ./slots.
+ */
 async function enforcedSpacing(db: SupabaseClient): Promise<number> {
   const { data } = await db.from('social_settings').select('key, value').in('key', ['limits', 'browser']);
   const byKey = new Map((data ?? []).map((r) => [r.key as string, (r.value ?? {}) as Record<string, unknown>]));
-  const limits = { ...DEFAULT_LIMITS, ...(byKey.get('limits') ?? {}) };
-  const browser = { ...DEFAULT_BROWSER, ...(byKey.get('browser') ?? {}) };
-  return Math.max(0, Number(limits.minGapMinutes) || 0) + Math.max(0, Number(browser.groupMinGapMinutes) || 0);
+  const limits = { ...DEFAULT_LIMITS, ...(byKey.get('limits') ?? {}) } as LimitsSettings;
+  const browser = { ...DEFAULT_BROWSER, ...(byKey.get('browser') ?? {}) } as BrowserSettings;
+  return accountGapSeconds(limits, browser, true);
 }
 
 /**

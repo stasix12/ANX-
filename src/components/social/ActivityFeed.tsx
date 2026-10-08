@@ -98,6 +98,7 @@ const EVENT_MARK: Record<string, { icon: React.ComponentType<{ className?: strin
   stopped_campaign_swept: { icon: XCircleIcon, tone: 'neutral' },
   run_adopted_queue: { icon: RepeatIcon, tone: 'brand' },
   queue_respaced: { icon: ClockIcon, tone: 'brand' },
+  limits_changed: { icon: ClockIcon, tone: 'brand' },
   queue_targets_added: { icon: UsersIcon, tone: 'brand' },
   queue_target_removed: { icon: UsersIcon, tone: 'neutral' },
   stuck_rows_released: { icon: AlertTriangleIcon, tone: 'warn' },

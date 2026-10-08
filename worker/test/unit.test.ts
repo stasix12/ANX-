@@ -563,23 +563,48 @@ console.log('unit tests OK');
    * out and 27 were deferred until MAX_DEFERRALS skipped them. A weekly
    * campaign was built to lose almost everything it scheduled.
    */
-  assert.ok(planSrc.includes('staggerAt(rawSlot, targetIndex, spacingMinutes)'), 'the planner must give each target its own instant inside an occasion');
+  assert.ok(planSrc.includes('staggerAt(rawSlot, targetIndex, spacingSeconds)'), 'the planner must give each target its own instant inside an occasion');
   assert.ok(planSrc.includes('async function enforcedSpacing'), 'the spacing must be read from the settings rules.ts enforces, not invented');
-  assert.ok(/minGapMinutes[\s\S]{0,120}groupMinGapMinutes/.test(planSrc), 'spacing must be the sum rules.ts compares against');
+  /*
+   * AND IT MUST ASK THE ONE FUNCTION, not add the columns up again.
+   *
+   * This used to require the literal `minGapMinutes … groupMinGapMinutes` sum
+   * in plan.ts, which is what the planner did — and that hand-rolled copy of
+   * the rule is exactly what broke when seconds arrived: rules.ts read a
+   * thirty-second floor while the planner, knowing only about minutes,
+   * rounded it to sixty and wrote every row a full minute apart. The engine
+   * was then never even asked to publish faster than one a minute. One
+   * function decides what the pair means; everyone else calls it.
+   */
+  assert.ok(planSrc.includes('accountGapSeconds(limits, browser, true)'), 'the planner must take the floor from accountGapSeconds, not add the two columns up itself');
+  assert.ok(!/minGapMinutes[\s\S]{0,120}groupMinGapMinutes/.test(planSrc), 'and it must NOT keep its own copy of that sum — two copies is how the unit drifted');
 
   // And the preview must do the same arithmetic, or it shows a schedule the
   // planner will not write — the lie this codebase keeps having to re-close.
-  assert.ok(pickerSrc.includes('staggeredSlots(slots, count, spacingMinutes)'), 'the schedule preview must stagger the way the planner does');
-  assert.ok(pickerSrc.includes('spacingMinutes?: number'), 'the picker must be told the real spacing');
+  assert.ok(pickerSrc.includes('staggeredSlots(slots, count, spacingSeconds)'), 'the schedule preview must stagger the way the planner does');
+  assert.ok(pickerSrc.includes('spacingSeconds?: number'), 'the picker must be told the real spacing, in the unit the planner uses');
 
-  // The arithmetic itself, executed.
+  // The arithmetic itself, executed — in SECONDS now.
   const base = new Date('2026-09-20T06:00:00Z');
-  const spread = staggeredSlots([base], 28, 65);
+  const spread = staggeredSlots([base], 28, 65 * 60);
   assert.equal(spread.length, 28, '28 targets produce 28 publications');
   assert.equal(spread[0].getTime(), base.getTime(), 'the first keeps the chosen time');
   for (let i = 1; i < spread.length; i += 1) {
     assert.equal(spread[i].getTime() - spread[i - 1].getTime(), 65 * 60_000, `row ${i} must sit exactly one gap after the one before it`);
   }
+
+  /*
+   * THE THIRTY-SECOND CASE, which is the whole reason the unit changed.
+   *
+   * "בהפרש פרסום בין פוסט לפוסט תעשה אופציה של 30 40 50 שניות." Under the old
+   * minutes this was unrepresentable: 30 rounded to 0 (no stagger at all, the
+   * whole campaign on one instant) or to 1 (sixty seconds apart, twice the
+   * gap he chose). Both are wrong and neither could be fixed in the engine,
+   * because the ROWS were already in the wrong places.
+   */
+  const fast = staggeredSlots([base], 4, 30);
+  assert.equal(fast[1].getTime() - fast[0].getTime(), 30_000, 'a thirty-second floor puts the rows thirty seconds apart');
+  assert.equal(fast[3].getTime() - fast[0].getTime(), 90_000, 'and four of them span a minute and a half, not four minutes');
   // Zero spacing must stay stacked rather than silently inventing a gap.
   assert.equal(staggeredSlots([base], 3, 0).every((d) => d.getTime() === base.getTime()), true, 'no spacing means no stagger');
 
@@ -589,9 +614,10 @@ console.log('unit tests OK');
   // planner spreads across a day and a half — the lie at the last moment
   // before they commit.
   const editorSrc = readFileSync(new URL('../../src/components/social/PostEditor.tsx', import.meta.url), 'utf8');
-  assert.ok(/planFor\(schedule, selectedObjects\.length, new Date\(\), spacingMinutes\)/.test(editorSrc),
+  assert.ok(/planFor\(schedule, selectedObjects\.length, new Date\(\), spacingSeconds\)/.test(editorSrc),
     'the pre-launch plan must be built with the real spacing');
-  assert.ok(editorSrc.includes('spacingMinutes={spacingMinutes}'), 'the picker and the review must share one spacing value');
+  assert.ok(editorSrc.includes('spacingSeconds={spacingSeconds}'), 'the picker and the review must share one spacing value');
+  assert.ok(editorSrc.includes('accountGapSeconds(limits, browser, true)'), 'and it must come from the one function, not be added up here as well');
 
   console.log('weekly-stagger tests OK');
 }
@@ -1017,9 +1043,23 @@ console.log('unit tests OK');
    * has to reproduce that sum exactly, or a row placed N minutes after the last
    * publication is deferred by the very setting that was supposed to allow it.
    */
+  /*
+   * RE-POINTED AT THE FUNCTION THAT NOW OWNS THE SUM. This used to require the
+   * literal `limits.minGapMinutes + extra` inside rules.ts, which is where the
+   * arithmetic lived; it moved into accountGapSeconds() when the floor learned
+   * to speak seconds, and it had to move, because FOUR readers were adding the
+   * same two columns up themselves (rules.ts, the worker's own gate, plan.ts
+   * and the pre-launch preview) and they drifted the moment a sub-minute floor
+   * was expressible. The claim is unchanged — the sum must still be what the
+   * engine compares against — and so is the executed arithmetic below it.
+   */
   assert.ok(
-    rules.includes('limits.minGapMinutes + extra'),
-    'rules.ts must still be the sum of the global gap and the group surcharge — the tuner splits one number into these two',
+    /export function accountGapSeconds\([\s\S]*?base \+ extra/.test(rules),
+    'accountGapSeconds must still be the sum of the global gap and the group surcharge — the tuner splits one number into these two',
+  );
+  assert.ok(
+    /const gapSeconds = accountGapSeconds\(limits, ctx\.browser, target\.channel === 'facebook_group'\)/.test(rules),
+    "and the per-row gate must take its floor from it, applying the group surcharge only to a group",
   );
   const split = (n: number, surcharge: number) =>
     n >= surcharge ? { minGap: n - surcharge, group: surcharge } : { minGap: 0, group: n };
@@ -3592,11 +3632,22 @@ const scenario: { step: string; line: string }[] = [];
    * that did not ask for anything keep exactly the behaviour they had.
    */
   assert.ok(
-    /findPostArticle\(page: Page, postText: string, passes = 20, firstWaitMs = 8_000\)/.test(composerSrc),
+    /passes = 20,\s*firstWaitMs = 8_000,/.test(composerSrc),
     'the scrolling search keeps its old defaults for the callers that hunt an older post',
   );
+  /*
+   * AND IT TAKES A DEADLINE, asked fresh each pass.
+   *
+   * Twenty passes at about a second and a half each is thirty seconds, and the
+   * publication tail is on a clock now — so a search that read its remaining
+   * time once at the start would already be stale by the second pass. Optional,
+   * because the comment writer and the metrics reader run BETWEEN publications
+   * and are on no clock at all.
+   */
+  assert.ok(/left\?: \(\) => number,/.test(composerSrc), 'the search can be told how long it has left');
+  assert.ok(/if \(left && left\(\) <= 0\) return null;/.test(composerSrc), 'and it stops when that time is gone');
   assert.ok(
-    composerSrc.includes('findPostArticle(page, input.text, 1, 6_000)'),
+    composerSrc.includes('findPostArticle(page, input.text, 1, floorSlice(6_000))'),
     'and the search after publishing takes one look instead of scrolling away from a post that is already on screen',
   );
 
@@ -3618,9 +3669,57 @@ const scenario: { step: string; line: string }[] = [];
    * detached, no error banner — and the evidence is gathered once, after it.
    */
   assert.ok(/publishedAt: string;/.test(composerSrc), 'the composer reports when the post went live');
+  /* Both offsets asserted present first: `indexOf` answers -1 for a line that
+     is not there at all, and -1 is less than everything — so an ordering check
+     on its own passes loudest exactly when the line it is about has been
+     renamed or deleted. */
+  const atPublished = composerSrc.indexOf('const publishedAt = new Date().toISOString();');
+  const atFirstLook = composerSrc.indexOf('findPostArticle(page, input.text, 1');
+  const atDeadline = composerSrc.indexOf('const deadline =');
+  for (const [what, at] of [['the published instant', atPublished], ['the first look', atFirstLook], ['the budget deadline', atDeadline]] as const) {
+    assert.ok(at >= 0, `${what} must be in the composer at all`);
+  }
+  assert.ok(atPublished < atFirstLook, 'and takes that instant BEFORE it goes looking for the post, not after');
+  /*
+   * ─── AND THE LOOKING IS ON A CLOCK ──────────────────────────────────────
+   *
+   * "ותעשה ככה שכל פרסום לא יקח יותר מ 30 שניות." There is one browser and the
+   * rows run one after another, so row N's evidence-gathering is time row N+1
+   * does not have: a tail that hunts the post across three pages for ninety
+   * seconds makes the next click land ninety seconds late however small the
+   * gap says it is, and the owner reads that as "נדחה" on a queue he set to
+   * thirty seconds.
+   *
+   * The deadline is installed where the post becomes real and nowhere earlier:
+   * everything before that line is the publication itself and may never be cut
+   * short, and the budget must not be computed before the click because the
+   * click's own round trip would then be spent outside it.
+   */
   assert.ok(
-    /const publishedAt = new Date\(\)\.toISOString\(\);[\s\S]{0,1200}findPostArticle/.test(composerSrc),
-    'and takes that instant BEFORE it goes looking for the post, not after',
+    atPublished < atDeadline,
+    'the budget starts where the post becomes real — a deadline over the publication itself would abandon a post in flight',
+  );
+  assert.ok(/budgetMs\?: number;/.test(composerSrc), 'the composer takes a budget for the whole publication');
+  assert.ok(
+    /const workMs = Date\.now\(\) - startedAt - heldMs \+ CLICK_RESERVE_MS;/.test(composerSrc),
+    'and subtracts the work already done — MEASURED, and never the hold, which IS the gap being served',
+  );
+  assert.ok(
+    /const floorSlice = [\s\S]{0,160}Math\.max\(VERIFY_FLOOR_MS, left\(\)\)/.test(composerSrc),
+    'the correctness checks — a late refusal, a pending-approval notice — are shortened by the budget but never skipped by it',
+  );
+  assert.ok(
+    /if \(!article && left\(\) < LOOKUP_MIN_MS\) verifyCutShort = true;/.test(composerSrc),
+    'and a fresh page load is never STARTED with too little time to answer anything',
+  );
+  assert.ok(/verifyCutShort\?: boolean;/.test(composerSrc), 'the result says when the hunt was stopped by the clock rather than finished');
+  assert.ok(
+    localWorker.includes('הפוסט פורסם. לא בדקתי אותו בפיד כדי לא לעכב את הפרסום הבא.'),
+    'and the owner is told THAT, not "בדקו בקבוצה" — the post is up and nothing is wrong, so sending him to look would be noise',
+  );
+  assert.ok(
+    /budgetMs: accountGapSeconds\(jobEnv\.limits, jobEnv\.browser, true\) \* 1000 \|\| undefined/.test(localWorker),
+    'the budget IS the account gap — and zero (no spacing rule at all) is passed as undefined, which means unbounded, not "no time"',
   );
   assert.ok(
     localWorker.includes('published_at: result.publishedAt || new Date().toISOString()'),

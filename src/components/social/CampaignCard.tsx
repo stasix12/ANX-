@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { canPauseRun, canResumeRun, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
+import { accountGapSeconds } from '@/lib/social/rules';
 import { counted, formatDayMonthHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem } from '@/lib/social/types';
@@ -533,6 +534,7 @@ export function CampaignCard({
               onRepeatChange={onRepeatChange}
               campaignName={campaign.name}
               disabled={scheduleBusy}
+              accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
             />
           </div>
         )}

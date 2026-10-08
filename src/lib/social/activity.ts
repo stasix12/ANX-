@@ -152,6 +152,15 @@ const KIND: Record<string, ActivityKind> = {
      the label would not delete the rows — it would only make them unreadable. */
   plan_not_customers: 'schedule',
   queue_respaced: 'schedule',
+  /*
+   * The account-wide floor coming down to meet a campaign's chosen gap
+   * (matchAccountGapTo in client.ts). 'schedule' and not 'system': nothing is
+   * broken and no machine did anything — the owner chose a smaller interval
+   * and this is the line that says the OTHER gate moved with it, which is the
+   * one consequence of that choice reaching outside the campaign he edited.
+   * It belongs beside queue_respaced, which is the same kind of fact.
+   */
+  limits_changed: 'schedule',
   queue_target_removed: 'schedule',
   queue_targets_added: 'schedule',
   stuck_rows_released: 'schedule',

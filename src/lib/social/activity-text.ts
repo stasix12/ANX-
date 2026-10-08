@@ -119,6 +119,10 @@ const TITLE: Record<string, string> = {
      the label would not delete the rows — it would only make them unreadable. */
   plan_not_customers: 'קבוצות בלי לקוחות — לא נכנסו לסבב',
   queue_respaced: 'המרווח בתור שונה',
+  /* The ACCOUNT-WIDE floor, not one round's — the headline says which,
+     because the whole point of the line is that it reaches further than the
+     campaign the owner was editing. */
+  limits_changed: 'המרווח המינימלי של החשבון שונה',
   queue_target_removed: 'קבוצה הוסרה מהתור',
   queue_targets_added: 'קבוצות נוספו לתור',
   stuck_rows_released: 'פרסומים תקועים שוחררו',

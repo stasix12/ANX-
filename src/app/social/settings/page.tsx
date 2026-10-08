@@ -108,10 +108,29 @@ export default function SettingsPage() {
     setBusy(true);
     try {
       const [curLimits, curBrowser, curBusiness] = await Promise.all([getLimits(), getBrowserSettings(), getBusiness()]);
+      /*
+       * ─── THE MINUTE FIELDS CARRY THEIR SECONDS WITH THEM ────────────────
+       *
+       * The two gap boxes on this screen are whole minutes, and the pair they
+       * write also has a `*Seconds` half that accountGapSeconds() PREFERS when
+       * it is present. So once anything has written seconds — the campaign
+       * panel lowering the floor to 30s does — typing "45" here and pressing
+       * שמור would say "ההגדרות נשמרו", show 45, and leave the engine on
+       * thirty seconds. A screen that is simply not true, with nothing on it
+       * disagreeing with anything else.
+       *
+       * Derived from the minutes the owner typed, because minutes are what
+       * these two boxes offer; the seconds are the same number said precisely,
+       * never a second opinion about it.
+       */
+      const gapFields = {
+        minGapSeconds: Math.max(0, Math.round(limits.minGapMinutes)) * 60,
+        groupMinGapSeconds: Math.max(0, Math.round(browser.groupMinGapMinutes)) * 60,
+      };
       await Promise.all([
-        saveSetting('limits', { ...curLimits, ...limits }),
+        saveSetting('limits', { ...curLimits, ...limits, minGapSeconds: gapFields.minGapSeconds }),
         saveSetting('business', { ...curBusiness, ...business }),
-        saveSetting('browser', { ...curBrowser, ...browser }),
+        saveSetting('browser', { ...curBrowser, ...browser, groupMinGapSeconds: gapFields.groupMinGapSeconds }),
       ]);
       toast('ההגדרות נשמרו.');
     } catch (err) {

@@ -6,7 +6,7 @@ import { detectCity } from '@/lib/social/cities';
 import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, type StoredGroup } from '@/lib/social/discovery';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
-import { PREP_LEAD_MS, evaluateQueueItem } from '@/lib/social/rules';
+import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, evaluateQueueItem } from '@/lib/social/rules';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { upsertScoped } from '@/lib/social/tenant';
 import { stampText } from '@/lib/social/time';
@@ -500,10 +500,16 @@ async function spacingGate(
   db: SupabaseClient,
   limits: LimitsSettings,
   browser: BrowserSettings,
-): Promise<{ open: boolean; waitMs: number; gapMs: number; gapMinutes: number; nextAt: string | null }> {
-  const gapMinutes = Math.max(0, (limits.minGapMinutes ?? 0) + (browser.groupMinGapMinutes ?? 0));
-  const gapMs = gapMinutes * 60_000;
-  if (!gapMs) return { open: true, waitMs: 0, gapMs: 0, gapMinutes, nextAt: null };
+): Promise<{ open: boolean; waitMs: number; gapMs: number; gapSeconds: number; nextAt: string | null }> {
+  /*
+   * THE SAME FUNCTION rules.ts USES, and that is the point of importing it
+   * rather than repeating the arithmetic. These two gates have drifted
+   * before; now the floor is computed once, understands the optional
+   * `*Seconds` fields, and this gate and the per-row one can only ever agree.
+   */
+  const gapSeconds = accountGapSeconds(limits, browser, true);
+  const gapMs = gapSeconds * 1000;
+  if (!gapMs) return { open: true, waitMs: 0, gapMs: 0, gapSeconds, nextAt: null };
   /*
    * DELIBERATELY NOT SCOPED BY ACCOUNT, and that is a reversal.
    *
@@ -541,12 +547,12 @@ async function spacingGate(
    * wide and every due row went out back to back with no gap at all. That is
    * how an account gets flagged, arrived at through a network blip.
    */
-  if (lastError) return { open: false, waitMs: gapMs, gapMs, gapMinutes, nextAt: null };
+  if (lastError) return { open: false, waitMs: gapMs, gapMs, gapSeconds, nextAt: null };
   const at = (last as { published_at?: string } | null)?.published_at;
-  if (!at) return { open: true, waitMs: 0, gapMs, gapMinutes, nextAt: null };
+  if (!at) return { open: true, waitMs: 0, gapMs, gapSeconds, nextAt: null };
   const nextMs = new Date(at).getTime() + gapMs;
   const waitMs = nextMs - Date.now();
-  return { open: waitMs <= 0, waitMs, gapMs, gapMinutes, nextAt: new Date(nextMs).toISOString() };
+  return { open: waitMs <= 0, waitMs, gapMs, gapSeconds, nextAt: new Date(nextMs).toISOString() };
 }
 
 /**
@@ -739,7 +745,7 @@ async function tick(state: WorkerState): Promise<void> {
   if (holdingForGap && Date.now() - state.spacingNoticeAt > gate.gapMs / 2) {
     /* Once per gap, not once per row per tick. */
     state.spacingNoticeAt = Date.now();
-    await logActivity('info', 'deferred', `ממתין למרווח של ${gate.gapMinutes} דק׳ בין פרסומים`, { until: gate.nextAt });
+    await logActivity('info', 'deferred', `ממתין למרווח של ${accountGapLabel(gate.gapSeconds)} בין פרסומים`, { until: gate.nextAt });
   }
 
   if (!due?.length || holdingForGap) {
@@ -1867,6 +1873,26 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
          gate above decides WHETHER to claim, rules.ts decides when the click
          may land, and only one of them may own that number. */
       notBefore: decision.notBefore ?? null,
+      /*
+       * HOW LONG THIS PUBLICATION MAY OCCUPY THE BROWSER.
+       *
+       * "ותעשה ככה שכל פרסום לא יקח יותר מ 30 שניות." It is the gap, because
+       * the gap is the only honest answer to "how long may this take": there
+       * is ONE browser, the rows run one after another, and row N+1's click
+       * cannot land at T + gap if row N is still hunting its post at T + 90.
+       * Choose thirty seconds and a publication gets thirty seconds; leave the
+       * default 65 minutes and nothing is cut, because nothing is waiting.
+       *
+       * THE ACCOUNT GAP, NOT THE CAMPAIGN'S, and that is the conservative one
+       * on purpose: matchAccountGapTo keeps the account floor at or below the
+       * campaign's gap, so this is the smaller of the two and a budget built
+       * from it can never be longer than the real interval.
+       *
+       * Zero means no spacing rule at all, which is no second publication to
+       * be late for — so it is passed as undefined, which the composer reads
+       * as unbounded rather than as "no time".
+       */
+      budgetMs: accountGapSeconds(jobEnv.limits, jobEnv.browser, true) * 1000 || undefined,
       /* The hold can be most of a minute; the dashboard calls a worker
          offline after ninety seconds of silence. Keep saying we are here. */
       onHold: async () => {
@@ -2068,9 +2094,22 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     return;
   }
 
+  /*
+   * "לא הצלחתי לאמת" MEANT TWO DIFFERENT THINGS AND SAID ONE SENTENCE.
+   *
+   * Looked everywhere and did not find it → go and check the group, something
+   * may be wrong. Ran out of time to look → nothing is wrong; the post is on
+   * Facebook and only our proof of it is missing. Sending him to check a group
+   * where nothing is wrong, several times an hour, is how a true sentence
+   * becomes noise — and he has already asked about this line once.
+   */
   const note = [
     result.pendingApproval ? 'הפוסט ממתין לאישור מנהל הקבוצה.' : '',
-    result.verified ? '' : 'לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.',
+    result.verified
+      ? ''
+      : result.verifyCutShort
+        ? 'הפוסט פורסם. לא בדקתי אותו בפיד כדי לא לעכב את הפרסום הבא.'
+        : 'לא הצלחתי לאמת את הפוסט בפיד — בדקו בקבוצה.',
   ]
     .filter(Boolean)
     .join(' ');
@@ -2113,7 +2152,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   const targetPatch: Record<string, unknown> = { last_published_at: new Date().toISOString(), last_status: result.pendingApproval ? 'pending_approval' : 'published', last_error: '' };
   if (result.groupTitle && (tt.name === tt.external_id || !tt.name)) targetPatch.name = result.groupTitle;
   await db.from('social_targets').update(targetPatch).eq('id', tt.id).then(() => undefined, () => undefined);
-  await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified, lookedIn: result.lookedIn ?? [] });
+  await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified, verifyCutShort: Boolean(result.verifyCutShort), lookedIn: result.lookedIn ?? [] });
   console.log(`[worker] ✔ פורסם ל-"${tt.name}"${note ? ` (${note})` : ''}`);
 }
 

@@ -8,6 +8,7 @@ import { readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule }
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
+import { accountGapLabel, accountGapSeconds, splitAccountGap } from './rules';
 import { checkCampaignInvariants, checkQueueInvariants, takeUnreported, type InvariantViolation } from './invariants';
 import {
   ALL_QUEUE_STATUSES,
@@ -2465,6 +2466,64 @@ export interface GapSplit {
  * one per campaign. There is no scoped version of this and pretending otherwise
  * would be worse than saying so.
  */
+/**
+ * THE ACCOUNT-WIDE FLOOR FOLLOWS THE CAMPAIGN, when the campaign asks for less.
+ *
+ * "תשנה גם את המרווח המינימלי הגלובלי ברגע שמשנים את הזמנים בקמפיין."
+ *
+ * Two gates pace this product and the LATER instant wins, so a campaign set
+ * to thirty seconds under an account floor of 45 + 20 minutes publishes every
+ * sixty-five minutes and nothing on any screen says why. The owner changed
+ * one number and the product quietly ignored it.
+ *
+ * SO IT LOWERS, AND ONLY LOWERS. Raising the floor from here would let one
+ * campaign slow every other campaign in the account — a side effect nobody
+ * asked for, arrived at by editing something else. If the floor is already at
+ * or below what the campaign wants, this does nothing and says so.
+ *
+ * WHAT IT COSTS, because this is not free: the floor is ACCOUNT-WIDE. Lowering
+ * it for one campaign lowers it for all of them. That is what was asked for,
+ * it is the only way the campaign's own gap can be honoured, and the caller
+ * tells the owner in words — see CampaignSchedulePanel.
+ *
+ * The split follows applyGapSettings: the group surcharge is kept where it
+ * fits and absorbed into the whole number where it does not, so the two
+ * halves still add up to exactly what was asked for.
+ */
+export async function matchAccountGapTo(
+  gapSeconds: number,
+): Promise<{ changed: boolean; wasSeconds: number; nowSeconds: number }> {
+  const want = Math.max(0, Math.round(gapSeconds));
+  const [limits, browser] = await Promise.all([getLimits(), getBrowserSettings()]);
+  const wasSeconds = accountGapSeconds(limits, browser, true);
+  if (wasSeconds <= want) return { changed: false, wasSeconds, nowSeconds: wasSeconds };
+
+  /* Through splitAccountGap, which is the one place that arithmetic lives —
+     see the long note on it. The surcharge keeps its share while it fits
+     inside the new total and is absorbed by it when it does not, and the two
+     halves always add up to exactly what was asked for. */
+  const { baseSeconds: base, surchargeSeconds: surcharge } = splitAccountGap(
+    want,
+    Number.isFinite(browser.groupMinGapSeconds) ? (browser.groupMinGapSeconds as number) : Math.max(0, browser.groupMinGapMinutes) * 60,
+  );
+
+  /* Written WHOLE: saveSetting replaces the entire jsonb, so a partial object
+     would wipe maxPerDay and the rest. And the minutes are written beside the
+     seconds, rounded UP, so a worker that has not been updated is SLOWER than
+     asked rather than faster. */
+  await saveSetting('limits', { ...limits, minGapSeconds: base, minGapMinutes: Math.ceil(base / 60) });
+  await saveSetting('browser', {
+    ...browser,
+    groupMinGapSeconds: surcharge,
+    groupMinGapMinutes: Math.ceil(surcharge / 60),
+  });
+  await logClientActivity('info', 'limits_changed', `המרווח הכללי בין פרסומים ירד מ-${accountGapLabel(wasSeconds)} ל-${accountGapLabel(want)} כדי שההפרש שנבחר בקמפיין יוכל לצאת לפועל`, {
+    wasSeconds,
+    nowSeconds: want,
+  });
+  return { changed: true, wasSeconds, nowSeconds: want };
+}
+
 export async function applyGapSettings(gapMinutes: number): Promise<GapSplit> {
   if (!Number.isInteger(gapMinutes) || gapMinutes < MIN_GAP_MINUTES || gapMinutes > MAX_GAP_MINUTES) {
     throw new Error(`המרווח צריך להיות מספר שלם של דקות, בין ${MIN_GAP_MINUTES} ל-${MAX_GAP_MINUTES}.`);
@@ -2476,12 +2535,37 @@ export async function applyGapSettings(gapMinutes: number): Promise<GapSplit> {
   const newSurcharge = gapMinutes >= surcharge ? surcharge : gapMinutes;
   const surchargeChanged = newSurcharge !== browser.groupMinGapMinutes;
 
+  /*
+   * ─── AND THE SECONDS ARE REWRITTEN, NOT LEFT BEHIND ─────────────────────
+   *
+   * THIS IS A SILENT NO-OP WAITING TO HAPPEN, and it is the dangerous shape:
+   * accountGapSeconds() prefers the `*Seconds` fields over the minutes when
+   * they are present, so once matchAccountGapTo has written a thirty-second
+   * floor, a write of the MINUTES ALONE changes nothing the engine reads. The
+   * tuner would move its slider, say "המרווח עודכן", move every row in the
+   * queue — and the gate would still be thirty seconds. Nothing on any screen
+   * would disagree with anything else; it would simply not be true.
+   *
+   * So whichever control writes this pair writes BOTH units of it. Derived
+   * from the minutes the owner chose here, because minutes are what this
+   * control offers — the seconds are the same number said precisely, never a
+   * second opinion about it.
+   */
+  const seconds = splitAccountGap(gapMinutes * 60, newSurcharge * 60);
+
   // Settings first, always. The worker re-reads 'limits' and 'browser' on every
   // tick (worker/social-worker.ts), so from this moment the new spacing is the
   // one being enforced — and a row created (or moved) a second later is measured
   // against the number the owner just chose, not the old one.
-  await saveSetting('limits', { ...limits, minGapMinutes: globalGap });
-  if (surchargeChanged) await saveSetting('browser', { ...browser, groupMinGapMinutes: newSurcharge });
+  await saveSetting('limits', { ...limits, minGapMinutes: globalGap, minGapSeconds: seconds.baseSeconds });
+  /*
+   * WRITTEN WHETHER OR NOT THE MINUTES CHANGED, unlike the line above it.
+   * `surchargeChanged` compares MINUTES, so a surcharge going from 30 seconds
+   * back up to a whole minute reads as "1 → 1, unchanged" and the stale 30
+   * would survive to out-vote it. The guard stays for the activity the caller
+   * reports; the write no longer depends on it.
+   */
+  await saveSetting('browser', { ...browser, groupMinGapMinutes: newSurcharge, groupMinGapSeconds: seconds.surchargeSeconds });
 
   return { gapMinutes, minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, surchargeChanged };
 }

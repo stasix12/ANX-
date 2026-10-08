@@ -6,6 +6,7 @@ import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/i
 import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
+import { accountGapSeconds } from '@/lib/social/rules';
 import { countdownTo } from '@/lib/social/countdown';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
@@ -551,6 +552,9 @@ export function LiveCampaignHero({
             onRepeatChange={onRepeatChange}
             campaignName={campaign.name}
             disabled={scheduleBusy}
+            /* The second gate, so the panel can say which of the two is
+               actually deciding — see the note on the prop. */
+            accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
             /* The title and the switch are already in the readout block above
                this one. Two live switches for one setting on one card is a
                screen the owner cannot read. */

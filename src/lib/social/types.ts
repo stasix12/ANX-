@@ -530,6 +530,9 @@ export interface BrowserSettings {
   maxPerCampaignPerDay: number;
   /** Extra spacing between two group posts, on top of the global gap. */
   groupMinGapMinutes: number;
+  /** The same surcharge in seconds, canonical when present — see
+      LimitsSettings.minGapSeconds for why it exists and why it is optional. */
+  groupMinGapSeconds?: number;
 }
 
 export const DEFAULT_BROWSER: BrowserSettings = {
@@ -554,6 +557,21 @@ export interface LimitsSettings {
   maxPerDay: number;
   maxPerTargetPerDay: number;
   minGapMinutes: number;
+  /**
+   * THE SAME FLOOR IN SECONDS, and the canonical one when it is there.
+   *
+   * minGapMinutes is whole minutes, so a campaign asking for thirty seconds
+   * was inert however it was set: the account-wide gate rounds everything up
+   * to the next minute and the later of the two instants wins. This is the
+   * field that lets the account floor follow a sub-minute campaign —
+   * "תשנה גם את המרווח המינימלי הגלובלי ברגע שמשנים את הזמנים בקמפיין".
+   *
+   * OPTIONAL AND ABSENT BY DEFAULT: social_settings is jsonb with no schema,
+   * so an account that has never touched this simply has no key and keeps
+   * being governed by the minutes beside it. Nothing changes until something
+   * writes it.
+   */
+  minGapSeconds?: number;
   dedupeDays: number;
   /**
    * Whether one post may reach the same group only once, ever.

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { ScheduleInput } from '@/lib/social/client';
 import { dripSlots, slotsFor, staggeredSlots } from '@/lib/social/slots';
+import { accountGapLabel } from '@/lib/social/rules';
 import { counted, formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { Stamp } from './DateTime';
 import { TIMEZONE, WEEKDAYS_HE, type ScheduleMode, type WeeklyPlan } from '@/lib/social/types';
@@ -77,7 +78,14 @@ export function targetsLabel(n: number): string {
   return counted(n, 'יעד אחד', 'יעדים', 'שני יעדים');
 }
 
-export function planFor(draft: ScheduleDraft, targetCount: number, now = new Date(), spacingMinutes = 0): SchedulePlan {
+/*
+ * `spacingSeconds`, NOT minutes. The planner's own gate is seconds now (see
+ * enforcedSpacing in plan.ts), and a preview that kept rounding to the minute
+ * would tell him "אחד כל דקה" about rows the planner writes thirty seconds
+ * apart — the preview being wrong about the launch is the exact fault the
+ * note below says must not happen.
+ */
+export function planFor(draft: ScheduleDraft, targetCount: number, now = new Date(), spacingSeconds = 0): SchedulePlan {
   const count = Math.max(0, targetCount);
   const empty: SchedulePlan = { slots: [], simultaneous: true, summary: '', firstAt: null, lastAt: null, days: 0 };
   if (!count) return { ...empty, summary: 'עדיין לא נבחרו יעדים.' };
@@ -107,7 +115,7 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
   /*
    * `now` and `once` are staggered here too, and that is not cosmetic.
    *
-   * plan.ts applies staggerAt(rawSlot, targetIndex, spacingMinutes) to EVERY
+   * plan.ts applies staggerAt(rawSlot, targetIndex, spacingSeconds) to EVERY
    * non-drip mode. The weekly/interval branch below already did the same
    * arithmetic; these two returned a single instant with simultaneous: true,
    * so the preview said "28 יעדים — נכנסים לתור מיד" with an estimated finish
@@ -121,21 +129,21 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
    * comment at PostEditor.tsx says must not happen.
    */
   if (draft.mode === 'now') {
-    const slots = staggeredSlots([now], count, spacingMinutes);
+    const slots = staggeredSlots([now], count, spacingSeconds);
     return finish(
       slots,
-      !spacingMinutes,
-      spacingMinutes ? `${targetsLabel(count)} — הראשון מיד, אחר כך אחד כל ${spacingMinutes} דק׳` : `${targetsLabel(count)} — נכנסים לתור מיד`,
+      !spacingSeconds,
+      spacingSeconds ? `${targetsLabel(count)} — הראשון מיד, אחר כך אחד כל ${accountGapLabel(spacingSeconds)}` : `${targetsLabel(count)} — נכנסים לתור מיד`,
     );
   }
 
   if (draft.mode === 'once') {
     if (!draft.date || !draft.time) return { ...empty, summary: 'בחרו תאריך ושעה.' };
-    const slots = staggeredSlots([zonedToUtc(draft.date, draft.time)], count, spacingMinutes);
+    const slots = staggeredSlots([zonedToUtc(draft.date, draft.time)], count, spacingSeconds);
     return finish(
       slots,
-      !spacingMinutes,
-      spacingMinutes ? `${targetsLabel(count)} — הראשון ב-${draft.time}, אחר כך אחד כל ${spacingMinutes} דק׳` : `${targetsLabel(count)}, כולם ב-${draft.time}`,
+      !spacingSeconds,
+      spacingSeconds ? `${targetsLabel(count)} — הראשון ב-${draft.time}, אחר כך אחד כל ${accountGapLabel(spacingSeconds)}` : `${targetsLabel(count)}, כולם ב-${draft.time}`,
     );
   }
 
@@ -162,11 +170,11 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
    * the same arithmetic or it would show 28 publications at 09:00 that the
    * planner will actually write across the next day and a half.
    */
-  const spread = staggeredSlots(slots, count, spacingMinutes);
-  const summary = spacingMinutes
-    ? `${targetsLabel(count)} בכל מועד, אחד כל ${spacingMinutes} דק׳ · ${slots.length} מועדים בשבועיים הקרובים`
+  const spread = staggeredSlots(slots, count, spacingSeconds);
+  const summary = spacingSeconds
+    ? `${targetsLabel(count)} בכל מועד, אחד כל ${accountGapLabel(spacingSeconds)} · ${slots.length} מועדים בשבועיים הקרובים`
     : `${targetsLabel(count)} בכל מועד · ${slots.length} מועדים בשבועיים הקרובים`;
-  return finish(spread, !spacingMinutes, summary);
+  return finish(spread, !spacingSeconds, summary);
 }
 
 function finish(slots: Date[], simultaneous: boolean, summary: string): SchedulePlan {
@@ -246,14 +254,14 @@ export function SchedulePicker({
   onChange,
   targetCount = 0,
   targetNames = [],
-  spacingMinutes = 0,
+  spacingSeconds = 0,
 }: {
   value: ScheduleDraft;
   onChange: (v: ScheduleDraft) => void;
   targetCount?: number;
   targetNames?: string[];
   /** limits.minGapMinutes + browser.groupMinGapMinutes — what the planner will space by. */
-  spacingMinutes?: number;
+  spacingSeconds?: number;
 }) {
   const set = (patch: Partial<ScheduleDraft>) => onChange({ ...value, ...patch });
   const modesRef = useRef<HTMLDivElement>(null);
@@ -264,7 +272,7 @@ export function SchedulePicker({
     modesRef.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }, [value.mode]);
   // Recomputed on every keystroke so the plan and the controls never disagree.
-  const plan = useMemo(() => planFor(value, targetCount, new Date(), spacingMinutes), [value, targetCount, spacingMinutes]);
+  const plan = useMemo(() => planFor(value, targetCount, new Date(), spacingSeconds), [value, targetCount, spacingSeconds]);
 
   function toggleDay(day: number) {
     const key = String(day);

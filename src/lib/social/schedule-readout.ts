@@ -7,6 +7,7 @@ import {
   type CampaignSchedule,
 } from './campaign-schedule';
 import type { CampaignState } from './campaign';
+import { accountGapSeconds } from './rules';
 
 /**
  * WHAT A SCREEN MAY SAY ABOUT WHEN THIS CAMPAIGN PUBLISHES NEXT — one answer,
@@ -125,6 +126,22 @@ export interface AccountSpacing {
   minGapMinutes: number;
   /** browser.groupMinGapMinutes — added on top of it for a facebook_group. */
   groupMinGapMinutes: number;
+  /**
+   * The same two numbers in SECONDS, when the account has them.
+   *
+   * The minutes above cannot say "thirty seconds" — the smallest thing they
+   * can express is a minute, so a card drawn from them over an account whose
+   * floor is genuinely 30s would print a minute and be wrong in the one
+   * direction that matters: it would promise LATER than the engine will
+   * publish, and the owner would watch a post go out before its own
+   * countdown reached zero.
+   *
+   * Optional, and absent means exactly what it meant before they existed.
+   * accountGapSeconds() in rules.ts decides which half wins, and this card
+   * calls that function rather than repeating the rule.
+   */
+  minGapSeconds?: number;
+  groupMinGapSeconds?: number;
   /** The account's most recent publication. NOT this campaign's. */
   lastPublishedAt: string | null;
 }
@@ -148,11 +165,10 @@ function accountFloorMs(spacing: AccountSpacing, channel: string | null): number
      facebook_group target and nowhere else. An unknown channel gets the plain
      floor rather than the larger one — guessing upwards would hold a page's
      publication behind a rule that does not govern it. */
-  const extra = channel === 'facebook_group' ? Math.max(0, spacing.groupMinGapMinutes) : 0;
-  const minutes = Math.max(0, spacing.minGapMinutes) + extra;
-  if (!minutes) return 0;
+  const seconds = accountGapSeconds(spacing, spacing, channel === 'facebook_group');
+  if (!seconds) return 0;
   const last = new Date(spacing.lastPublishedAt).getTime();
-  return Number.isNaN(last) ? 0 : last + minutes * 60_000;
+  return Number.isNaN(last) ? 0 : last + seconds * 1000;
 }
 
 export function scheduleReadout(

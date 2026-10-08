@@ -53,6 +53,37 @@ export interface ComposeInput {
    */
   authorId?: string;
   /**
+   * HOW LONG THE WHOLE PUBLICATION MAY OCCUPY THE BROWSER — the owner's own
+   * number: "ותעשה ככה שכל פרסום לא יקח יותר מ 30 שניות".
+   *
+   * WHAT IT CAN AND CANNOT BOUND, said plainly, because the difference is the
+   * whole point. It bounds OUR time — the evidence-gathering after the post is
+   * already on Facebook, which is the part that runs long and the only part we
+   * decide the length of. It does NOT bound Facebook's own page load, the
+   * media upload, or how long the composer dialog takes to detach: those are a
+   * remote machine's, and a "budget" that cut them short would abandon a
+   * publication in flight, which is the one thing this file may never do.
+   *
+   * WHY IT EXISTS AT ALL. There are two publications involved in every gap.
+   * Row N's click lands at T; row N+1's must land at T + gap, and the worker
+   * is ONE browser running them one after another — so row N+1 cannot be
+   * prepared until row N has let go. With a thirty-second gap, a verification
+   * tail that spends ninety seconds hunting the post across three pages makes
+   * the next click land at T + 100s however small the gap says it is. The
+   * owner then sees "נדחה" on a queue he set to thirty seconds and he is
+   * right. So the hunt gets what is left of the gap after the preparation, and
+   * stops when that is spent.
+   *
+   * The budget subtracts the work already done before the click — measured,
+   * not assumed — and NEVER the hold, because the hold IS the gap being served
+   * and charging it twice would leave no budget at all.
+   *
+   * Absent means unbounded, which is exactly the behaviour this file had
+   * before the budget existed: an account with no spacing rule has no second
+   * publication to be late for.
+   */
+  budgetMs?: number;
+  /**
    * Text to leave as the FIRST COMMENT on the post that was just published.
    *
    * Empty or absent means none. It exists because contact details in the body
@@ -83,6 +114,20 @@ export interface ComposeResult {
    * before it came to this — which is the ordinary case.
    */
   lookedIn?: string[];
+  /**
+   * The hunt for the post was STOPPED BY THE BUDGET, not finished.
+   *
+   * `verified: false` has two causes now and they mean different things to the
+   * owner: "we looked everywhere and could not find it" is a reason to go and
+   * check the group, and "we ran out of time to look" is not — the post is on
+   * Facebook either way, and the only thing missing is our proof of it. A
+   * screen that printed one sentence for both would be sending him to look at
+   * a group where nothing is wrong, several times an hour.
+   *
+   * False whenever the budget was absent or still had time in it, so a result
+   * that says nothing about this is a result where the full hunt really ran.
+   */
+  verifyCutShort?: boolean;
   /** Group moderates posts — it exists but waits for an admin. */
   pendingApproval: boolean;
   groupTitle: string;
@@ -125,6 +170,46 @@ const PREP_HOLD_CAP_MS = 3 * 60_000;
 const IMAGE_UPLOAD_TIMEOUT = 3 * 60_000;
 const VIDEO_UPLOAD_TIMEOUT = 15 * 60_000;
 
+/**
+ * THE FLOOR THE BUDGET MAY NEVER CUT INTO — the checks that are about
+ * CORRECTNESS rather than about evidence.
+ *
+ * Two things happen in the first seconds after the click and neither is
+ * optional at any gap: Facebook can render a refusal a beat late, and the
+ * group can say the post is waiting for an admin. Getting the first one wrong
+ * records a rejected post as published, which is the one outcome that must
+ * always reach a person. So the budget is allowed to end the HUNT and never
+ * these: every wait below takes `floorSlice`, which keeps this much however
+ * little is left.
+ */
+const VERIFY_FLOOR_MS = 1_200;
+
+/**
+ * The least that is worth STARTING a fresh page load for.
+ *
+ * `page.goto` + a beat + a scrolling look cannot answer anything in two
+ * seconds, and starting one with two seconds left spends the browser's time to
+ * arrive at the same "not found" it already had — while making the next
+ * publication late, which is the whole thing the budget exists to stop. Below
+ * this the hunt stops and says so (`verifyCutShort`).
+ */
+const LOOKUP_MIN_MS = 6_000;
+
+/**
+ * A margin kept for the NEXT publication's own final round trip.
+ *
+ * This publication's click is already measured — `Date.now() - startedAt`
+ * spans it, because the dialog had to detach before the post counted as real.
+ * What is NOT measured is that the row after this one has to click too, and
+ * the time between `postButton.click()` and Facebook accepting it belongs to a
+ * remote machine: nothing here can shorten it, and the gap has to contain it.
+ *
+ * So the hunt gives three seconds back rather than spending the gap to its
+ * last millisecond and making the next click land late by exactly the amount
+ * nobody controls.
+ */
+const CLICK_RESERVE_MS = 3_000;
+
 export async function publishToGroup(page: Page, input: ComposeInput): Promise<ComposeResult> {
   // 1. Open the group ------------------------------------------------------
   /*
@@ -138,6 +223,10 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * can still drive this choreography against its local mock-group.html fixture,
    * which is the whole reason the composer takes a URL instead of a target.
    */
+  /* THE CLOCK THE BUDGET IS MEASURED AGAINST — started before the first page
+     load, because "how long did this publication take" means all of it. */
+  const startedAt = Date.now();
+  let heldMs = 0;
   await input.onStep('opening');
   await page.goto(input.groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   /*
@@ -237,10 +326,17 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
      * control back so the caller can say it is still alive.
      */
     const until = Math.min(new Date(input.notBefore).getTime(), Date.now() + PREP_HOLD_CAP_MS);
+    /* NOT CHARGED TO THE BUDGET. This wait IS the gap being served — the post
+       is already written and the picture is already in, and the only thing
+       left is the click. Counting it as work would mean a publication that
+       held for twenty-five of its thirty seconds had no budget left to verify
+       with, which is the opposite of what the hold achieved. */
+    const holdFrom = Date.now();
     while (Date.now() < until) {
       await page.waitForTimeout(Math.min(15_000, until - Date.now()));
       await input.onHold?.();
     }
+    heldMs = Date.now() - holdFrom;
   }
   await input.onStep('publishing');
   assertUsable(await classifyPage(page));
@@ -278,7 +374,40 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * saw that as "נדחה" on a queue set to one a minute, and they were right.
    */
   const publishedAt = new Date().toISOString();
-  const pendingApproval = await fb.pendingText(page).isVisible({ timeout: 1500 }).catch(() => false);
+
+  /*
+   * ─── AND FROM HERE ON, A DEADLINE ───────────────────────────────────────
+   *
+   * Everything below is evidence-gathering about a post that is already up, so
+   * it is the one part of a publication whose length is ours to choose — and
+   * the one part that has been making the NEXT publication late. See the long
+   * note on `input.budgetMs`.
+   *
+   * `workMs` is what this publication has spent DOING things: the page load,
+   * the typing, the upload, the click's round trip. The hold is excluded
+   * because it is the gap itself. What is left of the budget after that is
+   * what the hunt gets.
+   */
+  const workMs = Date.now() - startedAt - heldMs + CLICK_RESERVE_MS;
+  /* `Date.now() - startedAt` already spans this publication's own click — the
+     dialog had to detach before the post counted as real — so the reserve
+     above is for the NEXT one's, which is not ours to shorten. */
+  const budget = Number.isFinite(input.budgetMs) && (input.budgetMs as number) > 0 ? (input.budgetMs as number) : Infinity;
+  const deadline = budget === Infinity ? Infinity : Date.now() + Math.max(0, budget - workMs);
+  /** Milliseconds left to look for the post. Infinity when no budget was given. */
+  const left = (): number => (deadline === Infinity ? Infinity : Math.max(0, deadline - Date.now()));
+  /**
+   * A wait, shortened by the budget but never below the floor.
+   *
+   * Used for every check that is about CORRECTNESS — a late refusal, a
+   * pending-approval notice — so an exhausted budget makes them quick rather
+   * than skipping them. See VERIFY_FLOOR_MS.
+   */
+  const floorSlice = (want: number): number => (deadline === Infinity ? want : Math.min(want, Math.max(VERIFY_FLOOR_MS, left())));
+  /** True once the hunt stopped because the budget ran out rather than because it was finished. */
+  let verifyCutShort = false;
+
+  const pendingApproval = await fb.pendingText(page).isVisible({ timeout: floorSlice(1500) }).catch(() => false);
 
   /*
    * ONE SEARCH, NOT TWO.
@@ -289,7 +418,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * reload. The article that carries our words IS the proof it published AND
    * the thing the address hangs on, so it is found once.
    */
-  let article = await findPostArticle(page, input.text, 1, 6_000);
+  let article = await findPostArticle(page, input.text, 1, floorSlice(6_000));
 
   /*
    * THE LATE REJECTION — looked for HERE, and only here.
@@ -311,14 +440,24 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * have survived the reload anyway, so the later position bought nothing to
    * pay for that risk with.
    */
-  if (!article && (await fb.failureText(page).isVisible({ timeout: 1000 }).catch(() => false))) {
+  if (!article && (await fb.failureText(page).isVisible({ timeout: floorSlice(1000) }).catch(() => false))) {
     throw new PublishError('rejected', `Facebook הודיע על כישלון: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);
   }
 
-  if (!article) {
+  /*
+   * THE BUDGET STOPS THE HUNT HERE FIRST, and this is the right place for the
+   * first check: everything above answered "is it already on the page we
+   * submitted from", which costs seconds; everything below RELOADS pages,
+   * which costs tens of them. A reload started with four seconds left arrives
+   * at the same "not found" it already had and makes the next publication
+   * late for it — see LOOKUP_MIN_MS.
+   */
+  if (!article && left() < LOOKUP_MIN_MS) verifyCutShort = true;
+
+  if (!article && !verifyCutShort) {
     try {
-      await page.goto(input.groupUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-      await page.waitForTimeout(1200);
+      await page.goto(input.groupUrl, { waitUntil: 'domcontentloaded', timeout: Math.min(60_000, left()) });
+      await page.waitForTimeout(Math.min(1200, left()));
       /*
        * THREE PASSES, NOT ONE, because a group feed does not open on our post.
        *
@@ -328,7 +467,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
        * DOM yet on a page that has not been scrolled. One glance said "not
        * there" and the owner got "לא הצלחתי לאמת" under a post he could see.
        */
-      article = await findPostArticle(page, input.text, 3, 8_000);
+      article = await findPostArticle(page, input.text, 3, floorSlice(8_000), left);
     } catch {
       /* Best effort throughout: an unverified post is reported as unverified,
          never as a failure — it is on Facebook either way. */
@@ -375,15 +514,23 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
     const group = parseGroupUrl(input.groupUrl);
     if (group) {
       for (const where of lookupPages(group.url, input.text, input.authorId ?? '').filter((u) => u !== group.url)) {
+        /* Checked per page rather than once for the loop: these are the two
+           most expensive things a publication can do, and the budget is
+           usually enough for one of them and not both. Stopping between them
+           keeps the first answer and the pace. */
+        if (left() < LOOKUP_MIN_MS) {
+          verifyCutShort = true;
+          break;
+        }
         tried.push(where);
         try {
-          await page.goto(where, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-          await page.waitForTimeout(2000);
+          await page.goto(where, { waitUntil: 'domcontentloaded', timeout: Math.min(60_000, left()) });
+          await page.waitForTimeout(Math.min(2000, left()));
           /* A checkpoint or a login wall here is not an answer about the post;
              it is a different problem, and one the next publication will meet
              properly. Never treated as "not there". */
           if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') continue;
-          article = await findPostArticle(page, input.text, 4, 8_000);
+          article = await findPostArticle(page, input.text, 4, floorSlice(8_000), left);
           if (article) break;
         } catch {
           /* Same rule as the feed look above. */
@@ -407,7 +554,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   const probe = pageProbe(input.text);
   const verified = Boolean(article) || (Boolean(probe) && (await page.getByText(probe, { exact: false }).first().isVisible().catch(() => false)));
   const permalink = article ? await permalinkOf(article) : '';
-  return { outcome: 'published', verified, pendingApproval, groupTitle, permalink, publishedAt, lookedIn: tried };
+  return { outcome: 'published', verified, pendingApproval, groupTitle, permalink, publishedAt, lookedIn: tried, verifyCutShort: verifyCutShort && !verified };
 }
 
 /**
@@ -457,7 +604,23 @@ async function permalinkOf(article: Locator): Promise<string> {
  * lazily, so a post from a few hours ago may not be on screen yet — hence the
  * scrolling, which stops the moment the post appears.
  */
-export async function findPostArticle(page: Page, postText: string, passes = 20, firstWaitMs = 8_000): Promise<Locator | null> {
+export async function findPostArticle(
+  page: Page,
+  postText: string,
+  passes = 20,
+  firstWaitMs = 8_000,
+  /**
+   * Milliseconds still allowed for this search, asked fresh before every pass.
+   *
+   * A function rather than a number because each pass costs about a second and
+   * a half of scrolling and a `passes` of twenty is thirty seconds — so a
+   * deadline handed in as a number at the start would already be stale by the
+   * second pass. Absent means the caller is not on a clock, which is every
+   * caller but the publication tail: the comment writer and the metrics reader
+   * run between publications, not inside one.
+   */
+  left?: () => number,
+): Promise<Locator | null> {
   const probe = pageProbe(postText);
   if (!probe) return null;
   const article = page.locator('[role="article"]').filter({ hasText: probe }).first();
@@ -475,6 +638,10 @@ export async function findPostArticle(page: Page, postText: string, passes = 20,
      * scrolling that changes the answer.
      */
     if (pass === 0 ? await appears(article, firstWaitMs) : await article.isVisible().catch(() => false)) return article;
+    /* OUT OF TIME — checked after the look and before the scroll, so the pass
+       that has already been paid for still gets to answer and the one that has
+       not is never started. See the budget note in publishToGroup. */
+    if (left && left() <= 0) return null;
     /* One pass means one look. Scrolling and then sleeping 1200ms on the way
        out is a second and a half added to every publication whose post was
        not in the first screenful — in the caller that asked for one look
@@ -494,7 +661,10 @@ export async function findPostArticle(page: Page, postText: string, passes = 20,
     await page.mouse.wheel(0, 2500).catch(() => undefined);
     await page.evaluate(() => window.scrollBy(0, 2500)).catch(() => undefined);
     await page.keyboard.press('End').catch(() => undefined);
-    await page.waitForTimeout(1200);
+    /* The settle after a scroll, clamped the same way: a pass that has 300ms
+       left should spend 300ms, not overrun the deadline by nine tenths of a
+       second on every one of twenty passes. */
+    await page.waitForTimeout(left ? Math.max(0, Math.min(1200, left())) : 1200);
 
     /*
      * PROGRESS IS MEASURED IN POSTS, NOT IN PIXELS — and that correction is

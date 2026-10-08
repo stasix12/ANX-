@@ -57,6 +57,7 @@ import {
   type Variant,
   type VariantStrategy,
 } from '@/lib/social/types';
+import { accountGapSeconds } from '@/lib/social/rules';
 import { friendlyMessage } from '@/lib/social/errors';
 
 type VariantDraft = Partial<Variant> & { key: string; label: string; text: string; language: Language; approval: Variant['approval'] };
@@ -247,10 +248,13 @@ export function PostEditor({ postId }: { postId?: string }) {
    * for a schedule the planner spreads over a day and a half is the preview
    * lying at the last possible moment before the owner commits.
    */
-  const spacingMinutes = limits.minGapMinutes + browser.groupMinGapMinutes;
+  /* Through accountGapSeconds rather than added up here: this used to be the
+     THIRD hand-rolled copy of the same sum, and the three drifted the moment
+     seconds existed — the engine read 30 while this preview read 60. */
+  const spacingSeconds = accountGapSeconds(limits, browser, true);
   const plan = useMemo(
-    () => planFor(schedule, selectedObjects.length, new Date(), spacingMinutes),
-    [schedule, selectedObjects.length, spacingMinutes],
+    () => planFor(schedule, selectedObjects.length, new Date(), spacingSeconds),
+    [schedule, selectedObjects.length, spacingSeconds],
   );
   /**
    * How many of this launch's publications the daily cap will PUSH TO ANOTHER
@@ -761,7 +765,7 @@ export function PostEditor({ postId }: { postId?: string }) {
               onChange={setSchedule}
               targetCount={selectedObjects.length}
               targetNames={selectedObjects.map((t) => t.name)}
-              spacingMinutes={spacingMinutes}
+              spacingSeconds={spacingSeconds}
             />
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Button size="lg" busy={busy === 'schedule'} onClick={openReview}>

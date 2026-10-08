@@ -12,6 +12,7 @@ import {
   type CampaignRepeat,
   type CampaignSchedule,
 } from '@/lib/social/campaign-schedule';
+import { accountGapLabel } from '@/lib/social/rules';
 import { CalendarIcon, ChevronDownIcon, ClockIcon, RepeatIcon } from '@/components/icons';
 import { Toggle } from './ui';
 
@@ -56,6 +57,7 @@ export function CampaignSchedulePanel({
   disabled = false,
   repeat,
   onRepeatChange,
+  accountFloorSeconds,
   showHeader = true,
 }: {
   schedule: CampaignSchedule;
@@ -85,6 +87,23 @@ export function CampaignSchedulePanel({
    * them: the default is on, so no existing caller changes.
    */
   showHeader?: boolean;
+  /**
+   * The ACCOUNT-WIDE floor this campaign also has to clear, in seconds.
+   *
+   * The gap field above is only the first of two gates. The second is
+   * `minGap + groupMinGap` across the whole account — 65 minutes out of the
+   * box — and choosing "30 שניות" under it used to change NOTHING the owner
+   * could see: the field said thirty seconds, the card counted down from it,
+   * and the engine held the row for an hour. "ושבאמת יספיק לפרסם בתווך זמן
+   * זה" is about that hour, not about the field.
+   *
+   * So saving a smaller gap now LOWERS that floor to match (client.ts's
+   * matchAccountGapTo), and this panel is where the owner is told so — before
+   * the write, because it is the one consequence on this panel that reaches
+   * outside the campaign he is looking at. Optional: a caller that cannot
+   * read the account's settings says nothing rather than guessing.
+   */
+  accountFloorSeconds?: number;
 }) {
   const set = (patch: Partial<CampaignSchedule>) => onChange({ ...schedule, ...patch });
   const canRepeat = Boolean(repeat && onRepeatChange);
@@ -102,6 +121,12 @@ export function CampaignSchedulePanel({
     set({ days: schedule.days.includes(day) ? schedule.days.filter((d) => d !== day) : [...schedule.days, day].sort((a, b) => a - b) });
 
   const noDays = schedule.days.length === 0;
+
+  /* Shown only while the two genuinely disagree, which makes it self-clearing:
+     once the write lands the floor equals the gap and the line goes away on
+     its own rather than sitting there as a permanent warning about nothing. */
+  const willLowerFloor =
+    typeof accountFloorSeconds === 'number' && Number.isFinite(accountFloorSeconds) && accountFloorSeconds > schedule.gapSeconds;
 
   return (
     <div data-schedule className="mt-1.5 rounded-2xl bg-brand-300/10 p-2">
@@ -267,6 +292,18 @@ export function CampaignSchedulePanel({
           <span className="min-w-0 truncate">התזמון כבוי — הקמפיין מפרסם ללא הגבלת ימים ושעות</span>
         )}
       </p>
+
+      {/* ─── 4b. the floor this gap is about to move, if it is about to ─── */}
+      {schedule.enabled && willLowerFloor && (
+        /* mist-300 on the white strip rather than amber: this is not a risk,
+           it is a fact about scope. The amber on this panel is reserved for
+           חזרה יומית, which is the one control here that can cost him his
+           account. */
+        <p className="mt-1 rounded-xl bg-ink-900 px-2 py-1.5 text-[10.5px] font-bold leading-4 text-mist-300">
+          המרווח המינימלי של כל החשבון הוא כרגע {accountGapLabel(accountFloorSeconds as number)}, והוא זה שקובע. בשמירה הוא ירד ל-
+          {accountGapLabel(schedule.gapSeconds)} <span className="text-brand-400">לכל הסבבים</span>, לא רק לזה.
+        </p>
+      )}
 
       {/* ─── 5. חזרה יומית — the one control here that makes something happen ─ */}
       {canRepeat && repeat && onRepeatChange && (

@@ -80,6 +80,73 @@ const DEFER_CUSHION_MS = 5_000;
  * Exported because the worker uses the same number to decide when to claim,
  * and the two must not drift.
  */
+/**
+ * THE ACCOUNT-WIDE FLOOR, IN SECONDS, and the one place that decides it.
+ *
+ * Two gates pace this product and they compose: the campaign's own gap, and
+ * this account-wide one. It is the LATER of the two instants that wins, so
+ * this is the real ceiling — with the shipped defaults it is 45 + 20 = 65
+ * MINUTES, and a campaign asking for thirty seconds is inert underneath it.
+ *
+ * Both halves are whole minutes in storage. The optional `*Seconds` fields
+ * beside them are the canonical value when present, which is what lets the
+ * floor follow a sub-minute campaign. Absent, the minutes decide exactly as
+ * they always have — an account that has never touched this is unchanged.
+ *
+ * THE GROUP SURCHARGE IS ONLY FOR GROUPS. `withGroupExtra` is not a
+ * convenience flag: rules.ts applies it per target channel and the worker's
+ * own gate applies it to the whole account, and those are two different
+ * questions about the same two numbers. Writing it once, here, is what stops
+ * them drifting — they have drifted before.
+ */
+export function accountGapSeconds(
+  limits: Pick<LimitsSettings, 'minGapMinutes' | 'minGapSeconds'>,
+  browser: Pick<BrowserSettings, 'groupMinGapMinutes' | 'groupMinGapSeconds'> | null | undefined,
+  withGroupExtra: boolean,
+): number {
+  const base = Number.isFinite(limits.minGapSeconds) && (limits.minGapSeconds as number) >= 0
+    ? (limits.minGapSeconds as number)
+    : Math.max(0, limits.minGapMinutes ?? 0) * 60;
+  if (!withGroupExtra) return Math.max(0, Math.round(base));
+  const extra = Number.isFinite(browser?.groupMinGapSeconds) && (browser?.groupMinGapSeconds as number) >= 0
+    ? (browser?.groupMinGapSeconds as number)
+    : Math.max(0, browser?.groupMinGapMinutes ?? 0) * 60;
+  return Math.max(0, Math.round(base + extra));
+}
+
+/**
+ * THE ACCOUNT FLOOR SPLIT BACK INTO THE TWO COLUMNS THAT STORE IT.
+ *
+ * `minGap` and `groupMinGap` are two settings and one rule: the engine only
+ * ever compares against their SUM for a group. So lowering the floor to N
+ * means choosing a pair that adds up to exactly N — and getting that wrong is
+ * not a rounding error, it is a row deferred by the very setting that was
+ * supposed to release it.
+ *
+ * THE SURCHARGE KEEPS ITS SHARE WHERE IT FITS and is absorbed where it does
+ * not. An owner who deliberately asked for an extra twenty minutes between
+ * two GROUP posts should still have it when the floor comes down to an hour;
+ * at thirty seconds there is nothing left to give it, so the whole thirty
+ * becomes the surcharge and the base goes to zero. Either way the two add up.
+ *
+ * Pure, exported and tested on its own, because this is the second copy of
+ * this arithmetic in the product (applyGapSettings has the first) and the two
+ * disagreeing about what a gap of N means is a bug nobody would see.
+ */
+export function splitAccountGap(wantSeconds: number, currentSurchargeSeconds: number): { baseSeconds: number; surchargeSeconds: number } {
+  const want = Math.max(0, Math.round(wantSeconds));
+  const surchargeSeconds = Math.min(want, Math.max(0, Math.round(currentSurchargeSeconds)));
+  return { baseSeconds: want - surchargeSeconds, surchargeSeconds };
+}
+
+/** "65 דק׳" / "30 שניות" — the floor said in the unit it actually has, for
+    the one sentence the owner reads when a row is deferred for it. */
+export function accountGapLabel(seconds: number): string {
+  if (seconds < 60) return `${seconds} שניות`;
+  const m = seconds / 60;
+  return `${Number.isInteger(m) ? m : m.toFixed(1)} דק׳`;
+}
+
 export const PREP_LEAD_MS = 75_000;
 
 /**
@@ -423,8 +490,8 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
     .limit(1)
     .maybeSingle();
   if (last?.published_at) {
-    const extra = target.channel === 'facebook_group' ? (ctx.browser?.groupMinGapMinutes ?? 0) : 0;
-    const gapMs = Math.max(0, (limits.minGapMinutes ?? 0) + extra) * 60_000;
+    const gapSeconds = accountGapSeconds(limits, ctx.browser, target.channel === 'facebook_group');
+    const gapMs = gapSeconds * 1000;
     const sinceLast = now.getTime() - new Date(last.published_at).getTime();
     if (sinceLast < gapMs) {
       /*
@@ -455,7 +522,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
         holdFor(new Date(new Date(last.published_at).getTime() + gapMs));
       } else {
         const until = new Date(new Date(last.published_at).getTime() + gapMs + DEFER_CUSHION_MS).toISOString();
-        return { action: 'defer', until, reason: `נדחה כדי לשמור מרווח של ${limits.minGapMinutes + extra} דק׳ בין פרסומים` };
+        return { action: 'defer', until, reason: `נדחה כדי לשמור מרווח של ${accountGapLabel(gapSeconds)} בין פרסומים` };
       }
     }
   }

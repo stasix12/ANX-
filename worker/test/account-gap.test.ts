@@ -244,6 +244,76 @@ const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
   is(/minGapSeconds: gapFields\.minGapSeconds/.test(settings), 'the settings screen writes the seconds too');
   is(/groupMinGapSeconds: gapFields\.groupMinGapSeconds/.test(settings), 'both halves there as well');
 
+  /*
+   * ─── AND IT IS A ONE-WAY RATCHET IF IT DERIVES THEM BLINDLY ────────────
+   *
+   * THE BUG THE FIRST VERSION OF THE FIX ABOVE SHIPPED WITH, found by reading
+   * it again rather than by anything failing.
+   *
+   * The seconds are stored with the minutes beside them ROUNDED UP, on
+   * purpose: a worker that predates the seconds must read a SLOWER number,
+   * never a faster one. So a 30-second floor is stored as 30 seconds with
+   * `groupMinGapMinutes: 1`. This screen loads that box as "1" — and a save
+   * that recomputed 1 x 60 would write 60, DOUBLING the floor the owner had
+   * just chosen in the campaign panel. Open the settings screen, press שמור,
+   * touch nothing: thirty seconds becomes sixty, silently, through the one
+   * screen whose job is to tell the truth about these numbers.
+   *
+   * So a minutes value that still agrees with the stored seconds is NOT a
+   * decision — it is the box showing what it can of a number it cannot say.
+   */
+  is(/const keepOrDerive = /.test(settings), 'the settings screen decides per field whether the minutes are a decision or a rounding');
+  is(
+    /Math\.ceil\(stored \/ 60\) === minutes\) return stored;/.test(settings),
+    'MINUTES THAT STILL ROUND UP TO THE STORED SECONDS KEEP THE SECONDS — otherwise a no-op save doubles a sub-minute floor',
+  );
+  is(
+    /Number\.isFinite\(stored\) && stored >= 0/.test(settings),
+    'and a stored floor of ZERO survives — the owner who wants no gap at all is not a falsy value to be discarded',
+  );
+  is(
+    /keepOrDerive\(limits\.minGapMinutes, curLimits\.minGapSeconds\)/.test(settings),
+    'compared against the FRESHLY RE-READ row, not the form state — the form was loaded before the campaign panel may have lowered the floor',
+  );
+  /* And the screen says the real figure when the box cannot. */
+  is(/accountGapLabel\(accountGapSeconds\(limits, browser, true\)\)/.test(settings), 'and it prints the floor the engine actually enforces when that is not a whole number of minutes');
+
+  /*
+   * THE ARITHMETIC ITSELF, EXECUTED — the rule re-implemented here exactly as
+   * the screen states it, so a change to the screen's rule that this file does
+   * not follow shows up as these cases failing rather than as a silent ratchet.
+   */
+  const keepOrDerive = (typedMinutes: number, storedSeconds: unknown): number => {
+    const minutes = Math.max(0, Math.round(Number(typedMinutes) || 0));
+    const stored = Number(storedSeconds);
+    if (Number.isFinite(stored) && stored >= 0 && Math.ceil(stored / 60) === minutes) return stored;
+    return minutes * 60;
+  };
+  eq(keepOrDerive(1, 30), 30, 'a box reading 1 over a stored 30s keeps the 30s — the no-op save that used to double it');
+  eq(keepOrDerive(0, 0), 0, 'a zero floor stays zero');
+  eq(keepOrDerive(1, 60), 60, 'a box reading 1 over a stored 60s keeps the 60s — nothing changes for an ordinary account');
+  eq(keepOrDerive(2, 30), 120, 'but typing 2 over a stored 30s is a DECISION, and the minutes win');
+  eq(keepOrDerive(0, 30), 0, 'and so is typing 0 — the owner lowering it to nothing');
+  eq(keepOrDerive(45, undefined), 2700, 'with no stored seconds at all the minutes decide, exactly as before they existed');
+  eq(keepOrDerive(45, 'abc'), 2700, 'and garbage in the jsonb does not become the floor');
+  eq(keepOrDerive(45, -1), 2700, 'nor does a negative one');
+  /* The round trip that matters: lower to 30s in the panel, then press שמור
+     on the settings screen without touching anything, twice. */
+  {
+    const stored = splitAccountGap(30, 20 * 60);
+    let base = stored.baseSeconds;
+    let surcharge = stored.surchargeSeconds;
+    for (let save = 1; save <= 3; save += 1) {
+      base = keepOrDerive(Math.ceil(base / 60), base);
+      surcharge = keepOrDerive(Math.ceil(surcharge / 60), surcharge);
+      eq(
+        accountGapSeconds({ minGapMinutes: Math.ceil(base / 60), minGapSeconds: base }, { groupMinGapMinutes: Math.ceil(surcharge / 60), groupMinGapSeconds: surcharge }, true),
+        30,
+        `save #${save} on the settings screen leaves the floor at thirty seconds`,
+      );
+    }
+  }
+
   /* The third writer is matchAccountGapTo, already checked above — it is the
      one that writes seconds FIRST and therefore the one that arms this trap
      for the other two. */

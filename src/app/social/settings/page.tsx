@@ -9,6 +9,7 @@ import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputCl
 import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, saveSetting, setPaused } from '@/lib/social/client';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type BrowserSettings, type BusinessSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
+import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
 import { friendlyMessage } from '@/lib/social/errors';
 
 type Tab = 'limits' | 'browser' | 'business';
@@ -119,13 +120,37 @@ export default function SettingsPage() {
        * thirty seconds. A screen that is simply not true, with nothing on it
        * disagreeing with anything else.
        *
-       * Derived from the minutes the owner typed, because minutes are what
-       * these two boxes offer; the seconds are the same number said precisely,
-       * never a second opinion about it.
+       * ...AND NOT DERIVED BLINDLY, which is where the first version of this
+       * was WRONG in the opposite direction, silently, on the most ordinary
+       * action this screen has.
+       *
+       * The seconds are stored alongside the minutes ROUNDED UP, deliberately:
+       * a worker that predates them must read a SLOWER number, never a faster
+       * one. So a 30-second floor is stored as `groupMinGapSeconds: 30` with
+       * `groupMinGapMinutes: 1`. This box then loads "1" — and a save that
+       * recomputed 1 × 60 = 60 would DOUBLE the floor the owner had just
+       * chosen in the campaign panel, having been told nothing and having
+       * touched nothing. Open this screen, press שמור, and 30 שניות quietly
+       * becomes 60. A one-way ratchet upwards through the one screen whose
+       * whole job is to show the truth about these settings.
+       *
+       * So the rule is: if the minutes in the box are still what the stored
+       * seconds round up to, the owner did not touch this field — keep the
+       * seconds exactly as they are. Only a minutes value that NO LONGER
+       * agrees with them is a decision, and then the minutes win, because
+       * minutes are all this control can express.
        */
+      const keepOrDerive = (typedMinutes: number, storedSeconds: unknown): number => {
+        const minutes = Math.max(0, Math.round(Number(typedMinutes) || 0));
+        const stored = Number(storedSeconds);
+        /* `>= 0` and not truthiness: a stored floor of 0 is a real setting —
+           the owner who wants no gap at all — and `!0` would discard it. */
+        if (Number.isFinite(stored) && stored >= 0 && Math.ceil(stored / 60) === minutes) return stored;
+        return minutes * 60;
+      };
       const gapFields = {
-        minGapSeconds: Math.max(0, Math.round(limits.minGapMinutes)) * 60,
-        groupMinGapSeconds: Math.max(0, Math.round(browser.groupMinGapMinutes)) * 60,
+        minGapSeconds: keepOrDerive(limits.minGapMinutes, curLimits.minGapSeconds),
+        groupMinGapSeconds: keepOrDerive(browser.groupMinGapMinutes, curBrowser.groupMinGapSeconds),
       };
       await Promise.all([
         saveSetting('limits', { ...curLimits, ...limits, minGapSeconds: gapFields.minGapSeconds }),
@@ -258,6 +283,35 @@ export default function SettingsPage() {
                     <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.dedupeDays} onChange={num('dedupeDays')} />
                   </Field>
                 </div>
+
+                {/*
+                  ─── WHAT THE ENGINE ACTUALLY ENFORCES, WHEN IT IS NOT A
+                      WHOLE NUMBER OF MINUTES ─────────────────────────────
+
+                  The box above is minutes, and the floor is stored in seconds
+                  with the minutes beside it rounded UP. So a 30-second floor —
+                  which is what the campaign panel writes when the owner picks
+                  "30 שניות" — makes that box read "1", and 1 is not what the
+                  engine does. The box is not wrong to say 1: it cannot say 0.5
+                  and rounding DOWN would promise something faster than the
+                  account allows. It is just not the whole truth, and this is
+                  the one screen whose job is the whole truth about these
+                  numbers.
+
+                  Shown only when the two genuinely differ, so an account whose
+                  floor IS a whole number of minutes sees nothing new. And it
+                  names the two halves separately, because they are two boxes
+                  on two tabs and the engine only ever compares against the
+                  sum.
+                */}
+                {accountGapSeconds(limits, browser, true) !== (Math.max(0, Math.round(limits.minGapMinutes)) + Math.max(0, Math.round(browser.groupMinGapMinutes))) * 60 && (
+                  <Notice tone="info">
+                    המרווח שהמערכת באמת שומרת בין שני פרסומים לקבוצה הוא{' '}
+                    <strong>{accountGapLabel(accountGapSeconds(limits, browser, true))}</strong> — פחות ממה שהתיבות למעלה יכולות להציג, כי הן
+                    מציגות דקות שלמות. זה נקבע כשבחרתם הפרש בשניות בתזמון של קמפיין. שינוי של אחת התיבות למעלה ושמירה יחזירו את המרווח לדקות
+                    שלמות.
+                  </Notice>
+                )}
 
                 {/*
                   The one rule in the product that had no time window and no

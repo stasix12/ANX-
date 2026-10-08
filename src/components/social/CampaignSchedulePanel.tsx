@@ -4,6 +4,7 @@ import {
   DAY_LABELS,
   DAY_NAMES,
   GAP_CHOICES,
+  gapChoiceLabel,
   TIME_CHOICES,
   daysLabel,
   gapLabel,
@@ -196,10 +197,13 @@ export function CampaignSchedulePanel({
         <Pick
           label="הפרש בין פוסט לפוסט"
           aria={`הפרש בין פוסט לפוסט ב${campaignName}`}
-          value={String(schedule.gapMinutes)}
+          value={String(schedule.gapSeconds)}
           disabled={disabled}
-          onChange={(v) => set({ gapMinutes: Number(v) })}
-          options={GAP_CHOICES.map((m) => ({ value: String(m), label: `${m} דק׳` }))}
+          onChange={(v) => set({ gapSeconds: Number(v) })}
+          /* Seconds, so the three sub-minute steps the owner asked for can
+             exist at all. gapChoiceLabel does the spelling, here and in the
+             summary line, so the two cannot drift. */
+          options={GAP_CHOICES.map((sec) => ({ value: String(sec), label: gapChoiceLabel(sec) }))}
         />
         <Pick
           label="שעת התחלה"

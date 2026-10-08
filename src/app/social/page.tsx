@@ -897,7 +897,11 @@ export default function SocialDashboard() {
       live.schedule_enabled === want.schedule_enabled &&
       live.schedule_start === want.schedule_start &&
       live.schedule_end === want.schedule_end &&
-      live.schedule_gap_minutes === want.schedule_gap_minutes &&
+      /* The SECONDS are the value the owner chose; the minutes beside them
+         are derived from it, so comparing both is comparing one thing twice
+         — and the derived one is coarser, so it would call a change from 30
+         to 40 seconds "no change". */
+      live.schedule_gap_seconds === want.schedule_gap_seconds &&
       live.schedule_days.join(',') === want.schedule_days.join(',')
     ) {
       setSchedulePatch(null);

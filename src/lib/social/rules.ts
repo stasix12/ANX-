@@ -8,6 +8,7 @@ import {
   scheduleSummary,
   type CampaignRepeat,
   type ScheduleFields,
+  gapLabel,
 } from './campaign-schedule';
 import { startOfZonedDay } from './time';
 import type { BrowserSettings, Campaign, LimitsSettings, Post, QueueItem, SocialTarget, Variant } from './types';
@@ -171,7 +172,18 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
     let campaign: (Pick<Campaign, 'status'> & ScheduleFields & Pick<Campaign, 'repeat_enabled' | 'repeat_min_hours'>) | null = null;
     const full = await db
       .from('social_campaigns')
-      .select('status, schedule_enabled, schedule_days, schedule_start, schedule_end, schedule_gap_minutes, repeat_enabled, repeat_min_hours')
+      /*
+       * BOTH GAP COLUMNS, and leaving the seconds out of this list is the
+       * exact shape of bug this product has shipped before: readSchedule()
+       * falls back to the minutes when the seconds are absent, and a column
+       * that is in the table but not in the SELECT is indistinguishable from
+       * one that does not exist. The owner would pick thirty seconds, the
+       * panel would show thirty seconds, and the engine deciding whether to
+       * publish would quietly enforce sixty — with nothing anywhere saying so.
+       */
+      .select(
+        'status, schedule_enabled, schedule_days, schedule_start, schedule_end, schedule_gap_minutes, schedule_gap_seconds, repeat_enabled, repeat_min_hours',
+      )
       .eq('id', campaignId)
       .maybeSingle();
     if (full.error) {
@@ -252,7 +264,10 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
           until: new Date(allowed.getTime() + DEFER_CUSHION_MS).toISOString(),
           reason: byWindow
             ? `מחוץ לשעות הפרסום של הקמפיין (${scheduleSummary(schedule)}) — הפרסום ימתין`
-            : `נדחה כדי לשמור מרווח של ${schedule.gapMinutes} דק׳ בין הפרסומים של הקמפיין`,
+            /* gapLabel rather than a number and a unit: the gap can now be
+               thirty seconds, and "נדחה כדי לשמור מרווח של 0.5 דק׳" is a
+               sentence nobody should have to read. */
+            : `נדחה כדי לשמור מרווח של ${gapLabel(schedule).replace('כל ', '')} בין הפרסומים של הקמפיין`,
         };
       }
       /* Close enough to start: prepare now, click at the instant itself. */

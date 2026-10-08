@@ -109,7 +109,12 @@ export interface Campaign {
   schedule_start?: string;
   schedule_end?: string;
   /** Minutes between one publication of this campaign and the next, 1–30. */
+  /** Whole minutes, kept in sync with the seconds below and rounded UP, for
+      any reader that predates social-schema-v26.sql. */
   schedule_gap_minutes?: number;
+  /** SECONDS between two publications of this campaign — the canonical value
+      since v26, which is what makes 30/40/50 seconds expressible at all. */
+  schedule_gap_seconds?: number;
   /*
    * CHZARA — whether this round publishes the SAME post to the SAME groups
    * again, and the minimum that must pass before it may.

@@ -3,8 +3,10 @@ import { readFileSync } from 'node:fs';
 import {
   DEFAULT_CAMPAIGN_SCHEDULE,
   GAP_CHOICES,
-  MAX_GAP_MINUTES,
-  MIN_GAP_MINUTES,
+  MAX_GAP_SECONDS,
+  MIN_GAP_SECONDS,
+  gapChoiceLabel,
+  gapMinutesFor,
   TIME_CHOICES,
   WEEKDAY_SHORT,
   dayRelativeHe,
@@ -74,7 +76,7 @@ const say = (d: Date | null): string =>
     : new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
 
 /** The owner's own: Sunday–Thursday, 08:00–22:00, every ten minutes. */
-const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', end: '22:00', gapMinutes: 10 };
+const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', end: '22:00', gapSeconds: 600 };
 
 /* ------------------------------------------------------------------ *
  * 1. READING A CAMPAIGN ROW. Every value here arrives from Postgres and
@@ -99,17 +101,33 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   eq(readSchedule({}).days, [0, 1, 2, 3, 4], 'the default week is Sunday to Thursday');
   eq(readSchedule({}).start, '08:00', 'opening at 08:00');
   eq(readSchedule({}).end, '22:00', 'closing at 22:00');
-  eq(readSchedule({}).gapMinutes, 10, 'ten minutes apart');
+  eq(readSchedule({}).gapSeconds, 600, 'ten minutes apart');
 
   /*
    * EVERY ONE OF THESE WOULD BE A CAMPAIGN THAT NEVER PUBLISHES AGAIN, and
    * none of them would show up as an error anywhere.
    */
-  eq(readSchedule({ schedule_gap_minutes: 0 }).gapMinutes, MIN_GAP_MINUTES, 'a gap of zero is not a gap — clamped to the minimum');
-  eq(readSchedule({ schedule_gap_minutes: -5 }).gapMinutes, MIN_GAP_MINUTES, 'A NEGATIVE GAP WOULD PUT EVERY PUBLICATION IN THE PAST, on every claim, for ever');
-  eq(readSchedule({ schedule_gap_minutes: 999 }).gapMinutes, MAX_GAP_MINUTES, 'and 999 minutes is past the range the panel offers');
-  eq(readSchedule({ schedule_gap_minutes: 7.6 as never }).gapMinutes, 8, 'a fractional gap rounds rather than producing fractional instants');
-  eq(readSchedule({ schedule_gap_minutes: NaN as never }).gapMinutes, 10, 'and a NaN falls back rather than poisoning every arithmetic below it');
+  /*
+   * RE-POINTED TO SECONDS, NOT DELETED. The gap is stored in seconds since
+   * v26 — "תעשה אופציה של 30 40 50 שניות" — and every clamp below is the same
+   * claim it always made, in the unit the value now has.
+   */
+  eq(readSchedule({ schedule_gap_seconds: 0 }).gapSeconds, 600, 'a gap of zero is not a gap — it falls back rather than publishing in a tight loop');
+  eq(readSchedule({ schedule_gap_seconds: -5 }).gapSeconds, 600, 'A NEGATIVE GAP WOULD PUT EVERY PUBLICATION IN THE PAST, on every claim, for ever');
+  eq(readSchedule({ schedule_gap_seconds: 10 }).gapSeconds, MIN_GAP_SECONDS, 'ten seconds is below the floor the panel offers');
+  eq(readSchedule({ schedule_gap_seconds: 99999 }).gapSeconds, MAX_GAP_SECONDS, 'and 99999 seconds is past the top of it');
+  eq(readSchedule({ schedule_gap_seconds: 45.6 as never }).gapSeconds, 46, 'a fractional gap rounds rather than producing fractional instants');
+  eq(readSchedule({ schedule_gap_seconds: NaN as never, schedule_gap_minutes: 7 }).gapSeconds, 420, 'a NaN in seconds falls back to the minutes beside it');
+
+  /*
+   * A DATABASE THAT HAS NOT RUN v26 YET. The column simply is not there, so
+   * every campaign arrives with minutes and no seconds. Reading the minutes
+   * is what keeps a dashboard that is ahead of its database working as it
+   * did — rather than silently resetting every campaign in the account to
+   * the ten-minute default, which is what Number(undefined) would do.
+   */
+  eq(readSchedule({ schedule_gap_minutes: 3 }).gapSeconds, 180, 'before the migration, the minutes column still decides');
+  eq(readSchedule({ schedule_gap_minutes: 30 }).gapSeconds, 1800, 'including at the top of its old range');
 
   eq(readSchedule({ schedule_start: '25:00' }).start, '08:00', 'there is no 25 o’clock');
   eq(readSchedule({ schedule_start: '08:70' }).start, '08:00', 'nor a 70th minute');
@@ -153,11 +171,31 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
 {
   /* "הפרש בין פוסטים חייב להיות ניתן לבחירה בטווח 1–30 דקות. כל מספר שלם בין
      1 ל-30 צריך להיות אפשרי." Every one, not a selection of round numbers. */
-  eq(GAP_CHOICES.length, 30, 'thirty choices');
-  eq(GAP_CHOICES[0], 1, 'starting at one minute');
-  eq(GAP_CHOICES[29], 30, 'ending at thirty');
+  /*
+   * RE-POINTED: the list was thirty whole minutes. It is now the three
+   * sub-minute steps the owner asked for, then the same thirty minutes —
+   * "תעשה אופציה של 30 40 50 שניות בין פוסט לפוסט".
+   */
+  eq(GAP_CHOICES.length, 33, 'three seconds-steps plus the thirty minutes');
+  eq(GAP_CHOICES.slice(0, 4).join(','), '30,40,50,60', 'thirty, forty and fifty seconds come first, then one minute');
+  eq(GAP_CHOICES[0], MIN_GAP_SECONDS, 'the list starts exactly at the floor the clamp enforces');
+  eq(GAP_CHOICES[GAP_CHOICES.length - 1], MAX_GAP_SECONDS, 'and ends exactly at its ceiling — a choice the clamp would reject is a trap');
   eq(
-    GAP_CHOICES.filter((n, i) => n !== i + 1),
+    GAP_CHOICES.filter((n) => n < MIN_GAP_SECONDS || n > MAX_GAP_SECONDS),
+    [],
+    'and nothing in between is outside it either',
+  );
+  eq(gapChoiceLabel(30), '30 שניות', 'a sub-minute step is spelled in seconds');
+  eq(gapChoiceLabel(60), 'דקה', 'sixty seconds is a minute, not "60 שניות"');
+  eq(gapChoiceLabel(600), '10 דק׳', 'and the minutes read as they always did');
+  /* The legacy column beside the seconds rounds UP, never below one: a reader
+     that predates v26 must be SLOWER than asked for, never faster. */
+  eq(gapMinutesFor(30), 1, 'thirty seconds is written as one minute for an old reader');
+  eq(gapMinutesFor(50), 1, 'and so is fifty');
+  eq(gapMinutesFor(61), 2, 'and anything over a minute rounds up, never down');
+  eq(gapMinutesFor(600), 10, 'a whole number of minutes is itself');
+  eq(
+    GAP_CHOICES.filter((n, i) => i >= 3 && n !== (i - 2) * 60),
     [],
     'and EVERY whole number in between — "כל מספר שלם בין 1 ל-30 צריך להיות אפשרי"',
   );
@@ -281,9 +319,10 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
 
   /* Hebrew counts one and two differently, and "כל 1 דקות" is the kind of
      line that tells a customer nobody read the screen. */
-  eq(scheduleSummary({ ...ref, gapMinutes: 1 }).endsWith('כל דקה'), true, 'one minute is "כל דקה"');
-  eq(scheduleSummary({ ...ref, gapMinutes: 2 }).endsWith('כל שתי דקות'), true, 'two is "כל שתי דקות"');
-  eq(scheduleSummary({ ...ref, gapMinutes: 3 }).endsWith('כל 3 דקות'), true, 'and three onwards carries the digit');
+  eq(scheduleSummary({ ...ref, gapSeconds: 60 }).endsWith('כל דקה'), true, 'one minute is "כל דקה"');
+  eq(scheduleSummary({ ...ref, gapSeconds: 120 }).endsWith('כל שתי דקות'), true, 'two is "כל שתי דקות"');
+  eq(scheduleSummary({ ...ref, gapSeconds: 180 }).endsWith('כל 3 דקות'), true, 'and three onwards carries the digit');
+  eq(scheduleSummary({ ...ref, gapSeconds: 30 }).endsWith('כל 30 שניות'), true, 'and a sub-minute gap is spelled in seconds, not as a fraction of a minute');
 
   is(scheduleSummary(ref).includes('08:00 – 22:00'), 'the window is printed as a range, start first');
   is(!/⁦|⁩/.test(scheduleSummary(ref)), 'and with no bidi control characters in it — this string also reaches an aria-label, and a screen reader reads those aloud');

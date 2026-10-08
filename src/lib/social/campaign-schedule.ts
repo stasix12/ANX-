@@ -38,8 +38,20 @@ export interface CampaignSchedule {
   /** 'HH:MM', 24-hour, local (Asia/Jerusalem). */
   start: string;
   end: string;
-  /** Minutes between one publication of THIS campaign and the next, 1–30. */
-  gapMinutes: number;
+  /**
+   * SECONDS between one publication of THIS campaign and the next.
+   *
+   * IT WAS MINUTES, AND SECONDS IS THE WHOLE POINT OF THE CHANGE: "בהפרש
+   * פרסום בין פוסט לפוסט תעשה אופציה של 30 40 50 שניות". A minute was the
+   * floor the unit imposed, not a decision anybody made.
+   *
+   * The column it is written to is still `schedule_gap_minutes` as well, kept
+   * in sync and rounded UP to a whole minute, so a dashboard or a worker that
+   * has not been updated reads a value that is slower than asked for rather
+   * than faster. Slower is the safe direction for the one number in this
+   * product that paces how fast an account posts.
+   */
+  gapSeconds: number;
 }
 
 /** א׳ … ש׳, indexed by the weekday number above. */
@@ -89,13 +101,43 @@ export function dayRelativeHe(at: Date, now: Date = new Date(), tz = TIMEZONE): 
 }
 
 /**
- * "הפרש בין פוסטים חייב להיות ניתן לבחירה בטווח 1–30 דקות. כל מספר שלם בין 1
- * ל-30 צריך להיות אפשרי." Every one of them, built rather than listed, so the
- * list and the clamp below cannot disagree about where it ends.
+ * THE CHOICES, IN SECONDS.
+ *
+ * "בהפרש פרסום בין פוסט לפוסט תעשה אופציה של 30 40 50 שניות בין פוסט לפוסט."
+ * Three sub-minute steps, then the whole minutes this has always offered —
+ * one list, built rather than typed out, so the options and the clamp below
+ * cannot disagree about where it starts or ends.
+ *
+ * THIRTY SECONDS IS THE FLOOR AND IT IS NOT ARBITRARY. It is the shortest
+ * step offered because it is the shortest one the machine has any chance of
+ * meeting: rules.ts lets a row through up to PREP_LEAD_MS early so the group
+ * page, the typing and the upload all happen INSIDE the gap rather than on
+ * top of it, and that lead is seventy-five seconds — chosen, in its own
+ * words, as "comfortably longer than a measured publication". A gap shorter
+ * than one publication cannot be kept by one browser however it is asked
+ * for; what the owner gets then is "as fast as it can", not the number.
  */
-export const MIN_GAP_MINUTES = 1;
-export const MAX_GAP_MINUTES = 30;
-export const GAP_CHOICES: number[] = Array.from({ length: MAX_GAP_MINUTES - MIN_GAP_MINUTES + 1 }, (_, i) => i + MIN_GAP_MINUTES);
+export const MIN_GAP_SECONDS = 30;
+export const MAX_GAP_SECONDS = 30 * 60;
+export const GAP_CHOICES: number[] = [
+  30,
+  40,
+  50,
+  ...Array.from({ length: 30 }, (_, i) => (i + 1) * 60),
+];
+
+/** "30 שניות" / "דקה" / "10 דק׳" — one spelling, used by the select and the
+    summary line so the two cannot drift. */
+export function gapChoiceLabel(seconds: number): string {
+  if (seconds < 60) return `${seconds} שניות`;
+  const m = Math.round(seconds / 60);
+  return m === 1 ? 'דקה' : `${m} דק׳`;
+}
+
+/** What goes in the legacy `schedule_gap_minutes` column beside the seconds:
+    rounded UP, never below one. A stale reader is then slower than asked for,
+    which is the safe direction for a number that paces an account. */
+export const gapMinutesFor = (seconds: number): number => Math.max(1, Math.ceil(seconds / 60));
 
 /** Every half hour of the clock, which is what the two time selects offer. */
 export const TIME_CHOICES: string[] = Array.from({ length: 48 }, (_, i) =>
@@ -116,12 +158,15 @@ export const DEFAULT_CAMPAIGN_SCHEDULE: CampaignSchedule = {
   days: [0, 1, 2, 3, 4],
   start: '08:00',
   end: '22:00',
-  gapMinutes: 10,
+  gapSeconds: 600,
 };
 
 /** The campaign columns this module reads — nothing else about a campaign. */
 export type ScheduleFields = Partial<
-  Pick<Campaign, 'schedule_enabled' | 'schedule_days' | 'schedule_start' | 'schedule_end' | 'schedule_gap_minutes'>
+  Pick<
+    Campaign,
+    'schedule_enabled' | 'schedule_days' | 'schedule_start' | 'schedule_end' | 'schedule_gap_minutes' | 'schedule_gap_seconds'
+  >
 >;
 
 /** 'HH:MM' → minutes past local midnight, or null when it is not a time. */
@@ -155,7 +200,19 @@ export function readSchedule(campaign: ScheduleFields | null | undefined): Campa
   const row = campaign ?? {};
   const rawDays = Array.isArray(row.schedule_days) ? row.schedule_days : DEFAULT_CAMPAIGN_SCHEDULE.days;
   const days = [...new Set(rawDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort((a, b) => a - b);
-  const gap = Number(row.schedule_gap_minutes);
+  /*
+   * SECONDS IF THE COLUMN IS THERE, MINUTES IF IT IS NOT.
+   *
+   * schedule_gap_seconds arrives only once social-schema-v26.sql has been run
+   * in Supabase. Until then every campaign still has its minutes, and reading
+   * them is what keeps a dashboard that is ahead of its database working
+   * exactly as it did — rather than silently resetting every campaign in the
+   * account to the ten-minute default, which is what a plain
+   * `Number(undefined)` would do here.
+   */
+  const rawSeconds = Number(row.schedule_gap_seconds);
+  const rawMinutes = Number(row.schedule_gap_minutes);
+  const gap = Number.isFinite(rawSeconds) && rawSeconds > 0 ? rawSeconds : rawMinutes * 60;
   const start = clampTime(row.schedule_start, DEFAULT_CAMPAIGN_SCHEDULE.start);
   const end = clampTime(row.schedule_end, DEFAULT_CAMPAIGN_SCHEDULE.end);
   return {
@@ -181,7 +238,9 @@ export function readSchedule(campaign: ScheduleFields | null | undefined): Campa
      * until now could not publish at all, so no working schedule moves.
      */
     end: (toMinutes(end) ?? 0) <= (toMinutes(start) ?? 0) ? '23:59' : end,
-    gapMinutes: Number.isFinite(gap) ? Math.min(MAX_GAP_MINUTES, Math.max(MIN_GAP_MINUTES, Math.round(gap))) : DEFAULT_CAMPAIGN_SCHEDULE.gapMinutes,
+    gapSeconds: Number.isFinite(gap) && gap > 0
+      ? Math.min(MAX_GAP_SECONDS, Math.max(MIN_GAP_SECONDS, Math.round(gap)))
+      : DEFAULT_CAMPAIGN_SCHEDULE.gapSeconds,
   };
 }
 
@@ -192,7 +251,12 @@ export function scheduleColumns(s: CampaignSchedule): Required<ScheduleFields> {
     schedule_days: [...s.days].sort((a, b) => a - b),
     schedule_start: s.start,
     schedule_end: s.end,
-    schedule_gap_minutes: s.gapMinutes,
+    schedule_gap_seconds: s.gapSeconds,
+    /* Written beside it, rounded up — see gapMinutesFor. Dropping this column
+       would leave an un-updated worker reading nothing and falling back to a
+       default, which is a change to how fast the account posts made by a
+       deployment rather than by the owner. */
+    schedule_gap_minutes: gapMinutesFor(s.gapSeconds),
   };
 }
 
@@ -346,7 +410,7 @@ export function nextPublishAt(
   if (!s.enabled) return from;
   let earliest = from;
   if (lastPublishedAt) {
-    const due = new Date(lastPublishedAt.getTime() + s.gapMinutes * 60_000);
+    const due = new Date(lastPublishedAt.getTime() + s.gapSeconds * 1000);
     if (due > earliest) earliest = due;
   }
   return nextAllowedAt(s, earliest, tz);
@@ -367,9 +431,11 @@ export function daysLabel(s: CampaignSchedule): string {
   return [...s.days].sort((a, b) => a - b).map((d) => DAY_LABELS[d]).join(', ');
 }
 
-/** "כל 10 דקות", and the two counts Hebrew does not spell with a digit. */
+/** "כל 10 דקות" / "כל 30 שניות", and the counts Hebrew does not spell with a
+    digit. */
 export function gapLabel(s: CampaignSchedule): string {
-  return `כל ${counted(s.gapMinutes, 'דקה', 'דקות', 'שתי דקות')}`;
+  if (s.gapSeconds < 60) return `כל ${counted(s.gapSeconds, 'שנייה', 'שניות', 'שתי שניות')}`;
+  return `כל ${counted(Math.round(s.gapSeconds / 60), 'דקה', 'דקות', 'שתי דקות')}`;
 }
 
 /**

@@ -49,7 +49,7 @@ const is = (c: unknown, msg: string) => {
 const at = (s: string): Date => new Date(`${s}${s >= '2026-03-27T02:00' && s < '2026-10-25T02:00' ? '+03:00' : '+02:00'}`);
 
 /** HIS OWN SETTING, off the screenshot: Sunday–Thursday, 08:00–22:00. */
-const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', end: '22:00', gapMinutes: 1 };
+const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', end: '22:00', gapSeconds: 60 };
 const off: CampaignSchedule = { ...ref, enabled: false };
 const noDays: CampaignSchedule = { ...ref, days: [] };
 
@@ -405,7 +405,7 @@ const st = (
    * poll; it is there for the whole gap.
    */
   const now = at('2026-10-07T10:12');
-  const minute: CampaignSchedule = { ...ref, gapMinutes: 1 };
+  const minute: CampaignSchedule = { ...ref, gapSeconds: 60 };
   const defaults = { minGapMinutes: 45, groupMinGapMinutes: 20, lastPublishedAt: at('2026-10-07T10:12').toISOString() };
 
   /* What the card said before: the campaign's minute, and nothing else. */
@@ -440,7 +440,7 @@ const st = (
   /* THE LATER OF THE TWO, NOT THE ACCOUNT ONE. A campaign gap of three hours
      outranks a 65-minute account floor — the engine takes the max and so must
      the card. */
-  const slow: CampaignSchedule = { ...ref, gapMinutes: 30 };
+  const slow: CampaignSchedule = { ...ref, gapSeconds: 1800 };
   const r = scheduleReadout(slow, st('running', at('2026-10-07T13:00').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, defaults);
   eq(r, { kind: 'due', at: at('2026-10-07T13:00').toISOString() }, 'a stored instant beyond both floors is left alone');
 

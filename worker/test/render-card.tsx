@@ -63,7 +63,7 @@ const sched: Record<string, CampaignSchedule> = {
   reference: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true },
   /* Every day lit, a gap of one (so "כל דקה", the singular branch), and a
      window that runs the whole clock — the longest summary this can print. */
-  all: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:30', gapMinutes: 1 },
+  all: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:30', gapSeconds: 60 },
   none: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true, days: [] },
   off: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: false },
 };

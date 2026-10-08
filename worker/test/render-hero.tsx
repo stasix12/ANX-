@@ -120,9 +120,9 @@ const beforeClock = (clock: string, h: number) => new Date(new Date(clock).getTi
  * can see rather than one argued about.
  */
 const sched: Record<string, CampaignSchedule> = {
-  image: { enabled: true, days: [0, 1, 2, 4], start: '08:00', end: '22:00', gapMinutes: 10 },
+  image: { enabled: true, days: [0, 1, 2, 4], start: '08:00', end: '22:00', gapSeconds: 600 },
   reference: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true },
-  all: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:30', gapMinutes: 1 },
+  all: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:30', gapSeconds: 60 },
   none: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true, days: [] },
   off: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: false },
 };

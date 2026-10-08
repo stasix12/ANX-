@@ -154,13 +154,16 @@ async function main(): Promise<void> {
     eq(sent[0].days, [0, 1, 2, 3, 4, 5], 'the first carries Friday added to the five that were there');
     eq(sent[1].days, [0, 1, 2, 3, 4, 5, 6], 'the second carries Saturday added to those SIX — not to the original five');
     eq(sent[2].days, [0, 1, 2, 4, 5, 6], 'and the third carries Wednesday removed from those seven');
-    is(sent.every((s) => s.start === '08:00' && s.end === '22:00' && s.gapMinutes === 10), 'and none of them quietly changed a field nobody touched');
+    is(sent.every((s) => s.start === '08:00' && s.end === '22:00' && s.gapSeconds === 600), 'and none of them quietly changed a field nobody touched');
 
     /* ---------------------------------------------------------------- *
      * 2. THE THREE FIELDS, each one live.
      * ---------------------------------------------------------------- */
     const fields = page.locator('[data-schedule] select');
-    await fields.nth(0).selectOption('25');
+    /* The select's values are SECONDS now — "תעשה אופציה של 30 40 50 שניות" —
+       so twenty-five minutes is 1500. Driven through the real control rather
+       than through the component's props, which is the point of this file. */
+    await fields.nth(0).selectOption('1500');
     is((await summary()).includes('כל 25 דקות'), 'changing the interval updates the summary on the spot');
     await fields.nth(1).selectOption('06:30');
     is((await summary()).includes('06:30'), 'and so does the start time');
@@ -172,12 +175,22 @@ async function main(): Promise<void> {
       'and all three at once, with the days from the taps above still in it',
     );
 
-    /* "1–30 דקות... כל מספר שלם בין 1 ל-30 צריך להיות אפשרי" — offered, not
-       merely accepted. */
+    /*
+     * RE-POINTED, NOT DELETED. This used to read "thirty choices, 1 דק׳ to 30
+     * דק׳" — offered, not merely accepted. The claim is the same; the list
+     * grew three sub-minute steps at the front, because a minute used to be
+     * the floor the UNIT imposed rather than a decision anyone made:
+     * "בהפרש פרסום בין פוסט לפוסט תעשה אופציה של 30 40 50 שניות".
+     *
+     * Read off the real <option> elements, so a choice that exists in the
+     * constant and never reaches the control still fails here.
+     */
     const gaps = await fields.nth(0).locator('option').allTextContents();
-    eq(gaps.length, 30, 'the interval field offers thirty choices');
-    eq(gaps[0], '1 דק׳', 'starting at one minute');
-    eq(gaps[29], '30 דק׳', 'and ending at thirty');
+    eq(gaps.length, 33, 'the interval field offers three sub-minute steps and the thirty minutes');
+    eq(gaps.slice(0, 4).join(' | '), '30 שניות | 40 שניות | 50 שניות | דקה', 'starting at thirty seconds');
+    eq(gaps[32], '30 דק׳', 'and still ending at thirty minutes');
+    const gapValues = await fields.nth(0).locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+    eq(gapValues.slice(0, 4).join(','), '30,40,50,60', 'and the VALUES are seconds — the label alone could say anything');
 
     /* ---------------------------------------------------------------- *
      * 3. THE SWITCH — "התזמון מושבת אך ההגדרות נשמרות".
@@ -198,7 +211,7 @@ async function main(): Promise<void> {
     );
     const afterToggle = (await changes()).at(-1)!;
     eq(afterToggle.days, [0, 1, 2, 4, 5, 6], 'and the schedule handed to the page still carries them, so nothing is lost on the way to the database');
-    eq(afterToggle.gapMinutes, 25, 'including the interval');
+    eq(afterToggle.gapSeconds, 1500, 'including the interval');
 
     /* ---------------------------------------------------------------- *
      * 4. NO DAY AT ALL, which is reachable in six taps and must not look

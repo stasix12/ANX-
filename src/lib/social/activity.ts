@@ -125,6 +125,14 @@ const KIND: Record<string, ActivityKind> = {
      the same post again tomorrow. */
   campaign_repeat_on: 'round',
   campaign_repeat_off: 'round',
+  /*
+   * The daily repeat could not be armed, because the round has never gone out
+   * and there is no group list to repeat. 'failure' and not 'round': nothing
+   * is broken, but the owner pressed a switch and it did nothing, and a line
+   * he can scroll past is how he lost an evening waiting for a publication
+   * that was never going to come.
+   */
+  campaign_repeat_needs_launch: 'failure',
   campaign_deleted: 'round',
   stopped_campaign_swept: 'round',
   worker_run: 'round',

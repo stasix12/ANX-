@@ -535,6 +535,9 @@ export function CampaignCard({
               campaignName={campaign.name}
               disabled={scheduleBusy}
               accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
+              /* 'not_started' with nothing ever queued: neither control below
+                 can produce a publication until the round is launched once. */
+              neverLaunched={state.state === 'not_started' && state.progress.total === 0}
             />
           </div>
         )}
@@ -625,6 +628,19 @@ export function CampaignCard({
                     </span>
                   )}
                 </span>
+              ) : state.state === 'not_started' && state.progress.total === 0 ? (
+                /*
+                 * NEVER LAUNCHED, AND "אין פרסום ממתין" DID NOT SAY SO.
+                 *
+                 * Same fault as the 'ended' branch above, at the other end of
+                 * a round's life: the sentence is true, it reads as a lull,
+                 * and nothing will end the lull. The owner set a schedule and
+                 * turned on the daily repeat on a round in exactly this state
+                 * and waited an evening for a publication that could not come
+                 * — neither control creates one, and nothing on the card said
+                 * which action would.
+                 */
+                <span className="block truncate text-warning-400">הסבב עוד לא הושק — בחרו קבוצות ושלחו</span>
               ) : (
                 <span className="block truncate text-mist-500">{showResume ? 'מושהה — אין פרסום ממתין' : 'אין פרסום ממתין'}</span>
               )}

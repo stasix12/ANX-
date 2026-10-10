@@ -58,6 +58,7 @@ export function CampaignSchedulePanel({
   repeat,
   onRepeatChange,
   accountFloorSeconds,
+  neverLaunched = false,
   showHeader = true,
 }: {
   schedule: CampaignSchedule;
@@ -104,6 +105,21 @@ export function CampaignSchedulePanel({
    * read the account's settings says nothing rather than guessing.
    */
   accountFloorSeconds?: number;
+  /**
+   * THIS ROUND HAS NEVER GONE OUT, so neither control below can produce a
+   * publication yet — and that is the one fact this panel was missing.
+   *
+   * Everything on this panel can only ever PREVENT a publication; the daily
+   * repeat is the one control that makes a round happen again, and it repeats
+   * a round by copying the group list off the schedule row that launched it
+   * (setCampaignRepeat in client.ts). No launch, no list, nothing armed.
+   *
+   * The owner set Saturday and 19:00 on a round in exactly this state, read
+   * the paragraph below promising "אותו פוסט יפורסם שוב… החל מהשעה 19:00",
+   * and waited. Optional, because a caller that cannot tell says nothing
+   * rather than guessing — but both screens that draw this panel can.
+   */
+  neverLaunched?: boolean;
 }) {
   const set = (patch: Partial<CampaignSchedule>) => onChange({ ...schedule, ...patch });
   const canRepeat = Boolean(repeat && onRepeatChange);
@@ -345,7 +361,20 @@ export function CampaignSchedulePanel({
             </span>
           </div>
           <p className="mt-1 text-[10.5px] font-bold leading-4 text-mist-300">
-            {repeat.enabled ? (
+            {neverLaunched ? (
+              /*
+               * SAID BEFORE THE PROMISE, not instead of the switch. The switch
+               * stays usable — he may well be arming a round he is about to
+               * launch — but the sentence under it may not describe something
+               * that cannot happen yet.
+               */
+              <>
+                הסבב הזה עוד לא יצא אף פעם, ולכן אין עדיין רשימת קבוצות לחזור אליה — החזרה היומית לא תיכנס לפעולה והתזמון לא יכניס פרסומים לתור.
+                <span className="mt-0.5 block text-warning-400">
+                  השיקו אותו פעם אחת — הוסיפו פוסט, בחרו קבוצות ושלחו — ומאותו רגע התזמון והחזרה יעבדו לבד.
+                </span>
+              </>
+            ) : repeat.enabled ? (
               <>
                 אותו פוסט יפורסם שוב לאותן קבוצות בכל יום פרסום, החל מהשעה{' '}
                 <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. לא יותר מפעם ב-{repeat.minHours} שעות לאותה

@@ -245,7 +245,26 @@ export default function CampaignsPage() {
              dashboard's copy of this. A weekly row built from the OLD start
              hour is the card saying one thing while the engine does another. */
           const repeat = readRepeat(campaign);
-          if (repeat.enabled) await setCampaignRepeat(campaign, repeat, next);
+          if (repeat.enabled) {
+            const armedNow = await setCampaignRepeat(campaign, repeat, next);
+          /*
+           * AND IF THE RE-ARM COULD NOT HAPPEN, HE HEARS IT NOW — on the save
+           * that he made, not on an evening he spends waiting.
+           *
+           * "אני רוצה שמתי שאני משנה שם ימים / שעות שזה יתעדכן באותו הרגע."
+           * He is right, and this is the half that was silent: changing the
+           * days re-arms the weekly row, and a round that has never gone out
+           * has no group list to re-arm WITH. That used to pass without a
+           * word, leaving a panel that said "שבת · 19:00" over a queue that
+           * would never receive a row.
+           */
+            if (!armedNow.armed) {
+              toast(
+                `התזמון נשמר, אבל "${campaign.name}" עוד לא יצא אף פעם — אין ממה להעתיק את רשימת הקבוצות, ולכן לא ייכנסו פרסומים לתור. השיקו אותו פעם אחת וזה יתפוס מיד.`,
+                'error',
+              );
+            }
+          }
 
           /* And the account-wide floor comes down with it, exactly as on the
              dashboard — see the long note on the dashboard's copy. Without it
@@ -283,13 +302,25 @@ export default function CampaignsPage() {
     async (campaign: Campaign, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        await setCampaignRepeat(campaign, next, readSchedule(campaign));
+        const result = await setCampaignRepeat(campaign, next, readSchedule(campaign));
         setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? { ...c, ...repeatColumns(next) } : c)));
+        /*
+         * THE TOAST SAYS WHAT HAPPENED, not what was asked for.
+         *
+         * It used to promise a daily repeat whenever the switch went on. A
+         * round that has never been launched cannot be armed — there is no
+         * group list to repeat, because the list lives on the schedule row
+         * that launched it and a campaign has no groups of its own. So that
+         * promise was false for exactly the campaigns the owner was most
+         * likely to be looking at: the new ones.
+         */
         toast(
-          next.enabled
-            ? `"${campaign.name}" יחזור על עצמו בכל יום פרסום`
-            : `החזרה היומית של "${campaign.name}" כובתה — הסבב הנוכחי ימשיך כרגיל`,
-          next.enabled ? 'info' : 'success',
+          !next.enabled
+            ? `החזרה היומית של "${campaign.name}" כובתה — הסבב הנוכחי ימשיך כרגיל`
+            : result.armed
+              ? `"${campaign.name}" יחזור על עצמו בכל יום פרסום`
+              : `"${campaign.name}" עוד לא יצא אף פעם, ולכן אין ממה להעתיק את רשימת הקבוצות. השיקו אותו פעם אחת — בחרו קבוצות ושלחו — ומשם זה יחזור כל יום לבד.`,
+          !next.enabled ? 'success' : result.armed ? 'info' : 'error',
         );
       } catch (err) {
         toast(friendlyMessage(err, 'שמירת החזרה נכשלה.'), 'error');

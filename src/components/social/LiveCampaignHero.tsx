@@ -555,6 +555,9 @@ export function LiveCampaignHero({
             /* The second gate, so the panel can say which of the two is
                actually deciding — see the note on the prop. */
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
+            /* 'not_started' with nothing ever queued: neither control below
+               can produce a publication until the round is launched once. */
+            neverLaunched={state.state === 'not_started' && state.progress.total === 0}
             /* The title and the switch are already in the readout block above
                this one. Two live switches for one setting on one card is a
                screen the owner cannot read. */

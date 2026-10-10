@@ -100,6 +100,7 @@ const TITLE: Record<string, string> = {
      wondering where the repeats came from. */
   campaign_repeat_on: 'חזרה יומית הופעלה',
   campaign_repeat_off: 'חזרה יומית כובתה',
+  campaign_repeat_needs_launch: 'החזרה היומית לא הופעלה — הסבב עוד לא הושק',
   campaign_resumed: 'הסבב חודש',
   campaign_stopped: 'הסבב נעצר',
   campaign_deleted: 'הסבב נמחק',

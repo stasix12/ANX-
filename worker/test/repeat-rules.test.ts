@@ -323,6 +323,78 @@ async function main(): Promise<void> {
     is(rules.includes('if (limits.blockRepeatToSameTarget !== false) {'), 'the global switch still gates the whole check');
   }
 
+  /* ================================================================== *
+   * THE SWITCH THAT REPORTED AN ARMING THAT DID NOT HAPPEN.
+   *
+   * "הפעלתי שיעבוד גם ביום שבת היום ב 7 בערב למה זה לא מראה שהולך לפרסם היום"
+   *
+   * He set Saturday and 19:00 on two rounds, turned on חזרה יומית, and waited.
+   * Nothing could ever have gone out. A round repeats by copying the group
+   * list off the schedule row that LAUNCHED it — `target_ids` lives there and
+   * nowhere else, because no table links a campaign to its groups — so a round
+   * that has never gone out has nothing to copy. setCampaignRepeat skipped it
+   * with `continue`, which is correct, and then wrote "יחזור על עצמו בכל יום
+   * פרסום" to the activity log anyway, unconditionally, below the loop.
+   *
+   * Every surface agreed with every other surface. The switch was on, the card
+   * drew the full paragraph, the log confirmed it, and nothing was armed. The
+   * one record he would check to find out why is the one that told him it was
+   * fine.
+   * ================================================================== */
+  {
+    const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+    const fn = client.slice(client.indexOf('export async function setCampaignRepeat'), client.indexOf('export async function pauseCampaign'));
+    is(fn.length > 800, 'setCampaignRepeat was located');
+
+    /* It counts, rather than returning nothing and hoping. */
+    is(/export interface RepeatResult/.test(client), 'the switch reports what it managed to do');
+    is(/Promise<RepeatResult>/.test(fn), 'and its callers can read that');
+    is(/needsLaunch \+= 1;/.test(fn), 'a round with no group list to repeat is COUNTED, not silently skipped');
+    is(/armed \+= 1;/.test(fn), 'and an armed one is counted too');
+
+    /* THE LIE ITSELF. The success line must sit behind the count. */
+    const atGuard = fn.indexOf('if (!armed) {');
+    const atSuccess = fn.indexOf("'campaign_repeat_on'");
+    is(atGuard >= 0, 'there is a guard on having armed anything at all');
+    is(atSuccess >= 0, 'and the success line still exists');
+    is(atGuard < atSuccess, 'AND THE GUARD COMES FIRST — the success line may never be reached on a round where nothing was armed');
+    is(/'campaign_repeat_needs_launch'/.test(fn), 'the failure has its own event, so the feed can show it rather than nothing');
+    is(/הסבב עוד לא יצא אף פעם/.test(fn), 'and says the actual reason in words');
+
+    /* ...and the two screens say it where he is standing. */
+    for (const [where, src] of [
+      ['the dashboard', 'src/app/social/page.tsx'],
+      ['the campaigns screen', 'src/app/social/campaigns/page.tsx'],
+    ] as const) {
+      const page = readFileSync(new URL(`../../${src}`, import.meta.url), 'utf8');
+      is(/const result = await setCampaignRepeat\(/.test(page), `${where} reads the result instead of discarding it`);
+      is(/result\.armed$/m.test(page) || /result\.armed\s/.test(page), `${where} branches its toast on whether anything was armed`);
+      is(/עוד לא יצא אף פעם/.test(page), `${where} tells him the round has never gone out`);
+      /* AND ON THE SCHEDULE SAVE TOO, which is the moment he actually asked
+         about: "מתי שאני משנה ימים / שעות שזה יתעדכן באותו הרגע". */
+      is(/const armedNow = await setCampaignRepeat\(campaign, repeat, next\);/.test(page), `${where} re-arms on a schedule change`);
+      is(/if \(!armedNow\.armed\)/.test(page), `${where} and says so on that save, not on an evening he spends waiting`);
+    }
+
+    /* The panel may not print a promise it cannot keep. */
+    const panel = readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8');
+    is(/neverLaunched\?: boolean;/.test(panel), 'the panel can be told the round has never gone out');
+    is(/\{neverLaunched \? \(/.test(panel), 'and that branch is taken BEFORE the daily-repeat paragraph');
+    is(
+      panel.indexOf('{neverLaunched ? (') < panel.indexOf('אותו פוסט יפורסם שוב לאותן קבוצות'),
+      'so the sentence promising a daily repeat is not what he reads on a round that cannot have one',
+    );
+    is(/השיקו אותו פעם אחת/.test(panel), 'and it names the action that would fix it');
+
+    /* And the card footer stops reading as a lull. */
+    const card = readFileSync(new URL('../../src/components/social/CampaignCard.tsx', import.meta.url), 'utf8');
+    is(/הסבב עוד לא הושק/.test(card), 'NOT "אין פרסום ממתין" — that is true, reads as a lull, and nothing will end it');
+    is(
+      /state\.state === 'not_started' && state\.progress\.total === 0/.test(card),
+      'and it is decided by the round never having produced a row, not by a guess',
+    );
+  }
+
   console.log(`repeat rules OK — ${checks} assertions, decided by the real engine against a fake database`);
 }
 

@@ -933,16 +933,39 @@ export type ScheduleInput = Omit<Schedule, 'id' | 'created_at' | 'planned_until'
  * owner has already been promised is not something a settings change may
  * cancel.
  */
+/**
+ * WHAT THE SWITCH ACTUALLY MANAGED TO DO.
+ *
+ * It used to return nothing, and that is how it came to lie. A round that has
+ * never been launched has no group list to repeat — the list lives on the
+ * schedule row that launched it (social_schedules.target_ids) and nowhere
+ * else, because no table links a campaign to its groups. So the loop below
+ * skipped it with `continue`... and then wrote "יחזור על עצמו בכל יום פרסום"
+ * to the activity log anyway, unconditionally, at the end.
+ *
+ * The owner turned the switch on, the card drew the full paragraph promising a
+ * daily repeat at 19:00, the log confirmed it, and nothing had been armed. He
+ * found out by watching a Saturday evening go by with an empty queue.
+ *
+ * So the caller is told. `armed` is how many posts now have a live weekly row;
+ * `needsLaunch` is how many could not be armed because the round has never
+ * gone out and therefore has no groups to repeat to.
+ */
+export interface RepeatResult {
+  armed: number;
+  needsLaunch: number;
+}
+
 export async function setCampaignRepeat(
   campaign: Pick<Campaign, 'id' | 'name'>,
   repeat: CampaignRepeat,
   schedule: CampaignSchedule,
-): Promise<void> {
+): Promise<RepeatResult> {
   unwrap(await db().from('social_campaigns').update(repeatColumns(repeat)).eq('id', campaign.id));
 
   const posts = unwrap<{ id: string }[]>(await db().from('social_posts').select('id').eq('campaign_id', campaign.id));
   const postIds = posts.map((p) => p.id);
-  if (!postIds.length) return;
+  if (!postIds.length) return { armed: 0, needsLaunch: 0 };
 
   /* Every weekly row this function has ever armed for this round. Matched on
      the mode as well as the post, so a one-off or a drip the owner set up
@@ -954,7 +977,7 @@ export async function setCampaignRepeat(
   if (!repeat.enabled) {
     if (existing.length) unwrap(await db().from('social_schedules').update({ active: false }).in('id', existing.map((r) => r.id)));
     await logClientActivity('info', 'campaign_repeat_off', `החזרה היומית של "${campaign.name}" כובתה`, { campaignId: campaign.id });
-    return;
+    return { armed: 0, needsLaunch: 0 };
   }
 
   /*
@@ -969,10 +992,13 @@ export async function setCampaignRepeat(
   const weekly: WeeklyPlan = {};
   for (const day of schedule.days) weekly[String(day)] = [schedule.start];
 
+  let armed = 0;
+  let needsLaunch = 0;
   for (const postId of postIds) {
     const mine = existing.filter((r) => r.post_id === postId);
     if (mine.length) {
       unwrap(await db().from('social_schedules').update({ mode: 'weekly', weekly, active: true }).in('id', mine.map((r) => r.id)));
+      armed += 1;
       continue;
     }
     /*
@@ -988,20 +1014,43 @@ export async function setCampaignRepeat(
     /* A round with no targets to repeat is not armed at all. An empty weekly
        row would sit there active for ever, planning nothing, and the card would
        promise a round that could never produce a publication. */
-    if (!targetIds.length) continue;
+    if (!targetIds.length) {
+      needsLaunch += 1;
+      continue;
+    }
     unwrap(
       await db()
         .from('social_schedules')
         .insert({ post_id: postId, mode: 'weekly', timezone: TIMEZONE, run_at: null, weekly, interval_days: null, interval_time: null, target_ids: targetIds, active: true }),
     );
+    armed += 1;
   }
 
+  /*
+   * ─── AND THE LOG SAYS WHICH OF THE TWO HAPPENED ─────────────────────────
+   *
+   * The success line used to be written here unconditionally, below a loop
+   * whose every iteration may have skipped. A log that reports an arming that
+   * did not happen is worse than no log: it is the one record the owner would
+   * check to find out why nothing went out, and it told him everything was
+   * fine.
+   */
+  if (!armed) {
+    await logClientActivity(
+      'warn',
+      'campaign_repeat_needs_launch',
+      `החזרה היומית של "${campaign.name}" לא הופעלה — הסבב עוד לא יצא אף פעם, ואין ממה להעתיק את רשימת הקבוצות. השיקו אותו פעם אחת וזה יתחיל לעבוד מעצמו.`,
+      { campaignId: campaign.id, needsLaunch },
+    );
+    return { armed, needsLaunch };
+  }
   await logClientActivity(
     'warn',
     'campaign_repeat_on',
     `"${campaign.name}" יחזור על עצמו בכל יום פרסום — אותו פוסט לאותן קבוצות, לא יותר מפעם ב-${repeat.minHours} שעות`,
-    { campaignId: campaign.id, minHours: repeat.minHours },
+    { campaignId: campaign.id, minHours: repeat.minHours, armed, needsLaunch },
   );
+  return { armed, needsLaunch };
 }
 
 export async function createSchedule(input: ScheduleInput): Promise<Schedule> {

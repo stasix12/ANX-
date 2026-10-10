@@ -522,7 +522,19 @@ const st = (
       .replace(/(^|[^:])\/\/.*$/gm, '$1 ');
   for (const f of ['src/app/social/page.tsx', 'src/app/social/campaigns/page.tsx']) {
     const src = code(f);
-    is(/if \(repeat\.enabled\) await setCampaignRepeat\(campaign, repeat, next\);/.test(src), `${f} re-arms the daily repeat when the hours change`);
+    /* Matched on the CLAIM, not on one statement's shape. This used to pin the
+       exact one-liner `if (repeat.enabled) await setCampaignRepeat(...)`, and
+       it broke the day the call grew a body — the re-arm now reads its result
+       so the screen can say when it armed nothing. The claim is unchanged: the
+       re-arm happens on a schedule change, and only when the repeat is on. */
+    is(
+      /if \(repeat\.enabled\)[\s\S]{0,200}setCampaignRepeat\(campaign, repeat, next\)/.test(src),
+      `${f} re-arms the daily repeat when the hours change`,
+    );
+    /* AND IT SAYS SO WHEN IT COULD NOT. A round that has never gone out has no
+       group list to repeat, so the re-arm does nothing — silently, until this.
+       That silence is what cost him a Saturday evening. */
+    is(/if \(!armedNow\.armed\)/.test(src), `${f} tells him on the spot when the re-arm armed nothing`);
     /* ONLY when it is on. Arming a weekly row from a change of hours would
        turn an edit into a recurrence he never asked for. */
     is(/const repeat = readRepeat\(campaign/.test(src), `${f} reads the repeat before deciding to, rather than assuming`);

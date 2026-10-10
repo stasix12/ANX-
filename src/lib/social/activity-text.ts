@@ -115,6 +115,7 @@ const TITLE: Record<string, string> = {
   cancelled: 'פרסום בוטל',
   manual_pending: 'ממתין לפרסום ידני',
   plan_targets_skipped: 'קבוצות לא נכנסו לסבב',
+  plan_all_blocked: 'אף קבוצה לא נכנסה לתור',
   /* The feature that wrote this is gone ("לפרסם רק לאן שיש לקוחות"), and the
      entry stays because his history still holds rows that carry it. Deleting
      the label would not delete the rows — it would only make them unreadable. */

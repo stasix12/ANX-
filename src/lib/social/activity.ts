@@ -155,6 +155,13 @@ const KIND: Record<string, ActivityKind> = {
   cancelled: 'schedule',
   manual_pending: 'schedule',
   plan_targets_skipped: 'schedule',
+  /*
+   * A launch where NOT ONE group got through, because every one of them
+   * already had a row waiting from another round. 'failure' and not
+   * 'schedule': a few groups left out is a note, a round that produced
+   * nothing and then closed itself is the owner's evening.
+   */
+  plan_all_blocked: 'failure',
   /* The feature that wrote this is gone ("לפרסם רק לאן שיש לקוחות"), and the
      entry stays because his history still holds rows that carry it. Deleting
      the label would not delete the rows — it would only make them unreadable. */

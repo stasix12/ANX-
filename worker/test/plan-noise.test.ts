@@ -160,6 +160,7 @@ function world(plans: Plan[]) {
 }
 
 const skips = (log: { event: string }[]) => log.filter((e) => e.event === 'plan_targets_skipped').length;
+const blocked = (log: { event: string }[]) => log.filter((e) => e.event === 'plan_all_blocked').length;
 const builds = (log: { event: string }[]) => log.filter((e) => e.event === 'planned').length;
 
 async function main(): Promise<void> {
@@ -174,6 +175,42 @@ async function main(): Promise<void> {
       0,
       `A PASS THAT PLANNED NOTHING HAS NOTHING TO REPORT — it wrote ${skips(w.log)} warnings for a fact that had not changed, once a minute, for ever`,
     );
+    /*
+     * ─── BUT SILENCE WAS NOT THE RIGHT ANSWER EITHER ────────────────────
+     *
+     * The guard above was written to stop a repeating round repeating a
+     * message about groups still busy with its own last pass. It also
+     * silenced THIS: a launch where not one group got through, because
+     * targetsAlreadyWaiting() is global and every group already held a row
+     * from some other round. Zero rows, zero log lines — and for a 'now' or
+     * 'once' schedule the schedule then retires itself in the same pass. The
+     * launch reports success and leaves nothing behind.
+     *
+     * The owner met the shape of this twice in one day: a switch that logged
+     * an arming it had not done, and a schedule that promised 19:00 over a
+     * queue that could never receive a row. This is the third door into the
+     * same room, so it gets a voice — ONCE, on the pass that could not
+     * place anything, and not again while nothing has changed.
+     */
+    eq(blocked(w.log), 1, 'THE FULLY-BLOCKED LAUNCH SAYS SO — exactly once, not once a minute');
+    const line = w.log.find((e) => e.event === 'plan_all_blocked')!.message;
+    is(/אף קבוצה לא נכנסה לתור/.test(line), 'in words that say what happened rather than what was attempted');
+    is(/t1|t2|t3/.test(line), 'naming the groups, because a count is not something anybody can act on');
+    is(/סבב אחר/.test(line), 'and saying WHY — a row from a different round, which he is not looking at and could not guess');
+  }
+
+  /* ── 1b. AND A SCHEDULE WITH NOTHING TO PLACE IS NOT "BLOCKED" ───────── */
+  {
+    /*
+     * made === 0 is not on its own an event. A schedule carrying no targets
+     * places nothing and blocks nothing, and reporting "אף קבוצה לא נכנסה
+     * לתור — לכל 0 הקבוצות כבר ממתין פרסום" would be a warning about a
+     * sentence that describes nothing. The `dropped.length` half of the guard
+     * is what separates "could not" from "had nothing to".
+     */
+    const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: [], busy: [], hour: '09:00' }]);
+    await planQueue({ db: w.db, log: w.note as never });
+    eq(blocked(w.log), 0, 'a schedule with no groups at all is not a blocked launch — it placed nothing because it had nothing');
   }
 
   /* ── 2. AND THE REPORT IS NOT LOST: a partial occasion still says so ─── */
@@ -181,6 +218,7 @@ async function main(): Promise<void> {
     const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2', 't3'], busy: ['t2'], hour: '09:00' }]);
     await planQueue({ db: w.db, log: w.note as never });
     eq(skips(w.log), 1, 'a pass that planned SOME and left one out says which — that is what this message is for');
+    eq(blocked(w.log), 0, 'and a pass that DID place rows is not "fully blocked" — the two messages must never both fire');
     is(/קבוצה t2/.test(w.log.find((e) => e.event === 'plan_targets_skipped')!.message), 'and it names the group, because a count is not something anybody can act on');
   }
 

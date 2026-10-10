@@ -296,6 +296,31 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      * nothing; this silences the one that planned a single refill.
      */
     await noteDropped(db, note, schedule.id, dropped, plannedAhead ? 0 : made);
+    /*
+     * ─── AND THE ONE CASE noteDropped IS DELIBERATELY SILENT ABOUT ─────────
+     *
+     * EVERY group dropped and not one row written. The `made <= 0` guard
+     * inside noteDropped exists to stop a repeating round repeating a message
+     * about the groups still busy with its own last pass — which is right.
+     * But it also silences the launch where NOTHING got through, and that is
+     * the one a person most needs to hear about.
+     *
+     * targetsAlreadyWaiting() is GLOBAL (see it: one select over social_queue
+     * with no post or campaign filter), so a group is blocked by an open row
+     * from ANY round. An owner with a few hundred rows already waiting can
+     * launch a second round over the same groups and get: zero rows, zero log
+     * lines, and — for a 'now' or 'once' schedule — the schedule retiring
+     * itself at the end of this very pass. The launch reports success and
+     * leaves nothing behind. Nothing on any screen would ever say why.
+     *
+     * So the fully-blocked pass speaks. Not on a top-up (`plannedAhead`),
+     * which is the steady state of every repeating round and has not changed
+     * since the minute before; and not when there was nothing to plan at all
+     * (`dropped` empty), which is not an event.
+     */
+    if (!plannedAhead && made === 0 && dropped.length) {
+      await noteAllBlocked(db, note, schedule.id, dropped);
+    }
     if (!plannedAhead) built += made;
     /*
      * MARKED PLANNED ONLY IF IT WAS. The stamp and the retirement below are
@@ -445,6 +470,30 @@ async function targetsAlreadyWaiting(db: SupabaseClient): Promise<Set<string>> {
  * counting them — "27 of 28" is not something anybody can act on.
  */
 const DROPPED_NAMES_SHOWN = 8;
+
+/**
+ * NOT ONE GROUP GOT THROUGH — said plainly, because this is the launch that
+ * looks like it worked and did nothing.
+ *
+ * Separate from noteDropped rather than a flag on it, because the two are
+ * different facts and deserve different words: "27 of 28 went in" is a note,
+ * "none of the 28 went in and this round is now closed" is a failure. It is a
+ * 'warn' for that reason, and it names the action, because the owner cannot be
+ * expected to know that a group is blocked by a row belonging to some other
+ * round he is not looking at.
+ */
+async function noteAllBlocked(db: SupabaseClient, note: PlanLogger, scheduleId: string, targetIds: string[]): Promise<void> {
+  const { data } = await db.from('social_targets').select('name').in('id', targetIds.slice(0, DROPPED_NAMES_SHOWN));
+  const names = ((data ?? []) as { name: string | null }[]).map((t) => t.name).filter(Boolean);
+  const rest = targetIds.length - names.length;
+  const list = names.length ? `: ${names.join(', ')}${rest > 0 ? ` ועוד ${rest}` : ''}` : '';
+  await note(
+    'warn',
+    'plan_all_blocked',
+    `אף קבוצה לא נכנסה לתור — לכל ${targetIds.length} הקבוצות כבר ממתין פרסום מסבב אחר${list}. הסבב הזה לא ייצא עד שהתור הקיים יתקדם או שתבחרו קבוצות אחרות.`,
+    { scheduleId, blocked: targetIds.length, targetIds },
+  );
+}
 
 /**
  * AND IT IS SAID WHEN SOMETHING ACTUALLY HAPPENED, NOT EVERY MINUTE.

@@ -432,6 +432,65 @@ console.log('unit tests OK');
   assert.ok(planAt > 0 && pauseAt > 0, 'the server worker must both plan and honour the pause switch');
   assert.ok(planAt < pauseAt, 'a paused queue must still be planned — pausing holds publishing, not bookkeeping');
 
+  /*
+   * ─── 1b. AND "NO" IS NOT ONE ANSWER ────────────────────────────────────
+   *
+   * He launched 218 groups and the screen told him "הפרסום עצמו מושהה … לחצו
+   * המשך בראש הדף כדי לשחרר את התור". There was nothing to press. This route
+   * can decline for FOUR reasons and that remedy is right for exactly one of
+   * them (control.paused); for the other three it sends him to a dead button:
+   *
+   *   multi-tenant  — the route cannot tell whose account it acts for, and
+   *                   groups were never affected anyway (SERVER_CHANNELS is
+   *                   page + manual only; facebook_group publishes from the PC)
+   *   run lock      — a previous run is in flight; waiting is the remedy
+   *   rate limited  — Meta decides when
+   *
+   * So the route says WHICH KIND of no, and the screen may not guess from
+   * `ran: false` alone.
+   */
+  assert.ok(/resumable\?: boolean;/.test(serverWorker), 'the route reports whether a button would change the outcome');
+  const resumableAt = serverWorker.indexOf('report.resumable = true;');
+  assert.ok(resumableAt > 0, 'and it sets it somewhere');
+  assert.ok(
+    resumableAt > pauseAt && resumableAt < serverWorker.indexOf('rateLimitedUntil && new Date'),
+    'ONLY on the paused branch — it is the one reason pressing המשך fixes',
+  );
+  assert.equal(
+    (serverWorker.match(/report\.resumable = true;/g) ?? []).length,
+    1,
+    'and only there: a second one would put the dead button back on a reason it cannot fix',
+  );
+  /* The two reasons that return ABOVE the planner must not be described as
+     having planned anything — the old comment in PostEditor claimed they did. */
+  const tenantAt = serverWorker.indexOf('moreThanOneBusiness(db)');
+  const lockAt = serverWorker.indexOf("report.reason = 'ריצה קודמת עדיין פועלת'");
+  assert.ok(tenantAt > 0 && lockAt > 0, 'both pre-planning refusals exist');
+  assert.ok(tenantAt < planAt && lockAt < planAt, 'and both really do return before the planner runs');
+
+  /* COMMENT-STRIPPED, the way schedule-readout.test.ts reads its two screens:
+     the note explaining this fix quotes the very sentence being counted, and a
+     test that cannot tell code from the prose about it is counting prose. */
+  const editor = readFileSync(new URL('../../src/components/social/PostEditor.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1 ');
+  assert.ok(/const remedy = r\.resumable$/m.test(editor) || /const remedy = r\.resumable\s/.test(editor), 'the launch screen branches its advice on that flag');
+  /* Counted rather than sliced. The slice this used to take was anchored on a
+     literal \n, which never matches on the Windows runner that builds the
+     installer — package.test.ts's own meta-guard caught it. The claim is
+     simpler stated as a count anyway: the sentence exists once, on the
+     resumable arm, and nowhere else. */
+  assert.equal(
+    (editor.match(/לחצו "המשך" בראש הדף/g) ?? []).length,
+    1,
+    'the "press המשך" sentence appears exactly once — a second copy would be the dead button back on a reason it cannot fix',
+  );
+  assert.ok(
+    /r\.resumable\s*\?\s*'לחצו "המשך" בראש הדף/.test(editor),
+    'and that one copy is on the resumable arm',
+  );
+  assert.ok(/הסבב נשמר\. הקבוצות נכנסות לתור מהתוכנה שעל המחשב שלכם/.test(editor), 'the other reasons say what is actually true: the round is saved and the PC takes it from here');
+
   // 2. The planner takes its client, so the process that is actually running
   //    (the owner's PC worker) can do the planning. GitHub registers a
   //    `schedule:` workflow only from the default branch, so the 5-minute tick

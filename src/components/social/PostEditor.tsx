@@ -494,7 +494,7 @@ export function PostEditor({ postId }: { postId?: string }) {
       setStarted(true);
       setReviewOpen(false);
       if (schedule.mode === 'now' || schedule.mode === 'drip') {
-        const r = await callSocialApi<{ ran: boolean; planned: number; reason?: string; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
+        const r = await callSocialApi<{ ran: boolean; planned: number; reason?: string; resumable?: boolean; published: number; manual: number; skipped: number; failed: number; deferred: number }>('/api/social/run');
         if (r.ran) {
           toast('הסבב התחיל. עקבו אחרי ההתקדמות למטה.');
           setMessage({
@@ -502,12 +502,34 @@ export function PostEditor({ postId }: { postId?: string }) {
             text: `דפים: ${r.published} ${agree(r.published, 'פורסם', 'פורסמו')}, ${r.skipped} ${agree(r.skipped, 'דולג', 'דולגו')}, ${r.deferred} ${agree(r.deferred, 'נדחה', 'נדחו')}, ${r.failed} ${agree(r.failed, 'נכשל', 'נכשלו')}. קבוצות מתפרסמות דרך התוכנה שעל המחשב שלכם — ההתקדמות למטה.`,
           });
         } else {
-          // The queue was still built (planning runs even when publishing is
-          // held), so say what is waiting and what releases it — not just why
-          // nothing came out.
+          /*
+           * ─── "NO" IS NOT ONE ANSWER, AND IT USED TO BE PRINTED AS ONE ────
+           *
+           * This branch appended «לחצו "המשך" בראש הדף כדי לשחרר את התור» to
+           * every reason the route can decline for, on the strength of
+           * `ran: false` alone. It is right for exactly one of the four
+           * (control.paused) and sends him to press a dead button for the
+           * other three — see the note on WorkerReport.resumable.
+           *
+           * And the comment that used to sit here, "the queue was still built
+           * (planning runs even when publishing is held)", is simply untrue
+           * for two of them: the multi-tenant guard and the run lock both
+           * return ABOVE `report.planned = await planQueue()`. So on those,
+           * `planned` is 0 — not because nothing was planned, but because this
+           * route never got that far.
+           *
+           * WHICH IS WHY THIS DOES NOT SAY "nothing was queued" EITHER. The
+           * schedule row was already written by createSchedule() above, before
+           * this call, and the engine on his PC plans every sixty seconds. He
+           * launched 218 groups, read "הפרסום עצמו מושהה", and had no way to
+           * tell that his round was saved and about to go out.
+           */
           const queued = r.planned ? `${counted(r.planned, 'פרסום אחד נכנס', 'פרסומים נכנסו', 'שני פרסומים נכנסו')} לתור. ` : '';
-          toast(`${queued}הפרסום עצמו מושהה: ${r.reason}`, 'info');
-          setMessage({ tone: 'info', text: `${queued}הפרסום עצמו לא רץ — ${r.reason}. לחצו "המשך" בראש הדף כדי לשחרר את התור.` });
+          const remedy = r.resumable
+            ? 'לחצו "המשך" בראש הדף כדי לשחרר את התור.'
+            : 'הסבב נשמר. הקבוצות נכנסות לתור מהתוכנה שעל המחשב שלכם תוך דקה — אין צורך לעשות דבר.';
+          toast(`${queued}${r.resumable ? 'הפרסום מושהה' : 'הסבב נשמר'}: ${r.reason}`, r.resumable ? 'info' : 'success');
+          setMessage({ tone: 'info', text: `${queued}${r.reason} ${remedy}` });
         }
       } else {
         toast('התזמון נשמר.');

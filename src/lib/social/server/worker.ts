@@ -48,6 +48,27 @@ const SERVER_CHANNELS = ['facebook_page', 'facebook_group_manual'];
 export interface WorkerReport {
   ran: boolean;
   reason?: string;
+  /**
+   * WOULD PRESSING "המשך" CHANGE THIS? — and the answer is no for three of the
+   * four reasons this route can decline.
+   *
+   * The launch screen used to append "לחצו \"המשך\" בראש הדף כדי לשחרר את
+   * התור" to EVERY reason, because `ran: false` was the only thing it had to
+   * go on. It is right for exactly one of them, `control.paused`. For the
+   * other three it sends the owner to press a button that does nothing:
+   *
+   *   multi-tenant   — this route cannot tell whose account it is acting for.
+   *                    Nothing on any screen changes that, and groups were
+   *                    never affected: SERVER_CHANNELS is page + manual only.
+   *   run lock       — a previous run is still in flight. Waiting is the
+   *                    remedy; pressing anything is not.
+   *   rate limited   — Meta decides when, not the owner.
+   *
+   * He launched 218 groups, read "הפרסום עצמו מושהה", and had no way to tell
+   * that his round was fine and already saved. So the route says which kind of
+   * "no" this is instead of leaving the screen to guess.
+   */
+  resumable?: boolean;
   planned: number;
   processed: number;
   published: number;
@@ -154,6 +175,8 @@ async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: Work
 
   if (control.paused) {
     report.reason = 'התורים מושהים';
+    /* THE ONE REASON A BUTTON FIXES. */
+    report.resumable = true;
     return report;
   }
   if (control.rateLimitedUntil && new Date(control.rateLimitedUntil) > new Date()) {

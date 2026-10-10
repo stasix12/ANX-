@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CampaignCard } from '@/components/social/CampaignCard';
+import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
 import {
@@ -96,6 +97,11 @@ export default function CampaignsPage() {
    * one sheet serves every card instead of one mounted per row.
    */
   const [commentFor, setCommentFor] = useState<Campaign | null>(null);
+  /*
+   * WHICH ROUND THE QUEUE TUNER IS ABOUT — null when it is closed, so one
+   * sheet serves every card, exactly as the dashboard does it.
+   */
+  const [tuner, setTuner] = useState<{ campaignId?: string } | null>(null);
   const [filter, setFilter] = useState<Filter>('live');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -517,6 +523,11 @@ export default function CampaignsPage() {
                  * neither card visibly, is what that row was.
                  */
                 addPostHref={`/social/posts/new?campaign=${c.id}`}
+                /* "תוסיף כאן הגדרות תור מתקדם כמו בעמוד ראשי" — the same sheet
+                   the dashboard's run card opens, scoped to this round. It is
+                   the only control in the product that re-times rows already
+                   in the queue, and it was reachable from one screen only. */
+                onTune={() => setTuner({ campaignId: c.id })}
                 /*
                  * "ערוך" PRESSED ON A CAMPAIGN OPENS ITS POST.
                  *
@@ -600,6 +611,14 @@ export default function CampaignsPage() {
         }}
       />
 
+      <QueueTunerSheet
+        open={tuner !== null}
+        onClose={() => setTuner(null)}
+        campaignId={tuner?.campaignId}
+        /* Re-reads the rounds after a re-space, so the card's "הבא בתור" is
+           the instant the tuner just wrote rather than the one it replaced. */
+        onChanged={load}
+      />
       {confirm.dialog}
     </SocialShell>
   );

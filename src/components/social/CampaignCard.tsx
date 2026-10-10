@@ -71,6 +71,7 @@ export function CampaignCard({
   workerOnline,
   postCount = 0,
   addPostHref,
+  onTune,
   editHref,
   onDuplicate,
   onReopen,
@@ -107,6 +108,21 @@ export function CampaignCard({
   /* ---- the actions that used to float underneath, now the card's own ---- */
   postCount?: number;
   addPostHref?: string;
+  /**
+   * OPENS THE QUEUE TUNER — the same "הגדרות תור מתקדמות" the dashboard's run
+   * card has had, asked for here by name.
+   *
+   * It is the only control in the product that re-times rows ALREADY IN the
+   * queue (respaceQueue), and it was reachable from one screen only. The
+   * campaigns screen is where a round is actually looked after, and the
+   * evening this was asked for was an evening spent needing exactly that:
+   * 264 rows dated days ahead, holding every group, with the only visible
+   * remedy being a red "אפס" that deletes them.
+   *
+   * Optional, like every other handler here: a caller that cannot open the
+   * sheet does not draw the button.
+   */
+  onTune?: () => void;
   /*
    * "ערוך" OPENS THE POST, not the campaign.
    *
@@ -266,6 +282,12 @@ export function CampaignCard({
     ...(showPause && onPause ? [{ label: 'עצור קמפיין', icon: <PauseIcon className="h-4 w-4" />, onSelect: onPause }] : []),
     ...(showResume && onResume ? [{ label: 'המשך קמפיין', icon: <PlayIcon className="h-4 w-4" />, onSelect: onResume }] : []),
     ...(addPostHref ? [{ label: 'הוסף פוסט', icon: <PlusIcon className="h-4 w-4" />, onSelect: () => { window.location.href = addPostHref; } }] : []),
+    /* ONLY WHEN THE BUTTON IS NOT DRAWN. The panel below carries a visible
+       "הגדרות תור מתקדמות" whenever this card has a schedule to show; a card
+       without one (no schedule, no onScheduleChange) would otherwise have no
+       way in at all. Two copies in one view is what this menu is careful not
+       to be — see the note on the header switch in CampaignSchedulePanel. */
+    ...(onTune && !(schedule && onScheduleChange) ? [{ label: 'הגדרות תור מתקדמות', icon: <RepeatIcon className="h-4 w-4" />, onSelect: onTune }] : []),
     ...(onComment ? [{ label: 'תגובה לפרסומים', icon: <MessageIcon className="h-4 w-4" />, onSelect: onComment }] : []),
     ...(onDuplicate ? [{ label: 'שכפל קמפיין', icon: <CopyIcon className="h-4 w-4" />, onSelect: onDuplicate }] : []),
     ...(onReopen ? [{ label: 'החזר לפעילות', icon: <RepeatIcon className="h-4 w-4" />, onSelect: onReopen }] : []),
@@ -539,6 +561,18 @@ export function CampaignCard({
                  can produce a publication until the round is launched once. */
               neverLaunched={state.state === 'not_started' && state.progress.total === 0}
             />
+            {/*
+              THE SAME BUTTON THE DASHBOARD'S RUN CARD HAS, in the same place
+              and the same words — "תוסיף כאן הגדרות תור מתקדם כמו בעמוד ראשי".
+              Under the panel, because what it opens is about the rows this
+              panel's settings govern.
+            */}
+            {onTune && (
+              <Button variant="secondary" size="sm" onClick={onTune} className="mt-1.5 w-full justify-center gap-1.5">
+                <RepeatIcon aria-hidden className="h-3.5 w-3.5" />
+                הגדרות תור מתקדמות
+              </Button>
+            )}
           </div>
         )}
 

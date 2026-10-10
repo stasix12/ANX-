@@ -928,6 +928,56 @@ console.log('unit tests OK');
   console.log('worker-freshness tests OK');
 }
 
+/* ------------------------------- the queue tuner is reachable from both screens */
+{
+  /*
+   * "תוסיף כאן הגדרות תור מתקדם כמו בעמוד ראשי שעישנו."
+   *
+   * respaceQueue is the ONLY thing in the product that re-times rows already
+   * sitting in the queue, and it had exactly one way in: the dashboard's run
+   * card. The campaigns screen is where a round is actually looked after, and
+   * the evening this was asked for was an evening that needed precisely it —
+   * 264 rows dated days ahead, holding every group through the database's
+   * one-open-row-per-target index, with the only visible remedy on screen
+   * being a red "אפס" that deletes them.
+   */
+  const card = readFileSync(new URL('../../src/components/social/CampaignCard.tsx', import.meta.url), 'utf8');
+  const hero = readFileSync(new URL('../../src/components/social/LiveCampaignHero.tsx', import.meta.url), 'utf8');
+  const campaignsPage = readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8');
+  const dash = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
+
+  for (const [where, src] of [['the dashboard run card', hero], ['the campaign card', card]] as const) {
+    assert.ok(/onTune\?: \(\) => void;/.test(src), `${where} takes a handler for the queue tuner`);
+    assert.ok(/הגדרות תור מתקדמות/.test(src), `${where} draws it with the same words, so it is the same thing on both screens`);
+  }
+  /* A VISIBLE BUTTON, not only a menu row — "כמו בעמוד ראשי" is what it looks
+     like there, and the dashboard's is a button under the panel. */
+  assert.ok(
+    /\{onTune && \([\s\S]{0,400}הגדרות תור מתקדמות[\s\S]{0,120}<\/Button>/.test(card),
+    'the campaign card draws it as a button under the schedule panel, the way the dashboard does',
+  );
+  /* ...and the overflow row is the FALLBACK for a card with no panel, not a
+     second copy of a control already on screen. */
+  assert.ok(
+    /onTune && !\(schedule && onScheduleChange\) \?/.test(card),
+    'the menu entry appears only when the button does not — one control per view',
+  );
+
+  for (const [where, src] of [['the dashboard', dash], ['the campaigns screen', campaignsPage]] as const) {
+    /* The string alone is not a mount — a `{false && <QueueTunerSheet …>}`
+       satisfies it while rendering nothing. What proves it is the sheet being
+       driven by the state: open when a round is chosen, closed when not. */
+    assert.ok(
+      /<QueueTunerSheet\s+open=\{tuner !== null\}/.test(src),
+      `${where} mounts the sheet and drives it from the chosen round, rather than merely naming it`,
+    );
+    assert.ok(/setTuner\(\{ campaignId/.test(src), `${where} opens it scoped to one round, not to the whole queue`);
+    assert.ok(/onChanged=\{load\}/.test(src), `${where} re-reads after a re-space, or the card keeps showing the instant the tuner just replaced`);
+  }
+
+  console.log('queue-tuner reachability tests OK');
+}
+
 /* ------------------------------------ the queue tuner actually changes the queue */
 {
   const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');

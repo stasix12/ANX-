@@ -151,6 +151,10 @@ const body = cases.map(([label, c, s, posts, media, paused]) => `
       hasPost: (posts as number) > 0, media: media as never, globalPaused: paused === true, workerOnline: true,
       onPause: () => {}, onResume: () => {}, editHref: '/social/posts/p1', onDuplicate: () => {},
       onDelete: () => {}, addPostHref: '/x', busy: false,
+      /* The queue tuner's button. Passed so the measurement below actually
+         covers it: without a handler the card draws nothing, and a hit-test
+         that never sees a control cannot find it too small. */
+      onTune: () => {},
       schedule: schedules[(c as { id: string }).id] ?? null,
       onScheduleChange: schedules[(c as { id: string }).id] ? () => {} : undefined }) as never,
   )}</div>`).join('');

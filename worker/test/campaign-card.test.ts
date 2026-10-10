@@ -297,15 +297,30 @@ async function main(): Promise<void> {
          * Without the panel the card is what it has always been: 166px here,
          * and the old 210 ceiling still holds it. With the panel it carries a
          * 232px block — a header, seven 40px chips, three 40px fields and a
-         * summary strip — and measures 404 to 462 across these widths. The
-         * second ceiling is that maximum plus four, as everywhere in this
-         * suite, and the gap between the two is what would catch the panel
-         * quietly growing a row.
+         * summary strip — plus, now, the "הגדרות תור מתקדמות" button under it,
+         * and measures 468 to 508 across these widths.
+         *
+         * RAISED FROM 466 TO 512, AND THE 46px IS TWO DELIBERATE ADDITIONS,
+         * measured rather than estimated:
+         *
+         *   ~18px  the queue-tuner button. "תוסיף כאן הגדרות תור מתקדם כמו
+         *          בעמוד ראשי" — it opens the only control in the product that
+         *          re-times rows ALREADY in the queue, and it was reachable
+         *          from one screen.
+         *   ~28px  the never-launched notice, on the one fixture card in that
+         *          state. It replaced a paragraph that promised a daily repeat
+         *          the round could not perform, and it is longer because it
+         *          also names the action that fixes it.
+         *
+         * A ceiling catches growth nobody decided on. Both of these were
+         * decided on, so the number moves with them rather than the controls
+         * being bent to fit — and it is still a ceiling: the next row that
+         * appears without a reason fails here.
          */
-        const ceiling = card.panel ? 466 : 210;
+        const ceiling = card.panel ? 512 : 210;
         assert.ok(
           card.height <= ceiling,
-          say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling panel it measured 404 to 462 when this was written' : "the design specification's card measured 169 to 206 here"}`),
+          say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling panel and the queue-tuner button it measured 468 to 508 when this was written' : "the design specification's card measured 169 to 206 here"}`),
         );
         /*
          * THE PICTURE IS THE POINT OF THIS CARD. "התמונה צריכה להיות אלמנט

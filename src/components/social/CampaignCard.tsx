@@ -645,7 +645,7 @@ export function CampaignCard({
                    nothing does, until he presses resume. */
                 <span className="block truncate text-warning-400">מושהה — אין פרסום עד שתמשיכו</span>
               ) : readout.kind === 'partial' ? (
-                <span className="block truncate text-mist-500">הסבב גדול מדי לספירה כאן</span>
+                <span className="block truncate text-mist-500">ספירה מקורבת</span>
               ) : readout.kind === 'manual' ? (
                 /* Publications ARE waiting — on him. "אין פרסום ממתין" over
                    these was the list reporting them as nothing. */

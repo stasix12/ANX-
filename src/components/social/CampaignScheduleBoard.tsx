@@ -411,7 +411,7 @@ function NextPublishStrip({ readout, scheduleOn }: { readout: ScheduleReadout; s
              countdown to a moment that arrives and passes untouched. */
           'הסבב מושהה'
         ) : partial ? (
-          'הסבב גדול מדי לספירה'
+          'ספירה מקורבת'
         ) : manual ? (
           'ממתין לטיפול ידני'
         ) : isWindow ? (
@@ -454,9 +454,11 @@ function NextPublishStrip({ readout, scheduleOn }: { readout: ScheduleReadout; s
         ) : paused ? (
           <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">אין פרסום עד שתמשיכו</span>
         ) : partial ? (
-          /* A capped read drops the furthest-out rows, so every count here
-             errs towards "finished". Saying so is the only honest answer. */
-          <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-mist-300">לא ניתן לחשב כאן</span>
+          /* No instant exists, and the label beside it already says the count
+             is approximate. A second sentence saying the same thing in the
+             same strip was the duplicate the owner pointed at — the `over`
+             branch above leaves this column empty for the same reason. */
+          null
         ) : manual ? (
           <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">
             {readout.kind === 'manual' && counted(readout.waiting, 'פרסום אחד ממתין לך', 'פרסומים ממתינים לך', 'שני פרסומים ממתינים לך')}

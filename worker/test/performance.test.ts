@@ -386,7 +386,7 @@ const code = (rel: string) =>
      can tell that it hit one instead of silently returning a short answer. */
   const countsLimit = Number(/const COUNTS_LIMIT = (\d+);/.exec(client)?.[1] ?? 0);
   is(countsLimit > 0 && countsLimit < ceiling, `the counts read asks for ${countsLimit}, strictly under the server's ${ceiling} so a short answer is detectable`);
-  is(/if \(\(countRes\.data \?\? \[\]\)\.length >= COUNTS_LIMIT\) return null;/.test(client), 'and it refuses to present a capped count as exact');
+  is(/if \(\(countRes\.data \?\? \[\]\)\.length >= COUNTS_LIMIT\) return \{ kind: 'too-many-rounds' \};/.test(client), 'and it refuses to present a capped count as exact, naming which ceiling it hit');
 }
 
 console.log(`performance-pass guards OK — ${checks} assertions`);

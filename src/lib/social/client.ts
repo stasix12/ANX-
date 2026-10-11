@@ -3,7 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
-import { counted, zonedDateISO } from './time';
+import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
 import { readSchedule, readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
@@ -1789,13 +1789,28 @@ export async function screenshotUrl(path: string): Promise<string | null> {
 const CAMPAIGN_ROLLUP_LIMIT = 1000;
 
 /**
- * How many FINISHED rows the rollup reads back, across every campaign.
+ * How many FINISHED rows the rollup reads back, across every campaign in ONE
+ * shared budget — which is the whole of why this number needs a comment.
  *
- * The done list is a preview — the newest few publications per round, for the
- * timeline and for "what went out". It is NOT where any number comes from any
- * more (see campaignCounts), so a ceiling here cannot make a round look more
- * finished than it is. Ordered by published_at DESCENDING, so what falls off
- * the end is the oldest history rather than anything still ahead.
+ * The done list is a preview, and WITHOUT v27's views it is also where the
+ * numbers come from. A cut preview can still only ever UNDERSTATE a round:
+ * dropping k finished rows removes one from `finished` and one from `total`
+ * together, and (f-k)/(t-k) <= f/t for every f <= t. So this ceiling cannot
+ * make a round look more finished than it is, and it is NOT the 28/28 guard —
+ * that guard is `openTruncated`, because resolveState() ends a round exactly
+ * when openRows(progress) is zero and that figure is built from the open read
+ * alone.
+ *
+ * What this ceiling CAN do is leave a headline short, so it still sets
+ * `truncated` for a round counted over its LIFE. A round counted for TODAY is
+ * cleared by its own read instead (see the today-scoped read in
+ * campaignStates), because this one is lifetime-scoped and cannot answer a
+ * question about today.
+ *
+ * Ordered by published_at DESCENDING, nulls last, so what falls off the end is
+ * the oldest history — and also every failed or skipped row, which has no
+ * published_at at all. That second half is exactly why the today read is
+ * filtered on scheduled_at and not on this column.
  */
 const ROLLUP_DONE_LIMIT = 500;
 
@@ -1873,7 +1888,25 @@ export interface CampaignExactCounts {
 
 export type CampaignCountMap = Record<string, CampaignExactCounts>;
 
-export async function campaignCounts(campaignIds?: string[]): Promise<CampaignCountMap | null> {
+/**
+ * WHY A COUNT IS NOT EXACT, because the screen has to say something different
+ * for each reason and used to say the worst one for all of them.
+ *
+ * A bare `null` collapsed "this database has not had social-latest.sql run on
+ * it yet" — a one-off the owner can fix in half a minute — into the same
+ * silence as "this round is genuinely larger than one request can count", and
+ * the card then printed the second sentence over the first situation.
+ */
+export type CountsRead =
+  | { kind: 'exact'; map: CampaignCountMap }
+  /** The v27 views are not in this database — social-latest.sql has not run. */
+  | { kind: 'db-outdated' }
+  /** The counts read reached COUNTS_LIMIT: more rounds than one request counts. */
+  | { kind: 'too-many-rounds' }
+  /** The read itself failed. Only a caller that catches produces this. */
+  | { kind: 'read-failed' };
+
+export async function campaignCounts(campaignIds?: string[]): Promise<CountsRead> {
   /*
    * AN EXPLICIT CEILING, because leaning on PostgREST's default is how a
    * count becomes a ceiling again.
@@ -1914,7 +1947,7 @@ export async function campaignCounts(campaignIds?: string[]): Promise<CampaignCo
    * shape of fault this whole change is about.
    */
   if (countRes.error && !isMissingRelation(countRes.error)) throw friendlyError(countRes.error);
-  if (countRes.error) return null;
+  if (countRes.error) return { kind: 'db-outdated' };
   /*
    * AT THE CEILING, THE ANSWER IS NOT EXACT — and an inexact exact-count is
    * worse than no exact-count, because every surface trusts this one. A
@@ -1923,7 +1956,7 @@ export async function campaignCounts(campaignIds?: string[]): Promise<CampaignCo
    * caller's fallback — count the rows, say they are partial — is the honest
    * answer in that case.
    */
-  if ((countRes.data ?? []).length >= COUNTS_LIMIT) return null;
+  if ((countRes.data ?? []).length >= COUNTS_LIMIT) return { kind: 'too-many-rounds' };
 
   const out: CampaignCountMap = {};
   const entry = (id: string) =>
@@ -1945,7 +1978,7 @@ export async function campaignCounts(campaignIds?: string[]): Promise<CampaignCo
       e.lastPublishedAt = row.last_published_at ?? null;
     }
   }
-  return out;
+  return { kind: 'exact', map: out };
 }
 
 /**
@@ -2031,12 +2064,16 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
     .limit(ROLLUP_DONE_LIMIT);
   if (campaignIds) doneQuery = doneQuery.in('campaign_id', campaignIds);
 
-  const [openRes, doneRes, counts, campaigns] = await Promise.all([
+  const [openRes, doneRes, countsRead, campaigns] = await Promise.all([
     openQuery,
     doneQuery,
     campaignCounts(campaignIds),
     listCampaigns(),
   ]);
+  /* One name for "do we have exact counts", so every line below — the
+     `!counts` gate on the today read, `Object.keys(counts ?? {})` and
+     `counts?.[id]` — reads exactly as it did before the reason was carried. */
+  const counts = countsRead.kind === 'exact' ? countsRead.map : null;
   const openRows = unwrap<(CampaignQueueRow & { campaign_id: string })[]>(openRes);
   const doneRows = unwrap<(CampaignQueueRow & { campaign_id: string })[]>(doneRes);
   /*
@@ -2056,11 +2093,90 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
 
   const byId = new Map(campaigns.map((c) => [c.id, c]));
   const grouped = new Map<string, CampaignQueueRow[]>();
+  /* Row ids already grouped, so the today read below cannot add a row twice —
+     a row counted twice is a total that is too BIG, the mirror image of the
+     fault this whole function guards. */
+  const seen = new Set<string>();
   for (const row of [...openRows, ...doneRows]) {
+    seen.add(row.id);
     const list = grouped.get(row.campaign_id);
     if (list) list.push(row);
     else grouped.set(row.campaign_id, [row]);
   }
+
+  /*
+   * ───────── TODAY'S FINISHED ROWS, WHEN TODAY IS WHAT IS BEING COUNTED ────
+   *
+   * `doneTruncated` answers "could we read all of HISTORY". A repeating round
+   * is counted for TODAY. Those are different questions, and feeding the first
+   * into the answer to the second is why a 39-row round was told it is "too
+   * big to count": one shared 500-row preview of lifetime history is full on
+   * any account with a few days of past, so every campaign in the call
+   * inherited the flag.
+   *
+   * This read asks the question that is actually being answered: every
+   * TERMINAL row whose scheduled_at falls inside today. Filtered on
+   * scheduled_at (NOT NULL) rather than published_at, so a failed or skipped
+   * row — which has no published_at and sorts last out of the preview above —
+   * cannot be missing from it. Union it with the open rows, which v20's
+   * one-open-row-per-target index already bounds, and today's slice is
+   * PROVABLY whole rather than hopefully whole.
+   *
+   * ONE EXTRA REQUEST, AND ONLY WHEN IT CHANGES AN ANSWER: skipped when the
+   * v27 views are there (the counts are exact, nothing is derived from rows),
+   * skipped when the preview was not cut at all (nothing was dropped to begin
+   * with), skipped when no campaign in the call repeats (nothing is counted
+   * for today). On a migrated database it never runs.
+   */
+  const now = new Date();
+  const dayStart = startOfZonedDay(now);
+  const dayEnd = zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00');
+  const anyRepeats = (campaignIds ?? campaigns.map((c) => c.id)).some((id) => readRepeat(byId.get(id) ?? null).enabled);
+  /* Unknown means HEDGE. Every path that skips the read leaves this true only
+     because that path has already proved today's rows are all present. */
+  let todayIsWhole = true;
+  if (!counts && doneTruncated && anyRepeats) {
+    let todayQuery = db()
+      .from('social_queue')
+      .select(ROLLUP_SELECT)
+      .not('campaign_id', 'is', null)
+      .in('status', TERMINAL_STATUSES as unknown as string[])
+      .gte('scheduled_at', dayStart.toISOString())
+      .lt('scheduled_at', dayEnd.toISOString())
+      .order('scheduled_at', { ascending: false })
+      .limit(CAMPAIGN_ROLLUP_LIMIT);
+    if (campaignIds) todayQuery = todayQuery.in('campaign_id', campaignIds);
+    try {
+      const todayRows = unwrap<(CampaignQueueRow & { campaign_id: string })[]>(await todayQuery);
+      /* At PostgREST's own ceiling the server may have cut it, so today is NOT
+         proved and the hedge stays — which is the conservative direction. */
+      todayIsWhole = todayRows.length < CAMPAIGN_ROLLUP_LIMIT;
+      for (const row of todayRows) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        const list = grouped.get(row.campaign_id);
+        if (list) list.push(row);
+        else grouped.set(row.campaign_id, [row]);
+      }
+    } catch {
+      /* A read added to REMOVE a false warning must not be able to blank a
+         dashboard that worked before it existed. Unproved means hedged. */
+      todayIsWhole = false;
+    }
+  }
+
+  /*
+   * WHOLENESS IS PER CAMPAIGN BECAUSE IT IS PER SCOPE, and `openTruncated` is
+   * the first term unconditionally — it is the 28/28 guard. resolveState()
+   * ends a round exactly when openRows(progress) is zero, and that figure is
+   * built from the open read alone, so a cut OPEN read must always flag.
+   *
+   *   • a REPEATING round is counted for TODAY, and today is whole when the
+   *     read above says so;
+   *   • a ONE-OFF round is counted over its LIFE, and the lifetime preview is
+   *     shared, so it stays exactly as conservative as it was.
+   */
+  const sliceIsWhole = (todayOnly: boolean): boolean => !openTruncated && (todayOnly ? todayIsWhole : !doneTruncated);
   /* A campaign the counts know about but that has no row in either preview —
      a round whose every publication is older than the done preview — must
      still get a state, or it would vanish from the dashboard exactly as the
@@ -2068,7 +2184,7 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
   for (const id of Object.keys(counts ?? {})) if (!grouped.has(id)) grouped.set(id, []);
   if (campaignIds) for (const id of campaignIds) if (!grouped.has(id)) grouped.set(id, []);
 
-  const todayISO = zonedDateISO(new Date());
+  const todayISO = zonedDateISO(now);
   const out: Record<string, CampaignState> = {};
   for (const [id, all] of grouped) {
     const campaign = byId.get(id) ?? null;
@@ -2096,11 +2212,28 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
        * `truncated` KEEPS ITS MEANING FOR EVERY READER: the numbers on this
        * state are not the round's totals. With the view present they ARE the
        * totals however the previews were cut, so it is false; without it the
-       * old row-counting behaviour returns, now bounded per campaign rather
-       * than by whatever the account-wide window left over.
+       * question is asked of the SLICE these numbers actually came from — see
+       * sliceIsWhole above, and the read that lets it answer "today".
        */
-      truncated: exact ? false : !rowsAreWhole,
+      truncated: exact ? false : !sliceIsWhole(todayOnly),
       todayOnly,
+      /*
+       * WHY the numbers are not exact, because "too big" and "the database
+       * needs a one-off update" are not the same sentence and only one of
+       * them is something he can act on. A genuinely cut read wins: that is
+       * the 28/28 shape and the strongest claim of the four.
+       */
+      countsNote: exact
+        ? null
+        : openTruncated || (todayOnly && !todayIsWhole)
+          ? 'too-big'
+          : countsRead.kind === 'db-outdated'
+            ? 'db-outdated'
+            : countsRead.kind === 'too-many-rounds'
+              ? 'too-many-rounds'
+              : countsRead.kind === 'read-failed'
+                ? 'read-failed'
+                : 'too-big',
       /* `lifetime: all` — the slice above is today's, and "has this round ever
          published" must not be answered from it. See CampaignState.everPublished. */
       lifetime: all,

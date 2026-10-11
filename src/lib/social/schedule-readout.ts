@@ -238,9 +238,17 @@ export function scheduleReadout(
    * "finished". The card is told it cannot answer rather than handed an answer
    * that leans one way.
    */
-  if (state.truncated) return { kind: 'partial' };
-
+  /*
+   * A ROW WAITING ON A PERSON SURVIVES A CAP, exactly as a queued row does,
+   * and for the same reason: p.manual is a count of rows we can SEE. A cap can
+   * only ever make it SMALLER, and "at least one publication is waiting for
+   * you" is safe to under-promise — whereas 'partial' here printed "לא ניתן
+   * לחשב כאן" over a round whose one actionable fact was known, which is the
+   * disclaimer eating the answer instead of qualifying it.
+   */
   if (state.progress.manual > 0) return { kind: 'manual', waiting: state.progress.manual };
+
+  if (state.truncated) return { kind: 'partial' };
 
   if (on && schedule) {
     /* 5 — inside the window, the useful edge is the one still ahead of him. */

@@ -332,7 +332,7 @@ async function main(): Promise<void> {
       });
 
       assert.equal(seen.overflow, false, `${width}: the page scrolls sideways`);
-      assert.equal(seen.cards.length, 13, `${width}: expected 13 cards, got ${seen.cards.length}`);
+      assert.equal(seen.cards.length, 14, `${width}: expected 14 cards, got ${seen.cards.length}`);
 
       seen.cards.forEach((c, i) => {
         const at = `${width}px, card ${i + 1}`;
@@ -371,13 +371,13 @@ async function main(): Promise<void> {
             c.text.includes('הסבב הופסק') ||
             c.text.includes('ממתין לטיפול ידני') ||
             c.text.includes('הסבב מושהה') ||
-            c.text.includes('הסבב גדול מדי לספירה'),
+            c.text.includes('ספירה מקורבת'),
           `${at}: the strip has lost its label`,
         );
       });
 
       /* ─── what each case must, and must not, say ─────────────────────── */
-      const [reference, , , noDay, off, nothingQueued, , scheduleOff, , windowOpen, ended, halted, awaitingHand] = seen.cards;
+      const [reference, , , noDay, off, nothingQueued, , scheduleOff, , windowOpen, ended, halted, awaitingHand, approximate] = seen.cards;
 
       /* 1 — the reference's own card: a time, a date, and the day it falls on. */
       assert.match(reference.text, /הפרסום הבא יתחיל ב: ?\d{2}:\d{2}/, `${width}: the reference card prints no time`);
@@ -509,6 +509,43 @@ async function main(): Promise<void> {
       assert.match(awaitingHand.text, /7 פרסומים ממתינים לך/, `${width}: and the strip does not say how many`);
       assert.ok(!awaitingHand.text.includes('אין פרסום ממתין'), `${width}: publications that ARE waiting were reported as none`);
       assert.doesNotMatch(awaitingHand.strip, /\d{1,2}:\d{2}/, `${width}: a hand-waiting round printed a clock time`);
+
+      /*
+       * 14 — A COUNT THAT IS NOT THE ROUND'S, rendered rather than grepped.
+       *
+       * Every other guard on this is a substring search for `state.truncated`
+       * in LiveCampaignHero's source, and that token appears three times in
+       * the file — so the paragraph could be deleted outright and they would
+       * all still pass. This reads the pixels.
+       *
+       * And it must be the RIGHT sentence. The owner's round is 39 rows; the
+       * reason his numbers are approximate is that the counting views are not
+       * in his database, which he can fix in half a minute. "הסבב גדול מדי"
+       * is false there, and it is the sentence the card used to print.
+       */
+      assert.ok(
+        approximate.text.includes('הספירה כאן מקורבת'),
+        `${width}: a card whose numbers are not the round's said nothing about it`,
+      );
+      assert.ok(
+        approximate.text.includes('social-latest.sql'),
+        `${width}: the one cause the owner can act on did not name the remedy`,
+      );
+      assert.ok(
+        !approximate.text.includes('גדול מדי') && !approximate.text.includes('גדול מכדי'),
+        `${width}: a 39-row round was told it is too big to count`,
+      );
+      /* Only that card. A disclaimer that leaks onto rounds whose numbers ARE
+         exact is the noise this whole change is about. */
+      seen.cards.forEach((c, i) => {
+        if (i === 13) return;
+        assert.ok(
+          !c.text.includes('הספירה כאן מקורבת') && !c.text.includes('ספירה מקורבת'),
+          `${width}: card ${i + 1} hedges a count nobody said was partial`,
+        );
+      });
+      /* And it still refuses to name an instant it cannot stand behind. */
+      assert.doesNotMatch(approximate.strip, /\d{1,2}:\d{2}/, `${width}: an unprovable count printed a clock time`);
 
       await view.close();
       checks += 35;

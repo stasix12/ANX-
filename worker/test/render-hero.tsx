@@ -247,6 +247,27 @@ const cases = [
   ['rows waiting for a person, inside an open window', camp('13', 'ניקוי שטיחים ערד'),
     st(prog({ total: 12, published: 5, manual: 7, finished: 5 }), { state: 'needs_attention', startedAt: beforeClock(WINDOW_OPEN, 3) }),
     12, sched.reference, WINDOW_OPEN],
+  /*
+   * 14 — THE COUNT IS NOT THE ROUND'S, and the card has to say so IN WORDS.
+   *
+   * Every other guard on this behaviour is a substring check for
+   * `state.truncated` in the source, and that token appears three times in
+   * LiveCampaignHero — so the paragraph itself could be deleted outright and
+   * the suite would stay green. This fixture renders it.
+   *
+   * `countsNote: 'db-outdated'` is the owner's real case: the round is 39 rows
+   * and the counting views simply are not in his database. Saying "the round
+   * is too big" there is false, and saying nothing is worse.
+   */
+  ['a count that is not the round\u2019s, because the database has no counting views', camp('14', 'פרסומת רוסים לספות'),
+    st(prog({ total: 39, published: 39, finished: 39 }), {
+      state: 'completed',
+      truncated: true,
+      countsNote: 'db-outdated',
+      todayOnly: true,
+      startedAt: beforeClock(WINDOW_OPEN, 5),
+    }),
+    39, sched.reference, WINDOW_OPEN],
 ] as const;
 
 const body = cases

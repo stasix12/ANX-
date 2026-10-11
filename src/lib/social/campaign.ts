@@ -50,6 +50,17 @@ export interface CampaignQueueRow extends Pick<QueueItem, 'id' | 'status' | 'sch
  * post and variant joined) gets those back out of `upcoming`/`done`, while a
  * caller that fetched the narrow columns is not forced to pretend otherwise.
  */
+/**
+ * Why a round's numbers are not exact — one of four, and each gets its own
+ * sentence on screen.
+ *
+ *   too-big          the read really was cut: more rows than one request holds
+ *   db-outdated      the counting views are not in this database yet
+ *   too-many-rounds  more campaigns than one counts request can carry
+ *   read-failed      the counts request itself did not come back
+ */
+export type CountsNote = 'too-big' | 'db-outdated' | 'too-many-rounds' | 'read-failed';
+
 export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
   progress: CampaignProgress;
   state: RunState;
@@ -61,6 +72,16 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
    * waiting. Set by the caller that knows its own limit (client.ts).
    */
   truncated: boolean;
+  /**
+   * WHY `truncated` is set — because "this round is larger than one request
+   * can count" and "this database has not had social-latest.sql run on it"
+   * are different sentences and only one of them is something the owner can
+   * act on. The card used to print the first over the second.
+   *
+   * Optional so every existing fixture keeps compiling; null means the counts
+   * are exact and nothing needs explaining.
+   */
+  countsNote?: CountsNote | null;
   /**
    * These rows are TODAY'S, not the round's whole history.
    *
@@ -142,6 +163,8 @@ export function campaignState<T extends CampaignQueueRow>(
   campaign?: Pick<Campaign, 'status'> | null,
   opts: {
     truncated?: boolean;
+    /** Why `truncated` is set. See CountsNote. */
+    countsNote?: CountsNote | null;
     todayOnly?: boolean;
     /**
      * Every row of the round, when `rows` is only a slice of it. Defaults to
@@ -300,6 +323,7 @@ export function campaignState<T extends CampaignQueueRow>(
      */
     state: resolveState(progress, campaign?.status, progress.total, startedAt !== null || progress.published > 0),
     truncated: opts.truncated ?? false,
+    countsNote: opts.countsNote ?? null,
     todayOnly: opts.todayOnly ?? false,
     startedAt,
     everPublished,

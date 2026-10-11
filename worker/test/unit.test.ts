@@ -2225,7 +2225,25 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(client.includes('const openTruncated = openRows.length >= CAMPAIGN_ROLLUP_LIMIT;'), 'campaignStates must detect the open read\u2019s ceiling');
   assert.ok(client.includes('const doneTruncated = doneRows.length >= ROLLUP_DONE_LIMIT;'), 'and the finished preview\u2019s');
   assert.ok(client.includes('const rowsAreWhole = !openTruncated && !doneTruncated;'), 'and may only count rows when neither was cut');
-  assert.ok(client.includes('truncated: exact ? false : !rowsAreWhole,'), 'exact counts clear the flag; anything else sets it');
+  assert.ok(client.includes('truncated: exact ? false : !sliceIsWhole(todayOnly),'), 'exact counts clear the flag; anything else asks the question of the slice the numbers actually came from');
+  /*
+   * AND THE OPEN CEILING IS THE FIRST TERM, UNCONDITIONALLY. It is the 28/28
+   * guard: resolveState() ends a round exactly when openRows(progress) is
+   * zero, and that figure is built from the open read alone, so a cut open
+   * read must flag however the round is scoped.
+   */
+  assert.ok(
+    client.includes('const sliceIsWhole = (todayOnly: boolean): boolean => !openTruncated && (todayOnly ? todayIsWhole : !doneTruncated);'),
+    'wholeness is per scope, and the open ceiling is never relaxed',
+  );
+  /* Today is read by when a row was DUE. published_at is null on every failed
+     and skipped row, so a published_at window would silently drop them. */
+  assert.ok(client.includes(".gte('scheduled_at', dayStart.toISOString())"), 'the today read is bounded by when a row was due');
+  assert.ok(client.includes(".lt('scheduled_at', dayEnd.toISOString())"), 'and closed at the next midnight, in the owner\u2019s timezone');
+  assert.ok(client.includes('todayIsWhole = todayRows.length < CAMPAIGN_ROLLUP_LIMIT;'), 'and the new read discloses its own ceiling rather than trusting it');
+  /* Two reads can return the same row. Counting it twice makes a total too
+     BIG — the mirror image of the fault this whole function guards. */
+  assert.ok(client.includes('if (seen.has(row.id)) continue;'), 'a row reachable from two reads is counted once');
   /* AND A FAILED READ IS NOT A MISSING VIEW. Swallowing both put the 28/28
      card back on screen the moment the phone lost signal. */
   assert.ok(client.includes('if (countRes.error && !isMissingRelation(countRes.error)) throw friendlyError(countRes.error);'), 'a failed counts read is raised, not mistaken for a database without the view');

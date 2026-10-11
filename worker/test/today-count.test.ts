@@ -198,7 +198,7 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
    * strip disappears from the dashboard every midnight — see section 6b.
    */
   is(
-    /campaignState\(list, campaign, \{\s*truncated: exact \? false : !rowsAreWhole,\s*todayOnly,/.test(client),
+    /campaignState\(list, campaign, \{\s*truncated: exact \? false : !sliceIsWhole\(todayOnly\),\s*todayOnly,/.test(client),
     'the state carries the scope WITH the numbers',
   );
   is(/lifetime: all,/.test(client), 'and the whole round’s rows alongside them');

@@ -359,10 +359,28 @@ const st = (
    */
   eq(scheduleReadout(ref, st('completed', null, { truncated: true }), now), { kind: 'partial' }, 'a capped read may NOT claim the round ended');
   eq(scheduleReadout(ref, st('not_started', null, { truncated: true }), now), { kind: 'partial' }, 'nor may it answer from a count it does not have');
+  /*
+   * BUT A ROW WAITING ON A PERSON SURVIVES THE CAP, for the same reason a
+   * queued row does: p.manual counts rows we can SEE, and a cap can only ever
+   * make that number SMALLER. "לפחות אחד ממתין לך" is safe to under-promise,
+   * whereas 'partial' here printed "לא ניתן לחשב כאן" over the one actionable
+   * fact the card knew — the disclaimer eating the answer instead of
+   * qualifying it. The owner's card 1 is exactly this shape.
+   */
   eq(
     scheduleReadout(ref, st('needs_attention', null, { truncated: true, manual: 7 }), now),
+    { kind: 'manual', waiting: 7 },
+    'a row waiting on HIM is still reported, capped read or not',
+  );
+  /*
+   * AND THE REORDER STOPS THERE. With nothing waiting on a person, a capped
+   * read still may not fall through to a window answer — those genuinely
+   * depend on "is anything left", which is the count the cap destroyed.
+   */
+  eq(
+    scheduleReadout(ref, st('completed', null, { truncated: true, manual: 0 }), now),
     { kind: 'partial' },
-    'nor count what is waiting',
+    'with nobody waiting, a capped read still answers nothing rather than a window',
   );
   /*
    * BUT A ROW IT CAN SEE IS A FACT, and nothing a cap drops makes it false.

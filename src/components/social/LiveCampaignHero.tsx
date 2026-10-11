@@ -8,6 +8,7 @@ import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaig
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { accountGapSeconds } from '@/lib/social/rules';
 import { countdownTo } from '@/lib/social/countdown';
+import { LATEST_SCHEMA_FILE } from '@/lib/social/errors';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
 import { CampaignScheduleBoard } from './CampaignScheduleBoard';
@@ -397,7 +398,11 @@ export function LiveCampaignHero({
                 into an ellipsis — decoration crowding out the two things the
                 owner asked this line for. They are on the run's own screen,
                 one tap away. */}
-            {[startedAt ? `התחיל ${relativeHe(startedAt)}` : 'טרם יצא פרסום', targetCount && !state.truncated ? counted(targetCount, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות') : '']
+            {/* THE GROUP COUNT IS A LOWER BOUND, NOT A SECRET. It used to be
+                dropped entirely when the count was approximate, which
+                subtracts a true fact instead of qualifying it — the row-derived
+                figure is always a floor, never an overstatement. */}
+            {[startedAt ? `התחיל ${relativeHe(startedAt)}` : 'טרם יצא פרסום', targetCount ? `${state.truncated ? 'לפחות ' : ''}${counted(targetCount, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')}` : '']
               .filter(Boolean)
               .join(' · ')}
           </p>
@@ -455,9 +460,23 @@ export function LiveCampaignHero({
         <p className="mt-1.5 text-xs text-mist-500">
           {[view.publishedLabel, view.note, open > 0 ? `${open} עוד לא יצאו` : ''].filter(Boolean).join(' · ')}
         </p>
+        {/*
+          ONE SENTENCE PER CAUSE, because they are not the same problem.
+          The old single sentence said "the round is too big" for all four,
+          and on an un-migrated database that is simply false: the round is
+          39 rows and the counting views are missing. It also said "הפרסומים
+          הראשונים בלבד", which describes an ASCENDING read — the done preview
+          is published_at DESCENDING, so what it drops is the OLDEST history.
+        */}
         {state.truncated && (
           <p className="mt-1.5 text-xs text-warning-400">
-            הסבב גדול מכדי לספור אותו כאן במלואו — המספרים למעלה הם של הפרסומים הראשונים בלבד. הרשימה המלאה בעמוד הסבב.
+            {state.countsNote === 'db-outdated'
+              ? `הספירה כאן מקורבת — צריך להריץ פעם אחת את ${LATEST_SCHEMA_FILE} ב-SQL Editor של Supabase, ואז המספרים יהיו מדויקים. אפשר להריץ אותו גם אם כבר הרצתם: הוא לא מוחק, לא מאפס את התור ולא משנה שום פרסום.`
+              : state.countsNote === 'too-many-rounds'
+                ? 'יש כאן יותר סבבים ממה שאפשר לספור בבת אחת — פתחו את הסבב כדי לראות את מספריו המדויקים.'
+                : state.countsNote === 'read-failed'
+                  ? 'לא הצלחנו לקרוא את הספירה המדויקת כרגע — המספרים כאן מקורבים.'
+                  : 'הסבב גדול מדי לספירה מלאה כאן — המספרים הם של הפרסומים שנקראו, לא של הסבב כולו. הרשימה המלאה בעמוד הסבב.'}
           </p>
         )}
         {globalPaused && (

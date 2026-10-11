@@ -160,6 +160,10 @@ function builder(source: Row[]) {
       filters.push((r) => typeof (r as any)[col] === 'string' && (r as any)[col] <= val);
       return self;
     },
+    lt(col: string, val: string) {
+      filters.push((r) => typeof (r as any)[col] === 'string' && (r as any)[col] < val);
+      return self;
+    },
     order(col: string, opts?: { ascending?: boolean }) {
       orderCol = col;
       ascending = opts?.ascending ?? true;
@@ -290,6 +294,8 @@ async function simCampaignStates(
   const { data: openRows } = (await openQuery) as Result;
   const { data: doneRows } = (await doneQuery) as Result;
   const openTruncated = openRows.length >= CAMPAIGN_ROLLUP_LIMIT;
+  const doneTruncated = doneRows.length >= ROLLUP_DONE_LIMIT;
+  const rowsAreWhole = !openTruncated && !doneTruncated;
 
   /* `countsView: false` is a database that has not run social-latest.sql yet —
      the fallback path, where the numbers come from the rows again and every
@@ -298,15 +304,52 @@ async function simCampaignStates(
 
   const byId = new Map(campaigns.map((c) => [c.id, c]));
   const grouped = new Map<string, Row[]>();
+  const seen = new Set<string>();
   for (const row of [...openRows, ...doneRows]) {
+    seen.add(row.id as string);
     const list = grouped.get(row.campaign_id as string);
     if (list) list.push(row);
     else grouped.set(row.campaign_id as string, [row]);
   }
+
+  const todayISO = opts.todayISO ?? NOW.toISOString().slice(0, 10);
+  /*
+   * TODAY'S FINISHED ROWS — mirroring campaignStates(). The lifetime preview
+   * answers "could we read all of HISTORY"; a repeating round is counted for
+   * TODAY. Bounded by scheduled_at, NOT published_at, because a skipped or
+   * failed row has no published_at and would be invisible to the other read.
+   */
+  const dayAfter = new Date(Date.parse(`${todayISO}T00:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
+  const anyRepeats = (campaignIds ?? campaigns.map((c) => c.id)).some(
+    (id) => Boolean((byId.get(id) as { repeat_enabled?: boolean } | undefined)?.repeat_enabled),
+  );
+  let todayIsWhole = true;
+  if (!counts && doneTruncated && anyRepeats) {
+    let todayQuery = db
+      .from('social_queue')
+      .select(SELECT)
+      .not('campaign_id', 'is', null)
+      .in('status', TERMINAL_STATUSES)
+      .gte('scheduled_at', `${todayISO}T00:00:00.000Z`)
+      .lt('scheduled_at', `${dayAfter}T00:00:00.000Z`)
+      .order('scheduled_at', { ascending: false })
+      .limit(CAMPAIGN_ROLLUP_LIMIT);
+    if (campaignIds) todayQuery = todayQuery.in('campaign_id', campaignIds);
+    const { data: todayRows } = (await todayQuery) as Result;
+    todayIsWhole = todayRows.length < CAMPAIGN_ROLLUP_LIMIT;
+    for (const row of todayRows) {
+      if (seen.has(row.id as string)) continue;
+      seen.add(row.id as string);
+      const list = grouped.get(row.campaign_id as string);
+      if (list) list.push(row);
+      else grouped.set(row.campaign_id as string, [row]);
+    }
+  }
+  const sliceIsWhole = (todayOnly: boolean): boolean => !openTruncated && (todayOnly ? todayIsWhole : !doneTruncated);
+
   for (const id of Object.keys(counts ?? {})) if (!grouped.has(id)) grouped.set(id, []);
   if (campaignIds) for (const id of campaignIds) if (!grouped.has(id)) grouped.set(id, []);
 
-  const todayISO = opts.todayISO ?? NOW.toISOString().slice(0, 10);
   const out: Record<string, CampaignState<Row>> = {};
   for (const [id, all] of grouped) {
     const campaign = byId.get(id) ?? null;
@@ -314,7 +357,7 @@ async function simCampaignStates(
     const list = todayOnly ? all.filter((r) => r.scheduled_at.slice(0, 10) === todayISO) : all;
     const exact = counts?.[id];
     out[id] = campaignState(list, campaign, {
-      truncated: exact ? false : openTruncated,
+      truncated: exact ? false : !sliceIsWhole(todayOnly),
       todayOnly,
       lifetime: all,
       counts: exact
@@ -947,9 +990,9 @@ async function main(): Promise<void> {
     expect(
       '10 rollup truncation',
       'INV-6c',
-      'even without the view the rows now carry the whole run, because finished history cannot crowd out what is waiting',
+      'even without the view the rows carry the whole run — and a ONE-OFF round, counted over its LIFE out of a SHARED history preview that was cut, still says it cannot prove that',
       { truncated: cn.truncated, readRows: cn.total },
-      { truncated: false, readRows: 28 },
+      { truncated: true, readRows: 28 },
       NONE,
     );
     /*
@@ -1102,7 +1145,158 @@ async function main(): Promise<void> {
   }
 
   /* =========================================================================
-   * SOURCE-DRIFT GUARDS  /* =========================================================================
+   * 12 — THE 39/39 "ספירה חלקית" SCREEN, 11/10 22:00
+   *
+   * "מה זה ההתראות הכתומות בלמעלה של הקמפיין ובשביל מה זה?"
+   *
+   * Two repeating rounds on a database that has NOT run social-latest.sql, so
+   * there are no counting views and the numbers come from the rows. Three days
+   * of history fill the shared 500-row lifetime preview, and the old flag —
+   * one `rowsAreWhole` for the whole call — stamped EVERY campaign in it as
+   * uncountable. A 39-row round was told it is "too big to count", printed
+   * "לפחות 39 מתוך 39" at 99%, and wore an orange "ספירה חלקית" badge.
+   *
+   * Campaign A also carries a SKIPPED row from today. It has no published_at,
+   * so it sorts last out of the lifetime preview whatever its age — which is
+   * exactly why today is read by scheduled_at and not by published_at. INV-9b
+   * is the assertion that proves that hole is closed.
+   * ======================================================================= */
+  {
+    const DAY = '2026-10-11';
+    const A = 'run-a';
+    const B = 'run-b';
+    const past = (d: number, i: number, run: string, tag: string): Row => ({
+      id: `h-${run}-${d}-${i}`,
+      status: 'published' as QueueStatus,
+      scheduled_at: `2026-10-0${8 + d}T09:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      published_at: `2026-10-0${8 + d}T09:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      target_id: `t-${tag}${i}`,
+      post_id: POST,
+      campaign_id: run,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `t-${tag}${i}`, name: `קבוצה ${tag}${i}`, channel: 'facebook_group' },
+    });
+    /* Three prior days, 223 a day — enough that the shared 500-row preview of
+       lifetime history is full before today is reached at all. */
+    const history: Row[] = [];
+    for (let d = 0; d < 3; d += 1) {
+      for (let i = 0; i < 184; i += 1) history.push(past(d, i, A, 'a'));
+      for (let i = 0; i < 39; i += 1) history.push(past(d, i, B, 'b'));
+    }
+    /* Today, campaign A: 182 published, one SKIPPED (no published_at), one
+       still waiting on a person — 184, the owner's own number. */
+    const todayA: Row[] = Array.from({ length: 184 }, (_, i) => {
+      const status: QueueStatus = i === 182 ? 'skipped' : i === 183 ? 'manual_pending' : 'published';
+      const at = `${DAY}T${String(9 + Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}:00.000Z`;
+      return {
+        id: `a${i}`,
+        status,
+        scheduled_at: at,
+        published_at: status === 'published' ? at : null,
+        target_id: `t-a-${i}`,
+        post_id: POST,
+        campaign_id: A,
+        worker_id: null,
+        claimed_at: null,
+        target: { id: `t-a-${i}`, name: `קבוצה א${i}`, channel: 'facebook_group' },
+      };
+    });
+    /* Today, campaign B: 39 published and nothing else. The card he
+       photographed. */
+    const todayB: Row[] = Array.from({ length: 39 }, (_, i) => ({
+      id: `b${i}`,
+      status: 'published' as QueueStatus,
+      scheduled_at: `${DAY}T14:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      published_at: `${DAY}T14:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      target_id: `t-b-${i}`,
+      post_id: POST,
+      campaign_id: B,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `t-b-${i}`, name: `קבוצה ב${i}`, channel: 'facebook_group' },
+    }));
+
+    const db = fakeDb([...history, ...todayA, ...todayB]);
+    const runA = { ...CAMPAIGN_ACTIVE, id: A, repeat_enabled: true } as Campaign;
+    const runB = { ...CAMPAIGN_ACTIVE, id: B, repeat_enabled: true } as Campaign;
+    const states = await simCampaignStates(db, [runA, runB], [A, B], { countsView: false, todayISO: DAY });
+    const sa = states[A];
+    const sb = states[B];
+
+    expect(
+      '12 the 39/39 partial-count screen',
+      'INV-9',
+      'THE REPORTED FAULT: neither round is "too big to count" — one of them has thirty-nine rows',
+      { a: sa.truncated, b: sb.truncated },
+      { a: false, b: false },
+      NONE,
+    );
+    expect(
+      '12 the 39/39 partial-count screen',
+      'INV-9b',
+      'and today is counted by when a row was DUE, so the skipped row — which has no published_at and falls out of a published_at preview first — is still in the total',
+      {
+        aTotal: sa.progress.total,
+        aPublished: sa.progress.published,
+        aSkipped: sa.progress.skipped,
+        aManual: sa.progress.manual,
+        bTotal: sb.progress.total,
+        bPublished: sb.progress.published,
+      },
+      { aTotal: 184, aPublished: 182, aSkipped: 1, aManual: 1, bTotal: 39, bPublished: 39 },
+      NONE,
+    );
+    const viewB = runProgress(sb.progress, sb.todayOnly, sb.truncated);
+    expect(
+      '12 the 39/39 partial-count screen',
+      'INV-9c',
+      'so 39 of 39 is a hundred per cent, said plainly, under a green badge — no "לפחות", no orange',
+      { percent: viewB.percent, hedged: viewB.handledLabel.startsWith('לפחות'), badge: runBadge(sb).label },
+      { percent: 100, hedged: false, badge: 'הושלם' },
+      NONE,
+    );
+    const viewA = runProgress(sa.progress, sa.todayOnly, sa.truncated);
+    expect(
+      '12 the 39/39 partial-count screen',
+      'INV-9d',
+      'and the round with one publication waiting on a person says THAT, which is the one thing on the card he can act on',
+      { state: sa.state, badge: runBadge(sa).label, percent: viewA.percent, hedged: viewA.handledLabel.startsWith('לפחות') },
+      { state: 'needs_attention', badge: 'דורש טיפול', percent: 99, hedged: false },
+      NONE,
+    );
+    /*
+     * THE CLEAR IS A PROOF, NOT A BLANKET. Push today itself past the read's
+     * own ceiling and the round is flagged again — which is the whole reason
+     * the new read discloses its own limit instead of trusting it.
+     */
+    const flood: Row[] = Array.from({ length: CAMPAIGN_ROLLUP_LIMIT + 5 }, (_, i) => ({
+      id: `f${i}`,
+      status: 'published' as QueueStatus,
+      scheduled_at: `${DAY}T${String(9 + Math.floor(i / 600)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      published_at: `${DAY}T${String(9 + Math.floor(i / 600)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      target_id: `t-f-${i}`,
+      post_id: POST,
+      campaign_id: A,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `t-f-${i}`, name: `קבוצה פ${i}`, channel: 'facebook_group' },
+    }));
+    const bigStates = await simCampaignStates(fakeDb([...history, ...flood, ...todayB]), [runA, runB], [A, B], {
+      countsView: false,
+      todayISO: DAY,
+    });
+    expect(
+      '12 the 39/39 partial-count screen',
+      'INV-9e',
+      'a day genuinely larger than one read still says so — the clear is earned per round, not handed out',
+      bigStates[A].truncated,
+      true,
+      NONE,
+    );
+  }
+
+  /* =========================================================================
    * SOURCE-DRIFT GUARDS
    * The simulations above are copies. These pin them to the originals: if a
    * query or a tile moves and this file is not updated, the failure says so
@@ -1236,6 +1430,32 @@ async function main(): Promise<void> {
   pin('client.ts open-rows read', client, ".in('status', OPEN_STATUSES as unknown as string[])");
   pin('client.ts done-rows read', client, "order('published_at', { ascending: false, nullsFirst: false })");
   pin('client.ts counts come from the v27 view', client, "from('social_campaign_counts')");
+  /*
+   * AND THE FOURTH READ, the one that lets a small round out of the hedge.
+   *
+   * These four pins are the whole of the fix the owner asked for, and each
+   * one is load-bearing in a different direction:
+   *
+   *   sliceIsWhole   the open ceiling is the FIRST term, unconditionally —
+   *                  it is the 28/28 guard and may never be relaxed;
+   *   scheduled_at   today is read by when a row was DUE, because a skipped
+   *                  or failed row has no published_at and would otherwise be
+   *                  silently absent from today's total;
+   *   todayIsWhole   the new read discloses its OWN ceiling instead of
+   *                  trusting it, so the clear stays a proof;
+   *   seen           a row reachable from two reads is counted once. Counting
+   *                  it twice makes a total too BIG, which is the mirror
+   *                  image of everything else this file guards.
+   */
+  pin(
+    'client.ts wholeness is per scope, open ceiling first',
+    client,
+    'const sliceIsWhole = (todayOnly: boolean): boolean => !openTruncated && (todayOnly ? todayIsWhole : !doneTruncated);',
+  );
+  pin('client.ts today is read by when a row was due', client, ".gte('scheduled_at', dayStart.toISOString())");
+  pin('client.ts and closed at the next midnight', client, ".lt('scheduled_at', dayEnd.toISOString())");
+  pin('client.ts the today read discloses its own ceiling', client, 'todayIsWhole = todayRows.length < CAMPAIGN_ROLLUP_LIMIT;');
+  pin('client.ts a row in two reads is counted once', client, 'if (seen.has(row.id)) continue;');
   pin('campaign.ts takes exact counts', campaignSrc, 'if (opts.counts) {');
   pin('campaign.ts state resolves from the counts', campaignSrc, 'resolveState(progress, campaign?.status, progress.total,');
   pin('campaign.ts badge refuses to end a round it cannot count', campaignSrc, "if (state.truncated && state.state === 'completed') {");

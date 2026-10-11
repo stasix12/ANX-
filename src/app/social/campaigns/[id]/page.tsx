@@ -31,6 +31,7 @@ import {
   cancelQueueItem,
   confirmQueueItem,
   campaignCounts,
+  type CountsRead,
   getBrowserSettings,
   getCampaign,
   getControl,
@@ -163,7 +164,7 @@ export default function CampaignControlCenter() {
          * Null when the database has not run social-latest.sql: the rows are
          * counted as before and `truncated` says the numbers are partial.
          */
-        campaignCounts([id]).catch(() => null),
+        campaignCounts([id]).catch((): CountsRead => ({ kind: 'read-failed' })),
       ]);
       setCampaign(c);
       setRows(q.rows);
@@ -176,10 +177,13 @@ export default function CampaignControlCenter() {
          those two columns, so the two screens cannot disagree about whether
          this round repeats either. */
       const todayOnly = readRepeat(c).enabled;
-      const exact = counts?.[id];
+      const exact = counts.kind === 'exact' ? counts.map[id] : undefined;
       const next = campaignState(q.rows, c, {
         truncated: exact ? false : q.truncated,
         todayOnly,
+        /* q.truncated IS a per-campaign cap here — rows.length >= the ceiling
+           on THIS round's own feed — so a cut read really is "too big". */
+        countsNote: exact ? null : q.truncated ? 'too-big' : counts.kind === 'exact' ? null : counts.kind,
         counts: exact
           ? { progress: todayOnly ? exact.today : exact.lifetime, everPublished: exact.lifetime.published ?? 0 }
           : undefined,
@@ -522,7 +526,7 @@ export default function CampaignControlCenter() {
 
           {state?.truncated && (
             <Notice tone="warn">
-              בסבב הזה יותר פרסומים ממה שאפשר להציג בבת אחת, והמספרים כאן הם של {state.progress.total} הפרסומים הראשונים בלבד — לא של הסבב כולו.
+              בסבב הזה יותר פרסומים ממה שאפשר להציג בבת אחת, והמספרים כאן הם של {state.progress.total} הפרסומים שנקראו — לא של הסבב כולו.
             </Notice>
           )}
 

@@ -33,6 +33,7 @@ import {
   lastPublishedAt,
   matchAccountGapTo,
   saveCampaign,
+  rescheduleCampaignQueue,
   setCampaignRepeat,
   stopCampaign,
 } from '@/lib/social/client';
@@ -40,6 +41,7 @@ import { campaignState, cancellableRows, type CampaignState } from '@/lib/social
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
+import { counted } from '@/lib/social/time';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import type { Campaign, ControlSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -344,6 +346,22 @@ export default function CampaignsPage() {
               'info',
             );
           }
+
+          /* AND THE QUEUE MOVES WITH THE HOURS — the same call the dashboard
+             makes, for the same reason, because this is the same record and a
+             second policy for it is a second truth. The long note is on
+             rescheduleCampaignQueue itself. Last, so a failed campaign write
+             never re-times a queue to a schedule that was not saved. */
+          const queue = await rescheduleCampaignQueue(campaign.id, next);
+          if (queue.moved) {
+            toast(
+              `${counted(queue.moved, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} לשעות החדשות${
+                queue.capped ? ` (רק ${queue.waiting} הקרובים בתור)` : ''
+              }`,
+              'success',
+            );
+          }
+          await load();
         } catch (err) {
           /* Put the row back exactly as it was before this burst of taps. */
           setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? (before.find((o) => o.id === c.id) ?? c) : c)));

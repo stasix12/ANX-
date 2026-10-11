@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { cancelQueueItem, confirmQueueItem, listLiveQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
+import { cancelQueueItem, confirmQueueItem, listLiveQueue, queueGates, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
+import { projectQueue } from '@/lib/social/projection';
 import { QueueSections } from './QueueSections';
 import { Card, ErrorState, Freshness, SkeletonList, useConfirm, useToast, ButtonLink } from './ui';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -33,19 +34,54 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
      four-second beat, which is a claim about a timer; this is the reading
      behind it, so a board that has quietly stopped landing says so. */
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  /*
+   * THE GATES THIS BOARD PROJECTS THROUGH — read ONCE, not on the beat.
+   *
+   * This list drew `scheduled_at` raw, so a row the engine holds until the
+   * window opens read the hour it was stamped at. What it needs to say the
+   * true instant is each campaign's window and gap plus the account floor —
+   * and those are SETTINGS, changed by opening a panel, not four times a
+   * second. The board re-reads every 4s; loading them on that beat would be a
+   * request a second on a metered Israeli mobile plan to learn numbers that
+   * had not moved.
+   *
+   * Null until the first read lands, and null means the rows draw exactly as
+   * they drew before — never a guess.
+   */
+  const [gates, setGates] = useState<Awaited<ReturnType<typeof queueGates>> | null>(null);
+  const [projected, setProjected] = useState<Map<string, string | null>>(new Map());
   const toast = useToast();
   const confirm = useConfirm();
+
+  useEffect(() => {
+    let alive = true;
+    void queueGates()
+      .then((g) => {
+        if (alive) setGates(g);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     try {
       const all = await listLiveQueue();
-      setRows(postId ? all.filter((r) => r.post_id === postId) : all);
+      const mine = postId ? all.filter((r) => r.post_id === postId) : all;
+      setRows(mine);
+      /* Ascending, because one row's instant is the next one's floor. The list
+         keeps its own order; only the projection needs the queue's. */
+      if (gates) {
+        const ordered = [...mine].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+        setProjected(projectQueue(ordered, { now: new Date(), gates: gates.gates, spacing: gates.spacing }));
+      }
       setUpdatedAt(new Date());
       setError(null);
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
-  }, [postId]);
+  }, [postId, gates]);
 
   /*
    * Four seconds, with an in-flight guard and a pause while the tab is
@@ -148,6 +184,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
           rows={rows}
           actions={actions}
           busyRowId={rowBusy}
+          projected={projected}
           emptyAction={
             <ButtonLink href="/social/posts/new">צרו פוסט ראשון</ButtonLink>
           }

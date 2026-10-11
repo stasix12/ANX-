@@ -121,6 +121,7 @@ const TITLE: Record<string, string> = {
      the label would not delete the rows — it would only make them unreadable. */
   plan_not_customers: 'קבוצות בלי לקוחות — לא נכנסו לסבב',
   queue_respaced: 'המרווח בתור שונה',
+  queue_rescheduled: 'שעות הפרסום שונו',
   /* The ACCOUNT-WIDE floor, not one round's — the headline says which,
      because the whole point of the line is that it reaches further than the
      campaign the owner was editing. */

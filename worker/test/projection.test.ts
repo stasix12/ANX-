@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   accountFloorMs,
   projectOne,
+  roundAnchor,
   projectQueue,
   spacingFrom,
   windowedCascade,
@@ -535,6 +536,157 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(/label="הסבב הבא"/.test(swiper), 'and a next arrow');
   is(/disabled=\{index === 0\}/.test(swiper) && /disabled=\{index === count - 1\}/.test(swiper), 'disabled at the ends rather than hidden, so the row beside them does not jump');
   is(!/focus-visible:outline-none/.test(swiper), 'and nothing cancels the focus ring — the dots were invisible to a keyboard');
+}
+
+/* ───── 15. THE HOURS CHANGE, AND THE QUEUE MOVES WITH THEM ──────────── */
+{
+  /*
+   * "שיניתי את תחילת הפרסום ל-10:00, אבל התור ממשיך להציג שעות ישנות."
+   *
+   * HIS EXACT SCREEN, as arithmetic. Ten rows stamped 12.10 at 08:00–08:09
+   * under a window that was 08:00–23:30, and one at 12.10 00:01 (a row a
+   * daily ceiling deferred to the next local midnight). He moves the window
+   * to 10:00–23:30 at 18:53 on 11.10.
+   *
+   * rescheduleCampaignQueue() uses each row's OWN stamp as the base, so the
+   * round stays on the day it was planned for and only its hours move — a
+   * fresh sequence from `now` would drag tomorrow's round into tonight, which
+   * is not what moving an hour means.
+   */
+  const from = [iso('2026-10-12T00:01'), ...Array.from({ length: 10 }, (_, i) => iso(`2026-10-12T08:0${i}`))];
+  const window10: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4, 6], start: '10:00', end: '23:30', gapSeconds: 60 };
+  const floor = new Date(at('2026-10-11T18:53').getTime() + 60_000);
+  /* Exactly what rescheduleCampaignQueue computes: the window's opening on the
+     day the round is set for, then that instant plus the gap, then the roll. */
+  const restamp = (rows: string[], sched: CampaignSchedule): string[] => {
+    const anchor = roundAnchor(sched, new Date(rows[0]), floor);
+    const gapMs = sched.gapSeconds * 1000;
+    return windowedCascade(rows.map((_, i) => new Date(anchor.getTime() + i * gapMs)), sched.gapSeconds, sched).map((d) => d.toISOString());
+  };
+  const rolled = restamp(from, window10);
+
+  eq(rolled[0], iso('2026-10-12T10:00'), 'the 00:01 row — the earliest — becomes the first publication of the new window');
+  eq(rolled[1], iso('2026-10-12T10:01'), 'and 08:00 follows it a gap later');
+  eq(rolled[10], iso('2026-10-12T10:10'), 'and 08:09, the last of them, lands at 10:10');
+  is(rolled.every((x) => x >= iso('2026-10-12T10:00')), 'NOT ONE of them is left before the hour he chose');
+  is(rolled.every((x) => x <= iso('2026-10-12T23:30')), 'and none past the hour he chose to stop');
+  is(rolled.every((x, i) => i === 0 || x > rolled[i - 1]), 'the round keeps its order — group N still follows group N-1');
+  is(new Set(rolled).size === rolled.length, 'and no two rows land on one instant, which the unique index would reject');
+  /* THE DAY IS NOT TOUCHED. A round planned for tomorrow is still tomorrow. */
+  is(rolled.every((x) => x.slice(0, 10) === iso('2026-10-12T10:00').slice(0, 10)), 'every row keeps the day it was planned for');
+
+  /* ── his test 2: 10:00 → 12:00, over the queue the first change produced ── */
+  const again = restamp(rolled, { ...window10, start: '12:00' });
+  eq(again[0], iso('2026-10-12T12:00'), 'moving the window again moves the queue again');
+  eq(again[10], iso('2026-10-12T12:10'), 'all of it, in order');
+
+  /*
+   * ── AND BACK AGAIN, which is the half that did not work ──
+   *
+   * nextAllowedAt() only ever moves an instant FORWARD, so re-stamping each
+   * row from its own current stamp corrected 08:00 to 10:00 and did NOTHING
+   * for 12:00 back to 08:00 — every row was already inside the wider window.
+   * The owner's tests are bidirectional; half of them would have passed for
+   * the wrong reason. The anchor is the window's opening, so it is symmetric.
+   */
+  const back = restamp(again, { ...window10, start: '08:00' });
+  eq(back[0], iso('2026-10-12T08:00'), 'widening the window EARLIER pulls the round back to the new opening');
+  eq(back[10], iso('2026-10-12T08:10'), 'all of it, not just the first row');
+
+  /* ── his test 3: the gap goes from a minute to five, and back ── */
+  const slower = restamp(rolled, { ...window10, gapSeconds: 300 });
+  eq(slower[0], iso('2026-10-12T10:00'), 'a wider gap starts in the same place');
+  eq(slower[1], iso('2026-10-12T10:05'), 'and spaces by the number he chose');
+  eq(slower[10], iso('2026-10-12T10:50'), 'all the way down');
+  const tighter = restamp(slower, window10);
+  eq(tighter[1], iso('2026-10-12T10:01'), 'and narrowing it again TIGHTENS the queue, which rolling forward could never do');
+  eq(tighter[10], iso('2026-10-12T10:10'), 'closing the whole round back up');
+
+  /* ── his test 4: the days change, and Monday is no longer a publishing day ── */
+  const moved = restamp(rolled, { ...window10, days: [0, 2, 3, 4] });
+  /* 12.10.2026 is a Monday; the next chosen day is Tuesday the 13th. */
+  eq(moved[0], iso('2026-10-13T10:00'), 'a round on a day he just un-chose moves to the next day he did choose');
+  is(moved.every((x) => x.slice(0, 10) === '2026-10-13'), 'and all of it moves together, not half of it');
+
+  /* ── A STAMP IN THE PAST IS NOT RE-STAMPED INTO THE PAST ── */
+  const stale = restamp([iso('2026-10-11T06:00')], window10);
+  is(stale[0] >= floor.toISOString(), 'a row whose stamp has gone is floored to a minute from now, never re-stamped backwards');
+  /* Today is Sunday 11.10 and the window is open until 23:30, so "as soon as
+     allowed" is a minute from now rather than tomorrow morning. */
+  eq(stale[0], new Date(floor).toISOString(), 'and goes out as soon as the window allows, which today is right now');
+}
+
+/* ───── 16. THE WRITE PATH, AND WHAT IT REFUSES TO TOUCH ─────────────── */
+{
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const client = strip(readFileSync('src/lib/social/client.ts', 'utf8'));
+
+  is(/export async function rescheduleCampaignQueue\(/.test(client), 'changing the hours re-stamps the queue — the function the write path was missing');
+  /*
+   * SCOPED TO THE CAMPAIGN — and to every row the ENGINE gates by it, which is
+   * not the same set. rules.ts resolves `item.campaign_id ?? post.campaign_id`,
+   * so a row stamped before its post joined this campaign carries a null id and
+   * is still held by this window. Matching the column alone would move its
+   * siblings and leave it behind on the old hours.
+   */
+  is(/campaign_id\.eq\.\$\{campaignId\},post_id\.in\./.test(client), 'scoped to every row this campaign governs, including one whose post joined it later');
+  is(/rowQuery\.eq\('campaign_id', campaignId\)/.test(client), 'and to the id alone when the post list cannot be read');
+  is(/item\.campaign_id \?\? post\.campaign_id/.test(readFileSync('src/lib/social/rules.ts', 'utf8')), 'which is exactly how the engine resolves it');
+  is(/\.in\('status', PENDING\)/.test(client), 'and to the rows that move on their own');
+  /*
+   * PENDING is AUTOMATIC_WAITING_STATUSES — 'scheduled' and 'paused'. The four
+   * statuses it excludes are excluded for four different reasons: 'publishing'
+   * is a publication in flight and must never be re-timed underneath itself;
+   * the three human-waiting ones move when he moves them; and the terminal
+   * ones are history.
+   */
+  is(/const PENDING: QueueItem\['status'\]\[\] = AUTOMATIC_WAITING_STATUSES;/.test(client), 'and PENDING is still the automatic-waiting set, which excludes a row in flight');
+  is(/windowedCascade\(bases, schedule\.gapSeconds, schedule\)/.test(client), 'the new instants come from the same roll the screens and the planner use');
+  is(/const anchor = roundAnchor\(schedule, head, floor\);/.test(client), 'anchored on the WINDOW, so the re-stamp works in both directions');
+  is(/const floor = new Date\(Date\.now\(\) \+ 60_000\);/.test(client), 'with a minute of cushion, so the worker cannot claim a row before the write lands');
+  is(/if \(!schedule\.enabled\) return \{ moved: 0/.test(client), 'and switching the window OFF moves nothing — that is not a re-space he asked for');
+  is(/\.filter\(\(w\) => w\.next !== w\.was\)/.test(client), 'a row already on its new instant is not written, so the count reported is the count that moved');
+  /* ONE COPY of the collision-safe write, not two. */
+  is(/async function writeNewInstants\(/.test(client), 'the unique-index dance is one function');
+  is((client.match(/const movingLater = /g) ?? []).length === 1, 'and there is exactly one copy of it');
+  is(!/\.delete\(\)/.test(client.slice(client.indexOf('rescheduleCampaignQueue'), client.indexOf('rescheduleCampaignQueue') + 3000)), 'nothing is deleted to re-time a queue');
+  is(!/\.insert\(/.test(client.slice(client.indexOf('rescheduleCampaignQueue'), client.indexOf('rescheduleCampaignQueue') + 3000)), 'and nothing is inserted, so a re-time cannot duplicate a publication');
+
+  /* AND BOTH SCREENS THAT SAVE A SCHEDULE CALL IT. */
+  for (const [what, file] of [['the dashboard', 'src/app/social/page.tsx'], ['the campaigns list', 'src/app/social/campaigns/page.tsx']] as const) {
+    const src = strip(readFileSync(file, 'utf8'));
+    is(/await rescheduleCampaignQueue\(campaign\.id, next\);/.test(src), `${what} re-stamps the queue when the hours change`);
+    /* AFTER the campaign write: a queue re-timed to a schedule that was never
+       saved is worse than one that is merely stale. */
+    is(src.indexOf('saveCampaign(') < src.indexOf('rescheduleCampaignQueue('), `${what} does it only after the campaign itself was saved`);
+  }
+}
+
+/* ───── 17. AND EVERY LIST OF WAITING ROWS NOW PROJECTS ─────────────── */
+{
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /*
+   * The screen he photographed was /social/history. Every caller of
+   * PublicationItem and QueueSections is pinned here, because "one source of
+   * truth" is a claim about all of them and this is the second time a screen
+   * was found still reading the column after the others were fixed.
+   */
+  for (const [what, file, needle] of [
+    ['the history list', 'src/app/social/history/page.tsx', 'projectedAt={projected.get(r.id)}'],
+    ['a group\u2019s own page', 'src/app/social/groups/[id]/page.tsx', 'projectedAt={projected.get(r.id)}'],
+    ['the post editor\u2019s board', 'src/components/social/LiveBoard.tsx', 'projected={projected}'],
+    ['the campaign screen', 'src/app/social/campaigns/[id]/page.tsx', 'projected={projected}'],
+  ] as const) {
+    const src = strip(readFileSync(file, 'utf8'));
+    is(src.includes(needle), `${what} draws the instant the engine will use`);
+    is(/projectQueue\(/.test(src), `${what} builds it from the one module`);
+  }
+  /* The gates are loaded once, from one place, rather than assembled by hand
+     on each screen — which is how two screens come to project differently. */
+  const client = strip(readFileSync('src/lib/social/client.ts', 'utf8'));
+  is(/export async function queueGates\(/.test(client), 'and the gates come from one loader');
+  const board = strip(readFileSync('src/components/social/LiveBoard.tsx', 'utf8'));
+  is(/useEffect\(\(\) => \{[\s\S]{0,200}queueGates\(\)/.test(board), 'which the 4-second board reads ONCE, not on its beat');
 }
 
 console.log(`projection OK — ${checks} assertions over the four gates, the cascade, the writers’ roll and both clock changes`);

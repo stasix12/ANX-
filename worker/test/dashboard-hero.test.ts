@@ -141,9 +141,29 @@ is(/onTune && \(/.test(hero), 'with the queue\'s own advanced settings kept insi
 is(/schedule && onScheduleChange && \(/.test(hero), 'no schedule, no block — every other caller gets the old card');
 is(/schedule\?: CampaignSchedule;/.test(hero), 'and the prop is optional');
 
-/* THE WRITE IS THE PAGE'S, debounced, and put back when the row refuses it. */
-is(/setTimeout\(async \(\) => \{[\s\S]{0,400}saveCampaign\(\{ id: campaign\.id/.test(page), 'the dashboard debounces the schedule write');
-is(/catch \(err\) \{[\s\S]{0,200}setSchedulePatch\(null\)/.test(page), 'and puts the card back when the write fails');
+/*
+ * THE WRITE IS THE PAGE'S, debounced, and put back when the row refuses it.
+ *
+ * PER CAMPAIGN NOW, which is what the swipe strip forced. One timer and one
+ * patch meant the second card's edit CANCELLED the first card's pending save:
+ * two campaigns touched inside 600ms and only the later one was ever written,
+ * while the card he had just left snapped back to the stored row. "בדוק שני
+ * קמפיינים פעילים במקביל" is exactly that case.
+ */
+is(/scheduleTimers\.current\[campaign\.id\] = setTimeout\(run, 600\);/.test(page), 'the dashboard debounces the schedule write, per campaign');
+is(/await saveCampaign\(\{ id: campaign\.id, name: campaign\.name, \.\.\.columns \}\);/.test(page), 'and the debounced body is the write itself');
+is(/const \[schedulePatch, setSchedulePatch\] = useState<Record<string, Required<ScheduleFields>>>\(\{\}\);/.test(page), 'and the optimistic overlay is keyed by campaign too');
+/*
+ * AND THE REVERT IS SCOPED TO THE WRITE THAT FAILED. One try/catch around all
+ * four steps put the card back to the old hours and said "שמירת התזמון נכשלה"
+ * whenever a LATER step threw — over a database that held exactly what he
+ * asked for.
+ */
+is(/\} catch \(err\) \{[\s\S]{0,400}delete copy\[campaign\.id\];[\s\S]{0,300}'שמירת התזמון נכשלה\.'/.test(page), 'and puts that one card back when the campaign write itself fails');
+is(/'התזמון נשמר, אבל עדכון התור לא הושלם\.'/.test(page), 'while a failure AFTER the save says so, instead of claiming nothing was saved');
+/* THE PENDING SAVE SURVIVES LEAVING THE SCREEN. The cleanup cleared the timer
+   and stopped, so a tap followed by a swipe inside 600ms was lost silently. */
+is(/clearTimeout\(timer\);[\s\S]{0,120}schedulePending\.current\[id\]\?\.\(\)/.test(page), 'and an unmount FLUSHES what was pending rather than dropping it');
 
 /* ───────────────────────────── contrast, computed from the tokens ──────── */
 

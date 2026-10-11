@@ -2,11 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   DEFAULT_CAMPAIGN_REPEAT,
   isAllowedAt,
+  nextAllowedAt,
   nextPublishAt,
   readRepeat,
   readSchedule,
   scheduleSummary,
   type CampaignRepeat,
+  type CampaignSchedule,
   type ScheduleFields,
   gapLabel,
 } from './campaign-schedule';
@@ -48,6 +50,22 @@ export interface RuleContext {
 }
 
 const MAX_DEFERRALS = 40;
+
+/**
+ * "That column does not exist" — a database that has not run
+ * social-latest.sql — as opposed to every other reason a read can fail.
+ *
+ * Postgres reports an unknown column as 42703, and PostgREST passes the code
+ * through. Everything else — a dropped connection, an expired token, a
+ * refused row — means the columns are there and we did not reach them, which
+ * is a different answer and must not be mistaken for "this campaign has no
+ * schedule".
+ */
+function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === '42703' || error.code === 'PGRST204') return true;
+  return /column .* does not exist|could not find the .* column/i.test(error.message ?? '');
+}
 
 /**
  * How far past the gap a deferred row is pushed.
@@ -192,6 +210,33 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   const now = ctx.now ?? new Date();
   const { item, target, post, variant, limits } = ctx;
 
+  /*
+   * ───────── A DEFERRAL LANDS INSIDE THE WINDOW, LIKE EVERY OTHER STAMP ────
+   *
+   * "אסור שיופיע פרסום מתוכנן ל-08:00 באותו יום עבור הקמפיין הזה."
+   *
+   * Every writer of `scheduled_at` in this product was taught the campaign's
+   * window — the planner, the respace, the re-time on a schedule change — and
+   * this one was not. It is the busiest of them: rules.ts rewrites the column
+   * on every deferral, and a deferral happens whenever a ceiling is full, a
+   * gap is still closing or a repeat is too recent.
+   *
+   * The daily ceilings are the clearest case. They park a row at the next
+   * local midnight plus a minute, which is an hour NO window the owner can
+   * configure contains — and that is the "12.10 · 00:01" row in his
+   * screenshot, sitting in a queue whose campaign publishes 10:00–23:30.
+   *
+   * Rolling the instant forward costs nothing when the schedule is off or the
+   * instant is already legal (nextAllowedAt returns it unchanged), and it is
+   * the same function the planner and the screens use, so a deferred row is
+   * now stamped where everything else agrees it will go out.
+   */
+  const insideWindow = (schedule: CampaignSchedule | null, at: Date): Date =>
+    schedule?.enabled ? nextAllowedAt(schedule, at) ?? at : at;
+  /* Set once the campaign's schedule has been read, below. Null until then —
+     and the reads that happen before it cannot produce a deferral instant. */
+  let gate: CampaignSchedule | null = null;
+
   if (!target) return { action: 'skip', reason: 'היעד נמחק.' };
   if (!post || post.status === 'archived') return { action: 'skip', reason: 'הפוסט נמחק או הועבר לארכיון.' };
   if (!target.enabled) return { action: 'skip', reason: `היעד "${target.name}" כבוי.` };
@@ -254,6 +299,32 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
       .eq('id', campaignId)
       .maybeSingle();
     if (full.error) {
+      /*
+       * A MISSING COLUMN AND A FAILED READ ARE NOT THE SAME ANSWER, and
+       * treating them alike is the one path in this engine that can publish
+       * outside the owner's hours.
+       *
+       * The fallback below selects `status` alone, so `readSchedule` sees no
+       * columns and reports `enabled: false` — and every gate under it (the
+       * days, the window, the campaign's own interval) is skipped. For a
+       * database that predates these columns that is right, and deliberate:
+       * an engine that stops working because a column is missing is worse
+       * than one that ignores a window nobody has set.
+       *
+       * For a DROPPED CONNECTION it is wrong in the worst possible direction.
+       * One transient PostgREST error and the row publishes at any hour of
+       * any day, with nothing on any screen saying why. So the two are told
+       * apart: a missing column falls through as before; anything else waits
+       * a minute and tries again, which costs one poll and cannot publish by
+       * a schedule it could not read.
+       */
+      if (!isMissingColumn(full.error)) {
+        return {
+          action: 'wait',
+          until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(),
+          reason: 'לא הצלחנו לקרוא את הגדרות התזמון של הסבב — ננסה שוב בעוד רגע.',
+        };
+      }
       const { data } = await db.from('social_campaigns').select('status').eq('id', campaignId).maybeSingle();
       campaign = (data as Pick<Campaign, 'status'> | null) ?? null;
     } else {
@@ -285,6 +356,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
      * entered at all — no extra query, no change in behaviour.
      */
     const schedule = readSchedule(campaign);
+    gate = schedule;
     if (schedule.enabled) {
       /*
        * The campaign's OWN last publication, not the account's. limits.
@@ -360,7 +432,10 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
    * just stops eating the queue to do it.
    */
   const dayStart = startOfZonedDay(now).toISOString();
-  const tomorrow = startOfNextZonedDay(now);
+  /* The next local midnight, rolled to the first minute the campaign may
+     actually publish — see insideWindow(). Unrolled, this is the one instant
+     in the product that no configurable window contains. */
+  const tomorrow = insideWindow(gate, new Date(startOfNextZonedDay(now))).toISOString();
 
   const todayAll = await countPublished(db, (q) => q.gte('published_at', dayStart));
   if (todayAll >= limits.maxPerDay)
@@ -431,7 +506,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
         const hours = Math.max(1, Math.ceil((needed - since) / 3_600_000));
         return {
           action: 'defer',
-          until: new Date(now.getTime() + needed - since + DEFER_CUSHION_MS).toISOString(),
+          until: insideWindow(gate, new Date(now.getTime() + needed - since + DEFER_CUSHION_MS)).toISOString(),
           /*
            * DEFERRED, NOT SKIPPED. The round repeats, so this group's turn is
            * coming — dropping the row would quietly shrink every round after
@@ -473,7 +548,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
             /* Deferred for the same reason the repeat guard defers: this
                group's turn is coming, and a skip would shrink the round. */
             action: 'defer',
-            until: new Date(now.getTime() + windowMs + DEFER_CUSHION_MS).toISOString(),
+            until: insideWindow(gate, new Date(now.getTime() + windowMs + DEFER_CUSHION_MS)).toISOString(),
             reason: `אותו תוכן כבר פורסם ליעד הזה לאחרונה — החזרה הבאה בעוד כ-${repeat.minHours} שעות.`,
           }
         : { action: 'skip', reason: `אותו תוכן כבר פורסם ליעד הזה ב-${limits.dedupeDays} הימים האחרונים.` };
@@ -521,7 +596,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
            whichever of the two is further out. */
         holdFor(new Date(new Date(last.published_at).getTime() + gapMs));
       } else {
-        const until = new Date(new Date(last.published_at).getTime() + gapMs + DEFER_CUSHION_MS).toISOString();
+        const until = insideWindow(gate, new Date(new Date(last.published_at).getTime() + gapMs + DEFER_CUSHION_MS)).toISOString();
         return { action: 'defer', until, reason: `נדחה כדי לשמור מרווח של ${accountGapLabel(gapSeconds)} בין פרסומים` };
       }
     }

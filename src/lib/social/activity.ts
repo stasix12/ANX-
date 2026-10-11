@@ -167,6 +167,10 @@ const KIND: Record<string, ActivityKind> = {
      the label would not delete the rows — it would only make them unreadable. */
   plan_not_customers: 'schedule',
   queue_respaced: 'schedule',
+  /* The hours of a campaign changed and its waiting rows moved with them —
+     the same kind of fact as a respace, and for the same reader: a queue that
+     moved on its own needs a line saying who moved it. */
+  queue_rescheduled: 'schedule',
   /*
    * The account-wide floor coming down to meet a campaign's chosen gap
    * (matchAccountGapTo in client.ts). 'schedule' and not 'system': nothing is

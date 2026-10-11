@@ -1,4 +1,6 @@
 import { nextAllowedAt, nextPublishAt, type CampaignSchedule } from './campaign-schedule';
+import { TIMEZONE } from './types';
+import { zonedDateISO, zonedToUtc } from './time';
 import { accountGapSeconds } from './rules';
 import type { BrowserSettings, LimitsSettings } from './types';
 
@@ -403,6 +405,56 @@ export function windowedStagger(
   const gap = Math.max(0, Math.round(gapSeconds));
   const bases = Array.from({ length: Math.max(0, targetCount) }, (_, i) => new Date(slot.getTime() + i * gap * 1000));
   return windowedCascade(bases, gap, schedule);
+}
+
+/**
+ * WHERE A RE-TIMED ROUND STARTS — the window's own opening, not wherever the
+ * rows happen to be sitting.
+ *
+ * THIS IS THE DIFFERENCE BETWEEN A FIX THAT WORKS IN ONE DIRECTION AND ONE
+ * THAT WORKS. nextAllowedAt() only ever moves an instant FORWARD — that is
+ * its whole contract — so re-stamping a queue by rolling each row from its
+ * own current stamp corrects 08:00 to 10:00 and does nothing at all for
+ * 10:00 back to 08:00, or for a gap of five minutes back down to one. The
+ * owner's own tests are bidirectional ("שנה מ-10:00 ל-12:00 ובדוק שוב",
+ * "שנה את מרווח הפרסום מדקה ל-5 דקות"), and half of them would have passed
+ * for the wrong reason.
+ *
+ * So the anchor is computed from the WINDOW, not from the rows: the first
+ * minute the campaign may publish on the day the round is already set for.
+ * Everything after it is that anchor plus the gap, which makes the whole
+ * re-stamp symmetric — earlier, later, tighter, wider, all the same
+ * arithmetic.
+ *
+ * THE DAY IS THE ROUND'S, NOT TODAY'S. `headAt` is the earliest row still
+ * waiting, so a round planned for tomorrow morning stays tomorrow morning and
+ * only its hour moves. Anchoring at `now` instead would drag tomorrow's round
+ * into tonight, which is not what changing an hour means.
+ *
+ * `floor` is the earliest instant that may be written at all — a minute from
+ * now, so the worker cannot claim a row before the write that moved it has
+ * landed. A round whose day has already begun starts from there instead.
+ *
+ * Returns the head instant; windowedCascade() lays the rest out from it and
+ * rolls across the window's close onto the next chosen day.
+ */
+export function roundAnchor(
+  schedule: CampaignSchedule | null | undefined,
+  headAt: Date,
+  floor: Date,
+): Date {
+  const from = new Date(Math.max(headAt.getTime(), floor.getTime()));
+  if (!schedule?.enabled) return from;
+  /* The window's opening on the day the round is set for. Built from the
+     calendar date in the zone, never by arithmetic on the instant, so the two
+     Israeli clock changes cannot move it by an hour. */
+  const opens = zonedToUtc(zonedDateISO(headAt, TIMEZONE), schedule.start, TIMEZONE);
+  const want = new Date(Math.max(opens.getTime(), floor.getTime()));
+  /* And if that day is not a chosen one — or its window has already closed —
+     the first legal moment after it. Null only when no day is chosen at all,
+     and then the rows stay where they are rather than being moved somewhere
+     impossible. */
+  return nextAllowedAt(schedule, want) ?? from;
 }
 
 /**

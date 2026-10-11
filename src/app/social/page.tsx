@@ -39,6 +39,7 @@ import {
   listWorkers,
   pauseCampaign,
   queueCampaignComment,
+  rescheduleCampaignQueue,
   queueSummary,
   runCovers,
   getBrowserSettings,
@@ -270,9 +271,33 @@ export default function SocialDashboard() {
    * exactly one run. The campaigns screen, which draws many, keys its own by
    * id for the same reason.
    */
-  const [schedulePatch, setSchedulePatch] = useState<{ id: string; columns: Required<ScheduleFields> } | null>(null);
-  const [scheduleBusy, setScheduleBusy] = useState(false);
-  const scheduleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /*
+   * KEYED BY CAMPAIGN, because this screen draws up to ten of them.
+   *
+   * It was a single {id, columns}: one card's un-acknowledged change at a
+   * time. With one featured run that was enough. With the swipe strip it is
+   * not — the owner sets campaign A's hours, swipes, taps a day chip on
+   * campaign B, and A's patch is simply replaced. The card he just left then
+   * snaps back to the stored row, which is the screen forgetting an edit he
+   * made ten seconds ago.
+   */
+  const [schedulePatch, setSchedulePatch] = useState<Record<string, Required<ScheduleFields>>>({});
+  /* Keyed too: the spinner belongs to the card whose write is in flight, and
+     with a strip of them a single boolean span-locked all of them. */
+  const [scheduleBusy, setScheduleBusy] = useState<Record<string, boolean>>({});
+  /*
+   * ONE DEBOUNCE PER CAMPAIGN, for the same reason.
+   *
+   * A single timer meant the second card's edit CANCELLED the first card's
+   * pending save: two campaigns touched inside 600ms, and only the later one
+   * was ever written. "בדוק שני קמפיינים פעילים במקביל" is exactly this case.
+   * The campaigns list has always keyed its timers by id; the dashboard did
+   * not, and it is the screen with the strip.
+   */
+  const scheduleTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  /* What each pending timer would write, so an unmount can flush it rather
+     than drop it — see the cleanup below. */
+  const schedulePending = useRef<Record<string, () => Promise<void>>>({});
   /* The instant the last read SUCCEEDED — not the instant a tick fired. It is
      the only honest input to the "עודכן לפני…" line, and it stays where it was
      when a read fails, so a failed refresh cannot make the screen look fresh. */
@@ -927,9 +952,22 @@ export default function SocialDashboard() {
    * screen promising something the machine will not do, which is the one class
    * of bug this module keeps being rewritten to prevent.
    */
+  /*
+   * ON UNMOUNT THE PENDING SAVE IS FLUSHED, NOT DROPPED.
+   *
+   * This cleared the timer and stopped. The schedule editor is three selects
+   * and seven day chips on a phone, and the panel's own on/off switch reaches
+   * the same debounce — so a tap followed by a swipe to another screen inside
+   * 600ms lost the change silently, with the card having already shown it as
+   * made. A write that was asked for is sent; what cannot survive an unmount
+   * is the toast about it, which is a smaller loss than the setting.
+   */
   useEffect(
     () => () => {
-      if (scheduleTimer.current) clearTimeout(scheduleTimer.current);
+      for (const [id, timer] of Object.entries(scheduleTimers.current)) {
+        clearTimeout(timer);
+        void schedulePending.current[id]?.();
+      }
     },
     [],
   );
@@ -940,63 +978,92 @@ export default function SocialDashboard() {
      readSchedule() turning that into the defaults is the honest answer to
      "what is this campaign set to". */
   useEffect(() => {
-    if (!schedulePatch || !data) return;
-    const row = data.campaigns.find((c) => c.id === schedulePatch.id);
-    if (!row) return;
-    const live = scheduleColumns(readSchedule(row));
-    const want = schedulePatch.columns;
-    if (
-      live.schedule_enabled === want.schedule_enabled &&
-      live.schedule_start === want.schedule_start &&
-      live.schedule_end === want.schedule_end &&
-      /* The SECONDS are the value the owner chose; the minutes beside them
-         are derived from it, so comparing both is comparing one thing twice
-         — and the derived one is coarser, so it would call a change from 30
-         to 40 seconds "no change". */
-      live.schedule_gap_seconds === want.schedule_gap_seconds &&
-      live.schedule_days.join(',') === want.schedule_days.join(',')
-    ) {
-      setSchedulePatch(null);
-    }
+    if (!data) return;
+    const ids = Object.keys(schedulePatch);
+    if (!ids.length) return;
+    const settled = ids.filter((id) => {
+      const row = data.campaigns.find((c) => c.id === id);
+      if (!row) return false;
+      const live = scheduleColumns(readSchedule(row));
+      const want = schedulePatch[id];
+      return (
+        live.schedule_enabled === want.schedule_enabled &&
+        live.schedule_start === want.schedule_start &&
+        live.schedule_end === want.schedule_end &&
+        /* The SECONDS are the value the owner chose; the minutes beside them
+           are derived from it, so comparing both is comparing one thing twice
+           — and the derived one is coarser, so it would call a change from 30
+           to 40 seconds "no change". */
+        live.schedule_gap_seconds === want.schedule_gap_seconds &&
+        live.schedule_days.join(',') === want.schedule_days.join(',')
+      );
+    });
+    if (!settled.length) return;
+    setSchedulePatch((all) => {
+      const next = { ...all };
+      for (const id of settled) delete next[id];
+      return next;
+    });
   }, [data, schedulePatch]);
 
   const changeSchedule = useCallback(
     (campaign: Campaign, next: CampaignSchedule) => {
       const columns = scheduleColumns(next);
-      setSchedulePatch({ id: campaign.id, columns });
-      if (scheduleTimer.current) clearTimeout(scheduleTimer.current);
-      scheduleTimer.current = setTimeout(async () => {
-        setScheduleBusy(true);
+      setSchedulePatch((all) => ({ ...all, [campaign.id]: columns }));
+
+      /*
+       * THE WRITE, AS A FUNCTION, so the unmount cleanup can run it instead of
+       * dropping it. See the cleanup effect above.
+       */
+      const run = async () => {
+        delete schedulePending.current[campaign.id];
+        delete scheduleTimers.current[campaign.id];
+        setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
+        /*
+         * ONCE THE CAMPAIGN ITSELF IS SAVED, IT IS SAVED.
+         *
+         * Everything after it — re-arming the repeat, lowering the account
+         * floor, re-timing the queue — acts on a row that is already
+         * committed. A single try/catch around all four put the card back to
+         * the old hours and said "שמירת התזמון נכשלה" when any of the three
+         * later steps threw, over a database that held exactly what he asked
+         * for. The patch is only reverted for the write that actually failed.
+         */
         try {
           await saveCampaign({ id: campaign.id, name: campaign.name, ...columns });
+        } catch (err) {
+          setSchedulePatch((all) => {
+            const copy = { ...all };
+            delete copy[campaign.id];
+            return copy;
+          });
+          toast(friendlyMessage(err, 'שמירת התזמון נכשלה.'), 'error');
+          setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
+          return;
+        }
+
+        try {
           /*
            * AND THE REPEAT IS RE-ARMED WITH THE NEW HOURS.
            *
            * CHZARA builds its weekly schedule row out of the campaign's days
-           * and its START HOUR, at the moment the switch is flipped. Changing
+           * and its START HOUR at the moment the switch is flipped. Changing
            * the window afterwards wrote the campaign's five columns and left
            * that row alone — so the card read "08:00 – 22:00" while the round
-           * it opens by itself still fired at 13:30, which is this session's
-           * whole subject wearing a different hat.
+           * it opens by itself still fired at 13:30.
            *
            * Only when the repeat is on: a campaign that does not repeat has no
            * weekly row to re-arm, and writing one here would turn a change of
            * hours into a recurrence he never asked for.
            */
-          const repeat = readRepeat(campaign as Campaign);
+          const repeat = readRepeat(campaign);
           if (repeat.enabled) {
             const armedNow = await setCampaignRepeat(campaign, repeat, next);
-          /*
-           * AND IF THE RE-ARM COULD NOT HAPPEN, HE HEARS IT NOW — on the save
-           * that he made, not on an evening he spends waiting.
-           *
-           * "אני רוצה שמתי שאני משנה שם ימים / שעות שזה יתעדכן באותו הרגע."
-           * He is right, and this is the half that was silent: changing the
-           * days re-arms the weekly row, and a round that has never gone out
-           * has no group list to re-arm WITH. That used to pass without a
-           * word, leaving a panel that said "שבת · 19:00" over a queue that
-           * would never receive a row.
-           */
+            /*
+             * AND IF THE RE-ARM COULD NOT HAPPEN, HE HEARS IT NOW — on the
+             * save that he made, not on an evening he spends waiting. A round
+             * that has never gone out has no group list to re-arm WITH.
+             */
             if (!armedNow.armed) {
               toast(
                 `התזמון נשמר, אבל "${campaign.name}" עוד לא יצא אף פעם — אין ממה להעתיק את רשימת הקבוצות, ולכן לא ייכנסו פרסומים לתור. השיקו אותו פעם אחת וזה יתפוס מיד.`,
@@ -1009,19 +1076,10 @@ export default function SocialDashboard() {
            * AND THE ACCOUNT-WIDE FLOOR COMES DOWN WITH IT.
            *
            * "תשנה גם את המרווח המינימלי הגלובלי ברגע שמשנים את הזמנים בקמפיין".
-           * Choosing 30 seconds here used to change nothing he could see: the
-           * campaign's own gap is only the FIRST of the gates, and the second
-           * one — minGap + groupMinGap, 65 minutes out of the box — is an
-           * ACCOUNT setting, so the row sat in the queue for an hour anyway
-           * and the card showed a number that never happened.
-           *
-           * matchAccountGapTo only ever LOWERS it, and only to exactly what
-           * was asked for, so a campaign set to 10 minutes does not drag a
-           * floor that the owner deliberately raised back down with it.
-           *
-           * AFTER saveCampaign, never before: if the campaign write fails the
-           * floor must stay where it was, or a failed save would still have
-           * loosened the whole account.
+           * The campaign's own gap is only the FIRST of the gates; the second
+           * — minGap + groupMinGap, 65 minutes out of the box — is an ACCOUNT
+           * setting, so a campaign set to thirty seconds sat in the queue for
+           * an hour anyway. matchAccountGapTo only ever LOWERS it.
            */
           const floor = await matchAccountGapTo(next.gapSeconds);
           if (floor.changed) {
@@ -1030,22 +1088,50 @@ export default function SocialDashboard() {
               'info',
             );
           }
+
+          /*
+           * ───────── AND THE QUEUE MOVES WITH THE HOURS ─────────
+           *
+           * "שיניתי את תחילת הפרסום ל-10:00, אבל התור ממשיך להציג שעות ישנות."
+           *
+           * This block wrote the campaign's columns, re-armed the repeat and
+           * lowered the floor — and left every row already in the queue on the
+           * hours he had just replaced. rules.ts would have corrected them one
+           * at a time as each was claimed and deferred, silently, over hours;
+           * until then the history list, the group cards and the activity
+           * sheet all showed 08:00 under a panel reading 10:00.
+           */
+          const queue = await rescheduleCampaignQueue(campaign.id, next);
+          if (queue.moved) {
+            toast(
+              `${counted(queue.moved, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} לשעות החדשות${
+                queue.capped ? ` (רק ${queue.waiting} הקרובים בתור)` : ''
+              }`,
+              'success',
+            );
+          }
+          await load();
         } catch (err) {
-          setSchedulePatch(null);
-          toast(friendlyMessage(err, 'שמירת התזמון נכשלה.'), 'error');
+          /* The campaign IS saved; one of the follow-ups is not. Say which,
+             and leave the panel showing what the database holds. */
+          toast(friendlyMessage(err, 'התזמון נשמר, אבל עדכון התור לא הושלם.'), 'error');
         } finally {
-          setScheduleBusy(false);
+          setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
         }
-      }, 600);
+      };
+
+      schedulePending.current[campaign.id] = run;
+      clearTimeout(scheduleTimers.current[campaign.id]);
+      scheduleTimers.current[campaign.id] = setTimeout(run, 600);
     },
-    [toast],
+    [toast, load],
   );
 
   /* What a card draws: the stored row, with the owner's un-acknowledged change
      laid over it. readSchedule() validates every field either way, so a row
      written by an older version still resolves to a usable schedule. */
   const scheduleOf = (campaign: Campaign): CampaignSchedule =>
-    readSchedule(schedulePatch?.id === campaign.id ? { ...campaign, ...schedulePatch.columns } : campaign);
+    readSchedule(schedulePatch[campaign.id] ? { ...campaign, ...schedulePatch[campaign.id] } : campaign);
 
   /*
    * ───────── WHEN EACH WAITING ROW WILL ACTUALLY GO OUT ─────────
@@ -1137,7 +1223,7 @@ export default function SocialDashboard() {
    */
   const changeRepeat = useCallback(
     async (campaign: Pick<Campaign, 'id' | 'name'>, next: CampaignRepeat) => {
-      setScheduleBusy(true);
+      setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
         const result = await setCampaignRepeat(campaign, next, scheduleOf(campaign as Campaign));
         await load();
@@ -1162,7 +1248,7 @@ export default function SocialDashboard() {
       } catch (err) {
         toast(friendlyMessage(err, 'שמירת החזרה נכשלה.'), 'error');
       } finally {
-        setScheduleBusy(false);
+        setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1662,7 +1748,7 @@ export default function SocialDashboard() {
                   }}
                   repeat={readRepeat(run.campaign)}
                   onRepeatChange={(next) => void changeRepeat(run.campaign, next)}
-                  scheduleBusy={scheduleBusy && schedulePatch?.id === run.campaign.id}
+                  scheduleBusy={Boolean(scheduleBusy[run.campaign.id])}
                 />
               ))}
             </CardSwiper>

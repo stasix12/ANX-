@@ -28,6 +28,7 @@ import {
   cancelQueueItem,
   getTarget,
   listCampaigns,
+  queueGates,
   requestGroupRefresh,
   retryQueueItem,
   screenshotUrl,
@@ -35,6 +36,7 @@ import {
   updateTarget,
   type QueueRow,
 } from '@/lib/social/client';
+import { projectQueue } from '@/lib/social/projection';
 import { isOpen } from '@/lib/social/status';
 import { KNOWN_CITIES, OTHER_CITY, detectCity, sortCities } from '@/lib/social/cities';
 import { Stamp } from '@/components/social/DateTime';
@@ -54,6 +56,9 @@ export default function GroupProfilePage() {
   const [group, setGroup] = useState<SocialTarget | null>(null);
   const [rows, setRows] = useState<QueueRow[] | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  /* Row id → the instant the engine will use; absent falls back to the stored
+     stamp, which is what this screen drew before. See load(). */
+  const [projected, setProjected] = useState<Map<string, string | null>>(new Map());
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +73,16 @@ export default function GroupProfilePage() {
       setGroup(t);
       setRows(q);
       setCampaigns(c);
+      /* WHEN EACH WAITING ROW WILL ACTUALLY GO OUT. This list is one group's
+         own history and future, and it drew the stored column — so a row the
+         engine holds until 10:00 read 08:00 here while the campaign card said
+         10:00. The rows span whichever campaigns have reached this group, so
+         the gates are loaded for those and keyed by campaign_id. Ascending,
+         because one row's instant is the next one's floor. */
+      const ids = [...new Set(q.map((r) => r.campaign_id).filter((x): x is string => Boolean(x)))];
+      const { gates, spacing } = await queueGates(ids);
+      const ordered = [...q].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+      setProjected(projectQueue(ordered, { now: new Date(), gates, spacing }));
       setNotes(t?.notes ?? '');
       setError(null);
     } catch (err) {
@@ -296,6 +311,7 @@ export default function GroupProfilePage() {
                 <PublicationItem
                   key={r.id}
                   row={r}
+                  projectedAt={projected.get(r.id)}
                   showDate
                   actions={{
                     onRetry: (row) => act(`retry-${row.id}`, () => retryQueueItem(row.id), 'הוחזר לתור.'),

@@ -89,7 +89,16 @@ is(!/runCoverMedia\(/.test(page), 'and not one request per card');
    beside it, and a schedule write belongs to the card it came from. */
 is(/camp-pause:\$\{run\.campaign\.id\}/.test(page), 'pausing is keyed to the run it acts on');
 is(/busy=\{campBusy\(run\.campaign\.id\)\}/.test(page), 'and only that card shows busy');
-is(/scheduleBusy && schedulePatch\?\.id === run\.campaign\.id/.test(page), 'a schedule write marks only the card that made it');
+/*
+ * The busy flag was `scheduleBusy && schedulePatch?.id === run.campaign.id` —
+ * correct about WHICH card, but derived from two pieces of state that each
+ * held only one campaign. The strip made that a bug rather than a limitation:
+ * a second card's edit replaced the first's patch, so the first card's
+ * spinner vanished while its write was still in flight. Both are keyed now.
+ */
+is(/scheduleBusy=\{Boolean\(scheduleBusy\[run\.campaign\.id\]\)\}/.test(page), 'a schedule write marks only the card that made it');
+is(/const \[scheduleBusy, setScheduleBusy\] = useState<Record<string, boolean>>\(\{\}\);/.test(page), 'and the flag can hold more than one card at a time');
+is(/scheduleTimers\.current\[campaign\.id\]/.test(page), 'and so can the debounce, so one card\u2019s edit cannot cancel another\u2019s save');
 
 /* THE GESTURE IS THE BROWSER'S. A hand-rolled drag would have to reinvent
    friction, the rubber band and the trackpad, and would be the first thing

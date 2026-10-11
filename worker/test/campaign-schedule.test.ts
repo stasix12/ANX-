@@ -365,8 +365,31 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   is(/holdFor\(new Date\(new Date\(last\.published_at\)\.getTime\(\) \+ gapMs\)\)/.test(rules), 'the account-wide one raises it too, instead of returning on its own');
   is(/return holdUntil \? \{ action: 'publish', notBefore: \(holdUntil as Date\)\.toISOString\(\) \}/.test(rules), 'and the single return hands over the later of the two');
 
-  /* A missing column must not stop the engine. */
-  is(/if \(full\.error\)[\s\S]{0,260}select\('status'\)/.test(rules), 'A DATABASE WITHOUT THE v24 COLUMNS STILL PUBLISHES — the read falls back to the status alone rather than refusing');
+  /*
+   * A MISSING COLUMN MUST NOT STOP THE ENGINE — and a FAILED READ must not
+   * start it.
+   *
+   * The fallback selects `status` alone, so readSchedule() sees no columns and
+   * reports `enabled: false`, and every gate under it is skipped. For a
+   * database that predates v24 that is deliberate. For a dropped connection it
+   * is the one path in this engine that publishes outside the owner's hours,
+   * because the two were told apart by nothing at all.
+   */
+  is(/if \(!isMissingColumn\(full\.error\)\) \{/.test(rules), 'a read that FAILED is not mistaken for a database without the columns');
+  is(/reason: 'לא הצלחנו לקרוא את הגדרות התזמון של הסבב/.test(rules), 'it waits a minute and tries again, rather than publishing by a schedule it could not read');
+  is(/if \(full\.error\)[\s\S]{0,2000}select\('status'\)/.test(rules), 'A DATABASE WITHOUT THE v24 COLUMNS STILL PUBLISHES — the read falls back to the status alone rather than refusing');
+  is(/function isMissingColumn\(/.test(rules), 'and "that column does not exist" is decided by the error code, not by guessing');
+  /*
+   * AND EVERY DEFERRAL LANDS INSIDE THE WINDOW. rules.ts is the busiest writer
+   * of scheduled_at in the product — every full ceiling, every closing gap,
+   * every too-recent repeat rewrites it — and it was the one writer that had
+   * never been taught the campaign's hours. The daily ceilings parked rows at
+   * the next local midnight plus a minute, an hour no window can contain:
+   * that is the "12.10 · 00:01" row the owner photographed.
+   */
+  is(/const insideWindow = \(schedule: CampaignSchedule \| null, at: Date\): Date =>/.test(rules), 'a deferral is rolled into the campaign window');
+  is(/const tomorrow = insideWindow\(gate, new Date\(startOfNextZonedDay\(now\)\)\)/.test(rules), 'including the daily ceilings, which is where 00:01 came from');
+  is(!/until: new Date\(now\.getTime\(\) \+ needed - since \+ DEFER_CUSHION_MS\)\.toISOString\(\)/.test(rules), 'and the repeat deferral, which lands at an arbitrary hour otherwise');
 
   const card = readFileSync(new URL('../../src/components/social/CampaignCard.tsx', import.meta.url), 'utf8');
   /*

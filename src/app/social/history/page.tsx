@@ -16,7 +16,8 @@ import {
   inputClass,
   useToast,
 } from '@/components/social/ui';
-import { cancelQueueItem, listCampaigns, listQueue, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
+import { cancelQueueItem, listCampaigns, listQueue, queueGates, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
+import { projectQueue } from '@/lib/social/projection';
 import { counted, startOfZonedDay, zonedToUtc } from '@/lib/social/time';
 import { AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES, NEEDS_HUMAN_STATUSES } from '@/lib/social/status';
 import { type PublishMethod, type QueueStatus } from '@/lib/social/types';
@@ -85,6 +86,10 @@ export default function HistoryPage() {
 function HistoryScreen() {
   const params = useSearchParams();
   const [rows, setRows] = useState<QueueRow[] | null>(null);
+  /* Row id → the instant the engine will use. Empty until the first read
+     lands, and a row absent from it falls back to its stored stamp — which is
+     exactly what this screen drew before. See the note in load(). */
+  const [projected, setProjected] = useState<Map<string, string | null>>(new Map());
   const [group, setGroup] = useState<string>(mapIncomingStatus(params.get('status')));
   const [method, setMethod] = useState<PublishMethod | ''>('');
   /*
@@ -136,7 +141,32 @@ function HistoryScreen() {
       } else if (days !== null && days !== undefined) {
         fromISO = new Date(Date.now() - Math.max(days, 1) * 86_400_000).toISOString();
       }
-      setRows(await listQueue({ status: statuses.length ? statuses : undefined, since: fromISO, until: toISO, limit: 500, withText: true }));
+      const page = await listQueue({ status: statuses.length ? statuses : undefined, since: fromISO, until: toISO, limit: 500, withText: true });
+      setRows(page);
+      /*
+       * ───────── AND WHEN EACH WAITING ROW WILL ACTUALLY GO OUT ─────────
+       *
+       * "עדיין מופיעים פוסטים המתוזמנים ל-08:00 … שיניתי את תחילת הפרסום
+       *  ל-10:00, אבל התור ממשיך להציג שעות ישנות."
+       *
+       * This is the screen he photographed. It drew `row.scheduled_at` with
+       * none of the four gates applied, so a row the engine will hold until
+       * 10:00 read "12.10 · 08:00" — the hours he had just replaced, under a
+       * panel one tap away showing the new ones.
+       *
+       * ROWS SPANNING EVERY CAMPAIGN, so the gates are loaded for all of them
+       * and projectQueue keys the cascade by campaign_id — one round's
+       * interval can never push another round's rows.
+       *
+       * ASCENDING, which projectQueue needs because one row's instant is the
+       * next one's floor. `listQueue` here is ordered descending (newest
+       * first, which is what a history list wants), so the projection is run
+       * over a sorted copy and the list keeps its own order.
+       */
+      const ids = [...new Set(page.map((r) => r.campaign_id).filter((id): id is string => Boolean(id)))];
+      const { gates, spacing } = await queueGates(ids);
+      const ordered = [...page].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+      setProjected(projectQueue(ordered, { now: new Date(), gates, spacing }));
       setError(null);
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
@@ -156,13 +186,27 @@ function HistoryScreen() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (rows ?? []).filter((r) => {
+    const kept = (rows ?? []).filter((r) => {
       if (method && (r.method ?? '') !== method) return false;
       if (!q) return true;
       const campaignName = r.campaign_id ? campaigns[r.campaign_id] ?? '' : '';
       return [r.target?.name, r.post?.title, campaignName, r.rendered_text].some((v) => v?.toLowerCase().includes(q));
     });
-  }, [rows, query, method, campaigns]);
+    /*
+     * ORDERED BY THE INSTANT EACH ROW PRINTS, newest first.
+     *
+     * The read is ordered by the stored column, and every row now prints the
+     * projected one — so a row held until 10:00 sat where its 08:00 stamp put
+     * it, above a row that will go out before it. A list sorted on one clock
+     * and labelled with another is in the wrong order on screen, which is the
+     * same fault as printing the wrong clock and harder to notice.
+     *
+     * A finished row keeps `published_at`, which is what the list is really
+     * about for everything but the waiting rows.
+     */
+    const when = (r: QueueRow) => r.published_at ?? projected.get(r.id) ?? r.scheduled_at;
+    return kept.sort((a, b) => String(when(b)).localeCompare(String(when(a))));
+  }, [rows, query, method, campaigns, projected]);
 
   const page = filtered.slice(0, limit);
 
@@ -286,7 +330,7 @@ function HistoryScreen() {
             <>
               <ul className="divide-y divide-ink-700">
                 {page.map((r) => (
-                  <PublicationItem key={r.id} row={r} actions={actions} showDate />
+                  <PublicationItem key={r.id} row={r} projectedAt={projected.get(r.id)} actions={actions} showDate />
                 ))}
               </ul>
               {filtered.length > page.length && (

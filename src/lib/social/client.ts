@@ -5,7 +5,7 @@ import { campaignState, type CampaignQueueRow, type CampaignState } from './camp
 import { detectCity } from './cities';
 import { counted, zonedDateISO } from './time';
 import { readSchedule, readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
-import { windowedCascade } from './projection';
+import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
@@ -2917,6 +2917,260 @@ async function campaignWindows(ids: string[]): Promise<Record<string, CampaignSc
 }
 
 /**
+ * EVERYTHING A SCREEN NEEDS TO SAY WHEN A ROW WILL GO OUT — in one call.
+ *
+ * projectQueue() composes the four publish gates, and it needs two things a
+ * list of rows does not carry: each campaign's window, gap and own last
+ * publication, and the account-wide floor. Every screen that draws waiting
+ * rows was assembling that by hand, or — the history list, a group's page,
+ * the post editor's board — not at all, which is why they printed the stored
+ * column while the dashboard beside them printed the real instant.
+ *
+ * FOUR SMALL READS. Three are settings rows the owner changes by opening a
+ * panel; the fourth is one head row. Every one of them fails soft, because a
+ * screen that cannot reach the settings should draw the stored instants it
+ * always drew rather than nothing at all.
+ *
+ * `campaignIds` narrows the campaign read when the caller knows its scope.
+ * Absent, every campaign is fetched — a few dozen rows, and the alternative
+ * on a list spanning campaigns is no projection at all.
+ */
+export async function queueGates(
+  campaignIds?: string[],
+): Promise<{ gates: Record<string, CampaignGate>; spacing: AccountSpacing | undefined }> {
+  const [campaigns, limits, browser, lastPublished] = await Promise.all([
+    (campaignIds && campaignIds.length === 0 ? Promise.resolve([] as Campaign[]) : listCampaigns()).catch(() => [] as Campaign[]),
+    getLimits().catch(() => null),
+    getBrowserSettings().catch(() => null),
+    lastPublishedAt().catch(() => null),
+  ]);
+  const wanted = campaignIds ? new Set(campaignIds) : null;
+  const gates: Record<string, CampaignGate> = {};
+  for (const c of campaigns) {
+    if (wanted && !wanted.has(c.id)) continue;
+    /* `lastPublishedAt: null` — the campaign's OWN last publication is not in
+       this read, and guessing it from the account's would make a round wait
+       out an interval that belongs to somebody else. Absent, the campaign gap
+       simply does not apply to the first row, which is the honest reading for
+       a screen that has not been told. */
+    gates[c.id] = { schedule: readSchedule(c), lastPublishedAt: null };
+  }
+  return { gates, spacing: limits ? spacingFrom(limits, browser, lastPublished) : undefined };
+}
+
+/**
+ * ───────── THE HOURS CHANGED, SO THE QUEUE MOVES WITH THEM ─────────
+ *
+ * "שיניתי את תחילת הפרסום ל-10:00, אבל התור ממשיך להציג שעות ישנות."
+ *
+ * THE FAULT. changeSchedule() did three things and none of them was this: it
+ * wrote the campaign's five columns, re-armed the daily repeat's weekly row,
+ * and lowered the account floor. The rows ALREADY IN THE QUEUE were never
+ * touched. So after moving the window from 08:00 to 10:00 the owner still had
+ * 12.10 08:00, 08:01, 08:02 … sitting in his queue, and every screen that
+ * reads that column — the history list, the group cards, the activity sheet —
+ * showed him the hours he had just replaced.
+ *
+ * THE ENGINE WAS NEVER CONFUSED. rules.ts re-reads social_campaigns on every
+ * single claim, so from the moment the save landed it was already holding
+ * those rows until 10:00; it just rewrote `scheduled_at` one row at a time, as
+ * each one was claimed and deferred. The queue would have corrected itself
+ * eventually and silently, over hours, which is indistinguishable from broken.
+ *
+ * WHAT THIS DOES. Every waiting row of this campaign is moved to the first
+ * instant the NEW schedule permits, in its existing order, cascading by the
+ * campaign's own gap — through windowedCascade(), which is the same function
+ * respaceQueue() writes with and projectQueue() draws with, so the queue, the
+ * screens and the engine cannot disagree about the result.
+ *
+ * EACH ROW KEEPS ITS DAY. The base is the row's OWN stamp, not a fresh
+ * sequence from now: a round planned for tomorrow morning stays tomorrow
+ * morning and starts at 10:00 instead of 08:00. Re-sequencing from now would
+ * drag tomorrow's round into tonight, which is not what moving an hour means.
+ * The one exception is a stamp already in the past, which is floored to a
+ * minute from now — the same cushion respaceQueue uses, so the worker cannot
+ * claim a row before the write that moved it has landed.
+ *
+ * WHAT IT WILL NOT TOUCH:
+ *   • anything already published, failed or skipped — history is not rewritten;
+ *   • a row a worker is holding RIGHT NOW (`publishing` is not in PENDING), so
+ *     a publication in flight is never re-timed underneath itself;
+ *   • a row waiting on a PERSON (manual_pending, needs_attention,
+ *     awaiting_confirmation) — those move when he moves them, and an hour is
+ *     not what they are waiting for;
+ *   • any other campaign (.eq('campaign_id', …)).
+ *
+ * It only ever UPDATEs `scheduled_at`. Nothing is inserted, nothing is
+ * deleted, no other column changes, and a row already on its new instant is
+ * skipped so the count reported is the number that really moved.
+ */
+export async function rescheduleCampaignQueue(
+  campaignId: string,
+  schedule: CampaignSchedule,
+): Promise<{ moved: number; waiting: number; capped: boolean }> {
+  /*
+   * NOTHING MOVES WHEN THE WINDOW IS SWITCHED OFF.
+   *
+   * "אין לשנות הגדרות שלא ביקשתי." With the schedule disabled there is no
+   * window to move rows into, so the only thing a re-stamp could do is
+   * re-space them by the campaign's gap — which is a change to a queue the
+   * owner did not ask to re-space, triggered by him turning a switch OFF.
+   * The rows are already on instants the engine permits; they stay there.
+   */
+  if (!schedule.enabled) return { moved: 0, waiting: 0, capped: false };
+
+  /*
+   * THE ROWS THIS CAMPAIGN GOVERNS — which is not only the rows that carry its
+   * id.
+   *
+   * rules.ts resolves the campaign as `item.campaign_id ?? post.campaign_id`,
+   * so a row stamped before its post was moved into this campaign carries a
+   * null id and is STILL gated by this window at claim time. Matching on the
+   * column alone would move its siblings and leave it on the old hours — one
+   * row publishing by a schedule the owner has replaced, which is the whole
+   * complaint in miniature.
+   *
+   * The post list is small (a campaign has a handful) and the failure is soft:
+   * if it cannot be read, the id match alone is used, which is what this
+   * function did before.
+   */
+  const postRes = await db().from('social_posts').select('id').eq('campaign_id', campaignId);
+  const postIds = postRes.error ? [] : ((postRes.data ?? []) as { id: string }[]).map((x) => x.id);
+
+  let rowQuery = db()
+    .from('social_queue')
+    .select('id, scheduled_at')
+    .in('status', PENDING)
+    .order('scheduled_at', { ascending: true })
+    .limit(LIVE_QUEUE_LIMIT);
+  rowQuery = postIds.length
+    ? rowQuery.or(`campaign_id.eq.${campaignId},post_id.in.(${postIds.join(',')})`)
+    : rowQuery.eq('campaign_id', campaignId);
+  const pending = unwrap<{ id: string; scheduled_at: string }[]>(await rowQuery);
+  if (!pending.length) return { moved: 0, waiting: 0, capped: false };
+
+  /*
+   * THE ROUND STARTS AT THE WINDOW'S OPENING, and everything after it is that
+   * instant plus the gap.
+   *
+   * It was each row's OWN stamp rolled forward, and that is only half a fix:
+   * nextAllowedAt() moves an instant FORWARD and never back, so 08:00 → 10:00
+   * worked and 10:00 → 08:00 did nothing at all. Nor did a gap going from
+   * five minutes back down to one — every row was already past its new floor.
+   * Anchoring on the window makes the re-stamp symmetric: earlier, later,
+   * tighter and wider are one piece of arithmetic. See roundAnchor().
+   *
+   * A minute from now is the floor, so the worker cannot claim a row before
+   * the write that moved it has landed — the same cushion respaceQueue uses.
+   */
+  const floor = new Date(Date.now() + 60_000);
+  const head = new Date(Date.parse(pending[0].scheduled_at) || floor.getTime());
+  const anchor = roundAnchor(schedule, head, floor);
+  const gapMs = Math.max(0, Math.round(schedule.gapSeconds)) * 1000;
+  const bases = pending.map((_, i) => new Date(anchor.getTime() + i * gapMs));
+  const rolled = windowedCascade(bases, schedule.gapSeconds, schedule);
+
+  const work = pending
+    .map((row, i) => ({ id: row.id, next: rolled[i].toISOString(), was: row.scheduled_at }))
+    .filter((w) => w.next !== w.was);
+  if (!work.length) return { moved: 0, waiting: pending.length, capped: pending.length >= LIVE_QUEUE_LIMIT };
+
+  const { moved, failed, firstError } = await writeNewInstants(work);
+
+  const capped = pending.length >= LIVE_QUEUE_LIMIT;
+  await logClientActivity(
+    failed ? 'warn' : 'info',
+    'queue_rescheduled',
+    `שעות הפרסום של הסבב השתנו (${schedule.start}–${schedule.end}) — ${counted(moved, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} לשעות החדשות${
+      capped ? ` (רק ${LIVE_QUEUE_LIMIT} הפרסומים הקרובים בתור)` : ''
+    }`,
+    { campaignId, start: schedule.start, end: schedule.end, gapSeconds: schedule.gapSeconds, days: schedule.days, moved, failed },
+  );
+
+  /* Half-applied is a real outcome and the owner is told the real numbers,
+     through the same classifier every other failure here goes through. */
+  if (failed) {
+    throw new Error(`${moved} פרסומים הוזזו לשעות החדשות, אבל ${failed} לא זזו: ${friendlyMessage(firstError)}`);
+  }
+  return { moved, waiting: pending.length, capped };
+}
+
+/** One row's move: where it is, and where it is going. */
+interface Restamp {
+  id: string;
+  next: string;
+  was: string;
+}
+
+/**
+ * WRITES A BLOCK OF NEW INSTANTS WITHOUT TRIPPING THE UNIQUE INDEX.
+ *
+ * social_queue has a UNIQUE index on (schedule_id, target_id, scheduled_at).
+ * Two rows of one schedule for one group can therefore collide mid-write if one
+ * lands on an instant a row behind it has not vacated yet. Writing in the
+ * DIRECTION OF TRAVEL — last-first when the queue is moving later, first-first
+ * when it is moving earlier — frees each instant before it is claimed, and is
+ * enough for every queue that moves the same way all the way down.
+ *
+ * A queue can also move BOTH ways at once — a longer gap starting earlier pulls
+ * the head back while it pushes the tail out — and then no single direction is
+ * collision-free. Rather than reason about which row crosses which, a row that
+ * hits the index is set aside and written again once every other row has
+ * vacated. One retry pass is all it can ever need: after the first pass nothing
+ * of ours is left on an old instant.
+ *
+ * Sequential, because Supabase has no per-row UPDATE ... FROM and the order is
+ * the whole point.
+ *
+ * ONE COPY, TWO CALLERS. respaceQueue() re-stamps for a new GAP and
+ * rescheduleCampaignQueue() for new HOURS; they differ only in the instants
+ * they compute, and a second hand-rolled copy of this loop is the kind of
+ * difference that shows up as a queue half-moved.
+ */
+async function writeNewInstants(work: Restamp[]): Promise<{ moved: number; failed: number; firstError: unknown }> {
+  const movingLater = work.length > 0 && new Date(work[0].next).getTime() >= new Date(work[0].was).getTime();
+  const ordered = movingLater ? [...work].reverse() : work;
+
+  let moved = 0;
+  const writeRow = async (item: Restamp) => {
+    /* Named statuses: a stale screen must never move a row that has meanwhile
+       started publishing, and `publishing` is deliberately not in PENDING. */
+    const res = await db()
+      .from('social_queue')
+      .update({ scheduled_at: item.next })
+      .eq('id', item.id)
+      .in('status', PENDING)
+      .select('id');
+    if (res.error) return res.error;
+    moved += (res.data as { id: string }[] | null)?.length ?? 0;
+    return null;
+  };
+
+  const blocked: Restamp[] = [];
+  let failed = 0;
+  let firstError: unknown = null;
+  for (const item of ordered) {
+    const err = await writeRow(item);
+    if (!err) continue;
+    if (isDuplicateSlot(err)) {
+      blocked.push(item);
+      continue;
+    }
+    failed += 1;
+    firstError ??= err;
+  }
+  for (const item of blocked) {
+    const err = await writeRow(item);
+    if (!err) continue;
+    /* Still taken — by a row outside this block (another campaign's, or one
+       already publishing). Counted and reported, never swallowed. */
+    failed += 1;
+    firstError ??= err;
+  }
+  return { moved, failed, firstError };
+}
+
+/**
  * Re-spaces the waiting queue to one publication every `gapMinutes`, and — the
  * part that actually makes it work — moves the settings so that the engine
  * agrees with the new spacing.
@@ -3011,59 +3265,7 @@ export async function respaceQueue(gapMinutes: number, opts: { campaignId?: stri
     // keeps the count we report equal to the number of rows that really moved.
     .filter((w) => w.next !== w.was);
 
-  // social_queue has a UNIQUE index on (schedule_id, target_id, scheduled_at).
-  // Two rows of one schedule for one group can therefore collide mid-respace if
-  // one lands on an instant a row behind it has not vacated yet. Writing in the
-  // direction of travel — last-first when the queue is moving later, first-first
-  // when it is moving earlier — frees each instant before it is claimed, and is
-  // enough for every queue that moves the same way all the way down.
-  // Sequentially, because Supabase has no per-row UPDATE ... FROM and the order
-  // is the whole point.
-  const movingLater = work.length > 0 && new Date(work[0].next).getTime() >= new Date(work[0].was).getTime();
-  const ordered = movingLater ? [...work].reverse() : work;
-
-  let moved = 0;
-  const writeRow = async (item: { id: string; next: string }) => {
-    // Named statuses, like the rest of this file: a stale screen must never move
-    // a row that has meanwhile started publishing.
-    const res = await db()
-      .from('social_queue')
-      .update({ scheduled_at: item.next })
-      .eq('id', item.id)
-      .in('status', PENDING)
-      .select('id');
-    if (res.error) return res.error;
-    moved += (res.data as { id: string }[] | null)?.length ?? 0;
-    return null;
-  };
-
-  // A queue can also move BOTH ways at once — a longer gap starting earlier
-  // pulls the head back while it pushes the tail out — and then no single
-  // direction is collision-free. Rather than reason about which row crosses
-  // which, a row that hits the unique index is simply set aside and written
-  // again once every other row has vacated. One retry pass is all it can ever
-  // need: after the first pass nothing of ours is left on an old instant.
-  const blocked: { id: string; next: string }[] = [];
-  let failed = 0;
-  let firstError: unknown = null;
-  for (const item of ordered) {
-    const err = await writeRow(item);
-    if (!err) continue;
-    if (isDuplicateSlot(err)) {
-      blocked.push(item);
-      continue;
-    }
-    failed += 1;
-    firstError ??= err;
-  }
-  for (const item of blocked) {
-    const err = await writeRow(item);
-    if (!err) continue;
-    // Still taken — by a row outside this respace (another campaign's, or one
-    // already publishing). Counted and reported, never swallowed.
-    failed += 1;
-    firstError ??= err;
-  }
+  const { moved, failed, firstError } = await writeNewInstants(work);
 
   const cappedNote = pending.length >= LIVE_QUEUE_LIMIT ? ` (רק ${LIVE_QUEUE_LIMIT} הפרסומים הקרובים בתור תוזמנו מחדש)` : '';
   /*

@@ -391,12 +391,49 @@ export default function CampaignControlCenter() {
     lastPublishedAt: state?.done.find((r) => r.published_at)?.published_at ?? null,
   };
   const spacingNow: AccountSpacing | undefined = spacing ? { ...spacing, lastPublishedAt: accountLastPublished } : undefined;
-  const projected = projectQueue(state?.upcoming ?? [], { now: new Date(), gates: { [id]: gate }, spacing: spacingNow });
+  /*
+   * EVERY ROW ON THIS SCREEN, not only the ones on the ציר זמן tab.
+   *
+   * It was `state?.upcoming`, which feeds the timeline — and the DEFAULT tab
+   * is the list beside it, which renders every row through PublicationItem and
+   * printed `scheduled_at` raw. So the fix that taught this screen's card and
+   * its timeline to agree left the list the owner actually opens still saying
+   * 06:25 under a window that opens at 08:00.
+   *
+   * `rows` is the whole campaign feed and is already ordered by scheduled_at
+   * ascending (campaignQueueWithStats), which is the order projectQueue needs
+   * — one row's instant is the next one's floor.
+   */
+  const projected = projectQueue(rows ?? [], { now: new Date(), gates: { [id]: gate }, spacing: spacingNow });
   /*
    * AND THE ONE FACT ABOVE THEM, from the same call. `null` back from
    * projectOne means one thing only — the schedule is on and no day is lit, so
    * the row is held indefinitely and there is no instant to print over it.
    */
+  /*
+   * WHEN THE ROUND ACTUALLY FINISHES — the LAST row's instant, projected.
+   *
+   * `state.estimatedCompletionAt` is the last pending row's raw
+   * `scheduled_at`, and it is rendered under the words "לפי התזמון שהוגדר" —
+   * a claim about the schedule made by a number the schedule was never
+   * applied to. On the owner's queue the stored stamps run 06:25 to 10:01
+   * under a window that opens at 08:00, so it promised a finish three and a
+   * half hours before the round can even start.
+   *
+   * The projection already walks every row with the gaps cascading, so the
+   * last of them IS the finish — the same arithmetic, over the same rows, as
+   * the instant printed beside it.
+   */
+  const finishAtShown = (() => {
+    let latest: string | null = null;
+    for (const r of rows ?? []) {
+      if (r.status !== 'scheduled') continue;
+      const at = projected.get(r.id);
+      if (at && (!latest || at > latest)) latest = at;
+    }
+    return latest;
+  })();
+
   const nextAtShown = state?.nextAt
     ? projectOne({
         scheduledAt: state.nextAt,
@@ -491,7 +528,15 @@ export default function CampaignControlCenter() {
 
           <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
             <Fact label="התחיל" value={state?.startedAt ? when(state.startedAt) : null} fallback="טרם התחיל" />
-            <Fact label="סיום משוער" value={state?.estimatedCompletionAt ? when(state.estimatedCompletionAt) : null} fallback={closed ? 'הסתיים' : '—'} hint={state?.estimatedCompletionAt ? 'לפי התזמון שהוגדר' : undefined} />
+            {/* The LAST row's projected instant — see finishAtShown. "לפי
+                התזמון שהוגדר" is only true of a number the tizmun was
+                actually applied to, and it was not. */}
+            <Fact
+              label="סיום משוער"
+              value={finishAtShown ? when(finishAtShown) : null}
+              fallback={closed ? 'הסתיים' : '—'}
+              hint={finishAtShown ? 'לפי התזמון שהוגדר' : undefined}
+            />
             {/* THE INSTANT THE ENGINE WILL USE, not the column — see
                 `nextAtShown`. The fallback distinguishes the three reasons
                 there is no instant: the owner's pause, a queue with nothing
@@ -744,7 +789,7 @@ export default function CampaignControlCenter() {
               }
             />
           )}
-          {rows && rows.length > 0 && tab === 'queue' && <QueueSections rows={rows} actions={queueActions} />}
+          {rows && rows.length > 0 && tab === 'queue' && <QueueSections rows={rows} actions={queueActions} projected={projected} />}
           {/* The same instants the fact above prints, one per stop — see
               `projected`. Without it this tab and that fact were two answers
               about one row. */}
@@ -754,7 +799,10 @@ export default function CampaignControlCenter() {
         {/* Between the list of what went out and the posts themselves: the
             answer to "and did it do anything", which is the question the round
             was run to settle. */}
-        {rows && <CampaignReach rows={rows} truncated={Boolean(state?.truncated)} />}
+        {/* `publishedTotal` is the round's exact publication count — "מכל N
+            הפרסומים" is a completeness claim and it was being made about a
+            capped read. See CampaignReach's own prop. */}
+        {rows && <CampaignReach rows={rows} truncated={Boolean(state?.truncated)} publishedTotal={state?.everPublished} />}
 
         <Card title={`פוסטים בסבב (${posts.length})`}>
           {posts.length === 0 ? (

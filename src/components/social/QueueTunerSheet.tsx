@@ -6,6 +6,7 @@ import {
   addTargetsToQueue,
   countPublishedSince,
   getBrowserSettings,
+  getCampaign,
   getLimits,
   listTargets,
   liveQueuePlan,
@@ -14,6 +15,8 @@ import {
   type LiveQueuePlan,
 } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
+import { windowedCascade } from '@/lib/social/projection';
+import { readSchedule, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { agree, counted, formatDayMonthHe, formatTimeHe, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
 import type { BrowserSettings, LimitsSettings, SocialTarget } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
@@ -147,6 +150,22 @@ interface Snapshot {
   plan: LiveQueuePlan;
   limits: LimitsSettings;
   browser: BrowserSettings;
+  /**
+   * THE WINDOW THE RESPACE WILL ROLL THESE ROWS INTO.
+   *
+   * respaceQueue() lays the queue out as `start + i × gap` and then moves every
+   * row forward to the first instant its campaign permits (windowedCascade in
+   * lib/social/projection.ts). This preview was the flat sequence alone, so
+   * the sheet the dashboard opens TO FIX the times promised 06:25, 06:26,
+   * 06:27 for a queue the write itself lands at 08:00, 08:01, 08:02 — the
+   * preview disagreeing with the button under it.
+   *
+   * Null when this sheet is opened for the whole queue rather than one round:
+   * the rows then belong to several campaigns with several windows, and the
+   * honest preview is the one that applies none of them. The write still
+   * applies each campaign's own.
+   */
+  window: CampaignSchedule | null;
   /** Real publications already out today, from countPublishedSince(). */
   publishedToday: number;
   /** The instant the snapshot was taken — keeps the preview from twitching. */
@@ -189,14 +208,18 @@ export function QueueTunerSheet({
     async (keepGapDraft: boolean) => {
       setError(null);
       try {
-        const [plan, all, limits, browser, publishedToday] = await Promise.all([
+        const [plan, all, limits, browser, publishedToday, campaign] = await Promise.all([
           liveQueuePlan(scope),
           listTargets(),
           getLimits(),
           getBrowserSettings(),
           countPublishedSince(startOfZonedDay(new Date()).toISOString()),
+          /* One row, and only when this sheet is scoped to a round — see
+             Snapshot.window. A failure here must not fail the sheet: no window
+             means the preview is the flat sequence, which is what it was. */
+          campaignId ? getCampaign(campaignId).catch(() => null) : Promise.resolve(null),
         ]);
-        setSnap({ plan, limits, browser, publishedToday, at: Date.now() });
+        setSnap({ plan, limits, browser, publishedToday, window: campaign ? readSchedule(campaign) : null, at: Date.now() });
         setTargets(all);
         // The dashboard behind this sheet reloads every 30s and the countdown
         // re-renders every second; a draft the owner is in the middle of
@@ -255,9 +278,55 @@ export function QueueTunerSheet({
   }, [naturalAnchor, startOverride, snap]);
   const startDirty = startOverride !== null && anchor !== naturalAnchor;
 
-  const instantAt = useCallback((i: number) => (anchor === null ? 0 : anchor + i * gap * 60_000), [anchor, gap]);
+  /*
+   * THE PREVIEW IS THE WRITE'S OWN ARITHMETIC, not a second opinion about it.
+   *
+   * windowedCascade() is the function respaceQueue() calls, so what this sheet
+   * draws and what the button under it does are the same instants by
+   * construction. Computed for the whole queue at once because the cascade is
+   * sequential — one row's instant is the floor of the next — and memoised on
+   * the three things that move it.
+   */
+  const previewed = useMemo(() => {
+    if (anchor === null || rows.length === 0) return [] as Date[];
+    const bases = rows.map((_, i) => new Date(anchor + i * gap * 60_000));
+    return windowedCascade(bases, gap * 60, snap?.window ?? null);
+  }, [anchor, gap, rows.length, snap?.window]);
 
-  const currentLastISO = rows.length > 0 ? rows[rows.length - 1].scheduled_at : null;
+  const instantAt = useCallback(
+    (i: number) => (anchor === null ? 0 : (previewed[i] ?? new Date(anchor + i * gap * 60_000)).getTime()),
+    [anchor, gap, previewed],
+  );
+
+  /*
+   * WHERE THE QUEUE STANDS RIGHT NOW, projected — the "before" half of this
+   * sheet, which has to be read in the same units as the "after" half beside
+   * it. Both are windowedCascade over the campaign's own schedule; the only
+   * difference is that this one starts from the stamps the rows already have.
+   */
+  const currentProjected = useMemo(() => {
+    if (rows.length === 0) return [] as string[];
+    const bases = rows.map((r) => new Date(Math.max(Date.parse(r.scheduled_at) || 0, snap?.at ?? Date.now())));
+    return windowedCascade(bases, (snap?.plan.effectiveGapMinutes ?? gap) * 60, snap?.window ?? null).map((d) => d.toISOString());
+  }, [rows, snap, gap]);
+
+  const currentLastISO = rows.length > 0 ? currentProjected[rows.length - 1] ?? rows[rows.length - 1].scheduled_at : null;
+
+  /*
+   * A STORED INSTANT → THE PROJECTED ONE, for the per-group chips.
+   *
+   * liveQueuePlan() hands each group its soonest row's raw `scheduled_at`, and
+   * the rows above are the same rows in the same order — so the stamp is the
+   * key. Falls back to the stamp itself for anything the map does not carry,
+   * which is the behaviour this chip had before.
+   */
+  const projectedFor = useCallback(
+    (iso: string) => {
+      const i = rows.findIndex((r) => r.scheduled_at === iso);
+      return i >= 0 ? currentProjected[i] ?? iso : iso;
+    },
+    [rows, currentProjected],
+  );
   const nextLastISO = anchor !== null && rows.length > 0 ? new Date(instantAt(rows.length - 1)).toISOString() : null;
 
   /*
@@ -530,8 +599,17 @@ export function QueueTunerSheet({
               <Stat label={plan.truncated ? 'הקרובים בתור' : 'ממתינים בתור'}>
                 <Num>{rows.length}</Num>
               </Stat>
+              {/*
+                THE INSTANTS THE ENGINE WILL USE, not the stored column.
+
+                This is the sheet the dashboard opens FROM the queue tile to
+                FIX the times, and it read `rows[0].scheduled_at` straight out
+                of the database — so on the owner's queue it opened on "06:25"
+                while the card he tapped from said 08:00. `currentProjected`
+                runs the same projection every other screen now reads.
+              */}
               <Stat label="הפרסום הבא">
-                <Clock iso={rows[0].scheduled_at} />
+                <Clock iso={currentProjected[0] ?? rows[0].scheduled_at} />
               </Stat>
               <Stat label="האחרון בתור">
                 {currentLastISO && <Clock iso={currentLastISO} withDay={!sameLocalDay(new Date(currentLastISO), new Date(snap!.at))} />}
@@ -718,10 +796,16 @@ export function QueueTunerSheet({
                       </p>
                       <p className="mt-0.5 text-xs text-mist-500">
                         <Num>{t.pending}</Num> ממתינים
+                        {/* Projected, like every other instant on this sheet:
+                            `LiveQueueTarget.nextAt` is the stored column
+                            (client.ts), and a chip reading 06:25 beside a
+                            header reading 08:00 is the same sheet arguing
+                            with itself. byRowProjected maps this group's
+                            soonest row to the instant the engine will use. */}
                         {t.nextAt && (
                           <>
                             {' · הבא ב-'}
-                            <Clock iso={t.nextAt} />
+                            <Clock iso={projectedFor(t.nextAt)} />
                           </>
                         )}
                       </p>

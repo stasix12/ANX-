@@ -31,6 +31,10 @@ import {
   addGroup,
   bulkDeleteTargets,
   bulkUpdateTargets,
+  getBrowserSettings,
+  getLimits,
+  lastPublishedAt,
+  listCampaigns,
   listQueue,
   listTargets,
   listWorkers,
@@ -38,6 +42,8 @@ import {
   updateTarget,
 } from '@/lib/social/client';
 import { formatDayMonthHe } from '@/lib/social/time';
+import { projectQueue, spacingFrom } from '@/lib/social/projection';
+import { readSchedule, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { KNOWN_CITIES, detectCity, sortCities } from '@/lib/social/cities';
 import { RUSSIAN_CATEGORY, needsRussianCategory, russianNamed } from '@/lib/social/language';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
@@ -137,7 +143,7 @@ export default function GroupsPage() {
   const confirm = useConfirm();
 
   const load = useCallback(async () => {
-    const [t, w, queued] = await Promise.all([
+    const [t, w, queued, campaigns, limits, browser, lastPublished] = await Promise.all([
       listTargets(),
       listWorkers().catch(() => []),
       /*
@@ -152,12 +158,49 @@ export default function GroupsPage() {
        * loop below re-sorts anyway.
        */
       listQueue({ status: ['scheduled'], limit: 500, order: 'asc' }).catch(() => []),
+      /*
+       * The gates "הבא" has to be projected through — see the chip below.
+       * Every one of these fails soft: without them the chip is the stored
+       * column, which is what it was.
+       */
+      listCampaigns().catch(() => []),
+      getLimits().catch(() => null),
+      getBrowserSettings().catch(() => null),
+      lastPublishedAt().catch(() => null),
     ]);
     const mine = t.filter((x) => x.channel === 'facebook_group' || x.channel === 'facebook_group_manual');
     const online = w.some((x) => x.online);
+    /*
+     * "הבא" IS THE INSTANT THE ENGINE WILL USE, not the stored column.
+     *
+     * This chip prints a DATE, so a roll inside the same day is invisible and
+     * a roll across midnight is wrong by a whole day — "הבא 11.10" on a group
+     * whose publication the window holds until the 12th. It is also the only
+     * forward-looking time on this screen, so there is nothing beside it to
+     * contradict and nothing to notice it by.
+     *
+     * The gates are per campaign, so the rows are projected per campaign with
+     * each round's own window and gap. `spacingFrom(limits, browser, …)` is
+     * the account-wide floor, read in the same round trip.
+     */
+    const gates: Record<string, { schedule: CampaignSchedule | null; lastPublishedAt: string | null }> = {};
+    for (const c of campaigns) gates[c.id] = { schedule: readSchedule(c), lastPublishedAt: null };
+    const ordered = [...queued].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+    const projected = projectQueue(ordered, {
+      now: new Date(),
+      gates,
+      /* No settings read means no account floor — the campaign's own window
+         and gap still apply, and inventing a floor from nothing would push
+         every chip out by an hour on an account that has never published. */
+      spacing: limits ? spacingFrom(limits, browser, lastPublished) : undefined,
+    });
     const next: Record<string, string> = {};
-    for (const row of [...queued].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))) {
-      if (!next[row.target_id]) next[row.target_id] = row.scheduled_at;
+    for (const row of ordered) {
+      const at = projected.get(row.id);
+      /* A row held with no instant at all (a schedule with no day chosen) gets
+         no chip rather than a date it will not keep. */
+      if (at === null) continue;
+      if (!next[row.target_id]) next[row.target_id] = at ?? row.scheduled_at;
     }
     setGroups(mine);
     setWorkerOnline(online);

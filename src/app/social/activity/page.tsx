@@ -9,7 +9,7 @@ import { Button, Card, EmptyState, ErrorState, SegmentedControl, SkeletonList } 
 import { ACTIVITY_FILTERS, filterActivity, type ActivityFilter } from '@/lib/social/activity';
 import { listActivity } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
-import { startOfZonedDay } from '@/lib/social/time';
+import { addDaysISO, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import type { ActivityEntry } from '@/lib/social/types';
 
 /**
@@ -61,9 +61,22 @@ export default function ActivityPage() {
   const since = useMemo(() => {
     const days = RANGES.find((r) => r.value === range)?.days;
     if (days === null || days === undefined) return undefined;
-    const from = startOfZonedDay(new Date());
-    if (days > 0) from.setDate(from.getDate() - days + 1);
-    return from.toISOString();
+    /*
+     * CALENDAR DAYS IN THE ZONE, NOT setDate ON A ZONED INSTANT.
+     *
+     * startOfZonedDay() returns the UTC instant that IS local midnight in
+     * Asia/Jerusalem — 21:00 or 22:00 UTC the evening before. getDate() and
+     * setDate() then work on the HOST's calendar, which for that instant is a
+     * different date, so "7 days" began on the wrong day on any server at or
+     * behind UTC (Vercel is UTC). It also steps by 24-hour days, so the two
+     * Israeli clock changes a year move the boundary by an hour.
+     *
+     * zonedDateISO + addDaysISO + zonedToUtc is the same discipline every
+     * other date boundary in this product uses, and it is the one time.ts
+     * exists to enforce.
+     */
+    if (days <= 0) return startOfZonedDay(new Date()).toISOString();
+    return zonedToUtc(addDaysISO(zonedDateISO(new Date()), -(days - 1)), '00:00').toISOString();
   }, [range]);
 
   const load = useCallback(async () => {

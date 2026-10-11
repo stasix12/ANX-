@@ -40,7 +40,7 @@ import { campaignState, cancellableRows, type CampaignState } from '@/lib/social
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
-import { type AccountSpacing } from '@/lib/social/schedule-readout';
+import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import type { Campaign, ControlSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { MegaphoneIcon } from '@/components/icons';
@@ -162,8 +162,48 @@ export default function CampaignsPage() {
     }
   }, []);
 
+  /*
+   * ───────── AND IT RE-READS ITSELF, like the two screens either side of it ──
+   *
+   * "המערכת חייבת להציג נתונים מעודכנים, גם כאשר המשתמש אינו מרענן את הדף."
+   *
+   * This screen read ONCE, on mount. So after a publication, a failure, a skip
+   * or a pause it kept the numbers it was born with, while the dashboard one
+   * tap away refreshed every thirty seconds — the same round, two different
+   * counts, and the only way to reconcile them was to leave the screen and
+   * come back.
+   *
+   * SIXTY SECONDS, not the dashboard's thirty: this is a list of cards with no
+   * countdown on it, and its read (listCampaigns + campaignStates, three
+   * queries) is the heaviest thing on a metered Israeli mobile plan that is
+   * not the dashboard itself.
+   *
+   * The three guards are the ones every other poller in this product uses and
+   * are not optional: paused while the tab is hidden, re-read immediately on
+   * return so what the owner sees when they come back is current, and an
+   * in-flight flag so a slow connection cannot stack reads on top of each
+   * other.
+   */
   useEffect(() => {
-    load();
+    let alive = true;
+    let running = false;
+    const tick = async () => {
+      if (!alive || running || document.visibilityState === 'hidden') return;
+      running = true;
+      try {
+        await load();
+      } finally {
+        running = false;
+      }
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      alive = false;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [load]);
 
   const stateOf = useCallback((c: Campaign): CampaignState => states[c.id] ?? campaignState([], c), [states]);
@@ -185,6 +225,13 @@ export default function CampaignsPage() {
    * first, then whatever goes out soonest. No new field: both come out of
    * `states`, which the page already has.
    */
+  /* The one answer about time this list may use, for the ORDER as well as for
+     the cards — the cards already call it through CampaignCard. */
+  const readoutFor = useCallback(
+    (c: Campaign) => scheduleReadout(readSchedule(c), stateOf(c), new Date(), readRepeat(c), spacing),
+    [stateOf, spacing],
+  );
+
   const visible = useMemo(() => {
     const list = campaigns ?? [];
     const finished = (c: Campaign) => ['completed', 'stopped'].includes(stateOf(c).state);
@@ -194,14 +241,28 @@ export default function CampaignsPage() {
       const sb = stateOf(b);
       const live = Number(sb.progress.running > 0) - Number(sa.progress.running > 0);
       if (live) return live;
-      // A run with nothing scheduled has no next instant; it sorts after the
-      // ones that do rather than ahead of them.
-      if (sa.nextAt && sb.nextAt) return sa.nextAt.localeCompare(sb.nextAt);
-      if (sa.nextAt) return -1;
-      if (sb.nextAt) return 1;
+      /*
+       * ORDERED BY THE INSTANT EACH CARD PRINTS, not by the stored column.
+       *
+       * `state.nextAt` is the raw `scheduled_at` of the soonest waiting row;
+       * the card beside it prints scheduleReadout → projectOne, with the
+       * window, the campaign gap and the account floor applied. So two rounds
+       * could be ordered one way by their stamps and read the other way round
+       * on screen — a list claiming to be "soonest first" contradicted by the
+       * times printed on it.
+       */
+      const ra = readoutFor(a);
+      const rb = readoutFor(b);
+      const na = ra?.kind === 'due' ? ra.at : null;
+      const nb = rb?.kind === 'due' ? rb.at : null;
+      // A run with no instant the engine will use sorts after the ones that
+      // have one, rather than ahead of them.
+      if (na && nb) return na.localeCompare(nb);
+      if (na) return -1;
+      if (nb) return 1;
       return 0;
     });
-  }, [campaigns, filter, stateOf]);
+  }, [campaigns, filter, stateOf, readoutFor]);
 
   /*
    * ─── SAVING A CAMPAIGN'S PUBLISHING WINDOW ─────────────────────────────
@@ -592,7 +653,10 @@ export default function CampaignsPage() {
         key={commentFor?.id ?? 'none'}
         open={commentFor !== null}
         onClose={() => setCommentFor(null)}
-        publishedCount={commentFor ? stateOf(commentFor).progress.published : 0}
+        /* The round's LIFETIME publications, which is what
+           queueCampaignComment actually matches — `progress.published` is
+           today's on a repeating round. Same reason as the dashboard's. */
+        publishedCount={commentFor ? stateOf(commentFor).everPublished : 0}
         initialText={commentFor?.comment_text ?? ''}
         initialMedia={commentFor?.comment_media ?? []}
         initialGapSeconds={commentFor?.comment_gap_seconds ?? 30}

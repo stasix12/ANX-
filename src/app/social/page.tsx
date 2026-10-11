@@ -545,7 +545,21 @@ export default function SocialDashboard() {
    * when, and a row with no when has not made that claim either way.
    */
   const soonCutoff = Date.now() + UPCOMING_WINDOW_HOURS * 3_600_000;
-  const soon = (data?.upcoming ?? []).filter((r) => !r.scheduled_at || Date.parse(r.scheduled_at) <= soonCutoff);
+  /*
+   * MEMBERSHIP IS DECIDED ON THE SAME INSTANT THE ROW PRINTS.
+   *
+   * This filtered on the raw `scheduled_at` while the rows inside printed the
+   * projected one, so a row stamped 06:25 under a window that opens at 08:00
+   * was admitted as "today" and then drawn at its real instant — and a row
+   * whose projection rolls past the cutoff stayed in a card headed "24 השעות
+   * הקרובות" showing tomorrow. projectOne only ever moves an instant LATER, so
+   * the error was one-directional: the card always over-promised.
+   *
+   * The projection is computed below (it needs the campaign gates, which are
+   * assembled with the cards), so this pass is deliberately ordered after it —
+   * see `soon` just under projectedAll.
+   */
+  const upcomingRows = data?.upcoming ?? [];
 
   /*
    * "N פרסומים ממתינים לכם" — AND WHETHER HE HAS ALREADY BEEN SHOWN THEM.
@@ -1058,8 +1072,8 @@ export default function SocialDashboard() {
    * the next poll — "אני רוצה שמתי שאני משנה שם ימים / שעות שזה יתעדכן באותו
    * הרגע".
    */
-  const projectedSoon = data
-    ? projectQueue(soon, {
+  const projectedAll = data
+    ? projectQueue(upcomingRows, {
         now: new Date(),
         spacing: spacingFrom(data.limits, data.browser, data.lastPublished),
         gates: Object.fromEntries(
@@ -1077,6 +1091,26 @@ export default function SocialDashboard() {
         ),
       })
     : undefined;
+
+  /*
+   * THE DAY AHEAD — the rows "הפרסומים הקרובים" actually draws, chosen on the
+   * instant each row will really go out.
+   *
+   * `upcoming` is already ordered soonest-first and capped, and the projection
+   * only ever moves an instant LATER, so nothing inside the window can be lost
+   * by cutting the tail.
+   *
+   * A row with no instant at all — held by a schedule with no day chosen —
+   * keeps its place rather than being dropped quietly: "soon" is a claim about
+   * when, and a row with no when has not made that claim either way.
+   */
+  const soon = upcomingRows.filter((r) => {
+    const at = projectedAll?.get(r.id);
+    if (at === null) return true;
+    const iso = at ?? r.scheduled_at;
+    return !iso || Date.parse(iso) <= soonCutoff;
+  });
+  const projectedSoon = projectedAll;
 
   /*
    * CHZARA — written straight through, with NO debounce, and that difference
@@ -1568,6 +1602,11 @@ export default function SocialDashboard() {
             <CardSwiper
               label="הסבבים שלכם"
               itemLabel={(position, total) => `סבב ${position} מתוך ${total}`}
+              /* The campaign ids, so a card keeps its identity when a poll
+                 re-sorts the strip — see CardSwiper's own `keys`. Without
+                 them the card under the thumb could quietly become a
+                 different round between two reads. */
+              keys={runs.map((r) => r.campaign.id)}
             >
               {runs.map((run) => (
                 <LiveCampaignHero
@@ -1890,7 +1929,19 @@ export default function SocialDashboard() {
         key={commentFor?.id ?? 'none'}
         open={commentFor !== null}
         onClose={() => setCommentFor(null)}
-        publishedCount={commentFor ? (data?.states[commentFor.id]?.progress.published ?? 0) : 0}
+        /*
+         * THE NUMBER THE WRITE WILL ACTUALLY TOUCH — the round's LIFETIME
+         * publications, not today's.
+         *
+         * `progress.published` is scoped to today for a repeating round (see
+         * CampaignState.todayOnly), and queueCampaignComment() matches
+         * `.eq('campaign_id', id).eq('status', 'published')` with no date
+         * bound at all. So the sheet promised "28 הפרסומים שכבר יצאו · בערך 5
+         * דקות" over a write that queues a comment on 1,027 of them and runs
+         * for three hours. `everPublished` is the lifetime count, which is the
+         * one this dialog is about.
+         */
+        publishedCount={commentFor ? (data?.states[commentFor.id]?.everPublished ?? 0) : 0}
         initialText={commentFor?.comment_text ?? ''}
         initialMedia={commentFor?.comment_media ?? []}
         initialGapSeconds={commentFor?.comment_gap_seconds ?? 30}

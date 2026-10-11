@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronIcon } from '@/components/icons';
 
 /**
  * ONE CARD AT A TIME, THE REST A SWIPE AWAY.
@@ -30,15 +31,55 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * swipe between, so the strip renders the card and no dots — the dashboard
  * looks exactly as it did before this existed.
  */
+/**
+ * One arrow: a 44px target painting a chevron, disabled at the ends.
+ *
+ * DISABLED RATHER THAN HIDDEN at the ends. A control that disappears moves
+ * everything beside it — the dots and the "2 / 3" would shift sideways every
+ * time the strip reached a limit, which reads as the layout breaking.
+ */
+function ArrowButton({ label, onClick, disabled, back = false }: { label: string; onClick: () => void; disabled: boolean; back?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-mist-300 transition-colors hover:bg-ink-800 hover:text-brand-300 disabled:pointer-events-none disabled:text-ink-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-300"
+    >
+      <ChevronIcon aria-hidden className={`h-4 w-4 ${back ? 'rotate-180' : ''}`} />
+    </button>
+  );
+}
+
 export function CardSwiper({
   label,
   itemLabel,
+  keys,
   children,
 }: {
   /** Names the strip for a screen reader: "הסבבים הפעילים". */
   label: string;
   /** Names one slide, given its 1-based position: `(i, n) => …`. */
   itemLabel: (position: number, total: number) => string;
+  /**
+   * A STABLE IDENTITY PER SLIDE — the campaign id, not its position.
+   *
+   * The slides were keyed by index while the dashboard re-sorts the runs on
+   * every thirty-second poll, and the sort's tiebreak is percentFinished
+   * ascending — which moves whenever a row finishes, so routinely, while the
+   * owner is looking at the card. The strip's own position is a scroll
+   * offset, so slide 2 stayed slide 2 and simply became a different campaign:
+   * the card under the thumb changed round without the dots or the "2 / 2"
+   * moving, and a tap meant for one round landed on another.
+   *
+   * With real keys React keeps each card's DOM and its state with the card,
+   * and the effect below keeps the SCROLL on the campaign that was in view
+   * rather than on the index it happened to occupy.
+   *
+   * Optional, so a caller with genuinely positional children is unchanged.
+   */
+  keys?: string[];
   children: React.ReactNode[];
 }) {
   const strip = useRef<HTMLDivElement>(null);
@@ -76,14 +117,62 @@ export function CardSwiper({
     if (index > count - 1) setIndex(Math.max(count - 1, 0));
   }, [count, index]);
 
-  const goTo = (to: number) => {
+  /*
+   * STAY ON THE CARD, NOT ON THE SLOT.
+   *
+   * The thumb is resting on a round; a poll re-sorts the list; without this
+   * the strip keeps its scroll offset and the owner is now looking at a
+   * different campaign. `held` remembers which KEY was in view and the strip
+   * is moved back to it when that key changes position.
+   *
+   * Only when keys are supplied, and never while a gesture is in flight —
+   * scrolling the strip under a moving finger is worse than the problem.
+   */
+  const held = useRef<string | null>(null);
+  useEffect(() => {
+    if (!keys) return;
+    held.current = keys[index] ?? null;
+  }, [keys, index]);
+  const keyList = keys?.join(',') ?? '';
+  useEffect(() => {
+    if (!keys || !held.current) return;
+    const to = keys.indexOf(held.current);
+    if (to < 0 || to === index) return;
     const el = strip.current;
     const card = el?.children[to] as HTMLElement | undefined;
+    card?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    setIndex(to);
+    // `keyList` is the dependency, not `keys`: the array is rebuilt on every
+    // render and comparing it by identity would re-run this on every poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyList]);
+
+  const goTo = (to: number) => {
+    const el = strip.current;
+    const at = Math.min(Math.max(to, 0), Math.max(count - 1, 0));
+    const card = el?.children[at] as HTMLElement | undefined;
     /* `block: 'nearest'` because the default is 'start', which would scroll
        the PAGE to put this strip at the top of the viewport — a tap on a dot
        is a sideways move and must not move the page under the reader. */
     card?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   };
+
+  /*
+   * ───────── AND A WAY THROUGH THAT IS NOT A SWIPE ─────────
+   *
+   * "שקיימים חצים או מנגנון מעבר חלופי."
+   *
+   * The dots were the only non-gesture control, and they are 10px marks whose
+   * meaning has to be inferred. A thumb that will not swipe — a desktop
+   * trackpad, a screen reader's caret, a hand holding a phone one-handed, or
+   * simply a person who does not know the strip moves — had nothing to press.
+   *
+   * RTL IS WHY THE ARROWS ARE NOT LABELLED BY DIRECTION. On this page "the
+   * next card" is to the LEFT, so an arrow called "ימינה" would move the strip
+   * the other way. They are "הסבב הקודם" and "הסבב הבא", and the glyph is
+   * flipped by the same `rtl:` variant the rest of the product uses.
+   */
+  const step = (delta: number) => goTo(index + delta);
 
   return (
     <div>
@@ -110,7 +199,7 @@ export function CardSwiper({
       >
         {children.map((child, i) => (
           <div
-            key={i}
+            key={keys?.[i] ?? i}
             /* `w-full shrink-0` is what makes it one card per view: the flex
                item takes the strip's whole width and refuses to be squeezed,
                so the next one begins exactly one screen along. */
@@ -123,9 +212,17 @@ export function CardSwiper({
         ))}
       </div>
 
-      {/* ─── the dots and the count: how many there are, and which one ──── */}
+      {/* ─── the dots, the arrows and the count ──────────────────────────── */}
       {count > 1 && (
         <div className="mt-2 flex items-center justify-center gap-0.5">
+          <ArrowButton
+            label="הסבב הקודם"
+            onClick={() => step(-1)}
+            disabled={index === 0}
+            /* Points at the START of the line, which on an RTL page is the
+               right — `rotate-180` on the chevron, not a second icon. */
+            back
+          />
           {children.map((_, i) => (
             <button
               key={i}
@@ -135,7 +232,17 @@ export function CardSwiper({
               aria-current={i === index ? 'true' : undefined}
               /* A 10px dot is not a tap target, so the BUTTON is 40×24 and the
                  dot is what it paints — the same split the day chips use. */
-              className="group flex h-10 w-6 items-center justify-center focus-visible:outline-none"
+              /*
+                THE RING IS BACK. `focus-visible:outline-none` cancelled the
+                global `:focus-visible` rule in globals.css and nothing
+                replaced it, so the only non-gesture control in this component
+                was invisible to a keyboard: tabbing through the dashboard
+                moved focus into the strip with nothing on screen saying so.
+                The outline is drawn on the BUTTON — the 40×24 target — rather
+                than on the 10px mark it paints, so it is a ring somebody can
+                actually see.
+              */
+              className="group flex h-10 w-6 items-center justify-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-300"
             >
               <span
                 className={`block rounded-full transition-all ${
@@ -171,10 +278,11 @@ export function CardSwiper({
             data-swiper-position
             aria-hidden
             dir="ltr"
-            className="ms-1.5 shrink-0 text-[12px] font-extrabold leading-4 tabular-nums text-mist-300"
+            className="mx-1.5 shrink-0 text-[12px] font-extrabold leading-4 tabular-nums text-mist-300"
           >
             {index + 1} / {count}
           </p>
+          <ArrowButton label="הסבב הבא" onClick={() => step(1)} disabled={index === count - 1} />
         </div>
       )}
     </div>

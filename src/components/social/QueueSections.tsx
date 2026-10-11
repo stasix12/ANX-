@@ -31,11 +31,22 @@ export function QueueSections({
   emptyDescription = 'צרו פוסט, בחרו קבוצות ולחצו "התחל פרסום" — התור יופיע כאן בזמן אמת.',
   emptyAction,
   busyRowId = null,
+  projected,
 }: {
   rows: QueueRow[];
   actions?: PublicationActions;
   /** The row whose write is in flight — its confirm button shows a spinner. */
   busyRowId?: string | null;
+  /**
+   * Row id → the instant the engine will actually take it, from
+   * projectQueue() in lib/social/projection.ts.
+   *
+   * This list is the campaign screen's DEFAULT tab and the history screen, and
+   * it printed `scheduled_at` raw while the card above it printed the
+   * projected instant. One queue, two answers — the fault projection.ts was
+   * written to end, found on the surface the owner opens most.
+   */
+  projected?: Map<string, string | null>;
   doneLimit?: number;
   nextLimit?: number;
   emptyTitle?: string;
@@ -43,7 +54,11 @@ export function QueueSections({
   emptyAction?: React.ReactNode;
 }) {
   const { attention, now, next, done } = useMemo(() => {
-    const byTime = [...rows].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+    /* Ordered by WHEN EACH ROW WILL GO OUT, which is the order the list claims
+       to be in. Sorting on the raw column while printing the projected instant
+       puts two rows on screen in the opposite order to their own times. */
+    const when = (r: QueueRow) => projected?.get(r.id) ?? r.scheduled_at;
+    const byTime = [...rows].sort((a, b) => String(when(a)).localeCompare(String(when(b))));
     return {
       attention: byTime.filter((r) => NEEDS_HUMAN.includes(r.status)),
       now: byTime.filter((r) => IN_FLIGHT.includes(r.status)),
@@ -52,7 +67,7 @@ export function QueueSections({
         .filter((r) => FINISHED.includes(r.status))
         .sort((a, b) => (b.published_at ?? b.scheduled_at).localeCompare(a.published_at ?? a.scheduled_at)),
     };
-  }, [rows]);
+  }, [rows, projected]);
 
   if (!rows.length) {
     return <EmptyState icon={<SendIcon className="h-5 w-5" />} title={emptyTitle} description={emptyDescription} action={emptyAction} />;
@@ -60,15 +75,15 @@ export function QueueSections({
 
   return (
     <div className="space-y-4">
-      <Group title="דורשים אתכם" tone="text-warning-400" items={attention} actions={actions} busyRowId={busyRowId} />
-      <Group title="מפרסם עכשיו" tone="text-brand-400" items={now} actions={actions} busyRowId={busyRowId} pulse />
-      <Group title="הבאים בתור" tone="text-brand-400" items={next.slice(0, nextLimit)} actions={actions} busyRowId={busyRowId} showDate more={next.length - nextLimit} />
+      <Group title="דורשים אתכם" tone="text-warning-400" items={attention} actions={actions} busyRowId={busyRowId} projected={projected} />
+      <Group title="מפרסם עכשיו" tone="text-brand-400" items={now} actions={actions} busyRowId={busyRowId} projected={projected} pulse />
+      <Group title="הבאים בתור" tone="text-brand-400" items={next.slice(0, nextLimit)} actions={actions} busyRowId={busyRowId} projected={projected} showDate more={next.length - nextLimit} />
       {/* "הסתיימו", not "הושלמו": this group is TERMINAL_STATUSES, so its rows
           and its count include the failed and the skipped. "הושלמו" is the word
           this module reserves for publications — it is what once let a run that
           published nothing read "84 מתוך 84 הושלמו" — and a heading with a
           number beside it is exactly where that word does the damage. */}
-      <Group title="הסתיימו" tone="text-success-400" items={done.slice(0, doneLimit)} actions={actions} busyRowId={busyRowId} more={done.length - doneLimit} />
+      <Group title="הסתיימו" tone="text-success-400" items={done.slice(0, doneLimit)} actions={actions} busyRowId={busyRowId} projected={projected} more={done.length - doneLimit} />
     </div>
   );
 }
@@ -82,6 +97,7 @@ function Group({
   more = 0,
   pulse = false,
   busyRowId = null,
+  projected,
 }: {
   title: string;
   tone: string;
@@ -91,6 +107,8 @@ function Group({
   more?: number;
   pulse?: boolean;
   busyRowId?: string | null;
+  /** Row id → the instant the engine will use. See PublicationItem. */
+  projected?: Map<string, string | null>;
 }) {
   if (!items.length) return null;
   return (
@@ -102,7 +120,14 @@ function Group({
       </h3>
       <ul className="divide-y divide-ink-700">
         {items.map((row) => (
-          <PublicationItem key={row.id} row={row} actions={actions} showDate={showDate} busy={row.id === busyRowId} />
+          <PublicationItem
+            key={row.id}
+            row={row}
+            projectedAt={projected?.get(row.id)}
+            actions={actions}
+            showDate={showDate}
+            busy={row.id === busyRowId}
+          />
         ))}
       </ul>
       {more > 0 && <p className="pt-1.5 text-xs text-mist-500">ועוד {more}</p>}

@@ -108,6 +108,19 @@ export function ActivityDetailSheet({
                   {row.target?.name ?? 'הקבוצה נמחקה מהרשימה'}
                 </p>
                 <p className="text-[11px] text-mist-500">
+                  {/*
+                    THE WORD BEFORE THE TIME, because the same string means two
+                    different things.
+
+                    For a published row this is when it went out; for one still
+                    waiting it is the slot it holds. The stamp was printed bare
+                    under the group name, so "19.09.2026, 06:25" read as a
+                    publication that had happened on a row that had not — the
+                    same sentence for a fact and for a plan. The product's own
+                    rule is that an hour never appears without something saying
+                    what happens at it.
+                  */}
+                  {row.published_at ? 'פורסם ' : 'מתוזמן ל-'}
                   <Stamp iso={row.published_at ?? row.scheduled_at} />
                   {/*
                     HOW LONG THE PUBLICATION ITSELF TOOK.

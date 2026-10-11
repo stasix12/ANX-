@@ -97,7 +97,16 @@ const code = (rel: string) =>
    */
   const screens: [string, string, string, RegExp][] = [
     ['the dashboard', 'src/app/social/page.tsx', 'SNAPSHOT.dashboard', /tick\(\);\s*\n\s*const id = setInterval\(tick, 30_000\);/],
-    ['the campaigns list', 'src/app/social/campaigns/page.tsx', 'SNAPSHOT.campaigns', /useEffect\(\(\) => \{\s*load\(\);\s*\}, \[load\]\);/],
+    /*
+     * THE CAMPAIGNS LIST NOW POLLS, so its mount effect is the poller's first
+     * tick rather than a bare load(). It read ONCE before, on mount: after a
+     * publication, a failure, a skip or a pause it kept the numbers it was
+     * born with while the dashboard one tap away refreshed every thirty
+     * seconds — the same round, two different counts, reconcilable only by
+     * leaving the screen. The claim this guard makes is unchanged: the read
+     * still runs, and the snapshot is what is drawn WHILE it runs.
+     */
+    ['the campaigns list', 'src/app/social/campaigns/page.tsx', 'SNAPSHOT.campaigns', /tick\(\);\s*const id = setInterval\(tick, 60_000\);/],
     ['the groups screen', 'src/app/social/groups/page.tsx', 'SNAPSHOT.groups', /useEffect\(\(\) => \{\s*reload\(\);\s*\}, \[reload\]\);/],
     ['the library', 'src/app/social/library/page.tsx', 'SNAPSHOT.library', /useEffect\(\(\) => \{\s*load\(\);\s*\}, \[load\]\);/],
   ];
@@ -356,7 +365,28 @@ const code = (rel: string) =>
   const ceiling = 1000; // PostgREST db-max-rows, as countByStatus's own comment states
   is(rollup > 0 && rollup <= ceiling, `the campaign rollup asks for ${rollup} rows from a server that returns at most ${ceiling} — above it, truncated can never be true`);
   is(usage > 0 && usage <= ceiling, `and so does the library's usage rollup (${usage})`);
-  is(/const truncated = rows\.length >= CAMPAIGN_ROLLUP_LIMIT;/.test(client), 'and the flag is still set by comparing against that same limit');
+  /*
+   * AND THE FLAG IS STILL SET BY COMPARING AGAINST THE LIMITS — both of them
+   * now, because the rollup is two reads.
+   *
+   * It was one account-wide ascending read that had to be a complete account
+   * of what is waiting AND a bounded sample of what is over; it could not be
+   * both, and "28 / 28 · 100% · הסתיים" over a 269-group round is what came
+   * out. The open read is now status-filtered and bounded by v20's
+   * one-open-row-per-group index; the finished one is a newest-first preview.
+   * The rows may only be counted when NEITHER was cut — and with v27's view
+   * they are not counted at all, which is why `exact` clears the flag.
+   */
+  const doneLimit = Number(/const ROLLUP_DONE_LIMIT = (\d+);/.exec(client)?.[1] ?? 0);
+  is(doneLimit > 0 && doneLimit <= ceiling, `the finished-row preview asks for ${doneLimit} rows, at or under the server's ${ceiling}`);
+  is(/const openTruncated = openRows\.length >= CAMPAIGN_ROLLUP_LIMIT;/.test(client), 'the open read compares against its own limit');
+  is(/const doneTruncated = doneRows\.length >= ROLLUP_DONE_LIMIT;/.test(client), 'and the finished preview against its own');
+  is(/const rowsAreWhole = !openTruncated && !doneTruncated;/.test(client), 'and the rows may only be counted when neither was cut');
+  /* The counts read has an explicit ceiling too, under the server's, so it
+     can tell that it hit one instead of silently returning a short answer. */
+  const countsLimit = Number(/const COUNTS_LIMIT = (\d+);/.exec(client)?.[1] ?? 0);
+  is(countsLimit > 0 && countsLimit < ceiling, `the counts read asks for ${countsLimit}, strictly under the server's ${ceiling} so a short answer is detectable`);
+  is(/if \(\(countRes\.data \?\? \[\]\)\.length >= COUNTS_LIMIT\) return null;/.test(client), 'and it refuses to present a capped count as exact');
 }
 
 console.log(`performance-pass guards OK — ${checks} assertions`);

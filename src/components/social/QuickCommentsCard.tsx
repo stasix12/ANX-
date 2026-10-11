@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { listRecentPosts } from '@/lib/social/client';
 import type { Campaign, MediaItem, Post } from '@/lib/social/types';
 import type { CampaignState } from '@/lib/social/campaign';
-import { zonedDateISO } from '@/lib/social/time';
+import { formatDayMonthHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
 import { ChevronDownIcon, MessageIcon, PlusIcon } from '@/components/icons';
 import { PostCover } from './PostCover';
 import { Card, OverflowMenu } from './ui';
@@ -32,10 +32,20 @@ function ShortStamp({ iso }: { iso: string | null }) {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  const two = (n: number) => String(n).padStart(2, '0');
+  /*
+   * THROUGH time.ts, LIKE EVERY OTHER STAMP IN THIS PRODUCT.
+   *
+   * This was `d.getDate()`, `d.getMonth()`, `d.getHours()` — four getters that
+   * read the HOST's timezone, and time.ts's own header says why that is a bug
+   * rather than a style point: "the module runs in Asia/Jerusalem no matter
+   * where the server lives (Vercel is UTC)". So this was the one formatter in
+   * /social that printed a different hour from every other card for the same
+   * publication — three hours out in summer, two in winter — and on a
+   * server-rendered first paint it printed the UTC hour to an Israeli owner.
+   */
   return (
     <span dir="ltr" className="inline-block tabular-nums">
-      {`${two(d.getDate())}.${two(d.getMonth() + 1)} · ${two(d.getHours())}:${two(d.getMinutes())}`}
+      {`${formatDayMonthHe(d)} · ${formatTimeHe(d)}`}
     </span>
   );
 }

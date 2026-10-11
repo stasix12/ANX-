@@ -229,11 +229,25 @@ export function SocialShell({
     // two RLS-refused requests on the way to the login redirect.
     if (owned || !session) return;
     readControl();
-    // Someone may pause from another device, or the worker may report a stop.
-    const id = setInterval(() => {
+    /*
+     * Someone may pause from another device, or the worker may report a stop.
+     *
+     * AND IT RE-READS ON RETURNING TO THE TAB. The interval already skipped
+     * hidden ticks, but nothing listened for the tab coming back — so the
+     * header's pause state and the PC light could sit stale for up to twenty
+     * seconds under a screen that had already refreshed on its own
+     * visibilitychange. Every screen-level poller in this module registers
+     * this listener; the two in the header did not.
+     */
+    const tick = () => {
       if (document.visibilityState === 'visible') readControl();
-    }, 20_000);
-    return () => clearInterval(id);
+    };
+    const id = setInterval(tick, 20_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [owned, readControl, session]);
 
   /*

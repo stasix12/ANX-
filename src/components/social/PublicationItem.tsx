@@ -29,9 +29,17 @@ export interface PublicationActions {
   onScreenshot?: (row: QueueRow) => void;
 }
 
-/** The one-line state, told in the language the owner speaks. */
-export function statusLine(row: QueueRow): { text: string; cls: string } {
+/**
+ * The one-line state, told in the language the owner speaks.
+ *
+ * `projectedAt` is when the engine will actually take this row — see
+ * PublicationItem's own prop. Absent, the stored instant stands, which is what
+ * every caller got before projection.ts existed and is still right for a
+ * caller with no account settings to hand.
+ */
+export function statusLine(row: QueueRow, projectedAt?: string | null): { text: string; cls: string } {
   const step = (row.step ?? '') as QueueStep;
+  const at = projectedAt ?? row.scheduled_at;
   switch (row.status) {
     case 'published':
       // No "ב-" before the time: a Hebrew prefix glued to digits with a hyphen
@@ -52,17 +60,44 @@ export function statusLine(row: QueueRow): { text: string; cls: string } {
     case 'manual_pending':
       return { text: 'ממתין לפרסום ידני', cls: TONE_TEXT[STATUS_TONE.manual_pending] };
     default:
-      return { text: `${formatTimeHe(row.scheduled_at)} · ${relativeHe(row.scheduled_at)}`, cls: TONE_TEXT[STATUS_TONE.scheduled] };
+      /*
+       * THE INSTANT THE ENGINE WILL USE, not the stored column.
+       *
+       * "למה יש כל פעם את האיחור הזה" — this line is where he reads it. A row
+       * re-spaced at 06:25 under a window that opens at 08:00 printed
+       * "06:25 · לפני שעתיים" here while the card one screen up said 08:00,
+       * because rules.ts holds every claimed row behind four gates and this
+       * formatted the column none of them had been applied to.
+       *
+       * `at` is projectQueue()'s answer when the caller supplied one, and the
+       * stored instant when it did not — see the prop on PublicationItem.
+       */
+      return { text: `${formatTimeHe(at)} · ${relativeHe(at)}`, cls: TONE_TEXT[STATUS_TONE.scheduled] };
   }
 }
 
 export function PublicationItem({
   row,
+  projectedAt,
   actions = {},
   showDate = false,
   busy = false,
 }: {
   row: QueueRow;
+  /**
+   * WHEN THIS ROW WILL ACTUALLY GO OUT — from projectQueue() in
+   * lib/social/projection.ts, where the four publish gates are composed.
+   *
+   * This component is the row renderer for the campaign screen's DEFAULT tab,
+   * the history screen and a group's own page, and it printed
+   * `row.scheduled_at` raw. So the fix that taught the dashboard's timeline and
+   * the campaign card to agree left the list the owner actually opens still
+   * saying 06:25 under a window that opens at 08:00.
+   *
+   * Absent: the stored instant, exactly as before. A caller that has no
+   * account settings to project with must not invent them.
+   */
+  projectedAt?: string | null;
   actions?: PublicationActions;
   showDate?: boolean;
   /** A write on this row is in flight — the confirm button locks and spins. */
@@ -90,7 +125,7 @@ export function PublicationItem({
       alive = false;
     };
   }, [open, row.id, row.rendered_text, fetchedText]);
-  const line = statusLine(row);
+  const line = statusLine(row, projectedAt);
   const running = row.status === 'publishing';
   /*
    * `showDate` replaces the status line's own clock rather than prefixing it —
@@ -98,7 +133,9 @@ export function PublicationItem({
    * then truncated. Today keeps the relative phrase (it is the useful part);
    * another day shows a compact date instead.
    */
-  const at = row.published_at ?? row.scheduled_at;
+  /* The row's own instant for the collapsed line: when it published, or when
+     it is going to — projected, never the raw column. */
+  const at = row.published_at ?? projectedAt ?? row.scheduled_at;
   const isToday = zonedDateISO(new Date(at)) === zonedDateISO(new Date());
   const when = !showDate
     ? line.text
@@ -123,7 +160,15 @@ export function PublicationItem({
     actions.onRetry && (row.status === 'failed' || row.status === 'skipped' || row.status === 'needs_attention')
       ? { label: 'נסה שוב', icon: <RepeatIcon className={icon} />, onSelect: () => actions.onRetry?.(row) }
       : null,
-    actions.onRunNow && row.status === 'scheduled' && new Date(row.scheduled_at).getTime() > Date.now() + 60_000
+    /*
+     * "הרץ עכשיו" is offered when the row is more than a minute away — which
+     * has to be measured on the instant it will REALLY go out. On the raw
+     * column it is false for every row whose stamp has passed but whose
+     * publication is still hours off, which is precisely the case the owner
+     * is in: the action vanished from exactly the rows that are waiting on a
+     * window and could most use it.
+     */
+    actions.onRunNow && row.status === 'scheduled' && new Date(projectedAt ?? row.scheduled_at).getTime() > Date.now() + 60_000
       ? { label: 'הרץ עכשיו', icon: <SendIcon className={icon} />, onSelect: () => actions.onRunNow?.(row) }
       : null,
     row.target?.url ? { label: 'פתח את הקבוצה', icon: <UsersIcon className={icon} />, onSelect: () => window.open(row.target?.url, '_blank', 'noreferrer') } : null,
@@ -164,7 +209,16 @@ export function PublicationItem({
             {row.variant && <Badge tone="brand">גרסה {row.variant.label}</Badge>}
           </div>
           <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm [&>*]:min-w-0">
+            {/* BOTH, when they differ — and they differ exactly when something
+                is holding the row. "מתוזמן ל" is the slot it was given;
+                "ייצא ב" is when the engine will take it, after the window, the
+                campaign's gap and the account floor. Printing only the first
+                is what made the list disagree with the card; printing only the
+                second would hide that the row was moved at all. */}
             <Detail label="מתוזמן ל"><Stamp iso={row.scheduled_at} /></Detail>
+            {projectedAt && projectedAt !== row.scheduled_at && row.status === 'scheduled' && (
+              <Detail label="ייצא ב"><Stamp iso={projectedAt} /></Detail>
+            )}
             <Detail label="פורסם ב">{row.published_at ? <Stamp iso={row.published_at} /> : '—'}</Detail>
             <Detail label="פוסט">{row.post?.title || '—'}</Detail>
             <Detail label="ניסיונות">{row.attempts}</Detail>

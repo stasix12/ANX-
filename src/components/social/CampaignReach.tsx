@@ -29,9 +29,34 @@ import { Card } from './ui';
  * card says how many posts each sum covers — otherwise a round half-read
  * reports as a round half-ignored.
  */
-export function CampaignReach({ rows, truncated = false }: { rows: QueueRow[]; truncated?: boolean }) {
+export function CampaignReach({
+  rows,
+  truncated = false,
+  publishedTotal,
+}: {
+  rows: QueueRow[];
+  truncated?: boolean;
+  /**
+   * THE ROUND'S REAL PUBLICATION COUNT, when the caller has one.
+   *
+   * "מכל N הפרסומים" is an explicit completeness claim, and it was made about
+   * `rows.filter(published).length` — rows from a read capped at
+   * CAMPAIGN_QUEUE_LIMIT. On a round past that ceiling the card said "מכל
+   * 1,000 הפרסומים" about a round with more, which is a ceiling presented as
+   * a total in the one sentence on this card that promises it is not.
+   *
+   * From v27's exact counts. Absent, the rows are counted as before.
+   */
+  publishedTotal?: number;
+}) {
   const published = rows.filter((r) => r.status === 'published');
   if (!published.length) return null;
+  /* What "מכל" is measured against: the round's own count when it is known,
+     and what we can see when it is not. Named for the publications it counts
+     and not for the word in this file's title — worker/test/unit.test.ts
+     fails on any identifier here that reads as an audience figure, because
+     this product has none and may never appear to. */
+  const publishedOf = publishedTotal ?? published.length;
 
   const sumOf = (pick: (r: QueueRow) => number | null | undefined) => {
     let total = 0;
@@ -89,14 +114,14 @@ export function CampaignReach({ rows, truncated = false }: { rows: QueueRow[]; t
               answer.
             */}
             {views.posts > 0 && (
-              <Figure label="צפיות בסרטון" value={views.total} posts={views.posts} of={published.length} />
+              <Figure label="צפיות בסרטון" value={views.total} posts={views.posts} of={publishedOf} />
             )}
             {(seen.posts > 0 || views.posts === 0) && (
-              <Figure label="נצפה על ידי" value={seen.posts ? seen.total : null} posts={seen.posts} of={published.length} />
+              <Figure label="נצפה על ידי" value={seen.posts ? seen.total : null} posts={seen.posts} of={publishedOf} />
             )}
-            <Figure label="לייקים" value={reactions.posts ? reactions.total : null} posts={reactions.posts} of={published.length} />
-            <Figure label="תגובות" value={comments.posts ? comments.total : null} posts={comments.posts} of={published.length} />
-            <Figure label="שיתופים" value={shares.posts ? shares.total : null} posts={shares.posts} of={published.length} />
+            <Figure label="לייקים" value={reactions.posts ? reactions.total : null} posts={reactions.posts} of={publishedOf} />
+            <Figure label="תגובות" value={comments.posts ? comments.total : null} posts={comments.posts} of={publishedOf} />
+            <Figure label="שיתופים" value={shares.posts ? shares.total : null} posts={shares.posts} of={publishedOf} />
           </dl>
           <p className="mt-3 text-xs text-mist-500">
             עודכן לאחרונה <Stamp iso={readAt} />

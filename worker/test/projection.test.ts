@@ -430,4 +430,81 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   );
 }
 
+/* ───────── 13. EVERY SURFACE THAT NAMES A TIME ASKS THE ONE MODULE ────── */
+{
+  /*
+   * "כל המסכים חייבים לקבל את זמן הפרסום הבא מאותו מקור נתונים מוסמך. אין
+   *  לבצע חישובים עצמאיים וסותרים בכל קומפוננטה."
+   *
+   * The projection was wired into the dashboard's timeline and the campaign
+   * card first, and the owner still reported 06:25 — because the surface he
+   * actually opens is the campaign screen's DEFAULT tab, which renders every
+   * row through PublicationItem and printed the stored column. These pins are
+   * per surface, because "one source of truth" is a claim about all of them.
+   */
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const read = (f: string) => strip(readFileSync(f, 'utf8'));
+
+  const item = read('src/components/social/PublicationItem.tsx');
+  is(/projectedAt\?: string \| null;/.test(item), 'the row renderer takes the projected instant');
+  is(/const at = projectedAt \?\? row\.scheduled_at;/.test(item), 'and its status line is built from it');
+  is(/const at = row\.published_at \?\? projectedAt \?\? row\.scheduled_at;/.test(item), 'and so is the collapsed row\u2019s own clock');
+  is(!/formatTimeHe\(row\.scheduled_at\)/.test(item), 'the raw column is no longer formatted as a publication time');
+  is(/new Date\(projectedAt \?\? row\.scheduled_at\)\.getTime\(\) > Date\.now\(\) \+ 60_000/.test(item), '"הרץ עכשיו" is offered on the instant the row will really go out');
+
+  const sections = read('src/components/social/QueueSections.tsx');
+  is(/projected\?: Map<string, string \| null>;/.test(sections), 'the queue list threads it to every row');
+  is(/const when = \(r: QueueRow\) => projected\?\.get\(r\.id\) \?\? r\.scheduled_at;/.test(sections), 'and ORDERS by it — a list sorted on one instant and printed with another is in the wrong order');
+
+  const runPage = read('src/app/social/campaigns/[id]/page.tsx');
+  is(/projectQueue\(rows \?\? \[\]/.test(runPage), 'the campaign screen projects its WHOLE feed, not only the timeline tab');
+  is(/<QueueSections rows=\{rows\} actions=\{queueActions\} projected=\{projected\} \/>/.test(runPage), 'and hands it to the default tab');
+  is(/const finishAtShown =/.test(runPage), 'and "סיום משוער" is the LAST projected instant, not the last stored one');
+  is(!/state\?\.estimatedCompletionAt \? when\(state\.estimatedCompletionAt\)/.test(runPage), 'the raw estimate is no longer printed under "לפי התזמון שהוגדר"');
+
+  const tuner = read('src/components/social/QueueTunerSheet.tsx');
+  is(/windowedCascade\(bases, gap \* 60, snap\?\.window \?\? null\)/.test(tuner), 'the respace preview runs the same cascade respaceQueue writes');
+  is(/const currentProjected =/.test(tuner), 'and the "before" half is projected too, so both halves are in the same units');
+  is(!/<Clock iso=\{rows\[0\]\.scheduled_at\} \/>/.test(tuner), 'the sheet opened to FIX the times no longer opens on the raw column');
+
+  const dash = read('src/app/social/page.tsx');
+  is(/const at = projectedAll\?\.get\(r\.id\);/.test(dash), 'the 24-hour card decides membership on the instant each row prints');
+
+  /* AND THE TWO TIMEZONE RULES time.ts EXISTS TO ENFORCE. */
+  const quick = read('src/components/social/QuickCommentsCard.tsx');
+  is(!/d\.getHours\(\)|d\.getDate\(\)|d\.getMonth\(\)/.test(quick), 'no stamp is formatted from the host timezone');
+  is(/formatDayMonthHe\(d\)/.test(quick) && /formatTimeHe\(d\)/.test(quick), 'they go through time.ts like every other stamp');
+  const activity = read('src/app/social/activity/page.tsx');
+  is(!/from\.setDate\(/.test(activity), 'a date range is not stepped with setDate on a zoned instant');
+  is(/zonedToUtc\(addDaysISO\(zonedDateISO\(new Date\(\)\), -\(days - 1\)\), '00:00'\)/.test(activity), 'it steps calendar days in the zone, which is what survives both clock changes');
+}
+
+/* ───────── 14. THE RUN STRIP KEEPS EACH CARD'S IDENTITY ───────────────── */
+{
+  /*
+   * "שכל כרטיס מציג רק את הנתונים שלו … שהמעבר בין קמפיינים אינו משנה את
+   *  התזמון או מצב הפרסום."
+   *
+   * The slides were keyed by POSITION while the dashboard re-sorts the strip
+   * on every poll, and the sort's tiebreak moves whenever a row finishes. The
+   * strip's own position is a scroll offset, so slide 2 stayed slide 2 and
+   * became a different campaign under the owner's thumb — with the dots and
+   * the "2 / 2" never moving to say so.
+   */
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const swiper = strip(readFileSync('src/components/social/CardSwiper.tsx', 'utf8'));
+  is(/keys\?: string\[\];/.test(swiper), 'the strip takes a stable identity per slide');
+  is(/key=\{keys\?\.\[i\] \?\? i\}/.test(swiper), 'and React keys the slides by it rather than by position');
+  is(/const to = keys\.indexOf\(held\.current\);/.test(swiper), 'and the scroll follows the CARD when the order changes, not the slot');
+  const dash = strip(readFileSync('src/app/social/page.tsx', 'utf8'));
+  is(/keys=\{runs\.map\(\(r\) => r\.campaign\.id\)\}/.test(dash), 'the dashboard supplies the campaign ids');
+
+  /* AND A WAY THROUGH THAT IS NOT A GESTURE — "שקיימים חצים או מנגנון מעבר
+     חלופי". */
+  is(/aria-label="הסבב הקודם"|label="הסבב הקודם"/.test(swiper), 'there is a previous arrow');
+  is(/label="הסבב הבא"/.test(swiper), 'and a next arrow');
+  is(/disabled=\{index === 0\}/.test(swiper) && /disabled=\{index === count - 1\}/.test(swiper), 'disabled at the ends rather than hidden, so the row beside them does not jump');
+  is(!/focus-visible:outline-none/.test(swiper), 'and nothing cancels the focus ring — the dots were invisible to a keyboard');
+}
+
 console.log(`projection OK — ${checks} assertions over the four gates, the cascade, the writers’ roll and both clock changes`);

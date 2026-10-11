@@ -1837,6 +1837,14 @@ const ROLLUP_DONE_LIMIT = 500;
  * can see, exactly as before, and every surface is told the counts are not
  * exact so that none of them claims a round is complete.
  */
+/**
+ * The ceiling on the counts read. See campaignCounts().
+ *
+ * Under PostgREST's db-max-rows (1,000) so the server cannot truncate the
+ * result without this number noticing first.
+ */
+const COUNTS_LIMIT = 900;
+
 export interface CampaignCountRow {
   campaign_id: string;
   status: QueueStatus;
@@ -1866,8 +1874,22 @@ export interface CampaignExactCounts {
 export type CampaignCountMap = Record<string, CampaignExactCounts>;
 
 export async function campaignCounts(campaignIds?: string[]): Promise<CampaignCountMap | null> {
-  let counts = db().from('social_campaign_counts').select('campaign_id, status, total, today');
-  let targets = db().from('social_campaign_targets').select('campaign_id, targets, targets_today, first_published_at, last_published_at');
+  /*
+   * AN EXPLICIT CEILING, because leaning on PostgREST's default is how a
+   * count becomes a ceiling again.
+   *
+   * Unscoped (the campaigns list asks for every campaign), this read has no
+   * `.in()` — and a select with no limit is served under db-max-rows, which
+   * is 1,000 on this project and is the exact mechanism the 28/28 fault ran
+   * on. The view returns one row per (campaign, status), so 1,000 rows is
+   * about 110 campaigns; asking for one more than the ceiling is what lets
+   * the code below TELL whether it hit it instead of guessing.
+   */
+  let counts = db().from('social_campaign_counts').select('campaign_id, status, total, today').limit(COUNTS_LIMIT);
+  let targets = db()
+    .from('social_campaign_targets')
+    .select('campaign_id, targets, targets_today, first_published_at, last_published_at')
+    .limit(COUNTS_LIMIT);
   if (campaignIds) {
     counts = counts.in('campaign_id', campaignIds);
     targets = targets.in('campaign_id', campaignIds);
@@ -1893,6 +1915,15 @@ export async function campaignCounts(campaignIds?: string[]): Promise<CampaignCo
    */
   if (countRes.error && !isMissingRelation(countRes.error)) throw friendlyError(countRes.error);
   if (countRes.error) return null;
+  /*
+   * AT THE CEILING, THE ANSWER IS NOT EXACT — and an inexact exact-count is
+   * worse than no exact-count, because every surface trusts this one. A
+   * partial read drops whole campaigns (the rows come back grouped, so the
+   * last campaign in the result may also be missing statuses), and the
+   * caller's fallback — count the rows, say they are partial — is the honest
+   * answer in that case.
+   */
+  if ((countRes.data ?? []).length >= COUNTS_LIMIT) return null;
 
   const out: CampaignCountMap = {};
   const entry = (id: string) =>

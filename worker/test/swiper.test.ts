@@ -258,6 +258,40 @@ async function main(): Promise<void> {
       eq(await dots.nth(2).getAttribute('aria-current'), 'true', `${at}: the third dot did not light up`);
       eq((await position.innerText()).replace(/\s+/g, ' ').trim(), '3 / 3', `${at}: the position indicator did not follow the dot tap`);
 
+      /*
+       * ───────── AND A WAY THROUGH THAT IS NOT A SWIPE ─────────
+       *
+       * "שקיימים חצים או מנגנון מעבר חלופי."
+       *
+       * The dots were the only non-gesture control and they are 10px marks
+       * whose meaning has to be inferred. These are buttons with words behind
+       * them, and the test drives them the way a thumb would.
+       */
+      const back = view.locator('button[aria-label="הסבב הקודם"]');
+      const fwd = view.locator('button[aria-label="הסבב הבא"]');
+      eq(await back.count(), 1, `${at}: there is no previous arrow`);
+      eq(await fwd.count(), 1, `${at}: there is no next arrow`);
+      /* At the last card: forward is disabled, back is not. Disabled and not
+         hidden, or the dots beside them shift every time an end is reached. */
+      eq(await fwd.isDisabled(), true, `${at}: the next arrow is live on the last card`);
+      eq(await back.isDisabled(), false, `${at}: the previous arrow is dead where it should work`);
+      const yBefore = await view.evaluate(() => window.scrollY);
+      await back.click();
+      await view.waitForTimeout(500);
+      const afterBack = await view.evaluate(() => {
+        const strip = document.querySelector('[role="group"]') as HTMLElement;
+        const kids = strip.children as unknown as HTMLElement[];
+        const stepPx = Math.abs(kids[1].offsetLeft - kids[0].offsetLeft);
+        return { index: Math.round(Math.abs(strip.scrollLeft) / stepPx), y: window.scrollY };
+      });
+      eq(afterBack.index, 1, `${at}: the previous arrow did not move the strip`);
+      eq(afterBack.y, yBefore, `${at}: the previous arrow scrolled the page`);
+      eq((await position.innerText()).replace(/\s+/g, ' ').trim(), '2 / 3', `${at}: the counter did not follow the arrow`);
+      /* A 44px target, which is this product's measured floor for anything a
+         thumb presses. */
+      const arrowBox = await back.boundingBox();
+      is((arrowBox?.width ?? 0) >= 40 && (arrowBox?.height ?? 0) >= 40, `${at}: the arrow is not a tap target (${JSON.stringify(arrowBox)})`);
+
       /* EACH CARD IS WHOLE AND SEPARATE — three schedule blocks, three sets of
          controls, and card 3's switch is not card 1's. A strip that reused one
          card's state across slides is the failure this cannot be allowed to
@@ -274,7 +308,7 @@ async function main(): Promise<void> {
 
       eq(crashes, [], `${at}: the strip threw: ${crashes[0] ?? ''}`);
       await view.close();
-      checks += 17;
+      checks += 26;
     }
 
     /* ─── AND WITH ONE RUN, NO STRIP FURNITURE AT ALL ──────────────────── */

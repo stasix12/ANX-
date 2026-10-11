@@ -1081,11 +1081,22 @@ export default function SocialDashboard() {
             c.id,
             {
               schedule: scheduleOf(c),
-              /* THIS campaign's own last publication — what its own gap is
-                 measured from. The account's is a different number and lives
-                 on `spacing`; swapping the two is how a card ends up waiting
-                 out an interval that belongs to another round. */
-              lastPublishedAt: data.states[c.id]?.done.find((r) => r.published_at)?.published_at ?? null,
+              /*
+               * THIS campaign's own last publication — what its own gap is
+               * measured from. The account's is a different number and lives
+               * on `spacing`; swapping the two is how a card ends up waiting
+               * out an interval that belongs to another round.
+               *
+               * FROM THE STATE, NOT FROM `done`. The same expression ran on
+               * this screen and on the round page over two differently-scoped
+               * arrays — here the 500 newest finished rows account-wide, then
+               * filtered to today; there the campaign's own feed. So the two
+               * screens could measure the gap from two different instants and
+               * promise two different next publications for one row.
+               * `state.lastPublishedAt` is the round's real most recent
+               * publication, from the v27 view's own max().
+               */
+              lastPublishedAt: data.states[c.id]?.lastPublishedAt ?? null,
             },
           ]),
         ),

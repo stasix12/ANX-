@@ -479,6 +479,36 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(/zonedToUtc\(addDaysISO\(zonedDateISO\(new Date\(\)\), -\(days - 1\)\), '00:00'\)/.test(activity), 'it steps calendar days in the zone, which is what survives both clock changes');
 }
 
+/* ───── 13b. ONE "LAST PUBLICATION" PER ROUND, ON EVERY SCREEN ───────── */
+{
+  /*
+   * The campaign's own gap is measured from its most recent publication, so
+   * two screens that disagree about THAT instant promise two different next
+   * publications for the same row.
+   *
+   * Both screens ran the same expression — `state.done.find(r => r.published_at)`
+   * — over two differently-scoped arrays: the dashboard's `done` is the 500
+   * newest finished rows ACCOUNT-WIDE, then filtered to today for a repeating
+   * round; the round page's is that campaign's own feed. One expression, two
+   * answers.
+   */
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const camp = strip(readFileSync('src/lib/social/campaign.ts', 'utf8'));
+  is(/opts\.counts\?\.lastPublishedAt !== undefined/.test(camp), 'the round\u2019s last publication is exact when the caller has it');
+  const dash = strip(readFileSync('src/app/social/page.tsx', 'utf8'));
+  const run = strip(readFileSync('src/app/social/campaigns/[id]/page.tsx', 'utf8'));
+  is(/lastPublishedAt: data\.states\[c\.id\]\?\.lastPublishedAt \?\? null/.test(dash), 'the dashboard reads it off the state');
+  is(/lastPublishedAt: state\?\.lastPublishedAt \?\? null/.test(run), 'and so does the round page — the same number, from the same place');
+  for (const [what, src] of [['the dashboard', dash], ['the round page', run]] as const) {
+    is(!/done\.find\(\(r\) => r\.published_at\)/.test(src), `${what} no longer digs the instant out of a preview array`);
+  }
+  /* The view is where it comes from: max() over every row, not the first of
+     whatever the preview happened to carry. */
+  const v27 = strip(readFileSync('supabase/social-schema-v27.sql', 'utf8'));
+  is(/max\(q\.published_at\) filter \(where q\.status = 'published'\) as last_published_at/.test(v27), 'and the database computes it over every row');
+  is(/min\(q\.published_at\) filter \(where q\.status = 'published'\) as first_published_at/.test(v27), 'with the round\u2019s FIRST publication beside it, for "התחיל"');
+}
+
 /* ───────── 14. THE RUN STRIP KEEPS EACH CARD'S IDENTITY ───────────────── */
 {
   /*

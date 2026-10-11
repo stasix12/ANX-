@@ -304,7 +304,18 @@ export function campaignState<T extends CampaignQueueRow>(
     startedAt,
     everPublished,
     targetCount,
-    lastPublishedAt: everPublishedRows[0]?.published_at ?? null,
+    /*
+     * THE ROUND'S MOST RECENT PUBLICATION, exact when the caller has it.
+     *
+     * Derived from `lifetime` otherwise, and `lifetime` is a PREVIEW on the
+     * dashboard (the 500 newest finished rows account-wide, then filtered to
+     * today for a repeating round) and the campaign's own feed on the round
+     * page. Two differently-scoped arrays, one expression — so the two
+     * screens could read a different "last publication" for the same round,
+     * and since this is what the campaign's own gap is measured from, they
+     * could then promise two different NEXT instants for the same row.
+     */
+    lastPublishedAt: opts.counts?.lastPublishedAt !== undefined ? opts.counts.lastPublishedAt : everPublishedRows[0]?.published_at ?? null,
     lastPublishedChannel: everPublishedRows[0]?.target?.channel ?? null,
     // The plan already assigns every remaining row an instant; the last one
     // is when the campaign finishes, assuming nothing is deferred by the

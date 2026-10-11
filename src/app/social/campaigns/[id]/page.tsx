@@ -387,8 +387,10 @@ export default function CampaignControlCenter() {
     /* THIS campaign's own last publication, which is what its own gap is
        measured from. The account's is a different number and rides on
        `spacing` — handing one where the other belongs makes a round wait out
-       an interval that belongs to somebody else's. */
-    lastPublishedAt: state?.done.find((r) => r.published_at)?.published_at ?? null,
+       an interval that belongs to somebody else's.
+       FROM THE STATE, so this screen and the dashboard measure the gap from
+       the same instant; see the matching note on the dashboard's own gates. */
+    lastPublishedAt: state?.lastPublishedAt ?? null,
   };
   const spacingNow: AccountSpacing | undefined = spacing ? { ...spacing, lastPublishedAt: accountLastPublished } : undefined;
   /*

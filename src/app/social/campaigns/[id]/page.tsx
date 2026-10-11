@@ -30,6 +30,7 @@ import {
   campaignQueueWithStats,
   cancelQueueItem,
   confirmQueueItem,
+  campaignCounts,
   getBrowserSettings,
   getCampaign,
   getControl,
@@ -61,7 +62,7 @@ import { checkCampaignInvariants, takeUnreported } from '@/lib/social/invariants
 import { logClientActivity } from '@/lib/social/client';
 import { agree, formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { projectOne, projectQueue, spacingFrom, type AccountSpacing } from '@/lib/social/projection';
-import { readSchedule } from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule } from '@/lib/social/campaign-schedule';
 import { ltr } from '@/components/social/DateTime';
 import type { Campaign, ControlSettings, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -137,7 +138,7 @@ export default function CampaignControlCenter() {
 
   const load = useCallback(async () => {
     try {
-      const [c, q, p, ctrl, workers, lastPublished] = await Promise.all([
+      const [c, q, p, ctrl, workers, lastPublished, counts] = await Promise.all([
         getCampaign(id),
         campaignQueueWithStats(id),
         listPostsForCampaign(id),
@@ -148,6 +149,21 @@ export default function CampaignControlCenter() {
            account floor, which is the answer this screen gave before it asked
            the question at all. */
         lastPublishedAt().catch(() => null),
+        /*
+         * THE EXACT COUNTS, the same ones the dashboard reads.
+         *
+         * This screen built its state as `campaignState(q.rows, c, { truncated })`
+         * — rows from a read capped at CAMPAIGN_QUEUE_LIMIT, and with
+         * `todayOnly` omitted entirely. So for a repeating round the dashboard
+         * showed TODAY'S figures (with the word "היום" in the sentence) and
+         * this screen showed the round's whole life, capped, with the same
+         * words and no label. One round, two numbers, neither saying which it
+         * was — which is the contradiction between screens the owner reported.
+         *
+         * Null when the database has not run social-latest.sql: the rows are
+         * counted as before and `truncated` says the numbers are partial.
+         */
+        campaignCounts([id]).catch(() => null),
       ]);
       setCampaign(c);
       setRows(q.rows);
@@ -155,7 +171,19 @@ export default function CampaignControlCenter() {
       setControl(ctrl);
       setAccountLastPublished(lastPublished);
       if (workers) setWorkerOnline(workers.some((w) => w.online));
-      const next = campaignState(q.rows, c, { truncated: q.truncated });
+      /* A repeating round is counted for TODAY on every screen, not only on
+         the dashboard — see the read above. readRepeat() is the one reader of
+         those two columns, so the two screens cannot disagree about whether
+         this round repeats either. */
+      const todayOnly = readRepeat(c).enabled;
+      const exact = counts?.[id];
+      const next = campaignState(q.rows, c, {
+        truncated: exact ? false : q.truncated,
+        todayOnly,
+        counts: exact
+          ? { progress: todayOnly ? exact.today : exact.lifetime, everPublished: exact.lifetime.published ?? 0 }
+          : undefined,
+      });
       setState(next);
       // A count that disagrees with itself is reported in Hebrew through the
       // activity log the owner already reads — never as an error on screen.
@@ -338,7 +366,7 @@ export default function CampaignControlCenter() {
   const badgeTone: Tone | undefined = badge ? (badge.tone === 'info' ? 'brand' : badge.tone) : undefined;
   const showPause = Boolean(state) && canPauseRun(state!.progress, campaign.status);
   const showResume = Boolean(state) && canResumeRun(state!.progress, campaign.status);
-  const view = state ? runProgress(state.progress) : null;
+  const view = state ? runProgress(state.progress, state.todayOnly, state.truncated) : null;
 
   /*
    * ───────── WHEN THIS ROUND'S ROWS WILL ACTUALLY GO OUT ─────────

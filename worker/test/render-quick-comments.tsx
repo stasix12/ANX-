@@ -54,6 +54,7 @@ const st = (
     progress: prog(today),
     state: 'completed',
     truncated: false,
+    targetCount: 0,
     todayOnly: opts.todayOnly ?? false,
     startedAt: iso,
     everPublished: ever,

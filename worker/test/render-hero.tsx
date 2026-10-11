@@ -36,6 +36,7 @@ const st = (p: unknown, extra: Partial<CampaignState> = {}): CampaignState =>
     progress: p as never,
     state: 'running',
     truncated: false,
+    targetCount: 0,
     startedAt: null,
     estimatedCompletionAt: null,
     nextAt: null,

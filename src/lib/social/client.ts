@@ -1789,71 +1789,310 @@ export async function screenshotUrl(path: string): Promise<string | null> {
 const CAMPAIGN_ROLLUP_LIMIT = 1000;
 
 /**
- * One full control-centre state per campaign, from the queue rows that carry
- * campaign_id. A single read (narrow columns plus the target's name) keeps
- * the campaigns screen and the dashboard hero to one request each, no matter
- * how many campaigns exist.
+ * How many FINISHED rows the rollup reads back, across every campaign.
+ *
+ * The done list is a preview — the newest few publications per round, for the
+ * timeline and for "what went out". It is NOT where any number comes from any
+ * more (see campaignCounts), so a ceiling here cannot make a round look more
+ * finished than it is. Ordered by published_at DESCENDING, so what falls off
+ * the end is the oldest history rather than anything still ahead.
  */
+const ROLLUP_DONE_LIMIT = 500;
+
+/**
+ * ───────── EXACT COUNTS PER ROUND, FROM THE ONE PLACE THAT KNOWS ─────────
+ *
+ * "28/28, 100%, הסתיים — ובפועל המערכת מפרסמת בהרבה יותר קבוצות."
+ *
+ * campaignStates() used to derive every number from ONE account-wide read of
+ * the 1,000 earliest queue rows, grouped by campaign_id in JavaScript. Three
+ * faults compounded in it, and all three were on the owner's screen at once:
+ *
+ *   1. THE CEILING WAS SHARED. One big round filled the window and a small one
+ *      was counted from the crumbs left over.
+ *   2. THE ORDER WAS ASCENDING, so what fell off the end was the furthest-out
+ *      rows — exactly the ones still waiting. A round whose pending rows are
+ *      dropped reports published === total, resolves to 'completed', and draws
+ *      a green 100%.
+ *   3. A REPEATING ROUND WAS THEN FILTERED TO TODAY, in JavaScript, AFTER the
+ *      cut. The window was full of old rows, so "today's round" was counted
+ *      from whatever handful of today happened to fit — and because the cut
+ *      favours the earliest, those were the ones that had already published.
+ *
+ * 28 of 28 handled, 27 published, one skipped, 100%, "הסתיים — חלק דולגו".
+ * Every figure true about the slice and false about the round.
+ *
+ * A count is a question only the database can answer, so it is asked there.
+ * social_campaign_counts — added in v27, and social-latest.sql is the one file
+ * anyone is ever told to run — is a grouped view:
+ * one row per (campaign, status) carrying the lifetime count and today's,
+ * with `today` computed as a FILTER inside the aggregate — so the scoping
+ * that made this worse is now part of the exact answer instead of a filter
+ * over a capped array. One request, at most campaigns × 9 rows, no queue row
+ * crossing the wire: cheaper than what it replaces, which matters on a
+ * metered Israeli mobile plan.
+ *
+ * NULL WHEN THE VIEW IS NOT THERE. A database that has not run v27 yet is not
+ * a database that should stop working — it falls back to counting the rows it
+ * can see, exactly as before, and every surface is told the counts are not
+ * exact so that none of them claims a round is complete.
+ */
+export interface CampaignCountRow {
+  campaign_id: string;
+  status: QueueStatus;
+  total: number;
+  today: number;
+}
+
+export interface CampaignTargetRow {
+  campaign_id: string;
+  targets: number;
+  targets_today: number;
+  first_published_at: string | null;
+  last_published_at: string | null;
+}
+
+export interface CampaignExactCounts {
+  lifetime: Record<string, number>;
+  today: Record<string, number>;
+  /** DISTINCT groups this round reaches — not its row count. */
+  targets: number;
+  targetsToday: number;
+  /** The round's FIRST publication, over every row it has ever had. */
+  firstPublishedAt: string | null;
+  lastPublishedAt: string | null;
+}
+
+export type CampaignCountMap = Record<string, CampaignExactCounts>;
+
+export async function campaignCounts(campaignIds?: string[]): Promise<CampaignCountMap | null> {
+  let counts = db().from('social_campaign_counts').select('campaign_id, status, total, today');
+  let targets = db().from('social_campaign_targets').select('campaign_id, targets, targets_today, first_published_at, last_published_at');
+  if (campaignIds) {
+    counts = counts.in('campaign_id', campaignIds);
+    targets = targets.in('campaign_id', campaignIds);
+  }
+  const [countRes, targetRes] = await Promise.all([counts, targets]);
+  /*
+   * A MISSING VIEW IS NOT AN ERROR ON SCREEN — but it is also NOT the only
+   * thing that can fail here, and treating the two alike was a way to put the
+   * 28/28 card back on the screen.
+   *
+   * PostgREST answers PGRST205 / 42P01 for a relation it does not know, which
+   * is the honest state of a database whose owner has not run
+   * social-latest.sql yet: count the rows instead, and say the numbers are
+   * partial. An expired token, an RLS refusal or a dropped mobile connection
+   * is a DIFFERENT answer — the view is there and we simply did not reach it
+   * — and the caller must not quietly fall back to a preview and present it as
+   * a total. Both still return null; the difference is that the caller is told
+   * to distrust the rows, which is what `truncated` is for.
+   *
+   * THROWN, not swallowed: the dashboard's own read already handles a failed
+   * request, and a count that silently becomes a smaller number is the exact
+   * shape of fault this whole change is about.
+   */
+  if (countRes.error && !isMissingRelation(countRes.error)) throw friendlyError(countRes.error);
+  if (countRes.error) return null;
+
+  const out: CampaignCountMap = {};
+  const entry = (id: string) =>
+    (out[id] ??= { lifetime: {}, today: {}, targets: 0, targetsToday: 0, firstPublishedAt: null, lastPublishedAt: null });
+  for (const row of (countRes.data ?? []) as CampaignCountRow[]) {
+    const e = entry(row.campaign_id);
+    e.lifetime[row.status] = (e.lifetime[row.status] ?? 0) + (row.total ?? 0);
+    e.today[row.status] = (e.today[row.status] ?? 0) + (row.today ?? 0);
+  }
+  /* The groups view is a SEPARATE grouping (per campaign, not per status), so
+     a database that has one and not the other still gets exact counts — the
+     group total simply falls back to the rows, which is what it was. */
+  if (!targetRes.error) {
+    for (const row of (targetRes.data ?? []) as CampaignTargetRow[]) {
+      const e = entry(row.campaign_id);
+      e.targets = row.targets ?? 0;
+      e.targetsToday = row.targets_today ?? 0;
+      e.firstPublishedAt = row.first_published_at ?? null;
+      e.lastPublishedAt = row.last_published_at ?? null;
+    }
+  }
+  return out;
+}
+
+/**
+ * "This relation does not exist" — a database that has not run the migration —
+ * as opposed to every other reason a read can fail.
+ *
+ * PostgREST reports an unknown table as PGRST205 (and 42P01 straight from
+ * Postgres). Everything else — 401, 403, a dropped connection — means the
+ * thing is there and we did not reach it, which is a different answer and must
+ * not be mistaken for "count the rows instead".
+ */
+function isMissingRelation(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === 'PGRST205' || error.code === 'PGRST202' || error.code === '42P01') return true;
+  return /does not exist|could not find the table|schema cache/i.test(error.message ?? '');
+}
+
+/**
+ * One full control-centre state per campaign.
+ *
+ * THREE READS, AND EACH ANSWERS THE QUESTION IT CAN ANSWER:
+ *
+ *   • the COUNTS come from social_campaign_counts — exact, per campaign, with
+ *     no ceiling anywhere near them (see campaignCounts above);
+ *   • the OPEN rows come from one read of everything not yet finished. That
+ *     read is effectively complete rather than capped, and not by luck:
+ *     social_queue_one_open_per_target_idx allows at most ONE open row per
+ *     group, so the whole account's open set is bounded by its number of
+ *     groups. These are what the timeline, "הבא בתור" and the projected
+ *     instants are built from, and they must not be a sample;
+ *   • the DONE rows come from one read of the most recent finished ones,
+ *     newest first — a preview, and now only a preview.
+ *
+ * It was one read, and the one read had to be both a complete answer about
+ * what is waiting and a bounded answer about what is over. It could not be
+ * both, so it was neither.
+ */
+const ROLLUP_SELECT = 'id, status, scheduled_at, published_at, target_id, post_id, campaign_id, target:social_targets(id,name,channel,image_url)';
+
 export async function campaignStates(campaignIds?: string[]): Promise<Record<string, CampaignState>> {
   if (campaignIds && campaignIds.length === 0) return {};
-  let query = db()
+
+  /*
+   * OPEN ROWS: everything not yet finished, soonest first.
+   *
+   * NOT A SAMPLE, and the reason is a database rule rather than a hope:
+   * social_queue_one_open_per_target_idx (v20) is a unique index on target_id
+   * over the open statuses, so the whole ACCOUNT can hold at most one open row
+   * per group. The ceiling below is therefore above the real maximum for any
+   * account with fewer than a thousand groups, and `openTruncated` says so
+   * honestly for one that is bigger.
+   *
+   * These rows decide "הבא בתור", the projected instants and the timeline, so
+   * a cut here would be a cut in the answers — which is exactly what the old
+   * single read did.
+   */
+  let openQuery = db()
     .from('social_queue')
-    .select('id, status, scheduled_at, published_at, target_id, post_id, campaign_id, target:social_targets(id,name,channel,image_url)')
+    .select(ROLLUP_SELECT)
     .not('campaign_id', 'is', null)
+    .in('status', OPEN_STATUSES as unknown as string[])
     .order('scheduled_at')
-    // A hard ceiling so one screen can never pull an unbounded table. Callers
-    // that care about a single campaign use campaignQueue() instead, which is
-    // scoped to it; this one is the overview.
     .limit(CAMPAIGN_ROLLUP_LIMIT);
-  if (campaignIds) query = query.in('campaign_id', campaignIds);
-  const [rows, campaigns] = await Promise.all([unwrap<(CampaignQueueRow & { campaign_id: string })[]>(await query), listCampaigns()]);
+  if (campaignIds) openQuery = openQuery.in('campaign_id', campaignIds);
+
+  /*
+   * DONE ROWS: the most recent finished ones, newest first — a preview.
+   *
+   * Ordered DESCENDING on purpose: what falls off the end is the oldest
+   * history, never anything still ahead. No number is derived from this array
+   * any more, so its ceiling cannot make a round look finished.
+   *
+   * `published_at` nulls last — a failed or skipped row has no instant, and
+   * ordering it as if it were the oldest would push real publications out of
+   * the preview.
+   */
+  let doneQuery = db()
+    .from('social_queue')
+    .select(ROLLUP_SELECT)
+    .not('campaign_id', 'is', null)
+    .in('status', TERMINAL_STATUSES as unknown as string[])
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .limit(ROLLUP_DONE_LIMIT);
+  if (campaignIds) doneQuery = doneQuery.in('campaign_id', campaignIds);
+
+  const [openRes, doneRes, counts, campaigns] = await Promise.all([
+    openQuery,
+    doneQuery,
+    campaignCounts(campaignIds),
+    listCampaigns(),
+  ]);
+  const openRows = unwrap<(CampaignQueueRow & { campaign_id: string })[]>(openRes);
+  const doneRows = unwrap<(CampaignQueueRow & { campaign_id: string })[]>(doneRes);
+  /*
+   * WHETHER THE ROWS ALONE COULD ANSWER — which is the question the fallback
+   * path rests on, and getting it wrong puts the 28/28 card straight back.
+   *
+   * Without the view the numbers come from these two arrays, so they are the
+   * round's totals only if NEITHER read hit its ceiling. The open read is
+   * bounded by one row per group (v20's unique index); the done read is a
+   * preview of recent history and on an account with any real past it WILL be
+   * full. A transient failure of the counts read lands here too, and it must
+   * not look like a small account.
+   */
+  const openTruncated = openRows.length >= CAMPAIGN_ROLLUP_LIMIT;
+  const doneTruncated = doneRows.length >= ROLLUP_DONE_LIMIT;
+  const rowsAreWhole = !openTruncated && !doneTruncated;
+
   const byId = new Map(campaigns.map((c) => [c.id, c]));
   const grouped = new Map<string, CampaignQueueRow[]>();
-  for (const row of rows) {
+  for (const row of [...openRows, ...doneRows]) {
     const list = grouped.get(row.campaign_id);
     if (list) list.push(row);
     else grouped.set(row.campaign_id, [row]);
   }
-  // The ceiling is shared by every live campaign and the read is ordered by
-  // scheduled_at ascending, so what gets dropped is the furthest-out rows —
-  // precisely the ones that have not happened yet. A truncated read therefore
-  // makes a run look MORE finished than it is, which is how a card could say
-  // "הושלם · 100%" beside rows the dashboard still counted as waiting. We
-  // cannot tell which campaign lost rows, so every state built from a capped
-  // read is marked, and the card stops presenting its numbers as totals.
-  const truncated = rows.length >= CAMPAIGN_ROLLUP_LIMIT;
-  /*
-   * A REPEATING ROUND IS COUNTED FOR TODAY. "מה זה ה-497 הזה?"
-   *
-   * 219 groups and 497 rows, because the round had been planned more than once
-   * into the same campaign — which is deliberate (ensureRunForPost reuses the
-   * run so "פורסם N פעמים" accumulates) and was readable while a round was a
-   * one-off. With CHZARA on it is not: the total grows by a round a day for
-   * ever, and a percentage of a number that never ends is not a percentage of
-   * anything.
-   *
-   * So for a repeating round the rows are today's, and it resets by
-   * construction rather than by a job — tomorrow the boundary is tomorrow's.
-   * Every other campaign is untouched, because for a round that runs once the
-   * lifetime figure IS the round.
-   *
-   * SCOPED ON scheduled_at AND NOT ON published_at, because the question the
-   * card answers is "how is today's round going", and a row that belongs to
-   * today's round but has not gone out yet is part of that answer.
-   */
+  /* A campaign the counts know about but that has no row in either preview —
+     a round whose every publication is older than the done preview — must
+     still get a state, or it would vanish from the dashboard exactly as the
+     never-launched ones used to. */
+  for (const id of Object.keys(counts ?? {})) if (!grouped.has(id)) grouped.set(id, []);
+  if (campaignIds) for (const id of campaignIds) if (!grouped.has(id)) grouped.set(id, []);
+
   const todayISO = zonedDateISO(new Date());
   const out: Record<string, CampaignState> = {};
   for (const [id, all] of grouped) {
     const campaign = byId.get(id) ?? null;
+    /*
+     * A REPEATING ROUND IS COUNTED FOR TODAY. "מה זה ה-497 הזה?"
+     *
+     * 219 groups and 497 rows, because the round had been planned more than
+     * once into the same campaign — deliberate, and readable while a round was
+     * a one-off. With CHZARA on it is not: the total grows by a round a day for
+     * ever, and a percentage of a number that never ends is not a percentage
+     * of anything. So a repeating round is counted for today and resets by
+     * construction rather than by a job.
+     *
+     * THE SCOPING NOW HAPPENS IN THE AGGREGATE, NOT OVER A CAPPED ARRAY. That
+     * ordering was the third half of the 28/28 fault: filtering today out of a
+     * window that had already been cut to the thousand OLDEST rows left a
+     * handful of this morning's publications standing in for the whole round.
+     * `counts[id].today` is computed by the database over every row.
+     */
     const todayOnly = readRepeat(campaign).enabled;
     const list = todayOnly ? all.filter((r) => zonedDateISO(new Date(r.scheduled_at)) === todayISO) : all;
-    /* `lifetime: all` — the slice above is today's, and "has this round ever
-       published" must not be answered from it. See CampaignState.everPublished:
-       scoping that number to today is what made the quick-comments strip
-       disappear from the dashboard every midnight. */
-    const state = campaignState(list, campaign, { truncated, todayOnly, lifetime: all });
+    const exact = counts?.[id];
+    const state = campaignState(list, campaign, {
+      /*
+       * `truncated` KEEPS ITS MEANING FOR EVERY READER: the numbers on this
+       * state are not the round's totals. With the view present they ARE the
+       * totals however the previews were cut, so it is false; without it the
+       * old row-counting behaviour returns, now bounded per campaign rather
+       * than by whatever the account-wide window left over.
+       */
+      truncated: exact ? false : !rowsAreWhole,
+      todayOnly,
+      /* `lifetime: all` — the slice above is today's, and "has this round ever
+         published" must not be answered from it. See CampaignState.everPublished. */
+      lifetime: all,
+      counts: exact
+        ? {
+            progress: todayOnly ? exact.today : exact.lifetime,
+            everPublished: exact.lifetime.published ?? 0,
+            targetCount: todayOnly ? exact.targetsToday : exact.targets,
+            /*
+             * THE ROUND'S FIRST PUBLICATION, from the database.
+             *
+             * campaignState() reads it off the rows otherwise, and the rows
+             * are now a NEWEST-FIRST preview — so "התחיל לפני 6 שעות" would be
+             * the age of the oldest row that survived the cut, drifting later
+             * every time the account publishes anything at all.
+             */
+            startedAt: exact.firstPublishedAt,
+            lastPublishedAt: exact.lastPublishedAt,
+          }
+        : undefined,
+    });
     out[id] = state;
-    if (!truncated) {
+    if (!state.truncated) {
       await reportViolations(checkCampaignInvariants(state, { campaignId: id, campaignName: campaign?.name ?? null }), `campaign:${id}`);
     }
   }

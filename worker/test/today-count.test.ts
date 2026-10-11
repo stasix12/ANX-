@@ -198,9 +198,22 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
    * strip disappears from the dashboard every midnight — see section 6b.
    */
   is(
-    /campaignState\(list, campaign, \{ truncated, todayOnly, lifetime: all \}\)/.test(client),
-    'the state carries the scope WITH the numbers, and the whole round’s rows alongside them',
+    /campaignState\(list, campaign, \{\s*truncated: exact \? false : !rowsAreWhole,\s*todayOnly,/.test(client),
+    'the state carries the scope WITH the numbers',
   );
+  is(/lifetime: all,/.test(client), 'and the whole round’s rows alongside them');
+  /*
+   * AND THE SCOPE IS NOW APPLIED INSIDE THE AGGREGATE, which is the half of
+   * this that was wrong. `list` is today's rows of a CAPPED read, so when the
+   * cap was account-wide and ascending, "today" was whatever crumbs of today
+   * fitted behind a thousand older rows — 28 of a 269-group round, all of them
+   * already published, hence "28 / 28 · 100% · הסתיים". The count comes from
+   * social_campaign_counts, whose `today` is a FILTER inside the group-by.
+   */
+  is(/progress: todayOnly \? exact\.today : exact\.lifetime/.test(client), "a repeating round's COUNT is today's, decided by the database and not by filtering a capped array");
+  const v27 = readSyncStrip('supabase/social-schema-v27.sql');
+  is(/count\(\*\) filter \(/.test(v27), 'and the view computes it as a filtered aggregate');
+  is(/at time zone 'Asia\/Jerusalem'\)::date/.test(v27), 'in the zone the owner lives in, by calendar date rather than by arithmetic');
 }
 
 /* ───────── 6b. "today" and "ever" are two questions, answered apart ────── */

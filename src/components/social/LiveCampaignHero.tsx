@@ -307,7 +307,7 @@ export function LiveCampaignHero({
    * round's PROGRESS (published + failed + skipped); `view.publishedLabel` is
    * its SUCCESS, on its own line under the bar and never folded in.
    */
-  const view = runProgress(progress, state.todayOnly);
+  const view = runProgress(progress, state.todayOnly, state.truncated);
   const open = openRows(progress);
   /*
    * One opinion about the state — the label, the colour, and whether the dot
@@ -406,7 +406,22 @@ export function LiveCampaignHero({
 
       <div className="mt-3">
         <div className="flex items-baseline justify-between gap-2">
-          <Ratio done={view.handled} total={view.total} suffix={agree(view.handled, 'טופל', 'טופלו')} />
+          {/*
+            "היום" IS PART OF THE SENTENCE, NOT AN EXTRA LINE BESIDE IT.
+
+            runProgress() puts the scope INTO handledLabel for exactly this
+            reason — campaign.ts: "'היום' IS PART OF THE SENTENCE … a true
+            number under a sentence that does not say what it is about" — and
+            this card renders the raw figures instead of that label, so the
+            word never arrived. A repeating round that has published three
+            thousand times showed "27 / 269 טופלו" with nothing saying those
+            are today's, directly under a schedule block reading "כל דקה".
+          */}
+          <Ratio
+            done={view.handled}
+            total={view.total}
+            suffix={`${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
+          />
           <p className="text-lg font-extrabold tabular-nums text-brand-400">{view.percent}%</p>
         </div>
         {/* Segmented, and that is forced by the figure above it: a single

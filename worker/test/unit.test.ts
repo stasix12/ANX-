@@ -2208,7 +2208,27 @@ const scenario: { step: string; line: string }[] = [];
   const runPage = readFileSync('src/app/social/campaigns/[id]/page.tsx', 'utf8');
   assert.ok(runPage.includes('state?.truncated'), 'the run page must disclose a capped read');
   const client = readFileSync('src/lib/social/client.ts', 'utf8');
-  assert.ok(client.includes('const truncated = rows.length >= CAMPAIGN_ROLLUP_LIMIT;'), 'campaignStates must detect its own ceiling');
+  /*
+   * THE CEILING IS STILL DETECTED — on BOTH reads now, and the flag means what
+   * it always meant to its readers: the numbers on this state are not the
+   * round's totals.
+   *
+   * It was one account-wide ascending read, so one `rows.length >= LIMIT`.
+   * That read answered two questions it could not both answer — a complete
+   * account of what is waiting, and a bounded sample of what is over — and the
+   * 28/28 card is what came out. It is two reads now (open rows, which v20's
+   * one-open-row-per-group index bounds, and a newest-first preview of
+   * finished ones), and the fallback may only trust the rows when NEITHER hit
+   * its ceiling. With the v27 view present the counts are exact and the flag
+   * is false whatever the previews did.
+   */
+  assert.ok(client.includes('const openTruncated = openRows.length >= CAMPAIGN_ROLLUP_LIMIT;'), 'campaignStates must detect the open read\u2019s ceiling');
+  assert.ok(client.includes('const doneTruncated = doneRows.length >= ROLLUP_DONE_LIMIT;'), 'and the finished preview\u2019s');
+  assert.ok(client.includes('const rowsAreWhole = !openTruncated && !doneTruncated;'), 'and may only count rows when neither was cut');
+  assert.ok(client.includes('truncated: exact ? false : !rowsAreWhole,'), 'exact counts clear the flag; anything else sets it');
+  /* AND A FAILED READ IS NOT A MISSING VIEW. Swallowing both put the 28/28
+     card back on screen the moment the phone lost signal. */
+  assert.ok(client.includes('if (countRes.error && !isMissingRelation(countRes.error)) throw friendlyError(countRes.error);'), 'a failed counts read is raised, not mistaken for a database without the view');
   assert.ok(client.includes('truncated: rows.length >= CAMPAIGN_QUEUE_LIMIT'), 'campaignQueue must report its ceiling');
   // countByStatus stopped being truncatable at all: exact head counts, no rows.
   assert.ok(client.includes("select('id', { count: 'exact', head: true }).eq('status', status)"), 'the tiles must use exact counts');
@@ -2618,7 +2638,7 @@ const scenario: { step: string; line: string }[] = [];
   /* The claim is unchanged — the bar is the ROUND'S progress, built once in
      campaign.ts — but the call now carries the scope beside the numbers, so a
      repeating round's figures and the "היום" on them cannot come apart. */
-  pin('the run card bar counts handled rows through campaign.ts', cards, 'runProgress(progress, state.todayOnly)');
+  pin('the run card bar counts handled rows through campaign.ts', cards, 'runProgress(progress, state.todayOnly, state.truncated)');
   pin('...and publications stay a separate, labelled figure on the same card', cards, 'view.publishedLabel');
   pin('the system state is decided once, by the page', dash, 'const systemState: SystemState =');
   /*

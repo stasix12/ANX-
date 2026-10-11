@@ -879,21 +879,20 @@ export default function SocialDashboard() {
   /*
    * How many DISTINCT groups the featured run publishes to.
    *
-   * Not `progress.total`, which is rows: a recurring schedule posts one run to
-   * one group more than once, so "מפרסם ל-84 קבוצות" over 40 groups would be a
-   * number that is not in the database. `upcoming` (non-terminal) and `done`
-   * (terminal) partition every row campaignState() read, so their union is
-   * complete; `now` is already inside `upcoming` because in-flight is
-   * non-terminal, and adding it would double-count.
+   * IT IS A FIELD ON THE STATE NOW, and the comment that used to be here said
+   * why it had to become one: "it belongs on CampaignState as a targetCount
+   * field — see the report; campaign.ts is not this task's to edit."
    *
-   * Derived HERE, once, rather than inside the card: a component that works a
-   * run fact out of rows for itself is the shape that produced "100% complete"
-   * beside 28 waiting publications. It belongs on CampaignState as a
-   * `targetCount` field — see the report; campaign.ts is not this task's to
-   * edit.
+   * It was `new Set([...state.upcoming, ...state.done].map(r => r.target_id))
+   * .size`, and those two arrays are what the 1,000-row account-wide read
+   * happened to return for this campaign. So the card said "מפרסם ל-28
+   * קבוצות" about a round reaching 269 of them — the same slice, and the same
+   * fault, as the 28/28 beside it. campaign.ts takes the number from the v27
+   * view's own distinct-count aggregate, which is the only place it can be
+   * counted without double-counting a group that has both a published row and
+   * a waiting one.
    */
-  const targetCountOf = (state: CampaignState): number =>
-    new Set([...state.upcoming, ...state.done].map((r) => r.target_id)).size;
+  const targetCountOf = (state: CampaignState): number => state.targetCount;
 
   /*
    * ───────── writing the featured run's schedule ──────────────────────────

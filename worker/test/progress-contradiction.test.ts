@@ -6,13 +6,14 @@ import {
   campaignState,
   openRows,
   percentFinished,
+  runBadge,
   percentPublished,
   runProgress,
   type CampaignQueueRow,
   type CampaignState,
 } from '@/lib/social/campaign';
 import { explainFailure } from '@/components/social/ErrorDetail';
-import { AUTOMATIC_WAITING_STATUSES, ALL_QUEUE_STATUSES, summarizeQueue } from '@/lib/social/status';
+import { AUTOMATIC_WAITING_STATUSES, ALL_QUEUE_STATUSES, OPEN_STATUSES, TERMINAL_STATUSES, summarizeQueue } from '@/lib/social/status';
 import { startOfZonedDay } from '@/lib/social/time';
 import type { Campaign, QueueStatus } from '@/lib/social/types';
 
@@ -188,6 +189,10 @@ function builder(source: Row[]) {
 
 function fakeDb(rows: Row[]) {
   return {
+    /* Every row, unfiltered and unordered — what a grouped VIEW aggregates
+       over. Not a query: the view has no ceiling and no order, which is the
+       whole reason the counts moved into it. */
+    all: () => rows,
     from(table: string) {
       if (table !== 'social_queue') throw new Error(`the fake serves social_queue only, asked for "${table}"`);
       return builder(rows);
@@ -215,36 +220,108 @@ function fakeDb(rows: Row[]) {
  */
 const CAMPAIGN_ROLLUP_LIMIT = 1000;
 
+/** client.ts — `const ROLLUP_DONE_LIMIT = 500;` (not exported). */
+const ROLLUP_DONE_LIMIT = 500;
+
 /**
- * SIMULATION of client.ts campaignStates() (client.ts:504-528). Same select,
- * same .not('campaign_id','is',null), same .order('scheduled_at'), same
- * .limit(CAMPAIGN_ROLLUP_LIMIT), same grouping in JS, and then the REAL
- * campaignState() from campaign.ts.
+ * SIMULATION of the v27 view `social_campaign_counts`.
+ *
+ * The view is `select campaign_id, status, count(*), count(*) filter (today)
+ * from social_queue where campaign_id is not null group by 1,2` — an exact
+ * aggregate with NO ceiling and no ordering, which is the entire point of it.
+ * Computing it here from the same fixture rows is therefore not an
+ * approximation of the database; it is the same arithmetic.
+ */
+function simCampaignCounts(rows: Row[], todayISO: string) {
+  const out: Record<string, { lifetime: Record<string, number>; today: Record<string, number> }> = {};
+  for (const r of rows) {
+    if (!r.campaign_id) continue;
+    const e = (out[r.campaign_id] ??= { lifetime: {}, today: {} });
+    e.lifetime[r.status] = (e.lifetime[r.status] ?? 0) + 1;
+    if (r.scheduled_at.slice(0, 10) === todayISO) e.today[r.status] = (e.today[r.status] ?? 0) + 1;
+  }
+  return out;
+}
+
+/**
+ * SIMULATION of client.ts campaignStates() — THREE reads now, and the reason
+ * is the owner's 28/28 screen.
+ *
+ * It was ONE read: the 1,000 earliest queue rows of the whole account,
+ * ordered by scheduled_at ascending, grouped by campaign in JavaScript, with
+ * progress.total set to each group's length. Three faults compounded in that:
+ * the ceiling was SHARED between campaigns, the ascending order dropped
+ * exactly the rows still waiting, and a repeating round was then filtered to
+ * today AFTER the cut. The result on his phone was "28 / 28 טופלו · 100% ·
+ * הסתיים — חלק דולגו" over a round publishing to hundreds of groups.
+ *
+ * Now: the COUNTS come from the v27 view (exact, per campaign, today computed
+ * inside the aggregate); the OPEN rows come from a read bounded by the one
+ * open row per group that v20's unique index allows; the DONE rows are a
+ * newest-first preview that no number is derived from.
  */
 async function simCampaignStates(
   db: ReturnType<typeof fakeDb>,
   campaigns: Campaign[],
   campaignIds?: string[],
+  opts: { countsView?: boolean; todayISO?: string } = {},
 ): Promise<Record<string, CampaignState<Row>>> {
   if (campaignIds && campaignIds.length === 0) return {};
-  let query = db
+  const SELECT = 'id, status, scheduled_at, published_at, target_id, post_id, campaign_id, target:social_targets(id,name,channel,image_url)';
+
+  let openQuery = db
     .from('social_queue')
-    .select('id, status, scheduled_at, published_at, target_id, post_id, campaign_id, target:social_targets(id,name,channel,image_url)')
+    .select(SELECT)
     .not('campaign_id', 'is', null)
+    .in('status', OPEN_STATUSES)
     .order('scheduled_at')
     .limit(CAMPAIGN_ROLLUP_LIMIT);
-  if (campaignIds) query = query.in('campaign_id', campaignIds);
-  const { data: rows } = (await query) as Result;
+  if (campaignIds) openQuery = openQuery.in('campaign_id', campaignIds);
+
+  let doneQuery = db
+    .from('social_queue')
+    .select(SELECT)
+    .not('campaign_id', 'is', null)
+    .in('status', TERMINAL_STATUSES)
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .limit(ROLLUP_DONE_LIMIT);
+  if (campaignIds) doneQuery = doneQuery.in('campaign_id', campaignIds);
+
+  const { data: openRows } = (await openQuery) as Result;
+  const { data: doneRows } = (await doneQuery) as Result;
+  const openTruncated = openRows.length >= CAMPAIGN_ROLLUP_LIMIT;
+
+  /* `countsView: false` is a database that has not run social-latest.sql yet —
+     the fallback path, where the numbers come from the rows again and every
+     surface is told so. */
+  const counts = opts.countsView === false ? null : simCampaignCounts(db.all(), opts.todayISO ?? NOW.toISOString().slice(0, 10));
+
   const byId = new Map(campaigns.map((c) => [c.id, c]));
   const grouped = new Map<string, Row[]>();
-  for (const row of rows) {
+  for (const row of [...openRows, ...doneRows]) {
     const list = grouped.get(row.campaign_id as string);
     if (list) list.push(row);
     else grouped.set(row.campaign_id as string, [row]);
   }
-  const truncated = rows.length >= CAMPAIGN_ROLLUP_LIMIT;
+  for (const id of Object.keys(counts ?? {})) if (!grouped.has(id)) grouped.set(id, []);
+  if (campaignIds) for (const id of campaignIds) if (!grouped.has(id)) grouped.set(id, []);
+
+  const todayISO = opts.todayISO ?? NOW.toISOString().slice(0, 10);
   const out: Record<string, CampaignState<Row>> = {};
-  for (const [id, list] of grouped) out[id] = campaignState(list, byId.get(id) ?? null, { truncated });
+  for (const [id, all] of grouped) {
+    const campaign = byId.get(id) ?? null;
+    const todayOnly = Boolean((campaign as { repeat_enabled?: boolean } | null)?.repeat_enabled);
+    const list = todayOnly ? all.filter((r) => r.scheduled_at.slice(0, 10) === todayISO) : all;
+    const exact = counts?.[id];
+    out[id] = campaignState(list, campaign, {
+      truncated: exact ? false : openTruncated,
+      todayOnly,
+      lifetime: all,
+      counts: exact
+        ? { progress: todayOnly ? exact.today : exact.lifetime, everPublished: exact.lifetime.published ?? 0 }
+        : undefined,
+    });
+  }
   return out;
 }
 
@@ -799,18 +876,25 @@ async function main(): Promise<void> {
     const mineInUpcoming = d.upcomingIds.filter((id) => late.some((r) => r.id === id));
 
     /*
-     * The ceiling is still there — it is what keeps one screen from pulling an
-     * unbounded table — so the fix is not that the number changes, it is that
-     * the number stops being presented as a total. campaignStates() now
-     * detects its own ceiling and every state built from a capped read carries
-     * `truncated`, which the hero and the run page render in words.
+     * ───────── AND NOW THE NUMBER ITSELF IS RIGHT ─────────
+     *
+     * This assertion used to read `{ truncated: true, readRows: 14 }`: the
+     * ceiling was accepted as unavoidable and the fix was that the card
+     * DISCLOSED it. That was the best a row-counting rollup could do, and it
+     * is what the owner photographed on 11.10 — "28 / 28 טופלו · 100%" with
+     * "הסבב גדול מדי לספור אותו כאן במלואו" printed underneath it, the card
+     * contradicting its own footnote in larger type.
+     *
+     * The count is not a row-counting question any more. v27's view answers it
+     * in the database, over every row, with no ceiling near it — so the card
+     * reports the round's real size and has nothing to disclose.
      */
     expect(
       '10 rollup truncation',
       'INV-6',
-      'a run card built from a capped read says so, instead of printing the slice as the run',
+      'a run whose rows fall past the read ceiling still reports its REAL size, because the count no longer comes from the rows',
       { truncated: c.truncated, readRows: c.total },
-      { truncated: true, readRows: 14 },
+      { truncated: false, readRows: 28 },
       NONE,
     );
     expect(
@@ -819,6 +903,77 @@ async function main(): Promise<void> {
       'THE REPORTED CONTRADICTION: a card reading 100% beside its own rows listed as upcoming is now impossible — either nothing of the run is upcoming, or the card is flagged as partial',
       { contradiction: c.percent === 100 && mineInUpcoming.length > 0 && !c.truncated },
       { contradiction: false },
+      NONE,
+    );
+    /*
+     * THE OPEN ROWS ARE NOT A SAMPLE EITHER, and that is a database rule
+     * rather than a hope: v20's social_queue_one_open_per_target_idx allows
+     * one open row per group, so the account's whole open set is bounded by
+     * its number of groups. The 14 still-waiting rows of this run are all
+     * present however much finished history sits in front of them — which is
+     * what the old single ascending read could not promise.
+     */
+    expect(
+      '10 rollup truncation',
+      'INV-6b',
+      'and every one of the run\u2019s waiting rows is readable, however much finished history precedes it',
+      states[RUN].upcoming.length,
+      14,
+      NONE,
+    );
+
+    /* ───────── THE FALLBACK, for a database that has not run v27 ─────────
+     *
+     * No view, so the numbers come from the rows again — and then every
+     * surface must be told, because the slice is all there is. This is the
+     * branch the card's `!state.truncated` clauses have always existed for,
+     * and the branch the BADGE did not check until this fix.
+     */
+    const noView = await simCampaignStates(db, campaigns, campaigns.map((x) => x.id), { countsView: false });
+    const cn = card(noView[RUN]);
+    /*
+     * AND THE FALLBACK IS BETTER TOO, for a reason worth stating: the open
+     * read is FILTERED BY STATUS now, so finished history can no longer crowd
+     * out the rows still waiting. Under the old single ascending read, 986
+     * published rows filled the window and all 14 of this run's scheduled rows
+     * fell off the end — 14 of 28, reported as the whole run. Here even
+     * without the view every waiting row is present, so the row count IS the
+     * run and nothing has to be disclosed.
+     *
+     * `openTruncated` is therefore only reachable on an account with a
+     * thousand OPEN rows, and v20's one-open-row-per-group index means that
+     * takes a thousand groups.
+     */
+    expect(
+      '10 rollup truncation',
+      'INV-6c',
+      'even without the view the rows now carry the whole run, because finished history cannot crowd out what is waiting',
+      { truncated: cn.truncated, readRows: cn.total },
+      { truncated: false, readRows: 28 },
+      NONE,
+    );
+    /*
+     * THE GUARD ITSELF, exercised directly rather than through a scenario that
+     * can no longer produce it. This is the badge the owner photographed:
+     * resolveState() calls a run 'completed' when nothing is open, and on a
+     * count that is not the round's, "nothing open" means "the open rows were
+     * the ones we could not see".
+     */
+    const partial = { ...noView[RUN], truncated: true, state: 'completed' as const };
+    expect(
+      '10 rollup truncation',
+      'INV-6d',
+      'and a badge over a count that is NOT the round\u2019s refuses to end it — this is the "הסתיים — חלק דולגו" the owner photographed',
+      runBadge(partial).label,
+      'ספירה חלקית',
+      NONE,
+    );
+    expect(
+      '10 rollup truncation',
+      'INV-6e',
+      'and the bar refuses to reach 100% on a count that is not the round\u2019s',
+      runProgress({ ...partial.progress, scheduled: 0, running: 0, manual: 0, finished: partial.progress.total, published: partial.progress.total }, false, true).percent,
+      99,
       NONE,
     );
     expect(
@@ -835,6 +990,119 @@ async function main(): Promise<void> {
   }
 
   /* =========================================================================
+   * 11. THE OWNER\u2019S SCREEN OF 11.10 — "28 / 28 טופלו · 100% · הסתיים".
+   *
+   * "בפועל המערכת מפרסמת בהרבה יותר קבוצות."
+   *
+   * The exact shape, reproduced: a REPEATING round (CHZARA on, so it is
+   * counted for today), a thousand rows of older history in front of it
+   * account-wide, and today\u2019s round part published and part still waiting.
+   *
+   * Under the old single read: the window filled with the oldest rows, the
+   * todayOnly filter then ran over what was left, and because an ascending cut
+   * keeps the EARLIEST rows what survived of today was the part that had
+   * already gone out. Everything finished, nothing open, 100%, "הסתיים".
+   * ======================================================================= */
+  {
+    const DAY = '2026-09-19';
+    const history: Row[] = Array.from({ length: 1000 }, (_, i) => ({
+      id: `h${i}`,
+      status: 'published' as QueueStatus,
+      scheduled_at: new Date(Date.parse('2026-08-01T00:00:00.000Z') + i * 60_000).toISOString(),
+      published_at: new Date(Date.parse('2026-08-01T00:00:00.000Z') + i * 60_000).toISOString(),
+      target_id: `t-h${i}`,
+      post_id: POST,
+      campaign_id: RUN,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `t-h${i}`, name: `קבוצה ${i}`, channel: 'facebook_group' },
+    }));
+    /* Today: 27 published, 1 skipped, and 241 still waiting — 269 groups, the
+       number of groups the owner actually has. */
+    const todayDone: Row[] = Array.from({ length: 28 }, (_, i) => ({
+      id: `d${i}`,
+      status: (i === 27 ? 'skipped' : 'published') as QueueStatus,
+      scheduled_at: `${DAY}T05:${String(i).padStart(2, '0')}:00.000Z`,
+      published_at: i === 27 ? null : `${DAY}T05:${String(i).padStart(2, '0')}:00.000Z`,
+      target_id: `t-d${i}`,
+      post_id: POST,
+      campaign_id: RUN,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `t-d${i}`, name: `קבוצה ד${i}`, channel: 'facebook_group' },
+    }));
+    const todayWaiting: Row[] = Array.from({ length: 241 }, (_, i) => ({
+      id: `w${i}`,
+      status: 'scheduled' as QueueStatus,
+      scheduled_at: `${DAY}T${String(6 + Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      published_at: null,
+      target_id: `t-w${i}`,
+      post_id: POST,
+      campaign_id: RUN,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `t-w${i}`, name: `קבוצה ו${i}`, channel: 'facebook_group' },
+    }));
+    const db = fakeDb([...history, ...todayDone, ...todayWaiting]);
+    const repeating = { ...CAMPAIGN_ACTIVE, repeat_enabled: true } as Campaign;
+    const states = await simCampaignStates(db, [repeating], [RUN], { todayISO: DAY });
+    const c = card(states[RUN]);
+    const badge = runBadge(states[RUN]);
+    const view = runProgress(states[RUN].progress, states[RUN].todayOnly, states[RUN].truncated);
+
+    expect(
+      '11 the 28/28 screen',
+      'INV-8',
+      'THE REPORTED FAULT: today\u2019s round is 269 publications, not the 28 of them that fitted inside an account-wide window of the oldest rows',
+      { total: c.total, published: states[RUN].progress.published, skipped: states[RUN].progress.skipped, waiting: states[RUN].progress.scheduled },
+      { total: 269, published: 27, skipped: 1, waiting: 241 },
+      NONE,
+    );
+    expect(
+      '11 the 28/28 screen',
+      'INV-8b',
+      'so it is not 100% and it has not ended — 241 publications are still to go',
+      { percent: view.percent, state: states[RUN].state, label: badge.label },
+      { percent: 10, state: 'running', label: 'רץ' },
+      NONE,
+    );
+    expect(
+      '11 the 28/28 screen',
+      'INV-8c',
+      'and nothing tells the owner the round is too big to count, because it is not',
+      states[RUN].truncated,
+      false,
+      NONE,
+    );
+    /* THE SEPARATE BUCKETS the owner asked for, each from a real count. */
+    expect(
+      '11 the 28/28 screen',
+      'INV-8d',
+      'every bucket is counted on its own and the six of them partition the round exactly',
+      states[RUN].progress.published +
+        states[RUN].progress.failed +
+        states[RUN].progress.skipped +
+        states[RUN].progress.scheduled +
+        states[RUN].progress.running +
+        states[RUN].progress.manual,
+      269,
+      NONE,
+    );
+    /* AND TODAY IS TODAY. The lifetime of this round is 1,269 rows; the card
+       is about today's and says so, and "has it ever published" is still
+       answered from the whole life of it. */
+    expect(
+      '11 the 28/28 screen',
+      'INV-8e',
+      'a repeating round is counted for today, while "has it ever published" stays a question about its whole life',
+      { todayOnly: states[RUN].todayOnly, today: c.total, ever: states[RUN].everPublished },
+      { todayOnly: true, today: 269, ever: 1027 },
+      NONE,
+    );
+  }
+
+  /* =========================================================================
+   * SOURCE-DRIFT GUARDS  /* =========================================================================
    * SOURCE-DRIFT GUARDS
    * The simulations above are copies. These pin them to the originals: if a
    * query or a tile moves and this file is not updated, the failure says so
@@ -960,7 +1228,17 @@ async function main(): Promise<void> {
     true,
     NONE,
   );
-  pin('client.ts campaignStates truncation flag', client, 'const truncated = rows.length >= CAMPAIGN_ROLLUP_LIMIT;');
+  pin('client.ts ROLLUP_DONE_LIMIT', client, `const ROLLUP_DONE_LIMIT = ${ROLLUP_DONE_LIMIT};`);
+  pin('client.ts campaignStates open-read truncation flag', client, 'const openTruncated = openRows.length >= CAMPAIGN_ROLLUP_LIMIT;');
+  /* THE THREE READS, pinned by shape. If any of them goes back to being one
+     account-wide ascending read, the 28/28 scenario below stops reproducing
+     what production does and this says so. */
+  pin('client.ts open-rows read', client, ".in('status', OPEN_STATUSES as unknown as string[])");
+  pin('client.ts done-rows read', client, "order('published_at', { ascending: false, nullsFirst: false })");
+  pin('client.ts counts come from the v27 view', client, "from('social_campaign_counts')");
+  pin('campaign.ts takes exact counts', campaignSrc, 'if (opts.counts) {');
+  pin('campaign.ts state resolves from the counts', campaignSrc, 'resolveState(progress, campaign?.status, progress.total,');
+  pin('campaign.ts badge refuses to end a round it cannot count', campaignSrc, "if (state.truncated && state.state === 'completed') {");
   pin('client.ts campaignStates campaign_id filter', client, ".not('campaign_id', 'is', null)");
   pin('client.ts listQueue order is the caller\'s', client, ".order('scheduled_at', { ascending: opts.order === 'asc' })");
   pin('client.ts countByStatus is exact', client, "select('id', { count: 'exact', head: true }).eq('status', status)");
@@ -1106,7 +1384,13 @@ async function main(): Promise<void> {
    * entirely in `done={view.handled}`, which is what the needle now reads.
    * INV-2d above still pins both full sentences, grammar included.
    */
-  pin('LiveCampaignHero ratio counts handled rows', hero, '<Ratio done={view.handled} total={view.total}');
+  pin('LiveCampaignHero ratio counts handled rows', hero, 'done={view.handled}');
+  pin('LiveCampaignHero ratio counts them out of the round', hero, 'total={view.total}');
+  /* AND IT SAYS WHICH DAY IT IS ABOUT. runProgress() puts "היום" into
+     handledLabel for a repeating round on purpose; this card renders the raw
+     figures instead of that label, so the word never reached the screen — a
+     true number under a sentence that does not say what it is about. */
+  pin('LiveCampaignHero names the scope of its figures', hero, "state.todayOnly ? ' היום' : ''");
   pin('LiveCampaignHero still prints the publications figure', hero, 'view.publishedLabel');
   pin('LiveCampaignHero resume follows the campaign record', hero, 'const showResume = canResumeRun(progress, campaign.status);');
   pin('LiveCampaignHero pause is offered only when it can act', hero, 'const showPause = canPauseRun(progress, campaign.status);');

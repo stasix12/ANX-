@@ -138,6 +138,10 @@ export function QuickCommentsCard({
         return {
           campaign: c,
           published: s?.everPublished ?? 0,
+          /* DISTINCT groups, which is what the strip prints — see the span
+             below. `published` stays as the filter that decides whether this
+             round belongs on the card at all. */
+          groups: s?.targetCount ?? 0,
           lastAt: s?.lastPublishedAt ?? null,
           channel: s?.lastPublishedChannel ?? null,
         };
@@ -241,7 +245,7 @@ export function QuickCommentsCard({
       )}
 
       <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 [&>*]:min-w-0">
-        {recent.map(({ campaign, published, lastAt, channel }) => (
+        {recent.map(({ campaign, published, groups, lastAt, channel }) => (
           <li key={campaign.id} className="shrink-0 snap-start">
             {/*
              * The whole card is the tap target and it does one thing: open the
@@ -295,13 +299,20 @@ export function QuickCommentsCard({
                   <ShortStamp iso={lastAt} />
                 </span>
                 {/*
-                 * The one figure this app can still stand behind. "N קבוצות"
-                 * is a count of rows that published, held in the same state
-                 * object the rest of this screen is drawn from — not a number
-                 * fetched from Facebook, so it cannot go stale or be missing.
+                 * The one figure this app can still stand behind — not a
+                 * number fetched from Facebook, so it cannot go stale or be
+                 * missing.
+                 *
+                 * AND IT IS GROUPS, NOT ROWS. It printed `everPublished`,
+                 * which is a count of PUBLICATIONS: a repeating round sends
+                 * one post to one group every day, so after a fortnight it
+                 * said "3,766 קבוצות" about forty. `targetCount` is the
+                 * distinct-group aggregate from the v27 view, which is the
+                 * only place that question can be answered without
+                 * double-counting a group the round has reached twice.
                  */}
                 <span className="mt-0.5 block text-[11px] font-bold leading-4 text-brand-400">
-                  {published} {published === 1 ? 'קבוצה' : 'קבוצות'}
+                  {groups} {groups === 1 ? 'קבוצה' : 'קבוצות'}
                 </span>
               </button>
               <OverflowMenu

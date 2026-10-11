@@ -1,4 +1,6 @@
 import {
+  ALL_QUEUE_STATUSES,
+  AUTOMATIC_WAITING_STATUSES,
   IN_FLIGHT_STATUSES,
   NEEDS_HUMAN_STATUSES,
   TERMINAL_STATUSES,
@@ -99,6 +101,17 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
   lastPublishedAt: string | null;
   /** And its channel, for the strip's badge. */
   lastPublishedChannel: string | null;
+  /**
+   * HOW MANY DISTINCT GROUPS this round publishes to — not how many rows it
+   * has.
+   *
+   * "בפועל המערכת מפרסמת בהרבה יותר קבוצות." A repeating round sends one post
+   * to one group more than once, so "מפרסם ל-84 קבוצות" over 40 groups would
+   * be a number that is in no table. Exact when the caller supplies it (the
+   * v27 view's own aggregate); otherwise distinct over the rows it was given,
+   * which is what the dashboard used to do for itself.
+   */
+  targetCount: number;
   /** Last scheduled_at still ahead of us — the plan's own end, not a guess. */
   estimatedCompletionAt: string | null;
   nextAt: string | null;
@@ -136,21 +149,97 @@ export function campaignState<T extends CampaignQueueRow>(
      * and nothing has to remember to pass it.
      */
     lifetime?: T[];
+    /**
+     * THE COUNTS, WHEN THE CALLER HAS EXACT ONES — the whole of the 28/28 fix.
+     *
+     * "28/28, 100%, הסתיים — ובפועל המערכת מפרסמת בהרבה יותר קבוצות."
+     *
+     * Every figure here used to be `rows.length` and a walk over `rows`, and
+     * `rows` was a slice: client.ts read the 1,000 earliest queue rows of the
+     * WHOLE ACCOUNT, ordered ascending, grouped them by campaign in JavaScript
+     * and handed each group in here. What falls off the end of an ascending
+     * read is the furthest-out rows — the ones still waiting — so a round that
+     * lost its pending rows arrived here with published === total, resolved to
+     * 'completed' and drew a green 100% over publications that had not gone
+     * out. For a repeating round the slice was then filtered to today, after
+     * the cut, which is how 28 crumbs of this morning became a whole sbav.
+     *
+     * `progress` is a per-status count from social_campaign_counts (v27), which
+     * the database computes over every row with no ceiling anywhere near it.
+     * `everPublished` is the round's lifetime publications, which is a
+     * different question from today's and may not be answered with today's
+     * number — see the field on CampaignState.
+     *
+     * ABSENT MEANS COUNT THE ROWS, exactly as this function always did. A
+     * database that has not run v27 keeps working; its caller sets
+     * `truncated`, and every surface that could claim completion checks it.
+     */
+    counts?: {
+      progress: Record<string, number>;
+      everPublished: number;
+      /**
+       * DISTINCT GROUPS this round reaches — "בפועל המערכת מפרסמת בהרבה יותר
+       * קבוצות".
+       *
+       * The dashboard worked it out as `new Set([...upcoming, ...done]
+       * .map(r => r.target_id)).size`, over the same arrays that produced the
+       * 28/28 card. It is a distinct count, so it cannot be summed out of the
+       * per-status counts either — a group with one published row and one
+       * waiting row would be counted twice. Its own aggregate, from its own
+       * view.
+       */
+      targetCount?: number;
+      /**
+       * The round's FIRST publication, over every row it has ever had.
+       *
+       * `startedAt` is otherwise the earliest published_at among the rows
+       * handed in, and those rows are a newest-first PREVIEW — so the sentence
+       * "התחיל לפני 6 שעות" would be the age of the oldest row that survived
+       * the cut, drifting later whenever the account publishes anything.
+       */
+      startedAt?: string | null;
+      lastPublishedAt?: string | null;
+    };
   } = {},
 ): CampaignState<T> {
   const progress: CampaignProgress = { ...EMPTY_PROGRESS, total: rows.length };
-  for (const r of rows) {
-    if (r.status === 'published') progress.published += 1;
-    else if (r.status === 'failed') progress.failed += 1;
-    else if (r.status === 'skipped') progress.skipped += 1;
-    else if (IN_FLIGHT_STATUSES.includes(r.status)) progress.running += 1;
-    else if (NEEDS_HUMAN_STATUSES.includes(r.status)) progress.manual += 1;
-    else progress.scheduled += 1;
+  if (opts.counts) {
+    /*
+     * THE SAME CLASSIFICATION, OVER COUNTS INSTEAD OF ROWS. status.ts decides
+     * what a status means for the rows below and it decides it here too — a
+     * second opinion about which bucket 'awaiting_confirmation' belongs in is
+     * how a tile and a card come to disagree, which is the fault this whole
+     * module exists to prevent.
+     */
+    const n = (status: string) => opts.counts?.progress[status] ?? 0;
+    progress.total = ALL_QUEUE_STATUSES.reduce((sum, st) => sum + n(st), 0);
+    progress.published = n('published');
+    progress.failed = n('failed');
+    progress.skipped = n('skipped');
+    progress.running = IN_FLIGHT_STATUSES.reduce((sum, st) => sum + n(st), 0);
+    progress.manual = NEEDS_HUMAN_STATUSES.reduce((sum, st) => sum + n(st), 0);
+    progress.scheduled = AUTOMATIC_WAITING_STATUSES.reduce((sum, st) => sum + n(st), 0);
+  } else {
+    for (const r of rows) {
+      if (r.status === 'published') progress.published += 1;
+      else if (r.status === 'failed') progress.failed += 1;
+      else if (r.status === 'skipped') progress.skipped += 1;
+      else if (IN_FLIGHT_STATUSES.includes(r.status)) progress.running += 1;
+      else if (NEEDS_HUMAN_STATUSES.includes(r.status)) progress.manual += 1;
+      else progress.scheduled += 1;
+    }
   }
   progress.finished = progress.published + progress.failed + progress.skipped;
 
   const published = rows.filter((r) => r.published_at);
-  const startedAt = published.length ? published.map((r) => r.published_at as string).sort()[0] : null;
+  /* Exact when the caller has it — see `counts.startedAt`. The row-derived
+     value stays as the fallback, and is right whenever the rows are whole. */
+  const startedAt =
+    opts.counts?.startedAt !== undefined
+      ? opts.counts.startedAt
+      : published.length
+        ? published.map((r) => r.published_at as string).sort()[0]
+        : null;
 
   const pending = rows
     .filter((r) => r.status === 'scheduled')
@@ -170,6 +259,20 @@ export function campaignState<T extends CampaignQueueRow>(
   const everPublishedRows = lifetime
     .filter((r) => r.status === 'published' && r.published_at)
     .sort((a, b) => (b.published_at as string).localeCompare(a.published_at as string));
+  /* The COUNT is exact when the caller has one; the ROW beside it is still the
+     most recent one the preview carries, which is all the strip needs. The two
+     answer different questions and only the count was ever wrong. */
+  const everPublished = opts.counts ? opts.counts.everPublished : everPublishedRows.length;
+  /*
+   * DISTINCT GROUPS, and it lives on the state rather than being re-derived by
+   * each card. The dashboard computed it from `upcoming ∪ done` — a comment
+   * there said in so many words that it "belongs on CampaignState as a
+   * targetCount field", and it was left outside because campaign.ts was not
+   * that task's to edit. It is this task's: those two arrays are previews now,
+   * so a set built from them is a count of what fitted.
+   */
+  const targetCount =
+    opts.counts?.targetCount ?? new Set([...rows.filter((r) => !isTerminal(r.status)), ...rows.filter((r) => isTerminal(r.status))].map((r) => r.target_id)).size;
 
   const done = rows
     .filter((r) => TERMINAL_STATUSES.includes(r.status))
@@ -180,11 +283,27 @@ export function campaignState<T extends CampaignQueueRow>(
     // `startedAt !== null` is handed in rather than re-derived: it is the very
     // fact the card prints under "התחיל", so the badge and that line are now
     // computed from one value and cannot disagree.
-    state: resolveState(progress, campaign?.status, rows.length, startedAt !== null),
+    /*
+     * BOTH ARGUMENTS COME FROM THE COUNTS WHEN THE COUNTS ARE EXACT, and this
+     * is not tidiness — each one was a way for the state to contradict the
+     * numbers beside it.
+     *
+     * `progress.total` rather than `rows.length`: with v27's view the rows are
+     * a PREVIEW (the open set, plus the most recent finished ones), so a round
+     * whose every publication is older than that preview would arrive here
+     * with an empty array and resolve to 'טרם התחיל' over a count of two
+     * hundred.
+     *
+     * `published > 0` rather than a published_at in the preview: `startedAt`
+     * is read off the same preview, so the same round would report "has never
+     * published" while the exact count says it published two hundred times.
+     */
+    state: resolveState(progress, campaign?.status, progress.total, startedAt !== null || progress.published > 0),
     truncated: opts.truncated ?? false,
     todayOnly: opts.todayOnly ?? false,
     startedAt,
-    everPublished: everPublishedRows.length,
+    everPublished,
+    targetCount,
     lastPublishedAt: everPublishedRows[0]?.published_at ?? null,
     lastPublishedChannel: everPublishedRows[0]?.target?.channel ?? null,
     // The plan already assigns every remaining row an instant; the last one
@@ -377,9 +496,20 @@ export interface RunProgressView {
   ariaLabel: string;
 }
 
-export function runProgress(progress: CampaignProgress, todayOnly = false): RunProgressView {
+export function runProgress(progress: CampaignProgress, todayOnly = false, truncated = false): RunProgressView {
   const { total, published, finished } = progress;
-  const percent = percentFinished(progress);
+  /*
+   * A CEILING MAY NOT BE PRINTED AS A TOTAL, and 100% is the loudest way to
+   * print one. ratio() returns 100 exactly when part >= total — which is
+   * precisely what a capped read produces, because the rows it drops are the
+   * unfinished ones. So on a count that is not the round's, the figure stops
+   * at 99 and the sentence says the numbers are of what could be counted.
+   *
+   * `truncated` is false for every caller that has exact counts (v27's view),
+   * so this is the fallback path's guard and not a permanent ceiling.
+   */
+  const percent = truncated ? Math.min(99, percentFinished(progress)) : percentFinished(progress);
+  const atLeast = truncated ? 'לפחות ' : '';
   /*
    * "היום" IS PART OF THE SENTENCE, NOT AN EXTRA LINE BESIDE IT.
    *
@@ -391,16 +521,16 @@ export function runProgress(progress: CampaignProgress, todayOnly = false): RunP
    * exactly as it did.
    */
   const scope = todayOnly ? ' היום' : '';
-  const handledLabel = total ? `${finished} מתוך ${total} ${agree(finished, 'טופל', 'טופלו')}${scope}` : 'אין פרסומים מתוכננים';
+  const handledLabel = total ? `${atLeast}${finished} מתוך ${total} ${agree(finished, 'טופל', 'טופלו')}${scope}` : 'אין פרסומים מתוכננים';
   return {
     total,
     handled: finished,
     published,
     open: openRows(progress),
     percent,
-    percentPublished: percentPublished(progress),
+    percentPublished: truncated ? Math.min(99, percentPublished(progress)) : percentPublished(progress),
     handledLabel,
-    publishedLabel: total ? `${published} מתוך ${total} ${agree(published, 'פורסם', 'פורסמו')}` : 'אין פרסומים מתוכננים',
+    publishedLabel: total ? `${atLeast}${published} מתוך ${total} ${agree(published, 'פורסם', 'פורסמו')}` : 'אין פרסומים מתוכננים',
     note: unpublishedNote(progress),
     ariaLabel: total ? `${percent}% — ${handledLabel}` : handledLabel,
   };
@@ -440,7 +570,12 @@ export interface RunBadgeView {
 }
 
 export function runBadge(
-  state: Pick<CampaignState, 'state' | 'progress'>,
+  /* `truncated` is part of the slice this reads BECAUSE of the fault below:
+     a badge that may announce a round has ended has to know whether the
+     numbers it is reading are the round's. Optional so the two test harnesses
+     that build a bare {state, progress} keep compiling; absent reads as "the
+     counts are exact", which is what every caller with real data now has. */
+  state: Pick<CampaignState, 'state' | 'progress'> & { truncated?: boolean },
   ctx: { globalPaused?: boolean; workerOnline?: boolean } = {},
 ): RunBadgeView {
   const p = state.progress;
@@ -475,6 +610,29 @@ export function runBadge(
    */
   if (state.state === 'not_started' && p.finished > 0) {
     return { label: 'התחיל — טרם פורסם', tone: 'warn', live: false };
+  }
+  /*
+   * A COUNT THAT IS NOT THE ROUND'S MAY NOT END THE ROUND.
+   *
+   * "28/28, 100%, הסתיים — ובפועל המערכת מפרסמת בהרבה יותר קבוצות."
+   *
+   * This is the badge that said so. resolveState() calls a run 'completed'
+   * when openRows(progress) is zero, and when the progress came from a capped
+   * slice that is zero for a reason that has nothing to do with the round:
+   * the rows still waiting were the ones the read dropped. The card below it
+   * printed the honest note — "הסבב גדול מדי לספור אותו כאן במלואו" — and this
+   * badge contradicted it in larger type, one line up.
+   *
+   * CampaignCard's `finishedClean` and scheduleReadout's 'ended' branch have
+   * both carried `!truncated` for exactly this reason. The badge never did.
+   *
+   * It is a LABEL and not a seventh RunState, like the two beside it: four
+   * screens outside this module match 'completed' by string to decide the
+   * "פעילים"/"הושלמו" filter, the pause button and the run screen's `closed`,
+   * and a new enum member would quietly move rounds between those lists.
+   */
+  if (state.truncated && state.state === 'completed') {
+    return { label: 'ספירה חלקית', tone: 'warn', live: false };
   }
   if (state.state === 'completed' && (p.failed > 0 || p.skipped > 0)) {
     const label =

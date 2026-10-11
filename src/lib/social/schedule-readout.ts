@@ -1,13 +1,23 @@
 import {
   DEFAULT_CAMPAIGN_REPEAT,
   nextAllowedAt,
-  nextPublishAt,
   windowClosesAt,
   type CampaignRepeat,
   type CampaignSchedule,
 } from './campaign-schedule';
 import type { CampaignState } from './campaign';
-import { accountGapSeconds } from './rules';
+import { NO_SPACING, projectOne, type AccountSpacing } from './projection';
+
+/**
+ * THE ACCOUNT-WIDE GAP, RE-EXPORTED FROM WHERE IT NOW LIVES.
+ *
+ * It was declared here while the campaign card was its only reader. The
+ * dashboard's queue list and respaceQueue() read it too now, so the type and
+ * the arithmetic moved to ./projection — the module all of them share — and
+ * this line keeps every existing `import { type AccountSpacing } from
+ * '@/lib/social/schedule-readout'` working untouched.
+ */
+export type { AccountSpacing };
 
 /**
  * WHAT A SCREEN MAY SAY ABOUT WHEN THIS CAMPAIGN PUBLISHES NEXT — one answer,
@@ -112,64 +122,19 @@ export type ScheduleReadout =
  * only floor the engine applies. rules.ts measures a SECOND interval against
  * the most recent publication of the WHOLE ACCOUNT —
  * `limits.minGapMinutes + (group ? browser.groupMinGapMinutes : 0)`, 45 + 20 by
- * default — and holds the row for whichever of the two is later. Nothing in
- * campaign-schedule.ts has ever heard of it.
+ * default — and holds the row for whichever of the two is later.
  *
  * So a card reading "כל דקה · הבא בתור 10:13" could sit over an engine that
- * will not publish before 11:17, which is word for word the failure that
- * module's header says it exists to prevent. And it does not correct itself: a
- * worker whose spacing gate is shut claims nothing at all, so no deferral is
- * written and the wrong minute stays on screen for the whole gap.
- */
-export interface AccountSpacing {
-  /** limits.minGapMinutes — between any two publications, whatever the channel. */
-  minGapMinutes: number;
-  /** browser.groupMinGapMinutes — added on top of it for a facebook_group. */
-  groupMinGapMinutes: number;
-  /**
-   * The same two numbers in SECONDS, when the account has them.
-   *
-   * The minutes above cannot say "thirty seconds" — the smallest thing they
-   * can express is a minute, so a card drawn from them over an account whose
-   * floor is genuinely 30s would print a minute and be wrong in the one
-   * direction that matters: it would promise LATER than the engine will
-   * publish, and the owner would watch a post go out before its own
-   * countdown reached zero.
-   *
-   * Optional, and absent means exactly what it meant before they existed.
-   * accountGapSeconds() in rules.ts decides which half wins, and this card
-   * calls that function rather than repeating the rule.
-   */
-  minGapSeconds?: number;
-  groupMinGapSeconds?: number;
-  /** The account's most recent publication. NOT this campaign's. */
-  lastPublishedAt: string | null;
-}
-
-/**
- * Unknown by default, and unknown means "adds nothing".
+ * will not publish before 11:17, which is word for word the failure
+ * campaign-schedule.ts says it exists to prevent. And it does not correct
+ * itself: a worker whose spacing gate is shut claims nothing at all, so no
+ * deferral is written and the wrong minute stays on screen for the whole gap.
  *
- * A caller that cannot supply the account's last publication gets exactly the
- * behaviour this module had before — the campaign's own gap and nothing else.
- * That is the wrong answer in the cases above, but it is the SAME wrong answer
- * every screen has always given, and a default that invented a floor out of
- * nothing would be worse: it would push every card's instant forward by an
- * hour on a database that has simply never published.
+ * The composition of that floor with the stored instant, the campaign's gap
+ * and the window is projectOne() in ./projection — the one copy of it, shared
+ * with the dashboard's queue list, which used to render the raw column and
+ * therefore disagreed with this card about every row. See that file's header.
  */
-const NO_SPACING: AccountSpacing = { minGapMinutes: 0, groupMinGapMinutes: 0, lastPublishedAt: null };
-
-/** The instant the account-wide rule will not let anything publish before. */
-function accountFloorMs(spacing: AccountSpacing, channel: string | null): number {
-  if (!spacing.lastPublishedAt) return 0;
-  /* The group surcharge is applied exactly where rules.ts applies it: on a
-     facebook_group target and nowhere else. An unknown channel gets the plain
-     floor rather than the larger one — guessing upwards would hold a page's
-     publication behind a rule that does not govern it. */
-  const seconds = accountGapSeconds(spacing, spacing, channel === 'facebook_group');
-  if (!seconds) return 0;
-  const last = new Date(spacing.lastPublishedAt).getTime();
-  return Number.isNaN(last) ? 0 : last + seconds * 1000;
-}
 
 export function scheduleReadout(
   schedule: CampaignSchedule | null | undefined,
@@ -237,21 +202,32 @@ export function scheduleReadout(
 
   if (state.nextAt) {
     /*
-     * BOTH FLOORS, COMPOSED THE WAY THE ENGINE COMPOSES THEM: the account-wide
-     * rule says "not before X", the stored instant says "not before Y", and the
-     * window then answers "the first legal moment at or after the later of the
-     * two". Folding the account floor into `from` rather than taking a max
-     * afterwards is what makes the window apply to it — an instant pushed past
-     * 22:00 by the account gap has to roll to the next chosen day, exactly as
-     * it would for any other reason.
+     * ALL FOUR GATES, FROM THE ONE PLACE THAT COMPOSES THEM.
+     *
+     * This card and the dashboard's "הפרסומים הקרובים" list are two readers of
+     * the same queue, and they disagreed about every row in it: this one asked
+     * the schedule and the list rendered `scheduled_at` straight out of the
+     * column. projectOne() is now the only copy of the composition — stored
+     * instant, account floor, campaign gap, then the window — so the two
+     * cannot drift again. See ./projection.
+     *
+     * 2 — null means one thing only: no day is selected, so the row is held
+     *     indefinitely. The stored instant may NOT be printed over it.
      */
-    const base = Math.max(new Date(state.nextAt).getTime(), accountFloorMs(spacing, state.nextChannel ?? null));
-    if (!on || !schedule) return { kind: 'due', at: new Date(base).toISOString() };
-    const lastPublishedAt = state.done.find((r) => r.published_at)?.published_at ?? null;
-    const from = new Date(Math.max(base, now.getTime()));
-    const at = nextPublishAt(schedule, from, lastPublishedAt ? new Date(lastPublishedAt) : null, undefined);
-    /* 2 — null here means one thing only: no day is selected, so the row is
-           held indefinitely. The stored instant may NOT be printed over it. */
+    const at = projectOne({
+      scheduledAt: state.nextAt,
+      channel: state.nextChannel ?? null,
+      gate: {
+        schedule: on ? schedule : null,
+        /* THIS campaign's own last publication — what its own gap is measured
+           from. `spacing.lastPublishedAt` is the account's and is a different
+           number; handing one where the other belongs is how a card ends up
+           waiting out another campaign's interval. */
+        lastPublishedAt: state.done.find((r) => r.published_at)?.published_at ?? null,
+      },
+      spacing,
+      now,
+    });
     return at ? { kind: 'due', at: at.toISOString() } : { kind: 'no-day' };
   }
 

@@ -123,7 +123,7 @@ export function CardSwiper({
         ))}
       </div>
 
-      {/* ─── the dots: how many there are, and where this one sits ───────── */}
+      {/* ─── the dots and the count: how many there are, and which one ──── */}
       {count > 1 && (
         <div className="mt-2 flex items-center justify-center gap-0.5">
           {children.map((_, i) => (
@@ -149,6 +149,32 @@ export function CardSwiper({
               />
             </button>
           ))}
+          {/*
+            "1 / 3" — THE POSITION AS A NUMBER, beside the dots.
+            "תוסיף אינדיקטור מיקום (1/2)."
+
+            The dots already carried the position, but only to a screen reader:
+            `itemLabel` is an aria-label and `aria-current` is invisible, so on
+            the screen the position was three identical pills and one longer
+            one — readable at three, guesswork at eight, and no answer at all
+            to "how many are there". The figure says both at a glance.
+
+            `aria-hidden`, deliberately: every dot beside it is a button whose
+            accessible name is already "סבב 2 מתוך 3", and a screen reader
+            reading the fraction as well would announce the same fact twice.
+
+            `dir="ltr"` because "1 / 3" is digits around a neutral slash, which
+            an RTL line reorders into "3 / 1"; `tabular-nums` so the strip does
+            not shift by a pixel when the figure goes from 1 to 2.
+          */}
+          <p
+            data-swiper-position
+            aria-hidden
+            dir="ltr"
+            className="ms-1.5 shrink-0 text-[12px] font-extrabold leading-4 tabular-nums text-mist-300"
+          >
+            {index + 1} / {count}
+          </p>
         </div>
       )}
     </div>

@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { dedupeKey, renderPostText } from './compose';
-import { dripSlots, slotsFor, staggerAt } from './slots';
+import { dripSlots, slotsFor } from './slots';
+import { windowedStagger } from './projection';
+import { readSchedule, type CampaignSchedule } from './campaign-schedule';
 import { CANCELLABLE_STATUSES, OPEN_STATUSES } from './status';
 import { DEFAULT_BROWSER, DEFAULT_LIMITS, type BrowserSettings, type LimitsSettings, type MediaItem, type Post, type Schedule, type SocialTarget, type Variant } from './types';
 import { accountGapSeconds } from './rules';
@@ -197,6 +199,39 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     const media = (post.media ?? []) as MediaItem[];
     const taken = await occupiedSlots(db, post.id);
     const waiting = await targetsAlreadyWaiting(db);
+    /*
+     * ───────── THE CAMPAIGN'S OWN WINDOW, BEFORE A SINGLE STAMP IS WRITTEN ──
+     *
+     * "אני רוצה שהפרסום בפועל יקרה בזמן הנכון."
+     *
+     * This loop wrote `staggerAt(slot, i, gap)` — the occasion's instant plus
+     * the spacing — and nothing in it had ever heard of the days and hours the
+     * owner set on the campaign. On a 218-group round at 65 minutes that walks
+     * nine days straight through every night: rows stamped 02:40, 03:45, 04:50
+     * on a campaign that publishes 08:00–22:00.
+     *
+     * Nothing was LOST — rules.ts defers such a row to the next legal moment
+     * and never drops it — but the column then says something the machine will
+     * not do, and every screen, countdown and "הבא בתור" in the product reads
+     * that column. A row may only be stamped at an instant the engine can
+     * actually use.
+     *
+     * windowedStagger() is the same interval, rolled across the window's edge
+     * and onto the next chosen day, cascading so a block of rolled rows lands
+     * at 08:00, 08:01, 08:02 … rather than all on the opening minute (which the
+     * unique index would reject, silently shrinking the round to one row).
+     * It takes no clock, so re-planning reproduces exactly the same instants
+     * and the unique (schedule, target, scheduled_at) key still does its job.
+     *
+     * COSTS NOTHING WHEN THE PANEL WAS NEVER OPENED: readSchedule() reports
+     * `enabled: false` for a campaign that predates these columns and for a
+     * database that has not run social-latest.sql, and the roll is then the
+     * identity — the flat sequence this planner has always written.
+     */
+    const campaignSchedule = await campaignWindow(db, post.campaign_id ?? null);
+    /* One row per (occasion, target), worked out up front because each instant
+       is the floor of the next — see windowedCascade(). */
+    const plannedSlots = slots.map((slot) => windowedStagger(slot, schedule.target_ids.length, spacingSeconds, campaignSchedule));
 
     /*
      * HAS THIS SCHEDULE ALREADY BEEN PLANNED past the end of this window?
@@ -239,10 +274,11 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
         .eq('target_id', targetId);
       let rotation = count ?? 0;
 
-      for (const rawSlot of slots) {
+      for (const [slotIndex] of slots.entries()) {
         // Each target gets its own instant inside the occasion, so a weekly
-        // campaign publishes instead of deferring itself into skips.
-        const slot = staggerAt(rawSlot, targetIndex, spacingSeconds);
+        // campaign publishes instead of deferring itself into skips — and that
+        // instant is inside the campaign's own window. See plannedSlots above.
+        const slot = plannedSlots[slotIndex][targetIndex];
         // Already planned for this post by some other schedule.
         if (taken.has(slotKey(targetId, slot))) continue;
         const variant = pickVariant(approved, schedule, targetId, targetIndex, rotation);
@@ -383,6 +419,30 @@ const slotKey = (targetId: string, at: string | Date) => `${targetId}|${new Date
  * up to a minute by a reader that only knew about minutes. That rounding was
  * the fourth gate: see staggerAt() in ./slots.
  */
+/**
+ * THE CAMPAIGN'S PUBLISHING WINDOW, for the planner's own stamps.
+ *
+ * The five schedule columns arrive only once social-latest.sql has been run,
+ * and a campaign that predates them — or a read that fails — must plan exactly
+ * as it always did rather than not at all. So a missing column, a missing
+ * campaign and a missing id all resolve to the same thing: null, which
+ * windowedStagger() treats as "no window", which is the identity.
+ *
+ * NOT A SECOND SCHEDULING MECHANISM. readSchedule() is the same function
+ * rules.ts asks before it releases a row and the same one the cards print; this
+ * only puts the stamp where that function already says the row will go out.
+ */
+async function campaignWindow(db: SupabaseClient, campaignId: string | null): Promise<CampaignSchedule | null> {
+  if (!campaignId) return null;
+  const { data, error } = await db
+    .from('social_campaigns')
+    .select('schedule_enabled, schedule_days, schedule_start, schedule_end, schedule_gap_minutes, schedule_gap_seconds')
+    .eq('id', campaignId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return readSchedule(data);
+}
+
 async function enforcedSpacing(db: SupabaseClient): Promise<number> {
   const { data } = await db.from('social_settings').select('key, value').in('key', ['limits', 'browser']);
   const byKey = new Map((data ?? []).map((r) => [r.key as string, (r.value ?? {}) as Record<string, unknown>]));

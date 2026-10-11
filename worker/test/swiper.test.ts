@@ -203,6 +203,28 @@ async function main(): Promise<void> {
       eq(await dots.count(), 3, `${at}: expected one dot per run`);
       eq(await dots.nth(1).getAttribute('aria-current'), 'true', `${at}: the dot did not follow the swipe`);
 
+      /*
+       * AND THE POSITION AS A NUMBER — "תוסיף אינדיקטור מיקום (1/2)."
+       *
+       * The dots carried the position only to a screen reader: `itemLabel` is
+       * an aria-label and `aria-current` paints a slightly wider pill. On the
+       * screen that is readable at three cards and guesswork at eight, and it
+       * never answered "how many are there". The figure is the answer, and it
+       * has to FOLLOW — a static "1 / 3" over the second card would be worse
+       * than nothing.
+       */
+      const position = view.locator('[data-swiper-position]');
+      eq(await position.count(), 1, `${at}: there is no position indicator`);
+      eq((await position.innerText()).replace(/\s+/g, ' ').trim(), '2 / 3', `${at}: the position indicator did not follow the swipe`);
+      /* VISIBLE, not merely present: a counter inside a collapsed or
+         zero-height box is the same as no counter at all. */
+      const box = await position.boundingBox();
+      is((box?.width ?? 0) >= 18 && (box?.height ?? 0) >= 10, `${at}: the position indicator is not drawn (${JSON.stringify(box)})`);
+      /* LTR, because "2 / 3" is digits around a neutral slash and an RTL line
+         reorders it into "3 / 2" — the one way a counter can be wrong while
+         being right. */
+      eq(await position.getAttribute('dir'), 'ltr', `${at}: the position indicator is not an LTR island`);
+
       /* A DOT MOVES THE STRIP AND NOT THE PAGE. The page is deliberately
          taller than the viewport, so a `scrollIntoView` that forgot
          `block: 'nearest'` would show up here as the document moving. */
@@ -234,6 +256,7 @@ async function main(): Promise<void> {
       eq(after.index, 2, `${at}: tapping the third dot did not bring the third card over`);
       eq(after.y, beforeY, `${at}: tapping a dot scrolled the page`);
       eq(await dots.nth(2).getAttribute('aria-current'), 'true', `${at}: the third dot did not light up`);
+      eq((await position.innerText()).replace(/\s+/g, ' ').trim(), '3 / 3', `${at}: the position indicator did not follow the dot tap`);
 
       /* EACH CARD IS WHOLE AND SEPARATE — three schedule blocks, three sets of
          controls, and card 3's switch is not card 1's. A strip that reused one
@@ -251,7 +274,7 @@ async function main(): Promise<void> {
 
       eq(crashes, [], `${at}: the strip threw: ${crashes[0] ?? ''}`);
       await view.close();
-      checks += 13;
+      checks += 17;
     }
 
     /* ─── AND WITH ONE RUN, NO STRIP FURNITURE AT ALL ──────────────────── */
@@ -267,7 +290,14 @@ async function main(): Promise<void> {
       });
       /* The dots belong to the component, not to the DOM surgery above, so
          this only proves the markup; the real guard is the source one. */
-      is(/count > 1 &&/.test(swiper), 'the dots render only when there is more than one card');
+      is(/count > 1 &&/.test(swiper), 'the dots and the counter render only when there is more than one card');
+      /* AND THE COUNTER IS INSIDE THAT SAME BLOCK. A lone card labelled
+         "1 / 1" reads as a strip with a card missing, so the figure has to be
+         governed by the same condition the dots are — checked in the source,
+         because the DOM surgery above cannot re-run React's condition. */
+      const gated = swiper.split('count > 1 &&')[1] ?? '';
+      is(gated.includes('data-swiper-position'), 'the position indicator is inside the more-than-one-card block');
+      is(!swiper.slice(0, swiper.indexOf('count > 1 &&')).includes('data-swiper-position'), 'and nowhere outside it');
       is(/count > 1 \? 'group' : undefined/.test(swiper), 'and a lone card is not announced as one of a set');
       await solo.close();
     }

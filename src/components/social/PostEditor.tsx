@@ -57,6 +57,7 @@ import {
   type Variant,
   type VariantStrategy,
 } from '@/lib/social/types';
+import { readSchedule } from '@/lib/social/campaign-schedule';
 import { accountGapSeconds } from '@/lib/social/rules';
 import { friendlyMessage } from '@/lib/social/errors';
 
@@ -252,9 +253,22 @@ export function PostEditor({ postId }: { postId?: string }) {
      THIRD hand-rolled copy of the same sum, and the three drifted the moment
      seconds existed — the engine read 30 while this preview read 60. */
   const spacingSeconds = accountGapSeconds(limits, browser, true);
+  /*
+   * AND THE CAMPAIGN'S OWN PUBLISHING WINDOW, because the planner now stamps
+   * inside it.
+   *
+   * planQueue() rolls every instant into the campaign's chosen days and hours
+   * (windowedStagger in lib/social/projection.ts). A preview that skipped the
+   * roll would promise 19:00–20:49 for a Saturday-evening round whose rows the
+   * planner lands on Sunday morning — the same "preview is a second opinion
+   * about the launch" fault the note above this block was written for, one
+   * layer along. `readSchedule` reads `enabled: false` for a campaign that has
+   * never opened the panel, and the roll is then the identity.
+   */
+  const publishWindow = useMemo(() => (campaign ? readSchedule(campaign) : null), [campaign]);
   const plan = useMemo(
-    () => planFor(schedule, selectedObjects.length, new Date(), spacingSeconds),
-    [schedule, selectedObjects.length, spacingSeconds],
+    () => planFor(schedule, selectedObjects.length, new Date(), spacingSeconds, publishWindow),
+    [schedule, selectedObjects.length, spacingSeconds, publishWindow],
   );
   /**
    * How many of this launch's publications the daily cap will PUSH TO ANOTHER
@@ -788,6 +802,8 @@ export function PostEditor({ postId }: { postId?: string }) {
               targetCount={selectedObjects.length}
               targetNames={selectedObjects.map((t) => t.name)}
               spacingSeconds={spacingSeconds}
+              /* …and the hours it is allowed to use them in — see publishWindow. */
+              publishWindow={publishWindow}
             />
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <Button size="lg" busy={busy === 'schedule'} onClick={openReview}>

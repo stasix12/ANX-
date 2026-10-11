@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import type { ScheduleInput } from '@/lib/social/client';
-import { dripSlots, slotsFor, staggeredSlots } from '@/lib/social/slots';
+import { dripSlots, slotsFor } from '@/lib/social/slots';
+import { windowedSlots } from '@/lib/social/projection';
+import type { CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { counted, formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { Stamp } from './DateTime';
@@ -85,7 +87,28 @@ export function targetsLabel(n: number): string {
  * apart — the preview being wrong about the launch is the exact fault the
  * note below says must not happen.
  */
-export function planFor(draft: ScheduleDraft, targetCount: number, now = new Date(), spacingSeconds = 0): SchedulePlan {
+/**
+ * `publishWindow` — THE CAMPAIGN'S PUBLISHING WINDOW, so the preview says what the
+ * planner will write.
+ *
+ * planQueue() rolls every stamp into the campaign's chosen days and hours
+ * (windowedStagger in lib/social/projection.ts), because a row stamped at an
+ * hour its own campaign forbids makes every screen in the product read a
+ * column the machine will not honour. A preview that skipped the roll would be
+ * the same fault at the worst possible moment: the sheet promising 19:00–20:49
+ * for a Saturday-evening round whose rows the planner lands on Sunday morning.
+ *
+ * Optional, and absent means no window — which is what every campaign that has
+ * never opened the scheduling panel actually has, and exactly the preview this
+ * function has always drawn.
+ */
+export function planFor(
+  draft: ScheduleDraft,
+  targetCount: number,
+  now = new Date(),
+  spacingSeconds = 0,
+  publishWindow: CampaignSchedule | null = null,
+): SchedulePlan {
   const count = Math.max(0, targetCount);
   const empty: SchedulePlan = { slots: [], simultaneous: true, summary: '', firstAt: null, lastAt: null, days: 0 };
   if (!count) return { ...empty, summary: 'עדיין לא נבחרו יעדים.' };
@@ -129,7 +152,7 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
    * comment at PostEditor.tsx says must not happen.
    */
   if (draft.mode === 'now') {
-    const slots = staggeredSlots([now], count, spacingSeconds);
+    const slots = windowedSlots([now], count, spacingSeconds, publishWindow);
     return finish(
       slots,
       !spacingSeconds,
@@ -139,7 +162,7 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
 
   if (draft.mode === 'once') {
     if (!draft.date || !draft.time) return { ...empty, summary: 'בחרו תאריך ושעה.' };
-    const slots = staggeredSlots([zonedToUtc(draft.date, draft.time)], count, spacingSeconds);
+    const slots = windowedSlots([zonedToUtc(draft.date, draft.time)], count, spacingSeconds, publishWindow);
     return finish(
       slots,
       !spacingSeconds,
@@ -170,7 +193,7 @@ export function planFor(draft: ScheduleDraft, targetCount: number, now = new Dat
    * the same arithmetic or it would show 28 publications at 09:00 that the
    * planner will actually write across the next day and a half.
    */
-  const spread = staggeredSlots(slots, count, spacingSeconds);
+  const spread = windowedSlots(slots, count, spacingSeconds, publishWindow);
   const summary = spacingSeconds
     ? `${targetsLabel(count)} בכל מועד, אחד כל ${accountGapLabel(spacingSeconds)} · ${slots.length} מועדים בשבועיים הקרובים`
     : `${targetsLabel(count)} בכל מועד · ${slots.length} מועדים בשבועיים הקרובים`;
@@ -255,6 +278,7 @@ export function SchedulePicker({
   targetCount = 0,
   targetNames = [],
   spacingSeconds = 0,
+  publishWindow = null,
 }: {
   value: ScheduleDraft;
   onChange: (v: ScheduleDraft) => void;
@@ -262,6 +286,9 @@ export function SchedulePicker({
   targetNames?: string[];
   /** limits.minGapMinutes + browser.groupMinGapMinutes — what the planner will space by. */
   spacingSeconds?: number;
+  /** The campaign's publishing window — see planFor. Named `publishWindow`
+      rather than `window` so nothing here can shadow the DOM global. */
+  publishWindow?: CampaignSchedule | null;
 }) {
   const set = (patch: Partial<ScheduleDraft>) => onChange({ ...value, ...patch });
   const modesRef = useRef<HTMLDivElement>(null);
@@ -272,7 +299,7 @@ export function SchedulePicker({
     modesRef.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }, [value.mode]);
   // Recomputed on every keystroke so the plan and the controls never disagree.
-  const plan = useMemo(() => planFor(value, targetCount, new Date(), spacingSeconds), [value, targetCount, spacingSeconds]);
+  const plan = useMemo(() => planFor(value, targetCount, new Date(), spacingSeconds, publishWindow), [value, targetCount, spacingSeconds, publishWindow]);
 
   function toggleDay(day: number) {
     const key = String(day);

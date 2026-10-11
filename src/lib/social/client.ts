@@ -3,8 +3,9 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
-import { zonedDateISO } from './time';
-import { readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
+import { counted, zonedDateISO } from './time';
+import { readSchedule, readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
+import { windowedCascade } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
@@ -2620,6 +2621,32 @@ export async function applyGapSettings(gapMinutes: number): Promise<GapSplit> {
 }
 
 /**
+ * The publishing window of each of these campaigns, by id.
+ *
+ * ONE READ FOR THE WHOLE RESPACE, rather than one per row: a 250-row queue over
+ * three campaigns is three entries, and asking per row would be 250 requests
+ * from a phone on a metered Israeli plan to learn three facts.
+ *
+ * A failed read, a missing campaign or a database that has not run
+ * social-latest.sql all resolve the same way — no entry, which windowedCascade()
+ * treats as "no window". A respace must not stop working because a column is
+ * absent; it must simply respace the way it did before windows existed.
+ */
+async function campaignWindows(ids: string[]): Promise<Record<string, CampaignSchedule>> {
+  if (!ids.length) return {};
+  const res = await db()
+    .from('social_campaigns')
+    .select('id, schedule_enabled, schedule_days, schedule_start, schedule_end, schedule_gap_minutes, schedule_gap_seconds')
+    .in('id', ids);
+  if (res.error) return {};
+  const out: Record<string, CampaignSchedule> = {};
+  for (const row of (res.data ?? []) as ({ id: string } & Parameters<typeof readSchedule>[0])[]) {
+    out[row.id] = readSchedule(row);
+  }
+  return out;
+}
+
+/**
  * Re-spaces the waiting queue to one publication every `gapMinutes`, and — the
  * part that actually makes it work — moves the settings so that the engine
  * agrees with the new spacing.
@@ -2646,15 +2673,70 @@ export async function respaceQueue(gapMinutes: number, opts: { campaignId?: stri
 
   let query = db()
     .from('social_queue')
-    .select('id, scheduled_at, status')
+    .select('id, scheduled_at, status, campaign_id')
     .in('status', PENDING)
     .order('scheduled_at', { ascending: true })
     .limit(LIVE_QUEUE_LIMIT);
   if (opts.campaignId) query = query.eq('campaign_id', opts.campaignId);
-  const pending = unwrap<{ id: string; scheduled_at: string; status: QueueItem['status'] }[]>(await query);
+  const pending = unwrap<{ id: string; scheduled_at: string; status: QueueItem['status']; campaign_id: string | null }[]>(await query);
+
+  /*
+   * ───────── AND THE ROWS LAND INSIDE THEIR CAMPAIGN'S OWN WINDOW ─────────
+   *
+   * "למה יש כל פעם את האיחור הזה" — because of this function, and the two
+   * lines it used to be.
+   *
+   * It laid the queue out as `start + i × gap`, a flat arithmetic sequence
+   * that had never heard of the days and hours set on the campaign. Re-spaced
+   * at 06:24 — which is what the owner did, at one minute — it stamped 217
+   * rows from 06:25 onwards on a campaign that publishes from 08:00. Every one
+   * of them was then at an instant its own campaign forbids: rules.ts deferred
+   * them correctly and dropped nothing, but the COLUMN said 06:25, and every
+   * screen, countdown and "הבא בתור" in this product reads that column. The
+   * dashboard duly reported 217 publications "באיחור · לפני שעתיים" that were
+   * not late at all — they were waiting for a window that had not opened.
+   *
+   * So the sequence above is still the spacing the owner chose, and it is now
+   * the BASE rather than the answer: each row is moved forward to the first
+   * instant its campaign actually permits. windowedCascade() does the roll, in
+   * the same module the cards and the queue list read, and it cascades — a
+   * block of rolled rows lands at 08:00, 08:01, 08:02 … instead of all on the
+   * opening minute, which the unique (schedule, target, scheduled_at) index
+   * would reject.
+   *
+   * PER CAMPAIGN, because a window is a campaign's setting: the global
+   * sequence keeps the cross-campaign order and spacing it always had, and
+   * each campaign's own rows are rolled against its own days and hours.
+   *
+   * AND IT IS THE IDENTITY FOR A CAMPAIGN WITH THE PANEL SWITCHED OFF, which
+   * is every campaign that has never used it — readSchedule() reads
+   * `enabled: false` and windowedCascade() hands the base straight back. An
+   * owner who has not set a window sees exactly the queue this function has
+   * always produced.
+   */
+  const bases = pending.map((_, i) => new Date(start + i * gapMinutes * 60_000));
+  const windows = await campaignWindows([...new Set(pending.map((r) => r.campaign_id).filter((id): id is string => Boolean(id)))]);
+  const rolled = new Array<Date>(pending.length);
+  const byCampaign = new Map<string, number[]>();
+  pending.forEach((row, i) => {
+    const key = row.campaign_id ?? '';
+    const list = byCampaign.get(key);
+    if (list) list.push(i);
+    else byCampaign.set(key, [i]);
+  });
+  for (const [key, indexes] of byCampaign) {
+    const out = windowedCascade(
+      indexes.map((i) => bases[i]),
+      gapMinutes * 60,
+      key ? windows[key] ?? null : null,
+    );
+    indexes.forEach((i, n) => {
+      rolled[i] = out[n];
+    });
+  }
 
   const work = pending
-    .map((row, i) => ({ id: row.id, next: new Date(start + i * gapMinutes * 60_000).toISOString(), was: row.scheduled_at }))
+    .map((row, i) => ({ id: row.id, next: rolled[i].toISOString(), was: row.scheduled_at }))
     // A row already sitting on its new instant needs no write, and skipping it
     // keeps the count we report equal to the number of rows that really moved.
     .filter((w) => w.next !== w.was);
@@ -2714,14 +2796,26 @@ export async function respaceQueue(gapMinutes: number, opts: { campaignId?: stri
   }
 
   const cappedNote = pending.length >= LIVE_QUEUE_LIMIT ? ` (רק ${LIVE_QUEUE_LIMIT} הפרסומים הקרובים בתור תוזמנו מחדש)` : '';
+  /*
+   * AND IF THE WINDOW MOVED ANY OF THEM, THE LINE SAYS SO.
+   *
+   * Without this the history reads "המרווח נקבע ל-1 דק׳" over a queue whose
+   * rows are an hour and a half later than the arithmetic implies, and the
+   * owner has no way to know the window did it. A number he can check against
+   * the panel is the difference between a setting and a surprise.
+   */
+  const rolledCount = pending.reduce((n, _row, i) => (rolled[i].getTime() > bases[i].getTime() ? n + 1 : n), 0);
+  const windowNote = rolledCount
+    ? ` (${counted(rolledCount, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} לשעות הפרסום של הסבב)`
+    : '';
   const surchargeNote = surchargeChanged
     ? ` (המרווח הנוסף לקבוצות עודכן ל-${newSurcharge} דק׳ והמרווח הכללי ל-${globalGap} דק׳)`
     : '';
   await logClientActivity(
     failed ? 'warn' : 'info',
     'queue_respaced',
-    `המרווח בין פרסומים נקבע ל-${gapMinutes} דק׳ — ${moved} פרסומים תוזמנו מחדש${cappedNote}${surchargeNote}`,
-    { gapMinutes, minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, moved, failed, campaignId: opts.campaignId ?? null },
+    `המרווח בין פרסומים נקבע ל-${gapMinutes} דק׳ — ${moved} פרסומים תוזמנו מחדש${cappedNote}${windowNote}${surchargeNote}`,
+    { gapMinutes, minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, moved, failed, rolledIntoWindow: rolledCount, campaignId: opts.campaignId ?? null },
   );
 
   // Half-applied is a real outcome and the owner is told the real numbers,

@@ -96,11 +96,29 @@ const readoutSrc = code('src/lib/social/schedule-readout.ts');
 const listCard = code('src/components/social/CampaignCard.tsx');
 is(/scheduleReadout\(schedule, state/.test(hero), 'the dashboard card asks scheduleReadout what to say');
 is(/scheduleReadout\(schedule, state/.test(listCard), 'and so does the campaigns list, from the same call');
-is(/nextPublishAt\(schedule, from, lastPublishedAt/.test(readoutSrc), 'which resolves the instant with the engine\'s own function, not a second rule');
+/*
+ * AND THE ARITHMETIC MOVED ONE MODULE ALONG, for exactly the reason this
+ * paragraph gives: the DASHBOARD'S QUEUE LIST turned out to be a third reader,
+ * and it was reading `scheduled_at` out of the column with no schedule in
+ * sight. With 217 rows re-spaced at 06:25 under a window that opens at 08:00
+ * the card said 08:00 and the list said "באיחור" about every one of them —
+ * this file's own fault, found again in the one place it had not been looked
+ * for. lib/social/projection.ts holds the composition now, schedule-readout.ts
+ * asks it, and the invariant below is the same invariant: NO COMPONENT MAY
+ * COMPUTE AN INSTANT.
+ */
+const projectionSrc = code('src/lib/social/projection.ts');
+is(/projectOne\(\{/.test(readoutSrc), 'which asks the one place that composes the gates');
+is(/nextPublishAt\(schedule, from,/.test(projectionSrc), 'and that place resolves the instant with the engine\'s own function, not a second rule');
 for (const [name, src] of [['LiveCampaignHero', hero], ['CampaignScheduleBoard', board], ['CampaignCard', listCard]] as const) {
   is(!/nextPublishAt\(|nextAllowedAt\(|windowClosesAt\(/.test(src), `${name} computes no instant of its own`);
 }
 is(!/setHours|\+ 7 \* 24|86400000|getDay\(\)/.test(board), 'the board does no date arithmetic of its own');
+/* THE QUEUE LIST IS HELD TO THE SAME RULE, which it was not before: it must
+   draw the instant it is handed and compute none. */
+const timelineSrc = code('src/components/social/Timeline.tsx');
+is(!/nextPublishAt\(|nextAllowedAt\(|windowClosesAt\(|projectOne\(|projectQueue\(/.test(timelineSrc), 'Timeline computes no instant of its own either — it draws the one it is given');
+is(/projected\?: Map<string, string \| null>/.test(timelineSrc), 'and it is given one, per row');
 
 /* NOTHING HARDCODED. "אסור לקודד Hardcoded: 08:10 / 01.10.2026 / 08:00–22:00 /
    10 דקות / א׳ ב׳ ג׳ ה׳ — אלה רק נתוני הדוגמה שבתמונה." */

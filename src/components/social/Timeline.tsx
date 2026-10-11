@@ -16,7 +16,28 @@ import { CalendarIcon } from '@/components/icons';
  * on a phone a horizontal timeline is a scroll container nobody scrolls, and
  * on a desktop the same column sits comfortably beside the campaign's stats.
  *
- * Times come from the queue rows themselves; nothing here is interpolated.
+ * ───────── WHERE THE TIMES COME FROM, AND WHY IT IS NOT THE COLUMN ─────────
+ *
+ * "למה יש כל פעם את האיחור הזה" · "מקור אמת אחד לזמני הפרסום — הכרטיס והרשימה
+ *  חייבים להסכים."
+ *
+ * This file used to render `row.scheduled_at` directly. That column is NOT
+ * when a row publishes: rules.ts holds every claimed row behind four gates —
+ * the account-wide floor, the campaign's own gap, the campaign's chosen days
+ * and its daily window — and the campaign card has named the resulting instant
+ * through scheduleReadout() since 4.0.1. So on the owner's screen, with 217
+ * rows re-spaced at 06:25 under a window that opens at 08:00, the card said
+ * 08:00 and this list said "באיחור · לפני שעתיים" about every single row.
+ *
+ * Both were drawn from real data. There were simply two answers, because there
+ * were two places working them out. There is now one — projectQueue() in
+ * lib/social/projection.ts — and the caller hands its result in as
+ * `projected`. The card calls the same module for the same row, so the two can
+ * no longer disagree.
+ *
+ * NOTHING IS INTERPOLATED HERE EITHER WAY. Absent a projection (the campaign
+ * screen's own strip, which has no account settings to hand) the stored instant
+ * is drawn exactly as it always was.
  */
 
 /**
@@ -113,7 +134,18 @@ const DONE_LINE: Partial<Record<QueueStatus, string>> = {
  * `overdue` say "אמור לצאת עכשיו", because a slot that has just passed is not
  * yet a problem — it is the worker's next tick.
  */
-function Countdown({ at, now }: { at: string; now: number }) {
+function Countdown({ at, now }: { at: string | null; now: number }) {
+  /*
+   * HELD, WITH NO INSTANT AT ALL — projectQueue() answers null for exactly one
+   * reason: the campaign's schedule is on and not one day is lit, so rules.ts
+   * defers the row a day at a time, for ever, by design. A clock over that
+   * would be a countdown to a moment that arrives and passes with the queue
+   * untouched — which is the fault this component was rewritten to end, and it
+   * is worth naming the setting rather than printing a time.
+   */
+  if (at === null) {
+    return <p className="text-[11px] font-bold leading-[14px] text-warning-400">מוחזק — לא נבחר יום פרסום בתזמון</p>;
+  }
   const left = countdownTo(at, now);
   if (!left) return null;
   if (left.overdue) {
@@ -138,10 +170,24 @@ export function Timeline({
   total,
   scrollable = false,
   done = [],
+  projected,
   onOpen,
 }: {
   rows: TimelineRow[];
   limit?: number;
+  /**
+   * WHEN EACH WAITING ROW WILL ACTUALLY GO OUT — row id → instant, from
+   * projectQueue() in lib/social/projection.ts. See this file's header.
+   *
+   * Three readings, and they are three different facts:
+   *   • an ISO string — the engine's own answer for that row, gaps and window
+   *     already applied, and the same number the campaign card prints;
+   *   • null — held with no instant at all (no publishing day is chosen);
+   *   • absent from the map — not forecast, so the stored instant is drawn.
+   *     That is every row waiting on a PERSON (a forecast over one of those
+   *     would be an invented promise) and every caller that supplies no map.
+   */
+  projected?: Map<string, string | null>;
   /**
    * What already happened today, oldest first, above the rows still waiting.
    *
@@ -221,17 +267,40 @@ export function Timeline({
   /* The footer counts the WAITING window only — `done` is its own small read
      with no remainder to promise. */
   const rest = (total ?? rows.length) - waiting.length;
+
+  /*
+   * EVERY STOP'S OWN INSTANT, WORKED OUT ONCE, BEFORE ANYTHING IS DRAWN.
+   *
+   * Three columns of this strip are about one instant — the hour on the left,
+   * the date divider above it and the countdown under the name — and they were
+   * each reading a different field to find it. The divider in particular asked
+   * `items[i-1].scheduled_at` while the row above it had printed
+   * `published_at`, so one late publication could hide a date heading or
+   * invent one. Deciding the instant per stop, here, is what makes the three
+   * agree by construction.
+   *
+   *   • a FINISHED stop is placed at the moment it actually happened, not at
+   *     the slot it was given — a row that went out four minutes late sitting
+   *     above one that went out on time is the list telling the afternoon out
+   *     of order;
+   *   • a WAITING stop takes the forecast when the caller supplied one (see
+   *     `projected`), and its stored instant when it did not.
+   */
+  const stops = items.map((row) => {
+    const doneLine = DONE_LINE[row.status];
+    if (doneLine) return { row, doneLine, at: row.published_at ?? row.scheduled_at };
+    const forecast = projected?.get(row.id);
+    return { row, doneLine, at: forecast === undefined ? row.scheduled_at : forecast };
+  });
+
   const list = (
     <ol className="relative space-y-0.5">
-      {items.map((row, i) => {
-        const doneLine = DONE_LINE[row.status];
-        /* A finished stop is placed at the moment it actually happened, not
-           at the slot it was given: a row that went out four minutes late
-           sitting above one that went out on time would be the list telling
-           the afternoon out of order. */
-        const at = doneLine ? (row.published_at ?? row.scheduled_at) : row.scheduled_at;
-        const day = zonedDateISO(new Date(at));
-        const showDay = day !== today && (i === 0 || zonedDateISO(new Date(items[i - 1].scheduled_at)) !== day);
+      {stops.map(({ row, doneLine, at }, i) => {
+        /* A held row has no instant at all, so it has no day either: it cannot
+           open a date heading and it cannot close the one above it. */
+        const day = at ? zonedDateISO(new Date(at)) : null;
+        const previous = i > 0 ? stops[i - 1].at : null;
+        const showDay = Boolean(day) && day !== today && (i === 0 || !previous || zonedDateISO(new Date(previous)) !== day);
         /*
          * The halo and the tint mark the stop the run is standing on: the row a
          * worker holds right now, and the row that has stopped the run by
@@ -248,12 +317,16 @@ export function Timeline({
                 accent: same column, and which half of the afternoon you are
                 looking at is readable without reading a word of it. */}
             <span className={`w-12 shrink-0 text-sm font-extrabold tabular-nums ${doneLine ? 'text-mist-500' : 'text-brand-400'}`}>
-              {formatTimeHe(at)}
+              {/* No instant, no clock: an em dash is the honest placeholder and
+                  the line under the name says which setting is holding it. */}
+              {at ? formatTimeHe(at) : '—'}
             </span>
             <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
             <div className="min-w-0 grow">
               <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
-              {row.status === 'scheduled' && <Countdown at={row.scheduled_at} now={now} />}
+              {/* The forecast, not the column — and the same number the
+                  campaign card prints for this row. See the header. */}
+              {row.status === 'scheduled' && <Countdown at={at} now={now} />}
               {line && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{line}</p>}
               {doneLine && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{doneLine}</p>}
             </div>
@@ -262,7 +335,7 @@ export function Timeline({
         const inner = `flex min-w-0 grow items-center gap-2.5 rounded-xl px-2 py-2 text-start ${standing ? TONE_TINT[tone] : ''}`;
         return (
           <li key={row.id}>
-            {showDay && <p className="mb-1 mt-3 text-[11px] font-extrabold uppercase tracking-wide text-mist-500">{formatDateHe(at)}</p>}
+            {showDay && at && <p className="mb-1 mt-3 text-[11px] font-extrabold uppercase tracking-wide text-mist-500">{formatDateHe(at)}</p>}
             <div className="flex items-stretch gap-3">
               {/* The rail: a dot per stop, a line between them. A finished
                   stop's dot is hollow — it is behind us, and the filled ones
@@ -273,7 +346,7 @@ export function Timeline({
                     doneLine ? `bg-ink-850 ring-2 ${RING_DONE[tone]}` : TONE_FILL[tone]
                   } ${standing ? `ring-4 ${RING[tone]}` : ''}`}
                 />
-                {i < items.length - 1 && <span aria-hidden className="w-px grow bg-ink-700" />}
+                {i < stops.length - 1 && <span aria-hidden className="w-px grow bg-ink-700" />}
               </div>
               {onOpen ? (
                 <button type="button" onClick={() => onOpen(row)} className={inner}>

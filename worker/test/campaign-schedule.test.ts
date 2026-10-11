@@ -380,8 +380,21 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    * than being deleted.
    */
   const readout = readFileSync(new URL('../../src/lib/social/schedule-readout.ts', import.meta.url), 'utf8');
+  /*
+   * AND THE COMPOSITION ITSELF MOVED ONE MODULE ALONG, for the same reason it
+   * moved out of the two cards: the DASHBOARD'S QUEUE LIST was a third reader,
+   * and it was reading `scheduled_at` out of the column. With 217 rows
+   * re-spaced at 06:25 under a window that opens at 08:00 the card said 08:00
+   * and the list said "באיחור" about every one of them — this file's own
+   * failure, one layer up.
+   *
+   * So lib/social/projection.ts now holds the one copy, schedule-readout.ts
+   * asks it, and the claims below follow it rather than being deleted.
+   */
+  const projection = readFileSync(new URL('../../src/lib/social/projection.ts', import.meta.url), 'utf8');
   is(/scheduleReadout\(schedule, state/.test(card), '"הבא בתור" asks the one module that decides what a card may say about time');
-  is(/nextPublishAt\(schedule, from, lastPublishedAt/.test(readout), 'and that module computes it with the engine’s own function, not a second copy of these rules');
+  is(/projectOne\(\{/.test(readout), 'and that module asks the one place that composes the gates, rather than composing them again');
+  is(/nextPublishAt\(schedule, from,/.test(projection), 'which computes it with the engine’s own function, not a second copy of these rules');
   /*
    * WITH THE SWITCH OFF, THE WINDOW IS NOT APPLIED — which is what the switch
    * means, and it is still true. The line that used to be pinned here returned
@@ -394,11 +407,19 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    * So the claim is pinned as what it actually is — the off path reaches no
    * window arithmetic at all — rather than as one exact expression.
    */
-  const offPath = readout.slice(readout.indexOf('if (!on || !schedule)'), readout.indexOf('if (!on || !schedule)') + 120);
-  is(/return \{ kind: 'due'/.test(offPath), 'with the switch off the queued row is reported as due, not held');
+  const offAt = projection.indexOf('if (!schedule?.enabled) {');
+  is(offAt > 0, 'projectOne still has an explicit "the campaign is not gated" branch');
+  const offPath = projection.slice(offAt, offAt + 260);
+  is(/return from;/.test(offPath), 'with the switch off the stored instant is handed back, not held');
   is(!/nextPublishAt|nextAllowedAt|windowClosesAt/.test(offPath), 'and no window arithmetic is applied to it — that is what "off" means');
-  /* And the floor that is NOT the window still reaches it. */
-  is(/accountFloorMs\(spacing, state\.nextChannel/.test(readout), 'the account-wide spacing floor is applied whether the campaign window is on or off');
+  /*
+   * And the floor that is NOT the window still reaches it — which is a claim
+   * about ORDER, so it is checked as one: the account floor is folded into
+   * `from` BEFORE the branch above, so the off path cannot escape it.
+   */
+  const floorAt = projection.indexOf('accountFloorMs(spacing, channel, input.accountLastPublishedAt)');
+  is(floorAt > 0, 'the account-wide spacing floor is applied by projectOne');
+  is(floorAt < offAt, 'and before the not-gated branch, so it applies whether the campaign window is on or off');
   is(/לא נבחר יום פרסום/.test(card), 'with no day chosen it says so rather than printing an instant the engine will not publish at');
   is(/<CampaignSchedulePanel/.test(card), 'the panel is rendered by the card itself — "אל תפתח Modal. אל תפתח Popup. אל תיצור מסך חדש"');
 

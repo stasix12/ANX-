@@ -30,8 +30,11 @@ import {
   campaignQueueWithStats,
   cancelQueueItem,
   confirmQueueItem,
+  getBrowserSettings,
   getCampaign,
   getControl,
+  getLimits,
+  lastPublishedAt,
   listPostsForCampaign,
   listWorkers,
   pauseCampaign,
@@ -57,6 +60,8 @@ import {
 import { checkCampaignInvariants, takeUnreported } from '@/lib/social/invariants';
 import { logClientActivity } from '@/lib/social/client';
 import { agree, formatDateTimeHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import { projectOne, projectQueue, spacingFrom, type AccountSpacing } from '@/lib/social/projection';
+import { readSchedule } from '@/lib/social/campaign-schedule';
 import { ltr } from '@/components/social/DateTime';
 import type { Campaign, ControlSettings, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -106,22 +111,49 @@ export default function CampaignControlCenter() {
   const [error, setError] = useState<string | null>(null);
   /* Distinct from `campaign`: a finished fetch that found nothing is not loading. */
   const [loaded, setLoaded] = useState(false);
+  /*
+   * THE ACCOUNT-WIDE FLOOR, so this screen's times are the same times the
+   * dashboard's are.
+   *
+   * "הפרסום הבא" here printed the raw `scheduled_at`, exactly as the
+   * dashboard's queue list used to, while the run card on the dashboard
+   * printed the instant the engine will actually use. Three surfaces, two
+   * answers. They all read projectOne() now, which needs the account's two gap
+   * settings and its last publication.
+   *
+   * THE TWO SETTINGS ARE READ ONCE AND THE INSTANT EVERY TICK, deliberately.
+   * This screen polls every five seconds and is already the most expensive one
+   * in the product (83 requests and 12.8 MB in a measured 63-second window);
+   * `limits` and `browser` are settings rows that change when the owner opens
+   * a panel, so re-reading them 720 times an hour would be 1,440 requests for
+   * two numbers. The account's last publication does move while a run is
+   * going, so that one rides the existing round trip — one lightweight head
+   * row on top of the eighty-three already there.
+   */
+  const [spacing, setSpacing] = useState<AccountSpacing | null>(null);
+  const [accountLastPublished, setAccountLastPublished] = useState<string | null>(null);
   const toast = useToast();
   const confirm = useConfirm();
 
   const load = useCallback(async () => {
     try {
-      const [c, q, p, ctrl, workers] = await Promise.all([
+      const [c, q, p, ctrl, workers, lastPublished] = await Promise.all([
         getCampaign(id),
         campaignQueueWithStats(id),
         listPostsForCampaign(id),
         getControl(),
         listWorkers().catch(() => null),
+        /* The ACCOUNT's last publication, not this campaign's — see `spacing`
+           above. A failure here must not fail the screen: no instant means no
+           account floor, which is the answer this screen gave before it asked
+           the question at all. */
+        lastPublishedAt().catch(() => null),
       ]);
       setCampaign(c);
       setRows(q.rows);
       setPosts(p);
       setControl(ctrl);
+      setAccountLastPublished(lastPublished);
       if (workers) setWorkerOnline(workers.some((w) => w.online));
       const next = campaignState(q.rows, c, { truncated: q.truncated });
       setState(next);
@@ -157,6 +189,27 @@ export default function CampaignControlCenter() {
    * owner sees on return is current. Making the read itself narrower is a
    * data-layer change and is flagged rather than attempted here.
    */
+  /*
+   * THE TWO GAP SETTINGS, ONCE. See `spacing` above for why this is not in the
+   * five-second poll. A failure leaves it null, and null means "no account
+   * floor" — the campaign's own window and gap still apply, which are the two
+   * gates the owner sets per campaign.
+   */
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const [limits, browser] = await Promise.all([getLimits(), getBrowserSettings()]);
+        if (alive) setSpacing(spacingFrom(limits, browser, null));
+      } catch {
+        /* Left null on purpose — see above. */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   useEffect(() => {
     let alive = true;
     let running = false;
@@ -287,6 +340,45 @@ export default function CampaignControlCenter() {
   const showResume = Boolean(state) && canResumeRun(state!.progress, campaign.status);
   const view = state ? runProgress(state.progress) : null;
 
+  /*
+   * ───────── WHEN THIS ROUND'S ROWS WILL ACTUALLY GO OUT ─────────
+   *
+   * "מקור אמת אחד לזמני הפרסום." This screen named two instants — the
+   * "הפרסום הבא" fact and every stop on the ציר זמן tab — and both printed the
+   * raw `scheduled_at`, which is not when a row publishes: rules.ts holds it
+   * behind the account floor, the campaign's own gap, its chosen days and its
+   * daily window. The dashboard's run card has composed all four since 4.0.1,
+   * so this screen and that card disagreed about the same row.
+   *
+   * One module answers it for all of them now. The gate is THIS campaign's —
+   * its window, its gap and its own last publication — and the account floor
+   * comes from `spacing`; see the comment on that state.
+   */
+  const gate = {
+    schedule: readSchedule(campaign),
+    /* THIS campaign's own last publication, which is what its own gap is
+       measured from. The account's is a different number and rides on
+       `spacing` — handing one where the other belongs makes a round wait out
+       an interval that belongs to somebody else's. */
+    lastPublishedAt: state?.done.find((r) => r.published_at)?.published_at ?? null,
+  };
+  const spacingNow: AccountSpacing | undefined = spacing ? { ...spacing, lastPublishedAt: accountLastPublished } : undefined;
+  const projected = projectQueue(state?.upcoming ?? [], { now: new Date(), gates: { [id]: gate }, spacing: spacingNow });
+  /*
+   * AND THE ONE FACT ABOVE THEM, from the same call. `null` back from
+   * projectOne means one thing only — the schedule is on and no day is lit, so
+   * the row is held indefinitely and there is no instant to print over it.
+   */
+  const nextAtShown = state?.nextAt
+    ? projectOne({
+        scheduledAt: state.nextAt,
+        channel: state.upcoming.find((r) => r.status === 'scheduled')?.target?.channel ?? null,
+        gate,
+        spacing: spacingNow,
+        now: new Date(),
+      })
+    : null;
+
   return (
     <SocialShell
       title={campaign.name}
@@ -372,7 +464,17 @@ export default function CampaignControlCenter() {
           <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
             <Fact label="התחיל" value={state?.startedAt ? when(state.startedAt) : null} fallback="טרם התחיל" />
             <Fact label="סיום משוער" value={state?.estimatedCompletionAt ? when(state.estimatedCompletionAt) : null} fallback={closed ? 'הסתיים' : '—'} hint={state?.estimatedCompletionAt ? 'לפי התזמון שהוגדר' : undefined} />
-            <Fact label="הפרסום הבא" value={state?.nextAt ? when(state.nextAt) : null} fallback={showResume ? 'מושהה' : 'אין'} hint={state?.nextAt ? relativeHe(state.nextAt) : undefined} />
+            {/* THE INSTANT THE ENGINE WILL USE, not the column — see
+                `nextAtShown`. The fallback distinguishes the three reasons
+                there is no instant: the owner's pause, a queue with nothing
+                waiting, and a schedule with no day chosen, which is held for
+                ever by design and must not be reported as "אין". */}
+            <Fact
+              label="הפרסום הבא"
+              value={nextAtShown ? when(nextAtShown.toISOString()) : null}
+              fallback={showResume ? 'מושהה' : state?.nextAt ? 'לא נבחר יום פרסום' : 'אין'}
+              hint={nextAtShown ? relativeHe(nextAtShown.toISOString()) : undefined}
+            />
             <Fact label="הקבוצה הבאה" value={state?.nextTargetName ?? null} fallback="—" />
           </dl>
 
@@ -615,7 +717,10 @@ export default function CampaignControlCenter() {
             />
           )}
           {rows && rows.length > 0 && tab === 'queue' && <QueueSections rows={rows} actions={queueActions} />}
-          {rows && rows.length > 0 && tab === 'timeline' && <Timeline rows={state?.upcoming ?? []} limit={12} />}
+          {/* The same instants the fact above prints, one per stop — see
+              `projected`. Without it this tab and that fact were two answers
+              about one row. */}
+          {rows && rows.length > 0 && tab === 'timeline' && <Timeline rows={state?.upcoming ?? []} limit={12} projected={projected} />}
         </Card>
 
         {/* Between the list of what went out and the posts themselves: the

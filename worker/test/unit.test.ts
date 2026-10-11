@@ -622,7 +622,33 @@ console.log('unit tests OK');
    * out and 27 were deferred until MAX_DEFERRALS skipped them. A weekly
    * campaign was built to lose almost everything it scheduled.
    */
-  assert.ok(planSrc.includes('staggerAt(rawSlot, targetIndex, spacingSeconds)'), 'the planner must give each target its own instant inside an occasion');
+  /*
+   * AND THAT INSTANT MUST BE INSIDE THE CAMPAIGN'S OWN WINDOW.
+   *
+   * It was `staggerAt(rawSlot, targetIndex, spacingSeconds)` — the occasion
+   * plus the spacing, and nothing more. On a 218-group round at 65 minutes
+   * that walks nine days straight through every night, so rows were stamped
+   * 02:40, 03:45, 04:50 on a campaign that publishes 08:00–22:00. rules.ts
+   * deferred them correctly and dropped nothing, but the COLUMN then said
+   * something the machine would not do — and every screen, countdown and
+   * "הבא בתור" in this product reads that column. The owner's dashboard duly
+   * reported 217 publications "באיחור" that were not late at all.
+   *
+   * windowedStagger() is the same interval, rolled onto the first instant the
+   * campaign permits and cascading so a rolled block lands 08:00, 08:01,
+   * 08:02 … rather than all on the opening minute (which the unique
+   * (schedule, target, scheduled_at) index would reject, silently shrinking
+   * the round). Proved as arithmetic in worker/test/projection.test.ts.
+   */
+  assert.ok(
+    planSrc.includes('windowedStagger(slot, schedule.target_ids.length, spacingSeconds, campaignSchedule)'),
+    'the planner must give each target its own instant inside an occasion, and inside the campaign window',
+  );
+  /* Comments stripped: the fix carries a note naming the call it replaced, and
+     a raw search matched its own explanation. */
+  const planCode = planSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!/staggerAt\(/.test(planCode), 'and it must not keep the window-blind stagger beside it — two stampers is how the column drifts');
+  assert.ok(planSrc.includes('async function campaignWindow'), 'the window must be read from the campaign row rules.ts reads, not invented');
   assert.ok(planSrc.includes('async function enforcedSpacing'), 'the spacing must be read from the settings rules.ts enforces, not invented');
   /*
    * AND IT MUST ASK THE ONE FUNCTION, not add the columns up again.
@@ -640,8 +666,18 @@ console.log('unit tests OK');
 
   // And the preview must do the same arithmetic, or it shows a schedule the
   // planner will not write — the lie this codebase keeps having to re-close.
-  assert.ok(pickerSrc.includes('staggeredSlots(slots, count, spacingSeconds)'), 'the schedule preview must stagger the way the planner does');
+  // THE WINDOW IS PART OF THAT ARITHMETIC NOW, which is the second time this
+  // has had to be said: teaching the planner about the window and not the
+  // preview re-opens the identical fault one layer along, with the sheet
+  // promising 19:00–20:49 for a Saturday round whose rows land on Sunday.
+  assert.ok(pickerSrc.includes('windowedSlots(slots, count, spacingSeconds, publishWindow)'), 'the schedule preview must stagger the way the planner does, window included');
+  const pickerCode = pickerSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!/staggeredSlots\(/.test(pickerCode), 'and must not keep the window-blind version beside it');
   assert.ok(pickerSrc.includes('spacingSeconds?: number'), 'the picker must be told the real spacing, in the unit the planner uses');
+  assert.ok(pickerSrc.includes('publishWindow?: CampaignSchedule | null;'), 'and the window it has to respect');
+  const editorWindow = readFileSync(new URL('../../src/components/social/PostEditor.tsx', import.meta.url), 'utf8');
+  assert.ok(/publishWindow = useMemo\(\(\) => \(campaign \? readSchedule\(campaign\) : null\)/.test(editorWindow), 'the pre-launch sheet reads the window off the campaign it is launching');
+  assert.ok(editorWindow.includes('publishWindow={publishWindow}'), 'and hands the picker the same one it built its own plan with');
 
   // The arithmetic itself, executed — in SECONDS now.
   const base = new Date('2026-09-20T06:00:00Z');
@@ -673,8 +709,8 @@ console.log('unit tests OK');
   // planner spreads across a day and a half — the lie at the last moment
   // before they commit.
   const editorSrc = readFileSync(new URL('../../src/components/social/PostEditor.tsx', import.meta.url), 'utf8');
-  assert.ok(/planFor\(schedule, selectedObjects\.length, new Date\(\), spacingSeconds\)/.test(editorSrc),
-    'the pre-launch plan must be built with the real spacing');
+  assert.ok(/planFor\(schedule, selectedObjects\.length, new Date\(\), spacingSeconds, publishWindow\)/.test(editorSrc),
+    'the pre-launch plan must be built with the real spacing and the real window');
   assert.ok(editorSrc.includes('spacingSeconds={spacingSeconds}'), 'the picker and the review must share one spacing value');
   assert.ok(editorSrc.includes('accountGapSeconds(limits, browser, true)'), 'and it must come from the one function, not be added up here as well');
 

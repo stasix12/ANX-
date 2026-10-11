@@ -13,6 +13,7 @@ import { CommentTimeline } from '@/components/social/CommentTimeline';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
+import { projectQueue, spacingFrom } from '@/lib/social/projection';
 import { AlertBar, Button, ButtonLink, Card, ErrorState, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
 import {
   callSocialApi,
@@ -795,22 +796,58 @@ export default function SocialDashboard() {
    * AND IT IS CAPPED. Each card draws a cover, a schedule block and a strip;
    * twenty of them is a 9,000px scroll container built on every poll, on a
    * screen whose speed is the thing the owner has complained about by name.
-   * Eight is well past what a swipe strip is for — "קמפיינים" lists them all,
-   * one tap away, and the tiles above already count them.
+   *
+   * TEN, BECAUSE TEN IS THE NUMBER HE NAMED — "לעבוד עם 3, 5 ו-10 קמפיינים".
+   * It was eight, which is a cap that silently drops two of ten, and dropping
+   * campaigns off this screen is the whole of the fault below. Ten dots and a
+   * counter measure 280px at the narrowest phone this product is tested at, so
+   * the strip furniture still fits. Past ten the line under the strip says how
+   * many are not drawn and links to the screen that lists them all — a cap the
+   * owner can see is a cap; a silent one is this bug again.
+   *
+   * ───────── AND A CAMPAIGN WITH AN EMPTY QUEUE BELONGS HERE TOO ─────────
+   *
+   * "הקמפיינים נעלמים מהמסך הראשי. יש לי שלושה ורואה אחד, ואין מה להחליק."
+   *
+   * THE FILTER WAS `Boolean(x.state?.progress.total)` AND THAT WAS THE BUG.
+   * `progress.total` counts QUEUE ROWS, so every campaign that has not been
+   * launched yet — and every campaign whose rows were all cancelled — was
+   * dropped here, before the sort and before the cap. With one launched round
+   * and two waiting to be launched the strip received exactly ONE child, and
+   * CardSwiper draws no dots and no counter for a single card (correctly: there
+   * is nothing to swipe to). So the two other rounds were not merely hard to
+   * reach, they were not on the dashboard at all, and the screen offered no
+   * sign that anything was missing.
+   *
+   * It was not even what the cards expected: LiveCampaignHero has carried a
+   * `neverLaunched` path into CampaignScheduleBoard for several versions —
+   * "הסבב עוד לא הושק — בחרו קבוצות ושלחו" — and from this screen it was
+   * unreachable. runProgress() answers 'אין פרסומים מתוכננים' at total 0 and
+   * ratio() answers 0%, so an empty round draws as an empty round rather than
+   * as a finished one.
+   *
+   * SO THE TEST IS ONLY THAT THERE IS A STATE TO DRAW. campaignStates() is
+   * asked about live campaigns only (statesPromise filters `archived`), which
+   * is what keeps a stopped-and-archived round out of the strip — the same set
+   * as before, minus nothing, plus the rounds that have not started.
    */
-  const FEATURED_LIMIT = 8;
-  const runs = data
+  const FEATURED_LIMIT = 10;
+  const featurable = data
     ? data.campaigns
         .map((c) => ({ campaign: c, state: data.states[c.id] }))
-        .filter((x): x is { campaign: Campaign; state: CampaignState } => Boolean(x.state?.progress.total))
+        .filter((x): x is { campaign: Campaign; state: CampaignState } => Boolean(x.state))
         .sort((a, b) => {
           const rank = (s: CampaignState) => (s.state === 'running' ? 0 : s.state === 'needs_attention' ? 1 : s.state === 'paused' ? 2 : s.state === 'not_started' ? 3 : 4);
           const d = rank(a.state) - rank(b.state);
           if (d) return d;
           return percentFinished(a.state.progress) - percentFinished(b.state.progress);
         })
-        .slice(0, FEATURED_LIMIT)
     : [];
+  const runs = featurable.slice(0, FEATURED_LIMIT);
+  /* What the cap left out — named under the strip rather than dropped, because
+     a campaign that is not on this screen and not counted anywhere is the
+     fault this whole block was rewritten for. */
+  const runsHidden = featurable.length - runs.length;
 
   /*
    * EVERY CARD'S COVER, IN ONE READ.
@@ -996,6 +1033,51 @@ export default function SocialDashboard() {
      written by an older version still resolves to a usable schedule. */
   const scheduleOf = (campaign: Campaign): CampaignSchedule =>
     readSchedule(schedulePatch?.id === campaign.id ? { ...campaign, ...schedulePatch.columns } : campaign);
+
+  /*
+   * ───────── WHEN EACH WAITING ROW WILL ACTUALLY GO OUT ─────────
+   *
+   * "מקור אמת אחד לזמני הפרסום — הכרטיס והרשימה חייבים להסכים."
+   *
+   * The run card has named the engine's own instant since 4.0.1
+   * (scheduleReadout → the four gates), and the list below it rendered
+   * `scheduled_at` out of the column. With 217 rows re-spaced at 06:25 under a
+   * window that opens at 08:00 the card said 08:00 and the list said
+   * "באיחור · לפני שעתיים" about every one of them.
+   *
+   * One module answers it now for both, and this is where the dashboard feeds
+   * it: the account's two gap settings and its last publication, plus every
+   * campaign's own window and own last publication, so a row is projected
+   * against the gates that actually govern IT. That per-campaign gate is also
+   * the attribution fix — `projectQueue` keys the cascade by `campaign_id`, so
+   * one campaign's interval can no longer push another campaign's rows
+   * forward, which a single shared clock did.
+   *
+   * SCHEDULE PATCH INCLUDED, VIA scheduleOf. The owner's un-acknowledged
+   * change is laid over the stored row, so the moment he moves a day or an
+   * hour this list moves with the card instead of waiting for the write and
+   * the next poll — "אני רוצה שמתי שאני משנה שם ימים / שעות שזה יתעדכן באותו
+   * הרגע".
+   */
+  const projectedSoon = data
+    ? projectQueue(soon, {
+        now: new Date(),
+        spacing: spacingFrom(data.limits, data.browser, data.lastPublished),
+        gates: Object.fromEntries(
+          data.campaigns.map((c) => [
+            c.id,
+            {
+              schedule: scheduleOf(c),
+              /* THIS campaign's own last publication — what its own gap is
+                 measured from. The account's is a different number and lives
+                 on `spacing`; swapping the two is how a card ends up waiting
+                 out an interval that belongs to another round. */
+              lastPublishedAt: data.states[c.id]?.done.find((r) => r.published_at)?.published_at ?? null,
+            },
+          ]),
+        ),
+      })
+    : undefined;
 
   /*
    * CHZARA — written straight through, with NO debounce, and that difference
@@ -1538,6 +1620,22 @@ export default function SocialDashboard() {
           )}
 
           {/*
+            AND WHAT THE CAP LEFT OUT, IN WORDS AND WITH A WAY TO REACH IT.
+            A strip that quietly draws ten of fourteen is the same fault as the
+            filter that quietly drew one of three — just at a number nobody
+            would have tested. The line only exists when there is something to
+            say.
+          */}
+          {runsHidden > 0 && (
+            <p className="text-center text-xs text-mist-500">
+              ועוד {counted(runsHidden, 'סבב אחד', 'סבבים', 'שני סבבים')} —{' '}
+              <Link href="/social/campaigns" className="font-bold text-brand-400 underline">
+                לכל הסבבים
+              </Link>
+            </p>
+          )}
+
+          {/*
             3b — what the system has just been doing, directly under the round
             it has been doing it for.
 
@@ -1669,6 +1767,10 @@ export default function SocialDashboard() {
                 rows={soon}
                 limit={UPCOMING_LIMIT}
                 scrollable
+                /* The engine's own instants, one per row — see projectedSoon
+                   above. Without this the clock in this list and the clock on
+                   the card 200px up are two different answers. */
+                projected={projectedSoon}
                 /* The window's own total, from the database. summary.automaticWaiting
                    is the WHOLE queue and would make the footer promise rows this
                    list is no longer about; `soon.length` is the capped read and

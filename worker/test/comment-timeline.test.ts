@@ -141,6 +141,10 @@ async function main(): Promise<void> {
           text: card?.textContent ?? '',
         };
       });
+      const stalled = await page.evaluate(() => {
+        const card = document.querySelector('.probe-stalled > section') as HTMLElement | null;
+        return { found: Boolean(card), text: card?.innerText ?? '' };
+      });
       await page.close();
 
       assert.ok(seen.found, `${width}px: the fixture rendered no card`);
@@ -386,6 +390,46 @@ async function main(): Promise<void> {
        * here) and the button appears only when something actually is.
        */
 
+
+      /* ════════════════ THE SECOND CARD: HIS EVENING ════════════════
+       *
+       * "0 הגיבו היום · 879 בתור", nothing finished, twelve stopped, and a
+       * publication due inside the minute.
+       *
+       * The card used to answer this by printing "בעוד כדקה" beside rows #3-#5
+       * and "~2 דק׳" beside #6 — projected from the round's CONFIGURED gap,
+       * and that fallback branch is selected BY the absence of evidence. So
+       * the less the feature worked, the more confident the number it showed,
+       * and the sentence beside it promised the estimate would fix itself
+       * "אחרי כמה תגובות" — conditioned on the exact progress that was not
+       * happening. It could never climb out of that.
+       */
+      assert.ok(stalled.found, `${width}px: the stalled card did not render`);
+
+      /* NO PROJECTION WITHOUT A RATE. These two strings are the fault itself. */
+      assert.ok(!stalled.text.includes('בעוד'), `${width}px: with nothing finished today the card still projected a countdown`);
+      assert.ok(
+        !stalled.text.includes('ההערכות יתעדכנו אחרי כמה תגובות'),
+        `${width}px: it still promised a self-correction conditioned on progress that is not happening`,
+      );
+      assert.ok(stalled.text.includes('עוד לא יצאה תגובה היום'), `${width}px: it does not say that nothing has gone out`);
+      assert.ok(stalled.text.includes('ממתין'), `${width}px: the queued rows must say they are waiting rather than naming a minute`);
+      /* The browser is publishing — which is the reason, and the lever. */
+      assert.ok(stalled.text.includes('חלון פנוי'), `${width}px: it does not say WHY the queue is not moving`);
+
+      /*
+       * AND THE TWELVE, WHERE THE TWELVE ARE COUNTED. This is the regression
+       * guard for the correction that `measured` can go true off a column of
+       * failures: `past` holds everything that HAPPENED, so three failures
+       * three minutes apart used to be enough to announce "לפי הקצב היום".
+       */
+      assert.ok(!stalled.text.includes('לפי הקצב היום'), `${width}px: a column of failures was read as a working pace`);
+      assert.ok(stalled.text.includes('תגובות נעצרו היום'), `${width}px: the stopped comments are counted but not shown`);
+      assert.ok(
+        stalled.text.includes('לא מצאנו את הפוסט הזה בקבוצה'),
+        `${width}px: the reason the worker recorded is still on no screen the owner can reach`,
+      );
+      assert.ok(stalled.text.includes('ועוד 9'), `${width}px: the rest are not accounted for`);
 
       console.log(`  ✓ ${width}px — ${seen.rows} rows, card ${seen.cardHeight}px, no overflow, no clipped text`);
     }

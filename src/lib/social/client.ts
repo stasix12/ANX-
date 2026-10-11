@@ -1624,6 +1624,40 @@ export async function listCommentsDone(limit = 40): Promise<QueueRow[]> {
 }
 
 /**
+ * The comments that STOPPED and need a person, newest outcome first.
+ *
+ * ITS OWN READ, for precisely the reason listCommentsWaiting below has one.
+ * The card counts these in the database and prints "12 דורשות טיפול היום",
+ * and then every list it could draw them from excludes them:
+ * listCommentQueue() is published_at ASCENDING capped at sixty, so it holds
+ * the sixty OLDEST things ever published and today's failures are the newest;
+ * listCommentsDone() filters comment_status = 'done'. So the card named twelve
+ * rows above a rail that contained none of them — and the one place the worker
+ * had already written down WHY each one stopped (comment_note, with
+ * comment_shot beside it) was unreachable from the screen he was looking at.
+ * Twelve answers, nobody could read them.
+ *
+ * Ordered by comment_at DESCENDING because an outcome has a time and this list
+ * is about what just happened, not about publication order.
+ */
+const COMMENT_ATTENTION_SELECT =
+  'id, status, comment_status, comment_at, comment_note, comment_shot, published_at, scheduled_at, permalink, campaign_id, target:social_targets(id,name,channel,url,image_url)';
+
+export async function listCommentsNeedingHuman(limit = 30): Promise<QueueRow[]> {
+  const res = await db()
+    .from('social_queue')
+    .select(COMMENT_ATTENTION_SELECT)
+    .in('comment_status', ['failed', 'unverified'])
+    .order('comment_at', { ascending: false, nullsFirst: false })
+    .limit(limit);
+  /* Same silence as the reads around it, for the same reason: this runs on the
+     dashboard's poll, and the screen that can explain a missing column is the
+     one with the button. */
+  if (res.error) return [];
+  return (res.data ?? []) as unknown as QueueRow[];
+}
+
+/**
  * The comments that have NOT been written yet, in the order the worker will
  * take them.
  *

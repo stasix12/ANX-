@@ -568,19 +568,59 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
  * has to work without one, since every post published before this existed has
  * none.
  */
+/**
+ * One post's canonical address, or '' when the href does not name a post.
+ *
+ * THE QUERY STRING USED TO GO AND TAKE THE POST WITH IT. Tracking parameters
+ * do have to be stripped — they change on every render and would make one post
+ * look like a different one each time it is read — but the selector above also
+ * matches `story_fbid=`, and on THAT shape the post id is in the QUERY and the
+ * pathname is the GROUP. Returning the pathname stored "this group" in a
+ * column that means "this post", and the consequences compounded:
+ *
+ *   - the row satisfies `.not('permalink','is',null)`, so it joins the CHEAP
+ *     candidate pass, which the caller budgeted 45 seconds for;
+ *   - commentOnPost tests `/\/(posts|permalink)\//` against it, sees a group,
+ *     and starts the 240-second lookup hunt inside that 45-second window —
+ *     which is "אני בא לפרסם סבב פוסטים, במקום זה הוא מפרסם תגובה", arriving
+ *     through the address column instead of through the gate;
+ *   - and the hunt's own writeback can store the same group URL again.
+ *
+ * So: keep a real /posts/ or /permalink/ path, REBUILD one when the id is in
+ * the query, and otherwise answer ''. Empty is the honest answer and the safe
+ * one — the row stays `permalink IS NULL`, which is the state the 240s hunt
+ * pass is already budgeted for. A group URL in this column is strictly worse
+ * than no URL at all.
+ *
+ * Exported for worker/test/comment-reach.test.ts: a pure string rule belongs
+ * in plain Node, not behind a browser.
+ */
+export function canonicalPostUrl(href: string): string {
+  try {
+    const url = new URL(href, 'https://www.facebook.com');
+    if (!/(^|\.)facebook\.com$/.test(url.hostname)) return '';
+    if (/\/(posts|permalink)\/[^/]/.test(url.pathname)) return `https://www.facebook.com${url.pathname}`;
+    const story = url.searchParams.get('story_fbid') ?? url.searchParams.get('multi_permalinks') ?? '';
+    const group = url.pathname.match(/^\/groups\/([^/]+)/)?.[1] ?? '';
+    if (/^[A-Za-z0-9]+$/.test(story) && group) return `https://www.facebook.com/groups/${group}/posts/${story}/`;
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 async function permalinkOf(article: Locator): Promise<string> {
+  /* The try/catch stays around the LOCATOR, not only the URL rule: this runs
+     inside the publish path, on an article that may have detached while the
+     feed re-rendered, and an address we could not read has never been a reason
+     to fail a publication that already went out. */
   try {
     const href = await article
       .locator('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid="]')
       .first()
       .getAttribute('href')
       .catch(() => null);
-    if (!href) return '';
-    const url = new URL(href, 'https://www.facebook.com');
-    if (!/(^|\.)facebook\.com$/.test(url.hostname)) return '';
-    /* Tracking parameters change on every render and would make the same post
-       look like a different one each time it is read. */
-    return `https://www.facebook.com${url.pathname}`;
+    return href ? canonicalPostUrl(href) : '';
   } catch {
     return '';
   }

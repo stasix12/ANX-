@@ -3177,6 +3177,20 @@ function jitterFor(id: string): number {
 }
 
 /**
+ * Both ends of the queue, in the order given, with no row named twice.
+ *
+ * The candidate read below asks the database twice — newest publications and
+ * oldest — and the two overlap on any queue shorter than twice the candidate
+ * limit. A row drawn twice would be offered to the claim twice in one pass.
+ * The claim is a compare-and-set and would refuse the second one anyway; this
+ * removes the question rather than relying on something else to answer it.
+ */
+function dedupeById<T extends { id: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+}
+
+/**
  * Leave the round's comment on the posts the owner asked for.
  *
  * ONE PER TICK, and that is not caution for its own sake. Twenty-eight
@@ -3234,7 +3248,7 @@ async function runCampaignComments(state: WorkerState, headless: boolean, roomMs
    */
   await sweepStuckComments(db);
 
-  const pending = (known: boolean) => {
+  const pending = (known: boolean, newest: boolean) => {
     const q = db
       .from('social_queue')
       .select('id, permalink, rendered_text, campaign_id, target:social_targets(url)')
@@ -3249,7 +3263,31 @@ async function runCampaignComments(state: WorkerState, headless: boolean, roomMs
        */
       .eq('status', 'published')
       .eq('comment_status', 'pending');
-    return (known ? q.not('permalink', 'is', null) : q.is('permalink', null)).order('published_at').limit(COMMENT_CANDIDATES);
+    /*
+     * WHICH END OF THE QUEUE — and this is the line that produced
+     * "0 הגיבו היום · 879 בתור".
+     *
+     * It was `published_at` ASCENDING with a limit of five: the five OLDEST
+     * posts still owed a comment. On a fresh account that is the whole queue.
+     * On this one it is five rows from weeks ago, and it never moves off them.
+     * An old group post is the one most likely to have been deleted, or to
+     * have fallen past the end of a scrolling search — so each attempt fails,
+     * writes comment_at, arms that round's gap, and the next tick looks at the
+     * next five of the same vintage. Meanwhile the two hundred and twenty-two
+     * posts published TODAY — the ones whose comment was actually asked for,
+     * and the only ones certain to still be on the page — sit eight hundred
+     * rows behind the window and are never candidates at all.
+     *
+     * This is the same cap-and-order trap listCommentsWaiting() in
+     * src/lib/social/client.ts was written to escape, in the same table, on
+     * the same account. The worker never got the correction.
+     *
+     * `nullsFirst: false` so a row with no publication stamp cannot head the
+     * new end for ever.
+     */
+    return (known ? q.not('permalink', 'is', null) : q.is('permalink', null))
+      .order('published_at', { ascending: !newest, nullsFirst: false })
+      .limit(COMMENT_CANDIDATES);
   };
   /*
    * AND THE EXPENSIVE ONE ONLY WHEN THERE IS ROOM FOR IT.
@@ -3261,9 +3299,29 @@ async function runCampaignComments(state: WorkerState, headless: boolean, roomMs
    * Without this the fix above would still let one old row take four minutes
    * out of a queue running at one post a minute.
    */
-  let { data, error } = await pending(true);
+  /*
+   * NEWEST FIRST, OLDEST BEHIND IT — both ends in one pass, still ONE comment
+   * out of it.
+   *
+   * The fresh rows go first because they are the request: he published this
+   * evening and asked for the round's comment on it. The old end stays in the
+   * list behind them so the backlog keeps draining rather than being traded
+   * away — the per-round gap clock is read per campaign_id, so a live round
+   * and a historic one pace themselves independently and neither starves the
+   * other.
+   *
+   * TWO SELECTS, NOT TWO PAGES. No session.newPage, no goto, no extra hold on
+   * the one browser — so the publishing window this is admitted into is
+   * exactly the window it was admitted into before.
+   */
+  const fresh = await pending(true, true);
+  const oldest = fresh.error ? fresh : await pending(true, false);
+  let error = fresh.error ?? oldest.error;
+  let data = error ? null : dedupeById([...(fresh.data ?? []), ...(oldest.data ?? [])]);
   if (!error && !data?.length && choreFits(roomMs, CHORE_NEEDS_MS.commentHunt)) {
-    ({ data, error } = await pending(false));
+    const hunt = await pending(false, true);
+    error = hunt.error;
+    data = hunt.error ? null : hunt.data;
   }
   if (error) {
     if (/comment_status/.test(error.message) && !state.commentNoticeShown) {

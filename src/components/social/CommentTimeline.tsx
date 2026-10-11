@@ -7,6 +7,7 @@ import { COMMENT_TONE, commentLabel, commentNeedsHuman } from '@/lib/social/comm
 import { addDaysISO, agree, formatDateHe, formatTimeHe, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { MessageIcon, ShareIcon } from '@/components/icons';
 import { TargetAvatar } from './TargetAvatar';
+import { CommentShot } from './CommentShot';
 import { Card, EmptyState, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
 
 /**
@@ -89,6 +90,7 @@ export function CommentTimeline({
   rows,
   waiting: waitingRows,
   done,
+  attention,
   totals,
   upcoming,
   campaigns,
@@ -109,6 +111,15 @@ export function CommentTimeline({
   waiting: QueueRow[];
   /** The finished ones, read separately and more deeply than `rows` reaches. */
   done: QueueRow[];
+  /**
+   * The ones that STOPPED and need a person, newest first.
+   *
+   * Its own read for the same reason `waiting` is — see
+   * listCommentsNeedingHuman in client.ts. Without it this card printed
+   * "12 דורשות טיפול היום" above a rail that held none of the twelve, and the
+   * note the worker wrote on each one was on no screen at all.
+   */
+  attention: QueueRow[];
   /** The REAL counts, from the database rather than from these two windows. */
   totals: CommentTotals;
   /** Publications still waiting to go out — the dashboard's existing read. */
@@ -141,7 +152,9 @@ export function CommentTimeline({
    * twice it would be the rail claiming two comments under one post.
    */
   const byId = new Map<string, QueueRow>();
-  for (const r of [...done, ...rows, ...waitingRows]) if (r.comment_status) byId.set(r.id, r);
+  /* `attention` LAST: its select is the only one carrying comment_note and
+     comment_shot, so it must win the merge for a row the others also hold. */
+  for (const r of [...done, ...rows, ...waitingRows, ...attention]) if (r.comment_status) byId.set(r.id, r);
   const all = [...byId.values()];
 
   /*
@@ -253,7 +266,22 @@ export function CommentTimeline({
    * between them yield two usable intervals, so the card fell back to the
    * configured gap while telling the owner it was reading today's pace.
    */
-  const pace = ((): { seconds: number; measured: boolean } => {
+  /*
+   * AN ESTIMATE NEEDS A RATE, AND THE SETTING IS NOT ONE.
+   *
+   * The fallback used to be the round's configured comment_gap_seconds — and
+   * the branch that selects it is selected BY the absence of evidence, so the
+   * less this feature was working, the more confident the number it printed.
+   * At a configured twenty seconds it told him rows #3-#5 were under ninety
+   * seconds away and #6 about two minutes, at 22:19, over 879 queued comments
+   * and nothing delivered since midnight — and the sentence beside it promised
+   * the estimate would correct itself "אחרי כמה תגובות", conditioned on the
+   * exact progress that was not happening. It could never climb out.
+   *
+   * Null now. No rate, no projection. The setting is still read for ORDER
+   * (gapOf), never for a countdown.
+   */
+  const pace = ((): { seconds: number | null; measured: boolean } => {
     const gaps: number[] = [];
     for (let i = 1; i < past.length; i += 1) {
       const a = Date.parse(past[i - 1].comment_at ?? '');
@@ -262,10 +290,48 @@ export function CommentTimeline({
       const d = (b - a) / 1000;
       if (d >= 5 && d <= 1800) gaps.push(d);
     }
-    if (gaps.length < 3) return { seconds: waiting.length ? gapOf(waiting[0]) : GAP_DEFAULT, measured: false };
+    if (gaps.length < 3) return { seconds: null, measured: false };
     gaps.sort((x, y) => x - y);
     return { seconds: gaps[Math.floor(gaps.length / 2)], measured: true };
   })();
+
+  /*
+   * NOTHING HAS SUCCEEDED TODAY AND THE QUEUE IS NOT EMPTY.
+   *
+   * Deliberately NOT `!pace.measured`. `past` holds every row that HAPPENED —
+   * done, failed and unverified alike — so on a day where a dozen failures
+   * land three usable intervals between them, `measured` goes true and the
+   * card would announce "לפי הקצב היום" over a column of failures. The
+   * question this predicate asks is the one he asked: did a comment go up.
+   */
+  const stalled = today.done === 0 && !past.some((r) => r.comment_status === 'done') && waiting.length > 0;
+  /*
+   * THE ONE TEST BOTH THE SUBTITLE AND THE ROWS MUST USE.
+   *
+   * `pace.seconds !== null` is not enough, and the fixture proved it: `past`
+   * holds every row that HAPPENED, failures included, so twelve failures three
+   * minutes apart hand `pace` three usable intervals and `measured` goes true.
+   * The subtitle checked `stalled` and said "עוד לא יצאה תגובה היום" while the
+   * rows below it, checking only for a number, counted down 3, 6, 9, 12, 15
+   * and 18 minutes from a rate derived entirely from things that failed.
+   */
+  const projecting = !stalled && pace.seconds !== null;
+  /* Is the one browser busy publishing, or is the queue simply not moving?
+     The only honest distinction this card can draw from what it was handed —
+     a publication due inside the next minute means the browser is spoken for,
+     which is the reason a comment stands down. */
+  const publishingNow = upcoming.some((r) => {
+    const at = Date.parse(r.scheduled_at);
+    return Number.isFinite(at) && at - now.getTime() < 60_000;
+  });
+  /* Three is the most that can be read without turning the card into a log.
+     Scoped to today, because that is what the number above it counts. */
+  const attentionTop = attention
+    .filter((r) => {
+      const at = r.comment_at ? Date.parse(r.comment_at) : NaN;
+      return Number.isFinite(at) && at >= since;
+    })
+    .slice(0, 3);
 
   const items: { row: QueueRow; kind: Kind }[] = [
     ...past.map((row) => ({ row, kind: 'past' as const })),
@@ -347,6 +413,46 @@ export function CommentTimeline({
       </p>
 
       {/*
+        THE TWELVE, WHERE THE TWELVE ARE COUNTED.
+
+        The line above says "12 דורשות טיפול היום" and then every list below it
+        excluded them — listCommentQueue is published_at ASCENDING capped at
+        sixty, so it holds the sixty OLDEST things ever published and today's
+        failures are the newest; listCommentsDone filters on 'done'. So the
+        number was an assertion with no evidence anywhere on the same screen,
+        while the worker had already written down why each one stopped
+        (comment_note, and a screenshot of the page as its browser had it).
+        That is the one thing that turns "תסדר" into a decision.
+
+        NO RETRY BUTTON HERE, on purpose. A round's failures are retried on the
+        campaign screen, which refuses 'unverified' — Enter was pressed on
+        those and the comment may already be under the post.
+      */}
+      {attentionTop.length > 0 && (
+        <div className={`mt-2 rounded-xl px-2.5 py-2 ${TONE_TINT.warn}`}>
+          <p className={`text-[11.5px] font-extrabold ${TONE_TEXT.warn}`}>
+            {`${needsHuman} ${agree(needsHuman, 'תגובה נעצרה היום', 'תגובות נעצרו היום')} — זה מה שהתוכנה דיווחה`}
+          </p>
+          <ul className="mt-1 space-y-1">
+            {attentionTop.map((r) => (
+              <li key={r.id} className="flex items-start gap-2 text-[11px] leading-snug">
+                <span dir="auto" className="w-24 shrink-0 truncate font-bold text-mist-200">{r.target?.name ?? 'קבוצה'}</span>
+                <span dir="auto" className="min-w-0 flex-1 text-mist-400">
+                  {r.comment_note || commentLabel(r.comment_status)}
+                </span>
+                {r.comment_shot && <CommentShot path={r.comment_shot} />}
+              </li>
+            ))}
+          </ul>
+          {needsHuman > attentionTop.length && (
+            <p className="mt-1 text-[11px] text-mist-500">
+              {`ועוד ${needsHuman - attentionTop.length} — כולן במסך הסבב, עם כפתור "נסה שוב"`}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/*
         WHAT IS NEXT, WITHOUT SCROLLING FOR IT.
         *
         * The queued rows are on the rail in their place — after the day, which
@@ -368,9 +474,13 @@ export function CommentTimeline({
             {next.comment_status === 'commenting' ? 'כותב עכשיו' : inAbout(0)}
           </span>
           <span className="w-full text-[11px] text-mist-500">
-            {pace.measured
-              ? `לפי הקצב היום — בערך ${aboutLong(pace.seconds)} לכל תגובה`
-              : 'הקצב לפי המרווח שנבחר לסבב — ההערכות יתעדכנו אחרי כמה תגובות'}
+            {stalled
+              ? publishingNow
+                ? 'עוד לא יצאה תגובה היום. תור הפרסומים צפוף ואין בין הפרסומים חלון פנוי לתגובה — התור יתחדש מעצמו כשהסבב ייגמר, או אם תגדילו את המרווח בין הפרסומים.'
+                : 'עוד לא יצאה תגובה היום, ולכן אין ממה לאמוד קצב. ההערכה תופיע אחרי שלוש תגובות.'
+              : projecting && pace.measured && pace.seconds !== null
+                ? `לפי הקצב היום — בערך ${aboutLong(pace.seconds)} לכל תגובה`
+                : 'אין עוד מספיק תגובות היום כדי לאמוד קצב. ההערכה תופיע אחרי שלוש תגובות.'}
           </span>
         </p>
       )}
@@ -481,7 +591,11 @@ export function CommentTimeline({
                                place 1 and must be zero paces away — at
                                `paceSeconds * place` the head of the queue
                                claimed a two-minute wait it does not have. */
-                            ? inAbout(pace.seconds * (place - 1))
+                            ? !projecting || pace.seconds === null
+                              ? stalled && publishingNow
+                                ? 'ממתין לחלון פנוי בין הפרסומים'
+                                : 'ממתין בתור'
+                              : inAbout(pace.seconds * (place - 1))
                             : commentLabel(status)}
                       </p>
                       {/*
@@ -541,7 +655,7 @@ export function CommentTimeline({
       </div>
 
       <p className="mt-2 text-[11px] leading-snug text-mist-500">
-        התגובות יוצאות אחת-אחת, במרווח שנבחר לכל סבב — ולכן אין להן שעה מראש. לפרסום שעוד לא יצא מוצגת השעה שבה הוא מתוזמן.
+        התגובות יוצאות אחת-אחת, במרווח שנבחר לכל סבב, ורק כשיש חלון פנוי בין שני פרסומים — ולכן אין להן שעה מראש. לפרסום שעוד לא יצא מוצגת השעה שבה הוא מתוזמן.
       </p>
     </Card>
   );

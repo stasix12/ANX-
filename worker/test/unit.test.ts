@@ -3097,8 +3097,39 @@ const scenario: { step: string; line: string }[] = [];
    */
   assert.ok(/\(known \? q\.not\('permalink', 'is', null\) : q\.is\('permalink', null\)\)/.test(localWorker), 'an address is preferred for a comment');
   assert.ok(
-    /if \(!error && !data\?\.length && choreFits\(roomMs, CHORE_NEEDS_MS\.commentHunt\)\) \{\s*\(\{ data, error \} = await pending\(false\)\);/.test(localWorker),
+    /if \(!error && !data\?\.length && choreFits\(roomMs, CHORE_NEEDS_MS\.commentHunt\)\) \{\s*const hunt = await pending\(false, true\);/.test(localWorker),
     'and never required — a post with no address is still commented on, once there is a window long enough to hunt for it',
+  );
+  /*
+   * AND BOTH ENDS OF THE QUEUE, which is the line that produced
+   * "0 הגיבו היום · 879 בתור".
+   *
+   * It was `.order('published_at')` — ascending by default — with a limit of
+   * five: the five OLDEST posts still owed a comment. On an 879-deep queue
+   * that window never moves off rows from weeks ago, and the posts published
+   * TODAY, whose comment was the thing actually asked for, were eight hundred
+   * rows behind it and were never candidates at all.
+   *
+   * The full rule, the de-dupe and the proof that the publishing gate did not
+   * move to pay for it are in worker/test/comment-reach.test.ts.
+   */
+  assert.ok(
+    /\.order\('published_at', \{ ascending: !newest, nullsFirst: false \}\)/.test(localWorker),
+    'the candidate read can be taken from either end of the queue',
+  );
+  assert.ok(
+    /const fresh = await pending\(true, true\);[\s\S]{0,240}?const oldest = fresh\.error \? fresh : await pending\(true, false\);/.test(localWorker),
+    "and is taken from BOTH on every pass, newest first — today's posts are not eight hundred rows behind the window",
+  );
+  assert.ok(
+    /dedupeById\(\[\.\.\.\(fresh\.data \?\? \[\]\), \.\.\.\(oldest\.data \?\? \[\]\)\]\)/.test(localWorker),
+    'and no row is offered to the claim twice in one pass',
+  );
+  /* The throughput fix must not have bought itself room from the publishing
+     window — "הפרסום של הפוסטים והתזמון סוף סוף מושלם". */
+  assert.ok(
+    /\{ run: runCampaignComments, needs: CHORE_NEEDS_MS\.commentKnown \}/.test(localWorker),
+    'and the comment chore still asks for the cheap budget, not a wider one',
   );
   assert.ok(/export async function findPostArticle/.test(composerSrc), 'the post is found by its own text');
   /* And scoped to it. Reading the whole page on a GROUP feed reports the

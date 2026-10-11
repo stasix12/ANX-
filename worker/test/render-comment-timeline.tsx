@@ -248,8 +248,69 @@ const upcoming: QueueRow[] = [
 ];
 
 
+/*
+ * THE SECOND PROBE: HIS EVENING. "0 הגיבו היום · 879 בתור", nothing finished,
+ * twelve stopped, and a publication due inside the minute so the one browser
+ * is spoken for.
+ *
+ * It is rendered beside the first rather than instead of it because the two
+ * halves of this card fail in opposite directions and both have to be held:
+ * the measured branch must keep printing a countdown, and this one must print
+ * none at all. The old fallback printed "בעוד כדקה" HERE — from the round's
+ * configured gap, chosen precisely because there was no evidence — so the
+ * less the feature worked, the more confident the number it showed.
+ */
+const stalledAttention: QueueRow[] = Array.from({ length: 12 }, (_, i) =>
+  row({
+    id: `x${i}`,
+    campaign_id: 'r1',
+    comment_status: i === 11 ? 'unverified' : 'failed',
+    comment_at: ago(5 + i * 3),
+    comment_note:
+      i === 11
+        ? 'לחצנו Enter ופייסבוק לא אישר. בדקו בפוסט אם התגובה נוספה לפני שתנסו שוב.'
+        : 'לא מצאנו את הפוסט הזה בקבוצה — ייתכן שהוא נמחק, או שמנהל הקבוצה הסיר אותו.',
+    published_at: ago(600 + i * 10),
+    target: { id: `g${i}`, name: `קבוצה ${i + 1}`, channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/9' } as never,
+  }),
+);
+/* A publication due in forty seconds — the browser is publishing, which is the
+   reason a comment stands down, and the only such distinction this card can
+   draw from what it is handed. */
+const stalledUpcoming: QueueRow[] = [
+  row({
+    id: 'p1',
+    status: 'scheduled',
+    campaign_id: 'r1',
+    scheduled_at: new Date(NOW.getTime() + 40_000).toISOString(),
+    published_at: null,
+    comment_status: '',
+  }),
+];
+const stalledToday = { done: 0, failed: 11, unverified: 1 };
+const stalledTotals = { pending: 879, done: 0, failed: 11, unverified: 1 };
+
 const body = renderToStaticMarkup(
-  createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, waiting, done, totals, today, upcoming, campaigns, now: NOW })),
+  createElement(
+    'div',
+    null,
+    createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, waiting, done, attention: [], totals, today, upcoming, campaigns, now: NOW })),
+    createElement(
+      'div',
+      { className: 'probe-stalled' },
+      createElement(CommentTimeline, {
+        rows: [],
+        waiting,
+        done: [],
+        attention: stalledAttention,
+        totals: stalledTotals,
+        today: stalledToday,
+        upcoming: stalledUpcoming,
+        campaigns,
+        now: NOW,
+      }),
+    ),
+  ),
 );
 
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">

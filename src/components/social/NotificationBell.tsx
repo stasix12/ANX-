@@ -13,7 +13,12 @@ import type { ActivityEntry } from '@/lib/social/types';
  * convenience, so it degrades to "everything is new" if storage is blocked.
  */
 const SEEN_KEY = 'social:notifications:seen';
-const NOTABLE = new Set(['publish_failed', 'needs_attention', 'manual_pending', 'browser_needs_auth', 'connect_failed', 'rate_limit', 'worker_stopped']);
+/* 'comments_waiting' stays level 'info' in the worker — nothing has failed,
+   the one browser was busy publishing — but it is the sentence that explains a
+   queue that is not moving, and at level 'info' alone the bell's own predicate
+   dropped it. The owner had nine unread notifications and the one that would
+   have answered his question was not among them. */
+const NOTABLE = new Set(['publish_failed', 'needs_attention', 'manual_pending', 'browser_needs_auth', 'connect_failed', 'rate_limit', 'worker_stopped', 'comments_waiting']);
 
 function readSeen(): string {
   try {

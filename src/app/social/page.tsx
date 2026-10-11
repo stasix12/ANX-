@@ -29,6 +29,7 @@ import {
   commentTotals,
   commentTotalsSince,
   listCommentsDone,
+  listCommentsNeedingHuman,
   listCommentQueue,
   listCommentsWaiting,
   listTimelineDone,
@@ -157,6 +158,10 @@ interface DashboardData {
   commentsToday: { done: number; failed: number; unverified: number };
   /** The successes, newest first, behind the card's green tile. */
   commentsDone: QueueRow[];
+  /* The ones that stopped, newest first. Its own read because every other
+     comment list on this screen structurally excludes them — see
+     listCommentsNeedingHuman. */
+  commentsAttention: QueueRow[];
   limits: LimitsSettings;
   /** For the account-wide spacing rule the cards must respect — see scheduleReadout. */
   browser: BrowserSettings;
@@ -352,7 +357,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, browser, lastPublished, waitingToday] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -406,6 +411,9 @@ export default function SocialDashboard() {
         /* The same midnight every other "today" on this screen uses. */
         commentTotalsSince(startOfZonedDay(now).toISOString()),
         listCommentsDone(),
+        /* The only read that can carry today's failures, and the note the worker
+           wrote on each one. */
+        listCommentsNeedingHuman(),
         /* THE OTHER HALF OF "הבא בתור". rules.ts holds a row for the later of
            the campaign's own gap and an account-wide one, and the cards knew
            only the first — so they printed a minute the engine would not
@@ -447,6 +455,7 @@ export default function SocialDashboard() {
         commentTotals: totals,
         commentsToday,
         commentsDone,
+        commentsAttention,
         limits,
         browser,
         lastPublished,
@@ -1993,6 +2002,7 @@ export default function SocialDashboard() {
             rows={data.comments}
             waiting={data.commentsWaiting}
             done={data.commentsDone}
+            attention={data.commentsAttention}
             totals={data.commentTotals}
             today={data.commentsToday}
             upcoming={data.upcoming}

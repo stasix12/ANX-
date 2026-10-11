@@ -689,4 +689,45 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(/useEffect\(\(\) => \{[\s\S]{0,200}queueGates\(\)/.test(board), 'which the 4-second board reads ONCE, not on its beat');
 }
 
+/* ───── 18. ONE RECORD OWNS THE CAMPAIGN'S GAP ──────────────────────── */
+{
+  /*
+   * "האם קיימים שני מנגנוני תזמון שונים?" — for the gap, there were two, and
+   * each silently undid the other.
+   *
+   * The panel writes `schedule_gap_seconds` on the campaign row and lowers the
+   * account floor to match. The queue tuner wrote ONLY the account floor
+   * (applyGapSettings) and never touched the campaign column — while seeding
+   * its own control from the ACCOUNT value, with no campaign input at all.
+   *
+   * So: set five minutes in the tuner, and the panel still reads "דקה" over an
+   * engine spacing five. Then touch one day chip on that panel and
+   * matchAccountGapTo fires with the panel's stale sixty seconds, dropping the
+   * floor back to one — the tuner's setting undone by a control nobody would
+   * connect to it.
+   */
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const tuner = strip(readFileSync('src/components/social/QueueTunerSheet.tsx', 'utf8'));
+  const client = strip(readFileSync('src/lib/social/client.ts', 'utf8'));
+
+  is(/setGap\(own\?\.enabled \? Math\.max\(1, Math\.round\(own\.gapSeconds \/ 60\)\) : plan\.effectiveGapMinutes\)/.test(tuner),
+    'the tuner opens on the ROUND\u2019s own gap when it is about a round, not on the account floor');
+  is(/await saveCampaign\(\{[\s\S]{0,200}scheduleColumns\(\{ \.\.\.snap\.window, gapSeconds: kept \}\)/.test(tuner),
+    'and writes that round\u2019s own column, so the panel beside it cannot disagree');
+  is(/await matchAccountGapTo\(kept\);/.test(tuner), 'with the account floor following the same number the panel would follow');
+  /*
+   * AND NO RATCHET. The control is whole minutes; a round on thirty seconds
+   * rounds to "1" here, so saving without touching the number wrote sixty and
+   * DOUBLED the floor. Same class as the settings-screen ratchet fixed earlier
+   * with keepOrDerive.
+   */
+  is(/Math\.max\(1, Math\.round\(snap\.window\.gapSeconds \/ 60\)\) === gap \? snap\.window\.gapSeconds : want/.test(tuner),
+    'and a sub-minute gap that round-trips to the same minute is kept exactly, never widened to 60s');
+  /* The account-wide path is untouched: with no campaign in scope the sheet
+     still writes the account settings and nothing else. */
+  is(/if \(campaignId && snap\?\.campaign && snap\.window\) \{/.test(tuner), 'the account-wide tuner is unchanged — this only applies when a round is in scope');
+  /* And the campaign columns still have exactly one writer. */
+  is(!/schedule_gap_seconds:/.test(client), 'client.ts never writes the gap columns directly — scheduleColumns() is still their one writer');
+}
+
 console.log(`projection OK — ${checks} assertions over the four gates, the cascade, the writers’ roll and both clock changes`);

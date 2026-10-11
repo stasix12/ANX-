@@ -7,18 +7,20 @@ import {
   countPublishedSince,
   getBrowserSettings,
   getCampaign,
+  matchAccountGapTo,
   getLimits,
   listTargets,
   liveQueuePlan,
   removeTargetFromQueue,
   respaceQueue,
+  saveCampaign,
   type LiveQueuePlan,
 } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
 import { windowedCascade } from '@/lib/social/projection';
-import { readSchedule, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { readSchedule, scheduleColumns, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { agree, counted, formatDayMonthHe, formatTimeHe, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
-import type { BrowserSettings, LimitsSettings, SocialTarget } from '@/lib/social/types';
+import type { BrowserSettings, Campaign, LimitsSettings, SocialTarget } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, EmptyState, Field, IconButton, inputClass, Loading, Notice, Sheet, useConfirm, useToast } from './ui';
 
@@ -166,6 +168,8 @@ interface Snapshot {
    * applies each campaign's own.
    */
   window: CampaignSchedule | null;
+  /** The campaign row this sheet is scoped to, for the write below. */
+  campaign: Campaign | null;
   /** Real publications already out today, from countPublishedSince(). */
   publishedToday: number;
   /** The instant the snapshot was taken — keeps the preview from twitching. */
@@ -219,13 +223,24 @@ export function QueueTunerSheet({
              means the preview is the flat sequence, which is what it was. */
           campaignId ? getCampaign(campaignId).catch(() => null) : Promise.resolve(null),
         ]);
-        setSnap({ plan, limits, browser, publishedToday, window: campaign ? readSchedule(campaign) : null, at: Date.now() });
+        setSnap({ plan, limits, browser, publishedToday, window: campaign ? readSchedule(campaign) : null, campaign, at: Date.now() });
         setTargets(all);
         // The dashboard behind this sheet reloads every 30s and the countdown
         // re-renders every second; a draft the owner is in the middle of
         // setting must survive that, so it is only overwritten deliberately.
         if (!keepGapDraft) {
-          setGap(plan.effectiveGapMinutes);
+          /*
+           * SEEDED FROM THE CAMPAIGN WHEN THIS SHEET IS ABOUT ONE.
+           *
+           * It read `plan.effectiveGapMinutes`, which is
+           * `limits.minGapMinutes + browser.groupMinGapMinutes` — the ACCOUNT
+           * floor, with no campaign input at all, even though the campaign row
+           * was already in hand. So a round set to one minute on its own panel
+           * opened this sheet showing the account's five, and pressing save
+           * wrote five over it.
+           */
+          const own = campaign ? readSchedule(campaign) : null;
+          setGap(own?.enabled ? Math.max(1, Math.round(own.gapSeconds / 60)) : plan.effectiveGapMinutes);
           setGapDirty(false);
           /* A half-typed number from a previous opening must not come back as
              the value of a queue the owner has not looked at yet. */
@@ -476,6 +491,50 @@ export function QueueTunerSheet({
   const commitGap = () =>
     run('respace', async () => {
       setStartOverride(null);
+      /*
+       * ───────── ONE RECORD OWNS THE GAP, AND THIS SHEET WRITES IT ─────────
+       *
+       * "האם קיימים שני מנגנוני תזמון שונים?" — for the gap, there were.
+       *
+       * The campaign panel writes `schedule_gap_seconds` on the campaign row
+       * and then LOWERS the account floor to match. This sheet wrote only the
+       * account floor (applyGapSettings) and never touched the campaign
+       * column. Two editors, two records, and each silently undoing the other:
+       *
+       *   • set five minutes here → the floor is five, the rows are re-spaced
+       *     five apart, and the panel still reads "דקה", because its column
+       *     was never written. The panel is now showing a number the engine
+       *     does not use;
+       *   • then touch ANY control on that panel — one day chip, the switch —
+       *     and matchAccountGapTo fires with the panel's stale sixty seconds
+       *     and drops the floor back to one minute. The setting made here is
+       *     gone, undone by a control nobody would connect to it.
+       *
+       * So when this sheet is scoped to a round, the round's own column is
+       * what it writes. The floor still follows, through the same call the
+       * panel makes, and the two can no longer disagree.
+       */
+      if (campaignId && snap?.campaign && snap.window) {
+        const want = gap * 60;
+        /*
+         * AND IT DOES NOT RATCHET A SUB-MINUTE GAP UP TO A MINUTE.
+         *
+         * This control is whole minutes; a campaign on thirty seconds is
+         * stored as 30 and rounds to "1" here, so saving without touching the
+         * number would write sixty and double it. If the minutes round-trip to
+         * the same minute the stored value is kept exactly — the same
+         * keepOrDerive rule the settings screen was fixed with.
+         */
+        const kept = Math.max(1, Math.round(snap.window.gapSeconds / 60)) === gap ? snap.window.gapSeconds : want;
+        if (kept !== snap.window.gapSeconds) {
+          await saveCampaign({
+            id: snap.campaign.id,
+            name: snap.campaign.name,
+            ...scheduleColumns({ ...snap.window, gapSeconds: kept }),
+          });
+          await matchAccountGapTo(kept);
+        }
+      }
       const moved = await respaceQueue(gap, { ...(campaignId ? { campaignId } : {}), ...(anchor !== null ? { startAt: new Date(anchor).toISOString() } : {}) });
       return `${posts(moved)} ${agree(moved, 'תוזמן', 'תוזמנו')} מחדש, מרווח של ${minutes(gap)} ביניהם.`;
     });

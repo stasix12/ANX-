@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { cardImage, inStock, productHref } from '@/lib/shop/logic';
+import { useRouter } from 'next/navigation';
+import { cardImage, inStock, productHref, purchasable } from '@/lib/shop/logic';
 import { STATIC_PRODUCT_SLUGS } from '@/lib/shop/static';
 import { actions, useShop } from '@/lib/shop/store';
 import type { Product } from '@/lib/shop/types';
@@ -32,9 +33,9 @@ export function FavoriteButton({ product, className = '', size = 'sm' }: { produ
   );
 }
 
-export function addProductToCart(product: Product, colorId?: string | null, qty = 1) {
+export function addProductToCart(product: Product, colorId?: string | null, qty = 1, options: Record<string, string> = {}) {
   const color = colorId === undefined ? (product.colors[0]?.id ?? null) : colorId;
-  const r = actions.addToCart(product.id, color, qty);
+  const r = actions.addToCart(product.id, color, qty, options);
   if (!r.ok) return toast(r.error);
   const colorName = product.colors.find((c) => c.id === color)?.name;
   toast(`${product.name}${colorName ? ` · ${colorName}` : ''} נוסף לסל`, { href: '/shop/cart', label: 'לעגלה' });
@@ -56,20 +57,29 @@ export function ProductCard({
   compact?: boolean;
   priority?: boolean;
 }) {
+  const router = useRouter();
   const href = productHref(product, STATIC_PRODUCT_SLUGS);
   const available = inStock(product);
+  const priced = product.price !== null;
+  // A product with versions to choose (or no price yet) is ordered from its page.
+  const direct = purchasable(product) && !product.variants.length;
+  const note = product.imageNotes[cardImage(product)];
   return (
     <article dir="rtl" className="group relative flex flex-col overflow-hidden rounded-[14px] bg-white shadow-x-card ring-1 ring-x-line/60 transition hover:shadow-x-pop">
       <Link href={href} className="absolute inset-0 z-0" aria-label={product.name} />
       <div className={`pointer-events-none relative overflow-hidden bg-x-soft ${compact ? 'aspect-[1/0.86]' : 'aspect-[1/0.92]'}`}>
         <Img path={cardImage(product)} alt={product.name} eager={priority} className="size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
         <FavoriteButton product={product} className={`pointer-events-auto absolute z-10 ${compact ? 'top-1.5 left-1.5 size-7!' : 'top-2 left-2'}`} />
+        {note && (
+          <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/45 px-1.5 py-0.5 text-[9px] font-semibold text-white/90 backdrop-blur-sm">{note}</span>
+        )}
         {!available && (
           <span className="absolute right-2 bottom-2 rounded-full bg-x-ink/80 px-2 py-0.5 text-[11px] font-bold text-white">אזל מהמלאי</span>
         )}
       </div>
       <div className={`pointer-events-none relative flex flex-1 flex-col ${compact ? 'px-2 pt-2 pb-2' : 'px-3 pt-2.5 pb-3'}`}>
         <h3 className={`truncate font-extrabold text-x-ink ${compact ? 'text-[13px]' : 'text-[15px]'}`}>{product.name}</h3>
+        {product.subtitle && <p className={`truncate font-semibold text-x-ink-2 ${compact ? 'text-[12px]' : 'text-[14px]'}`}>{product.subtitle}</p>}
         <div className="mt-1">
           <Stars rating={product.rating} count={product.reviewCount} size={compact ? 11 : 13} />
         </div>
@@ -77,15 +87,19 @@ export function ProductCard({
           <button
             type="button"
             disabled={!available}
-            aria-label={`הוספת ${product.name} לסל`}
-            onClick={() => addProductToCart(product)}
+            aria-label={direct ? `הוספת ${product.name} לסל` : `לפרטים ולהזמנה — ${product.name}`}
+            onClick={() => (direct ? addProductToCart(product) : router.push(href))}
             className={`pointer-events-auto relative z-10 grid place-items-center rounded-[10px] text-white shadow-[0_4px_10px_rgb(60_80_250/0.25)] transition active:scale-90 disabled:bg-x-faint! disabled:shadow-none ${
               compact ? 'size-9' : 'size-10'
-            } ${accent === 'violet' ? 'bg-x-violet hover:bg-x-violet-600' : 'bg-x-blue hover:bg-x-blue-600'}`}
+            } ${accent === 'violet' ? 'bg-x-violet hover:bg-x-violet-600' : 'bg-x-indigo hover:bg-x-violet-600'}`}
           >
             <IconCart size={compact ? 19 : 21} />
           </button>
-          <Price value={product.price} className={compact ? 'text-[17px]' : 'text-[19px]'} />
+          {priced ? (
+            <Price value={product.price as number} className={compact ? 'text-[17px]' : 'text-[19px]'} />
+          ) : (
+            <span className={`font-bold text-x-muted ${compact ? 'text-[11px]' : 'text-[13px]'}`}>מחיר יעודכן</span>
+          )}
         </div>
       </div>
     </article>

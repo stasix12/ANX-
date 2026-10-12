@@ -18,14 +18,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const p = SEED_PRODUCTS.find((x) => x.slug === slug);
   if (!p) return { title: 'המוצר לא נמצא' };
   return {
-    title: p.name,
+    title: p.subtitle ? `${p.name} — ${p.subtitle}` : p.name,
     description: p.description,
     alternates: { canonical: `/shop/p/${p.slug}` },
     openGraph: {
       type: 'website',
       locale: 'he_IL',
       siteName: 'ANX3D',
-      title: `${p.name} | ANX3D`,
+      title: `${p.name}${p.subtitle ? ` — ${p.subtitle}` : ''} | ANX3D`,
       description: p.description,
       images: [{ url: `${site.url}${p.cardImage ?? p.images[0]}` }],
     },
@@ -44,13 +44,15 @@ export default async function ProductPage({ params }: PageProps) {
     description: p.description,
     image: p.images.map((i) => `${site.url}${i}`),
     brand: { '@type': 'Brand', name: 'ANX3D' },
-    material: p.material,
-    offers: {
-      '@type': 'Offer',
-      priceCurrency: 'ILS',
-      price: p.price,
-      url: `${site.url}/shop/p/${p.slug}`,
-    },
+    ...(p.material && { material: p.material }),
+    ...(p.price !== null && {
+      offers: {
+        '@type': 'Offer',
+        priceCurrency: 'ILS',
+        price: p.price,
+        url: `${site.url}/shop/p/${p.slug}`,
+      },
+    }),
   };
   return (
     <>

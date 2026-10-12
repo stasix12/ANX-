@@ -79,7 +79,7 @@ function ImagesField({ images, onChange, label = 'תמונות' }: { images: str
         </label>
       </div>
       <div className="mt-2 flex gap-2">
-        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="או כתובת תמונה (https://… או /shop/img/…)" dir="ltr" className={`${inputCls} h-10 text-right text-[13px]`} />
+        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="או כתובת תמונה (https://… או /shop/img2/…)" dir="ltr" className={`${inputCls} h-10 text-right text-[13px]`} />
         <button
           type="button"
           onClick={() => {
@@ -133,13 +133,26 @@ function ProductEditor({ initial, onDone }: { initial: Product; onDone: () => vo
         </label>
       </div>
       <label className={lbl}>
+        שורת משנה (מופיעה מתחת לשם)
+        <input value={p.subtitle} placeholder="למשל: ידית מקצועית לניקוי ספות" onChange={(e) => set('subtitle', e.target.value)} className={`${inputCls} mt-1`} />
+      </label>
+      <label className={lbl}>
         תיאור
         <textarea value={p.description} onChange={(e) => set('description', e.target.value)} rows={3} className={`${inputCls} mt-1 h-auto py-3`} />
       </label>
       <div className="grid gap-4 sm:grid-cols-4">
         <label className={lbl}>
           מחיר (₪)
-          <input type="number" min={0} step="0.01" value={p.price} onChange={(e) => set('price', +e.target.value)} className={`${inputCls} mt-1`} />
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={p.price ?? ''}
+            placeholder="טרם נקבע"
+            onChange={(e) => set('price', e.target.value === '' ? null : +e.target.value)}
+            className={`${inputCls} mt-1`}
+          />
+          <span className="mt-1 block font-normal text-x-muted">ריק = &quot;מחיר יעודכן&quot; והזמנה בוואטסאפ</span>
         </label>
         <label className={lbl}>
           מחיר לפני הנחה
@@ -167,8 +180,8 @@ function ProductEditor({ initial, onDone }: { initial: Product; onDone: () => vo
           </span>
         </label>
         <label className={lbl}>
-          חומר
-          <input value={p.material} onChange={(e) => set('material', e.target.value)} className={`${inputCls} mt-1`} />
+          חומר הדפסה
+          <input value={p.material} placeholder="למשל ABS" onChange={(e) => set('material', e.target.value)} className={`${inputCls} mt-1`} />
         </label>
       </div>
 
@@ -193,6 +206,97 @@ function ProductEditor({ initial, onDone }: { initial: Product; onDone: () => vo
       </fieldset>
 
       <ImagesField images={p.images} onChange={(v) => set('images', v)} />
+      {p.images.length > 0 && (
+        <div className="space-y-1 text-[13px]">
+          <p className="font-bold">תמונות שאינן צילום של המוצר</p>
+          {p.images.map((im, i) => (
+            <label key={im.slice(0, 64) + i} className="flex items-center gap-2">
+              <select
+                value={p.imageNotes[im] ?? ''}
+                onChange={(e) => {
+                  const notes = { ...p.imageNotes };
+                  if (e.target.value) notes[im] = e.target.value;
+                  else delete notes[im];
+                  set('imageNotes', notes);
+                }}
+                className="h-9 rounded-lg border border-x-line px-2"
+              >
+                <option value="">צילום מוצר</option>
+                <option value="תמונה להמחשה">תמונה להמחשה</option>
+                <option value="הדמיית תכנון (CAD)">הדמיית תכנון (CAD)</option>
+              </select>
+              תמונה {i + 1}
+            </label>
+          ))}
+        </div>
+      )}
+
+      <fieldset>
+        <legend className={lbl}>גרסאות לבחירה (למשל קוטר חיבור)</legend>
+        {p.variants.map((v, i) => (
+          <div key={v.id} className="mt-2 grid grid-cols-[1fr_2fr_auto] gap-2">
+            <input
+              aria-label="שם הבחירה"
+              value={v.label}
+              onChange={(e) => set('variants', p.variants.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+              className={`${inputCls} h-10`}
+            />
+            <input
+              aria-label="אפשרויות, מופרדות בפסיק"
+              value={v.values.join(', ')}
+              onChange={(e) => set('variants', p.variants.map((x, j) => (j === i ? { ...x, values: e.target.value.split(',').map((t) => t.trimStart()) } : x)))}
+              placeholder="32 מ״מ, 36 מ״מ, 38 מ״מ"
+              className={`${inputCls} h-10`}
+            />
+            <button type="button" aria-label="הסרה" onClick={() => set('variants', p.variants.filter((_, j) => j !== i))} className="text-x-muted hover:text-x-red">
+              <IconTrash size={18} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => set('variants', [...p.variants, { id: `v${Date.now().toString(36)}`, label: 'קוטר חיבור', values: [] }])}
+          className={`${btn.ghost} mt-2 h-9 px-3 text-[13px]`}
+        >
+          + בחירה
+        </button>
+      </fieldset>
+
+      <fieldset>
+        <legend className={lbl}>מפרט טכני (מידות, משקל…)</legend>
+        {p.specs.map((r, i) => (
+          <div key={i} className="mt-2 grid grid-cols-[1fr_2fr_auto] gap-2">
+            <input aria-label="שדה" value={r.label} onChange={(e) => set('specs', p.specs.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} className={`${inputCls} h-10`} />
+            <input aria-label="ערך" value={r.value} onChange={(e) => set('specs', p.specs.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} className={`${inputCls} h-10`} />
+            <button type="button" aria-label="הסרה" onClick={() => set('specs', p.specs.filter((_, j) => j !== i))} className="text-x-muted hover:text-x-red">
+              <IconTrash size={18} />
+            </button>
+          </div>
+        ))}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {['מידות', 'משקל', 'קוטר חיבור'].map((label) => (
+            <button key={label} type="button" onClick={() => set('specs', [...p.specs, { label, value: '' }])} className={`${btn.ghost} h-9 px-3 text-[13px]`}>
+              + {label}
+            </button>
+          ))}
+          <button type="button" onClick={() => set('specs', [...p.specs, { label: '', value: '' }])} className={`${btn.ghost} h-9 px-3 text-[13px]`}>
+            + שדה אחר
+          </button>
+        </div>
+      </fieldset>
+
+      <label className={lbl}>
+        יתרונות (שורה לכל יתרון)
+        <textarea value={p.highlights.join('\n')} onChange={(e) => set('highlights', e.target.value.split('\n'))} rows={3} className={`${inputCls} mt-1 h-auto py-3`} />
+      </label>
+      <label className={lbl}>
+        התאמה למכונות ולצינורות (שורה לכל התאמה)
+        <textarea value={p.compatibility.join('\n')} onChange={(e) => set('compatibility', e.target.value.split('\n'))} rows={2} className={`${inputCls} mt-1 h-auto py-3`} />
+      </label>
+      <label className={lbl}>
+        הוראות שימוש ותחזוקה
+        <textarea value={p.usage} onChange={(e) => set('usage', e.target.value)} rows={3} className={`${inputCls} mt-1 h-auto py-3`} />
+      </label>
 
       <fieldset>
         <legend className={lbl}>צבעים זמינים</legend>
@@ -233,7 +337,7 @@ function ProductEditor({ initial, onDone }: { initial: Product; onDone: () => vo
           </label>
           <label className={`${lbl} sm:col-span-2`}>
             מילות חיפוש (מופרדות בפסיק)
-            <input value={p.tags.join(', ')} onChange={(e) => set('tags', e.target.value.split(',').map((t) => t.trim()).filter(Boolean))} className={`${inputCls} mt-1`} />
+            <input value={p.tags.join(', ')} onChange={(e) => set('tags', e.target.value.split(',').map((t) => t.trimStart()))} className={`${inputCls} mt-1`} />
           </label>
           <label className={lbl}>
             דירוג ממוצע
@@ -290,7 +394,7 @@ function ProductsTab() {
                 {p.name} {!p.published && <span className="text-[11px] font-semibold text-x-red">(מוסתר)</span>}
               </span>
               <span className="block text-[12px] text-x-muted">
-                {ils(p.price)} · מלאי: {p.stock === null ? 'ללא הגבלה' : p.stock} · {p.colors.length} צבעים
+                {p.price === null ? 'ללא מחיר' : ils(p.price)} · מלאי: {p.stock === null ? 'ללא הגבלה' : p.stock} · {p.colors.length} צבעים
               </span>
             </span>
             <label className="hidden items-center gap-1 text-[12px] sm:flex">
@@ -323,7 +427,7 @@ function ProductsTab() {
   );
 }
 
-const ICONS: CategoryIcon[] = ['figurine', 'decor', 'gaming', 'stand', 'tools', 'animals', 'parts', 'stl'];
+const ICONS: CategoryIcon[] = ['handle', 'wand', 'adapter', 'suction', 'accessory', 'parts'];
 
 function CategoriesTab() {
   const s = useShop();
@@ -387,7 +491,7 @@ function CategoriesTab() {
       ) : (
         <button
           type="button"
-          onClick={() => setEdit({ c: { slug: '', name: '', shortName: '', icon: 'figurine', image: '', sortOrder: cats.length + 1 } })}
+          onClick={() => setEdit({ c: { slug: '', name: '', shortName: '', icon: 'handle', image: '', sortOrder: cats.length + 1 } })}
           className={`${btn.blue} mb-4 h-11 px-5`}
         >
           + קטגוריה חדשה
@@ -454,7 +558,7 @@ function OrdersTab() {
             </select>
           </div>
           <p className="mt-2 text-[13px] text-x-muted">
-            {o.lines.map((l) => `${l.name}${l.colorName ? ` (${l.colorName})` : ''} ×${l.qty}`).join(' · ')}
+            {o.lines.map((l) => `${l.name}${l.colorName ? ` (${l.colorName})` : ''}${l.optionsText ? ` [${l.optionsText}]` : ''} ×${l.qty}`).join(' · ')}
           </p>
           <p className="mt-1 text-[12px] text-x-faint">
             {o.address.street ? `${o.address.street}, ${o.address.city}` : 'ללא משלוח'} · תשלום: {o.paymentMethod} · אסמכתא: {o.paymentRef ?? '—'}

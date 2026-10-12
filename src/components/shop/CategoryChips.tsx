@@ -17,11 +17,11 @@ export function CategoryChips({ active = 'all' }: { active?: string }) {
         const on = c.slug === active;
         return (
           <li key={c.slug} className="snap-start">
-            <Link href={categoryHref(c.slug, STATIC_CATEGORY_SLUGS)} className="group flex w-[52px] flex-col items-center gap-1.5 lg:w-[84px]">
+            <Link href={categoryHref(c.slug, STATIC_CATEGORY_SLUGS)} className="group flex w-[54px] flex-col items-center gap-1.5 lg:w-[84px]">
               <span
-                className={`grid size-[50px] place-items-center rounded-[15px] transition lg:size-[72px] ${
+                className={`grid size-[50px] place-items-center rounded-full transition lg:size-[72px] ${
                   on
-                    ? 'bg-linear-to-b from-[#3d72ff] to-x-blue text-white shadow-[0_6px_14px_rgb(47_93_251/0.35)]'
+                    ? 'bg-linear-to-b from-[#5b5cff] to-x-indigo text-white shadow-[0_6px_14px_rgb(86_73_251/0.35)]'
                     : 'bg-x-soft text-x-ink group-hover:bg-x-blue-50 group-hover:text-x-blue'
                 }`}
               >

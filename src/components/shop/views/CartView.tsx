@@ -42,6 +42,7 @@ export function CartView() {
                           {l.product.name}
                         </Link>
                         {l.colorName && <p className="text-[12px] text-x-muted">צבע: {l.colorName}</p>}
+                        {l.optionsText && <p className="text-[12px] text-x-muted">{l.optionsText}</p>}
                       </div>
                     </div>
                     <div dir="ltr" className="mt-0.5">

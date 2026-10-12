@@ -59,6 +59,19 @@ export function Stars({
   size?: number;
   countLabel?: string;
 }) {
+  // No reviews yet: say so instead of showing an invented score.
+  if (count === 0) {
+    return (
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] text-x-faint" style={{ fontSize: size > 14 ? 14 : undefined }}>
+        <span dir="ltr" className="inline-flex text-x-line" style={{ gap: size > 14 ? 3 : 1 }}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <IconStar key={i} size={size} amount={0} />
+          ))}
+        </span>
+        טרם דורג
+      </span>
+    );
+  }
   return (
     <span dir="ltr" className="inline-flex items-center gap-1.5" aria-label={`דירוג ${rating} מתוך 5${count !== undefined ? `, ${count} דירוגים` : ''}`}>
       <span className="inline-flex text-x-star" style={{ gap: size > 14 ? 3 : 1 }}>

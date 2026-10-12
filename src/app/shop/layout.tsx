@@ -1,24 +1,24 @@
 import type { Metadata, Viewport } from 'next';
 
 /**
- * ANX3D — 3D-printed models store. A standalone app under /shop with its own
+ * ANX3D — professional upholstery/carpet cleaning accessories, 3D printed. A standalone app under /shop with its own
  * chrome (SiteChrome steps aside), tokens (x-* in globals.css) and data layer
  * (src/lib/shop). The cleaning-equipment store at / is untouched.
  */
 export const metadata: Metadata = {
   title: {
-    default: 'ANX3D — מודלים תלת מימד שמדפיסים בבית',
+    default: 'ANX3D — הדור הבא של ציוד הניקוי המקצועי',
     template: '%s | ANX3D',
   },
   description:
-    'חנות ANX3D: דמויות, דרקונים גמישים, מעמדים, אביזרי גיימינג, עיצוב לבית וקבצי STL — מודפסים בתלת ממד באיכות גבוהה.',
+    'ANX3D: ידיות לניקוי ספות, טולים לניקוי שטיחים, מתאמים, מחברים ואביזרי שאיבה לאנשי מקצוע — מיוצרים בהדפסת תלת־ממד.',
   alternates: { canonical: '/shop' },
   openGraph: {
     type: 'website',
     locale: 'he_IL',
     siteName: 'ANX3D',
-    title: 'ANX3D — מודלים תלת מימד שמדפיסים בבית',
-    description: 'עיצובים ייחודיים, איכות גבוהה, לכל הרמות והמדפסות.',
+    title: 'ANX3D — הדור הבא של ציוד הניקוי המקצועי',
+    description: 'אביזרים חדשניים לניקוי ספות ושטיחים, המיוצרים בטכנולוגיית הדפסת תלת־ממד.',
   },
 };
 

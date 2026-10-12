@@ -14,7 +14,21 @@ import type {
 /** "89 ₪" — inside RTL text this renders as the design's "₪ 89". */
 export const ils = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(2)} ₪`;
 
-export const lineKey = (productId: string, colorId: string | null) => `${productId}::${colorId ?? '-'}`;
+export const lineKey = (productId: string, colorId: string | null, options: Record<string, string> = {}) =>
+  [productId, colorId ?? '-', ...Object.keys(options).sort().map((k) => `${k}=${options[k]}`)].join('::');
+
+/** "קוטר חיבור: 36 מ״מ" — variant selections as one line for cart and orders. */
+export function optionsText(p: Product, options: Record<string, string>): string {
+  return p.variants
+    .filter((v) => options[v.id])
+    .map((v) => `${v.label}: ${options[v.id]}`)
+    .join(' · ');
+}
+
+/** Has a price, is published and in stock — i.e. can go into the cart. */
+export function purchasable(p: Product): boolean {
+  return p.published && p.price !== null && inStock(p);
+}
 
 export function cardImage(p: Product): string {
   return p.cardImage ?? p.images[0] ?? '';
@@ -105,7 +119,7 @@ export function suggestions(products: Product[], cats: Category[], query: string
 /* --------------------------------------------------------------- filters */
 
 export function priceBounds(products: Product[]): [number, number] {
-  const prices = products.filter((p) => p.published).map((p) => p.price);
+  const prices = products.filter((p) => p.published && p.price !== null).map((p) => p.price as number);
   if (!prices.length) return [0, 300];
   return [0, Math.max(300, Math.ceil(Math.max(...prices) / 50) * 50)];
 }
@@ -130,8 +144,8 @@ export function applyFilters(products: Product[], f: Filters): Product[] {
   return products.filter(
     (p) =>
       p.published &&
-      p.price >= f.minPrice &&
-      p.price <= f.maxPrice &&
+      // Products without a price yet only drop out once a minimum is set.
+      (p.price === null ? f.minPrice <= 0 : p.price >= f.minPrice && p.price <= f.maxPrice) &&
       (!f.categories.length || p.categories.some((c) => f.categories.includes(c))) &&
       (!f.colors.length || p.colors.some((c) => f.colors.includes(c.id))) &&
       p.rating >= f.minRating &&
@@ -143,9 +157,9 @@ export function sortProducts(products: Product[], sort: SortKey): Product[] {
   const list = [...products];
   switch (sort) {
     case 'price-asc':
-      return list.sort((a, b) => a.price - b.price);
+      return list.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
     case 'price-desc':
-      return list.sort((a, b) => b.price - a.price);
+      return list.sort((a, b) => (b.price ?? -Infinity) - (a.price ?? -Infinity));
     case 'rating':
       return list.sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount);
     case 'newest':
@@ -168,6 +182,7 @@ export const SORT_LABELS: Record<SortKey, string> = {
 export interface PricedLine extends CartLine {
   product: Product;
   colorName: string | null;
+  optionsText: string;
   image: string;
   unitPrice: number;
   lineTotal: number;
@@ -220,15 +235,17 @@ export function priceCart(
     const color = product.colors.find((c) => c.id === l.colorId) ?? null;
     let problem: string | null = null;
     if (!product.published) problem = 'המוצר אינו זמין יותר';
+    else if (product.price === null) problem = 'המחיר טרם נקבע — להזמנה בוואטסאפ';
     else if (!inStock(product)) problem = 'אזל מהמלאי';
     else if (l.qty > maxQty(product)) problem = `נותרו ${maxQty(product)} יחידות במלאי`;
     priced.push({
       ...l,
       product,
       colorName: color?.name ?? null,
+      optionsText: optionsText(product, l.options ?? {}),
       image: color?.images?.[0] ?? cardImage(product),
-      unitPrice: product.price,
-      lineTotal: product.price * l.qty,
+      unitPrice: product.price ?? 0,
+      lineTotal: (product.price ?? 0) * l.qty,
       problem,
     });
   }

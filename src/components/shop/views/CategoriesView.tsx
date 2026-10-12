@@ -5,7 +5,7 @@ import { categoryHref } from '@/lib/shop/logic';
 import { STATIC_CATEGORY_SLUGS } from '@/lib/shop/static';
 import { useShop } from '@/lib/shop/store';
 import { ShopFrame } from '../Chrome';
-import { IconSearch } from '../icons';
+import { IconArrow, IconSearch } from '../icons';
 import { Img } from '../ui';
 import { ShopFooter } from './HomeView';
 
@@ -23,7 +23,7 @@ export function CategoriesView() {
           className="flex h-12 items-center gap-3 rounded-full bg-x-soft px-4 text-[14px] text-x-faint lg:hidden"
         >
           <IconSearch size={22} className="text-x-ink" />
-          <span dir="rtl">חיפוש מוצרים, דמויות, אביזרים...</span>
+          <span dir="rtl">חיפוש מוצרים, קטגוריות...</span>
         </Link>
         <h2 className="mb-5 hidden text-3xl font-black lg:block">קטגוריות</h2>
         <ul dir="ltr" className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:mt-0 lg:grid-cols-4 lg:gap-5">
@@ -31,13 +31,16 @@ export function CategoriesView() {
             <li key={c.slug}>
               <Link
                 href={categoryHref(c.slug, STATIC_CATEGORY_SLUGS)}
-                className="group relative block aspect-[1.27/1] overflow-hidden rounded-[16px] bg-[#1b1e25] shadow-x-card"
+                className="group relative block aspect-[1/0.98] overflow-hidden rounded-[16px] bg-[#1b1e25] shadow-x-card"
               >
                 <Img path={c.image} alt="" eager={i < 4} className="absolute inset-0 size-full object-cover transition duration-500 group-hover:scale-105" />
                 <span className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-t from-black/80 via-black/40 to-transparent" />
-                <span dir="rtl" className="absolute inset-x-2 bottom-2.5 text-center text-[16px] font-extrabold text-white drop-shadow lg:text-lg">
-                  {c.name}
-                  <span className="sr-only"> ({counts(c.slug)} מוצרים)</span>
+                <span className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 text-white">
+                  <span dir="rtl" className="truncate text-[15.5px] font-extrabold drop-shadow lg:text-lg">
+                    {c.name}
+                    <span className="sr-only"> ({counts(c.slug)} מוצרים)</span>
+                  </span>
+                  <IconArrow dir="right" size={18} className="shrink-0" />
                 </span>
               </Link>
             </li>

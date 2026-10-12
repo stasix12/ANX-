@@ -41,7 +41,7 @@ export function CatalogView({ slug, cat, sortParam }: { slug: string; cat?: stri
   const title = catSlug === 'all' ? 'כל המוצרים' : (category?.name ?? 'קטגוריה');
 
   const pill = (on: boolean) =>
-    `h-10 shrink-0 rounded-full px-5 text-[14px] font-semibold transition ${on ? 'bg-x-blue-50 text-x-blue ring-1 ring-x-blue-100' : 'bg-x-soft text-x-ink-2 hover:bg-x-line/60'}`;
+    `h-10 shrink-0 rounded-full px-5 text-[14px] font-semibold transition ${on ? 'bg-linear-to-r from-x-violet to-x-indigo text-white shadow-[0_4px_12px_rgb(86_73_251/0.3)]' : 'bg-x-soft text-x-ink-2 hover:bg-x-line/60'}`;
 
   if (catSlug !== 'all' && !category && s.ready) {
     return (
@@ -87,7 +87,7 @@ export function CatalogView({ slug, cat, sortParam }: { slug: string; cat?: stri
 
         <div dir="ltr" className="x-noscrollbar -mx-4 mt-3 flex gap-2.5 overflow-x-auto px-4 pb-1 lg:mx-0 lg:px-0">
           <button type="button" onClick={() => setSort('recommended')} aria-pressed={sort === 'recommended'} className={pill(sort === 'recommended')}>
-            מומלצים
+            הכל
           </button>
           <button
             type="button"
@@ -98,10 +98,7 @@ export function CatalogView({ slug, cat, sortParam }: { slug: string; cat?: stri
           >
             מחיר{sort === 'price-asc' ? ' ↑' : sort === 'price-desc' ? ' ↓' : ''}
           </button>
-          <button type="button" onClick={() => setSort('rating')} aria-pressed={sort === 'rating'} className={pill(sort === 'rating')}>
-            דירוג
-          </button>
-          <button type="button" onClick={() => setSort('newest')} aria-pressed={sort === 'newest'} className={`${pill(sort === 'newest')} hidden lg:block`}>
+          <button type="button" onClick={() => setSort('newest')} aria-pressed={sort === 'newest'} className={pill(sort === 'newest')}>
             חדשים
           </button>
           <button
@@ -119,7 +116,7 @@ export function CatalogView({ slug, cat, sortParam }: { slug: string; cat?: stri
 
         <div className="mt-4">
           {list.length ? (
-            <ProductGrid products={list} alternate />
+            <ProductGrid products={list} />
           ) : (
             <EmptyState
               icon={<IconFilter size={34} />}

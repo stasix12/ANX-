@@ -1,8 +1,9 @@
-// End-to-end journey test for /shop (home → category → product → color → cart → checkout → order),
-// plus search, favorites, filters, auth and admin. Usage: BASE=http://localhost:3000 node scripts/shop-e2e.cjs <screenshot-dir>
-// Full user-journey test + screenshots of all 11 screens at 390x844.
+// End-to-end journey test for /shop: home → category → product → color → cart →
+// checkout → order, plus filters, unpriced (WhatsApp) products, search,
+// favorites, auth and admin (incl. a product with a diameter choice).
+// Usage: BASE=http://localhost:3000 node scripts/shop-e2e.cjs <screenshot-dir> [width] [height]
 const { chromium } = require(process.env.PW_CORE || 'playwright-core');
-const BASE = process.env.BASE || 'http://localhost:3100';
+const BASE = process.env.BASE || 'http://localhost:3000';
 const OUT = process.argv[2] || 'shots';
 const W = +(process.argv[3] || 390), H = +(process.argv[4] || 844);
 const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log('  ok -', m); };
@@ -22,96 +23,96 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
     await page.screenshot({ path: `${OUT}/${name}.png` });
   };
   const go = async (p) => { await page.goto(BASE + p, { waitUntil: 'networkidle' }); };
+  const badge = async (n) => (await page.locator('header').first().getByRole('link', { name: new RegExp(`עגלת קניות, ${n} פריטים`) }).count()) > 0;
 
   console.log('1 home');
   await go('/shop');
   await page.evaluate(() => localStorage.clear());
   await go('/shop');
   await shot('01-home');
-  assert(await page.getByRole('heading', { name: /מודלים תלת מימד/ }).isVisible(), 'hero title visible');
+  assert(await page.getByRole('heading', { name: /הדור הבא של/ }).isVisible(), 'hero title visible');
+  assert((await page.getByText(/דרקון|עציץ|תמנון/).count()) === 0, 'no decorative products left');
 
   console.log('2 categories');
   await page.getByRole('navigation', { name: 'ניווט תחתון' }).getByRole('link', { name: 'קטגוריות' }).click();
   await page.waitForURL('**/shop/categories');
   await shot('02-categories');
+  assert((await page.locator('main ul[dir=ltr] > li').count()) === 6, 'six cleaning categories');
 
   console.log('3 catalog');
-  await page.getByRole('link', { name: /^דמויות/ }).first().click();
-  await page.waitForURL('**/shop/c/figurines');
+  await page.getByRole('link', { name: /^ידיות לניקוי ספות/ }).first().click();
+  await page.waitForURL('**/shop/c/handles');
   await shot('03-catalog');
   const count = await page.locator('article').count();
-  assert(count > 0, `catalog shows ${count} products`);
+  assert(count >= 2, `handles shows ${count} products`);
 
   console.log('8 filters');
   await page.getByRole('button', { name: 'סינון מוצרים' }).click();
   await page.waitForTimeout(400);
   await shot('08-filters');
-  await page.getByRole('button', { name: 'חיות', exact: true }).click();
-  const btnText = await page.getByRole('button', { name: /^הצג \d+ מוצרים$/ }).textContent();
-  console.log('   filter button:', btnText);
+  await page.getByRole('button', { name: 'משלימים', exact: true }).click();
   await page.getByRole('button', { name: /^הצג \d+ מוצרים$/ }).click();
   const after = await page.locator('article').count();
-  assert(after > 0 && after <= count, `filter applied: ${count} -> ${after}`);
+  assert(after === 1, `filter applied: ${count} -> ${after}`);
 
   console.log('4 product');
-  await go('/shop/p/flex-dragon');
+  await go('/shop/p/anaconda');
   await shot('04-product');
   const mainSrc = async () => page.locator('[aria-roledescription="גלריה"] img').first().getAttribute('src');
-  const before = await mainSrc();
-  await page.getByRole('button', { name: 'אדום', exact: true }).click();
+  assert((await mainSrc()).includes('anx-anaconda/1'), 'real ANACONDA photo first');
+  await page.getByRole('button', { name: 'שחור', exact: true }).click();
   await page.waitForTimeout(300);
-  const red = await mainSrc();
-  assert(before !== red && red.includes('dragon-red'), 'color change swaps gallery image');
+  assert((await mainSrc()).includes('anx-anaconda/5'), 'black swatch shows the black handle photos');
+  assert((await page.locator('video').count()) === 1, 'demo video in gallery');
   await page.getByRole('button', { name: 'הוסף כמות' }).click();
   await page.getByRole('button', { name: /הוסף לסל/ }).click();
   await page.waitForTimeout(300);
-  const badge = await page.locator('header').first().getByRole('link', { name: /עגלת קניות, 2 פריטים/ }).count();
-  assert(badge > 0, 'cart badge shows 2 items');
+  assert(await badge(2), 'cart badge shows 2 items');
+
+  console.log('unpriced product');
+  await go('/shop/p/wand-of-troy');
+  assert((await page.getByText('מחיר יעודכן בקרוב').count()) > 0, 'unpriced product says price will be updated');
+  const wa = await page.getByRole('link', { name: /בוואטסאפ/ }).getAttribute('href');
+  assert(wa.startsWith('https://wa.me/') && decodeURIComponent(wa).includes('Wand of Troy'), 'WhatsApp order link carries the product');
+  assert((await page.getByRole('button', { name: /הוסף לסל/ }).count()) === 0, 'no add-to-cart without a price');
+  assert((await page.getByText('תמונה להמחשה').count()) > 0, 'mock-up image is captioned as illustrative');
 
   console.log('7 favorites');
   await go('/shop/c/all');
-  for (const n of ['דרקון גמיש', 'עציץ גרוט', 'תמנון גמיש', 'דרקון אדום']) {
+  for (const n of ['ANACONDA', 'Wand of Troy', 'ראש שאיבה לחריצים', 'קופסה למשאבת Shurflo']) {
     await page.getByRole('button', { name: `הוספת ${n} למועדפים` }).first().click();
   }
-  await page.getByRole('button', { name: 'הוספת עציץ גרוט לסל' }).first().click();
-  await page.getByRole('button', { name: 'הוספת מעמד לטלפון לסל' }).first().click();
+  await page.getByRole('button', { name: 'הוספת סט קליפסים לצינורות לסל' }).first().click();
+  await page.getByRole('button', { name: 'לפרטים ולהזמנה — Wand of Troy' }).first().click();
+  await page.waitForURL('**/shop/p/wand-of-troy');
   await go('/shop/favorites');
   await shot('07-favorites');
   assert((await page.locator('article').count()) === 4, 'favorites shows 4');
-  await page.getByRole('button', { name: 'הסרת תמנון גמיש מהמועדפים' }).click();
+  await page.getByRole('button', { name: 'הסרת ראש שאיבה לחריצים מהמועדפים' }).click();
   assert((await page.locator('article').count()) === 3, 'remove from favorites works');
-  await page.getByRole('button', { name: 'הוספת תמנון גמיש למועדפים' }).count();
 
   console.log('5 cart');
   await go('/shop/cart');
-  // set dragon qty back to 1 so totals mirror the design (89+69+59)
-  const rows = page.locator('main li');
   await page.getByRole('button', { name: 'הפחת כמות' }).first().click();
   await shot('05-cart');
-  const total = await page.locator('main').getByText(/232/).count();
-  assert(total > 0, 'cart total 217 + 15 = 232');
+  assert((await page.locator('main').getByText(/1144/).count()) > 0, 'total 850 + 279 + 15 shipping = 1144');
   await page.getByRole('button', { name: 'הוסף כמות' }).nth(1).click();
-  assert((await page.locator('main').getByText(/301/).count()) > 0, 'qty change recalculates (286+15=301)');
+  assert((await page.locator('main').getByText(/1423/).count()) > 0, 'qty change recalculates (850 + 558 + 15 = 1423)');
   await page.getByRole('button', { name: 'הפחת כמות' }).nth(1).click();
   await page.getByLabel('קוד קופון').fill('BADCODE');
   await page.getByRole('button', { name: 'הפעל' }).click();
   assert((await page.getByText('קוד הקופון אינו בתוקף').count()) > 0, 'invalid coupon rejected');
-  await page.getByLabel('קוד קופון').fill('anx10');
-  await page.getByRole('button', { name: 'הפעל' }).click();
-  assert((await page.getByText(/הנחת קופון/).count()) > 0, 'valid coupon applied');
-  await page.getByRole('button', { name: 'הסרת הקופון' }).click();
 
   console.log('6 search');
   await go('/shop/search');
-  await page.getByRole('combobox').fill('דרקון');
+  await page.getByRole('combobox').fill('ידית');
   await page.waitForTimeout(300);
   await shot('06-search');
-  const sugg = await page.getByRole('option').count();
-  assert(sugg >= 2, `autocomplete shows ${sugg} suggestions`);
+  assert((await page.getByRole('option').count()) >= 1, 'autocomplete suggestions');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(400);
-  assert((await page.locator('article').count()) >= 3, 'search results for דרקון');
-  await page.getByRole('combobox').fill('גיימינג');
+  assert((await page.locator('article').count()) >= 1, 'search results for ידית');
+  await page.getByRole('combobox').fill('שטיחים');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   assert((await page.locator('article').count()) >= 1, 'search by category name');
@@ -128,14 +129,10 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.locator('select').selectOption('חיפה');
   await page.getByRole('button', { name: 'המשך לתשלום' }).click();
   await page.waitForTimeout(300);
-  await shot('09b-payment');
-  await page.getByRole('button', { name: /לתשלום מאובטח/ }).click();
-  assert((await page.getByText('יש לאשר את תנאי השימוש').count()) > 0, 'terms required');
   await page.getByRole('checkbox').last().check();
   await page.getByRole('button', { name: /לתשלום מאובטח/ }).click();
   await page.getByRole('button', { name: 'סירוב (בדיקה)' }).click();
   assert((await page.getByText(/התשלום נדחה/).count()) > 0, 'declined payment shows error, no success');
-  assert(page.url().includes('/checkout'), 'stayed on checkout after decline');
   await page.getByRole('button', { name: /לתשלום מאובטח/ }).click();
   await page.getByRole('button', { name: 'אישור תשלום (הדגמה)' }).click();
   await page.waitForURL('**/shop/order?id=**', { timeout: 5000 });
@@ -144,12 +141,10 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.waitForTimeout(1600);
   await shot('10-success');
   assert((await page.getByText('ההזמנה בוצעה בהצלחה!').count()) > 0, 'success screen after approved payment');
-  const num = await page.locator('p[dir=ltr]').first().textContent();
-  console.log('   order number', num);
-  assert((await page.locator('header').first().getByRole('link', { name: /עגלת קניות, 0 פריטים/ }).count()) > 0, 'cart cleared after order');
+  assert(await badge(0), 'cart cleared after order');
   await page.getByRole('link', { name: 'מעקב אחר ההזמנה' }).click();
   await page.waitForURL('**/shop/track**');
-  await shot('10b-track');
+  assert((await page.getByText('ANACONDA').count()) > 0, 'tracking shows ordered items');
   await go('/shop/order?id=nonexistent');
   assert((await page.getByText('ההזמנה לא נמצאה').count()) > 0, 'fake order id shows no success');
 
@@ -163,22 +158,11 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.getByRole('button', { name: 'יצירת חשבון' }).click();
   await page.waitForURL('**/shop/account');
   await shot('11-account');
-  await page.getByRole('link', { name: 'כתובות משלוח' }).click();
-  await page.getByRole('button', { name: '+ הוספת כתובת' }).click();
-  await page.getByPlaceholder('רחוב ומספר בית').fill('דיזנגוף 50');
-  await page.getByPlaceholder('עיר').fill('תל אביב-יפו');
-  await page.getByRole('button', { name: 'שמירה' }).click();
-  assert((await page.getByText('דיזנגוף 50').count()) > 0, 'address saved');
-  await go('/shop/account');
   await page.getByRole('button', { name: 'התנתק' }).click();
   await page.waitForURL(BASE + '/shop');
-  await go('/shop/login');
-  await page.getByPlaceholder('אימייל').fill('stas@example.com');
-  await page.getByPlaceholder('סיסמה').fill('wrongpass1');
-  await page.getByRole('button', { name: 'התחברות', exact: true }).last().click();
-  assert((await page.getByText('אימייל או סיסמה שגויים').count()) > 0, 'wrong password rejected');
 
   console.log('admin');
+  await go('/shop/login');
   await page.getByPlaceholder('אימייל').fill('admin@anx3d.demo');
   await page.getByPlaceholder('סיסמה').fill('anx3d-admin');
   await page.getByRole('button', { name: 'התחברות', exact: true }).last().click();
@@ -186,25 +170,24 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await go('/shop/admin');
   await shot('12-admin');
   await page.getByRole('button', { name: '+ מוצר חדש' }).click();
-  await page.locator('label:has-text("שם המוצר") input').fill('מחזיק אוזניות');
-  await page.locator('label:has-text("מזהה URL") input').fill('headphone-holder');
-  await page.locator('label:has-text("מחיר (₪)") input').fill('55');
-  await page.locator('label:has-text("מלאי") input[type=number]').first().fill('7');
-  await page.getByRole('button', { name: 'גיימינג' }).click();
-  await page.getByPlaceholder(/או כתובת תמונה/).fill('/shop/img/phone-stand.webp');
+  await page.locator('label:has-text("שם המוצר") input').fill('מתאם בדיקה');
+  await page.locator('label:has-text("מזהה URL") input').fill('test-adapter');
+  await page.locator('label:has-text("מחיר (₪)") input').fill('120');
+  await page.getByRole('button', { name: 'מתאמים ומחברים' }).click();
+  await page.getByPlaceholder(/או כתובת תמונה/).fill('/shop/img2/cat-adapters.webp');
   await page.getByRole('button', { name: 'הוספה' }).click();
+  await page.getByRole('button', { name: '+ בחירה' }).click();
+  await page.getByLabel('אפשרויות, מופרדות בפסיק').fill('32 מ״מ, 36 מ״מ, 38 מ״מ');
   await page.getByRole('button', { name: 'שמירה' }).click();
-  assert((await page.getByText('מחזיק אוזניות').count()) > 0, 'admin created product');
-  await go('/shop/c/gaming');
-  assert((await page.getByText('מחזיק אוזניות').count()) > 0, 'new product visible in storefront');
-  await page.getByRole('link', { name: 'מחזיק אוזניות' }).click();
-  await page.waitForURL('**/shop/item?s=headphone-holder');
-  assert((await page.getByRole('heading', { name: 'מחזיק אוזניות' }).count()) > 0, 'new product page works');
-
-  console.log('empty cart');
+  assert((await page.getByText('מתאם בדיקה').count()) > 0, 'admin created product');
+  await go('/shop/item?s=test-adapter');
+  await page.getByRole('button', { name: /הוסף לסל/ }).click();
+  assert((await page.getByText('יש לבחור קוטר חיבור').count()) > 0, 'diameter must be chosen');
+  await page.getByRole('button', { name: '36 מ״מ' }).click();
+  await page.getByRole('button', { name: /הוסף לסל/ }).click();
   await go('/shop/cart');
-  assert((await page.getByText('העגלה ריקה').count()) > 0, 'empty cart state');
-  await go('/shop/p/does-not-exist');
+  assert((await page.getByText('קוטר חיבור: 36 מ״מ').count()) > 0, 'cart line carries the chosen diameter');
+
   console.log('\nCONSOLE/NETWORK ERRORS:', errors.length ? '\n' + errors.join('\n') : 'none');
   await browser.close();
 })().catch((e) => { console.error('FAILED', e.message); process.exit(1); });

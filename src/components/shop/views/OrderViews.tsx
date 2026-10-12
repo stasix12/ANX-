@@ -174,7 +174,8 @@ export function OrderDetail({ order }: { order: Order }) {
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[14px] font-bold">{l.name}</span>
               <span className="block text-[12px] text-x-muted">
-                {l.colorName ? `צבע: ${l.colorName} · ` : ''}כמות: {l.qty}
+                {l.colorName ? `צבע: ${l.colorName} · ` : ''}
+                {l.optionsText ? `${l.optionsText} · ` : ''}כמות: {l.qty}
               </span>
             </span>
             <span className="text-[14px] font-extrabold">{ils(l.unitPrice * l.qty)}</span>

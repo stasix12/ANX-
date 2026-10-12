@@ -103,7 +103,7 @@ export function SearchView({ initial = '' }: { initial?: string }) {
                   setActive((a) => Math.max(-1, a - 1));
                 }
               }}
-              placeholder="חיפוש מוצרים, דמויות, אביזרים..."
+              placeholder="חיפוש מוצרים, קטגוריות..."
               aria-label="חיפוש מוצרים"
               aria-autocomplete="list"
               aria-controls="search-suggestions"
@@ -216,7 +216,7 @@ export function SearchView({ initial = '' }: { initial?: string }) {
             <section>
               <h2 className="mb-3 text-[16px] font-extrabold">חיפושים פופולריים</h2>
               <div className="flex flex-wrap gap-2">
-                {['דרקון', 'גמיש', 'מעמד', 'עציץ', 'גיימינג', 'STL'].map((t) => (
+                {['ידית', 'ANACONDA', 'טול', 'מחבר 360', 'מתאם', 'Shurflo'].map((t) => (
                   <button key={t} type="button" onClick={() => run(t)} className="h-9 rounded-full bg-x-soft px-4 text-[14px] font-semibold text-x-ink-2 hover:bg-x-blue-50 hover:text-x-blue">
                     {t}
                   </button>

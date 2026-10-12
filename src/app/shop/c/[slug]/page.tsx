@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const name = cat?.name ?? 'כל המוצרים';
   return {
     title: name,
-    description: `${name} מודפסים בתלת ממד — ANX3D. עיצובים ייחודיים, איכות הדפסה גבוהה ומגוון צבעים.`,
+    description: `${name} — ציוד ניקוי מקצועי מבית ANX3D, מיוצר בהדפסת תלת־ממד.`,
     alternates: { canonical: `/shop/c/${slug}` },
   };
 }

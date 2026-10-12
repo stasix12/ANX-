@@ -224,48 +224,40 @@ export function CategoryGlyph({ icon, ...p }: P & { icon: CategoryIcon }) {
           <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
         </Base>
       );
-    case 'figurine':
+    case 'handle':
+      // Upholstery tool: grip with trigger and a clear nozzle head.
       return (
         <Base {...p}>
-          <path d="M8 20.5h8M9.5 20.5l.8-6.5M14.5 20.5l-.8-6.5" />
-          <path d="M12 14c-3.3 0-6-2.4-6-5.4C6 5.6 8.7 3.5 12 3.5s6 2.1 6 5.1c0 3-2.7 5.4-6 5.4Z" />
-          <path d="M9 7.5c1 .9 1.9 1.3 3 1.3s2-.4 3-1.3" />
+          <path d="M3 9.5 13 6.5l1.5 3-9 3.2" />
+          <path d="M8.5 11.5 7 16.5H4.5L6 11.9" />
+          <path d="M13 6.5 17 9l-1 2.5 4.5 6H13l1-6.5" />
         </Base>
       );
-    case 'decor':
+    case 'wand':
+      // Carpet wand: shaft into a wide floor head.
       return (
         <Base {...p}>
-          <path d="M5 20.5h14M7.5 20.5 9 11h6l1.5 9.5M9.5 4h5l1.5 7H8l1.5-7Z" />
+          <path d="M12 3v10" />
+          <path d="M9.5 13h5l5.5 5H4l5.5-5Z" />
+          <path d="M6 20.5h12" />
         </Base>
       );
-    case 'gaming':
+    case 'adapter':
+      // Pipe fitting: two diameters joined.
       return (
         <Base {...p}>
-          <path d="M7 7.5h10a4 4 0 0 1 4 4.3l-.4 3.9a2.4 2.4 0 0 1-4.2 1.3L14.6 15H9.4l-1.8 2a2.4 2.4 0 0 1-4.2-1.3L3 11.8a4 4 0 0 1 4-4.3Z" />
-          <path d="M8 10.5v3M6.5 12h3" />
-          <circle cx="15.5" cy="11" r=".6" fill="currentColor" />
-          <circle cx="17" cy="13" r=".6" fill="currentColor" />
+          <rect x="3.5" y="8" width="7" height="8" rx="1.5" />
+          <rect x="10.5" y="6" width="10" height="12" rx="2" />
+          <path d="M14 6v12M17 6v12" />
         </Base>
       );
-    case 'stand':
+    case 'suction':
+      // Narrow suction nozzle.
       return (
         <Base {...p}>
-          <rect x="7" y="3" width="10" height="18" rx="2" />
-          <path d="M11 17.5h2" />
-        </Base>
-      );
-    case 'tools':
-      return (
-        <Base {...p}>
-          <path d="M14.5 6.5a4 4 0 0 0 5.2 5.2l-8.9 8.9a2.1 2.1 0 0 1-3-3l8.9-8.9a4 4 0 0 1-2.2-2.2Z" />
-          <path d="M14.5 6.5 17 4l3 3-2.5 2.5" />
-        </Base>
-      );
-    case 'animals':
-      return (
-        <Base {...p}>
-          <path d="M5 18c2-1 3-3.5 3-6.5C8 7 10.5 4 14 4c2.5 0 4.5 1.6 5 4l-2.5.8c.4 1.8-.3 3.4-2 4.2l1.5 5H5Z" />
-          <circle cx="15" cy="7.5" r=".7" fill="currentColor" />
+          <path d="M5 20 19 6" />
+          <path d="M15 4l5 5-3 1.5-3.5-3.5L15 4Z" />
+          <path d="M4 21l2.5-.5L5.5 19.5 4 21Z" />
         </Base>
       );
     case 'parts':
@@ -275,11 +267,12 @@ export function CategoryGlyph({ icon, ...p }: P & { icon: CategoryIcon }) {
           <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
         </Base>
       );
-    case 'stl':
+    case 'accessory':
+      // Pump box.
       return (
         <Base {...p}>
-          <path d="M6 3.5h8l4 4V20a.5.5 0 0 1-.5.5h-11A.5.5 0 0 1 6 20V3.5Z" />
-          <path d="M14 3.5V8h4M12 10.5v6m-2.5-2.5L12 16.5l2.5-2.5" />
+          <rect x="4" y="8" width="16" height="12" rx="2" />
+          <path d="M9 8V5.5h6V8M8 14h2M14 14h2" />
         </Base>
       );
   }

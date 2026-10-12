@@ -73,7 +73,15 @@ function load(): ShopState {
     const d = v as ShopDB;
     return !!d && d.version === DB_VERSION && Array.isArray(d.products) && !!d.settings;
   });
-  const cart = read(CART_KEY, { lines: [], coupon: null }, (v) => Array.isArray((v as ShopState['cart'])?.lines));
+  const stored = read(CART_KEY, { lines: [], coupon: null }, (v) => Array.isArray((v as ShopState['cart'])?.lines));
+  // Lines saved by an older version have no `options`; lines for products
+  // that no longer exist are dropped.
+  const cart = {
+    ...stored,
+    lines: stored.lines
+      .filter((l: CartLine) => db.products.some((p) => p.id === l.productId))
+      .map((l: CartLine) => ({ ...l, options: l.options ?? {} })),
+  };
   const favorites = read<string[]>(FAV_KEY, [], Array.isArray);
   const userId = read<string | null>(SESSION_KEY, null, (v) => typeof v === 'string');
   return { db, cart, favorites, userId: db.users.some((u) => u.id === userId) ? userId : null, ready: true };
@@ -164,17 +172,20 @@ export interface CheckoutInput {
 
 export const actions = {
   /* ------------------------------------------------------------- cart */
-  addToCart(productId: string, colorId: string | null, qty = 1): Result<number> {
+  addToCart(productId: string, colorId: string | null, qty = 1, options: Record<string, string> = {}): Result<number> {
     const s = get();
     const p = s.db.products.find((x) => x.id === productId);
     if (!p || !p.published) return fail('המוצר אינו זמין');
+    if (p.price === null) return fail('המחיר טרם נקבע — אפשר לברר ולהזמין בוואטסאפ');
     if (!inStock(p)) return fail('המוצר אזל מהמלאי');
-    const key = lineKey(productId, colorId);
+    const missing = p.variants.find((v) => !options[v.id]);
+    if (missing) return fail(`יש לבחור ${missing.label}`);
+    const key = lineKey(productId, colorId, options);
     const existing = s.cart.lines.find((l) => l.key === key);
     const want = Math.min(maxQty(p), (existing?.qty ?? 0) + qty);
     const lines = existing
       ? s.cart.lines.map((l) => (l.key === key ? { ...l, qty: want } : l))
-      : [...s.cart.lines, { key, productId, colorId, qty: want }];
+      : [...s.cart.lines, { key, productId, colorId, options, qty: want }];
     commit({ cart: { ...s.cart, lines } });
     return ok(want);
   },
@@ -326,6 +337,7 @@ export const actions = {
         productId: l.productId,
         name: l.product.name,
         colorName: l.colorName,
+        optionsText: l.optionsText,
         image: l.image,
         unitPrice: l.unitPrice,
         qty: l.qty,
@@ -395,9 +407,18 @@ export const actions = {
     if (!p.name.trim()) return fail('חסר שם מוצר');
     if (!/^[a-z0-9-]+$/.test(p.slug)) return fail('מזהה URL: אותיות באנגלית קטנות, ספרות ומקפים בלבד');
     if (db.products.some((x) => x.slug === p.slug && x.id !== p.id)) return fail('מזהה ה-URL כבר בשימוש');
-    if (!(p.price >= 0)) return fail('מחיר לא תקין');
+    if (p.price !== null && !(p.price >= 0)) return fail('מחיר לא תקין');
     if (!p.images.length) return fail('יש להוסיף לפחות תמונה אחת');
     if (!p.categories.length) return fail('יש לבחור קטגוריה');
+    const clean = (list: string[]) => list.map((t) => t.trim()).filter(Boolean);
+    p = {
+      ...p,
+      highlights: clean(p.highlights),
+      compatibility: clean(p.compatibility),
+      specs: p.specs.filter((r) => r.label.trim() && r.value.trim()),
+      tags: clean(p.tags),
+      variants: p.variants.map((v) => ({ ...v, values: clean(v.values) })).filter((v) => v.label.trim() && v.values.length),
+    };
     const exists = db.products.some((x) => x.id === p.id);
     commit({ db: { ...db, products: exists ? db.products.map((x) => (x.id === p.id ? p : x)) : [...db.products, p] } });
     return ok(undefined);
@@ -454,18 +475,25 @@ export function newProductDraft(): Product {
     id: uid('p'),
     slug: '',
     name: '',
+    subtitle: '',
     description: '',
     categories: [],
-    price: 0,
+    price: null,
     images: [],
     colors: [],
-    stock: 0,
+    variants: [],
+    imageNotes: {},
+    specs: [],
+    compatibility: [],
+    highlights: [],
+    usage: '',
+    stock: null,
     rating: 0,
     reviewCount: 0,
     featured: false,
     published: true,
     digital: false,
-    material: 'PLA',
+    material: '',
     tags: [],
     createdAt: now(),
     sortOrder: 100,

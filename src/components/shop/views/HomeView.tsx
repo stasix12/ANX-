@@ -7,6 +7,7 @@ import { CategoryChips } from '../CategoryChips';
 import { SampleRibbon, ShopFrame } from '../Chrome';
 import { IconArrow } from '../icons';
 import { ProductCard, ProductGrid } from '../ProductCard';
+import { Logo } from '../Logo';
 import { Img } from '../ui';
 
 export function HomeView() {
@@ -19,34 +20,36 @@ export function HomeView() {
   return (
     <ShopFrame nav="home" header="overlay">
       {/* Hero — dark stage, dragon on the left, copy on the right. */}
-      <section className="relative isolate overflow-hidden bg-[#10141c] text-white">
-        {/* Blurred copy fills the stage; the sharp dragon sits bottom-left at the design's scale. */}
-        <Img path="/shop/img/dragon-blue-hero.webp" alt="" eager className="absolute inset-0 -z-20 size-full scale-125 object-cover opacity-70 blur-xl" />
+      <section className="relative isolate overflow-hidden bg-[#0a1640] text-white">
+        <div className="absolute inset-0 -z-20 bg-[radial-gradient(120%_90%_at_15%_40%,#1d3fa8_0%,#0f2160_45%,#081233_100%)]" />
         <Img
-          path="/shop/img/dragon-blue-hero.webp"
-          alt="דרקון גמיש מודפס בתלת ממד בצבעי שחור וכחול"
+          path="/shop/img2/hero-handle.webp"
+          alt="ידית ANX3D לניקוי ספות על ספה"
           eager
-          className="absolute bottom-[3%] -left-[2%] -z-10 aspect-square h-[76%] max-h-[440px] object-cover [mask-image:radial-gradient(closest-side,#000_74%,transparent)] sm:h-[90%] lg:left-[6%]"
+          className="absolute bottom-0 left-0 -z-10 h-[88%] w-[52%] object-cover object-[40%_50%] [mask-image:linear-gradient(90deg,#000_62%,transparent)] sm:w-[44%] lg:h-full lg:w-[42%]"
         />
-        <div className="absolute inset-0 -z-10 bg-[linear-gradient(270deg,#0d1118_0%,rgba(13,17,24,0.92)_26%,rgba(13,17,24,0.35)_52%,rgba(13,17,24,0)_70%)]" />
-        <div className="absolute inset-x-0 top-0 -z-10 h-28 bg-linear-to-b from-black/45 to-transparent" />
-        <div className="mx-auto flex min-h-[330px] max-w-7xl items-start px-4 pt-[calc(66px+env(safe-area-inset-top))] pb-12 sm:min-h-[400px] lg:min-h-[480px] lg:items-center lg:px-8 lg:pt-24">
-          <div className="ms-0 me-auto w-[64%] max-w-md animate-x-fade sm:w-1/2 lg:max-w-lg">
-            <h1 className="text-[26px] leading-[1.18] font-black sm:text-[34px] lg:text-[48px]">
-              מודלים תלת מימד
+        <span className="absolute bottom-7 left-2 -z-10 text-[9px] font-semibold text-white/45 lg:bottom-12 lg:left-4">הדמיה</span>
+        <div className="absolute inset-x-0 top-0 -z-10 h-24 bg-linear-to-b from-black/35 to-transparent" />
+        <div className="mx-auto flex min-h-[330px] max-w-7xl items-start px-4 pt-[calc(64px+env(safe-area-inset-top))] pb-12 sm:min-h-[400px] lg:min-h-[480px] lg:items-center lg:px-8 lg:pt-24">
+          <div className="ms-0 me-auto w-[62%] max-w-md animate-x-fade sm:w-1/2 lg:max-w-xl">
+            <p className="text-left" dir="ltr">
+              <Logo tone="light" className="text-[34px] lg:text-[52px]" />
+            </p>
+            <h1 className="mt-1.5 text-[23px] leading-[1.2] font-black sm:text-[30px] lg:text-[44px]">
+              הדור הבא של
               <br />
-              <span className="bg-linear-to-l from-[#9b7bff] to-[#7a55ff] bg-clip-text text-transparent">שמדפיסים בבית</span>
+              <span className="bg-linear-to-l from-[#7fb6ff] to-[#3f8cff] bg-clip-text text-transparent">ציוד הניקוי המקצועי</span>
             </h1>
-            <p className="mt-2.5 text-[14px] leading-snug text-white/90 lg:mt-4 lg:text-lg">
-              עיצובים ייחודיים, איכות גבוהה,
+            <p className="mt-2.5 text-[13.5px] leading-snug text-white/90 lg:mt-4 lg:text-lg">
+              אביזרים חדשניים לניקוי ספות ושטיחים,
               <br />
-              לכל הרמות והמדפסות.
+              המיוצרים בטכנולוגיית הדפסת תלת־ממד.
             </p>
             <Link
               href="/shop/c/all"
-              className="mt-5 inline-flex h-12 items-center gap-2 rounded-full bg-linear-to-r from-[#5c4dfc] to-[#4f4bfb] px-6 text-[15px] font-bold shadow-[0_8px_22px_rgb(84_74_252/0.45)] transition hover:brightness-110 lg:h-14 lg:px-8 lg:text-base"
+              className="mt-5 inline-flex h-12 items-center gap-2 rounded-full bg-linear-to-r from-[#6a4cfc] to-[#4f52fb] px-6 text-[15px] font-bold shadow-[0_8px_22px_rgb(84_74_252/0.45)] transition hover:brightness-110 lg:h-14 lg:px-8 lg:text-base"
             >
-              לכל המוצרים
+              לצפייה במוצרים
               <IconArrow dir="right" size={18} />
             </Link>
           </div>
@@ -82,20 +85,16 @@ export function HomeView() {
           </div>
         </section>
 
-        {/* Promo band — the white dragon / knight strip under the featured row. */}
+        {/* Promo band under the featured row — the ANACONDA set, from real photos. */}
         <section className="px-4 pt-4 lg:px-0 lg:pt-10">
-          <Link
-            href="/shop/c/figurines"
-            className="relative flex h-[150px] items-center overflow-hidden rounded-[20px] bg-[#1a1d24] lg:h-[220px]"
-          >
-            <Img path="/shop/img/dragon-white-1.webp" alt="" className="absolute inset-y-0 left-0 h-full w-1/2 object-cover" />
-            <Img path="/shop/img/knight-bust.webp" alt="" className="absolute inset-y-0 right-0 h-full w-1/2 object-cover opacity-70" />
-            <div className="absolute inset-0 bg-[linear-gradient(270deg,rgba(10,13,20,0.92)_0%,rgba(10,13,20,0.7)_45%,rgba(10,13,20,0.1)_100%)]" />
-            <div className="relative ms-5 me-auto max-w-[60%] text-white lg:ms-10">
-              <p className="text-xs font-bold text-[#a993ff]">חדש בחנות</p>
-              <p className="mt-1 text-[19px] leading-tight font-black lg:text-3xl">דמויות ופסלים לאספנים</p>
+          <Link href="/shop/p/anaconda-set" className="relative flex h-[150px] items-center overflow-hidden rounded-[20px] bg-[#111827] lg:h-[220px]">
+            <Img path="/products/anx-anaconda-set/1.webp" alt="" className="absolute inset-y-0 left-0 h-full w-[55%] object-cover object-[50%_40%]" />
+            <div className="absolute inset-0 bg-[linear-gradient(270deg,rgba(10,16,40,0.96)_0%,rgba(10,16,40,0.8)_45%,rgba(10,16,40,0.05)_100%)]" />
+            <div className="relative ms-5 me-auto max-w-[58%] text-white lg:ms-10">
+              <p className="text-xs font-bold text-[#8fb4ff]">סט מלא</p>
+              <p className="mt-1 text-[19px] leading-tight font-black lg:text-3xl">ANACONDA — ידית, צינור משולב ומחבר 360°</p>
               <span className="mt-2 inline-flex items-center gap-1 text-[13px] font-bold text-white/90">
-                לקולקציה <IconArrow dir="right" size={15} />
+                לפרטים <IconArrow dir="right" size={15} />
               </span>
             </div>
           </Link>
@@ -136,7 +135,7 @@ export function ShopFooter() {
           <p className="text-2xl font-black">
             ANX<span className="text-x-blue">3D</span>
           </p>
-          <p className="mt-2 text-x-muted">מודלים ומוצרים מודפסים בתלת ממד — עיצובים ייחודיים לבית, למשרד ולמתנה.</p>
+          <p className="mt-2 text-x-muted">אביזרים מקצועיים לניקוי ספות, שטיחים וריפודים — מתוכננים ומיוצרים בהדפסת תלת־ממד.</p>
         </div>
         <div>
           <p className="mb-3 font-bold">חנות</p>

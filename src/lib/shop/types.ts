@@ -6,16 +6,7 @@
  * same shapes map 1:1 onto supabase/shop-schema.sql.
  */
 
-export type CategoryIcon =
-  | 'all'
-  | 'figurine'
-  | 'decor'
-  | 'gaming'
-  | 'stand'
-  | 'tools'
-  | 'animals'
-  | 'parts'
-  | 'stl';
+export type CategoryIcon = 'all' | 'handle' | 'wand' | 'adapter' | 'suction' | 'parts' | 'accessory';
 
 export interface Category {
   slug: string;
@@ -37,20 +28,46 @@ export interface ColorOption {
   images?: string[];
 }
 
+/** A choosable product version, e.g. connection diameter: 32 / 36 / 38 mm. */
+export interface VariantGroup {
+  id: string;
+  label: string;
+  values: string[];
+}
+
+export interface SpecRow {
+  label: string;
+  value: string;
+}
+
 export interface Product {
   id: string;
   slug: string;
+  /** Model name, e.g. "ANACONDA". */
   name: string;
+  /** Second line under the name on cards, e.g. "ידית מקצועית לניקוי ספות". */
+  subtitle: string;
   description: string;
   /** Category slugs; the first one is the primary (breadcrumb) category. */
   categories: string[];
-  price: number;
+  /** null = price not set yet: shown as "מחיר יעודכן", ordering goes to WhatsApp. */
+  price: number | null;
   compareAtPrice?: number;
   images: string[];
   /** Square shot for product cards; defaults to images[0]. */
   cardImage?: string;
   colors: ColorOption[];
-  /** Units on hand. 0 = out of stock. null = made to order / digital. */
+  variants: VariantGroup[];
+  /** Captions for images that are not product photos ("תמונה להמחשה", "הדמיית תכנון"). */
+  imageNotes: Record<string, string>;
+  video?: { mp4: string; webm: string; poster: string };
+  specs: SpecRow[];
+  /** Machines / hoses it fits. */
+  compatibility: string[];
+  highlights: string[];
+  /** Usage and maintenance instructions. */
+  usage: string;
+  /** Units on hand. 0 = out of stock. null = not tracked (made to order / digital). */
   stock: number | null;
   rating: number;
   reviewCount: number;
@@ -69,6 +86,8 @@ export interface CartLine {
   key: string;
   productId: string;
   colorId: string | null;
+  /** Variant selections, e.g. { diameter: '36 מ״מ' }. */
+  options: Record<string, string>;
   qty: number;
 }
 
@@ -124,6 +143,8 @@ export interface OrderLine {
   productId: string;
   name: string;
   colorName: string | null;
+  /** Variant selections as text, e.g. "קוטר חיבור: 36 מ״מ". */
+  optionsText: string;
   image: string;
   unitPrice: number;
   qty: number;

@@ -151,7 +151,7 @@ export function ShopHeader({
           className="ms-auto flex h-11 w-80 items-center gap-2 rounded-full bg-x-soft px-4 text-x-muted focus-within:ring-2 focus-within:ring-x-blue-100"
         >
           <IconSearch size={20} />
-          <input name="q" placeholder="חיפוש מוצרים, דמויות, אביזרים..." className="w-full bg-transparent text-sm text-x-ink outline-none placeholder:text-x-faint" />
+          <input name="q" placeholder="חיפוש מוצרים, קטגוריות..." className="w-full bg-transparent text-sm text-x-ink outline-none placeholder:text-x-faint" />
         </form>
         <div className={`flex items-center gap-1 ${iconCls}`}>
           <Link href="/shop/favorites" aria-label="מועדפים" className={`grid size-11 place-items-center rounded-full ${dark ? 'hover:bg-white/10' : 'hover:bg-x-soft'}`}>

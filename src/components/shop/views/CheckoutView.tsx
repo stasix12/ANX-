@@ -318,6 +318,7 @@ export function CheckoutView() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[14px] font-bold">{l.product.name}</span>
                     {l.colorName && <span className="block text-[12px] text-x-muted">צבע: {l.colorName}</span>}
+                    {l.optionsText && <span className="block text-[12px] text-x-muted">{l.optionsText}</span>}
                   </span>
                   <Price value={l.lineTotal} className="text-[14px]" />
                 </li>

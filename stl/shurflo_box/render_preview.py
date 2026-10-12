@@ -21,7 +21,7 @@ def elbow(sy):
     stem = C.cylinder(8, 10, sections=24); stem.apply_transform(trimesh.transformations.rotation_matrix(np.pi/2, [1, 0, 0]))
     body = C.cylinder(9, 32, sections=24); body.apply_transform(ax_x)
     return trimesh.util.concatenate([at(stem, -70, sy*49.5, 62+LIFT), at(body, -70+12, sy*63, 62+LIFT)])
-def tube(sy): t = C.cylinder(5, 120, sections=24); t.apply_transform(ax_x); return at(t, -42+60, sy*63, 62+LIFT)
+def tube(sy): t = C.cylinder(4, 120, sections=24); t.apply_transform(ax_x); return at(t, -42+60, sy*63, 62+LIFT)
 pump = trimesh.util.concatenate([at(C.box([76, 96, 3]), 15, 0, 4+LIFT+1.5), xcyl(38, 125, -45), xcyl(43.5, 50, -95),
                                  xcyl(15, 15, 80), at(C.box([16, 89, 16]), -70, 0, 62+LIFT), elbow(1), elbow(-1), tube(1), tube(-1)])
 def view(az, el):                 # rows: screen-right, screen-up, towards viewer

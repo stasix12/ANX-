@@ -1,6 +1,6 @@
 """ANX3D enclosure for a Shurflo diaphragm pump 8095-901-890 (230 VAC, ~190 x 96 x 89 mm on its flat bracket).
 Outer body 210 x 170 x 120 mm (widened from 140 so the pump fits with a PL 3/8" push-in elbow on each port): base (82 mm) + lid (38 mm), joined by 6 x M4 screws.
-Front face: inlet + outlet (35 mm panel-frame holes) | power gland (M16), Hebrew labels engraved above.
+Front face: inlet + outlet (17 mm holes for PM8 bulkhead unions) | power gland (M16), Hebrew labels engraved above.
 Run:  python3 make_box.py   ->  base.stl, lid.stl (lid already flipped for printing)."""
 import numpy as np, trimesh
 from manifold3d import Manifold, CrossSection, FillRule, JoinType
@@ -12,7 +12,7 @@ HB = 82.0                         # base height (lid = H - HB)
 W = 4.0                           # wall / floor thickness
 R = 10.0                          # outer corner radius
 GLAND_Z = 40.0                    # gland hole centre height
-WATER_HOLE = 35.0                 # water fittings: same panel-frame hole as the Turbo-X panel
+WATER_HOLE = 17.0                 # PM8 push-in bulkhead union (8 mm tube, M16 thread, 17 mm panel hole)
 GLANDS = [(-48, WATER_HOLE, 'יציאה'),     # (y, hole dia, label)  - viewed from the front: left -> right
           (0,   16.4, 'חשמל'),             # water holes line up with the elbows on either side of the pump head
           (48,  WATER_HOLE, 'כניסה')]

@@ -63,7 +63,7 @@ const base = {
 } satisfies Partial<Product>;
 
 const anacondaGreen = [1, 2, 3, 4].map((n) => real('anx-anaconda', n));
-const anacondaBlack = [5, 6, 7, 8].map((n) => real('anx-anaconda', n));
+const anacondaBlack = [5, 6, 7, 8, 9].map((n) => real('anx-anaconda', n));
 
 export const SEED_PRODUCTS: Product[] = [
   {
@@ -318,7 +318,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 export function buildSeedDB(): ShopDB {
   return {

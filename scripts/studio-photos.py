@@ -47,10 +47,20 @@ GALLERIES = {
         'pro-handle-1.jpg', 'pro-handle-2.jpg',
         'pro-handle-3.jpg', 'pro-handle-4.jpg',
     ],
+    # The black ANACONDA. Its gallery opens with the jungle-green handle
+    # (1-4, scripts/product-photos.py), so these are numbered from 5.
+    'anx-anaconda': (5, [
+        'anaconda-black-studio-1.jpg', 'anaconda-black-studio-2.jpg', 'anaconda-black-studio-3.jpg',
+        'anaconda-black-studio-4.jpg', 'anaconda-black-studio-5.jpg',
+    ]),
 }
 
 # Per source photo, in source pixels: the window outline (just inside the
-# frame), the embossed logo to leave alone, and the glare strength.
+# frame), the embossed lettering to leave alone, and the glare strength.
+# Optional: 'keep' — parts seen through the window that belong to the
+# product and stay untouched; 'neutral' — take a colour cast out of the
+# window (0..1); 'cut' — polygons of background the mask took in; 'erase' —
+# boxes in the window (a reflection of the room) filled from the glass around.
 CLEANUP = {
     'pro-handle-1.jpg': {
         'window': [(745, 1105), (890, 1095), (700, 1865), (325, 1725)],
@@ -73,6 +83,39 @@ CLEANUP = {
         'sheen': 0,
     },
     'pro-handle-4.jpg': {},
+    'anaconda-black-studio-1.jpg': {
+        'window': [(1112, 1040), (1290, 1036), (1440, 1180), (1610, 1380), (1688, 1500),
+                   (1678, 1555), (1262, 1560), (1210, 1430), (1150, 1220)],
+        'keep': [(1215, 1235, 1405, 1405)],
+        # The kitchen reflected in the glass, everywhere but the inner part.
+        'erase': [(1100, 1020, 1700, 1580)],
+        'logo': [(975, 830, 1165, 970)],
+        'sheen': 0.14,
+    },
+    'anaconda-black-studio-2.jpg': {
+        'window': [(815, 1065), (955, 1065), (905, 1250), (820, 1480), (735, 1700),
+                   (640, 1712), (402, 1580), (365, 1528), (565, 1300)],
+        'keep': [(675, 1255, 855, 1405)],
+        'logo': [(950, 845, 1100, 985), (1255, 1090, 1435, 1150)],
+        'sheen': 0.10,
+    },
+    'anaconda-black-studio-3.jpg': {
+        'window': [(1290, 1055), (1395, 1022), (1640, 1240), (1868, 1452), (1855, 1488), (1700, 1605)],
+        'keep': [(1395, 1195, 1585, 1385)],
+        'logo': [(1115, 830, 1255, 985)],
+        'sheen': 0.10,
+        'neutral': 0.85,
+    },
+    'anaconda-black-studio-4.jpg': {
+        # The bottle behind touches the handle's tail and the mask took it in.
+        'cut': [[(0, 0), (560, 0), (560, 945), (500, 952), (380, 958), (270, 962), (190, 972), (0, 972)]],
+        # Edge-on window: only a coloured reflection of the kitchen to take out.
+        'window': [(1550, 1120), (1610, 1120), (1805, 1270), (1805, 1305), (1770, 1310), (1570, 1165)],
+        'logo': [(1230, 880, 1335, 985)],
+        'sheen': 0,
+        'neutral': 0.9,
+    },
+    'anaconda-black-studio-5.jpg': {},
 }
 
 
@@ -83,8 +126,7 @@ def remove_dust(img, mask, logo):
     cand = tophat > 34
     cand &= cv2.medianBlur(L, 31) < 110  # dark plastic only, not metal or glare
     cand &= cv2.erode((mask > 200).astype(np.uint8), np.ones((15, 15), np.uint8)) > 0
-    if logo:
-        x0, y0, x1, y1 = logo
+    for x0, y0, x1, y1 in ([logo] if isinstance(logo, tuple) else logo or []):
         cand[y0:y1, x0:x1] = False
 
     n, labels, stats, _ = cv2.connectedComponentsWithStats(cand.astype(np.uint8), 8)
@@ -99,11 +141,24 @@ def remove_dust(img, mask, logo):
     return out
 
 
-def clean_window(img, outline, sheen):
+def clean_window(img, outline, sheen, keep=(), neutral=0, erase=()):
     """Spots, stains and streaks out of the window; frame edges and reflections stay."""
     m = np.zeros(img.shape[:2], np.uint8)
     cv2.fillPoly(m, [np.array(outline)], 255)
+    whole = m.copy()
+    for x0, y0, x1, y1 in keep:
+        m[y0:y1, x0:x1] = 0
 
+    if erase:
+        # The glass reflects the room here: the reflections go, and what stays
+        # is the dark tone of the glass itself, smoothly varying.
+        hole = np.zeros_like(m)
+        for x0, y0, x1, y1 in erase:
+            hole[y0:y1, x0:x1] = 255
+        dark = cv2.erode(img, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (61, 61)))
+        dark = cv2.GaussianBlur(dark, (0, 0), 40)
+        h = cv2.GaussianBlur(hole & m, (0, 0), 12).astype(np.float32)[..., None] / 255
+        img = (img * (1 - h) + dark * h).astype(np.uint8)
     med = cv2.medianBlur(img, 31)
     spots = (img.max(axis=2).astype(int) - med.max(axis=2).astype(int) > 22) & (m > 0)
     spots = cv2.dilate(spots.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
@@ -114,6 +169,12 @@ def clean_window(img, outline, sheen):
     smooth = cv2.ximgproc.guidedFilter(smooth, smooth, 12, 25.0 ** 2)
     a = cv2.GaussianBlur(m, (0, 0), 6).astype(np.float32)[..., None] / 255
     out = img * (1 - a) + smooth * a
+
+    if neutral:
+        # A clean pane has no colour of its own: pull the window towards grey.
+        w = cv2.GaussianBlur(whole, (0, 0), 6).astype(np.float32)[..., None] / 255 * neutral
+        grey = out.mean(axis=2, keepdims=True)
+        out = out * (1 - w) + grey * w
 
     if sheen:
         # A soft diagonal glare band, the way a clean pane catches the light.
@@ -130,7 +191,8 @@ def clean(img, mask, filename):
     bgr = cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
     bgr = remove_dust(bgr, np.asarray(mask), spec.get('logo'))
     if 'window' in spec:
-        bgr = clean_window(bgr, spec['window'], spec['sheen'])
+        bgr = clean_window(bgr, spec['window'], spec['sheen'], spec.get('keep', ()), spec.get('neutral', 0),
+                           spec.get('erase', ()))
     return Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
 
 
@@ -142,6 +204,10 @@ def load_mask(filename, img):
         session = new_session('birefnet-general')
         remove(img, session=session, only_mask=True).save(path)
     mask = Image.open(path).convert('L')
+    for poly in CLEANUP.get(filename, {}).get('cut', []):
+        m = np.asarray(mask).copy()
+        cv2.fillPoly(m, [np.array(poly)], 0)
+        mask = Image.fromarray(cv2.GaussianBlur(m, (0, 0), 1.2))
     trim = CLEANUP.get(filename, {}).get('trim')
     if trim:
         # Warm, wood-coloured pixels inside the box are background, not product.
@@ -265,10 +331,11 @@ def compose(img, mask):
 
 def main():
     for slug, gallery in GALLERIES.items():
+        start, gallery = gallery if isinstance(gallery, tuple) else (1, gallery)
         dest = os.path.join(PRODUCTS, slug)
         os.makedirs(dest, exist_ok=True)
 
-        for index, filename in enumerate(gallery, 1):
+        for index, filename in enumerate(gallery, start):
             img = ImageOps.exif_transpose(Image.open(os.path.join(SOURCE, filename))).convert('RGB')
             mask = load_mask(filename, img)
             out = compose(enhance(decontaminate(clean(img, mask, filename), mask)), mask)

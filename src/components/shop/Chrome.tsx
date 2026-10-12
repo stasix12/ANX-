@@ -55,8 +55,10 @@ export function ShopHeader({
   back,
   title,
   onMenu,
+  uprightLogo,
 }: {
   tone?: HeaderTone;
+  uprightLogo?: boolean;
   /** Shows the back chevron in place of the menu; the href is the fallback when there is no history. */
   back?: string;
   /** Replaces the wordmark (checkout shows "תשלום"). */
@@ -104,7 +106,7 @@ export function ShopHeader({
               {title}
             </span>
           ) : (
-            <Logo tone={dark ? 'light' : 'dark'} className="text-[29px]" />
+            <Logo tone={dark ? 'light' : 'dark'} upright={uprightLogo} className={uprightLogo ? 'text-[30px] tracking-[-0.02em]' : 'text-[29px]'} />
           )}
         </Link>
         <div className="flex items-center justify-end gap-1">
@@ -123,7 +125,7 @@ export function ShopHeader({
       {/* Desktop: a real top bar instead of a stretched phone header. */}
       <div className="mx-auto hidden h-18 max-w-7xl items-center gap-8 px-8 lg:flex">
         <Link href="/shop" aria-label="ANX3D — דף הבית">
-          <Logo tone={dark ? 'light' : 'dark'} className="text-[32px]" />
+          <Logo tone={dark ? 'light' : 'dark'} upright={uprightLogo} className="text-[32px]" />
         </Link>
         <nav aria-label="ניווט ראשי" className="flex items-center gap-1">
           {DESKTOP_LINKS.map((l) => {
@@ -323,6 +325,7 @@ export function ShopFrame({
   title,
   hideHeader,
   dark,
+  uprightLogo,
 }: {
   children: React.ReactNode;
   /** Bottom-nav tab to highlight; `false` hides the bar (product, checkout, search). */
@@ -332,12 +335,14 @@ export function ShopFrame({
   title?: string;
   hideHeader?: boolean;
   dark?: boolean;
+  /** Home page only: the upright wordmark of the hero design. */
+  uprightLogo?: boolean;
 }) {
   const [menu, setMenu] = useState(false);
   const close = useState(() => () => setMenu(false))[0];
   return (
     <div className={`relative min-h-dvh ${dark ? 'bg-x-night text-white' : 'bg-white'}`}>
-      {!hideHeader && <ShopHeader tone={header} back={back} title={title} onMenu={() => setMenu(true)} />}
+      {!hideHeader && <ShopHeader tone={header} back={back} title={title} uprightLogo={uprightLogo} onMenu={() => setMenu(true)} />}
       <main id="main" className={nav === false ? 'pb-8' : 'pb-[calc(92px+env(safe-area-inset-bottom))] lg:pb-16'}>
         {children}
       </main>

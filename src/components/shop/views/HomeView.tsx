@@ -5,7 +5,7 @@ import { sortProducts } from '@/lib/shop/logic';
 import { useShop } from '@/lib/shop/store';
 import { CategoryChips } from '../CategoryChips';
 import { SampleRibbon, ShopFrame } from '../Chrome';
-import { IconArrow } from '../icons';
+import { IconArrow, IconBox, IconShield } from '../icons';
 import { ProductCard, ProductGrid } from '../ProductCard';
 import { Logo } from '../Logo';
 import { Img } from '../ui';
@@ -18,40 +18,65 @@ export function HomeView() {
   const newest = sortProducts(published, 'newest');
 
   return (
-    <ShopFrame nav="home" header="overlay">
+    <ShopFrame nav="home" header="overlay" uprightLogo>
       {/* Hero — dark stage, dragon on the left, copy on the right. */}
-      <section className="relative isolate overflow-hidden bg-[#0a1640] text-white">
-        <div className="absolute inset-0 -z-20 bg-[radial-gradient(120%_90%_at_15%_40%,#1d3fa8_0%,#0f2160_45%,#081233_100%)]" />
+      {/* Hero — black ANACONDA on the sofa (scripts/shop-hero-asset.py), copy on the left. */}
+      <section className="relative isolate min-h-[calc(412px+env(safe-area-inset-top))] overflow-hidden bg-[#0b1226] text-white sm:min-h-[480px] lg:min-h-[600px]">
         <Img
-          path="/shop/img2/hero-handle.webp"
-          alt="ידית ANX3D לניקוי ספות על ספה"
+          path="/shop/img2/hero-anaconda.webp"
+          alt="ידית ANACONDA שחורה לניקוי ספות על ספה"
           eager
-          className="absolute bottom-0 left-0 -z-10 h-[88%] w-[52%] object-cover object-[40%_50%] [mask-image:linear-gradient(90deg,#000_62%,transparent)] sm:w-[44%] lg:h-full lg:w-[42%]"
+          className="absolute inset-x-0 top-0 -z-20 h-auto w-full sm:inset-0 sm:size-full sm:object-cover sm:object-[100%_30%] lg:inset-auto lg:top-0 lg:right-0 lg:h-full lg:w-auto lg:max-w-[62%] lg:object-[0%_50%] lg:[mask-image:linear-gradient(90deg,transparent,#000_22%)]"
         />
-        <span className="absolute bottom-7 left-2 -z-10 text-[9px] font-semibold text-white/45 lg:bottom-12 lg:left-4">הדמיה</span>
-        <div className="absolute inset-x-0 top-0 -z-10 h-24 bg-linear-to-b from-black/35 to-transparent" />
-        <div className="mx-auto flex min-h-[330px] max-w-7xl items-start px-4 pt-[calc(64px+env(safe-area-inset-top))] pb-12 sm:min-h-[400px] lg:min-h-[480px] lg:items-center lg:px-8 lg:pt-24">
-          <div className="ms-0 me-auto w-[62%] max-w-md animate-x-fade sm:w-1/2 lg:max-w-xl">
-            <p className="text-left" dir="ltr">
-              <Logo tone="light" className="text-[34px] lg:text-[52px]" />
+        {/* Wider screens: keep the copy side as dark as on the phone. */}
+        <div className="absolute inset-0 -z-10 hidden bg-[linear-gradient(90deg,#0b1226_0%,rgba(11,18,38,0.85)_30%,rgba(11,18,38,0)_60%)] sm:block" />
+        <div className="absolute inset-x-0 bottom-0 -z-10 h-24 bg-linear-to-t from-[#0b1226]/60 to-transparent" />
+        <div className="absolute inset-x-0 top-0 -z-10 hidden h-28 bg-linear-to-b from-black/45 to-transparent lg:block" />
+        <div className="mx-auto max-w-7xl px-5 pt-[calc(156px+env(safe-area-inset-top))] sm:pt-36 sm:pb-10 lg:px-8 lg:pt-44 lg:pb-20">
+          <div dir="ltr" className="mr-auto max-w-[262px] animate-x-fade sm:max-w-md lg:max-w-xl">
+            <p className="flex items-center gap-2.5">
+              <span className="h-[3px] w-6 rounded-full bg-[#3b5bff] lg:w-10" />
+              <Logo tone="light" upright className="text-[18px] tracking-[-0.02em] lg:text-[28px]" />
             </p>
-            <h1 className="mt-1.5 text-[23px] leading-[1.2] font-black sm:text-[30px] lg:text-[44px]">
+            <h1 dir="rtl" className="mt-0.5 text-left text-[25px] leading-[1] font-black lg:mt-3 lg:text-[52px] lg:leading-[1.1]">
               הדור הבא של
               <br />
-              <span className="bg-linear-to-l from-[#7fb6ff] to-[#3f8cff] bg-clip-text text-transparent">ציוד הניקוי המקצועי</span>
+              <span className="bg-linear-to-l from-[#3f4dff] to-[#5a46f5] bg-clip-text text-transparent">ציוד הניקוי המקצועי</span>
             </h1>
-            <p className="mt-2.5 text-[13.5px] leading-snug text-white/90 lg:mt-4 lg:text-lg">
+            <p dir="rtl" className="mt-2 text-left text-[13.5px] leading-[1.33] text-white/92 lg:mt-4 lg:text-lg lg:leading-[1.5]">
               אביזרים חדשניים לניקוי ספות ושטיחים,
               <br />
               המיוצרים בטכנולוגיית הדפסת תלת־ממד.
             </p>
             <Link
               href="/shop/c/all"
-              className="mt-5 inline-flex h-12 items-center gap-2 rounded-full bg-linear-to-r from-[#6a4cfc] to-[#4f52fb] px-6 text-[15px] font-bold shadow-[0_8px_22px_rgb(84_74_252/0.45)] transition hover:brightness-110 lg:h-14 lg:px-8 lg:text-base"
+              dir="rtl"
+              className="relative mt-1.5 inline-flex h-[30px] items-center gap-2 rounded-full bg-linear-to-r from-[#5b45f6] to-[#3f55fb] px-[18px] text-[13.5px] font-bold text-white shadow-[0_6px_20px_rgb(76_80_255/0.6)] transition after:absolute after:inset-x-0 after:-inset-y-[7px] after:content-[''] hover:brightness-110 lg:mt-6 lg:h-14 lg:px-9 lg:text-lg"
             >
               לצפייה במוצרים
-              <IconArrow dir="right" size={18} />
+              <IconArrow dir="right" size={16} />
             </Link>
+          </div>
+
+          {/* Benefits row */}
+          <ul dir="ltr" className="mt-2.5 grid grid-cols-3 lg:mt-14 lg:mr-auto lg:max-w-xl">
+            {[
+              { Icon: IconShield, title: 'עמידות גבוהה', text: 'בשימוש יומיומי' },
+              { Icon: IconCog, title: 'עיצוב ארגונומי', text: 'נוחות מקסימלית' },
+              { Icon: IconBox, title: 'הדפסת תלת־ממד', text: 'פתרונות מותאמים' },
+            ].map(({ Icon, title, text }) => (
+              <li key={title} dir="rtl" className="flex flex-col items-center text-center">
+                <span className="grid size-[30px] place-items-center rounded-full border-[1.5px] border-white/75 lg:size-12">
+                  <Icon size={17} />
+                </span>
+                <span className="mt-1 text-[11px] leading-[14px] font-bold lg:text-[15px]">{title}</span>
+                <span className="text-[10px] leading-[13px] text-white/75 lg:text-[13px]">{text}</span>
+              </li>
+            ))}
+          </ul>
+          <div aria-hidden="true" dir="ltr" className="mt-1 flex justify-center gap-1.5 lg:hidden">
+            <span className="size-[5px] rounded-full bg-white" />
+            <span className="size-[5px] rounded-full border border-white/70" />
           </div>
         </div>
       </section>
@@ -124,6 +149,16 @@ export function HomeView() {
       </div>
       <ShopFooter />
     </ShopFrame>
+  );
+}
+
+/** Toothed cog for the "עיצוב ארגונומי" benefit, as in the hero design. */
+function IconCog({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" aria-hidden="true">
+      <path d="M10.3 3h3.4l.5 2.4 1.6.9 2.3-.8 1.7 2.9-1.8 1.6v1.9l1.8 1.6-1.7 2.9-2.3-.8-1.6.9-.5 2.4h-3.4l-.5-2.4-1.6-.9-2.3.8-1.7-2.9L5.8 13v-1.9L4 9.4l1.7-2.9 2.3.8 1.6-.9.7-2.4Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
   );
 }
 

@@ -112,6 +112,7 @@ export const SEED_PRODUCTS: Product[] = [
     price: 950,
     images: [1, 2, 3, 4].map((n) => real('anx-pro-handle', n)),
     colors: [{ ...COLORS.black }],
+    video: { webm: '/video/viper-demo.webm', mp4: '/video/viper-demo.mp4', poster: '/video/viper-demo-poster.jpg' },
     highlights: ['חלון שקוף בראש השאיבה', 'הדק להתזה תוך כדי עבודה', 'אחיזה מחוספסת', 'קו מים מובנה'],
     featured: true,
     tags: ['viper', 'וייפר', 'ויפר', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
@@ -317,7 +318,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export function buildSeedDB(): ShopDB {
   return {

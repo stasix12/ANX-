@@ -145,6 +145,42 @@ export function formatTimeHe(iso: string | Date, tz = TIMEZONE): string {
   return formatter('he-IL', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
 }
 
+/** The second of the local clock at an instant, in the zone. */
+export function zonedSecond(date: Date, tz = TIMEZONE): number {
+  return partsInZone(date, tz).second;
+}
+
+/**
+ * A PUBLISH INSTANT, TO THE SECOND WHEN THE SECOND MEANS SOMETHING.
+ *
+ * formatTimeHe() is HH:MM, and at a thirty-second cadence that is the wrong
+ * resolution for half the queue: six rows thirty seconds apart print three
+ * distinct times, so two rows per printed minute with no way to tell on any
+ * screen that they are thirty seconds apart. The Timeline then shows 10:00
+ * beside a countdown reading 00:00 on one row and 00:30 on the row under it,
+ * and one screen contradicts itself.
+ *
+ * SECONDS ONLY WHEN THEY CARRY INFORMATION. A ten-minute round lands every row
+ * on :00, and "10:00:00" down a column is three characters of noise per row on
+ * a 390px phone. Omitted at :00, printed otherwise — which is exactly the rows
+ * a sub-minute gap produces and no others, so no existing screen moves until a
+ * campaign is actually set below a minute.
+ */
+export function formatInstantHe(iso: string | Date, tz = TIMEZONE): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  const base = formatTimeHe(d, tz);
+  const s = zonedSecond(d, tz);
+  return s === 0 ? base : `${base}:${String(s).padStart(2, '0')}`;
+}
+
+/** The same, for a full date-and-time in a detail sheet. */
+export function formatDateInstantHe(iso: string | Date | null | undefined, tz = TIMEZONE): string {
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  const s = zonedSecond(d, tz);
+  return s === 0 ? formatDateTimeHe(d, tz) : `${formatDateTimeHe(d, tz)}:${String(s).padStart(2, '0')}`;
+}
+
 /**
  * Compact date for dense rows: "18.09" inside the current year, "18.09.25"
  * outside it. A full dd.mm.yyyy next to a time and a relative phrase does not

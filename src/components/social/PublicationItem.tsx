@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getQueueItem, type QueueRow } from '@/lib/social/client';
-import { formatDayMonthHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import { formatDayMonthHe, formatInstantHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { CANCELLABLE_STATUSES } from '@/lib/social/status';
 import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
 import { CalendarIcon, ClipboardListIcon, EyeIcon, RepeatIcon, SendIcon, UsersIcon, XCircleIcon } from '@/components/icons';
@@ -44,7 +44,7 @@ export function statusLine(row: QueueRow, projectedAt?: string | null): { text: 
     case 'published':
       // No "ב-" before the time: a Hebrew prefix glued to digits with a hyphen
       // is exactly the construction that flips order in a bidi run.
-      return { text: row.published_at ? `פורסם ${formatTimeHe(row.published_at)}` : 'פורסם', cls: TONE_TEXT[STATUS_TONE.published] };
+      return { text: row.published_at ? `פורסם ${formatInstantHe(row.published_at)}` : 'פורסם', cls: TONE_TEXT[STATUS_TONE.published] };
     case 'failed':
       return { text: 'נכשל', cls: TONE_TEXT[STATUS_TONE.failed] };
     case 'skipped':
@@ -72,7 +72,7 @@ export function statusLine(row: QueueRow, projectedAt?: string | null): { text: 
        * `at` is projectQueue()'s answer when the caller supplied one, and the
        * stored instant when it did not — see the prop on PublicationItem.
        */
-      return { text: `${formatTimeHe(at)} · ${relativeHe(at)}`, cls: TONE_TEXT[STATUS_TONE.scheduled] };
+      return { text: `${formatInstantHe(at)} · ${relativeHe(at)}`, cls: TONE_TEXT[STATUS_TONE.scheduled] };
   }
 }
 
@@ -141,8 +141,8 @@ export function PublicationItem({
     ? line.text
     : row.status === 'scheduled'
       ? isToday
-        ? `${formatTimeHe(at)} · ${relativeHe(at)}`
-        : `${formatDayMonthHe(at)} · ${formatTimeHe(at)}`
+        ? `${formatInstantHe(at)} · ${relativeHe(at)}`
+        : `${formatDayMonthHe(at)} · ${formatInstantHe(at)}`
       : isToday
         ? line.text
         : `${formatDayMonthHe(at)} · ${line.text}`;

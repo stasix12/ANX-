@@ -231,7 +231,23 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     const campaignSchedule = await campaignWindow(db, post.campaign_id ?? null);
     /* One row per (occasion, target), worked out up front because each instant
        is the floor of the next — see windowedCascade(). */
-    const plannedSlots = slots.map((slot) => windowedStagger(slot, schedule.target_ids.length, spacingSeconds, campaignSchedule));
+    /*
+     * THE LATER OF THE TWO GATES, because that is the one the engine enforces.
+     *
+     * `spacingSeconds` is the ACCOUNT floor and nothing else, while
+     * campaignSchedule was passed only as the WINDOW to roll into. So the
+     * moment the floor comes down to thirty seconds, a second campaign still
+     * asking for ten minutes has its rows STAMPED thirty seconds apart and
+     * then every one of them deferred by rules.ts — the column promising an
+     * instant the queue will never use, which is the contradiction between
+     * screens this product keeps being bitten by. holdFor() and projectOne()
+     * both already take this max; the planner was the one place that did not.
+     */
+    const stampGapSeconds = Math.max(
+      spacingSeconds,
+      campaignSchedule?.enabled ? campaignSchedule.gapSeconds : 0,
+    );
+    const plannedSlots = slots.map((slot) => windowedStagger(slot, schedule.target_ids.length, stampGapSeconds, campaignSchedule));
 
     /*
      * HAS THIS SCHEDULE ALREADY BEEN PLANNED past the end of this window?

@@ -464,7 +464,11 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(!/state\?\.estimatedCompletionAt \? when\(state\.estimatedCompletionAt\)/.test(runPage), 'the raw estimate is no longer printed under "לפי התזמון שהוגדר"');
 
   const tuner = read('src/components/social/QueueTunerSheet.tsx');
-  is(/windowedCascade\(bases, gap \* 60, snap\?\.window \?\? null\)/.test(tuner), 'the respace preview runs the same cascade respaceQueue writes');
+  /* SECONDS on both sides now. The sheet held whole minutes and multiplied by
+     60 here; respaceQueue takes seconds, so the preview and the write only
+     agreed while every gap happened to be a whole minute. */
+  is(/windowedCascade\(bases, gap, snap\?\.window \?\? null\)/.test(tuner), 'the respace preview runs the same cascade respaceQueue writes, in the same unit');
+  is(/const MIN_GAP = MIN_GAP_SECONDS;/.test(tuner), 'and the sheet floors at the engine\u2019s own minimum rather than at one minute');
   is(/const currentProjected =/.test(tuner), 'and the "before" half is projected too, so both halves are in the same units');
   is(!/<Clock iso=\{rows\[0\]\.scheduled_at\} \/>/.test(tuner), 'the sheet opened to FIX the times no longer opens on the raw column');
 
@@ -643,7 +647,11 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(/const PENDING: QueueItem\['status'\]\[\] = AUTOMATIC_WAITING_STATUSES;/.test(client), 'and PENDING is still the automatic-waiting set, which excludes a row in flight');
   is(/windowedCascade\(bases, schedule\.gapSeconds, schedule\)/.test(client), 'the new instants come from the same roll the screens and the planner use');
   is(/const anchor = roundAnchor\(schedule, head, floor\);/.test(client), 'anchored on the WINDOW, so the re-stamp works in both directions');
-  is(/const floor = new Date\(Date\.now\(\) \+ 60_000\);/.test(client), 'with a minute of cushion, so the worker cannot claim a row before the write lands');
+  /* The cushion is sized off the BATCH now, not fixed at a minute: a minute
+     was one slot when a minute was the fastest this product went, and is two
+     slots of dead air at the head of a thirty-second round. */
+  is(/const floor = new Date\(Date\.now\(\) \+ writeSettleMs\(pending\.length\)\);/.test(client), 'with enough cushion that the worker cannot claim a row before the write lands');
+  is(/export const writeSettleMs = \(rows: number\): number => Math\.min\(60_000, Math\.max\(10_000, rows \* 40\)\);/.test(client), 'and the cushion is at least two worker polls, however small the batch');
   is(/if \(!schedule\.enabled\) return \{ moved: 0/.test(client), 'and switching the window OFF moves nothing — that is not a re-space he asked for');
   is(/\.filter\(\(w\) => w\.next !== w\.was\)/.test(client), 'a row already on its new instant is not written, so the count reported is the count that moved');
   /* ONE COPY of the collision-safe write, not two. */
@@ -710,19 +718,24 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   const tuner = strip(readFileSync('src/components/social/QueueTunerSheet.tsx', 'utf8'));
   const client = strip(readFileSync('src/lib/social/client.ts', 'utf8'));
 
-  is(/setGap\(own\?\.enabled \? Math\.max\(1, Math\.round\(own\.gapSeconds \/ 60\)\) : plan\.effectiveGapMinutes\)/.test(tuner),
-    'the tuner opens on the ROUND\u2019s own gap when it is about a round, not on the account floor');
+  /* And it opens on the round's gap EXACTLY, not rounded into whole minutes:
+     a thirty-second round used to load as "1 דק׳" and one save doubled it. */
+  is(/setGap\(own\?\.enabled \? own\.gapSeconds : plan\.effectiveGapSeconds\)/.test(tuner),
+    'the tuner opens on the ROUND\u2019s own gap when it is about a round, not on the account floor, and does not round it');
   is(/await saveCampaign\(\{[\s\S]{0,200}scheduleColumns\(\{ \.\.\.snap\.window, gapSeconds: kept \}\)/.test(tuner),
     'and writes that round\u2019s own column, so the panel beside it cannot disagree');
   is(/await matchAccountGapTo\(kept\);/.test(tuner), 'with the account floor following the same number the panel would follow');
   /*
-   * AND NO RATCHET. The control is whole minutes; a round on thirty seconds
-   * rounds to "1" here, so saving without touching the number wrote sixty and
-   * DOUBLED the floor. Same class as the settings-screen ratchet fixed earlier
-   * with keepOrDerive.
+   * AND THE RATCHET IS GONE BECAUSE ITS CAUSE IS.
+   *
+   * The control used to be whole minutes, so a round on thirty seconds loaded
+   * as "1" and one save wrote sixty — doubling the floor without the owner
+   * touching the number. The guard that defended against it needed a
+   * round trip to defend against; a seconds control has none, so the written
+   * value IS the value on screen.
    */
-  is(/Math\.max\(1, Math\.round\(snap\.window\.gapSeconds \/ 60\)\) === gap \? snap\.window\.gapSeconds : want/.test(tuner),
-    'and a sub-minute gap that round-trips to the same minute is kept exactly, never widened to 60s');
+  is(/const kept = gap;/.test(tuner), 'the sheet writes the gap it is showing, with no minutes round trip to lose it in');
+  is(!/Math\.round\(snap\.window\.gapSeconds \/ 60\)/.test(tuner), 'and nothing on this sheet rounds a stored gap into whole minutes any more');
   /* The account-wide path is untouched: with no campaign in scope the sheet
      still writes the account settings and nothing else. */
   is(/if \(campaignId && snap\?\.campaign && snap\.window\) \{/.test(tuner), 'the account-wide tuner is unchanged — this only applies when a round is in scope');

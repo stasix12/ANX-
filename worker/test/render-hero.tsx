@@ -47,7 +47,18 @@ const st = (p: unknown, extra: Partial<CampaignState> = {}): CampaignState =>
     ...extra,
   }) as CampaignState;
 
-const inHours = (h: number) => new Date(Date.now() + h * 3600e3).toISOString();
+/*
+ * Floored to the MINUTE, because a planned instant is.
+ *
+ * It was `Date.now() + h*3600e3`, which carries whatever second the test
+ * happened to start on — so once the screens began printing seconds, every
+ * fixture rendered 14:27:26 and the measured guard failed on a string no real
+ * schedule produces. A whole-minute round lands on :00; the sub-minute case
+ * gets its own fixture below, which is the one that has to FIT.
+ */
+const inHours = (h: number) => new Date(Math.floor((Date.now() + h * 3600e3) / 60_000) * 60_000).toISOString();
+/** The same, plus thirty seconds — what a 30-second cadence actually stamps. */
+const inHoursPlus30 = (h: number) => new Date(Math.floor((Date.now() + h * 3600e3) / 60_000) * 60_000 + 30_000).toISOString();
 
 /*
  * A RENDER AT A KNOWN MINUTE, for the two cards whose words depend on whether
@@ -268,6 +279,25 @@ const cases = [
       startedAt: beforeClock(WINDOW_OPEN, 5),
     }),
     39, sched.reference, WINDOW_OPEN],
+  /*
+   * 15 — A THIRTY-SECOND CADENCE, and the eight characters it stamps.
+   *
+   * Its own fixture rather than a flag on another, because a truncated card
+   * must print no instant at all (case 14) — the two cannot be the same row.
+   *
+   * The strip's figure is 22px tabular digits in a fixed column; "10:00:30"
+   * does not fit there at 360px, which the measured guard proved rather than
+   * anyone guessing. The answer is to shrink the figure, never to drop the
+   * seconds: a strip reading 10:00 over a list reading 10:00:30 is this
+   * product's oldest failure shape.
+   */
+  ['a sub-minute round: the next instant carries its seconds and still fits', camp('15', 'סבב כל 30 שניות'),
+    st(prog({ total: 80, published: 30, scheduled: 50, finished: 30 }), {
+      state: 'running',
+      startedAt: beforeClock(WINDOW_OPEN, 1),
+      nextAt: inHoursPlus30(1),
+    }),
+    80, sched.reference, WINDOW_OPEN],
 ] as const;
 
 const body = cases

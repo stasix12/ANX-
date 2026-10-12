@@ -5,7 +5,7 @@ import { canPauseRun, canResumeRun, runBadge, runProgress, type CampaignState } 
 import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { accountGapSeconds } from '@/lib/social/rules';
-import { counted, formatDayMonthHe, formatTimeHe, zonedDateISO } from '@/lib/social/time';
+import { counted, formatDayMonthHe, formatInstantHe, zonedDateISO } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem } from '@/lib/social/types';
 import {
@@ -699,6 +699,6 @@ function cover(media?: MediaItem[] | null): MediaItem | null {
 /** Today shows a bare time; another day needs its date to mean anything. */
 function whenLabel(iso: string): string {
   return zonedDateISO(new Date(iso)) === zonedDateISO(new Date())
-    ? `היום, ${formatTimeHe(iso)}`
-    : `${formatDayMonthHe(iso)}, ${formatTimeHe(iso)}`;
+    ? `היום, ${formatInstantHe(iso)}`
+    : `${formatDayMonthHe(iso)}, ${formatInstantHe(iso)}`;
 }

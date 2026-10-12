@@ -1,13 +1,16 @@
 'use client';
 
 import { supabase } from '@/lib/supabase';
+import { MIN_GAP_SECONDS, gapChoiceLabel } from './campaign-schedule';
+import { accountGapSeconds } from './rules';
 import {
   MAX_GAP_MINUTES,
   MIN_GAP_MINUTES,
+  applyGapFloor,
   applyGapSettings,
   callSocialApi,
   createSchedule,
-  effectiveGroupGap,
+  effectiveGroupGapSeconds,
   getBrowserSettings,
   getCampaign,
   getLimits,
@@ -22,7 +25,7 @@ import {
   ensureRunForPost,
   savePost,
   countPublishedSince,
-  type GapSplit,
+  type GapFloor,
   type QueueRow,
   type ScheduleInput,
 } from './client';
@@ -148,7 +151,7 @@ export interface QuickPublishPlan {
   startAt: string;
   /** The last slot, or null when there is only one publication. */
   endAt: string | null;
-  gapMinutes: number;
+  gapSeconds: number;
   /** How many of these exceed limits.maxPerDay TODAY, counting what already went out. 0 if none. */
   overDailyCap: number;
 
@@ -160,7 +163,7 @@ export interface QuickPublishPlan {
   publishedToday: number;
   /** Local days the plan spans. */
   days: number;
-  /** 'now' = one target, immediately. 'drip' = one target every gapMinutes. */
+  /** 'now' = one target, immediately. 'drip' = one target every gapSeconds. */
   mode: 'now' | 'drip';
   /**
    * True when the first slot had to be pushed to now + gap by the running floor
@@ -169,7 +172,7 @@ export interface QuickPublishPlan {
    */
   firstSlotDeferred: boolean;
   /** What rules.ts demands between two GROUP publications right now. */
-  effectiveGapMinutes: number;
+  effectiveGapSeconds: number;
   /**
    * How many of today's publications exceed the owner's PER-CAMPAIGN daily
    * ceiling (browser.maxPerCampaignPerDay), when this post belongs to a
@@ -467,8 +470,8 @@ export interface QuickPublishInput {
   targetIds: string[];
   /** ISO. Omitted, unparseable, or mode 'now' — all mean "from this moment". */
   startAt?: string;
-  /** Minutes between two publications. Omitted = whatever the settings demand today. */
-  gapMinutes?: number;
+  /** SECONDS between two publications. Omitted = whatever the settings demand today. */
+  gapSeconds?: number;
   mode?: 'now' | 'schedule';
 }
 
@@ -496,7 +499,7 @@ export interface QuickPublishContext {
    */
   queuedByDay: Map<string, number>;
   /** limits.minGapMinutes + browser.groupMinGapMinutes — what rules.ts demands now. */
-  effectiveGapMinutes: number;
+  effectiveGapSeconds: number;
   /** The campaign this post belongs to, if any — the per-campaign ceiling applies only then. */
   campaignId: string | null;
   /** Publications of that campaign that already went out today. Read, never assumed. */
@@ -531,7 +534,7 @@ export async function quickPublishContext(campaignId?: string | null): Promise<Q
     browser,
     publishedToday,
     queuedByDay,
-    effectiveGapMinutes: effectiveGroupGap(limits, browser),
+    effectiveGapSeconds: effectiveGroupGapSeconds(limits, browser),
     campaignId: campaignId ?? null,
     campaignPublishedToday,
   };
@@ -570,11 +573,11 @@ async function countCampaignPublishedSince(campaignId: string, sinceISO: string)
  * exactly what was shown (plan.ts planDrip calls the very same dripSlots).
  */
 interface QuickPublishDraft {
-  /** 'now' = a single target, immediately. 'drip' = one target every gapMinutes. */
+  /** 'now' = a single target, immediately. 'drip' = one target every gapSeconds. */
   mode: 'now' | 'drip';
   /** ISO instant the first publication is anchored to. */
   startAt: string;
-  gapMinutes: number;
+  gapSeconds: number;
   targetIds: string[];
   /** Local HH:MM. The daily window publications are allowed inside. */
   windowStart: string;
@@ -601,9 +604,12 @@ function draftFor(input: QuickPublishInput, ctx: QuickPublishContext, now: Date)
   const startAt = new Date(Number.isFinite(startMs) ? startMs : now.getTime());
   // Clamped to the same bounds applyGapSettings() enforces, so a preview can
   // never show a plan the write would then refuse.
-  const gapMinutes = Math.min(
-    MAX_GAP_MINUTES,
-    Math.max(MIN_GAP_MINUTES, Math.round(input.gapMinutes ?? ctx.effectiveGapMinutes)),
+  /* SECONDS. The clamp was whole minutes with a floor of one, so the draft
+     could not carry thirty even when every layer under it could — and quick
+     publish is the path every multi-group round takes. */
+  const gapSeconds = Math.min(
+    MAX_GAP_MINUTES * 60,
+    Math.max(MIN_GAP_SECONDS, Math.round(input.gapSeconds ?? ctx.effectiveGapSeconds)),
   );
 
   // One target and "now" is the one case that must not be a drip: dripSlots'
@@ -617,7 +623,7 @@ function draftFor(input: QuickPublishInput, ctx: QuickPublishContext, now: Date)
   return {
     mode,
     startAt: startAt.toISOString(),
-    gapMinutes,
+    gapSeconds,
     targetIds,
     // The window is derived from the start time rather than fixed at 09:00–20:00:
     // quick publish has no window control, and a hidden 09:00–20:00 would silently
@@ -645,7 +651,8 @@ function slotsForDraft(draft: QuickPublishDraft, now: Date): Date[] {
       timezone: TIMEZONE,
       run_at: draft.startAt,
       drip_per_day: draft.perDay,
-      drip_gap_minutes: draft.gapMinutes,
+      drip_gap_minutes: Math.max(1, Math.ceil(draft.gapSeconds / 60)),
+      drip_gap_seconds: draft.gapSeconds,
       drip_window_start: draft.windowStart,
       drip_window_end: draft.windowEnd,
       target_ids: draft.targetIds,
@@ -670,7 +677,8 @@ function scheduleInputFor(draft: QuickPublishDraft, postId: string): ScheduleInp
   return {
     ...base,
     drip_per_day: draft.perDay,
-    drip_gap_minutes: draft.gapMinutes,
+    drip_gap_minutes: Math.max(1, Math.ceil(draft.gapSeconds / 60)),
+    drip_gap_seconds: draft.gapSeconds,
     drip_window_start: draft.windowStart,
     drip_window_end: draft.windowEnd,
   };
@@ -727,7 +735,7 @@ export function planQuickPublish(ctx: QuickPublishContext, input: QuickPublishIn
     rows,
     startAt: first,
     endAt: rows.length > 1 ? rows[rows.length - 1].at : null,
-    gapMinutes: draft.gapMinutes,
+    gapSeconds: draft.gapSeconds,
     overDailyCap,
     overCapTotal,
     maxPerDay: ctx.limits.maxPerDay,
@@ -737,7 +745,7 @@ export function planQuickPublish(ctx: QuickPublishContext, input: QuickPublishIn
     // A minute of slack: the floor is now + gap to the millisecond, and an exact
     // comparison would flag every plan.
     firstSlotDeferred: new Date(first).getTime() > new Date(draft.startAt).getTime() + 60_000,
-    effectiveGapMinutes: ctx.effectiveGapMinutes,
+    effectiveGapSeconds: ctx.effectiveGapSeconds,
     overCampaignCapToday,
     maxPerCampaignPerDay: campaignCap,
   };
@@ -774,7 +782,7 @@ export interface QuickPublishResult {
   failed: number;
   deferred: number;
   /** What was written to the spacing settings, and whether the surcharge moved. */
-  gap: GapSplit;
+  gap: GapFloor;
   /** True when the owner answered "no" to the already-in-flight prompt; nothing was written. */
   cancelled: boolean;
   scheduleMode: 'now' | 'drip';
@@ -896,8 +904,12 @@ export async function quickPublish(
 
   /* ---- 3. already on its way out? ---- */
   const pending = await hasPendingQueue(post.id);
-  const idle: GapSplit = {
-    gapMinutes: draft.gapMinutes,
+  /* The "nothing was asked for, so nothing was written" shape, in the same
+     type applyGapFloor returns — so the caller reports one thing either way. */
+  const idle: GapFloor = {
+    gapSeconds: draft.gapSeconds,
+    minGapSeconds: accountGapSeconds(ctx.limits, null, false),
+    groupMinGapSeconds: accountGapSeconds(ctx.limits, ctx.browser, true) - accountGapSeconds(ctx.limits, null, false),
     minGapMinutes: ctx.limits.minGapMinutes,
     groupMinGapMinutes: ctx.browser.groupMinGapMinutes,
     surchargeChanged: false,
@@ -928,7 +940,7 @@ export async function quickPublish(
   // Only when a gap was actually asked for. Without one the plan already uses
   // what the settings demand, and rewriting a global setting nobody touched
   // would be a change the owner never made.
-  const gap = input.gapMinutes === undefined ? idle : await applyGapSettings(draft.gapMinutes);
+  const gap = input.gapSeconds === undefined ? idle : await applyGapFloor(draft.gapSeconds);
 
   const schedule = await createSchedule({
     ...scheduleInputFor(draft, post.id),
@@ -970,8 +982,8 @@ export async function quickPublish(
   await logClientActivity(
     'info',
     'quick_published',
-    `פרסום מהיר: ${draft.targetIds.length} יעדים, אחד כל ${draft.gapMinutes} דק׳${gap.surchargeChanged ? ` (המרווח הנוסף לקבוצות עודכן ל-${gap.groupMinGapMinutes} דק׳ והמרווח הכללי ל-${gap.minGapMinutes} דק׳)` : ''}`,
-    { postId: post.id, targets: draft.targetIds.length, gapMinutes: draft.gapMinutes, queued, mode: draft.mode },
+    `פרסום מהיר: ${draft.targetIds.length} יעדים, אחד כל ${gapChoiceLabel(draft.gapSeconds)}${gap.surchargeChanged ? ` (המרווח הנוסף לקבוצות עודכן ל-${gap.groupMinGapMinutes} דק׳ והמרווח הכללי ל-${gap.minGapMinutes} דק׳)` : ''}`,
+    { postId: post.id, targets: draft.targetIds.length, gapSeconds: draft.gapSeconds, queued, mode: draft.mode },
   );
 
   return {

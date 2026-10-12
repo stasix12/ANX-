@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
-import { readSchedule, readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
+import { MIN_GAP_SECONDS, gapChoiceLabel, readSchedule, readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey } from './compose';
@@ -2782,10 +2782,10 @@ export interface LiveQueueTarget {
 export interface LiveQueuePlan {
   /** Pending rows, soonest first. */
   rows: QueueRow[];
-  /** The gap actually between consecutive rows now (median). null if < 2 rows. */
-  gapMinutes: number | null;
-  /** The floor rules.ts enforces for a GROUP target right now. */
-  effectiveGapMinutes: number;
+  /** The gap actually between consecutive rows now (median), IN SECONDS. null if < 2 rows. */
+  gapSeconds: number | null;
+  /** The floor rules.ts enforces for a GROUP target right now, IN SECONDS. */
+  effectiveGapSeconds: number;
   targets: LiveQueueTarget[];
   /** The post the pending rows belong to; null if they are mixed. */
   postId: string | null;
@@ -2821,14 +2821,19 @@ const LIVE_QUEUE_SELECT =
  * The median gap, not the mean: one row that somebody dragged a day out would
  * pull an average far away from the spacing every other row actually has, and
  * the owner would be shown a number that matches nothing on their screen.
- * Whole minutes, because that is the unit they edit in.
+ *
+ * SECONDS, and the unit is the whole point. `Math.round(30_000 / 60_000)` is 1
+ * and `Math.round(20_000 / 60_000)` is ZERO, so a queue genuinely spaced at
+ * thirty seconds was measured as a minute — or as nothing at all — and
+ * addTargetsToQueue then CONTINUED that queue at sixty. The owner's own
+ * spacing was rounded away by the function whose job was to report it.
  */
-function medianGapMinutes(sortedISO: string[]): number | null {
+function medianGapSeconds(sortedISO: string[]): number | null {
   if (sortedISO.length < 2) return null;
   const gaps: number[] = [];
   for (let i = 1; i < sortedISO.length; i += 1) {
     const ms = new Date(sortedISO[i]).getTime() - new Date(sortedISO[i - 1]).getTime();
-    if (Number.isFinite(ms)) gaps.push(Math.round(ms / 60_000));
+    if (Number.isFinite(ms)) gaps.push(Math.round(ms / 1000));
   }
   if (!gaps.length) return null;
   gaps.sort((a, b) => a - b);
@@ -2837,14 +2842,18 @@ function medianGapMinutes(sortedISO: string[]): number | null {
 }
 
 /**
- * What rules.ts will actually demand between two GROUP publications:
- * src/lib/social/rules.ts adds browser.groupMinGapMinutes on top of
- * limits.minGapMinutes whenever the target's channel is 'facebook_group'.
- * Both settings are editable on the settings screen, so they are always read —
- * never assumed to still be the 45 + 20 the defaults ship with.
+ * What rules.ts will actually demand between two GROUP publications, IN SECONDS.
+ *
+ * It ASKS accountGapSeconds() rather than adding the two MINUTE columns up,
+ * because the `*Seconds` half out-votes them inside the engine. With a
+ * thirty-second floor live, the old sum returned 1 — and that 1 was the
+ * tuner's loaded value, the quick-publish default, the sentence on both
+ * sheets, and (through addTargetsToQueue) the real spacing written into
+ * scheduled_at. Three screens printed "1 דק׳" over an engine running at
+ * thirty seconds, and then one of them made it true.
  */
-export function effectiveGroupGap(limits: LimitsSettings, browser: BrowserSettings): number {
-  return Math.max(0, Math.round(limits.minGapMinutes + browser.groupMinGapMinutes));
+export function effectiveGroupGapSeconds(limits: LimitsSettings, browser: BrowserSettings): number {
+  return accountGapSeconds(limits, browser, true);
 }
 
 export async function liveQueuePlan(opts: { campaignId?: string } = {}): Promise<LiveQueuePlan> {
@@ -2883,8 +2892,8 @@ export async function liveQueuePlan(opts: { campaignId?: string } = {}): Promise
 
   return {
     rows,
-    gapMinutes: medianGapMinutes(rows.map((r) => r.scheduled_at)),
-    effectiveGapMinutes: effectiveGroupGap(limits, browser),
+    gapSeconds: medianGapSeconds(rows.map((r) => r.scheduled_at)),
+    effectiveGapSeconds: effectiveGroupGapSeconds(limits, browser),
     targets,
     // Only a queue that is one post's can be added to — see addTargetsToQueue.
     postId: postIds.size === 1 ? [...postIds][0] : null,
@@ -2894,6 +2903,21 @@ export async function liveQueuePlan(opts: { campaignId?: string } = {}): Promise
 }
 
 /** The owner's own number, guarded. Not a Facebook limit and not a promise about one. */
+/**
+ * LONG ENOUGH THAT THE WORKER CANNOT CLAIM A ROW BEFORE THE WRITE THAT MOVED
+ * IT HAS LANDED, AND NO LONGER.
+ *
+ * It was a hard minute in three places — one slot when a minute was the
+ * fastest this product went, TWO slots at thirty seconds, paid at the head of
+ * every re-timed round. Sized off the batch rather than off one round trip,
+ * because writeNewInstants is a strictly sequential per-row UPDATE loop over
+ * up to LIVE_QUEUE_LIMIT rows and a real 217-row respace is cited in this
+ * file's own comments: ten seconds can be shorter than that pass. The worker
+ * polls every five seconds, so two polls is the floor.
+ */
+export const writeSettleMs = (rows: number): number => Math.min(60_000, Math.max(10_000, rows * 40));
+export const WRITE_SETTLE_MS = 10_000;
+
 export const MIN_GAP_MINUTES = 1;
 export const MAX_GAP_MINUTES = 720;
 
@@ -3055,6 +3079,58 @@ export async function applyGapSettings(gapMinutes: number): Promise<GapSplit> {
   await saveSetting('browser', { ...browser, groupMinGapMinutes: newSurcharge, groupMinGapSeconds: seconds.surchargeSeconds });
 
   return { gapMinutes, minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, surchargeChanged };
+}
+
+/** What applyGapFloor() wrote, in both units, so a caller can say it in words. */
+export interface GapFloor {
+  /** What was asked for, in seconds. */
+  gapSeconds: number;
+  minGapSeconds: number;
+  groupMinGapSeconds: number;
+  /** Mirrors, rounded UP, for a reader that predates the seconds pair. */
+  minGapMinutes: number;
+  groupMinGapMinutes: number;
+  /** True when the owner's group surcharge had to move; the screen must SAY so. */
+  surchargeChanged: boolean;
+}
+
+/**
+ * THE ACCOUNT FLOOR, IN SECONDS, FROM ANY SCREEN — the symmetric writer.
+ *
+ * applyGapSettings() above is whole minutes and throws below one, so the queue
+ * tuner and quick publish — its only two callers — could not express thirty
+ * seconds at all. And "could not" is the kinder half: because
+ * accountGapSeconds() PREFERS the `*Seconds` pair, every call rewrote BOTH
+ * units, so one quick publish on any post silently raised an account-wide
+ * thirty-second floor back to sixty for every campaign. matchAccountGapTo()
+ * only ever LOWERS and is reachable only from the two campaign panels, so
+ * nothing undid it: the owner set thirty seconds on the campaign, used the
+ * queue tuner once, and the engine went back to a minute without a word.
+ *
+ * Both units are written, WHOLE (saveSetting replaces the entire jsonb, so a
+ * partial object would wipe maxPerDay), with the minutes rounded UP — a worker
+ * that has not been updated is then SLOWER than asked, never faster.
+ */
+export async function applyGapFloor(gapSeconds: number): Promise<GapFloor> {
+  const want = Math.round(gapSeconds);
+  if (!Number.isFinite(want) || want < MIN_GAP_SECONDS || want > MAX_GAP_MINUTES * 60) {
+    throw new Error(`המרווח צריך להיות בין ${MIN_GAP_SECONDS} שניות ל-${MAX_GAP_MINUTES} דקות.`);
+  }
+  const [limits, browser] = await Promise.all([getLimits(), getBrowserSettings()]);
+  const curSurcharge = Number.isFinite(browser.groupMinGapSeconds)
+    ? (browser.groupMinGapSeconds as number)
+    : Math.max(0, browser.groupMinGapMinutes) * 60;
+  const { baseSeconds, surchargeSeconds } = splitAccountGap(want, curSurcharge);
+  await saveSetting('limits', { ...limits, minGapMinutes: Math.ceil(baseSeconds / 60), minGapSeconds: baseSeconds });
+  await saveSetting('browser', { ...browser, groupMinGapMinutes: Math.ceil(surchargeSeconds / 60), groupMinGapSeconds: surchargeSeconds });
+  return {
+    gapSeconds: want,
+    minGapSeconds: baseSeconds,
+    groupMinGapSeconds: surchargeSeconds,
+    minGapMinutes: Math.ceil(baseSeconds / 60),
+    groupMinGapMinutes: Math.ceil(surchargeSeconds / 60),
+    surchargeChanged: surchargeSeconds !== curSurcharge,
+  };
 }
 
 /**
@@ -3230,7 +3306,7 @@ export async function rescheduleCampaignQueue(
    * A minute from now is the floor, so the worker cannot claim a row before
    * the write that moved it has landed — the same cushion respaceQueue uses.
    */
-  const floor = new Date(Date.now() + 60_000);
+  const floor = new Date(Date.now() + writeSettleMs(pending.length));
   const head = new Date(Date.parse(pending[0].scheduled_at) || floor.getTime());
   const anchor = roundAnchor(schedule, head, floor);
   const gapMs = Math.max(0, Math.round(schedule.gapSeconds)) * 1000;
@@ -3338,7 +3414,7 @@ async function writeNewInstants(work: Restamp[]): Promise<{ moved: number; faile
 }
 
 /**
- * Re-spaces the waiting queue to one publication every `gapMinutes`, and — the
+ * Re-spaces the waiting queue to one publication every `gapSeconds`, and — the
  * part that actually makes it work — moves the settings so that the engine
  * agrees with the new spacing.
  *
@@ -3351,16 +3427,21 @@ async function writeNewInstants(work: Restamp[]): Promise<{ moved: number; faile
  *
  * Returns the number of rows that actually moved.
  */
-export async function respaceQueue(gapMinutes: number, opts: { campaignId?: string; startAt?: string } = {}): Promise<number> {
+export async function respaceQueue(gapSeconds: number, opts: { campaignId?: string; startAt?: string } = {}): Promise<number> {
+  if (!Number.isFinite(gapSeconds) || gapSeconds < MIN_GAP_SECONDS) {
+    /* LOUD, because the UNIT changed. A caller still passing minutes would
+       respace a 217-row queue to one-second spacing in silence. */
+    throw new Error(`respaceQueue takes SECONDS; got ${gapSeconds}.`);
+  }
   const startMs = opts.startAt ? new Date(opts.startAt).getTime() : NaN;
-  // A minute from now by default: "now" would hand the worker a row it can claim
-  // before the settings write below has landed.
-  const start = Number.isFinite(startMs) ? startMs : Date.now() + 60_000;
+  // A cushion from now by default: "now" would hand the worker a row it can
+  // claim before the settings write below has landed. See writeSettleMs.
+  const start = Number.isFinite(startMs) ? startMs : Date.now() + WRITE_SETTLE_MS;
 
   // Validates the number, splits it and writes both settings — see above. Note
   // the asymmetry, and it is deliberate: `campaignId` narrows which ROWS are
   // re-stamped, but the settings it writes are global.
-  const { minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, surchargeChanged } = await applyGapSettings(gapMinutes);
+  const { minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, surchargeChanged } = await applyGapFloor(gapSeconds);
 
   let query = db()
     .from('social_queue')
@@ -3405,7 +3486,7 @@ export async function respaceQueue(gapMinutes: number, opts: { campaignId?: stri
    * owner who has not set a window sees exactly the queue this function has
    * always produced.
    */
-  const bases = pending.map((_, i) => new Date(start + i * gapMinutes * 60_000));
+  const bases = pending.map((_, i) => new Date(start + i * gapSeconds * 1000));
   const windows = await campaignWindows([...new Set(pending.map((r) => r.campaign_id).filter((id): id is string => Boolean(id)))]);
   const rolled = new Array<Date>(pending.length);
   const byCampaign = new Map<string, number[]>();
@@ -3418,7 +3499,7 @@ export async function respaceQueue(gapMinutes: number, opts: { campaignId?: stri
   for (const [key, indexes] of byCampaign) {
     const out = windowedCascade(
       indexes.map((i) => bases[i]),
-      gapMinutes * 60,
+      gapSeconds,
       key ? windows[key] ?? null : null,
     );
     indexes.forEach((i, n) => {
@@ -3453,8 +3534,8 @@ export async function respaceQueue(gapMinutes: number, opts: { campaignId?: stri
   await logClientActivity(
     failed ? 'warn' : 'info',
     'queue_respaced',
-    `המרווח בין פרסומים נקבע ל-${gapMinutes} דק׳ — ${moved} פרסומים תוזמנו מחדש${cappedNote}${windowNote}${surchargeNote}`,
-    { gapMinutes, minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, moved, failed, rolledIntoWindow: rolledCount, campaignId: opts.campaignId ?? null },
+    `המרווח בין פרסומים נקבע ל-${gapChoiceLabel(gapSeconds)} — ${moved} פרסומים תוזמנו מחדש${cappedNote}${windowNote}${surchargeNote}`,
+    { gapSeconds, minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, moved, failed, rolledIntoWindow: rolledCount, campaignId: opts.campaignId ?? null },
   );
 
   // Half-applied is a real outcome and the owner is told the real numbers,
@@ -3624,10 +3705,21 @@ export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?
   // same post would be skipped by rules.ts anyway ("הפוסט הזה כבר פורסם ל-…").
   if (!fresh.length) return 0;
 
-  const gap = Math.max(MIN_GAP_MINUTES, plan.gapMinutes ?? plan.effectiveGapMinutes);
+  /*
+   * SECONDS, and all three terms were a sixty-second floor on their own:
+   * MIN_GAP_MINUTES = 1, a median rounded to whole minutes, and an effective
+   * gap read off the two minute columns. Fixing any one of them changed
+   * nothing here. rescheduleCampaignQueue one screen up has been
+   * seconds-correct since schedule_gap_seconds shipped; this is the OTHER
+   * writer of scheduled_at, and it disagreed with it.
+   */
+  const gapSeconds = Math.max(MIN_GAP_SECONDS, plan.gapSeconds ?? plan.effectiveGapSeconds);
   const last = plan.rows[plan.rows.length - 1];
   const lastMs = new Date(last.scheduled_at).getTime();
-  const from = Number.isFinite(lastMs) ? lastMs : Date.now();
+  /* And never already-due: this path had no cushion at all, unlike its two
+     siblings, so at a thirty-second gap the first appended row could be
+     claimable before the insert had landed. */
+  const from = Math.max(Number.isFinite(lastMs) ? lastMs : Date.now(), Date.now() + WRITE_SETTLE_MS);
   const mediaUrls = (template.post?.media ?? []).map((m: MediaItem) => m.url);
 
   const rows = await Promise.all(
@@ -3639,7 +3731,7 @@ export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?
       campaign_id: template.campaign_id ?? null,
       variant_id: template.variant_id,
       target_id: targetId,
-      scheduled_at: new Date(from + (i + 1) * gap * 60_000).toISOString(),
+      scheduled_at: new Date(from + (i + 1) * gapSeconds * 1000).toISOString(),
       status: 'scheduled' as const,
       // '' means "terminal" elsewhere in this codebase; the planner sets 'pending'.
       step: 'pending',
@@ -3653,10 +3745,10 @@ export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?
   );
 
   const inserted = unwrap<{ id: string }[]>(await db().from('social_queue').insert(rows).select('id'));
-  await logClientActivity('info', 'queue_targets_added', `${inserted.length} קבוצות נוספו לתור, כל אחת ${gap} דק׳ אחרי הקודמת`, {
+  await logClientActivity('info', 'queue_targets_added', `${inserted.length} קבוצות נוספו לתור, כל אחת ${gapChoiceLabel(gapSeconds)} אחרי הקודמת`, {
     targetIds: fresh,
     added: inserted.length,
-    gapMinutes: gap,
+    gapSeconds,
     postId: plan.postId,
     campaignId: opts.campaignId ?? null,
   });

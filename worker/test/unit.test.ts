@@ -641,8 +641,20 @@ console.log('unit tests OK');
    * the round). Proved as arithmetic in worker/test/projection.test.ts.
    */
   assert.ok(
-    planSrc.includes('windowedStagger(slot, schedule.target_ids.length, spacingSeconds, campaignSchedule)'),
+    planSrc.includes('windowedStagger(slot, schedule.target_ids.length, stampGapSeconds, campaignSchedule)'),
     'the planner must give each target its own instant inside an occasion, and inside the campaign window',
+  );
+  /*
+   * AND IT STAMPS AT THE LATER OF THE TWO GATES.
+   *
+   * `spacingSeconds` is the ACCOUNT floor alone. Once that floor comes down to
+   * thirty seconds, a campaign still asking for ten minutes had its rows
+   * stamped thirty seconds apart and then every one of them deferred by
+   * rules.ts — the column promising an instant the queue would never use.
+   */
+  assert.ok(
+    planSrc.includes('const stampGapSeconds = Math.max('),
+    'and it stamps at the later of the account floor and the campaign\u2019s own gap',
   );
   /* Comments stripped: the fix carries a note naming the call it replaced, and
      a raw search matched its own explanation. */
@@ -1184,8 +1196,22 @@ console.log('unit tests OK');
   );
   assert.ok(respace.length > 500, 'respaceQueue must exist in client.ts');
   assert.ok(
-    /export async function respaceQueue[\s\S]*?await applyGapSettings\(/.test(respace),
-    'respaceQueue must still go through applyGapSettings — moving the rows without moving the settings is the queue that quietly dies',
+    /export async function respaceQueue[\s\S]*?await applyGapFloor\(/.test(respace),
+    'respaceQueue must still write the settings — moving the rows without moving the floor is the queue that quietly dies',
+  );
+  /*
+   * AND THROUGH THE SECONDS WRITER, not the minutes one. applyGapSettings
+   * rewrites BOTH units off a whole-minute input, so routing a thirty-second
+   * respace through it would raise the account floor to sixty — the ratchet
+   * that silently undid every sub-minute campaign.
+   */
+  assert.ok(
+    /export async function respaceQueue\(gapSeconds: number/.test(respace),
+    'and respaceQueue takes SECONDS',
+  );
+  assert.ok(
+    /throw new Error\(`respaceQueue takes SECONDS; got \$\{gapSeconds\}\.`\)/.test(respace),
+    'and says so loudly to a caller still passing minutes, rather than respacing a queue to one-second spacing in silence',
   );
   assert.ok(respace.includes("saveSetting('limits'"), 'respaceQueue must write the spacing setting, not only the queue rows');
   assert.ok(respace.includes("saveSetting('browser'"), 'respaceQueue must be able to move the group surcharge too');
@@ -1238,9 +1264,18 @@ console.log('unit tests OK');
     }
   }
   // And the number on screen is read from the stored settings, never assumed.
+  /*
+   * SECONDS, and it ASKS rules.ts rather than adding the two MINUTE columns.
+   *
+   * accountGapSeconds prefers the `*Seconds` pair, so with a thirty-second
+   * floor live the old sum returned 1 — and that 1 was the tuner's loaded
+   * value, the quick-publish default and, through addTargetsToQueue, the real
+   * spacing written into scheduled_at. Three screens printed "1 דק׳" over an
+   * engine running at thirty seconds, and then one of them made it true.
+   */
   assert.ok(
-    client.includes('limits.minGapMinutes + browser.groupMinGapMinutes'),
-    'the effective gap must be computed from the saved settings, not from the shipped defaults',
+    client.includes('return accountGapSeconds(limits, browser, true);'),
+    'the effective gap must be the one rules.ts enforces, read from the saved settings in the unit the engine uses',
   );
 
   /*
@@ -1531,7 +1566,7 @@ console.log('unit tests OK');
    * now, and the stepper is the fine adjustment.
    */
   const tuner = readFileSync(new URL('../../src/components/social/QueueTunerSheet.tsx', import.meta.url), 'utf8');
-  assert.ok(/const STEP = 1;/.test(tuner), 'the stepper must move one minute at a time');
+  assert.ok(/const STEP = 30;/.test(tuner), 'the stepper must move thirty seconds at a time — the engine\u2019s own minimum');
   assert.ok(/inputMode="numeric"[\s\S]{0,1400}דקות בין פרסום לפרסום/.test(tuner), 'the gap figure itself must be typable');
   /*
    * And it must be typable in practice. A controlled input clamped on every
@@ -1589,7 +1624,16 @@ console.log('unit tests OK');
    * minutes apart while the engine still wants 65 is the 112-skipped campaign
    * again, with a nicer preview on top of it.
    */
-  assert.ok(quick.includes('applyGapSettings('), 'quick publish must write the gap settings, not only the schedule');
+  /*
+   * THE SECONDS WRITER, and the unit is load-bearing.
+   *
+   * applyGapSettings rewrites BOTH units off a whole-minute input, and
+   * accountGapSeconds prefers the seconds — so one quick publish on any post
+   * silently raised an account-wide thirty-second floor back to sixty for
+   * every campaign, and nothing undid it.
+   */
+  assert.ok(quick.includes('applyGapFloor('), 'quick publish must write the gap settings, not only the schedule');
+  assert.ok(!quick.includes('applyGapSettings('), 'and in SECONDS — the minutes writer ratchets a sub-minute floor back up');
   assert.ok(
     quick.indexOf('applyGapSettings(') < quick.indexOf('await createSchedule('),
     'the gap settings must be written before the schedule, so rows planned from it are measured against the number the owner chose',
@@ -1610,11 +1654,17 @@ console.log('unit tests OK');
   const slotsFn = library.slice(library.indexOf('function slotsForDraft('), library.indexOf('function scheduleInputFor('));
   assert.ok(slotsFn.includes('dripSlots('), 'the staggered preview must come from dripSlots() — slotsFor() fires every target at once and cannot stagger');
   assert.ok(
-    /drip_gap_minutes: draft\.gapMinutes/.test(slotsFn),
+    /drip_gap_seconds: draft\.gapSeconds/.test(slotsFn),
     'the preview must read the gap off the draft, not off a second number',
   );
+  /* And the legacy minutes column travels beside it, rounded UP: a worker that
+     predates drip_gap_seconds is then SLOWER than asked, never faster. */
+  assert.ok(
+    /drip_gap_minutes: Math\.max\(1, Math\.ceil\(draft\.gapSeconds \/ 60\)\)/.test(slotsFn),
+    'with the minutes mirror rounded up, so an un-updated reader errs slow',
+  );
   const writeFn = library.slice(library.indexOf('function scheduleInputFor('), library.indexOf('export function planQuickPublish'));
-  for (const field of ['drip_per_day: draft.perDay', 'drip_gap_minutes: draft.gapMinutes', 'drip_window_start: draft.windowStart', 'drip_window_end: draft.windowEnd']) {
+  for (const field of ['drip_per_day: draft.perDay', 'drip_gap_seconds: draft.gapSeconds', 'drip_window_start: draft.windowStart', 'drip_window_end: draft.windowEnd']) {
     assert.ok(writeFn.includes(field), `the schedule written must take ${field.split(':')[0]} from the same draft the preview used`);
     assert.ok(slotsFn.includes(field), `the preview must take ${field.split(':')[0]} from the same draft too`);
   }

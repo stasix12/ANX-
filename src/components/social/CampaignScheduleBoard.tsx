@@ -10,7 +10,21 @@ import {
   gapLabel,
   type CampaignSchedule,
 } from '@/lib/social/campaign-schedule';
-import { counted, formatDateHe, formatTimeHe } from '@/lib/social/time';
+import { counted, formatDateHe, formatInstantHe } from '@/lib/social/time';
+
+/**
+ * THE FIGURE SHRINKS RATHER THAN LOSING ITS SECONDS.
+ *
+ * At a sub-minute gap the stamp is 10:00:30, and those seconds are not
+ * decoration: a strip reading 10:00 over a list reading 10:00:30 is this
+ * product's oldest failure shape, one screen disagreeing with another about
+ * one row. But 22px tabular digits do not fit eight characters at 360px —
+ * worker/test/dashboard-hero.test.ts measured it rather than anyone guessing.
+ *
+ * So the glance gives up four pixels and keeps the truth. A whole-minute
+ * round is five characters and is untouched.
+ */
+const instantSize = (iso: string): string => (formatInstantHe(iso).length > 5 ? 'text-[18px]' : 'text-[22px]');
 import { Toggle } from './ui';
 
 /**
@@ -464,8 +478,21 @@ function NextPublishStrip({ readout, scheduleOn }: { readout: ScheduleReadout; s
             {readout.kind === 'manual' && counted(readout.waiting, 'פרסום אחד ממתין לך', 'פרסומים ממתינים לך', 'שני פרסומים ממתינים לך')}
           </span>
         ) : shown ? (
-          <span data-must-fit dir="ltr" className="block truncate text-[22px] font-extrabold leading-7 tabular-nums text-brand-400">
-            {formatTimeHe(shown)}
+          /*
+           * THE FIGURE SHRINKS RATHER THAN LOSING ITS SECONDS.
+           *
+           * At a sub-minute gap the instant is 10:00:30, and two eight-character
+           * figures per printed minute is the whole point — a strip reading
+           * 10:00 over a list reading 10:00:30 is this product's oldest failure
+           * shape, one screen disagreeing with another about one row. But
+           * 22px tabular digits do not fit eight characters at 360px; the
+           * measured guard proved it rather than anyone guessing.
+           *
+           * So the glance keeps the precision and gives up four pixels. A
+           * whole-minute round is five characters and is untouched.
+           */
+          <span data-must-fit dir="ltr" className={`block truncate leading-7 font-extrabold tabular-nums text-brand-400 ${instantSize(shown)}`}>
+            {formatInstantHe(shown)}
           </span>
         ) : (
           <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-mist-300">לא מתוזמן</span>

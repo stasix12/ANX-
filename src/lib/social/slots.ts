@@ -1,3 +1,4 @@
+import { MIN_GAP_SECONDS } from './campaign-schedule';
 import { addDaysISO, zonedDateISO, zonedToUtc, zonedWeekday } from './time';
 import type { Schedule } from './types';
 
@@ -7,7 +8,7 @@ import type { Schedule } from './types';
  * unit-tested and reused by a future "upcoming" preview in the UI.
  */
 export type SlotSchedule = Pick<Schedule, 'mode' | 'timezone' | 'run_at' | 'weekly' | 'interval_days' | 'interval_time'>;
-export type DripSchedule = Pick<Schedule, 'timezone' | 'run_at' | 'drip_per_day' | 'drip_gap_minutes' | 'drip_window_start' | 'drip_window_end' | 'target_ids'>;
+export type DripSchedule = Pick<Schedule, 'timezone' | 'run_at' | 'drip_per_day' | 'drip_gap_minutes' | 'drip_gap_seconds' | 'drip_window_start' | 'drip_window_end' | 'target_ids'>;
 
 /**
  * One instant per target. Posts start at run_at (or the window start on
@@ -18,19 +19,36 @@ export type DripSchedule = Pick<Schedule, 'timezone' | 'run_at' | 'drip_per_day'
 export function dripSlots(schedule: DripSchedule, now = new Date()): Date[] {
   const tz = schedule.timezone || 'Asia/Jerusalem';
   const perDay = Math.max(0, schedule.drip_per_day ?? 0);
-  const gap = Math.max(1, schedule.drip_gap_minutes ?? 20);
+  /*
+   * SECONDS, and the unit WAS the bug.
+   *
+   * The cursor was an integer MINUTE-of-day formatted to HH:MM, so even with
+   * the `Math.max(1, …)` clamp removed this function could not emit two
+   * instants thirty seconds apart — a fractional minute was truncated inside
+   * the HH:MM round trip. Quick publish takes this path for every
+   * multi-target round, so "פרסם עכשיו" to a hundred groups stamped them a
+   * minute apart at best, whatever the campaign's gap said.
+   *
+   * The window EDGES stay whole minutes: nobody picks a publishing window to
+   * the second, and drip_window_start/end are HH:MM columns.
+   */
+  const rawSec = Number(schedule.drip_gap_seconds);
+  const gapSec = Math.max(
+    MIN_GAP_SECONDS,
+    Number.isFinite(rawSec) && rawSec > 0 ? Math.round(rawSec) : (schedule.drip_gap_minutes ?? 20) * 60,
+  );
   const [sh, sm] = (schedule.drip_window_start || '09:00').split(':').map(Number);
   const [eh, em] = (schedule.drip_window_end || '20:00').split(':').map(Number);
-  const startMin = sh * 60 + sm;
-  const endMin = Math.max(startMin, eh * 60 + em);
+  const startSec = (sh * 60 + sm) * 60;
+  const endSec = Math.max(startSec, (eh * 60 + em) * 60);
   const first = schedule.run_at ? new Date(schedule.run_at) : now;
   let dayISO = zonedDateISO(first, tz);
-  // Minute-of-day of the first post: run_at's local time, clamped into the window.
+  // Second-of-day of the first post: run_at's local time, clamped into the window.
   const firstLocal = zonedToUtc(dayISO, '00:00', tz);
-  let minute = Math.max(startMin, Math.round((first.getTime() - firstLocal.getTime()) / 60_000));
-  if (minute > endMin) {
+  let sec = Math.max(startSec, Math.round((first.getTime() - firstLocal.getTime()) / 1000));
+  if (sec > endSec) {
     dayISO = addDaysISO(dayISO, 1);
-    minute = startMin;
+    sec = startSec;
   }
   let countToday = 0;
   const out: Date[] = [];
@@ -42,20 +60,23 @@ export function dripSlots(schedule: DripSchedule, now = new Date()): Date[] {
    * kept its original (earlier, still-future) slot, so two posts went out four
    * minutes apart under a ten-minute setting.
    */
-  let floor = now.getTime() + gap * 60_000;
+  let floor = now.getTime() + gapSec * 1000;
   for (let i = 0; i < schedule.target_ids.length; i += 1) {
-    if ((perDay > 0 && countToday >= perDay) || minute > endMin) {
+    if ((perDay > 0 && countToday >= perDay) || sec > endSec) {
       dayISO = addDaysISO(dayISO, 1);
-      minute = startMin;
+      sec = startSec;
       countToday = 0;
     }
-    const hm = `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-    const planned = zonedToUtc(dayISO, hm, tz);
+    /* The HH:MM round trip is what truncated a sub-minute cursor, so the
+       seconds are added back on as milliseconds after it. */
+    const whole = Math.floor(sec / 60);
+    const hm = `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
+    const planned = new Date(zonedToUtc(dayISO, hm, tz).getTime() + (sec % 60) * 1000);
     const at = new Date(Math.max(planned.getTime(), floor));
-    floor = at.getTime() + gap * 60_000;
+    floor = at.getTime() + gapSec * 1000;
     out.push(at);
     countToday += 1;
-    minute += gap;
+    sec += gapSec;
   }
   return out;
 }

@@ -18,8 +18,8 @@ import {
 } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
 import { windowedCascade } from '@/lib/social/projection';
-import { readSchedule, scheduleColumns, type CampaignSchedule } from '@/lib/social/campaign-schedule';
-import { agree, counted, formatDayMonthHe, formatTimeHe, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
+import { readSchedule, scheduleColumns, type CampaignSchedule, MIN_GAP_SECONDS, gapChoiceLabel } from '@/lib/social/campaign-schedule';
+import { agree, counted, formatDayMonthHe, formatInstantHe, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
 import type { BrowserSettings, Campaign, LimitsSettings, SocialTarget } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, EmptyState, Field, IconButton, inputClass, Loading, Notice, Sheet, useConfirm, useToast } from './ui';
@@ -82,7 +82,7 @@ function MinusIcon({ className = '' }: { className?: string }) {
 function Clock({ iso, withDay = false }: { iso: string; withDay?: boolean }) {
   return (
     <span dir="ltr" className="inline-block tabular-nums font-bold">
-      {withDay ? `${formatDayMonthHe(iso)} ${formatTimeHe(iso)}` : formatTimeHe(iso)}
+      {withDay ? `${formatDayMonthHe(iso)} ${formatInstantHe(iso)}` : formatInstantHe(iso)}
     </span>
   );
 }
@@ -131,18 +131,27 @@ function Stepper({ label, onClick, disabled, children }: { label: string; onClic
 const posts = (n: number) => counted(n, 'פרסום אחד', 'פרסומים', 'שני פרסומים');
 const minutes = (n: number) => counted(n, 'דקה אחת', 'דקות', 'שתי דקות');
 
-const MIN_GAP = 1;
-const MAX_GAP = 720;
 /*
- * One minute, not five.
+ * SECONDS, like the campaign panel — so the two editors of ONE record cannot
+ * drift apart.
+ *
+ * This sheet was whole minutes on the write AND on the preview, and its own
+ * anti-ratchet guard meant no value of `gap` could ever WRITE thirty seconds:
+ * it could only preserve a thirty set elsewhere, or raise it to a whole
+ * minute. One save from this screen undid a thirty-second campaign.
+ */
+const MIN_GAP = MIN_GAP_SECONDS;
+const MAX_GAP = 720 * 60;
+/*
+ * Thirty seconds, not one minute.
  *
  * The stepper moved in fives and the presets jumped 20 → 30 → 45, so 7 or 23
  * minutes were not reachable by any control on the screen — the owner asked
  * for exactly that. The presets stay for the big moves; these two buttons are
  * now the fine adjustment, and the figure between them can be typed into.
  */
-const STEP = 1;
-const PRESETS = [20, 30, 45, 65, 90, 120];
+const STEP = 30;
+const PRESETS = [30, 60, 300, 1200, 2700, 3900];
 /** Anything longer than this and the list gets a search box instead of a scroll. */
 const ADD_LIST_LIMIT = 30;
 
@@ -240,7 +249,7 @@ export function QueueTunerSheet({
            * wrote five over it.
            */
           const own = campaign ? readSchedule(campaign) : null;
-          setGap(own?.enabled ? Math.max(1, Math.round(own.gapSeconds / 60)) : plan.effectiveGapMinutes);
+          setGap(own?.enabled ? own.gapSeconds : plan.effectiveGapSeconds);
           setGapDirty(false);
           /* A half-typed number from a previous opening must not come back as
              the value of a queue the owner has not looked at yet. */
@@ -304,12 +313,12 @@ export function QueueTunerSheet({
    */
   const previewed = useMemo(() => {
     if (anchor === null || rows.length === 0) return [] as Date[];
-    const bases = rows.map((_, i) => new Date(anchor + i * gap * 60_000));
-    return windowedCascade(bases, gap * 60, snap?.window ?? null);
+    const bases = rows.map((_, i) => new Date(anchor + i * gap * 1000));
+    return windowedCascade(bases, gap, snap?.window ?? null);
   }, [anchor, gap, rows.length, snap?.window]);
 
   const instantAt = useCallback(
-    (i: number) => (anchor === null ? 0 : (previewed[i] ?? new Date(anchor + i * gap * 60_000)).getTime()),
+    (i: number) => (anchor === null ? 0 : (previewed[i] ?? new Date(anchor + i * gap * 1000)).getTime()),
     [anchor, gap, previewed],
   );
 
@@ -322,7 +331,7 @@ export function QueueTunerSheet({
   const currentProjected = useMemo(() => {
     if (rows.length === 0) return [] as string[];
     const bases = rows.map((r) => new Date(Math.max(Date.parse(r.scheduled_at) || 0, snap?.at ?? Date.now())));
-    return windowedCascade(bases, (snap?.plan.effectiveGapMinutes ?? gap) * 60, snap?.window ?? null).map((d) => d.toISOString());
+    return windowedCascade(bases, snap?.plan.effectiveGapSeconds ?? gap, snap?.window ?? null).map((d) => d.toISOString());
   }, [rows, snap, gap]);
 
   const currentLastISO = rows.length > 0 ? currentProjected[rows.length - 1] ?? rows[rows.length - 1].scheduled_at : null;
@@ -425,8 +434,8 @@ export function QueueTunerSheet({
 
   /** The queue's real spacing versus what the settings demand — the actual bug. */
   const mismatch =
-    plan && plan.gapMinutes !== null && plan.gapMinutes < plan.effectiveGapMinutes
-      ? `הפרסומים בתור מרווחים כרגע ב-${plan.gapMinutes} דק׳, אבל ההגדרות דורשות ${plan.effectiveGapMinutes} דק׳ — לכן כל פרסום שמגיע מוקדם מדי נדחה שוב ושוב במקום לצאת. עדכון המרווח כאן מיישר בין השניים.`
+    plan && plan.gapSeconds !== null && plan.gapSeconds < plan.effectiveGapSeconds
+      ? `הפרסומים בתור מרווחים כרגע ב-${gapChoiceLabel(plan.gapSeconds)}, אבל ההגדרות דורשות ${gapChoiceLabel(plan.effectiveGapSeconds)} — לכן כל פרסום שמגיע מוקדם מדי נדחה שוב ושוב במקום לצאת. עדכון המרווח כאן מיישר בין השניים.`
       : null;
 
   const inQueue = useMemo(() => new Set(rows.map((r) => r.target_id)), [rows]);
@@ -452,10 +461,10 @@ export function QueueTunerSheet({
    * the draft in the stepper: until the draft is committed the queue still has
    * its old spacing, and a preview drawn from a number nobody saved is a guess.
    */
-  const addGap = plan ? Math.max(MIN_GAP, plan.gapMinutes ?? plan.effectiveGapMinutes) : MIN_GAP;
+  const addGap = plan ? Math.max(MIN_GAP, plan.gapSeconds ?? plan.effectiveGapSeconds) : MIN_GAP;
   const addFromMs = currentLastISO ? new Date(currentLastISO).getTime() : null;
-  const addFirstISO = addFromMs !== null ? new Date(addFromMs + addGap * 60_000).toISOString() : null;
-  const addLastISO = addFromMs !== null && picked.length > 0 ? new Date(addFromMs + picked.length * addGap * 60_000).toISOString() : null;
+  const addFirstISO = addFromMs !== null ? new Date(addFromMs + addGap * 1000).toISOString() : null;
+  const addLastISO = addFromMs !== null && picked.length > 0 ? new Date(addFromMs + picked.length * addGap * 1000).toISOString() : null;
 
   /* ------------------------------------------------------------ mutations */
 
@@ -515,17 +524,13 @@ export function QueueTunerSheet({
        * panel makes, and the two can no longer disagree.
        */
       if (campaignId && snap?.campaign && snap.window) {
-        const want = gap * 60;
         /*
-         * AND IT DOES NOT RATCHET A SUB-MINUTE GAP UP TO A MINUTE.
-         *
-         * This control is whole minutes; a campaign on thirty seconds is
-         * stored as 30 and rounds to "1" here, so saving without touching the
-         * number would write sixty and double it. If the minutes round-trip to
-         * the same minute the stored value is kept exactly — the same
-         * keepOrDerive rule the settings screen was fixed with.
+         * NO ROUND-TRIP GUARD ANY MORE, because there is no round trip: this
+         * control holds seconds and writes seconds. The guard it replaces
+         * existed only because a whole-minutes control could not represent the
+         * value it was about to overwrite.
          */
-        const kept = Math.max(1, Math.round(snap.window.gapSeconds / 60)) === gap ? snap.window.gapSeconds : want;
+        const kept = gap;
         if (kept !== snap.window.gapSeconds) {
           await saveCampaign({
             id: snap.campaign.id,
@@ -536,7 +541,7 @@ export function QueueTunerSheet({
         }
       }
       const moved = await respaceQueue(gap, { ...(campaignId ? { campaignId } : {}), ...(anchor !== null ? { startAt: new Date(anchor).toISOString() } : {}) });
-      return `${posts(moved)} ${agree(moved, 'תוזמן', 'תוזמנו')} מחדש, מרווח של ${minutes(gap)} ביניהם.`;
+      return `${posts(moved)} ${agree(moved, 'תוזמן', 'תוזמנו')} מחדש, מרווח של ${gapChoiceLabel(gap)} ביניהם.`;
     });
 
   const removeTarget = async (targetId: string, name: string, pending: number) => {

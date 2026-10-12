@@ -13,15 +13,24 @@ import {
   type QuickPublishPlan,
   type QuickPublishResult,
 } from '@/lib/social/library';
-import { agree, counted, formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { agree, counted, formatDayMonthHe, formatInstantHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { Stamp } from './DateTime';
 import type { MediaItem } from '@/lib/social/types';
 import { SchedulePlanPreview, type SchedulePlan } from './SchedulePicker';
+import { GAP_CHOICES, MIN_GAP_SECONDS, gapChoiceLabel } from '@/lib/social/campaign-schedule';
+import { accountGapLabel } from '@/lib/social/rules';
 import { TargetPicker } from './TargetPicker';
 import { Badge, Button, ButtonLink, Notice, Sheet, SkeletonList, inputClass, useConfirm } from './ui';
 
-/** The scheduler's own quick intervals, so the two screens never disagree. */
-const QUICK_GAPS = [10, 20, 30, 45, 60, 90];
+/*
+ * The scheduler's own quick intervals, so the two screens never disagree —
+ * and IN SECONDS, which is the unit everything under this sheet uses.
+ *
+ * The old list was minutes, and its "30" chip read "30 דק׳" on a screen whose
+ * engine was being asked for thirty SECONDS. One tap moved the account floor
+ * the wrong way by a factor of sixty.
+ */
+const QUICK_GAPS = [30, 60, 300, 1200, 2700, 3600];
 
 /**
  * Publishing a library post without opening the editor: pick groups, pick the
@@ -103,7 +112,7 @@ export function QuickPublishSheet({
         listWorkers().catch(() => []),
       ]);
       setCtx(snapshot);
-      setGap(Math.max(1, snapshot.effectiveGapMinutes || 20));
+      setGap(Math.max(MIN_GAP_SECONDS, snapshot.effectiveGapSeconds || 1200));
       setWorkerOnline(workers.some((w) => w.online));
       const approved = variants.filter((v) => v.approval === 'approved' && v.text.trim());
       setVariantProblem(
@@ -154,7 +163,7 @@ export function QuickPublishSheet({
      on every change instead of asking the server again. */
   const plan: QuickPublishPlan | null = useMemo(() => {
     if (!ctx || !selectedIds.length) return null;
-    return planQuickPublish(ctx, { targetIds: selectedIds, startAt, gapMinutes: gap, mode }, anchor);
+    return planQuickPublish(ctx, { targetIds: selectedIds, startAt, gapSeconds: gap, mode }, anchor);
   }, [ctx, selectedIds, startAt, gap, mode, anchor]);
 
   /* The same shape the editor's preview renders, so the two screens read alike. */
@@ -175,7 +184,7 @@ export function QuickPublishSheet({
           ? 'פרסום אחד — נכנס לתור מיד'
           : plan.rows.length === 1
             ? 'פרסום אחד'
-            : `${plan.rows.length} פרסומים, אחד כל ${plan.gapMinutes} דקות${plan.days > 1 ? `, על פני ${plan.days} ימים` : ''}`,
+            : `${plan.rows.length} פרסומים, אחד כל ${gapChoiceLabel(plan.gapSeconds)}${plan.days > 1 ? `, על פני ${plan.days} ימים` : ''}`,
       firstAt: slots[0],
       lastAt: slots[slots.length - 1],
       days: plan.days,
@@ -246,7 +255,7 @@ export function QuickPublishSheet({
         postId: post.id,
         targetIds: selectedIds,
         startAt,
-        gapMinutes: gap,
+        gapSeconds: gap,
         mode,
         /* The data layer cannot open a dialog, so the question lives here — the
            editor's own wording, for the same double-tap it protects against. */
@@ -364,12 +373,12 @@ export function QuickPublishSheet({
           <dl className="grid grid-cols-3 gap-2 text-center [&>*]:min-w-0">
             <div className="rounded-lg bg-ink-900 py-2">
               <dt className="text-[10px] font-bold text-mist-500">מתחיל</dt>
-              <dd className="text-sm font-extrabold tabular-nums text-mist-100">{formatTimeHe(result.startAt)}</dd>
+              <dd className="text-sm font-extrabold tabular-nums text-mist-100">{formatInstantHe(result.startAt)}</dd>
               <p className="text-[10px] font-bold tabular-nums text-brand-400">{formatDayMonthHe(result.startAt)}</p>
             </div>
             <div className="rounded-lg bg-ink-900 py-2">
               <dt className="text-[10px] font-bold text-mist-500">צפוי להסתיים</dt>
-              <dd className="text-sm font-extrabold tabular-nums text-mist-100">{result.endAt ? formatTimeHe(result.endAt) : '—'}</dd>
+              <dd className="text-sm font-extrabold tabular-nums text-mist-100">{result.endAt ? formatInstantHe(result.endAt) : '—'}</dd>
               {result.endAt && <p className="text-[10px] font-bold tabular-nums text-brand-400">{formatDayMonthHe(result.endAt)}</p>}
             </div>
             <div className="rounded-lg bg-ink-900 py-2">
@@ -392,7 +401,7 @@ export function QuickPublishSheet({
 
           {result.gap.surchargeChanged && (
             <Notice tone="info">
-              המרווח הנוסף לקבוצות עודכן ל-{result.gap.groupMinGapMinutes} דק׳ והמרווח הכללי ל-{result.gap.minGapMinutes} דק׳.
+              המרווח הנוסף לקבוצות עודכן ל-{accountGapLabel(result.gap.groupMinGapSeconds)} והמרווח הכללי ל-{accountGapLabel(result.gap.minGapSeconds)}.
             </Notice>
           )}
           <p className="text-xs text-mist-500">
@@ -523,35 +532,40 @@ export function QuickPublishSheet({
 
             <div className="min-w-0">
               <label className="text-sm">
-                <span className="mb-1 block font-bold text-mist-300">מרווח בין פרסומים (דקות)</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={600}
-                  inputMode="numeric"
-                  aria-label="מרווח בדקות בין פרסומים"
+                <span className="mb-1 block font-bold text-mist-300">מרווח בין פרסומים</span>
+                {/* The campaign panel's own list, so one record has one
+                    vocabulary. A free number box in MINUTES could not say
+                    thirty seconds at all, and its "30" meant thirty minutes. */}
+                <select
+                  aria-label="מרווח בין פרסומים"
                   className={inputClass}
-                  value={gap}
-                  onChange={(e) => setGap(Math.min(600, Math.max(1, Number(e.target.value) || 1)))}
-                />
+                  value={String(gap)}
+                  onChange={(e) => setGap(Number(e.target.value) || MIN_GAP_SECONDS)}
+                >
+                  {GAP_CHOICES.map((sec) => (
+                    <option key={sec} value={String(sec)}>
+                      {gapChoiceLabel(sec)}
+                    </option>
+                  ))}
+                </select>
               </label>
               <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-xs font-bold">
                 <span className="self-center text-mist-500">מרווח מהיר:</span>
-                {QUICK_GAPS.map((m) => (
+                {QUICK_GAPS.map((sec) => (
                   <button
-                    key={m}
+                    key={sec}
                     type="button"
-                    onClick={() => setGap(m)}
-                    className={`min-h-11 rounded-full px-2.5 ${gap === m ? 'bg-brand-500 text-on-brand' : 'bg-ink-900 text-mist-300'}`}
+                    onClick={() => setGap(sec)}
+                    className={`min-h-11 rounded-full px-2.5 ${gap === sec ? 'bg-brand-500 text-on-brand' : 'bg-ink-900 text-mist-300'}`}
                   >
-                    {m} דק׳
+                    {gapChoiceLabel(sec)}
                   </button>
                 ))}
               </div>
             </div>
 
             <p className="text-xs text-mist-500">
-              ההגדרות דורשות כרגע {ctx.effectiveGapMinutes} דק׳ בין שני פרסומים לקבוצות. אישור כאן יעדכן את ההגדרה הזו ל-{gap} דק׳, והיא חלה על כל החשבון — לא על הפרסום הזה בלבד.
+              ההגדרות דורשות כרגע {accountGapLabel(ctx.effectiveGapSeconds)} בין שני פרסומים לקבוצות. אישור כאן יעדכן את ההגדרה הזו ל-{accountGapLabel(gap)}, והיא חלה על כל החשבון — לא על הפרסום הזה בלבד.
             </p>
             <p className="text-xs text-mist-500">
               המרווח הוא הגדרה שלכם בלבד. אין מרווח שמבטיח שלא תיחסם ואין לפייסבוק מספר רשמי שאפשר להסתמך עליו — המערכת פשוט תעשה מה שביקשתם.
@@ -578,7 +592,7 @@ export function QuickPublishSheet({
                   <ul className="max-h-64 min-w-0 space-y-1 overflow-y-auto rounded-xl border border-ink-700 p-2">
                     {plan.rows.map((r, i) => (
                       <li key={`${r.targetId}-${i}`} className="flex items-center gap-2 text-xs">
-                        <span className="w-12 shrink-0 font-extrabold tabular-nums text-brand-400">{formatTimeHe(r.at)}</span>
+                        <span className="w-12 shrink-0 font-extrabold tabular-nums text-brand-400">{formatInstantHe(r.at)}</span>
                         <span dir="auto" className="min-w-0 truncate text-mist-300">{r.name}</span>
                         <span className="ms-auto shrink-0 text-[11px] font-bold tabular-nums text-mist-500">{formatDayMonthHe(r.at)}</span>
                       </li>
@@ -588,7 +602,7 @@ export function QuickPublishSheet({
 
                 {plan.firstSlotDeferred && (
                   <p className="text-xs text-mist-500">
-                    הפרסום הראשון לא יוצא מיד: המרווח שבחרתם חל גם עליו, ולכן הוא נקבע ל-{formatTimeHe(plan.startAt)}.
+                    הפרסום הראשון לא יוצא מיד: המרווח שבחרתם חל גם עליו, ולכן הוא נקבע ל-{formatInstantHe(plan.startAt)}.
                   </p>
                 )}
                 {plan.days > 1 && (

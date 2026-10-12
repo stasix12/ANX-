@@ -6,7 +6,7 @@ import { dripSlots, slotsFor } from '@/lib/social/slots';
 import { windowedSlots } from '@/lib/social/projection';
 import type { CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
-import { counted, formatDayMonthHe, formatTimeHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { counted, formatDayMonthHe, formatInstantHe, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { Stamp } from './DateTime';
 import { TIMEZONE, WEEKDAYS_HE, type ScheduleMode, type WeeklyPlan } from '@/lib/social/types';
 import { Notice, inputClass } from './ui';
@@ -219,10 +219,10 @@ export function SchedulePlanPreview({ plan, names = [] }: { plan: SchedulePlan; 
       <p className="text-xs font-bold text-mist-300">{plan.summary}</p>
       <dl className="mt-2 grid grid-cols-3 gap-2 text-center [&>*]:min-w-0">
         <Stat label="ראשון" hint={dayHint(plan.firstAt as Date)}>
-          {formatTimeHe(plan.firstAt as Date)}
+          {formatInstantHe(plan.firstAt as Date)}
         </Stat>
         <Stat label="אחרון" hint={dayHint(plan.lastAt as Date)}>
-          {formatTimeHe(plan.lastAt as Date)}
+          {formatInstantHe(plan.lastAt as Date)}
         </Stat>
         <Stat label="ימים">{plan.days}</Stat>
       </dl>
@@ -231,7 +231,7 @@ export function SchedulePlanPreview({ plan, names = [] }: { plan: SchedulePlan; 
           const newDay = i === 0 || zonedDateISO(at) !== zonedDateISO(rows[i - 1]);
           return (
             <li key={i} className="flex items-center gap-2 text-xs">
-              <span className="w-12 shrink-0 font-extrabold tabular-nums text-brand-400">{formatTimeHe(at)}</span>
+              <span className="w-12 shrink-0 font-extrabold tabular-nums text-brand-400">{formatInstantHe(at)}</span>
               <span dir="auto" className="min-w-0 truncate text-mist-300">
                 {plan.simultaneous ? `כל ${names.length || 'ה'}${names.length ? ' היעדים' : 'יעדים'}` : names[i] || `יעד ${i + 1}`}
               </span>

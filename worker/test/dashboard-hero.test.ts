@@ -332,7 +332,7 @@ async function main(): Promise<void> {
       });
 
       assert.equal(seen.overflow, false, `${width}: the page scrolls sideways`);
-      assert.equal(seen.cards.length, 14, `${width}: expected 14 cards, got ${seen.cards.length}`);
+      assert.equal(seen.cards.length, 15, `${width}: expected 15 cards, got ${seen.cards.length}`);
 
       seen.cards.forEach((c, i) => {
         const at = `${width}px, card ${i + 1}`;
@@ -377,7 +377,7 @@ async function main(): Promise<void> {
       });
 
       /* ─── what each case must, and must not, say ─────────────────────── */
-      const [reference, , , noDay, off, nothingQueued, , scheduleOff, , windowOpen, ended, halted, awaitingHand, approximate] = seen.cards;
+      const [reference, , , noDay, off, nothingQueued, , scheduleOff, , windowOpen, ended, halted, awaitingHand, approximate, subMinute] = seen.cards;
 
       /* 1 — the reference's own card: a time, a date, and the day it falls on. */
       assert.match(reference.text, /הפרסום הבא יתחיל ב: ?\d{2}:\d{2}/, `${width}: the reference card prints no time`);
@@ -546,6 +546,17 @@ async function main(): Promise<void> {
       });
       /* And it still refuses to name an instant it cannot stand behind. */
       assert.doesNotMatch(approximate.strip, /\d{1,2}:\d{2}/, `${width}: an unprovable count printed a clock time`);
+
+      /*
+       * 15 — THE SUB-MINUTE INSTANT, measured rather than asserted in source.
+       *
+       * At a thirty-second cadence the stamp is 10:00:30, and the strip's
+       * figure is 22px tabular digits in a fixed column. The seconds are not
+       * optional — a strip reading 10:00 over a list reading 10:00:30 is one
+       * screen disagreeing with another about one row — so the figure shrinks
+       * and the clipping guard above decides whether that was enough.
+       */
+      assert.match(subMinute.strip, /\d{1,2}:\d{2}:\d{2}/, `${width}: a sub-minute round lost the seconds off its next instant`);
 
       await view.close();
       checks += 35;

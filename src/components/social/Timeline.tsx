@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { TimelineRow } from '@/lib/social/client';
 import { countdownTo } from '@/lib/social/countdown';
 import { isInFlight, needsHuman } from '@/lib/social/status';
-import { agree, counted, formatDateHe, formatTimeHe, relativeHe, zonedDateISO } from '@/lib/social/time';
+import { agree, counted, formatDateHe, formatInstantHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import type { QueueStatus } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
 import { EmptyState, STATUS_TONE, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
@@ -319,7 +319,7 @@ export function Timeline({
             <span className={`w-12 shrink-0 text-sm font-extrabold tabular-nums ${doneLine ? 'text-mist-500' : 'text-brand-400'}`}>
               {/* No instant, no clock: an em dash is the honest placeholder and
                   the line under the name says which setting is holding it. */}
-              {at ? formatTimeHe(at) : '—'}
+              {at ? formatInstantHe(at) : '—'}
             </span>
             <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
             <div className="min-w-0 grow">

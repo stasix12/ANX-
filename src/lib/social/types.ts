@@ -197,6 +197,15 @@ export interface Schedule {
   drip_per_day?: number | null;
   /** drip: minutes between two consecutive posts. */
   drip_gap_minutes?: number | null;
+  /**
+   * The drip gap in SECONDS, canonical when present.
+   *
+   * Beside the minutes column rather than instead of it, exactly like
+   * social_campaigns.schedule_gap_seconds: a database that has not run the
+   * migration keeps working off the minutes, and a worker that predates the
+   * column reads the minutes too — slower than asked, never faster.
+   */
+  drip_gap_seconds?: number | null;
   drip_window_start?: string;
   drip_window_end?: string;
   target_ids: string[];

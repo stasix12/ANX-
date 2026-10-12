@@ -861,7 +861,34 @@ console.log('unit tests OK');
    * empty, and currentJob is checked again anyway — the cost of being wrong is
    * a post that exists on Facebook with no record of it here.
    */
-  assert.ok(/if \(state\.currentJob\) return;/.test(localWorker), 'it never restarts while a post is going out');
+  /*
+   * A SET AND A LANE LIST, because there can now be more than one lane — and
+   * then the DATABASE, because the cost of being wrong is a post that exists
+   * on Facebook with no record of it here, and that is too expensive to rest
+   * on in-memory state surviving correctly.
+   */
+  assert.ok(
+    /if \(state\.currentJobs\.size \|\| state\.lanes\.some\(\(l\) => !l\.done\)\) return;/.test(localWorker),
+    'it never restarts while a post is going out',
+  );
+  assert.ok(
+    /\.in\('status', \['publishing', 'awaiting_confirmation'\]\);[\s\S]{0,120}?if \(\(count \?\? 0\) > 0\) return;/.test(localWorker),
+    'and it asks the queue too, not only its own memory',
+  );
+  /* The slot is released on every exit path, including the ones that throw: a
+     row never deleted from the SET pins updates off for the life of the
+     process, which a single overwritable slot used to hide. */
+  assert.ok(
+    /\} finally \{[\s\S]{0,400}?state\.currentJobs\.delete\(item\.id\);/.test(localWorker),
+    'and a lane always releases its row, however it leaves',
+  );
+  /* …and the admission mutex with it. A lane that threw between the claim and
+     the browser would otherwise wedge every other lane behind it for the life
+     of the process, which is worse than the bug this whole change fixes. */
+  assert.ok(
+    /\} finally \{[\s\S]{0,400}?release\(\);/.test(localWorker),
+    'and it always releases the admission section too',
+  );
   /*
    * THE IDLE BRANCH, AND WHAT MAY RUN INSIDE IT.
    *
@@ -2496,7 +2523,38 @@ const scenario: { step: string; line: string }[] = [];
 
   /* --- one publication at a time ------------------------------------------ */
   assert.ok(!/Promise\.all\([^)]*runJob/.test(pcWorker), 'jobs must not run concurrently: every limit in rules.ts is a count taken before the batch writes its outcome');
-  assert.ok(/for \(const item of jobs\.slice\(0, concurrency\)\) \{/.test(pcWorker), 'the batch is claimed together and published one after another');
+  /*
+   * ───── AND NOW: THE DANGEROUS HALF SERIAL, THE SLOW HALF PARALLEL ─────
+   *
+   * The loop above used to be `for (… of jobs.slice(0, concurrency)) await
+   * runJob(…)`, and the twenty-line note beside it was right about why: every
+   * limit in rules.ts is a COUNT read before any of the batch writes its
+   * outcome. That has not changed — the counts are still evaluated one lane
+   * at a time, inside worker/admission.ts's mutex. What moved outside it is
+   * the page load, the typing and the upload, which is the 30-60 seconds that
+   * was being ADDED to every gap.
+   *
+   * Four properties, and each one is a way this can go wrong:
+   */
+  assert.ok(
+    /if \(jobEnv\.admission\) void jobEnv\.admission\.run\(\(\) => admitted\);/.test(pcWorker),
+    'the claim and the rules run one lane at a time — the counts are read before anything writes',
+  );
+  assert.ok(
+    /jobEnv\.onAdmitted\?\.\(\);[\s\S]{0,200}?result = await adapter\.publish\(\{/.test(pcWorker),
+    'and the mutex is released the moment the browser work starts, not when the publication ends',
+  );
+  assert.ok(
+    /const laneLimit = laneCountFor\(\{ want: concurrency, gapMs: gate\.gapMs, holdCapMs: PREP_HOLD_CAP_MS, serial \}\);/.test(pcWorker),
+    'the lane count is bounded by the composer\u2019s hold cap — a long gap collapses to one lane with nobody having to remember',
+  );
+  assert.ok(
+    /if \(\(!due\?\.length \|\| holdingForGap\) && state\.lanes\.every\(\(l\) => l\.done\)\) \{/.test(pcWorker),
+    'and no idle chore may take the one browser while a lane is publishing',
+  );
+  /* The lanes are tracked, never awaited: awaiting them inside the tick would
+     re-couple them at the tick boundary, which is requirement 7 undone. */
+  assert.ok(!/await Promise\.(all|allSettled)\([^)]*lane/.test(pcWorker), 'the tick must not await the lanes');
 
   /* --- a publication is never recorded twice, and never published twice ---- */
   const job = slice(pcWorker, 'async function runJob', '/** Three tries with a short backoff');
@@ -4934,9 +4992,16 @@ const scenario: { step: string; line: string }[] = [];
 
   /* 2 — the gate is asked once per tick, before anything is claimed. */
   assert.ok(/async function spacingGate\(/.test(worker), 'the spacing question is asked once per tick');
+  const gateAt = worker.indexOf('const gate = await spacingGate(db');
+  const laneAt = worker.indexOf('for (const item of jobs.filter((j) => !held.has(j.id)).slice(0, free))');
+  assert.ok(gateAt >= 0 && laneAt >= 0, 'sanity: found both the gate and the lane loop');
+  assert.ok(gateAt < laneAt, 'and it is asked BEFORE any row is claimed, or the claim burst is back');
+  /* The gate's gap is also what bounds the lane count and paces the commit
+     cursor, so one reading of it serves all three — two readings could
+     disagree and the lanes would be spaced against a number nothing enforces. */
   assert.ok(
-    worker.indexOf('const gate = await spacingGate(db') < worker.indexOf('for (const item of jobs.slice(0, concurrency))'),
-    'and it is asked BEFORE any row is claimed, or the claim burst is back',
+    /gapMs: gate\.gapMs, holdCapMs: PREP_HOLD_CAP_MS/.test(worker) && /admission: state\.admission, gapMs: gate\.gapMs/.test(worker),
+    'and one reading of the gap bounds the lanes AND paces them',
   );
   assert.ok(/state\.spacingNoticeAt/.test(worker), 'the waiting line is said once per gap, not once per row per tick');
 

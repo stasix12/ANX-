@@ -7,6 +7,7 @@ import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, ty
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, evaluateQueueItem } from '@/lib/social/rules';
+import { Admission, laneCountFor } from './admission';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { upsertScoped } from '@/lib/social/tenant';
 import { stampText } from '@/lib/social/time';
@@ -32,7 +33,7 @@ import { updateAvailable } from './self-update';
 import { logActivity, safeError, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
-import { commentOnPost, type CommentOutcome } from './facebook/composer';
+import { PREP_HOLD_CAP_MS, commentOnPost, type CommentOutcome } from './facebook/composer';
 import { matchPosts, ourPostsInGroup } from './facebook/postIndex';
 import { downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
@@ -92,7 +93,23 @@ interface WorkerState {
   id: string;
   browserState: 'connected' | 'needs_auth' | 'disconnected' | 'unknown';
   attention: string;
-  currentJob: string | null;
+  /**
+   * THE ROWS THIS PROCESS IS HOLDING — a SET, because there can now be more
+   * than one lane.
+   *
+   * A single slot meant the second claim overwrote the first, and then the
+   * first lane's exit cleared it while the second was still publishing.
+   * restartIfUpdated() reads this to decide whether it may end the process
+   * mid-upload, and the cost of being wrong is a post that exists on Facebook
+   * with no record of it here.
+   */
+  currentJobs: Set<string>;
+  /** In-flight lane promises. NOT awaited by the tick — see the publish loop. */
+  lanes: { id: string; done: boolean; p: Promise<void> }[];
+  /** The admission section. One per process; see worker/admission.ts. */
+  admission: Admission;
+  /** The headless mode the live lanes were started under — frozen while they run. */
+  laneHeadless?: boolean;
   /**
    * A publication ran on this tick.
    *
@@ -289,7 +306,9 @@ async function main(): Promise<void> {
     id: worker.id,
     browserState: session.hasProfile() ? 'unknown' : 'disconnected',
     attention: '',
-    currentJob: null,
+    currentJobs: new Set<string>(),
+    lanes: [],
+    admission: new Admission(),
     lastCheckAt: 0,
     lastPlanAt: 0,
     spacingNoticeAt: 0,
@@ -748,7 +767,20 @@ async function tick(state: WorkerState): Promise<void> {
     await logActivity('info', 'deferred', `ממתין למרווח של ${accountGapLabel(gate.gapSeconds)} בין פרסומים`, { until: gate.nextAt });
   }
 
-  if (!due?.length || holdingForGap) {
+  /*
+   * …AND NOTHING IS PUBLISHING.
+   *
+   * The chores were mutually exclusive with publishing for free, because the
+   * publish loop was AWAITED: reaching this line meant nothing was in flight.
+   * With lanes tracked on `state` that is no longer true, and a chore holding
+   * the one browser for 240 seconds beside a live publication is the exact
+   * bug the owner reported — "אני בא לפרסם סבב פוסטים, במקום זה הוא מפרסם
+   * תגובה על הפוסט שכבר פירסמתי" — arriving by a new route.
+   *
+   * It also preserves what the comment pipeline depends on: one browser, one
+   * thing at a time, and CHORE_NEEDS_MS not widened by a millisecond.
+   */
+  if ((!due?.length || holdingForGap) && state.lanes.every((l) => l.done)) {
     /*
      * IDLE CHORES — the work that uses the browser when no post is due.
      *
@@ -872,18 +904,65 @@ async function tick(state: WorkerState): Promise<void> {
    * nothing: there is one browser profile and one Facebook session here, so
    * the jobs were never really parallel in the place it mattered.
    */
-  for (const item of jobs.slice(0, concurrency)) {
+  /*
+   * ───────────────── AND NOW THEY CAN OVERLAP, CAREFULLY ─────────────────
+   *
+   * Everything above this line is still true, which is why the dangerous half
+   * is still serialised: worker/admission.ts holds the claim, the rules and
+   * both cursors ONE LANE AT A TIME, while the page load, the typing and the
+   * upload — the part that belongs to a remote machine and takes 30-60
+   * seconds — overlap. That is the whole of the parallelism, and it is what
+   * stops a publication's own duration from being ADDED to the gap.
+   *
+   * THE LANES ARE NOT AWAITED HERE. A fan-out inside the tick would re-couple
+   * them at the tick boundary, because main() awaits the whole tick — so one
+   * lane holding a fifteen-minute video upload would cost the other lane
+   * thirty slots at a thirty-second cadence. Tracked on `state` instead: this
+   * tick returns in milliseconds and the next poll, five seconds later,
+   * starts another lane in whatever slot has freed up. That is requirement 7
+   * — a delayed operation must not block the independent ones.
+   *
+   * `notBefore` is still what makes a gap mean a gap: the gate let this row
+   * through up to PREP_LEAD_MS early so the browser work happens INSIDE the
+   * remaining wait, and the composer holds the final click. What is new is
+   * that the instant it holds for is re-taken AFTER the preparation
+   * (ComposeInput.slotAt), so a lane that prepared slowly cannot click on top
+   * of one that prepared quickly.
+   */
+  state.lanes = state.lanes.filter((l) => !l.done);
+  /* Confirmation and test mode both park a publication on a question to a
+     person for up to fifteen minutes. Two questions at once is two holds for
+     one answer, so those modes stay strictly serial. */
+  const serial = Boolean(browser.requireConfirmation || browser.testMode);
+  const laneLimit = laneCountFor({ want: concurrency, gapMs: gate.gapMs, holdCapMs: PREP_HOLD_CAP_MS, serial });
+  /* Every lane shares ONE Chromium context, and session.ensure() tears that
+     context down on a headless flip — which would abandon the other lane's
+     open composer mid-publish. So the mode is frozen while any lane holds a
+     page, and a flip takes effect on the next tick with no lane running. */
+  if (state.lanes.length && headless !== state.laneHeadless) return;
+  state.laneHeadless = headless;
+  const free = Math.max(0, laneLimit - state.lanes.length);
+  const held = new Set(state.lanes.map((l) => l.id));
+  for (const item of jobs.filter((j) => !held.has(j.id)).slice(0, free)) {
     if (stopping) break;
-    /*
-     * `notBefore` is what makes a one-minute gap mean one publication a
-     * minute. The gate above let this row through up to PREP_LEAD_MS early,
-     * so the browser work — opening the group, typing, uploading — happens
-     * INSIDE the remaining wait instead of after it, and the composer holds
-     * the final click until the instant itself. Before this, the gap and the
-     * preparation ran one after the other and the true interval was always
-     * gap + preparation, never gap.
-     */
-    await runJob(state, item, { limits, browser, headless });
+    const lane: { id: string; done: boolean; p: Promise<void> } = { id: item.id, done: false, p: Promise.resolve() };
+    lane.p = runJob(state, item, {
+      limits,
+      browser,
+      headless,
+      ...(laneLimit > 1 ? { admission: state.admission, gapMs: gate.gapMs } : {}),
+    })
+      .catch(async (err) => {
+        /* A lane's failure is its own: it must not take another lane's
+           publication down with it, and it must not reach main()'s catch as
+           an unhandled rejection and stop the loop. */
+        console.error('[worker] lane:', err instanceof Error ? err.message : err);
+        await logActivity('error', 'worker_error', safeError(err, 'אירעה תקלה בתוכנת הפרסום. היא ממשיכה לנסות בעצמה.'), { detail: String(err) }).catch(() => undefined);
+      })
+      .finally(() => {
+        lane.done = true;
+      });
+    state.lanes.push(lane);
   }
 }
 
@@ -1695,9 +1774,58 @@ interface JobEnv {
   limits: LimitsSettings;
   browser: BrowserSettings;
   headless: boolean;
+  /** The admission section, when this lane is one of several. */
+  admission?: Admission;
+  /** The account floor this lane is being paced against, in ms. */
+  gapMs?: number;
+  /**
+   * Called once the claim and the rules are done and the browser work is about
+   * to start — which is where this lane stops excluding the others.
+   */
+  onAdmitted?: () => void;
 }
 
 async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Promise<void> {
+  /*
+   * THE SLOT IS RELEASED WHATEVER HAPPENS.
+   *
+   * There are five separate `currentJobs.delete` sites on the paths this
+   * function can leave by, and with one lane a missed one was survivable: the
+   * next claim overwrote the single slot. With a SET it is not — a row that is
+   * never deleted pins restartIfUpdated() off for the life of the process, so
+   * the worker stops taking updates and nothing says why.
+   */
+  /*
+   * THE ADMISSION SECTION — the claim and the rules, one lane at a time.
+   *
+   * Every limit in rules.ts is a COUNT or a read taken BEFORE any of the
+   * batch writes its outcome: maxPerDay, maxPerCampaignPerDay, the duplicate
+   * check, the repeat rule. Two lanes evaluating them together each read the
+   * same numbers and both pass, which is how a cap of N becomes N + lanes - 1.
+   * The claim itself is already a compare-and-set and was never the risk; the
+   * COUNTS were.
+   *
+   * So the mutex is held from the start of the lane until the browser work is
+   * about to begin — `onAdmitted` — and not a moment longer. The page load,
+   * the typing and the upload, which are the 30-60 seconds that actually
+   * matter, run outside it and overlap. That is the whole of the parallelism.
+   */
+  let release = () => {};
+  const admitted = new Promise<void>((r) => {
+    release = r;
+  });
+  if (jobEnv.admission) void jobEnv.admission.run(() => admitted);
+  try {
+    await runJobInner(state, item, { ...jobEnv, onAdmitted: release });
+  } finally {
+    /* Belt and braces: a lane that threw between the claim and the browser
+       must not wedge every other lane behind it for the life of the process. */
+    release();
+    state.currentJobs.delete(item.id);
+  }
+}
+
+async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Promise<void> {
   const db = await workerDb();
   const now = new Date().toISOString();
   const attempts = item.attempts + 1;
@@ -1708,7 +1836,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     .eq('status', 'scheduled')
     .select('id');
   if (!claimed?.length) return;
-  state.currentJob = item.id;
+  state.currentJobs.add(item.id);
   /* Both of these are in the same unguarded window as the rules below — see
      the note there. heartbeat() calls workerDb(), which throws when a token
      refresh fails, and a throw here left the row on 'publishing' with no way
@@ -1721,7 +1849,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
       .from('social_queue')
       .update({ status: 'scheduled', step: 'pending', scheduled_at: new Date(Date.now() + 60_000).toISOString(), attempts: item.attempts, step_at: new Date().toISOString() })
       .eq('id', item.id);
-    state.currentJob = null;
+    state.currentJobs.delete(item.id);
     console.log(`[worker] ⏲ heartbeat נכשל אחרי התפיסה — השורה הוחזרה לתור. ${safeError(err)}`);
     return;
   }
@@ -1737,7 +1865,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
 
   const finish = async (patch: Partial<QueueItem> & Record<string, unknown>) => {
     await db.from('social_queue').update({ ...patch, step_at: new Date().toISOString() }).eq('id', item.id);
-    state.currentJob = null;
+    state.currentJobs.delete(item.id);
   };
   /**
    * finish(), but it THROWS when the write did not land.
@@ -1751,7 +1879,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
   const finishChecked = async (patch: Partial<QueueItem> & Record<string, unknown>) => {
     const { error } = await db.from('social_queue').update({ ...patch, step_at: new Date().toISOString() }).eq('id', item.id);
     if (error) throw new Error(error.message);
-    state.currentJob = null;
+    state.currentJobs.delete(item.id);
   };
 
   /*
@@ -1854,6 +1982,10 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
    * 'publishing' — visible, recoverable by hand, and never re-claimed, because
    * both claims filter on status = 'scheduled'.
    */
+  /* The claim and the rules are done; everything from here is the browser, and
+     the browser is where the lanes are allowed to overlap. Released OUTSIDE the
+     try so the string the publish block is found by stays one line. */
+  jobEnv.onAdmitted?.();
   let result: Awaited<ReturnType<typeof adapter.publish>>;
   try {
     result = await adapter.publish({
@@ -1873,6 +2005,43 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
          gate above decides WHETHER to claim, rules.ts decides when the click
          may land, and only one of them may own that number. */
       notBefore: decision.notBefore ?? null,
+      /*
+       * THE SLOT, RE-TAKEN AFTER THE PREPARATION — the line that makes the
+       * floor hold with more than one lane.
+       *
+       * `notBefore` above is decided before the page is opened, which is
+       * right for one lane and wrong for two: preparation is a page load, a
+       * photo upload and a remote machine's mood, so lane 0 can finish LATE
+       * and lane 1 EARLY and each clicks at the instant it was promised
+       * before either knew. Measured on worker/test/cadence-30s.test.ts, two
+       * naive lanes on a thirty-second floor published at a mean of 14.85s
+       * with 99 of 99 intervals under the floor.
+       *
+       * admission.commit() is monotonic and is taken under the same mutex as
+       * every other lane's, so two consecutive clicks are a gap apart by
+       * construction rather than by an estimate of how long a publication
+       * takes. Absent (one lane) this is undefined and the hold is exactly
+       * `notBefore`, as it has always been.
+       */
+      slotAt:
+        jobEnv.admission && jobEnv.gapMs
+          ? async () => {
+              const a = jobEnv.admission as Admission;
+              const gapMs = jobEnv.gapMs as number;
+              return a
+                .run(async () =>
+                  new Date(
+                    a.commit({
+                      gapMs,
+                      slotMs: decision.notBefore ? Date.parse(decision.notBefore) : Date.now(),
+                      nowMs: Date.now(),
+                      lastPublishedMs: 0,
+                    }),
+                  ).toISOString(),
+                )
+                .catch(() => null);
+            }
+          : undefined,
       /*
        * HOW LONG THIS PUBLICATION MAY OCCUPY THE BROWSER.
        *
@@ -2143,7 +2312,7 @@ async function runJob(state: WorkerState, item: QueueItem, jobEnv: JobEnv): Prom
     }),
   );
   if (!recorded) {
-    state.currentJob = null;
+    state.currentJobs.delete(item.id);
     await logActivity('error', 'publish_unrecorded', `פורסם ל-"${tt.name}" אבל לא הצלחתי לרשום את התוצאה. הפרסום קיים בפייסבוק — סמנו את השורה ידנית.`, { queueId: item.id });
     console.error(`[worker] ⚠ פורסם ל-"${tt.name}" אבל רישום התוצאה נכשל — השורה נשארת "מפרסם" ודורשת בדיקה ידנית.`);
     return;
@@ -3617,7 +3786,30 @@ async function saveCommentOutcome(
  * worse by an update that goes wrong.
  */
 async function restartIfUpdated(state: WorkerState): Promise<void> {
-  if (state.currentJob) return;
+  /* Any lane holding a row, and any lane still running at all. The set is the
+     fast answer; the lane list catches the window between a lane being started
+     and its claim landing, which is milliseconds but is not zero. */
+  if (state.currentJobs.size || state.lanes.some((l) => !l.done)) return;
+  /*
+   * AND THE QUEUE'S OWN ANSWER, not only this process's memory.
+   *
+   * desktop/main.ts already refuses to install an update while a row is
+   * 'publishing' or 'awaiting_confirmation', and it asks the DATABASE. This
+   * asks the same question for the same reason: ending the process mid-upload
+   * leaves a post on Facebook with no record of it here, and that is too
+   * expensive to let ride on in-memory state surviving correctly.
+   */
+  try {
+    const db = await workerDb();
+    const { count } = await db
+      .from('social_queue')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['publishing', 'awaiting_confirmation']);
+    if ((count ?? 0) > 0) return;
+  } catch {
+    /* Cannot tell — so do not restart. The update waits for the next tick. */
+    return;
+  }
   if (Date.now() - (state.lastUpdateCheckAt ?? 0) < UPDATE_CHECK_MS) return;
   state.lastUpdateCheckAt = Date.now();
   const check = await updateAvailable();
@@ -3817,7 +4009,7 @@ async function heartbeat(state: WorkerState, status: 'online' | 'needs_attention
       status,
       browser_state: browserOverride ?? state.browserState,
       attention_message: state.attention,
-      current_job_id: state.currentJob,
+      current_job_id: [...state.currentJobs][0] ?? null,
       debug_mode: debugMode,
       last_seen_at: new Date().toISOString(),
       version: VERSION,

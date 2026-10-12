@@ -28,6 +28,8 @@ export interface GroupPublishInput {
   notBefore?: string | null;
   /** Called every few seconds while the post is held for `notBefore`. */
   onHold?: () => Promise<void>;
+  /** Taken after the preparation and before the hold — see ComposeInput.slotAt. */
+  slotAt?: () => Promise<string | null>;
   /** Our own Facebook user id, so the composer can verify on our posts page. */
   authorId?: string;
   /**
@@ -96,6 +98,7 @@ export class FacebookGroupBrowserAdapter {
         confirm: input.confirm,
         notBefore: input.notBefore ?? null,
         onHold: input.onHold,
+        slotAt: input.slotAt,
         authorId: input.authorId ?? '',
         budgetMs: input.budgetMs,
       });

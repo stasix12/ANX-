@@ -44,6 +44,28 @@ export interface ComposeInput {
   /** Called every few seconds while the post is held for `notBefore`. */
   onHold?: () => Promise<void>;
   /**
+   * THE SLOT, TAKEN AFTER THE PREPARATION AND BEFORE THE HOLD.
+   *
+   * `notBefore` is decided before the page is even opened, which is the right
+   * place for ONE lane and the wrong place for two. Preparation is a page
+   * load, a photo upload and a remote machine's mood; it does not take the
+   * same time twice. So with two lanes, lane 0 can finish preparing LATE and
+   * lane 1 EARLY, and each clicks at the instant it was promised before
+   * either knew — which puts the two clicks closer together than the gap, and
+   * can even invert their order.
+   *
+   * This callback closes that. It is invoked once, immediately before the
+   * hold, when everything except the click is done — so the instant it
+   * returns is taken against a cursor that already knows every lane's real
+   * progress. worker/admission.ts holds that cursor and is monotonic, so two
+   * consecutive clicks are a gap apart by construction rather than by an
+   * estimate of how long a publication takes.
+   *
+   * ABSENT MEANS UNCHANGED. One lane needs no cursor, and without this
+   * callback the hold is exactly `notBefore` as it has always been.
+   */
+  slotAt?: () => Promise<string | null>;
+  /**
    * OUR OWN Facebook user id — what turns "is it in the feed somewhere" into
    * "is it on the page that lists only our posts".
    *
@@ -165,7 +187,7 @@ export interface ComposeResult {
  * and never claims more than PREP_LEAD_MS early, so this only ever catches a
  * clock that moved or a setting that changed under a job in flight.
  */
-const PREP_HOLD_CAP_MS = 3 * 60_000;
+export const PREP_HOLD_CAP_MS = 3 * 60_000;
 
 const IMAGE_UPLOAD_TIMEOUT = 3 * 60_000;
 const VIDEO_UPLOAD_TIMEOUT = 15 * 60_000;
@@ -315,7 +337,11 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * not any more, so running a second copy is now a way to publish twice at
    * once rather than merely twice as often.
    */
-  if (input.notBefore) {
+  /* The slot is re-taken HERE, with the preparation already done — see
+     ComposeInput.slotAt. Falls back to the instant decided before the page
+     was opened, which is what a single lane has always used. */
+  const holdUntilISO = (await input.slotAt?.().catch(() => null)) ?? input.notBefore;
+  if (holdUntilISO) {
     /*
      * Held in short slices, with a beat between them.
      *
@@ -325,7 +351,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
      * progress. The dashboard would show "מנותק" mid-post. Each slice hands
      * control back so the caller can say it is still alive.
      */
-    const until = Math.min(new Date(input.notBefore).getTime(), Date.now() + PREP_HOLD_CAP_MS);
+    const until = Math.min(new Date(holdUntilISO).getTime(), Date.now() + PREP_HOLD_CAP_MS);
     /* NOT CHARGED TO THE BUDGET. This wait IS the gap being served — the post
        is already written and the picture is already in, and the only thing
        left is the click. Counting it as work would mean a publication that

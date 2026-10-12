@@ -1,4 +1,4 @@
-"""ANX3D enclosure for a Shurflo diaphragm pump (8000 series, ~190 x 112 x 105 mm).
+"""ANX3D enclosure for a Shurflo diaphragm pump 8095-901-890 (230 VAC, ~190 x 96 x 89 mm on its flat bracket).
 Outer body 210 x 140 x 120 mm: base (82 mm) + lid (38 mm), joined by 6 x M4 screws.
 Front face: 3 gland holes  - inlet (M20) | outlet (M20) | power (M16), Hebrew labels engraved above.
 Run:  python3 make_box.py   ->  base.stl, lid.stl (lid already flipped for printing)."""
@@ -18,7 +18,8 @@ GLANDS = [(-40, 16.4, 'חשמל'),    # (y, hole dia, label)  - viewed from the 
 SCREW_PILOT, SCREW_CLEAR, SCREW_HEAD = 3.4, 4.5, 8.6   # M4 self-tapping into the base pillars
 PILLARS = [(sx*(L/2-W-4), sy*(D/2-W-4)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, -(D/2-W-4)), (0, D/2-W-4)]
 FEET_X = (-78.0, 78.0)            # mounting ears on both long sides, 5.5 mm holes
-PUMP_SLOTS_Y = (-38, -25, 25, 38) # floor slots (along X) for the pump's rubber feet bolts, 5.5 wide
+PUMP_SLOTS_Y = (-41.5, 41.5)      # floor slots (along X) under the bracket's grommet holes (~83 mm apart)
+PUMP_SLOT_W, PUMP_SLOT_L = 8.0, 150.0   # 8 mm wide: M5 + washer, +-1.5 mm lateral play, any hole pitch along X
 SEG = 64
 HEB_FONT = FontProperties(fname='/usr/share/fonts/truetype/freefont/FreeSansBold.ttf')
 LOGO_FONT = FontProperties(fname='/usr/share/fonts/truetype/freefont/FreeSansBoldOblique.ttf')
@@ -93,7 +94,7 @@ def make_base():
     cuts.append(wall_cut(rrect(96, 54, 3).translate([0, 39]), 2, TO_BACK, L/2-1))
     # floor: pump bolt slots
     for y in PUMP_SLOTS_Y:
-        cuts.append(slot2d(130, 5.5).translate([-5, y]).extrude(W+2).translate([0, 0, -1]))
+        cuts.append(slot2d(PUMP_SLOT_L, PUMP_SLOT_W).translate([0, y]).extrude(W+2).translate([0, 0, -1]))
     return body - sum(cuts[1:], cuts[0])
 
 # ------------------------------------------------------------------ LID (modelled in place, z = HB..H)

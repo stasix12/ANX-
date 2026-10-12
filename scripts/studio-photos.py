@@ -3,13 +3,20 @@ Turns phone photos into clean catalogue shots: the product is cut out of the
 room it was photographed in and set on a soft studio backdrop with a contact
 shadow, in a square frame.
 
-    pip install numpy opencv-python-headless pillow rembg
+    pip install numpy opencv-contrib-python-headless pillow rembg
     python3 scripts/studio-photos.py
 
-The product itself is not redrawn or retouched. Its pixels come straight from
-the source photo; the only change to them is a global tone pass (a little
+The product is not redrawn. Its pixels come from the source photo with two
+clean-up passes so it reads as new, and then a global tone pass (a little
 lift in the shadows so a black part does not read as a silhouette, mild
-contrast and a light sharpen) that applies to the whole frame equally.
+contrast and a light sharpen):
+
+  * dust: small bright specks on the dark plastic take the local median, so
+    the print-layer texture around them stays (the embossed logo is left out);
+  * window: inside the window outline only, water spots go first, then an
+    edge-preserving smooth takes out stains and streaks while the frame
+    edges and the real reflections stay; dark windows get a faint glare band
+    so they read as glass.
 
 Masks are cached in photos/masks/ — the segmentation model is slow and close
 to 1 GB, so it only runs for a photo that has no mask yet. Delete a mask to
@@ -18,6 +25,7 @@ regenerate it.
 
 import os
 
+import cv2
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
@@ -40,6 +48,88 @@ GALLERIES = {
         'pro-handle-3.jpg', 'pro-handle-4.jpg',
     ],
 }
+
+# Per source photo, in source pixels: the window outline (just inside the
+# frame), the embossed logo to leave alone, and the glare strength.
+CLEANUP = {
+    'pro-handle-1.jpg': {
+        'window': [(745, 1105), (890, 1095), (700, 1865), (325, 1725)],
+        'logo': (750, 900, 1010, 1020),
+        'sheen': 0.12,
+    },
+    'pro-handle-2.jpg': {
+        'window': [(950, 935), (1235, 935), (1255, 1200), (1285, 1400), (1292, 1480), (1282, 1560),
+                   (1264, 1738), (710, 1740), (708, 1600), (718, 1500), (765, 1400), (845, 1200), (925, 1000)],
+        'logo': (930, 720, 1270, 815),
+        'sheen': 0.15,
+    },
+    'pro-handle-3.jpg': {
+        # This window already mirrors the bright sky, so no added glare.
+        'window': [(1105, 1000), (1290, 975), (1775, 1585), (1450, 1712), (1410, 1650),
+                   (1350, 1550), (1280, 1450), (1230, 1350), (1130, 1150)],
+        'logo': (965, 850, 1160, 915),
+        'sheen': 0,
+    },
+    'pro-handle-4.jpg': {},
+}
+
+
+def remove_dust(img, mask, logo):
+    """Small bright dots on the dark plastic take the local median."""
+    L = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)[..., 0]
+    tophat = cv2.morphologyEx(L, cv2.MORPH_TOPHAT, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17)))
+    cand = tophat > 34
+    cand &= cv2.medianBlur(L, 31) < 110  # dark plastic only, not metal or glare
+    cand &= cv2.erode((mask > 200).astype(np.uint8), np.ones((15, 15), np.uint8)) > 0
+    if logo:
+        x0, y0, x1, y1 = logo
+        cand[y0:y1, x0:x1] = False
+
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(cand.astype(np.uint8), 8)
+    small = np.zeros(n, bool)
+    for i in range(1, n):
+        _, _, w, h, area = stats[i]
+        small[i] = area <= 70 and max(w, h) <= 12  # dots, not edges or highlight lines
+    specks = cv2.dilate(small[labels].astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+
+    out = img.copy()
+    out[specks] = cv2.medianBlur(img, 11)[specks]
+    return out
+
+
+def clean_window(img, outline, sheen):
+    """Spots, stains and streaks out of the window; frame edges and reflections stay."""
+    m = np.zeros(img.shape[:2], np.uint8)
+    cv2.fillPoly(m, [np.array(outline)], 255)
+
+    med = cv2.medianBlur(img, 31)
+    spots = (img.max(axis=2).astype(int) - med.max(axis=2).astype(int) > 22) & (m > 0)
+    spots = cv2.dilate(spots.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+    img = img.copy()
+    img[spots] = med[spots]
+
+    smooth = cv2.ximgproc.guidedFilter(img, img, 22, 40.0 ** 2)
+    smooth = cv2.ximgproc.guidedFilter(smooth, smooth, 12, 25.0 ** 2)
+    a = cv2.GaussianBlur(m, (0, 0), 6).astype(np.float32)[..., None] / 255
+    out = img * (1 - a) + smooth * a
+
+    if sheen:
+        # A soft diagonal glare band, the way a clean pane catches the light.
+        x0, y0, w, h = cv2.boundingRect(np.array(outline))
+        yy, xx = np.mgrid[0:img.shape[0], 0:img.shape[1]].astype(np.float32)
+        t = (xx - x0) / w + (yy - y0) / h
+        band = np.clip(1 - np.abs(t - 0.55) / 0.22, 0, 1) ** 2 * 0.8 + np.clip(1 - (yy - y0) / h, 0, 1) * 0.35
+        out = out + 255 * sheen * (band * a[..., 0])[..., None]
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def clean(img, mask, filename):
+    spec = CLEANUP.get(filename, {})
+    bgr = cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
+    bgr = remove_dust(bgr, np.asarray(mask), spec.get('logo'))
+    if 'window' in spec:
+        bgr = clean_window(bgr, spec['window'], spec['sheen'])
+    return Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
 
 
 def load_mask(filename, img):
@@ -115,7 +205,7 @@ def main():
         for index, filename in enumerate(gallery, 1):
             img = ImageOps.exif_transpose(Image.open(os.path.join(SOURCE, filename))).convert('RGB')
             mask = load_mask(filename, img)
-            out = compose(tone(img), mask)
+            out = compose(tone(clean(img, mask, filename)), mask)
 
             target = os.path.join(dest, f'{index}.webp')
             out.save(target, 'WEBP', quality=90, method=6)

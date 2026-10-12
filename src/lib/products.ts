@@ -243,7 +243,7 @@ const fallbackProducts: Product[] = [
       { label: 'לחץ עבודה מומלץ', value: 'עד 60 בר' },
       { label: 'אחריות', value: '12 חודשים' },
     ],
-    images: gallery('anx-pro-handle'),
+    images: [1, 2, 3, 4].map((n) => asset(`/products/anx-pro-handle/${n}.webp`)),
     inStock: true,
     featured: false,
     published: true,

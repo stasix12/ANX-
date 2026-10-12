@@ -20,7 +20,9 @@ SCREW_PILOT, SCREW_CLEAR, SCREW_HEAD = 3.4, 4.5, 8.6   # M4 self-tapping into th
 PILLARS = [(sx*(L/2-W-4), sy*(D/2-W-4)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, -(D/2-W-4)), (0, D/2-W-4)]
 FEET_X = (-78.0, 78.0)            # mounting ears on both long sides, 5.5 mm holes
 PUMP_SLOTS_Y = (-41.5, 41.5)      # floor slots (along X) under the bracket's grommet holes (~83 mm apart)
-PUMP_SLOT_W, PUMP_SLOT_L = 8.0, 150.0   # 8 mm wide: M5 + washer, +-1.5 mm lateral play, any hole pitch along X
+PUMP_SLOT_W, PUMP_SLOT_L = 8.0, 150.0
+MAT_L, MAT_D, MAT_T = 156.0, 112.0, 3.0   # TPU damping mat: 3 mm plate + 2 mm bumps = 5 mm under the bracket
+FOOT_PIN, FOOT_PIN_L = 10.0, 8.0       # TPU feet: pin d10 (+0.5 interference) x 8 deep into the corner pillars   # 8 mm wide: M5 + washer, +-1.5 mm lateral play, any hole pitch along X
 SEG = 64
 HEB_FONT = FontProperties(fname='/usr/share/fonts/truetype/freefont/FreeSansBold.ttf')
 LOGO_FONT = FontProperties(fname='/usr/share/fonts/truetype/freefont/FreeSansBoldOblique.ttf')
@@ -93,10 +95,29 @@ def make_base():
             cuts.append(wall_cut(rrect(b-a+12, 54, 3).translate([(a+b)/2, 39]), 2, m, D/2-1))
     cuts.append(wall_cut(vent_group(-42, 42, 18, 60), W+2, TO_BACK, L/2-W-1))
     cuts.append(wall_cut(rrect(96, 54, 3).translate([0, 39]), 2, TO_BACK, L/2-1))
-    # floor: pump bolt slots
+    # floor: pump bolt slots + a 3 mm frame that keeps the TPU damping mat in place
     for y in PUMP_SLOTS_Y:
         cuts.append(slot2d(PUMP_SLOT_L, PUMP_SLOT_W).translate([0, y]).extrude(W+2).translate([0, 0, -1]))
+    body += prism(MAT_L+0.8+4, MAT_D+0.8+4, 4, W-0.1, W+3) - prism(MAT_L+0.8, MAT_D+0.8, 2, W-1, W+4)
+    # underside: blind pockets in the corner pillars for the press-in TPU feet
+    for x, y in PILLARS[:4]:
+        cuts.append(cyl(FOOT_PIN/2, -1, FOOT_PIN_L+0.5, x, y))
     return body - sum(cuts[1:], cuts[0])
+
+# ------------------------------------------------------------------ ANTI-VIBRATION (print in TPU 95A)
+def make_mat():                   # sits in the floor frame under the pump bracket; bumps face DOWN
+    mat = prism(MAT_L, MAT_D, 2, 0, MAT_T)
+    for y in PUMP_SLOTS_Y:
+        mat -= slot2d(PUMP_SLOT_L, PUMP_SLOT_W).translate([0, y]).extrude(MAT_T+2).translate([0, 0, -1])
+    bumps = []
+    for x in np.arange(-MAT_L/2+8, MAT_L/2-7, 12):
+        for y in np.arange(-MAT_D/2+8, MAT_D/2-7, 12):
+            if min(abs(y-sy) for sy in PUMP_SLOTS_Y) > PUMP_SLOT_W/2+4:
+                bumps.append(cyl(3, MAT_T-0.1, MAT_T+2, x, y))
+    return mat + sum(bumps[1:], bumps[0])   # printed bumps-up, flipped when installed
+
+def make_foot():                  # press-fit pin into the base, 18 mm soft pad underneath
+    return cyl(9, 0, 5) + cyl(FOOT_PIN/2+0.25, 4.9, 5+FOOT_PIN_L) - cyl(1.5, -1, 1, 0, 0)
 
 # ------------------------------------------------------------------ LID (modelled in place, z = HB..H)
 TOP = H-3.0                       # lid roof; a 3 mm raised logo panel sits on top of it
@@ -134,3 +155,5 @@ if __name__ == '__main__':
     base, lid = make_base(), make_lid()
     export(base, 'base.stl')
     export(lid.rotate([180, 0, 0]).translate([0, 0, H]), 'lid.stl')   # flipped: logo face on the bed
+    export(make_mat(), 'damping_mat_TPU.stl')
+    export(make_foot(), 'foot_TPU_x4.stl')

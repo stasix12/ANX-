@@ -81,15 +81,48 @@ jobs:
           # So: ask, wait, and if production has not moved, ask again. A second
           # request after the first has gone quiet is not a retry storm — it is
           # at most three hook calls, ten minutes apart, for one push.
+          # NOT EVERY NON-2xx IS A BROKEN SECRET, and this one cost a release.
+          #
+          # On 12/10 the hook answered 429 and the run died in six seconds
+          # telling the owner to check his secret. The secret was fine. The body
+          # said what had actually happened:
+          #
+          #   {"error":{"code":"github_response_error","message":"GitHub fetch
+          #    error - status: 403 … You have exceeded a secondary rate limit…"}}
+          #
+          # VERCEL could not fetch the branch from GitHub. Nothing to do with
+          # this repository's configuration, nothing a person can fix, and gone
+          # a minute later — but the commit was never deployed and the run
+          # reported a cause that would have sent somebody rotating a working
+          # secret.
+          #
+          # So a transient answer is waited out and asked again. Only the codes
+          # that really do mean "this hook is wrong" — 401, 403, 404, 410 — end
+          # the run, and they say so without guessing at anything else.
           ask() {
-            status=$(curl -sS --max-time 30 -o response.json -w '%{http_code}' -X POST "${HOOK}")
-            echo "Vercel answered HTTP ${status}"
-            cat response.json || true
-            echo
-            case "${status}" in
-              2??) echo "Deployment requested." ;;
-              *) echo "::error::The deploy hook was rejected (HTTP ${status}). Check that the secret still matches the hook in Vercel."; exit 1 ;;
-            esac
+            for attempt in 1 2 3; do
+              status=$(curl -sS --max-time 30 -o response.json -w '%{http_code}' -X POST "${HOOK}")
+              echo "Vercel answered HTTP ${status}"
+              cat response.json || true
+              echo
+              case "${status}" in
+                2??)
+                  echo "Deployment requested."
+                  return 0
+                  ;;
+                401|403|404|410)
+                  echo "::error::The deploy hook was rejected (HTTP ${status}). Check that the secret still matches the hook in Vercel."
+                  exit 1
+                  ;;
+                *)
+                  # 429, any 5xx, and 000 (curl could not finish at all).
+                  echo "::warning::HTTP ${status} is transient — Vercel is busy or could not reach GitHub. Waiting 60s and asking again (attempt ${attempt} of 3)."
+                  sleep 60
+                  ;;
+              esac
+            done
+            echo "::error::Three requests in a row came back transient. Vercel never accepted the deployment; production is unchanged. Read the bodies above — if they mention a GitHub rate limit, nothing here is misconfigured and a re-run in a few minutes will work."
+            exit 1
           }
 
           live=''

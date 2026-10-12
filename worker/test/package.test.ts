@@ -378,10 +378,27 @@ is(/ELECTRON_RUN_AS_NODE/.test(main), 'the worker runs on the same binary, so no
     /ask\s+echo "Round \$\{round\}: waiting/.test(deploy),
     'and each round ASKS before it waits — a round that only waits again is the same ten minutes twice',
   );
+  /* The warning is searched for FROM the match check, not from the top of the
+     file: ask() now has a `::warning::` of its own for a transient rejection,
+     and a search from zero found that one and handed slice() a backwards
+     range — the same shape as the publish-try slice in unit.test.ts. */
+  const matchAt = deploy.indexOf('if [ "${live}" = "${short}" ]');
+  is(matchAt >= 0, 'sanity: found the "production is on it" check');
   is(
-    /exit 0/.test(deploy.slice(deploy.indexOf('if [ "${live}" = "${short}" ]'), deploy.indexOf('::warning::'))),
+    /exit 0/.test(deploy.slice(matchAt, deploy.indexOf('::warning::', matchAt))),
     'it stops the moment production reports the commit, rather than burning all three rounds',
   );
+  /*
+   * AND A TRANSIENT REJECTION IS WAITED OUT, NOT REPORTED AS A BROKEN SECRET.
+   *
+   * On 12/10 the hook answered 429 — Vercel could not fetch the branch from
+   * GitHub, a secondary rate limit on THEIR side — and the run died in six
+   * seconds telling the owner to check his secret. The secret was fine, the
+   * commit was never deployed, and the stated cause would have sent somebody
+   * rotating a working credential.
+   */
+  is(/401\|403\|404\|410\)/.test(deploy), 'only the codes that really mean a wrong hook end the run');
+  is(/attempt \$\{attempt\} of 3/.test(deploy), 'and anything else — 429, a 5xx, a dead connection — is asked again');
   is(
     /Production is still on .* after three requests/.test(deploy),
     'and when all three fail it still fails loudly — a deploy that never landed must never read as success',

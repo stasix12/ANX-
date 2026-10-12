@@ -12,6 +12,7 @@ HB = 82.0                         # base height (lid = H - HB)
 W = 4.0                           # wall / floor thickness
 R = 10.0                          # outer corner radius
 GLAND_Z = 40.0                    # gland hole centre height
+NUT_PAD = 2.0                     # extra wall thickness behind each bulkhead nut
 WATER_HOLE = 17.0                 # PM8 push-in bulkhead union (8 mm tube, M16 thread, 17 mm panel hole)
 GLANDS = [(-48, WATER_HOLE, 'יציאה'),     # (y, hole dia, label)  - viewed from the front: left -> right
           (0,   16.4, 'חשמל'),             # water holes line up with the elbows on either side of the pump head
@@ -99,6 +100,10 @@ def make_base():
     for y in PUMP_SLOTS_Y:
         cuts.append(slot2d(PUMP_SLOT_L, PUMP_SLOT_W).translate([0, y]).extrude(W+2).translate([0, 0, -1]))
     body += prism(MAT_L+0.8+4, MAT_D+0.8+4, 4, W-0.1, W+3) - prism(MAT_L+0.8, MAT_D+0.8, 2, W-1, W+4)
+    # inside the front wall: 30 mm pads (+2 mm) behind the water holes so the bulkhead nut clamps 5.2 mm of wall
+    for y, dia, _ in GLANDS:
+        if dia == WATER_HOLE:
+            body += cyl(15, 0, NUT_PAD+0.1).transform(np.array([[0, 0, -1, L/2-W+0.1], [0, 1, 0, y], [1, 0, 0, GLAND_Z]], float))
     # underside: blind pockets in the corner pillars for the press-in TPU feet
     for x, y in PILLARS[:4]:
         cuts.append(cyl(FOOT_PIN/2, -1, FOOT_PIN_L+0.5, x, y))

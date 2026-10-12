@@ -102,6 +102,24 @@ export const SEED_PRODUCTS: Product[] = [
   },
   {
     ...base,
+    id: 'p-viper',
+    slug: 'viper',
+    name: 'VIPER',
+    subtitle: 'ידית מקצועית לניקוי ספות',
+    description:
+      'ידית VIPER לניקוי ספות וריפודים מבית ANX3D: ראש שאיבה עם חלון שקוף, אחיזה מחוספסת, הדק להתזה וקו מים מובנה לאורך הידית.',
+    categories: ['handles'],
+    price: 950,
+    images: [1, 2, 3, 4].map((n) => real('anx-pro-handle', n)),
+    colors: [{ ...COLORS.black }],
+    highlights: ['חלון שקוף בראש השאיבה', 'הדק להתזה תוך כדי עבודה', 'אחיזה מחוספסת', 'קו מים מובנה'],
+    featured: true,
+    tags: ['viper', 'וייפר', 'ויפר', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
+    createdAt: created(0),
+    sortOrder: 1.5,
+  },
+  {
+    ...base,
     id: 'p-wand-of-troy',
     slug: 'wand-of-troy',
     name: 'Wand of Troy',
@@ -299,7 +317,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export function buildSeedDB(): ShopDB {
   return {

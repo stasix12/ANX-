@@ -1,5 +1,5 @@
 """ANX3D enclosure for a Shurflo diaphragm pump 8095-901-890 (230 VAC, ~190 x 96 x 89 mm on its flat bracket).
-Outer body 210 x 140 x 120 mm: base (82 mm) + lid (38 mm), joined by 6 x M4 screws.
+Outer body 210 x 170 x 120 mm (widened from 140 so the pump fits with a PL 3/8" push-in elbow on each port): base (82 mm) + lid (38 mm), joined by 6 x M4 screws.
 Front face: inlet + outlet (35 mm panel-frame holes) | power gland (M16), Hebrew labels engraved above.
 Run:  python3 make_box.py   ->  base.stl, lid.stl (lid already flipped for printing)."""
 import numpy as np, trimesh
@@ -7,15 +7,15 @@ from manifold3d import Manifold, CrossSection, FillRule, JoinType
 from matplotlib.textpath import TextPath
 from matplotlib.font_manager import FontProperties
 
-L, D, H = 210.0, 140.0, 120.0     # outer body (feet extend beyond D)
+L, D, H = 210.0, 170.0, 120.0     # outer body (feet extend beyond D)
 HB = 82.0                         # base height (lid = H - HB)
 W = 4.0                           # wall / floor thickness
 R = 10.0                          # outer corner radius
 GLAND_Z = 40.0                    # gland hole centre height
 WATER_HOLE = 35.0                 # water fittings: same panel-frame hole as the Turbo-X panel
-GLANDS = [(-46.5, 16.4, 'חשמל'),          # (y, hole dia, label)  - viewed from the front: left -> right
-          (-13.5, WATER_HOLE, 'יציאה'),
-          (28.5,  WATER_HOLE, 'כניסה')]
+GLANDS = [(-48, WATER_HOLE, 'יציאה'),     # (y, hole dia, label)  - viewed from the front: left -> right
+          (0,   16.4, 'חשמל'),             # water holes line up with the elbows on either side of the pump head
+          (48,  WATER_HOLE, 'כניסה')]
 SCREW_PILOT, SCREW_CLEAR, SCREW_HEAD = 3.4, 4.5, 8.6   # M4 self-tapping into the base pillars
 PILLARS = [(sx*(L/2-W-4), sy*(D/2-W-4)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, -(D/2-W-4)), (0, D/2-W-4)]
 FEET_X = (-78.0, 78.0)            # mounting ears on both long sides, 5.5 mm holes
@@ -84,7 +84,7 @@ def make_base():
     for y, dia, label in GLANDS:
         cuts.append(cyl(dia/2, -1, 20).transform(np.array([[0, 0, 1, L/2-10], [0, 1, 0, y], [-1, 0, 0, GLAND_Z]], float)))
         cuts.append(wall_cut(text2d(label, 7.5, HEB_FONT).translate([y, GLAND_Z+26]), 3, TO_FRONT, L/2-1.8))
-    cuts.append(wall_cut(rrect(124, 62, 4).translate([-9, GLAND_Z+6]), 2, TO_FRONT, L/2-0.8))   # 0.8 mm panel recess
+    cuts.append(wall_cut(rrect(150, 62, 4).translate([0, GLAND_Z+6]), 2, TO_FRONT, L/2-0.8))   # 0.8 mm panel recess
     # vents: two groups on each long side, one on the back, each in a 1 mm recessed frame
     for u0, u1 in ((-88, -22), (12, 66)):
         for m, k in ((TO_RIGHT, 1), (TO_LEFT, -1)):      # u is mirrored on the +Y wall
@@ -103,7 +103,7 @@ TOP = H-3.0                       # lid roof; a 3 mm raised logo panel sits on t
 def make_lid():
     outer = Manifold.batch_hull([prism(L, D, R, HB, TOP-2), prism(L-4, D-4, R-2, TOP-2, TOP)])   # 2 mm chamfered top edge
     lid = outer - prism(L-2*W, D-2*W, R-W, HB-1, TOP-W)
-    lid += Manifold.batch_hull([prism(156, 96, 8, TOP-0.1, TOP), prism(150, 90, 5, H-0.01, H)])  # 45deg raised panel
+    lid += Manifold.batch_hull([prism(L-54, D-44, 8, TOP-0.1, TOP), prism(L-60, D-50, 5, H-0.01, H)])  # 45deg raised panel
     for x, y in PILLARS:              # screw bosses hanging from the roof
         boss = cyl(6, HB, TOP, x, y) + Manifold.cube([12, 12, TOP-HB]).translate([x-6+np.sign(x)*4*(x != 0), y-6+np.sign(y)*4, HB])
         lid += boss ^ outer

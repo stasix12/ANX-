@@ -1,6 +1,6 @@
 """ANX3D enclosure for a Shurflo diaphragm pump 8095-901-890 (230 VAC, ~190 x 96 x 89 mm on its flat bracket).
 Outer body 210 x 170 x 120 mm (widened from 140 so the pump fits with a PL 3/8" push-in elbow on each port): base (82 mm) + lid (38 mm), joined by 6 x M4 screws.
-Front face: inlet + outlet (17 mm holes for PM8 bulkhead unions) | power gland (M16), Hebrew labels engraved above.
+Front face: inlet + outlet (35 mm panel-frame holes) | power gland (M16), Hebrew labels engraved above.
 Run:  python3 make_box.py   ->  base.stl, lid.stl (lid already flipped for printing)."""
 import numpy as np, trimesh
 from manifold3d import Manifold, CrossSection, FillRule, JoinType
@@ -12,17 +12,17 @@ HB = 82.0                         # base height (lid = H - HB)
 W = 4.0                           # wall / floor thickness
 R = 10.0                          # outer corner radius
 GLAND_Z = 40.0                    # gland hole centre height
-NUT_PAD = 2.0                     # extra wall thickness behind each bulkhead nut
-WATER_HOLE = 17.0                 # PM8 push-in bulkhead union (8 mm tube, M16 thread, 17 mm panel hole)
+WATER_HOLE = 35.0                 # water fittings: same panel-frame hole as the Turbo-X panel
 GLANDS = [(-48, WATER_HOLE, 'יציאה'),     # (y, hole dia, label)  - viewed from the front: left -> right
           (0,   16.4, 'חשמל'),             # water holes line up with the elbows on either side of the pump head
           (48,  WATER_HOLE, 'כניסה')]
 SCREW_PILOT, SCREW_CLEAR, SCREW_HEAD = 3.4, 4.5, 8.6   # M4 self-tapping into the base pillars
 PILLARS = [(sx*(L/2-W-4), sy*(D/2-W-4)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, -(D/2-W-4)), (0, D/2-W-4)]
 FEET_X = (-78.0, 78.0)            # mounting ears on both long sides, 5.5 mm holes
-PUMP_SLOTS_Y = (-41.5, 41.5)      # floor slots (along X) under the bracket's grommet holes (~83 mm apart)
-PUMP_SLOT_W, PUMP_SLOT_L = 8.0, 150.0
-MAT_L, MAT_D, MAT_T = 156.0, 112.0, 3.0   # TPU damping mat: 3 mm plate + 2 mm bumps = 5 mm under the bracket
+BRACKET_X, BRACKET_W, BRACKET_L = 15.0, 90.0, 60.0   # pump bracket: grommet bolts 90 mm across (Y) x 60 mm along the motor (X)
+BRACKET_HOLES = [(BRACKET_X+sx*BRACKET_L/2, sy*BRACKET_W/2) for sx in (-1, 1) for sy in (-1, 1)]
+SEAT_H, SEAT_CUP, GROMMET_OD = 8.0, 2.5, 16.0       # seat height above floor, cup depth, rubber grommet OD (cup = OD + 0.8)
+NUT_AF, NUT_DEPTH = 8.4, 4.5                        # M5 hex nut pocket from below
 FOOT_PIN, FOOT_PIN_L = 10.0, 8.0       # TPU feet: pin d10 (+0.5 interference) x 8 deep into the corner pillars   # 8 mm wide: M5 + washer, +-1.5 mm lateral play, any hole pitch along X
 SEG = 64
 HEB_FONT = FontProperties(fname='/usr/share/fonts/truetype/freefont/FreeSansBold.ttf')
@@ -96,31 +96,18 @@ def make_base():
             cuts.append(wall_cut(rrect(b-a+12, 54, 3).translate([(a+b)/2, 39]), 2, m, D/2-1))
     cuts.append(wall_cut(vent_group(-42, 42, 18, 60), W+2, TO_BACK, L/2-W-1))
     cuts.append(wall_cut(rrect(96, 54, 3).translate([0, 39]), 2, TO_BACK, L/2-1))
-    # floor: pump bolt slots + a 3 mm frame that keeps the TPU damping mat in place
-    for y in PUMP_SLOTS_Y:
-        cuts.append(slot2d(PUMP_SLOT_L, PUMP_SLOT_W).translate([0, y]).extrude(W+2).translate([0, 0, -1]))
-    body += prism(MAT_L+0.8+4, MAT_D+0.8+4, 4, W-0.1, W+3) - prism(MAT_L+0.8, MAT_D+0.8, 2, W-1, W+4)
-    # inside the front wall: 30 mm pads (+2 mm) behind the water holes so the bulkhead nut clamps 5.2 mm of wall
-    for y, dia, _ in GLANDS:
-        if dia == WATER_HOLE:
-            body += cyl(15, 0, NUT_PAD+0.1).transform(np.array([[0, 0, -1, L/2-W+0.1], [0, 1, 0, y], [1, 0, 0, GLAND_Z]], float))
+    # floor: 4 seats the bracket's rubber grommets drop into (90 x 60 hole pattern), M5 bolt + nut trapped underneath
+    for x, y in BRACKET_HOLES:
+        body += Manifold.batch_hull([cyl(16, W-0.1, W+2, x, y), cyl(13, W+2, W+SEAT_H, x, y)])
+        cuts.append(cyl(GROMMET_OD/2+0.4, W+SEAT_H-SEAT_CUP, W+SEAT_H+1, x, y))      # cup the grommet sits in
+        cuts.append(cyl(2.75, -1, W+SEAT_H+1, x, y))                                    # M5 clearance
+        cuts.append(CrossSection.circle(NUT_AF/np.sqrt(3), 6).extrude(NUT_DEPTH+1).translate([x, y, -1]))  # M5 nut trap
     # underside: blind pockets in the corner pillars for the press-in TPU feet
     for x, y in PILLARS[:4]:
         cuts.append(cyl(FOOT_PIN/2, -1, FOOT_PIN_L+0.5, x, y))
     return body - sum(cuts[1:], cuts[0])
 
-# ------------------------------------------------------------------ ANTI-VIBRATION (print in TPU 95A)
-def make_mat():                   # sits in the floor frame under the pump bracket; bumps face DOWN
-    mat = prism(MAT_L, MAT_D, 2, 0, MAT_T)
-    for y in PUMP_SLOTS_Y:
-        mat -= slot2d(PUMP_SLOT_L, PUMP_SLOT_W).translate([0, y]).extrude(MAT_T+2).translate([0, 0, -1])
-    bumps = []
-    for x in np.arange(-MAT_L/2+8, MAT_L/2-7, 12):
-        for y in np.arange(-MAT_D/2+8, MAT_D/2-7, 12):
-            if min(abs(y-sy) for sy in PUMP_SLOTS_Y) > PUMP_SLOT_W/2+4:
-                bumps.append(cyl(3, MAT_T-0.1, MAT_T+2, x, y))
-    return mat + sum(bumps[1:], bumps[0])   # printed bumps-up, flipped when installed
-
+# ------------------------------------------------------------------ FEET (print in TPU 95A)
 def make_foot():                  # press-fit pin into the base, 18 mm soft pad underneath
     return cyl(9, 0, 5) + cyl(FOOT_PIN/2+0.25, 4.9, 5+FOOT_PIN_L) - cyl(1.5, -1, 1, 0, 0)
 
@@ -160,5 +147,4 @@ if __name__ == '__main__':
     base, lid = make_base(), make_lid()
     export(base, 'base.stl')
     export(lid.rotate([180, 0, 0]).translate([0, 0, H]), 'lid.stl')   # flipped: logo face on the bed
-    export(make_mat(), 'damping_mat_TPU.stl')
     export(make_foot(), 'foot_TPU_x4.stl')

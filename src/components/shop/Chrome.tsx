@@ -104,7 +104,7 @@ export function ShopHeader({
               {title}
             </span>
           ) : (
-            <Logo tone={dark ? 'light' : 'dark'} className="text-[29px]" />
+            <Logo tone={dark ? 'light' : 'dark'} upright={tone === 'overlay'} className="text-[29px]" />
           )}
         </Link>
         <div className="flex items-center justify-end gap-1">

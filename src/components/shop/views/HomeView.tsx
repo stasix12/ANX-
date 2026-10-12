@@ -10,6 +10,48 @@ import { ProductCard, ProductGrid } from '../ProductCard';
 import { Logo } from '../Logo';
 import { Img } from '../ui';
 
+/** The hero's three benefits, in the reference's right-to-left order. */
+const HERO_BENEFITS = [
+  { title: 'הדפסת תלת־ממד', text: 'פתרונות מותאמים', Icon: IconCube },
+  { title: 'עיצוב ארגונומי', text: 'נוחות מקסימלית', Icon: IconCog },
+  { title: 'עמידות גבוהה', text: 'בשימוש יומיומי', Icon: IconShieldCheck },
+];
+
+function HeroIcon({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+function IconCube({ className }: { className?: string }) {
+  return (
+    <HeroIcon className={className}>
+      <path d="m12 3 8 4.3v9.4L12 21l-8-4.3V7.3L12 3Z" />
+      <path d="m4 7.3 8 4.4 8-4.4M12 11.7V21" />
+    </HeroIcon>
+  );
+}
+
+function IconCog({ className }: { className?: string }) {
+  return (
+    <HeroIcon className={className}>
+      <path d="M10.3 3.5h3.4l.5 2.4 1.6.9 2.3-.8 1.7 2.9-1.8 1.6v1.9l1.8 1.6-1.7 2.9-2.3-.8-1.6.9-.5 2.4h-3.4l-.5-2.4-1.6-.9-2.3.8-1.7-2.9L6 13V11L4.2 9.4l1.7-2.9 2.3.8 1.6-.9.5-2.4Z" />
+      <circle cx="12" cy="12" r="2.8" />
+    </HeroIcon>
+  );
+}
+
+function IconShieldCheck({ className }: { className?: string }) {
+  return (
+    <HeroIcon className={className}>
+      <path d="M12 3.5 19 6v5.5c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6l7-2.5Z" />
+      <path d="m9 12 2.2 2.2L15.5 10" />
+    </HeroIcon>
+  );
+}
+
 export function HomeView() {
   const s = useShop();
   const published = s.db.products.filter((p) => p.published);
@@ -19,40 +61,63 @@ export function HomeView() {
 
   return (
     <ShopFrame nav="home" header="overlay">
-      {/* Hero — dark stage, dragon on the left, copy on the right. */}
-      <section className="relative isolate overflow-hidden bg-[#0a1640] text-white">
-        <div className="absolute inset-0 -z-20 bg-[radial-gradient(120%_90%_at_15%_40%,#1d3fa8_0%,#0f2160_45%,#081233_100%)]" />
+      {/*
+        Hero — the approved reference: the black ANACONDA on a sofa on the
+        right, copy left-aligned on the left, three benefits along the bottom.
+        On phones the whole composition scales with the screen width (--u is
+        one reference pixel at 390 wide) so the copy never runs into the
+        handle; from sm up it becomes a fixed-height stage.
+      */}
+      <section className="relative isolate min-h-[calc(396*var(--u))] overflow-hidden bg-[#07172c] text-white [--u:calc(100vw/390)] sm:min-h-0">
         <Img
-          path="/shop/img2/hero-handle.webp"
-          alt="ידית ANX3D לניקוי ספות על ספה"
+          path="/shop/img2/hero-anaconda.webp"
+          alt="ידית ANACONDA לניקוי ספות מונחת על ספה"
           eager
-          className="absolute bottom-0 left-0 -z-10 h-[88%] w-[52%] object-cover object-[40%_50%] [mask-image:linear-gradient(90deg,#000_62%,transparent)] sm:w-[44%] lg:h-full lg:w-[42%]"
+          className="absolute top-[calc(-16*var(--u)+env(safe-area-inset-top))] right-0 -z-10 w-full max-w-none sm:top-0 sm:h-full sm:w-auto sm:[mask-image:linear-gradient(90deg,transparent,#000_32%)]"
         />
-        <span className="absolute bottom-7 left-2 -z-10 text-[9px] font-semibold text-white/45 lg:bottom-12 lg:left-4">הדמיה</span>
-        <div className="absolute inset-x-0 top-0 -z-10 h-24 bg-linear-to-b from-black/35 to-transparent" />
-        <div className="mx-auto flex min-h-[330px] max-w-7xl items-start px-4 pt-[calc(64px+env(safe-area-inset-top))] pb-12 sm:min-h-[400px] lg:min-h-[480px] lg:items-center lg:px-8 lg:pt-24">
-          <div className="ms-0 me-auto w-[62%] max-w-md animate-x-fade sm:w-1/2 lg:max-w-xl">
-            <p className="text-left" dir="ltr">
-              <Logo tone="light" className="text-[34px] lg:text-[52px]" />
+        <span className="absolute right-2 bottom-[calc(28*var(--u))] -z-10 text-[9px] font-semibold text-white/40 sm:bottom-12">הדמיה</span>
+
+        <div className="mx-auto max-w-7xl pt-[calc(145.4*var(--u)+env(safe-area-inset-top))] pr-[calc(20*var(--u))] pl-[calc(20.5*var(--u))] text-left sm:min-h-[540px] sm:px-8 sm:pt-28 lg:min-h-[620px] lg:pt-32">
+          <div className="animate-x-fade sm:mr-auto sm:max-w-[340px] lg:max-w-xl">
+            <p dir="ltr" className="flex items-center gap-[calc(7.5*var(--u))] sm:gap-3">
+              <span aria-hidden="true" className="h-[2px] w-[calc(18*var(--u))] rounded-full bg-[#2f4ef0] sm:w-8" />
+              <Logo tone="light" upright className="text-[length:calc(15*var(--u))] sm:text-[22px] lg:text-[26px]" />
             </p>
-            <h1 className="mt-1.5 text-[23px] leading-[1.2] font-black sm:text-[30px] lg:text-[44px]">
+            <h1 className="mt-[calc(3.4*var(--u))] text-[length:calc(23.5*var(--u))] leading-[1.07] font-black sm:mt-3 sm:text-[28px] lg:text-[50px]">
               הדור הבא של
               <br />
-              <span className="bg-linear-to-l from-[#7fb6ff] to-[#3f8cff] bg-clip-text text-transparent">ציוד הניקוי המקצועי</span>
+              <span className="bg-linear-to-l from-[#4b45f9] via-[#2c4cf5] to-[#4a44f7] bg-clip-text text-transparent">ציוד הניקוי המקצועי</span>
             </h1>
-            <p className="mt-2.5 text-[13.5px] leading-snug text-white/90 lg:mt-4 lg:text-lg">
+            <p className="mt-[calc(4.9*var(--u))] text-[length:calc(12.2*var(--u))] leading-[1.21] text-white/92 sm:mt-4 sm:text-base lg:text-lg">
               אביזרים חדשניים לניקוי ספות ושטיחים,
               <br />
               המיוצרים בטכנולוגיית הדפסת תלת־ממד.
             </p>
             <Link
               href="/shop/c/all"
-              className="mt-5 inline-flex h-12 items-center gap-2 rounded-full bg-linear-to-r from-[#6a4cfc] to-[#4f52fb] px-6 text-[15px] font-bold shadow-[0_8px_22px_rgb(84_74_252/0.45)] transition hover:brightness-110 lg:h-14 lg:px-8 lg:text-base"
+              className="mt-[calc(9.8*var(--u))] -ms-[calc(1*var(--u))] inline-flex h-[calc(30*var(--u))] w-[calc(137*var(--u))] items-center justify-center gap-[calc(9*var(--u))] rounded-full bg-linear-to-r from-[#4b37fb] via-[#3a4afc] to-[#1662fd] text-[length:calc(12.4*var(--u))] font-bold shadow-[0_calc(5*var(--u))_calc(16*var(--u))_rgb(73_55_251/0.55)] transition hover:brightness-110 sm:mt-7 sm:h-13 sm:w-auto sm:gap-2.5 sm:px-8 sm:text-base sm:shadow-[0_8px_24px_rgb(73_55_251/0.5)]"
             >
               לצפייה במוצרים
-              <IconArrow dir="right" size={18} />
+              <IconArrow dir="right" className="size-[calc(15*var(--u))] sm:size-[18px]" />
             </Link>
           </div>
+
+          <ul className="mt-[calc(13.8*var(--u))] grid grid-cols-3 text-center sm:mt-12 sm:mr-auto sm:max-w-md lg:mt-14 lg:max-w-xl">
+            {HERO_BENEFITS.map(({ title, text, Icon }) => (
+              <li key={title} className="flex flex-col items-center">
+                <span className="grid size-[calc(28*var(--u))] place-items-center rounded-full bg-white/[0.04] ring-[1.5px] ring-white/80 sm:size-12">
+                  <Icon className="size-[calc(15*var(--u))] sm:size-6" />
+                </span>
+                <span className="mt-[calc(4*var(--u))] text-[length:calc(10.6*var(--u))] leading-tight font-bold sm:mt-2.5 sm:text-[15px]">{title}</span>
+                <span className="mt-[calc(0.5*var(--u))] text-[length:calc(8.8*var(--u))] leading-tight text-white/80 sm:text-[13px]">{text}</span>
+              </li>
+            ))}
+          </ul>
+          <div aria-hidden="true" dir="ltr" className="mt-[calc(8*var(--u))] flex justify-center gap-[calc(6*var(--u))] pb-[calc(22.8*var(--u))] sm:hidden">
+            <span className="size-[calc(5*var(--u))] rounded-full bg-white" />
+            <span className="size-[calc(5*var(--u))] rounded-full ring-1 ring-white/70" />
+          </div>
+          <div className="hidden pb-16 sm:block" />
         </div>
       </section>
 

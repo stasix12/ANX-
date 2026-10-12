@@ -25,11 +25,10 @@ LONGEST_SIDE = 1600
 # Per product slug, the gallery in order. The first entry of each is also what
 # its catalogue card shows.
 GALLERIES = {
-    # The jungle-green handle first, then the same handle in black.
+    # The jungle-green handle. The black one follows as 5-9, studio shots
+    # from scripts/studio-photos.py.
     'anx-anaconda': [
         'anaconda-4.jpg', 'anaconda-1.jpg', 'anaconda-2.jpg', 'anaconda-3.jpg',
-        'anaconda-black-1.jpg', 'anaconda-black-2.jpg',
-        'anaconda-black-3.jpg', 'anaconda-black-4.jpg',
     ],
     # What you get, then it working, then the swivel, then the branded cuff.
     'anx-anaconda-set': [

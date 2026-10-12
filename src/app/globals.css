@@ -987,3 +987,126 @@
     display: none;
   }
 }
+
+/* =====================================================================
+ * ANX3D 3D-print store (/shop) — tokens from the approved mock-ups.
+ *
+ * Electric blue primary, modern violet secondary, blue→violet gradients,
+ * near-black text, white cards on white, light-gray secondary grounds, soft
+ * shadows. No orange anywhere in this app. Prefixed x-* so they never
+ * collide with the cleaning store's ink/mist/brand tokens.
+ *
+ * Contrast: x-ink #0f1115 on white 18.9:1; x-muted #5f6673 6.0:1;
+ * x-blue #2f5dfb 4.9:1 (text and fills, white text on it 4.9:1);
+ * x-violet #6c4cfc 5.0:1.
+ * ===================================================================== */
+@theme {
+  --color-x-blue: #2f5dfb;
+  --color-x-blue-600: #2449e0;
+  --color-x-blue-50: #eef3ff;
+  --color-x-blue-100: #dde7ff;
+  --color-x-violet: #6c4cfc;
+  --color-x-violet-600: #5a3be8;
+  --color-x-indigo: #5649fb;
+  --color-x-ink: #0f1115;
+  --color-x-ink-2: #2b2f38;
+  --color-x-muted: #5f6673;
+  --color-x-faint: #8c93a0;
+  --color-x-line: #e7e9ef;
+  --color-x-soft: #f3f5f8;
+  --color-x-soft-2: #f7f8fa;
+  --color-x-star: #2a7bf8;
+  --color-x-green: #1f9d55;
+  --color-x-red: #e0353b;
+  --color-x-night: #070f1d;
+  --color-x-night-2: #0c1830;
+
+  --shadow-x-card: 0 1px 2px rgb(15 17 21 / 0.05), 0 4px 14px rgb(15 17 21 / 0.06);
+  --shadow-x-pop: 0 10px 30px rgb(15 17 21 / 0.12);
+  --shadow-x-cta: 0 8px 20px rgb(60 80 250 / 0.28);
+
+  --animate-x-pop: x-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-x-fade: x-fade 0.5s ease-out both;
+  --animate-x-sheet: x-sheet 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes x-pop {
+  0% { opacity: 0; transform: scale(0.4); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes x-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes x-sheet {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+@keyframes x-confetti {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0); }
+  15% { opacity: 1; }
+  100% { opacity: 0.9; transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); }
+}
+@keyframes x-ring {
+  0% { box-shadow: 0 0 0 0 rgb(34 197 94 / 0.45); }
+  100% { box-shadow: 0 0 0 22px rgb(34 197 94 / 0); }
+}
+
+.shop-theme {
+  color: var(--color-x-ink);
+  background: #ffffff;
+}
+.shop-theme :focus-visible {
+  outline: 2px solid var(--color-x-blue);
+  outline-offset: 2px;
+}
+.x-noscrollbar {
+  scrollbar-width: none;
+}
+.x-noscrollbar::-webkit-scrollbar {
+  display: none;
+}
+.x-grad {
+  background-image: linear-gradient(90deg, var(--color-x-violet) 0%, var(--color-x-blue) 100%);
+}
+.x-grad-text {
+  background-image: linear-gradient(90deg, #7c4dff 0%, #3b5bff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.x-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+.x-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid var(--color-x-blue);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+  cursor: pointer;
+}
+.x-range::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid var(--color-x-blue);
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shop-theme *,
+  .shop-theme *::before,
+  .shop-theme *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

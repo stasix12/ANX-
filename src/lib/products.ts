@@ -142,7 +142,7 @@ const fallbackProducts: Product[] = [
       { label: 'אטימה', value: 'אטם קצף היקפי' },
       { label: 'שליטה', value: 'הדק התזה מובנה' },
     ],
-    images: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => asset(`/products/anx-anaconda/${n}.webp`)),
+    images: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => asset(`/products/anx-anaconda/${n}.webp`)),
     video: {
       webm: '/video/anaconda-demo.webm',
       mp4: '/video/anaconda-demo.mp4',
@@ -243,7 +243,7 @@ const fallbackProducts: Product[] = [
       { label: 'לחץ עבודה מומלץ', value: 'עד 60 בר' },
       { label: 'אחריות', value: '12 חודשים' },
     ],
-    images: gallery('anx-pro-handle'),
+    images: [1, 2, 3, 4].map((n) => asset(`/products/anx-pro-handle/${n}.webp`)),
     inStock: true,
     featured: false,
     published: true,

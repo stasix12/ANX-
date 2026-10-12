@@ -1,6 +1,6 @@
 """ANX3D enclosure for a Shurflo diaphragm pump 8095-901-890 (230 VAC, ~190 x 96 x 89 mm on its flat bracket).
 Outer body 210 x 140 x 120 mm: base (82 mm) + lid (38 mm), joined by 6 x M4 screws.
-Front face: 3 gland holes  - inlet (M20) | outlet (M20) | power (M16), Hebrew labels engraved above.
+Front face: inlet + outlet (35 mm panel-frame holes) | power gland (M16), Hebrew labels engraved above.
 Run:  python3 make_box.py   ->  base.stl, lid.stl (lid already flipped for printing)."""
 import numpy as np, trimesh
 from manifold3d import Manifold, CrossSection, FillRule, JoinType
@@ -12,9 +12,10 @@ HB = 82.0                         # base height (lid = H - HB)
 W = 4.0                           # wall / floor thickness
 R = 10.0                          # outer corner radius
 GLAND_Z = 40.0                    # gland hole centre height
-GLANDS = [(-40, 16.4, 'חשמל'),    # (y, hole dia, label)  - viewed from the front: left -> right
-          (0,   20.4, 'יציאה'),
-          (40,  20.4, 'כניסה')]
+WATER_HOLE = 35.0                 # water fittings: same panel-frame hole as the Turbo-X panel
+GLANDS = [(-46.5, 16.4, 'חשמל'),          # (y, hole dia, label)  - viewed from the front: left -> right
+          (-13.5, WATER_HOLE, 'יציאה'),
+          (28.5,  WATER_HOLE, 'כניסה')]
 SCREW_PILOT, SCREW_CLEAR, SCREW_HEAD = 3.4, 4.5, 8.6   # M4 self-tapping into the base pillars
 PILLARS = [(sx*(L/2-W-4), sy*(D/2-W-4)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, -(D/2-W-4)), (0, D/2-W-4)]
 FEET_X = (-78.0, 78.0)            # mounting ears on both long sides, 5.5 mm holes
@@ -82,8 +83,8 @@ def make_base():
     cuts = []
     for y, dia, label in GLANDS:
         cuts.append(cyl(dia/2, -1, 20).transform(np.array([[0, 0, 1, L/2-10], [0, 1, 0, y], [-1, 0, 0, GLAND_Z]], float)))
-        cuts.append(wall_cut(text2d(label, 7.5, HEB_FONT).translate([y, GLAND_Z+22]), 3, TO_FRONT, L/2-1.8))
-    cuts.append(wall_cut(rrect(124, 66, 4).translate([0, GLAND_Z+8]), 2, TO_FRONT, L/2-0.8))   # 0.8 mm panel recess
+        cuts.append(wall_cut(text2d(label, 7.5, HEB_FONT).translate([y, GLAND_Z+26]), 3, TO_FRONT, L/2-1.8))
+    cuts.append(wall_cut(rrect(124, 62, 4).translate([-9, GLAND_Z+6]), 2, TO_FRONT, L/2-0.8))   # 0.8 mm panel recess
     # vents: two groups on each long side, one on the back, each in a 1 mm recessed frame
     for u0, u1 in ((-88, -22), (12, 66)):
         for m, k in ((TO_RIGHT, 1), (TO_LEFT, -1)):      # u is mirrored on the +Y wall

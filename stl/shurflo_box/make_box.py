@@ -136,6 +136,24 @@ def make_ear_pad():               # screw-down isolator under each ear: ear sits
 def make_ear_washer():            # TPU washer on top of the ear: screw head never touches the box
     return cyl(7, 0, 3) - cyl(SCREW_D/2+0.2, -1, 4)            # 14 mm: clears the ear gussets
 
+MAT_BASE, MAT_RIM, MAT_WALL = 3.0, 6.0, 4.0   # TPU tray: floor under the box, rim height above it, rim width
+def box_footprint():              # base outline incl. the 4 mounting ears (2D)
+    fp = rrect(L, D, R)
+    for fx in FEET_X:
+        ear = CrossSection.batch_hull([CrossSection.square([26, 1], center=True), CrossSection.circle(13, SEG).translate([0, 11])])
+        fp += ear.translate([fx, D/2-1]) + ear.translate([fx, D/2-1]).mirror([0, 1])
+    return fp
+
+def make_tray():                  # TPU mat the whole box drops into; grooved underside grips the counter
+    fp = box_footprint()
+    tray = fp.offset(0.6+MAT_WALL, JoinType.Round, circular_segments=SEG).extrude(MAT_BASE+MAT_RIM)
+    tray -= fp.offset(0.6, JoinType.Round, circular_segments=SEG).extrude(MAT_RIM+1).translate([0, 0, MAT_BASE])
+    for x, y in EAR_HOLES:        # optional: screw straight through ear + tray
+        tray -= cyl(SCREW_D/2+0.3, -1, MAT_BASE+1, x, y)
+    (x0, y0), (x1, y1) = tray.bounding_box()[:2], tray.bounding_box()[3:5]
+    grooves = [Manifold.cube([x1-x0+2, 1.2, 1.0]).translate([x0-1, y, -0.5]) for y in np.arange(y0+4, y1-3, 6)]
+    return tray - sum(grooves[1:], grooves[0])
+
 # ------------------------------------------------------------------ LID (modelled in place, z = HB..H)
 TOP = H                           # flat roof (prints face-down, whole roof on the bed)
 def make_lid():
@@ -176,3 +194,4 @@ if __name__ == '__main__':
     export(make_ear_mount(), 'ear_damper_TPU_x4.stl')
     export(make_ear_pad(), 'ear_pad_screw_TPU_x4.stl')
     export(make_ear_washer(), 'ear_washer_TPU_x4.stl')
+    export(make_tray(), 'base_mat_TPU.stl')

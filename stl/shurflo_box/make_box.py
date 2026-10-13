@@ -126,6 +126,16 @@ def make_ear_mount():             # damper under each mounting ear: 30 mm TPU pa
     slit = Manifold.cube([1.2, 8, 4.5]).translate([-0.6, -4, FOOT_H+4])       # lets the lip squeeze through
     return pad + pin + lip - slit - grip_rings(15)
 
+SCREW_D = 4.0                     # wood screw / M4 through ear + dampers into the surface
+def make_ear_pad():               # screw-down isolator under each ear: ear sits in a 1.5 mm pocket (open toward the box)
+    pad = Manifold.batch_hull([cyl(15, 0, FOOT_H), cyl(13.5, FOOT_H, FOOT_H+1.5)])
+    pocket = CrossSection.batch_hull([CrossSection.square([26.6, 10], center=True).translate([0, -16]),
+                                      CrossSection.circle(13.3, SEG)]).extrude(3).translate([0, 0, FOOT_H])
+    return pad - pocket - cyl(SCREW_D/2+0.3, -1, FOOT_H+3) - grip_rings(15)
+
+def make_ear_washer():            # TPU washer on top of the ear: screw head never touches the box
+    return cyl(7, 0, 3) - cyl(SCREW_D/2+0.2, -1, 4)            # 14 mm: clears the ear gussets
+
 # ------------------------------------------------------------------ LID (modelled in place, z = HB..H)
 TOP = H                           # flat roof (prints face-down, whole roof on the bed)
 def make_lid():
@@ -164,3 +174,5 @@ if __name__ == '__main__':
     export(lid.rotate([180, 0, 0]).translate([0, 0, H]), 'lid.stl')   # flipped: logo face on the bed
     export(make_foot(), 'foot_TPU_x4.stl')
     export(make_ear_mount(), 'ear_damper_TPU_x4.stl')
+    export(make_ear_pad(), 'ear_pad_screw_TPU_x4.stl')
+    export(make_ear_washer(), 'ear_washer_TPU_x4.stl')

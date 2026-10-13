@@ -112,11 +112,10 @@ def make_foot():                  # press-fit pin into the base, 18 mm soft pad 
     return cyl(9, 0, 5) + cyl(FOOT_PIN/2+0.25, 4.9, 5+FOOT_PIN_L) - cyl(1.5, -1, 1, 0, 0)
 
 # ------------------------------------------------------------------ LID (modelled in place, z = HB..H)
-TOP = H-3.0                       # lid roof; a 3 mm raised logo panel sits on top of it
+TOP = H                           # flat roof (prints face-down, whole roof on the bed)
 def make_lid():
     outer = Manifold.batch_hull([prism(L, D, R, HB, TOP-2), prism(L-4, D-4, R-2, TOP-2, TOP)])   # 2 mm chamfered top edge
     lid = outer - prism(L-2*W, D-2*W, R-W, HB-1, TOP-W)
-    lid += Manifold.batch_hull([prism(L-54, D-44, 8, TOP-0.1, TOP), prism(L-60, D-50, 5, H-0.01, H)])  # 45deg raised panel
     for x, y in PILLARS:              # screw bosses hanging from the roof
         boss = cyl(6, HB, TOP, x, y) + Manifold.cube([12, 12, TOP-HB]).translate([x-6+np.sign(x)*4*(x != 0), y-6+np.sign(y)*4, HB])
         lid += boss ^ outer
@@ -126,7 +125,8 @@ def make_lid():
     for x, y in PILLARS:
         tongue -= cyl(6.6, HB-6, HB+1, x, y) + Manifold.cube([13.2, 13.2, 7]).translate([x-6.6+np.sign(x)*4*(x != 0), y-6.6+np.sign(y)*4, HB-6])
     lid += tongue
-    cuts = [text2d('ANX3D', 26, LOGO_FONT).extrude(3).translate([0, 0, H-1.2])]            # engraved logo
+    cuts = [text2d('ANX3D', 26, LOGO_FONT).extrude(3).translate([0, 0, H-1.2]),            # engraved logo
+            (rrect(L-54, D-44, 8) - rrect(L-57, D-47, 6.5)).extrude(2).translate([0, 0, H-0.6])]   # 0.6 mm panel outline
     for sx in (-1, 1):                                                                     # roof vents at both ends
         for x in (83, 90):
             cuts.append(slot2d(80, 4.5).rotate(90).translate([sx*x, 0]).extrude(10).translate([0, 0, TOP-8]))

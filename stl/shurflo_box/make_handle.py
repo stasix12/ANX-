@@ -40,7 +40,9 @@ def make_handle():
     along_v = lambda r, v0, v1, u: Manifold.cylinder(v1-v0, r, r, SEG).rotate([-90, 0, 0]).translate([u, v0, T/2])
     for s in (-1, 1):
         u = s*SPAN/2
-        h += along_v(4.1, -8, 0.5, u)                     # spigot into the lid's 8.6 mm counterbore
+        tear = CrossSection.batch_hull([CrossSection.circle(4.1, SEG), CrossSection.square([0.6, 0.6], center=True).translate([0, -5.8])])
+        tear = tear ^ CrossSection.circle(4.25, SEG)                    # 45deg underside, still fits the 8.6 mm counterbore
+        h += tear.extrude(8.5).transform(np.array([[1, 0, 0, u], [0, 0, -1, 0.5], [0, 1, 0, T/2]], float))  # spigot
         h -= along_v(SCREW_CLEAR/2, -9, 20, u)            # M4 clearance
         h -= along_v(SCREW_HEAD/2+0.4, 4, 40, u)          # screw head seat 4 mm above the lid
     return h

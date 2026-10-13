@@ -28,4 +28,4 @@ export const WORKER_VERSION = '4.15.0';
  * have to reach the PC? If yes, bump WORKER_VERSION above. If no, paste the
  * fingerprint. Either way it is answered out loud.
  */
-export const WORKER_FINGERPRINT = 'a00a87d61f0f9361';
+export const WORKER_FINGERPRINT = 'b567cf6aa0ecb8c1';

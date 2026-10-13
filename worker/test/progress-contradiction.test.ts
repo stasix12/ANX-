@@ -314,6 +314,19 @@ async function simCampaignStates(
 
   const todayISO = opts.todayISO ?? NOW.toISOString().slice(0, 10);
   /*
+   * PUBLICATIONS THAT WENT OUT TODAY BUT ARE NOT IN TODAY'S PLAN, per round —
+   * mirroring countPublishedOutsidePlanToday(). Its own read on BOTH paths,
+   * migrated or not, because the fact it carries is missing from both.
+   */
+  const outsidePlan: Record<string, number> = {};
+  for (const r of db.all()) {
+    if (r.status !== 'published' || !r.campaign_id) continue;
+    const at = r.published_at ?? '';
+    if (at.slice(0, 10) !== todayISO) continue;
+    if (r.scheduled_at.slice(0, 10) === todayISO) continue;
+    outsidePlan[r.campaign_id as string] = (outsidePlan[r.campaign_id as string] ?? 0) + 1;
+  }
+  /*
    * TODAY'S FINISHED ROWS — mirroring campaignStates(). The lifetime preview
    * answers "could we read all of HISTORY"; a repeating round is counted for
    * TODAY. Bounded by scheduled_at, NOT published_at, because a skipped or
@@ -359,6 +372,8 @@ async function simCampaignStates(
     out[id] = campaignState(list, campaign, {
       truncated: exact ? false : !sliceIsWhole(todayOnly),
       todayOnly,
+      publishedOutsidePlanToday: todayOnly ? outsidePlan[id] ?? 0 : 0,
+      outsidePlanIsWhole: true,
       lifetime: all,
       counts: exact
         ? { progress: todayOnly ? exact.today : exact.lifetime, everPublished: exact.lifetime.published ?? 0 }
@@ -1297,6 +1312,172 @@ async function main(): Promise<void> {
   }
 
   /* =========================================================================
+   * 13 — "לא סופר לי את הפוסטים בקמפיין עמוד ראשי", 13/10 15:36
+   *
+   * The header said "31 / 253 פורסמו מתוך המתוכננים להיום" and the card under
+   * it said "0 / 207 טופלו היום · 0% · טרם יצא פרסום".
+   *
+   * BOTH COUNTERS WERE RIGHT. They answer different questions on two axes at
+   * once — the header is every round in the account counted by when a row
+   * PUBLISHED; the card is one round counted by when a row was DUE — and
+   * nothing on the screen said so. Today's 207 rows were stamped today and
+   * none was due yet; the thirty-one that went out this morning were stamped
+   * last night and belong to yesterday's plan.
+   *
+   * So the counter does not move. What was missing was a sentence, and what
+   * was false was "טרם יצא פרסום" — `startedAt` is derived from the TODAY
+   * slice while everPublished was given the unscoped array, so a round that
+   * published two hundred times printed "no publication has ever gone out".
+   * ======================================================================= */
+  {
+    const DAY = '2026-10-13';
+    const YDAY = '2026-10-12';
+    const A = 'run-main';
+    const B = 'run-other';
+    /* Today's plan: 207 groups, stamped today, none due yet. */
+    const planA: Row[] = Array.from({ length: 207 }, (_, i) => ({
+      id: `p${i}`,
+      status: 'scheduled' as QueueStatus,
+      scheduled_at: `${DAY}T15:${String(36 + Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}.000Z`,
+      published_at: null,
+      target_id: `t${i}`,
+      post_id: POST,
+      campaign_id: A,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `t${i}`, name: `קבוצה ${i}`, channel: 'facebook_group' },
+    }));
+    /*
+     * Yesterday's round, finishing this morning: stamped yesterday, PUBLISHED
+     * today. The target ids are a subset of today's plan on purpose — v20's
+     * one-open-row-per-target index forbids anything else, and a fixture that
+     * breaks a database rule proves nothing.
+     */
+    const tailA: Row[] = Array.from({ length: 31 }, (_, i) => ({
+      id: `y${i}`,
+      status: 'published' as QueueStatus,
+      scheduled_at: `${YDAY}T23:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      published_at: `${DAY}T00:${String(2 + (i % 50)).padStart(2, '0')}:00.000Z`,
+      target_id: `t${i}`,
+      post_id: POST,
+      campaign_id: A,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `t${i}`, name: `קבוצה ${i}`, channel: 'facebook_group' },
+    }));
+    /* And the rest of yesterday, which went out yesterday. */
+    const oldA: Row[] = Array.from({ length: 176 }, (_, i) => ({
+      id: `o${i}`,
+      status: 'published' as QueueStatus,
+      scheduled_at: `${YDAY}T12:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      published_at: `${YDAY}T12:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      target_id: `t${100 + i}`,
+      post_id: POST,
+      campaign_id: A,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `t${100 + i}`, name: `קבוצה ו${i}`, channel: 'facebook_group' },
+    }));
+    /* A second round that published nothing today — the scope axis. */
+    const planB: Row[] = Array.from({ length: 15 }, (_, i) => ({
+      id: `b${i}`,
+      status: 'scheduled' as QueueStatus,
+      scheduled_at: `${DAY}T16:${String(i % 60).padStart(2, '0')}:00.000Z`,
+      published_at: null,
+      target_id: `tb${i}`,
+      post_id: POST,
+      campaign_id: B,
+      worker_id: null,
+      claimed_at: null,
+      target: { id: `tb${i}`, name: `קבוצה ב${i}`, channel: 'facebook_group' },
+    }));
+
+    const runA = { ...CAMPAIGN_ACTIVE, id: A, repeat_enabled: true } as Campaign;
+    const runB = { ...CAMPAIGN_ACTIVE, id: B, repeat_enabled: true } as Campaign;
+
+    for (const view of [true, false]) {
+      const db = fakeDb([...planA, ...tailA, ...oldA, ...planB]);
+      const st = await simCampaignStates(db, [runA, runB], [A, B], { countsView: view, todayISO: DAY });
+      const sa = st[A];
+      const sb = st[B];
+      const label = view ? 'with the counting views' : 'without them';
+
+      expect(
+        '13 the posts that had nowhere to be',
+        `INV-10 (${label})`,
+        'THE REPORTED FAULT: the card names the publications the header counted — and the round that published nothing today claims nothing',
+        { a: sa.publishedOutsidePlanToday, b: sb.publishedOutsidePlanToday },
+        { a: 31, b: 0 },
+        NONE,
+      );
+      expect(
+        '13 the posts that had nowhere to be',
+        `INV-10b (${label})`,
+        'and the denominator is still the PLAN — 238 over "207 קבוצות" would be the "מה זה ה-497 הזה?" fault pointing the other way',
+        {
+          total: sa.progress.total,
+          published: sa.progress.published,
+          targets: sa.targetCount,
+          percent: runProgress(sa.progress, sa.todayOnly, sa.truncated).percent,
+        },
+        { total: 207, published: 0, targets: 207, percent: 0 },
+        NONE,
+      );
+      expect(
+        '13 the posts that had nowhere to be',
+        `INV-10c (${label})`,
+        'nothing is counted twice, and the two numbers add up to the thirty-one the header saw',
+        {
+          totalIsRows: sa.progress.total === 207,
+          notBelowItsOwn: sa.progress.total >= sa.progress.finished,
+          sum: sa.progress.published + (sa.publishedOutsidePlanToday ?? 0),
+        },
+        { totalIsRows: true, notBelowItsOwn: true, sum: 31 },
+        NONE,
+      );
+      expect(
+        '13 the posts that had nowhere to be',
+        `INV-10d (${label})`,
+        'the card stops denying what went out — everPublished is the lifetime question — while the badge stays honest about TODAY',
+        { ever: sa.everPublished > 0, startedToday: sa.startedAt !== null, badge: runBadge(sa).label },
+        { ever: true, startedToday: false, badge: 'טרם התחיל' },
+        NONE,
+      );
+      expect(
+        '13 the posts that had nowhere to be',
+        `INV-10f (${label})`,
+        'and none of it can claim the day is over: 207 publications are still to go',
+        { state: sa.state, badge: runBadge(sa).label !== 'הושלם' },
+        { state: 'not_started', badge: true },
+        NONE,
+      );
+    }
+
+    /*
+     * THE SHAPE THAT KILLED THE OTHER FIX. Yesterday's thirty-one published and
+     * NO open row yet — the minutes between midnight and today's planning pass.
+     * Re-keying the slice to published_at turned this into "31 מתוך 31 · 100% ·
+     * הושלם" inside his own window. Counting them separately cannot: the plan
+     * is empty, and an empty plan is "no publications planned", not a finished
+     * round.
+     */
+    const preplan = await simCampaignStates(fakeDb([...tailA, ...oldA]), [runA], [A], { countsView: false, todayISO: DAY });
+    expect(
+      '13 the posts that had nowhere to be',
+      'INV-10g',
+      'before today is planned, a round with yesterday’s tail published this morning is NOT a finished round',
+      {
+        total: preplan[A].progress.total,
+        state: preplan[A].state,
+        completed: runBadge(preplan[A]).label === 'הושלם',
+        outside: preplan[A].publishedOutsidePlanToday,
+      },
+      { total: 0, state: 'not_started', completed: false, outside: 31 },
+      NONE,
+    );
+  }
+
+  /* =========================================================================
    * SOURCE-DRIFT GUARDS
    * The simulations above are copies. These pin them to the originals: if a
    * query or a tile moves and this file is not updated, the failure says so
@@ -1456,6 +1637,21 @@ async function main(): Promise<void> {
   pin('client.ts and closed at the next midnight', client, ".lt('scheduled_at', dayEnd.toISOString())");
   pin('client.ts the today read discloses its own ceiling', client, 'todayIsWhole = todayRows.length < CAMPAIGN_ROLLUP_LIMIT;');
   pin('client.ts a row in two reads is counted once', client, 'if (seen.has(row.id)) continue;');
+  /*
+   * AND THE THIRD NUMBER, which is a sentence and not a re-keying.
+   *
+   * The header counts by when a row PUBLISHED and is account-wide; the card
+   * counts by when a row was DUE and is one round. Both stay exactly as they
+   * were — these three pin the read that names the difference, so a later
+   * change cannot quietly fold it into a denominator instead.
+   */
+  pin('client.ts the extra publications are read by when a row PUBLISHED', client, ".gte('published_at', opts.sinceISO)");
+  pin('client.ts and only the ones today\u2019s plan does not hold', client, 'if (zonedDateISO(new Date(r.scheduled_at)) === opts.todayISO) continue;');
+  pin('client.ts the new read discloses its own ceiling', client, 'whole: rows.length < CAMPAIGN_ROLLUP_LIMIT');
+  /* The slice rule itself did NOT move, and that is the point: re-keying it to
+     published_at turned yesterday's tail into "31 מתוך 31 · 100% · הושלם"
+     before today was planned. INV-10g is that shape. */
+  pin('client.ts today\u2019s plan is still what was DUE today', client, 'const list = todayOnly ? all.filter((r) => zonedDateISO(new Date(r.scheduled_at)) === todayISO) : all;');
   pin('campaign.ts takes exact counts', campaignSrc, 'if (opts.counts) {');
   pin('campaign.ts state resolves from the counts', campaignSrc, 'resolveState(progress, campaign?.status, progress.total,');
   pin('campaign.ts badge refuses to end a round it cannot count', campaignSrc, "if (state.truncated && state.state === 'completed') {");

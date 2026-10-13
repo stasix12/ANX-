@@ -402,7 +402,22 @@ export function LiveCampaignHero({
                 dropped entirely when the count was approximate, which
                 subtracts a true fact instead of qualifying it — the row-derived
                 figure is always a floor, never an overstatement. */}
-            {[startedAt ? `התחיל ${relativeHe(startedAt)}` : 'טרם יצא פרסום', targetCount ? `${state.truncated ? 'לפחות ' : ''}${counted(targetCount, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')}` : '']
+            {/*
+              "טרם יצא פרסום" IS A LIFETIME CLAIM AND `startedAt` IS NOT ONE.
+              Without the v27 views campaign.ts derives it from the rows it was
+              handed, and for a repeating round those are TODAY'S — so a round
+              that published thirty-one posts this morning printed "no
+              publication has ever gone out", directly beside a comment strip
+              offering to comment on them. `everPublished` is the field that
+              WAS given the unscoped array, and it is exact on both paths, so
+              it is what answers "ever". `startedAt` keeps feeding resolveState
+              untouched: widening THAT would flip the badge to 'running' with
+              nothing published today and fire the invariant on every poll.
+            */}
+            {[
+              startedAt ? `התחיל ${relativeHe(startedAt)}` : state.everPublished > 0 ? 'יצאו פרסומים בעבר' : 'טרם יצא פרסום',
+              targetCount ? `${state.truncated ? 'לפחות ' : ''}${counted(targetCount, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')}` : '',
+            ]
               .filter(Boolean)
               .join(' · ')}
           </p>
@@ -468,6 +483,23 @@ export function LiveCampaignHero({
           הראשונים בלבד", which describes an ASCENDING read — the done preview
           is published_at DESCENDING, so what it drops is the OLDEST history.
         */}
+        {/*
+          THE POSTS HE WATCHED GO OUT, ON THE CARD HE WATCHED THEM FROM.
+
+          The counter above is today's PLAN and is right; the account header is
+          what went out and is right; this is the row that is in the second and
+          not the first — named, rather than folded into the denominator.
+
+          Rendered only when it is non-zero, so it appears on exactly the days
+          it explains something. "מחוץ למתוכנן להיום" and not "מסבב קודם": a row
+          published today and stamped TOMORROW is in this count too, and naming
+          a previous round would be a false sentence over a true number.
+        */}
+        {state.todayOnly && (state.publishedOutsidePlanToday ?? 0) > 0 && (
+          <p className="mt-1.5 text-xs text-mist-400">
+            {`ועוד ${state.outsidePlanIsWhole === false ? 'לפחות ' : ''}${counted(state.publishedOutsidePlanToday ?? 0, 'פרסום אחד', 'פרסומים', 'שני פרסומים')} של הסבב יצאו היום מחוץ למתוכנן להיום`}
+          </p>
+        )}
         {state.truncated && (
           <p className="mt-1.5 text-xs text-warning-400">
             {state.countsNote === 'db-outdated'
@@ -981,7 +1013,19 @@ export function LiveQueueHero({
 
       <div className="mt-3.5">
         {plannedToday > 0 ? (
-          <Ratio done={publishedToday} total={plannedToday} suffix={`${agree(publishedToday, 'פורסם', 'פורסמו')} מתוך המתוכננים להיום`} />
+          <>
+            <Ratio done={publishedToday} total={plannedToday} suffix={`${agree(publishedToday, 'פורסם', 'פורסמו')} מתוך המתוכננים להיום`} />
+            {/* THE SCOPE, ON ITS OWN LINE. countPublishedSince and
+                countWaitingWithin have no campaign filter at all, so this
+                ratio is every round in the account plus the rows that belong
+                to none — and read beside a card saying "0 / 207" it looks like
+                one round's. It cannot go in the suffix: Ratio is
+                whitespace-nowrap and clamps to 11px, so more words there is an
+                overflow at 375, not a clarification. */}
+            <p dir="auto" className="mt-0.5 text-center text-[11px] leading-4 text-mist-500">
+              סך כל הסבבים יחד — לא של סבב בודד
+            </p>
+          </>
         ) : (
           /* Nothing today: a ratio out of zero is a bar that is either empty
              or full depending on how the division is written, and neither is

@@ -83,6 +83,25 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
    */
   countsNote?: CountsNote | null;
   /**
+   * PUBLICATIONS THAT WENT OUT TODAY AND ARE NOT IN `progress`.
+   *
+   * "לא סופר לי את הפוסטים בקמפיין." The account header counts by when a row
+   * PUBLISHED; this card counts by when a row was DUE. Both are right, and the
+   * screen showed 31 beside 0 — because the number he watched go out had
+   * nowhere on this card to be.
+   *
+   * It is NOT added to `progress`, and that is the whole design. `progress.total`
+   * is today's PLAN — the groups he set up — and a denominator that grows
+   * through the day with yesterday's tail is the "מה זה ה-497 הזה?" fault
+   * pointing the other way. A fact that is missing gets a sentence, not a
+   * bigger denominator.
+   *
+   * Zero for a lifetime-scoped card: there, those rows are already in its total.
+   */
+  publishedOutsidePlanToday?: number;
+  /** False when the read above hit its ceiling — the figure is then a FLOOR. */
+  outsidePlanIsWhole?: boolean;
+  /**
    * These rows are TODAY'S, not the round's whole history.
    *
    * "מה זה ה-497 הזה?" — 219 groups and 497 rows, because a repeating round
@@ -165,6 +184,9 @@ export function campaignState<T extends CampaignQueueRow>(
     truncated?: boolean;
     /** Why `truncated` is set. See CountsNote. */
     countsNote?: CountsNote | null;
+    /** See the field of the same name on CampaignState. */
+    publishedOutsidePlanToday?: number;
+    outsidePlanIsWhole?: boolean;
     todayOnly?: boolean;
     /**
      * Every row of the round, when `rows` is only a slice of it. Defaults to
@@ -324,6 +346,8 @@ export function campaignState<T extends CampaignQueueRow>(
     state: resolveState(progress, campaign?.status, progress.total, startedAt !== null || progress.published > 0),
     truncated: opts.truncated ?? false,
     countsNote: opts.countsNote ?? null,
+    publishedOutsidePlanToday: opts.publishedOutsidePlanToday ?? 0,
+    outsidePlanIsWhole: opts.outsidePlanIsWhole ?? true,
     todayOnly: opts.todayOnly ?? false,
     startedAt,
     everPublished,

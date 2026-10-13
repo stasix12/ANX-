@@ -2165,6 +2165,15 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
   const now = new Date();
   const dayStart = startOfZonedDay(now);
   const dayEnd = zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00');
+  /* STARTED HERE, READ IN THE LOOP BELOW. It overlaps the today read rather
+     than adding a round trip to a poll, and it runs on EVERY path — migrated
+     or not — because the fact it carries is missing from both. */
+  const outsidePlanRead = countPublishedOutsidePlanToday({
+    sinceISO: dayStart.toISOString(),
+    untilISO: dayEnd.toISOString(),
+    todayISO: zonedDateISO(now),
+    campaignIds,
+  });
   const anyRepeats = (campaignIds ?? campaigns.map((c) => c.id)).some((id) => readRepeat(byId.get(id) ?? null).enabled);
   /* Unknown means HEDGE. Every path that skips the read leaves this true only
      because that path has already proved today's rows are all present. */
@@ -2219,6 +2228,7 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
   if (campaignIds) for (const id of campaignIds) if (!grouped.has(id)) grouped.set(id, []);
 
   const todayISO = zonedDateISO(now);
+  const outsidePlan = await outsidePlanRead;
   const out: Record<string, CampaignState> = {};
   for (const [id, all] of grouped) {
     const campaign = byId.get(id) ?? null;
@@ -2251,6 +2261,11 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
        */
       truncated: exact ? false : !sliceIsWhole(todayOnly),
       todayOnly,
+      /* Carried, never folded into `progress`: see the field on CampaignState.
+         Zero for a lifetime-scoped card, where those rows are already inside
+         its own total. */
+      publishedOutsidePlanToday: todayOnly ? outsidePlan.map[id] ?? 0 : 0,
+      outsidePlanIsWhole: outsidePlan.whole,
       /*
        * WHY the numbers are not exact, because "too big" and "the database
        * needs a one-off update" are not the same sentence and only one of
@@ -2637,6 +2652,68 @@ export async function countPublishedSince(sinceISO: string): Promise<number> {
   const res = await db().from('social_queue').select('id', { count: 'exact', head: true }).eq('status', 'published').gte('published_at', sinceISO);
   if (res.error) throw friendlyError(res.error);
   return res.count ?? 0;
+}
+
+/**
+ * PUBLICATIONS THAT WENT OUT TODAY BUT ARE NOT PART OF TODAY'S PLAN, per round.
+ *
+ * "הפוסטים יוצאים עכשיו יותר מהר, אבל לא סופר לי את הפוסטים בקמפיין עמוד ראשי."
+ *
+ * The header counts by WHEN A ROW PUBLISHED and is account-wide; a campaign
+ * card counts by WHEN A ROW WAS DUE and is one round. Both are right about
+ * their own question, and "31" beside "0 / 207" is what that costs when
+ * neither says which question it answered.
+ *
+ * This is the missing third number, and it is NOT a re-keying of either of
+ * them. The card's total stays the PLAN — the 207 groups he set up — because a
+ * denominator that grows through the day with yesterday's tail is "מה זה
+ * ה-497 הזה?" pointing the other way. A fact that is missing gets a sentence,
+ * not a bigger denominator.
+ *
+ * ONE PREDICATE, NOT A SUBTRACTION. "published today minus progress.published"
+ * is two differently-sourced aggregates and can go negative or double-count —
+ * markManualPublished() stamps published_at without touching scheduled_at, so
+ * the two sets are not nested. Counting the rows the predicate selects cannot.
+ *
+ * NO MIGRATION, deliberately. A new column on social_campaign_counts would
+ * answer "column does not exist" on every database that has v27 and not this,
+ * isMissingRelation() would match it, and EVERY card would silently drop to
+ * the row-counting path until the owner ran SQL. This answers the same either
+ * way — which matters, because the un-migrated path is also where the card
+ * denies the publication it is being asked about.
+ *
+ * `whole` is the ceiling, disclosed rather than trusted, like todayIsWhole: a
+ * day past the limit reports a FLOOR and the card says "לפחות".
+ */
+export async function countPublishedOutsidePlanToday(opts: {
+  sinceISO: string;
+  untilISO: string;
+  todayISO: string;
+  campaignIds?: string[];
+}): Promise<{ map: Record<string, number>; whole: boolean }> {
+  let q = db()
+    .from('social_queue')
+    .select('campaign_id, scheduled_at')
+    .not('campaign_id', 'is', null)
+    .eq('status', 'published')
+    .gte('published_at', opts.sinceISO)
+    .lt('published_at', opts.untilISO)
+    .order('published_at', { ascending: false })
+    .limit(CAMPAIGN_ROLLUP_LIMIT);
+  if (opts.campaignIds) q = q.in('campaign_id', opts.campaignIds);
+  try {
+    const rows = unwrap<{ campaign_id: string; scheduled_at: string }[]>(await q);
+    const map: Record<string, number> = {};
+    for (const r of rows) {
+      if (zonedDateISO(new Date(r.scheduled_at)) === opts.todayISO) continue;
+      map[r.campaign_id] = (map[r.campaign_id] ?? 0) + 1;
+    }
+    return { map, whole: rows.length < CAMPAIGN_ROLLUP_LIMIT };
+  } catch {
+    /* A read added to EXPLAIN a number must not be able to break the card it
+       explains. Nothing known means nothing claimed. */
+    return { map: {}, whole: false };
+  }
 }
 
 /**

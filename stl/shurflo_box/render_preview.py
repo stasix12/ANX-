@@ -2,11 +2,11 @@
 import trimesh, numpy as np, matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
-from make_box import make_base, make_lid, make_foot, PILLARS, W, BRACKET_HOLES, BRACKET_X, SEAT_H
+from make_box import make_base, make_lid, make_foot, make_ear_mount, EAR_HOLES, FOOT_H, PILLARS, W, BRACKET_HOLES, BRACKET_X, SEAT_H
 def tm(m):
     x = m.to_mesh(); return trimesh.Trimesh(np.asarray(x.vert_properties)[:, :3], np.asarray(x.tri_verts), process=False)
 base, lid = tm(make_base()), tm(make_lid())
-feet = [tm(make_foot().translate([x, y, -5])) for x, y in PILLARS[:4]]
+feet = [tm(make_foot().translate([x, y, -FOOT_H])) for x, y in PILLARS[:4]] + [tm(make_ear_mount().translate([x, y, -FOOT_H])) for x, y in EAR_HOLES]
 base = trimesh.util.concatenate([base] + feet)
 LIFT = SEAT_H+3    # bracket rests on the grommets in the seats
 # rough Shurflo 8095 proxy (measured off the product photo): bracket 76x96, motor d76, head d87, side ports

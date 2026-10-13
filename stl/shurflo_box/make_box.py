@@ -108,8 +108,23 @@ def make_base():
     return body - sum(cuts[1:], cuts[0])
 
 # ------------------------------------------------------------------ FEET (print in TPU 95A)
-def make_foot():                  # press-fit pin into the base, 18 mm soft pad underneath
-    return cyl(9, 0, 5) + cyl(FOOT_PIN/2+0.25, 4.9, 5+FOOT_PIN_L) - cyl(1.5, -1, 1, 0, 0)
+FOOT_H = 8.0                      # all feet: 8 mm of TPU between box and table
+EAR_HOLES = [(fx, sy*(D/2+10)) for fx in FEET_X for sy in (-1, 1)]
+
+def grip_rings(r_out):            # concentric 1 mm grooves underneath: anti-slip, softer contact
+    rings = [cyl(r, -1, 1.0) - cyl(r-1.2, -2, 2) for r in np.arange(r_out-2.5, 3, -3.0)]
+    return sum(rings[1:], rings[0])
+
+def make_foot():                  # corner foot: press-fit pin into the base pillar, 18 mm pad
+    return cyl(9, 0, FOOT_H) + cyl(FOOT_PIN/2+0.25, FOOT_H-0.1, FOOT_H+FOOT_PIN_L) - grip_rings(9)
+
+def make_ear_mount():             # damper under each mounting ear: 30 mm TPU pad + snap pin through the 5.5 mm hole
+    pad = Manifold.batch_hull([cyl(15, 0, FOOT_H-1.5), cyl(13.5, FOOT_H-1.5, FOOT_H)])
+    pin = cyl(2.6, FOOT_H-0.1, FOOT_H+6.2)                                    # 6 mm ear
+    lip = Manifold.batch_hull([cyl(2.6, FOOT_H+6.2, FOOT_H+6.3), cyl(3.2, FOOT_H+6.8, FOOT_H+7.0),
+                               cyl(2.2, FOOT_H+8.2, FOOT_H+8.3)])            # snaps over the ear's top face
+    slit = Manifold.cube([1.2, 8, 4.5]).translate([-0.6, -4, FOOT_H+4])       # lets the lip squeeze through
+    return pad + pin + lip - slit - grip_rings(15)
 
 # ------------------------------------------------------------------ LID (modelled in place, z = HB..H)
 TOP = H                           # flat roof (prints face-down, whole roof on the bed)
@@ -148,3 +163,4 @@ if __name__ == '__main__':
     export(base, 'base.stl')
     export(lid.rotate([180, 0, 0]).translate([0, 0, H]), 'lid.stl')   # flipped: logo face on the bed
     export(make_foot(), 'foot_TPU_x4.stl')
+    export(make_ear_mount(), 'ear_damper_TPU_x4.stl')

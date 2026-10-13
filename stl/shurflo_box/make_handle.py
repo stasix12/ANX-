@@ -4,7 +4,7 @@ so the load goes straight into the base. Exported lying on its side (layers run 
 Run:  python3 make_handle.py"""
 import numpy as np
 from manifold3d import Manifold, CrossSection
-from make_box import PILLARS, SCREW_HEAD, SCREW_CLEAR, export, rrect
+from make_box import PILLARS, SCREW_HEAD, SCREW_CLEAR, export, rrect, text2d, LOGO_FONT
 
 SPAN = 2*abs(PILLARS[-1][1])      # 154 mm between the middle lid screws
 T = 24.0                          # handle thickness (along the box length)
@@ -45,7 +45,10 @@ def make_handle():
         h += tear.extrude(8.5).transform(np.array([[1, 0, 0, u], [0, 0, -1, 0.5], [0, 1, 0, T/2]], float))  # spigot
         h -= along_v(SCREW_CLEAR/2, -9, 20, u)            # M4 clearance
         h -= along_v(SCREW_HEAD/2+0.4, 4, 40, u)          # screw head seat 4 mm above the lid
-    return h
+    # ANX3D engraved 0.8 mm into the top of the grip, reading left-to-right from the front of the box
+    top = GRIP_Z + GRIP_R
+    logo = text2d('ANX3D', 17, LOGO_FONT).extrude(2).transform(np.array([[1, 0, 0, 0], [0, 0, 1, top-0.8], [0, -1, 0, T/2]], float))
+    return h - logo
 
 if __name__ == '__main__':
     export(make_handle(), 'carry_handle.stl')

@@ -144,6 +144,19 @@ def box_footprint():              # base outline incl. the 4 mounting ears (2D)
         fp += ear.translate([fx, D/2-1]) + ear.translate([fx, D/2-1]).mirror([0, 1])
     return fp
 
+ABS_H = 15.0                      # rigid ABS feet: lift the box 15 mm
+def make_foot_abs():              # corner foot: d10 pin (light press) into the base pillar pocket
+    f = Manifold.batch_hull([cyl(10, 0, ABS_H-2), cyl(9, ABS_H-0.01, ABS_H)])
+    f += cyl(FOOT_PIN/2+0.05, ABS_H-0.1, ABS_H+FOOT_PIN_L-0.5)
+    return f - cyl(7.2, -1, 0.8)                                               # 0.8 mm recess for a 14 mm stick-on rubber bumper
+
+def make_ear_foot_abs():          # under each mounting ear: split pin with a small 0.25 mm snap lip (ABS-friendly)
+    f = Manifold.batch_hull([cyl(15, 0, ABS_H-2), cyl(13.5, ABS_H-0.01, ABS_H)])
+    f += cyl(2.6, ABS_H-0.1, ABS_H+6.2)
+    f += Manifold.batch_hull([cyl(2.6, ABS_H+6.2, ABS_H+6.3), cyl(2.95, ABS_H+6.6, ABS_H+6.8), cyl(2.2, ABS_H+8.0, ABS_H+8.1)])
+    f -= Manifold.cube([1.4, 8, 6.5]).translate([-0.7, -4, ABS_H+2])           # slit so the pin halves flex
+    return f - cyl(10.2, -1, 0.8)                                              # 0.8 mm recess for a 20 mm stick-on rubber bumper
+
 def make_tray():                  # TPU mat the whole box drops into; grooved underside grips the counter
     fp = box_footprint()
     tray = fp.offset(0.6+MAT_WALL, JoinType.Round, circular_segments=SEG).extrude(MAT_BASE+MAT_RIM)
@@ -195,3 +208,5 @@ if __name__ == '__main__':
     export(make_ear_pad(), 'ear_pad_screw_TPU_x4.stl')
     export(make_ear_washer(), 'ear_washer_TPU_x4.stl')
     export(make_tray(), 'base_mat_TPU.stl')
+    plate = [make_ear_foot_abs().translate([-51+i*34, 19, 0]) for i in range(4)] + [make_foot_abs().translate([-51+i*34, -17, 0]) for i in range(4)]
+    export(sum(plate[1:], plate[0]), 'feet_plate_ABS_15mm.stl')

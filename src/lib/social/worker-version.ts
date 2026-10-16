@@ -27,5 +27,14 @@ export const WORKER_VERSION = '4.16.0';
  * the new value — which forces the one question that was missed: does this
  * have to reach the PC? If yes, bump WORKER_VERSION above. If no, paste the
  * fingerprint. Either way it is answered out loud.
+ *
+ * ANSWERED OUT LOUD, 4.16.0 → 4.16.0: the last change to src/lib/social was
+ * invariants.ts, and `grep -rn 'checkCampaignInvariants\\|campaignStates'
+ * worker/ desktop/` returns nothing. Those checks run where the counts are
+ * drawn — the dashboard and the round page — and the worker neither calls them
+ * nor reads their output. The code is inside worker.cjs because the alias puts
+ * all of src/lib/social there; nothing on the PC executes it. So the version
+ * holds, and the machine is not asked to install a build that would change
+ * nothing for it.
  */
-export const WORKER_FINGERPRINT = '4d1654f1de2def9a';
+export const WORKER_FINGERPRINT = '9ec83a0719fc37e3';

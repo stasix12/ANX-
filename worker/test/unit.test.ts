@@ -2003,6 +2003,75 @@ console.log('unit tests OK');
   };
   assert.deepEqual(checkCampaignInvariants(phantom).map((v) => v.code), ['unclaimable_waiting_rows']);
 
+  /*
+   * ─── I6 — "רץ" WITHOUT A MACHINE FACT, AND AT WHICH SCOPE ─────────────
+   *
+   * THE ONE THE OWNER REPORTED, twice in his activity log at 02:34 in the
+   * morning: "אי-התאמה בספירת הפרסומים — הסבב מסומן כרץ, אך אף פרסום לא יצא
+   * ואף פרסום לא נמצא כרגע בעבודה."
+   *
+   * Nothing was wrong with the round. resolveState() decides 'running' from
+   * `startedAt !== null || progress.published > 0` — the first of those is the
+   * round's FIRST publication EVER — and this check re-read only the second,
+   * which is TODAY'S for a repeating round (CampaignState.todayOnly). So the
+   * two asked one question at two scopes and disagreed by construction:
+   *
+   *   • every night, for every repeating round, between midnight and the
+   *     day's first publication;
+   *   • and all day whenever the PC is off, which is what he was looking at.
+   *
+   * His round had published 7,522 times. The invariant was comparing that
+   * against a counter that resets at midnight.
+   */
+  const repeatingOvernight = {
+    progress: { total: 205, published: 0, failed: 0, skipped: 0, scheduled: 205, running: 0, manual: 0, finished: 0 },
+    state: 'running' as const,
+    upcoming: [],
+    /* Today's slice is empty; the round's life is not. */
+    everPublished: 7522,
+    startedAt: '2026-10-01T06:00:00.000Z',
+    todayOnly: true,
+  };
+  assert.deepEqual(
+    checkCampaignInvariants(repeatingOvernight).map((v) => v.code),
+    [],
+    'A REPEATING ROUND BETWEEN MIDNIGHT AND ITS FIRST PUBLICATION IS NOT A CONTRADICTION — it is a counter that resets, measured against a history that does not',
+  );
+
+  /* And the round this check is actually about is still caught: no row in
+     flight, nothing published today, nothing ever published, no first
+     publication on record — and still marked running. */
+  const runningOnNothing = {
+    ...repeatingOvernight,
+    everPublished: 0,
+    startedAt: null,
+  };
+  assert.deepEqual(
+    checkCampaignInvariants(runningOnNothing).map((v) => v.code),
+    ['running_without_a_machine_fact'],
+    'while a round marked running with no machine fact at ANY scope is still reported',
+  );
+  /* A worker holding a row is a machine fact on its own, history or not. */
+  assert.deepEqual(
+    checkCampaignInvariants({
+      ...runningOnNothing,
+      progress: { ...runningOnNothing.progress, scheduled: 204, running: 1 },
+    }).map((v) => v.code),
+    [],
+    'and so is a row a worker is holding right now',
+  );
+  /*
+   * A BARE STATE READS AS "NO HISTORY", which is the behaviour this check had
+   * before the lifetime fields existed. The fields are optional, and
+   * `undefined !== null` is TRUE — so reading `startedAt !== null` would have
+   * silenced I6 for every caller that passes neither.
+   */
+  assert.deepEqual(
+    checkCampaignInvariants({ progress: runningOnNothing.progress, state: 'running' as const, upcoming: [] }).map((v) => v.code),
+    ['running_without_a_machine_fact'],
+    'a caller that makes no claim about the round\u2019s history gets the strict reading',
+  );
+
   // Reported once per subject, so a 5-second poll cannot flood the owner's log.
   resetInvariantReports();
   assert.equal(takeUnreported(checkCampaignInvariants(pausedEmpty), 'campaign:c1').length, 1);

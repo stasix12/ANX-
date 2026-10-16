@@ -36,11 +36,26 @@ const SAMPLE = 10;
  *  I5  a waiting row that no worker can ever claim is reported, not counted
  *      silently as if it were going to go out
  *  I6  'running' is never claimed without a machine fact behind it — a row a
- *      worker is holding, or a publication that really went out
+ *      worker is holding, or a publication that really went out, AT ANY SCOPE
  *  I7  no percentage reads 100 while a row is still open
  */
 export function checkCampaignInvariants(
-  state: Pick<CampaignState, 'progress' | 'state' | 'upcoming'>,
+  /*
+   * THE LIFETIME FIELDS ARE OPTIONAL, AND I6 IS THE REASON THEY ARE HERE.
+   *
+   * `progress` is TODAY'S for a repeating round (see CampaignState.todayOnly),
+   * while resolveState() decides 'running' partly from `startedAt`, which is
+   * the round's first publication EVER. I6 re-checked that decision against
+   * today's count — two scopes, one question — so every repeating round
+   * reported a contradiction every night between midnight and its first
+   * publication of the day, and all day whenever the PC was off.
+   *
+   * Absent, they read as "no lifetime fact", which is exactly the behaviour
+   * this check had before: a caller that builds a bare {progress, state,
+   * upcoming} is making no claim about the round's history.
+   */
+  state: Pick<CampaignState, 'progress' | 'state' | 'upcoming'> &
+    Partial<Pick<CampaignState, 'everPublished' | 'startedAt' | 'todayOnly'>>,
   ctx: { campaignId?: string | null; campaignName?: string | null } = {},
 ): InvariantViolation[] {
   const out: InvariantViolation[] = [];
@@ -94,12 +109,37 @@ export function checkCampaignInvariants(
    * The reported "● רץ" beside "התחיל: טרם התחיל". resolveState() can no
    * longer produce it, so this is what catches a state assembled anywhere
    * else: running means a worker is holding a row, or something published.
+   *
+   * AT ANY SCOPE, AND THAT WORD IS THE WHOLE FIX. resolveState() reads
+   * `startedAt !== null || progress.published > 0` — the first of those is the
+   * round's FIRST publication ever. This read only the second, and
+   * `progress.published` is today's for a repeating round, so the two asked
+   * the same question at two scopes and disagreed by construction:
+   *
+   *   • every night, for every repeating round, from midnight until the day's
+   *     first publication — the window in which today's count is zero and the
+   *     round has still published eight thousand times;
+   *   • all day whenever the PC is off, which is the state the owner was
+   *     looking at when he reported this.
+   *
+   * The round it is actually about has no machine fact anywhere: nothing in
+   * flight, nothing published today, nothing ever published, and no first
+   * publication on record. That round is still caught.
    */
-  if (state.state === 'running' && p.running === 0 && p.published === 0) {
+  const everPublished = state.everPublished ?? 0;
+  /* `Boolean(...)`, not `!== null`: the field is OPTIONAL here, and `undefined
+     !== null` is true — which would have made an absent history read as a
+     machine fact and silenced this check for every caller that does not pass
+     one. The two test harnesses that build a bare state are exactly those
+     callers. */
+  const machineFact = p.running > 0 || p.published > 0 || everPublished > 0 || Boolean(state.startedAt);
+  if (state.state === 'running' && !machineFact) {
     out.push({
       code: 'running_without_a_machine_fact',
       message: 'הסבב מסומן כרץ, אך אף פרסום לא יצא ואף פרסום לא נמצא כרגע בעבודה',
-      meta: { ...base, progress: { ...p } },
+      /* The scope is in the meta, because the next person to read this line in
+         the activity log needs to know which numbers it was weighed against. */
+      meta: { ...base, progress: { ...p }, everPublished, startedAt: state.startedAt ?? null, todayOnly: state.todayOnly ?? false },
     });
   }
 

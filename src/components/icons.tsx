@@ -525,6 +525,38 @@ export function CheckCircleIcon(props: IconProps) {
   );
 }
 
+/**
+ * A circle with an exclamation in it — "something here is wrong", at the size
+ * a chip or a stat tile can carry.
+ *
+ * The reference image draws it twice on one card: beside "המחשב לא מחובר" and
+ * above "נכשלו". AlertTriangleIcon is the product's warning mark and reads as
+ * a caution; this is a FAULT, which is a different thing and the reference
+ * draws it differently.
+ */
+export function AlertCircleIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 7v6" />
+      <path d="M12 16.5h.01" />
+    </svg>
+  );
+}
+
+/**
+ * The lightning bolt the reference puts inside the "פעיל" badge on the
+ * campaign's picture. Filled rather than stroked: at 10px a stroked bolt is
+ * two hairlines and reads as noise.
+ */
+export function BoltIcon(props: IconProps) {
+  return (
+    <svg {...base} fill="currentColor" stroke="none" {...props}>
+      <path d="M13.2 2 4.8 13h5.4l-.6 9 8.4-11h-5.4l.6-9Z" />
+    </svg>
+  );
+}
+
 export function XCircleIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

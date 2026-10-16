@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { scheduleReadout } from '../../src/lib/social/schedule-readout';
+import { projectQueue, type AccountSpacing } from '../../src/lib/social/projection';
 import { DEFAULT_CAMPAIGN_REPEAT, readRepeat, repeatColumns, MIN_REPEAT_HOURS, MAX_REPEAT_HOURS, type CampaignRepeat, type CampaignSchedule } from '../../src/lib/social/campaign-schedule';
 import type { CampaignState } from '../../src/lib/social/campaign';
 
@@ -49,7 +50,7 @@ const is = (c: unknown, msg: string) => {
 const at = (s: string): Date => new Date(`${s}${s >= '2026-03-27T02:00' && s < '2026-10-25T02:00' ? '+03:00' : '+02:00'}`);
 
 /** HIS OWN SETTING, off the screenshot: Sunday–Thursday, 08:00–22:00. */
-const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', end: '22:00', gapSeconds: 60 };
+const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', gapSeconds: 60 };
 const off: CampaignSchedule = { ...ref, enabled: false };
 const noDays: CampaignSchedule = { ...ref, days: [] };
 
@@ -93,7 +94,7 @@ const st = (
    * one of the two may print 22:00.
    */
   const live = scheduleReadout(ref, st('not_started', null), now);
-  eq(live, { kind: 'window-open', until: at('2026-10-06T22:00').toISOString() }, 'a campaign that has not run yet may still be told when the window shuts');
+  eq(live, { kind: 'window-open', until: at('2026-10-07T00:00').toISOString() }, 'a campaign that has not run yet may still be told when the day shuts');
   is(JSON.stringify(r) !== JSON.stringify(live), 'the run state is what separates them, and it does');
 }
 
@@ -108,14 +109,23 @@ const st = (
   );
   /*
    * OUTSIDE IT, THE CARD PRINTS WHAT THE ENGINE WILL DO, NOT WHAT THE ROW
-   * SAYS. A row stamped 23:40 on a campaign that stops at 22:00 does not go out
-   * at 23:40 — rules.ts defers it to 08:00 on the next chosen day, and a card
-   * printing 23:40 is the screen contradicting the machine.
+   * SAYS. The edge is midnight now rather than an hour the owner set, so the
+   * row that proves it is one stamped at 02:00: rules.ts defers it to 08:00 on
+   * that same chosen day, and a card printing 02:00 is the screen
+   * contradicting the machine.
    */
   eq(
-    scheduleReadout(ref, st('running', at('2026-10-06T23:40').toISOString()), now),
+    scheduleReadout(ref, st('running', at('2026-10-07T02:00').toISOString()), now),
     { kind: 'due', at: at('2026-10-07T08:00').toISOString() },
-    'a row stamped past the window is reported at the next legal moment',
+    'a row stamped before the day opens is reported at the next legal moment',
+  );
+  /* And 23:40 — which used to be deferred to the next morning — is now simply
+     when it goes out. This is the evening the owner bought by removing the
+     closing hour, stated where a screen can be checked against the engine. */
+  eq(
+    scheduleReadout(ref, st('running', at('2026-10-06T23:40').toISOString()), now),
+    { kind: 'due', at: at('2026-10-06T23:40').toISOString() },
+    'twenty to midnight on a chosen day is its own minute — there is no closing hour left to defer it past',
   );
   /* A row whose instant has already passed publishes from NOW, not from the
      moment it missed. */
@@ -187,14 +197,14 @@ const st = (
    * 17:13, a minute that had gone.
    */
   const r = scheduleReadout(ref, st('not_started', null), at('2026-10-06T17:13'));
-  eq(r, { kind: 'window-open', until: at('2026-10-06T22:00').toISOString() }, 'inside the window, the edge that matters is when it shuts');
+  eq(r, { kind: 'window-open', until: at('2026-10-07T00:00').toISOString() }, 'inside the window, the edge that matters is when it shuts — midnight, now that the closing hour is gone');
   is(r.kind === 'window-open' && new Date(r.until) > at('2026-10-06T17:13'), 'and it is ahead of now, never the present minute');
 
   /* Both edges of the day: the minute it opens and the minute it closes are
      inside, so neither blanks the card for a minute. */
   is(scheduleReadout(ref, st('not_started', null), at('2026-10-06T08:00')).kind === 'window-open', 'the opening minute is inside the window');
-  is(scheduleReadout(ref, st('not_started', null), at('2026-10-06T22:00')).kind === 'window-open', 'and so is the closing minute');
-  is(scheduleReadout(ref, st('not_started', null), at('2026-10-06T22:01')).kind === 'window-next', 'a minute later it is the next window');
+  is(scheduleReadout(ref, st('not_started', null), at('2026-10-06T23:59')).kind === 'window-open', 'and so is the last minute of the day');
+  is(scheduleReadout(ref, st('not_started', null), at('2026-10-07T00:01')).kind === 'window-next', 'a minute past midnight it is the next window');
 }
 
 /* ──────────── 6. The two days a year the clock moves ───────────────────── */
@@ -205,9 +215,9 @@ const st = (
      on both sides of the change — which an offset in milliseconds gets wrong by
      an hour, once a year, on a day as likely as any other. */
   const r = scheduleReadout(ref, st('not_started', null), at('2026-10-25T10:00'));
-  eq(r, { kind: 'window-open', until: at('2026-10-25T22:00').toISOString() }, 'the window closes at 22:00 local on the day the clock goes back');
+  eq(r, { kind: 'window-open', until: at('2026-10-26T00:00').toISOString() }, 'the window closes at local midnight on the day the clock goes back — a 25-hour day, and still one day');
   const spring = scheduleReadout(ref, st('not_started', null), at('2026-03-29T10:00'));
-  eq(spring, { kind: 'window-open', until: at('2026-03-29T22:00').toISOString() }, 'and on a summer-time Sunday too');
+  eq(spring, { kind: 'window-open', until: at('2026-03-30T00:00').toISOString() }, 'and on a summer-time Sunday too');
 }
 
 /* ──────────── 7. THE RULE ITSELF, over every state at once ─────────────── */
@@ -246,7 +256,7 @@ const st = (
              window kinds, which describe something still ahead — in the future.
              A 'due' row may be due now, which is the engine saying "go". */
           is(!Number.isNaN(new Date(carries).getTime()), `${s}/${c}: a printed instant must be a real date`);
-          if (r.kind !== 'due') is(new Date(carries) > at(c), `${s}/${c}: ${r.kind} named ${carries}, which is not ahead of now`);
+          if (r.kind !== 'due' && r.kind !== 'paused') is(new Date(carries) > at(c), `${s}/${c}: ${r.kind} named ${carries}, which is not ahead of now`);
           /*
            * AND A ROUND THAT IS OVER MAY NEVER REACH THIS LINE — unless the
            * read was capped, in which case "over" is precisely the claim that
@@ -255,10 +265,18 @@ const st = (
            * here rather than worked around.
            */
           if (!cap) is(s !== 'completed' && s !== 'stopped', `${s}: a round that has ended printed ${r.kind} = ${carries}`);
-          is(s !== 'paused', `${s}: a paused round printed ${r.kind} = ${carries}`);
+          /*
+           * A PAUSED ROUND MAY NAME THE MINUTE IT IS PLANNED FOR, and only
+           * that: "אם הקמפיין מושהה, יש להציג את המועד המתוכנן לצד סטטוס
+           * מושהה, בלי להציג אותו כפרסום שעומד להתבצע." The card draws it
+           * under the word "מושהה" with no countdown over it, which is what
+           * makes it a plan rather than a promise — and it is still forbidden
+           * from reaching any OTHER shape.
+           */
+          is(s !== 'paused' || r.kind === 'paused', `${s}: a paused round printed ${r.kind} = ${carries}`);
           /* A capped read may name an instant only when it is a row it can
              actually see — never one derived from a count it does not have. */
-          if (cap) is(r.kind === 'due', `truncated/${s}: a capped read printed ${r.kind} = ${carries}`);
+          if (cap) is(r.kind === 'due' || r.kind === 'paused', `truncated/${s}: a capped read printed ${r.kind} = ${carries}`);
         }
   is(seen === states.length * schedules.length * queues.length * clocks.length * caps.length, 'the sweep covered every combination');
   is(kinds.size >= 6, `the sweep reached ${kinds.size} of the readout's shapes`);
@@ -398,9 +416,23 @@ const st = (
    * the queue untouched: the same fault as the 22:00, and harder to see,
    * because the time it shows is real and merely never happens.
    */
-  eq(scheduleReadout(ref, st('paused', at('2026-10-06T10:20').toISOString()), now), { kind: 'paused' }, 'a paused round names no instant');
-  eq(scheduleReadout(off, st('paused', at('2026-10-06T10:20').toISOString()), now), { kind: 'paused' }, 'with the schedule off too — the pause is what holds it');
-  eq(scheduleReadout(ref, st('paused', null, { truncated: true }), now), { kind: 'paused' }, 'and a capped read does not hide it');
+  /*
+   * IT NAMES THE PLANNED MINUTE AND NOTHING ELSE. The brief asks for it by
+   * name — "יש להציג את המועד המתוכנן לצד סטטוס מושהה, בלי להציג אותו כפרסום
+   * שעומד להתבצע" — and the kind is what keeps the two apart: <NextPublication>
+   * draws no countdown and no "הפרסום הבא" framing over a 'paused'.
+   */
+  eq(
+    scheduleReadout(ref, st('paused', at('2026-10-06T10:20').toISOString()), now),
+    { kind: 'paused', at: at('2026-10-06T10:20').toISOString() },
+    'a paused round names the minute it is PLANNED for, never a minute it will publish at',
+  );
+  eq(
+    scheduleReadout(off, st('paused', at('2026-10-06T10:20').toISOString()), now),
+    { kind: 'paused', at: at('2026-10-06T10:20').toISOString() },
+    'with the schedule off too — the pause is what holds it',
+  );
+  eq(scheduleReadout(ref, st('paused', null, { truncated: true }), now), { kind: 'paused', at: null }, 'and a capped read with nothing queued has no plan to name');
 }
 
 /* ──────────── 11. THE OTHER GAP — the account-wide one ─────────────────── */
@@ -463,20 +495,21 @@ const st = (
   eq(r, { kind: 'due', at: at('2026-10-07T13:00').toISOString() }, 'a stored instant beyond both floors is left alone');
 
   /*
-   * AND THE WINDOW STILL APPLIES TO IT. An instant pushed past 22:00 by the
-   * account gap has to roll to the next chosen day, exactly as it would for
-   * any other reason — which is why the floor is folded into `from` rather
-   * than maxed in afterwards.
+   * AND THE WINDOW STILL APPLIES TO IT. An instant pushed past the day's end
+   * by the account gap has to roll to the next chosen day, exactly as it would
+   * for any other reason — which is why the floor is folded into `from` rather
+   * than maxed in afterwards. The edge is midnight now, so the publication
+   * that proves it is one at twenty to midnight with 65 minutes to wait.
    */
   const late = {
     minGapMinutes: 45,
     groupMinGapMinutes: 20,
-    lastPublishedAt: at('2026-10-07T21:30').toISOString(),
+    lastPublishedAt: at('2026-10-07T23:30').toISOString(),
   };
   eq(
-    scheduleReadout(minute, st('running', at('2026-10-07T21:35').toISOString()), at('2026-10-07T21:35'), DEFAULT_CAMPAIGN_REPEAT, late),
+    scheduleReadout(minute, st('running', at('2026-10-07T23:35').toISOString()), at('2026-10-07T23:35'), DEFAULT_CAMPAIGN_REPEAT, late),
     { kind: 'due', at: at('2026-10-08T08:00').toISOString() },
-    'an account floor past the window rolls to the next chosen day, it does not land at 22:35',
+    'an account floor past the end of the day rolls to the next chosen day, it does not land at 00:35',
   );
 
   /* NOTHING PUBLISHED YET — no floor at all, and certainly not one invented
@@ -596,13 +629,105 @@ const st = (
     'src/components/social/LiveCampaignHero.tsx',
     'src/components/social/CampaignScheduleBoard.tsx',
     'src/components/social/CampaignCard.tsx',
+    'src/components/social/NextPublication.tsx',
   ]) {
     is(!/nextPublishAt\(|nextAllowedAt\(|windowClosesAt\(/.test(code(f)), `${f} computes no publishing instant of its own`);
     /* The board takes the decision as a prop rather than making the call, so
-       the shared claim is the IMPORT: every one of the three speaks this
+       the shared claim is the IMPORT: every one of the four speaks this
        module's language and none of them invents its own. */
     is(/from '@\/lib\/social\/schedule-readout'/.test(code(f)), `${f} speaks the one module that does`);
   }
+
+  /*
+   * AND THERE IS NOW ONE BLOCK, NOT TWO VERSIONS OF ONE.
+   *
+   * "בעבר היו פערים בין השעות שהוצגו בכרטיס הקמפיין לבין השעות שהופיעו במסך
+   *  ממתינים. אסור שהתקלה הזאת תחזור."
+   *
+   * The INSTANT was already shared — both cards read a ScheduleReadout — but
+   * the sentences around it were not, so a state added to one of them reached
+   * the other only when somebody remembered. Both now render the same
+   * component, and neither spells its own copy of its sentences.
+   */
+  const nextPub = code('src/components/social/NextPublication.tsx');
+  for (const [f, src] of [
+    ['src/components/social/CampaignScheduleBoard.tsx', code('src/components/social/CampaignScheduleBoard.tsx')],
+    ['src/components/social/CampaignSchedulePanel.tsx', code('src/components/social/CampaignSchedulePanel.tsx')],
+  ] as const) {
+    is(/<NextPublication/.test(src), `${f} draws the shared block`);
+    for (const sentence of ['אין פרסומים מתוזמנים', 'לא נבחר יום פרסום', 'הסבב הסתיים']) {
+      is(!src.includes(sentence), `${f} spells "${sentence}" itself instead of letting the shared block say it`);
+    }
+  }
+  for (const sentence of ['אין פרסומים מתוזמנים', 'לא נבחר יום פרסום', 'הסבב הסתיים']) {
+    is(nextPub.includes(sentence), `the shared block is where "${sentence}" lives`);
+  }
+}
+
+/* ──────── 14. THE CARD AND THE "ממתינים" LIST, ON ONE ROW ───────────────
+ *
+ * "הפרסום הבא זהה לזה שמופיע במסך ממתינים."
+ *
+ * Both are now asked, for the same row, under the same gates, and the two
+ * answers are compared rather than argued about. This is the test that would
+ * have caught the fault the owner reported: the card said 08:00 while the list
+ * said "באיחור" about every one of 217 rows, because one read the schedule and
+ * the other rendered `scheduled_at` out of the column.
+ * ------------------------------------------------------------------------ */
+{
+  const spacing: AccountSpacing = { minGapMinutes: 45, groupMinGapMinutes: 20, lastPublishedAt: at('2026-10-06T09:40').toISOString() };
+  /* Four instants that each take a different path through the gates: inside
+     the window, before it opens, after the day ends, and one already past. */
+  for (const stamp of ['2026-10-06T10:20', '2026-10-06T07:30', '2026-10-07T02:00', '2026-10-06T09:00']) {
+    const now = at('2026-10-06T10:12');
+    const iso = at(stamp).toISOString();
+    /* What the CARD prints. */
+    const card = scheduleReadout(ref, st('running', iso), now, DEFAULT_CAMPAIGN_REPEAT, spacing);
+    /* What the "ממתינים" LIST prints for the same row — projectQueue, which
+       is what src/app/social/page.tsx hands to <Timeline projected=…>. */
+    const list = projectQueue(
+      /* A GROUP ROW, because that is what the card's state says it is
+         (`nextChannel: 'facebook_group'`) — and the account floor carries a
+         surcharge for groups and not for anything else. Handing the list a
+         channel-less row would compare 45 minutes against 65 and call the
+         difference a bug in the code rather than in the fixture. */
+      [{ id: 'r1', status: 'scheduled', scheduled_at: iso, campaign_id: 'c1', post_id: null, target_id: 't1', published_at: null, target: { channel: 'facebook_group' } } as never],
+      { now, gates: { c1: { schedule: ref, lastPublishedAt: null } }, spacing },
+    );
+    eq(
+      card.kind === 'due' ? card.at : null,
+      list.get('r1') ?? null,
+      `${stamp}: the card and the waiting list name different instants for ONE row`,
+    );
+  }
+
+  /*
+   * AND THE CAMPAIGN'S OWN GAP IS MEASURED FROM THE SAME PUBLICATION.
+   *
+   * The dashboard builds the list's gates from `state.lastPublishedAt` — the
+   * v27 view's lifetime max() — and this card used to read `state.done`, a
+   * capped and TODAY-SCOPED preview. A row stamped yesterday and published
+   * today is in one and not the other, and then the two screens promise two
+   * different minutes for one row. `done` is deliberately left EMPTY here, so
+   * a readout that ignored `lastPublishedAt` would answer 10:20 and fail.
+   */
+  const slow: CampaignSchedule = { ...ref, gapSeconds: 1800 };
+  const lastPublished = at('2026-10-06T10:05').toISOString();
+  const now = at('2026-10-06T10:12');
+  const iso = at('2026-10-06T10:20').toISOString();
+  const card = scheduleReadout(
+    slow,
+    { ...(st('running', iso) as object), lastPublishedAt: lastPublished } as never,
+    now,
+    DEFAULT_CAMPAIGN_REPEAT,
+    { minGapMinutes: 0, groupMinGapMinutes: 0, lastPublishedAt: null },
+  );
+  const list = projectQueue(
+    [{ id: 'r1', status: 'scheduled', scheduled_at: iso, campaign_id: 'c1', post_id: null, target_id: 't1', published_at: null, target: { channel: 'facebook_group' } } as never],
+    { now, gates: { c1: { schedule: slow, lastPublishedAt: lastPublished } }, spacing: { minGapMinutes: 0, groupMinGapMinutes: 0, lastPublishedAt: null } },
+  );
+  eq(card.kind === 'due' ? card.at : null, at('2026-10-06T10:35').toISOString(), 'the card waits out the campaign gap from the round’s own last publication');
+  eq(card.kind === 'due' ? card.at : null, list.get('r1') ?? null, 'AND THE WAITING LIST AGREES — one row, one gap, one instant');
 }
 
 console.log(`schedule readout OK — ${checks} assertions over every state, both clock changes, and the no-second-mechanism rule`);

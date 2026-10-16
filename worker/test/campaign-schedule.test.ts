@@ -75,8 +75,8 @@ const say = (d: Date | null): string =>
     ? 'null'
     : new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
 
-/** The owner's own: Sunday–Thursday, 08:00–22:00, every ten minutes. */
-const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', end: '22:00', gapSeconds: 600 };
+/** The owner's own: Sunday–Thursday, from 08:00, every ten minutes. */
+const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', gapSeconds: 600 };
 
 /* ------------------------------------------------------------------ *
  * 1. READING A CAMPAIGN ROW. Every value here arrives from Postgres and
@@ -100,8 +100,10 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   /* The values the panel opens on, which are the reference image's own. */
   eq(readSchedule({}).days, [0, 1, 2, 3, 4], 'the default week is Sunday to Thursday');
   eq(readSchedule({}).start, '08:00', 'opening at 08:00');
-  eq(readSchedule({}).end, '22:00', 'closing at 22:00');
   eq(readSchedule({}).gapSeconds, 600, 'ten minutes apart');
+  /* There is no closing hour to default to any more: "יש להסיר לחלוטין את
+     אפשרות שעת הסיום מממשק הכרטיס." */
+  eq('end' in readSchedule({}), false, 'AND NO CLOSING HOUR AT ALL — a chosen day runs from `start` to midnight');
 
   /*
    * EVERY ONE OF THESE WOULD BE A CAMPAIGN THAT NEVER PUBLISHES AGAIN, and
@@ -135,27 +137,32 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   eq(readSchedule({ schedule_start: '8:30' }).start, '08:30', 'but a single-digit hour is a real time and is kept, padded');
 
   /*
-   * AN END BEFORE ITS START. 22:00 to 08:00 is how a person writes "overnight",
-   * and this product does not do overnight windows — slots.ts has clamped the
-   * same pair the same way since it was written, and two modules disagreeing
-   * about what that means is worse than either answer.
+   * ─── THE COLUMN IS IGNORED, AND IT IS NOT TOUCHED ────────────────────
+   *
+   * `schedule_end` is still in the database and still holds whatever each
+   * campaign had — "אסור למחוק מידע" — and nothing reads it. Both halves
+   * matter and each would be invisible on its own: a read that still honoured
+   * it would enforce a 22:00 cut-off the owner can no longer see or change,
+   * and a WRITE that blanked it would destroy the only record of what every
+   * campaign used to be set to.
    */
-  const backwards = readSchedule({ schedule_start: '22:00', schedule_end: '08:00' });
-  eq(backwards.end, '23:59', 'an end before its start runs to midnight instead');
+  eq('end' in readSchedule({ schedule_end: '22:00' } as never), false, 'a stored closing hour produces no field to read');
+  is(
+    !Object.keys(scheduleColumns(ref)).includes('schedule_end'),
+    'AND SAVING DOES NOT WRITE THE COLUMN — the value already in the row survives untouched',
+  );
   /*
-   * AND THAT IS THE WHOLE POINT — this used to collapse onto the start, which
-   * is a window exactly one instant wide. rules.ts defers to the allowed
-   * instant plus a five-second cushion, so every claim landed five seconds
-   * past the only legal moment and deferred to the next chosen day, for ever:
-   * a campaign set to an overnight window never published anything. Reproduced
-   * before the fix. The assertion that replaces the old one is not "it has
-   * some window" but "a publication deferred into it is actually inside it".
+   * WHAT THAT MEANS FOR A CAMPAIGN THAT HAD ONE. 22:00 to 08:00 is how a
+   * person writes "overnight", and the clamp that used to rewrite it to 23:59
+   * is gone with the field it guarded: the day simply runs to midnight now,
+   * which is what that clamp was approximating anyway.
    */
-  const over = { ...backwards, enabled: true, days: [0, 1, 2, 3, 4] };
+  const over = { ...readSchedule({ schedule_start: '22:00', schedule_end: '08:00' } as never), enabled: true, days: [0, 1, 2, 3, 4] };
   const allowed = nextAllowedAt(over, at('2026-10-04T09:00'));
   is(allowed !== null, 'the campaign can still publish');
   is(isAllowedAt(over, new Date(allowed!.getTime() + 5_000)), 'AND FIVE SECONDS PAST THAT INSTANT IS STILL INSIDE THE WINDOW — the defer cushion lands in it rather than past it');
   is(isAllowedAt(over, at('2026-10-04T23:30')), 'and so is half past eleven at night');
+  is(isAllowedAt(over, at('2026-10-04T23:59:59')), 'right up to the last second of the day');
 
   eq(readSchedule({ schedule_days: [9, -1, 3, 3, 1] }).days, [1, 3], 'junk day indices are dropped and the real ones de-duplicated and sorted');
   eq(readSchedule({ schedule_days: [] }).days, [], 'AN EMPTY WEEK IS A REAL CHOICE and is kept — see the branch for it below');
@@ -211,9 +218,15 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
 {
   is(isAllowedAt(ref, at('2026-10-04T12:00')), 'midday on a Sunday is inside the window');
   is(isAllowedAt(ref, at('2026-10-04T08:00')), 'AND SO IS THE INSTANT IT OPENS — an exclusive edge here loses the first publication of every day');
-  is(isAllowedAt(ref, at('2026-10-04T22:00')), 'and the instant it closes');
+  /*
+   * THE HOURS THAT USED TO BE SHUT. 22:00 was the close; there is no close
+   * before midnight any more, so the evening is open and these three are the
+   * whole behavioural change the owner will notice.
+   */
+  is(isAllowedAt(ref, at('2026-10-04T22:01')), 'A MINUTE PAST TEN AT NIGHT IS NOW INSIDE IT — the closing hour is gone');
+  is(isAllowedAt(ref, at('2026-10-04T23:59')), 'and so is the last minute of the day');
   is(!isAllowedAt(ref, at('2026-10-04T07:59')), 'a minute before it opens is not');
-  is(!isAllowedAt(ref, at('2026-10-04T22:01')), 'nor a minute after it closes');
+  is(!isAllowedAt(ref, at('2026-10-03T23:59')), 'nor the last minute of a Saturday, which is not a chosen day');
   is(!isAllowedAt(ref, at('2026-10-02T12:00')), 'nor midday on a Friday, which is not a chosen day');
   is(isAllowedAt({ ...ref, enabled: false }, at('2026-10-02T03:00')), 'WITH THE SWITCH OFF EVERYTHING IS ALLOWED — the campaign behaves exactly as it did before this existed');
 }
@@ -226,15 +239,22 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   eq(say(nextAllowedAt(ref, at('2026-10-04T06:00'))), say(at('2026-10-04T08:00')), 'before it opens, the publication waits for the opening — not for tomorrow');
 
   /*
-   * THE SENTENCE THE WHOLE FEATURE IS ABOUT: "אם מגיעים לשעת הסיום: לא לפרסם
-   * יותר באותו יום. הקמפיין צריך להמתין אוטומטית ליום הפעילות הבא ולהמשיך
-   * משעת ההתחלה שהוגדרה."
+   * THE SENTENCE THE WHOLE FEATURE IS ABOUT: "הקמפיין צריך להמתין אוטומטית
+   * ליום הפעילות הבא ולהמשיך משעת ההתחלה שהוגדרה."
+   *
+   * THE EDGE IS MIDNIGHT NOW. 23:30 on a chosen Sunday is inside the day and
+   * is answered with itself; the roll happens where the day does, and lands on
+   * the NEXT chosen day's opening hour rather than on the small hours of a day
+   * the owner never asked to publish in.
    */
-  eq(say(nextAllowedAt(ref, at('2026-10-04T23:30'))), say(at('2026-10-05T08:00')), 'PAST CLOSING IT IS THE NEXT DAY AT THE OPENING HOUR, not the next minute and not midnight');
+  eq(say(nextAllowedAt(ref, at('2026-10-04T23:30'))), say(at('2026-10-04T23:30')), 'half past eleven on a chosen day is itself — the evening is open');
+  eq(say(nextAllowedAt(ref, at('2026-10-05T00:30'))), say(at('2026-10-05T08:00')), 'PAST MIDNIGHT IT IS THE OPENING HOUR, not the next minute — half past twelve is not a publishing hour');
+  eq(say(nextAllowedAt(ref, at('2026-10-05T00:00'))), say(at('2026-10-05T08:00')), 'and midnight itself belongs to the new day, not to the one that just ended');
 
-  /* Thursday night rolls over the weekend to Sunday, because Friday and
-     Saturday are not chosen. */
-  eq(say(nextAllowedAt(ref, at('2026-10-01T23:00'))), say(at('2026-10-04T08:00')), 'Thursday night waits for Sunday — the two days in between are not chosen');
+  /* Thursday night is still Thursday, and only once it is over does the
+     weekend push the answer to Sunday: Friday and Saturday are not chosen. */
+  eq(say(nextAllowedAt(ref, at('2026-10-01T23:00'))), say(at('2026-10-01T23:00')), 'eleven on a Thursday night is Thursday — the day is open to midnight');
+  eq(say(nextAllowedAt(ref, at('2026-10-02T00:30'))), say(at('2026-10-04T08:00')), 'HALF AN HOUR LATER IT IS FRIDAY, and the answer jumps the weekend to Sunday morning');
   eq(say(nextAllowedAt(ref, at('2026-10-02T12:00'))), say(at('2026-10-04T08:00')), 'and so does a Friday afternoon');
 
   /*
@@ -243,7 +263,7 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    * here, and null is read as "this campaign can never publish".
    */
   const sundayOnly: CampaignSchedule = { ...ref, days: [0] };
-  eq(say(nextAllowedAt(sundayOnly, at('2026-10-04T23:00'))), say(at('2026-10-11T08:00')), 'ONE CHOSEN DAY, PAST ITS CLOSE: next week, and never null');
+  eq(say(nextAllowedAt(sundayOnly, at('2026-10-05T00:30'))), say(at('2026-10-11T08:00')), 'ONE CHOSEN DAY, PAST ITS END: next week, and never null');
 
   /* No day at all: the one input nothing can satisfy, and the caller is told
      so rather than handed an instant it would have to guess about. */
@@ -269,14 +289,21 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   eq(say(nextPublishAt(ref, at('2026-10-04T12:00'), null)), say(at('2026-10-04T12:00')), 'a campaign that has never published waits only for its window');
 
   /*
-   * THE TWO CONSTRAINTS COMPOSE IN ONE DIRECTION ONLY. The gap pushes 21:55
-   * past the 22:00 close, so the answer is the next DAY's opening — not 22:05,
-   * which is what applying the window first and the gap afterwards produces.
+   * THE TWO CONSTRAINTS COMPOSE IN ONE DIRECTION ONLY. The gap pushes 23:55
+   * past midnight, so the answer is the next DAY's opening — not 00:05, which
+   * is what applying the window first and the gap afterwards produces.
    */
   eq(
-    say(nextPublishAt(ref, at('2026-10-04T21:58'), at('2026-10-04T21:55'))),
+    say(nextPublishAt(ref, at('2026-10-04T23:58'), at('2026-10-04T23:55'))),
     say(at('2026-10-05T08:00')),
-    'A GAP THAT CROSSES THE CLOSING TIME ROLLS TO THE NEXT DAY — gap first, window second, and never the other way round',
+    'A GAP THAT CROSSES MIDNIGHT ROLLS TO THE NEXT DAY — gap first, window second, and never the other way round',
+  );
+  /* And the evening that used to roll now does not: 21:55 plus ten minutes is
+     22:05, which is a publishing minute again. */
+  eq(
+    say(nextPublishAt(ref, at('2026-10-04T21:58'), at('2026-10-04T21:55'))),
+    say(at('2026-10-04T22:05')),
+    'while the same arithmetic at ten at night stays on the same evening — this is the hour the owner bought by removing the closing time',
   );
 
   eq(nextPublishAt({ ...ref, days: [] }, at('2026-10-04T12:00'), null), null, 'and no chosen day is still no answer, gap or not');
@@ -301,9 +328,9 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   is(isAllowedAt(ref, at('2026-10-25T08:00')), 'and that instant is inside it');
   is(!isAllowedAt(ref, at('2026-10-25T07:30')), 'while half an hour earlier is not, on a day that is 25 hours long');
 
-  /* And forward, in March: the 27th is a Friday (not chosen), so a Thursday
-     night rolls to Sunday the 29th — across the changeover. */
-  eq(say(nextAllowedAt(ref, at('2026-03-26T23:00'))), say(at('2026-03-29T08:00')), 'and across the spring change, the opening hour is still the opening hour');
+  /* And forward, in March: the 27th is a Friday (not chosen), so the small
+     hours of that Friday roll to Sunday the 29th — across the changeover. */
+  eq(say(nextAllowedAt(ref, at('2026-03-27T00:30'))), say(at('2026-03-29T08:00')), 'and across the spring change, the opening hour is still the opening hour');
 }
 
 /* ------------------------------------------------------------------ *
@@ -311,7 +338,7 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
  *    five values add up to.
  * ------------------------------------------------------------------ */
 {
-  eq(scheduleSummary(ref), 'א׳, ב׳, ג׳, ד׳, ה׳ · 08:00 – 22:00 · כל 10 דקות', 'the whole line, from the five values the reference itself shows');
+  eq(scheduleSummary(ref), 'א׳, ב׳, ג׳, ד׳, ה׳ · משעה 08:00 · כל 10 דקות', 'the whole line, from the four values the reference itself shows');
   eq(daysLabel({ ...ref, days: [0, 1, 2, 4] }), 'א׳, ב׳, ג׳, ה׳', 'the brief’s own example — four days, in order, with ד׳ left out');
   eq(daysLabel({ ...ref, days: [4, 0, 2, 1] }), 'א׳, ב׳, ג׳, ה׳', 'and the order is the week’s, not the order he tapped them in');
   eq(daysLabel({ ...ref, days: [0, 1, 2, 3, 4, 5, 6] }), 'כל הימים', 'seven days is a sentence, not a list of seven — it would be the longest line on the card');
@@ -324,7 +351,8 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   eq(scheduleSummary({ ...ref, gapSeconds: 180 }).endsWith('כל 3 דקות'), true, 'and three onwards carries the digit');
   eq(scheduleSummary({ ...ref, gapSeconds: 30 }).endsWith('כל 30 שניות'), true, 'and a sub-minute gap is spelled in seconds, not as a fraction of a minute');
 
-  is(scheduleSummary(ref).includes('08:00 – 22:00'), 'the window is printed as a range, start first');
+  is(scheduleSummary(ref).includes('משעה 08:00'), 'the hour is printed as an opening, not as a range — there is no second hour to print');
+  is(!/–/.test(scheduleSummary(ref)), 'AND NO DASH ANYWHERE IN IT — "אין להציג שעת סיום גם בשורת הסיכום"');
   is(!/⁦|⁩/.test(scheduleSummary(ref)), 'and with no bidi control characters in it — this string also reaches an aria-label, and a screen reader reads those aloud');
 }
 
@@ -443,8 +471,17 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   const floorAt = projection.indexOf('accountFloorMs(spacing, channel, input.accountLastPublishedAt)');
   is(floorAt > 0, 'the account-wide spacing floor is applied by projectOne');
   is(floorAt < offAt, 'and before the not-gated branch, so it applies whether the campaign window is on or off');
-  is(/לא נבחר יום פרסום/.test(card), 'with no day chosen it says so rather than printing an instant the engine will not publish at');
+  /*
+   * RE-POINTED TO THE BLOCK THAT DRAWS IT. "לא נבחר יום פרסום" used to be
+   * spelled inside this card and, separately, inside the dashboard's own
+   * strip — two copies of one sentence, which is how the two screens came to
+   * disagree about the same campaign. <NextPublication> is the single block
+   * both cards draw now, so the claim is pinned where it lives.
+   */
+  const nextPub = readFileSync(new URL('../../src/components/social/NextPublication.tsx', import.meta.url), 'utf8');
+  is(/לא נבחר יום פרסום/.test(nextPub), 'with no day chosen it says so rather than printing an instant the engine will not publish at');
   is(/<CampaignSchedulePanel/.test(card), 'the panel is rendered by the card itself — "אל תפתח Modal. אל תפתח Popup. אל תיצור מסך חדש"');
+  is(/<NextPublication/.test(readFileSync(new URL('../../src/components/social/CampaignScheduleBoard.tsx', import.meta.url), 'utf8')), 'and the dashboard draws THAT block rather than a second copy of it');
 
   const page = readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8');
   is(/schedule=\{readSchedule\(c\)\}/.test(page), 'the panel is fed from the campaign row, so a refresh shows what was saved');
@@ -458,6 +495,27 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   is(/schedule\.days\.includes\(day\) \? schedule\.days\.filter/.test(panel), 'tapping a chosen day un-chooses it — "חובה לאפשר Multi Select", in both directions');
   is(/dir="ltr"/.test(panel), 'the clock range is an LTR island, or the bidi algorithm prints "22:00 – 08:00"');
   is(!/useState/.test(panel), 'the panel holds no state of its own — what is on screen is what the page has, which is what the database has');
+  /*
+   * AND THE ONE PIECE OF STATE IN THE BLOCK IT DRAWS IS A CLOCK.
+   *
+   * The sentence above is a text search on one file, so it stayed green when
+   * the panel began rendering <NextPublication> — which holds a useState and a
+   * one-second interval. That is the countdown, and it is the one thing here
+   * that cannot be a prop. The claim the panel's guard is really making is
+   * that nothing on screen is a SETTING the page does not have, so the block
+   * is held to exactly that: a tick, and no second copy of a schedule.
+   */
+  const nextPubSrc = readFileSync(new URL('../../src/components/social/NextPublication.tsx', import.meta.url), 'utf8');
+  /* `useState(` with the bracket: the CALL, not the import line beside it. */
+  eq((nextPubSrc.match(/useState\(/g) ?? []).length, 1, 'the next-publication block holds exactly one piece of state');
+  is(/const \[now, setNow\] = useState\(\(\) => Date\.now\(\)\)/.test(nextPubSrc), 'and it is the clock the countdown ticks on, not a copy of anything the page owns');
+  is(/setInterval\(\(\) => setNow\(Date\.now\(\)\), everyMs\)/.test(nextPubSrc), 'ticking on an interval the caller sets');
+  /* A second while the seconds are on screen, fifteen when the line reads in
+     hours and minutes and is not moving — a campaigns list is twenty of these
+     cards, and a flat one-second tick is twenty re-renders a second for a
+     figure that has not changed. */
+  is(/coarse \? 15_000 : 1_000/.test(nextPubSrc), 'and a card counting down in hours ticks at a fifteenth of the rate');
+  is(/if \(!active\) return;/.test(nextPubSrc), 'and armed only when there is an instant to count down to — a list of finished rounds runs no timers');
 
   /* The migration, and the one file the owner is ever told to run. */
   const v24 = readFileSync(new URL('../../supabase/social-schema-v24.sql', import.meta.url), 'utf8');
@@ -511,7 +569,7 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
 
   const pairs: [string, number, number][] = [
     ['"תזמון פרסום" on the panel', ratio(token('mist-100'), panel), AA],
-    ['the labels ("ימי פרסום", "שעת סיום") on the panel', ratio(token('mist-300'), panel), AA],
+    ['the header subtitle and the field labels on the panel', ratio(token('mist-300'), panel), AA],
     ['an unchosen day\u2019s letter on its white chip', ratio(token('mist-300'), white), AA],
     ['a chosen day\u2019s letter at the LIGHT end of its gradient', ratio(token('on-brand'), token('brand-500')), AA],
     ['a chosen day\u2019s letter at the dark end', ratio(token('on-brand'), token('brand-600')), AA],
@@ -544,8 +602,12 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    * rather than text. A guard that is wrong about where a colour is cannot be
    * trusted about whether it is readable.
    */
-  is(/text-mist-300">ימי פרסום/.test(panelSrc), 'the "ימי פרסום" label is mist-300 on the tint (5.61), not mist-500 (4.40)');
-  is(/leading-\[13px\] text-mist-300/.test(panelSrc), 'and so is every field\u2019s own label, which sits on the same tint');
+  is(/leading-\[13px\] text-mist-300/.test(panelSrc), 'the header subtitle is mist-300 on the tint (5.61), not mist-500 (4.40)');
+  is(/text-\[10px\] font-bold leading-4 text-mist-300/.test(panelSrc), 'and so is every field\u2019s own label, which sits on a white box inside it');
+  /* The days are labelled for a screen reader by the group they are in, since
+     the visible "ימי פרסום" line the reference replaced with a subtitle is no
+     longer there to read. */
+  is(/aria-label=\{`ימי פרסום ל\$\{campaignName\}`\}/.test(panelSrc), 'the row of seven still says "ימי פרסום" to a screen reader');
   /* `'grad-primary` with the quote: the class being APPLIED, not the note
      above it explaining why it is not. A bare /grad-primary/ matched its own
      explanation and the check could never fail. */
@@ -613,19 +675,23 @@ function ch(v: number): number {
    * and the caller falls back to it.
    */
   eq(say(nextAllowedAt(ref, at('2026-09-30T10:00'))), say(at('2026-09-30T10:00')), 'inside the window, the first permitted instant IS now — the 17:12');
-  eq(say(windowClosesAt(ref, at('2026-09-30T10:00'))), say(at('2026-09-30T22:00')), 'and what is actually ahead of him is the close');
+  /* AND THE CLOSE IS MIDNIGHT. It was `s.end`; with the closing hour removed
+     the day's own boundary is what is ahead of him, built as the NEXT
+     calendar date's 00:00 in the zone rather than as 23:59, which is a minute
+     short, or as a day of milliseconds, which moves twice a year. */
+  eq(say(windowClosesAt(ref, at('2026-09-30T10:00'))), say(at('2026-10-01T00:00')), 'and what is actually ahead of him is the end of the day');
 
-  /* THE EDGES ARE INSIDE. The minute it opens and the minute it closes are
-     both permitted — isAllowedAt uses >= and <=, and a close that read "not
-     open" at 22:00 would blank the strip for one minute a day. */
-  eq(say(windowClosesAt(ref, at('2026-09-30T08:00'))), say(at('2026-09-30T22:00')), 'the opening minute is inside the window');
-  eq(say(windowClosesAt(ref, at('2026-09-30T22:00'))), say(at('2026-09-30T22:00')), 'and so is the closing minute');
+  /* THE OPENING EDGE IS INSIDE, and so is every minute after it: a close that
+     read "not open" at 22:00 used to blank the strip for a minute a day, and
+     there is no such minute left to get wrong. */
+  eq(say(windowClosesAt(ref, at('2026-09-30T08:00'))), say(at('2026-10-01T00:00')), 'the opening minute is inside the window');
+  eq(say(windowClosesAt(ref, at('2026-09-30T23:59'))), say(at('2026-10-01T00:00')), 'and so is the last minute of the day');
 
   /* NOT NOW, THREE WAYS — and every one of them must be null, because each is
      a case where the strip has a real future opening to name instead. */
   eq(windowClosesAt(ref, at('2026-09-30T07:59')), null, 'before it opens there is no open window');
-  eq(windowClosesAt(ref, at('2026-09-30T22:01')), null, 'after it closes there is no open window');
-  eq(windowClosesAt(ref, at('2026-10-02T12:00')), null, 'and Friday is not a chosen day, whatever the hour');
+  eq(windowClosesAt(ref, at('2026-10-03T12:00')), null, 'Saturday is not a chosen day, whatever the hour');
+  eq(windowClosesAt(ref, at('2026-10-02T12:00')), null, 'and neither is Friday');
 
   /* THE SWITCH OFF IS NOT AN OPEN WINDOW. isAllowedAt() answers `true` for a
      disabled schedule — rightly, since nothing is restricting the queue — and
@@ -637,13 +703,13 @@ function ch(v: number): number {
   /*
    * THE CLOCK CHANGE. 25.10.2026 is the Sunday Israel goes back to +02:00 at
    * 02:00, so that Sunday is 25 hours long. The close is a WALL CLOCK time
-   * resolved against the calendar date in the zone, so it is 22:00 local on
-   * both sides of the change — which a millisecond offset from "now" would
-   * get wrong by an hour exactly once a year, on a day the owner is as likely
-   * to be publishing as any other.
+   * resolved against the calendar date in the zone, so it is local midnight on
+   * both sides of the change — which a millisecond offset from "now" would get
+   * wrong by an hour exactly once a year, on a day the owner is as likely to
+   * be publishing as any other.
    */
-  eq(say(windowClosesAt(ref, at('2026-10-25T10:00'))), say(at('2026-10-25T22:00')), 'the close is 22:00 local on the day the clock goes back');
-  eq(say(windowClosesAt(ref, at('2026-03-29T10:00'))), say(at('2026-03-29T22:00')), 'and on a summer-time Sunday too');
+  eq(say(windowClosesAt(ref, at('2026-10-25T10:00'))), say(at('2026-10-26T00:00')), 'the close is local midnight on the day the clock goes back — a 25-hour day, and still one day');
+  eq(say(windowClosesAt(ref, at('2026-03-29T10:00'))), say(at('2026-03-30T00:00')), 'and on a summer-time Sunday too');
 }
 
 console.log(`campaign schedule tests OK — ${checks} assertions`);

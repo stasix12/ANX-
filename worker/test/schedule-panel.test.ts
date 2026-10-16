@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { copyFileSync, mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
@@ -107,14 +107,20 @@ async function main(): Promise<void> {
     await page.goto(`file://${path.join(dir, 'index.html')}`);
     await page.waitForSelector('[data-schedule]');
 
-    const summary = () => page.locator('[data-schedule] p').last().innerText();
+    /* BY ITS OWN ATTRIBUTE. "the last <p>" happened to be the summary while
+       the panel was four elements; it carries a next-publication block and a
+       repeat row now, and a locator that finds the wrong element cannot fail
+       for the right reason. innerText rather than textContent, so the two
+       lines the reference draws come back with a break between them instead of
+       "…ה׳משעה 08:00". */
+    const summary = () => page.locator('[data-schedule] [data-summary]').innerText();
     const day = (name: string) => page.locator(`[data-schedule] [aria-label="${name}"]`);
     const changes = () => page.evaluate(() => window.__changes);
 
     /* The state the owner's screen opens in. */
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'סיכום תזמון: א׳, ב׳, ג׳, ד׳, ה׳ · 08:00 – 22:00 · כל 10 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳ משעה 08:00 · כל 10 דקות',
       'the panel opens on the reference’s own setting',
     );
 
@@ -124,13 +130,13 @@ async function main(): Promise<void> {
     await day('יום שישי').click();
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'סיכום תזמון: א׳, ב׳, ג׳, ד׳, ה׳, ו׳ · 08:00 – 22:00 · כל 10 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳, ו׳ משעה 08:00 · כל 10 דקות',
       'ADDING A SIXTH DAY KEEPS THE OTHER FIVE — a row that behaved like radio buttons would read "ו׳" alone here',
     );
     eq(await day('יום שישי').getAttribute('aria-pressed'), 'true', 'and the chip says it is chosen');
 
     await day('שבת').click();
-    eq((await summary()).replace(/\s+/g, ' ').trim(), 'סיכום תזמון: כל הימים · 08:00 – 22:00 · כל 10 דקות', 'all seven is a sentence, not seven labels');
+    eq((await summary()).replace(/\s+/g, ' ').trim(), 'ימי פרסום: כל הימים משעה 08:00 · כל 10 דקות', 'all seven is a sentence, not seven labels');
 
     /* And off again: "חובה לאפשר Multi Select" says nothing about a day being
        un-choosable, and a control that refuses its own last press is one the
@@ -138,7 +144,7 @@ async function main(): Promise<void> {
     await day('יום רביעי').click();
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'סיכום תזמון: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ · 08:00 – 22:00 · כל 10 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ משעה 08:00 · כל 10 דקות',
       'a chosen day un-chooses, and the list closes over the gap in week order rather than in tap order',
     );
     eq(await day('יום רביעי').getAttribute('aria-pressed'), 'false', 'and the chip says so');
@@ -154,25 +160,36 @@ async function main(): Promise<void> {
     eq(sent[0].days, [0, 1, 2, 3, 4, 5], 'the first carries Friday added to the five that were there');
     eq(sent[1].days, [0, 1, 2, 3, 4, 5, 6], 'the second carries Saturday added to those SIX — not to the original five');
     eq(sent[2].days, [0, 1, 2, 4, 5, 6], 'and the third carries Wednesday removed from those seven');
-    is(sent.every((s) => s.start === '08:00' && s.end === '22:00' && s.gapSeconds === 600), 'and none of them quietly changed a field nobody touched');
+    is(sent.every((s) => s.start === '08:00' && s.gapSeconds === 600), 'and none of them quietly changed a field nobody touched');
 
     /* ---------------------------------------------------------------- *
-     * 2. THE THREE FIELDS, each one live.
+     * 2. THE TWO FIELDS, each one live — and there are TWO.
+     *
+     * "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק הכרטיס... להשאיר רק: שעת
+     *  התחלת הפרסום, הפרש בין פרסום לפרסום, ימי הפרסום שנבחרו."
      * ---------------------------------------------------------------- */
     const fields = page.locator('[data-schedule] select');
+    eq(await fields.count(), 2, 'TWO FIELDS, not three — the closing hour has no control any more');
+    /* The reference's own order: the start time first, the interval second. */
+    await fields.nth(0).selectOption('06:30');
+    is((await summary()).includes('06:30'), 'changing the start time updates the summary on the spot');
     /* The select's values are SECONDS now — "תעשה אופציה של 30 40 50 שניות" —
        so twenty-five minutes is 1500. Driven through the real control rather
        than through the component's props, which is the point of this file. */
-    await fields.nth(0).selectOption('1500');
-    is((await summary()).includes('כל 25 דקות'), 'changing the interval updates the summary on the spot');
-    await fields.nth(1).selectOption('06:30');
-    is((await summary()).includes('06:30'), 'and so does the start time');
-    await fields.nth(2).selectOption('23:30');
-    is((await summary()).includes('23:30'), 'and the end time');
+    await fields.nth(1).selectOption('1500');
+    is((await summary()).includes('כל 25 דקות'), 'and so does the interval');
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'סיכום תזמון: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ · 06:30 – 23:30 · כל 25 דקות',
-      'and all three at once, with the days from the taps above still in it',
+      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ משעה 06:30 · כל 25 דקות',
+      'and both at once, with the days from the taps above still in it',
+    );
+    /* AND NOWHERE IN IT IS A SECOND HOUR. A range is written with a dash; its
+       absence is the cheapest statement of the requirement that cannot be
+       satisfied by accident. */
+    is(!(await summary()).includes('–'), 'the summary prints no hour RANGE — "אין להציג שעת סיום גם בשורת הסיכום"');
+    is(
+      !(await page.locator('[data-schedule]').innerText()).includes('שעת סיום'),
+      'and the words "שעת סיום" appear nowhere in the panel at all',
     );
 
     /*
@@ -185,11 +202,11 @@ async function main(): Promise<void> {
      * Read off the real <option> elements, so a choice that exists in the
      * constant and never reaches the control still fails here.
      */
-    const gaps = await fields.nth(0).locator('option').allTextContents();
+    const gaps = await fields.nth(1).locator('option').allTextContents();
     eq(gaps.length, 33, 'the interval field offers three sub-minute steps and the thirty minutes');
     eq(gaps.slice(0, 4).join(' | '), '30 שניות | 40 שניות | 50 שניות | דקה', 'starting at thirty seconds');
     eq(gaps[32], '30 דק׳', 'and still ending at thirty minutes');
-    const gapValues = await fields.nth(0).locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+    const gapValues = await fields.nth(1).locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
     eq(gapValues.slice(0, 4).join(','), '30,40,50,60', 'and the VALUES are seconds — the label alone could say anything');
 
     /* ---------------------------------------------------------------- *
@@ -206,8 +223,8 @@ async function main(): Promise<void> {
     await toggle.click();
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'סיכום תזמון: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ · 06:30 – 23:30 · כל 25 דקות',
-      'AND TURNING IT BACK ON FINDS EVERYTHING EXACTLY AS IT WAS — "ההגדרות נשמרות", down to the six days and both times',
+      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ משעה 06:30 · כל 25 דקות',
+      'AND TURNING IT BACK ON FINDS EVERYTHING EXACTLY AS IT WAS — "ההגדרות נשמרות", down to the six days, the hour and the interval',
     );
     const afterToggle = (await changes()).at(-1)!;
     eq(afterToggle.days, [0, 1, 2, 4, 5, 6], 'and the schedule handed to the page still carries them, so nothing is lost on the way to the database');
@@ -218,10 +235,44 @@ async function main(): Promise<void> {
      *    like any other state.
      * ---------------------------------------------------------------- */
     for (const name of ['יום ראשון', 'יום שני', 'יום שלישי', 'יום חמישי', 'יום שישי', 'שבת']) await day(name).click();
-    eq((await summary()).replace(/\s+/g, ' ').trim(), 'סיכום תזמון: לא נבחר אף יום', 'with nothing chosen the panel says so instead of printing an empty list');
-    const stripe = await page.locator('[data-schedule] p').last().evaluate((e) => getComputedStyle(e).color);
+    eq((await summary()).replace(/\s+/g, ' ').trim(), 'ימי פרסום: לא נבחר אף יום', 'with nothing chosen the panel says so instead of printing an empty list');
+    const stripe = await page.locator('[data-schedule] [data-summary]').evaluate((e) => getComputedStyle(e).color);
     is(stripe !== 'rgb(109, 40, 217)', 'and it is not drawn in the ordinary purple — nothing will publish in this state');
     eq((await changes()).at(-1)!.days, [], 'and that is what would be written');
+
+    /* ---------------------------------------------------------------- *
+     * 5. "הפרסום הבא" — AND ITS COUNTDOWN, TICKING.
+     *
+     * "להציג ספירה לאחור שמתעדכנת בזמן אמת, בלי לבצע קריאות מיותרות לשרת."
+     *
+     * Both halves are checked here and nowhere else can check them: every
+     * other fixture in this suite is server-rendered HTML, where useEffect
+     * never runs and the block freezes on its first second. A frozen clock is
+     * indistinguishable from a live one in a screenshot.
+     * ---------------------------------------------------------------- */
+    const block = page.locator('[data-schedule] [data-next-publication]');
+    eq(await block.count(), 1, 'the panel draws the "הפרסום הבא" block when it is given a readout');
+    const blockText = await block.innerText();
+    is(blockText.startsWith('הפרסום הבא'), `the block leads with its own name — "${blockText.slice(0, 30)}"`);
+    is(/ בשעה \d{2}:\d{2}/.test(blockText), 'and names the hour the publication goes out');
+    is(/\d{2}\.\d{2}/.test(blockText), 'with the date beside it');
+    is(blockText.includes('באר שבע מדברת'), 'and the group it goes to');
+
+    const tick = () => page.locator('[data-schedule] [data-next-publication] p').nth(2).innerText();
+    const first = await tick();
+    is(/בעוד/.test(first), `the countdown is drawn — "${first}"`);
+    /* 1.2s, not 1.0: the interval fires on a 1000ms boundary and the read has
+       to land after one of them, not on it. */
+    await page.waitForTimeout(1200);
+    const second = await tick();
+    is(first !== second, `THE COUNTDOWN IS LIVE — it read "${first}" and still reads "${second}" a second later`);
+    /* AND IT COSTS NOTHING. The tick re-renders from an instant the component
+       was already handed; a block that re-fetched would be a request a second,
+       per card, on a screen the owner leaves open all day. */
+    is(
+      !/fetch\(|XMLHttpRequest/.test(readFileSync(new URL('../../src/components/social/NextPublication.tsx', import.meta.url), 'utf8')),
+      'and it reaches the network for none of it',
+    );
 
     eq(crashes, [], `the panel threw in the browser: ${crashes.join(' | ')}`);
     await page.close();

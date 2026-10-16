@@ -386,13 +386,24 @@ async function main(): Promise<void> {
     );
     is(/השיקו אותו פעם אחת/.test(panel), 'and it names the action that would fix it');
 
-    /* And the card footer stops reading as a lull. */
-    const card = readFileSync(new URL('../../src/components/social/CampaignCard.tsx', import.meta.url), 'utf8');
-    is(/הסבב עוד לא הושק/.test(card), 'NOT "אין פרסום ממתין" — that is true, reads as a lull, and nothing will end it');
-    is(
-      /state\.state === 'not_started' && state\.progress\.total === 0/.test(card),
-      'and it is decided by the round never having produced a row, not by a guess',
-    );
+    /* And the "next publication" block stops reading as a lull.
+
+       RE-POINTED TO <NextPublication>, which is the one block both the card
+       and the dashboard draw now. The sentence used to be spelled inside
+       CampaignCard's own footer and, separately, inside the dashboard's own
+       strip — two copies that had to be kept in step by hand. */
+    const nextPub = readFileSync(new URL('../../src/components/social/NextPublication.tsx', import.meta.url), 'utf8');
+    is(/הסבב עוד לא הושק/.test(nextPub), 'NOT "אין פרסומים מתוזמנים" — that is true, reads as a lull, and nothing will end it');
+    is(/neverLaunched \?: boolean;|neverLaunched\?: boolean;/.test(nextPub), 'and the block can be told so');
+    for (const [where, src] of [
+      ['the campaigns card', readFileSync(new URL('../../src/components/social/CampaignCard.tsx', import.meta.url), 'utf8')],
+      ['the dashboard run card', readFileSync(new URL('../../src/components/social/LiveCampaignHero.tsx', import.meta.url), 'utf8')],
+    ] as const) {
+      is(
+        /state\.state === 'not_started' && state\.progress\.total === 0/.test(src),
+        `${where} decides it by the round never having produced a row, not by a guess`,
+      );
+    }
   }
 
   console.log(`repeat rules OK — ${checks} assertions, decided by the real engine against a fake database`);

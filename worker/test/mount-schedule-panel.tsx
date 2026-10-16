@@ -26,6 +26,7 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CampaignSchedulePanel } from '@/components/social/CampaignSchedulePanel';
 import { DEFAULT_CAMPAIGN_SCHEDULE, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 
 declare global {
   interface Window {
@@ -33,6 +34,23 @@ declare global {
   }
 }
 window.__changes = [];
+
+/*
+ * A PUBLICATION A FEW MINUTES OUT, so "הפרסום הבא" has something to count
+ * down to.
+ *
+ * THE COUNTDOWN IS THE ONE THING IN THIS PRODUCT THAT ONLY EXISTS WITH REACT
+ * RUNNING. Every other fixture is renderToStaticMarkup: useEffect never fires
+ * there, so the block renders its first second and freezes — which measures
+ * the layout perfectly and proves nothing about "להציג ספירה לאחור
+ * שמתעדכנת בזמן אמת". Here the timer actually ticks, and the test reads the
+ * same element twice a second apart.
+ *
+ * Under an hour on purpose: the words branch ("בעוד שעתיים ו-10 דקות") only
+ * changes once a minute, which is longer than any test should sit. Below the
+ * hour the label is mm:ss and moves every second.
+ */
+const readout: ScheduleReadout = { kind: 'due', at: new Date(Date.now() + 4 * 60_000).toISOString() };
 
 function Harness() {
   /* The reference's own setting, switched on — the state the owner's screen
@@ -43,6 +61,9 @@ function Harness() {
       <CampaignSchedulePanel
         schedule={schedule}
         campaignName="ניקוי ספות באר שבע"
+        readout={readout}
+        workerOnline
+        nextTargetName="באר שבע מדברת"
         onChange={(next) => {
           window.__changes.push(next);
           setSchedule(next);

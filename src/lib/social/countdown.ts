@@ -1,3 +1,5 @@
+import { counted } from './time';
+
 /**
  * Time left until an instant, as the dashboard shows it: a live "בעוד 06:42".
  *
@@ -69,4 +71,56 @@ export function countdownTo(iso: string | null | undefined, now: number = Date.n
     late,
     overdue: late > OVERDUE_AFTER_SECONDS,
   };
+}
+
+/**
+ * "8 שעות ו-2 דקות" — the wait in words, for the one place that has room for
+ * them: the campaign card's "הפרסום הבא" block.
+ *
+ * "ומתחתיו: בעוד 8 שעות ו־2 דקות." A mm:ss clock is the right reading for a
+ * wait of minutes — it is what the queue list prints beside every row — and
+ * the wrong one for a wait of hours: "8:02:00" is three numbers the owner has
+ * to parse, and at a glance it reads as a time of day.
+ *
+ * NULL UNDER AN HOUR, deliberately, and that is the whole interface: the
+ * caller prints `label` (mm:ss, live to the second) when this returns null, so
+ * the short wait keeps its seconds and the long one loses digits nobody reads.
+ * A single function returning both would have to decide how to render the LTR
+ * island around the digits, which is the caller's job and not this file's.
+ */
+export function longWaitHe(c: Countdown): string | null {
+  const hours = Math.floor(c.seconds / 3600);
+  if (hours < 1) return null;
+  /*
+   * AND DAYS PAST TWO OF THEM. "בעוד 430 שעות" is arithmetic the owner has to
+   * do; a round planned for next week is "בעוד 17 ימים ו-22 שעות", which he
+   * can check against the date on the line above it. 48 hours is the
+   * changeover because "בעוד 36 שעות" is still a number anyone reads at a
+   * glance, and relativeHe() in time.ts draws the same line in the same place.
+   */
+  if (hours >= 48) {
+    const days = Math.floor(c.seconds / 86_400);
+    const rest = Math.floor((c.seconds % 86_400) / 3600);
+    return and(counted(days, 'יום', 'ימים', 'יומיים'), rest ? counted(rest, 'שעה', 'שעות', 'שעתיים') : '');
+  }
+  const minutes = Math.floor((c.seconds % 3600) / 60);
+  /* "8 שעות ו-0 דקות" is a number printed for the sake of the sentence's
+     shape. On the hour the hours are the whole answer. */
+  return and(counted(hours, 'שעה', 'שעות', 'שעתיים'), minutes ? counted(minutes, 'דקה', 'דקות', 'שתי דקות') : '');
+}
+
+/**
+ * "8 שעות ו-2 דקות", but also "שעה ודקה" and "שעתיים ושתי דקות".
+ *
+ * THE HYPHEN BELONGS TO THE DIGIT, NOT TO THE CONJUNCTION. Hebrew joins two
+ * words with a prefixed ו and no hyphen — "שעה ודקה". The hyphen appears only
+ * to separate the letter from a NUMERAL, as in "ו-2". counted() returns a bare
+ * word for one and for two ("דקה", "שתי דקות") and a digit-led phrase for
+ * everything else, so a fixed `ו-` produced "שעה ו-דקה" and "שעתיים ו-שתי
+ * דקות" — which is how a sentence tells a customer that nobody read the
+ * screen. The form is decided by what actually follows it.
+ */
+function and(first: string, second: string): string {
+  if (!second) return first;
+  return `${first} ${/^\d/.test(second) ? 'ו-' : 'ו'}${second}`;
 }

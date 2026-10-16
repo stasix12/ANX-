@@ -68,7 +68,7 @@ const at = (s: string): Date => new Date(`${s}${s >= '2026-03-27T02:00' && s < '
 const iso = (s: string): string => at(s).toISOString();
 
 /** HIS OWN SETTING, off the screenshot: Sunday–Thursday, 08:00–22:00. */
-const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', end: '22:00', gapSeconds: 60 };
+const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', gapSeconds: 60 };
 const off: CampaignSchedule = { ...ref, enabled: false };
 const noDays: CampaignSchedule = { ...ref, days: [] };
 
@@ -157,8 +157,8 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
    * sequence is — would push one campaign's rows out by the other's interval.
    */
   const now = at('2026-10-06T07:00');
-  const morning: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', end: '12:00', gapSeconds: 60 };
-  const evening: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '18:00', end: '22:00', gapSeconds: 600 };
+  const morning: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08:00', gapSeconds: 60 };
+  const evening: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '18:00', gapSeconds: 600 };
   const rows = [
     row('a1', iso('2026-10-06T07:10'), { campaign_id: 'A' }),
     row('b1', iso('2026-10-06T07:11'), { campaign_id: 'B' }),
@@ -273,21 +273,34 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
 
 /* ───────── 7. ACROSS THE WINDOW'S EDGE, AND ONTO THE NEXT DAY ───────── */
 {
-  const now = at('2026-10-06T21:50');
-  /* Three rows a minute apart at 21:58, under a window that shuts at 22:00:
-     two fit, the third rolls to Wednesday 08:00. */
-  const rows = [row('x1', iso('2026-10-06T21:58')), row('x2', iso('2026-10-06T21:59')), row('x3', iso('2026-10-06T22:00')), row('x4', iso('2026-10-06T22:01'))];
+  const now = at('2026-10-06T23:50');
+  /*
+   * THE EDGE IS MIDNIGHT NOW, not an hour the owner set: the closing time was
+   * removed from the product ("יש להסיר לחלוטין את אפשרות שעת הסיום"), so a
+   * chosen day runs to its own end. Four rows a minute apart across it: three
+   * fit, the fourth rolls to Wednesday's opening hour.
+   */
+  const rows = [row('x1', iso('2026-10-06T23:58')), row('x2', iso('2026-10-06T23:59')), row('x3', iso('2026-10-07T00:00')), row('x4', iso('2026-10-07T00:01'))];
   const projected = projectQueue(rows, { now, gates: { c1: { schedule: ref } }, spacing: NO_FLOOR });
-  eq(projected.get('x1'), iso('2026-10-06T21:58'), 'a row inside the window keeps its minute');
-  eq(projected.get('x2'), iso('2026-10-06T21:59'), 'and so does the next');
-  eq(projected.get('x3'), iso('2026-10-06T22:00'), 'the closing minute is inside the window');
-  eq(projected.get('x4'), iso('2026-10-07T08:00'), 'and the one past it opens tomorrow, not at 22:01');
+  eq(projected.get('x1'), iso('2026-10-06T23:58'), 'a row inside the day keeps its minute');
+  eq(projected.get('x2'), iso('2026-10-06T23:59'), 'and so does the last minute of it');
+  eq(projected.get('x3'), iso('2026-10-07T08:00'), 'MIDNIGHT BELONGS TO THE NEXT DAY, and waits for its opening hour');
+  /* One minute LATER than x3, not the same minute: the projection is strictly
+     increasing by the campaign's gap, or a roll would pile every held row onto
+     the opening minute — which the unique index would then reject all but one
+     of. */
+  eq(projected.get('x4'), iso('2026-10-07T08:01'), 'and so does the minute after it, one gap behind the row in front rather than going out at 00:01');
+
+  /* And the evening that used to roll now does not — this is the behaviour
+     the owner bought by removing the closing hour. */
+  const evening = projectQueue([row('e1', iso('2026-10-06T22:01'))], { now: at('2026-10-06T21:50'), gates: { c1: { schedule: ref } }, spacing: NO_FLOOR });
+  eq(evening.get('e1'), iso('2026-10-06T22:01'), 'a minute past ten at night keeps its own minute');
 
   /* THURSDAY NIGHT ROLLS TO SUNDAY, because Friday and Saturday are not his
      days. A queue that pretends otherwise is a weekend of "באיחור". */
-  const thu = at('2026-10-08T21:59');
-  const weekend = projectQueue([row('w1', iso('2026-10-08T23:00'))], { now: thu, gates: { c1: { schedule: ref } }, spacing: NO_FLOOR });
-  eq(weekend.get('w1'), iso('2026-10-11T08:00'), 'past Thursday’s window the next instant is Sunday morning');
+  const thu = at('2026-10-08T23:59');
+  const weekend = projectQueue([row('w1', iso('2026-10-09T01:00'))], { now: thu, gates: { c1: { schedule: ref } }, spacing: NO_FLOOR });
+  eq(weekend.get('w1'), iso('2026-10-11T08:00'), 'past Thursday the next instant is Sunday morning');
 }
 
 /* ───────── 8. THE WRITERS' ROLL: deterministic, increasing, identity ───── */
@@ -420,10 +433,10 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
      window" rather than as a default one that stops the queue. */
   eq(readSchedule({}).enabled, false, 'a campaign row with no schedule columns is not gated');
   eq(readSchedule(null).enabled, false, 'and neither is no row at all');
-  eq(readSchedule({ schedule_enabled: true, schedule_days: [6], schedule_start: '19:00', schedule_end: '23:30', schedule_gap_seconds: 30 }).days, [6], 'Saturday alone is a legal week');
+  eq(readSchedule({ schedule_enabled: true, schedule_days: [6], schedule_start: '19:00', schedule_gap_seconds: 30 }).days, [6], 'Saturday alone is a legal week');
   /* HIS SATURDAY. "הפעלתי שיעבוד גם ביום שבת היום ב-7 בערב" — a row stamped
      Saturday 19:00 under a Saturday-only window is left exactly where it is. */
-  const sat: CampaignSchedule = { enabled: true, days: [6], start: '19:00', end: '23:30', gapSeconds: 30 };
+  const sat: CampaignSchedule = { enabled: true, days: [6], start: '19:00', gapSeconds: 30 };
   eq(
     projectOne({ scheduledAt: iso('2026-10-10T19:00'), gate: { schedule: sat }, now: at('2026-10-10T18:00') })?.toISOString(),
     iso('2026-10-10T19:00'),
@@ -558,7 +571,7 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
    * is not what moving an hour means.
    */
   const from = [iso('2026-10-12T00:01'), ...Array.from({ length: 10 }, (_, i) => iso(`2026-10-12T08:0${i}`))];
-  const window10: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4, 6], start: '10:00', end: '23:30', gapSeconds: 60 };
+  const window10: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4, 6], start: '10:00', gapSeconds: 60 };
   const floor = new Date(at('2026-10-11T18:53').getTime() + 60_000);
   /* Exactly what rescheduleCampaignQueue computes: the window's opening on the
      day the round is set for, then that instant plus the gap, then the roll. */

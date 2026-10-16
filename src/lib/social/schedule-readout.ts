@@ -68,8 +68,20 @@ export type ScheduleReadout =
   | { kind: 'ended'; stopped: boolean; repeats: boolean }
   /** Rows are waiting — on him, not on the clock. */
   | { kind: 'manual'; waiting: number }
-  /** Held by the owner's own pause. No instant: the engine publishes none. */
-  | { kind: 'paused' }
+  /**
+   * Held by the owner's own pause.
+   *
+   * `at` is the minute the head row is PLANNED for, and it is not a promise:
+   * rules.ts hands every row of a paused round straight back on each poll, so
+   * that minute arrives and passes with the queue untouched. The card labels
+   * it as planned and draws no countdown over it — "אם הקמפיין מושהה, יש
+   * להציג את המועד המתוכנן לצד סטטוס מושהה, בלי להציג אותו כפרסום שעומד
+   * להתבצע."
+   *
+   * Null when nothing is queued at all, which is a paused round with an empty
+   * queue — there is no planned minute to name.
+   */
+  | { kind: 'paused'; at: string | null }
   /** Nothing queued and the window is open: until when it would be allowed. */
   | { kind: 'window-open'; until: string }
   /** Nothing queued and the window is shut: when it next opens. */
@@ -138,7 +150,12 @@ export type ScheduleReadout =
 
 export function scheduleReadout(
   schedule: CampaignSchedule | null | undefined,
-  state: Pick<CampaignState, 'state' | 'nextAt' | 'done' | 'progress'> & { truncated?: boolean; nextChannel?: string | null },
+  state: Pick<CampaignState, 'state' | 'nextAt' | 'done' | 'progress'> & {
+    truncated?: boolean;
+    nextChannel?: string | null;
+    /** The round's own most recent publication — see projectedAt. */
+    lastPublishedAt?: string | null;
+  },
   now: Date = new Date(),
   repeat: CampaignRepeat = DEFAULT_CAMPAIGN_REPEAT,
   spacing: AccountSpacing = NO_SPACING,
@@ -198,38 +215,24 @@ export function scheduleReadout(
    * untouched, which is the same fault as the 22:00 and harder to notice,
    * because the time it shows is real and merely never happens.
    */
-  if (state.state === 'paused') return { kind: 'paused' };
+  if (state.state === 'paused') {
+    /*
+     * THE PLANNED MINUTE, RESOLVED THE SAME WAY A LIVE ONE IS.
+     *
+     * Through projectOne, not off the raw column: the brief asks for "המועד
+     * המתוכנן", and the stored stamp is not it — it is the stamp before the
+     * window, the campaign's gap and the account floor have had their say. A
+     * paused card showing 23:40 beside a resumed card showing 08:00 for the
+     * same row would be the two states of one screen disagreeing.
+     */
+    return { kind: 'paused', at: (state.nextAt ? projectedAt(state, schedule, on, spacing, now) : null)?.toISOString() ?? null };
+  }
 
   if (state.nextAt) {
-    /*
-     * ALL FOUR GATES, FROM THE ONE PLACE THAT COMPOSES THEM.
-     *
-     * This card and the dashboard's "הפרסומים הקרובים" list are two readers of
-     * the same queue, and they disagreed about every row in it: this one asked
-     * the schedule and the list rendered `scheduled_at` straight out of the
-     * column. projectOne() is now the only copy of the composition — stored
-     * instant, account floor, campaign gap, then the window — so the two
-     * cannot drift again. See ./projection.
-     *
-     * 2 — null means one thing only: no day is selected, so the row is held
-     *     indefinitely. The stored instant may NOT be printed over it.
-     */
-    const at = projectOne({
-      scheduledAt: state.nextAt,
-      channel: state.nextChannel ?? null,
-      gate: {
-        schedule: on ? schedule : null,
-        /* THIS campaign's own last publication — what its own gap is measured
-           from. `spacing.lastPublishedAt` is the account's and is a different
-           number; handing one where the other belongs is how a card ends up
-           waiting out another campaign's interval. */
-        lastPublishedAt: state.done.find((r) => r.published_at)?.published_at ?? null,
-      },
-      spacing,
-      now,
-    });
+    const at = projectedAt(state, schedule, on, spacing, now);
     return at ? { kind: 'due', at: at.toISOString() } : { kind: 'no-day' };
   }
+
 
   /*
    * AND HERE IS WHERE A CAPPED READ RUNS OUT OF THINGS IT KNOWS. Everything
@@ -259,4 +262,53 @@ export function scheduleReadout(
     if (opens) return { kind: 'window-next', opens: opens.toISOString() };
   }
   return { kind: 'none' };
+}
+
+/**
+ * THE QUEUED INSTANT, RESOLVED THE WAY THE ENGINE WILL RESOLVE IT — the one
+ * copy of that call, now that two branches above need it.
+ *
+ * ALL FOUR GATES, FROM THE ONE PLACE THAT COMPOSES THEM. This card and the
+ * dashboard's "הפרסומים הקרובים" list are two readers of the same queue, and
+ * they disagreed about every row in it: this one asked the schedule and the
+ * list rendered `scheduled_at` straight out of the column. projectOne() is the
+ * only copy of the composition — stored instant, account floor, campaign gap,
+ * then the window — so the two cannot drift again. See ./projection.
+ *
+ * NULL MEANS ONE THING ONLY: no day is selected, so the row is held
+ * indefinitely and the stored instant may NOT be printed over it.
+ */
+function projectedAt(
+  state: Pick<CampaignState, 'nextAt' | 'done'> & { nextChannel?: string | null; lastPublishedAt?: string | null },
+  schedule: CampaignSchedule | null | undefined,
+  on: boolean,
+  spacing: AccountSpacing,
+  now: Date,
+): Date | null {
+  return projectOne({
+    scheduledAt: state.nextAt as string,
+    channel: state.nextChannel ?? null,
+    gate: {
+      schedule: on ? schedule : null,
+      /*
+       * THIS campaign's own last publication — what its own gap is measured
+       * from. `spacing.lastPublishedAt` is the ACCOUNT's and is a different
+       * number; handing one where the other belongs is how a card ends up
+       * waiting out another campaign's interval.
+       *
+       * `state.lastPublishedAt` FIRST, AND `done` ONLY AS A FALLBACK. The
+       * dashboard builds the queue list's gates from `state.lastPublishedAt`
+       * — the v27 view's own lifetime max() — while this read `done`, which
+       * is a capped, TODAY-SCOPED preview. For a row stamped yesterday and
+       * published today the two disagree, and then the card and the
+       * "ממתינים" list promise two different minutes for one row: exactly
+       * the fault "אסור שהתקלה הזאת תחזור" names. `done` survives as the
+       * answer for a caller whose state predates the view (the two test
+       * harnesses, and a database that has not run social-latest.sql).
+       */
+      lastPublishedAt: state.lastPublishedAt ?? state.done.find((r) => r.published_at)?.published_at ?? null,
+    },
+    spacing,
+    now,
+  });
 }

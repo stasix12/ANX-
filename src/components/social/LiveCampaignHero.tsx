@@ -541,6 +541,14 @@ export function LiveCampaignHero({
           editing={editingSchedule}
           readout={readout}
           campaignName={campaign.name}
+          /* So the block under it can withdraw its own promise when the PC
+             that does the publishing is not connected: "אם המחשב מנותק, יש
+             להציג אזהרת חיבור, בלי להבטיח שהפרסום יצא במועד." */
+          workerOnline={workerOnline}
+          /* Neither the window nor the daily repeat can produce a publication
+             on a round that has never gone out — the block says so instead of
+             reporting a lull. Same expression the editor below is handed. */
+          neverLaunched={state.state === 'not_started' && state.progress.total === 0}
           disabled={scheduleBusy}
         />
       )}

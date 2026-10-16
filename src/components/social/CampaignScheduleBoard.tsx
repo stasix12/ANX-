@@ -1,31 +1,27 @@
 'use client';
 
 import { CalendarIcon, ClockIcon, RepeatIcon } from '@/components/icons';
+import { NextPublication } from './NextPublication';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 import {
   DAY_LABELS,
   DAY_NAMES,
-  dayRelativeHe,
   daysLabel,
   gapLabel,
   type CampaignSchedule,
 } from '@/lib/social/campaign-schedule';
-import { counted, formatDateHe, formatInstantHe } from '@/lib/social/time';
-
-/**
- * THE FIGURE SHRINKS RATHER THAN LOSING ITS SECONDS.
- *
- * At a sub-minute gap the stamp is 10:00:30, and those seconds are not
- * decoration: a strip reading 10:00 over a list reading 10:00:30 is this
- * product's oldest failure shape, one screen disagreeing with another about
- * one row. But 22px tabular digits do not fit eight characters at 360px —
- * worker/test/dashboard-hero.test.ts measured it rather than anyone guessing.
- *
- * So the glance gives up four pixels and keeps the truth. A whole-minute
- * round is five characters and is untouched.
- */
-const instantSize = (iso: string): string => (formatInstantHe(iso).length > 5 ? 'text-[18px]' : 'text-[22px]');
 import { Toggle } from './ui';
+
+/*
+ * THE SECONDS AND THE SHRINKING FIGURE MOVED WITH THE STRIP.
+ *
+ * `instantSize` used to live here: at a sub-minute gap the stamp is 10:00:30,
+ * and 22px tabular digits do not fit eight characters at 360px — measured by
+ * worker/test/dashboard-hero.test.ts rather than guessed. The next
+ * publication is drawn by <NextPublication> now, on both screens, and its
+ * sentence sets the instant at a size that holds the seconds at every width,
+ * so there is nothing left here to scale.
+ */
 
 /**
  * "תזמון פרסום" AND "הפרסום הבא יתחיל ב:" — the two blocks the owner's
@@ -65,6 +61,8 @@ export function CampaignScheduleBoard({
   onEdit,
   readout,
   campaignName,
+  workerOnline,
+  neverLaunched = false,
   disabled = false,
   editing = false,
 }: {
@@ -93,6 +91,15 @@ export function CampaignScheduleBoard({
   readout: ScheduleReadout;
   /** For the accessible names — the dashboard draws one of these, lists draw many. */
   campaignName: string;
+  /**
+   * Whether the PC that publishes has sent a heartbeat — passed straight
+   * through to <NextPublication>, which draws the connection caveat under the
+   * instant rather than instead of it. Undefined means not known and draws
+   * nothing.
+   */
+  workerOnline?: boolean;
+  /** The round has never gone out — passed through to <NextPublication>. */
+  neverLaunched?: boolean;
   disabled?: boolean;
   /** Whether the editor below is open, for the boxes' aria-expanded. */
   editing?: boolean;
@@ -153,7 +160,7 @@ export function CampaignScheduleBoard({
           Measured at 360, 390 and 430 by worker/test/dashboard-hero.test.ts,
           which fails on a single clipped character in any of them.
         */}
-        <div className="mt-1.5 grid grid-cols-2 gap-1 [&>*]:min-w-0 @[300px]:grid-cols-[1.51fr_1fr_1.19fr]">
+        <div className="mt-1.5 grid grid-cols-2 gap-1 [&>*]:min-w-0 @[300px]:grid-cols-[1.6fr_1.1fr_1fr]">
           <Box
             label="ימי פרסום"
             aria={`ימי פרסום: ${daysLabel(schedule)}. פתיחת עריכת התזמון של ${campaignName}`}
@@ -211,8 +218,11 @@ export function CampaignScheduleBoard({
           </Box>
 
           <Box
-            label="הפרש בין פוסטים"
-            aria={`הפרש בין פוסטים: ${gapLabel(schedule)}. פתיחת עריכת התזמון של ${campaignName}`}
+            /* "הפרש בין פרסומים", the words the second reference image uses
+               and the words the editor under this block uses. They were
+               "פוסטים" here and "פוסט לפוסט" there, for one setting. */
+            label="הפרש בין פרסומים"
+            aria={`הפרש בין פרסומים: ${gapLabel(schedule)}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}
             editing={editing}
@@ -224,8 +234,8 @@ export function CampaignScheduleBoard({
           </Box>
 
           <Box
-            label="שעות פרסום"
-            aria={`שעות פרסום: ${schedule.start} עד ${schedule.end}. פתיחת עריכת התזמון של ${campaignName}`}
+            label="שעת התחלה"
+            aria={`שעת התחלה: ${schedule.start}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}
             editing={editing}
@@ -233,23 +243,46 @@ export function CampaignScheduleBoard({
             <span className="flex w-full min-w-0 items-center justify-center gap-[3px]">
               <ClockIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />
               {/*
-                ITS OWN LTR ISLAND. "08:00 – 22:00" is two European number runs
-                around a neutral dash: inside an RTL line the bidi algorithm
-                renders it "22:00 – 08:00", end time first. `dir="auto"` does
-                not fix it — the string has no strong character, so auto falls
-                back to the RTL that caused it. "מספרים ושעות חייבים להופיע
-                 נכון... ולא להתהפך בגלל RTL."
+                ITS OWN LTR ISLAND. "09:00" is a European number run around a
+                neutral colon, and `dir="auto"` cannot help it — the string has
+                no strong character, so auto falls back to the RTL that caused
+                the problem. "מספרים ושעות חייבים להופיע נכון... ולא להתהפך
+                 בגלל RTL."
+
+                ONE HOUR, NOT TWO. It read "08:00 – 22:00" until the closing
+                hour was removed from the product: "יש להסיר לחלוטין את אפשרות
+                שעת הסיום מממשק הכרטיס." A chosen day now runs from this hour
+                to midnight.
               */}
               <span data-must-fit dir="ltr" className="min-w-0 truncate text-[11px] font-extrabold leading-4 tabular-nums text-mist-100">
-                {schedule.start} – {schedule.end}
+                {schedule.start}
               </span>
             </span>
           </Box>
         </div>
       </div>
 
-      {/* ─── "הפרסום הבא יתחיל ב:" — its own container, as the image draws it ── */}
-      <NextPublishStrip readout={readout} scheduleOn={schedule.enabled} />
+      {/*
+        ─── "הפרסום הבא" — THE SHARED BLOCK, not this file's own any more ───
+
+        "בעבר היו פערים בין השעות שהוצגו בכרטיס הקמפיין לבין השעות שהופיעו
+         במסך ממתינים. אסור שהתקלה הזאת תחזור."
+
+        This file used to carry its own three-column strip and the campaigns
+        list carried a two-line version of the same thing. The INSTANT was
+        already shared — both read a ScheduleReadout — but the words around it
+        were not, so a state added to one of them reached the other only when
+        somebody remembered. They are one component now, and the live
+        countdown the brief asks for ("ומתחתיו: בעוד 8 שעות ו־2 דקות") arrived
+        on both screens at once because of it.
+      */}
+      <NextPublication
+        readout={readout}
+        scheduleOn={schedule.enabled}
+        workerOnline={workerOnline}
+        neverLaunched={neverLaunched}
+        className="mt-1.5"
+      />
     </div>
   );
 }
@@ -302,243 +335,5 @@ function Box({
           in this file, so "auto" resolves to the RTL they already had. */}
       <span data-must-fit dir="auto" className="w-full truncate text-[9px] font-bold leading-3 text-mist-300">{label}</span>
     </button>
-  );
-}
-
-/**
- * The strip under the block: when the next publication actually lands.
- *
- * "⚠️ זה חלק חשוב מאוד... בצד ימין 'הפרסום הבא יתחיל ב:', במרכז ובולט מאוד
- *  08:10, בצד שמאל 01.10.2026 ומתחת מחר (חמישי)."
- *
- * THE INSTANT IS THE ENGINE'S, NOT A GUESS. The card hands it over already
- * resolved by nextPublishAt() — gap first, then the window, then the next
- * chosen day — which is the same call rules.ts makes before it releases a row.
- * So "אם עכשיו 21:55 וה-Interval 10 דקות ושעת הסיום 22:00" does not print
- * 22:05: nextAllowedAt() walks to the next chosen day and returns its start.
- *
- * AND WHEN THERE IS NO INSTANT IT SAYS SO, in the words the brief gives for
- * it, rather than printing the last one it knew: "אל תציג זמן שגוי או זמן
- *  ישן." Three different nothings, because they need three different answers —
- * no day chosen (a setting), nothing queued (a finished round), and a round
- * that is simply waiting.
- */
-function NextPublishStrip({ readout, scheduleOn }: { readout: ScheduleReadout; scheduleOn: boolean }) {
-  /*
-   * A WINDOW IS NOT AN EVENT, AND THE RUN DECIDES WHICH OF THE TWO THIS IS.
-   *
-   * "למה זה מראה לי שסבב פרסום מתחיל ב-22:00? מה זה כל הבאגים האלה של
-   *  התזמונים!"
-   *
-   * Because every instant this strip had to offer came out of the SCHEDULE,
-   * and a schedule does not know whether anything is left to publish. His
-   * round had finished — 219 of 219 handled — so there was no publication to
-   * constrain and no instant at which anything would happen; the strip printed
-   * the window's closing time anyway, in the place where a publication time
-   * goes, and he read it the only way it can be read.
-   *
-   * THE RULE THIS NOW FOLLOWS, and the one the last three fixes to this strip
-   * were each half of: print a time only when something will happen at it.
-   * Everything below is that rule applied to the states a campaign can be in,
-   * in the order the states outrank each other:
-   *
-   *   a publication is queued      → when it goes out          (an event)
-   *   no day chosen                → the setting that holds it
-   *   THE ROUND IS OVER            → it is over, and nothing is coming
-   *   rows waiting for a person    → they are waiting for HIM, not the clock
-   *   nothing queued, window open  → until when it may, if he starts one
-   *   nothing queued, window shut  → when it next may
-   *   nothing at all               → "לא מתוזמן"
-   *
-   * THIS LIST HAS GROWN THREE TIMES AND ALWAYS THE SAME WAY: a state that was
-   * being served by a neighbour's words. "אין פרסום ממתין" was added when a
-   * finished round borrowed the sentence a queued one uses; "פתוח עד" when an
-   * already-open window was announced as the next one; and these two now,
-   * because a window was being offered as an answer in states where no answer
-   * about time exists. Each was a true number under a false sentence, which is
-   * the only way this strip has ever failed.
-   */
-  /*
-   * ONE VALUE, SEVEN SHAPES, AND NO ARITHMETIC LEFT IN THIS FILE.
-   *
-   * The contradictions this strip kept producing — a window edge in the place a
-   * publication time goes, and nearly "הסבב הסתיים" over a publication time —
-   * were the same kind of fault twice: two expressions reading different halves
-   * of the state and agreeing only by luck. A discriminated union cannot do
-   * that. The label, the figure and the note below are three views of ONE
-   * decision, and a state that has no instant has no way to produce one.
-   */
-  const over = readout.kind === 'ended';
-  const manual = readout.kind === 'manual';
-  const paused = readout.kind === 'paused';
-  const partial = readout.kind === 'partial';
-  const noDay = readout.kind === 'no-day';
-  const openNow = readout.kind === 'window-open';
-  const isWindow = openNow || readout.kind === 'window-next';
-  const shown =
-    readout.kind === 'due'
-      ? readout.at
-      : readout.kind === 'window-open'
-        ? readout.until
-        : readout.kind === 'window-next'
-          ? readout.opens
-          : null;
-  return (
-    <div
-      /*
-       * STILL A LAVENDER CONTAINER WHEN SOMETHING IS WRONG, one shade lighter.
-       *
-       * Two measured facts decide this line. The warning state cannot keep the
-       * 20% tint: this theme's warning-400 is a dark amber (#b54708) and over
-       * brand-300 at 20% it measures 4.21:1, under the 4.5 AA asks of 12px
-       * text. And it cannot drop to white either, which is what it did for one
-       * commit — white IS the card, so the container the reference draws
-       * vanished exactly on the card that had something to say. At 10% the
-       * same amber is 4.80 and the block is still a block.
-       */
-      className={`mt-1.5 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-2xl px-3 py-2 ${
-        noDay ? 'bg-brand-300/10' : 'bg-brand-300/20'
-      }`}
-    >
-      <span data-must-fit className={`whitespace-nowrap text-[12px] font-bold leading-4 ${noDay ? 'text-warning-400' : 'text-brand-400'}`}>
-        {over ? (
-          /*
-           * THE ROUND IS OVER, AND THAT IS THE WHOLE ANSWER. No time, because
-           * there is no instant: a finished round does not restart itself, and
-           * the words say so where the clock used to be.
-           *
-           * BOTH LINES HERE RATHER THAN ONE EACH SIDE OF THE MIDDLE COLUMN.
-           * Measured: at 360px "אין פרסום מתוזמן" in the centre, squeezed
-           * between this label and the note at the end, clipped to "אין פרסום
-           * מתוז…" — and a sentence about nothing happening, cut off, is
-           * exactly the kind of half-read line this card keeps being fixed
-           * for. Stacked, they are one statement in one column and the centre
-           * is free to be what it honestly is: empty.
-           */
-          <>
-            <span className="block">{readout.kind === 'ended' && readout.stopped ? 'הסבב הופסק' : 'הסבב הסתיים'}</span>
-            <span className="block text-mist-300">אין פרסום מתוזמן</span>
-          </>
-        ) : paused ? (
-          /* The owner's own pause. rules.ts hands every row of a paused round
-             straight back, so there is no instant — the stored one would be a
-             countdown to a moment that arrives and passes untouched. */
-          'הסבב מושהה'
-        ) : partial ? (
-          'ספירה מקורבת'
-        ) : manual ? (
-          'ממתין לטיפול ידני'
-        ) : isWindow ? (
-          /* TWO LINES, AND BOTH OF THEM MATTER. The first is why there is no
-             publication to name; the second is what the figure beside it IS.
-             Dropping either one is how this strip would start lying: without
-             the first it promises a publication, without the second it leaves
-             a bare time with nothing saying what happens at it. */
-          <>
-            <span className="block text-mist-300">אין פרסום ממתין</span>
-            {/* "הבא" vs "פתוח עד" is the whole of the 4.0.1 fix, and it is in
-                the words rather than the layout: the figure beside it is a
-                window edge either way, and which edge it is is the only thing
-                that tells him whether he is waiting or has time left. */}
-            <span className="block">{openNow ? 'חלון הפרסום פתוח עד:' : 'חלון הפרסום הבא:'}</span>
-          </>
-        ) : (
-          'הפרסום הבא יתחיל ב:'
-        )}
-      </span>
-
-      <span className="min-w-0 text-center">
-        {noDay ? (
-          /* The switch is on and no day is lit, so the queue is held — by
-             design (rules.ts defers, it never drops) and indefinitely. The
-             strip says the cause, because the fix is two taps above it. */
-          <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">לא נבחר יום פרסום</span>
-        ) : over ? (
-          /*
-           * EMPTY, AND THAT IS THE ANSWER TO HIS QUESTION.
-           *
-           * "הקמפיין פעיל, אמור לצאת כל יום" — it is not. The schedule is a
-           * WINDOW on a round that is running, not a recurrence: when a round
-           * ends nothing publishes again until he opens the next one, and no
-           * amount of "פעיל" on the switch above changes that. This column is
-           * where the 22:00 was, and the only honest thing to put in it is
-           * nothing. The words are in the label beside it.
-           */
-          null
-        ) : paused ? (
-          <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">אין פרסום עד שתמשיכו</span>
-        ) : partial ? (
-          /* No instant exists, and the label beside it already says the count
-             is approximate. A second sentence saying the same thing in the
-             same strip was the duplicate the owner pointed at — the `over`
-             branch above leaves this column empty for the same reason. */
-          null
-        ) : manual ? (
-          <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-warning-400">
-            {readout.kind === 'manual' && counted(readout.waiting, 'פרסום אחד ממתין לך', 'פרסומים ממתינים לך', 'שני פרסומים ממתינים לך')}
-          </span>
-        ) : shown ? (
-          /*
-           * THE FIGURE SHRINKS RATHER THAN LOSING ITS SECONDS.
-           *
-           * At a sub-minute gap the instant is 10:00:30, and two eight-character
-           * figures per printed minute is the whole point — a strip reading
-           * 10:00 over a list reading 10:00:30 is this product's oldest failure
-           * shape, one screen disagreeing with another about one row. But
-           * 22px tabular digits do not fit eight characters at 360px; the
-           * measured guard proved it rather than anyone guessing.
-           *
-           * So the glance keeps the precision and gives up four pixels. A
-           * whole-minute round is five characters and is untouched.
-           */
-          <span data-must-fit dir="ltr" className={`block truncate leading-7 font-extrabold tabular-nums text-brand-400 ${instantSize(shown)}`}>
-            {formatInstantHe(shown)}
-          </span>
-        ) : (
-          <span data-must-fit className="block truncate text-[12px] font-extrabold leading-5 text-mist-300">לא מתוזמן</span>
-        )}
-      </span>
-
-      {/* The date, and under it the day in the words the owner reads his own
-          week in. Empty when there is no instant — a date with no time beside
-          it would be the screen filling a gap with something. */}
-      <span className="text-end">
-        {over && (
-          /*
-           * AND WHAT THE SETTING ABOVE ACTUALLY DOES NOW — the other half of
-           * his misunderstanding. The three boxes still read "א׳ ב׳ ג׳ ד׳ ה׳ ·
-           * 08:00 – 22:00 · כל דקה" over a finished round, and with no line
-           * like this one they read as a promise about today. They are the
-           * terms the NEXT round will run under, which is a true and useful
-           * thing to say, and the button that starts it is directly below.
-           */
-          <span
-            data-must-fit
-            className={`block text-[10px] font-bold leading-[13px] ${
-              readout.kind === 'ended' && readout.repeats ? 'text-warning-400' : 'text-mist-300'
-            }`}
-          >
-            {readout.kind === 'ended' && readout.repeats
-              ? /* CHZARA IS ON, so another round IS coming — and it says so in
-                   the amber it is set in everywhere else, because a round that
-                   re-publishes the same post to the same groups on its own is
-                   the one state on this card worth noticing from across a
-                   room. */
-                'חזרה יומית פעילה — הסבב הבא ייפתח לבד'
-              : scheduleOn
-                ? 'התזמון יחול על הסבב הבא'
-                : 'התזמון כבוי'}
-          </span>
-        )}
-        {shown && (
-          <>
-            <span data-must-fit dir="ltr" className="block text-[12px] font-extrabold leading-4 tabular-nums text-brand-400">
-              {formatDateHe(shown)}
-            </span>
-            <span data-must-fit className="block text-[10px] font-bold leading-[13px] text-mist-300">{dayRelativeHe(new Date(shown))}</span>
-          </>
-        )}
-      </span>
-    </div>
   );
 }

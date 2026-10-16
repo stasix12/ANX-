@@ -1529,6 +1529,19 @@ alter table public.social_campaigns
 alter table public.social_campaigns
   add column if not exists schedule_end text not null default '22:00';
 
+-- schedule_end IS NO LONGER READ BY ANYTHING, and it is kept anyway.
+--
+-- "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק הכרטיס... להשאיר רק: שעת
+--  התחלת הפרסום, הפרש בין פרסום לפרסום, ימי הפרסום שנבחרו."
+--
+-- A chosen day now runs from schedule_start to local midnight. readSchedule()
+-- stopped reading this column and scheduleColumns() stopped writing it, so
+-- every value already stored survives untouched — "אסור למחוק מידע" — and a
+-- rollback reads the old hours straight back out. Dropping it would make that
+-- impossible and would gain nothing: it is one text column per campaign.
+comment on column public.social_campaigns.schedule_end is
+  'DISUSED since the closing hour was removed from the product. A publishing day runs from schedule_start to local midnight. Kept, unread and unwritten, so the hours each campaign used to be set to are not lost.';
+
 alter table public.social_campaigns
   add column if not exists schedule_gap_minutes smallint not null default 10;
 

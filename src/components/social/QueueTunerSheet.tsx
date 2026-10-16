@@ -10,6 +10,7 @@ import {
   matchAccountGapTo,
   getLimits,
   listTargets,
+  lastPublishedAt,
   liveQueuePlan,
   removeTargetFromQueue,
   respaceQueue,
@@ -17,7 +18,7 @@ import {
   type LiveQueuePlan,
 } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
-import { windowedCascade } from '@/lib/social/projection';
+import { accountFloorMs, spacingFrom, windowedCascade } from '@/lib/social/projection';
 import { readSchedule, scheduleColumns, type CampaignSchedule, MIN_GAP_SECONDS, gapChoiceLabel } from '@/lib/social/campaign-schedule';
 import { agree, counted, formatDayMonthHe, formatInstantHe, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
 import type { BrowserSettings, Campaign, LimitsSettings, SocialTarget } from '@/lib/social/types';
@@ -181,6 +182,21 @@ interface Snapshot {
   campaign: Campaign | null;
   /** Real publications already out today, from countPublishedSince(). */
   publishedToday: number;
+  /**
+   * THE ACCOUNT'S OWN LAST PUBLICATION — the second floor this preview was
+   * missing.
+   *
+   * rules.ts holds a row for the LATER of two intervals: the campaign's own
+   * gap and `minGap + groupMinGap` across the whole account. This sheet
+   * applied the first and not the second, so the "הפרסום הבא" it printed
+   * could be up to an hour earlier than the one on the card that opened it —
+   * two screens disagreeing about one row, which is the fault
+   * "בעבר היו פערים בין השעות שהוצגו בכרטיס הקמפיין לבין השעות שהופיעו במסך
+   *  ממתינים. אסור שהתקלה הזאת תחזור" names.
+   *
+   * Null when it cannot be read, which is what the preview assumed all along.
+   */
+  accountLastPublishedAt: string | null;
   /** The instant the snapshot was taken — keeps the preview from twitching. */
   at: number;
 }
@@ -221,18 +237,30 @@ export function QueueTunerSheet({
     async (keepGapDraft: boolean) => {
       setError(null);
       try {
-        const [plan, all, limits, browser, publishedToday, campaign] = await Promise.all([
+        const [plan, all, limits, browser, publishedToday, accountLast, campaign] = await Promise.all([
           liveQueuePlan(scope),
           listTargets(),
           getLimits(),
           getBrowserSettings(),
           countPublishedSince(startOfZonedDay(new Date()).toISOString()),
+          /* Fails soft, like the campaign read below it: no account floor is
+             the preview this sheet drew before, not a broken sheet. */
+          lastPublishedAt().catch(() => null),
           /* One row, and only when this sheet is scoped to a round — see
              Snapshot.window. A failure here must not fail the sheet: no window
              means the preview is the flat sequence, which is what it was. */
           campaignId ? getCampaign(campaignId).catch(() => null) : Promise.resolve(null),
         ]);
-        setSnap({ plan, limits, browser, publishedToday, window: campaign ? readSchedule(campaign) : null, campaign, at: Date.now() });
+        setSnap({
+          plan,
+          limits,
+          browser,
+          publishedToday,
+          accountLastPublishedAt: accountLast,
+          window: campaign ? readSchedule(campaign) : null,
+          campaign,
+          at: Date.now(),
+        });
         setTargets(all);
         // The dashboard behind this sheet reloads every 30s and the countdown
         // re-renders every second; a draft the owner is in the middle of
@@ -330,7 +358,24 @@ export function QueueTunerSheet({
    */
   const currentProjected = useMemo(() => {
     if (rows.length === 0) return [] as string[];
-    const bases = rows.map((r) => new Date(Math.max(Date.parse(r.scheduled_at) || 0, snap?.at ?? Date.now())));
+    /*
+     * BOTH FLOORS, NOT ONE. `windowedCascade` applies the campaign's window
+     * and its own gap; the account-wide interval — `minGap + groupMinGap`,
+     * sixty-five minutes out of the box — is measured from the account's last
+     * publication and is a separate gate that rules.ts takes the max of.
+     *
+     * This preview applied only the first, so the sheet the card opens could
+     * promise an hour earlier than the card itself. accountFloorMs is the same
+     * arithmetic projectOne() runs for every other screen; 'facebook_group'
+     * because the surcharge exists for groups and this product publishes to
+     * groups.
+     */
+    const since = snap?.accountLastPublishedAt ? Date.parse(snap.accountLastPublishedAt) : NaN;
+    const accountFloor = Number.isFinite(since)
+      ? since + accountFloorMs(spacingFrom(snap!.limits, snap!.browser, snap!.accountLastPublishedAt), 'facebook_group')
+      : 0;
+    const floor = Math.max(snap?.at ?? Date.now(), accountFloor);
+    const bases = rows.map((r) => new Date(Math.max(Date.parse(r.scheduled_at) || 0, floor)));
     return windowedCascade(bases, snap?.plan.effectiveGapSeconds ?? gap, snap?.window ?? null).map((d) => d.toISOString());
   }, [rows, snap, gap]);
 

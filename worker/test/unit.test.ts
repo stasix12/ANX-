@@ -35,7 +35,7 @@ import {
   summarizeQueue,
 } from '@/lib/social/status';
 import type { QueueStatus } from '@/lib/social/types';
-import { countdownTo, OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
+import { countdownTo, longWaitHe, OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { friendlyMessage, GENERIC_ERROR, LATEST_SCHEMA_FILE } from '@/lib/social/errors';
 import { renderPostText } from '@/lib/social/compose';
 import { safeError } from '../db';
@@ -349,6 +349,42 @@ console.log('unit tests OK');
   assert.equal(stale?.due, true);
   assert.equal(stale?.late, 6 * 3600, 'six hours late is six hours late');
   assert.equal(stale?.overdue, true, 'the PC-is-switched-off state must be distinguishable from "publishing now"');
+
+  /*
+   * ─── THE WAIT IN WORDS, AND THE HYPHEN THAT DOES NOT BELONG TO IT ──────
+   *
+   * "ומתחתיו: בעוד 8 שעות ו־2 דקות." The campaign card's "הפרסום הבא" block
+   * prints this under the instant; a mm:ss clock is right for minutes and
+   * wrong for hours, where "8:02:00" reads as a time of day.
+   *
+   * EVERY CASE HERE IS A SENTENCE A CUSTOMER WOULD READ. counted() returns a
+   * bare word for one and for two — "דקה", "שתי דקות" — and a digit-led
+   * phrase for everything else, so a fixed "ו-" produced "שעה ו-דקה" and
+   * "שעתיים ו-שתי דקות". The hyphen separates the letter from a NUMERAL and
+   * from nothing else, which is what the first four lines below pin.
+   */
+  const wait = (sec: number): string | null => longWaitHe(countdownTo(new Date(t0 + sec * 1000).toISOString(), t0)!);
+  assert.equal(wait(3600 + 60), 'שעה ודקה', 'one and one join with a bare ו — "שעה ו-דקה" is not Hebrew');
+  assert.equal(wait(2 * 3600 + 120), 'שעתיים ושתי דקות', 'and so do two and two');
+  assert.equal(wait(8 * 3600 + 3 * 60), '8 שעות ו-3 דקות', 'THE HYPHEN IS THE NUMERAL\u2019S — the brief\u2019s own example');
+  assert.equal(wait(3 * 3600 + 60), '3 שעות ודקה', 'a digit on one side and a word on the other takes the word\u2019s form');
+  /* On the hour, the hours are the whole answer: "8 שעות ו-0 דקות" is a
+     number printed for the sake of the sentence's shape. */
+  assert.equal(wait(8 * 3600), '8 שעות', 'no minutes, no minutes clause');
+  assert.equal(wait(3600), 'שעה', 'and one hour is a word, not "1 שעות"');
+  assert.equal(wait(2 * 3600), 'שעתיים', 'two hours has its own word in Hebrew');
+  /* PAST TWO DAYS IT COUNTS DAYS. "בעוד 430 שעות" is arithmetic the owner
+     would have to do; the date on the line above it is what this has to be
+     checkable against. */
+  assert.equal(wait(50 * 3600), 'יומיים ושעתיים', 'fifty hours is two days and two hours');
+  assert.equal(wait(49 * 3600), 'יומיים ושעה', 'and forty-nine is two days and one');
+  assert.equal(wait(26 * 3600), '26 שעות', 'while twenty-six is still a number anyone reads at a glance');
+  assert.equal(wait(3 * 86_400), '3 ימים', 'a whole number of days carries no hours clause');
+  /* UNDER AN HOUR IT RETURNS NULL, which is the whole interface: the caller
+     prints `label` — mm:ss, live to the second — so a short wait keeps its
+     seconds and a long one loses digits nobody reads. */
+  assert.equal(wait(3599), null, 'under an hour there are no words, and the caller prints mm:ss');
+  assert.equal(wait(0), null, 'and an instant that has arrived has no wait at all');
 
   console.log('countdown tests OK');
 }

@@ -156,7 +156,7 @@ const N = 100;
 const POLL_MS = 5_000;
 const HOLD_CAP_MS = 3 * 60_000;          /* PREP_HOLD_CAP_MS, composer.ts */
 const OPENS = Date.parse('2026-10-13T05:00:00.000Z'); /* 08:00 Asia/Jerusalem */
-const SCHEDULE: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '08:00', end: '22:00', gapSeconds: GAP };
+const SCHEDULE: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '08:00', gapSeconds: GAP };
 
 /* The account floor lowered to the campaign's own gap, through the REAL split
    — the same values matchAccountGapTo(30) writes. */
@@ -171,7 +171,7 @@ const BROWSER = {
 };
 const CAMPAIGN_ROW = {
   status: 'active', schedule_enabled: true, schedule_days: [0, 1, 2, 3, 4, 5, 6],
-  schedule_start: '08:00', schedule_end: '22:00', schedule_gap_minutes: 1, schedule_gap_seconds: GAP,
+  schedule_start: '08:00', schedule_gap_minutes: 1, schedule_gap_seconds: GAP,
   repeat_enabled: false, repeat_min_hours: 20,
 };
 

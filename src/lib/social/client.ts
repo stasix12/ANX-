@@ -3226,7 +3226,7 @@ async function campaignWindows(ids: string[]): Promise<Record<string, CampaignSc
   if (!ids.length) return {};
   const res = await db()
     .from('social_campaigns')
-    .select('id, schedule_enabled, schedule_days, schedule_start, schedule_end, schedule_gap_minutes, schedule_gap_seconds')
+    .select('id, schedule_enabled, schedule_days, schedule_start, schedule_gap_minutes, schedule_gap_seconds')
     .in('id', ids);
   if (res.error) return {};
   const out: Record<string, CampaignSchedule> = {};
@@ -3401,10 +3401,10 @@ export async function rescheduleCampaignQueue(
   await logClientActivity(
     failed ? 'warn' : 'info',
     'queue_rescheduled',
-    `שעות הפרסום של הסבב השתנו (${schedule.start}–${schedule.end}) — ${counted(moved, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} לשעות החדשות${
+    `שעות הפרסום של הסבב השתנו (משעה ${schedule.start}) — ${counted(moved, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} לשעות החדשות${
       capped ? ` (רק ${LIVE_QUEUE_LIMIT} הפרסומים הקרובים בתור)` : ''
     }`,
-    { campaignId, start: schedule.start, end: schedule.end, gapSeconds: schedule.gapSeconds, days: schedule.days, moved, failed },
+    { campaignId, start: schedule.start, gapSeconds: schedule.gapSeconds, days: schedule.days, moved, failed },
   );
 
   /* Half-applied is a real outcome and the owner is told the real numbers,

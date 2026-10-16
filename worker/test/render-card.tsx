@@ -28,10 +28,11 @@
  * with three-figure counts in every chip, and a campaign with nothing in it at
  * all.
  */
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CampaignCard } from '@/components/social/CampaignCard';
 import type { CampaignState } from '@/lib/social/campaign';
-import { DEFAULT_CAMPAIGN_SCHEDULE, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { DEFAULT_CAMPAIGN_REPEAT, DEFAULT_CAMPAIGN_SCHEDULE, type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 
 /* Inline so the fixture never reaches the network: a flat tile the size of a
    real cover, which is all `object-fit: cover` needs to be measured. */
@@ -63,7 +64,7 @@ const sched: Record<string, CampaignSchedule> = {
   reference: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true },
   /* Every day lit, a gap of one (so "כל דקה", the singular branch), and a
      window that runs the whole clock — the longest summary this can print. */
-  all: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:30', gapSeconds: 60 },
+  all: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', gapSeconds: 60 },
   none: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true, days: [] },
   off: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: false },
 };
@@ -144,11 +145,33 @@ const schedules: Record<string, CampaignSchedule> = {
      and the campaign screen render this component. */
 };
 
+/*
+ * WHICH CARD HAS THE DAILY REPEAT ARMED. Off is the common state and the one
+ * the reference draws; card 6 carries it ON, because that is the only state
+ * in which the amber consequence paragraph is drawn at all — and that
+ * paragraph is the tallest thing the panel can grow by.
+ */
+const repeats: Record<string, CampaignRepeat> = {
+  '6': { enabled: true, minHours: 20 },
+};
+
 const body = cases.map(([label, c, s, posts, media, paused]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
   <div class="card-probe">${renderToStaticMarkup(
-    CampaignCard({ campaign: c as never, state: s as never, postCount: posts as number,
-      hasPost: (posts as number) > 0, media: media as never, globalPaused: paused === true, workerOnline: true,
+    /*
+     * createElement, NOT a direct call — the same correction render-hero.tsx
+     * made for the same reason. The card draws <NextPublication>, which holds
+     * a one-second tick in a useState, and a component invoked as a plain
+     * function has no hook dispatcher: React throws before it renders a pixel.
+     * Server-rendered, useEffect never runs, so the countdown shows its
+     * initial value and the markup is deterministic.
+     */
+    createElement(CampaignCard, { campaign: c as never, state: s as never, postCount: posts as number,
+      hasPost: (posts as number) > 0, media: media as never, globalPaused: paused === true,
+      /* The PC's heartbeat, which the reference draws as a pill of its own.
+         One fixture reports it DOWN, because that pill and the connection
+         caveat under the next publication only exist in that state. */
+      workerOnline: (c as { id: string }).id !== '3',
       onPause: () => {}, onResume: () => {}, editHref: '/social/posts/p1', onDuplicate: () => {},
       onDelete: () => {}, addPostHref: '/x', busy: false,
       /* The queue tuner's button. Passed so the measurement below actually
@@ -156,7 +179,11 @@ const body = cases.map(([label, c, s, posts, media, paused]) => `
          that never sees a control cannot find it too small. */
       onTune: () => {},
       schedule: schedules[(c as { id: string }).id] ?? null,
-      onScheduleChange: schedules[(c as { id: string }).id] ? () => {} : undefined }) as never,
+      onScheduleChange: schedules[(c as { id: string }).id] ? () => {} : undefined,
+      /* CHZARA, so the repeat row the reference draws is measured too. The
+         panel draws it only when BOTH arrive. */
+      repeat: repeats[(c as { id: string }).id] ?? DEFAULT_CAMPAIGN_REPEAT,
+      onRepeatChange: schedules[(c as { id: string }).id] ? () => {} : undefined } as never),
   )}</div>`).join('');
 
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">

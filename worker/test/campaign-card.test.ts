@@ -196,9 +196,24 @@ async function main(): Promise<void> {
                 const pr = p.getBoundingClientRect();
                 const chips = [...p.querySelectorAll('[aria-pressed]')].map((e) => e.getBoundingClientRect());
                 const fields = [...p.querySelectorAll('select')].map((e) => e.getBoundingClientRect());
-                const label = [...p.querySelectorAll('p')][0];
-                const summary = [...p.querySelectorAll('p')].at(-1);
+                /*
+                 * BOTH BY THEIR OWN ATTRIBUTE NOW, not by position among the
+                 * paragraphs. The panel used to be four elements and "the
+                 * first <p>" / "the last <p>" happened to be the days label
+                 * and the summary; it carries the next-publication block and
+                 * the repeat row too, so position identifies nothing. A probe
+                 * that finds the wrong element cannot fail for the right
+                 * reason.
+                 */
+                const days = p.querySelector('[role="group"]');
+                const summary = p.querySelector('[data-summary]');
+                const nextPub = p.querySelector('[data-next-publication]');
                 return {
+                  /* The block the brief adds: "יש להוסיף לכרטיס אזור ברור
+                     ומעוצב המציג את היום, התאריך והשעה של הפרסום הבא". */
+                  nextPub: !!nextPub,
+                  nextPubText: (nextPub?.textContent || '').replace(/\s+/g, ' ').trim(),
+                  nextPubBelowFields: !!nextPub && !!fields.length && nextPub.getBoundingClientRect().top > Math.max(...fields.map((f) => f.top)),
                   width: Math.round(pr.width),
                   height: Math.round(pr.height),
                   /* Inside the card's padding, on both edges. */
@@ -206,9 +221,12 @@ async function main(): Promise<void> {
                   /* Under "הוסף פוסט"/the progress bar and above the actions —
                      the order the brief writes out. */
                   belowHead: pr.top > (c.querySelector('[data-must-fit]')?.getBoundingClientRect().top ?? pr.top) ,
+                  /* The foot action, by its exact words. A loose /ערוך/ did
+                     NOT match "עריכת קמפיין", so this read Math.min() of an
+                     empty list — Infinity — and could never fail. */
                   aboveActions: pr.bottom <= Math.min(
                     ...[...c.querySelectorAll('a,button')]
-                      .filter((e) => /פתח קמפיין|ערוך|הפעל שוב/.test(e.textContent || ''))
+                      .filter((e) => /עריכת קמפיין|פתח קמפיין/.test(e.textContent || ''))
                       .map((e) => e.getBoundingClientRect().top + 1),
                   ),
                   chips: chips.length,
@@ -221,8 +239,8 @@ async function main(): Promise<void> {
                   /* How many of the seven are lit — the fixture's own data. */
                   lit: [...p.querySelectorAll('[aria-pressed="true"]')].length,
                   switches: p.querySelectorAll('[role="switch"]').length,
-                  daysLabel: (label?.textContent || '').trim(),
-                  summary: (summary?.textContent || '').trim(),
+                  daysLabel: (days?.getAttribute('aria-label') || '').trim(),
+                  summary: (summary?.textContent || '').replace(/\s+/g, ' ').trim(),
                   /* Cut off, which is what a 250px column did to this line. */
                   summaryClipped: !!summary && summary.scrollWidth > summary.clientWidth + 1,
                 };
@@ -241,11 +259,12 @@ async function main(): Promise<void> {
        * reason. The WIDTH is the one under test and does not move, and nothing
        * on this card is measured against the viewport's height.
        */
-      /* 2800 held seven cards. There are twelve now and each with a
-         scheduling panel is 400-460px, so the lower half read 1x1 — no target
-         at all, which passes as a failure for the wrong reason. The height is
-         not under test and nothing here is measured against it. */
-      await page.setViewportSize({ width, height: 9000 });
+      /* 2800 held seven cards; 9000 held twelve while each was ~460px. The
+         rebuilt card is 700-840 and twelve of them come to ~10,000 at 600px,
+         so the last one read 1x1 — no target at all, which passes as a failure
+         for the wrong reason. The height is not under test and nothing here is
+         measured against it. */
+      await page.setViewportSize({ width, height: 16000 });
       const hits = await page.evaluate(() =>
         [...document.querySelectorAll('.card-probe > div')].map((c) =>
           [...c.querySelectorAll('a,button')].map((e) => {
@@ -292,35 +311,32 @@ async function main(): Promise<void> {
 
       for (const [i, card] of seen.cards.entries()) {
         /*
-         * TWO CEILINGS, BECAUSE THERE ARE NOW TWO CARDS.
+         * TWO CEILINGS, BECAUSE THERE ARE TWO CARDS — and both moved a long
+         * way in this pass, on purpose.
          *
-         * Without the panel the card is what it has always been: 166px here,
-         * and the old 210 ceiling still holds it. With the panel it carries a
-         * 232px block — a header, seven 40px chips, three 40px fields and a
-         * summary strip — plus, now, the "הגדרות תור מתקדמות" button under it,
-         * and measures 468 to 508 across these widths.
+         * The owner sent a second reference image and called it binding:
+         * "עליך ליישם את העיצוב בדיוק כמו בתמונה... אין להמציא עיצוב חלופי."
+         * It draws the card as ONE COLUMN — the picture and the name, the
+         * connection pill, three counters, the scheduling block, the next
+         * publication, the daily repeat and one button — which is a taller
+         * card than the three-row grid it replaces, and is the card that fills
+         * his phone in the image he sent.
          *
-         * RAISED FROM 466 TO 512, AND THE 46px IS TWO DELIBERATE ADDITIONS,
-         * measured rather than estimated:
+         * Measured here, with the panel, across 360/390/430/600:
          *
-         *   ~18px  the queue-tuner button. "תוסיף כאן הגדרות תור מתקדם כמו
-         *          בעמוד ראשי" — it opens the only control in the product that
-         *          re-times rows ALREADY in the queue, and it was reachable
-         *          from one screen.
-         *   ~28px  the never-launched notice, on the one fixture card in that
-         *          state. It replaced a paragraph that promised a daily repeat
-         *          the round could not perform, and it is longer because it
-         *          also names the action that fixes it.
+         *     the quiet card (finished, nothing skipped)      700 – 787px
+         *     a live card with a group name and a countdown   720 – 807px
+         *     the daily repeat armed, amber paragraph and all 792 – 841px
+         *     no panel at all (every other screen's card)     264 – 336px
          *
-         * A ceiling catches growth nobody decided on. Both of these were
-         * decided on, so the number moves with them rather than the controls
-         * being bent to fit — and it is still a ceiling: the next row that
-         * appears without a reason fails here.
+         * The ceiling is the measured maximum plus a few, as everywhere in
+         * this suite: it catches growth nobody decided on. Everything in the
+         * list above was decided on.
          */
-        const ceiling = card.panel ? 512 : 210;
+        const ceiling = card.panel ? 850 : 345;
         assert.ok(
           card.height <= ceiling,
-          say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling panel and the queue-tuner button it measured 468 to 508 when this was written' : "the design specification's card measured 169 to 206 here"}`),
+          say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling block, the next publication and the daily repeat it measured 697 to 841 when this was written' : "a card with no scheduling block measured 264 to 336 here"}`),
         );
         /*
          * THE PICTURE IS THE POINT OF THIS CARD. "התמונה צריכה להיות אלמנט
@@ -355,8 +371,15 @@ async function main(): Promise<void> {
           ratio >= 0.35 && ratio <= 2,
           say(`card ${i}'s picture is ${card.picture}×${card.pictureHeight} — a ratio of ${ratio.toFixed(2)}, which is a stripe rather than the reference's portrait`),
         );
+        /*
+         * 90, NOT 100, AND THE NUMBER IS THE REFERENCE'S OWN. The picture is
+         * a square at 30% of the card now — 101px on the 390px phone the owner
+         * uses, which is what the image measures — so the narrowest Android
+         * worth supporting puts it at 92. A floor above that would be failing
+         * the reference for being the reference.
+         */
         assert.ok(
-          card.pictureHeight >= 100,
+          card.pictureHeight >= 90,
           say(`card ${i}'s picture is only ${card.pictureHeight}px tall — "התמונה צריכה להיות אלמנט ויזואלי מרכזי בכרטיס... לא Thumbnail קטן"`),
         );
         assert.ok(card.pictureAtEnd, say(`card ${i}'s picture is not on its left — "תמונת פוסט גדולה בצד שמאל של הכרטיס"`));
@@ -366,7 +389,11 @@ async function main(): Promise<void> {
         assert.ok(targets.length >= 4, say(`card ${i} offered ${targets.length} controls to hit-test — the floor below would pass on an empty card`));
         /* A card with publications promises one such label; an empty one
            promises none, and its own branch is checked by the height ceiling. */
-        assert.ok(card.mustFit <= 1, say(`card ${i} marked ${card.mustFit} labels as must-fit — the check below would be measuring something else`));
+        /* Six: three counter words, the connection pill, the next
+           publication's own sentence, and the campaign's progress line. The
+           floor is what stops a card that dropped the attribute from passing
+           the clipping check below by having nothing to check. */
+        assert.ok(card.mustFit >= 1 && card.mustFit <= 6, say(`card ${i} marked ${card.mustFit} labels as must-fit — the check below would be measuring something else`));
         assert.deepEqual(
           card.clipped,
           [],
@@ -444,20 +471,42 @@ async function main(): Promise<void> {
            point and is not visible from a single chip. */
         assert.ok(p.lit >= 2 || p.lit === 0, `${where}: ${p.lit} day lit — a single-choice row would look exactly like this`);
 
-        /* "✓ שעת התחלה ✓ שעת סיום ✓ 1–30 דקות" — three fields, one row,
-           equal widths, as the reference draws them. */
-        assert.equal(p.fields, 3, `${where}: ${p.fields} fields, not three`);
-        assert.equal(p.fieldRows, 1, `${where}: the three fields wrapped onto ${p.fieldRows} rows`);
+        /*
+         * TWO FIELDS, NOT THREE. "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק
+         * הכרטיס. להשאיר רק: שעת התחלת הפרסום, הפרש בין פרסום לפרסום, ימי
+         * הפרסום שנבחרו." The third one being gone is the assertion; it is
+         * written as an equality rather than a `<= 2` so a fourth field cannot
+         * creep in either.
+         */
+        assert.equal(p.fields, 2, `${where}: ${p.fields} fields — the reference draws two, and "שעת סיום" is not one of them`);
+        assert.equal(p.fieldRows, 1, `${where}: the two fields wrapped onto ${p.fieldRows} rows`);
         assert.ok(
           p.fieldWidths.length === 1,
-          `${where}: the three fields are different widths — ${p.fieldWidths.join(', ')}px`,
+          `${where}: the two fields are different widths — ${p.fieldWidths.join(', ')}px`,
         );
 
-        /* "✓ Toggle" — exactly one, and it is a real switch rather than a
-           styled div, so a screen reader says "on"/"off". */
-        assert.equal(p.switches, 1, `${where}: ${p.switches} switches in the panel`);
+        /* "✓ Toggle" — two now, and both are real switches rather than styled
+           divs, so a screen reader says "on"/"off" for each: the window's own
+           and חזרה יומית's. They are 300px apart and control different things;
+           the fault this counts against is a THIRD appearing for one setting. */
+        assert.equal(p.switches, 2, `${where}: ${p.switches} switches in the panel — the window's and the daily repeat's`);
 
-        assert.equal(p.daysLabel, 'ימי פרסום', `${where}: the days are not labelled "ימי פרסום"`);
+        assert.equal(p.daysLabel.startsWith('ימי פרסום'), true, `${where}: the row of seven is not named "ימי פרסום" for a screen reader — "${p.daysLabel}"`);
+
+        /*
+         * ─── "הפרסום הבא" — the block the brief adds, where it asks for it ──
+         *
+         * "יש למקם את אזור הפרסום הבא מתחת להגדרות התזמון ולפני החזרה היומית."
+         * Measured as boxes rather than read off the source: source order and
+         * visual order are two different things, and the whole point of the
+         * requirement is where the owner's eye lands.
+         */
+        assert.ok(p.nextPub, `${where}: no "הפרסום הבא" block on a card that has a schedule`);
+        assert.ok(p.nextPubBelowFields, `${where}: the next publication is drawn ABOVE the timing fields, not under them`);
+        assert.ok(
+          p.nextPubText.startsWith('הפרסום הבא'),
+          `${where}: the block does not lead with "הפרסום הבא" — "${p.nextPubText.slice(0, 40)}"`,
+        );
 
         /*
          * "✓ סיכום תזמון" — AND ALL OF IT.
@@ -470,9 +519,16 @@ async function main(): Promise<void> {
          */
         assert.ok(!p.summaryClipped, `${where}: the summary line is cut off — "${p.summary}"`);
         assert.ok(
-          /^סיכום תזמון:/.test(p.summary) || /^התזמון כבוי/.test(p.summary),
+          /^ימי פרסום:/.test(p.summary) || /^התזמון כבוי/.test(p.summary),
           `${where}: the summary line says something else — "${p.summary}"`,
         );
+        /*
+         * AND NO CLOSING HOUR IN IT. "אין להציג שעת סיום גם בשורת הסיכום."
+         * The dash is what a range is written with, and its absence is the
+         * cheapest way to state the requirement that cannot be satisfied by
+         * accident.
+         */
+        assert.ok(!/–/.test(p.summary), `${where}: the summary still prints an hour range — "${p.summary}"`);
       }
 
       /*

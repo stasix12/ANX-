@@ -9,7 +9,7 @@
  * fixed. The only evidence was a version number in one line of its terminal
  * output, which nobody reads.
  */
-export const WORKER_VERSION = '4.15.0';
+export const WORKER_VERSION = '4.16.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -28,4 +28,4 @@ export const WORKER_VERSION = '4.15.0';
  * have to reach the PC? If yes, bump WORKER_VERSION above. If no, paste the
  * fingerprint. Either way it is answered out loud.
  */
-export const WORKER_FINGERPRINT = 'b567cf6aa0ecb8c1';
+export const WORKER_FINGERPRINT = '4d1654f1de2def9a';

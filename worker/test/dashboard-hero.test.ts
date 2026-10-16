@@ -110,7 +110,7 @@ is(/scheduleReadout\(schedule, state/.test(listCard), 'and so does the campaigns
 const projectionSrc = code('src/lib/social/projection.ts');
 is(/projectOne\(\{/.test(readoutSrc), 'which asks the one place that composes the gates');
 is(/nextPublishAt\(schedule, from,/.test(projectionSrc), 'and that place resolves the instant with the engine\'s own function, not a second rule');
-for (const [name, src] of [['LiveCampaignHero', hero], ['CampaignScheduleBoard', board], ['CampaignCard', listCard]] as const) {
+for (const [name, src] of [['LiveCampaignHero', hero], ['CampaignScheduleBoard', board], ['CampaignCard', listCard], ['NextPublication', code('src/components/social/NextPublication.tsx')]] as const) {
   is(!/nextPublishAt\(|nextAllowedAt\(|windowClosesAt\(/.test(src), `${name} computes no instant of its own`);
 }
 is(!/setHours|\+ 7 \* 24|86400000|getDay\(\)/.test(board), 'the board does no date arithmetic of its own');
@@ -126,10 +126,26 @@ for (const literal of ['08:10', '01.10.2026', '08:00', '22:00', '10 דקות']) 
   is(!board.includes(literal), `the image's example value "${literal}" appears nowhere in the board`);
 }
 
-/* THE WORDS ARE THE BRIEF'S. */
-for (const word of ['תזמון פרסום', 'פעיל', 'כבוי', 'ימי פרסום', 'הפרש בין פוסטים', 'שעות פרסום', 'הפרסום הבא יתחיל ב:', 'לא מתוזמן']) {
+/* THE WORDS ARE THE BRIEF'S — the board's own, and the block's.
+
+   "הפרסום הבא" AND ITS STATES MOVED OUT OF THIS FILE. The board carried its
+   own strip and the campaigns card carried a second version of the same
+   sentences; they are one component now (NextPublication), which is what
+   "אסור שהתקלה הזאת תחזור" asks for about the two screens disagreeing. So
+   the words are pinned where they live.
+
+   And "שעות פרסום" became "שעת התחלה": there is no closing hour left to make
+   it a plural. "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק הכרטיס." */
+const nextPubSrc = code('src/components/social/NextPublication.tsx');
+for (const word of ['תזמון פרסום', 'פעיל', 'כבוי', 'ימי פרסום', 'הפרש בין פרסומים', 'שעת התחלה']) {
   is(board.includes(word), `the board prints "${word}", in the brief's own wording`);
 }
+is(!board.includes('שעות פרסום'), 'and no longer offers a RANGE of hours — there is one hour now');
+for (const word of ['הפרסום הבא', 'אין פרסומים מתוזמנים', 'מושהה', 'הסבב הסתיים', 'הסבב הופסק', 'לא נבחר יום פרסום', 'בעוד']) {
+  is(nextPubSrc.includes(word), `the next-publication block prints "${word}"`);
+}
+is(/<NextPublication/.test(board), 'and the board draws that block rather than a second copy of it');
+is(/<NextPublication/.test(code('src/components/social/CampaignSchedulePanel.tsx')), 'as does the panel the campaigns card builds on');
 
 /* "ערוך מועד" OPENS THE SCHEDULE, which is what the owner asked it to do —
    and the queue tuner it used to open is still reachable from inside. */
@@ -222,9 +238,11 @@ for (const [what, fg, bg, bar] of pairs) {
 
 /* And the component actually uses the colours that were measured: a ratio
    computed off tokens the file does not reference proves nothing. */
-is(/bg-brand-300\/10/.test(board) && /bg-brand-300\/20/.test(board), 'the block and the strip use the two tints measured above');
+is(/bg-brand-300\/10/.test(board), 'the block uses the 10% tint measured above');
+is(/bg-brand-300\/10/.test(nextPubSrc), 'and so does the next-publication block, which is the one that has to be able to turn amber (4.80 at 10%, 4.21 at 20%)');
+is(/bg-brand-300\/20/.test(code('src/components/social/CampaignSchedulePanel.tsx')), 'while the summary strip keeps the 20% one');
 is(/border-ink-600/.test(board) && !/border-ink-700/.test(board), 'and the boxes carry the control edge, not the decorative hairline');
-is(/text-warning-400/.test(board), 'with the warning in the token whose ratio was checked');
+is(/text-warning-400/.test(nextPubSrc), 'with the warning in the token whose ratio was checked');
 
 /* ───────────────────────────── the browser pass ─────────────────────────── */
 
@@ -274,7 +292,10 @@ async function main(): Promise<void> {
             const br = b?.getBoundingClientRect();
             const boxes = b ? [...b.querySelectorAll('button[aria-expanded]')].map((e) => e.getBoundingClientRect()) : [];
             const chips = b ? [...b.querySelectorAll('[data-must-fit]')].filter((e) => /^[א-ת]׳$/.test((e.textContent || '').trim())) : [];
-            const strip = b?.lastElementChild;
+            /* BY ITS OWN ATTRIBUTE. It used to be "the board's last child",
+               which was true while the board drew its own strip; the block is
+               a shared component now and the probe names it. */
+            const strip = b?.querySelector('[data-next-publication]');
             const sr = strip?.getBoundingClientRect();
             const bar = c.querySelector('[role="progressbar"], [aria-label*="הושלמו"], .h-2\\.5');
             const actions = [...c.querySelectorAll('a,button')].filter((e) => /פתח סבב|ערוך מועד|השהה סבב|המשך סבב/.test(e.textContent || ''));
@@ -332,7 +353,7 @@ async function main(): Promise<void> {
       });
 
       assert.equal(seen.overflow, false, `${width}: the page scrolls sideways`);
-      assert.equal(seen.cards.length, 15, `${width}: expected 15 cards, got ${seen.cards.length}`);
+      assert.equal(seen.cards.length, 16, `${width}: expected 16 cards, got ${seen.cards.length}`);
 
       seen.cards.forEach((c, i) => {
         const at = `${width}px, card ${i + 1}`;
@@ -349,7 +370,7 @@ async function main(): Promise<void> {
         assert.ok(c.inside, `${at}: the block is not inside the card`);
         assert.ok(c.belowProgress, `${at}: the block is not under the progress bar`);
         assert.ok(c.aboveActions, `${at}: the block is not above the action row`);
-        assert.ok(c.stripIsOwnBlock, `${at}: "הפרסום הבא יתחיל ב:" is not its own container under the block`);
+        assert.ok(c.stripIsOwnBlock, `${at}: "הפרסום הבא" is not its own container under the block`);
         assert.equal(c.readouts, 3, `${at}: expected three readouts, got ${c.readouts}`);
         assert.equal(c.chips, 7, `${at}: expected seven day chips, got ${c.chips}`);
         assert.equal(c.chipRows, 1, `${at}: the seven days must stay on one row`);
@@ -357,32 +378,37 @@ async function main(): Promise<void> {
            360 is allowed the two-row fallback and nothing else is. */
         assert.equal(c.readoutRows, width >= 390 ? 1 : 2, `${at}: readouts on ${c.readoutRows} row(s)`);
         assert.ok(c.text.includes('תזמון פרסום'), `${at}: the block has lost its title`);
-        /* One of the two labels — a queued publication's, or the window's for a
-           round with nothing waiting. Neither is optional: a strip with a bare
-           time and no label is a number nobody can act on. */
-        /* One of the three — a queued publication's, the next window's, or the
-           open window's close. None is optional: a strip with a bare time and
-           no label is a number nobody can act on. */
+        /*
+         * THE BLOCK ALWAYS LEADS WITH ITS OWN NAME, and then says one of the
+         * things it is allowed to say. Neither half is optional: a block with
+         * a bare time and no label is a number nobody can act on, and a label
+         * with no state under it is a heading over nothing.
+         */
+        assert.ok(c.strip.trim().startsWith('הפרסום הבא'), `${at}: the block has lost its heading — "${c.strip.slice(0, 40)}"`);
         assert.ok(
-          c.text.includes('הפרסום הבא יתחיל ב:') ||
-            c.text.includes('חלון הפרסום הבא:') ||
-            c.text.includes('חלון הפרסום פתוח עד:') ||
-            c.text.includes('הסבב הסתיים') ||
-            c.text.includes('הסבב הופסק') ||
-            c.text.includes('ממתין לטיפול ידני') ||
-            c.text.includes('הסבב מושהה') ||
-            c.text.includes('ספירה מקורבת'),
-          `${at}: the strip has lost its label`,
+          /בעוד |אמור לצאת עכשיו|באיחור/.test(c.strip) ||
+            c.strip.includes('אין פרסומים מתוזמנים') ||
+            c.strip.includes('הסבב הסתיים') ||
+            c.strip.includes('הסבב הופסק') ||
+            c.strip.includes('ממתינים לך') ||
+            c.strip.includes('מושהה') ||
+            c.strip.includes('לא נבחר יום פרסום') ||
+            c.strip.includes('הסבב עוד לא הושק') ||
+            c.strip.includes('לא ידוע מתי הפרסום הבא'),
+          `${at}: the block has lost its state — "${c.strip.slice(0, 60)}"`,
         );
       });
 
       /* ─── what each case must, and must not, say ─────────────────────── */
-      const [reference, , , noDay, off, nothingQueued, , scheduleOff, , windowOpen, ended, halted, awaitingHand, approximate, subMinute] = seen.cards;
+      const [reference, , , noDay, off, nothingQueued, , scheduleOff, , windowOpen, ended, halted, awaitingHand, approximate, subMinute, neverLaunched] = seen.cards;
 
       /* 1 — the reference's own card: a time, a date, and the day it falls on. */
-      assert.match(reference.text, /הפרסום הבא יתחיל ב: ?\d{2}:\d{2}/, `${width}: the reference card prints no time`);
-      assert.match(reference.text, /\d{2}\.\d{2}\.\d{4}/, `${width}: the reference card prints no date`);
-      assert.match(reference.text, /היום \(|מחר \(|מחרתיים \(|יום |שבת/, `${width}: the reference card does not say which day`);
+      /* The day, the date, the hour and a live countdown — "הפרסום הבא: יום
+         ראשון, 18.10 בשעה 09:00 … בעוד 8 שעות ו-2 דקות". */
+      assert.match(reference.strip, / בשעה \d{2}:\d{2}/, `${width}: the reference card prints no time`);
+      assert.match(reference.strip, /\d{2}\.\d{2}/, `${width}: the reference card prints no date`);
+      assert.match(reference.strip, /היום \(|מחר \(|מחרתיים \(|יום |שבת/, `${width}: the reference card does not say which day`);
+      assert.match(reference.strip, /בעוד |אמור לצאת עכשיו|באיחור/, `${width}: the reference card has no countdown under its instant`);
       assert.ok(reference.text.includes('פעיל'), `${width}: a live schedule must read "פעיל"`);
       /* And nothing above it moved. */
       assert.ok(reference.text.includes('50 / 50') || reference.text.includes('50 /'), `${width}: the card's own figures changed`);
@@ -391,12 +417,12 @@ async function main(): Promise<void> {
       /* 4 — no day chosen. The stored instant may NOT be printed: the engine
              will not publish at it. */
       assert.ok(noDay.text.includes('לא נבחר יום פרסום'), `${width}: a schedule with no day must say so`);
-      assert.doesNotMatch(noDay.text, /יתחיל ב: ?\d{2}:\d{2}/, `${width}: a schedule with no day printed a time anyway`);
+      assert.doesNotMatch(noDay.strip, /\d{1,2}:\d{2}/, `${width}: a schedule with no day printed a time anyway`);
 
       /* 5 — the switch off. The word is "כבוי", and the queue's own instant is
              still the truth, so it is still shown. */
       assert.ok(off.text.includes('כבוי'), `${width}: a schedule that is off must read "כבוי"`);
-      assert.match(off.text, /יתחיל ב: ?\d{2}:\d{2}/, `${width}: a queued publication is still a fact when the schedule is off`);
+      assert.match(off.strip, / בשעה \d{2}:\d{2}/, `${width}: a queued publication is still a fact when the schedule is off`);
 
       /*
        * 6 — A FINISHED ROUND WITH NOTHING QUEUED, and the schedule still on.
@@ -406,18 +432,18 @@ async function main(): Promise<void> {
        * its own would read as a publication that is about to happen, and
        * nothing will happen at it until a post is launched.
        */
-      assert.ok(nothingQueued.text.includes('אין פרסום ממתין'), `${width}: an empty queue must say nothing is waiting`);
-      assert.ok(nothingQueued.text.includes('חלון הפרסום הבא:'), `${width}: and must name what the time beside it is`);
-      assert.match(nothingQueued.text, /חלון הפרסום הבא: ?\d{2}:\d{2}/, `${width}: the window's own instant is missing`);
-      /* And it may NOT borrow the words a queued publication uses. */
-      assert.doesNotMatch(nothingQueued.text, /הפרסום הבא יתחיל ב:/, `${width}: an empty queue promised a publication`);
+      assert.ok(nothingQueued.strip.includes('אין פרסומים מתוזמנים'), `${width}: an empty queue must say nothing is waiting`);
+      assert.ok(nothingQueued.strip.includes('יום הפרסום הבא:'), `${width}: and must name what the time beside it is`);
+      assert.match(nothingQueued.strip, /יום הפרסום הבא: ?\d{2}\.\d{2} בשעה \d{2}:\d{2}/, `${width}: the next publishing day's own instant is missing`);
+      /* And it may NOT borrow the countdown a queued publication gets. */
+      assert.doesNotMatch(nothingQueued.strip, /בעוד |אמור לצאת עכשיו/, `${width}: an empty queue counted down to a publication`);
       /* Drawn at Friday noon against a Sunday–Thursday window, so the window
          it names is genuinely ahead: 08:00 on Sunday, never the present
          minute. Before 4.0.1 this card also produced the next assertion's
          wording whenever the suite happened to run inside the window, and the
          line above would have failed — which is exactly what the owner saw on
          his screen and what the clock in render-hero.tsx now pins. */
-      assert.ok(!nothingQueued.text.includes('פתוח עד:'), `${width}: a shut window was called open`);
+      assert.ok(!nothingQueued.strip.includes('ברגע שייכנסו'), `${width}: a shut window was described as one with nothing to say`);
 
       /*
        * 10 — THE SAME EMPTY QUEUE, INSIDE AN OPEN WINDOW. The owner's 17:12.
@@ -431,23 +457,26 @@ async function main(): Promise<void> {
        * opening to name and the only fact left is when it shuts. The close is
        * what must be on screen — 22:00 — and the word must be "פתוח עד".
        */
-      assert.ok(windowOpen.text.includes('אין פרסום ממתין'), `${width}: an open window with an empty queue must still say nothing is waiting`);
-      assert.ok(windowOpen.text.includes('חלון הפרסום פתוח עד:'), `${width}: an open window must say it is open, not when it opens`);
-      /* THE INSTANT IS THE CLOSE, NOT THE CLOCK. 22:00 is this schedule's own
-         end; 10:00 is the pinned minute, and printing it is the bug. */
-      assert.match(windowOpen.text, /חלון הפרסום פתוח עד: ?22:00/, `${width}: an open window did not print its closing time`);
-      assert.doesNotMatch(windowOpen.text, /פתוח עד: ?10:00/, `${width}: the strip printed the current minute as the window's edge`);
-      /* And neither of the two sentences it is not. */
-      assert.ok(!windowOpen.text.includes('חלון הפרסום הבא:'), `${width}: an open window was announced as the next one`);
-      assert.doesNotMatch(windowOpen.text, /הפרסום הבא יתחיל ב:/, `${width}: an open window promised a publication`);
+      assert.ok(windowOpen.strip.includes('אין פרסומים מתוזמנים'), `${width}: an open window with an empty queue must still say nothing is waiting`);
+      /*
+       * AND IT NAMES NO HOUR AT ALL NOW, which is the honest answer once the
+       * closing hour is gone: "חלון הפרסום פתוח עד: 22:00" was a real fact
+       * while 22:00 was a setting the owner had chosen. The day runs to
+       * midnight for every campaign, so "open until 00:00" is a sentence about
+       * nothing — and printing an hour in the place an appointment goes is
+       * precisely the 17:12 this strip was rewritten for.
+       */
+      assert.ok(windowOpen.strip.includes('ברגע שייכנסו פרסומים לתור'), `${width}: an open window must say what would make something appear here`);
+      assert.doesNotMatch(windowOpen.strip, /\d{1,2}:\d{2}/, `${width}: an open window with an empty queue printed an hour`);
+      assert.ok(!windowOpen.strip.includes('יום הפרסום הבא:'), `${width}: an open window was announced as the next one`);
 
       /* 8 — nothing queued and the switch off. No queue, no window, no time. */
-      assert.ok(scheduleOff.text.includes('לא מתוזמן'), `${width}: with no queue and no schedule it must read "לא מתוזמן"`);
-      /* Scoped to the STRIP's own labels. A bare /\d\d:\d\d/ matches the
-         readout boxes above it — "08:00 – 22:00" is the window this campaign
-         is set to, and it is correct for it to be on screen. */
-      assert.doesNotMatch(scheduleOff.text, /יתחיל ב: ?\d{2}:\d{2}/, `${width}: a card with nothing scheduled printed a publication time`);
-      assert.ok(!scheduleOff.text.includes('חלון הפרסום הבא:'), `${width}: a switched-off schedule has no window to open`);
+      assert.ok(scheduleOff.strip.includes('אין פרסומים מתוזמנים'), `${width}: with no queue and no schedule it must say nothing is scheduled`);
+      /* Scoped to the BLOCK. A bare /\d\d:\d\d/ matches the readout boxes
+         above it — "משעה 08:00" is the hour this campaign is set to, and it is
+         correct for it to be on screen. */
+      assert.doesNotMatch(scheduleOff.strip, /\d{1,2}:\d{2}/, `${width}: a card with nothing scheduled printed a publication time`);
+      assert.ok(!scheduleOff.strip.includes('יום הפרסום הבא:'), `${width}: a switched-off schedule has no window to open`);
 
       /*
        * ───── 11 — HIS SCREEN, AND THE RULE THE WHOLE STRIP NOW OBEYS ──────
@@ -467,14 +496,14 @@ async function main(): Promise<void> {
        * rather than as a list of forbidden sentences — a future state that
        * invents a fourth way to print 22:00 has to fail this too.
        */
-      assert.ok(ended.text.includes('הסבב הסתיים'), `${width}: a finished round must say so where the clock used to be`);
-      assert.ok(ended.text.includes('אין פרסום מתוזמן'), `${width}: and must say that nothing is coming`);
+      assert.ok(ended.strip.includes('הסבב הסתיים'), `${width}: a finished round must say so where the clock used to be`);
+      assert.ok(ended.strip.includes('אין פרסומים מתוזמנים'), `${width}: and must say that nothing is coming`);
       /* THE OTHER HALF OF HIS MISUNDERSTANDING. The three boxes above still
          read "א׳…ה׳ · 08:00 – 22:00 · כל דקה" over a spent queue; without this
          line they read as a promise about today. */
-      assert.ok(ended.text.includes('התזמון יחול על הסבב הבא'), `${width}: the card does not say what the setting above it still does`);
+      assert.ok(ended.strip.includes('התזמון יחול על הסבב הבא'), `${width}: the card does not say what the setting above it still does`);
       assert.doesNotMatch(ended.strip, /\d{1,2}:\d{2}/, `${width}: THE BUG — a finished round printed a time: "${ended.strip.replace(/\s+/g, ' ')}"`);
-      assert.ok(!ended.text.includes('חלון הפרסום'), `${width}: a finished round was told about a window`);
+      assert.ok(!ended.strip.includes('יום הפרסום הבא'), `${width}: a finished round was told about a window`);
       /* And the numbers above it did not move. */
       assert.ok(ended.text.includes('196 מתוך 219 פורסמו'), `${width}: the breakdown line changed`);
       /* A ROUND CANNOT HAVE STARTED IN THE FUTURE, and a card that says it did
@@ -492,22 +521,33 @@ async function main(): Promise<void> {
        * card counted down to it anyway, which is the same fault as the 22:00
        * and harder to notice: the time is real, it simply never happens.
        */
+      /*
+       * AND THE BRIEF ASKS FOR THE PLANNED MINUTE BESIDE THE WORD, which is a
+       * change: "אם הקמפיין מושהה, יש להציג את המועד המתוכנן לצד סטטוס מושהה,
+       * בלי להציג אותו כפרסום שעומד להתבצע." So the minute may be there — and
+       * the countdown may NOT, because that is what turns a plan into a
+       * promise.
+       */
       const [, , , , , , , , bigPaused] = seen.cards;
-      assert.ok(bigPaused.text.includes('הסבב מושהה'), `${width}: a paused round must say so where the clock was`);
-      assert.ok(bigPaused.text.includes('אין פרסום עד שתמשיכו'), `${width}: and must say that nothing goes out meanwhile`);
-      assert.doesNotMatch(bigPaused.strip, /\d{1,2}:\d{2}/, `${width}: a paused round printed a time it will not publish at`);
+      assert.ok(bigPaused.strip.includes('מושהה'), `${width}: a paused round must say so where the clock was`);
+      assert.ok(
+        bigPaused.strip.includes('לא ייצא עד שתמשיכו') || bigPaused.strip.includes('אין פרסום עד שתמשיכו'),
+        `${width}: and must say that nothing goes out meanwhile`,
+      );
+      assert.doesNotMatch(bigPaused.strip, /בעוד |אמור לצאת עכשיו/, `${width}: a paused round counted down to a minute it will not publish at`);
+      assert.ok(!bigPaused.strip.includes('הפרסום הבא:'), `${width}: a paused round's planned minute was presented as the next publication`);
 
       /* 12 — stopped by hand. Same silence about time, its own word. */
-      assert.ok(halted.text.includes('הסבב הופסק'), `${width}: a round he stopped must say it was stopped, not that it finished`);
+      assert.ok(halted.strip.includes('הסבב הופסק'), `${width}: a round he stopped must say it was stopped, not that it finished`);
       assert.doesNotMatch(halted.strip, /\d{1,2}:\d{2}/, `${width}: a stopped round printed a time`);
 
       /*
        * 13 — WAITING ON A PERSON, which the window sentences called "אין פרסום
        * ממתין". Seven publications were waiting; they were waiting for him.
        */
-      assert.ok(awaitingHand.text.includes('ממתין לטיפול ידני'), `${width}: rows waiting for a person were not named`);
-      assert.match(awaitingHand.text, /7 פרסומים ממתינים לך/, `${width}: and the strip does not say how many`);
-      assert.ok(!awaitingHand.text.includes('אין פרסום ממתין'), `${width}: publications that ARE waiting were reported as none`);
+      assert.match(awaitingHand.strip, /7 פרסומים ממתינים לך/, `${width}: rows waiting for a person were not named, or not counted`);
+      assert.ok(awaitingHand.strip.includes('ממתינים לאישור שלכם'), `${width}: and the block does not say WHAT they are waiting for`);
+      assert.ok(!awaitingHand.strip.includes('אין פרסומים מתוזמנים'), `${width}: publications that ARE waiting were reported as none`);
       assert.doesNotMatch(awaitingHand.strip, /\d{1,2}:\d{2}/, `${width}: a hand-waiting round printed a clock time`);
 
       /*
@@ -557,6 +597,23 @@ async function main(): Promise<void> {
        * and the clipping guard above decides whether that was enough.
        */
       assert.match(subMinute.strip, /\d{1,2}:\d{2}:\d{2}/, `${width}: a sub-minute round lost the seconds off its next instant`);
+      /* AND THE COUNTDOWN UNDER IT IS LIVE TO THE SECOND TOO — mm:ss under an
+         hour, words above it. "בעוד 00:30" and "בעוד 8 שעות ו-2 דקות" are the
+         same control at two scales. */
+      assert.match(subMinute.strip, /בעוד \d{1,2}:\d{2}|בעוד .*(שעה|שעות|שעתיים|דקה|דקות)|אמור לצאת עכשיו|באיחור/, `${width}: a sub-minute round has no countdown`);
+
+      /*
+       * 16 — NEVER LAUNCHED. The state cases 6, 9 and 10 used to be in, and
+       * the one the dashboard had no words for: "אין פרסומים מתוזמנים" is
+       * true, reads as a lull, and nothing will end it. A campaign owns no
+       * group list, so until a round is launched once neither the window nor
+       * the daily repeat can produce a publication — which is why no window
+       * sentence may be printed over it.
+       */
+      assert.ok(neverLaunched.strip.includes('הסבב עוד לא הושק'), `${width}: a round that has never gone out was reported as a lull`);
+      assert.ok(neverLaunched.strip.includes('בחרו קבוצות ושלחו'), `${width}: and was not told the one action that ends it`);
+      assert.ok(!neverLaunched.strip.includes('יום הפרסום הבא:'), `${width}: a never-launched round was promised a publishing day`);
+      assert.doesNotMatch(neverLaunched.strip, /\d{1,2}:\d{2}/, `${width}: a never-launched round printed a time`);
 
       await view.close();
       checks += 35;

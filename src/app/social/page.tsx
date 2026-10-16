@@ -998,7 +998,6 @@ export default function SocialDashboard() {
       return (
         live.schedule_enabled === want.schedule_enabled &&
         live.schedule_start === want.schedule_start &&
-        live.schedule_end === want.schedule_end &&
         /* The SECONDS are the value the owner chose; the minutes beside them
            are derived from it, so comparing both is comparing one thing twice
            — and the derived one is coarser, so it would call a change from 30

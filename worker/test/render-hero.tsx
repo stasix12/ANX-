@@ -57,8 +57,6 @@ const st = (p: unknown, extra: Partial<CampaignState> = {}): CampaignState =>
  * gets its own fixture below, which is the one that has to FIT.
  */
 const inHours = (h: number) => new Date(Math.floor((Date.now() + h * 3600e3) / 60_000) * 60_000).toISOString();
-/** The same, plus thirty seconds — what a 30-second cadence actually stamps. */
-const inHoursPlus30 = (h: number) => new Date(Math.floor((Date.now() + h * 3600e3) / 60_000) * 60_000 + 30_000).toISOString();
 
 /*
  * A RENDER AT A KNOWN MINUTE, for the two cards whose words depend on whether
@@ -122,6 +120,19 @@ const WINDOW_OPEN = '2026-09-30T10:00:00+03:00';
  * owner will ever see.
  */
 const beforeClock = (clock: string, h: number) => new Date(new Date(clock).getTime() - h * 3600e3).toISOString();
+/**
+ * AHEAD of a pinned clock, plus thirty seconds — what a 30-second cadence
+ * actually stamps.
+ *
+ * It was `Date.now() + h` and that was wrong in a way nothing failed on: the
+ * card it feeds is drawn at a PINNED minute, so an instant built from the real
+ * clock sat eighteen days in that card's future, got rolled onto the next
+ * chosen day by the window, and arrived at the strip as a round 08:00 — the
+ * seconds this fixture exists for gone, with the assertion about them still
+ * passing because some other card happened to carry them.
+ */
+const afterClock = (clock: string, h: number) =>
+  new Date(Math.floor((new Date(clock).getTime() + h * 3600e3) / 60_000) * 60_000 + 30_000).toISOString();
 
 /*
  * THE WINDOWS, including the one the reference image is set to.
@@ -132,9 +143,9 @@ const beforeClock = (clock: string, h: number) => new Date(new Date(clock).getTi
  * can see rather than one argued about.
  */
 const sched: Record<string, CampaignSchedule> = {
-  image: { enabled: true, days: [0, 1, 2, 4], start: '08:00', end: '22:00', gapSeconds: 600 },
+  image: { enabled: true, days: [0, 1, 2, 4], start: '08:00', gapSeconds: 600 },
   reference: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true },
-  all: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:30', gapSeconds: 60 },
+  all: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', gapSeconds: 60 },
   none: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true, days: [] },
   off: { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: false },
 };
@@ -198,16 +209,27 @@ const cases = [
   ['the switch off — the card as it was before this feature', camp('5', 'ניקוי מרפסות'),
     st(prog({ total: 40, published: 12, scheduled: 28, finished: 12 }), { state: 'running', startedAt: inHours(-3), nextAt: inHours(1) }),
     40, sched.off, null],
-  ['nothing queued yet, window SHUT', camp('6', 'ניקוי ריפודי רכב'),
-    st(prog({ total: 0 }), { state: 'not_started' }),
+  /*
+   * 6 — NOTHING LEFT TO QUEUE, WINDOW SHUT. A round that HAS launched: 39 of
+   *     40 published and the fortieth in the worker's hands, so there is no
+   *     scheduled row to name an instant from.
+   *
+   * IT USED TO BE total:0 / not_started, WHICH IS A DIFFERENT THING. That is
+   * a round nobody has launched, and neither the window nor the daily repeat
+   * can produce a publication for it — the block says so in its own words now
+   * (case 16 below). Reaching the window branches needs a round that is
+   * genuinely between publications, which is this.
+   */
+  ['nothing left queued, window SHUT', camp('6', 'ניקוי ריפודי רכב'),
+    st(prog({ total: 40, published: 39, running: 1, finished: 39 }), { state: 'running', startedAt: beforeClock(WINDOW_SHUT, 26) }),
     20, sched.reference, WINDOW_SHUT],
   ['no schedule at all — any other caller', camp('7', 'סבב פרסום'),
     st(prog({ total: 15, published: 5, skipped: 10, finished: 15 }), { state: 'stopped', startedAt: inHours(-30) }),
     15, null, null],
   /* 9 — nothing queued AND the switch off. The only state left with no
          instant of any kind to print, and the one "לא מתוזמן" is for. */
-  ['nothing queued yet and the schedule off', camp('9', 'ניקוי דלתות'),
-    st(prog({ total: 0 }), { state: 'not_started' }),
+  ['nothing left queued and the schedule off', camp('9', 'ניקוי דלתות'),
+    st(prog({ total: 40, published: 39, running: 1, finished: 39 }), { state: 'running', startedAt: inHours(-5) }),
     20, sched.off, null],
   ['a long name, big numbers, publishing globally paused', camp('8', 'ניקוי ריפודי רכב ומושבים בבאר שבע והסביבה', 'paused'),
     st(prog({ total: 248, published: 120, scheduled: 100, skipped: 16, failed: 12, finished: 148 }), { state: 'paused', startedAt: inHours(-48), nextAt: inHours(4) }),
@@ -225,8 +247,8 @@ const cases = [
    * is the whole claim: one schedule, one empty queue, two different true
    * sentences depending only on whether the window is open.
    */
-  ['nothing queued yet, window OPEN NOW', camp('10', 'פרסומת לרוסים'),
-    st(prog({ total: 0 }), { state: 'not_started' }),
+  ['nothing left queued, window OPEN NOW', camp('10', 'פרסומת לרוסים'),
+    st(prog({ total: 40, published: 39, running: 1, finished: 39 }), { state: 'running', startedAt: beforeClock(WINDOW_OPEN, 2) }),
     138, sched.reference, WINDOW_OPEN],
   /*
    * 11 — HIS OWN SCREEN, AT THE MINUTE HE SENT IT.
@@ -295,9 +317,23 @@ const cases = [
     st(prog({ total: 80, published: 30, scheduled: 50, finished: 30 }), {
       state: 'running',
       startedAt: beforeClock(WINDOW_OPEN, 1),
-      nextAt: inHoursPlus30(1),
+      nextAt: afterClock(WINDOW_OPEN, 1),
     }),
     80, sched.reference, WINDOW_OPEN],
+  /*
+   * 16 — NEVER LAUNCHED, which is what cases 6, 9 and 10 used to be.
+   *
+   * "אין פרסומים מתוזמנים" is true here and reads as a lull — something that
+   * will pass. Nothing will pass it: a campaign owns no group list, so the
+   * list a round publishes to comes from the schedule row that launched it,
+   * and until one exists neither the window nor the daily repeat can produce
+   * a publication. The owner waited an evening on exactly this state. The
+   * campaigns card has said so since 4.9; the dashboard did not, because the
+   * sentence lived inside CampaignCard rather than in the block both draw.
+   */
+  ['never launched — no window sentence may be printed over it', camp('16', 'סבב חדש'),
+    st(prog({ total: 0 }), { state: 'not_started' }),
+    0, sched.reference, WINDOW_OPEN],
 ] as const;
 
 const body = cases

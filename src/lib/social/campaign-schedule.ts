@@ -5,10 +5,16 @@ import { TIMEZONE, type Campaign } from './types';
  * WHEN A CAMPAIGN IS ALLOWED TO PUBLISH — days of the week, a daily window,
  * and a gap between one publication and the next.
  *
- * "המערכת רשאית לפרסם רק בימים שנבחרו, רק בין 08:00 ל-22:00, ובהפרש של 10
- *  דקות בין פרסום לפרסום. אם מגיעים לשעת הסיום: לא לפרסם יותר באותו יום.
- *  הקמפיין צריך להמתין אוטומטית ליום הפעילות הבא ולהמשיך משעת ההתחלה
- *  שהוגדרה. אין לאפס את התור. אין להתחיל את הקמפיין מחדש."
+ * "המערכת רשאית לפרסם רק בימים שנבחרו, רק מ-08:00 ואילך, ובהפרש של 10 דקות
+ *  בין פרסום לפרסום. הקמפיין צריך להמתין אוטומטית ליום הפעילות הבא ולהמשיך
+ *  משעת ההתחלה שהוגדרה. אין לאפס את התור. אין להתחיל את הקמפיין מחדש."
+ *
+ * THERE IS NO CLOSING HOUR. "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק
+ * הכרטיס... להשאיר רק: שעת התחלת הפרסום, הפרש בין פרסום לפרסום, ימי הפרסום
+ * שנבחרו." A chosen day opens at `start` and runs to midnight; the roll onto
+ * the next chosen day is what the day boundary does, not what an hour the
+ * owner can no longer see does. The `schedule_end` column keeps whatever it
+ * holds — nothing here reads it and nothing here writes it.
  *
  * ONE FUNCTION, TWO READERS, AND THAT IS THE WHOLE POINT OF THIS FILE.
  *
@@ -35,9 +41,21 @@ export interface CampaignSchedule {
   enabled: boolean;
   /** 0 = Sunday … 6 = Saturday — the same numbering zonedWeekday() returns. */
   days: number[];
-  /** 'HH:MM', 24-hour, local (Asia/Jerusalem). */
+  /**
+   * 'HH:MM', 24-hour, local (Asia/Jerusalem) — the hour the day OPENS, and the
+   * only hour this schedule has.
+   *
+   * THERE IS NO CLOSING HOUR ANY MORE. "יש להסיר לחלוטין את אפשרות שעת הסיום
+   * מממשק הכרטיס... להשאיר רק: שעת התחלת הפרסום, הפרש בין פרסום לפרסום, ימי
+   * הפרסום שנבחרו." A chosen day is open from this hour until midnight, and
+   * the roll onto the next chosen day happens at the day boundary rather than
+   * at an hour the owner can no longer see or change.
+   *
+   * The `schedule_end` COLUMN is untouched — readSchedule() simply stops
+   * reading it and scheduleColumns() stops writing it, so every value already
+   * in the database stays exactly where it is. "אסור למחוק מידע."
+   */
   start: string;
-  end: string;
   /**
    * SECONDS between one publication of THIS campaign and the next.
    *
@@ -147,7 +165,7 @@ export const TIME_CHOICES: string[] = Array.from({ length: 48 }, (_, i) =>
 /**
  * What a campaign gets before anyone has touched the panel.
  *
- * The owner's own reference: Sunday to Thursday, 08:00–22:00, ten minutes.
+ * The owner's own reference: Sunday to Thursday, from 08:00, ten minutes.
  * Friday and Saturday are off because that is the working week here, and a
  * default that publishes into Shabbat is a default that gets noticed by the
  * wrong people. `enabled: false` regardless: these are the values the panel
@@ -157,7 +175,6 @@ export const DEFAULT_CAMPAIGN_SCHEDULE: CampaignSchedule = {
   enabled: false,
   days: [0, 1, 2, 3, 4],
   start: '08:00',
-  end: '22:00',
   gapSeconds: 600,
 };
 
@@ -165,7 +182,7 @@ export const DEFAULT_CAMPAIGN_SCHEDULE: CampaignSchedule = {
 export type ScheduleFields = Partial<
   Pick<
     Campaign,
-    'schedule_enabled' | 'schedule_days' | 'schedule_start' | 'schedule_end' | 'schedule_gap_minutes' | 'schedule_gap_seconds'
+    'schedule_enabled' | 'schedule_days' | 'schedule_start' | 'schedule_gap_minutes' | 'schedule_gap_seconds'
   >
 >;
 
@@ -214,43 +231,40 @@ export function readSchedule(campaign: ScheduleFields | null | undefined): Campa
   const rawMinutes = Number(row.schedule_gap_minutes);
   const gap = Number.isFinite(rawSeconds) && rawSeconds > 0 ? rawSeconds : rawMinutes * 60;
   const start = clampTime(row.schedule_start, DEFAULT_CAMPAIGN_SCHEDULE.start);
-  const end = clampTime(row.schedule_end, DEFAULT_CAMPAIGN_SCHEDULE.end);
   return {
     enabled: row.schedule_enabled === true,
     days,
     start,
     /*
-     * AN END AT OR BEFORE ITS START RUNS TO MIDNIGHT — it does NOT collapse
-     * onto the start, which is what this did and which was a deadlock.
+     * `schedule_end` IS READ BY NOTHING HERE ANY MORE, and that is the change.
      *
-     * The panel offers start and end as two independent selects, so "22:00 to
-     * 08:00" — the natural way to ask for an overnight window — is two taps
-     * away. Clamping `end` onto `start` made the window exactly one instant
-     * wide, and rules.ts defers to the allowed instant PLUS a five-second
-     * cushion: five seconds past the only legal moment of the day. So every
-     * claim landed outside the window and deferred to the next chosen day,
-     * for ever. Reproduced: a campaign set that way never published a single
-     * post, and the only sign was one "מחוץ לשעות הפרסום" line a day.
+     * It used to be a second wall clock with a clamp in front of it: an end at
+     * or before its start was rewritten to 23:59, because the natural way to
+     * ask for an overnight window ("22:00 to 08:00") otherwise produced a
+     * window exactly one instant wide and a campaign that never published a
+     * single post. That clamp is gone with the field it guarded — a day now
+     * runs from `start` to midnight, which is the only reading the two
+     * remaining controls can produce.
      *
-     * 23:59 is the closest honest reading of "from 22:00, overnight" that
-     * this product can actually deliver — a window that crosses midnight is a
-     * bigger change than a clamp. Only reachable when end <= start, which
-     * until now could not publish at all, so no working schedule moves.
+     * The COLUMN still holds whatever it held. Nothing above touches it, so a
+     * rollback reads the old hours straight back out.
      */
-    end: (toMinutes(end) ?? 0) <= (toMinutes(start) ?? 0) ? '23:59' : end,
     gapSeconds: Number.isFinite(gap) && gap > 0
       ? Math.min(MAX_GAP_SECONDS, Math.max(MIN_GAP_SECONDS, Math.round(gap)))
       : DEFAULT_CAMPAIGN_SCHEDULE.gapSeconds,
   };
 }
 
-/** The schedule → the five columns, for saveCampaign(). */
+/** The schedule → the four columns it still owns, for saveCampaign(). */
 export function scheduleColumns(s: CampaignSchedule): Required<ScheduleFields> {
   return {
     schedule_enabled: s.enabled,
     schedule_days: [...s.days].sort((a, b) => a - b),
     schedule_start: s.start,
-    schedule_end: s.end,
+    /* `schedule_end` IS DELIBERATELY ABSENT. The window has no closing hour
+       any more, so writing one would be this module inventing a value the
+       owner cannot see; leaving the column out of the update keeps whatever
+       is stored there exactly as it is. "אסור למחוק מידע." */
     schedule_gap_seconds: s.gapSeconds,
     /* Written beside it, rounded up — see gapMinutesFor. Dropping this column
        would leave an un-updated worker reading nothing and falling back to a
@@ -320,12 +334,20 @@ export function repeatColumns(r: CampaignRepeat): { repeat_enabled: boolean; rep
   return { repeat_enabled: r.enabled, repeat_min_hours: Math.min(MAX_REPEAT_HOURS, Math.max(MIN_REPEAT_HOURS, Math.round(r.minHours))) };
 }
 
-/** Whether `at` falls on a chosen day, inside the daily window. */
+/**
+ * Whether `at` falls on a chosen day, at or after that day's opening hour.
+ *
+ * ONE EDGE, NOT TWO. The upper edge used to be `s.end` and is now the day
+ * itself: `dayISO` is derived from `at`, so an instant on a chosen day is
+ * before that day's midnight by construction and there is nothing left to
+ * compare it against. What this answers is therefore exactly what the two
+ * remaining controls can express — "is this a publishing day, and has it
+ * opened yet".
+ */
 export function isAllowedAt(s: CampaignSchedule, at: Date, tz = TIMEZONE): boolean {
   if (!s.enabled) return true;
   if (!s.days.includes(zonedWeekday(at, tz))) return false;
-  const dayISO = zonedDateISO(at, tz);
-  return at >= zonedToUtc(dayISO, s.start, tz) && at <= zonedToUtc(dayISO, s.end, tz);
+  return at >= zonedToUtc(zonedDateISO(at, tz), s.start, tz);
 }
 
 /**
@@ -352,9 +374,17 @@ export function nextAllowedAt(s: CampaignSchedule, from: Date, tz = TIMEZONE): D
        close enough to a boundary for a DST shift to answer with its neighbour. */
     if (!s.days.includes(zonedWeekday(zonedToUtc(dayISO, '12:00', tz), tz))) continue;
     const opens = zonedToUtc(dayISO, s.start, tz);
-    const closes = zonedToUtc(dayISO, s.end, tz);
+    /*
+     * MIDNIGHT, AND EXCLUSIVE. The day closes where the next one begins, built
+     * as the next calendar date's 00:00 in the zone rather than as 23:59 or as
+     * a day of milliseconds — the first is a minute short and the second moves
+     * by an hour twice a year. Exclusive because 00:00 belongs to the day
+     * after, which the next iteration decides about on its own merits: it may
+     * not be a publishing day at all.
+     */
+    const closes = zonedToUtc(addDaysISO(dayISO, 1), '00:00', tz);
     if (from <= opens) return opens;
-    if (from <= closes) return from;
+    if (from < closes) return from;
   }
   return null;
 }
@@ -372,9 +402,10 @@ export function nextAllowedAt(s: CampaignSchedule, from: Date, tz = TIMEZONE): D
  *
  * So the strip needs the other half of the same fact, and it is a question
  * nextAllowedAt() cannot be asked: not when the window opens, but when the one
- * already open closes. A caller cannot derive it safely from the schedule
- * either — `s.end` is a wall clock, and turning it into an instant means
- * resolving it against the right calendar date in the right zone, which is
+ * already open closes. WHICH IS NOW MIDNIGHT — the day's own end, since the
+ * closing hour was removed — and a caller still cannot derive it safely,
+ * because "the end of the day this instant falls in" means resolving a
+ * calendar date in the zone across two clock changes a year, which is
  * precisely the arithmetic that lives in this file and nowhere else.
  *
  * NULL IS NOT "NEVER", IT IS "NOT NOW". Outside the window — before it opens,
@@ -384,7 +415,7 @@ export function nextAllowedAt(s: CampaignSchedule, from: Date, tz = TIMEZONE): D
 export function windowClosesAt(s: CampaignSchedule, from: Date, tz = TIMEZONE): Date | null {
   if (!s.enabled) return null;
   if (!isAllowedAt(s, from, tz)) return null;
-  return zonedToUtc(zonedDateISO(from, tz), s.end, tz);
+  return zonedToUtc(addDaysISO(zonedDateISO(from, tz), 1), '00:00', tz);
 }
 
 /**
@@ -452,5 +483,5 @@ export function gapLabel(s: CampaignSchedule): string {
  * value that also reaches an aria-label is read aloud by some screen readers.
  */
 export function scheduleSummary(s: CampaignSchedule): string {
-  return `${daysLabel(s)} · ${s.start} – ${s.end} · ${gapLabel(s)}`;
+  return `${daysLabel(s)} · משעה ${s.start} · ${gapLabel(s)}`;
 }

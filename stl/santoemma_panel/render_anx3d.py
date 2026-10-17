@@ -29,10 +29,10 @@ def camera_from_h(H, w, h):               # K [r1 r2 t] = H (Zhang, principal po
 
 def props():                             # render-only hardware: machine housing, rocker switches, screws (not printed)
     hx, hy, hd = BIG; sx, sy, sd = SMALL
-    housing = prism(plate_outline().buffer(-1.5), -30, -0.01).cut(cyl(hd, -31, 1, hx, hy)).cut(cyl(sd, -31, 1, sx, sy))
+    housing = prism(plate_outline().buffer(-1.5), -25, -0.01).cut(cyl(hd, -31, 1, hx, hy)).cut(cyl(sd, -31, 1, sx, sy))
     bezel = rocker = None
     for x, y in SWITCHES:
-        b = rbox(30.5, 38.0, 2.0, 2.0, T+3.5, x, y)
+        b = rbox(30.5, 38.0, 2.0, T-3, T+3.5, x, y)
         r = rbox(25.0, 32.0, 2.5, T+3.5, T+9.0, x, y).edges('>Z').chamfer(1.2)
         bezel = b if bezel is None else bezel.union(b); rocker = r if rocker is None else rocker.union(r)
     def screw(x, y, z, d):
@@ -49,7 +49,7 @@ def tess(shape, tol=0.03):
     v, f = shape.val().tessellate(tol, 0.15)
     return np.array([(p.x, p.y, p.z) for p in v]), np.array(f)
 
-MAT = {'black': 0, 'blue': 1, 'silver': 2, 'housing': 3, 'bezel': 4, 'rocker': 5, 'chrome': 6}
+MAT = {'black': 0, 'blue': 1, 'silver': 2, 'letters_ANX': 2, 'letters_3D': 1, 'icons': 2, 'housing': 3, 'bezel': 4, 'rocker': 5, 'chrome': 6}
 
 def raster(meshes, project, w, h):
     zb = np.full((h, w), np.inf); nb = np.zeros((h, w, 3)); mb = np.full((h, w), -1); pb = np.zeros((h, w, 3))

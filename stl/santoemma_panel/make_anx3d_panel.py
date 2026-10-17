@@ -4,22 +4,26 @@ Functional geometry is kept from make_panel.py: 258 x 175 plate, 2 x 22.2 x 30.2
 Layout, logo, vents, rim and grooves are measured off the rectified reference and scaled to 258 x 175 (x 0.963, y 0.888).
 
 Three bodies for a multi-material print, all resting on the black body (no floating parts), back face on the bed:
-  black  - plate, switch pockets, recessed logo/vent tray with open slots, logo outline, grooves
-  blue   - outer rim, square flange around the 44 hole, ring in the 32 hole, "3D"
-  silver - "ANX", switch icons (flush inlays)
+  black        - 10 mm plate, switch pockets, recessed logo/vent tray with open slots, logo outline, grooves
+  blue         - outer rim, square flange around the 44 hole, ring in the 32 hole
+  letters_ANX  - "ANX"  } separate parts so each can be printed / painted in its own colour
+  letters_3D   - "3D"   }  (letters_ANX3D = both together)
+  icons        - water spray / vacuum icons over the switches (flush inlays)
 Run:  python3 make_anx3d_panel.py  ->  anx3d_panel.step (coloured assembly), anx3d_panel.stl (one body),
-                                      anx3d_panel_{black,blue,silver}.stl (multi-material, same origin)."""
+                                      anx3d_panel_<part>.stl + anx3d_panel.3mf (multi-material, same origin)."""
 import numpy as np, cadquery as cq
 from shapely.geometry import Polygon, LineString, Point
 from shapely.ops import unary_union
 from shapely import affinity
 
 PW, PH = 258.0, 175.0                     # plate (unchanged)
-T = 5.0                                   # black plate, front face at z = T
+T = 10.0                                  # black plate (panel thickness), front face at z = T
+MOUNT_T = 5.0                             # relieved from the back to 5 mm around the fittings + cable gland (thread length)
 RIM_H = 3.0                               # blue rim stands 3 mm proud of the black face
 SWITCH_W, SWITCH_H, SWITCH_PANEL = 22.2, 30.2, 2.0      # rocker cutout + material left at the clips (unchanged)
 SWITCHES = [(-57.3, 44.4), (-22.6, 44.4)]
-SW_POCKET = (32.5, 40.0, 2.5)             # black pocket each switch sits in (w, h, r)
+SW_POCKET = (32.5, 40.0, 2.5)             # black pocket each switch sits in (w, h, r), 3 mm deep
+SW_BACK = (30.0, 38.0, 2.0)               # back pocket: leaves SWITCH_PANEL at the clips
 BIG = (32.5, 44.4, 44.0)                  # 44 hole (x, y, dia) in the blue square flange
 FLANGE, FLANGE_R, FLANGE_POCKET = 58.0, 4.0, 63.0
 FLANGE_SCREW, FLANGE_PITCH = 3.2, 38.0    # 4 x M3, 38 mm square (measured on the original panel)
@@ -161,15 +165,16 @@ def make_black():
     b = prism(plate_outline().buffer(-SKIRT, join_style='mitre'), 0, T)
     cuts = []
     for x, y in SWITCHES:
-        cuts += [rbox(*SW_POCKET, SWITCH_PANEL, T+1, x, y),
+        cuts += [rbox(*SW_POCKET, T-3, T+1, x, y), rbox(*SW_BACK, -1, T-3-SWITCH_PANEL, x, y),
                  cq.Workplane('XY', origin=(x, y, -1)).rect(SWITCH_W, SWITCH_H).extrude(T+2)]
     bx, by, bd = BIG
-    cuts += [rbox(FLANGE_POCKET, FLANGE_POCKET, FLANGE_R+1, T-1.5, T+1, bx, by), cyl(bd, -1, T+1, bx, by)]
+    cuts += [rbox(FLANGE_POCKET, FLANGE_POCKET, FLANGE_R+1, T-1.5, T+1, bx, by), cyl(bd, -1, T+1, bx, by),
+             rbox(56, 56, 4, -1, T-1.5-MOUNT_T, bx, by)]                                  # back relief: nuts + fitting thread
     cuts += [cyl(FLANGE_SCREW, -1, T+1, bx+sx*FLANGE_PITCH/2, by+sy*FLANGE_PITCH/2) for sx in (-1, 1) for sy in (-1, 1)]
     sx_, sy_, sd = SMALL
-    cuts += [cyl(RING_BORE, T-2, T+1, sx_, sy_), cyl(sd, -1, T+1, sx_, sy_)]
+    cuts += [cyl(RING_BORE, T-2, T+1, sx_, sy_), cyl(sd, -1, T+1, sx_, sy_), cyl(48, -1, T-2-MOUNT_T+2, sx_, sy_)]
     cx, cy, cd = CABLE
-    cuts += [cyl(cd, -1, T+1, cx, cy), cone_cut(cd, T, 0.5, cx, cy)]
+    cuts += [cyl(cd, -1, T+1, cx, cy), cone_cut(cd, T, 0.5, cx, cy), cyl(30, -1, T-MOUNT_T, cx, cy)]   # 22 AF locknut seat
     for x, y in SCREWS_BLACK:
         cuts += [cyl(SCREW, -1, T+1, x, y), cyl(SCREW_HEAD, T-HEAD_DEPTH, T+1, x, y)]
     cuts += [cyl(SCREW, -1, T+1, *SCREW_BLUE)]
@@ -201,17 +206,19 @@ def make_blue():
             fl = fl.cut(cyl(FLANGE_SCREW, T-2, T+2, x, y)).cut(cyl(6.0, T+1.5-1.2, T+2, x, y))
     sx_, sy_, sd = SMALL
     ring = cyl(RING_OD, T-2, T, sx_, sy_).cut(cyl(sd, T-3, T+1, sx_, sy_)).cut(cone_cut(sd, T, 0.8, sx_, sy_))
-    _, three_d = letters()
-    return rim.union(fl).union(ring).union(prism(three_d, LOGO_Z0, LOGO_Z1))
+    return rim.union(fl).union(ring)
 
-def make_silver():
-    anx, _ = letters()
-    return prism(anx, LOGO_Z0, LOGO_Z1).union(prism(icons(), T-INLAY, T))
+def make_letters():               # ANX and 3D: separate parts, each can get its own colour
+    anx, three_d = letters()
+    return prism(anx, LOGO_Z0, LOGO_Z1), prism(three_d, LOGO_Z0, LOGO_Z1)
 
-COLORS = {'black': (0.06, 0.06, 0.07), 'blue': (0.05, 0.28, 1.0), 'silver': (0.78, 0.79, 0.80)}
+COLORS = {'black': (0.06, 0.06, 0.07), 'blue': (0.05, 0.28, 1.0), 'letters_ANX': (0.78, 0.79, 0.80),
+          'letters_3D': (0.05, 0.28, 1.0), 'icons': (0.78, 0.79, 0.80)}
 
 def build():
-    return {'black': make_black(), 'blue': make_blue(), 'silver': make_silver()}
+    anx, three_d = make_letters()
+    return {'black': make_black(), 'blue': make_blue(), 'letters_ANX': anx, 'letters_3D': three_d,
+            'icons': prism(icons(), T-INLAY, T)}
 
 if __name__ == '__main__':
     parts = build()
@@ -220,10 +227,17 @@ if __name__ == '__main__':
         asm.add(s, name=k, color=cq.Color(*COLORS[k]))
         cq.exporters.export(s, f'anx3d_panel_{k}.stl', tolerance=0.02, angularTolerance=0.1)
     asm.save('anx3d_panel.step')
-    one = parts['black'].union(parts['blue']).union(parts['silver'])
+    letters_all = parts['letters_ANX'].union(parts['letters_3D'])
+    cq.exporters.export(letters_all, 'anx3d_panel_letters_ANX3D.stl', tolerance=0.02, angularTolerance=0.1)
+    one = parts['black']
+    for k in ['blue', 'letters_ANX', 'letters_3D', 'icons']: one = one.union(parts[k])
     cq.exporters.export(one, 'anx3d_panel.stl', tolerance=0.02, angularTolerance=0.1)
     import trimesh                                                   # report from the exported meshes (tight bounds)
-    for k in ['black', 'blue', 'silver', None]:
+    scene = trimesh.Scene()                                          # 3MF: every colour a separate part, same origin
+    for k in parts:
+        scene.add_geometry(trimesh.load(f'anx3d_panel_{k}.stl'), node_name=k, geom_name=k)
+    scene.export('anx3d_panel.3mf')
+    for k in list(parts) + ['letters_ANX3D', None]:
         m = trimesh.load(f'anx3d_panel_{k}.stl' if k else 'anx3d_panel.stl')
         print(f'{k or "combined":9s} watertight={m.is_watertight} bodies={len(m.split(only_watertight=False))} '
               f'vol={m.volume/1000:.1f}cm3 bounds={m.bounds.round(2).tolist()}')

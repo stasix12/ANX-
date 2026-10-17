@@ -12,7 +12,7 @@ SWITCHES = [(62.0, 50.0), (96.0, 50.0)]   # (x, y) centres, top-right, side by s
 ROUND = [(79.0, 0.0, 44.0), (79.0, -50.0, 32.0)]   # (x, y, dia) right side: 44 above, 32 below
 CABLE = (-104.0, 0.0, 16.4)               # middle of the left side, M16 gland
 SCREW = 4.5                               # M4 clearance
-SCREWS = [(sx*(PW/2-8), sy*(PH/2-8)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, PH/2-8), (0, -(PH/2-8))]
+SCREWS = [(sx*121.0, sy*78.25) for sx in (-1, 1) for sy in (-1, 1)] + [(0, 78.25), (0, -78.25)]   # measured on the original
 SEG = 96
 
 def rrect(w, h, r):

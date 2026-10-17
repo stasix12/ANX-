@@ -22,13 +22,14 @@ SWITCHES = [(-57.3, 44.4), (-22.6, 44.4)]
 SW_POCKET = (32.5, 40.0, 2.5)             # black pocket each switch sits in (w, h, r)
 BIG = (32.5, 44.4, 44.0)                  # 44 hole (x, y, dia) in the blue square flange
 FLANGE, FLANGE_R, FLANGE_POCKET = 58.0, 4.0, 63.0
-FLANGE_SCREW, FLANGE_PITCH = 3.2, 42.0    # 4 x M3, 42 mm square
+FLANGE_SCREW, FLANGE_PITCH = 3.2, 38.0    # 4 x M3, 38 mm square (measured on the original panel)
 SMALL = (90.0, 44.4, 32.0)                # 32 hole (x, y, dia) with the blue ring
 RING_OD, RING_BORE = 40.0, 46.0
 CABLE = (-104.0, 0.0, 16.4)               # power cable, M16 gland (unchanged)
-SCREW, SCREW_HEAD, HEAD_DEPTH = 4.5, 8.0, 1.2
-SCREWS_BLACK = [(sx*(PW/2-8), sy*(PH/2-8)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, PH/2-8)]
-SCREW_BLUE = (0.0, -(PH/2-8))             # bottom middle screw sits in the blue rim tab
+SCREW, SCREW_HEAD, HEAD_DEPTH = 4.5, 9.0, 1.2
+SCREW_X, SCREW_Y = 121.0, 78.25           # measured on the original panel: 8 mm from the sides, 9.25 mm from top/bottom
+SCREWS_BLACK = [(sx*SCREW_X, sy*SCREW_Y) for sx in (-1, 1) for sy in (-1, 1)] + [(0, SCREW_Y)]
+SCREW_BLUE = (0.0, -SCREW_Y)              # bottom middle screw sits in the blue rim tab
 TRAY_Z = T-1.2                            # recessed logo / vent tray floor
 LOGO_Z0, LOGO_Z1 = TRAY_Z+2.0, TRAY_Z+3.2 # logo outline plate top, letter top
 INLAY = 0.8                               # icon inlay depth
@@ -45,14 +46,14 @@ def plate_outline():                      # left corners R6, right corners 5 mm 
     return Polygon(q + arc(-w+r, -h+r, 1.5*np.pi) + arc(-w+r, h-r, np.pi))
 
 def rim_inner():                          # black panel outline inside the blue rim (13 mm sides, 6.5 mm top, 9 mm bottom),
-    xs, xn, yt, yn, yb = 116.0, 125.5, 81.0, 84.5, -78.5    # notched around the black-zone screw heads,
-    return Polygon([(xs, -64), (xn, -73.5), (xn, -84), (115, -84), (109.5, yb), (14, yb), (9, -73.5),   # blue tab around
-                    (-9, -73.5), (-14, yb), (-109.5, yb), (-115, -84), (-xn, -84), (-xn, -73.5), (-xs, -64),  # the bottom
-                    (-xs, 68), (-xn, 77.5), (-xn, yn), (-116.5, yn), (-113, yt), (-9, yt), (-5.5, yn),        # middle screw
-                    (5.5, yn), (9, yt), (113, yt), (116.5, yn), (122, yn), (xn, 81), (xn, 77.5), (xs, 68)])
+    xs, xn, yt, yn, yb = 116.0, 126.0, 81.0, 84.5, -78.5    # notched around the black-zone screw heads,
+    return Polygon([(xs, -64), (xn, -73.5), (xn, -84), (115, -84), (109.5, yb), (14, yb), (9, -72.5),   # blue tab around
+                    (-9, -72.5), (-14, yb), (-109.5, yb), (-115, -84), (-xn, -84), (-xn, -73.5), (-xs, -64),  # the bottom
+                    (-xs, 66), (-xn, 75.5), (-xn, yn), (-116.5, yn), (-113, yt), (-9, yt), (-5.5, yn),        # middle screw
+                    (5.5, yn), (9, yt), (113, yt), (116.5, yn), (122, yn), (xn, 81), (xn, 75.5), (xs, 66)])
 
-TRAY = Polygon([(-79, -3.6), (80.9, -3.6), (105.9, -30.2), (105.9, -63.9), (98.8, -71), (-100, -71),
-                (-107.9, -63.1), (-107.9, -39.1)])
+TRAY = Polygon([(-79, -3.6), (80.9, -3.6), (105.9, -30.2), (105.9, -62.9), (98.8, -70), (-100, -70),
+                (-107.9, -62.1), (-107.9, -39.1)])
 GROOVE = LineString([(-114.5, 73), (-110, 68.5), (-110, 12.4), (-81, 12.4), (-76, 6.2), (-35, 6.2),     # V groove,
                      (-31, 8.9), (78, 8.9), (83, 3.6), (108.5, 3.6), (113, 8)]).buffer(0.3, cap_style='flat', join_style='mitre')  # 2.2 top x 0.8
 

@@ -1,6 +1,6 @@
 """ANX3D enclosure for a Shurflo diaphragm pump 8095-901-890 (230 VAC, ~190 x 96 x 89 mm on its flat bracket).
 Outer body 230 x 170 x 120 mm (widened from 140 so the pump fits with a PL 3/8" push-in elbow on each port): base (82 mm) + lid (38 mm), joined by 6 x M4 screws.
-Front face (left -> right): power rocker switch | outlet | inlet (35 mm panel-frame holes), Hebrew labels engraved above.
+Front face (left -> right): outlet | power rocker switch | inlet (35 mm panel-frame holes), Hebrew labels engraved above.
 Run:  python3 make_box.py   ->  base.stl, lid.stl (lid already flipped for printing)."""
 import numpy as np, trimesh
 from manifold3d import Manifold, CrossSection, FillRule, JoinType
@@ -13,9 +13,9 @@ W = 4.0                           # wall / floor thickness
 R = 10.0                          # outer corner radius
 GLAND_Z = 40.0                    # gland hole centre height
 WATER_HOLE = 35.0                 # water fittings: same panel-frame hole as the Turbo-X panel
-GLANDS = [(2,  WATER_HOLE, 'יציאה'),      # (y, hole dia, label)  - viewed from the front: left -> right
-          (44, WATER_HOLE, 'כניסה')]      # outlet and inlet side by side on the right
-SWITCH = (-46.0, 22.2, 30.2, 'חשמל')      # (y, cutout W, cutout H, label): snap-in rocker switch on the left
+GLANDS = [(-38, WATER_HOLE, 'יציאה'),     # (y, hole dia, label)  - viewed from the front: left -> right
+          (38,  WATER_HOLE, 'כניסה')]     # outlet left, inlet right
+SWITCH = (0.0, 22.2, 30.2, 'חשמל')        # (y, cutout W, cutout H, label): snap-in rocker switch in the middle
 SWITCH_PANEL = 2.0                        # wall thinned to 2 mm around the cutout so the switch clips catch
 SCREW_PILOT, SCREW_CLEAR, SCREW_HEAD = 3.4, 4.5, 8.6   # M4 self-tapping into the base pillars
 PILLARS = [(sx*(L/2-W-4), sy*(D/2-W-4)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, -(D/2-W-4)), (0, D/2-W-4)]

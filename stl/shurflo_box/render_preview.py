@@ -43,7 +43,7 @@ fig, axs = plt.subplots(2, 3, figsize=(21, 13)); fig.patch.set_facecolor('white'
 draw(axs[0, 0], [base, lid], view(-35, 28), 'Assembled  230 x 170 x 120 mm')
 draw(axs[0, 1], [base, up], view(-35, 28), 'Base + lid, 6 x M4 screws')
 draw(axs[0, 2], [base, pump], view(150, 50), 'Pump on its grommets in the 4 seats (90 x 60)')
-draw(axs[1, 0], [base, lid], view(0, 0), 'Front: power switch | outlet | inlet')
+draw(axs[1, 0], [base, lid], view(0, 0), 'Front: outlet | power switch | inlet')
 draw(axs[1, 1], [tm(make_base())], view(150, 55), 'Grommet seats 90 x 60 (M5 nut trapped below)')
 draw(axs[1, 2], [base, lid], view(-90, 0), 'Side')
 plt.tight_layout(); plt.savefig('preview.png', dpi=80, facecolor='white')

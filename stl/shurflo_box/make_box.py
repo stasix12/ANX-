@@ -17,6 +17,7 @@ GLANDS = [(-38, WATER_HOLE, 'יציאה'),     # (y, hole dia, label)  - viewed 
           (38,  WATER_HOLE, 'כניסה')]     # outlet left, inlet right
 SWITCH = (0.0, 22.2, 30.2, 'חשמל')        # (y, cutout W, cutout H, label): snap-in rocker switch in the middle
 SWITCH_PANEL = 2.0                        # wall thinned to 2 mm around the cutout so the switch clips catch
+BACK_CABLE = (-58.0, 16.4)                # (y, dia): power cable hole in the back wall, M16 gland / make_gland.py; beside the pump head
 SCREW_PILOT, SCREW_CLEAR, SCREW_HEAD = 3.4, 4.5, 8.6   # M4 self-tapping into the base pillars
 PILLARS = [(sx*(L/2-W-4), sy*(D/2-W-4)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, -(D/2-W-4)), (0, D/2-W-4)]
 FEET_X = (-88.0, 88.0)            # mounting ears on both long sides, 5.5 mm holes
@@ -100,8 +101,12 @@ def make_base():
             a, b = sorted((k*u0, k*u1))
             cuts.append(wall_cut(vent_group(a, b, 18, 60), W+2, m, D/2-W-1))
             cuts.append(wall_cut(rrect(b-a+12, 54, 3).translate([(a+b)/2, 39]), 2, m, D/2-1))
-    cuts.append(wall_cut(vent_group(-42, 42, 18, 60), W+2, TO_BACK, L/2-W-1))
-    cuts.append(wall_cut(rrect(96, 54, 3).translate([0, 39]), 2, TO_BACK, L/2-1))
+    bv0, bv1 = -44, 34                                       # back vents, kept clear of the cable gland flange
+    cuts.append(wall_cut(vent_group(bv0, bv1, 18, 60), W+2, TO_BACK, L/2-W-1))
+    cuts.append(wall_cut(rrect(bv1-bv0+12, 54, 3).translate([(bv0+bv1)/2, 39]), 2, TO_BACK, L/2-1))
+    cy, cd = BACK_CABLE                                                                       # power cable entry
+    cuts.append(wall_cut(CrossSection.circle(cd/2, SEG).translate([-cy, GLAND_Z]), W+2, TO_BACK, L/2-W-1))
+    cuts.append(wall_cut(text2d('חשמל', 6.5, HEB_FONT).translate([-cy, GLAND_Z+20]), 3, TO_BACK, L/2-1.0))
     # floor: 4 seats the bracket's rubber grommets drop into (90 x 60 hole pattern), M5 bolt + nut trapped underneath
     for x, y in BRACKET_HOLES:
         body += Manifold.batch_hull([cyl(16, W-0.1, W+2, x, y), cyl(13, W+2, W+SEAT_H, x, y)])

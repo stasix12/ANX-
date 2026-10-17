@@ -1,24 +1,25 @@
 """ANX3D enclosure for a Shurflo diaphragm pump 8095-901-890 (230 VAC, ~190 x 96 x 89 mm on its flat bracket).
-Outer body 210 x 170 x 120 mm (widened from 140 so the pump fits with a PL 3/8" push-in elbow on each port): base (82 mm) + lid (38 mm), joined by 6 x M4 screws.
-Front face: inlet + outlet (35 mm panel-frame holes) | power gland (M16), Hebrew labels engraved above.
+Outer body 230 x 170 x 120 mm (widened from 140 so the pump fits with a PL 3/8" push-in elbow on each port): base (82 mm) + lid (38 mm), joined by 6 x M4 screws.
+Front face (left -> right): power rocker switch | outlet | inlet (35 mm panel-frame holes), Hebrew labels engraved above.
 Run:  python3 make_box.py   ->  base.stl, lid.stl (lid already flipped for printing)."""
 import numpy as np, trimesh
 from manifold3d import Manifold, CrossSection, FillRule, JoinType
 from matplotlib.textpath import TextPath
 from matplotlib.font_manager import FontProperties
 
-L, D, H = 210.0, 170.0, 120.0     # outer body (feet extend beyond D)
+L, D, H = 230.0, 170.0, 120.0     # outer body (feet extend beyond D)
 HB = 82.0                         # base height (lid = H - HB)
 W = 4.0                           # wall / floor thickness
 R = 10.0                          # outer corner radius
 GLAND_Z = 40.0                    # gland hole centre height
 WATER_HOLE = 35.0                 # water fittings: same panel-frame hole as the Turbo-X panel
-GLANDS = [(-48, WATER_HOLE, 'יציאה'),     # (y, hole dia, label)  - viewed from the front: left -> right
-          (0,   16.4, 'חשמל'),             # water holes line up with the elbows on either side of the pump head
-          (48,  WATER_HOLE, 'כניסה')]
+GLANDS = [(2,  WATER_HOLE, 'יציאה'),      # (y, hole dia, label)  - viewed from the front: left -> right
+          (44, WATER_HOLE, 'כניסה')]      # outlet and inlet side by side on the right
+SWITCH = (-46.0, 22.2, 30.2, 'חשמל')      # (y, cutout W, cutout H, label): snap-in rocker switch on the left
+SWITCH_PANEL = 2.0                        # wall thinned to 2 mm around the cutout so the switch clips catch
 SCREW_PILOT, SCREW_CLEAR, SCREW_HEAD = 3.4, 4.5, 8.6   # M4 self-tapping into the base pillars
 PILLARS = [(sx*(L/2-W-4), sy*(D/2-W-4)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, -(D/2-W-4)), (0, D/2-W-4)]
-FEET_X = (-78.0, 78.0)            # mounting ears on both long sides, 5.5 mm holes
+FEET_X = (-88.0, 88.0)            # mounting ears on both long sides, 5.5 mm holes
 BRACKET_X, BRACKET_W, BRACKET_L = 15.0, 90.0, 60.0   # pump bracket: grommet bolts 90 mm across (Y) x 60 mm along the motor (X)
 BRACKET_HOLES = [(BRACKET_X+sx*BRACKET_L/2, sy*BRACKET_W/2) for sx in (-1, 1) for sy in (-1, 1)]
 SEAT_H, SEAT_CUP, GROMMET_OD = 8.0, 2.5, 16.0       # seat height above floor, cup depth, rubber grommet OD (cup = OD + 0.8)
@@ -87,9 +88,13 @@ def make_base():
     for y, dia, label in GLANDS:
         cuts.append(cyl(dia/2, -1, 20).transform(np.array([[0, 0, 1, L/2-10], [0, 1, 0, y], [-1, 0, 0, GLAND_Z]], float)))
         cuts.append(wall_cut(text2d(label, 7.5, HEB_FONT).translate([y, GLAND_Z+26]), 3, TO_FRONT, L/2-1.8))
+    sy, sw, sh, slabel = SWITCH                                                               # rocker switch cutout
+    cuts.append(wall_cut(CrossSection.square([sw, sh], center=True).translate([sy, GLAND_Z]), W+2, TO_FRONT, L/2-W-1))
+    cuts.append(wall_cut(rrect(sw+8, sh+8, 2).translate([sy, GLAND_Z]), W-0.8-SWITCH_PANEL+1, TO_FRONT, L/2-W-1))  # thin to 2 mm inside
+    cuts.append(wall_cut(text2d(slabel, 7.5, HEB_FONT).translate([sy, GLAND_Z+26]), 3, TO_FRONT, L/2-1.8))
     cuts.append(wall_cut(rrect(150, 62, 4).translate([0, GLAND_Z+6]), 2, TO_FRONT, L/2-0.8))   # 0.8 mm panel recess
     # vents: two groups on each long side, one on the back, each in a 1 mm recessed frame
-    for u0, u1 in ((-88, -22), (12, 66)):
+    for u0, u1 in ((-98, -24), (14, 80)):
         for m, k in ((TO_RIGHT, 1), (TO_LEFT, -1)):      # u is mirrored on the +Y wall
             a, b = sorted((k*u0, k*u1))
             cuts.append(wall_cut(vent_group(a, b, 18, 60), W+2, m, D/2-W-1))
@@ -184,10 +189,10 @@ def make_lid():
     cuts = [text2d('ANX3D', 26, LOGO_FONT).extrude(3).translate([0, 0, H-1.2]),            # engraved logo
             (rrect(L-54, D-44, 8) - rrect(L-57, D-47, 6.5)).extrude(2).translate([0, 0, H-0.6])]   # 0.6 mm panel outline
     for sx in (-1, 1):                                                                     # roof vents at both ends
-        for x in (83, 90):
+        for x in (L/2-22, L/2-15):
             cuts.append(slot2d(80, 4.5).rotate(90).translate([sx*x, 0]).extrude(10).translate([0, 0, TOP-8]))
     for m, k in ((TO_RIGHT, 1), (TO_LEFT, -1)):                                            # side vents on the lid wall
-        for u0, u1 in ((-86, -14), (14, 86)):
+        for u0, u1 in ((-96, -14), (14, 96)):
             cuts.append(wall_cut(vent_group(u0, u1, HB+6, TOP-7), W+2, m, D/2-W-1))
     lid -= sum(cuts[1:], cuts[0])
     return lid

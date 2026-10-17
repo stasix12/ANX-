@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { scheduleReadout } from '../../src/lib/social/schedule-readout';
 import { projectQueue, type AccountSpacing } from '../../src/lib/social/projection';
 import { DEFAULT_CAMPAIGN_REPEAT, readRepeat, repeatColumns, MIN_REPEAT_HOURS, MAX_REPEAT_HOURS, type CampaignRepeat, type CampaignSchedule } from '../../src/lib/social/campaign-schedule';
-import type { CampaignState } from '../../src/lib/social/campaign';
+import { campaignState, neverLaunched, type CampaignState } from '../../src/lib/social/campaign';
 
 /**
  * WHAT A CARD MAY SAY ABOUT TIME — every state, decided without a browser.
@@ -86,7 +86,7 @@ const st = (
    */
   const now = at('2026-10-06T10:12');
   const r = scheduleReadout(ref, st('completed', null), now);
-  eq(r, { kind: 'ended', stopped: false, repeats: false }, 'a finished round inside an open window must name no instant');
+  eq(r, { kind: 'ended', stopped: false, repeats: false, opens: null }, 'a finished round inside an open window must name no instant');
 
   /*
    * AND THE PROOF THAT IT IS THE ROUND, NOT THE CLOCK, THAT DECIDES. Same
@@ -171,7 +171,7 @@ const st = (
    */
   eq(scheduleReadout(noDays, st('running', at('2026-10-06T10:20').toISOString()), now), { kind: 'no-day' }, 'a schedule with no day names no instant');
   /* Stopped by hand reads differently from finished, because it is. */
-  eq(scheduleReadout(ref, st('stopped', null), now), { kind: 'ended', stopped: true, repeats: false }, 'a round he stopped says it was stopped');
+  eq(scheduleReadout(ref, st('stopped', null), now), { kind: 'ended', stopped: true, repeats: false, opens: null }, 'a round he stopped says it was stopped');
   /*
    * WAITING ON A PERSON. Every window sentence called this "אין פרסום ממתין".
    * Seven publications were waiting; they were waiting for him.
@@ -258,13 +258,24 @@ const st = (
           is(!Number.isNaN(new Date(carries).getTime()), `${s}/${c}: a printed instant must be a real date`);
           if (r.kind !== 'due' && r.kind !== 'paused') is(new Date(carries) > at(c), `${s}/${c}: ${r.kind} named ${carries}, which is not ahead of now`);
           /*
-           * AND A ROUND THAT IS OVER MAY NEVER REACH THIS LINE — unless the
-           * read was capped, in which case "over" is precisely the claim that
-           * cannot be trusted and a row we can SEE outranks it. That exception
-           * is the whole design of the truncation branch, so it is written
-           * here rather than worked around.
+           * AND A ROUND THAT IS OVER MAY NEVER REACH THIS LINE — with two
+           * exceptions, and both are the same sentence: A ROW WE CAN SEE IS A
+           * FACT.
+           *
+           *   • a CAPPED read, where "over" is precisely the claim that cannot
+           *     be trusted;
+           *   • a 'completed' round that still has a QUEUED row. That state
+           *     used to be unbuildable — campaign.ts called a round completed
+           *     exactly when nothing was open — and a repeating round builds
+           *     it every day: its counts are TODAY'S, so a day with nothing
+           *     scheduled reads as finished while the queue holds tomorrow's
+           *     rows. The instant is the row's, and the row is real.
+           *
+           * 'stopped' has no exception. Its rows are real too and rules.ts
+           * hands every one of them straight back, so naming their instant
+           * would be the one thing this module forbids.
            */
-          if (!cap) is(s !== 'completed' && s !== 'stopped', `${s}: a round that has ended printed ${r.kind} = ${carries}`);
+          if (!cap && !(s === 'completed' && q)) is(s !== 'completed' && s !== 'stopped', `${s}: a round that has ended printed ${r.kind} = ${carries}`);
           /*
            * A PAUSED ROUND MAY NAME THE MINUTE IT IS PLANNED FOR, and only
            * that: "אם הקמפיין מושהה, יש להציג את המועד המתוכנן לצד סטטוס
@@ -294,15 +305,44 @@ const st = (
    */
   const now = at('2026-10-06T10:12');
   const on: CampaignRepeat = { enabled: true, minHours: 20 };
+  /*
+   * AND IT SAYS WHEN. "למה הוא לא מראה מתי אמור לצאת הפרסום הבא" was asked of
+   * exactly this state: the card knew another round was coming and could not
+   * name an hour for it. `opens` is nextAllowedAt() — the first minute the
+   * window permits, which is the earliest the repeat can act. Drawn at 10:12
+   * on a Tuesday inside an 08:00 window, that minute is now.
+   */
   eq(
     scheduleReadout(ref, st('completed', null), now, on),
-    { kind: 'ended', stopped: false, repeats: true },
-    'a finished round that repeats says another one is coming',
+    { kind: 'ended', stopped: false, repeats: true, opens: now.toISOString() },
+    'a finished round that repeats says another one is coming, and when',
+  );
+  /* Outside the window it is the next chosen day's opening hour, never a
+     minute that has gone. Friday noon against a Sunday-to-Thursday schedule. */
+  eq(
+    scheduleReadout(ref, st('completed', null), at('2026-10-02T12:00'), on),
+    { kind: 'ended', stopped: false, repeats: true, opens: at('2026-10-04T08:00').toISOString() },
+    'and on a day the schedule does not permit, the hour is the next day it does',
+  );
+  /* No day chosen: the repeat is armed and there is no minute it can act in.
+     An hour invented here would be the card promising a round that is held
+     indefinitely, by design. */
+  eq(
+    scheduleReadout({ ...ref, days: [] }, st('completed', null), now, on),
+    { kind: 'ended', stopped: false, repeats: true, opens: null },
+    'with no day chosen there is no minute to name, and none is named',
+  );
+  /* The window off is not a window: the repeat still reopens the round, and
+     the hour it would open at is not a fact this module has. */
+  eq(
+    scheduleReadout(off, st('completed', null), now, on),
+    { kind: 'ended', stopped: false, repeats: true, opens: null },
+    'and a switched-off window names no hour either',
   );
   eq(
     scheduleReadout(ref, st('completed', null), now, DEFAULT_CAMPAIGN_REPEAT),
-    { kind: 'ended', stopped: false, repeats: false },
-    'and one that does not, does not — the default is off',
+    { kind: 'ended', stopped: false, repeats: false, opens: null },
+    'and one that does not, does not — the default is off, and names no hour',
   );
   /*
    * A ROUND HE STOPPED DOES NOT COME BACK, whatever the switch says. Stopping
@@ -311,8 +351,8 @@ const st = (
    */
   eq(
     scheduleReadout(ref, st('stopped', null), now, on),
-    { kind: 'ended', stopped: true, repeats: false },
-    'a round he STOPPED does not repeat, even with the switch on',
+    { kind: 'ended', stopped: true, repeats: false, opens: null },
+    'a round he STOPPED does not repeat, even with the switch on — and is promised no hour',
   );
   /* And the switch changes nothing about any other state's answer. */
   for (const s of ['not_started', 'running'] as const) {
@@ -728,6 +768,108 @@ const st = (
   );
   eq(card.kind === 'due' ? card.at : null, at('2026-10-06T10:35').toISOString(), 'the card waits out the campaign gap from the round’s own last publication');
   eq(card.kind === 'due' ? card.at : null, list.get('r1') ?? null, 'AND THE WAITING LIST AGREES — one row, one gap, one instant');
+}
+
+/* ──────── 15. HIS SCREEN AT 03:10 ON A SATURDAY ────────────────────────
+ *
+ * "למה הוא לא מראה מתי אמור לצאת הפרסום הבא ורושם הסבב לא הושק"
+ *
+ * One card, three sentences, two of them false:
+ *
+ *     סבב פרסום            טרם התחיל        ← the badge
+ *     התחיל לפני 12 ימים                    ← directly under it
+ *     0 / 0 טופלו היום · אין פרסומים מתוכננים
+ *     הפרסום הבא: הסבב עוד לא הושק
+ *                 הוסיפו פוסט, בחרו קבוצות ושלחו
+ *
+ * THE ROUND WAS TWELVE DAYS INTO PUBLISHING. It repeats daily on
+ * Sunday–Thursday from 11:00, and the day he was looking at was a SATURDAY —
+ * a day the schedule does not permit, so nothing was scheduled for it. Every
+ * number on the card is today's (CampaignState.todayOnly), so today's total
+ * was 0, and three separate readers turned that into "this round has never
+ * been launched":
+ *
+ *   resolveState()  `!total` → 'not_started'  → the badge
+ *   neverLaunched   state + total             → the block's sentence
+ *   the block       no instant to name        → no hour anywhere
+ *
+ * Built here through campaignState() from the counts, exactly as
+ * campaignStates() builds it, so the whole chain is under test and not just
+ * its last link.
+ * --------------------------------------------------------------------- */
+{
+  /* Sunday–Thursday from 11:00 — the schedule in his screenshot. */
+  const his: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '11:00', gapSeconds: 30 };
+  const saturday = at('2026-10-17T03:10');
+  const state = campaignState([], { id: 'c1', status: 'active' } as never, {
+    todayOnly: true,
+    counts: {
+      /* Nothing scheduled today: it is a Saturday. */
+      progress: {},
+      everPublished: 7522,
+      startedAt: at('2026-10-05T11:00').toISOString(),
+      lastPublishedAt: at('2026-10-15T23:00').toISOString(),
+    },
+  });
+
+  eq(state.progress.total, 0, 'today holds no rows at all — the day is not a publishing day');
+  is(!neverLaunched(state), 'A ROUND TWELVE DAYS INTO PUBLISHING HAS BEEN LAUNCHED, whatever today\u2019s counter says');
+  eq(state.state, 'completed', 'and its badge is not "טרם התחיל" over a line reading "התחיל לפני 12 ימים"');
+
+  const r = scheduleReadout(his, state, saturday, { enabled: true, minHours: 20 });
+  eq(r.kind, 'ended', 'the round has nothing left today');
+  is(r.kind === 'ended' && r.repeats, 'the daily repeat will open the next one');
+  eq(
+    r.kind === 'ended' ? r.opens : null,
+    at('2026-10-18T11:00').toISOString(),
+    'AND THE CARD CAN NOW NAME THE HOUR — Sunday at 11:00, which is what he was asking for',
+  );
+
+  /*
+   * ─── AND THE SAME SATURDAY WITH THE QUEUE ALREADY FULL ────────────────
+   *
+   * The dangerous half of this fix. His dashboard banner read "209 פרסומים
+   * ממתינים בתור" over a card that said nothing was planned — because a
+   * repeating round's counts are TODAY'S and the rows were stamped for Sunday.
+   * Teaching resolveState() to call that empty day 'completed' would, on its
+   * own, have put "הסבב הסתיים" on a card with two hundred rows waiting: a
+   * worse sentence than the one being fixed.
+   *
+   * So a row we can SEE outranks a count that is scoped to one day. `nextAt`
+   * reads the open rows, which carry no date filter.
+   */
+  const queued = campaignState([], { id: 'c3', status: 'active' } as never, {
+    todayOnly: true,
+    counts: {
+      progress: {},
+      everPublished: 7522,
+      startedAt: at('2026-10-05T11:00').toISOString(),
+      lastPublishedAt: at('2026-10-15T23:00').toISOString(),
+    },
+  });
+  /* The 209 rows are stamped for Sunday morning; `nextAt` is the soonest. */
+  const withRow = { ...queued, nextAt: at('2026-10-18T11:00').toISOString() } as CampaignState;
+  const q = scheduleReadout(his, withRow, saturday, { enabled: true, minHours: 20 });
+  eq(q.kind, 'due', 'A QUEUED ROW OUTRANKS A DAY THAT HAPPENS TO BE EMPTY — "הסבב הסתיים" over 209 waiting rows is not an under-promise');
+  eq(q.kind === 'due' ? q.at : null, at('2026-10-18T11:00').toISOString(), 'and the instant is the row\u2019s own');
+
+  /*
+   * A ROUND HE STOPPED KEEPS THE OLD ORDER, and must. rules.ts hands every row
+   * of a stopped round straight back, so its queued rows are real rows that
+   * will not go out — the one case where naming their instant is the promise
+   * this module exists to prevent.
+   */
+  const halted = scheduleReadout(his, { ...withRow, state: 'stopped' } as CampaignState, saturday, { enabled: true, minHours: 20 });
+  eq(halted.kind, 'ended', 'a stopped round with rows in its queue still says it was stopped');
+  is(halted.kind === 'ended' && halted.stopped, 'and says which of the two endings it was');
+
+  /* The same round with no history is still the round the sentence is for. */
+  const fresh = campaignState([], { id: 'c2', status: 'active' } as never, {
+    todayOnly: true,
+    counts: { progress: {}, everPublished: 0, startedAt: null, lastPublishedAt: null },
+  });
+  is(neverLaunched(fresh), 'while a round that really has never gone out is still told so');
+  eq(fresh.state, 'not_started', 'and still reads "טרם התחיל"');
 }
 
 console.log(`schedule readout OK — ${checks} assertions over every state, both clock changes, and the no-second-mechanism rule`);

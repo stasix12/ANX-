@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
-import { canPauseRun, canResumeRun, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
+import { canPauseRun, canResumeRun, neverLaunched, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { accountGapSeconds } from '@/lib/social/rules';
@@ -547,8 +547,9 @@ export function LiveCampaignHero({
           workerOnline={workerOnline}
           /* Neither the window nor the daily repeat can produce a publication
              on a round that has never gone out — the block says so instead of
-             reporting a lull. Same expression the editor below is handed. */
-          neverLaunched={state.state === 'not_started' && state.progress.total === 0}
+             reporting a lull. Same expression the editor below is handed, and
+             it asks about the round's whole life: see campaign.ts. */
+          neverLaunched={neverLaunched(state)}
           disabled={scheduleBusy}
         />
       )}
@@ -629,9 +630,10 @@ export function LiveCampaignHero({
             /* The second gate, so the panel can say which of the two is
                actually deciding — see the note on the prop. */
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
-            /* 'not_started' with nothing ever queued: neither control below
-               can produce a publication until the round is launched once. */
-            neverLaunched={state.state === 'not_started' && state.progress.total === 0}
+            /* Neither control below can produce a publication until the round
+               is launched once — a question about its whole life, not today's
+               counter. See campaign.ts. */
+            neverLaunched={neverLaunched(state)}
             /* The title and the switch are already in the readout block above
                this one. Two live switches for one setting on one card is a
                screen the owner cannot read. */

@@ -378,6 +378,44 @@ export function campaignState<T extends CampaignQueueRow>(
   };
 }
 
+/**
+ * HAS THIS ROUND NEVER GONE OUT — one definition, for the three screens that
+ * were each deciding it from today's counter.
+ *
+ * "למה הוא לא מראה מתי אמור לצאת הפרסום הבא ורושם הסבב לא הושק" — over a card
+ * that printed "התחיל לפני 12 ימים" two lines above it.
+ *
+ * THE QUESTION IS ABOUT THE ROUND'S WHOLE LIFE AND IT WAS BEING ASKED OF ONE
+ * DAY. Every caller read `state === 'not_started' && progress.total === 0`,
+ * and `progress` is TODAY'S for a repeating round (CampaignState.todayOnly).
+ * So on any day with nothing scheduled — a Saturday on a Sunday-to-Thursday
+ * schedule, or any day before the repeat has planned it — a round that had
+ * published thousands of times reported that it had never been launched, and
+ * the block that would otherwise have named the next publishing day printed
+ * "הוסיפו פוסט, בחרו קבוצות ושלחו" instead.
+ *
+ * It is the same fault as everPublished's: a counter that resets at midnight
+ * standing in for a history that does not. So this asks the history.
+ *
+ * `startedAt` and `everPublished` are both consulted because they come from
+ * different places — the view's first publication and its lifetime published
+ * count — and a round that has one of them has been launched whatever the
+ * other says.
+ */
+export function neverLaunched(
+  state: Pick<CampaignState, 'state' | 'progress' | 'startedAt' | 'everPublished'>,
+): boolean {
+  return (
+    state.state === 'not_started' &&
+    state.progress.total === 0 &&
+    state.startedAt === null &&
+    /* `?? 0` because the two measured fixtures hand-build a state and cast it:
+       a missing lifetime count is "no history", which is what this branch is
+       about, and not a reason to silently stop answering. */
+    (state.everPublished ?? 0) === 0
+  );
+}
+
 /** Rows that have not finished: waiting on the clock, on a worker, or on a person. */
 export function openRows(p: CampaignProgress): number {
   return p.scheduled + p.running + p.manual;
@@ -419,7 +457,30 @@ function resolveState(
   // counted it under "פעילים", printed "טרם התחיל" and offered "השהה" for a
   // run that had already been ended.
   if (campaignStatus === 'archived') return 'stopped';
-  if (!total) return 'not_started';
+  /*
+   * NO ROWS — AND THAT MEANS TWO DIFFERENT THINGS DEPENDING ON THE SCOPE.
+   *
+   * "למה הוא לא מראה מתי אמור לצאת הפרסום הבא ורושם הסבב לא הושק", over a card
+   * whose next line read "התחיל לפני 12 ימים".
+   *
+   * For a lifetime-scoped round, no rows means no rows ever: nothing has been
+   * launched and `started` is false, because nothing can have published out of
+   * an empty queue. That is 'not_started', exactly as before.
+   *
+   * For a REPEATING round the counts are today's, and a day with nothing
+   * scheduled is ordinary — a Saturday on a Sunday-to-Thursday schedule, or
+   * any day before the repeat has planned it. Calling that 'טרם התחיל' put the
+   * badge in direct contradiction with the sentence beside it, and from there
+   * it reached every reader of the state: the card said the round had never
+   * been launched and offered "הוסיפו פוסט, בחרו קבוצות ושלחו" to a round that
+   * had published for twelve days.
+   *
+   * `started` is the lifetime fact (startedAt, or something published), so a
+   * round that has one has finished today's work — there is none left — rather
+   * than never having begun. The branch below says the same thing for a day
+   * whose rows have all ended, and this is that day with zero rows in it.
+   */
+  if (!total) return started ? 'completed' : 'not_started';
   // Nothing left to do — the run has ended, however it ended.
   if (openRows(p) === 0) return 'completed';
   // Paused is only true while rows are actually being held back. A job already
@@ -580,7 +641,17 @@ export function runProgress(progress: CampaignProgress, todayOnly = false, trunc
    * exactly as it did.
    */
   const scope = todayOnly ? ' היום' : '';
-  const handledLabel = total ? `${atLeast}${finished} מתוך ${total} ${agree(finished, 'טופל', 'טופלו')}${scope}` : 'אין פרסומים מתוכננים';
+  /*
+   * AND THE EMPTY LABEL CARRIES THE SCOPE TOO.
+   *
+   * "אין פרסומים מתוכננים" beside "209 קבוצות" is a card contradicting itself:
+   * the rows exist, they are stamped for tomorrow, and this counter is TODAY'S.
+   * campaignHeadline() has said "להיום" in this position since it was written;
+   * these two labels are the ones the dashboard and the campaigns card draw,
+   * and they were the pair that still did not.
+   */
+  const nothing = todayOnly ? 'אין פרסומים מתוכננים להיום' : 'אין פרסומים מתוכננים';
+  const handledLabel = total ? `${atLeast}${finished} מתוך ${total} ${agree(finished, 'טופל', 'טופלו')}${scope}` : nothing;
   return {
     total,
     handled: finished,
@@ -589,7 +660,7 @@ export function runProgress(progress: CampaignProgress, todayOnly = false, trunc
     percent,
     percentPublished: truncated ? Math.min(99, percentPublished(progress)) : percentPublished(progress),
     handledLabel,
-    publishedLabel: total ? `${atLeast}${published} מתוך ${total} ${agree(published, 'פורסם', 'פורסמו')}` : 'אין פרסומים מתוכננים',
+    publishedLabel: total ? `${atLeast}${published} מתוך ${total} ${agree(published, 'פורסם', 'פורסמו')}` : nothing,
     note: unpublishedNote(progress),
     ariaLabel: total ? `${percent}% — ${handledLabel}` : handledLabel,
   };

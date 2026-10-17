@@ -38,6 +38,12 @@ const st = (p: unknown, extra: Partial<CampaignState> = {}): CampaignState =>
     truncated: false,
     targetCount: 0,
     startedAt: null,
+    /* THE ROUND'S WHOLE LIFE, stated rather than left out. neverLaunched()
+       reads it, and a fixture that omits it is a fixture making no claim
+       about the one thing the case below is about. Cases that HAVE published
+       override it. */
+    everPublished: 0,
+    lastPublishedAt: null,
     estimatedCompletionAt: null,
     nextAt: null,
     nextTargetName: null,

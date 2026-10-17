@@ -395,15 +395,35 @@ async function main(): Promise<void> {
     const nextPub = readFileSync(new URL('../../src/components/social/NextPublication.tsx', import.meta.url), 'utf8');
     is(/הסבב עוד לא הושק/.test(nextPub), 'NOT "אין פרסומים מתוזמנים" — that is true, reads as a lull, and nothing will end it');
     is(/neverLaunched \?: boolean;|neverLaunched\?: boolean;/.test(nextPub), 'and the block can be told so');
+    /*
+     * RE-POINTED TO ONE PREDICATE, AND THE CHANGE IS THE SCOPE.
+     *
+     * Both cards used to spell `state === 'not_started' && progress.total ===
+     * 0` inline, and `progress` is TODAY'S for a repeating round — so on a day
+     * with nothing scheduled (a Saturday on a Sunday-to-Thursday schedule) a
+     * round twelve days into publishing reported that it had never been
+     * launched. The question is about the round's whole life; it is asked of
+     * the round's whole life now, in one place, and both cards call it.
+     */
     for (const [where, src] of [
       ['the campaigns card', readFileSync(new URL('../../src/components/social/CampaignCard.tsx', import.meta.url), 'utf8')],
       ['the dashboard run card', readFileSync(new URL('../../src/components/social/LiveCampaignHero.tsx', import.meta.url), 'utf8')],
     ] as const) {
+      is(/neverLaunched\(state\)/.test(src), `${where} asks the one predicate rather than spelling its own`);
       is(
-        /state\.state === 'not_started' && state\.progress\.total === 0/.test(src),
-        `${where} decides it by the round never having produced a row, not by a guess`,
+        !/state\.state === 'not_started' && state\.progress\.total === 0/.test(src),
+        `${where} no longer decides it from a counter that resets at midnight`,
       );
     }
+    const campaignLib = readFileSync(new URL('../../src/lib/social/campaign.ts', import.meta.url), 'utf8');
+    /* The BODY, comments stripped: a pin that spans prose breaks every time a
+       sentence is added to it, which is a guard failing for the one reason it
+       must not. */
+    const bare = campaignLib.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const predicate = bare.slice(bare.indexOf('export function neverLaunched('), bare.indexOf('export function openRows('));
+    is(/state\.startedAt === null/.test(predicate), 'and that predicate reads the round\u2019s first publication');
+    is(/state\.everPublished \?\? 0\) === 0/.test(predicate), 'and its lifetime count — not one day of it');
+    is(/state\.progress\.total === 0/.test(predicate), 'beside the today-scoped pair, which still has to be empty');
   }
 
   console.log(`repeat rules OK — ${checks} assertions, decided by the real engine against a fake database`);

@@ -37,4 +37,4 @@ export const WORKER_VERSION = '4.16.0';
  * holds, and the machine is not asked to install a build that would change
  * nothing for it.
  */
-export const WORKER_FINGERPRINT = '9ec83a0719fc37e3';
+export const WORKER_FINGERPRINT = 'be6de3c83cc7bbf7';

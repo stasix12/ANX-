@@ -65,7 +65,27 @@ export type ScheduleReadout =
    * fact due again tomorrow morning, which is the same class of wrong answer
    * as the window edge it replaced, pointing the other way.
    */
-  | { kind: 'ended'; stopped: boolean; repeats: boolean }
+  | {
+      kind: 'ended';
+      stopped: boolean;
+      repeats: boolean;
+      /**
+       * WHEN THE REPEAT WILL OPEN THE NEXT ROUND — the first instant this
+       * schedule permits from now.
+       *
+       * "למה הוא לא מראה מתי אמור לצאת הפרסום הבא": a finished round with the
+       * daily repeat armed was told only THAT another round was coming, never
+       * when. The hour is not a promise about a queued row — there is none —
+       * it is the first minute the window allows, which is the earliest the
+       * repeat can act. The card labels it as the publishing day rather than
+       * as a publication.
+       *
+       * Null when the repeat is off, when the round was stopped by hand, when
+       * the window is off, or when no day is chosen — every state in which no
+       * such minute exists.
+       */
+      opens: string | null;
+    }
   /** Rows are waiting — on him, not on the clock. */
   | { kind: 'manual'; waiting: number }
   /**
@@ -175,17 +195,29 @@ export function scheduleReadout(
    * the queue will genuinely do: off means the window is not enforced at all.
    */
   /*
-   * THE ENDED CHECK COMES FIRST, AHEAD OF THE QUEUE.
+   * THE ENDED CHECK COMES FIRST, AHEAD OF THE QUEUE — EXCEPT OVER A ROW WE
+   * CAN SEE.
    *
-   * campaign.ts calls a run 'completed' exactly when no row is open, so a
-   * finished round with a queued publication is not a state this product can
-   * build — but "cannot happen" is a claim about today's code, and the order of
-   * two branches is a decision about what happens when it is wrong. Only one of
-   * the two answers is safe to be wrong with: a card that says "הסבב הסתיים"
-   * while a row is in fact pending under-promises, and the row still goes out;
-   * a card that promises 10:20 over a spent queue is the fault this module was
-   * written to end. So the rule that cannot be bent — never promise a
-   * publication that will not happen — decides the order.
+   * campaign.ts called a run 'completed' exactly when no row was open, so a
+   * finished round with a queued publication was not a state this product
+   * could build, and the order of these two branches only ever decided what
+   * happened if that claim was wrong. It is wrong now, and deliberately: a
+   * REPEATING round is counted for today (CampaignState.todayOnly), so a
+   * Saturday with nothing scheduled gives it an empty today — 'completed' for
+   * today — while 209 rows sit in the queue for Sunday morning. `nextAt` reads
+   * the open ROWS, which carry no date filter, so it is the one value here
+   * that can see them.
+   *
+   * A ROW WE CAN SEE IS A FACT, and the same sentence already decides the
+   * truncation branch below. "הסבב הסתיים" over a queue with rows in it is not
+   * the safe under-promise it was when the state could not occur — it is the
+   * card telling him the round is over on the evening before it publishes two
+   * hundred times.
+   *
+   * 'stopped' KEEPS THE OLD ORDER AND MUST. Stopping is him saying "not this",
+   * and rules.ts hands every row of a stopped round straight back — so its
+   * queued rows are real rows that will not go out, which is exactly the case
+   * where naming their instant would be a promise the engine will not keep.
    */
   /*
    * `!state.truncated` IS PART OF THIS CONDITION, not a separate check above
@@ -194,14 +226,25 @@ export function scheduleReadout(
    * return it also swallowed 'due' and 'paused', which survive a cap — a row
    * we can see is a fact, and so is the owner's own pause.
    */
-  if (!state.truncated && (state.state === 'completed' || state.state === 'stopped')) {
+  if (!state.truncated && (state.state === 'stopped' || (state.state === 'completed' && !state.nextAt))) {
     /*
      * A ROUND HE STOPPED DOES NOT REPEAT, whatever the switch says. Stopping is
      * the owner saying "not this", and a card that answered "it will run again
      * tomorrow" would be the screen overruling him — the one thing worse than
      * the window edge this module was written to remove.
      */
-    return { kind: 'ended', stopped: state.state === 'stopped', repeats: repeat.enabled && state.state === 'completed' };
+    const stopped = state.state === 'stopped';
+    const repeats = repeat.enabled && !stopped;
+    return {
+      kind: 'ended',
+      stopped,
+      repeats,
+      /* nextAllowedAt(), the same call the engine makes — never a second rule.
+         Only for a round that is actually coming back: naming an hour for a
+         round nothing will reopen is the window-edge fault this module exists
+         to prevent, one state along. */
+      opens: repeats && on && schedule ? nextAllowedAt(schedule, now)?.toISOString() ?? null : null,
+    };
   }
 
   /*

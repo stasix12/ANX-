@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { canPauseRun, canResumeRun, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
+import { canPauseRun, canResumeRun, neverLaunched, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { accountGapSeconds } from '@/lib/social/rules';
@@ -527,9 +527,10 @@ export function CampaignCard({
             campaignName={campaign.name}
             disabled={scheduleBusy}
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
-            /* 'not_started' with nothing ever queued: neither control in the
-               panel can produce a publication until the round is launched once. */
-            neverLaunched={state.state === 'not_started' && state.progress.total === 0}
+            /* Neither control in the panel can produce a publication until
+               the round is launched once — and "once" is a question about the
+               round's whole life, not about today's counter. See campaign.ts. */
+            neverLaunched={neverLaunched(state)}
             readout={readout}
             workerOnline={workerOnline}
             nextTargetName={state.nextTargetName}

@@ -311,16 +311,39 @@ function Words({ readout, scheduleOn, neverLaunched }: { readout: ScheduleReadou
       <>
         <p className="mt-1 text-[14px] font-extrabold leading-5 text-mist-100">{readout.stopped ? 'הסבב הופסק' : 'הסבב הסתיים'}</p>
         <p className={`mt-0.5 text-[11.5px] font-bold leading-4 ${readout.repeats ? 'text-warning-400' : 'text-mist-300'}`}>
-          {readout.repeats
-            ? /* CHZARA IS ON, so another round IS coming — and it says so in
-                 the amber it is set in everywhere else, because a round that
-                 re-publishes the same post to the same groups on its own is
-                 the one state on this card worth noticing from across a
-                 room. */
-              'חזרה יומית פעילה — הסבב הבא ייפתח לבד'
-            : scheduleOn
-              ? 'אין פרסומים מתוזמנים — התזמון יחול על הסבב הבא'
-              : 'אין פרסומים מתוזמנים'}
+          {readout.repeats ? (
+            /*
+             * CHZARA IS ON, so another round IS coming — and it says WHEN.
+             *
+             * "למה הוא לא מראה מתי אמור לצאת הפרסום הבא" was asked of exactly
+             * this state: a round whose queue had emptied, with the daily
+             * repeat armed, told only that something would happen. The hour is
+             * the first minute the window permits, which is the earliest the
+             * repeat can act — labelled as the publishing day, never as a
+             * queued publication, because no row exists yet.
+             *
+             * Amber, like everywhere else this switch is drawn: a round that
+             * re-publishes the same post to the same groups on its own is the
+             * one state on this card worth noticing from across a room.
+             */
+            <>
+              חזרה יומית פעילה — הסבב הבא ייפתח
+              {readout.opens ? (
+                <>
+                  {' ב-'}
+                  <span dir="ltr" className="inline-block tabular-nums">{formatDayMonthHe(readout.opens)}</span>
+                  {' בשעה '}
+                  <span dir="ltr" className="inline-block tabular-nums">{formatInstantHe(readout.opens)}</span>
+                </>
+              ) : (
+                ' לבד'
+              )}
+            </>
+          ) : scheduleOn ? (
+            'אין פרסומים מתוזמנים — התזמון יחול על הסבב הבא'
+          ) : (
+            'אין פרסומים מתוזמנים'
+          )}
         </p>
       </>
     );

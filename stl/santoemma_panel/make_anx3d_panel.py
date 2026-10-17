@@ -25,7 +25,7 @@ FLANGE, FLANGE_R, FLANGE_POCKET = 58.0, 4.0, 63.0
 FLANGE_SCREW, FLANGE_PITCH = 3.2, 38.0    # 4 x M3, 38 mm square (measured on the original panel)
 SMALL = (90.0, 44.4, 32.0)                # 32 hole (x, y, dia) with the blue ring
 RING_OD, RING_BORE = 40.0, 46.0
-CABLE = (-104.0, 0.0, 16.4)               # power cable, M16 gland (unchanged)
+CABLE = (-100.0, 0.0, 16.4)               # power cable, M16 gland (16 mm thread); flat seat >= 31 mm around it
 SCREW, SCREW_HEAD, HEAD_DEPTH = 4.5, 9.0, 1.2
 SCREW_X, SCREW_Y = 121.0, 78.25           # measured on the original panel: 8 mm from the sides, 9.25 mm from top/bottom
 SCREWS_BLACK = [(sx*SCREW_X, sy*SCREW_Y) for sx in (-1, 1) for sy in (-1, 1)] + [(0, SCREW_Y)]
@@ -54,7 +54,7 @@ def rim_inner():                          # black panel outline inside the blue 
 
 TRAY = Polygon([(-79, -3.6), (80.9, -3.6), (105.9, -30.2), (105.9, -62.9), (98.8, -70), (-100, -70),
                 (-107.9, -62.1), (-107.9, -39.1)])
-GROOVE = LineString([(-114.5, 73), (-110, 68.5), (-110, 12.4), (-81, 12.4), (-76, 6.2), (-35, 6.2),     # V groove,
+GROOVE = LineString([(-114.5, 73), (-110, 68.5), (-110, 17.0), (-84, 17.0), (-73.2, 6.2), (-35, 6.2),     # V groove,
                      (-31, 8.9), (78, 8.9), (83, 3.6), (108.5, 3.6), (113, 8)]).buffer(0.3, cap_style='flat', join_style='mitre')  # 2.2 top x 0.8
 
 # vents: 15 open slots, 6 mm wide, 12.8 mm pitch, leaning 15 deg (top to the right)
@@ -169,7 +169,7 @@ def make_black():
     sx_, sy_, sd = SMALL
     cuts += [cyl(RING_BORE, T-2, T+1, sx_, sy_), cyl(sd, -1, T+1, sx_, sy_)]
     cx, cy, cd = CABLE
-    cuts += [cyl(cd, -1, T+1, cx, cy), cone_cut(cd, T, 1.0, cx, cy)]
+    cuts += [cyl(cd, -1, T+1, cx, cy), cone_cut(cd, T, 0.5, cx, cy)]
     for x, y in SCREWS_BLACK:
         cuts += [cyl(SCREW, -1, T+1, x, y), cyl(SCREW_HEAD, T-HEAD_DEPTH, T+1, x, y)]
     cuts += [cyl(SCREW, -1, T+1, *SCREW_BLUE)]

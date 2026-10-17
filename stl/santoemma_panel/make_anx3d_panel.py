@@ -87,19 +87,27 @@ def letters():
     D = Polygon(ref(rrect_pts(56.5, YB, 85, YT, 11.5, 11.5))) - Polygon(ref(rrect_pts(64, -26.5, 75.5, -15, 5, 5)))
     return unary_union([A, N, X]), unary_union([three, D])
 
-def icons():                              # engraved line icons above the switches (silver inlays)
-    def tri(cx, cy, w, h, t):
-        o = Polygon([(cx-w/2, cy-h/2), (cx+w/2, cy-h/2), (cx, cy+h/2)])
-        return o - o.buffer(-t, join_style='mitre')
+def icons():                              # icons above the switches (silver inlays): left = water spray, right = vacuum
     (x1, _), (x2, _) = SWITCHES
-    y = 75.5
-    warn = unary_union([tri(x2, y, 11.5, 10, 1.2),
-                        Polygon([(x2-0.6, y-1.2), (x2+0.6, y-1.2), (x2+0.6, y+2.6), (x2-0.6, y+2.6)]),
-                        Point(x2, y-3.0).buffer(0.75)])
-    head = tri(x1, y+2.6, 8.0, 5.0, 1.1)
-    dots = [Point(x1+dx, y+yy).buffer(0.6) for yy, n, s in ((-1.4, 3, 2.2), (-3.2, 4, 2.4), (-5.0, 5, 2.4))
-            for dx in (np.arange(n)-(n-1)/2)*s]
-    return unary_union([warn, head] + dots)
+    y = 75.0
+    def drop(cx, cy, w=1.5, h=2.3):       # water droplet, point up
+        return unary_union([Point(cx, cy-h/2+w/2).buffer(w/2), Polygon([(cx-w/2, cy-h/2+w/2), (cx+w/2, cy-h/2+w/2), (cx, cy+h/2)])])
+    nozzle = unary_union([Polygon([(x1-2.4, y+4.6), (x1+2.4, y+4.6), (x1+2.4, y+3.0), (x1-2.4, y+3.0)]),   # spray nozzle
+                          Polygon([(x1-1.1, y+3.1), (x1+1.1, y+3.1), (x1+0.7, y+2.0), (x1-0.7, y+2.0)])])
+    drops = [drop(x1+dx, y+yy) for yy, dxs in ((0.0, (-1.6, 0, 1.6)), (-2.9, (-3.6, -1.2, 1.2, 3.6)),
+                                                (-5.6, (-5.0, -2.5, 0, 2.5, 5.0)))
+             for dx in dxs]
+    spray = unary_union([nozzle] + drops)
+    t = np.linspace(0, 1, 32)[:, None]                                                 # canister vacuum pictogram:
+    q = [np.array(p) for p in ((x2+0.6, y-1.6), (x2-1.6, y-1.2), (x2+0.2, y+5.4), (x2-2.4, y+4.0))]   # S-shaped hose
+    hose = LineString((1-t)**3*q[0] + 3*(1-t)**2*t*q[1] + 3*(1-t)*t**2*q[2] + t**3*q[3]).buffer(0.5)
+    wand = LineString([(x2-2.4, y+4.0), (x2-4.2, y-3.7)]).buffer(0.6, cap_style='flat')
+    grip = LineString([(x2-2.4, y+4.0), (x2-3.6, y+4.6)]).buffer(0.55)
+    head = Polygon([(x2-6.4, y-5.0), (x2-2.6, y-5.0), (x2-3.2, y-3.6), (x2-5.8, y-3.6)])
+    body = Polygon([(x2+1.6, y-3.4), (x2+4.6, y-3.4), (x2+4.6, y-1.2), (x2+1.6, y-1.2)]).buffer(1.5, join_style='round')
+    wheels = [Point(x2+1.7, y-4.9).buffer(0.7), Point(x2+4.5, y-4.9).buffer(0.7)]
+    vac = unary_union([hose, wand, grip, head, body] + wheels)
+    return unary_union([spray, vac])
 
 # ------------------------------------------------------------------ 2D -> CadQuery solids
 def prism(poly, z0, z1):

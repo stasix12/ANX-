@@ -20,7 +20,8 @@ SWITCH_PANEL = 2.0                        # wall thinned to 2 mm around the cuto
 SCREW_PILOT, SCREW_CLEAR, SCREW_HEAD = 3.4, 4.5, 8.6   # M4 self-tapping into the base pillars
 PILLARS = [(sx*(L/2-W-4), sy*(D/2-W-4)) for sx in (-1, 1) for sy in (-1, 1)] + [(0, -(D/2-W-4)), (0, D/2-W-4)]
 FEET_X = (-88.0, 88.0)            # mounting ears on both long sides, 5.5 mm holes
-BRACKET_X, BRACKET_W, BRACKET_L = 15.0, 90.0, 60.0   # pump bracket: grommet bolts 90 mm across (Y) x 60 mm along the motor (X)
+BRACKET_X, BRACKET_W, BRACKET_L = 5.0, 90.0, 60.0    # pump bracket: grommet bolts 90 mm across (Y) x 60 mm along the motor (X);
+                                                    # same distance from the BACK wall as in the 210 box - the 20 mm went to the front
 BRACKET_HOLES = [(BRACKET_X+sx*BRACKET_L/2, sy*BRACKET_W/2) for sx in (-1, 1) for sy in (-1, 1)]
 SEAT_H, SEAT_CUP, GROMMET_OD = 8.0, 2.5, 16.0       # seat height above floor, cup depth, rubber grommet OD (cup = OD + 0.8)
 NUT_AF, NUT_DEPTH = 8.4, 4.5                        # M5 hex nut pocket from below

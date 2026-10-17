@@ -21,8 +21,10 @@ def elbow(sy):
     body = C.cylinder(9, 32, sections=24); body.apply_transform(ax_x)
     return trimesh.util.concatenate([at(stem, -70, sy*49.5, 62+LIFT), at(body, -70+12, sy*63, 62+LIFT)])
 def tube(sy): t = C.cylinder(4, 120, sections=24); t.apply_transform(ax_x); return at(t, -42+60, sy*63, 62+LIFT)
-pump = trimesh.util.concatenate([at(C.box([76, 106, 3]), BRACKET_X, 0, 4+LIFT+1.5)] + [at(C.cylinder(8, 9, sections=32), x, y, W+SEAT_H+2) for x, y in BRACKET_HOLES] + [xcyl(38, 125, -45), xcyl(43.5, 50, -95),
+pump = trimesh.util.concatenate([at(C.box([76, 106, 3]), 15, 0, 4+LIFT+1.5), xcyl(38, 125, -45), xcyl(43.5, 50, -95),   # modelled with the bracket at x=15
                                  xcyl(15, 15, 80), at(C.box([16, 89, 16]), -70, 0, 62+LIFT), elbow(1), elbow(-1), tube(1), tube(-1)])
+pump.apply_translation([BRACKET_X-15, 0, 0])
+pump = trimesh.util.concatenate([pump] + [at(C.cylinder(8, 9, sections=32), x, y, W+SEAT_H+2) for x, y in BRACKET_HOLES])
 def view(az, el):                 # rows: screen-right, screen-up, towards viewer
     d = np.array([np.cos(np.radians(el))*np.cos(np.radians(az)), np.cos(np.radians(el))*np.sin(np.radians(az)), np.sin(np.radians(el))])
     r = np.cross([0, 0, 1], d) if abs(d[2]) < 0.999 else np.array([1., 0, 0]); r /= np.linalg.norm(r)

@@ -17,7 +17,9 @@ from shapely.ops import unary_union
 from shapely import affinity
 
 PW, PH = 258.0, 175.0                     # plate (unchanged)
-T = 10.0                                  # black plate (panel thickness), front face at z = T
+import os
+T = float(os.environ.get('PANEL_T', 10))  # black plate (panel thickness), front face at z = T: 10 mm, or PANEL_T=5
+OUT = 'anx3d_panel' if T == 10 else f'anx3d_panel_{T:g}mm'
 MOUNT_T = 5.0                             # relieved from the back to 5 mm around the fittings + cable gland (thread length)
 RIM_H = 3.0                               # blue rim stands 3 mm proud of the black face
 SWITCH_W, SWITCH_H, SWITCH_PANEL = 22.2, 30.2, 2.0      # rocker cutout + material left at the clips (unchanged)
@@ -165,16 +167,20 @@ def make_black():
     b = prism(plate_outline().buffer(-SKIRT, join_style='mitre'), 0, T)
     cuts = []
     for x, y in SWITCHES:
-        cuts += [rbox(*SW_POCKET, T-3, T+1, x, y), rbox(*SW_BACK, -1, T-3-SWITCH_PANEL, x, y),
+        cuts += [rbox(*SW_POCKET, T-3, T+1, x, y), 
                  cq.Workplane('XY', origin=(x, y, -1)).rect(SWITCH_W, SWITCH_H).extrude(T+2)]
     bx, by, bd = BIG
     cuts += [rbox(FLANGE_POCKET, FLANGE_POCKET, FLANGE_R+1, T-1.5, T+1, bx, by), cyl(bd, -1, T+1, bx, by),
-             rbox(50, 50, 4, -1, T-1.5-MOUNT_T, bx, by)]                                  # back relief: nuts + fitting thread
+             ]
     cuts += [cyl(FLANGE_SCREW, -1, T+1, bx+sx*FLANGE_PITCH/2, by+sy*FLANGE_PITCH/2) for sx in (-1, 1) for sy in (-1, 1)]
     sx_, sy_, sd = SMALL
-    cuts += [cyl(RING_BORE, T-2, T+1, sx_, sy_), cyl(sd, -1, T+1, sx_, sy_), cyl(48, -1, T-2-MOUNT_T+2, sx_, sy_)]
+    cuts += [cyl(RING_BORE, T-2, T+1, sx_, sy_), cyl(sd, -1, T+1, sx_, sy_)]
     cx, cy, cd = CABLE
-    cuts += [cyl(cd, -1, T+1, cx, cy), cone_cut(cd, T, 0.5, cx, cy), cyl(30, -1, T-MOUNT_T, cx, cy)]   # 22 AF locknut seat
+    cuts += [cyl(cd, -1, T+1, cx, cy), cone_cut(cd, T, 0.5, cx, cy)]
+    if T-3-SWITCH_PANEL > 0.1:                                                    # back reliefs (thick plate only):
+        cuts += [rbox(*SW_BACK, -1, T-3-SWITCH_PANEL, x, y) for x, y in SWITCHES]   # 2 mm at the switch clips,
+        cuts += [rbox(50, 50, 4, -1, T-1.5-MOUNT_T, bx, by),                         # 5 mm at the fittings
+                 cyl(48, -1, T-MOUNT_T, sx_, sy_), cyl(30, -1, T-MOUNT_T, cx, cy)]   # and the gland's 22 AF locknut
     for x, y in SCREWS_BLACK:
         cuts += [cyl(SCREW, -1, T+1, x, y), cyl(SCREW_HEAD, T-HEAD_DEPTH, T+1, x, y)]
     cuts += [cyl(SCREW, -1, T+1, *SCREW_BLUE)]
@@ -225,19 +231,19 @@ if __name__ == '__main__':
     asm = cq.Assembly(name='anx3d_panel')
     for k, s in parts.items():
         asm.add(s, name=k, color=cq.Color(*COLORS[k]))
-        cq.exporters.export(s, f'anx3d_panel_{k}.stl', tolerance=0.02, angularTolerance=0.1)
-    asm.save('anx3d_panel.step')
+        cq.exporters.export(s, f'{OUT}_{k}.stl', tolerance=0.02, angularTolerance=0.1)
+    asm.save(f'{OUT}.step')
     letters_all = parts['letters_ANX'].union(parts['letters_3D'])
-    cq.exporters.export(letters_all, 'anx3d_panel_letters_ANX3D.stl', tolerance=0.02, angularTolerance=0.1)
+    cq.exporters.export(letters_all, f'{OUT}_letters_ANX3D.stl', tolerance=0.02, angularTolerance=0.1)
     one = parts['black']
     for k in ['blue', 'letters_ANX', 'letters_3D', 'icons']: one = one.union(parts[k])
-    cq.exporters.export(one, 'anx3d_panel.stl', tolerance=0.02, angularTolerance=0.1)
+    cq.exporters.export(one, f'{OUT}.stl', tolerance=0.02, angularTolerance=0.1)
     import trimesh                                                   # report from the exported meshes (tight bounds)
     scene = trimesh.Scene()                                          # 3MF: every colour a separate part, same origin
     for k in parts:
-        scene.add_geometry(trimesh.load(f'anx3d_panel_{k}.stl'), node_name=k, geom_name=k)
-    scene.export('anx3d_panel.3mf')
+        scene.add_geometry(trimesh.load(f'{OUT}_{k}.stl'), node_name=k, geom_name=k)
+    scene.export(f'{OUT}.3mf')
     for k in list(parts) + ['letters_ANX3D', None]:
-        m = trimesh.load(f'anx3d_panel_{k}.stl' if k else 'anx3d_panel.stl')
+        m = trimesh.load(f'{OUT}_{k}.stl' if k else f'{OUT}.stl')
         print(f'{k or "combined":9s} watertight={m.is_watertight} bodies={len(m.split(only_watertight=False))} '
               f'vol={m.volume/1000:.1f}cm3 bounds={m.bounds.round(2).tolist()}')

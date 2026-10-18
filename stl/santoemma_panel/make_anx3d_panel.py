@@ -29,13 +29,13 @@ SW_BACK = (28.0, 36.0, 2.0)               # back pocket: leaves SWITCH_PANEL at 
 BIG = (29.3, 51.75, 44.0)                 # 44 hole (x, y, dia), concentric with the original 4-screw pattern
 FLANGE, FLANGE_R, FLANGE_POCKET = 48.0, 4.0, 52.0   # pocket clears the top middle screw head
 FLANGE_SCREW, FLANGE_PITCH = 3.2, 38.0    # 4 x M3, 38 mm square (measured on the original panel)
-SMALL = (83.3, 51.75, 32.0)               # 32 hole (x, y, dia) with the blue ring, measured on the original
-RING_OD, RING_BORE = 40.0, 46.0
+SMALL = (78.9, 51.75, 32.0)               # 32 hole (x, y, dia) with the blue ring, checked against the original on a test print
+RING_OD, RING_BORE = 40.0, 44.0
 CABLE = (-100.0, 0.0, 16.4)               # power cable, M16 gland (16 mm thread); flat seat >= 31 mm around it
 SCREW, SCREW_HEAD, HEAD_DEPTH = 4.5, 9.0, 1.2
-SCREW_X, SCREW_Y = 121.0, 78.25           # measured on the original panel: 8 mm from the sides, 9.25 mm from top/bottom
-SCREWS_BLACK = [(sx*SCREW_X, sy*SCREW_Y) for sx in (-1, 1) for sy in (-1, 1)] + [(0, SCREW_Y)]
-SCREW_BLUE = (0.0, -SCREW_Y)              # bottom middle screw sits in the blue rim tab
+SCREW_X, SCREW_Y, SCREW_YB = 121.0, 78.25, -77.0   # original panel: 8 mm from the sides, top row 9.25 mm from the top edge,
+SCREWS_BLACK = [(sx*SCREW_X, y) for sx in (-1, 1) for y in (SCREW_YB, SCREW_Y)] + [(0, SCREW_Y)]   # bottom row 10.5 (test print)
+SCREW_BLUE = (0.0, SCREW_YB)              # bottom middle screw sits in the blue rim tab
 TRAY_Z = T-1.2                            # recessed logo / vent tray floor
 LOGO_Z0, LOGO_Z1 = TRAY_Z+2.0, TRAY_Z+3.2 # logo outline plate top, letter top
 INLAY = 0.8                               # icon inlay depth
@@ -53,13 +53,13 @@ def plate_outline():                      # left corners R6, right corners 5 mm 
 
 def rim_inner():                          # black panel outline inside the blue rim (13 mm sides, 6.5 mm top, 9 mm bottom),
     xs, xn, yt, yn, yb = 116.0, 126.0, 81.0, 84.5, -78.5    # notched around the black-zone screw heads,
-    return Polygon([(xs, -64), (xn, -73.5), (xn, -84), (115, -84), (109.5, yb), (14, yb), (9, -72.5),   # blue tab around
-                    (-9, -72.5), (-14, yb), (-109.5, yb), (-115, -84), (-xn, -84), (-xn, -73.5), (-xs, -64),  # the bottom
+    return Polygon([(xs, -64), (xn, -73.5), (xn, -84), (115, -84), (109.5, yb), (14, yb), (9, -71.3),   # blue tab around
+                    (-9, -71.3), (-14, yb), (-109.5, yb), (-115, -84), (-xn, -84), (-xn, -73.5), (-xs, -64),  # the bottom
                     (-xs, 66), (-xn, 75.5), (-xn, yn), (-116.5, yn), (-113, yt), (-9, yt), (-5.5, yn),        # middle screw
                     (5.5, yn), (9, yt), (113, yt), (116.5, yn), (122, yn), (xn, 81), (xn, 75.5), (xs, 66)])
 
-TRAY = Polygon([(-79, -3.6), (80.9, -3.6), (105.9, -30.2), (105.9, -62.9), (98.8, -70), (-100, -70),
-                (-107.9, -62.1), (-107.9, -39.1)])
+TRAY = Polygon([(-79, -3.6), (80.9, -3.6), (105.9, -30.2), (105.9, -61.7), (98.8, -68.8), (-100, -68.8),
+                (-107.9, -60.9), (-107.9, -39.1)])
 GROOVE = LineString([(-114.5, 73), (-110, 68.5), (-110, 17.0), (-84, 17.0), (-73.2, 6.2), (-35, 6.2),     # V groove,
                      (-31, 8.9), (78, 8.9), (83, 3.6), (108.5, 3.6), (113, 8)]).buffer(0.3, cap_style='flat', join_style='mitre')  # 2.2 top x 0.8
 
@@ -180,7 +180,7 @@ def make_black():
     if T-3-SWITCH_PANEL > 0.1:                                                    # back reliefs (thick plate only):
         cuts += [rbox(*SW_BACK, -1, T-3-SWITCH_PANEL, x, y) for x, y in SWITCHES]   # 2 mm at the switch clips,
         cuts += [rbox(50, 50, 4, -1, T-1.5-MOUNT_T, bx, by),                         # 5 mm at the fittings
-                 cyl(48, -1, T-MOUNT_T, sx_, sy_), cyl(30, -1, T-MOUNT_T, cx, cy)]   # and the gland's 22 AF locknut
+                 cyl(46, -1, T-MOUNT_T, sx_, sy_), cyl(30, -1, T-MOUNT_T, cx, cy)]   # and the gland's 22 AF locknut
     for x, y in SCREWS_BLACK:
         cuts += [cyl(SCREW, -1, T+1, x, y), cyl(SCREW_HEAD, T-HEAD_DEPTH, T+1, x, y)]
     cuts += [cyl(SCREW, -1, T+1, *SCREW_BLUE)]
@@ -243,7 +243,17 @@ if __name__ == '__main__':
     for k in parts:
         scene.add_geometry(trimesh.load(f'{OUT}_{k}.stl'), node_name=k, geom_name=k)
     scene.export(f'{OUT}.3mf')
-    for k in list(parts) + ['letters_ANX3D', None]:
+    # 2-colour set: body (plate + frame) in one filament, letters + icons in the other - on a dual-nozzle printer
+    # (H2D) each part gets its own nozzle, so nothing is swapped during the print
+    body = parts['black'].union(parts['blue'])
+    marks = parts['letters_ANX'].union(parts['letters_3D']).union(parts['icons'])
+    cq.exporters.export(body, f'{OUT}_2color_body.stl', tolerance=0.02, angularTolerance=0.1)
+    cq.exporters.export(marks, f'{OUT}_2color_letters_icons.stl', tolerance=0.02, angularTolerance=0.1)
+    two = trimesh.Scene()
+    for k in ['2color_body', '2color_letters_icons']:
+        two.add_geometry(trimesh.load(f'{OUT}_{k}.stl'), node_name=k[7:], geom_name=k[7:])
+    two.export(f'{OUT}_2color.3mf')
+    for k in list(parts) + ['letters_ANX3D', '2color_body', '2color_letters_icons', None]:
         m = trimesh.load(f'{OUT}_{k}.stl' if k else f'{OUT}.stl')
         print(f'{k or "combined":9s} watertight={m.is_watertight} bodies={len(m.split(only_watertight=False))} '
               f'vol={m.volume/1000:.1f}cm3 bounds={m.bounds.round(2).tolist()}')

@@ -9,10 +9,10 @@ PW, PH, T, R = 258.0, 175.0, 4.0, 8.0     # width, height, thickness, corner rad
 SWITCH_W, SWITCH_H = 22.2, 30.2           # same snap-in rocker cutout as the Shurflo box / previous frame
 SWITCH_PANEL = 2.0                        # plate thinned to 2 mm around each cutout so the clips catch
 SWITCHES = [(-56.3, 51.1), (-26.25, 51.1)]   # (x, y) centres, measured on the original panel
-ROUND = [(29.3, 51.75, 44.0), (83.3, 51.75, 32.0)]   # (x, y, dia) measured on the original panel
+ROUND = [(29.3, 51.75, 44.0), (78.9, 51.75, 32.0)]   # (x, y, dia) measured on the original panel
 CABLE = (-100.0, 0.0, 16.4)               # left side, M16 gland
 SCREW = 4.5                               # M4 clearance
-SCREWS = [(sx*121.0, sy*78.25) for sx in (-1, 1) for sy in (-1, 1)] + [(0, 78.25), (0, -78.25)]   # measured on the original
+SCREWS = [(sx*121.0, y) for sx in (-1, 1) for y in (-77.0, 78.25)] + [(0, 78.25), (0, -77.0)]   # measured on the original
 SEG = 96
 
 def rrect(w, h, r):

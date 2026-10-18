@@ -3,7 +3,7 @@ import numpy as np, trimesh
 from PIL import Image, ImageDraw
 from manifold3d import Manifold, Mesh
 import render_anx3d as R
-from make_gland_7mm import make_body, make_screw, make_locknut, make_seal, WALL_T, SOCK_T, FEM_L, CABLE_D
+from make_gland_7mm import make_body, make_cap, make_locknut, WALL_T, CAP_T, CABLE_D
 from make_gland import FLANGE_T
 from make_box import cyl
 
@@ -20,30 +20,27 @@ def look(eye, at, f, w, h):
     return proj
 
 CX, FACE = -100.0, 5.0                                    # hole centre, front face of the 5 mm panel
-zs = WALL_T + FLANGE_T                                    # socket start (body coords)
+zc = WALL_T + FLANGE_T                                    # cap thread start (body coords)
 body = make_body().translate([CX, 0, FACE - WALL_T])
 nut = make_locknut().translate([CX, 0, -5.0])
-seal = make_seal().translate([CX, 0, FACE - WALL_T + zs])
-tip = FACE - WALL_T + zs + 10.0                           # screw tip resting on the seal
-screw = make_screw().rotate([180, 0, 0]).translate([CX, 0, tip + 19.0])
+cap = make_cap().rotate([0, 0, 288]).translate([CX, 0, FACE - WALL_T + zc + 1.0])   # 9 of 10 mm engaged: fingers gripping
 cable = cyl(CABLE_D/2, -40, 80).translate([CX, 0, 0])
 crop = Manifold.cube([70, 60, 30]).translate([CX-35, -30, -1])
 panel_k = man('anx3d_panel_5mm_black.stl') ^ crop
 rim_k = man('anx3d_panel_5mm_blue.stl') ^ crop
 keep = Manifold.cube([200, 200, 200]).translate([CX-100, 0, -100])        # half section: keep y > 0
-parts = {'black': panel_k ^ keep, 'blue': (rim_k ^ keep) + (body ^ keep), 'silver': (screw ^ keep) + (nut ^ keep),
-         'housing': seal ^ keep, 'bezel': cable ^ keep}
+parts = {'black': panel_k ^ keep, 'blue': (rim_k ^ keep) + (body ^ keep), 'silver': (cap ^ keep) + (nut ^ keep),
+         'bezel': cable ^ keep}
 meshes = {k: vf(m) for k, m in parts.items()}
 W, H = 900, 760
 eye = np.array([CX-120, -150, 95.0])
 sec = R.render(meshes, look(eye, [CX, 0, 8], 1500, W, H), eye, W, H)
 # exploded, whole parts
-ex = {'blue': vf(body.translate([0, 0, 0])), 'silver': vf(screw.translate([0, 0, 28]) + nut.translate([0, 0, -18])),
-      'housing': vf(seal.translate([0, 0, 18])), 'black': vf(panel_k), 'bezel': vf(cable)}
+ex = {'blue': vf(body), 'silver': vf(cap.translate([0, 0, 30]) + nut.translate([0, 0, -18])), 'black': vf(panel_k), 'bezel': vf(cable)}
 eye2 = np.array([CX-110, -160, 80.0])
 exp = R.render(ex, look(eye2, [CX, 0, 15], 1100, W, H), eye2, W, H)
 sheet = Image.new('RGB', (2*W, H+40), 'white'); sheet.paste(sec, (0, 40)); sheet.paste(exp, (W, 40))
 d = ImageDraw.Draw(sheet)
-d.text((20, 12), 'Section: body (blue) through the panel, lock nut behind, TPU seal in the cone, pressure screw in the internal thread', fill=(0, 0, 0))
-d.text((W+20, 12), 'Exploded: lock nut | panel | body | TPU seal | pressure screw   (7 mm cable)', fill=(0, 0, 0))
+d.text((20, 12), 'Section: body (blue) through the panel, lock nut behind; the cap (internal thread + cone) closes the 6 fingers on the cable', fill=(0, 0, 0))
+d.text((W+20, 12), 'Exploded: lock nut | panel | body with collet fingers | cap   (7 mm cable)', fill=(0, 0, 0))
 sheet.save('gland7_preview.png')

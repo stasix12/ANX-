@@ -32,8 +32,8 @@ def props():                             # render-only hardware: machine housing
     housing = prism(plate_outline().buffer(-1.5), -25, -0.01).cut(cyl(hd, -31, 1, hx, hy)).cut(cyl(sd, -31, 1, sx, sy))
     bezel = rocker = None
     for x, y in SWITCHES:
-        b = rbox(30.5, 38.0, 2.0, T-3, T+3.5, x, y)
-        r = rbox(25.0, 32.0, 2.5, T+3.5, T+9.0, x, y).edges('>Z').chamfer(1.2)
+        b = rbox(29.0, 37.0, 2.0, T-3, T+3.5, x, y)
+        r = rbox(24.0, 31.0, 2.5, T+3.5, T+9.0, x, y).edges('>Z').chamfer(1.2)
         bezel = b if bezel is None else bezel.union(b); rocker = r if rocker is None else rocker.union(r)
     def screw(x, y, z, d):
         hexs = cq.Workplane('XY', origin=(x, y, z+0.45*d-0.8)).polygon(6, 0.35*d).extrude(2)

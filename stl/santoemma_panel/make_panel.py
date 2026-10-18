@@ -8,9 +8,9 @@ from manifold3d import Manifold, CrossSection, JoinType
 PW, PH, T, R = 258.0, 175.0, 4.0, 8.0     # width, height, thickness, corner radius
 SWITCH_W, SWITCH_H = 22.2, 30.2           # same snap-in rocker cutout as the Shurflo box / previous frame
 SWITCH_PANEL = 2.0                        # plate thinned to 2 mm around each cutout so the clips catch
-SWITCHES = [(62.0, 50.0), (96.0, 50.0)]   # (x, y) centres, top-right, side by side
-ROUND = [(79.0, 0.0, 44.0), (79.0, -50.0, 32.0)]   # (x, y, dia) right side: 44 above, 32 below
-CABLE = (-104.0, 0.0, 16.4)               # middle of the left side, M16 gland
+SWITCHES = [(-56.3, 51.1), (-26.25, 51.1)]   # (x, y) centres, measured on the original panel
+ROUND = [(29.3, 51.75, 44.0), (83.3, 51.75, 32.0)]   # (x, y, dia) measured on the original panel
+CABLE = (-100.0, 0.0, 16.4)               # left side, M16 gland
 SCREW = 4.5                               # M4 clearance
 SCREWS = [(sx*121.0, sy*78.25) for sx in (-1, 1) for sy in (-1, 1)] + [(0, 78.25), (0, -78.25)]   # measured on the original
 SEG = 96

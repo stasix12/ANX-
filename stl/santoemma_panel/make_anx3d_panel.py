@@ -21,13 +21,13 @@ T = 10.0                                  # black plate (panel thickness), front
 MOUNT_T = 5.0                             # relieved from the back to 5 mm around the fittings + cable gland (thread length)
 RIM_H = 3.0                               # blue rim stands 3 mm proud of the black face
 SWITCH_W, SWITCH_H, SWITCH_PANEL = 22.2, 30.2, 2.0      # rocker cutout + material left at the clips (unchanged)
-SWITCHES = [(-57.3, 44.4), (-22.6, 44.4)]
-SW_POCKET = (32.5, 40.0, 2.5)             # black pocket each switch sits in (w, h, r), 3 mm deep
-SW_BACK = (30.0, 38.0, 2.0)               # back pocket: leaves SWITCH_PANEL at the clips
-BIG = (32.5, 44.4, 44.0)                  # 44 hole (x, y, dia) in the blue square flange
-FLANGE, FLANGE_R, FLANGE_POCKET = 58.0, 4.0, 63.0
+SWITCHES = [(-56.3, 51.1), (-26.25, 51.1)]  # measured on the original panel (30 mm apart)
+SW_POCKET = (27.5, 36.0, 2.0)             # black pocket each switch sits in (w, h, r), 3 mm deep
+SW_BACK = (28.0, 36.0, 2.0)               # back pocket: leaves SWITCH_PANEL at the clips, 2 mm rib between
+BIG = (29.3, 51.75, 44.0)                 # 44 hole (x, y, dia), concentric with the original 4-screw pattern
+FLANGE, FLANGE_R, FLANGE_POCKET = 48.0, 4.0, 52.0   # pocket clears the top middle screw head
 FLANGE_SCREW, FLANGE_PITCH = 3.2, 38.0    # 4 x M3, 38 mm square (measured on the original panel)
-SMALL = (90.0, 44.4, 32.0)                # 32 hole (x, y, dia) with the blue ring
+SMALL = (83.3, 51.75, 32.0)               # 32 hole (x, y, dia) with the blue ring, measured on the original
 RING_OD, RING_BORE = 40.0, 46.0
 CABLE = (-100.0, 0.0, 16.4)               # power cable, M16 gland (16 mm thread); flat seat >= 31 mm around it
 SCREW, SCREW_HEAD, HEAD_DEPTH = 4.5, 9.0, 1.2
@@ -93,7 +93,7 @@ def letters():
 
 def icons():                              # icons above the switches (silver inlays): left = water spray, right = vacuum
     (x1, _), (x2, _) = SWITCHES
-    y = 75.0
+    y, k = 75.8, 0.85                    # icons scaled to 85 % to fit between the switch pockets and the rim
     def drop(cx, cy, w=1.5, h=2.3):       # water droplet, point up
         return unary_union([Point(cx, cy-h/2+w/2).buffer(w/2), Polygon([(cx-w/2, cy-h/2+w/2), (cx+w/2, cy-h/2+w/2), (cx, cy+h/2)])])
     nozzle = unary_union([Polygon([(x1-2.4, y+4.6), (x1+2.4, y+4.6), (x1+2.4, y+3.0), (x1-2.4, y+3.0)]),   # spray nozzle
@@ -111,7 +111,7 @@ def icons():                              # icons above the switches (silver inl
     body = Polygon([(x2+1.6, y-3.4), (x2+4.6, y-3.4), (x2+4.6, y-1.2), (x2+1.6, y-1.2)]).buffer(1.5, join_style='round')
     wheels = [Point(x2+1.7, y-4.9).buffer(0.7), Point(x2+4.5, y-4.9).buffer(0.7)]
     vac = unary_union([hose, wand, grip, head, body] + wheels)
-    return unary_union([spray, vac])
+    return unary_union([affinity.scale(spray, k, k, origin=(x1, y)), affinity.scale(vac, k, k, origin=(x2, y))])
 
 # ------------------------------------------------------------------ 2D -> CadQuery solids
 def prism(poly, z0, z1):
@@ -169,7 +169,7 @@ def make_black():
                  cq.Workplane('XY', origin=(x, y, -1)).rect(SWITCH_W, SWITCH_H).extrude(T+2)]
     bx, by, bd = BIG
     cuts += [rbox(FLANGE_POCKET, FLANGE_POCKET, FLANGE_R+1, T-1.5, T+1, bx, by), cyl(bd, -1, T+1, bx, by),
-             rbox(56, 56, 4, -1, T-1.5-MOUNT_T, bx, by)]                                  # back relief: nuts + fitting thread
+             rbox(50, 50, 4, -1, T-1.5-MOUNT_T, bx, by)]                                  # back relief: nuts + fitting thread
     cuts += [cyl(FLANGE_SCREW, -1, T+1, bx+sx*FLANGE_PITCH/2, by+sy*FLANGE_PITCH/2) for sx in (-1, 1) for sy in (-1, 1)]
     sx_, sy_, sd = SMALL
     cuts += [cyl(RING_BORE, T-2, T+1, sx_, sy_), cyl(sd, -1, T+1, sx_, sy_), cyl(48, -1, T-2-MOUNT_T+2, sx_, sy_)]

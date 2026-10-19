@@ -5,13 +5,13 @@ import numpy as np, trimesh
 from manifold3d import Manifold
 
 F = 96
-od, wall   = 38.0, 6.0        # קוטר חיצוני ועובי דופן (פנים 26)
+od, wall   = 38.0, 4.0        # קוטר חיצוני ועובי דופן (מעבר אוויר 30 מ"מ)
 stub_L     = 70.0             # הזיז שנכנס למחבר
 angle_deg  = 40.0             # זווית הכיפוף
 bend_R     = 90.0             # רדיוס הכיפוף (למרכז הצינור)
 grip_L     = 230.0            # אורך האחיזה
 grip_od    = 38.0             # קוטר האחיזה (לקלמרה של הטריגר)
-cap        = 5.0              # סגירה בקצוות
+cap        = 0.0              # פתוח משני הצדדים - צינור שאיבה
 N_BEND     = 14
 
 def disk(d, z=0.0):
@@ -48,7 +48,7 @@ outer = sweep(od, pts, dirs)
 # אחיזה בקוטר אחר (אם שונה): מחליפים את הקטע האחרון
 if grip_od != od:
     outer += sweep(grip_od, pts[-2:], dirs[-2:])
-inner_pts = [pts[0] + np.array([0,0,cap])] + pts[1:-1] + [pts[-1] - cap*end_dir]
+inner_pts = [pts[0] - np.array([0,0,1.0])] + pts[1:-1] + [pts[-1] + 1.0*end_dir]
 inner = sweep(od - 2*wall, inner_pts, dirs)
 handle = outer - inner
 # פזה בקצה הזיז

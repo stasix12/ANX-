@@ -5,7 +5,7 @@ import numpy as np, trimesh
 from manifold3d import Manifold
 
 F = 96
-od, wall   = 38.0, 4.0        # קוטר חיצוני ועובי דופן (מעבר אוויר 30 מ"מ)
+od, wall   = 38.0, 6.0        # קוטר חיצוני ועובי דופן (מעבר אוויר 26 מ"מ)
 stub_L     = 70.0             # הזיז שנכנס למחבר
 angle_deg  = 40.0             # זווית הכיפוף
 bend_R     = 90.0             # רדיוס הכיפוף (למרכז הצינור)

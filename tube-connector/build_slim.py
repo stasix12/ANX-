@@ -64,13 +64,22 @@ def ring():
     return r - c
 
 def nut():
-    outer = cyl(nut_od, nut_L)
-    for i in range(n_ribs):
-        outer += box(3, 3.5, nut_L-4).translate([nut_od/2-1.5, -1.75, 2]).rotate([0,0,360*i/n_ribs])
+    # אום מקומר: גליל בצד הגוף, כיפה כלפי חוץ (ללא תמיכות - נסגר כלפי מעלה)
+    from manifold3d import CrossSection
+    R0, z_dome = nut_od/2, 11.0            # רדיוס מלא עד z=11, משם קשת
+    r_lip = 40.5/2 + 3.5                   # רדיוס בקצה החיצוני (דופן 3.5 מעל השפה)
+    prof = [(0,0), (R0,0)]
+    for i in range(1, 25):
+        t = i/24
+        th = t*np.pi/2
+        prof.append((r_lip + (R0-r_lip)*np.cos(th), z_dome + (nut_L-z_dome)*np.sin(th)))
+    prof.append((0, nut_L))
+    outer = Manifold.revolve(CrossSection([prof]), F)
+    for i in range(n_ribs):                # חריצי אחיזה רדודים לאורך
+        outer -= Manifold.cylinder(nut_L-5, 1.6, 1.6, 24).translate([R0+0.7, 0, 2.5]).rotate([0,0,360*i/n_ribs])
     tl = nut_thr + 1
     hole = (cyl(thr_major-2*depth+2*thr_cl, tl+1) + thread(thr_major, tl+1, thr_cl)).translate([0,0,-1])
     hole += cyl(thr_major+2*thr_cl+2, 2, d2=thr_major+2*thr_cl-2).translate([0,0,-0.01])
-    hole += cyl(thr_major+2*thr_cl+1, nut_plain+1).translate([0,0,nut_thr-0.5])
     hole += cyl(40.5, nut_lip+2).translate([0,0,nut_thr+nut_plain-0.01])
     hole += cyl(40.5, 1, d2=42.5).translate([0,0,nut_L-0.99])
     return outer - hole

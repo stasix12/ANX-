@@ -48,8 +48,11 @@ def half_body():
 def body():
     h = half_body()
     m = h + h.rotate([180,0,0])
-    stop = cyl(bore+1, 2) - cyl(stop_d, 4).translate([0,0,-1])
-    return m + stop.translate([0,0,-1])
+    # טבעת עצירה עם שיפוע 45° מלמטה - נדפסת בלי תמיכות
+    ch = (bore - stop_d) / 2
+    stop  = cyl(bore+1, 2+ch).translate([0,0,-1-ch])
+    stop -= cyl(stop_d, 2.01).translate([0,0,-1]) + cyl(bore, ch, d2=stop_d).translate([0,0,-1-ch])
+    return m + stop
 
 def ring():
     r  = cyl(seat_d_tip, ring_taper_L, d2=46).translate([0,0,0])

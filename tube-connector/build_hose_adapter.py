@@ -10,7 +10,7 @@ wall         = 4.0
 hose_d       = 36.0
 A_len, A_bore = 45.0, 30.0        # אורך הזיז ל-36 וקוטר מעבר האוויר
 barb_h, barb_len = 0.8, 3.0       # שפה קטנה בקצה שמחזיקה את הצינור
-B_depth, B_cl = 45.0, 0.3
+B_depth, B_cl = 50.0, 0.2
 
 cyl = lambda d, h, d2=None: Manifold.cylinder(h, d/2, (d2 if d2 else d)/2, F)
 sid = tube_d + cl; sod = sid + 2*wall     # 38.3 / 46.3

@@ -3,7 +3,8 @@ import numpy as np, trimesh
 from PIL import Image, ImageDraw
 from manifold3d import Manifold, Mesh
 import render_anx3d as R
-from make_gland_7mm import make_body, make_cap, make_locknut, make_wedge, WALL_T, CAP_T, CABLE_D
+from make_gland_7mm import make_body, make_cap, make_locknut, make_wedge, WALL_T, CAP_T
+CABLE_D = 8.0
 from make_gland import FLANGE_T
 from make_box import cyl
 
@@ -45,5 +46,5 @@ exp = R.render(ex, look(eye2, [CX, 0, 15], 1100, W, H), eye2, W, H)
 sheet = Image.new('RGB', (2*W, H+40), 'white'); sheet.paste(sec, (0, 40)); sheet.paste(exp, (W, 40))
 d = ImageDraw.Draw(sheet)
 d.text((20, 12), 'Section: body (blue) through the panel, lock nut behind; the cap (internal thread + cone) presses the 2 wedge halves onto the cable', fill=(0, 0, 0))
-d.text((W+20, 12), 'Exploded: lock nut | panel | body | 2 wedge halves | cap   (7 mm cable)', fill=(0, 0, 0))
+d.text((W+20, 12), 'Exploded: lock nut | panel | body | 2 wedge halves | cap   (fits 7-9 mm cables)', fill=(0, 0, 0))
 sheet.save('gland7_preview.png')

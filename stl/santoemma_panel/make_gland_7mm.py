@@ -1,10 +1,10 @@
-"""Printable cable gland for the 16.4 mm power-cable hole of the Santoemma panel, 7 mm cable. No collet fingers.
+"""Printable cable gland for the 16.4 mm power-cable hole of the Santoemma panel, for 7 / 8 / 9 mm cables. No collet fingers.
 Body: 16 mm thread through the panel (22 AF flange on the front, lock nut behind) and a 20 mm thread for the cap.
 Clamp: two solid half-cones (split wedge, grip ridges inside) that sit around the cable on top of the body.
 Cap: knurled dome nut with an INTERNAL thread and an inner cone - screwing it down presses the two halves together
 onto the cable. Every part is solid and prints without supports (the halves lie on their flat split face).
 Thread profile / helpers from ../shurflo_box/make_gland.py.
-Parts: gland7_body, gland7_cap, gland7_locknut, gland7_wedge_half (print 2) - PETG/ASA.
+Parts: gland7_body, gland7_cap, gland7_locknut, gland7_wedge_half (print 2) - PETG/ASA. (file names kept from the 7 mm version)
 Run:  python3 make_gland_7mm.py"""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shurflo_box'))
@@ -12,13 +12,13 @@ from manifold3d import Manifold
 from make_gland import thread, hexagon, knurled, R1, R2, CLEAR, FLANGE_AF, FLANGE_T, SEG
 from make_box import cyl, export
 
-CABLE_D = 7.0
+CABLE_MIN, CABLE_MAX = 7.0, 9.0   # cable range: 9 mm grips after ~8 mm of cap thread, 7 mm with the cap tight
 WALL_T = 13.0                     # thread through the panel: 5 mm wall + 5 mm lock nut + 3 mm spare (10 mm panel: 5 mm at the hole)
-CAP_T = 10.0                      # cap thread length (OD 20)
-BODY_BORE = CABLE_D + 2.0         # bore through the body
-WEDGE_L, WEDGE_D0, WEDGE_D1 = 12.0, 15.0, 11.8   # split wedge, closed: length, bottom OD, top OD (8 deg taper)
-WEDGE_BORE, RIDGE_D = CABLE_D - 0.6, CABLE_D - 1.2   # closed bore 6.4 + two ridges 5.8: 0.3 + 0.3 mm bite per side on 7 mm
-CONE_GAP = 0.15                   # cap cone sits 0.15 mm outside the closed wedge: halves fully closed with the cap tight
+CAP_T = 14.0                      # cap thread length (OD 20): long, so the cone travels far enough for the whole range
+BODY_BORE = CABLE_MAX + 1.0       # bore through the body, 10
+WEDGE_L, WEDGE_D0, WEDGE_D1 = 12.0, 14.6, 10.6   # split wedge, closed: length, bottom OD, top OD (9.5 deg taper)
+WEDGE_BORE, RIDGE_D = 6.4, 5.8    # closed bore + two grip ridges: the halves stand 0.6 (7 mm) .. 1.6 mm (9 mm) out on the cable
+CONE_GAP = 0.05                   # cap cone 0.05 mm outside the closed wedge: on a 7 mm cable the ridges bite 0.55 mm with the cap tight
 CAP_H = CAP_T + WEDGE_L + 2.0
 
 def make_body():                  # modelled with the panel thread at z = 0..WALL_T, cap thread on top, flat top for the wedge
@@ -46,7 +46,7 @@ def make_cap():                   # knurled dome nut: internal thread at the ope
     c -= thread(R2, CAP_T+1, extra=CLEAR).translate([0, 0, -0.5])                            # internal thread
     c -= Manifold.cylinder(1.0, R2+0.6+CLEAR+1.0, R2+0.6+CLEAR, SEG).translate([0, 0, -0.01])  # lead-in chamfer
     c -= Manifold.cylinder(WEDGE_L+0.01, WEDGE_D0/2+CONE_GAP, WEDGE_D1/2+CONE_GAP, SEG).translate([0, 0, CAP_T])
-    c -= cyl(CABLE_D/2+0.6, 0, CAP_H+1)
+    c -= cyl(CABLE_MAX/2+0.3, 0, CAP_H+1)
     return c
 
 def make_locknut():

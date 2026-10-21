@@ -1,7 +1,7 @@
 """Printable cable gland for the 16.4 mm power-cable hole of the Santoemma panel, for 7 / 8 / 9 mm cables. No collet fingers.
 Body: 16 mm thread through the panel (22 AF flange on the front, lock nut behind) and a 20 mm thread for the cap.
 Clamp: two solid half-cones (split wedge, grip ridges inside) that sit around the cable on top of the body.
-Cap: knurled dome nut with an INTERNAL thread and an inner cone - screwing it down presses the two halves together
+Cap: dome nut (tapered nose, 6 finger scallops) with an INTERNAL thread and an inner cone - screwing it down presses the two halves together
 onto the cable. Every part is solid and prints without supports (the halves lie on their flat split face).
 Thread profile / helpers from ../shurflo_box/make_gland.py.
 Parts: gland7_body, gland7_cap, gland7_locknut, gland7_wedge_half (print 2) - PETG/ASA. (file names kept from the 7 mm version)
@@ -41,12 +41,25 @@ def make_wedge_half():            # one half (y > 0), split face on the bed
     half = half.rotate([90, 0, 0])                                                         # y -> z: split face down
     return half.translate([0, 0, -half.bounding_box()[2]])
 
-def make_cap():                   # knurled dome nut: internal thread at the open end, cone above it, printed open end down
-    c = knurled(14.0, CAP_H)
+CAP_R, CAP_TOP_R, CAP_TAPER = 14.5, 8.5, 9.0     # cap outside: radius, radius at the top, height of the tapered nose
+
+def cap_shell():                  # outside of the cap: round body + tapered nose, 6 finger scallops, ring groove, chamfers
+    z_n = CAP_H - CAP_TAPER
+    s = Manifold.cylinder(0.8, CAP_R-0.8, CAP_R, SEG) + cyl(CAP_R, 0.79, z_n+0.01) + \
+        Manifold.cylinder(CAP_TAPER, CAP_R, CAP_TOP_R, SEG).translate([0, 0, z_n])
+    for k in range(6):                                                                     # finger scallops
+        ball = lambda z: Manifold.sphere(5.0, 48).translate([17.7, 0, z])
+        s -= Manifold.batch_hull([ball(4.0), ball(z_n-1.5)]).rotate([0, 0, 30+60*k])
+    s -= cyl(CAP_R+1, 2.2, 3.0) - cyl(CAP_R-0.6, 1.0, 4.0)                                 # thin ring groove near the bottom
+    return s
+
+def make_cap():                   # dome nut: internal thread at the open end, cone above it, printed open end down
+    c = cap_shell()
     c -= thread(R2, CAP_T+1, extra=CLEAR).translate([0, 0, -0.5])                            # internal thread
     c -= Manifold.cylinder(1.0, R2+0.6+CLEAR+1.0, R2+0.6+CLEAR, SEG).translate([0, 0, -0.01])  # lead-in chamfer
     c -= Manifold.cylinder(WEDGE_L+0.01, WEDGE_D0/2+CONE_GAP, WEDGE_D1/2+CONE_GAP, SEG).translate([0, 0, CAP_T])
     c -= cyl(CABLE_MAX/2+0.3, 0, CAP_H+1)
+    c -= Manifold.cylinder(0.81, CABLE_MAX/2+0.3, CABLE_MAX/2+1.1, SEG).translate([0, 0, CAP_H-0.8])   # chamfered cable opening
     return c
 
 def make_locknut():

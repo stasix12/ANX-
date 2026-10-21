@@ -1,46 +1,51 @@
-"""Printable cable gland for the 16.4 mm power-cable hole of the Santoemma panel, 7 mm cable.
-Body: 16 mm thread through the panel (22 AF flange on the front, lock nut behind), 20 mm thread for the cap and six
-rigid collet fingers with three grip ridges inside. Cap: knurled dome nut with an INTERNAL thread and an inner cone -
-screwing it down closes the fingers onto the cable (no rubber needed; the grip comes from the PETG fingers).
-Thread profile / helpers from ../shurflo_box/make_gland.py.  Parts: gland7_body, gland7_cap, gland7_locknut (PETG/ASA).
+"""Printable cable gland for the 16.4 mm power-cable hole of the Santoemma panel, 7 mm cable. No collet fingers.
+Body: 16 mm thread through the panel (22 AF flange on the front, lock nut behind) and a 20 mm thread for the cap.
+Clamp: two solid half-cones (split wedge, grip ridges inside) that sit around the cable on top of the body.
+Cap: knurled dome nut with an INTERNAL thread and an inner cone - screwing it down presses the two halves together
+onto the cable. Every part is solid and prints without supports (the halves lie on their flat split face).
+Thread profile / helpers from ../shurflo_box/make_gland.py.
+Parts: gland7_body, gland7_cap, gland7_locknut, gland7_wedge_half (print 2) - PETG/ASA.
 Run:  python3 make_gland_7mm.py"""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shurflo_box'))
-import numpy as np
-from manifold3d import Manifold, CrossSection
+from manifold3d import Manifold
 from make_gland import thread, hexagon, knurled, R1, R2, CLEAR, FLANGE_AF, FLANGE_T, SEG
 from make_box import cyl, export
 
 CABLE_D = 7.0
 WALL_T = 13.0                     # thread through the panel: 5 mm wall + 5 mm lock nut + 3 mm spare (10 mm panel: 5 mm at the hole)
 CAP_T = 10.0                      # cap thread length (OD 20)
-FING_L, FING_D0, FING_D1 = 12.0, 16.0, 13.0      # collet fingers: length, base OD, tip OD
-FING_BORE = CABLE_D + 0.8         # finger bore at rest, 7.8
-RIDGE_D = CABLE_D + 0.2           # grip ridges: 7.2 at rest (cable slides through), close to 5.6 when the cap is tight
-BODY_BORE = CABLE_D + 2.0         # bore through the panel thread
-CONE_D0, CONE_D1 = FING_D0 + 0.6, FING_D1 - 1.6  # cap cone: at the finger base / tip -> max 0.8 mm radial squeeze at the tips
-CAP_H = CAP_T + FING_L + 2.0
+BODY_BORE = CABLE_D + 2.0         # bore through the body
+WEDGE_L, WEDGE_D0, WEDGE_D1 = 12.0, 15.0, 11.8   # split wedge, closed: length, bottom OD, top OD (8 deg taper)
+WEDGE_BORE, RIDGE_D = CABLE_D - 0.6, CABLE_D - 1.2   # closed bore 6.4 + two ridges 5.8: 0.3 + 0.3 mm bite per side on 7 mm
+CONE_GAP = 0.15                   # cap cone sits 0.15 mm outside the closed wedge: halves fully closed with the cap tight
+CAP_H = CAP_T + WEDGE_L + 2.0
 
-def make_body():                  # modelled with the panel thread at z = 0..WALL_T
-    z_fl = WALL_T; z_c = z_fl + FLANGE_T; z_f = z_c + CAP_T
+def make_body():                  # modelled with the panel thread at z = 0..WALL_T, cap thread on top, flat top for the wedge
+    z_fl = WALL_T; z_c = z_fl + FLANGE_T
     b = thread(R1, WALL_T) + hexagon(FLANGE_AF, FLANGE_T, z_fl) + thread(R2, CAP_T).translate([0, 0, z_c])
-    b += Manifold.cylinder(FING_L, FING_D0/2, FING_D1/2, SEG).translate([0, 0, z_f])
-    b -= cyl(BODY_BORE/2, -1, z_f+0.5)
-    b -= Manifold.cylinder(1.0, BODY_BORE/2, FING_BORE/2, SEG).translate([0, 0, z_f+0.5])     # step down to the finger bore
-    b -= cyl(FING_BORE/2, z_f+1.49, z_f+FING_L+1)
-    for zr in (z_f+FING_L-1.5, z_f+FING_L-4.5, z_f+FING_L-7.5):                             # 3 grip ridges (45 deg flanks)
-        h = (FING_BORE-RIDGE_D)/2
-        ring = Manifold.cylinder(h, FING_BORE/2, RIDGE_D/2, SEG) + Manifold.cylinder(h, RIDGE_D/2, FING_BORE/2, SEG).translate([0, 0, h])
-        b += ring.translate([0, 0, zr-h]) - cyl(RIDGE_D/2, zr-h-1, zr+h+1)
-    for a in range(6):                                                                       # 6 collet slots
-        b -= Manifold.cube([1.6, 20, FING_L+0.1]).translate([-0.8, 0, z_f+0.2]).rotate([0, 0, a*60])
+    b -= cyl(BODY_BORE/2, -1, z_c+CAP_T+1)
     return b
+
+def make_wedge():                 # the closed split wedge, axis on z, wide end at z = 0
+    w = Manifold.cylinder(WEDGE_L, WEDGE_D0/2, WEDGE_D1/2, SEG) - cyl(WEDGE_BORE/2, -1, WEDGE_L+1)
+    for zr in (WEDGE_L*0.3, WEDGE_L*0.7):                                                  # two grip ridges, 45 deg flanks
+        h = (WEDGE_BORE-RIDGE_D)/2
+        w += (Manifold.cylinder(h, WEDGE_BORE/2, RIDGE_D/2, SEG).translate([0, 0, zr-h]) +
+              Manifold.cylinder(h, RIDGE_D/2, WEDGE_BORE/2, SEG).translate([0, 0, zr])) - cyl(RIDGE_D/2, zr-h-1, zr+h+1)
+    w -= Manifold.cylinder(0.6, WEDGE_D0/2+1, WEDGE_D0/2-0.4, SEG).translate([0, 0, -0.01])  # small chamfer, no elephant foot bite
+    return w
+
+def make_wedge_half():            # one half (y > 0), split face on the bed
+    half = make_wedge() ^ Manifold.cube([40, 20, 40]).translate([-20, 0, -5])
+    half = half.rotate([90, 0, 0])                                                         # y -> z: split face down
+    return half.translate([0, 0, -half.bounding_box()[2]])
 
 def make_cap():                   # knurled dome nut: internal thread at the open end, cone above it, printed open end down
     c = knurled(14.0, CAP_H)
     c -= thread(R2, CAP_T+1, extra=CLEAR).translate([0, 0, -0.5])                            # internal thread
     c -= Manifold.cylinder(1.0, R2+0.6+CLEAR+1.0, R2+0.6+CLEAR, SEG).translate([0, 0, -0.01])  # lead-in chamfer
-    c -= Manifold.cylinder(FING_L+0.01, CONE_D0/2, CONE_D1/2, SEG).translate([0, 0, CAP_T])   # squeezes the finger tips
+    c -= Manifold.cylinder(WEDGE_L+0.01, WEDGE_D0/2+CONE_GAP, WEDGE_D1/2+CONE_GAP, SEG).translate([0, 0, CAP_T])
     c -= cyl(CABLE_D/2+0.6, 0, CAP_H+1)
     return c
 
@@ -50,6 +55,7 @@ def make_locknut():
 if __name__ == '__main__':
     body = make_body()
     top = body.bounding_box()[5]
-    export(body.rotate([180, 0, 0]).translate([0, 0, top]), 'gland7_body.stl')   # finger tips on the bed
+    export(body.rotate([180, 0, 0]).translate([0, 0, top]), 'gland7_body.stl')   # cap-thread end on the bed
     export(make_cap(), 'gland7_cap.stl')
     export(make_locknut(), 'gland7_locknut.stl')
+    export(make_wedge_half(), 'gland7_wedge_half.stl')

@@ -416,6 +416,113 @@ export default function CampaignsPage() {
     [toast],
   );
 
+  /**
+   * "החזר לפעילות" — AND MAKING IT MEAN WHAT IT SAYS.
+   *
+   * "למה במסך קמפיינים אין כפתור להדלקת קמפיינים." The button is on the card
+   * now, and the first thing to check was whether the handler behind it does
+   * anything. It did not, quite:
+   *
+   *   stopCampaign() writes three things (client.ts) — status 'archived',
+   *   social_schedules.active = false for every post of the round, and every
+   *   cancellable queue row swept to 'skipped'.
+   *
+   *   reopenCampaign() undoes exactly one of them. Its own docstring says so:
+   *   "re-opens a stopped campaign FOR EDITING; it does not resurrect
+   *   cancelled rows."
+   *
+   * And planQueue() reads `social_schedules` WHERE active = true. So the
+   * status flip on its own gives back a campaign that is on every list as
+   * live, editable, badged as never-started — and invisible to the planner
+   * for ever. As a row in a menu nobody found, that was a quiet oddity. As
+   * the card's own button it would be the worst kind of control: one that
+   * reports success and changes nothing the owner can see.
+   *
+   * WORSE THAN NOTHING, FOR ONE SHAPE OF ROUND. scheduleReadout() computes
+   * `repeats = repeat.enabled && !stopped`, so the moment 'stopped' goes
+   * away a round with the daily repeat armed starts printing "חזרה יומית
+   * פעילה — הסבב הבא ייפתח ב-24.10 בשעה 08:00" over a schedule row that is
+   * switched off. A dated promise about a publication that cannot happen is
+   * precisely the fault "למה הוא לא מראה מתי אמור לצאת הפרסום הבא" was fixed
+   * to remove.
+   *
+   * SO THE RE-ARM IS PART OF THE PRESS, in this order and not the other:
+   * setCampaignRepeat() is the only thing in the product that sets
+   * social_schedules.active = true, and plan.ts retires the schedules of any
+   * campaign still marked 'archived' on its next pass — within sixty seconds.
+   * Re-arm first and it is undone before the owner looks up.
+   *
+   * It is the SAME call the schedule panel already makes on every day or hour
+   * change (changeSchedule above), including its answer when there is nothing
+   * to copy: a round that has never gone out owns no group list, so `armed`
+   * comes back 0 and he is told to launch it once rather than left waiting.
+   *
+   * WHEN THE REPEAT IS OFF, nothing is re-armed and nothing pretends
+   * otherwise — a round whose repeat is off ended when it ended, and the
+   * toast says what starts a new one.
+   */
+  async function reopen(campaign: Campaign) {
+    setBusy(`open-${campaign.id}`);
+    /* Which of the two writes landed, so the message after a failure can say
+       what is true rather than "הפעולה נכשלה" over a campaign that IS open. */
+    let reopened = false;
+    try {
+      await reopenCampaign(campaign.id);
+      reopened = true;
+      const repeat = readRepeat(campaign);
+      const schedule = readSchedule(campaign);
+      if (!repeat.enabled) {
+        toast('הקמפיין חזר לפעילות. כדי שיפרסם שוב — פתחו את הפוסט והשיקו אותו מחדש.');
+      } else {
+        const armed = await setCampaignRepeat(campaign, repeat, schedule);
+        /*
+         * A WEEKLY PLAN IS BUILT OUT OF THE CHOSEN DAYS — `for (const day of
+         * schedule.days) weekly[day] = [start]` — so with no day chosen it is
+         * an empty object, and setCampaignRepeat still counts the row it
+         * wrote as armed. It is active, it has no occasion, and it will plan
+         * nothing for ever. The switch is on; the answer the owner needs is
+         * which other control is holding it.
+         */
+        const noDay = !schedule.days.length;
+        if (armed.armed > 0 && !noDay) {
+          /* WHAT COMES BACK AND WHAT DOES NOT. stopCampaign swept every row
+             that had not begun to 'skipped', and nothing in this product
+             un-skips a row — so the round resumes at its next publishing day
+             rather than carrying on from the minute it was stopped. Saying
+             "הפרסומים ייכנסו לתור" without that is a promise about today. */
+          toast('הקמפיין חזר לפעילות והחזרה היומית הופעלה מחדש. הפרסומים שבוטלו בעצירה לא חוזרים — הסבב ימשיך מיום הפרסום הבא.');
+        } else if (noDay) {
+          toast('הקמפיין חזר לפעילות, אבל לא נבחר אף יום פרסום — בחרו לפחות יום אחד בכרטיס כדי שייכנסו פרסומים לתור.', 'info');
+        } else if (armed.needsLaunch > 0) {
+          /* The round owns no group list to copy. Same answer the schedule
+             panel gives on a day or hour change, in the same words. */
+          toast(`הקמפיין חזר לפעילות, אבל "${campaign.name}" עוד לא יצא אף פעם — אין ממה להעתיק את רשימת הקבוצות. פתחו את הפוסט והשיקו אותו פעם אחת.`, 'info');
+        } else {
+          /* armed 0 AND needsLaunch 0 is the third shape, and it is not the
+             same sentence: setCampaignRepeat returns it when the campaign has
+             no post at all. */
+          toast('הקמפיין חזר לפעילות, אבל אין בו פוסט — הוסיפו פוסט והשיקו אותו.', 'info');
+        }
+      }
+      await load();
+    } catch (err) {
+      toast(
+        reopened
+          ? 'הקמפיין חזר לפעילות, אבל החזרה היומית לא הופעלה מחדש. נסו שוב.'
+          : friendlyMessage(err, 'הפעולה נכשלה.'),
+        'error',
+      );
+      /* THE SCREEN MUST MATCH THE DATABASE EVEN WHEN THE SECOND WRITE FAILED,
+         because the first one landed: without this the card keeps its old
+         'נעצר' badge over an open campaign, and the button that would retry
+         is drawn from that stale state. Its own failure is swallowed — the
+         error above is the one worth reading. */
+      await load().catch(() => {});
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function act(key: string, fn: () => Promise<unknown>, done: string) {
     setBusy(key);
     try {
@@ -624,7 +731,7 @@ export default function CampaignsPage() {
                 /* Only a stopped run can be put back — the card draws nothing
                    when this is undefined, which is how a menu item that cannot
                    act stays off the menu. */
-                onReopen={state.state === 'stopped' ? () => act(`open-${c.id}`, () => reopenCampaign(c.id), 'הקמפיין חזר לפעילות.') : undefined}
+                onReopen={state.state === 'stopped' ? () => reopen(c) : undefined}
                 /*
                   THE REASON THIS ACTION EXISTS, in the owner's own words:
                   "even if two hours have passed, even if a day — I pick the

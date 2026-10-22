@@ -129,6 +129,27 @@ const cases = [
     st(prog({ total:40, published:12, scheduled:28, finished:12 }), { state:'running', nextAt:new Date(Date.now()+90*60e3).toISOString(), nextTargetName:'ערד ביחד' }), 1, vid],
   ['the switch off — the card as it was before this feature', { id:'12', name:'ניקוי חלונות ערד', service:'', city:'', status:'active' as const, created_at:'2026-10-01T08:00:00Z' },
     st(prog({ total:40, published:12, scheduled:28, finished:12 }), { state:'running', nextAt:new Date(Date.now()+90*60e3).toISOString(), nextTargetName:'לוח ערד' }), 1, img],
+  /*
+   * 13 — A CAMPAIGN THE OWNER STOPPED, which NOTHING here rendered.
+   *
+   * "למה במסך קמפיינים אין כפתור להדלקת קמפיינים." Case 5 is state 'stopped'
+   * with `status: 'active'` and no panel, so it never exercised the shape the
+   * campaigns page actually hands over: status 'archived', a scheduling panel
+   * (the page passes one to every card unconditionally), the daily repeat
+   * armed — and therefore `onReopen`, which no fixture passed at all. A
+   * control gated on it would have rendered on nothing and every measurement
+   * below would have passed over an empty card.
+   *
+   * The repeat is ON and the window is the reference's, so this is the
+   * TALLEST shape the card can take: the amber repeat paragraph, the stopped
+   * sentence, and the turn-it-back-on button under both.
+   *
+   * published < total deliberately — a stopped round that published
+   * everything would be a second "הקמפיין הסתיים בהצלחה" card, and exactly
+   * one fixture is allowed to say that.
+   */
+  ['a round the owner stopped — archived, with the repeat still armed', { id:'13', name:'סבב פרסום', service:'', city:'', status:'archived' as const, created_at:'2026-09-24T09:00:00Z' },
+    st(prog({ total:20, published:6, skipped:4, finished:10 }), { state:'stopped' }), 1, img],
 ] as const;
 
 /*
@@ -140,9 +161,12 @@ const cases = [
 const schedules: Record<string, CampaignSchedule> = {
   '1': sched.reference, '2': sched.reference, '3': sched.reference, '4': sched.reference,
   '6': sched.reference, '7': sched.reference, '8': sched.reference, '9': sched.reference,
-  '10': sched.all, '11': sched.none, '12': sched.off,
+  '10': sched.all, '11': sched.none, '12': sched.off, '13': sched.reference,
   /* '5' is left out on purpose: a card with no panel, the way the dashboard
-     and the campaign screen render this component. */
+     and the campaign screen render this component. It is also the ONE card
+     here without one — campaign-card.test.ts asserts that count exactly, so a
+     new case that is left out of this map changes which ceiling it is held
+     to. */
 };
 
 /*
@@ -153,6 +177,10 @@ const schedules: Record<string, CampaignSchedule> = {
  */
 const repeats: Record<string, CampaignRepeat> = {
   '6': { enabled: true, minHours: 20 },
+  /* And on the stopped card too, because that is the pair that used to put a
+     dated promise on screen: scheduleReadout() computes `repeats = enabled &&
+     !stopped`, so this card must say "הסבב הופסק" and NOT name an hour. */
+  '13': { enabled: true, minHours: 20 },
 };
 
 const body = cases.map(([label, c, s, posts, media, paused]) => `
@@ -174,6 +202,15 @@ const body = cases.map(([label, c, s, posts, media, paused]) => `
       workerOnline: (c as { id: string }).id !== '3',
       onPause: () => {}, onResume: () => {}, editHref: '/social/posts/p1', onDuplicate: () => {},
       onDelete: () => {}, addPostHref: '/x', busy: false,
+      /*
+       * "החזר לפעילות" — PASSED ON EXACTLY THE CONDITION THE PAGE PASSES IT.
+       *
+       * src/app/social/campaigns/page.tsx: `state.state === 'stopped' ? … :
+       * undefined`. No fixture passed it before, so the card's reopen path
+       * rendered on nothing and every hit-test, ceiling and clipping check
+       * below passed over a control that was never drawn.
+       */
+      onReopen: (s as { state?: string }).state === 'stopped' ? () => {} : undefined,
       /* The queue tuner's button. Passed so the measurement below actually
          covers it: without a handler the card draws nothing, and a hit-test
          that never sees a control cannot find it too small. */

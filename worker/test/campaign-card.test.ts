@@ -153,6 +153,24 @@ async function main(): Promise<void> {
               /* "הקמפיין הסתיים בהצלחה" — the one claim on this card that is
                  about an OUTCOME rather than a count. See the assertion. */
               saysSuccess: (c.textContent || '').includes('הקמפיין הסתיים בהצלחה'),
+              /*
+               * THE CONTROL THAT TURNS A CAMPAIGN BACK ON, read off the real
+               * DOM rather than off the source.
+               *
+               * "למה במסך קמפיינים אין כפתור להדלקת קמפיינים." It was a row
+               * in the ⋯ menu, and an overflow menu renders NOTHING until it
+               * is opened — so no measured assertion in this file could ever
+               * have seen it, and none did. As a button it is in the markup,
+               * it is hit-tested with every other control above, and its
+               * absence from a card that needs it is now a failure.
+               */
+              turnOn: [...c.querySelectorAll('button')]
+                .map((e) => (e.textContent || '').replace(/\s+/g, ' ').trim())
+                .filter((t) => t === 'המשך קמפיין' || t === 'החזר לפעילות'),
+              /* The whole card, for the pairing below: a count of buttons says
+                 how many were drawn and nothing about whether they landed on
+                 the right cards. */
+              text: (c.textContent || '').replace(/\s+/g, ' ').trim(),
               clipped: [...c.querySelectorAll('[data-must-fit]')]
                 .filter((e) => e.scrollWidth > e.clientWidth + 1)
                 .map((e) => (e.textContent || '').trim().slice(0, 28)),
@@ -324,19 +342,28 @@ async function main(): Promise<void> {
          *
          * Measured here, with the panel, across 360/390/430/600:
          *
-         *     the quiet card (finished, nothing skipped)      700 – 787px
-         *     a live card with a group name and a countdown   720 – 807px
-         *     the daily repeat armed, amber paragraph and all 792 – 841px
-         *     no panel at all (every other screen's card)     264 – 336px
+         *     the quiet card (finished, nothing skipped)      715 – 787px
+         *     a live card with a group name and a countdown   735 – 807px
+         *     the daily repeat armed, amber paragraph and all 785 – 841px
+         *     paused, with "המשך קמפיין" under the block      773 – 845px
+         *     stopped, repeat armed, "החזר לפעילות" under it  854 – 901px
+         *     no panel at all, with "החזר לפעילות"            322 – 394px
+         *
+         * THE TALLEST CARD GREW BY A BUTTON, AND IT IS THE POINT OF THE PASS.
+         * "למה במסך קמפיינים אין כפתור להדלקת קמפיינים." המשך קמפיין and
+         * החזר לפעילות came out of the ⋯ menu and onto the card, on cards
+         * that are NOT running — so the reference's own running card is
+         * untouched at 841 and the two states that had no visible way back on
+         * each carry 46px more than they did.
          *
          * The ceiling is the measured maximum plus a few, as everywhere in
          * this suite: it catches growth nobody decided on. Everything in the
          * list above was decided on.
          */
-        const ceiling = card.panel ? 850 : 345;
+        const ceiling = card.panel ? 910 : 400;
         assert.ok(
           card.height <= ceiling,
-          say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling block, the next publication and the daily repeat it measured 697 to 841 when this was written' : "a card with no scheduling block measured 264 to 336 here"}`),
+          say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling block, the next publication, the daily repeat and a turn-it-back-on button it measured 685 to 901 when this was written' : "a card with no scheduling block measured 322 to 394 here"}`),
         );
         /*
          * THE PICTURE IS THE POINT OF THIS CARD. "התמונה צריכה להיות אלמנט
@@ -423,11 +450,66 @@ async function main(): Promise<void> {
         1,
         say(`${success} cards say "הקמפיין הסתיים בהצלחה" — exactly one fixture finished cleanly; the others are a truncated read and a global pause, and neither ended well`),
       );
+      /* ================================================================ *
+       *  "למה במסך קמפיינים אין כפתור להדלקת קמפיינים"
+       * ================================================================ *
+       *
+       * Three fixtures are not running: one PAUSED round with its queue
+       * intact (id '3'), and two STOPPED ones — the panel-less card (id '5')
+       * and the archived round with the daily repeat still armed (id '13').
+       * Each must offer, as a button on the card and not as a row in a menu,
+       * the one action that undoes its state.
+       *
+       * COUNTED AND LABELLED, not located: a paused round resumes and a
+       * stopped one is re-opened, and those are different writes behind
+       * different words. One label on the wrong state is the card offering a
+       * button that cannot act.
+       */
+      const turnOns = seen.cards.flatMap((c) => c.turnOn);
+      assert.equal(
+        turnOns.filter((t) => t === 'המשך קמפיין').length,
+        1,
+        say(`${turnOns.filter((t) => t === 'המשך קמפיין').length} cards draw "המשך קמפיין" — exactly one fixture is paused with rows still waiting`),
+      );
+      assert.equal(
+        turnOns.filter((t) => t === 'החזר לפעילות').length,
+        2,
+        say(`${turnOns.filter((t) => t === 'החזר לפעילות').length} cards draw "החזר לפעילות" — two fixtures are stopped`),
+      );
+      /* AND NEVER BOTH ON ONE CARD. canResumeRun is false for an archived
+         campaign and onReopen is passed only for a stopped one, so a card
+         showing two ways back on would mean one of them is lying. */
+      for (const [i, card] of seen.cards.entries()) {
+        assert.ok(card.turnOn.length <= 1, say(`card ${i} offers ${card.turnOn.length} ways to turn the campaign on: ${card.turnOn.join(', ')}`));
+      }
+      /*
+       * AND ON THE RIGHT CARDS. The two counts above are satisfied by any
+       * three cards in the list; what makes them mean something is that the
+       * label matches the state the badge beside it reports. A "המשך קמפיין"
+       * on a stopped round is a button whose write (status 'active' with the
+       * queue already swept) cannot produce a publication.
+       */
+      for (const [i, card] of seen.cards.entries()) {
+        if (card.turnOn.includes('החזר לפעילות')) {
+          assert.ok(card.text.includes('נעצר'), say(`card ${i} offers "החזר לפעילות" but its badge does not say "נעצר"`));
+        }
+        if (card.turnOn.includes('המשך קמפיין')) {
+          assert.ok(card.text.includes('מושהה'), say(`card ${i} offers "המשך קמפיין" but its badge does not say "מושהה"`));
+        }
+        /* The other direction, which is the one the owner reported: a card
+           whose badge says it is not running and which offers no way back. */
+        if (!card.turnOn.length) {
+          assert.ok(!card.text.includes('נעצר'), say(`card ${i} says "נעצר" and offers no visible way to turn it back on`));
+        }
+      }
       const withCover = seen.cards.filter((c) => c.drewCover).length;
-      /* Seven of the nine fixtures carry media. The floor is all seven, not a
-         majority: with a majority, a case that silently stopped painting its
-         cover still passed, which is what happened when this read `>= 4`. */
-      assert.ok(withCover >= 7, say(`only ${withCover} of the nine cards painted a real cover — seven of them carry media`));
+      /* Eleven of the thirteen fixtures carry media. The floor is all eleven,
+         not a majority: with a majority, a case that silently stopped
+         painting its cover still passed, which is what happened when this
+         read `>= 4`. (It said "seven of the nine" for three passes after the
+         fixture list had grown past nine — a floor that is lower than the
+         truth stops catching the thing it is for.) */
+      assert.ok(withCover >= 11, say(`only ${withCover} of the thirteen cards painted a real cover — eleven of them carry media`));
       /* ================================================================ *
        * "תזמון פרסום" — THE PANEL, AGAINST THE REFERENCE IMAGE.
        *

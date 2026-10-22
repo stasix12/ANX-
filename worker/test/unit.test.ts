@@ -1089,6 +1089,106 @@ console.log('unit tests OK');
   console.log('queue-tuner reachability tests OK');
 }
 
+/* --------------------------------- turning a campaign back on is a BUTTON, and it works */
+{
+  /*
+   * "למה במסך קמפיינים אין כפתור להדלקת קמפיינים."
+   *
+   * Two separate claims, and the second is the one that matters.
+   *
+   * (1) THE CONTROL IS ON THE CARD. 'המשך קמפיין' and 'החזר לפעילות' were
+   *     rows in the ⋯ menu — which renders nothing at all until it is opened,
+   *     so no measured test in this suite had ever seen them. campaign-card
+   *     .test.ts hit-tests the button now; this pins that the menu does not
+   *     also carry it, the way the queue tuner's row is pinned above.
+   *
+   * (2) THE BUTTON DOES WHAT IT SAYS. stopCampaign() writes three things —
+   *     status 'archived', social_schedules.active = false for every post of
+   *     the round, and every cancellable queue row swept to 'skipped'. And
+   *     reopenCampaign() undoes exactly one of them; its own docstring says
+   *     "it does not resurrect cancelled rows". planQueue() reads schedules
+   *     WHERE active = true, so a bare status flip hands back a campaign that
+   *     is live on every list and invisible to the planner for ever.
+   *
+   *     setCampaignRepeat() is the only thing in the product that sets
+   *     social_schedules.active = true, and plan.ts retires the schedules of
+   *     any campaign still marked 'archived' on its next pass. So the order
+   *     is load-bearing: the status flip first, the re-arm second, or the
+   *     re-arm is undone inside a minute with nothing on screen to explain
+   *     it.
+   */
+  const card = readFileSync(new URL('../../src/components/social/CampaignCard.tsx', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8');
+  const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+
+  /* ---- (1) one control per view ---- */
+  assert.ok(
+    /\{turnOn && \([\s\S]{0,1400}turnOn\.label[\s\S]{0,120}<\/Button>/.test(card),
+    'the campaign card draws the turn-it-back-on control as a button, not only as a menu row',
+  );
+  for (const label of ['המשך קמפיין', 'החזר לפעילות']) {
+    assert.ok(card.includes(label), `the card still names "${label}" — the button reuses the menu's own words`);
+    /* The menu row for the same action must be gated on the button NOT being
+       drawn. Written as "the words appear after a !turnOn gate" rather than
+       as a line-exact regex, so re-ordering the menu cannot silently pass. */
+    /* SEARCHED INSIDE THE MENU ARRAY, not in the whole file: the same two
+       words appear a few lines above in the derivation that decides which
+       button to draw, and that occurrence has no gate in front of it and
+       should not. */
+    const menuAt = card.indexOf('const menu: MenuAction[]');
+    assert.ok(menuAt > -1, 'the card no longer builds its overflow menu as one array');
+    const menu = card.slice(menuAt);
+    const row = menu.indexOf(`label: '${label}'`);
+    assert.ok(row > -1, `the menu still declares "${label}"`);
+    const before = menu.slice(Math.max(0, row - 160), row);
+    assert.ok(before.includes('!turnOn'), `"${label}" is offered in the menu as well as on the card — one control per view`);
+  }
+
+  /* ---- (2) the write behind it ---- */
+  assert.ok(/does not resurrect cancelled rows/.test(client), 'reopenCampaign no longer documents what it does not do');
+  /* SCOPED TO stopCampaign'S OWN BODY. That exact statement appears four
+     times in client.ts — deleteCampaign, archivePost, setCampaignRepeat's
+     own off-branch and this one — so a whole-file search proves nothing
+     about the function this guard is named after. */
+  const stopAt = client.indexOf('export async function stopCampaign');
+  assert.ok(stopAt > -1, 'client.ts no longer exports stopCampaign');
+  const stopBody = client.slice(stopAt, client.indexOf('export async function reopenCampaign'));
+  assert.ok(
+    /from\('social_schedules'\)\.update\(\{ active: false \}\)/.test(stopBody),
+    'stopCampaign no longer retires the schedules — the re-arm below would be pointless',
+  );
+  const reopenAt = page.indexOf('await reopenCampaign(');
+  const rearmAt = page.indexOf('await setCampaignRepeat(campaign, repeat, schedule)');
+  assert.ok(reopenAt > -1, 'the campaigns page no longer re-opens a stopped campaign');
+  assert.ok(rearmAt > -1, 'the campaigns page re-opens a stopped campaign without re-arming its schedule — the planner will never see it again');
+  assert.ok(
+    reopenAt < rearmAt,
+    'the re-arm runs BEFORE the status flip — plan.ts retires the schedule of a campaign still marked archived, so it would be undone within the minute',
+  );
+  /* And a round that has never gone out owns no group list to copy, so the
+     re-arm comes back empty and he is told to launch it rather than left
+     waiting. The same answer the schedule panel already gives. */
+  assert.ok(/armed\.needsLaunch > 0[\s\S]{0,400}השיקו אותו פעם אחת/.test(page), 'a reopen that could not arm anything says so, and names what to do instead');
+  /* AND THE THREE WAYS IT CAN FAIL TO ARM ARE THREE DIFFERENT SENTENCES.
+     setCampaignRepeat answers {armed, needsLaunch}: armed with no day chosen
+     is a row that will plan nothing, needsLaunch is a round with no group
+     list to copy, and 0/0 is a campaign with no post. One sentence for the
+     three told the owner to launch a post he had not written. */
+  for (const [what, words] of [
+    ['no publishing day is chosen', 'לא נבחר אף יום פרסום'],
+    ['the campaign has no post at all', 'אין בו פוסט'],
+    ['the cancelled publications do not come back', 'לא חוזרים'],
+  ] as const) {
+    assert.ok(page.includes(words), `the reopen says nothing about ${what}`);
+  }
+  /* The first write lands before the second can fail, so a failure is not
+     "the operation failed" and the screen may not keep the old state. */
+  assert.ok(/reopened[\s\S]{0,200}החזרה היומית לא הופעלה מחדש/.test(page), 'a reopen whose re-arm threw reports total failure over a campaign that IS open');
+  assert.ok(/await load\(\)\.catch\(/.test(page), 'a failed reopen leaves the card showing a state the database no longer has');
+
+  console.log('campaign turn-on tests OK');
+}
+
 /* ------------------------------------ the queue tuner actually changes the queue */
 {
   const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');

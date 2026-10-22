@@ -60,12 +60,16 @@ import { Badge, Button, ButtonLink, OverflowMenu, TONE_FILL, type MenuAction, ty
  *   runBadge was written to prevent, kept by construction rather than by the
  *   label.
  *
- *   ONE BUTTON, AND NOTHING LOST. "עריכת קמפיין" is the reference's only
- *   action. Everything the foot row used to carry is still reachable: the name
- *   and the picture are both links into the campaign, and ⋯ holds פרטי
- *   הקמפיין, עצור/המשך, הוסף פוסט, הגדרות תור מתקדמות, תגובות, שכפל, החזר
- *   לפעילות and מחק — the same handlers under the same conditions, one tap
- *   further away.
+ *   ONE BUTTON ON A RUNNING CARD, AND NOTHING LOST. "עריכת קמפיין" is the
+ *   reference's only action, and it is still the only one a RUNNING card
+ *   draws. Everything else the foot row used to carry is reachable from ⋯ —
+ *   פרטי הקמפיין, עצור, הוסף פוסט, תגובות, שכפל and מחק — one tap further
+ *   away.
+ *
+ *   THE TWO THAT CAME BACK OUT OF THE MENU are המשך קמפיין and החזר
+ *   לפעילות: "למה במסך קמפיינים אין כפתור להדלקת קמפיינים." They are drawn
+ *   only on a card that is not running, so the reference's card is untouched,
+ *   and the menu drops the row the button draws — one control per view.
  *
  * NO HANDLER, href, CONDITION OR DERIVATION BELOW IS NEW. `runBadge`,
  * `runProgress`, `canPauseRun`, `canResumeRun`, `scheduleReadout` and every
@@ -220,6 +224,39 @@ export function CampaignCard({
      toasted "הסבב הושהה." over a write that could not move a row. */
   const showPause = canPauseRun(state.progress, campaign.status);
   const showResume = canResumeRun(state.progress, campaign.status);
+
+  /*
+   * ─── TURNING A CAMPAIGN BACK ON, AS A BUTTON ON THE CARD ───────────────
+   *
+   * "למה במסך קמפיינים אין כפתור להדלקת קמפיינים."
+   *
+   * Because it was in the ⋯ menu, which is where everything the reference
+   * image does not draw went. That was the right call for שכפל and מחק and
+   * the wrong one for this: it is the only control on the card that answers
+   * the question the card itself raises. A badge reading "נעצר" over no way
+   * to un-stop it is a screen that reports a problem and withholds the
+   * remedy, and the owner read it exactly that way.
+   *
+   * TWO STATES, ONE SLOT, AND THEY CANNOT BOTH BE TRUE. A paused run has its
+   * queue intact — plan.ts sweeps only ARCHIVED campaigns, "which is exactly
+   * what lets המשך resume it" — so resuming is a flag flip and the rows go
+   * out. A stopped one has had its rows swept and its schedules retired, so
+   * `onReopen` is a different promise and the page says so when it lands.
+   * canResumeRun is false for an archived campaign and onReopen is passed
+   * only for a stopped one, so the branch below is a choice between two
+   * mutually exclusive facts rather than a preference.
+   *
+   * STOPPING STAYS IN THE MENU. The reference draws one action at the foot of
+   * a running card and that is still what a running card has; what is added
+   * here appears only on a card that is not running, which is the card that
+   * had nothing to offer.
+   */
+  const turnOn: { label: string; icon: React.ReactNode; onSelect: () => void } | null =
+    showResume && onResume
+      ? { label: 'המשך קמפיין', icon: <PlayIcon aria-hidden className="h-4 w-4" />, onSelect: onResume }
+      : onReopen
+        ? { label: 'החזר לפעילות', icon: <RepeatIcon aria-hidden className="h-4 w-4" />, onSelect: onReopen }
+        : null;
   const view = runProgress(state.progress, state.todayOnly, state.truncated);
   const { total, published, skipped, failed } = state.progress;
 
@@ -306,12 +343,16 @@ export function CampaignCard({
   const menu: MenuAction[] = [
     { label: postCount > 0 ? `פרטי הקמפיין (${postCount === 1 ? 'פוסט אחד' : `${postCount} פוסטים`})` : 'פרטי הקמפיין', icon: <ClipboardListIcon className="h-4 w-4" />, onSelect: () => { window.location.href = link; } },
     ...(showPause && onPause ? [{ label: 'עצור קמפיין', icon: <PauseIcon className="h-4 w-4" />, onSelect: onPause }] : []),
-    ...(showResume && onResume ? [{ label: 'המשך קמפיין', icon: <PlayIcon className="h-4 w-4" />, onSelect: onResume }] : []),
+    /* `!turnOn` ON BOTH ROWS THE BUTTON CAN DRAW — the same gate the tuner
+       row carries, for the same reason: one control per view. It reads as a
+       tautology beside the definition above, and it is the line that stays
+       correct if the button is ever gated more narrowly. */
+    ...(!turnOn && showResume && onResume ? [{ label: 'המשך קמפיין', icon: <PlayIcon className="h-4 w-4" />, onSelect: onResume }] : []),
     ...(addPostHref ? [{ label: 'הוסף פוסט', icon: <PlusIcon className="h-4 w-4" />, onSelect: () => { window.location.href = addPostHref; } }] : []),
     ...(onTune && !(schedule && onScheduleChange) ? [{ label: 'הגדרות תור מתקדמות', icon: <RepeatIcon className="h-4 w-4" />, onSelect: onTune }] : []),
     ...(onComment ? [{ label: 'תגובה לפרסומים', icon: <MessageIcon className="h-4 w-4" />, onSelect: onComment }] : []),
     ...(onDuplicate ? [{ label: 'שכפל קמפיין', icon: <CopyIcon className="h-4 w-4" />, onSelect: onDuplicate }] : []),
-    ...(onReopen ? [{ label: 'החזר לפעילות', icon: <RepeatIcon className="h-4 w-4" />, onSelect: onReopen }] : []),
+    ...(!turnOn && onReopen ? [{ label: 'החזר לפעילות', icon: <RepeatIcon className="h-4 w-4" />, onSelect: onReopen }] : []),
     ...(onDelete ? [{ label: 'מחק קמפיין', icon: <TrashIcon className="h-4 w-4" />, onSelect: onDelete, danger: true }] : []),
   ];
 
@@ -564,6 +605,45 @@ export function CampaignCard({
       )}
 
       {/*
+        ─── 3b. "המשך קמפיין" / "החזר לפעילות" ────────────────────────────
+
+        OUTSIDE the panel fragment deliberately: a card with no scheduling
+        block is still a card whose campaign can be stopped, and that is the
+        narrowest card in the product — the one place this control is most
+        needed and would have been easiest to leave out.
+
+        `busy` IS WIRED HERE, AND IT WAS DEAD. The prop has been declared and
+        handed in by the campaigns page since the card was built and read by
+        nothing; the page's act() writes, toasts and then re-reads eight
+        queries before it clears, so this is a second of a card showing the
+        old state. In a menu that cost a double entry nobody saw. As the
+        card's own button it would be a second press, a second write and a
+        second line in the activity log.
+      */}
+      {turnOn && (
+        /*
+         * THE FILLED ONE, AND IT TAKES THAT FROM "עריכת קמפיין" BELOW.
+         *
+         * The card's rule is one filled action at the foot, and the reference
+         * draws it as the editor — on a card that is RUNNING, where editing
+         * is the only thing left to do. On a card that is stopped or paused
+         * the useful action is the one that undoes that, and a card whose eye
+         * is drawn to the wrong button is the menu problem again with an
+         * extra step. So the rule is kept and the identity of the primary
+         * follows the state: exactly one filled button either way.
+         */
+        <Button
+          size="md"
+          busy={busy}
+          onClick={turnOn.onSelect}
+          className="mt-2.5 h-12 w-full !min-h-12 justify-center gap-2 !rounded-2xl !text-[14px]"
+        >
+          {turnOn.icon}
+          {turnOn.label}
+        </Button>
+      )}
+
+      {/*
         ─── 4. "עריכת קמפיין" ─────────────────────────────────────────────
 
         The reference's one action, full width across the card's foot. It opens
@@ -574,6 +654,10 @@ export function CampaignCard({
       <ButtonLink
         href={editHref ?? link}
         size="md"
+        /* Quiet while a turn-it-back-on button is drawn above — see the note
+           there. Filled on the reference's own running card, which is the one
+           the image draws. */
+        variant={turnOn ? 'secondary' : undefined}
         className="mt-2.5 h-12 w-full !min-h-12 !rounded-2xl justify-center gap-2 !text-[14px]"
       >
         <PencilIcon aria-hidden className="h-4 w-4" />

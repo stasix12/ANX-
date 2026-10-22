@@ -339,6 +339,24 @@ function Words({ readout, scheduleOn, neverLaunched }: { readout: ScheduleReadou
                 ' לבד'
               )}
             </>
+          ) : readout.stopped ? (
+            /*
+             * A STOPPED ROUND IS NOT A LULL, AND THE SCHEDULE IS NOT WHY.
+             *
+             * "וכנגד יש קמפיין אחד שהוא כבוי והוא לא מוציא ממנו כלום" — about
+             * a campaign he had stopped himself. The card said "הסבב הופסק"
+             * and then, underneath, "התזמון יחול על הסבב הבא", which points
+             * at the switch above as though it were the thing holding the
+             * queue. It is not: rules.ts skips every row of an archived
+             * campaign whatever the window says, and no hour, day or gap on
+             * this card can release one.
+             *
+             * So this line names the real state and the one action that ends
+             * it. The words are the menu's own ("החזר לפעילות"), because an
+             * instruction that does not match the label he has to press is an
+             * instruction he has to translate.
+             */
+            'הקמפיין עצור — לא יֵצאו פרסומים עד שתחזירו אותו לפעילות'
           ) : scheduleOn ? (
             'אין פרסומים מתוזמנים — התזמון יחול על הסבב הבא'
           ) : (

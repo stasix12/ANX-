@@ -137,7 +137,7 @@ for (const literal of ['08:10', '01.10.2026', '08:00', '22:00', '10 דקות']) 
    And "שעות פרסום" became "שעת התחלה": there is no closing hour left to make
    it a plural. "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק הכרטיס." */
 const nextPubSrc = code('src/components/social/NextPublication.tsx');
-for (const word of ['תזמון פרסום', 'פעיל', 'כבוי', 'ימי פרסום', 'הפרש בין פרסומים', 'שעת התחלה']) {
+for (const word of ['תזמון פרסום', 'פעיל', 'ללא הגבלה', 'כבוי', 'ימי פרסום', 'הפרש בין פרסומים', 'שעת התחלה']) {
   is(board.includes(word), `the board prints "${word}", in the brief's own wording`);
 }
 is(!board.includes('שעות פרסום'), 'and no longer offers a RANGE of hours — there is one hour now');
@@ -419,10 +419,45 @@ async function main(): Promise<void> {
       assert.ok(noDay.text.includes('לא נבחר יום פרסום'), `${width}: a schedule with no day must say so`);
       assert.doesNotMatch(noDay.strip, /\d{1,2}:\d{2}/, `${width}: a schedule with no day printed a time anyway`);
 
-      /* 5 — the switch off. The word is "כבוי", and the queue's own instant is
-             still the truth, so it is still shown. */
-      assert.ok(off.text.includes('כבוי'), `${width}: a schedule that is off must read "כבוי"`);
+      /*
+       * 5 — THE SWITCH OFF, AND WHAT THAT IS NOT.
+       *
+       * "בעיה חמורה מאד יש קמפיין שמכובה והוא מוציא פרסומים שלו" — sent with
+       * a screenshot of this exact card: the header read "תזמון פרסום · כבוי"
+       * and the block under it read "אמור לצאת עכשיו" over a round that had
+       * published nineteen times that morning. Both were true. The pair was
+       * unreadable, because this switch gates DAYS AND HOURS and off is
+       * therefore a wider permission than on — the one thing the word "כבוי"
+       * cannot say.
+       *
+       * So the word beside the switch is "ללא הגבלה", the block below says
+       * that off does not stop the campaign, and the queue's own instant is
+       * still printed, because it is still what will happen.
+       */
+      assert.ok(off.text.includes('ללא הגבלה'), `${width}: a schedule that is off must say it restricts nothing`);
+      assert.ok(
+        off.text.includes('זה לא עוצר את הקמפיין'),
+        `${width}: THE BUG — the card lets "off" be read as a campaign that has been turned off`,
+      );
+      assert.ok(
+        off.text.includes('ההגדרות למטה שמורות ואינן בתוקף'),
+        `${width}: and does not say that the days and the hour under it are not being applied`,
+      );
+      /* AND IT POINTS AT THE CONTROL THAT DOES STOP IT — by the label on the
+         button in the row below, which this fixture draws because the round
+         still has rows to hold back. */
+      assert.ok(off.text.includes('לעצירת הפרסום עצמו'), `${width}: the card does not say where the real stop is`);
+      assert.ok(off.text.includes('השהה סבב'), `${width}: and the button it names is not the one on the card`);
       assert.match(off.strip, / בשעה \d{2}:\d{2}/, `${width}: a queued publication is still a fact when the schedule is off`);
+      /* AND THE SETTINGS ARE STILL THERE TO READ AND TO EDIT. "כאשר כבוי:
+         התזמון מושבת אך ההגדרות נשמרות" — not hidden, not emptied. */
+      assert.ok(off.text.includes('ימי פרסום'), `${width}: a schedule that is off lost its saved settings from the card`);
+      /* The sentence belongs to the off state alone: on the reference card it
+         would be a paragraph contradicting the three boxes beside it. */
+      assert.ok(
+        !reference.text.includes('זה לא עוצר את הקמפיין'),
+        `${width}: a LIVE schedule is told that it does not restrict anything`,
+      );
 
       /*
        * 6 — A FINISHED ROUND WITH NOTHING QUEUED, and the schedule still on.
@@ -540,6 +575,27 @@ async function main(): Promise<void> {
       /* 12 — stopped by hand. Same silence about time, its own word. */
       assert.ok(halted.strip.includes('הסבב הופסק'), `${width}: a round he stopped must say it was stopped, not that it finished`);
       assert.doesNotMatch(halted.strip, /\d{1,2}:\d{2}/, `${width}: a stopped round printed a time`);
+      /*
+       * AND IT NAMES THE REASON AND THE WAY OUT, which it used to blame on the
+       * switch above it.
+       *
+       * "וכנגד יש קמפיין אחד שהוא כבוי והוא לא מוציא ממנו כלום." The line read
+       * "התזמון יחול על הסבב הבא" over a campaign he had STOPPED — pointing at
+       * a schedule that has no power here at all: rules.ts skips every row of
+       * an archived campaign whatever the window says.
+       */
+      assert.ok(
+        halted.strip.includes('הקמפיין עצור'),
+        `${width}: a stopped campaign does not say that IT is why nothing goes out — "${halted.strip.replace(/\s+/g, ' ').slice(0, 80)}"`,
+      );
+      assert.ok(halted.strip.includes('תחזירו אותו לפעילות'), `${width}: and does not name the one action that releases it`);
+      assert.ok(
+        !halted.strip.includes('התזמון יחול על הסבב הבא'),
+        `${width}: THE BUG — a stopped campaign blames the schedule for its silence`,
+      );
+      /* The reverse, so the two states cannot collapse into one sentence: a
+         round that simply FINISHED is not stopped and has no reopening to do. */
+      assert.ok(!ended.strip.includes('הקמפיין עצור'), `${width}: a finished round is reported as stopped by hand`);
 
       /*
        * 13 — WAITING ON A PERSON, which the window sentences called "אין פרסום

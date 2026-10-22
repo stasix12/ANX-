@@ -545,6 +545,12 @@ export function LiveCampaignHero({
              that does the publishing is not connected: "אם המחשב מנותק, יש
              להציג אזהרת חיבור, בלי להבטיח שהפרסום יצא במועד." */
           workerOnline={workerOnline}
+          /* THE NAME OF THE BUTTON IN THE ROW BELOW, so the "this does not
+             stop the campaign" sentence can point at the control that does —
+             and only while that control is actually drawn. `showPause` is the
+             same expression the row itself switches on, read once here rather
+             than guessed at inside the block. */
+          pauseLabel={showPause ? 'השהה סבב' : null}
           /* Neither the window nor the daily repeat can produce a publication
              on a round that has never gone out — the block says so instead of
              reporting a lull. Same expression the editor below is handed, and

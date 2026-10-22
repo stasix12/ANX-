@@ -63,6 +63,7 @@ export function CampaignScheduleBoard({
   campaignName,
   workerOnline,
   neverLaunched = false,
+  pauseLabel = null,
   disabled = false,
   editing = false,
 }: {
@@ -100,6 +101,18 @@ export function CampaignScheduleBoard({
   workerOnline?: boolean;
   /** The round has never gone out — passed through to <NextPublication>. */
   neverLaunched?: boolean;
+  /**
+   * THE LABEL OF THE CONTROL THAT ACTUALLY STOPS THE PUBLISHING, when the
+   * card is drawing one — "השהה סבב" on the dashboard, null when the round
+   * has nothing left to hold back and the row omits the button.
+   *
+   * "בעיה חמורה מאד יש קמפיין שמכובה והוא מוציא פרסומים שלו." The sentence
+   * under the switch has to say where the real stop is, and an instruction
+   * naming a button that is not on the screen is an instruction he has to
+   * translate — so the card that draws the button is the card that names it,
+   * and when there is none the sentence simply stops after the facts.
+   */
+  pauseLabel?: string | null;
   disabled?: boolean;
   /** Whether the editor below is open, for the boxes' aria-expanded. */
   editing?: boolean;
@@ -129,16 +142,69 @@ export function CampaignScheduleBoard({
               block's own padding and touches nothing. The header is then the
               32px the reference draws, and the control is still 44. */}
           <span className="ms-auto -me-1 -my-1.5 flex items-center gap-1.5">
-            {/* "פעיל" / "כבוי" — the reference prints the word beside the
-                switch, and it is not decoration: a switch on its own is read
-                by colour alone, and this card is the one the owner glances at
-                rather than studies. */}
-            <span className={`text-[12px] font-bold leading-4 ${schedule.enabled ? 'text-mist-100' : 'text-mist-300'}`}>
-              {schedule.enabled ? 'פעיל' : 'כבוי'}
+            {/*
+              "פעיל" / "ללא הגבלה" — the reference prints the word beside the
+              switch, and it is not decoration: a switch on its own is read by
+              colour alone, and this card is the one the owner glances at
+              rather than studies.
+
+              THE OFF WORD IS NO LONGER "כבוי", AND THAT IS A BUG REPORT, NOT
+              A PREFERENCE. "בעיה חמורה מאד יש קמפיין שמכובה והוא מוציא
+              פרסומים שלו" — sent with a screenshot of THIS header reading
+              "תזמון פרסום · כבוי" above a round that had published nineteen
+              times that morning. Both halves were true and the pair was
+              unreadable: the switch gates days and hours, so off is a WIDER
+              permission than on, and no word that means "turned off" can say
+              that. "ללא הגבלה" says what off does, and the line below says
+              what it does not do.
+            */}
+            {/* NOT TRUNCATED, and `data-must-fit` instead: this is one of two
+                literals rather than a name of unknown length, and an "ללא
+                הגבל…" would be a worse answer than a header one character
+                tighter. The measured suite fails on a clipped character here
+                at every width it drives. */}
+            <span
+              data-must-fit
+              className={`shrink-0 text-[12px] font-bold leading-4 ${schedule.enabled ? 'text-mist-100' : 'text-mist-300'}`}
+            >
+              {schedule.enabled ? 'פעיל' : 'ללא הגבלה'}
             </span>
             <Toggle checked={schedule.enabled} onChange={onToggle} label={`תזמון פרסום ל${campaignName}`} />
           </span>
         </div>
+
+        {/*
+          ─── WHAT "OFF" MEANS, WHERE THE WORD "OFF" IS ────────────────────
+
+          "בעיה חמורה מאד יש קמפיין שמכובה והוא מוציא פרסומים שלו וכנגד יש
+           קמפיין אחד שהוא כבוי והוא לא מוציא ממנו כלום."
+
+          Two campaigns, both read as "off", opposite behaviour — and the
+          engine was right about both. One had this switch off, which removes
+          the day-and-hour restriction and therefore lets the queue run
+          whenever it likes; the other was a campaign the owner had STOPPED,
+          which is a different control in a different place. The card gave him
+          one word for the two facts.
+
+          The campaigns list has said this in words since the panel was built
+          ("התזמון כבוי — הקמפיין מפרסם ללא הגבלת ימים ושעות"); this block,
+          the one on the screen he actually opens, said only "כבוי" and then
+          drew the days, the hour and the gap underneath exactly as it draws
+          them when they are in force. So it is here, in the same words, and
+          it says the other half too: the settings below are kept and are not
+          being applied. "כאשר כבוי: התזמון מושבת אך ההגדרות נשמרות."
+
+          IT IS NOT A WARNING AND IT IS NOT AMBER. Nothing is wrong — this is
+          the state most campaigns in the account are in, and the amber on
+          these cards is reserved for the daily repeat.
+        */}
+        {!schedule.enabled && (
+          <p className="mt-1.5 rounded-xl bg-ink-900 px-2 py-1.5 text-[10.5px] font-bold leading-4 text-mist-300">
+            <span className="font-extrabold text-mist-100">זה לא עוצר את הקמפיין</span> — התזמון הכבוי רק מבטל את הגבלת
+            הימים והשעות, והפרסומים יֵצאו לפי התור. ההגדרות למטה שמורות ואינן בתוקף כרגע.
+            {pauseLabel ? <> לעצירת הפרסום עצמו: <span className="font-extrabold text-mist-100">{pauseLabel}</span>.</> : null}
+          </p>
+        )}
 
         {/*
           THREE BOXES, IN THE REFERENCE'S OWN ORDER AND PROPORTIONS: days,

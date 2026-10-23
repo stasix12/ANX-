@@ -525,3 +525,37 @@ console.log(`tenancy tests OK — ${checks} assertions, ${columnTables.length} t
   console.error(e);
   process.exit(1);
 });
+
+/* ═══════════════════════════════════════════════════════════════════════ *
+ *  DISCONNECTING FACEBOOK MAY NOT SWITCH OFF THE GROUPS
+ * ═══════════════════════════════════════════════════════════════════════ */
+/*
+ * The confirmation dialog on /social/targets says, in these words:
+ * "פרסום לדפים ייפסק עד שתתחברו שוב. פרסום בקבוצות לא מושפע."
+ *
+ * revokeAccount() disagreed with it. The update ran over every target
+ * carrying the account's id, and the worker stamps account_id onto GROUP
+ * targets too — so one tap set enabled = false on all 218 Facebook groups,
+ * which are published by a browser on the owner's own PC and hold no token.
+ * Nothing re-enables them. The rounds stop, under a dialog that promised
+ * they would not.
+ */
+{
+  const sync = readFileSync(new URL('../../src/lib/social/server/sync.ts', import.meta.url), 'utf8');
+  const code = sync.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const at = code.indexOf("update({ permission_status: 'revoked'");
+  is(at > -1, 'revokeAccount no longer marks anything revoked — this guard stopped covering it');
+  /* Scoped to the API channels, by id list, not to every row of the account. */
+  is(
+    /const apiIds = all\.filter\(\(t\) => t\.channel === 'facebook_page' \|\| t\.channel === 'instagram'\)/.test(code),
+    'revokeAccount switches off every target of the account again — including the Facebook groups the dialog promises are unaffected',
+  );
+  is(/\.in\('id', apiIds\)/.test(code), 'and the update is not scoped to that list');
+  is(!/\.update\(\{ permission_status: 'revoked'[\s\S]{0,120}\.in\('id', ids\)/.test(code), 'the unscoped update is still there');
+
+  /* And the dialog still makes the promise this is held to. */
+  const page = readFileSync(new URL('../../src/app/social/targets/page.tsx', import.meta.url), 'utf8');
+  is(page.includes('פרסום בקבוצות לא מושפע'), 'the disconnect dialog no longer promises groups are unaffected — if that promise changed, this test must change with it');
+}
+
+console.log('revoke-scope tests OK');

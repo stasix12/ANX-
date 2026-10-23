@@ -284,7 +284,26 @@ async function sweepStuck(db: any): Promise<void> {
       .from('social_queue')
       .update({
         status: 'needs_attention',
-        step: 'needs_attention',
+        /*
+         * 'submitted', NOT 'needs_attention' — the same word the PC's own
+         * startup sweep writes for the identical situation
+         * (worker/social-worker.ts). These rows were in flight when the
+         * machine stopped reporting, so the Post button may already have been
+         * clicked and the post may already be live.
+         *
+         * `step` is what the bulk "המשך סבב" reads: resumeNeedsAttention()
+         * re-arms every needs_attention row EXCEPT the ones marked
+         * 'submitted'. Writing 'needs_attention' here put rows that are
+         * probably live back in the queue on one tap, and the worst of them
+         * is the row that is CERTAIN to be live — a publication whose
+         * outcome write failed three times is deliberately left on
+         * 'publishing' with publish_unrecorded logged, and this sweep is what
+         * finds it.
+         *
+         * Per-row "נסה שוב" is untouched: the owner presses that while
+         * looking at the row and its screenshot, having checked the group.
+         */
+        step: 'submitted',
         error: 'המחשב שמפרסם לקבוצות הפסיק לדווח באמצע העבודה. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".',
       })
       .in('worker_id', gone)

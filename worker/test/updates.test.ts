@@ -149,6 +149,26 @@ is(typeof readable(undefined) === 'string', 'nor must nothing at all');
 
   /* ---- 2. the two rules, and only one of them ever relaxes ----------- */
   is(/\['publishing', 'awaiting_confirmation'\]/.test(main), 'THE HARD RULE: nothing in flight. A half-typed post costs a human a trip to Facebook to find out whether it went');
+  /*
+   * AND THE SWEEP THAT RUNS AFTER THE RESTART SPLITS BY HOW FAR THE ROW GOT.
+   *
+   * It parked EVERY in-flight row as step 'submitted' — "the Post button may
+   * already have been clicked" — including rows that died at 'opening',
+   * before a composer existed. 'submitted' is what keeps the bulk
+   * "המשך סבב" off a row for good, and one open row is a lock on its group
+   * (social_queue_one_open_per_target_idx), so a restart mid-round could
+   * park a lane's worth of groups permanently with nothing saying so.
+   */
+  const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  is(
+    /const MAYBE_LIVE_STEPS = \['publishing', 'verifying', 'submitted'\];/.test(worker),
+    'the restart sweep no longer tells apart a row that reached the click from one that did not',
+  );
+  is(/\.in\('step', MAYBE_LIVE_STEPS\)/.test(worker), 'and the parking update is not scoped to the steps that may be live');
+  is(
+    /status: 'scheduled', step: 'pending'[\s\S]{0,200}\.not\('step', 'in'/.test(worker),
+    'a row that never reached the click is not put back in the queue — its group stays locked until a human finds it',
+  );
   is(/const busy = \(machines\.data \?\? \[\]\)\.some\(\(m\) => \(m as \{ current_job_id: string \| null \}\)\.current_job_id\);/.test(main), 'including a job claimed a moment ago whose row is not stamped yet — the engine’s own word for it');
   is(/const patient = waitedMs >= PATIENCE_MS;/.test(main), 'THE SOFT RULE relaxes with patience, because a thirty-second queue may never go quiet');
   const atFlight = main.indexOf('if ((flight.count ?? 0) > 0) return { ok: false');

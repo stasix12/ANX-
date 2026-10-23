@@ -131,12 +131,31 @@ export async function revokeAccount(accountId: string): Promise<void> {
       await logActivity('warn', 'revoke_remote_failed', friendlyMessage(err, 'revoke failed'));
     }
   }
-  const { data: targets } = await db.from('social_targets').select('id').eq('account_id', accountId);
-  const ids = (targets ?? []).map((t) => t.id);
-  await deleteSecrets('target', ids);
+  const { data: targets } = await db.from('social_targets').select('id, channel').eq('account_id', accountId);
+  const all = (targets ?? []) as { id: string; channel: string }[];
+  /* Every token this account ever held goes, whatever it was attached to —
+     deleting a credential is always right here. */
+  await deleteSecrets('target', all.map((t) => t.id));
   await deleteSecrets('account', [accountId]);
-  if (ids.length) {
-    await db.from('social_targets').update({ permission_status: 'revoked', can_api_publish: false, enabled: false }).in('id', ids);
+  /*
+   * ─── BUT ONLY THE API TARGETS ARE SWITCHED OFF ────────────────────────
+   *
+   * The dialog on /social/targets says, in these words: "פרסום לדפים ייפסק
+   * עד שתתחברו שוב. פרסום בקבוצות לא מושפע." The code did not agree with
+   * it. This update ran over EVERY target carrying this account_id, and the
+   * worker stamps account_id onto group targets as well — so one tap on
+   * "נתק ומחק טוקנים" set enabled = false on all 218 Facebook groups, which
+   * are published by the browser on the owner's own PC and need no token at
+   * all. Nothing anywhere turns them back on; the rounds simply stop, under
+   * a dialog that promised they would not.
+   *
+   * A revoked Graph grant is a fact about API publishing. It says nothing
+   * about a group a browser posts to, so a group's row is left exactly as it
+   * was.
+   */
+  const apiIds = all.filter((t) => t.channel === 'facebook_page' || t.channel === 'instagram').map((t) => t.id);
+  if (apiIds.length) {
+    await db.from('social_targets').update({ permission_status: 'revoked', can_api_publish: false, enabled: false }).in('id', apiIds);
   }
   await db.from('social_accounts').update({ revoked_at: new Date().toISOString() }).eq('id', accountId);
   await logActivity('info', 'disconnected', 'החיבור לפייסבוק נותק וכל הטוקנים נמחקו');

@@ -580,6 +580,48 @@ async function main(): Promise<void> {
     'the tuner reads the group surcharge in minutes again and subtracts it from a value in seconds',
   );
 
+  /*
+   * ═══════════════════════════════════════════════════════════════════════ *
+   *  A POST THAT MAY ALREADY BE LIVE IS NEVER RETRIED AUTOMATICALLY
+   * ═══════════════════════════════════════════════════════════════════════ *
+   *
+   * The worst outcome this product can produce is the same advertisement
+   * posted twice to one group under the owner's own account. There is no
+   * undo. Three separate paths could do it:
+   *
+   *   1. A post-click error that was not a PublishError — the window closed,
+   *      Chromium killed, the context torn down — fell through to the
+   *      ten-minute retry. debugMode ships TRUE, so a real Chromium window
+   *      is on screen while a round runs and closing it is ordinary.
+   *   2. The server's orphan sweep wrote step 'needs_attention' where the
+   *      PC's own sweep writes 'submitted', so one tap on the bulk
+   *      "המשך סבב" re-armed rows that were probably already live.
+   *   3. The confirmation gate read `confirmed_at` before the status, so a
+   *      publication the owner had just cancelled could be switched from
+   *      'skipped' straight back to 'publishing'.
+   */
+  const workerSrc = src('../../worker/social-worker.ts');
+  is(
+    /const afterSubmit = \(err instanceof PublishError && err\.afterSubmit\) \|\| mayAlreadyBePosted;/.test(workerSrc),
+    'a post-click error that is not a PublishError is auto-retried again — the same post can go to the same group twice',
+  );
+  const serverSrc = src('../../src/lib/social/server/worker.ts');
+  is(
+    /status: 'needs_attention',[\s\S]{0,1400}step: 'submitted',/.test(serverSrc),
+    "the server's orphan sweep marks possibly-live rows as ordinary needs_attention again — the bulk resume will repost them",
+  );
+  /* Both confirmation writes are compare-and-set, and the status is read
+     before the stamp. */
+  is(
+    workerSrc.indexOf("if (data.status !== 'awaiting_confirmation') return 'declined';") <
+      workerSrc.indexOf('if (data.confirmed_at) {'),
+    'the confirmation gate trusts a stale confirmed_at over a cancellation that came after it',
+  );
+  is(
+    (workerSrc.match(/update\(\{ status: 'publishing' \}\)\s*\n\s*\.eq\('id', queueId\)\s*\n\s*\.eq\('status', 'awaiting_confirmation'\)/g) ?? []).length === 2,
+    'a confirmation write is not a compare-and-set — a cancel landing between the read and the write is overwritten',
+  );
+
   console.log('  %d assertions OK\n', checks);
 }
 

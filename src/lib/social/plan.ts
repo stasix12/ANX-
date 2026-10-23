@@ -371,7 +371,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      * (`dropped` empty), which is not an event.
      */
     if (!plannedAhead && made === 0 && dropped.length) {
-      await noteAllBlocked(db, note, schedule.id, dropped);
+      await noteAllBlocked(db, note, schedule.id, dropped, schedule.mode === 'now' || schedule.mode === 'once');
     }
     if (!plannedAhead) built += made;
     /*
@@ -558,16 +558,36 @@ const DROPPED_NAMES_SHOWN = 8;
  * expected to know that a group is blocked by a row belonging to some other
  * round he is not looking at.
  */
-async function noteAllBlocked(db: SupabaseClient, note: PlanLogger, scheduleId: string, targetIds: string[]): Promise<void> {
+async function noteAllBlocked(
+  db: SupabaseClient,
+  note: PlanLogger,
+  scheduleId: string,
+  targetIds: string[],
+  /**
+   * Whether this schedule is about to be retired in the same pass.
+   *
+   * It decides the last sentence, and the two are not interchangeable. A
+   * RECURRING schedule stays active, so "it will not go out until the queue
+   * advances" is a true description of what happens next. A 'now', 'once' or
+   * 'drip' launch is retired three lines later — telling that owner to wait
+   * for the queue to advance is telling him to wait for something that will
+   * never be tried again. He has to press publish once more, so the line
+   * says so.
+   */
+  retiring: boolean,
+): Promise<void> {
   const { data } = await db.from('social_targets').select('name').in('id', targetIds.slice(0, DROPPED_NAMES_SHOWN));
   const names = ((data ?? []) as { name: string | null }[]).map((t) => t.name).filter(Boolean);
   const rest = targetIds.length - names.length;
   const list = names.length ? `: ${names.join(', ')}${rest > 0 ? ` ועוד ${rest}` : ''}` : '';
+  const whatNext = retiring
+    ? 'הפרסום הזה לא נכנס לתור בכלל — נסו שוב אחרי שהתור הקיים יתקדם, או בחרו קבוצות אחרות.'
+    : 'הסבב הזה לא ייצא עד שהתור הקיים יתקדם או שתבחרו קבוצות אחרות.';
   await note(
     'warn',
     'plan_all_blocked',
-    `אף קבוצה לא נכנסה לתור — לכל ${targetIds.length} הקבוצות כבר ממתין פרסום מסבב אחר${list}. הסבב הזה לא ייצא עד שהתור הקיים יתקדם או שתבחרו קבוצות אחרות.`,
-    { scheduleId, blocked: targetIds.length, targetIds },
+    `אף קבוצה לא נכנסה לתור — לכל ${targetIds.length} הקבוצות כבר ממתין פרסום מסבב אחר${list}. ${whatNext}`,
+    { scheduleId, blocked: targetIds.length, targetIds, retiring },
   );
 }
 
@@ -755,7 +775,10 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
    * two cannot drift and the owner sees one sentence for one situation.
    */
   if (made === 0 && dropped.length) {
-    await noteAllBlocked(db, note, schedule.id, dropped);
+    /* A drip is always retired at the end of this pass (`active: false`
+       below), so the owner is told to press publish again rather than to
+       wait for something that will not be tried. */
+    await noteAllBlocked(db, note, schedule.id, dropped, true);
   }
   if (failed) {
     await note(

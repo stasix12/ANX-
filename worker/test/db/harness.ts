@@ -29,11 +29,19 @@ const run = promisify(execFile);
 
 export const DSN = process.env.ANX_TEST_DATABASE_URL ?? '';
 
-/** Whether these tests can run at all. */
+/**
+ * Whether these tests can run at all — AND THE SERVER IS ACTUALLY ASKED.
+ *
+ * This used to check only that a DSN was set and that psql existed, so a
+ * variable left over from a previous session pointed every suite at a server
+ * that was no longer listening: three files exploded with a connection error
+ * instead of skipping, and the failure named a `drop schema` rather than the
+ * thing that was wrong. One round trip answers it properly.
+ */
 export function available(): boolean {
   if (!DSN) return false;
   try {
-    execFileSync('psql', ['-V'], { stdio: 'ignore' });
+    execFileSync('psql', [DSN, '-v', 'ON_ERROR_STOP=1', '-tAc', 'select 1'], { stdio: ['ignore', 'ignore', 'ignore'] });
     return true;
   } catch {
     return false;
@@ -42,8 +50,8 @@ export function available(): boolean {
 
 export function skip(name: string): void {
   console.log(
-    `${name} SKIPPED — no database. Set ANX_TEST_DATABASE_URL to a throwaway Postgres ` +
-      '(CI does this with a service container) and these run.',
+    `${name} SKIPPED — no database reachable${DSN ? ' at ANX_TEST_DATABASE_URL' : ''}. ` +
+      'Point ANX_TEST_DATABASE_URL at a throwaway Postgres (CI does this with a service container) and these run.',
   );
 }
 

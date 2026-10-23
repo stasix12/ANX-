@@ -316,14 +316,50 @@ async function main(): Promise<void> {
     accountId: ((worker as { fb_user_id?: string }).fb_user_id ?? '') || undefined,
   };
 
-  // Jobs this worker was running when it died: never auto-retry (the post may exist).
-  // 'submitted' for that exact reason — it is what keeps the bulk "המשך סבב"
-  // off them too, and the error text already tells the owner to look first.
+  /*
+   * ─── JOBS THIS WORKER WAS RUNNING WHEN IT DIED, SPLIT BY HOW FAR THEY GOT ─
+   *
+   * This swept EVERY in-flight row to needs_attention + step 'submitted',
+   * regardless of the step actually on the row. 'submitted' means "the Post
+   * button may already have been clicked", and it is what keeps the bulk
+   * "המשך סבב" off a row for good — so a row that died at 'opening', before
+   * a composer was even on screen, was parked for ever. And because
+   * social_queue_one_open_per_target_idx makes every open row a lock on its
+   * group, that group then sat out every future round until a human found it
+   * and pressed something. A PC restart during a 219-group round could park
+   * a lane's worth of groups permanently, with nothing saying so.
+   *
+   * The step on the row is the evidence and it is already there. Only
+   * 'publishing', 'verifying' and 'submitted' are at or past the final click;
+   * 'opening', 'composer_opened', 'uploading_media' and 'ready_to_publish'
+   * are all before it, and nothing was sent.
+   *
+   * The conservative half is UNCHANGED: anything that might be live still
+   * parks, with the same word and the same sentence.
+   */
+  const MAYBE_LIVE_STEPS = ['publishing', 'verifying', 'submitted'];
   await db
     .from('social_queue')
     .update({ status: 'needs_attention', step: 'submitted', error: 'ה-worker הופסק באמצע העבודה. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".' })
     .eq('worker_id', state.id)
-    .in('status', ['publishing', 'awaiting_confirmation']);
+    .in('status', ['publishing', 'awaiting_confirmation'])
+    .in('step', MAYBE_LIVE_STEPS);
+  /*
+   * And everything that never reached the click goes straight back into the
+   * queue. Nothing was posted, so there is nothing for a person to check:
+   * parking it would be asking the owner to confirm an event that did not
+   * happen, and the group stays locked while he does.
+   */
+  const { data: requeued } = await db
+    .from('social_queue')
+    .update({ status: 'scheduled', step: 'pending', scheduled_at: new Date().toISOString(), error: '' })
+    .eq('worker_id', state.id)
+    .in('status', ['publishing', 'awaiting_confirmation'])
+    .not('step', 'in', `(${MAYBE_LIVE_STEPS.join(',')})`)
+    .select('id');
+  if (requeued?.length) {
+    console.log(`[worker] ↻ ${requeued.length} פרסומים שלא הגיעו ללחיצה הוחזרו לתור אחרי ההפעלה מחדש.`);
+  }
 
   /*
    * Comments this worker was in the middle of leaving. Same rule as the jobs
@@ -2176,7 +2212,29 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
       await logActivity('warn', 'target_left', `כובתה הקבוצה "${tt.name}" — ${message}`, { queueId: item.id, targetId: tt.id, detail: raw });
       return;
     }
-    const afterSubmit = err instanceof PublishError && err.afterSubmit;
+    /*
+     * ─── TWO WAYS TO KNOW THE BUTTON WAS CLICKED, AND ONLY ONE WAS USED ───
+     *
+     * `err.afterSubmit` is the composer raising its own exception after the
+     * click. `mayAlreadyBePosted` — computed twenty lines up and, until now,
+     * consulted only by the SessionError branch — is the step the job had
+     * actually reached, which is the evidence that survives ANY throw.
+     *
+     * So a Playwright error that is not a PublishError — the window closed,
+     * the context torn down, the page navigated, Chromium killed — landed on
+     * neither and fell through to the retry below. The post was already live
+     * on Facebook; ten minutes later the same post went to the same group a
+     * second time, under the owner's own account, and there is no undo.
+     *
+     * debugMode ships TRUE (types.ts), so the owner watches a real Chromium
+     * window while a round runs: closing it mid-publication is an ordinary
+     * thing for him to do, not an edge case.
+     *
+     * The step is the stricter test and it is the one that decides now. A
+     * failure BEFORE the click still retries exactly as it did — `lastStep`
+     * is 'composer' or 'submit' there, and neither is in the pair.
+     */
+    const afterSubmit = (err instanceof PublishError && err.afterSubmit) || mayAlreadyBePosted;
     if (afterSubmit) {
       // Never retry automatically once "Post" was clicked — the owner checks the group first.
       // 'submitted' is what makes that true for the bulk "המשך סבב" as well; see above.
@@ -2378,15 +2436,41 @@ async function waitForConfirmation(queueId: string, page: Page): Promise<'confir
     const { data } = await db.from('social_queue').select('status, confirmed_at').eq('id', queueId).maybeSingle();
     /* The row is gone — deleted, or its campaign was. Nothing to hand back. */
     if (!data) return 'declined';
+    /*
+     * ─── THE STATUS IS ASKED FIRST, AND IT WAS ASKED SECOND ───────────────
+     *
+     * Somebody moving the row — the panic button, a stop, "דלג" — is a
+     * DECISION, and it has to beat a stale `confirmed_at`. Read the other way
+     * round, a row that was approved and then cancelled came back here with
+     * the old stamp still on it, was switched from 'skipped' straight to
+     * 'publishing', and the post the owner had just cancelled went out.
+     *
+     * And both writes below are guarded, because a status read a moment ago
+     * is not a status now: `.eq('status','awaiting_confirmation')` makes the
+     * flip a compare-and-set, so a cancel that lands between the read and the
+     * write wins instead of being overwritten.
+     */
+    if (data.status !== 'awaiting_confirmation') return 'declined';
     if (data.confirmed_at) {
-      await db.from('social_queue').update({ status: 'publishing' }).eq('id', queueId);
+      const { data: taken } = await db
+        .from('social_queue')
+        .update({ status: 'publishing' })
+        .eq('id', queueId)
+        .eq('status', 'awaiting_confirmation')
+        .select('id');
+      /* Lost the race to a cancel — that is the decision, not this. */
+      if (!taken?.length) return 'declined';
       return 'confirmed';
     }
-    /* Somebody moved it: the panic button, a stop, a skip. That IS a decision. */
-    if (data.status !== 'awaiting_confirmation') return 'declined';
     await sleep(3000);
   }
-  await db.from('social_queue').update({ status: 'publishing' }).eq('id', queueId);
+  const { data: resumed } = await db
+    .from('social_queue')
+    .update({ status: 'publishing' })
+    .eq('id', queueId)
+    .eq('status', 'awaiting_confirmation')
+    .select('id');
+  if (!resumed?.length) return 'declined';
   return 'timeout';
 }
 

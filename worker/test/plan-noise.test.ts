@@ -205,6 +205,9 @@ async function main(): Promise<void> {
     is(/אף קבוצה לא נכנסה לתור/.test(line), 'in words that say what happened rather than what was attempted');
     is(/t1|t2|t3/.test(line), 'naming the groups, because a count is not something anybody can act on');
     is(/סבב אחר/.test(line), 'and saying WHY — a row from a different round, which he is not looking at and could not guess');
+    /* A WEEKLY schedule stays active, so for it the wait IS what happens
+       next — the two sentences are not interchangeable. */
+    is(/לא ייצא עד שהתור/.test(line), 'a recurring schedule is told the queue will release it, because it will');
   }
 
   /* ── 1a. AND THE SAME LAUNCH THROUGH THE DRIP LOOP ──────────────────── */
@@ -223,6 +226,12 @@ async function main(): Promise<void> {
     const line = w.log.find((e) => e.event === 'plan_all_blocked')!.message;
     is(/אף קבוצה לא נכנסה לתור/.test(line), 'in the same words the other loop uses, for the same situation');
     is(/t1|t2|t3/.test(line), 'naming the groups');
+    /* AND THE LAST SENTENCE IS THE TRUE ONE FOR THIS SHAPE. A drip is retired
+       at the end of this pass, so "it will not go out until the queue
+       advances" would be telling the owner to wait for something that will
+       never be tried again. He has to press publish once more. */
+    is(/נסו שוב/.test(line), 'a retired launch tells the owner to try again, not to wait');
+    is(!/לא ייצא עד שהתור/.test(line), 'a retired launch promises it will go out later — it will not');
     /* And it is still said ONCE: the drip retires itself at the end of the
        pass, so a second pass has no schedule left to report on. */
     await planQueue({ db: w.db, log: w.note as never });

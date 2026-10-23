@@ -108,7 +108,12 @@ export function CardSwiper({
     const step = second && first ? Math.abs(second.offsetLeft - first.offsetLeft) : (first?.getBoundingClientRect().width ?? el.clientWidth);
     if (step <= 0) return;
     const at = Math.round(Math.abs(el.scrollLeft) / step);
-    setIndex((prev) => (prev === at ? prev : Math.min(Math.max(at, 0), Math.max(count - 1, 0))));
+    const clamped = Math.min(Math.max(at, 0), Math.max(count - 1, 0));
+    /* THE HELD CARD IS RECORDED WHERE THE POSITION CHANGES ON PURPOSE — see
+       the note on `held`. A scroll is the owner moving the strip himself, so
+       whatever is in view afterwards is what he means to be looking at. */
+    held.current = keysRef.current?.[clamped] ?? null;
+    setIndex((prev) => (prev === clamped ? prev : clamped));
   }, [count]);
 
   /* A run can finish, or a new one can start, between two polls. An index left
@@ -129,13 +134,38 @@ export function CardSwiper({
    * scrolling the strip under a moving finger is worse than the problem.
    */
   const held = useRef<string | null>(null);
-  useEffect(() => {
-    if (!keys) return;
-    held.current = keys[index] ?? null;
-  }, [keys, index]);
+  /*
+   * ─── AND IT NEVER WORKED, BECAUSE AN EFFECT KEPT OVERWRITING IT ────────
+   *
+   * `held` used to be written by `useEffect(..., [keys, index])`. `keys` is
+   * rebuilt on every render, so that effect ran on EVERY render — including
+   * the one straight after a poll re-sorted the list. At that moment `index`
+   * is still the OLD slot number while `keys` is already the NEW order, so
+   * the line stored `keys[oldIndex]`: the campaign that had just moved INTO
+   * the slot under the thumb. The restore below then found it already in
+   * place and did nothing.
+   *
+   * The whole mechanism was inert, and the failure is not cosmetic: the
+   * dashboard's run card carries "סיים ואפס", which archives a round and
+   * cancels every publication still waiting in it. A card that silently
+   * becomes a different campaign between the look and the tap is a stop
+   * applied to the wrong round.
+   *
+   * So nothing writes `held` from a render any more. It is written exactly
+   * where the position changes DELIBERATELY — a scroll (sync) and a tap on a
+   * dot (goTo) — plus once on mount, below, so a re-sort before the owner
+   * has touched anything still has something to hold onto.
+   */
+  const keysRef = useRef(keys);
+  keysRef.current = keys;
   const keyList = keys?.join(',') ?? '';
   useEffect(() => {
-    if (!keys || !held.current) return;
+    if (!keys) return;
+    /* First run: adopt whatever is in view, without moving anything. */
+    if (held.current === null) {
+      held.current = keys[index] ?? null;
+      return;
+    }
     const to = keys.indexOf(held.current);
     if (to < 0 || to === index) return;
     const el = strip.current;
@@ -150,6 +180,8 @@ export function CardSwiper({
   const goTo = (to: number) => {
     const el = strip.current;
     const at = Math.min(Math.max(to, 0), Math.max(count - 1, 0));
+    /* A tap on a dot is the other deliberate move — see the note on `held`. */
+    held.current = keysRef.current?.[at] ?? null;
     const card = el?.children[at] as HTMLElement | undefined;
     /* `block: 'nearest'` because the default is 'start', which would scroll
        the PAGE to put this strip at the top of the viewport — a tap on a dot

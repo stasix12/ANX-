@@ -167,6 +167,23 @@ async function main(): Promise<void> {
               turnOn: [...c.querySelectorAll('button')]
                 .map((e) => (e.textContent || '').replace(/\s+/g, ' ').trim())
                 .filter((t) => t === 'המשך קמפיין' || t === 'החזר לפעילות'),
+              /*
+               * WHERE IT IS, not only that it exists.
+               *
+               * "רשום לי נעצר, איך אני מחזיר לפעילות?" — asked while looking
+               * at the block that names the remedy, with the button three
+               * blocks below it, under the daily repeat and the queue tuner,
+               * at the bottom of a 900px card. Found only by scrolling.
+               *
+               * -1 when the card draws no such button; otherwise how far
+               * down the card it starts, in pixels.
+               */
+              turnOnTop: (() => {
+                const b = [...c.querySelectorAll('button')].find((e) =>
+                  ['המשך קמפיין', 'החזר לפעילות'].includes((e.textContent || '').replace(/\s+/g, ' ').trim()),
+                );
+                return b ? Math.round(b.getBoundingClientRect().top - box.top) : -1;
+              })(),
               /* The whole card, for the pairing below: a count of buttons says
                  how many were drawn and nothing about whether they landed on
                  the right cards. */
@@ -233,6 +250,9 @@ async function main(): Promise<void> {
                   nextPubText: (nextPub?.textContent || '').replace(/\s+/g, ' ').trim(),
                   nextPubBelowFields: !!nextPub && !!fields.length && nextPub.getBoundingClientRect().top > Math.max(...fields.map((f) => f.top)),
                   width: Math.round(pr.width),
+                  /* How far down the card the scheduling block starts — the
+                     line the turn-it-on button must sit above. */
+                  top: Math.round(pr.top - box.top),
                   height: Math.round(pr.height),
                   /* Inside the card's padding, on both edges. */
                   inside: pr.left >= box.left - 1 && pr.right <= box.right + 1,
@@ -496,10 +516,20 @@ async function main(): Promise<void> {
         if (card.turnOn.includes('המשך קמפיין')) {
           assert.ok(card.text.includes('מושהה'), say(`card ${i} offers "המשך קמפיין" but its badge does not say "מושהה"`));
         }
-        /* The other direction, which is the one the owner reported: a card
-           whose badge says it is not running and which offers no way back. */
-        if (!card.turnOn.length) {
+          if (!card.turnOn.length) {
           assert.ok(!card.text.includes('נעצר'), say(`card ${i} says "נעצר" and offers no visible way to turn it back on`));
+        }
+        /*
+         * AND IT IS ABOVE THE SCHEDULING BLOCK, which is what makes it
+         * reachable without scrolling. The panel, the daily repeat and the
+         * queue tuner are all irrelevant while a campaign is stopped; the
+         * one action that is not may not sit under them.
+         */
+        if (card.turnOnTop >= 0 && card.panel) {
+          assert.ok(
+            card.turnOnTop < card.panel.top,
+            say(`card ${i} draws its turn-it-on button ${card.turnOnTop}px down, below the scheduling block that starts at ${card.panel.top}px — it was reported as unfindable there`),
+          );
         }
       }
       const withCover = seen.cards.filter((c) => c.drewCover).length;

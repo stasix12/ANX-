@@ -113,6 +113,40 @@ is(/Math\.abs\(el\.scrollLeft\)/.test(swiper), 'the scroll position is read as a
 /* `block: 'nearest'` — the default is 'start', which scrolls the PAGE. */
 is(/block: 'nearest'/.test(swiper), 'jumping to a card moves the strip, not the page');
 
+/* ═══════════════════════════════════════════════════════════════════════ *
+ *  STAY ON THE CARD — and it was inert, which is a stop on the wrong round
+ * ═══════════════════════════════════════════════════════════════════════ */
+/*
+ * `held` remembers WHICH CAMPAIGN is under the thumb, so a poll that
+ * re-sorts the list can put the strip back on it. It was written by
+ * `useEffect(..., [keys, index])` — and `keys` is rebuilt on every render,
+ * so that effect ran on every render, including the one straight after a
+ * re-sort. `index` was still the old slot and `keys` already the new order,
+ * so it stored the campaign that had just moved INTO that slot. The restore
+ * then found it in place and did nothing. The mechanism never worked.
+ *
+ * The dashboard's run card carries "סיים ואפס", which archives a round and
+ * cancels every publication still waiting in it. A card that silently
+ * becomes a different campaign between the look and the tap is a stop
+ * applied to the wrong round, and there is no undo for the cancelled rows.
+ */
+{
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = strip(swiper);
+  is(
+    !/useEffect\(\(\) => \{\s*if \(!keys\) return;\s*held\.current = keys\[index\][\s\S]{0,40}\}, \[keys, index\]\)/.test(code),
+    'held is written from a render again — it will be overwritten by the re-sort it exists to survive',
+  );
+  /* Written where the position changes DELIBERATELY: a scroll, and a tap. */
+  is(/held\.current = keysRef\.current\?\.\[clamped\]/.test(code), 'a scroll no longer records which card the owner landed on');
+  is(/held\.current = keysRef\.current\?\.\[at\]/.test(code), 'a tap on a dot no longer records which card it went to');
+  /* And adopted once on mount, so a re-sort before the first touch still
+     has something to hold onto. */
+  is(/if \(held\.current === null\) \{/.test(code), 'nothing adopts the card in view on the first render — a re-sort before the owner touches anything still swaps it');
+  /* The restore itself is unchanged and still keyed on the joined list. */
+  is(/const to = keys\.indexOf\(held\.current\);/.test(code), 'the restore no longer looks the held card up in the new order');
+}
+
 /* ───────────────────────────── the browser pass ─────────────────────────── */
 
 async function main(): Promise<void> {

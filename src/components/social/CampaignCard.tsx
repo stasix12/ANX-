@@ -550,6 +550,59 @@ export function CampaignCard({
       )}
 
       {/*
+        ─── 2b. "המשך קמפיין" / "החזר לפעילות" ────────────────────────────
+
+        IT SAT AT THE FOOT, AND THAT IS WHERE IT WAS NOT FOUND.
+
+        "רשום לי נעצר, איך אני מחזיר לפעילות?" — asked while looking at the
+        "הפרסום הבא" block, which says in so many words "לא יֵצאו פרסומים עד
+        שתחזירו אותו לפעילות". The button that does it was three blocks
+        further down: past the daily-repeat row and its amber paragraph, past
+        "הגדרות תור מתקדמות", at the bottom of a card that is nine hundred
+        pixels tall. A screen that names the remedy and then hides it below
+        the fold is the overflow menu again with extra steps.
+
+        So it is directly under the counters now, which is the first thing
+        below the numbers on a card that is not running — and ABOVE the
+        scheduling block, because days and hours are the one thing on this
+        card that cannot matter while the campaign is stopped.
+
+        OUTSIDE the panel fragment deliberately: a card with no scheduling
+        block is still a card whose campaign can be stopped, and that is the
+        narrowest card in the product — the one place this control is most
+        needed and would have been easiest to leave out.
+
+        `busy` IS WIRED HERE, AND IT WAS DEAD. The prop has been declared and
+        handed in by the campaigns page since the card was built and read by
+        nothing; the page's act() writes, toasts and then re-reads eight
+        queries before it clears, so this is a second of a card showing the
+        old state. In a menu that cost a double entry nobody saw. As the
+        card's own button it would be a second press, a second write and a
+        second line in the activity log.
+      */}
+      {turnOn && (
+        /*
+         * THE FILLED ONE, AND IT TAKES THAT FROM "עריכת קמפיין" BELOW.
+         *
+         * The card's rule is one filled action, and the reference draws it as
+         * the editor — on a card that is RUNNING, where editing is the only
+         * thing left to do. On a card that is stopped or paused the useful
+         * action is the one that undoes that. The rule is kept and the
+         * identity of the primary follows the state: exactly one filled
+         * button either way.
+         */
+        <Button
+          size="md"
+          busy={busy}
+          onClick={turnOn.onSelect}
+          className="mt-2.5 h-12 w-full !min-h-12 justify-center gap-2 !rounded-2xl !text-[14px]"
+        >
+          {turnOn.icon}
+          {turnOn.label}
+        </Button>
+      )}
+
+      {/*
         ─── 3. "תזמון פרסום", "הפרסום הבא", "חזרה יומית" ──────────────────
 
         One component draws all three, in the order the brief writes out, and
@@ -602,45 +655,6 @@ export function CampaignCard({
             </Button>
           )}
         </>
-      )}
-
-      {/*
-        ─── 3b. "המשך קמפיין" / "החזר לפעילות" ────────────────────────────
-
-        OUTSIDE the panel fragment deliberately: a card with no scheduling
-        block is still a card whose campaign can be stopped, and that is the
-        narrowest card in the product — the one place this control is most
-        needed and would have been easiest to leave out.
-
-        `busy` IS WIRED HERE, AND IT WAS DEAD. The prop has been declared and
-        handed in by the campaigns page since the card was built and read by
-        nothing; the page's act() writes, toasts and then re-reads eight
-        queries before it clears, so this is a second of a card showing the
-        old state. In a menu that cost a double entry nobody saw. As the
-        card's own button it would be a second press, a second write and a
-        second line in the activity log.
-      */}
-      {turnOn && (
-        /*
-         * THE FILLED ONE, AND IT TAKES THAT FROM "עריכת קמפיין" BELOW.
-         *
-         * The card's rule is one filled action at the foot, and the reference
-         * draws it as the editor — on a card that is RUNNING, where editing
-         * is the only thing left to do. On a card that is stopped or paused
-         * the useful action is the one that undoes that, and a card whose eye
-         * is drawn to the wrong button is the menu problem again with an
-         * extra step. So the rule is kept and the identity of the primary
-         * follows the state: exactly one filled button either way.
-         */
-        <Button
-          size="md"
-          busy={busy}
-          onClick={turnOn.onSelect}
-          className="mt-2.5 h-12 w-full !min-h-12 justify-center gap-2 !rounded-2xl !text-[14px]"
-        >
-          {turnOn.icon}
-          {turnOn.label}
-        </Button>
       )}
 
       {/*

@@ -39,7 +39,20 @@ export interface PublicationActions {
  */
 export function statusLine(row: QueueRow, projectedAt?: string | null): { text: string; cls: string } {
   const step = (row.step ?? '') as QueueStep;
-  const at = projectedAt ?? row.scheduled_at;
+  /*
+   * NULL AND UNDEFINED ARE TWO DIFFERENT ANSWERS, and `??` read them as one.
+   *
+   * projectQueue() returns `null` for exactly one state — the campaign's
+   * schedule is on and no day is lit — and its header says what that means:
+   * "the row is held indefinitely… the caller may not print the stored
+   * instant over it." `undefined` is the other thing entirely: a caller with
+   * no account settings to hand, for which the stored instant IS the best
+   * answer. Collapsing them printed "08:01 · בעוד 3 שעות" over a row
+   * rules.ts defers twenty-four hours at a time, for ever.
+   */
+  const held = projectedAt === null && row.status === 'scheduled';
+  const at = projectedAt === undefined || projectedAt === null ? row.scheduled_at : projectedAt;
+  if (held) return { text: 'מוחזק — לא נבחר יום פרסום בתזמון', cls: TONE_TEXT[STATUS_TONE.needs_attention] };
   switch (row.status) {
     case 'published':
       // No "ב-" before the time: a Hebrew prefix glued to digits with a hyphen
@@ -135,9 +148,12 @@ export function PublicationItem({
    */
   /* The row's own instant for the collapsed line: when it published, or when
      it is going to — projected, never the raw column. */
-  const at = row.published_at ?? projectedAt ?? row.scheduled_at;
+  const at = row.published_at ?? (projectedAt === undefined || projectedAt === null ? row.scheduled_at : projectedAt);
   const isToday = zonedDateISO(new Date(at)) === zonedDateISO(new Date());
-  const when = !showDate
+  /* Same rule as statusLine's: a held row has no instant to put a date on,
+     so the collapsed line keeps the words instead of inventing a clock. */
+  const heldRow = projectedAt === null && !row.published_at && row.status === 'scheduled';
+  const when = !showDate || heldRow
     ? line.text
     : row.status === 'scheduled'
       ? isToday

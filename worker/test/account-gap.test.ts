@@ -389,4 +389,40 @@ const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
   is(/if \(!spent\) await page\.waitForTimeout\(DEBUG_LINGER_MS\)/.test(adapter), 'and it is skipped entirely when the budget is already spent — a publication that ran long must not then stand still');
 }
 
+/* ═══════════════════════════════════════════════════════════════════════ *
+ *  A GAP THAT ENFORCES NOTHING MAY NOT LOWER THE ONE THAT ENFORCES ALL
+ * ═══════════════════════════════════════════════════════════════════════ */
+/*
+ * matchAccountGapTo() is account-wide and one-directional: it takes the floor
+ * DOWN for every campaign in the account and never puts it back. Both screens
+ * that edit a campaign's schedule called it on every save — including a save
+ * on a campaign whose scheduling switch is OFF, where campaign-schedule.ts
+ * short-circuits every function and the gap governs nothing at all.
+ *
+ * So tapping one day chip on an untouched campaign took the shipped
+ * 65-minute account floor down to that campaign's default ten minutes, for
+ * everything, permanently. The owner would see one toast about it and have no
+ * way back.
+ */
+{
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  for (const f of ['../../src/app/social/page.tsx', '../../src/app/social/campaigns/page.tsx']) {
+    const code = strip(readFileSync(new URL(f, import.meta.url), 'utf8'));
+    const at = code.indexOf('matchAccountGapTo(next.gapSeconds)');
+    is(at > -1, `${f} no longer lowers the account floor with the campaign's gap`);
+    /* The guard has to be on the SAME expression, not somewhere in the file:
+       `next.enabled ? await matchAccountGapTo(...) : …`. */
+    const before = code.slice(Math.max(0, at - 120), at);
+    is(
+      /next\.enabled\s*\n?\s*\?/.test(before),
+      `${f}: the account-wide floor is lowered even when that campaign's gate is off — a gap that enforces nothing must not move one that enforces everything`,
+    );
+  }
+  /* And the queue tuner is deliberately NOT guarded: there the owner typed
+     the number into a control whose only job is the gap, so it is a choice
+     rather than a side effect. */
+  const tuner = strip(readFileSync(new URL('../../src/components/social/QueueTunerSheet.tsx', import.meta.url), 'utf8'));
+  is(tuner.includes('matchAccountGapTo('), 'the tuner no longer matches the account floor to the gap the owner just typed');
+}
+
 console.log(`account gap tests OK — ${checks} assertions`);

@@ -250,6 +250,51 @@ async function main(): Promise<void> {
     );
   }
 
+  /* ══════════════════════════════════════════════════════════════════ *
+   *  THE OTHER THREE WRITERS OF scheduled_at USE THE CAMPAIGN'S OWN GAP
+   * ══════════════════════════════════════════════════════════════════ */
+  /*
+   * planQueue composes `max(account floor, campaign gap)` and rolls the
+   * result through the window. For a long time it was the only writer that
+   * did. The other two applied half of each campaign's schedule and ignored
+   * the other half:
+   *
+   *   respaceQueue      passed each campaign's WINDOW as the gate and the
+   *                     GLOBAL gap as the spacing, so a ten-minute campaign
+   *                     came out thirty seconds apart inside the right hours.
+   *   addTargetsToQueue applied neither — `from + (i+1) * gap`, flat — so
+   *                     five groups appended at 23:00 on a Thursday landed on
+   *                     Friday, a day that campaign forbids.
+   *
+   * Both are now the planner's composition. Pinned as source, because both
+   * live behind a Supabase client this file does not stand up.
+   */
+  {
+    const client = readFileSync('src/lib/social/client.ts', 'utf8');
+    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const code = strip(client);
+
+    is(
+      /const ownGapSeconds = Math\.max\(gapSeconds, own\?\.enabled \? own\.gapSeconds : 0\);/.test(code),
+      'respaceQueue spaces every campaign at the global gap again, ignoring each campaign\u2019s own',
+    );
+    is(
+      /windowedCascade\(\s*indexes\.map\(\(i\) => bases\[i\]\),\s*ownGapSeconds,/.test(code),
+      'and the cascade is still handed the global gap rather than the composed one',
+    );
+    is(
+      /const stampGapSeconds = Math\.max\(gapSeconds, ownWindow\?\.enabled \? ownWindow\.gapSeconds : 0\);/.test(code),
+      'addTargetsToQueue appends at the account gap again, ignoring the campaign\u2019s own',
+    );
+    is(
+      /const stamps = windowedCascade\(/.test(code),
+      'addTargetsToQueue writes flat arithmetic again — rows can land on a day the campaign forbids',
+    );
+    /* And it reads the window from the one helper, rather than inventing a
+       second way to ask what a campaign's hours are. */
+    is(/const ownWindow = ownId \? \(await campaignWindows\(\[ownId\]\)\)/.test(code), 'addTargetsToQueue no longer reads the campaign\u2019s window at all');
+  }
+
   console.log(`campaign gap tests OK — ${checks} assertions, decided by the real engine against a fake database`);
 }
 

@@ -338,8 +338,15 @@ export default function CampaignsPage() {
           /* And the account-wide floor comes down with it, exactly as on the
              dashboard — see the long note on the dashboard's copy. Without it
              the gap chosen here is only the first of two gates and the second
-             one, 65 minutes out of the box, decides. */
-          const floor = await matchAccountGapTo(next.gapSeconds);
+             one, 65 minutes out of the box, decides.
+
+             ONLY WHEN THE GATE IS ON, for the reason spelled out on the
+             dashboard's copy: a gap that enforces nothing may not lower an
+             account-wide floor that enforces everything, and this call never
+             raises it back. */
+          const floor = next.enabled
+            ? await matchAccountGapTo(next.gapSeconds)
+            : { changed: false, wasSeconds: 0, nowSeconds: 0 };
           if (floor.changed) {
             toast(
               `המרווח המינימלי של כל החשבון ירד מ-${accountGapLabel(floor.wasSeconds)} ל-${accountGapLabel(floor.nowSeconds)} — זה חל על כל הסבבים, לא רק על זה`,

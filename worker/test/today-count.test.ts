@@ -263,6 +263,45 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
   const plain = campaignState(all, { status: 'active' });
   eq(plain.everPublished, 2, 'an unscoped campaign answers the same without being handed anything extra');
   eq(plain.progress.published, 2, 'and its two numbers agree, because there is only one scope');
+
+  /*
+   * ─── AND "WHEN NEXT" IS NOT A QUESTION ABOUT TODAY ───────────────────
+   *
+   * The planner writes 48 hours ahead, and the one-open-row-per-group index
+   * means tomorrow's rows appear exactly when today's stop being open. So
+   * the moment a repeating round finishes its day, tomorrow's occasion is
+   * already in the queue — and a nextAt derived from today's slice is null
+   * over it. scheduleReadout() reads that null as "the round has ENDED", so
+   * the card said "הסבב הסתיים" while the round page, handed the whole feed,
+   * said "הפרסום הבא: מחר". Same campaign, same minute, two screens.
+   *
+   * Third time this shape has been fixed (6a81259, 37d4290): a lifetime
+   * question answered with a today-scoped array.
+   */
+  const tomorrow = [row('e', '2026-10-08', 'scheduled', null)];
+  const finishedToday = [
+    row('c2', '2026-10-07', 'published', '2026-10-07T12:04:00Z'),
+    row('d2', '2026-10-07', 'published', '2026-10-07T12:51:00Z'),
+  ];
+  const rolled = campaignState(finishedToday, { status: 'active' }, {
+    todayOnly: true,
+    lifetime: [...yesterday, ...finishedToday, ...tomorrow],
+  });
+  eq(rolled.progress.published, 2, "today's counts stay today's — that half was never wrong");
+  eq(rolled.progress.scheduled, 0, 'and nothing is left waiting TODAY');
+  eq(rolled.nextAt, '2026-10-08T12:00:00Z', 'THE BUG: the next publication is tomorrow and the state reported none');
+  eq(rolled.nextTargetName, 'קבוצה', 'and the group it goes to comes from the same row');
+  /* The run page hands in the whole feed with no `lifetime`, and must be
+     unaffected: one array, one answer, exactly as before. */
+  const unscoped = campaignState([...finishedToday, ...tomorrow], { status: 'active' });
+  eq(unscoped.nextAt, '2026-10-08T12:00:00Z', 'an unscoped caller still reads its own rows');
+  /* And a round with nothing ahead of it anywhere still reports none — the
+     fix may not invent a next publication out of history. */
+  const reallyDone = campaignState(finishedToday, { status: 'active' }, {
+    todayOnly: true,
+    lifetime: [...yesterday, ...finishedToday],
+  });
+  eq(reallyDone.nextAt, null, 'a round with no scheduled row anywhere was given one');
 }
 
 /* ───────── 6c. the strip is today's, and it never vanishes ────────────── */

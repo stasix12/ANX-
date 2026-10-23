@@ -101,6 +101,13 @@ const TITLE: Record<string, string> = {
   campaign_repeat_on: 'חזרה יומית הופעלה',
   campaign_repeat_off: 'חזרה יומית כובתה',
   campaign_repeat_needs_launch: 'החזרה היומית לא הופעלה — הסבב עוד לא הושק',
+  /* A screen that stopped drawing. Two headlines, because the two are found
+     in different places and mean different things to whoever is looking:
+     one is a screen that went blank under the owner, the other is a fault
+     that left the screen standing and the button dead. */
+  screen_crashed: 'מסך נתקע',
+  client_error: 'תקלה בתוכנה',
+  schedule_column_missing: 'עדכון חסר בבסיס הנתונים',
   campaign_resumed: 'הסבב חודש',
   campaign_stopped: 'הסבב נעצר',
   campaign_deleted: 'הסבב נמחק',

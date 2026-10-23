@@ -1858,3 +1858,27 @@ select
   sum(today) as "מתוכם היום"
 from public.social_campaign_counts;
 
+-- ---------------------------------------------------------------------------
+-- v28 — drip_gap_seconds. See supabase/social-schema-v28.sql for the whole
+-- story; the short version is that src/lib/social/library.ts has written this
+-- column on every multi-group launch since 12.10.2026 and no file in this
+-- repository ever created it, so PostgREST answered PGRST204 and the launch
+-- threw. A round already running was unaffected (the daily repeat writes no
+-- drip_* fields), which is why publishing kept working while nothing new
+-- could be started.
+--
+-- Nullable, so slots.ts keeps falling back to drip_gap_minutes. Safe to run
+-- again. To undo: alter table public.social_schedules drop column drip_gap_seconds;
+-- ---------------------------------------------------------------------------
+alter table public.social_schedules
+  add column if not exists drip_gap_seconds integer;
+
+comment on column public.social_schedules.drip_gap_seconds is
+  'מרווח בשניות בין פרסום לפרסום בהשקה מרובת קבוצות. גובר על drip_gap_minutes כשהוא קיים; ריק = להשתמש בדקות.';
+
+do $$
+declare n bigint;
+begin
+  select count(*) into n from public.social_schedules where drip_gap_seconds is null and mode <> 'now';
+  raise notice 'v28: העמודה drip_gap_seconds נוספה. % תזמונים קיימים ימשיכו להשתמש בדקות.', n;
+end $$;

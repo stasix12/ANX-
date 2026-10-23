@@ -130,7 +130,10 @@ function Stepper({ label, onClick, disabled, children }: { label: string; onClic
  * uses most.
  */
 const posts = (n: number) => counted(n, 'פרסום אחד', 'פרסומים', 'שני פרסומים');
-const minutes = (n: number) => counted(n, 'דקה אחת', 'דקות', 'שתי דקות');
+/* `minutes()` lived here and spelled this sheet's one number as minutes. It
+   is gone with the labels that used it: the value is seconds and has been
+   since the sub-minute gaps shipped, and gapChoiceLabel() is the product's
+   single spelling of it. */
 
 /*
  * SECONDS, like the campaign panel — so the two editors of ONE record cannot
@@ -370,9 +373,20 @@ export function QueueTunerSheet({
      * because the surcharge exists for groups and this product publishes to
      * groups.
      */
-    const since = snap?.accountLastPublishedAt ? Date.parse(snap.accountLastPublishedAt) : NaN;
-    const accountFloor = Number.isFinite(since)
-      ? since + accountFloorMs(spacingFrom(snap!.limits, snap!.browser, snap!.accountLastPublishedAt), 'facebook_group')
+    /*
+     * accountFloorMs() RETURNS AN INSTANT, NOT A DURATION, and this line used
+     * to add the account's last publication to it a second time.
+     *
+     *     last + gap  +  last   ≈  two epochs  ≈  14.08.2083
+     *
+     * Every figure in this sheet is raised to `floor`, so the whole "before"
+     * column, the per-group chips and "האחרון בתור" all read a date in 2083
+     * — on the one control in the product whose job is to re-time the queue.
+     * It returns 0 when the account has never published, which Math.max
+     * already handles, so there is nothing left to guard.
+     */
+    const accountFloor = snap
+      ? accountFloorMs(spacingFrom(snap.limits, snap.browser, snap.accountLastPublishedAt), 'facebook_group')
       : 0;
     const floor = Math.max(snap?.at ?? Date.now(), accountFloor);
     const bases = rows.map((r) => new Date(Math.max(Date.parse(r.scheduled_at) || 0, floor)));
@@ -450,7 +464,24 @@ export function QueueTunerSheet({
    * every target that is NOT a plain facebook_group, because rules.ts adds the
    * surcharge only for that one channel.
    */
-  const surcharge = snap?.browser.groupMinGapMinutes ?? 0;
+  /*
+   * IN SECONDS, LIKE `gap` — it was read in MINUTES and subtracted from a
+   * value in seconds.
+   *
+   * With the shipped 20-minute group surcharge, `surcharge` was 20 and `gap`
+   * was 1200, so the note below could only fire for a gap under twenty
+   * SECONDS — a value MIN_GAP (30) forbids. The warning that exists to tell
+   * the owner his group surcharge is about to be rewritten was therefore
+   * unreachable, and the "general gap" figure beside it was 1180 seconds of
+   * nonsense.
+   *
+   * The seconds column wins when it is there and the minutes are the
+   * fallback, which is the same preference splitAccountGap() uses on the
+   * write side — so the number shown and the number saved are one number.
+   */
+  const surcharge = Number.isFinite(snap?.browser.groupMinGapSeconds)
+    ? (snap?.browser.groupMinGapSeconds as number)
+    : Math.max(0, snap?.browser.groupMinGapMinutes ?? 0) * 60;
   const nextGlobalGap = gap >= surcharge ? gap - surcharge : 0;
 
   /**
@@ -464,7 +495,7 @@ export function QueueTunerSheet({
    */
   const splitNote =
     snap && gap < surcharge
-      ? `המרווח שביקשתם קטן מהתוספת לקבוצות שמוגדרת אצלכם (${surcharge} דק׳). כדי שהמרווח בפועל יהיה ${gap} דק׳, התוספת לקבוצות תשתנה ל-${gap} והמרווח הכללי יתאפס.`
+      ? `המרווח שביקשתם קטן מהתוספת לקבוצות שמוגדרת אצלכם (${gapChoiceLabel(surcharge)}). כדי שהמרווח בפועל יהיה ${gapChoiceLabel(gap)}, התוספת לקבוצות תשתנה ל-${gapChoiceLabel(gap)} והמרווח הכללי יתאפס.`
       : null;
 
   /*
@@ -654,7 +685,23 @@ export function QueueTunerSheet({
   const working = busy !== null;
   // "ל-" takes the hyphen before a digit only; the singular and the dual spell
   // the number out, so they attach straight to the prefix ("לדקה אחת").
-  const gapLabel = gap <= 2 ? `ל${minutes(gap)}` : `ל-${minutes(gap)}`;
+  /*
+   * THE WHOLE SHEET SAYS SECONDS NOW, BECAUSE THE VALUE ALWAYS DID.
+   *
+   * `gap` was migrated from whole minutes to seconds on the value side only:
+   * it is seeded from `gapSeconds`, clamped to MIN_GAP_SECONDS and handed to
+   * respaceQueue(), which throws unless it is seconds. Every label around it
+   * still said minutes. So a campaign on the shipped ten-minute gap showed
+   * "600" over the words "דקות בין פרסום לפרסום", and an owner correcting it
+   * to 10 got a queue re-spaced at THIRTY SECONDS under a button that read
+   * "עדכן מרווח ל-30 דקות" — a twenty-fold speed-up applied by a control that
+   * said it was slowing things down, on the one number in this product that
+   * paces how fast an account posts to Facebook.
+   *
+   * gapChoiceLabel() is the product's one spelling of this value ("30 שניות",
+   * "דקה", "10 דק׳") and is what the campaign panel and the summary line
+   * already use. */
+  const gapLabel = `ל-${gapChoiceLabel(gap)}`;
 
   const footer =
     !loading && !error && hasQueue ? (
@@ -780,7 +827,7 @@ export function QueueTunerSheet({
             <h3 className="text-sm font-extrabold uppercase tracking-wide text-mist-500">מרווח בין פרסומים</h3>
 
             <div className="flex items-center justify-center gap-4 rounded-xl bg-ink-900 px-3 py-4">
-              <Stepper label={`הפחת ${minutes(STEP)}`} onClick={() => setGapTo(gap - STEP)} disabled={working || gap <= MIN_GAP}>
+              <Stepper label={`הפחת ${gapChoiceLabel(STEP)}`} onClick={() => setGapTo(gap - STEP)} disabled={working || gap <= MIN_GAP}>
                 <MinusIcon className="h-6 w-6" />
               </Stepper>
               <div className="min-w-0 text-center">
@@ -805,11 +852,14 @@ export function QueueTunerSheet({
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  aria-label={`מרווח בדקות, בין ${MIN_GAP} ל-${MAX_GAP}`}
+                  aria-label={`מרווח בשניות, בין ${gapChoiceLabel(MIN_GAP)} ל-${gapChoiceLabel(MAX_GAP)}`}
                   disabled={working}
                   dir="ltr"
                   value={draft ?? String(gap)}
-                  onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+                  /* FOUR DIGITS, NOT THREE. The ceiling is MAX_GAP = 43,200
+                     seconds, and a three-character field could not express
+                     the ten-minute default the campaigns ship with. */
+                  onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
                   onFocus={(e) => {
                     setDraft(String(gap));
                     e.target.select();
@@ -823,9 +873,12 @@ export function QueueTunerSheet({
                   }}
                   className="block w-24 rounded-lg bg-transparent text-center tabular-nums text-[42px] font-extrabold leading-none text-mist-100 focus:bg-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:opacity-50"
                 />
-                <span className="mt-1 block text-xs font-bold text-mist-500">דקות בין פרסום לפרסום</span>
+                <span className="mt-1 block text-xs font-bold text-mist-500">שניות בין פרסום לפרסום</span>
+                {/* And the same number in the words the rest of the product
+                    uses for it, so "600" and "10 דק׳" are visibly one value. */}
+                {gap >= 60 && <span className="mt-0.5 block text-[11px] font-bold text-brand-400">{gapChoiceLabel(gap)}</span>}
               </div>
-              <Stepper label={`הוסף ${minutes(STEP)}`} onClick={() => setGapTo(gap + STEP)} disabled={working || gap >= MAX_GAP}>
+              <Stepper label={`הוסף ${gapChoiceLabel(STEP)}`} onClick={() => setGapTo(gap + STEP)} disabled={working || gap >= MAX_GAP}>
                 <PlusIcon className="h-6 w-6" />
               </Stepper>
             </div>
@@ -842,15 +895,15 @@ export function QueueTunerSheet({
                     gap === p ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'
                   }`}
                 >
-                  <span dir="ltr">{p}</span>
+                  <span dir="auto">{gapChoiceLabel(p)}</span>
                 </button>
               ))}
             </div>
 
             <p className="text-xs leading-relaxed text-mist-500">
               זה המרווח שאתם קובעים, ותו לא. הוא לא הופך שום דבר ל״בטוח״ מול פייסבוק ולא מונע הגבלות — לפייסבוק אין מספר רשמי ומפורסם, ואף
-              כלי לא יכול להבטיח שמספר מסוים לא יוביל להגבלה. המערכת תדחה פרסום שמגיע מוקדם מדי כדי לשמור מרווח של <Num>{gap}</Num> דק׳ בין
-              פרסומים. שינוי המרווח מתזמן מחדש כל פרסום שעדיין ממתין בתור.
+              כלי לא יכול להבטיח שמספר מסוים לא יוביל להגבלה. המערכת תדחה פרסום שמגיע מוקדם מדי כדי לשמור מרווח של{' '}
+              <span dir="auto" className="font-bold">{gapChoiceLabel(gap)}</span> בין פרסומים. שינוי המרווח מתזמן מחדש כל פרסום שעדיין ממתין בתור.
             </p>
 
             {mismatch && <Notice tone="warn">{mismatch}</Notice>}
@@ -864,7 +917,8 @@ export function QueueTunerSheet({
                     בתור ממתינים גם <Num>{otherChannels.length}</Num> יעדים שאינם קבוצת פייסבוק רגילה.
                   </>
                 )}{' '}
-                המספר למעלה הוא המרווח שנאכף בין פרסומים לקבוצות; ליעדים האחרים ההגדרות ידרשו <Num>{nextGlobalGap}</Num> דק׳ בלבד.
+                המספר למעלה הוא המרווח שנאכף בין פרסומים לקבוצות; ליעדים האחרים ההגדרות ידרשו{' '}
+                <span dir="auto" className="font-bold">{gapChoiceLabel(nextGlobalGap)}</span> בלבד.
               </Notice>
             )}
 

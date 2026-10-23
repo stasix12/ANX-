@@ -1054,8 +1054,78 @@ export async function setCampaignRepeat(
   return { armed, needsLaunch };
 }
 
+/**
+ * THE COLUMNS THIS INSERT MAY LOSE AND STILL BE CORRECT.
+ *
+ * `drip_gap_seconds` is the sub-minute precision added on 12.10.2026, and
+ * slots.ts (:35-39) already treats it as optional: absent, the drip falls back
+ * to `drip_gap_minutes`, which scheduleInputFor() writes beside it rounded UP.
+ * So a launch without it is SLOWER than asked for, never faster — the safe
+ * direction for the one number that paces an account.
+ */
+const OPTIONAL_SCHEDULE_COLUMNS = ['drip_gap_seconds'] as const;
+
+/**
+ * A LAUNCH MUST NOT DIE ON A COLUMN THE DATABASE HAS NOT GOT.
+ *
+ * It did, for eleven days. library.ts has written `drip_gap_seconds` on every
+ * launch to more than one group since 12.10.2026, and no .sql file in this
+ * repository ever created it — so PostgREST answered PGRST204 ("Could not
+ * find the 'drip_gap_seconds' column… in the schema cache"), unwrap() threw,
+ * and the launch ended with nothing queued. A round already running kept
+ * publishing, because the daily repeat writes no drip_* fields at all, which
+ * is exactly why it went unnoticed: the dashboard looked alive and the
+ * library filled up with posts that said "טרם פורסם".
+ *
+ * The column is added by the one file the owner ever runs,
+ * supabase/social-latest.sql (and by the numbered migration beside it). This
+ * makes the database that has NOT run it work anyway, which is what
+ * types.ts:208 has claimed all along. One retry, only for a column on the list above, and only on the
+ * errors that mean "that column is not here" — never on a refused write, a
+ * dropped connection or an expired token, which are different answers and
+ * must keep failing loudly.
+ *
+ * It says so in the activity log, once per launch, so the owner is told to
+ * run the update rather than left on the slower path for ever.
+ */
 export async function createSchedule(input: ScheduleInput): Promise<Schedule> {
-  return unwrap<Schedule>(await db().from('social_schedules').insert({ ...input, active: true }).select('*').single());
+  const first = await db().from('social_schedules').insert({ ...input, active: true }).select('*').single();
+  if (!first.error) return first.data as Schedule;
+
+  const missing = OPTIONAL_SCHEDULE_COLUMNS.filter((c) =>
+    isMissingColumnNamed(first.error as { code?: string; message?: string }, c),
+  );
+  if (!missing.length) return unwrap<Schedule>(first);
+
+  const rest = { ...(input as Record<string, unknown>) };
+  for (const c of missing) delete rest[c];
+  const second = unwrap<Schedule>(
+    await db().from('social_schedules').insert({ ...rest, active: true }).select('*').single(),
+  );
+  await logClientActivity(
+    'warn',
+    'schedule_column_missing',
+    `הפרסום יצא לדרך, אבל בבסיס הנתונים חסרה העמודה ${missing.join(', ')} — ההפרש בין פרסומים יעוגל לדקות שלמות. כדאי להריץ את supabase/social-latest.sql.`,
+    { columns: missing },
+  );
+  return second;
+}
+
+/**
+ * "That exact column is not here" — as opposed to every other reason a write
+ * can fail.
+ *
+ * Postgres reports an unknown column as 42703 and PostgREST as PGRST204, and
+ * both put the column's NAME in the message. Matching the name as well as the
+ * code is what stops this retry from quietly dropping a field over an error
+ * that was about something else entirely.
+ */
+function isMissingColumnNamed(error: { code?: string; message?: string } | null, column: string): boolean {
+  if (!error) return false;
+  const message = error.message ?? '';
+  if (!message.includes(column)) return false;
+  if (error.code === '42703' || error.code === 'PGRST204') return true;
+  return /column .* does not exist|could not find the .* column|schema cache/i.test(message);
 }
 
 /**
@@ -3574,10 +3644,30 @@ export async function respaceQueue(gapSeconds: number, opts: { campaignId?: stri
     else byCampaign.set(key, [i]);
   });
   for (const [key, indexes] of byCampaign) {
+    const own = key ? windows[key] ?? null : null;
+    /*
+     * EACH CAMPAIGN'S OWN GAP, max()-ed with the global one — the same
+     * composition planQueue uses (`stampGapSeconds = Math.max(spacing,
+     * schedule.enabled ? schedule.gapSeconds : 0)`).
+     *
+     * This passed the GLOBAL gap as the cascade's spacing while passing the
+     * campaign's WINDOW as its gate: half of each campaign's schedule
+     * applied, half ignored. So a re-space run from the dashboard (where the
+     * sheet opens unscoped whenever the head row has no campaign) re-stamped
+     * a ten-minute campaign's sixty rows thirty seconds apart, inside the
+     * right hours. rules.ts then deferred every one of them back out, and the
+     * queue showed times that would never be kept.
+     *
+     * The BASES stay on the global ladder on purpose: that ladder is the
+     * account-wide spacing ACROSS campaigns, and windowedCascade only ever
+     * pushes an instant later, so the campaign's own gap is applied on top of
+     * it rather than instead of it.
+     */
+    const ownGapSeconds = Math.max(gapSeconds, own?.enabled ? own.gapSeconds : 0);
     const out = windowedCascade(
       indexes.map((i) => bases[i]),
-      gapSeconds,
-      key ? windows[key] ?? null : null,
+      ownGapSeconds,
+      own,
     );
     indexes.forEach((i, n) => {
       rolled[i] = out[n];
@@ -3799,6 +3889,36 @@ export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?
   const from = Math.max(Number.isFinite(lastMs) ? lastMs : Date.now(), Date.now() + WRITE_SETTLE_MS);
   const mediaUrls = (template.post?.media ?? []).map((m: MediaItem) => m.url);
 
+  /*
+   * ─── AND THEY LAND INSIDE THE CAMPAIGN'S WINDOW ────────────────────────
+   *
+   * This was the fourth writer of scheduled_at and the only one never taught
+   * the window. It wrote `from + (i+1) * gap` and stopped, so adding five
+   * groups at 23:00 on a Thursday to a campaign that publishes Sunday to
+   * Thursday produced five instants on Friday — a day that campaign forbids.
+   * rules.ts then correctly deferred every one of them to Sunday 08:00 and
+   * the owner watched five publications sit in the queue showing Friday
+   * times that never arrived.
+   *
+   * windowedCascade is the same function planQueue, respaceQueue and
+   * rescheduleCampaignQueue roll their stamps through. A campaign with no
+   * window, or one whose gate is off, gets `null` and the plain arithmetic
+   * below — which is exactly what this path did before.
+   *
+   * THE CAMPAIGN'S OWN GAP JOINS THE ACCOUNT'S, max() as everywhere else:
+   * the planner stamps at max(account floor, campaign gap) and this used to
+   * stamp at the account's alone, so rows appended to a ten-minute campaign
+   * on a thirty-second account came out ten minutes too close together.
+   */
+  const ownId = template.campaign_id ?? opts.campaignId ?? null;
+  const ownWindow = ownId ? (await campaignWindows([ownId]))[ownId] ?? null : null;
+  const stampGapSeconds = Math.max(gapSeconds, ownWindow?.enabled ? ownWindow.gapSeconds : 0);
+  const stamps = windowedCascade(
+    fresh.map((_, i) => new Date(from + (i + 1) * stampGapSeconds * 1000)),
+    stampGapSeconds,
+    ownWindow,
+  );
+
   const rows = await Promise.all(
     fresh.map(async (targetId, i) => ({
       schedule_id: null,
@@ -3808,7 +3928,7 @@ export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?
       campaign_id: template.campaign_id ?? null,
       variant_id: template.variant_id,
       target_id: targetId,
-      scheduled_at: new Date(from + (i + 1) * gapSeconds * 1000).toISOString(),
+      scheduled_at: (stamps[i] ?? new Date(from + (i + 1) * stampGapSeconds * 1000)).toISOString(),
       status: 'scheduled' as const,
       // '' means "terminal" elsewhere in this codebase; the planner sets 'pending'.
       step: 'pending',
@@ -3822,7 +3942,7 @@ export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?
   );
 
   const inserted = unwrap<{ id: string }[]>(await db().from('social_queue').insert(rows).select('id'));
-  await logClientActivity('info', 'queue_targets_added', `${inserted.length} קבוצות נוספו לתור, כל אחת ${gapChoiceLabel(gapSeconds)} אחרי הקודמת`, {
+  await logClientActivity('info', 'queue_targets_added', `${inserted.length} קבוצות נוספו לתור, כל אחת ${gapChoiceLabel(stampGapSeconds)} אחרי הקודמת`, {
     targetIds: fresh,
     added: inserted.length,
     gapSeconds,

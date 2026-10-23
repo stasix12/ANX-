@@ -1088,8 +1088,20 @@ export default function SocialDashboard() {
            * — minGap + groupMinGap, 65 minutes out of the box — is an ACCOUNT
            * setting, so a campaign set to thirty seconds sat in the queue for
            * an hour anyway. matchAccountGapTo only ever LOWERS it.
+           *
+           * ONLY WHEN THE GATE IS ON. Every function in campaign-schedule.ts
+           * short-circuits on `enabled: false`, so a disabled campaign's
+           * gapSeconds governs nothing at all — and this call is account-wide
+           * and one-directional: it lowers the floor for EVERY campaign and
+           * never puts it back. Unguarded, tapping one day chip on a campaign
+           * whose switch has never been turned on took the shipped 65-minute
+           * floor down to that campaign's untouched 10-minute default, for
+           * the whole account. A number that governs nothing may not move a
+           * setting that governs everything.
            */
-          const floor = await matchAccountGapTo(next.gapSeconds);
+          const floor = next.enabled
+            ? await matchAccountGapTo(next.gapSeconds)
+            : { changed: false, wasSeconds: 0, nowSeconds: 0 };
           if (floor.changed) {
             toast(
               `המרווח המינימלי של כל החשבון ירד מ-${accountGapLabel(floor.wasSeconds)} ל-${accountGapLabel(floor.nowSeconds)} — זה חל על כל הסבבים, לא רק על זה`,

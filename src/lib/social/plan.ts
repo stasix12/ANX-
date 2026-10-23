@@ -736,6 +736,27 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
     }
   }
   await noteDropped(db, note, schedule.id, dropped, made);
+  /*
+   * ─── AND A DRIP THAT QUEUED NOTHING SAYS SO ────────────────────────────
+   *
+   * The loop above has had this since the day it was written; this one never
+   * did, and it is the loop that every "פרסם עכשיו" goes through —
+   * draftFor() makes any launch with more than one target a 'drip'.
+   *
+   * targetsAlreadyWaiting() is GLOBAL: a group is blocked by an open row
+   * from ANY round. So an owner whose 218-group round is mid-flight presses
+   * publish on a second post over the same groups and gets zero rows, and
+   * then — because `made === 0` silences noteDropped and nothing else here
+   * asks the question — zero log lines, while the line below retires the
+   * schedule for good. The launch reports success. The post sits in the
+   * library reading "טרם פורסם" for ever, and nothing on any screen says why.
+   *
+   * Same words, same event name and same condition as the main loop, so the
+   * two cannot drift and the owner sees one sentence for one situation.
+   */
+  if (made === 0 && dropped.length) {
+    await noteAllBlocked(db, note, schedule.id, dropped);
+  }
   if (failed) {
     await note(
       'warn',

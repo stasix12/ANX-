@@ -289,7 +289,35 @@ export function campaignState<T extends CampaignQueueRow>(
   const pending = rows
     .filter((r) => r.status === 'scheduled')
     .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
-  const next = pending[0] ?? null;
+  /*
+   * ─── "WHEN NEXT" IS NOT A QUESTION ABOUT TODAY ─────────────────────────
+   *
+   * For a repeating round `rows` is TODAY'S slice, by design: a percentage of
+   * a number that grows by a round a day is a percentage of nothing. Every
+   * COUNT on this state is therefore today's, and that is right.
+   *
+   * `nextAt` is not a count. The planner writes 48 hours ahead (plan.ts), so
+   * the moment today's last row finishes, tomorrow's 08:00 rows are already
+   * sitting in the queue — and a nextAt derived from today's slice is null
+   * over them. scheduleReadout() reads exactly that null to decide the round
+   * has ENDED, so the card printed "הסבב הסתיים" while the round page, which
+   * is handed the whole feed, printed "הפרסום הבא: מחר 08:00" for the same
+   * campaign at the same minute.
+   *
+   * This is the third time this shape has been fixed in this file (6a81259,
+   * 37d4290): a LIFETIME question answered with a TODAY-scoped array. So the
+   * next publication is read off the unscoped rows, which is what `lifetime`
+   * is and what every caller that scopes anything already passes.
+   *
+   * `last` is left alone deliberately. It feeds estimatedCompletionAt, which
+   * is "when does the work on screen finish" — a question about the scope the
+   * card is showing, and meaningless for a round that never ends.
+   */
+  const pendingLifetime =
+    opts.lifetime && opts.lifetime !== rows
+      ? opts.lifetime.filter((r) => r.status === 'scheduled').sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
+      : pending;
+  const next = pendingLifetime[0] ?? null;
   const last = pending[pending.length - 1] ?? null;
 
   const now = rows.filter((r) => IN_FLIGHT_STATUSES.includes(r.status));

@@ -540,6 +540,46 @@ async function main(): Promise<void> {
     }
   }
 
+  /*
+   * ─── THE CONTROL THAT SETS THE GAP MUST SAY WHAT IT IS SETTING ──────────
+   *
+   * This whole file exists because the gap became SECONDS. The queue tuner's
+   * value was migrated with it — seeded from gapSeconds, clamped to
+   * MIN_GAP_SECONDS, handed to respaceQueue() which throws unless it is
+   * seconds — and every LABEL on it was left saying minutes. A campaign on
+   * the shipped 600-second gap showed "600" over "דקות בין פרסום לפרסום";
+   * an owner correcting that to 10 got the queue re-spaced at thirty seconds
+   * under a button reading "עדכן מרווח ל-30 דקות".
+   *
+   * Twenty times faster, on the one number that paces how fast this account
+   * posts to Facebook, applied by a control that said it was slowing it down.
+   */
+  const tuner = src('../../src/components/social/QueueTunerSheet.tsx');
+  const tunerCode = tuner.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  is(
+    !/דקות בין פרסום לפרסום/.test(tunerCode),
+    'the queue tuner still captions its seconds field with the word minutes',
+  );
+  is(!/מרווח בדקות/.test(tunerCode), 'and its field is still announced to a screen reader as minutes');
+  is(/gapChoiceLabel\(gap\)/.test(tunerCode), 'the tuner no longer spells its own value with the product\u2019s one spelling of it');
+  /* The stepper, the presets and the footer button all take the same spelling
+     — three places that each said "דקות" over a number of seconds. */
+  for (const call of ['gapChoiceLabel(STEP)', 'gapChoiceLabel(p)', 'gapChoiceLabel(MIN_GAP)']) {
+    is(tunerCode.includes(call), `the tuner no longer spells ${call.replace('gapChoiceLabel(', '').replace(')', '')} in seconds`);
+  }
+  /* And the field can hold the shipped default at all: MAX_GAP is 43,200
+     seconds and the input used to accept three characters. */
+  is(!/slice\(0, 3\)/.test(tunerCode), 'the gap field is capped at three digits again — the ten-minute default cannot be typed');
+  /* And the group surcharge is read in the same unit as the gap it is
+     subtracted from. It was read in MINUTES (20) and taken off a value in
+     SECONDS (1200), so the warning that says "your group surcharge is about
+     to be rewritten" could only fire below twenty seconds — a value the
+     minimum forbids — and the figure beside it was 1,180 of nothing. */
+  is(
+    /groupMinGapSeconds[\s\S]{0,160}groupMinGapMinutes \?\? 0\) \* 60/.test(tunerCode),
+    'the tuner reads the group surcharge in minutes again and subtracts it from a value in seconds',
+  );
+
   console.log('  %d assertions OK\n', checks);
 }
 

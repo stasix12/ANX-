@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/social/ui';
 import { friendlyMessage } from '@/lib/social/errors';
+import { crashLine, crashReport, type CrashReport } from '@/lib/social/crash';
+import { logClientActivity } from '@/lib/social/client';
 
 /**
  * The last net under every /social screen.
@@ -20,11 +22,41 @@ import { friendlyMessage } from '@/lib/social/errors';
  *
  * The message obeys house rule 3: friendlyMessage() never emits raw exception
  * text, and the original stays on the console for whoever is looking at one.
+ *
+ * AND IT LEAVES A RECORD NOW, which it did not. "אתר את הגורם האמיתי לקריסה"
+ * was asked of a screenshot showing this card with no route, no line and no
+ * code — because `error.digest` is set only for an error thrown on the
+ * SERVER, and that one was a client render. There was nothing to look up.
+ *
+ * So the boundary writes one line to the activity log and prints a six
+ * character code the owner can read out. Both go through crash.ts, which
+ * redacts anything credential-shaped first: an exception message is the most
+ * likely place in this product for a token to appear, and this table is one
+ * the owner opens on his phone. "אסור להכניס ללוגים: Passwords, Facebook
+ * tokens, Secrets."
  */
 export default function SocialError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  const [report, setReport] = useState<CrashReport | null>(null);
+
   useEffect(() => {
     // The only place the raw error is allowed to exist: a developer console.
     console.error('[social] render error', error);
+    /* `window` rather than usePathname(): this boundary can be rendered when
+       the router tree itself is what threw, and the address bar is the one
+       source of the route that cannot also be broken. */
+    const route = typeof window === 'undefined' ? '/' : window.location.pathname;
+    const r = crashReport(error, route, error.digest);
+    setReport(r);
+    /* Fire and forget, and already guarded: logClientActivity swallows its
+       own failures, which matters most when the thing that threw IS the
+       database connection. */
+    void logClientActivity('error', 'screen_crashed', crashLine(r), {
+      route: r.route,
+      code: r.code,
+      name: r.name,
+      frame: r.frame,
+      digest: r.digest,
+    });
   }, [error]);
 
   return (
@@ -53,9 +85,16 @@ export default function SocialError({ error, reset }: { error: Error & { digest?
             ללוח הבקרה
           </a>
         </div>
-        {error.digest && (
-          <p className="mt-4 text-[11px] text-mist-500">
-            מזהה התקלה: <span dir="ltr" className="font-mono">{error.digest}</span>
+        {/* ALWAYS, NOT ONLY FOR A SERVER ERROR. The same fault always prints
+            the same six characters, so "זה קרה שוב, 4F2A9C" names a bug and
+            two different codes are two different bugs. */}
+        {report && (
+          <p className="mt-4 text-[11px] leading-5 text-mist-500">
+            מזהה התקלה: <span dir="ltr" className="font-mono font-bold text-mist-300">{report.code}</span>
+            <span className="mt-0.5 block">
+              מסך: <span dir="ltr" className="font-mono">{report.route}</span>
+            </span>
+            <span className="mt-1 block">התקלה נרשמה במרכז הפעילות — אפשר לשלוח לי את המזהה הזה.</span>
           </p>
         )}
       </div>

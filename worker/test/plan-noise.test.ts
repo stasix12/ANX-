@@ -51,7 +51,7 @@ interface Row {
 interface Plan {
   id: string;
   post: string;
-  mode: 'weekly' | 'now';
+  mode: 'weekly' | 'now' | 'drip';
   targets: string[];
   busy: string[];
   /* Different hours, so two schedules in one pass cannot collide on a slot. */
@@ -75,7 +75,15 @@ function world(plans: Plan[]) {
     post_id: p.post,
     mode: p.mode,
     timezone: 'Asia/Jerusalem',
-    run_at: p.mode === 'now' ? new Date().toISOString() : null,
+    run_at: p.mode === 'now' || p.mode === 'drip' ? new Date().toISOString() : null,
+    /* The five drip columns, so planDrip() can be driven by this fake at all.
+       dripSlots() needs a window and a gap; the defaults here put every slot
+       inside today and well apart. */
+    drip_per_day: 50,
+    drip_gap_minutes: 10,
+    drip_gap_seconds: 600,
+    drip_window_start: '00:00',
+    drip_window_end: '23:59',
     /* Every weekday at an hour inside the horizon, so a slot always exists. */
     weekly: Object.fromEntries(['0', '1', '2', '3', '4', '5', '6'].map((d) => [d, [p.hour]])),
     interval_days: null,
@@ -197,6 +205,28 @@ async function main(): Promise<void> {
     is(/אף קבוצה לא נכנסה לתור/.test(line), 'in words that say what happened rather than what was attempted');
     is(/t1|t2|t3/.test(line), 'naming the groups, because a count is not something anybody can act on');
     is(/סבב אחר/.test(line), 'and saying WHY — a row from a different round, which he is not looking at and could not guess');
+  }
+
+  /* ── 1a. AND THE SAME LAUNCH THROUGH THE DRIP LOOP ──────────────────── */
+  {
+    /*
+     * EVERY "פרסם עכשיו" GOES THROUGH planDrip, not through the loop above:
+     * draftFor() (library.ts) makes any launch with more than one target a
+     * 'drip'. That loop had no voice at all for the fully-blocked pass — it
+     * called noteDropped(), whose `made <= 0` guard silenced it, and then
+     * retired the schedule. Zero rows, zero lines, and a post that reads
+     * "טרם פורסם" in the library for ever.
+     */
+    const w = world([{ id: 'd1', post: 'p1', mode: 'drip', targets: ['t1', 't2', 't3'], busy: ['t1', 't2', 't3'], hour: '09:00' }]);
+    await planQueue({ db: w.db, log: w.note as never });
+    eq(blocked(w.log), 1, 'A FULLY-BLOCKED QUICK PUBLISH SAYS SO — it was the one launch path with no voice');
+    const line = w.log.find((e) => e.event === 'plan_all_blocked')!.message;
+    is(/אף קבוצה לא נכנסה לתור/.test(line), 'in the same words the other loop uses, for the same situation');
+    is(/t1|t2|t3/.test(line), 'naming the groups');
+    /* And it is still said ONCE: the drip retires itself at the end of the
+       pass, so a second pass has no schedule left to report on. */
+    await planQueue({ db: w.db, log: w.note as never });
+    eq(blocked(w.log), 1, 'and not again on the next tick');
   }
 
   /* ── 1b. AND A SCHEDULE WITH NOTHING TO PLACE IS NOT "BLOCKED" ───────── */

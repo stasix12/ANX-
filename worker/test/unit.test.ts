@@ -1730,7 +1730,10 @@ console.log('unit tests OK');
    */
   const tuner = readFileSync(new URL('../../src/components/social/QueueTunerSheet.tsx', import.meta.url), 'utf8');
   assert.ok(/const STEP = 30;/.test(tuner), 'the stepper must move thirty seconds at a time — the engine\u2019s own minimum');
-  assert.ok(/inputMode="numeric"[\s\S]{0,1400}דקות בין פרסום לפרסום/.test(tuner), 'the gap figure itself must be typable');
+  /* "שניות", not "דקות": the value has been seconds since the sub-minute gaps
+     shipped and every label on this sheet said minutes over it — see the
+     section in cadence-30s.test.ts. The pin follows the value. */
+  assert.ok(/inputMode="numeric"[\s\S]{0,1600}שניות בין פרסום לפרסום/.test(tuner), 'the gap figure itself must be typable');
   /*
    * And it must be typable in practice. A controlled input clamped on every
    * keystroke cannot be cleared — emptying it yields NaN, the clamp makes that

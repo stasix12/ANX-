@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { statusLine } from '../../src/components/social/PublicationItem';
 import {
   accountFloorMs,
   projectOne,
@@ -201,6 +202,80 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   eq(accountFloorMs(fast, 'facebook_group'), at('2026-10-06T10:00:30').getTime(), 'thirty seconds means thirty seconds, not a minute');
   /* An account that has never published has no floor at all. */
   eq(accountFloorMs({ ...fast, lastPublishedAt: null }, 'facebook_group'), 0, 'an account that never published imposes no floor');
+
+  /*
+   * ─── IT RETURNS AN INSTANT. IT IS NOT A DURATION. ────────────────────
+   *
+   * The queue tuner read it as one and wrote `since + accountFloorMs(...)`,
+   * which adds the account's last publication to a number that already
+   * contains it: two epochs, and every figure in that sheet — the "before"
+   * column, the per-group chips, "האחרון בתור" — read 14.08.2083. It shipped,
+   * on the one control whose job is to re-time the queue.
+   *
+   * The unit is the fault, so the unit is what is pinned: the answer is the
+   * last publication plus the gap, and anything that has added an epoch to it
+   * lands centuries out. Both halves are asserted, because "equals last + gap"
+   * alone is satisfied by a caller that then doubles it.
+   */
+  const floorNow = accountFloorMs(fast, 'facebook_group');
+  eq(floorNow, at('2026-10-06T10:00').getTime() + 30_000, 'the floor is not "the last publication plus the gap"');
+  is(
+    floorNow < at('2036-01-01T00:00').getTime(),
+    `accountFloorMs returned ${new Date(floorNow).toISOString()} — a caller treating it as a duration lands here`,
+  );
+  /* And the one caller outside projection.ts hands it straight to Math.max,
+     with nothing added. A source guard, because the arithmetic lives inside a
+     component this suite does not mount. */
+  const tuner = readFileSync(new URL('../../src/components/social/QueueTunerSheet.tsx', import.meta.url), 'utf8');
+  is(
+    !/[+]\s*accountFloorMs\(|accountFloorMs\([^)]*\)\s*[+]/.test(tuner),
+    'something is being added to accountFloorMs() again — it is already an instant',
+  );
+}
+
+/* ───────── 4b. AND WHAT THE LIST DOES WITH "HELD" ───────── */
+/*
+ * projectQueue() answers `null` for exactly one state — the schedule is on
+ * and no day is lit — and its header forbids printing the stored instant over
+ * it. Three screens pass that answer to statusLine(), which read it with
+ * `projectedAt ?? row.scheduled_at`: `??` takes null and undefined as one
+ * thing, so the raw stamp came back with a live countdown attached, on a row
+ * rules.ts defers a day at a time for ever.
+ *
+ * The distinction is the test: null is "held", undefined is "no forecast was
+ * supplied, the stamp stands".
+ */
+{
+  const base = {
+    id: 'q1',
+    post_id: 'p1',
+    target_id: 't1',
+    status: 'scheduled',
+    scheduled_at: iso('2026-10-06T08:01'),
+    step: 'pending',
+    attempts: 0,
+    published_at: null,
+    skip_reason: null,
+  } as never;
+
+  const heldLine = statusLine(base, null);
+  is(heldLine.text.includes('מוחזק'), `a held row reads "${heldLine.text}" instead of saying it is held`);
+  is(!/\d{1,2}:\d{2}/.test(heldLine.text), `a held row printed a clock: "${heldLine.text}"`);
+  is(!heldLine.text.includes('בעוד'), 'a held row printed a countdown to a minute that will not arrive');
+
+  /* undefined is the caller that has no account settings — the stamp stands,
+     exactly as it did before projection.ts existed. */
+  const plain = statusLine(base, undefined);
+  is(/\d{1,2}:\d{2}/.test(plain.text), `a row with no forecast lost its time: "${plain.text}"`);
+
+  /* And a real forecast is printed in place of the stamp. */
+  const moved = statusLine(base, iso('2026-10-06T11:30'));
+  is(moved.text.includes('11:30'), `a projected row printed "${moved.text}" rather than its projected time`);
+
+  /* A row that has already published is about its own past and is untouched
+     by any of this. */
+  const done = statusLine({ ...(base as object), status: 'published', published_at: iso('2026-10-06T09:00') } as never, null);
+  is(done.text.includes('פורסם'), `a published row reads "${done.text}"`);
 }
 
 /* ───────── 5. HELD, WITH NO INSTANT — and it pushes nothing ───────── */
@@ -461,8 +536,15 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
 
   const item = read('src/components/social/PublicationItem.tsx');
   is(/projectedAt\?: string \| null;/.test(item), 'the row renderer takes the projected instant');
-  is(/const at = projectedAt \?\? row\.scheduled_at;/.test(item), 'and its status line is built from it');
-  is(/const at = row\.published_at \?\? projectedAt \?\? row\.scheduled_at;/.test(item), 'and so is the collapsed row\u2019s own clock');
+  /* SPELLED OUT, NOT `??`. The two pins below used to match the nullish
+     form, which is how they kept passing over the bug in section 4b: `??`
+     folds projectQueue()'s deliberate `null` ("held, print no instant") into
+     `undefined` ("no forecast supplied"). The behaviour is asserted up there;
+     these stay as the structural pin that the projected value is what the
+     line is built from at all. */
+  is(/projectedAt === undefined \|\| projectedAt === null \? row\.scheduled_at : projectedAt/.test(item), 'and its status line is built from it');
+  is(/const at = row\.published_at \?\? \(projectedAt === undefined/.test(item), 'and so is the collapsed row\u2019s own clock');
+  is(/const held = projectedAt === null/.test(item), 'and a held row is told apart from a row with no forecast');
   is(!/formatTimeHe\(row\.scheduled_at\)/.test(item), 'the raw column is no longer formatted as a publication time');
   is(/new Date\(projectedAt \?\? row\.scheduled_at\)\.getTime\(\) > Date\.now\(\) \+ 60_000/.test(item), '"הרץ עכשיו" is offered on the instant the row will really go out');
 

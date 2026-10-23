@@ -9,7 +9,7 @@
  * fixed. The only evidence was a version number in one line of its terminal
  * output, which nobody reads.
  */
-export const WORKER_VERSION = '4.16.0';
+export const WORKER_VERSION = '4.17.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -28,13 +28,23 @@ export const WORKER_VERSION = '4.16.0';
  * have to reach the PC? If yes, bump WORKER_VERSION above. If no, paste the
  * fingerprint. Either way it is answered out loud.
  *
- * ANSWERED OUT LOUD, 4.16.0 → 4.16.0: the last change to src/lib/social was
- * invariants.ts, and `grep -rn 'checkCampaignInvariants\\|campaignStates'
- * worker/ desktop/` returns nothing. Those checks run where the counts are
- * drawn — the dashboard and the round page — and the worker neither calls them
- * nor reads their output. The code is inside worker.cjs because the alias puts
- * all of src/lib/social there; nothing on the PC executes it. So the version
- * holds, and the machine is not asked to install a build that would change
- * nothing for it.
+ * ANSWERED OUT LOUD, 4.16.0 → 4.17.0, AND THIS TIME IT IS YES.
+ *
+ * src/lib/social/plan.ts changed, and plan.ts is the planner the PC worker
+ * runs every sixty seconds — the one file this comment was written about.
+ * planDrip() retired a fully-blocked launch without writing a word: every
+ * "פרסם עכשיו" over groups that already hold a row from another round queued
+ * nothing, logged nothing, and left the post reading "טרם פורסם" in the
+ * library for ever. The loop beside it has said so since it was written; this
+ * one never did. The fix only works where the planner actually runs, so the
+ * machine has to take it.
+ *
+ * The other src/lib/social files in this change — crash.ts, campaign.ts,
+ * client.ts, activity.ts, activity-text.ts — are NOT in the worker's import
+ * closure (account-scope, cities, compose, discovery, errors, plan, rules,
+ * tenant, time, types, and through plan: slots, projection,
+ * campaign-schedule, status, variants). They ride along inside worker.cjs
+ * because the alias puts all of src/lib/social there; nothing on the PC
+ * executes them.
  */
-export const WORKER_FINGERPRINT = 'be6de3c83cc7bbf7';
+export const WORKER_FINGERPRINT = '083870f0ca62df0a';

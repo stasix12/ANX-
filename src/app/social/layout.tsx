@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { CrashLogger } from '@/components/social/CrashLogger';
 import { SocialGate } from '@/components/social/SocialGate';
 import { ToastProvider } from '@/components/social/ui';
 
@@ -98,6 +99,11 @@ export default function SocialLayout({ children }: { children: React.ReactNode }
     <div className="social-theme">
       {/* The gate is INSIDE the toast provider: it renders the login screen,
           which needs to be able to raise a toast like every other screen. */}
+      {/* Renders nothing. It listens for the faults a render boundary cannot
+          see — a throw inside a click handler, a rejected promise nobody
+          awaited — and writes one redacted line per fault to the activity
+          log. See CrashLogger. */}
+      <CrashLogger />
       <ToastProvider>
         <SocialGate>{children}</SocialGate>
       </ToastProvider>

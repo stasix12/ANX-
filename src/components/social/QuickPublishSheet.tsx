@@ -200,6 +200,38 @@ export function QuickPublishSheet({
     [selectedIds, item],
   );
 
+  /*
+   * THE DOUBLE-TAP GUARD ON THE BUTTON THAT ACTUALLY PUBLISHES.
+   *
+   * `busy` below is React state: it is not set until the render AFTER the
+   * click, so two taps dispatched inside one task both reach quickPublish().
+   * Measured on the settings screen, which had the identical shape: three
+   * same-task taps produced three full saves. Here the cost is not a wasted
+   * request — it is a second set of queue rows for the same post and the same
+   * groups, i.e. the same text posted twice to each of them under the owner's
+   * own Facebook account. There is no undo for that.
+   *
+   * A ref flips synchronously inside the handler, which is the only thing
+   * that can stop the second tap. One tap behaves exactly as it always did.
+   * Same guard, same reason, as `writing` in src/app/social/page.tsx.
+   *
+   * ─── AND IT MUST BE DECLARED HERE, ABOVE THE EARLY RETURN ──────────────
+   *
+   * It was below it, and that is the crash the owner photographed: "המסך הזה
+   * נתקע". The library mounts this sheet permanently with `open={false}`
+   * (library/page.tsx), so the first render takes `if (!open || !item)
+   * return null` and never reaches the hook. The first tap on "פרסם" renders
+   * past that line, React counts one hook more than last time, and throws
+   * #310 — a client render error, which is why the boundary showed no
+   * `digest` and there was nothing to look up.
+   *
+   * It was unreachable by every test in this suite and by `next build`:
+   * react-hooks/rules-of-hooks is the check that names this in one line, and
+   * `next lint` was removed in Next 16, so nothing had run it in this repo
+   * for as long as the rule has existed here.
+   */
+  const publishing = useRef(false);
+
   if (!open || !item) return null;
 
   const post = item.post;
@@ -222,23 +254,6 @@ export function QuickPublishSheet({
     if (mode === 'schedule' && (!date || !time)) return 'בחרו תאריך ושעה.';
     return null;
   }
-
-  /*
-   * THE DOUBLE-TAP GUARD ON THE BUTTON THAT ACTUALLY PUBLISHES.
-   *
-   * `busy` below is React state: it is not set until the render AFTER the
-   * click, so two taps dispatched inside one task both reach quickPublish().
-   * Measured on the settings screen, which had the identical shape: three
-   * same-task taps produced three full saves. Here the cost is not a wasted
-   * request — it is a second set of queue rows for the same post and the same
-   * groups, i.e. the same text posted twice to each of them under the owner's
-   * own Facebook account. There is no undo for that.
-   *
-   * A ref flips synchronously inside the handler, which is the only thing
-   * that can stop the second tap. One tap behaves exactly as it always did.
-   * Same guard, same reason, as `writing` in src/app/social/page.tsx.
-   */
-  const publishing = useRef(false);
 
   async function onConfirm() {
     const problem = localProblem();

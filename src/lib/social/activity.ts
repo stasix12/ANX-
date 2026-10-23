@@ -133,6 +133,28 @@ const KIND: Record<string, ActivityKind> = {
    * that was never going to come.
    */
   campaign_repeat_needs_launch: 'failure',
+  /*
+   * A SCREEN THAT STOPPED DRAWING, and the fault behind it.
+   *
+   * "המסך הזה נתקע" arrived as a screenshot with no route, no line and no
+   * code, because `error.digest` exists only for a SERVER error and that one
+   * was a client render. These two lines are what make the next one
+   * answerable: `screen_crashed` is written by the route boundary
+   * (src/app/social/error.tsx), `client_error` by CrashLogger for the faults
+   * a boundary never sees — a throw inside a click handler, a rejected
+   * promise nobody awaited. Both carry a six-character code that is stable
+   * for one fault, and both are redacted by crash.ts before they are stored.
+   *
+   * 'failure' rather than 'system': nothing published, and a screen the owner
+   * could not use is his problem before it is the machine's.
+   */
+  screen_crashed: 'failure',
+  client_error: 'failure',
+  /* A launch that went out on the slower path because the database has not
+     run supabase/social-schema-v28.sql. Nothing was lost — the drip falls
+     back to whole minutes — but it is a sentence that tells him to run the
+     update, so it may not be filed where it can be scrolled past. */
+  schedule_column_missing: 'failure',
   campaign_deleted: 'round',
   stopped_campaign_swept: 'round',
   worker_run: 'round',

@@ -579,6 +579,13 @@ async function main(): Promise<void> {
     /groupMinGapSeconds[\s\S]{0,160}groupMinGapMinutes \?\? 0\) \* 60/.test(tunerCode),
     'the tuner reads the group surcharge in minutes again and subtracts it from a value in seconds',
   );
+  /* NOT ONE "דק׳" LEFT OVER A SECONDS VALUE. Every sentence in this sheet
+     that names the gap goes through gapChoiceLabel; a bare דק׳ beside {gap}
+     or {addGap} is the same mistake in a corner nobody looked at. */
+  is(
+    !/\{gap\}<\/Num> דק׳|\{addGap\}<\/Num> דק׳/.test(tunerCode),
+    'a sentence in the tuner still prints a seconds value followed by the word דק׳',
+  );
 
   /*
    * ═══════════════════════════════════════════════════════════════════════ *

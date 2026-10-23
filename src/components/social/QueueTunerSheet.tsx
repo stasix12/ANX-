@@ -927,7 +927,8 @@ export function QueueTunerSheet({
                 אחרי השינוי: הפרסום האחרון בתור יצא ב-
                 <Clock iso={nextLastISO} withDay={!sameLocalDay(new Date(nextLastISO), new Date(snap!.at))} /> במקום ב-
                 <Clock iso={currentLastISO} withDay={!sameLocalDay(new Date(currentLastISO), new Date(snap!.at))} />. הפרסום הראשון בתור יֵצֵא ב-
-                <Clock iso={new Date(anchor!).toISOString()} />, וכל אחד אחריו <Num>{gap}</Num> דק׳ אחרי הקודם.
+                <Clock iso={new Date(anchor!).toISOString()} />, וכל אחד אחריו{' '}
+                <span dir="auto" className="font-bold">{gapChoiceLabel(gap)}</span> אחרי הקודם.
               </Notice>
             )}
 
@@ -1065,7 +1066,8 @@ export function QueueTunerSheet({
                       </>
                     ) : (
                       <>
-                        <Num>{picked.length}</Num> פרסומים חדשים ייכנסו אחרי האחרון שבתור, אחד כל <Num>{addGap}</Num> דק׳: הראשון ב-
+                        <Num>{picked.length}</Num> פרסומים חדשים ייכנסו אחרי האחרון שבתור, אחד כל{' '}
+                        <span dir="auto" className="font-bold">{gapChoiceLabel(addGap)}</span>: הראשון ב-
                         <Clock iso={addFirstISO} withDay={!sameLocalDay(new Date(addFirstISO), new Date(snap!.at))} /> והאחרון ב-
                         <Clock iso={addLastISO} withDay={!sameLocalDay(new Date(addLastISO), new Date(snap!.at))} />.
                       </>

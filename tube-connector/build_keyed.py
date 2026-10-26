@@ -31,11 +31,12 @@ def keyed_body():
     carbon = half_body().rotate([180, 0, 0])                         # z מ-0 עד -37
     hs = cyl(54, 6) + thread(thr_major, h_thr_len).translate([0, 0, 6])
     hs += teeth(teeth_h).translate([0, 0, h_face])
-    hs -= cyl(bore, h_face + 5).translate([0, 0, 1])                 # קדח המוביל, עד המחיצה
+    hs -= cyl(bore, h_face + 6).translate([0, 0, -1])                # קדח המוביל, פתוח עד המרכז
     body = carbon + hs
-    stop = cyl(bore + 1, 2) - cyl(stop_d, 4).translate([0, 0, -1])
+    stop = cyl(bore + 1, 2) - cyl(stop_d, 4).translate([0, 0, -1])    # טבעת עצירה עם מעבר אוויר 31
     body += stop.translate([0, 0, -1])
-    body -= cyl(bore, 2.5, d2=stop_d).translate([0, 0, -1 - 2.5 + 0.01]) - cyl(stop_d, 10).translate([0,0,-10])  # (פזה למחיצה מצד הקרבון)
+    body -= cyl(stop_d, 10).translate([0, 0, -5])                     # מוודא מעבר פתוח דרך המרכז
+    body -= cyl(bore, (bore - stop_d)/2, d2=stop_d).translate([0, 0, -1 - (bore - stop_d)/2 + 0.01])  # פזה 45° מתחת לטבעת (הדפסה בלי תמיכות)
     return body
 
 def handle_nut():

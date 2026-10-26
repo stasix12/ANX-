@@ -41,17 +41,7 @@ def keyed_body():
 
 def handle_nut():
     L = nut_thr + n_plain + nut_lip
-    from manifold3d import CrossSection as CS
-    R0, z_dome = nut_od/2, L - 9.0
-    r_lip = 40.5/2 + 3.5
-    prof = [(0, 0), (R0, 0)]
-    for i in range(1, 25):
-        th = (i/24)*np.pi/2
-        prof.append((r_lip + (R0 - r_lip)*np.cos(th), z_dome + (L - z_dome)*np.sin(th)))
-    prof.append((0, L))
-    outer = Manifold.revolve(CS([prof]), F)
-    for i in range(n_ribs):
-        outer -= Manifold.cylinder(L - 5, 1.6, 1.6, 24).translate([R0 + 0.7, 0, 2.5]).rotate([0, 0, 360*i/n_ribs])
+    outer = nut_outer(L)
     tl = nut_thr + 1
     hole = (cyl(thr_major - 2*depth + 2*thr_cl, tl + 1) + thread(thr_major, tl + 1, thr_cl)).translate([0, 0, -1])
     hole += cyl(thr_major + 2*thr_cl + 2, 2, d2=thr_major + 2*thr_cl - 2).translate([0, 0, -0.01])

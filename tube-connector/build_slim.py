@@ -20,9 +20,9 @@ pitch, depth, thr_major, thr_cl = 3.0, 1.2, 52.0, 0.4
 ring_taper_L, ring_cyl_L, ring_back_d = 7.0, 5.0, 45.0
 ring_slit = 2.0
 # אום
-nut_thr, nut_plain, nut_lip = 15, 0, 5
+nut_thr, nut_plain, nut_lip = 15, 0, 6
 nut_L  = nut_thr + nut_plain + nut_lip   # 23
-nut_od, n_ribs = 59, 16
+nut_od, n_ribs = 62, 16
 
 cyl = lambda d, h, n=F, d2=None: Manifold.cylinder(h, d/2, (d2 if d2 else d)/2, n)
 box = lambda x, y, z: Manifold.cube([x, y, z])
@@ -63,23 +63,23 @@ def ring():
     c += box(30, ring_slit, 30).translate([0, -ring_slit/2, -1])
     return r - c
 
-def nut():
-    # אום מקומר: גליל בצד הגוף, כיפה כלפי חוץ (ללא תמיכות - נסגר כלפי מעלה)
+def nut_outer(L):
+    """גוף חיצוני של אום: גליל עם פזה 45° (5 מ"מ) בצד השפה, וחריצי אחיזה. מודפס כשהשפה למטה."""
     from manifold3d import CrossSection
-    R0, z_dome = nut_od/2, 11.0            # רדיוס מלא עד z=11, משם קשת
-    r_lip = 40.5/2 + 3.5                   # רדיוס בקצה החיצוני (דופן 3.5 מעל השפה)
-    prof = [(0,0), (R0,0)]
-    for i in range(1, 25):
-        t = i/24
-        th = t*np.pi/2
-        prof.append((r_lip + (R0-r_lip)*np.cos(th), z_dome + (nut_L-z_dome)*np.sin(th)))
-    prof.append((0, nut_L))
+    R0 = nut_od/2; ch = 5.0
+    prof = [(0,0), (R0,0), (R0, L-ch), (R0-ch, L), (0, L)]
     outer = Manifold.revolve(CrossSection([prof]), F)
-    for i in range(n_ribs):                # חריצי אחיזה רדודים לאורך
-        outer -= Manifold.cylinder(nut_L-5, 1.6, 1.6, 24).translate([R0+0.7, 0, 2.5]).rotate([0,0,360*i/n_ribs])
+    for i in range(n_ribs):
+        outer -= Manifold.cylinder(L-9, 1.6, 1.6, 24).translate([R0+0.7, 0, 2.5]).rotate([0,0,360*i/n_ribs])
+    return outer
+
+def nut():
+    # ציר z: 0 = צד ההברגה (פונה לגוף). להדפסה הופכים: השפה למטה, ההברגה למעלה -> אין תקרה תלויה בפנים.
+    outer = nut_outer(nut_L)
     tl = nut_thr + 1
     hole = (cyl(thr_major-2*depth+2*thr_cl, tl+1) + thread(thr_major, tl+1, thr_cl)).translate([0,0,-1])
     hole += cyl(thr_major+2*thr_cl+2, 2, d2=thr_major+2*thr_cl-2).translate([0,0,-0.01])
+    hole += cyl(thr_major+2*thr_cl+1, nut_plain+1).translate([0,0,nut_thr-0.5])
     hole += cyl(40.5, nut_lip+2).translate([0,0,nut_thr+nut_plain-0.01])
     hole += cyl(40.5, 1, d2=42.5).translate([0,0,nut_L-0.99])
     return outer - hole

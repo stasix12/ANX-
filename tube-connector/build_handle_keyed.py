@@ -6,6 +6,14 @@ src = open('build_handle.py').read().split("me = handle.to_mesh()")[0]
 src = src.replace("stub_L     = 65.0", "stub_L     = %.1f" % (pilot_L + flange_t)).replace("grip_L     = 195.0", "grip_L     = 215.0")
 exec(src)
 handle_k = handle + (flange_part() - cyl(od - 2*wall, pilot_L + flange_t + 2).translate([0, 0, -1]))
+# בית למחבר שואב 36 בקצה האחיזה: התרחבות ל-46 חיצוני, קדח 36.2 בעומק 50, מדרגה 45° ל-26
+sock_id, sock_od, sock_depth = 36.2, 46.0, 50.0
+end_p = pts[-1]; d = end_dir
+sock = cyl(od, 6, d2=sock_od).translate([0,0,-sock_depth-6]) + cyl(sock_od, sock_depth).translate([0,0,-sock_depth])
+hole = cyl(sock_id, sock_depth+1).translate([0,0,-sock_depth]) + cyl(od-2*wall, (sock_id-(od-2*wall))/2, d2=sock_id).translate([0,0,-sock_depth-(sock_id-(od-2*wall))/2+0.01])
+hole += cyl(sock_id+1.5, 1.5, d2=sock_id).translate([0,0,-1.49])
+sock = (sock - hole)
+handle_k = handle_k + place(sock, end_p, d) - place(hole, end_p, d)
 m = handle_k.rotate([0, -angle_deg, 0]).rotate([180, 0, 0])
 bb = m.bounding_box(); m = m.translate([-(bb[0]+bb[3])/2, -(bb[1]+bb[4])/2, -bb[2]])
 bb = m.bounding_box(); print('handle_keyed', m.status(), 'height %.1f, footprint %.0f x %.0f, %.0f cm3' % (bb[5], bb[3]-bb[0], bb[4]-bb[1], m.volume()/1000))

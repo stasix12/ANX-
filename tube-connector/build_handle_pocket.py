@@ -50,8 +50,8 @@ notch_gap = 3.5                                             # דופן שנשא�
 z_n0 = uc + dz/2 + hole_d/2 + notch_gap
 x_n0 = apex + h2                                            # מגובה מרכז החור הרחוק ועד התחתית
 notch = Manifold.extrude(rounded([(x_n0, z_n0), (D + 10, z_n0), (D + 10, u0 + Lp + 10), (x_n0, u0 + Lp + 10)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
-pocket -= notch
-# אותה מדרגה גם בפינה שלכיוון הכיפוף (מתחת לחור הקרוב), כך שידית השסתום עוברת בכל כיוון הרכבה
+# (המדרגה לכיוון הקצה החופשי בוטלה - ציר ידית השסתום יושב בצד הכיפוף, לפי התמונה)
+# מדרגה בפינה שלכיוון הכיפוף (מתחת לחור הקרוב)
 z_n1 = uc - dz/2 - hole_d/2 - notch_gap
 notch2 = Manifold.extrude(rounded([(x_n0, u0 - 20), (D + 10, u0 - 20), (D + 10, z_n1), (x_n0, z_n1)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
 pocket -= notch2
@@ -83,8 +83,7 @@ for yy in (od/2 - 0.5, od/2 - 2.9, od/2 - 3.2):
             c = p.mean(0); r = np.linalg.norm(p - c, axis=1); ds.append(round(2*r.mean(), 1))
     cbc.add((round(od/2 - yy, 1), tuple(sorted(set(ds)))))
 print('CHECK counterbore dia at depth 0.5 / 2.9 / 3.2:', sorted(cbc), ' source: 8.0 x 3.0 -> 8.6 x 3.0, then 4.8')
-_far = _hit([apex + h2 - 1.5, 12.0, uc], [0, 0, 1.0], 2); print('CHECK wall beyond far hole edge, above the notch (mm):', round(_far[-1] - (uc + dz/2 + hole_d/2), 1), ' required >= 4')
-_nt = _hit([apex + h2 + 3.0, 12.0, z_n0 + 5], [-1.0, 0, 0], 0); print('CHECK notch top below rest surface (mm):', round(_nt[-1] - apex, 1), ' required: %.1f' % h2)
+_far = _hit([apex + h2 - 1.5, 12.0, uc], [0, 0, 1.0], 2); print('CHECK solid wall beyond far hole edge (mm):', round(_far[-1] - (uc + dz/2 + hole_d/2), 1), ' required >= 14')
 _nt2 = _hit([apex + h2 + 3.0, 12.0, z_n1 - 5], [-1.0, 0, 0], 0); print('CHECK bend-side notch top (mm):', round(_nt2[-1] - apex, 1), ' required: %.1f' % h2)
 _nb = _hit([apex + h1 + 1.5, 12.0, uc], [0, 0, -1.0], 2); print('CHECK wall before near hole edge, above bend-side notch (mm):', round((uc - dz/2 - hole_d/2) - _nb[0], 1), ' required >= 4')
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה

@@ -42,7 +42,7 @@ bar_xz = Manifold.extrude(rounded([(bar_x0 - 5, zb0), (D, zb0), (D, z_far), (bar
 bar = bar_xy ^ bar_xz
 blk = Manifold.hull(tube_seg + bar) if hasattr(Manifold, 'hull') else (tube_seg + bar).hull()
 pocket = blk - box(100, ch_w, Lp + 20).translate([apex, -ch_w/2, u0 - 10])        # התעלה, תקרה שטוחה על דופן הצינור
-for x, z in ((apex + h1, uc - dz/2), (apex + h2, uc + dz/2)):   # הקרוב למשענת - לכיוון הכיפוף; הרחוק - לכיוון הקצה החופשי
+for x, z in ((apex + h1, uc + dz/2), (apex + h2, uc - dz/2)):   # לפי ההרכבה בתמונה: החור העמוק (29.0) לכיוון הכיפוף, הרדוד (13.4) לכיוון הקצה החופשי
     pocket -= Manifold.cylinder(60, hole_d/2, hole_d/2, 32).rotate([-90, 0, 0]).translate([x, -30, z])
     pocket -= Manifold.cylinder(cb_depth + 5, cb_d/2, cb_d/2, 32).rotate([-90, 0, 0]).translate([x, od/2 - cb_depth, z])  # שקע בדופן +y
 # מדרגה לידית השסתום (הלחץ): חיתוך בפינה התחתונה של הדפנות, מעבר לחור הרחוק לכיוון הקצה החופשי
@@ -52,7 +52,7 @@ x_n0 = apex + h2                                            # מגובה מרכ�
 notch = Manifold.extrude(rounded([(x_n0, z_n0), (D + 10, z_n0), (D + 10, u0 + Lp + 10), (x_n0, u0 + Lp + 10)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
 # (המדרגה לכיוון הקצה החופשי בוטלה - ציר ידית השסתום יושב בצד הכיפוף, לפי התמונה)
 # מדרגה בפינה שלכיוון הכיפוף (מתחת לחור הקרוב)
-z_n1 = uc - dz/2 - hole_d/2 - notch_gap
+z_n1 = (uc - dz/2) - cb_d/2 - 1.5                    # המדרגה מגיעה עד 1.5 מ"מ מקצה שקע הבורג העמוק
 notch2 = Manifold.extrude(rounded([(x_n0, u0 - 20), (D + 10, u0 - 20), (D + 10, z_n1), (x_n0, z_n1)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
 pocket -= notch2
 # --- בדיקה עצמית מול המקור (קרניים וחתכים) ---
@@ -71,7 +71,7 @@ for yy in (9.0, 10.5, 12.0):
         per = np.linalg.norm(np.diff(p, axis=0), axis=1).sum()
         if 10 < per < 20:
             c = p.mean(0); r = np.linalg.norm(p - c, axis=1); hc.add((round(c[0] - apex, 1), round(c[2] - uc, 1), round(2*r.mean(), 2)))
-print('CHECK holes (below rest surface, along, dia):', sorted(hc), ' source: (13.4, -7.0, 4.5) (29.0, +7.0, 4.5) -> holes 4.8')
+print('CHECK holes (below rest surface, along, dia):', sorted(hc), ' required: (13.4, +7.0) (29.0, -7.0), dia 4.8')
 cbc = set()
 for yy in (od/2 - 0.5, od/2 - 2.9, od/2 - 3.2):
     sec = _t.section(plane_origin=[0, yy, 0], plane_normal=[0, 1, 0]); ds = []
@@ -83,9 +83,9 @@ for yy in (od/2 - 0.5, od/2 - 2.9, od/2 - 3.2):
             c = p.mean(0); r = np.linalg.norm(p - c, axis=1); ds.append(round(2*r.mean(), 1))
     cbc.add((round(od/2 - yy, 1), tuple(sorted(set(ds)))))
 print('CHECK counterbore dia at depth 0.5 / 2.9 / 3.2:', sorted(cbc), ' source: 8.0 x 3.0 -> 8.6 x 3.0, then 4.8')
-_far = _hit([apex + h2 - 1.5, 12.0, uc], [0, 0, 1.0], 2); print('CHECK solid wall beyond far hole edge (mm):', round(_far[-1] - (uc + dz/2 + hole_d/2), 1), ' required >= 14')
+_far = _hit([apex + h1, 12.0, uc], [0, 0, 1.0], 2); print('CHECK solid wall beyond the shallow hole, free-end side (mm):', round(_far[-1] - (uc + dz/2 + hole_d/2), 1), ' required >= 14')
 _nt2 = _hit([apex + h2 + 3.0, 12.0, z_n1 - 5], [-1.0, 0, 0], 0); print('CHECK bend-side notch top (mm):', round(_nt2[-1] - apex, 1), ' required: %.1f' % h2)
-_nb = _hit([apex + h1 + 1.5, 12.0, uc], [0, 0, -1.0], 2); print('CHECK wall before near hole edge, above bend-side notch (mm):', round((uc - dz/2 - hole_d/2) - _nb[0], 1), ' required >= 4')
+_nb = _hit([apex + h2 + 5.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK wall between deep-hole counterbore edge and notch (mm):', round((uc - dz/2 - cb_d/2) - _nb[0], 1), ' required: 1.5')
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה
 handle_p = handle_k + place(pocket, bend_end, d)
 handle_p -= place(cyl(od - 2*wall, grip_L + 2).translate([0, 0, -1]), bend_end, d)      # מעבר האוויר נשאר פתוח

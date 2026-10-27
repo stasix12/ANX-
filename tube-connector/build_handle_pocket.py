@@ -24,7 +24,7 @@ apex = od/2                                                 # משטח המשע�
 h1, h2, dz = 13.4, 29.0, 14.0
 hole_d, cb_d, cb_depth = 4.8, 8.6, 3.0              # מרווח ביטחון: חור 4.8 ל-M4, שקע 8.6
 margin_end = 14.0                                           # דופן מלאה אחרי קצה החור הרחוק (לפני הפזה/העיגול)
-u0 = -12.0                                                  # הגוש מתחיל 12 מ"מ בתוך הקשת (קדימה לכיוון הקימור)
+u0 = -18.0                                                  # מקסימום קדימה: 18 מ"מ בתוך הקשת (מעבר לזה התעלה פוגעת בדופן הצינור המעוקל)
 uc = u0 + 36.0                                              # מרכז זוג החורים לאורך
 D = apex + h2 + 10.0                                        # תחתית הגוש: 10 מ"מ מתחת למרכז החור העמוק
 R = od/2; rr = 6.0                                          # רדיוס עיגול הקצוות
@@ -67,7 +67,7 @@ z_n3a = uc
 notch3 = Manifold.extrude(rounded([(x_n3, u0 - 10), (D + 10, u0 - 10), (D + 10, z_n3a), (x_n3, z_n3a)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
 pocket -= notch3
 # חיתוך אלכסוני בצד הכיפוף (לפי הפנל הכחול): מדופן הצינור בתחילת הגוש, באלכסון כלפי מטה ואחורה, מעל הברגים
-Ld = 35.0                                                   # אורך האלכסון לאורך הצינור (זווית ~48° מציר הצינור)
+Ld = 18.0                                                   # אלכסון תלול יותר (~65° מציר הצינור) - חותך יותר
 diag = Manifold.extrude(CrossSection([[(apex - 0.5, u0 - 40), (D + 10, u0 - 40), (D + 10, u0 + Ld * (D + 10.5 - apex) / (D - apex)), (apex - 0.5, u0)]]), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
 pocket -= diag
 # --- בדיקה עצמית מול המקור (קרניים וחתכים) ---
@@ -105,6 +105,7 @@ _n3 = _hit([apex + 60, 12.0, uc - 4], [-1.0, 0, 0], 0); print('CHECK cut top, be
 _n3s = _hit([apex + 33.0, 12.0, uc - 30], [0, 0, 1.0], 2); print('CHECK cut ends at (mm before deep-hole center):', round((uc + dz/2) - _n3s[0], 1), ' required: 7.0')
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה
 handle_p = handle_k + place(pocket, bend_end, d)
+handle_p -= place(box(100, ch_w, Lp + 20).translate([apex, -ch_w/2, u0 - 10]), bend_end, d)   # מיישר את תקרת התעלה גם באזור הקשת (מגלח את הבליטה של הצינור המעוקל)
 handle_p -= place(cyl(od - 2*wall, grip_L + 2).translate([0, 0, -1]), bend_end, d)      # מעבר האוויר נשאר פתוח
 # ייצוא בכיוון ההדפסה (קצה האחיזה למטה)
 hp = handle_p.rotate([0, -angle_deg, 0]).rotate([180, 0, 0]); bb = hp.bounding_box(); hp = hp.translate([-(bb[0]+bb[3])/2, -(bb[1]+bb[4])/2, -bb[2]])

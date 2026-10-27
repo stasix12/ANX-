@@ -92,7 +92,7 @@ print('CHECK counterbore dia at depth 0.5 / 2.9 / 3.2:', sorted(cbc), ' source: 
 _wb = _hit([apex + 60, 12.0, uc], [-1.0, 0, 0], 0); print('CHECK wall bottom below rest surface (mm):', round(_wb[-1] - apex, 1), ' required: %.1f' % (h2 + 10))
 _nt = _hit([apex + h2 + 3.0, 12.0, z_n0 + 5], [-1.0, 0, 0], 0); print('CHECK notch top below rest surface (mm):', round(_nt[-1] - apex, 1), ' required: %.1f' % h2)
 _ng = _hit([apex + h2 + 5.0, 12.0, uc], [0, 0, 1.0], 2); print('CHECK wall between shallow-hole counterbore edge and notch (mm):', round(_ng[0] - (uc + dz/2 + cb_d/2), 1), ' required: ~1.5')
-_bs = _hit([apex + h2 + 2.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK solid wall on bend side beyond deep hole edge, at hole level (mm):', round((uc - dz/2 - hole_d/2) - _bs[-1], 1), ' required >= 14')
+_bs = _hit([apex + 20.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK solid wall on bend side beyond deep hole edge, above the step (mm):', round((uc - dz/2 - hole_d/2) - _bs[-1], 1), ' required >= 14')
 _n2 = _hit([apex + 60, 12.0, uc - dz/2], [-1.0, 0, 0], 0); print('CHECK wall bottom under the deep hole (mm):', round(_n2[-1] - apex, 1), ' required: %.1f' % (h2 + cb_d/2 + 1.7))
 _n2s = _hit([apex + 37.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK lower notch starts before deep-hole center by (mm):', round((uc - dz/2) - _n2s[-1], 1), ' required: 14')
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה

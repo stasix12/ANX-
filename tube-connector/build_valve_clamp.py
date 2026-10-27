@@ -7,9 +7,10 @@ tube_d, cl = 38.0, 0.3
 bore = tube_d + cl; od = 50.0; L = 32.0              # ציר הצינור = z
 lug_w, lug_h = 12.0, 14.0                            # אוזני ברגי ההידוק (M5) בשני הצדדים, מישור החלוקה y=0
 bolt_d, head_d, nut_af = 5.4, 9.5, 8.2               # M5: קדח, ראש, אום (across flats)
-plate_t, plate_h, plate_w = 6.0, 48.0, 36.0          # דפנות הכיס: עובי כל דופן, גובה מעל ציר הצינור, רוחב (לאורך z)
+plate_t, plate_h, plate_w = 6.0, 50.0, 32.0          # דפנות הכיס: עובי, גובה מעל ציר הצינור, רוחב = אורך הטבעת
 block_w = 16.3                                       # רוחב הכיס: תעלה 16.0 בקובץ המקור + 0.3 מרווח
 hole_d, hole_cb = 4.4, 8.0                           # M4 דרך + שקע לראש מצד הצינור
+hole1_below = 9.0                                    # החור הקרוב: 9 מ"מ מתחת לדופן הצינור (כמו בתמונה)
 pitch = 21.0; dx = dy = pitch/np.sqrt(2)             # 14.85 x 14.85
 
 cyl = lambda d, h, n=F, d2=None: Manifold.cylinder(h, d/2, (d2 if d2 else d)/2, n)
@@ -40,10 +41,9 @@ def top_half():
         p += box(8, 8, plate_w).rotate([0,0,45]).translate([s_*(W/2 + 4), y0 + 6, z0]) ^ box(W + 16, 10, plate_w).translate([-W/2 - 8, y0, z0])
     r += p
     r -= cyl(bore, L+2).translate([0,0,-1])
-    r -= box(block_w, plate_h, plate_w + 2).translate([-block_w/2, y0 + 7, z0 - 1])      # התעלה; רצפה 7 מ"מ מעל הטבעת
-    zc, yc = L/2, y0 + 7 + (plate_h - y0 - 7)/2
-    for sz, sy in ((-1, -1), (1, 1)):   # שני החורים באלכסון, דרך שתי הדפנות
-        z, y = zc + sz*dx/2, yc + sy*dy/2
+    r -= box(block_w, plate_h, plate_w + 2).translate([-block_w/2, bore/2 + 0.15, z0 - 1])   # התעלה פתוחה עד הצינור: גוש הפליז נשען על הצינור
+    zc = L/2; y1 = bore/2 + hole1_below; y2 = y1 + dy
+    for z, y in ((zc - dx/2, y1), (zc + dx/2, y2)):   # שני החורים באלכסון, דרך שתי הדפנות
         r -= cyl(hole_d, 60, 32).rotate([0,90,0]).translate([-30, y, z])
         r -= cyl(hole_cb, 10, 32).rotate([0,90,0]).translate([-W/2 - 10 + 2.0, y, z])    # שקע לראש בדופן אחת (עומק 2)
     return r

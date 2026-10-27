@@ -45,6 +45,12 @@ pocket = blk - box(100, ch_w, Lp + 20).translate([apex, -ch_w/2, u0 - 10])      
 for x, z in ((apex + h1, uc - dz/2), (apex + h2, uc + dz/2)):   # הקרוב למשענת - לכיוון הכיפוף; הרחוק - לכיוון הקצה החופשי
     pocket -= Manifold.cylinder(60, hole_d/2, hole_d/2, 32).rotate([-90, 0, 0]).translate([x, -30, z])
     pocket -= Manifold.cylinder(cb_depth + 5, cb_d/2, cb_d/2, 32).rotate([-90, 0, 0]).translate([x, od/2 - cb_depth, z])  # שקע בדופן +y
+# מדרגה לידית השסתום (הלחץ): חיתוך בפינה התחתונה של הדפנות, מעבר לחור הרחוק לכיוון הקצה החופשי
+notch_gap = 4.5                                             # דופן שנשארת מעבר לקצה החור הרחוק
+z_n0 = uc + dz/2 + hole_d/2 + notch_gap
+x_n0 = apex + h2                                            # מגובה מרכז החור הרחוק ועד התחתית
+notch = Manifold.extrude(rounded([(x_n0, z_n0), (D + 10, z_n0), (D + 10, u0 + Lp + 10), (x_n0, u0 + Lp + 10)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
+pocket -= notch
 # --- בדיקה עצמית מול המקור (קרניים וחתכים) ---
 _me = pocket.to_mesh(); _t = trimesh.Trimesh(np.asarray(_me.vert_properties)[:, :3], np.asarray(_me.tri_verts), process=False)
 def _hit(o, d, k=0):
@@ -73,7 +79,8 @@ for yy in (od/2 - 0.5, od/2 - 2.9, od/2 - 3.2):
             c = p.mean(0); r = np.linalg.norm(p - c, axis=1); ds.append(round(2*r.mean(), 1))
     cbc.add((round(od/2 - yy, 1), tuple(sorted(set(ds)))))
 print('CHECK counterbore dia at depth 0.5 / 2.9 / 3.2:', sorted(cbc), ' source: 8.0 to depth 3.0, then 4.5')
-_far = _hit([apex + h2, 12.0, uc], [0, 0, 1.0], 2); print('CHECK solid wall beyond far hole edge (mm):', round(_far[-1] - (uc + dz/2 + hole_d/2), 1), ' required >= %.0f' % margin_end)
+_far = _hit([apex + h2 - 1.5, 12.0, uc], [0, 0, 1.0], 2); print('CHECK wall beyond far hole edge, above the notch (mm):', round(_far[-1] - (uc + dz/2 + hole_d/2), 1), ' required >= 4')
+_nt = _hit([apex + h2 + 3.0, 12.0, z_n0 + 5], [-1.0, 0, 0], 0); print('CHECK notch top below rest surface (mm):', round(_nt[-1] - apex, 1), ' required: %.1f' % h2)
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה
 handle_p = handle_k + place(pocket, bend_end, d)
 handle_p -= place(cyl(od - 2*wall, grip_L + 2).translate([0, 0, -1]), bend_end, d)      # מעבר האוויר נשאר פתוח

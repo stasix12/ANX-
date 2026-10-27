@@ -24,7 +24,7 @@ apex = od/2                                                 # משטח המשע�
 h1, h2, dz = 13.4, 29.0, 14.0
 hole_d, cb_d, cb_depth = 4.8, 8.6, 3.0              # מרווח ביטחון: חור 4.8 ל-M4, שקע 8.6
 margin_end = 14.0                                           # דופן מלאה אחרי קצה החור הרחוק (לפני הפזה/העיגול)
-u0 = 0.0                                                    # הגוש מתחיל מיד בסוף הכיפוף (קדימה לכיוון הקימור)
+u0 = -12.0                                                  # הגוש מתחיל 12 מ"מ בתוך הקשת (קדימה לכיוון הקימור)
 uc = u0 + 36.0                                              # מרכז זוג החורים לאורך
 D = apex + h2 + 10.0                                        # תחתית הגוש: 10 מ"מ מתחת למרכז החור העמוק
 R = od/2; rr = 6.0                                          # רדיוס עיגול הקצוות
@@ -66,6 +66,10 @@ x_n3 = apex + 30.5
 z_n3a = uc
 notch3 = Manifold.extrude(rounded([(x_n3, u0 - 10), (D + 10, u0 - 10), (D + 10, z_n3a), (x_n3, z_n3a)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
 pocket -= notch3
+# חיתוך אלכסוני בצד הכיפוף (לפי הפנל הכחול): מדופן הצינור בתחילת הגוש, באלכסון כלפי מטה ואחורה, מעל הברגים
+Ld = 35.0                                                   # אורך האלכסון לאורך הצינור (זווית ~48° מציר הצינור)
+diag = Manifold.extrude(CrossSection([[(apex - 0.5, u0 - 40), (D + 10, u0 - 40), (D + 10, u0 + Ld * (D + 10.5 - apex) / (D - apex)), (apex - 0.5, u0)]]), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
+pocket -= diag
 # --- בדיקה עצמית מול המקור (קרניים וחתכים) ---
 _me = pocket.to_mesh(); _t = trimesh.Trimesh(np.asarray(_me.vert_properties)[:, :3], np.asarray(_me.tri_verts), process=False)
 def _hit(o, d, k=0):
@@ -95,8 +99,9 @@ for yy in (od/2 - 0.5, od/2 - 2.9, od/2 - 3.2):
     cbc.add((round(od/2 - yy, 1), tuple(sorted(set(ds)))))
 print('CHECK counterbore dia at depth 0.5 / 2.9 / 3.2:', sorted(cbc), ' source: 8.0 x 3.0 -> 8.6 x 3.0, then 4.8')
 _bs = _hit([apex + 20.0, 12.0, uc], [0, 0, 1.0], 2); print('CHECK solid wall on free-end side beyond deep hole edge, above the step (mm):', round(_bs[0] - (uc + dz/2 + hole_d/2), 1), ' required >= 14')
+_dg = _hit([apex + h1 + 4.5, 12.0, uc - dz/2], [0, 0, -1.0], 2); print('CHECK wall before shallow-hole counterbore edge, just below it (mm):', round((uc - dz/2 - cb_d/2) - _dg[-1], 1), ' required >= 8')
 _n2 = _hit([apex + 60, 12.0, uc + dz/2], [-1.0, 0, 0], 0); print('CHECK wall bottom under the deep hole (mm):', round(_n2[-1] - apex, 1), ' required: 35.0')
-_n3 = _hit([apex + 60, 12.0, uc - 10], [-1.0, 0, 0], 0); print('CHECK cut top, bend-side half (mm below surface):', round(_n3[-1] - apex, 1), ' required: 30.5')
+_n3 = _hit([apex + 60, 12.0, uc - 4], [-1.0, 0, 0], 0); print('CHECK cut top, bend-side half (mm below surface):', round(_n3[-1] - apex, 1), ' required: 30.5')
 _n3s = _hit([apex + 33.0, 12.0, uc - 30], [0, 0, 1.0], 2); print('CHECK cut ends at (mm before deep-hole center):', round((uc + dz/2) - _n3s[0], 1), ' required: 7.0')
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה
 handle_p = handle_k + place(pocket, bend_end, d)

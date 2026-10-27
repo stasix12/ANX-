@@ -100,7 +100,7 @@ _ng = _hit([apex + h2 + 5.0, 12.0, uc], [0, 0, 1.0], 2); print('CHECK wall betwe
 _bs = _hit([apex + 20.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK solid wall on bend side beyond deep hole edge, above the step (mm):', round((uc - dz/2 - hole_d/2) - _bs[-1], 1), ' required >= 14')
 _n2 = _hit([apex + 60, 12.0, uc - dz/2], [-1.0, 0, 0], 0); print('CHECK wall bottom under the deep hole (mm):', round(_n2[-1] - apex, 1), ' required: 35.0')
 _n3 = _hit([apex + 60, 12.0, uc + 10], [-1.0, 0, 0], 0); print('CHECK cut top, free-end half (mm below surface):', round(_n3[-1] - apex, 1), ' required: 30.5')
-_n3s = _hit([apex + 30.0, 12.0, uc + 30], [0, 0, -1.0], 2); print('CHECK cut starts at (mm from deep-hole center, toward free end):', round(_n3s[-1] - (uc - dz/2), 1), ' required: 7.0')
+_n3s = _hit([apex + 33.0, 12.0, uc + 30], [0, 0, -1.0], 2); print('CHECK cut starts at (mm from deep-hole center, toward free end):', round(_n3s[-1] - (uc - dz/2), 1), ' required: 7.0')
 _n2s = _hit([apex + 37.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK lower notch starts before deep-hole center by (mm):', round((uc - dz/2) - _n2s[-1], 1), ' required: 14')
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה
 handle_p = handle_k + place(pocket, bend_end, d)

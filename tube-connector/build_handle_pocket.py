@@ -14,54 +14,66 @@ hole = cyl(sock_id, sock_depth+1).translate([0,0,-sock_depth]) + cyl(od-2*wall, 
 hole += cyl(sock_id+1.5, 1.5, d2=sock_id).translate([0,0,-1.49])
 handle_k = handle + place(sock - hole, end_p, d) - place(hole, end_p, d)
 
-# ---- כיס לשסתום, שקוע בגוף - העתק מדויק של התעלה בידית הווילונות (נמדד מהקובץ):
-#      תעלה 16.0, תקרה עגולה r=8 (לבוסט העגול של השסתום), קודקוד התקרה על דופן הצינור,
-#      חורים 4.5: 13.4 ו-29.0 מתחת לקודקוד, 14.0 ביניהם לאורך; שקע 8.0 בעומק 3.0 בדופן אחת. ----
-from manifold3d import CrossSection
-ch_w, groove_r = 16.0, 8.0
-pk_len, u0 = 80.0, 10.0                                     # אורך הגוש, מרחק מסוף הכיפוף
-apex = od/2                                                 # קודקוד התקרה = דופן הצינור (19 מציר הצינור), כמו במקור
-h1, h2, dz = 13.4, 29.0, 14.0                               # מהקודקוד לחורים, ומרחק החורים לאורך (21.0 באלכסון)
-D = apex + h2 + 10.0                                        # תחתית הגוש: 10 מ"מ מתחת למרכז החור הרחוק
+# ---- כיס לשסתום, שקוע בגוף. מידות מהקובץ של ידית הווילונות (נמדד):
+#      תעלה 16.0; החורים 13.4 ו-29.0 מתחת למשטח שעליו נשען השסתום (קודקוד התקרה במקור = דופן הצינור),
+#      14.0 ביניהם לאורך (21.0 באלכסון); קוטר 4.5; שקע 8.0 בעומק 3.0 בדופן אחת.
+#      כאן התקרה שטוחה (בהדפסה היא אנכית - אין תלייה), הקצוות מעוגלים, מרווח ביטחון אחרי החור הרחוק. ----
+from manifold3d import CrossSection, JoinType
+ch_w = 16.0
+apex = od/2                                                 # משטח המשענת של השסתום = דופן הצינור (19 מציר הצינור)
+h1, h2, dz = 13.4, 29.0, 14.0
 hole_d, cb_d, cb_depth = 4.5, 8.0, 3.0
+margin_end = 14.0                                           # דופן מלאה אחרי קצה החור הרחוק (לפני הפזה/העיגול)
+u0 = 8.0                                                    # תחילת הגוש אחרי סוף הכיפוף
+uc = u0 + 36.0                                              # מרכז זוג החורים לאורך
+D = apex + h2 + 10.0                                        # תחתית הגוש: 10 מ"מ מתחת למרכז החור הרחוק
+R = od/2; rr = 6.0                                          # רדיוס עיגול הקצוות
+z_far = uc + dz/2 + hole_d/2 + margin_end                   # סוף האזור המלא בעומק החורים
+Lp = (z_far - u0) + (D - R)                                 # הפזה 45° מתחילה אחרי אזור הביטחון
 box = lambda x, y, z: Manifold.cube([x, y, z])
-R = od/2; ch = D - R                                        # פזה 45° בקצה הפונה לקצה החופשי (למטה בהדפסה)
-prof = [(0, u0), (D, u0), (D, u0 + pk_len - ch), (R, u0 + pk_len), (0, u0 + pk_len)]
-blk = Manifold.extrude(CrossSection([prof]), od).translate([0, 0, -od/2])   # (x_local, z_local, y_local)
-blk = blk.rotate([-90, 0, 0]).mirror([0, 0, 1])                             # -> (x_local, y_local, z_local)
-chan = box(100, ch_w, pk_len + 2).translate([apex + groove_r, -ch_w/2, u0 - 1])
-chan += Manifold.cylinder(pk_len + 2, groove_r, groove_r, 64).translate([apex + groove_r, 0, u0 - 1])   # תקרה עגולה
-pocket = blk - chan
-uc = u0 + 38.0
-for x, z in ((apex + h1, uc - dz/2), (apex + h2, uc + dz/2)):   # הקרוב לקודקוד - לכיוון הכיפוף; הרחוק - לכיוון הקצה החופשי
+def rounded(poly, r):
+    cs = CrossSection([poly]); return cs.offset(-r, JoinType.Miter).offset(r, JoinType.Round, 1.0, 64)
+# פרופיל x-z: קצה עליון (לכיפוף) מעוגל, קצה תחתון (לקצה החופשי) בפזה 45° - ללא תלייה בהדפסה
+profA = [(0, u0 - 2), (D, u0 - 2), (D, z_far), (R, u0 + Lp), (0, u0 + Lp)]
+A = Manifold.extrude(rounded(profA, rr), od + 2).translate([0, 0, -od/2 - 1]).rotate([-90, 0, 0]).mirror([0, 0, 1])
+# פרופיל x-y: רוחב הצינור, פינות תחתונות מעוגלות
+profB = [(0, -od/2), (D, -od/2), (D, od/2), (0, od/2)]
+B = Manifold.extrude(rounded(profB, rr), Lp + 10).translate([0, 0, u0 - 5])
+blk = A ^ B
+blk += Manifold.cylinder(Lp + 4, od/2, od/2, F).translate([0, 0, u0 - 2]) ^ box(od/2 + 1, od + 2, Lp + 6).translate([0, -od/2 - 1, u0 - 3])  # מילוי בין הגוש לצינור
+pocket = blk - box(100, ch_w, Lp + 20).translate([apex, -ch_w/2, u0 - 10])        # התעלה, תקרה שטוחה על דופן הצינור
+for x, z in ((apex + h1, uc - dz/2), (apex + h2, uc + dz/2)):   # הקרוב למשענת - לכיוון הכיפוף; הרחוק - לכיוון הקצה החופשי
     pocket -= Manifold.cylinder(60, hole_d/2, hole_d/2, 32).rotate([-90, 0, 0]).translate([x, -30, z])
     pocket -= Manifold.cylinder(cb_depth + 5, cb_d/2, cb_d/2, 32).rotate([-90, 0, 0]).translate([x, od/2 - cb_depth, z])  # שקע בדופן +y
-# --- בדיקה עצמית מול המקור (באותה שיטה: קרניים וחתכים) ---
+# --- בדיקה עצמית מול המקור (קרניים וחתכים) ---
 _me = pocket.to_mesh(); _t = trimesh.Trimesh(np.asarray(_me.vert_properties)[:, :3], np.asarray(_me.tri_verts), process=False)
-prof_chk = [round(_t.ray.intersects_location(np.array([[-50.0, yy, uc]]), np.array([[1.0, 0, 0]]))[0][:, 0].max() - apex, 2) for yy in (-7, -4, 0, 4, 7)]
-print('CHECK ceiling profile (from apex) at y=-7..7:', prof_chk, ' source: [4.13, 1.07, 0, 1.07, 4.13]')
-_w = _t.ray.intersects_location(np.array([[apex + 20.0, -30.0, uc]]), np.array([[0, 1.0, 0]]))[0][:, 1]
-print('CHECK channel width:', round(np.sort(_w)[2] - np.sort(_w)[1], 2), ' source: 16.0')
-hc = []
-for yy in (9.0, 10.0, 11.0):
+def _hit(o, d, k=0):
+    loc = _t.ray.intersects_location(np.array([o]), np.array([d]))[0]; return np.sort(loc[:, {0:0,1:1,2:2}[k]])
+prof_chk = [round(_hit([-50.0, yy, uc], [1.0, 0, 0], 0).max() - apex, 2) for yy in (-7, -4, 0, 4, 7)]
+print('CHECK ceiling (flat) from the rest surface at y=-7..7:', prof_chk, ' required: all 0')
+_w = _hit([apex + 20.0, -30.0, uc], [0, 1.0, 0], 1); print('CHECK channel width:', round(_w[2] - _w[1], 2), ' source: 16.0')
+hc = set()
+for yy in (9.0, 10.5, 12.0):
     sec = _t.section(plane_origin=[0, yy, 0], plane_normal=[0, 1, 0])
     for ent in sec.entities:
         p = sec.vertices[ent.points]
         if len(p) < 8 or not ent.closed: continue
         per = np.linalg.norm(np.diff(p, axis=0), axis=1).sum()
         if 10 < per < 20:
-            c = p.mean(0); r = np.linalg.norm(p - c, axis=1); hc.append((round(c[0] - apex, 2), round(c[2] - uc, 2), round(2*r.mean(), 2)))
-print('CHECK holes (below apex, along, dia):', sorted(set(hc)), ' source: (13.4, -7.0, 4.5) (29.0, +7.0, 4.5)')
-cbc = []
-for yy in (od/2 - 0.5, od/2 - 2.9):
-    sec = _t.section(plane_origin=[0, yy, 0], plane_normal=[0, 1, 0])
+            c = p.mean(0); r = np.linalg.norm(p - c, axis=1); hc.add((round(c[0] - apex, 1), round(c[2] - uc, 1), round(2*r.mean(), 2)))
+print('CHECK holes (below rest surface, along, dia):', sorted(hc), ' source: (13.4, -7.0, 4.5) (29.0, +7.0, 4.5)')
+cbc = set()
+for yy in (od/2 - 0.5, od/2 - 2.9, od/2 - 3.2):
+    sec = _t.section(plane_origin=[0, yy, 0], plane_normal=[0, 1, 0]); ds = []
     for ent in sec.entities:
         p = sec.vertices[ent.points]
         if len(p) < 8 or not ent.closed: continue
         per = np.linalg.norm(np.diff(p, axis=0), axis=1).sum()
-        if 20 < per < 30:
-            c = p.mean(0); r = np.linalg.norm(p - c, axis=1); cbc.append((round(yy, 1), round(2*r.mean(), 2)))
-print('CHECK counterbore dia at depth 0.5 / 2.9:', cbc, ' source: 8.0, depth 3.0')
+        if 10 < per < 30:
+            c = p.mean(0); r = np.linalg.norm(p - c, axis=1); ds.append(round(2*r.mean(), 1))
+    cbc.add((round(od/2 - yy, 1), tuple(sorted(set(ds)))))
+print('CHECK counterbore dia at depth 0.5 / 2.9 / 3.2:', sorted(cbc), ' source: 8.0 to depth 3.0, then 4.5')
+_far = _hit([apex + h2, 12.0, uc], [0, 0, 1.0], 2); print('CHECK solid wall beyond far hole edge (mm):', round(_far[-1] - (uc + dz/2 + hole_d/2), 1), ' required >= %.0f' % margin_end)
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה
 handle_p = handle_k + place(pocket, bend_end, d)
 handle_p -= place(cyl(od - 2*wall, grip_L + 2).translate([0, 0, -1]), bend_end, d)      # מעבר האוויר נשאר פתוח

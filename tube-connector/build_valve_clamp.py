@@ -36,9 +36,7 @@ def top_half():
     z0 = (L - plate_w)/2
     # כיס: גוש מלא מהטבעת ועד הגובה, ואז חיתוך התעלה שבה יושב גוש הפליז (פתוחה למעלה ובשני הקצוות)
     p = box(W, plate_h - y0, plate_w).translate([-W/2, y0, z0])
-    p += box(W + 8, 8, plate_w).translate([-W/2 - 4, y0 - 2, z0])              # בסיס רחב יותר על הטבעת
-    for s_ in (-1, 1):                                                           # כתפיים 45° לבסיס
-        p += box(8, 8, plate_w).rotate([0,0,45]).translate([s_*(W/2 + 4), y0 + 6, z0]) ^ box(W + 16, 10, plate_w).translate([-W/2 - 8, y0, z0])
+    p += box(W, 8, plate_w).translate([-W/2, y0 - 2, z0])                      # חפיפה לטבעת
     r += p
     r -= cyl(bore, L+2).translate([0,0,-1])
     r -= box(block_w, plate_h, plate_w + 2).translate([-block_w/2, bore/2 + 0.15, z0 - 1])   # התעלה פתוחה עד הצינור: גוש הפליז נשען על הצינור

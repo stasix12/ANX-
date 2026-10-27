@@ -61,11 +61,10 @@ x_n2 = apex + h2 + cb_d/2 + 1.7                              # 35 מתחת למ�
 z_n2 = (uc - dz/2) - 14.0                                    # מתחיל 14 מ"מ לפני מרכז הבורג העמוק (לכיוון הכיפוף)
 notch2 = Manifold.extrude(rounded([(x_n2, z_n2), (D + 10, z_n2), (D + 10, u0 + Lp + 10), (x_n2, u0 + Lp + 10)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
 pocket -= notch2
-# שקע לראש ציר הלחצן (לפי הסימון האדום): בין שני הברגים לאורך, מהקצה התחתון של הדופן ועד 22 מתחת למשטח.
-# רוחב 9 מ"מ, לא נוגע באף חור (החור הרדוד נגמר ב-15.8 עומק, החור העמוק מתחיל ב-uc-4.6 לאורך).
-x_n3 = apex + 22.0
-z_n3a, z_n3b = uc - 4.5, uc + 4.5
-notch3 = Manifold.extrude(rounded([(x_n3, z_n3a), (D + 10, z_n3a), (D + 10, z_n3b), (x_n3, z_n3b)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
+# חיתוך לפי הסימון האדום: מאמצע המרחק בין הברגים ועד הקצה החופשי, מהקצה התחתון של הדופן ועד 26.5 מתחת למשטח.
+x_n3 = apex + 26.5
+z_n3a = uc
+notch3 = Manifold.extrude(rounded([(x_n3, z_n3a), (D + 10, z_n3a), (D + 10, u0 + Lp + 10), (x_n3, u0 + Lp + 10)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
 pocket -= notch3
 # --- בדיקה עצמית מול המקור (קרניים וחתכים) ---
 _me = pocket.to_mesh(); _t = trimesh.Trimesh(np.asarray(_me.vert_properties)[:, :3], np.asarray(_me.tri_verts), process=False)
@@ -100,7 +99,8 @@ _nt = _hit([apex + h2 + 3.0, 12.0, z_n0 + 5], [-1.0, 0, 0], 0); print('CHECK not
 _ng = _hit([apex + h2 + 5.0, 12.0, uc], [0, 0, 1.0], 2); print('CHECK wall between shallow-hole counterbore edge and notch (mm):', round(_ng[0] - (uc + dz/2 + cb_d/2), 1), ' required: ~1.5')
 _bs = _hit([apex + 20.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK solid wall on bend side beyond deep hole edge, above the step (mm):', round((uc - dz/2 - hole_d/2) - _bs[-1], 1), ' required >= 14')
 _n2 = _hit([apex + 60, 12.0, uc - dz/2], [-1.0, 0, 0], 0); print('CHECK wall bottom under the deep hole (mm):', round(_n2[-1] - apex, 1), ' required: 35.0')
-_n3 = _hit([apex + 60, 12.0, uc], [-1.0, 0, 0], 0); print('CHECK pivot recess top, between the screws (mm below surface):', round(_n3[-1] - apex, 1), ' required: 22.0')
+_n3 = _hit([apex + 60, 12.0, uc + 10], [-1.0, 0, 0], 0); print('CHECK cut top, free-end half (mm below surface):', round(_n3[-1] - apex, 1), ' required: 26.5')
+_n3s = _hit([apex + 30.0, 12.0, uc + 30], [0, 0, -1.0], 2); print('CHECK cut starts at (mm from deep-hole center, toward free end):', round(_n3s[-1] - (uc - dz/2), 1), ' required: 7.0')
 _n2s = _hit([apex + 37.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK lower notch starts before deep-hole center by (mm):', round((uc - dz/2) - _n2s[-1], 1), ' required: 14')
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה
 handle_p = handle_k + place(pocket, bend_end, d)

@@ -56,6 +56,11 @@ z_n0 = (uc + dz/2) + cb_d/2 + 1.5
 x_n0 = apex + h2
 notch = Manifold.extrude(rounded([(x_n0, z_n0), (D + 10, z_n0), (D + 10, u0 + Lp + 10), (x_n0, u0 + Lp + 10)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
 pocket -= notch
+# הרחבת המדרגה קדימה, עד מעבר לציר (לפי התמונה): מתחת לשקע הבורג העמוק, לאורך הדופן עד הקצה
+x_n2 = apex + h2 + cb_d/2 + 1.7                              # 35 מתחת למשטח: 1.7 מתחת לקצה שקע הבורג העמוק
+z_n2 = (uc - dz/2) - 14.0                                    # מתחיל 14 מ"מ לפני מרכז הבורג העמוק (לכיוון הכיפוף)
+notch2 = Manifold.extrude(rounded([(x_n2, z_n2), (D + 10, z_n2), (D + 10, u0 + Lp + 10), (x_n2, u0 + Lp + 10)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
+pocket -= notch2
 # --- בדיקה עצמית מול המקור (קרניים וחתכים) ---
 _me = pocket.to_mesh(); _t = trimesh.Trimesh(np.asarray(_me.vert_properties)[:, :3], np.asarray(_me.tri_verts), process=False)
 def _hit(o, d, k=0):
@@ -87,7 +92,9 @@ print('CHECK counterbore dia at depth 0.5 / 2.9 / 3.2:', sorted(cbc), ' source: 
 _wb = _hit([apex + 60, 12.0, uc], [-1.0, 0, 0], 0); print('CHECK wall bottom below rest surface (mm):', round(_wb[-1] - apex, 1), ' required: %.1f' % (h2 + 10))
 _nt = _hit([apex + h2 + 3.0, 12.0, z_n0 + 5], [-1.0, 0, 0], 0); print('CHECK notch top below rest surface (mm):', round(_nt[-1] - apex, 1), ' required: %.1f' % h2)
 _ng = _hit([apex + h2 + 5.0, 12.0, uc], [0, 0, 1.0], 2); print('CHECK wall between shallow-hole counterbore edge and notch (mm):', round(_ng[0] - (uc + dz/2 + cb_d/2), 1), ' required: ~1.5')
-_bs = _hit([apex + h2 + 5.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK solid wall on bend side beyond deep hole edge (mm):', round((uc - dz/2 - hole_d/2) - _bs[-1], 1), ' required >= 14')
+_bs = _hit([apex + h2 + 2.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK solid wall on bend side beyond deep hole edge, at hole level (mm):', round((uc - dz/2 - hole_d/2) - _bs[-1], 1), ' required >= 14')
+_n2 = _hit([apex + 60, 12.0, uc - dz/2], [-1.0, 0, 0], 0); print('CHECK wall bottom under the deep hole (mm):', round(_n2[-1] - apex, 1), ' required: %.1f' % (h2 + cb_d/2 + 1.7))
+_n2s = _hit([apex + 37.0, 12.0, uc], [0, 0, -1.0], 2); print('CHECK lower notch starts before deep-hole center by (mm):', round((uc - dz/2) - _n2s[-1], 1), ' required: 14')
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה
 handle_p = handle_k + place(pocket, bend_end, d)
 handle_p -= place(cyl(od - 2*wall, grip_L + 2).translate([0, 0, -1]), bend_end, d)      # מעבר האוויר נשאר פתוח

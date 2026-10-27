@@ -14,22 +14,25 @@ hole = cyl(sock_id, sock_depth+1).translate([0,0,-sock_depth]) + cyl(od-2*wall, 
 hole += cyl(sock_id+1.5, 1.5, d2=sock_id).translate([0,0,-1.49])
 handle_k = handle + place(sock - hole, end_p, d) - place(hole, end_p, d)
 
-# ---- כיס לשסתום (קואורדינטות מקומיות: z לאורך האחיזה לכיוון הקצה החופשי, +x פנימה לכיפוף = "למטה", y רוחב) ----
-ch_w, wall_t, pk_len, u0 = 16.0, 7.0, 60.0, 10.0          # רוחב תעלה, עובי דופן, אורך הכיס, מרחק מסוף הכיפוף
-pk_depth = od/2 + 38.0                                      # תחתית הדפנות: 38 מ"מ מתחת לדופן הצינור
-h1, h2 = 13.4, 13.4 + 21.0/np.sqrt(2)                       # חורים: מתחת לדופן הצינור (כמו בקובץ המקור: 13.4 / 28.3)
+# ---- כיס לשסתום, שקוע בגוף (כמו בידית הווילונות): גוש ברוחב הצינור (38), התעלה 16 חתוכה לתוכו,
+#      רצפת התעלה 3 מ"מ מעל מעבר האוויר, הדפנות ישרות ובקו אחד עם הצינור. ----
+from manifold3d import CrossSection
+ch_w, pk_len, u0 = 16.0, 80.0, 10.0                         # רוחב תעלה, אורך הגוש, מרחק מסוף הכיפוף
+floor_x = (od - 2*wall)/2 + 3.0                             # רצפת התעלה: 16 מציר הצינור (3 מ"מ דופן מעל מעבר האוויר)
+D = floor_x + 36.0                                          # תחתית הגוש: 52 מציר הצינור
+h1, h2 = 13.4, 13.4 + 21.0/np.sqrt(2)                       # חורים מתחת לרצפת התעלה (כמו במקור: 13.4 / 28.3)
 hole_d, cb_d, cb_depth = 4.5, 8.0, 2.5
 dz = 21.0/np.sqrt(2)
 box = lambda x, y, z: Manifold.cube([x, y, z])
-pocket = None
-for sgn in (-1, 1):
-    w = box(pk_depth, wall_t, pk_len).translate([0, sgn*ch_w/2 if sgn > 0 else -(ch_w/2 + wall_t), u0])
-    pocket = w if pocket is None else pocket + w
-pocket -= box(100, ch_w, pk_len + 2).translate([od/2 + 0.15, -ch_w/2, u0 - 1])        # התעלה פתוחה עד הצינור
-uc = u0 + pk_len/2
-for x, z in ((od/2 + h1, uc - dz/2), (od/2 + h2, uc + dz/2)):   # החור הקרוב לצינור - לכיוון הכיפוף, הרחוק - לכיוון הקצה (כמו במקור)
+R = od/2; ch = D - R                                        # פזה 45° בקצה הפונה לקצה החופשי (למטה בהדפסה)
+prof = [(0, u0), (D, u0), (D, u0 + pk_len - ch), (R, u0 + pk_len), (0, u0 + pk_len)]
+blk = Manifold.extrude(CrossSection([prof]), od).translate([0, 0, -od/2])   # (x_local, z_local, y_local)
+blk = blk.rotate([-90, 0, 0]).mirror([0, 0, 1])                             # -> (x_local, y_local, z_local)
+pocket = blk - box(100, ch_w, pk_len + 2).translate([floor_x, -ch_w/2, u0 - 1])          # התעלה
+uc = u0 + 35.0
+for x, z in ((floor_x + h1, uc - dz/2), (floor_x + h2, uc + dz/2)):   # החור הקרוב לרצפה - לכיוון הכיפוף, הרחוק - לכיוון הקצה
     pocket -= Manifold.cylinder(60, hole_d/2, hole_d/2, 32).rotate([-90, 0, 0]).translate([x, -30, z])
-    pocket -= Manifold.cylinder(cb_depth + 5, cb_d/2, cb_d/2, 32).rotate([-90, 0, 0]).translate([x, ch_w/2 + wall_t - cb_depth, z])  # שקע בדופן +y
+    pocket -= Manifold.cylinder(cb_depth + 5, cb_d/2, cb_d/2, 32).rotate([-90, 0, 0]).translate([x, od/2 - cb_depth, z])  # שקע בדופן +y
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה
 handle_p = handle_k + place(pocket, bend_end, d)
 handle_p -= place(cyl(od - 2*wall, grip_L + 2).translate([0, 0, -1]), bend_end, d)      # מעבר האוויר נשאר פתוח

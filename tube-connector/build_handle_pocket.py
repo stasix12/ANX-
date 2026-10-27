@@ -19,10 +19,10 @@ handle_k = handle + place(sock - hole, end_p, d) - place(hole, end_p, d)
 #      14.0 ביניהם לאורך (21.0 באלכסון); קוטר 4.5; שקע 8.0 בעומק 3.0 בדופן אחת.
 #      כאן התקרה שטוחה (בהדפסה היא אנכית - אין תלייה), הקצוות מעוגלים, מרווח ביטחון אחרי החור הרחוק. ----
 from manifold3d import CrossSection, JoinType
-ch_w = 16.0
+ch_w = 16.0 + 0.4                                           # מרווח ביטחון: 0.2 לכל צד
 apex = od/2                                                 # משטח המשענת של השסתום = דופן הצינור (19 מציר הצינור)
 h1, h2, dz = 13.4, 29.0, 14.0
-hole_d, cb_d, cb_depth = 4.5, 8.0, 3.0
+hole_d, cb_d, cb_depth = 4.8, 8.6, 3.0              # מרווח ביטחון: חור 4.8 ל-M4, שקע 8.6
 margin_end = 14.0                                           # דופן מלאה אחרי קצה החור הרחוק (לפני הפזה/העיגול)
 u0 = 8.0                                                    # תחילת הגוש אחרי סוף הכיפוף
 uc = u0 + 36.0                                              # מרכז זוג החורים לאורך
@@ -46,7 +46,7 @@ for x, z in ((apex + h1, uc - dz/2), (apex + h2, uc + dz/2)):   # הקרוב ל�
     pocket -= Manifold.cylinder(60, hole_d/2, hole_d/2, 32).rotate([-90, 0, 0]).translate([x, -30, z])
     pocket -= Manifold.cylinder(cb_depth + 5, cb_d/2, cb_d/2, 32).rotate([-90, 0, 0]).translate([x, od/2 - cb_depth, z])  # שקע בדופן +y
 # מדרגה לידית השסתום (הלחץ): חיתוך בפינה התחתונה של הדפנות, מעבר לחור הרחוק לכיוון הקצה החופשי
-notch_gap = 4.5                                             # דופן שנשארת מעבר לקצה החור הרחוק
+notch_gap = 3.5                                             # דופן שנשארת מעבר לקצה החור הרחוק
 z_n0 = uc + dz/2 + hole_d/2 + notch_gap
 x_n0 = apex + h2                                            # מגובה מרכז החור הרחוק ועד התחתית
 notch = Manifold.extrude(rounded([(x_n0, z_n0), (D + 10, z_n0), (D + 10, u0 + Lp + 10), (x_n0, u0 + Lp + 10)], 3.0), od + 4).translate([0, 0, -od/2 - 2]).rotate([-90, 0, 0]).mirror([0, 0, 1])
@@ -57,7 +57,7 @@ def _hit(o, d, k=0):
     loc = _t.ray.intersects_location(np.array([o]), np.array([d]))[0]; return np.sort(loc[:, {0:0,1:1,2:2}[k]])
 prof_chk = [round(_hit([-50.0, yy, uc], [1.0, 0, 0], 0).max() - apex, 2) for yy in (-7, -4, 0, 4, 7)]
 print('CHECK ceiling (flat) from the rest surface at y=-7..7:', prof_chk, ' required: all 0')
-_w = _hit([apex + 20.0, -30.0, uc], [0, 1.0, 0], 1); print('CHECK channel width:', round(_w[2] - _w[1], 2), ' source: 16.0')
+_w = _hit([apex + 20.0, -30.0, uc], [0, 1.0, 0], 1); print('CHECK channel width:', round(_w[2] - _w[1], 2), ' source: 16.0 (+0.4 clearance)')
 hc = set()
 for yy in (9.0, 10.5, 12.0):
     sec = _t.section(plane_origin=[0, yy, 0], plane_normal=[0, 1, 0])
@@ -67,7 +67,7 @@ for yy in (9.0, 10.5, 12.0):
         per = np.linalg.norm(np.diff(p, axis=0), axis=1).sum()
         if 10 < per < 20:
             c = p.mean(0); r = np.linalg.norm(p - c, axis=1); hc.add((round(c[0] - apex, 1), round(c[2] - uc, 1), round(2*r.mean(), 2)))
-print('CHECK holes (below rest surface, along, dia):', sorted(hc), ' source: (13.4, -7.0, 4.5) (29.0, +7.0, 4.5)')
+print('CHECK holes (below rest surface, along, dia):', sorted(hc), ' source: (13.4, -7.0, 4.5) (29.0, +7.0, 4.5) -> holes 4.8')
 cbc = set()
 for yy in (od/2 - 0.5, od/2 - 2.9, od/2 - 3.2):
     sec = _t.section(plane_origin=[0, yy, 0], plane_normal=[0, 1, 0]); ds = []
@@ -78,7 +78,7 @@ for yy in (od/2 - 0.5, od/2 - 2.9, od/2 - 3.2):
         if 10 < per < 30:
             c = p.mean(0); r = np.linalg.norm(p - c, axis=1); ds.append(round(2*r.mean(), 1))
     cbc.add((round(od/2 - yy, 1), tuple(sorted(set(ds)))))
-print('CHECK counterbore dia at depth 0.5 / 2.9 / 3.2:', sorted(cbc), ' source: 8.0 to depth 3.0, then 4.5')
+print('CHECK counterbore dia at depth 0.5 / 2.9 / 3.2:', sorted(cbc), ' source: 8.0 x 3.0 -> 8.6 x 3.0, then 4.8')
 _far = _hit([apex + h2 - 1.5, 12.0, uc], [0, 0, 1.0], 2); print('CHECK wall beyond far hole edge, above the notch (mm):', round(_far[-1] - (uc + dz/2 + hole_d/2), 1), ' required >= 4')
 _nt = _hit([apex + h2 + 3.0, 12.0, z_n0 + 5], [-1.0, 0, 0], 0); print('CHECK notch top below rest surface (mm):', round(_nt[-1] - apex, 1), ' required: %.1f' % h2)
 bend_end = pts[-2]                                          # סוף הקשת = תחילת האחיזה

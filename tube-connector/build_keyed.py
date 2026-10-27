@@ -7,8 +7,9 @@ exec(open('build_slim.py').read().split("def save")[0])     # פרמטרים + h
 # צד הידית (z חיובי מהמרכז)
 h_thr_len = 15.0;  h_face = 6.0 + h_thr_len          # הברגה 6..21, פנים ב-21
 teeth_n, teeth_h, r_in, r_out = 24, 2.0, 19.5, 25.0
-pilot_L, flange_t, flange_od = 20.0, 6.0, 49.0
-n_plain = 8.0                                         # אום הידית: הברגה 15 + בית לאוגן 8 + שפה 5
+pilot_L, flange_t, flange_od = 20.0, 6.0, 49.5
+sock_od, sock_L, lip_bore = 44.0, 40.0, 44.6        # בית לידית מאחורי האוגן; שפת אום הידית עוברת מעליו
+n_plain = 11.0                                        # אום הידית: הברגה 15 + בית לאוגן ולמעבר 11 + שפה 6
 
 def teeth(h, shrink=0.0, n=teeth_n):
     """שיניים רדיאליות: כל שן היא hull של 6 נקודות בקואורדינטות קוטביות (דפנות מישוריות רדיאליות).
@@ -46,9 +47,23 @@ def handle_nut():
     hole = (cyl(thr_major - 2*depth + 2*thr_cl, tl + 1) + thread(thr_major, tl + 1, thr_cl)).translate([0, 0, -1])
     hole += cyl(thr_major + 2*thr_cl + 2, 2, d2=thr_major + 2*thr_cl - 2).translate([0, 0, -0.01])
     hole += cyl(flange_od + 1.0, n_plain + 1).translate([0, 0, nut_thr - 0.5])     # בית לאוגן
-    hole += cyl(40.5, nut_lip + 2).translate([0, 0, nut_thr + n_plain - 0.01])
-    hole += cyl(40.5, 1, d2=42.5).translate([0, 0, L - 0.99])
+    hole += cyl(lip_bore, nut_lip + 2).translate([0, 0, nut_thr + n_plain - 0.01])
+    hole += cyl(lip_bore, 1, d2=lip_bore + 2).translate([0, 0, L - 0.99])
     return outer - hole, L
+
+def stub_adapter():
+    """חלק נפרד: מוביל 38 לתוך הגוף + אוגן שיניים + בית 38.3 שהידית מודבקת לתוכו. ציר z: 0 = קצה המוביל."""
+    f = cyl(38.0, pilot_L)
+    f += cyl(flange_od, flange_t).translate([0, 0, pilot_L])
+    f += teeth(teeth_h, 0.3).rotate([0, 0, 180/teeth_n]).rotate([180, 0, 0]).translate([0, 0, pilot_L])
+    f += cyl(flange_od, (flange_od - sock_od)/2, d2=sock_od).translate([0, 0, pilot_L + flange_t])   # מעבר 45°
+    f += cyl(sock_od, sock_L).translate([0, 0, pilot_L + flange_t])
+    top = pilot_L + flange_t + sock_L
+    c  = cyl(26.0, top + 2).translate([0, 0, -1])                                                     # מעבר אוויר
+    c += cyl(26.0, (bore - 26.0)/2, d2=bore).translate([0, 0, top - sock_L - (bore - 26.0)/2])        # מדרגה 45°
+    c += cyl(bore, sock_L + 1).translate([0, 0, top - sock_L])                                        # בית לידית
+    c += cyl(bore + 1.5, 1.5, d2=bore).translate([0, 0, top - 1.49])
+    return f - c
 
 def flange_part():
     """מוביל 38 + אוגן עם שיניים, ציר z: 0 = קצה המוביל"""

@@ -33,14 +33,14 @@ Lp = (z_far - u0) + (D - R)                                 # הפזה 45° מת
 box = lambda x, y, z: Manifold.cube([x, y, z])
 def rounded(poly, r):
     cs = CrossSection([poly]); return cs.offset(-r, JoinType.Miter).offset(r, JoinType.Round, 1.0, 64)
-# פרופיל x-z: קצה עליון (לכיפוף) מעוגל, קצה תחתון (לקצה החופשי) בפזה 45° - ללא תלייה בהדפסה
-profA = [(0, u0 - 2), (D, u0 - 2), (D, z_far), (R, u0 + Lp), (0, u0 + Lp)]
-A = Manifold.extrude(rounded(profA, rr), od + 2).translate([0, 0, -od/2 - 1]).rotate([-90, 0, 0]).mirror([0, 0, 1])
-# פרופיל x-y: רוחב הצינור, פינות תחתונות מעוגלות
-profB = [(0, -od/2), (D, -od/2), (D, od/2), (0, od/2)]
-B = Manifold.extrude(rounded(profB, rr), Lp + 10).translate([0, 0, u0 - 5])
-blk = A ^ B
-blk += Manifold.cylinder(Lp + 4, od/2, od/2, F).translate([0, 0, u0 - 2]) ^ box(od/2 + 1, od + 2, Lp + 6).translate([0, -od/2 - 1, u0 - 3])  # מילוי בין הגוש לצינור
+# הגוש = hull של קטע הצינור ושל "סרגל" מעוגל בתחתית -> הקצוות משתלבים בצינור במשיקיות, בלי מדרגה
+bar_x0, zb0 = D - 14.0, u0 + 8.0
+Lt = (z_far + (D - R)) - u0                                 # קצה תחתון (לכיוון הקצה החופשי) בשיפוע 45° - ללא תלייה
+tube_seg = Manifold.cylinder(Lt, od/2, od/2, F).translate([0, 0, u0])
+bar_xy = Manifold.extrude(rounded([(bar_x0, -od/2), (D, -od/2), (D, od/2), (bar_x0, od/2)], rr), z_far - zb0).translate([0, 0, zb0])
+bar_xz = Manifold.extrude(rounded([(bar_x0 - 5, zb0), (D, zb0), (D, z_far), (bar_x0 - 5, z_far)], rr), od + 2).translate([0, 0, -od/2 - 1]).rotate([-90, 0, 0]).mirror([0, 0, 1])
+bar = bar_xy ^ bar_xz
+blk = Manifold.hull(tube_seg + bar) if hasattr(Manifold, 'hull') else (tube_seg + bar).hull()
 pocket = blk - box(100, ch_w, Lp + 20).translate([apex, -ch_w/2, u0 - 10])        # התעלה, תקרה שטוחה על דופן הצינור
 for x, z in ((apex + h1, uc - dz/2), (apex + h2, uc + dz/2)):   # הקרוב למשענת - לכיוון הכיפוף; הרחוק - לכיוון הקצה החופשי
     pocket -= Manifold.cylinder(60, hole_d/2, hole_d/2, 32).rotate([-90, 0, 0]).translate([x, -30, z])

@@ -40,7 +40,7 @@ tube_piece = handle_k ^ slab
 blk = Manifold.hull(tube_piece + P(bar))
 # חיתוכים (בקואורדינטות מקומיות, ממוקמים עם P)
 cut = box(100, ch_w, Lp + 20).translate([apex, -ch_w/2, u0 - 10])                          # התעלה
-for x, z in ((apex + h1, uc - dz/2), (apex + h2, uc + dz/2)):                              # ברגים: רדוד לכיוון הזיז, עמוק לכיוון האחיזה
+for x, z in ((apex + h1, uc - dz/2),):                                                      # בורג אחד בלבד: הרדוד (13.4). העמוק בוטל לפי בקשה
     cut += Manifold.cylinder(60, hole_d/2, hole_d/2, 32).rotate([-90, 0, 0]).translate([x, -30, z])
     cut += Manifold.cylinder(cb_depth + 5, cb_d/2, cb_d/2, 32).rotate([-90, 0, 0]).translate([x, od/2 - cb_depth, z])
 cut += xz([(apex + h2 + cb_d/2 + 1.7, u0 - 20), (D + 10, u0 - 20), (D + 10, uc + dz/2 + 14.0), (apex + h2 + cb_d/2 + 1.7, uc + dz/2 + 14.0)], 3.0)   # 35 מתחת לבורג העמוק
@@ -48,7 +48,7 @@ cut += xz([(apex + 30.5, u0 - 10), (D + 10, u0 - 10), (D + 10, uc), (apex + 30.5
 Ld = 18.0
 cut += xz([(apex - 0.5, u0 - 40), (D + 10, u0 - 40), (D + 10, u0 + Ld * (D + 10.5 - apex) / (D - apex)), (apex - 0.5, u0)])        # אלכסון
 holes_only = Manifold.compose([]) if False else None
-for x, z in ((apex + h1, uc - dz/2), (apex + h2, uc + dz/2)):
+for x, z in ((apex + h1, uc - dz/2),):
     hcyl = Manifold.cylinder(60, hole_d/2, hole_d/2, 32).rotate([-90, 0, 0]).translate([x, -30, z]) + Manifold.cylinder(cb_depth + 5, cb_d/2, cb_d/2, 32).rotate([-90, 0, 0]).translate([x, od/2 - cb_depth, z])
     holes_only = hcyl if holes_only is None else holes_only + hcyl
 handle_p = handle_k + (blk - P(cut))                                       # התעלה, האלכסון והחיתוכים - בגוש בלבד; הצינור המעוקל נשאר שלם
@@ -75,7 +75,7 @@ for yy in (9.0, 10.5, 12.0):
         if 10 < per < 20:
             cc = p.mean(0); r = np.linalg.norm(p - cc, axis=1); rel = cc - p_mid
             hc.add((round(rel @ np.array([np.cos(a*phi), 0, -np.sin(a*phi)]) - apex, 1), round(rel @ t_mid - uc, 1), round(2*r.mean(), 2)))
-print('CHECK holes (below rest surface, along, dia):', sorted(hc), ' required: (13.4, -7.0) (29.0, +7.0), dia 4.8')
+print('CHECK holes (below rest surface, along, dia):', sorted(hc), ' required: (13.4, -7.0) only, dia 4.8')
 cc_ = np.array([bend_R, 0, stub_L]); worst = 99
 for deg in np.linspace(0, angle_deg, 41):
     th = np.radians(deg); p0 = cc_ + bend_R*np.array([-np.cos(th), 0, np.sin(th)]); n = (cc_ - p0) / np.linalg.norm(cc_ - p0)

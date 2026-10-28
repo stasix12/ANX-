@@ -3,7 +3,17 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
-import { canPauseRun, canResumeRun, neverLaunched, openRows, runBadge, runProgress, type CampaignState, type RunTone } from '@/lib/social/campaign';
+import {
+  canPauseRun,
+  canResumeRun,
+  neverLaunched,
+  openRows,
+  runBadge,
+  runBadgeHref,
+  runProgress,
+  type CampaignState,
+  type RunTone,
+} from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { accountGapSeconds } from '@/lib/social/rules';
@@ -68,14 +78,41 @@ function HeroPanel({ children, ariaLabel, className = 'p-4' }: { children: React
  * colour carried no meaning. Same class of bug as the inline status lists,
  * one layer up.
  */
-function StatePill({ tone, label, live }: { tone: Tone; label: string; live: boolean }) {
-  return (
+/**
+ * ─── AND THE BADGE IS A DOOR WHEN IT HAS SOMEWHERE TO LEAD ────────────────
+ *
+ * "בריבוע של דורש טיפול / הסתיים עם כשלים אני רוצה שיהיה ניתן ללחוץ על זה
+ *  וזה יביא אותי לעמוד של הכשלים."
+ *
+ * It was a label. The owner read "הסתיים עם כשלים · 11 נכשלו", and then had
+ * to open the history screen, filter it to נכשלו, widen the range and find
+ * this run's rows among every other run's — to reach a list the badge had
+ * just counted for him.
+ *
+ * `href` comes from runBadgeHref(), off the same runBadge() call that chose
+ * the word, so the list can never be about rows the sentence did not name.
+ * When it is null the pill renders exactly as it always did: a badge that
+ * leads nowhere must not look pressable.
+ *
+ * THE LOOK IS UNCHANGED. The pill's own box keeps every class it had; the
+ * anchor around it is a transparent 44px row, which is the product's tap
+ * floor and the same height the title link beside it already reserves — so
+ * the header line does not move by a pixel.
+ */
+function StatePill({ tone, label, live, href }: { tone: Tone; label: string; live: boolean; href?: string | null }) {
+  const pill = (
     <span
       className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${TONE_TINT[tone]} ${TONE_TEXT[tone]}`}
     >
       {live && <span aria-hidden className={`pulse-dot h-1.5 w-1.5 rounded-full ${TONE_FILL[tone]}`} />}
       {label}
     </span>
+  );
+  if (!href) return pill;
+  return (
+    <Link href={href} aria-label={`${label} — פתיחת הרשימה`} className="flex min-h-11 shrink-0 items-center">
+      {pill}
+    </Link>
   );
 }
 
@@ -385,7 +422,7 @@ export function LiveCampaignHero({
             <Link href={`/social/campaigns/${campaign.id}`} dir="auto" className="block min-h-11 min-w-0 truncate py-1.5 text-[15px] font-extrabold leading-5 text-mist-100">
               {campaign.name}
             </Link>
-            <StatePill tone={pillTone} label={badge.label} live={badge.live} />
+            <StatePill tone={pillTone} label={badge.label} live={badge.live} href={runBadgeHref(badge, campaign.id)} />
           </div>
           {/* When the run started, and how many GROUPS it publishes to — both
               facts the card loaded and never showed. `startedAt` is null until

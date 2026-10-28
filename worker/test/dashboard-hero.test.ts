@@ -342,6 +342,15 @@ async function main(): Promise<void> {
                 .map((e) => e.getBoundingClientRect())
                 .filter((r) => r.width > 0 && (r.height < 40 || r.width < 24))
                 .length,
+              /*
+               * THE BADGE THAT IS NOW A DOOR — counted, so that it silently
+               * ceasing to render is a failure rather than a quiet loss.
+               * "בריבוע של דורש טיפול / הסתיים עם כשלים אני רוצה שיהיה ניתן
+               *  ללחוץ על זה." Two fixtures earn one (card 10 ended with 23
+               * failures, card 12 is waiting on a person); the size and
+               * escape rules above already apply to it like any other link.
+               */
+              badgeLinks: [...c.querySelectorAll('a[href^="/social/history?status="]')].length,
               /* And nothing escapes the card's own box. */
               escaped: [...c.querySelectorAll('a,button')].filter((e) => {
                 const r = e.getBoundingClientRect();
@@ -354,6 +363,12 @@ async function main(): Promise<void> {
 
       assert.equal(seen.overflow, false, `${width}: the page scrolls sideways`);
       assert.equal(seen.cards.length, 16, `${width}: expected 16 cards, got ${seen.cards.length}`);
+      /* Across the board, not per card: most states are about the run and
+         lead nowhere on purpose, and a badge that leads nowhere must stay a
+         plain label. */
+      const doors = seen.cards.reduce((n, c) => n + c.badgeLinks, 0);
+      assert.ok(doors >= 2, `${width}: ${doors} state badges lead to their own rows — the failed and needs-a-person runs must both offer one`);
+      seen.cards.forEach((c, i) => assert.ok(c.badgeLinks <= 1, `${width}: card ${i + 1} draws ${c.badgeLinks} badge links`));
 
       seen.cards.forEach((c, i) => {
         const at = `${width}px, card ${i + 1}`;

@@ -91,6 +91,18 @@ function HistoryScreen() {
      exactly what this screen drew before. See the note in load(). */
   const [projected, setProjected] = useState<Map<string, string | null>>(new Map());
   const [group, setGroup] = useState<string>(mapIncomingStatus(params.get('status')));
+  /*
+   * ONE RUN'S ROWS, when the owner arrived by pressing its badge.
+   *
+   * "בריבוע של דורש טיפול / הסתיים עם כשלים אני רוצה שיהיה ניתן ללחוץ על זה
+   *  וזה יביא אותי לעמוד של הכשלים."
+   *
+   * Held in state rather than read from the URL on every render, because the
+   * chip below clears it — the owner who arrived at one round's failures is
+   * one tap from everyone's, without going back and losing the outcome filter
+   * he came in with.
+   */
+  const [onlyCampaign, setOnlyCampaign] = useState<string>(params.get('campaign') ?? '');
   const [method, setMethod] = useState<PublishMethod | ''>('');
   /*
    * "All" when the owner arrived from a dashboard tile, 30 days otherwise.
@@ -141,7 +153,14 @@ function HistoryScreen() {
       } else if (days !== null && days !== undefined) {
         fromISO = new Date(Date.now() - Math.max(days, 1) * 86_400_000).toISOString();
       }
-      const page = await listQueue({ status: statuses.length ? statuses : undefined, since: fromISO, until: toISO, limit: 500, withText: true });
+      const page = await listQueue({
+        status: statuses.length ? statuses : undefined,
+        campaignId: onlyCampaign || undefined,
+        since: fromISO,
+        until: toISO,
+        limit: 500,
+        withText: true,
+      });
       setRows(page);
       /*
        * ───────── AND WHEN EACH WAITING ROW WILL ACTUALLY GO OUT ─────────
@@ -171,7 +190,7 @@ function HistoryScreen() {
     } catch (err) {
       setError(friendlyMessage(err, 'טעינה נכשלה.'));
     }
-  }, [group, range, since, until]);
+  }, [group, range, since, until, onlyCampaign]);
 
   useEffect(() => {
     load();
@@ -275,6 +294,26 @@ function HistoryScreen() {
                 className="min-w-max"
               />
             </div>
+            {/*
+              THE ROUND IT CAME FROM, NAMED AND REMOVABLE.
+              A filter the owner cannot see is a screen that lies about what
+              it is showing — he pressed a badge two screens ago and would
+              otherwise read this list as the whole history.
+            */}
+            {onlyCampaign && (
+              <div className="flex min-w-0 items-center gap-2 rounded-xl bg-ink-850 px-3 py-2">
+                <span dir="auto" className="min-w-0 truncate text-xs font-bold text-mist-300">
+                  מוצג רק הסבב: <span className="text-mist-100">{campaigns[onlyCampaign] ?? 'סבב'}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOnlyCampaign('')}
+                  className="ms-auto min-h-11 shrink-0 px-1 text-xs font-extrabold text-brand-400 underline"
+                >
+                  הצג את כל הסבבים
+                </button>
+              </div>
+            )}
             {range === 'custom' && (
               <div className="grid grid-cols-2 gap-2 [&>*]:min-w-0">
                 <label className="text-xs font-bold text-mist-500">

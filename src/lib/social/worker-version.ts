@@ -40,15 +40,23 @@ export const WORKER_VERSION = '4.19.0';
  *     faults that are this computer's own (a closed Chromium window, a
  *     dropped line), which are handed back with the attempt unspent.
  *
- * AND ANSWERED AGAIN, THIS TIME NO: the fingerprint moves, the number does
- * not. client.ts re-stamps the queue in waves of six instead of one row at a
- * time, carries a stall guard on each write and reports progress; supabase.ts
- * puts a sixty-second ceiling under every request the BROWSER makes, because
- * supabase-js sets none and a connection that dies mid-flight never settles.
- * Both are read by screens, not by the worker — the PC has its own client in
- * worker/db.ts and its own loop, and neither file is in its import closure.
- * Bumping the version for them would send the owner to reinstall for a change
- * his computer does not run.
+ * AND ANSWERED AGAIN, TWICE, BOTH TIMES NO: the fingerprint moves, the number
+ * does not.
+ *
+ *   • client.ts re-stamps the queue in waves of six instead of one row at a
+ *     time, carries a stall guard on each write and reports progress;
+ *     supabase.ts puts a sixty-second ceiling under every request the BROWSER
+ *     makes, because supabase-js sets none and a connection that dies
+ *     mid-flight never settles.
+ *   • campaign.ts's runBadge() now also returns WHICH rows its label is about,
+ *     so the dashboard's state badge can open them ("בריבוע של דורש טיפול /
+ *     הסתיים עם כשלים... זה יביא אותי לעמוד של הכשלים"), and client.ts's
+ *     listQueue can narrow to one round.
+ *
+ * All of it is read by screens, not by the worker — the PC has its own client
+ * in worker/db.ts and its own loop, and none of these files is in its import
+ * closure. Bumping the version for them would send the owner to reinstall for
+ * a change his computer does not run.
  *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, activity.ts, activity-text.ts, server/sync.ts, server/worker.ts
@@ -56,4 +64,4 @@ export const WORKER_VERSION = '4.19.0';
  * because the alias puts all of src/lib/social there; nothing on the PC
  * executes them.
  */
-export const WORKER_FINGERPRINT = 'ea4d9ac10f93c48d';
+export const WORKER_FINGERPRINT = '50f71a4bd2c979ed';

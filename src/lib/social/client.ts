@@ -1268,7 +1268,24 @@ export async function listTimelineDone(opts: { since: string; until: string; lim
 }
 
 export async function listQueue(
-  opts: { status?: QueueItem['status'][]; since?: string; until?: string; limit?: number; order?: 'asc' | 'desc'; withText?: boolean } = {},
+  opts: {
+    status?: QueueItem['status'][];
+    since?: string;
+    until?: string;
+    limit?: number;
+    order?: 'asc' | 'desc';
+    withText?: boolean;
+    /**
+     * ONE ROUND'S ROWS, for the badge that now leads here.
+     *
+     * "בריבוע של דורש טיפול / הסתיים עם כשלים... זה יביא אותי לעמוד של
+     *  הכשלים." The history screen could narrow by outcome, by window and by
+     *  method, but never by RUN — so a badge counting eleven failures on one
+     *  round could only open every round's failures at once, and the owner
+     *  was left matching names by eye.
+     */
+    campaignId?: string;
+  } = {},
 ): Promise<QueueRow[]> {
   /* Lean by default: only the history screen, which SEARCHES the body text
      client-side, asks for it (withText). Everyone else draws collapsed rows
@@ -1279,6 +1296,7 @@ export async function listQueue(
     .order('scheduled_at', { ascending: opts.order === 'asc' })
     .limit(opts.limit ?? 200);
   if (opts.status?.length) q = q.in('status', opts.status);
+  if (opts.campaignId) q = q.eq('campaign_id', opts.campaignId);
   if (opts.since) q = q.gte('scheduled_at', opts.since);
   if (opts.until) q = q.lte('scheduled_at', opts.until);
   return unwrap<QueueRow[]>(await q);

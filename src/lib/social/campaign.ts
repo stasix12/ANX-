@@ -725,6 +725,36 @@ export interface RunBadgeView {
   tone: RunTone;
   /** A pulsing "live" dot may be drawn only when this is true. */
   live: boolean;
+  /**
+   * WHICH ROWS THE BADGE IS ABOUT — named as /social/history's own filter
+   * names them, or null when the badge is about the run as a whole.
+   *
+   * "בריבוע של דורש טיפול / הסתיים עם כשלים אני רוצה שיהיה ניתן ללחוץ על זה
+   *  וזה יביא אותי לעמוד של הכשלים."
+   *
+   * The badge is the only place in the product that knows a run ended badly,
+   * and it was a dead label: the owner read "הסתיים עם כשלים", then went
+   * hunting through a history list of every run for the eleven rows it meant.
+   * The answer is already in this function — the same `p.failed` that chose
+   * the word — so it is returned beside it rather than re-derived by a screen,
+   * where the two could disagree about which rows a sentence names.
+   *
+   * null where a list would open empty or say nothing: a paused account, a PC
+   * that is not connected, a partial count. A badge that leads nowhere stays
+   * a label.
+   */
+  rows: 'failed' | 'skipped' | 'manual' | null;
+}
+
+/**
+ * The badge's own rows, as an address — or null when it has none.
+ *
+ * Composed here and not in a component so both cards ask the same question
+ * and get the same answer, and so the status name travels with the function
+ * that chose it.
+ */
+export function runBadgeHref(badge: RunBadgeView, campaignId: string): string | null {
+  return badge.rows ? `/social/history?status=${badge.rows}&campaign=${encodeURIComponent(campaignId)}` : null;
 }
 
 export function runBadge(
@@ -738,11 +768,11 @@ export function runBadge(
 ): RunBadgeView {
   const p = state.progress;
   // Everything is held, so nothing is running whatever this run's own rows say.
-  if (ctx.globalPaused) return { label: RUN_STATE_LABEL.paused, tone: RUN_STATE_TONE.paused, live: false };
+  if (ctx.globalPaused) return { label: RUN_STATE_LABEL.paused, tone: RUN_STATE_TONE.paused, live: false, rows: null };
   // The PC that does the publishing is not connected. The run has not stopped
   // and nothing has failed — it simply is not moving, and the badge says which.
   if (state.state === 'running' && ctx.workerOnline === false) {
-    return { label: 'לא רץ — המחשב לא מחובר', tone: 'warn', live: false };
+    return { label: 'לא רץ — המחשב לא מחובר', tone: 'warn', live: false, rows: null };
   }
   /*
    * A finished run is not automatically a good outcome, and green said it was:
@@ -767,7 +797,9 @@ export function runBadge(
    * says the true thing instead: it began, and nothing has gone out.
    */
   if (state.state === 'not_started' && p.finished > 0) {
-    return { label: 'התחיל — טרם פורסם', tone: 'warn', live: false };
+    /* Nothing published, but something was decided — and whatever decided
+       it is the list worth opening. */
+    return { label: 'התחיל — טרם פורסם', tone: 'warn', live: false, rows: p.failed > 0 ? 'failed' : 'skipped' };
   }
   /*
    * A COUNT THAT IS NOT THE ROUND'S MAY NOT END THE ROUND.
@@ -790,12 +822,16 @@ export function runBadge(
    * and a new enum member would quietly move rounds between those lists.
    */
   if (state.truncated && state.state === 'completed') {
-    return { label: 'ספירה חלקית', tone: 'warn', live: false };
+    /* The counts are of a slice, so no filtered list can be promised to
+       hold what this badge is talking about. */
+    return { label: 'ספירה חלקית', tone: 'warn', live: false, rows: null };
   }
   if (state.state === 'completed' && (p.failed > 0 || p.skipped > 0)) {
     const label =
       p.failed > 0 ? 'הסתיים עם כשלים' : p.published === 0 ? 'הסתיים בלי פרסומים' : 'הסתיים — חלק דולגו';
-    return { label, tone: 'warn', live: false };
+    /* Failures first where there are both: the badge named them, and they
+       are the half he can still do something about. */
+    return { label, tone: 'warn', live: false, rows: p.failed > 0 ? 'failed' : 'skipped' };
   }
   return {
     label: RUN_STATE_LABEL[state.state],
@@ -803,6 +839,13 @@ export function runBadge(
     // The dot claims a publication is happening RIGHT NOW, so only a row a
     // worker is actually holding may light it.
     live: state.state === 'running' && p.running > 0,
+    /*
+     * "דורש טיפול" is the one state in this list that names rows waiting on a
+     * PERSON, and those are exactly /social/history's 'ידניים' bucket. The
+     * rest — running, paused, scheduled, completed cleanly — are about the run
+     * and not about a set of rows, so they stay labels.
+     */
+    rows: state.state === 'needs_attention' ? 'manual' : null,
   };
 }
 

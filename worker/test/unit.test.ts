@@ -1369,7 +1369,9 @@ console.log('unit tests OK');
    * that silently undid every sub-minute campaign.
    */
   assert.ok(
-    /export async function respaceQueue\(gapSeconds: number/.test(respace),
+    /* `\s*` because the signature wraps: it grew an onProgress callback when
+       the re-space learned to count itself on the button. */
+    /export async function respaceQueue\(\s*gapSeconds: number/.test(respace),
     'and respaceQueue takes SECONDS',
   );
   assert.ok(

@@ -2958,6 +2958,34 @@ const PENDING: QueueItem['status'][] = AUTOMATIC_WAITING_STATUSES;
 const LIVE_QUEUE_LIMIT = 500;
 
 /**
+ * How many re-stamps may be in flight at once.
+ *
+ * Every row is its own request — PostgREST has no per-row UPDATE ... FROM —
+ * and one at a time meant one mobile round trip per publication. Six is the
+ * number: enough that a queue of forty is two seconds instead of fifteen,
+ * small enough that the direction of travel still holds between waves, where
+ * the slot collisions are (see writeNewInstants).
+ */
+const RESTAMP_LANES = 6;
+
+/**
+ * NOTHING THE OWNER PRESSES MAY WAIT FOR EVER.
+ *
+ * supabase-js sets no timeout at all, so a request whose connection dies
+ * mid-flight — an ordinary event on a phone moving between cells — never
+ * settles, and a button that awaits it spins until the app is closed. Twenty-
+ * five seconds is far longer than any query here legitimately takes and far
+ * shorter than "for ever".
+ *
+ * Undefined where AbortSignal.timeout is missing, which is only very old
+ * browsers: the previous, unbounded behaviour, rather than a crash.
+ */
+const STALL_MS = 25_000;
+function stallSignal(): AbortSignal | undefined {
+  return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(STALL_MS) : undefined;
+}
+
+/**
  * Same shape as QUEUE_SELECT, but the whole target row — the tuner lists the
  * groups themselves (picture, name, channel), not just the name on a row.
  */
@@ -3509,28 +3537,53 @@ interface Restamp {
  * vacated. One retry pass is all it can ever need: after the first pass nothing
  * of ours is left on an old instant.
  *
- * Sequential, because Supabase has no per-row UPDATE ... FROM and the order is
- * the whole point.
+ * IN SMALL WAVES, NOT ONE ROW AT A TIME — and this is a fix, not a tidy-up.
+ * Supabase has no per-row UPDATE ... FROM, so every row is its own request;
+ * awaiting them one after another made the owner's phone pay a full round
+ * trip per publication. Forty-two rows over 4G is about fifteen seconds of a
+ * spinner with nothing moving on it, and a long queue is minutes — "הוא משנה
+ * אבל נתקע". A wave of RESTAMP_LANES keeps the direction of travel between
+ * waves, where the collisions are, and spends one round trip for every six
+ * rows instead of one for every row.
+ *
+ * Inside a wave two rows can still swap instants, which the retry pass above
+ * already exists to absorb; it is the same answer as before, reached a few
+ * milliseconds sooner.
+ *
+ * AND NO SINGLE WRITE MAY HANG FOR EVER. supabase-js sets no timeout, so one
+ * request stalled on a dropped mobile connection used to hold the whole sheet
+ * open with no way out but closing the app. A stalled write is counted as a
+ * failure like any other and respaceQueue reports the real numbers.
  *
  * ONE COPY, TWO CALLERS. respaceQueue() re-stamps for a new GAP and
  * rescheduleCampaignQueue() for new HOURS; they differ only in the instants
  * they compute, and a second hand-rolled copy of this loop is the kind of
  * difference that shows up as a queue half-moved.
  */
-async function writeNewInstants(work: Restamp[]): Promise<{ moved: number; failed: number; firstError: unknown }> {
+async function writeNewInstants(
+  work: Restamp[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ moved: number; failed: number; firstError: unknown }> {
   const movingLater = work.length > 0 && new Date(work[0].next).getTime() >= new Date(work[0].was).getTime();
   const ordered = movingLater ? [...work].reverse() : work;
 
   let moved = 0;
+  let done = 0;
+  const step = () => {
+    done += 1;
+    onProgress?.(done, work.length);
+  };
   const writeRow = async (item: Restamp) => {
     /* Named statuses: a stale screen must never move a row that has meanwhile
        started publishing, and `publishing` is deliberately not in PENDING. */
-    const res = await db()
+    const query = db()
       .from('social_queue')
       .update({ scheduled_at: item.next })
       .eq('id', item.id)
       .in('status', PENDING)
       .select('id');
+    const stall = stallSignal();
+    const res = await (stall ? query.abortSignal(stall) : query);
     if (res.error) return res.error;
     moved += (res.data as { id: string }[] | null)?.length ?? 0;
     return null;
@@ -3539,18 +3592,31 @@ async function writeNewInstants(work: Restamp[]): Promise<{ moved: number; faile
   const blocked: Restamp[] = [];
   let failed = 0;
   let firstError: unknown = null;
-  for (const item of ordered) {
-    const err = await writeRow(item);
-    if (!err) continue;
-    if (isDuplicateSlot(err)) {
-      blocked.push(item);
-      continue;
-    }
-    failed += 1;
-    firstError ??= err;
+  for (let at = 0; at < ordered.length; at += RESTAMP_LANES) {
+    const wave = ordered.slice(at, at + RESTAMP_LANES);
+    const errors = await Promise.all(
+      wave.map((item) =>
+        writeRow(item)
+          /* A thrown abort is this row's failure, not the run's: the rows
+             behind it still have somewhere to be. */
+          .catch((err: unknown) => err ?? new Error('write failed'))
+          .finally(step),
+      ),
+    );
+    errors.forEach((err, n) => {
+      if (!err) return;
+      if (isDuplicateSlot(err)) {
+        blocked.push(wave[n]);
+        return;
+      }
+      failed += 1;
+      firstError ??= err;
+    });
   }
+  /* The retry pass stays one at a time: it is the collision resolver, it is
+     never more than a handful of rows, and ordering is the whole point of it. */
   for (const item of blocked) {
-    const err = await writeRow(item);
+    const err = await writeRow(item).catch((e: unknown) => e ?? new Error('write failed'));
     if (!err) continue;
     /* Still taken — by a row outside this block (another campaign's, or one
        already publishing). Counted and reported, never swallowed. */
@@ -3574,7 +3640,10 @@ async function writeNewInstants(work: Restamp[]): Promise<{ moved: number; faile
  *
  * Returns the number of rows that actually moved.
  */
-export async function respaceQueue(gapSeconds: number, opts: { campaignId?: string; startAt?: string } = {}): Promise<number> {
+export async function respaceQueue(
+  gapSeconds: number,
+  opts: { campaignId?: string; startAt?: string; onProgress?: (done: number, total: number) => void } = {},
+): Promise<number> {
   if (!Number.isFinite(gapSeconds) || gapSeconds < MIN_GAP_SECONDS) {
     /* LOUD, because the UNIT changed. A caller still passing minutes would
        respace a 217-row queue to one-second spacing in silence. */
@@ -3680,7 +3749,7 @@ export async function respaceQueue(gapSeconds: number, opts: { campaignId?: stri
     // keeps the count we report equal to the number of rows that really moved.
     .filter((w) => w.next !== w.was);
 
-  const { moved, failed, firstError } = await writeNewInstants(work);
+  const { moved, failed, firstError } = await writeNewInstants(work, opts.onProgress);
 
   const cappedNote = pending.length >= LIVE_QUEUE_LIMIT ? ` (רק ${LIVE_QUEUE_LIMIT} הפרסומים הקרובים בתור תוזמנו מחדש)` : '';
   /*

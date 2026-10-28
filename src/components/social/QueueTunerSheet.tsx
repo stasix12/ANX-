@@ -146,6 +146,39 @@ const posts = (n: number) => counted(n, 'פרסום אחד', 'פרסומים', '
  */
 const MIN_GAP = MIN_GAP_SECONDS;
 const MAX_GAP = 720 * 60;
+
+/**
+ * ─── A BUTTON IN THIS SHEET ENDS, ALWAYS ────────────────────────────────
+ *
+ * "אני רוצה אחרי שאני לוחץ שינוי בקמפיין זה מייד שומר ולא טוען מסך בלי סוף."
+ *
+ * Every mutation here is a chain of requests, and supabase-js sets no timeout
+ * on any of them: one connection that dies mid-flight on a phone moving
+ * between cells never settles, the await never returns, and the spinner stays
+ * until the app is closed. The writes themselves now carry their own stall
+ * guard (client.ts), but the reads around them do not, and neither does
+ * anything added here later — so the ceiling is put on the whole mutation,
+ * once, where no future caller can forget it.
+ *
+ * Ninety seconds: longer than the slowest honest run this sheet has (a
+ * five-hundred-row re-space over a bad connection), short enough to be an
+ * answer rather than a wait. The work is NOT cancelled — a half-written queue
+ * is worse than a slow one — so the sentence says what is true: it was sent,
+ * we stopped waiting, look at the list. The reload that follows every failure
+ * here shows what actually landed.
+ */
+const SHEET_DEADLINE_MS = 90_000;
+
+function withDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const bell = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('השינוי נשלח, אבל לא קיבלנו אישור בזמן. בדקו ברשימה למטה מה נשמר — ואם לא השתנה כלום, נסו שוב.')),
+      SHEET_DEADLINE_MS,
+    );
+  });
+  return Promise.race([work, bell]).finally(() => clearTimeout(timer));
+}
 /*
  * Thirty seconds, not one minute.
  *
@@ -226,6 +259,15 @@ export function QueueTunerSheet({
   const [error, setError] = useState<string | null>(null);
   /** null · 'respace' · 'add' · `remove:<targetId>` */
   const [busy, setBusy] = useState<string | null>(null);
+  /**
+   * How far the re-space has got, so the button counts instead of spinning.
+   *
+   * "הוא משנה אבל נתקע... לא טוען מסך בלי סוף." Every row in the queue is its
+   * own request, so a long queue is genuinely many seconds of work — and a
+   * spinner with nothing moving on it is indistinguishable from a hang. This
+   * is the difference between the two, on screen.
+   */
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const [gap, setGap] = useState(0);
   const [gapDirty, setGapDirty] = useState(false);
@@ -548,8 +590,9 @@ export function QueueTunerSheet({
     async (key: string, fn: () => Promise<string>) => {
       setBusy(key);
       setError(null);
+      setProgress(null);
       try {
-        const message = await fn();
+        const message = await withDeadline(fn());
         await load(false);
         onChanged?.();
         toast(message);
@@ -568,6 +611,7 @@ export function QueueTunerSheet({
         setError(message);
       } finally {
         setBusy(null);
+        setProgress(null);
       }
     },
     [load, onChanged, toast],
@@ -616,7 +660,11 @@ export function QueueTunerSheet({
           await matchAccountGapTo(kept);
         }
       }
-      const moved = await respaceQueue(gap, { ...(campaignId ? { campaignId } : {}), ...(anchor !== null ? { startAt: new Date(anchor).toISOString() } : {}) });
+      const moved = await respaceQueue(gap, {
+        ...(campaignId ? { campaignId } : {}),
+        ...(anchor !== null ? { startAt: new Date(anchor).toISOString() } : {}),
+        onProgress: (done, total) => setProgress({ done, total }),
+      });
       return `${posts(moved)} ${agree(moved, 'תוזמן', 'תוזמנו')} מחדש, מרווח של ${gapChoiceLabel(gap)} ביניהם.`;
     });
 
@@ -706,11 +754,13 @@ export function QueueTunerSheet({
   const footer =
     !loading && !error && hasQueue ? (
       <Button size="lg" className="w-full" busy={busy === 'respace'} disabled={working || (!gapDirty && !startDirty)} onClick={commitGap}>
-        {startDirty && gapDirty
-          ? 'עדכן את מועד ההתחלה והמרווח'
-          : startDirty
-            ? 'הזז את התור למועד החדש'
-            : `עדכן מרווח ${gapLabel}`}
+        {busy === 'respace' && progress
+          ? `מעדכן… ${progress.done} מתוך ${progress.total}`
+          : startDirty && gapDirty
+            ? 'עדכן את מועד ההתחלה והמרווח'
+            : startDirty
+              ? 'הזז את התור למועד החדש'
+              : `עדכן מרווח ${gapLabel}`}
       </Button>
     ) : undefined;
 

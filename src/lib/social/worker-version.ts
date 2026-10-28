@@ -28,31 +28,32 @@ export const WORKER_VERSION = '4.19.0';
  * have to reach the PC? If yes, bump WORKER_VERSION above. If no, paste the
  * fingerprint. Either way it is answered out loud.
  *
- * ANSWERED OUT LOUD, 4.17.0 → 4.18.0, AND AGAIN IT IS YES. v4.17.0 is
- * already published (10:41 today), so reusing the number would mean the
- * release workflow refuses it and not one installed copy ever sees this —
- * which is the exact failure this fingerprint exists to prevent.
+ * ANSWERED OUT LOUD, 4.18.0 → 4.19.0, AND IT WAS YES. One change in that run
+ * executes on the PC:
  *
- * Four changes in this one run the PC, and every one of them is about the
- * same thing: a post that may already be live on Facebook.
+ *   • social-worker.ts: a publication that failed before the "פרסום" click
+ *     went back on the queue at +10 minutes, then at +20, and only the third
+ *     attempt was allowed to fail for good. One open row per group, so each
+ *     failing group was also barred from the next round for that half hour —
+ *     and the first two attempts write 'scheduled', which no screen draws, so
+ *     nothing said so. The first failure is terminal now, except for the
+ *     faults that are this computer's own (a closed Chromium window, a
+ *     dropped line), which are handed back with the attempt unspent.
  *
- *   • social-worker.ts: a post-click error that is not a PublishError was
- *     blind-retried, so the same post went to the same group twice. The step
- *     the job reached is the evidence and it now decides.
- *   • social-worker.ts: the startup sweep parked EVERY in-flight row as
- *     "may already be posted", including rows that died before the composer
- *     opened — and because one open row locks its group, those groups sat
- *     out every future round. It splits by the row's own step now.
- *   • social-worker.ts: the confirmation gate read `confirmed_at` before the
- *     status, so a cancelled publication could be resurrected; both writes
- *     are compare-and-set now.
- *   • plan.ts: a fully-blocked launch told the owner to wait for the queue
- *     while retiring itself in the same pass.
+ * AND ANSWERED AGAIN, THIS TIME NO: the fingerprint moves, the number does
+ * not. client.ts re-stamps the queue in waves of six instead of one row at a
+ * time, carries a stall guard on each write and reports progress; supabase.ts
+ * puts a sixty-second ceiling under every request the BROWSER makes, because
+ * supabase-js sets none and a connection that dies mid-flight never settles.
+ * Both are read by screens, not by the worker — the PC has its own client in
+ * worker/db.ts and its own loop, and neither file is in its import closure.
+ * Bumping the version for them would send the owner to reinstall for a change
+ * his computer does not run.
  *
- * The other src/lib/social files in this change — crash.ts, campaign.ts,
+ * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, activity.ts, activity-text.ts, server/sync.ts, server/worker.ts
- * — are NOT in the worker's import closure. They ride along inside worker.cjs
+ * — are NOT in the worker's import closure either. They are inside worker.cjs
  * because the alias puts all of src/lib/social there; nothing on the PC
  * executes them.
  */
-export const WORKER_FINGERPRINT = 'f205b994a4defc07';
+export const WORKER_FINGERPRINT = 'ea4d9ac10f93c48d';

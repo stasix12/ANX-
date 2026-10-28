@@ -1,7 +1,7 @@
 # ידית עם בית הברגה מובנה: קצה הזיז הוא חצי גוף של המחבר הדק (הברגה + מושב קוני),
 # הקרבון נכנס ישר לידית ונתפס עם הטבעת והאום הרגילים. בלי מתאם, בלי שיניים, בלי דבק.
 import numpy as np, trimesh, zipfile, io, contextlib
-src = open('build_handle_pocket.py').read().split("# ייצוא בכיוון ההדפסה")[0]
+src = open('build_handle_pocket2.py').read().split("hp = handle_p.rotate")[0]
 src = src.replace('replace("stub_L     = 65.0", "stub_L     = 42.0")', 'replace("stub_L     = 65.0", "stub_L     = 50.0")').replace('"grip_L     = 205.0"', '"grip_L     = 198.0"')
 with contextlib.redirect_stdout(io.StringIO()): exec(src)
 # גוף המחבר בקצה הזיז: הפנים (מושב) ב-z=0, הברגה 0..15, כתף 15..37, מעבר קוני 37..45 ל-38

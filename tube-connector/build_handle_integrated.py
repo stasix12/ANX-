@@ -16,6 +16,19 @@ handle_i -= cyl(od - 2*wall, 30).translate([0, 0, face + 2])
 # חור אופציונלי לפין נעילה נגד סיבוב: 5.2 מ"מ דרך הכתף והקרבון, בניצב למישור הכיפוף (ציר y)
 pin_z = 26.0
 handle_i -= Manifold.cylinder(80, 2.6, 2.6, 32).rotate([-90, 0, 0]).translate([0, -40, pin_z])
+# עין לצינור המים (9.4) בצד הכיס, מתחת לאום: מיישרת את הצינור מהשסתום אל העין שעל מחבר מוט-מוט,
+# ועוקפת את האום (רדיוס 31) עם מרווח. התחתית בשיפוע 45° להדפסה בלי תמיכות.
+eye_x, eye_r, eye_w = 39.2, 9.4/2, 2.5
+eye_z0, eye_z1 = 16.0, 60.0
+eye = Manifold.cylinder(eye_z1 - eye_z0, eye_r + eye_w, eye_r + eye_w, 48).translate([eye_x, 0, eye_z0])
+eye += Manifold.cube([eye_x - 17.0, 2*(eye_r + eye_w), eye_z1 - eye_z0]).translate([17.0, -(eye_r + eye_w), eye_z0])
+slope = Manifold.extrude(CrossSection([[(10.0, eye_z0 - 1), (60.0, eye_z0 - 1), (60.0, eye_z1 - (60.0 - 25.0)), (10.0, eye_z1 - (10.0 - 25.0))]]), 40).translate([0, 0, -20]).rotate([-90, 0, 0]).mirror([0, 0, 1])
+eye = eye ^ slope
+eye -= Manifold.cylinder(eye_z1 - eye_z0 + 2, eye_r, eye_r, 48).translate([eye_x, 0, eye_z0 - 1])
+eye -= Manifold.cylinder(1.5, eye_r + 1.5, eye_r, 48).translate([eye_x, 0, eye_z0 - 0.01])             # פזה בכניסה
+handle_i += eye
+handle_i -= cyl(od - 2*wall, 30).translate([0, 0, face + 2])                                           # מעבר האוויר נשאר פתוח
+print('CHECK hose eye clears the nut (eye inner wall radius %.1f > nut radius 31):' % (eye_x - eye_r - eye_w), eye_x - eye_r - eye_w > 31)
 # בדיקות: האום הרגיל מתברג על ההברגה; הטבעת יושבת במושב; מעבר אוויר פתוח
 N = nut().rotate([180, 0, 0])
 print('nut vs handle body at best phase:', min(round((N.rotate([0,0,a]).translate([0,0,face-shoulder]) ^ handle_i).volume(), 1) for a in range(0,360,30)), '(0 = מתברג נקי)')

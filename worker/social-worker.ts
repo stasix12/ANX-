@@ -10,7 +10,6 @@ import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, evaluateQueueItem } f
 import { Admission, laneCountFor } from './admission';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { upsertScoped } from '@/lib/social/tenant';
-import { stampText } from '@/lib/social/time';
 import { nightlyDue } from './nightly';
 import {
   DEFAULT_BROWSER,
@@ -87,7 +86,24 @@ const EXIT_ALREADY_RUNNING = 3;
 const EXIT_UPDATE = 4;
 /** How often to ask. Ten minutes is far below how often anything is pushed. */
 const UPDATE_CHECK_MS = 10 * 60_000;
-const MAX_PRE_SUBMIT_ATTEMPTS = 3;
+
+/**
+ * THE FAULTS THAT ARE OURS, NOT THE GROUP'S.
+ *
+ * A publication that fails is now final on the first attempt — the owner's
+ * instruction, and right for everything the composer can tell us about a
+ * group. These are the handful of messages that say nothing about the group
+ * at all: the Chromium window was closed (the owner watches a real window
+ * while a round runs, so this is an ordinary thing for him to do), or the
+ * machine lost its line. The row never reached Facebook, so it is handed
+ * back unspent rather than burned — otherwise one dropped Wi-Fi would mark
+ * every due row of the day "נכשל", and there is no bulk way back from that.
+ *
+ * Matched on the RAW message: these strings come from Chromium and from
+ * node's fetch, in English, before safeError() renders a Hebrew sentence.
+ */
+const LOCAL_FAULT_RE =
+  /Target (?:page, context or browser|closed)|browser has been closed|Browser closed|browserContext\.\w+: Target|net::ERR_(?:INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NETWORK_CHANGED|CONNECTION_(?:RESET|CLOSED|REFUSED|FAILED)|ADDRESS_UNREACHABLE|PROXY_CONNECTION_FAILED)|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed/i;
 
 interface WorkerState {
   id: string;
@@ -2222,17 +2238,20 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
      *
      * So a Playwright error that is not a PublishError — the window closed,
      * the context torn down, the page navigated, Chromium killed — landed on
-     * neither and fell through to the retry below. The post was already live
-     * on Facebook; ten minutes later the same post went to the same group a
-     * second time, under the owner's own account, and there is no undo.
+     * neither and fell through to the branches below. The post was already
+     * live on Facebook; the row went back on the queue and the same post went
+     * to the same group a second time, under the owner's own account, and
+     * there is no undo.
      *
      * debugMode ships TRUE (types.ts), so the owner watches a real Chromium
      * window while a round runs: closing it mid-publication is an ordinary
      * thing for him to do, not an edge case.
      *
      * The step is the stricter test and it is the one that decides now. A
-     * failure BEFORE the click still retries exactly as it did — `lastStep`
-     * is 'composer' or 'submit' there, and neither is in the pair.
+     * failure BEFORE the click goes on to the two branches below — `lastStep`
+     * is 'composer' or 'submit' there, and neither is in the pair — where
+     * this computer's own faults are handed back and everything else is
+     * final on the spot.
      */
     const afterSubmit = (err instanceof PublishError && err.afterSubmit) || mayAlreadyBePosted;
     if (afterSubmit) {
@@ -2244,27 +2263,79 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
       console.log(`[worker] ⚠ ${raw}`);
       return;
     }
-    if (attempts < MAX_PRE_SUBMIT_ATTEMPTS) {
-      const retryAt = new Date(Date.now() + 10 * 60_000 * attempts).toISOString();
-      // confirmed_at is cleared with every other per-attempt field: a stamp
-      // left from this round would let the next one skip asking (see
-      // waitForConfirmation).
-      await finish({ status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: message, screenshot_path: screenshot, confirmed_at: null });
-      /*
-       * `lastStep` is an internal id ("composer", "submit") and `retryAt` is an
-       * ISO instant; neither is a sentence, and this line is read in the bell
-       * and in /social/history. Both move to meta — nothing is lost, it just
-       * stops being the thing on screen.
-       */
-      await logActivity('warn', 'retry', `${tt.name}: ניסיון ${attempts} לפרסום נכשל. ${message} המערכת תנסה שוב ב-${stampText(retryAt)}.`, {
+    /*
+     * ─── BUT FIRST: WAS IT THE GROUP, OR WAS IT THIS COMPUTER? ────────────
+     *
+     * Only the group's own failures are final. A closed Chromium window or a
+     * dropped line never reached Facebook, so the row goes back exactly as it
+     * does when the rules could not be read a few branches up: one minute
+     * out, with the attempt handed back, because nothing was tried.
+     *
+     * AFTER the afterSubmit test above and never before it — a window closed
+     * a moment after the Post click may already be live, and that row must go
+     * to a person, not back into the queue.
+     */
+    if (LOCAL_FAULT_RE.test(raw)) {
+      await finish({
+        status: 'scheduled',
+        step: 'pending',
+        scheduled_at: new Date(Date.now() + 60_000).toISOString(),
+        attempts: item.attempts,
+        error: message,
+        screenshot_path: screenshot,
+        /* Per-attempt state, cleared like every other path that re-queues a
+           row: a stamp from this round must not answer the next round's
+           question (see waitForConfirmation). */
+        confirmed_at: null,
+      });
+      await logActivity('warn', 'retry', `${tt.name}: ${message} זה לא נספר כניסיון — הפרסום יחזור לתור בעוד דקה.`, {
         queueId: item.id,
         step: lastStep,
-        retryAt,
         detail: raw,
       });
-      console.log(`[worker] ✖ ${raw} (ינסה שוב)`);
+      console.log(`[worker] ⏲ "${tt.name}": ${raw} (לא נספר כניסיון)`);
       return;
     }
+    /*
+     * ─── ONE ATTEMPT. THEN ON TO THE NEXT GROUP. ──────────────────────────
+     *
+     * "אם לא הצליח לפרסם אחרי פעם ראשונה פשוט לדלג, שזה לא יעקב את כל הקמפיין."
+     *
+     * There used to be a ladder here: a failure before the Post click was put
+     * back on the queue at now + 10 minutes, then at now + 20, and only the
+     * THIRD attempt was allowed to fail for good. Three consequences, all of
+     * them the owner's complaint:
+     *
+     *   · THE GROUP WAS HELD for those thirty minutes. An unfinished row is an
+     *     open row, and social_queue_one_open_per_target_idx allows exactly one
+     *     open row per group — so the next round could not queue that group at
+     *     all while its predecessor sat waiting to fail.
+     *   · NOTHING SAID SO. The first two attempts write status 'scheduled',
+     *     which is not terminal, so they never appear on the dashboard's
+     *     timeline. A group in trouble went quiet for half an hour and then
+     *     turned red, with the stamp of a slot rather than of the failure.
+     *   · AND THE HALF HOUR BOUGHT LITTLE. What still reaches this branch is
+     *     everything that failed BEFORE the Post button was reachable: the
+     *     composer errors (no "כתבו משהו…" box, no text field, no enabled
+     *     "פרסום"), an upload that never finished, and a page that would not
+     *     load. The common one by far is a group this account can no longer
+     *     post in, and that fails identically on all three attempts.
+     *
+     * So the first failure is the last. The row is written terminal here and
+     * now, the group is free again the same second, and the queue goes on to
+     * the next row without waiting for anything.
+     *
+     * WHAT THIS COSTS, said plainly: a genuinely passing hiccup — one slow
+     * photo upload — used to be absorbed silently by attempt two. Now it
+     * costs that group this round. It gets the next round normally, and "נסה
+     * שוב" re-runs the row by hand (retryQueueItem accepts a failed row) —
+     * neither of which was reachable while the row sat parked mid-ladder.
+     * "המשך סבב" is NOT one of them: it re-arms needs_attention rows only.
+     *
+     * The three kinds that must NOT land here still return above: Facebook
+     * asking for a human (SessionError), a group that refuses the account
+     * (cannot_post), and anything that may already be live (afterSubmit).
+     */
     await finish({ status: 'failed', step: 'failed', error: message, screenshot_path: screenshot });
     await db.from('social_targets').update({ last_status: 'failed', last_error: message }).eq('id', tt.id);
     /*

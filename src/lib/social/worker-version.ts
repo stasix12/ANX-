@@ -9,7 +9,7 @@
  * fixed. The only evidence was a version number in one line of its terminal
  * output, which nobody reads.
  */
-export const WORKER_VERSION = '4.18.0';
+export const WORKER_VERSION = '4.19.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -55,4 +55,4 @@ export const WORKER_VERSION = '4.18.0';
  * because the alias puts all of src/lib/social there; nothing on the PC
  * executes them.
  */
-export const WORKER_FINGERPRINT = '3a4f37f255fa6817';
+export const WORKER_FINGERPRINT = 'f205b994a4defc07';

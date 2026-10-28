@@ -2722,7 +2722,12 @@ const scenario: { step: string; line: string }[] = [];
     gate.indexOf('confirmed_at: null') < gate.indexOf('if (data.confirmed_at)'),
     'the stamp has to be cleared before the first poll reads it',
   );
-  assert.ok(pcWorker.includes("status: 'scheduled', step: 'pending', scheduled_at: retryAt, error: message, screenshot_path: screenshot, confirmed_at: null"), "the worker's own retry must clear it too");
+  /* There used to be a fourth path: the worker's own retry ladder, which put a
+     failed row back on the queue and had to clear the stamp as it went. It is
+     gone — a pre-submit failure is terminal on the first attempt now (see "one
+     attempt, then the next group" further down) — so the invariant holds by
+     there being nothing left to re-queue. */
+  assert.ok(!/scheduled_at: retryAt/.test(pcWorker), 'the retry ladder is back, and with it a path that can carry a stale confirmation stamp into the next attempt');
 
   /* --- confirm is a guarded write, like retry and cancel ------------------- */
   const confirm = slice(client, 'export async function confirmQueueItem', '/** Rows a browser worker parked');
@@ -4508,6 +4513,115 @@ const scenario: { step: string; line: string }[] = [];
         /enabled: false/.test(branch),
         'a refused publication switches the group off too, instead of skipping one row and queueing the next',
       );
+    }
+
+    /*
+     * ───── ONE ATTEMPT, AND THEN THE NEXT GROUP ─────────────────────────
+     *
+     * "אם לא הצליח לפרסם אחרי פעם ראשונה פשוט לדלג, שזה לא יעקב את כל הקמפיין."
+     *
+     * The ladder this replaces put a pre-submit failure back on the queue at
+     * now + 10 minutes and then at now + 20, and only let the third attempt
+     * fail for good. The owner photographed the result: three red rows at
+     * 10:07, 10:08 and 10:09 whose trouble had started at 09:37, and nothing
+     * at all on the screen in between — because the first two attempts write
+     * 'scheduled', which is not terminal and so is drawn nowhere.
+     *
+     * The cost was not only the waiting. An unfinished row is an OPEN row,
+     * and one open row per group is the rule, so each of those groups was
+     * also barred from the next round for the whole half hour.
+     *
+     * Every anchor below is asserted unique first: the same slice written
+     * against indexOf() once pointed 1,800 lines away from the branch it was
+     * supposed to be reading, and passed.
+     */
+    {
+      const only = (needle: string) => {
+        assert.equal(localWorker.split(needle).length - 1, 1, `the anchor "${needle}" must appear exactly once`);
+        return localWorker.indexOf(needle);
+      };
+      const catchBlock = localWorker.slice(only('const mayAlreadyBePosted = lastStep ==='), only("logActivity('error', 'publish_failed'"));
+      const beforeTheFork = catchBlock.slice(0, catchBlock.indexOf('const afterSubmit ='));
+      const localFault = catchBlock.slice(
+        catchBlock.indexOf('if (LOCAL_FAULT_RE.test(raw))'),
+        catchBlock.indexOf('ONE ATTEMPT. THEN ON TO THE NEXT GROUP'),
+      );
+      const terminal = catchBlock.slice(catchBlock.indexOf('ONE ATTEMPT. THEN ON TO THE NEXT GROUP'));
+      assert.ok(beforeTheFork.length > 200 && localFault.length > 200 && terminal.length > 200, 'the three parts of the failure branch are found');
+
+      /* --- the ladder is gone ------------------------------------------- */
+      assert.ok(!/MAX_PRE_SUBMIT_ATTEMPTS/.test(localWorker), 'the attempt ladder is back');
+      assert.ok(!/10 \* 60_000 \* attempts/.test(localWorker), 'and with it the ten-minutes-times-attempts stamp');
+
+      /* --- a group's own failure is final, there and then ---------------- */
+      assert.ok(
+        /finish\(\{ status: 'failed', step: 'failed'/.test(terminal),
+        'the first pre-submit failure must be written terminal, there and then',
+      );
+      assert.ok(
+        !/status: 'scheduled'/.test(terminal),
+        'and nothing in that branch may put the row back on the queue — a parked row holds its group against the next round',
+      );
+      assert.ok(!/'retry'/.test(terminal), 'nor promise an automatic retry in the bell that will never come');
+      assert.ok(
+        TERMINAL_STATUSES.includes('failed') && !OPEN_STATUSES.includes('failed'),
+        'terminal is what frees the group the same second — that is the half of this the owner actually asked for',
+      );
+
+      /* --- but this computer's own faults are not the group's ------------ */
+      assert.ok(/status: 'scheduled'/.test(localFault) && /60_000/.test(localFault), 'a closed window or a dropped line hands the row back, a minute out');
+      assert.ok(
+        /attempts: item\.attempts/.test(localFault),
+        'and hands the attempt back with it — nothing was tried, so nothing may be spent',
+      );
+      assert.ok(/confirmed_at: null/.test(localFault), 'a re-queued row carries no confirmation stamp into the next attempt');
+      assert.ok(
+        catchBlock.indexOf('const afterSubmit =') < catchBlock.indexOf('if (LOCAL_FAULT_RE.test(raw))'),
+        'the may-already-be-live test must come FIRST: a window closed a second after the Post click may not be re-queued',
+      );
+
+      /* --- and the three outcomes that must not reach either one --------- */
+      assert.ok(/err instanceof SessionError/.test(beforeTheFork), 'Facebook asking for a human must still park the row, not burn it');
+      assert.ok(/err\.kind === 'cannot_post'/.test(beforeTheFork), 'a group that refuses this account is still skipped and switched off, not failed');
+      assert.ok(/step: 'submitted'/.test(catchBlock), 'and anything that may already be live still goes to needs_attention, never terminal');
+    }
+
+    /*
+     * ───── AND THE "OURS, NOT THE GROUP'S" TEST IS NARROW ───────────────
+     *
+     * This is the one line standing between "a group that cannot be posted
+     * in is skipped immediately" and "a dropped Wi-Fi marks the whole day
+     * נכשל". Widened by a word it would swallow the composer's own Hebrew
+     * diagnoses and re-queue them for ever; narrowed away it burns the queue
+     * the first time the owner closes the Chromium window. So it is run, not
+     * read: the literal is lifted out of the source and exercised.
+     */
+    {
+      const literal = /const LOCAL_FAULT_RE =\s*(\/[\s\S]*?\/[a-z]*);/.exec(localWorker);
+      assert.ok(literal, 'LOCAL_FAULT_RE is declared as a regular-expression literal');
+      const cut = (literal as RegExpExecArray)[1].lastIndexOf('/');
+      const re = new RegExp((literal as RegExpExecArray)[1].slice(1, cut), (literal as RegExpExecArray)[1].slice(cut + 1));
+      for (const ours of [
+        'page.goto: Target page, context or browser has been closed',
+        'browserContext.newPage: Target page, context or browser has been closed',
+        'page.click: Target closed',
+        'page.goto: net::ERR_INTERNET_DISCONNECTED at https://www.facebook.com/groups/123',
+        'net::ERR_NAME_NOT_RESOLVED',
+        'TypeError: fetch failed',
+        'getaddrinfo ENOTFOUND fbcdn.net',
+      ]) {
+        assert.ok(re.test(ours), `this is the computer's fault, not the group's: ${ours}`);
+      }
+      for (const theirs of [
+        'לא מצאתי את תיבת "כתבו משהו…" בקבוצה. ייתכן שאין הרשאת פרסום.',
+        'חלון הפוסט נפתח אבל אין בו תיבת טקסט.',
+        'ההעלאה לא הסתיימה בזמן (2 קבצים).',
+        'Facebook דחה את הפוסט: משהו השתבש',
+        'page.waitForSelector: Timeout 60000ms exceeded.',
+        'לפי פייסבוק אי אפשר לפרסם בקבוצה הזו מהחשבון הזה',
+      ]) {
+        assert.ok(!re.test(theirs), `this is about the group and must stay final: ${theirs}`);
+      }
     }
 
     /*

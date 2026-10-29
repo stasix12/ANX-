@@ -9,7 +9,9 @@ import { planQueue } from '@/lib/social/plan';
 import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, evaluateQueueItem } from '@/lib/social/rules';
 import { Admission, laneCountFor } from './admission';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
+import { OPEN_STATUSES } from '@/lib/social/status';
 import { upsertScoped } from '@/lib/social/tenant';
+import { REVIVE_ATTEMPT_CEILING, REVIVE_WINDOW_MS, pickRevivable, type FailedRow, type OpenRow } from './revive';
 import { nightlyDue } from './nightly';
 import {
   DEFAULT_BROWSER,
@@ -140,6 +142,8 @@ interface WorkerState {
   spacingNoticeAt: number;
   lastCheckAt: number;
   lastPlanAt: number;
+  /** When the end-of-round second pass last looked. See reviveFailedRows(). */
+  lastReviveAt: number;
   idleNoticeShown: boolean;
   /** When the repository was last compared against this checkout. */
   lastUpdateCheckAt?: number;
@@ -327,6 +331,7 @@ async function main(): Promise<void> {
     admission: new Admission(),
     lastCheckAt: 0,
     lastPlanAt: 0,
+    lastReviveAt: 0,
     spacingNoticeAt: 0,
     idleNoticeShown: false,
     accountId: ((worker as { fb_user_id?: string }).fb_user_id ?? '') || undefined,
@@ -834,6 +839,31 @@ async function tick(state: WorkerState): Promise<void> {
    */
   if ((!due?.length || holdingForGap) && state.lanes.every((l) => l.done)) {
     /*
+     * ─── FIRST, AND WITHOUT A BROWSER: THE ROUND'S SECOND PASS ───────────
+     *
+     * "להחזיר אותם לתור אחרי שפרסם את כל הקבוצות בסבב ולנסות שוב."
+     *
+     * Nothing is due and no lane is running, which is the only moment this
+     * question has an answer. It is three small reads and it opens no window,
+     * so it sits ahead of the window-storm breaker and ahead of the session
+     * check — a worker whose Facebook session has expired should still be
+     * able to put its own failures back in line.
+     *
+     * Only when NOTHING is due: `holdingForGap` means rows are waiting on the
+     * clock, and a round with rows still to publish has not finished. The
+     * sweep would refuse them anyway (they are in `busyCampaigns`); this
+     * saves the reads.
+     */
+    if (!due?.length) {
+      try {
+        await reviveFailedRows(state, limits, browser);
+      } catch (err) {
+        /* Never let the second pass take the publishing loop down with it —
+           the same rule plan() follows, for the same reason. */
+        console.error('[worker] החזרת הכשלים לתור נכשלה:', safeError(err));
+      }
+    }
+    /*
      * IDLE CHORES — the work that uses the browser when no post is due.
      *
      * Leaving a round's comment, looking up a post's address, reading view
@@ -1040,6 +1070,109 @@ async function plan(state: WorkerState): Promise<void> {
     // Never let planning take the publishing loop down with it.
     console.error('[worker] תכנון התור נכשל:', err instanceof Error ? err.message : err);
   }
+}
+
+/* ------------------------------------- the round's own second pass */
+
+/**
+ * ─── THE FAILURES COME BACK ONCE, AT THE END OF THE ROUND ────────────────
+ *
+ * "פוסטים שנכשלו להעביר, לא להתעקב עליהם כמו שאמרנו — להחזיר אותם לתור אחרי
+ *  שפרסם את כל הקבוצות בסבב ולנסות שוב."
+ *
+ * This is the I/O half: two reads and one guarded write per row. WHICH rows,
+ * and WHEN each one goes, is worker/revive.ts — away from the database so the
+ * rules can be run by a test rather than read, and the long note on why each
+ * one is what it is lives there with them.
+ *
+ * The reads are deliberately wider than the decision needs. `open` is every
+ * row in an open status, because the same list answers "is this round still
+ * working", "is this group already spoken for" and "where does the queue
+ * end"; the ceiling on `attempts` is applied in the query AND again in
+ * pickRevivable, so the database is spared the rows and the rule is still
+ * enforced where it is tested.
+ */
+/** How often the sweep may look. It is two small reads, but not every tick. */
+const REVIVE_EVERY_MS = 2 * 60_000;
+
+async function reviveFailedRows(state: WorkerState, limits: LimitsSettings, browser: BrowserSettings): Promise<void> {
+  if (Date.now() - state.lastReviveAt < REVIVE_EVERY_MS) return;
+  state.lastReviveAt = Date.now();
+  const db = await workerDb();
+  const scope = queueScope(state);
+
+  let openQuery = db
+    .from('social_queue')
+    .select('status, campaign_id, target_id, scheduled_at, target:social_targets!inner(channel, account_id)')
+    .in('status', OPEN_STATUSES)
+    .eq('target.channel', 'facebook_group')
+    /* Explicit, so a server-side max-rows setting cannot silently shorten the
+       list this decision is built from. A truncated read costs nothing worse
+       than a revival the unique index then refuses, which is counted. */
+    .limit(1000);
+  if (scope) openQuery = openQuery.or(`account_id.eq.${scope},account_id.is.null`, { referencedTable: 'target' });
+  const { data: open, error: openErr } = await openQuery;
+  if (openErr) throw new Error(openErr.message);
+
+  /* The ceiling is applied in the query AND again in pickRevivable: the read
+     is narrowed for the database's sake, and the rule is enforced where it is
+     tested. */
+  let failedQuery = db
+    .from('social_queue')
+    .select('id, campaign_id, target_id, attempts, target:social_targets!inner(channel, account_id)')
+    .eq('status', 'failed')
+    .lt('attempts', REVIVE_ATTEMPT_CEILING)
+    .gte('scheduled_at', new Date(Date.now() - REVIVE_WINDOW_MS).toISOString())
+    .eq('target.channel', 'facebook_group')
+    .order('scheduled_at')
+    .limit(500);
+  if (scope) failedQuery = failedQuery.or(`account_id.eq.${scope},account_id.is.null`, { referencedTable: 'target' });
+  const { data: failed, error: failErr } = await failedQuery;
+  if (failErr) throw new Error(failErr.message);
+
+  const revivals = pickRevivable({
+    open: (open ?? []) as OpenRow[],
+    failed: (failed ?? []) as FailedRow[],
+    nowMs: Date.now(),
+    gapMs: accountGapSeconds(limits, browser, true) * 1000,
+  });
+  if (!revivals.length) return;
+
+  let back = 0;
+  let taken = 0;
+  for (const revival of revivals) {
+    const { data, error } = await db
+      .from('social_queue')
+      .update({
+        status: 'scheduled',
+        step: 'pending',
+        scheduled_at: revival.at,
+        step_at: new Date().toISOString(),
+        /* Per-attempt state, cleared like every other path that re-queues a
+           row: a stamp from the first pass must not answer the second. */
+        confirmed_at: null,
+      })
+      .eq('id', revival.id)
+      /* Compare-and-set: a row somebody retried by hand in the meantime is
+         already on its way and must not be re-stamped. A rejection from the
+         one-open-row-per-group index lands here too, and is counted rather
+         than thrown — it means the group already has somewhere to be. */
+      .eq('status', 'failed')
+      .select('id');
+    if (error) {
+      taken += 1;
+      continue;
+    }
+    if ((data as { id: string }[] | null)?.length) back += 1;
+  }
+  if (!back) return;
+  await logActivity(
+    'info',
+    'retry',
+    `${back} פרסומים שנכשלו הוחזרו לסוף התור — הסבב סיים את כל הקבוצות שלו, וננסה אותם עוד פעם אחת.`,
+    { revived: back, blocked: taken },
+  );
+  console.log(`[worker] \u21bb ${back} פרסומים שנכשלו חזרו לסוף התור${taken ? ` (${taken} קבוצות כבר תפוסות)` : ''}`);
 }
 
 function idle(state: WorkerState, reason: string): void {

@@ -9,7 +9,7 @@
  * fixed. The only evidence was a version number in one line of its terminal
  * output, which nobody reads.
  */
-export const WORKER_VERSION = '4.19.0';
+export const WORKER_VERSION = '4.20.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -58,10 +58,18 @@ export const WORKER_VERSION = '4.19.0';
  * closure. Bumping the version for them would send the owner to reinstall for
  * a change his computer does not run.
  *
+ * AND NOW 4.19.0 → 4.20.0, WHICH IS YES AGAIN. "פוסטים שנכשלו... להחזיר אותם
+ * לתור אחרי שפרסם את כל הקבוצות בסבב ולנסות שוב." A failure is still final on
+ * the spot — nothing waits ten minutes and no group is held — but when a round
+ * has finished every group it had, its failures go back to the END of the
+ * queue for exactly one more attempt. The loop that does it is the worker's
+ * (social-worker.ts) and the rules it follows are worker/revive.ts, both of
+ * which run on the PC and nowhere else.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, activity.ts, activity-text.ts, server/sync.ts, server/worker.ts
  * — are NOT in the worker's import closure either. They are inside worker.cjs
  * because the alias puts all of src/lib/social there; nothing on the PC
  * executes them.
  */
-export const WORKER_FINGERPRINT = '50f71a4bd2c979ed';
+export const WORKER_FINGERPRINT = 'fef1b1e8e77797be';

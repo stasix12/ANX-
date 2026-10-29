@@ -468,7 +468,7 @@ export default function CampaignsPage() {
    * otherwise — a round whose repeat is off ended when it ended, and the
    * toast says what starts a new one.
    */
-  async function reopen(campaign: Campaign) {
+  async function reopen(campaign: Campaign, was: 'stopped' | 'completed') {
     setBusy(`open-${campaign.id}`);
     /* Which of the two writes landed, so the message after a failure can say
        what is true rather than "הפעולה נכשלה" over a campaign that IS open. */
@@ -479,7 +479,11 @@ export default function CampaignsPage() {
       const repeat = readRepeat(campaign);
       const schedule = readSchedule(campaign);
       if (!repeat.enabled) {
-        toast('הקמפיין חזר לפעילות. כדי שיפרסם שוב — פתחו את הפוסט והשיקו אותו מחדש.');
+        /* Nothing is armed and nothing pretends otherwise. The two routes out
+           are both on this card, and the sentence names them rather than
+           leaving him pressing a button that reports success and changes
+           nothing he can see. */
+        toast('הקמפיין חזר לפעילות, אבל החזרה היומית כבויה — הדליקו אותה בכרטיס, או פתחו את הפוסט והשיקו אותו מחדש.', 'info');
       } else {
         const armed = await setCampaignRepeat(campaign, repeat, schedule);
         /*
@@ -492,12 +496,19 @@ export default function CampaignsPage() {
          */
         const noDay = !schedule.days.length;
         if (armed.armed > 0 && !noDay) {
-          /* WHAT COMES BACK AND WHAT DOES NOT. stopCampaign swept every row
-             that had not begun to 'skipped', and nothing in this product
-             un-skips a row — so the round resumes at its next publishing day
-             rather than carrying on from the minute it was stopped. Saying
-             "הפרסומים ייכנסו לתור" without that is a promise about today. */
-          toast('הקמפיין חזר לפעילות והחזרה היומית הופעלה מחדש. הפרסומים שבוטלו בעצירה לא חוזרים — הסבב ימשיך מיום הפרסום הבא.');
+          /* WHAT COMES BACK AND WHAT DOES NOT — and the two cases differ.
+             stopCampaign swept every row that had not begun to 'skipped', and
+             nothing in this product un-skips a row, so a STOPPED round
+             resumes at its next publishing day rather than carrying on from
+             the minute it was stopped; saying "הפרסומים ייכנסו לתור" without
+             that is a promise about today. A round that merely FINISHED had
+             nothing to sweep, and telling it that publications were cancelled
+             would be a sentence about something that never happened. */
+          toast(
+            was === 'stopped'
+              ? 'הקמפיין חזר לפעילות והחזרה היומית הופעלה מחדש. הפרסומים שבוטלו בעצירה לא חוזרים — הסבב ימשיך מיום הפרסום הבא.'
+              : 'הקמפיין חזר לפעילות והחזרה היומית הופעלה מחדש — הסבב ייפתח שוב ביום הפרסום הבא.',
+          );
         } else if (noDay) {
           toast('הקמפיין חזר לפעילות, אבל לא נבחר אף יום פרסום — בחרו לפחות יום אחד בכרטיס כדי שייכנסו פרסומים לתור.', 'info');
         } else if (armed.needsLaunch > 0) {
@@ -688,6 +699,11 @@ export default function CampaignsPage() {
         <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
           {visible.map((c) => {
             const state = stateOf(c);
+            /* Which kind of "over" this round is, or null when it is not over
+               at all — see the note on onReopen below. Narrowed here because
+               the handler's message depends on the answer. */
+            const ended: 'stopped' | 'completed' | null =
+              state.state === 'stopped' || state.state === 'completed' ? state.state : null;
             const mine = posts.filter((p) => p.campaign_id === c.id);
             return (
               <CampaignCard
@@ -735,10 +751,29 @@ export default function CampaignsPage() {
                  */
                 editHref={mine.length ? `/social/posts/${mine[0].id}` : `/social/posts/new?campaign=${c.id}`}
                 onDuplicate={() => act(`dup-${c.id}`, () => duplicateCampaign(c.id), 'העתק נוצר.')}
-                /* Only a stopped run can be put back — the card draws nothing
-                   when this is undefined, which is how a menu item that cannot
-                   act stays off the menu. */
-                onReopen={state.state === 'stopped' ? () => reopen(c) : undefined}
+                /*
+                 * ─── A ROUND THAT IS OVER CAN BE STARTED AGAIN ─────────────
+                 *
+                 * "אצל הלקוח שלי בטלפון אין האופציה להחזיר פעילות, אצלי כן,
+                 *  ושנינו על אותה גרסה."
+                 *
+                 * They were. The difference was never the version or the
+                 * account: this read `state === 'stopped'`, and 'stopped'
+                 * means one thing only — `campaign.status === 'archived'`,
+                 * i.e. a round the owner ended by hand. A round that simply
+                 * ran out of rows is 'completed'. BOTH sit under the same
+                 * "הסתיימו" tab, so two cards that read as finished behaved
+                 * differently for a reason nothing on the screen showed.
+                 *
+                 * Now both offer it, and reopen() is told which it was: a
+                 * stopped round had its queue swept and has to say so, a
+                 * completed one had nothing to sweep and must not claim it.
+                 *
+                 * NOT 'not_started'. A round that has never gone out is not
+                 * being "returned" to anything — its card already says so and
+                 * points at "+ הוסף פוסט", which is the thing that starts it.
+                 */
+                onReopen={ended ? () => reopen(c, ended) : undefined}
                 /*
                   THE REASON THIS ACTION EXISTS, in the owner's own words:
                   "even if two hours have passed, even if a day — I pick the

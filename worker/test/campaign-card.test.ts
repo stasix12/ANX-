@@ -39,7 +39,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, statSync, writeFileSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
@@ -485,16 +485,50 @@ async function main(): Promise<void> {
        * different words. One label on the wrong state is the card offering a
        * button that cannot act.
        */
+      /*
+       * AND THE RULE ITSELF, READ OFF THE PAGE — because every count above is
+       * measured on a HARNESS that mirrors the page by hand. The mirror is
+       * what makes the measurement possible and it is also what can drift:
+       * the fixtures would go on drawing six buttons long after the screen
+       * stopped passing them.
+       */
+      {
+        const page = readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8');
+        assert.ok(
+          /const ended: 'stopped' \| 'completed' \| null =\s*state\.state === 'stopped' \|\| state\.state === 'completed' \? state\.state : null;/.test(page),
+          say('the campaigns screen no longer offers "החזר לפעילות" on a round that finished on its own — only on one stopped by hand, which is the fault this was'),
+        );
+        assert.ok(/onReopen=\{ended \? \(\) => reopen\(c, ended\) : undefined\}/.test(page), say('the card is no longer handed the reopen action'));
+        assert.ok(
+          /async function reopen\(campaign: Campaign, was: 'stopped' \| 'completed'\)/.test(page),
+          say('reopen no longer knows which kind of ending it is undoing, so it cannot keep its message true'),
+        );
+        assert.ok(
+          /הפרסומים שבוטלו בעצירה לא חוזרים[\s\S]{0,400}הסבב ייפתח שוב ביום הפרסום הבא/.test(page),
+          say('both endings must have their own sentence — a round that merely finished had nothing cancelled'),
+        );
+      }
+
       const turnOns = seen.cards.flatMap((c) => c.turnOn);
       assert.equal(
         turnOns.filter((t) => t === 'המשך קמפיין').length,
         1,
         say(`${turnOns.filter((t) => t === 'המשך קמפיין').length} cards draw "המשך קמפיין" — exactly one fixture is paused with rows still waiting`),
       );
+      /*
+       * SIX, NOT TWO — and the four that were added are the whole of "אצל
+       * הלקוח שלי אין האופציה להחזיר פעילות, אצלי כן".
+       *
+       * The page used to pass onReopen for 'stopped' alone, which means
+       * `status === 'archived'`: a round the owner ended by hand. A round
+       * that simply ran out of rows is 'completed', and both sit under the
+       * same "הסתיימו" tab — so two cards that read as finished behaved
+       * differently for a reason nothing on the screen showed.
+       */
       assert.equal(
         turnOns.filter((t) => t === 'החזר לפעילות').length,
-        2,
-        say(`${turnOns.filter((t) => t === 'החזר לפעילות').length} cards draw "החזר לפעילות" — two fixtures are stopped`),
+        6,
+        say(`${turnOns.filter((t) => t === 'החזר לפעילות').length} cards draw "החזר לפעילות" — every finished or stopped fixture must offer it`),
       );
       /* AND NEVER BOTH ON ONE CARD. canResumeRun is false for an archived
          campaign and onReopen is passed only for a stopped one, so a card
@@ -511,7 +545,16 @@ async function main(): Promise<void> {
        */
       for (const [i, card] of seen.cards.entries()) {
         if (card.turnOn.includes('החזר לפעילות')) {
-          assert.ok(card.text.includes('נעצר'), say(`card ${i} offers "החזר לפעילות" but its badge does not say "נעצר"`));
+          /* A round that is OVER, however it ended: stopped by hand ("נעצר"),
+             finished cleanly ("הושלם"), finished badly ("הסתיים…"), counted
+             from a capped slice ("ספירה חלקית"), or finished with the whole
+             account held ("מושהה", which runBadge returns for any state while
+             publishing is globally paused). What it may never be is a round
+             that is still going: "החזר לפעילות" on one of those is a button
+             whose write cannot produce a publication. */
+          const over = ['נעצר', 'הושלם', 'הסתיים', 'ספירה חלקית', 'מושהה'].some((w) => card.text.includes(w));
+          assert.ok(over, say(`card ${i} offers "החזר לפעילות" but its badge does not say the round is over`));
+          assert.ok(!card.text.includes('● רץ'), say(`card ${i} offers "החזר לפעילות" on a running round`));
         }
         if (card.turnOn.includes('המשך קמפיין')) {
           assert.ok(card.text.includes('מושהה'), say(`card ${i} offers "המשך קמפיין" but its badge does not say "מושהה"`));

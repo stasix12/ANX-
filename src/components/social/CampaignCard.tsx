@@ -240,11 +240,18 @@ export function CampaignCard({
    * TWO STATES, ONE SLOT, AND THEY CANNOT BOTH BE TRUE. A paused run has its
    * queue intact — plan.ts sweeps only ARCHIVED campaigns, "which is exactly
    * what lets המשך resume it" — so resuming is a flag flip and the rows go
-   * out. A stopped one has had its rows swept and its schedules retired, so
-   * `onReopen` is a different promise and the page says so when it lands.
-   * canResumeRun is false for an archived campaign and onReopen is passed
-   * only for a stopped one, so the branch below is a choice between two
-   * mutually exclusive facts rather than a preference.
+   * out. A run that is OVER has nothing left to resume, so `onReopen` is a
+   * different promise and the page says so when it lands. canResumeRun is
+   * false for both of the states that pass onReopen, so the branch below is a
+   * choice between two mutually exclusive facts rather than a preference.
+   *
+   * "OVER" IS TWO THINGS, AND THE PAGE DECIDES WHICH QUALIFY. It used to be
+   * the archived ones alone, and that is the whole of "אצל הלקוח שלי אין
+   * האופציה להחזיר פעילות, אצלי כן": a round he had stopped by hand offered
+   * the button, a round that simply ran out of rows did not, and both read
+   * "הסתיימו" on the same tab. The card does not re-derive that rule — it
+   * draws the action when it is handed one, which is how a control that
+   * cannot act stays off the card at all.
    *
    * STOPPING STAYS IN THE MENU. The reference draws one action at the foot of
    * a running card and that is still what a running card has; what is added

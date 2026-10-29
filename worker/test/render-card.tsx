@@ -205,12 +205,15 @@ const body = cases.map(([label, c, s, posts, media, paused]) => `
       /*
        * "החזר לפעילות" — PASSED ON EXACTLY THE CONDITION THE PAGE PASSES IT.
        *
-       * src/app/social/campaigns/page.tsx: `state.state === 'stopped' ? … :
-       * undefined`. No fixture passed it before, so the card's reopen path
-       * rendered on nothing and every hit-test, ceiling and clipping check
-       * below passed over a control that was never drawn.
+       * src/app/social/campaigns/page.tsx: 'stopped' OR 'completed'. It used
+       * to be the archived ones alone, which is the whole of "אצל הלקוח שלי
+       * אין האופציה להחזיר פעילות, אצלי כן" — a round he stopped by hand
+       * offered the button and a round that simply ran out of rows did not,
+       * with both of them under the same "הסתיימו" tab. Mirrored here, so the
+       * ceilings and hit-tests below are measured on the cards that really
+       * draw it.
        */
-      onReopen: (s as { state?: string }).state === 'stopped' ? () => {} : undefined,
+      onReopen: ['stopped', 'completed'].includes((s as { state?: string }).state ?? '') ? () => {} : undefined,
       /* The queue tuner's button. Passed so the measurement below actually
          covers it: without a handler the card draws nothing, and a hit-test
          that never sees a control cannot find it too small. */

@@ -653,6 +653,41 @@ async function main(): Promise<void> {
         is(!head.hasName, `${width}px: the account's name is gone from the card`);
         eq(head.images, 0, `${width}px: and its face with it — no <img> is left in the panel`);
         eq(head.controls, 0, `${width}px: and not one control is left in the header — no chip, no swap icon, no refresh button`);
+
+        /*
+         * ─── AND WHAT IS ACTUALLY GOING OUT, UNDER THE HEADLINE ──────────
+         *
+         * "שזה מחפש / טוען / מפרסם זה נראה כאילו זה נתקע." The headline says
+         * a robot is working and the scene loops whether or not anything
+         * moves — it is an idle animation and says so itself. This line is
+         * the only thing on the card that can tell a machine that is working
+         * from one that is wedged: the group, the stage the worker is on,
+         * and how long it has been on it.
+         */
+        const live = await page.evaluate(() => {
+          const panel = document.querySelector('[data-panel]') as HTMLElement;
+          const h2 = panel.querySelector('h2') as HTMLElement;
+          const rows = [...panel.querySelectorAll('ul li')].map((el) => {
+            const fixed = el.querySelector('[data-must-fit]') as HTMLElement | null;
+            return {
+              text: (el.textContent || '').replace(/\s+/g, ' ').trim(),
+              /* The NAME is allowed to truncate — it is data of any length.
+                 What may never be cut is the part that moves. */
+              clipped: !fixed || fixed.scrollWidth > fixed.clientWidth + 1,
+              top: el.getBoundingClientRect().top,
+            };
+          });
+          return { rows, headBottom: h2.getBoundingClientRect().bottom };
+        });
+        eq(live.rows.length, 1, `${width}px: the panel must draw one line per publication in flight`);
+        is(live.rows[0].text.includes('Беэр'), `${width}px: it must name the group — "${live.rows[0]?.text}"`);
+        is(live.rows[0].text.includes('מעלה'), `${width}px: and the stage the worker is really on — "${live.rows[0]?.text}"`);
+        is(
+          /\d+ שניות/.test(live.rows[0].text),
+          `${width}px: and how long it has been on it, or the line says no more than the headline above it — "${live.rows[0]?.text}"`,
+        );
+        is(!live.rows[0].clipped, `${width}px: the stage and its counter must never be cut — they are the only part of this card that moves`);
+        is(live.rows[0].top > live.headBottom, `${width}px: it belongs under the headline, not over the scene`);
       }
       await page.setViewportSize({ width: 390, height: 844 });
     }

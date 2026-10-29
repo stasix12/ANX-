@@ -37,7 +37,37 @@ export interface PublicationActions {
  * every caller got before projection.ts existed and is still right for a
  * caller with no account settings to hand.
  */
-export function statusLine(row: QueueRow, projectedAt?: string | null): { text: string; cls: string } {
+/**
+ * ─── AND HOW LONG IT HAS BEEN ON THAT STAGE ──────────────────────────────
+ *
+ * "שזה מחפש / טוען / מפרסם זה נראה כאילו זה נתקע."
+ *
+ * This is the one place in the product that names the stage — "מעלה מדיה",
+ * "מאמת" — and the words alone cannot tell a publication that reached that
+ * stage two seconds ago from one that has been on it for four minutes. The
+ * worker stamps `step_at` on every stage change (social-worker.ts), and
+ * nothing drew it.
+ *
+ * `now` is passed ONLY by a host that re-reads the row — see the `live` prop
+ * below. A frozen list must never grow a counter: a number climbing on a row
+ * nobody is refreshing says the publication is still going when the screen
+ * has no idea whether it is.
+ */
+export function stageElapsed(row: QueueRow, now: number | undefined): string {
+  if (now === undefined || !row.step_at) return '';
+  const secs = Math.round((now - Date.parse(row.step_at)) / 1000);
+  /* The clamp travels with the arithmetic, exactly as it does for a finished
+     row in ActivityDetailSheet: a PC clock minutes off its phone's would
+     otherwise print a negative age or an hour-long one. Above the hour there
+     is nothing honest left to say — and an hour clears the longest upload
+     the composer allows. */
+  if (!Number.isFinite(secs) || secs <= 0 || secs >= 3600) return '';
+  if (secs < 60) return ` · ${secs === 1 ? 'שנייה אחת' : secs === 2 ? 'שתי שניות' : `${secs} שניות`}`;
+  const min = Math.floor(secs / 60);
+  return ` · ${min === 1 ? 'דקה' : min === 2 ? 'שתי דקות' : `${min} דקות`}`;
+}
+
+export function statusLine(row: QueueRow, projectedAt?: string | null, now?: number): { text: string; cls: string } {
   const step = (row.step ?? '') as QueueStep;
   /*
    * NULL AND UNDEFINED ARE TWO DIFFERENT ANSWERS, and `??` read them as one.
@@ -69,7 +99,7 @@ export function statusLine(row: QueueRow, projectedAt?: string | null): { text: 
     case 'paused':
       return { text: 'מושהה', cls: TONE_TEXT[STATUS_TONE.paused] };
     case 'publishing':
-      return { text: QUEUE_STEP_LABEL[step] || 'מפרסם עכשיו', cls: TONE_TEXT[STATUS_TONE.publishing] };
+      return { text: `${QUEUE_STEP_LABEL[step] || 'מפרסם עכשיו'}${stageElapsed(row, now)}`, cls: TONE_TEXT[STATUS_TONE.publishing] };
     case 'manual_pending':
       return { text: 'ממתין לפרסום ידני', cls: TONE_TEXT[STATUS_TONE.manual_pending] };
     default:
@@ -95,6 +125,7 @@ export function PublicationItem({
   actions = {},
   showDate = false,
   busy = false,
+  live = false,
 }: {
   row: QueueRow;
   /**
@@ -115,8 +146,37 @@ export function PublicationItem({
   showDate?: boolean;
   /** A write on this row is in flight — the confirm button locks and spins. */
   busy?: boolean;
+  /**
+   * THIS HOST RE-READS THE ROW, so a publishing row may count.
+   *
+   * Opt-in, and default off, because the counter is only honest where the
+   * data behind it is moving: the campaign run and the post editor poll every
+   * four to five seconds, while the history screen and a group's own page
+   * read once. A row frozen at "מעלה מדיה" whose seconds keep climbing is a
+   * screen asserting something it cannot know.
+   */
+  live?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  /*
+   * One second, and only while this row is actually publishing — the same
+   * beat and the same visibility guard every other counter in the product
+   * uses. A row in any other status starts no interval at all.
+   */
+  const ticking = live && row.status === 'publishing' && Boolean(row.step_at);
+  const [now, setNow] = useState<number | undefined>(() => (ticking ? Date.now() : undefined));
+  useEffect(() => {
+    if (!ticking) {
+      setNow(undefined);
+      return;
+    }
+    setNow(Date.now());
+    const id = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(id);
+  }, [ticking]);
   /*
    * The body text on demand. Lists fetch rows WITHOUT rendered_text now
    * (QUEUE_SELECT_LITE — it was two hundred full post bodies polled every four
@@ -138,7 +198,7 @@ export function PublicationItem({
       alive = false;
     };
   }, [open, row.id, row.rendered_text, fetchedText]);
-  const line = statusLine(row, projectedAt);
+  const line = statusLine(row, projectedAt, now);
   const running = row.status === 'publishing';
   /*
    * `showDate` replaces the status line's own clock rather than prefixing it —

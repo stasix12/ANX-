@@ -68,6 +68,31 @@ function Harness() {
             against hand-written markup instead of the real panel.
           */
           inFlight={mode === 'sending' ? 1 : 0}
+          /*
+           * THE ROW ITSELF, so the line that says WHAT is going out is drawn
+           * and therefore measured. A long Cyrillic group name on purpose:
+           * that is the case the clipping guard exists for, and the stage
+           * line is now the longest thing in this panel.
+           *
+           * `step_at` is twelve seconds back, so the counter has something
+           * honest to print — the component clamps anything negative or over
+           * an hour away, and a fixed instant would drift past that clamp as
+           * the page sits open.
+           */
+          inFlightRows={
+            mode === 'sending'
+              ? ([
+                  {
+                    id: 'q-live',
+                    status: 'publishing',
+                    step: 'uploading_media',
+                    step_at: new Date(Date.now() - 12_000).toISOString(),
+                    scheduled_at: new Date().toISOString(),
+                    target: { name: 'Чистка диванов Беэр-Шева и окрестности — объявления' },
+                  },
+                ] as never)
+              : []
+          }
           fbAccount={{ name: 'Stas Terehin', avatar: 'https://example.invalid/a.jpg' }}
           profiles={[
             { name: 'Stas Terehin', kind: 'profile', image: 'https://example.invalid/a.jpg' },

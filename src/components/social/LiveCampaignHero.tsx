@@ -20,10 +20,13 @@ import { accountGapSeconds } from '@/lib/social/rules';
 import { countdownTo } from '@/lib/social/countdown';
 import { LATEST_SCHEMA_FILE } from '@/lib/social/errors';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
+import type { QueueRow } from '@/lib/social/client';
+import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
 import { CampaignScheduleBoard } from './CampaignScheduleBoard';
 import { CampaignSchedulePanel } from './CampaignSchedulePanel';
 import { PostCover } from './PostCover';
+import { stageElapsed } from './PublicationItem';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
 import { PublishingScene, type SceneMode } from './PublishingScene';
@@ -737,6 +740,7 @@ export function LiveQueueHero({
   nextTarget,
   onDue,
   inFlight = 0,
+  inFlightRows = [],
   workerOnline,
   intervention = null,
   profiles = [],
@@ -830,6 +834,22 @@ export function LiveQueueHero({
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
   /**
+   * THOSE SAME ROWS, so the card can say WHAT is going out and how far in.
+   *
+   * "שזה מחפש / טוען / מפרסם זה נראה כאילו זה נתקע." The count alone made the
+   * headline flip to "רובוט בפעולה" and the scene start looping, and then
+   * nothing on this card moved again until the publication finished — a
+   * minute, sometimes several. The scene is an idle animation by design and
+   * asserts nothing about progress (PublishingScene's own header says so), so
+   * between 'opening' and 'verifying' there was no difference on screen
+   * between a machine working and a machine wedged.
+   *
+   * Each row carries `step` — the stage the worker is actually on — and
+   * `step_at`, the instant it reached it. Both are already in the lean select
+   * and neither was read anywhere on this screen.
+   */
+  inFlightRows?: QueueRow[];
+  /**
    * STILL ACCEPTED, NO LONGER READ HERE — and left in deliberately.
    *
    * It used to decide the headline, and that was the bug: a heartbeat says
@@ -856,7 +876,9 @@ export function LiveQueueHero({
   intervention?: { title: string; body: string; actionLabel: string; href: string; onAction?: () => void } | null;
 }) {
   const paused = systemState === 'paused';
-  const now = useTick(Boolean(nextAt) && !paused);
+  /* Also while something is in flight: the stage counter below needs a beat,
+     and without this the card ticks only when a NEXT publication is known. */
+  const now = useTick((Boolean(nextAt) || inFlightRows.length > 0) && !paused);
   const tone = SYSTEM_STATE_TONE[systemState];
   /* The profile picker's open state and its Escape handler lived here. Both
      went with the chip — a window listening for a key that can no longer open
@@ -1032,6 +1054,48 @@ export function LiveQueueHero({
                 : (intervention?.title ?? 'נדרשת פעולה שלכם')}
         </h2>
       </div>
+
+      {/*
+        ─── AND WHAT IT IS DOING, IN WORDS THAT CHANGE ────────────────────
+        
+        "שזה מחפש / טוען / מפרסם זה נראה כאילו זה נתקע."
+        
+        The headline above says a robot is working and the scene below loops
+        whether or not anything is moving — it is an idle animation and its
+        own header says it asserts nothing. So for the length of a whole
+        publication this card looked identical to a card whose machine had
+        wedged.
+        
+        One line per row a worker is holding: the group, the stage the worker
+        is actually on, and how long it has been on it. Every one of those is
+        a column the row already carries. There is no percentage, because a
+        publication has no honest one.
+        
+        No link and no picture, deliberately: the measured suite asserts zero
+        of each across this panel, so that a tap meant for the card cannot
+        land on something else.
+      */}
+      {publishing && inFlightRows.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5">
+          {inFlightRows.map((row) => (
+            /*
+              THE NAME MAY BE CUT; THE MOVING PART MAY NOT. A group's name is
+              data and can be any length — this one is a 48-character Russian
+              title — but the stage and its counter are the whole reason the
+              line exists, and a line that truncated to "Чистка дива…" would
+              be exactly the frozen card it replaces.
+            */
+            <li key={row.id} className="flex min-w-0 items-center justify-center gap-1 text-[11.5px] font-bold leading-4 text-mist-500">
+              <span dir="auto" className="min-w-0 truncate text-mist-300">{row.target?.name ?? 'קבוצה'}</span>
+              <span data-must-fit className="shrink-0">
+                {'· '}
+                {QUEUE_STEP_LABEL[(row.step ?? '') as QueueStep] || 'מפרסם'}
+                {stageElapsed(row, now)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/*
         THE SCENE SITS ABOVE THE FIGURES, not instead of them.

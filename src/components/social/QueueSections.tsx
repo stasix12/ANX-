@@ -127,6 +127,17 @@ function Group({
             actions={actions}
             showDate={showDate}
             busy={row.id === busyRowId}
+            /*
+             * THE SAME SEAM THAT ALREADY MEANS "THESE ROWS ARE LIVE".
+             *
+             * `pulse` is set on exactly one group — "מפרסם עכשיו" — and both
+             * hosts of this component re-read their rows every four to five
+             * seconds. So the counter on a publishing row counts only where
+             * the row behind it is actually moving; the history screen and a
+             * group's own page render PublicationItem directly, read once,
+             * and inherit today's static text for free.
+             */
+            live={pulse}
           />
         ))}
       </ul>

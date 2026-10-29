@@ -846,12 +846,74 @@ export function EmptyState({
   );
 }
 
+/**
+ * The same duals as agoHe, in the present tense.
+ *
+ * NOT agoHe, which says "לפני" — a screen that is still waiting has not
+ * finished waiting, and "לפני 12 שניות" under a live spinner reads as a
+ * stamp on something that already happened.
+ *
+ * No minutes-and-hours ladder either: past sixty seconds the request has
+ * reached the ceiling in src/lib/supabase.ts and every screen that draws this
+ * clears it on the error, so a longer branch would be a sentence nobody can
+ * see.
+ */
+function waitingHe(ms: number): string {
+  const sec = Math.max(0, Math.round(ms / 1000));
+  if (sec >= 60) return 'ממתין יותר מדקה';
+  return sec === 1 ? 'ממתין שנייה' : sec === 2 ? 'ממתין שתי שניות' : `ממתין ${sec} שניות`;
+}
+
+/**
+ * ─── A SPINNER THAT SAYS HOW LONG IT HAS BEEN SPINNING ───────────────────
+ *
+ * "שזה מחפש / טוען / מפרסם זה נראה כאילו זה נתקע. אני תמיד רוצה שיהיה איזה
+ *  שהוא אינדיקטור שאני ידע את ההתקדמות שלו ולא שהוא נתקע."
+ *
+ * Twelve screens draw this one component, and second 1 and second 59 were
+ * pixel-identical in all of them. A request can hold it for a full minute —
+ * that is the ceiling in src/lib/supabase.ts, and it is the only bound there
+ * is — so "stuck" and "still going" looked exactly alike for the entire
+ * length of the longest honest wait in the product.
+ *
+ * WHAT IT COUNTS IS ITS OWN LIFE, and nothing else. This component mounts
+ * when a screen starts waiting and unmounts when the data lands, so elapsed
+ * seconds is a fact it owns. There is no percentage and no bar: a share of
+ * work done is something none of these screens know, and inventing one is
+ * worse than a spinner because it can be wrong.
+ *
+ * AFTER FOUR SECONDS, not immediately — a screen that answers at once should
+ * flash a spinner and nothing else, and a number that appears on every tap
+ * would be noise on the hundred waits that are instant.
+ */
 export function Loading() {
+  const [since] = useState(() => Date.now());
+  const [now, setNow] = useState(since);
+  useEffect(() => {
+    /* The same beat and the same guard as Freshness above: one second, and a
+       backgrounded tab re-renders nothing. */
+    const id = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+  const waited = now - since;
   return (
-    <div className="grid place-items-center py-16">
+    /* role="status" so this is announced at all: SpinnerIcon is aria-hidden,
+       so until now a screen reader was told nothing while a screen loaded.
+       The label is the one SkeletonList already uses. */
+    <div role="status" aria-label="טוען…" className="grid place-items-center py-16">
       {/* brand-300, not brand-500: a spinner is a mark, not a label, and
           brand-500 is a surface colour that sits at 3.09 as ink on a card. */}
       <SpinnerIcon className="h-7 w-7 animate-spin text-brand-300" />
+      {/* aria-hidden: the live region above announces once, and a counter
+          that re-announced every second would be unusable. */}
+      {waited >= 4000 && (
+        <p aria-hidden className="mt-2 text-[11px] leading-tight text-mist-500">
+          {waitingHe(waited)}
+        </p>
+      )}
     </div>
   );
 }

@@ -60,7 +60,7 @@ import { cancellableRows, percentFinished, type CampaignState } from '@/lib/soci
 import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields } from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
-import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
+import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
 import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { addDaysISO, agree, counted, startOfZonedDay, startOfZonedWeek, zonedDateISO, zonedToUtc } from '@/lib/social/time';
@@ -142,6 +142,22 @@ interface DashboardData {
   weekPublished: number;
   weekComments: number;
   upcoming: QueueRow[];
+  /**
+   * THE ROWS A WORKER IS HOLDING RIGHT NOW — so the card can say what it is
+   * doing instead of only that it is doing something.
+   *
+   * "שזה מחפש / טוען / מפרסם זה נראה כאילו זה נתקע." The queue card knew the
+   * COUNT of in-flight rows and nothing else, so between "פותח את הקבוצה" and
+   * "מאמת" — a minute, sometimes more — not one pixel on this screen changed.
+   * The stage and its stamp were already on the row and were never read here:
+   * the dashboard's queue read is AUTOMATIC_WAITING_STATUSES, which excludes
+   * 'publishing' on purpose.
+   *
+   * Capped at three because that is the most lanes the worker will ever run
+   * (laneCountFor), and ascending because listQueue is newest-first by
+   * default — the trap its own header describes.
+   */
+  inFlightRows: QueueRow[];
   /** Waiting publications due inside UPCOMING_WINDOW_HOURS — an exact count
       from the database, because `upcoming` is a capped read and its length
       would print the ceiling as a total. */
@@ -357,7 +373,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, inFlightRows, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -386,6 +402,9 @@ export default function SocialDashboard() {
         // and "הפרסומים הקרובים" would be showing the last publications while
         // calling the first of them the next one.
         listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' }),
+        /* What is going out at this very second. The lean select already
+           carries `step` and `step_at`; see inFlightRows above. */
+        listQueue({ status: IN_FLIGHT_STATUSES, limit: 3, order: 'asc' }),
         /* How many of those fall inside the day the card shows. A head count:
            no rows cross the wire, and it is the only honest source for the
            footer's "ועוד N אחריהם" once the list is a window. */
@@ -448,6 +467,7 @@ export default function SocialDashboard() {
         weekPublished,
         weekComments,
         upcoming,
+        inFlightRows,
         upcomingSoon,
         doneToday,
         comments,
@@ -1686,6 +1706,7 @@ export default function SocialDashboard() {
             nextTargetName={data.upcoming[0]?.target?.name ?? null}
             nextTarget={data.upcoming[0]?.target ?? null}
             inFlight={summary.inFlight}
+            inFlightRows={data.inFlightRows}
             workerOnline={data.workerOnline}
             fbAccount={data.fbAccount}
             profiles={data.profiles}

@@ -56,6 +56,9 @@ half = Manifold.cube([200, 200, 400]).translate([0, -100, -50]).rotate([0, 0, np
 lobe = lobe ^ half
 mouth = Manifold.hull_points(disk_pts(11.0, r_in, hb_d/2 + 1.5) + disk_pts(14.0, r_in, hb_d/2))   # פזה בכניסה
 handle_i += place(lobe, pts[-2], d)
+for (u0_, r0_), (u1_, r1_) in zip(wps[:-1], wps[1:]):       # סוויפ כדורים לאורך המסלול - קדח עגול אמיתי גם בקטע האלכסוני
+    for t_ in np.linspace(0, 1, int((u1_ - u0_)/1.5) + 2):
+        hbore += Manifold.sphere(hb_d/2, 24).translate([(r0_ + t_*(r1_ - r0_))*np.cos(th), (r0_ + t_*(r1_ - r0_))*np.sin(th), u0_ + t_*(u1_ - u0_)])
 handle_i -= place(hbore + mouth, pts[-2], d)
 # מעבר אוויר באחיזה: 24 באזור התעלה, עם מעברים 45°
 narrow_from, narrow_to = 8.0, u_sock - 20.0

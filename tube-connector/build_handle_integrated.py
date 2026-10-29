@@ -29,6 +29,19 @@ eye -= Manifold.cylinder(1.5, eye_r + 1.5, eye_r, 48).translate([eye_x, 0, eye_z
 handle_i += eye
 handle_i -= cyl(od - 2*wall, 30).translate([0, 0, face + 2])                                           # מעבר האוויר נשאר פתוח
 print('CHECK hose eye clears the nut (eye inner wall radius %.1f > nut radius 31):' % (eye_x - eye_r - eye_w), eye_x - eye_r - eye_w > 31)
+# שני תופסני C לצינור המים לאורך האחיזה, בצד (90° ממישור הכיפוף, צד השקעים) - מחוץ למסלול ידית הלחיצה.
+# הצינור נלחץ פנימה בקליק (פתח 7 לצינור 8-9), לא צריך להשחיל.
+hose_d_c, cw, copen, cL = 9.2, 2.2, 7.0, 22.0
+cx = od/2 + cw + hose_d_c/2; cro = hose_d_c/2 + cw
+for u in (75.0, 150.0):                                     # מרחק מסוף הקשת לאורך האחיזה
+    clip = Manifold.cylinder(cL, cro, cro, 48).translate([0, cx, 0])
+    clip += Manifold.cube([2*cro, cx - od/2 + 2, cL]).translate([-cro, od/2 - 2, 0])
+    clip -= Manifold.cylinder(cL + 2, hose_d_c/2, hose_d_c/2, 48).translate([0, cx, -1])
+    clip -= Manifold.cube([copen, 20, cL + 2]).translate([-copen/2, cx, -1])
+    for sg in (1, -1):
+        clip -= Manifold.cube([3, 3, cL + 2]).rotate([0, 0, 45]).translate([sg*(copen/2 + 1.6), cx + cro - 0.6, -1])
+    handle_i += place(clip, pts[-2] + u*d, d)
+handle_i -= place(cyl(od - 2*wall, grip_L + 2).translate([0, 0, -1]), pts[-2], d)                    # מעבר האוויר נשאר פתוח
 # בדיקות: האום הרגיל מתברג על ההברגה; הטבעת יושבת במושב; מעבר אוויר פתוח
 N = nut().rotate([180, 0, 0])
 print('nut vs handle body at best phase:', min(round((N.rotate([0,0,a]).translate([0,0,face-shoulder]) ^ handle_i).volume(), 1) for a in range(0,360,30)), '(0 = מתברג נקי)')

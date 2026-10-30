@@ -19,7 +19,12 @@ def barrel_nut():
     for (z0, r0), (z1, r1) in zip(ctrl[:-1], ctrl[1:]):
         for i in range(14):
             t = i/14; prof.append((r0 + (r1 - r0)*(0.5 - 0.5*np.cos(np.pi*t)), z0 + t*(z1 - z0)))
-    prof += [(26.0, nut_len), (0, nut_len)]
+    prof += [(0, nut_len)]
+    # ניקוי נקודות כפולות (גורמות למשולשים מנוונים ולרשת לא אטומה)
+    clean = [prof[0]]
+    for p in prof[1:]:
+        if abs(p[0]-clean[-1][0]) > 1e-6 or abs(p[1]-clean[-1][1]) > 1e-6: clean.append(p)
+    prof = clean
     outer = Manifold.revolve(CrossSection([prof]), F)
     # 6 שקעי אצבעות אליפטיים
     for i in range(6):

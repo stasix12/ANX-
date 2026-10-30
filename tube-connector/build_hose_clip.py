@@ -32,7 +32,7 @@ depth = 0.6
 shell = Manifold.cylinder(H+2, ro + 2, ro + 2, F).translate([0,0,-1]) - Manifold.cylinder(H+4, ro - depth, ro - depth, F).translate([0,0,-2])
 txt0 = Manifold.extrude(cs, 10).rotate([90, 0, 0]).translate([0, 0, H/2])     # אותיות במישור xz, עובי לאורך y (0..-10)
 part -= (txt0.translate([0, ro + 5, 0]) ^ shell)                                # צד +y, קריא מבחוץ
-part -= (txt0.mirror([1, 0, 0]).mirror([0, 1, 0]).translate([0, -ro - 5, 0]) ^ shell)   # צד -y, קריא מבחוץ
+part -= (txt0.mirror([0, 1, 0]).translate([0, -ro - 5, 0]) ^ shell)   # צד -y, קריא מבחוץ
 me = part.to_mesh(); V = np.asarray(me.vert_properties)[:, :3]; Fc = np.asarray(me.tri_verts)
 trimesh.Trimesh(V, Fc, process=False).export('hose_clip_closed.stl')
 objs, items = [], []

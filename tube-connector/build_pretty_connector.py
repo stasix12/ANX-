@@ -2,7 +2,11 @@
 # ומכסים את הגוף לגמרי. פרופיל חלק עם 6 שקעי אצבעות. מתאים לגוף הדק הקיים ולטבעות הקיימות.
 import numpy as np, trimesh, zipfile
 from manifold3d import Manifold, CrossSection
-exec(open('build_slim.py').read().split("def save")[0])
+import sys
+BIG = len(sys.argv) > 1 and sys.argv[1] == 'big'
+exec(open('build_ferrule.py' if BIG else 'build_slim.py').read().split("def save")[0])
+body_od = 60.0 if BIG else 54.0
+tag = '_big' if BIG else ''
 skirt_L, lip_L = face - thr_len, 7.0             # 22, 7
 nut_len = skirt_L + thr_len + lip_L              # 44: מהמרכז (0.5) ועד 7 אחרי פני הגוף
 r_mid, r_end = 32.0, 25.5                        # רדיוס חיצוני במרכז ובקצה
@@ -10,7 +14,7 @@ gap = 0.6                                        # רווח בין שני האו
 def barrel_nut():
     # פרופיל חיצוני (r לאורך z, z=0 = קצה פנימי במרכז הגוף)
     # פרופיל חיצוני: 33 במרכז -> 31 בסוף החצאית -> 29.5 בסוף ההברגה (דופן 3 מעל ההברגה) -> 26 בקצה השפה
-    ctrl = [(0.0, 33.0), (skirt_L, 31.0), (skirt_L + thr_len, 29.5), (nut_len, 26.0)]
+    ctrl = [(0.0, body_od/2 + 6.0), (skirt_L, body_od/2 + 4.0), (skirt_L + thr_len, thr_major/2 + 3.5), (nut_len, 26.0)]
     prof = [(0, 0)]
     for (z0, r0), (z1, r1) in zip(ctrl[:-1], ctrl[1:]):
         for i in range(14):
@@ -19,12 +23,12 @@ def barrel_nut():
     outer = Manifold.revolve(CrossSection([prof]), F)
     # 6 שקעי אצבעות אליפטיים
     for i in range(6):
-        sc = Manifold.sphere(1.0, 48).scale([14.0, 6.5, 9.0]).translate([31.5 + 14.0 - 1.6, 0, 16.0]).rotate([0, 0, 360*i/6])
+        sc = Manifold.sphere(1.0, 48).scale([14.0, 6.5, 9.0]).translate([body_od/2 + 4.5 + 14.0 - 1.6, 0, 16.0]).rotate([0, 0, 360*i/6])
         outer -= sc
     tl = thr_len + 1
     minor = thr_major - 2*depth + 2*thr_cl
-    hole = cyl(54.6, skirt_L + 1).translate([0, 0, -1])                                         # חצאית מעל הכתף של הגוף
-    hole += cyl(54.6, (54.6 - minor)/2, d2=minor).translate([0, 0, skirt_L - (54.6 - minor)/2])     # מעבר 45° שמסתיים בתחילת ההברגה
+    hole = cyl(body_od + 0.6, skirt_L + 1).translate([0, 0, -1])                                         # חצאית מעל הכתף של הגוף
+    hole += cyl(body_od + 0.6, (body_od + 0.6 - minor)/2, d2=minor).translate([0, 0, skirt_L - (body_od + 0.6 - minor)/2])     # מעבר 45° שמסתיים בתחילת ההברגה
     hole += (cyl(minor, tl + 1) + thread(thr_major, tl + 1, thr_cl)).translate([0, 0, skirt_L - 0.5])
     hole += cyl(40.5, lip_L + 2).translate([0, 0, skirt_L + thr_len - 0.01])
     hole += cyl(40.5, 1, d2=42.5).translate([0, 0, nut_len - 0.99])
@@ -42,7 +46,7 @@ def floor(m):
     bb = m.bounding_box(); return m.translate([-(bb[0]+bb[3])/2, -(bb[1]+bb[4])/2, -bb[2]])
 Nprint = floor(N.rotate([180, 0, 0]))                        # שפה למטה
 me = Nprint.to_mesh(); V = np.asarray(me.vert_properties)[:, :3]; Fc = np.asarray(me.tri_verts)
-trimesh.Trimesh(V, Fc, process=False).export('barrel_nut_print.stl')
+trimesh.Trimesh(V, Fc, process=False).export('barrel_nut%s_print.stl' % tag)
 objs, items = [], []
 for i, (name, (x, y)) in enumerate([('barrel_nut_1', (-40, 0)), ('barrel_nut_2', (40, 0))], 1):
     objs.append('<object id="%d" name="%s" type="model"><mesh><vertices>%s</vertices><triangles>%s</triangles></mesh></object>' % (i, name, ''.join('<vertex x="%.4f" y="%.4f" z="%.4f"/>' % tuple(v) for v in V), ''.join('<triangle v1="%d" v2="%d" v3="%d"/>' % tuple(f) for f in Fc)))
@@ -50,7 +54,7 @@ for i, (name, (x, y)) in enumerate([('barrel_nut_1', (-40, 0)), ('barrel_nut_2',
 model = ('<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><metadata name="Title">ANX barrel nuts x2</metadata><resources>%s</resources><build>%s</build></model>') % (''.join(objs), ''.join(items))
 rels = '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>'
 ct = '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>'
-with zipfile.ZipFile('barrel_nuts_print.3mf', 'w', zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile('barrel_nuts%s_print.3mf' % tag, 'w', zipfile.ZIP_DEFLATED) as z:
     z.writestr('[Content_Types].xml', ct); z.writestr('_rels/.rels', rels); z.writestr('3D/3dmodel.model', model)
 bb = Nprint.bounding_box(); print('barrel nut', Nprint.status(), 'OD %.0f, H %.0f, %.1f cm3' % (bb[3]-bb[0], bb[5]-bb[2], Nprint.volume()/1000))
 # תצוגה: הרכבה על שני מוטות
@@ -67,4 +71,4 @@ for i, (el, az, ttl) in enumerate([(15, -60, 'barrel connector on the rods'), (0
     ax = fig.add_subplot(1, 3, i+1, projection='3d')
     for m, c in [(rod, (0.3,0.3,0.35)), (Np, (0.1,0.1,0.1)), (Nm, (0.1,0.1,0.1))]: ax.add_collection3d(coll(m, c))
     ax.set_xlim(-90, 90); ax.set_ylim(-90, 90); ax.set_zlim(-120, 120); ax.set_box_aspect((1, 1, 1.33)); ax.view_init(el, az); ax.axis('off'); ax.set_title(ttl)
-plt.tight_layout(); plt.savefig('preview_barrel.png', dpi=100)
+plt.tight_layout(); plt.savefig('preview_barrel%s.png' % tag, dpi=100)

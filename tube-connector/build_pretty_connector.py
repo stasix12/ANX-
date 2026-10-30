@@ -19,7 +19,7 @@ def barrel_nut():
     outer = Manifold.revolve(CrossSection([prof]), F)
     # 6 שקעי אצבעות אליפטיים
     for i in range(6):
-        sc = Manifold.sphere(1.0, 48).scale([14.0, 6.5, 9.0]).translate([31.5 + 4.0, 0, 16.0]).rotate([0, 0, 360*i/6])
+        sc = Manifold.sphere(1.0, 48).scale([14.0, 6.5, 9.0]).translate([31.5 + 14.0 - 1.6, 0, 16.0]).rotate([0, 0, 360*i/6])
         outer -= sc
     tl = thr_len + 1
     minor = thr_major - 2*depth + 2*thr_cl

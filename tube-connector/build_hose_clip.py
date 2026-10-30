@@ -20,7 +20,7 @@ eye -= Manifold.cylinder(1.2, hose/2 + 1.2, hose/2, 48).translate([cx, 0, -0.01]
 eye -= Manifold.cylinder(1.2, hose/2, hose/2 + 1.2, 48).translate([cx, 0, H - 1.19])
 part = ring + eye
 # חריטת ANX משני הצדדים, עומק 0.6, גובה אותיות 9
-tp = TextPath((0, 0), "ANX", size=9, prop=FontProperties(family='DejaVu Sans', weight='bold'))
+tp = TextPath((0, 0), "ANX3D", size=7.5, prop=FontProperties(family='DejaVu Sans', weight='bold'))
 polys = []
 for p in tp.to_polygons():
     p = np.asarray(p, float)

@@ -32,7 +32,7 @@ import {
 import { friendlyError } from './errors';
 import { ALL_QUEUE_STATUSES, AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES, OPEN_STATUSES, isOpen } from './status';
 import { dripSlots, slotsFor } from './slots';
-import { startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
+import { startOfZonedDay, zonedDateISO } from './time';
 import {
   TIMEZONE,
   type BrowserSettings,
@@ -586,13 +586,6 @@ interface QuickPublishDraft {
   perDay: number;
 }
 
-/** Local HH:MM of an instant, by the same arithmetic slots.ts:29-30 uses. */
-function localHm(at: Date): string {
-  const midnight = zonedToUtc(zonedDateISO(at, TIMEZONE), '00:00', TIMEZONE);
-  const minutes = Math.min(1439, Math.max(0, Math.round((at.getTime() - midnight.getTime()) / 60_000)));
-  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
-}
-
 function draftFor(input: QuickPublishInput, ctx: QuickPublishContext, now: Date): QuickPublishDraft {
   // Targets that no longer exist are dropped rather than scheduled: the planner
   // would create rows for them and rules.ts would skip every one with
@@ -625,13 +618,37 @@ function draftFor(input: QuickPublishInput, ctx: QuickPublishContext, now: Date)
     startAt: startAt.toISOString(),
     gapSeconds,
     targetIds,
-    // The window is derived from the start time rather than fixed at 09:00–20:00:
-    // quick publish has no window control, and a hidden 09:00–20:00 would silently
-    // roll an evening publish to tomorrow morning with nothing on screen to
-    // explain it. Starting at the chosen time and running to the end of the local
-    // day means the plan does what it looks like it does; anything that does not
-    // fit today resumes tomorrow at the same hour.
-    windowStart: localHm(startAt),
+    /*
+     * ─── THE WHOLE CLOCK, NOT THE MINUTE HE PRESSED IT ────────────────────
+     *
+     * "זה לא נותן להוציא פוסטים אם התזמון שאנחנו מסמנים מיידי, זה מזיז את זה
+     *  ליום אחר."
+     *
+     * This was the launch minute's own local HH:MM, and that one line is the
+     * whole of that sentence. It was written to avoid the opposite fault — a hidden
+     * 09:00–20:00 window rolling an evening publish to the morning — but a
+     * window that STARTS at the launch minute and ends at 23:59 is only as
+     * wide as what is left of the day. Press "פרסם עכשיו" at 23:40 and every
+     * following day gets the same nineteen minutes: dripSlots rolls past
+     * endSec and restarts the cursor at startSec, which is 23:40 again.
+     *
+     * Run on the real functions, Asia/Jerusalem, 292 groups at a 30-second
+     * gap launched 23:40:28 on 31.10:
+     *
+     *   windowStart = 23:40   →  38 tonight, 39 a night, last 23:49:30 · 07.11
+     *   windowStart = 00:00   →  last 02:06:30 · 01.11
+     *
+     * The first line is the owner's screenshot to the second. At the
+     * shipped 65-minute gap the same launch is ONE group a night — 291 days,
+     * finishing next August.
+     *
+     * 00:00 keeps the thing the old comment was protecting: `run_at` still
+     * fixes the first instant, so an evening publish still starts this
+     * evening. What changes is only where the cursor resumes after midnight,
+     * and midnight is the honest answer — nothing about a quick publish says
+     * it may use one slice of each day.
+     */
+    windowStart: '00:00',
     windowEnd: '23:59',
     perDay: 0,
   };
@@ -776,6 +793,8 @@ export interface QuickPublishResult {
   /** false is a normal outcome — the queue was still planned, publishing is held. */
   ran: boolean;
   reason?: string;
+  /** True only when "המשך" is the thing that releases it — see the fetch type. */
+  resumable?: boolean;
   published: number;
   manual: number;
   skipped: number;
@@ -958,6 +977,18 @@ export async function quickPublish(
     ran: boolean;
     planned: number;
     reason?: string;
+    /*
+     * WHETHER "לחצו המשך" IS A REMEDY OR A DEAD END.
+     *
+     * `ran: false` is four different answers (server/worker.ts), and only one
+     * of them — publishing is paused — is fixed by pressing המשך. The sheet
+     * printed that sentence for all four, so a customer whose run was refused
+     * for a reason that has nothing to do with the pause was sent to look for
+     * a button that is not on their screen; the one that IS there says "עצור".
+     * PostEditor already asks for this field. This was the only caller left
+     * guessing.
+     */
+    resumable?: boolean;
     published: number;
     manual: number;
     skipped: number;
@@ -994,6 +1025,7 @@ export async function quickPublish(
     targetCount: draft.targetIds.length,
     ran: Boolean(r.ran),
     reason: r.reason,
+    resumable: r.resumable,
     published: r.published ?? 0,
     manual: r.manual ?? 0,
     skipped: r.skipped ?? 0,

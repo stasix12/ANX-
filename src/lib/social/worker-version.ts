@@ -66,10 +66,18 @@ export const WORKER_VERSION = '4.20.0';
  * (social-worker.ts) and the rules it follows are worker/revive.ts, both of
  * which run on the PC and nowhere else.
  *
+ * AND ONCE MORE, NO: library.ts. "פרסם עכשיו" was giving every launch a daily
+ * publishing window that STARTS at the minute it was pressed — so a launch at
+ * 23:40 got nineteen minutes a night, and 292 groups at a 30-second gap
+ * finished seven days later. It is the whole clock now. The function that
+ * computes it (draftFor) runs in the BROWSER and writes the window onto the
+ * schedule row; the PC reads that row and plans from it, so the fix reaches
+ * the owner's customer the moment they launch, with nothing to reinstall.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
- * client.ts, activity.ts, activity-text.ts, server/sync.ts, server/worker.ts
- * — are NOT in the worker's import closure either. They are inside worker.cjs
- * because the alias puts all of src/lib/social there; nothing on the PC
- * executes them.
+ * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
+ * server/worker.ts — are NOT in the worker's import closure either. They are
+ * inside worker.cjs because the alias puts all of src/lib/social there;
+ * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = 'fef1b1e8e77797be';
+export const WORKER_FINGERPRINT = '0907fa8acee9a894';

@@ -301,6 +301,28 @@ export function QuickPublishSheet({
     }
   }
 
+  /*
+   * How many CALENDAR DAYS this launch covers, from the two instants the
+   * panel already prints. Local days, through the product's own formatter, so
+   * a launch that starts at 23:40 and ends at 02:06 counts as the two days it
+   * really is rather than the two and a half hours it lasts.
+   */
+  const spanDays =
+    result && result.endAt
+      ? new Set(
+          [result.startAt, result.endAt].map((iso) => zonedDateISO(new Date(iso))),
+        ).size === 1
+        ? 1
+        : Math.max(
+            2,
+            Math.round(
+              (Date.parse(zonedDateISO(new Date(result.endAt))) -
+                Date.parse(zonedDateISO(new Date(result.startAt)))) /
+                86_400_000,
+            ) + 1,
+          )
+      : 1;
+
   return (
     <Sheet
       open={open}
@@ -385,6 +407,24 @@ export function QuickPublishSheet({
               painted in it has nothing to sit against and the three boxes
               disappear. Inside a sheet the recess is one step darker, the same
               step the hero's countdown box uses inside a card. */}
+          {/*
+            ─── A FORECAST IS LABELLED AS ONE ──────────────────────────────
+            
+            "והכל נראה מבולבל." These three boxes were drawn whenever a result
+            existed, with no reference to whether anything had been written —
+            so the sheet said "התור עדיין לא נבנה" and then, two centimetres
+            below, printed a start instant, a finish instant and 292 targets
+            as settled facts. They are all three computed before the write:
+            startAt and endAt come from the planner's own slot functions, and
+            "יעדים" is the SELECTION, not the rows.
+            
+            So the heading says which it is, and the targets box says it is
+            what was chosen. Nothing here is removed — the numbers are useful
+            — they just stop presenting themselves as a record.
+          */}
+          <p className="text-[11px] font-bold text-mist-500">
+            {result.queued > 0 ? 'מה נקבע לפרסום הזה' : 'צפי — התור עוד לא נבנה'}
+          </p>
           <dl className="grid grid-cols-3 gap-2 text-center [&>*]:min-w-0">
             <div className="rounded-lg bg-ink-900 py-2">
               <dt className="text-[10px] font-bold text-mist-500">מתחיל</dt>
@@ -397,10 +437,30 @@ export function QuickPublishSheet({
               {result.endAt && <p className="text-[10px] font-bold tabular-nums text-brand-400">{formatDayMonthHe(result.endAt)}</p>}
             </div>
             <div className="rounded-lg bg-ink-900 py-2">
-              <dt className="text-[10px] font-bold text-mist-500">יעדים</dt>
+              {/* The ask, and it says so. It is draft.targetIds.length — the
+                  groups chosen — and the planner will write fewer whenever one
+                  of them is already waiting for this post. */}
+              <dt className="text-[10px] font-bold text-mist-500">יעדים שנבחרו</dt>
               <dd className="text-sm font-extrabold tabular-nums text-mist-100">{result.targetCount}</dd>
             </div>
           </dl>
+
+          {/*
+            AND IF IT DOES NOT ALL GO OUT TODAY, SAY SO IN WORDS.
+            
+            The two dates are right there in the boxes, and the owner still
+            read the panel as "it is going out now" — "זה מזיז את זה ליום
+            אחר" is him discovering the second date afterwards. A sentence is
+            harder to miss than a date, and it is computed from the same two
+            instants above rather than from anything new.
+          */}
+          {spanDays > 1 && (
+            <Notice tone="warn">
+              {spanDays === 2
+                ? 'הפרסום לא כולו יוצא היום — חלק ממנו ימשיך מחר, לפי המרווח שנקבע.'
+                : `הפרסום יתפרש על ${spanDays} ימים, לפי המרווח שנקבע. לקיצור — הגדילו את מספר הפרסומים ליום או הקטינו את המרווח בכוונון התור.`}
+            </Notice>
+          )}
 
           {/* The run's real numbers, not a summary of intent. */}
           {result.ran ? (
@@ -408,9 +468,30 @@ export function QuickPublishSheet({
               דפים: {result.published} {agree(result.published, 'פורסם', 'פורסמו')}, {result.skipped} {agree(result.skipped, 'דולג', 'דולגו')},{' '}
               {result.deferred} {agree(result.deferred, 'נדחה', 'נדחו')}, {result.failed} {agree(result.failed, 'נכשל', 'נכשלו')}. קבוצות מתפרסמות דרך התוכנה שעל המחשב שלכם.
             </Notice>
-          ) : (
+          ) : result.resumable ? (
             <Notice tone="warn">
               הפרסום עצמו לא רץ — {result.reason ?? 'הפרסום מושהה.'} לחצו "המשך" בראש הדף כדי לשחרר את התור.
+            </Notice>
+          ) : (
+            /*
+              NOT A WARNING, AND NOT "PRESS המשך".
+              
+              `ran: false` has four causes and only one of them — publishing
+              is paused — is fixed by that button. The sheet said it for all
+              four, so a customer whose run was refused for an unrelated
+              reason was sent looking for a control that is not on their
+              screen; the one that is there says "עצור". And the refusal they
+              actually hit does not stop group publishing at all: that route
+              serves Facebook PAGES, and the groups are planned and published
+              by the program on their own PC, which is untouched by it.
+              
+              Two red boxes over a round that is about to go out is most of
+              "והכל נראה מבולבל", so this one is calm and says what happens
+              next instead.
+            */
+            <Notice tone="info">
+              הפרסום לדפים לא רץ הפעם{result.reason ? ` — ${result.reason}` : '.'} הקבוצות לא תלויות בזה: התוכנה שעל המחשב בונה את התור
+              ומפרסמת אותו כרגיל, בדרך כלל תוך דקה.
             </Notice>
           )}
 
@@ -419,8 +500,20 @@ export function QuickPublishSheet({
               המרווח הנוסף לקבוצות עודכן ל-{accountGapLabel(result.gap.groupMinGapSeconds)} והמרווח הכללי ל-{accountGapLabel(result.gap.minGapSeconds)}.
             </Notice>
           )}
+          {/*
+            SECONDS, THROUGH THE PRODUCT'S ONE SPELLING OF THIS VALUE.
+            
+            This added the two MINUTE mirrors, and applyGapFloor rounds each of
+            them UP — so a thirty-second floor printed as "1 דק׳" while the
+            engine ran at thirty seconds. On the owner's own screenshot that
+            is why the three numbers on this sheet do not reconcile: 292
+            groups at "a minute" is five hours, not the week the finish box
+            showed. accountGapLabel reads the seconds, which is what rules.ts
+            enforces.
+          */}
           <p className="text-xs text-mist-500">
-            ההגדרות דורשות כעת {result.gap.minGapMinutes + result.gap.groupMinGapMinutes} דק׳ בין שני פרסומים לקבוצות. זו הגדרה אחת לכל החשבון, לא לפרסום הזה בלבד.
+            ההגדרות דורשות כעת {accountGapLabel(result.gap.minGapSeconds + result.gap.groupMinGapSeconds)} בין שני פרסומים לקבוצות. זו הגדרה אחת לכל החשבון, לא
+            לפרסום הזה בלבד.
           </p>
 
           {workerOnline === false && groupCount > 0 && (

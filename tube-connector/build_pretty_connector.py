@@ -26,10 +26,19 @@ def barrel_nut():
         if abs(p[0]-clean[-1][0]) > 1e-6 or abs(p[1]-clean[-1][1]) > 1e-6: clean.append(p)
     prof = clean
     outer = Manifold.revolve(CrossSection([prof]), F)
-    # 6 שקעי אצבעות אליפטיים
-    for i in range(6):
-        sc = Manifold.sphere(1.0, 48).scale([14.0, 6.5, 9.0]).translate([body_od/2 + 4.5 + 14.0 - 1.6, 0, 16.0]).rotate([0, 0, 360*i/6])
-        outer -= sc
+    # קליפה דקה שעוקבת אחרי הפרופיל: ממנה נגזרים הפסים כך שעומקם אחיד לאורך כל החבית
+    def shell(d):
+        inner = [(max(r - d, 0.0), z) for (r, z) in prof]
+        return outer - Manifold.revolve(CrossSection([inner]), F)
+    # 18 פסי אחיזה אורכיים, רוחב 2.6, עומק 0.9, מ-z=7 עד z=37
+    grooves = None
+    for i in range(18):
+        slab = Manifold.cube([100, 2.6, 30.0]).translate([0, -1.3, 7.0]).rotate([0, 0, 360*i/18 + 10])
+        grooves = slab if grooves is None else grooves + slab
+    outer -= shell(0.9) ^ grooves
+    # שני פסי הדגשה היקפיים דקים (רוחב 0.8, עומק 0.5) בקצוות
+    for zc in (4.0, 40.0):
+        outer -= shell(0.5) ^ Manifold.cylinder(0.8, 100, 100, 32).translate([0, 0, zc - 0.4])
     tl = thr_len + 1
     minor = thr_major - 2*depth + 2*thr_cl
     hole = cyl(body_od + 0.6, skirt_L + 1).translate([0, 0, -1])                                         # חצאית מעל הכתף של הגוף

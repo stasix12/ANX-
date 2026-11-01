@@ -9,7 +9,7 @@
  * fixed. The only evidence was a version number in one line of its terminal
  * output, which nobody reads.
  */
-export const WORKER_VERSION = '4.21.0';
+export const WORKER_VERSION = '4.22.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -176,10 +176,35 @@ export const WORKER_VERSION = '4.21.0';
  * re-armed only when the CHZARA switch was on, while a launch from the editor
  * creates an ACTIVE weekly row without touching that switch. Browser-side.
  *
+ * AND 4.21.0 → 4.22.0, WHICH IS YES — AND IT CLOSES A DOOR 4.21.0 OPENED.
+ *
+ * The stranded-row sweep in 4.21.0 reads the ROW's `step` to decide whether a
+ * publication reached the Post button. The step write in onStep had its error
+ * DISCARDED — supabase-js resolves with { data, error } rather than throwing —
+ * so a failed UPDATE was a no-op nobody noticed, while `lastStep` still moved
+ * in memory and this process's own answer stayed right.
+ *
+ * Put together: the write of 'publishing' fails, the click lands, the post is
+ * on Facebook, the write of 'verifying' fails too (one blip, two writes), the
+ * row is later stranded — and fifteen minutes later the sweep reads a pre-click
+ * step and publishes the same post to the same group A SECOND TIME. Before the
+ * sweep only a restart could do that; the sweep made it reachable every fifteen
+ * minutes, so closing it belongs to the same release.
+ *
+ *   • social-worker.ts captures the step write's error. composer.ts awaits
+ *     onStep, and the click sits between 'publishing' (:367) and 'verifying'
+ *     (:372) — so a PRE-CLICK failure throws, the click never happens, nothing
+ *     is published, and the row goes back to the queue in a minute with its
+ *     attempt unspent through LOCAL_FAULT_RE. After the click there is nothing
+ *     safe to throw about: the row stays on 'publishing', which both sweeps
+ *     already read as maybe-live, and the loss is logged instead.
+ *
+ * It runs on the PC and nowhere else.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
  * server/worker.ts — are NOT in the worker's import closure either. They are
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '82d83cfb0243486e';
+export const WORKER_FINGERPRINT = '0a2516d5ac48edfa';

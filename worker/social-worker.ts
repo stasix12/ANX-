@@ -107,7 +107,38 @@ const UPDATE_CHECK_MS = 10 * 60_000;
  * node's fetch, in English, before safeError() renders a Hebrew sentence.
  */
 const LOCAL_FAULT_RE =
-  /Target (?:page, context or browser|closed)|browser has been closed|Browser closed|browserContext\.\w+: Target|net::ERR_(?:INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NETWORK_CHANGED|CONNECTION_(?:RESET|CLOSED|REFUSED|FAILED)|ADDRESS_UNREACHABLE|PROXY_CONNECTION_FAILED)|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed/i;
+  /Target (?:page, context or browser|closed)|browser has been closed|Browser closed|browserContext\.\w+: Target|net::ERR_(?:INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NETWORK_CHANGED|CONNECTION_(?:RESET|CLOSED|REFUSED|FAILED)|ADDRESS_UNREACHABLE|PROXY_CONNECTION_FAILED)|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed|step write refused/i;
+
+/**
+ * ─── A LOST STEP WRITE MAY NOT BECOME A SECOND POST ──────────────────────────
+ *
+ * The step write in onStep had its error DISCARDED — supabase-js resolves with
+ * `{ data, error }` rather than throwing, so a failed UPDATE was a no-op nobody
+ * noticed. `lastStep` still moved in memory, so this process's own "did the
+ * click happen?" answer stayed right; the ROW kept the step before it.
+ *
+ * That was survivable until the stranded-row sweep shipped. The sweep reads the
+ * ROW's step, and re-queues anything whose step is not one of the maybe-live
+ * three. So: the write of 'publishing' fails, the click lands, the post is on
+ * Facebook, the write of 'verifying' fails too (one blip, two writes), the row
+ * is later stranded — and fifteen minutes later the sweep sees a pre-click step
+ * and publishes the same post to the same group a second time. The sweep made a
+ * dormant fault reachable every fifteen minutes instead of once per restart,
+ * which makes closing it part of that change rather than a separate task.
+ *
+ * THE CLICK IS THE LINE. composer.ts calls onStep('publishing') at :367,
+ * clicks at :369, and calls onStep('verifying') at :372 — and it AWAITS each
+ * one, so throwing from a pre-click step stops the click from happening at all.
+ * Then nothing was published, the row goes back to the queue in a minute with
+ * its attempt unspent (LOCAL_FAULT_RE, above — this is the machine's fault, not
+ * the group's), and no stale step is ever left for the sweep to misread.
+ *
+ * AFTER the click there is nothing safe to throw about: the post may be live,
+ * and a row put back would be the very double-post this prevents. A failed
+ * 'verifying' write leaves the row on 'publishing', which both sweeps already
+ * treat as maybe-live and hand to the owner. So it is reported and carried.
+ */
+const STEP_WRITE_REFUSED = 'step write refused';
 
 interface WorkerState {
   id: string;
@@ -2416,7 +2447,23 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
       onStep: async (step) => {
         lastStep = step;
         console.log(`[worker]    ${step}`);
-        await db.from('social_queue').update({ step, step_at: new Date().toISOString() }).eq('id', item.id);
+        const { error: stepErr } = await db.from('social_queue').update({ step, step_at: new Date().toISOString() }).eq('id', item.id);
+        if (!stepErr) return;
+        /* 'verifying' is the only step AFTER the click. See the note on
+           STEP_WRITE_REFUSED: the post may be live, so this is carried, and the
+           row stays on 'publishing', which both sweeps read as maybe-live. */
+        if (step === 'verifying') {
+          console.error(`[worker] ⚠ רישום השלב "${step}" נכשל אחרי הלחיצה — השורה נשארת כ"אולי פורסם". ${stepErr.message}`);
+          await logActivity('warn', 'step_write_lost', `רישום שלב הפרסום נכשל אחרי הלחיצה (${tt.name}) — השורה תטופל כפרסום שאולי עלה`, {
+            queueId: item.id,
+            step,
+            detail: stepErr.message,
+          });
+          return;
+        }
+        /* Before the click. Refusing costs a minute; continuing can cost a
+           second post in the same group. */
+        throw new Error(`${STEP_WRITE_REFUSED}: ${stepErr.message}`);
       },
       confirm: requireConfirmation ? (page) => waitForConfirmation(item.id, page) : undefined,
     });

@@ -206,7 +206,7 @@ const KIND: Record<string, ActivityKind> = {
   queue_targets_added: 'schedule',
   stuck_rows_released: 'schedule',
   stuck_rows_requeued: 'schedule',
-  queued_text_refreshed: 'post',
+  queued_text_refreshed: 'schedule',
 
   // The machine and the session.
   worker_stopped: 'system',

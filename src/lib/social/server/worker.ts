@@ -122,6 +122,36 @@ export async function runWorker(trigger: 'cron' | 'manual'): Promise<WorkerRepor
   const db = serviceDb();
   const report: WorkerReport = { ran: false, planned: 0, processed: 0, published: 0, manual: 0, skipped: 0, failed: 0, deferred: 0 };
 
+  /*
+   * RECOVERY RUNS FIRST — ABOVE THE REFUSAL, AND THAT IS THE WHOLE POINT.
+   *
+   * It used to sit inside runWorkerLocked(), where it had already been moved
+   * above the pause and rate-limit checks for a good reason: "recovering a
+   * wedged row is bookkeeping, not publishing", and while publishing is paused
+   * — the state an owner chooses precisely BECAUSE something looks wrong —
+   * nothing was ever recovered.
+   *
+   * Then the multi-business refusal was added ABOVE all of it, for an
+   * unrelated reason, and switched the sweep off completely. There are two
+   * businesses in social_tenants now, so it has not run since the customer was
+   * added. That is the most expensive quiet failure in the product:
+   * social_queue_one_open_per_target_idx allows ONE OPEN ROW PER GROUP, and a
+   * row left in 'publishing' is open — so the group is excluded from every
+   * round the planner builds afterwards, the campaign card reads רץ below 100%
+   * for ever because the row never finishes, and because the lock is per group
+   * and account-wide, one wedged row shortens the next round of a DIFFERENT
+   * campaign. "פוסטים לא מתפרסמים בשעות שהגדרתי" and "קמפיינים מתבלבלים עם
+   * תורים של קמפיינים אחרים", from one cause.
+   *
+   * It is safe above the refusal for the same reason it is safe above the
+   * pause: it publishes nothing and it reads nothing it must attribute to a
+   * business. It writes status, step and error onto rows that are ALREADY
+   * stranded, and a stranded row needs freeing whoever it belongs to. The
+   * refusal exists because the publishing path below it cannot tell whose
+   * request it is serving; recovery does not need to know.
+   */
+  await sweepStuck(db);
+
   if (await moreThanOneBusiness(db)) {
     report.reason = 'יש יותר מעסק אחד במערכת, והמסלול הזה עדיין לא יודע בשם מי הוא פועל — לכן הוא לא רץ. הפרסום לקבוצות ממשיך כרגיל מהמחשב.';
     return report;
@@ -163,15 +193,6 @@ async function runWorkerLocked(db: any, trigger: 'cron' | 'manual', report: Work
    * pressing "המשך" had nothing to resume.
    */
   report.planned = await planQueue();
-
-  /*
-   * Recovering a wedged row is bookkeeping, not publishing, so it runs here —
-   * before the pause and rate-limit checks, for the same reason planning does.
-   * It used to sit below them, which meant that while publishing was paused
-   * (the state an owner puts the system into precisely BECAUSE something looks
-   * wrong) nothing was ever recovered.
-   */
-  await sweepStuck(db);
 
   if (control.paused) {
     report.reason = 'התורים מושהים';

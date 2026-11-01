@@ -136,6 +136,7 @@ const TITLE: Record<string, string> = {
   queue_target_removed: 'קבוצה הוסרה מהתור',
   queue_targets_added: 'קבוצות נוספו לתור',
   stuck_rows_released: 'פרסומים תקועים שוחררו',
+  stuck_rows_requeued: 'פרסומים תקועים חזרו לתור',
 
   // The machine and the session.
   worker_stopped: 'המחשב התנתק',

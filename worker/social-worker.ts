@@ -14,6 +14,7 @@ import { upsertScoped } from '@/lib/social/tenant';
 import { REVIVE_ATTEMPT_CEILING, REVIVE_WINDOW_MS, pickRevivable, type FailedRow, type OpenRow } from './revive';
 import { nightlyDue } from './nightly';
 import { PULSE_EVERY_MS, createPulse, type Pulse } from './pulse';
+import { STRANDED_AFTER_MS, pickStranded, type StrandedRow, type WorkerSeen } from './stranded';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
@@ -145,6 +146,8 @@ interface WorkerState {
   lastPlanAt: number;
   /** When the end-of-round second pass last looked. See reviveFailedRows(). */
   lastReviveAt: number;
+  /** When the stranded-row sweep last looked. See sweepStranded(). */
+  lastStrandedAt: number;
   idleNoticeShown: boolean;
   /** When the repository was last compared against this checkout. */
   lastUpdateCheckAt?: number;
@@ -348,6 +351,7 @@ async function main(): Promise<void> {
     lastCheckAt: 0,
     lastPlanAt: 0,
     lastReviveAt: 0,
+    lastStrandedAt: 0,
     spacingNoticeAt: 0,
     idleNoticeShown: false,
     accountId: ((worker as { fb_user_id?: string }).fb_user_id ?? '') || undefined,
@@ -809,6 +813,25 @@ async function tick(state: WorkerState): Promise<void> {
   await heartbeat(state, state.attention ? 'needs_attention' : 'online', browser.debugMode);
   await plan(state);
 
+  /*
+   * ─── FREE WHAT NOBODY IS HOLDING, BEFORE ANYTHING IS CLAIMED ───────────
+   *
+   * Not in the idle branch, and not behind the pause: a row wedged in
+   * 'publishing' is the thing that BLOCKS the queue, so waiting for a quiet
+   * tick to free it is waiting for the symptom to clear the cause. One open
+   * row per group means that group is absent from every round the planner
+   * builds — so rows can keep being due for other groups for ever while the
+   * wedged one is never looked at.
+   *
+   * Two small reads, paced, and guarded: a transient database error may not
+   * take the publishing loop down with it.
+   */
+  try {
+    await sweepStranded(state);
+  } catch (err) {
+    console.error('[worker] שחרור שורות תקועות נכשל:', safeError(err));
+  }
+
   if (control.paused) return idle(state, 'התורים מושהים בלוח הבקרה.');
   if (state.attention) return idle(state, `ממתין לטיפול ידני: ${state.attention}`);
   if (state.browserState === 'disconnected') return idle(state, 'אין חיבור לפייסבוק — לחצו "התחבר לפייסבוק" בלוח הבקרה.');
@@ -1134,6 +1157,96 @@ async function plan(state: WorkerState): Promise<void> {
  * pickRevivable, so the database is spared the rows and the rule is still
  * enforced where it is tested.
  */
+/**
+ * ─── A ROW NOBODY IS HOLDING, FREED HERE TOO ─────────────────────────────────
+ *
+ * The rules are in worker/stranded.ts, with their own test; this is the
+ * database around them.
+ *
+ * Why the worker needs its own, when src/lib/social/server/worker.ts already
+ * has sweepStuck(): that one runs on Vercel's cron, and this is the one
+ * process that certainly runs for this owner. The startup sweep above covers a
+ * crash-and-restart and is scoped to this worker's own id; it does not cover a
+ * row with no worker_id, one claimed by a machine that has since gone, or one
+ * this process claimed and then lost to a lane that died without finishing —
+ * a worker up for days never looks again.
+ *
+ * The one rule that outranks recovery: a row whose post may already be on
+ * Facebook is never re-queued. It is parked for the owner with step
+ * 'submitted', which resumeNeedsAttention() deliberately skips.
+ */
+/** Paced: two small reads, and nothing here changes inside two minutes. */
+const STRANDED_EVERY_MS = 2 * 60_000;
+
+async function sweepStranded(state: WorkerState): Promise<void> {
+  if (Date.now() - state.lastStrandedAt < STRANDED_EVERY_MS) return;
+  state.lastStrandedAt = Date.now();
+  const db = await workerDb();
+  const scope = queueScope(state);
+
+  let rowQuery = db
+    .from('social_queue')
+    .select('id, status, step, worker_id, claimed_at, target:social_targets!inner(channel, account_id)')
+    .in('status', ['publishing', 'awaiting_confirmation'])
+    .eq('target.channel', 'facebook_group')
+    /* Only rows old enough to be candidates, so the read is small on a busy
+       queue. The same threshold is applied again in pickStranded, where it is
+       tested. */
+    .lt('claimed_at', new Date(Date.now() - STRANDED_AFTER_MS).toISOString())
+    .limit(500);
+  if (scope) rowQuery = rowQuery.or(`account_id.eq.${scope},account_id.is.null`, { referencedTable: 'target' });
+  const { data: rows, error: rowErr } = await rowQuery;
+  if (rowErr) throw new Error(rowErr.message);
+  if (!rows?.length) return;
+
+  /*
+   * WHO IS ALIVE — and a read that fails is not an answer. `workersKnown`
+   * false makes pickStranded leave every other machine's row alone rather
+   * than guess, which is the difference between recovering a wedged row and
+   * two machines publishing the same one.
+   */
+  const { data: workers, error: workerErr } = await db.from('social_workers').select('id, last_seen_at, status');
+
+  const decided = pickStranded({
+    rows: (rows ?? []) as StrandedRow[],
+    workers: (workers ?? []) as WorkerSeen[],
+    workersKnown: !workerErr,
+    selfId: state.id,
+    held: state.currentJobs,
+    nowMs: Date.now(),
+  });
+
+  if (decided.park.length) {
+    await db
+      .from('social_queue')
+      .update({
+        status: 'needs_attention',
+        step: 'submitted',
+        error: 'הפרסום נקטע באמצע ואין מי שמחזיק אותו. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".',
+      })
+      .in('id', decided.park);
+    await logActivity(
+      'warn',
+      'stuck_rows_released',
+      `${decided.park.length} פרסומים נתקעו אחרי שהלחיצה אולי כבר בוצעה — הועברו ל"דורשים אתכם" לבדיקה בקבוצה`,
+      { parked: decided.park.length },
+    );
+  }
+
+  if (decided.requeue.length) {
+    await db
+      .from('social_queue')
+      .update({ status: 'scheduled', step: 'pending', scheduled_at: new Date().toISOString(), error: '', worker_id: null, claimed_at: null })
+      .in('id', decided.requeue);
+    await logActivity(
+      'info',
+      'stuck_rows_requeued',
+      `${decided.requeue.length} פרסומים שלא הגיעו ללחיצה שוחררו וחזרו לתור — הקבוצות שלהם היו חסומות לסבבים הבאים`,
+      { requeued: decided.requeue.length },
+    );
+  }
+}
+
 /** How often the sweep may look. It is two small reads, but not every tick. */
 const REVIVE_EVERY_MS = 2 * 60_000;
 

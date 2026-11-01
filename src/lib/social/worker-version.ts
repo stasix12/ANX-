@@ -105,6 +105,36 @@ export const WORKER_VERSION = '4.21.0';
  *
  * All four run on the PC and nowhere else.
  *
+ * AND IN THE SAME 4.21.0, THE WORST FINDING IN THE AUDIT, WHICH IS ALSO THE
+ * QUIETEST. social_queue_one_open_per_target_idx allows ONE OPEN ROW PER
+ * GROUP, and a row left in 'publishing' is open — so that group is absent from
+ * every round the planner builds afterwards, the campaign card reads רץ below
+ * 100% for ever because the row never finishes, and because the lock is per
+ * group and account-wide, one wedged row shortens the next round of a
+ * DIFFERENT campaign.
+ *
+ * Both recoveries missed it. server/worker.ts's sweepStuck() sat BELOW the
+ * refusal that returns early when social_tenants holds more than one business
+ * — so it has not run since the customer was added, switched off by a guard
+ * put above it for an unrelated reason. And the worker's startup sweep is
+ * scoped `.eq('worker_id', state.id)` and runs only at startup: it covers a
+ * crash-and-restart and nothing else.
+ *
+ *   • worker/stranded.ts (new) holds the decision, with its own test: which
+ *     claims count as abandoned, and the rule that outranks recovery itself —
+ *     a row whose post MAY ALREADY BE LIVE is never re-queued, only parked for
+ *     the owner with step 'submitted'. Inverting that is a second post in the
+ *     same group.
+ *   • worker/social-worker.ts sweeps on its own clock, before anything is
+ *     claimed and not behind the pause, because a wedged row is what blocks
+ *     the queue.
+ *   • src/lib/social/server/worker.ts moves its sweep above the refusal. That
+ *     file runs on Vercel, not here, so it rides along in the fingerprint
+ *     without needing the version.
+ *
+ * The version was already going to 4.21.0 for the pulse, and this ships in the
+ * same install rather than asking the owner to update twice.
+ *
  * AND ONE MORE, NO: client.ts. listWorkers() computed `online` from
  * last_seen_at alone, so a worker that had just reported status 'offline' was
  * drawn as a healthy green computer for another ninety seconds — the same
@@ -112,10 +142,15 @@ export const WORKER_VERSION = '4.21.0';
  * round launched inside that window shows a connected PC and then nothing
  * moves. Read by screens.
  *
+ * (activity.ts and activity-text.ts move in the same change, to name the new
+ *  stuck_rows_requeued event. Those two maps are read by screens; the worker
+ *  only writes the event name, so they need the fingerprint and not the
+ *  version.)
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
  * server/worker.ts — are NOT in the worker's import closure either. They are
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '68e226174eebefe5';
+export const WORKER_FINGERPRINT = 'b43cd8b7e85d5740';

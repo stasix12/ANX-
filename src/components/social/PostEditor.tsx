@@ -133,6 +133,26 @@ export function PostEditor({ postId }: { postId?: string }) {
   const searchParams = useSearchParams();
   const presets = useRef({ campaign: searchParams.get('campaign'), targets: searchParams.get('targets') ?? '' });
   const loadedFor = useRef<string | undefined>('__never__');
+  /*
+   * ─── TWO TAPS ON "השק" MADE TWO ROUNDS ──────────────────────────────────
+   *
+   * setBusy('schedule') is React state, so it is not true until a render
+   * lands. Two taps inside that window both pass the check and both run the
+   * whole launch: ensureRunForPost is read-then-create, so the account gets
+   * TWO runs for one post, and createSchedule is called twice, so the post
+   * gets two active schedules — which from tomorrow is every group published
+   * to twice a day, by two rounds that each look correct on their own card.
+   *
+   * The hasPendingQueue() confirmation below does not close this. It asks
+   * whether rows are already waiting, and on an immediate launch there are
+   * none yet: the rows are written later, by the planner on the PC. It
+   * catches a second launch minutes later, not a double tap.
+   *
+   * A REF IS THE ONLY THING THAT IS TRUE IMMEDIATELY, which is why every
+   * other write path in this product already uses one (QuickPublishSheet,
+   * PublishingToggle, the dashboard). This was the one left.
+   */
+  const launching = useRef(false);
   const [previewKey, setPreviewKey] = useState<string>('base');
   const [schedule, setSchedule] = useState<ScheduleDraft>({ mode: 'now', date: '', time: '09:00', weekly: {}, intervalDays: 2, intervalTime: '09:00', dripPerDay: 0, dripGapMinutes: 20, dripStart: '09:00', dripEnd: '20:00' });
   const [loading, setLoading] = useState(true);
@@ -472,6 +492,9 @@ export function PostEditor({ postId }: { postId?: string }) {
       toast(problem, 'error');
       return;
     }
+    /* Synchronous, before any await — see the note on `launching`. */
+    if (launching.current) return;
+    launching.current = true;
     setBusy('schedule');
     try {
       const id = await persist('ready');
@@ -553,6 +576,11 @@ export function PostEditor({ postId }: { postId?: string }) {
     } catch (err) {
       toast(friendlyMessage(err, 'התזמון נכשל.'), 'error');
     } finally {
+      /* In the `finally`, so it is released on the error path and on the
+         "no, leave it" early return inside the try as well as on success. A
+         ref released only on success locks the button for the rest of the
+         session the first time Facebook or the network says no. */
+      launching.current = false;
       setBusy(null);
     }
   }

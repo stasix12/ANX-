@@ -14,12 +14,12 @@ import {
   liveQueuePlan,
   removeTargetFromQueue,
   respaceQueue,
-  saveCampaign,
+  saveCampaignSchedule,
   type LiveQueuePlan,
 } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
 import { accountFloorMs, spacingFrom, windowedCascade } from '@/lib/social/projection';
-import { readSchedule, scheduleColumns, type CampaignSchedule, MIN_GAP_SECONDS, gapChoiceLabel } from '@/lib/social/campaign-schedule';
+import { readSchedule, gapMinutesFor, type CampaignSchedule, MIN_GAP_SECONDS, gapChoiceLabel } from '@/lib/social/campaign-schedule';
 import { agree, counted, formatDayMonthHe, formatInstantHe, startOfZonedDay, zonedDateISO } from '@/lib/social/time';
 import type { BrowserSettings, Campaign, LimitsSettings, SocialTarget } from '@/lib/social/types';
 import { TargetAvatar } from './TargetAvatar';
@@ -652,10 +652,31 @@ export function QueueTunerSheet({
          */
         const kept = gap;
         if (kept !== snap.window.gapSeconds) {
-          await saveCampaign({
-            id: snap.campaign.id,
-            name: snap.campaign.name,
-            ...scheduleColumns({ ...snap.window, gapSeconds: kept }),
+          /*
+           * THE GAP COLUMNS ONLY, AND THAT IS THE WHOLE CORRECTION HERE.
+           *
+           * This wrote `scheduleColumns({ ...snap.window, gapSeconds: kept })`
+           * — the ENTIRE window, rebuilt from a snapshot taken when this sheet
+           * opened — plus that snapshot's `name`. So choosing a gap also
+           * restored schedule_start, schedule_days, schedule_enabled and the
+           * campaign's name to whatever they were at open time. Set the hours
+           * on the card, open this sheet, change the gap, and the hours are
+           * silently back. One control, four unrelated fields rolled back, and
+           * then the queue re-spaced to the restored window.
+           *
+           * The write-back itself stays: the long note above is why this sheet
+           * must own the round's own column rather than only the account floor.
+           * What changes is that it writes only what it edits. Everything else
+           * keeps whatever is stored — the same rule scheduleColumns() already
+           * states for schedule_end.
+           */
+          await saveCampaignSchedule(snap.campaign.id, {
+            schedule_gap_seconds: kept,
+            /* Beside it, rounded up, for the same reason scheduleColumns writes
+               both: an un-updated worker reading nothing falls back to a
+               default, which is a change to how fast the account posts made by
+               a deployment rather than by the owner. */
+            schedule_gap_minutes: gapMinutesFor(kept),
           });
           await matchAccountGapTo(kept);
         }

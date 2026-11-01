@@ -37,6 +37,15 @@ const is = (cond: boolean, what: string) => {
 };
 
 const src = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+/**
+ * The file with its comments removed.
+ *
+ * Every negative assertion here needs this: the comments in this codebase
+ * QUOTE the code they replaced, on purpose, so "the old call must be gone"
+ * matches the explanation of why it is gone and passes for ever after.
+ */
+const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
 const SCREENS: [string, string][] = [
   ['/social/campaigns', src('../../src/app/social/campaigns/page.tsx')],
   ['the dashboard', src('../../src/app/social/page.tsx')],
@@ -58,7 +67,7 @@ for (const [name, page] of SCREENS) {
   );
   /* And the edit must never be written into the list the read owns. */
   is(
-    !/setCampaigns\(before\.map\(\(c\) => \(c\.id === campaign\.id \? \{ \.\.\.c, \.\.\.columns \} : c\)\)\)/.test(page),
+    !/setCampaigns\(before\.map\(\(c\) => \(c\.id === campaign\.id \? \{ \.\.\.c, \.\.\.columns \} : c\)\)\)/.test(code(page)),
     `${name} must not patch the schedule into the campaigns list — that list belongs to the refresh`,
   );
 }
@@ -102,4 +111,43 @@ for (const [name, page] of SCREENS) {
   is(/\[toast, load\]/.test(fn.slice(fn.length - 400)) || /\[toast, load\],/.test(page), 'changeSchedule must declare load() among its dependencies now that the settle path depends on the read');
 }
 
-console.log(`settings stick OK — ${checks} assertions over both screens`);
+/* ───────── 4. the queue tuner writes what it edits, and no more ────────── */
+{
+  const tuner = src('../../src/components/social/QueueTunerSheet.tsx');
+  const fn = tuner.slice(tuner.indexOf('const commitGap = ()'), tuner.indexOf('const removeTarget ='));
+  is(fn.length > 800, 'commitGap is found');
+
+  /*
+   * The write-back itself must STAY. The long note above it is why: without it
+   * this sheet wrote only the account floor and the round's own column kept a
+   * number the engine does not use — two editors, two records, each undoing
+   * the other. What was wrong is its WIDTH.
+   */
+  is(/await saveCampaignSchedule\(snap\.campaign\.id, \{/.test(fn), "the round's own gap column must still be written from here — writing only the account floor is the two-editors bug this replaced");
+  is(/schedule_gap_seconds: kept,/.test(fn), 'and it must write the seconds the owner chose');
+  is(/schedule_gap_minutes: gapMinutesFor\(kept\),/.test(fn), 'with the rounded-up minutes beside them, or an un-updated worker reads nothing and falls back to a default — a change to how fast the account posts made by a deployment rather than by the owner');
+
+  /*
+   * AND NOTHING ELSE. It rebuilt the entire window from `snap.window`, a
+   * snapshot taken when the sheet OPENED, and carried that snapshot's name. So
+   * choosing a gap restored the start hour, the chosen days, the on/off switch
+   * and the name to their open-time values — and then re-spaced the queue to
+   * the restored window.
+   */
+  is(
+    !/scheduleColumns\(\{ \.\.\.snap\.window, gapSeconds: kept \}\)/.test(code(fn)),
+    'the tuner must not rebuild the whole window from its open-time snapshot: a start hour or a day chosen on the card in between is silently restored, and the queue is then re-spaced to the restored window',
+  );
+  is(!/name: snap\.campaign\.name/.test(code(fn)), "nor carry the snapshot's name — a rename made while the sheet was open would be rolled back by a control about spacing");
+  is(!/scheduleColumns/.test(code(tuner)), 'and the whole-window writer must not come back anywhere in this sheet');
+
+  /* The narrow writer must be narrow by construction, not by its callers. */
+  const client = src('../../src/lib/social/client.ts');
+  const writer = client.slice(client.indexOf('export async function saveCampaignSchedule'), client.indexOf('export async function saveCampaign('));
+  is(writer.length > 100, 'saveCampaignSchedule is found');
+  is(/patch: Partial<ScheduleFields>/.test(writer), 'it must take a PARTIAL — a required full shape puts every caller back to supplying fields it is not editing');
+  is(/\.update\(patch\)/.test(writer), 'and send exactly that patch, so anything absent keeps whatever is stored');
+  is(/if \(!id \|\| !Object\.keys\(patch\)\.length\) return;/.test(writer), 'an empty patch must write nothing at all rather than issue a no-op UPDATE');
+}
+
+console.log(`settings stick OK — ${checks} assertions over both screens and the queue tuner`);

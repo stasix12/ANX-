@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
-import { MIN_GAP_SECONDS, gapChoiceLabel, readSchedule, readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule } from './campaign-schedule';
+import { MIN_GAP_SECONDS, gapChoiceLabel, readSchedule, readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey } from './compose';
@@ -532,6 +532,29 @@ export async function getAccount(): Promise<SocialAccount | null> {
 
 export async function listCampaigns(): Promise<Campaign[]> {
   return unwrap<Campaign[]>(await db().from('social_campaigns').select('*').order('created_at', { ascending: false }));
+}
+
+/**
+ * ─── WRITES THE SCHEDULE COLUMNS AND NOTHING ELSE ────────────────────────────
+ *
+ * saveCampaign() takes `name` because an INSERT needs one, and every caller
+ * that only wants to change the schedule has to supply it anyway — from
+ * whatever copy of the row it happens to be holding. On a screen whose copy is
+ * fresh that is harmless. On one holding a snapshot taken when a sheet opened
+ * it is a last-write-wins revert of a field nobody was editing.
+ *
+ * The queue tuner was doing both at once: writing the whole window from its
+ * open-time snapshot (so a start hour or a day chosen on the card in between
+ * was restored to what it had been) AND carrying that snapshot's `name`. One
+ * control, three unrelated fields quietly rolled back.
+ *
+ * So the narrow writer exists, and it names the columns it touches. Anything
+ * absent from the patch keeps whatever is stored, which is the same rule
+ * scheduleColumns() already follows for schedule_end: "אסור למחוק מידע".
+ */
+export async function saveCampaignSchedule(id: string, patch: Partial<ScheduleFields>): Promise<void> {
+  if (!id || !Object.keys(patch).length) return;
+  unwrap(await db().from('social_campaigns').update(patch).eq('id', id).select('id').single());
 }
 
 export async function saveCampaign(input: Partial<Campaign> & { name: string }): Promise<Campaign> {

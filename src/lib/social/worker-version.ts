@@ -170,4 +170,4 @@ export const WORKER_VERSION = '4.21.0';
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '714251fc0bf96d9c';
+export const WORKER_FINGERPRINT = '173439ae42adb97f';

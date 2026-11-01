@@ -229,9 +229,35 @@ export default function CampaignsPage() {
    */
   /* The one answer about time this list may use, for the ORDER as well as for
      the cards — the cards already call it through CampaignCard. */
+  /*
+   * ─── THE EDIT THE OWNER MADE, HELD OVER THE STORED ROW ───────────────────
+   *
+   * "שינויים בהגדרות לא מתעדכנים מיידית."
+   *
+   * This screen patched the edit straight into `campaigns`, and a read lands
+   * on top of that list every five seconds. So between the tap and the write
+   * settling — 600ms of debounce plus a campaign save, a repeat re-arm, a
+   * floor write and a queue respace, which is several seconds on a phone — any
+   * refresh put the STORED row back and the card snapped to the old hour, the
+   * old days, the old gap. The owner taps a day chip, watches it light up, and
+   * watches it go out again.
+   *
+   * Keyed by campaign id, because this screen shows every round at once: one
+   * patch would mean setting A's hours, scrolling to B, tapping a chip, and
+   * A's edit silently replaced.
+   */
+  const [schedulePatch, setSchedulePatch] = useState<Record<string, ReturnType<typeof scheduleColumns>>>({});
+  /* What a card draws: the stored row, with the owner's un-acknowledged change
+     laid over it. readSchedule() validates every field either way, so a row
+     written by an older version still resolves to a usable schedule. */
+  const scheduleOf = useCallback(
+    (campaign: Campaign) => readSchedule(schedulePatch[campaign.id] ? { ...campaign, ...schedulePatch[campaign.id] } : campaign),
+    [schedulePatch],
+  );
+
   const readoutFor = useCallback(
-    (c: Campaign) => scheduleReadout(readSchedule(c), stateOf(c), new Date(), readRepeat(c), spacing),
-    [stateOf, spacing],
+    (c: Campaign) => scheduleReadout(scheduleOf(c), stateOf(c), new Date(), readRepeat(c), spacing),
+    [scheduleOf, stateOf, spacing],
   );
 
   const visible = useMemo(() => {
@@ -293,20 +319,44 @@ export default function CampaignsPage() {
    */
   const scheduleTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [scheduleBusy, setScheduleBusy] = useState<Record<string, boolean>>({});
-  useEffect(() => {
-    const timers = scheduleTimers.current;
-    return () => {
-      for (const t of Object.values(timers)) clearTimeout(t);
-    };
-  }, []);
+  /*
+   * The dashboard solved this three ways and none of them were ported here:
+   * the pending edit lives in its own record (declared above, beside the
+   * reader that lays it over the stored row), the pending write is a FUNCTION
+   * so an unmount can flush it instead of dropping it, and the patch is
+   * dropped only once the stored row agrees.
+   */
+  /* What each pending timer would write, so the cleanup can run it. */
+  const schedulePending = useRef<Record<string, () => Promise<void>>>({});
+  /*
+   * ON UNMOUNT THE PENDING SAVE IS FLUSHED, NOT DROPPED.
+   *
+   * This cleared the timer and stopped. The editor is three selects and seven
+   * day chips on a phone, so a tap followed by a swipe to another screen
+   * inside 600ms lost the change silently — with the card having already shown
+   * it as made. A write that was asked for is sent; what cannot survive an
+   * unmount is the toast about it, which is the smaller loss.
+   */
+  useEffect(
+    () => () => {
+      for (const [id, timer] of Object.entries(scheduleTimers.current)) {
+        clearTimeout(timer);
+        void schedulePending.current[id]?.();
+      }
+    },
+    [],
+  );
 
   const changeSchedule = useCallback(
     (campaign: Campaign, next: CampaignSchedule) => {
-      const before = campaigns ?? [];
       const columns = scheduleColumns(next);
-      setCampaigns(before.map((c) => (c.id === campaign.id ? { ...c, ...columns } : c)));
-      clearTimeout(scheduleTimers.current[campaign.id]);
-      scheduleTimers.current[campaign.id] = setTimeout(async () => {
+      /* Into its own record, not into `campaigns` — the five-second read owns
+         that list and would put the stored row straight back. */
+      setSchedulePatch((all) => ({ ...all, [campaign.id]: columns }));
+      /* THE WRITE, AS A FUNCTION, so the unmount cleanup can run it. */
+      const run = async () => {
+        delete schedulePending.current[campaign.id];
+        delete scheduleTimers.current[campaign.id];
         setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
         try {
           await saveCampaign({ id: campaign.id, name: campaign.name, ...columns });
@@ -370,16 +420,68 @@ export default function CampaignsPage() {
           }
           await load();
         } catch (err) {
-          /* Put the row back exactly as it was before this burst of taps. */
-          setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? (before.find((o) => o.id === c.id) ?? c) : c)));
+          /*
+           * THE PATCH IS DROPPED, so the card goes back to what the database
+           * holds. A row that refused the write (most likely cause, and what
+           * errors.ts will say: supabase/social-latest.sql has not been run)
+           * must not leave the card showing a window the engine has never
+           * heard of — that is the screen promising something the machine will
+           * not do.
+           */
+          setSchedulePatch((all) => {
+            const rest = { ...all };
+            delete rest[campaign.id];
+            return rest;
+          });
           toast(friendlyMessage(err, 'שמירת התזמון נכשלה.'), 'error');
         } finally {
           setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
         }
-      }, 600);
+      };
+
+      schedulePending.current[campaign.id] = run;
+      clearTimeout(scheduleTimers.current[campaign.id]);
+      scheduleTimers.current[campaign.id] = setTimeout(run, 600);
     },
-    [campaigns, toast],
+    [toast, load],
   );
+
+  /*
+   * AND THE PATCH IS DROPPED ONLY ONCE THE STORED ROW AGREES WITH IT.
+   *
+   * Not on the write returning: `load()` is what refills the list, and between
+   * the write settling and that read landing the card would flick back to the
+   * old value for one frame. Comparing what the row RESOLVES to rather than
+   * the raw columns, because a database that has not run the migration returns
+   * no columns at all and readSchedule() turning that into the defaults is the
+   * honest answer to "what is this campaign set to".
+   */
+  useEffect(() => {
+    const ids = Object.keys(schedulePatch);
+    if (!ids.length || !campaigns) return;
+    const settled = ids.filter((id) => {
+      const row = campaigns.find((c) => c.id === id);
+      if (!row) return false;
+      const live = scheduleColumns(readSchedule(row));
+      const want = schedulePatch[id];
+      return (
+        live.schedule_enabled === want.schedule_enabled &&
+        live.schedule_start === want.schedule_start &&
+        /* The SECONDS are what the owner chose; the minutes beside them are
+           derived from it, and the derived one is coarser — it would call a
+           change from 30 to 40 seconds "no change". */
+        live.schedule_gap_seconds === want.schedule_gap_seconds &&
+        live.schedule_days.join(',') === want.schedule_days.join(',')
+      );
+    });
+    if (!settled.length) return;
+    setSchedulePatch((all) => {
+      const rest = { ...all };
+      for (const id of settled) delete rest[id];
+      return rest;
+    });
+  }, [campaigns, schedulePatch]);
+
 
   /*
    * CHZARA — the same switch the dashboard carries, on the screen where this
@@ -791,7 +893,7 @@ export default function CampaignsPage() {
                  * so the panel draws, the owner can set it up, and only
                  * pressing the switch reports the migration is missing.
                  */
-                schedule={readSchedule(c)}
+                schedule={scheduleOf(c)}
                 onScheduleChange={(next) => changeSchedule(c, next)}
                 spacing={spacing}
                 repeat={readRepeat(c)}

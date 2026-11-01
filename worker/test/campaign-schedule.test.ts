@@ -484,7 +484,20 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   is(/<NextPublication/.test(readFileSync(new URL('../../src/components/social/CampaignScheduleBoard.tsx', import.meta.url), 'utf8')), 'and the dashboard draws THAT block rather than a second copy of it');
 
   const page = readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8');
-  is(/schedule=\{readSchedule\(c\)\}/.test(page), 'the panel is fed from the campaign row, so a refresh shows what was saved');
+  /*
+   * The panel is still fed from the stored row — but with the owner's
+   * un-acknowledged edit laid OVER it, which is what stops the five-second
+   * refresh snapping the card back to the old hour between the tap and the
+   * write settling ("שינויים בהגדרות לא מתעדכנים מיידית"). Both halves matter:
+   * reading only the patch would show an edit the database refused, and
+   * reading only the row is the bug.
+   */
+  is(/schedule=\{scheduleOf\(c\)\}/.test(page), 'the panel is fed from the campaign row, so a refresh shows what was saved');
+  is(
+    /const scheduleOf = useCallback\(\s*\(campaign: Campaign\) => readSchedule\(schedulePatch\[campaign\.id\] \? \{ \.\.\.campaign, \.\.\.schedulePatch\[campaign\.id\] \} : campaign\)/.test(page),
+    'and that reader lays the pending edit over the stored row, rather than replacing it',
+  );
+  is(/scheduleReadout\(scheduleOf\(c\)/.test(page), "the card's own readout must read the same thing the panel does, or the two disagree for several seconds after every tap");
   is(/saveCampaign\(\{ id: campaign\.id, name: campaign\.name, \.\.\.columns \}\)/.test(page), 'and a change is WRITTEN to that row — "ההגדרות חייבות להישמר גם לאחר Refresh"');
   is(/setCampaigns\(\(list\) => \(list \?\? \[\]\)\.map/.test(page), 'a write that fails puts the card back, rather than leaving it showing a window the engine never heard of');
   is(/clearTimeout\(scheduleTimers\.current\[campaign\.id\]\)/.test(page), 'and three taps in a second are one write, not three racing each other');

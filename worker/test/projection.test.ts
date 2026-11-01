@@ -817,8 +817,22 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
      a thirty-second round used to load as "1 דק׳" and one save doubled it. */
   is(/setGap\(own\?\.enabled \? own\.gapSeconds : plan\.effectiveGapSeconds\)/.test(tuner),
     'the tuner opens on the ROUND\u2019s own gap when it is about a round, not on the account floor, and does not round it');
-  is(/await saveCampaign\(\{[\s\S]{0,200}scheduleColumns\(\{ \.\.\.snap\.window, gapSeconds: kept \}\)/.test(tuner),
+  /*
+   * IT STILL WRITES THE ROUND'S OWN COLUMN — that is the invariant here and it
+   * has not changed. What changed is the WIDTH of the write: it used to send
+   * `scheduleColumns({ ...snap.window, gapSeconds: kept })`, the whole window
+   * rebuilt from a snapshot taken when the sheet opened, plus that snapshot's
+   * name. So choosing a gap also rolled back the start hour, the chosen days,
+   * the on/off switch and the name to their open-time values, and then
+   * re-spaced the queue to the restored window. The narrow writer sends the two
+   * gap columns and leaves everything else exactly as stored.
+   */
+  is(/await saveCampaignSchedule\(snap\.campaign\.id, \{[\s\S]{0,400}schedule_gap_seconds: kept,/.test(tuner),
     'and writes that round\u2019s own column, so the panel beside it cannot disagree');
+  is(/schedule_gap_minutes: gapMinutesFor\(kept\),/.test(tuner),
+    'with the rounded-up minutes beside the seconds, so a worker that has not updated is slower than asked rather than faster');
+  is(!/scheduleColumns\(\{ \.\.\.snap\.window/.test(tuner),
+    'and it must NOT rebuild the whole window from the open-time snapshot — that silently restored the hours, the days and the name');
   is(/await matchAccountGapTo\(kept\);/.test(tuner), 'with the account floor following the same number the panel would follow');
   /*
    * AND THE RATCHET IS GONE BECAUSE ITS CAUSE IS.

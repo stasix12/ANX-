@@ -2588,10 +2588,29 @@ export async function manualQueue(): Promise<QueueRow[]> {
 
 /* -------------------------------------------------------------- workers */
 
+/**
+ * THE COMPUTER'S OWN LAST WORD COUNTS, not only how recently it spoke.
+ *
+ * `online` was computed from last_seen_at alone, so a worker that had just
+ * reported status 'offline' — the user closed the window, the program
+ * self-updated — was still drawn as a healthy green computer for the whole
+ * ninety-second cutoff. That is the same fault as "מראה שהמחשב מנותק למרות
+ * שהוא מחובר" pointing the other way, and it is the more expensive direction:
+ * a round launched inside that window shows a connected PC and then nothing
+ * moves, with no explanation anywhere.
+ *
+ * Both halves are required. A fresh stamp with status 'offline' is a clean
+ * shutdown; a stale stamp with status 'online' is a machine that stopped
+ * answering mid-sentence. Only "spoke recently AND did not say goodbye" is
+ * connected.
+ */
 export async function listWorkers(): Promise<(SocialWorker & { online: boolean })[]> {
   const rows = unwrap<SocialWorker[]>(await db().from('social_workers').select('*').order('created_at'));
   const cutoff = Date.now() - WORKER_OFFLINE_AFTER_SECONDS * 1000;
-  return rows.map((w) => ({ ...w, online: Boolean(w.last_seen_at && new Date(w.last_seen_at).getTime() > cutoff) }));
+  return rows.map((w) => ({
+    ...w,
+    online: Boolean(w.last_seen_at && new Date(w.last_seen_at).getTime() > cutoff) && w.status !== 'offline',
+  }));
 }
 
 /**

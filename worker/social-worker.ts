@@ -13,6 +13,7 @@ import { OPEN_STATUSES } from '@/lib/social/status';
 import { upsertScoped } from '@/lib/social/tenant';
 import { REVIVE_ATTEMPT_CEILING, REVIVE_WINDOW_MS, pickRevivable, type FailedRow, type OpenRow } from './revive';
 import { nightlyDue } from './nightly';
+import { PULSE_EVERY_MS, createPulse, type Pulse } from './pulse';
 import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
@@ -214,6 +215,19 @@ interface WorkerState {
    */
   recheckSession?: boolean;
   /**
+   * THE STATUS THE PULSE RE-SENDS, and the reason it is held here.
+   *
+   * worker/pulse.ts writes last_seen_at on its own timer so that a six-minute
+   * login challenge or a 2-6 minute group discovery can no longer make the
+   * dashboard say the computer is off. But a pulse that sent a fixed 'online'
+   * would quietly promote a worker that is ASKING FOR HELP back to healthy
+   * between transitions, which is a worse lie than the one being fixed. So
+   * heartbeat() records what it last reported, and the pulse repeats exactly
+   * that until the next transition changes it.
+   */
+  pulseStatus?: 'online' | 'needs_attention' | 'offline';
+  pulseDebug?: boolean;
+  /**
    * The c_user id of the account the browser is signed in as.
    *
    * Kept here because finding one of our own posts in a group comes down to
@@ -234,6 +248,8 @@ interface WorkerState {
 
 const session = new BrowserSession();
 const adapter = new FacebookGroupBrowserAdapter(session);
+/** The heartbeat timer. Module scope so the self-update path can stop it too. */
+let pulse: Pulse | null = null;
 let stopping = false;
 
 async function main(): Promise<void> {
@@ -425,6 +441,30 @@ async function main(): Promise<void> {
     markIdentity(state);
   }
 
+  /*
+   * THE PULSE STARTS HERE, before the first job and before the Facebook login
+   * check — which is itself one of the long awaits that used to starve it.
+   *
+   * It is deliberately NOT inside tick(): a timer that only exists while the
+   * loop is running is the same step in disguise. This one runs from the
+   * moment the worker row is real until the process is on its way out.
+   */
+  let pulseProblem = '';
+  pulse = createPulse({
+    everyMs: PULSE_EVERY_MS,
+    write: () => heartbeat(state, state.pulseStatus ?? 'online', state.pulseDebug ?? false),
+    onError: (err) => {
+      /* Said once per distinct reason, not every five seconds — the whole
+         point of this timer is that it keeps firing, and a loud one would
+         bury the log it shares with everything else. */
+      const message = safeError(err, 'אות החיים למסד הנתונים נכשל. התוכנה ממשיכה לנסות.').split('\n')[0];
+      if (message === pulseProblem) return;
+      pulseProblem = message;
+      console.error(`[worker] ⏲ ${message}`);
+    },
+  });
+  pulse.start();
+
   await logActivity('info', 'worker_started', `ה-worker "${env.workerName}" עלה (${hostname()})`, { version: VERSION });
   console.log('[worker] מחובר ל-Supabase. ממתין לעבודות… (Ctrl+C לעצירה)');
 
@@ -486,6 +526,8 @@ async function main(): Promise<void> {
        exactly what was believed the last time this ended the process. */
     if (!state.worked) await idleWait(state.id).catch(() => undefined);
   }
+  /* Stopped BEFORE the last word, so no tick can re-assert 'online' after it. */
+  pulse?.stop();
   await heartbeat(state, 'offline');
   await session.close();
   await logActivity('info', 'worker_stopped', `ה-worker "${env.workerName}" נעצר`);
@@ -4123,6 +4165,7 @@ async function restartIfUpdated(state: WorkerState): Promise<void> {
   await logActivity('info', 'worker_self_update', 'ירדה גרסה חדשה של התוכנה במחשב. היא מתקינה אותה ומפעילה את עצמה מחדש — אין צורך לגעת במחשב.');
   /* Offline before exiting, so the dashboard shows the gap as a restart in
      progress rather than a machine that stopped answering. */
+  pulse?.stop();
   await heartbeat(state, 'offline');
   await session.close().catch(() => undefined);
   process.exit(EXIT_UPDATE);
@@ -4290,6 +4333,12 @@ async function clearChallenge(state: WorkerState): Promise<void> {
 /* ------------------------------------------------------------ helpers */
 
 async function heartbeat(state: WorkerState, status: 'online' | 'needs_attention' | 'offline', debugMode = false, browserOverride?: WorkerState['browserState']): Promise<void> {
+  /* Recorded BEFORE the write, so a transition the database refused is still
+     the status the pulse repeats — the alternative is a pulse that keeps
+     re-asserting a stale 'online' every five seconds precisely while the
+     machine is failing to report that it needs help. */
+  state.pulseStatus = status;
+  state.pulseDebug = debugMode;
   const db = await workerDb();
   await db
     .from('social_workers')

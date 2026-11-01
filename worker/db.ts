@@ -3,6 +3,7 @@ import { friendlyMessage } from '@/lib/social/errors';
 import { env } from './env';
 import { existsSync } from 'node:fs';
 import { fileSessionStorage, forgetSession, sessionFile } from './session-store';
+import { timedWorkerFetch } from './timed-fetch';
 import { signInInteractively } from './sign-in';
 
 /**
@@ -32,6 +33,13 @@ let client: SupabaseClient | null = null;
 export async function workerDb(): Promise<SupabaseClient> {
   if (client) return client;
   const c = createClient(env.supabaseUrl, env.supabaseAnonKey, {
+    /*
+     * A CEILING ON EVERY REQUEST. supabase-js sets no timeout, so a connection
+     * that dies mid-flight never settles and the publishing loop freezes behind
+     * one socket with the machine up and nothing on screen. Same fix, same
+     * number and same storage exemption as the browser's — see timed-fetch.ts.
+     */
+    global: { fetch: timedWorkerFetch },
     auth: {
       persistSession: true,
       autoRefreshToken: true,

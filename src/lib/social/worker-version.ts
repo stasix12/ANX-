@@ -9,7 +9,7 @@
  * fixed. The only evidence was a version number in one line of its terminal
  * output, which nobody reads.
  */
-export const WORKER_VERSION = '4.20.0';
+export const WORKER_VERSION = '4.21.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -79,10 +79,43 @@ export const WORKER_VERSION = '4.20.0';
  * place of "הסבב עוד לא הושק" — a denial of the thing the owner had just
  * done, and the whole of "וזה נראה כמו באג". Both files are read by screens.
  *
+ * AND 4.20.0 → 4.21.0, WHICH IS YES, AND IT IS THE PC'S OWN CLOCK.
+ * "המערכת מציגה לפעמים שהמחשב מנותק למרות שהוא מחובר."
+ *
+ * The dashboard decides the computer is connected from social_workers
+ * .last_seen_at against a ninety-second cutoff, and that column was written by
+ * heartbeat() — A STEP IN THE PUBLISHING LOOP. So every slow thing the worker
+ * did pushed the next write out by exactly that long: group discovery runs 2-6
+ * minutes with no write at all, a Facebook login challenge waits up to SIX
+ * minutes for the code, and on an idle tick all four chores plus the update
+ * check run back to back with at most one write between them. The machine was
+ * up and publishing every time.
+ *
+ *   • worker/pulse.ts (new) puts the write on its own timer, re-armed BEFORE
+ *     each write rather than after, so the interval cannot be stretched by
+ *     anything the loop or the database is doing. It repeats whatever status
+ *     the last transition recorded, so it can never promote a worker that is
+ *     asking for help back to "online".
+ *   • worker/timed-fetch.ts (new) + worker/db.ts put the same sixty-second
+ *     ceiling under the worker's requests that supabase.ts already puts under
+ *     the browser's. Without it a dead socket holds one write in flight for
+ *     ever and the timer, correct as it is, never writes again.
+ *   • worker/social-worker.ts starts the pulse before the first login check
+ *     and stops it on both ways out.
+ *
+ * All four run on the PC and nowhere else.
+ *
+ * AND ONE MORE, NO: client.ts. listWorkers() computed `online` from
+ * last_seen_at alone, so a worker that had just reported status 'offline' was
+ * drawn as a healthy green computer for another ninety seconds — the same
+ * fault pointing the other way, and the more expensive direction, because a
+ * round launched inside that window shows a connected PC and then nothing
+ * moves. Read by screens.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
  * server/worker.ts — are NOT in the worker's import closure either. They are
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '3a1b61cad3044138';
+export const WORKER_FINGERPRINT = '68e226174eebefe5';

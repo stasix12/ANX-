@@ -3364,7 +3364,7 @@ export interface GapFloor {
  * partial object would wipe maxPerDay), with the minutes rounded UP — a worker
  * that has not been updated is then SLOWER than asked, never faster.
  */
-export async function applyGapFloor(gapSeconds: number): Promise<GapFloor> {
+export async function applyGapFloor(gapSeconds: number, opts: { lowerOnly?: boolean } = {}): Promise<GapFloor> {
   const want = Math.round(gapSeconds);
   if (!Number.isFinite(want) || want < MIN_GAP_SECONDS || want > MAX_GAP_MINUTES * 60) {
     throw new Error(`המרווח צריך להיות בין ${MIN_GAP_SECONDS} שניות ל-${MAX_GAP_MINUTES} דקות.`);
@@ -3373,6 +3373,45 @@ export async function applyGapFloor(gapSeconds: number): Promise<GapFloor> {
   const curSurcharge = Number.isFinite(browser.groupMinGapSeconds)
     ? (browser.groupMinGapSeconds as number)
     : Math.max(0, browser.groupMinGapMinutes) * 60;
+
+  /*
+   * ─── LOWER ONLY, WHEN THE CALLER SPEAKS FOR ONE CAMPAIGN ─────────────────
+   *
+   * "קמפיינים מתבלבלים עם תורים של קמפיינים אחרים."
+   *
+   * The floor is ACCOUNT-WIDE and this function wrote it in both directions,
+   * unconditionally. So widening ONE campaign in the queue tuner — 30 seconds
+   * to 10 minutes — set the floor for the whole account to 10 minutes, and a
+   * different campaign still set to 30 seconds started publishing once every
+   * ten, while its own panel and its own stored instants all still said 30.
+   *
+   * matchAccountGapTo() three lines up the same handler already refuses to
+   * raise, and says exactly why: "raising the floor from here would let one
+   * campaign slow every other campaign in the account — a side effect nobody
+   * asked for". This had the authority to undo that refusal and used it.
+   *
+   * AND THE HALF THAT REFUSING ALONE DOES NOT FIX, which is why respaceQueue
+   * reports it in words now: when the floor is ABOVE what the campaign asked
+   * for, the campaign does not get what it asked for. Two gates pace this
+   * product and the later instant wins, so a campaign on 30 seconds under a
+   * 65-minute floor publishes every 65 minutes. The old behaviour hid that by
+   * quietly dragging the floor to match; refusing to raise it hides it the
+   * other way unless somebody says so out loud.
+   */
+  if (opts.lowerOnly) {
+    const wasSeconds = accountGapSeconds(limits, browser, true);
+    if (wasSeconds <= want) {
+      return {
+        gapSeconds: want,
+        minGapSeconds: Number.isFinite(limits.minGapSeconds) ? (limits.minGapSeconds as number) : Math.max(0, limits.minGapMinutes) * 60,
+        groupMinGapSeconds: curSurcharge,
+        minGapMinutes: limits.minGapMinutes,
+        groupMinGapMinutes: browser.groupMinGapMinutes,
+        surchargeChanged: false,
+      };
+    }
+  }
+
   const { baseSeconds, surchargeSeconds } = splitAccountGap(want, curSurcharge);
   await saveSetting('limits', { ...limits, minGapMinutes: Math.ceil(baseSeconds / 60), minGapSeconds: baseSeconds });
   await saveSetting('browser', { ...browser, groupMinGapMinutes: Math.ceil(surchargeSeconds / 60), groupMinGapSeconds: surchargeSeconds });
@@ -3732,10 +3771,22 @@ export async function respaceQueue(
   // claim before the settings write below has landed. See writeSettleMs.
   const start = Number.isFinite(startMs) ? startMs : Date.now() + WRITE_SETTLE_MS;
 
-  // Validates the number, splits it and writes both settings — see above. Note
-  // the asymmetry, and it is deliberate: `campaignId` narrows which ROWS are
-  // re-stamped, but the settings it writes are global.
-  const { minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, surchargeChanged } = await applyGapFloor(gapSeconds);
+  /*
+   * Validates the number, splits it and writes both settings — see above.
+   *
+   * THE SETTINGS WRITE NOW FOLLOWS THE SCOPE. It used to be deliberately
+   * asymmetric — "campaignId narrows which ROWS are re-stamped, but the
+   * settings it writes are global" — and that asymmetry is the whole of
+   * "קמפיינים מתבלבלים עם תורים של קמפיינים אחרים" for this control: widening
+   * one round set the floor for every round in the account.
+   *
+   * Scoped to a round it may only LOWER, which is the same rule
+   * matchAccountGapTo() follows for the same reason. Unscoped — the account's
+   * own queue tuner — it still writes the floor in both directions, because
+   * there the floor IS what the owner is editing.
+   */
+  const floor = await applyGapFloor(gapSeconds, { lowerOnly: Boolean(opts.campaignId) });
+  const { minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, surchargeChanged } = floor;
 
   let query = db()
     .from('social_queue')
@@ -3845,11 +3896,33 @@ export async function respaceQueue(
   const surchargeNote = surchargeChanged
     ? ` (המרווח הנוסף לקבוצות עודכן ל-${newSurcharge} דק׳ והמרווח הכללי ל-${globalGap} דק׳)`
     : '';
+  /*
+   * AND WHEN THE ACCOUNT FLOOR IS HIGHER THAN WHAT THIS ROUND ASKED FOR, SAY
+   * SO. The rows are stamped at the gap the owner chose, but the engine
+   * releases them no faster than the floor — two gates, later instant wins. It
+   * is the one case where the number on the panel and the pace on Facebook
+   * honestly differ, and it was invisible from every screen.
+   */
+  const floorSeconds = floor.minGapSeconds + floor.groupMinGapSeconds;
+  const floorNote =
+    floorSeconds > gapSeconds
+      ? ` — שימו לב: המרווח הכללי של החשבון הוא ${accountGapLabel(floorSeconds)}, ולכן הסבב הזה ייצא בקצב הזה ולא ב-${gapChoiceLabel(gapSeconds)}. כדי להאיץ אותו יש להוריד את המרווח הכללי בהגדרות.`
+      : '';
   await logClientActivity(
     failed ? 'warn' : 'info',
     'queue_respaced',
-    `המרווח בין פרסומים נקבע ל-${gapChoiceLabel(gapSeconds)} — ${moved} פרסומים תוזמנו מחדש${cappedNote}${windowNote}${surchargeNote}`,
-    { gapSeconds, minGapMinutes: globalGap, groupMinGapMinutes: newSurcharge, moved, failed, rolledIntoWindow: rolledCount, campaignId: opts.campaignId ?? null },
+    `המרווח בין פרסומים נקבע ל-${gapChoiceLabel(gapSeconds)} — ${moved} פרסומים תוזמנו מחדש${cappedNote}${windowNote}${surchargeNote}${floorNote}`,
+    {
+      gapSeconds,
+      minGapMinutes: globalGap,
+      groupMinGapMinutes: newSurcharge,
+      accountFloorSeconds: floorSeconds,
+      scopedToCampaign: Boolean(opts.campaignId),
+      moved,
+      failed,
+      rolledIntoWindow: rolledCount,
+      campaignId: opts.campaignId ?? null,
+    },
   );
 
   // Half-applied is a real outcome and the owner is told the real numbers,

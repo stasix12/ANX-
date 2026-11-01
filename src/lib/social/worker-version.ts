@@ -147,10 +147,20 @@ export const WORKER_VERSION = '4.21.0';
  *  only writes the event name, so they need the fingerprint and not the
  *  version.)
  *
+ * AND AGAIN, NO: client.ts and library.ts. A campaign-scoped re-space was
+ * writing the ACCOUNT-WIDE spacing floor in both directions, so widening one
+ * round in the queue tuner slowed every other round in the account — the
+ * product refuses exactly this three lines up the same handler
+ * (matchAccountGapTo "only ever LOWERS"), and applyGapFloor had the authority
+ * to undo the refusal. It is scoped now, and the respace report says so when
+ * the floor is higher than the round asked for. Both functions run in the
+ * BROWSER; the PC reads the settings they write, so the fix reaches the owner
+ * with nothing to reinstall.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
  * server/worker.ts — are NOT in the worker's import closure either. They are
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = 'b43cd8b7e85d5740';
+export const WORKER_FINGERPRINT = '9bf39b87c7924008';

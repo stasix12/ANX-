@@ -959,7 +959,15 @@ export async function quickPublish(
   // Only when a gap was actually asked for. Without one the plan already uses
   // what the settings demand, and rewriting a global setting nobody touched
   // would be a change the owner never made.
-  const gap = input.gapSeconds === undefined ? idle : await applyGapFloor(draft.gapSeconds);
+  /*
+   * SAME RULE FOR A LAUNCH THAT BELONGS TO A ROUND. One quick publish of one
+   * post used to re-pace every other running round, through the same
+   * unconditional floor write — "one quick publish on any post silently raised
+   * an account-wide thirty-second floor back to sixty for every campaign" is
+   * already written above applyGapFloor; this is the other direction of it.
+   */
+  const gap =
+    input.gapSeconds === undefined ? idle : await applyGapFloor(draft.gapSeconds, { lowerOnly: Boolean(ctx.campaignId) });
 
   const schedule = await createSchedule({
     ...scheduleInputFor(draft, post.id),

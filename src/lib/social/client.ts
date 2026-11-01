@@ -2186,12 +2186,53 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
     .limit(ROLLUP_DONE_LIMIT);
   if (campaignIds) doneQuery = doneQuery.in('campaign_id', campaignIds);
 
-  const [openRes, doneRes, countsRead, campaigns] = await Promise.all([
+  /*
+   * ───────── WHICH ROUNDS HAVE BEEN LAUNCHED, AND WHEN ─────────────────
+   *
+   * "אני מפעיל קמפיין מהספריה לתזמון מיידי, ולמעלה לוקח לו זמן... וזה נראה
+   *  כמו באג."
+   *
+   * The launch and the first queue row are not the same instant: sending
+   * writes an ACTIVE schedule row, and the rows themselves are written by the
+   * planner — which, for groups, is the program on the owner's PC running on
+   * its own cadence. In the gap between the two the card had no way to tell a
+   * round that was never launched from one launched forty seconds ago, so it
+   * said "הסבב עוד לא הושק. הוסיפו פוסט, בחרו קבוצות ושלחו" — the one thing
+   * he had just done.
+   *
+   * An active schedule row IS the launch. One read, two columns, keyed to the
+   * campaign through the post it belongs to.
+   */
+  let armedQuery = db()
+    .from('social_schedules')
+    .select('created_at, post:social_posts!inner(campaign_id)')
+    .eq('active', true)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (campaignIds) armedQuery = armedQuery.in('post.campaign_id', campaignIds);
+
+  const [openRes, doneRes, countsRead, campaigns, armedRes] = await Promise.all([
     openQuery,
     doneQuery,
     campaignCounts(campaignIds),
     listCampaigns(),
+    /* Never fatal, and it does not need a catch: supabase-js resolves with
+       { data, error } rather than rejecting, and a round whose launch instant
+       could not be read keeps the wording it had before this existed — the
+       honest fallback. */
+    armedQuery,
   ]);
+  /* Newest first from the query, so the first write per campaign wins. */
+  const armedAt = new Map<string, string>();
+  const armedRows = (armedRes.error ? [] : ((armedRes.data ?? []) as unknown)) as {
+    created_at: string;
+    post: { campaign_id: string | null } | { campaign_id: string | null }[] | null;
+  }[];
+  for (const row of armedRows) {
+    const post = Array.isArray(row.post) ? row.post[0] : row.post;
+    const id = post?.campaign_id;
+    if (id && !armedAt.has(id)) armedAt.set(id, row.created_at);
+  }
   /* One name for "do we have exact counts", so every line below — the
      `!counts` gate on the today read, `Object.keys(counts ?? {})` and
      `counts?.[id]` — reads exactly as it did before the reason was carried. */
@@ -2392,7 +2433,7 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
           }
         : undefined,
     });
-    out[id] = state;
+    out[id] = { ...state, armedAt: armedAt.get(id) ?? null };
     if (!state.truncated) {
       await reportViolations(checkCampaignInvariants(state, { campaignId: id, campaignName: campaign?.name ?? null }), `campaign:${id}`);
     }

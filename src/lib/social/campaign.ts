@@ -137,6 +137,29 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
    * neither can be answered with the other's number.
    */
   everPublished: number;
+  /**
+   * WHEN THIS ROUND WAS LAUNCHED — the instant its newest ACTIVE schedule row
+   * was created, or null when it has none.
+   *
+   * "אני מפעיל קמפיין מהספריה לתזמון מיידי, ולמעלה לוקח לו זמן... וזה נראה
+   *  כמו באג."
+   *
+   * It is a bug, and it is this one: between pressing send and the first row
+   * appearing in social_queue there is a gap — the planner is the program on
+   * the PC, which plans on its own cadence — and for the whole of that gap
+   * the card said "הסבב עוד לא הושק. הוסיפו פוסט, בחרו קבוצות ושלחו", which
+   * is the one thing he had just done. A screen that denies the action its
+   * owner took thirty seconds ago is indistinguishable from a broken one.
+   *
+   * An active schedule row IS the launch: nothing else creates one, and
+   * setScheduleActive(false) is what unmakes it. So the card can tell "never
+   * launched" from "launched, the queue is on its way", and say how long it
+   * has been waiting instead of denying it happened.
+   *
+   * Optional because the two measured fixtures hand-build a state: absent
+   * reads as "we did not look", which keeps exactly the old wording.
+   */
+  armedAt?: string | null;
   /** The most recent publication of this round, whatever day it was. */
   lastPublishedAt: string | null;
   /** And its channel, for the strip's badge. */
@@ -431,8 +454,13 @@ export function campaignState<T extends CampaignQueueRow>(
  * other says.
  */
 export function neverLaunched(
-  state: Pick<CampaignState, 'state' | 'progress' | 'startedAt' | 'everPublished'>,
+  state: Pick<CampaignState, 'state' | 'progress' | 'startedAt' | 'everPublished' | 'armedAt'>,
 ): boolean {
+  /* AN ARMED SCHEDULE IS A LAUNCH THAT HAPPENED. Whatever the counters say,
+     "הוסיפו פוסט, בחרו קבוצות ושלחו" is no longer the instruction — he has
+     done it, the rows are on their way, and NextPublication says so instead.
+     This is the whole of "ולמעלה לוקח לו זמן... וזה נראה כמו באג". */
+  if (state.armedAt) return false;
   return (
     state.state === 'not_started' &&
     state.progress.total === 0 &&
@@ -443,6 +471,39 @@ export function neverLaunched(
     (state.everPublished ?? 0) === 0
   );
 }
+
+/**
+ * A LAUNCH THAT HAS NOT BECOME ROWS YET — its instant, or null.
+ *
+ * "אני מפעיל קמפיין מהספריה לתזמון מיידי, ולמעלה לוקח לו זמן... אני רוצה שכל
+ *  קמפיין שאני משיק שיהיה כמו אינדיקטור של התקדמות שאני לא יחשוב שזה באג."
+ *
+ * Three conditions, and each one is there to stop a different wrong sentence:
+ *
+ *   · an ARMED schedule, which is what a launch writes;
+ *   · NOTHING in the queue and nothing ever published — a round with rows is
+ *     not waiting for any, and one with history was launched long ago;
+ *   · and RECENTLY. A repeating round sitting on a Saturday has an armed
+ *     schedule and no rows today, and it is not building anything; without a
+ *     bound it would wear this line every weekend. Fifteen minutes is far
+ *     longer than the planner's own cadence and far shorter than a day.
+ *
+ * Past the bound the card says what it said before — and the line itself
+ * turns from "building" to "launched, and the queue has not been built",
+ * which is the honest reading of a minute and a half of silence.
+ */
+export function launchPending(
+  state: Pick<CampaignState, 'armedAt' | 'progress' | 'everPublished'>,
+  nowMs: number,
+): string | null {
+  if (!state.armedAt) return null;
+  if (state.progress.total > 0 || (state.everPublished ?? 0) > 0) return null;
+  const age = nowMs - Date.parse(state.armedAt);
+  return Number.isFinite(age) && age >= 0 && age < LAUNCH_PENDING_MS ? state.armedAt : null;
+}
+
+/** How long a launch may be "on its way" before the card stops saying so. */
+export const LAUNCH_PENDING_MS = 15 * 60_000;
 
 /** Rows that have not finished: waiting on the clock, on a worker, or on a person. */
 export function openRows(p: CampaignProgress): number {

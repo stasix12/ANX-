@@ -63,6 +63,7 @@ export function CampaignScheduleBoard({
   campaignName,
   workerOnline,
   neverLaunched = false,
+  armedAt = null,
   pauseLabel = null,
   disabled = false,
   editing = false,
@@ -101,6 +102,14 @@ export function CampaignScheduleBoard({
   workerOnline?: boolean;
   /** The round has never gone out — passed through to <NextPublication>. */
   neverLaunched?: boolean;
+  /**
+   * A LAUNCH WHOSE ROWS HAVE NOT ARRIVED YET — passed straight through.
+   *
+   * campaign.ts's launchPending() decides it; this file only carries it, so
+   * the three conditions behind it (armed, empty, recent) cannot drift into
+   * a component's own idea of them.
+   */
+  armedAt?: string | null;
   /**
    * THE LABEL OF THE CONTROL THAT ACTUALLY STOPS THE PUBLISHING, when the
    * card is drawing one — "השהה סבב" on the dashboard, null when the round
@@ -347,6 +356,7 @@ export function CampaignScheduleBoard({
         scheduleOn={schedule.enabled}
         workerOnline={workerOnline}
         neverLaunched={neverLaunched}
+        armedAt={armedAt}
         className="mt-1.5"
       />
     </div>

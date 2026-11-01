@@ -74,10 +74,15 @@ export const WORKER_VERSION = '4.20.0';
  * schedule row; the PC reads that row and plans from it, so the fix reaches
  * the owner's customer the moment they launch, with nothing to reinstall.
  *
+ * AND AGAIN, NO: campaign.ts and client.ts. A round that has been launched
+ * but whose rows the planner has not written yet now says so and counts, in
+ * place of "הסבב עוד לא הושק" — a denial of the thing the owner had just
+ * done, and the whole of "וזה נראה כמו באג". Both files are read by screens.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
  * server/worker.ts — are NOT in the worker's import closure either. They are
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '0907fa8acee9a894';
+export const WORKER_FINGERPRINT = '3a1b61cad3044138';

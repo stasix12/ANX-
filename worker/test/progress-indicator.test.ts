@@ -24,6 +24,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stageElapsed } from '../../src/components/social/PublicationItem';
+import { LAUNCH_PENDING_MS, launchPending, neverLaunched } from '../../src/lib/social/campaign';
 import type { QueueRow } from '../../src/lib/social/client';
 
 let checks = 0;
@@ -121,6 +122,65 @@ const row = (o: Partial<QueueRow>): QueueRow => ({ id: 'q', status: 'publishing'
   is(/useTick\(\(Boolean\(nextAt\) \|\| inFlightRows\.length > 0\) && !paused\)/.test(hero), 'the card must keep a beat while something is in flight, or the counter it draws never moves');
   is(/\{publishing && inFlightRows\.length > 0 && \(/.test(hero), 'and must draw the live lines only while something really is publishing');
   is(/data-must-fit/.test(hero.slice(hero.indexOf('inFlightRows.map'))), 'the stage and its counter must be marked as text that may never be cut');
+}
+
+/* ───────── 5. a launch that has not become rows yet, and says so ───────── */
+{
+  /*
+   * "אני מפעיל קמפיין מהספריה לתזמון מיידי, ולמעלה לוקח לו זמן איפה שרשום
+   *  ממתינים בתור וזה נראה כמו באג."
+   *
+   * Sending writes an ACTIVE schedule row; the rows themselves are written by
+   * the planner, which for groups is the program on the PC running on its own
+   * cadence. For the whole of that gap the card said "הסבב עוד לא הושק.
+   * הוסיפו פוסט, בחרו קבוצות ושלחו" — the one thing he had just done.
+   */
+  const NOW = Date.parse('2026-11-01T15:12:00.000Z');
+  const ago = (secs: number) => new Date(NOW - secs * 1000).toISOString();
+  const empty = { total: 0, published: 0, failed: 0, skipped: 0, scheduled: 0, running: 0, manual: 0, finished: 0 };
+  const st = (o: Record<string, unknown>) =>
+    ({ state: 'not_started', progress: empty, startedAt: null, everPublished: 0, armedAt: null, ...o }) as never;
+
+  is(!neverLaunched(st({ armedAt: ago(40) })), 'a round with an armed schedule has been launched — the card may not tell him to launch it');
+  is(neverLaunched(st({})), 'and a round that really has none is still told so');
+
+  eq(launchPending(st({ armedAt: ago(40) }), NOW), ago(40), 'a launch forty seconds old with nothing in the queue is still on its way');
+  eq(launchPending(st({}), NOW), null, 'a round that was never launched is not waiting for rows');
+  eq(launchPending(st({ armedAt: ago(40), progress: { ...empty, total: 5, scheduled: 5 } }), NOW), null, 'a round whose rows have arrived is not waiting for them');
+  eq(launchPending(st({ armedAt: ago(40), everPublished: 12 }), NOW), null, 'nor one that has published before — that schedule was armed long ago');
+  /*
+   * THE BOUND IS WHAT STOPS A REPEATING ROUND WEARING THIS EVERY SATURDAY: an
+   * armed schedule with no rows today is ordinary on a day it does not
+   * publish, and without a limit the line would be permanent.
+   */
+  eq(launchPending(st({ armedAt: ago(16 * 60) }), NOW), null, 'past the bound the card goes back to what it said before');
+  is(LAUNCH_PENDING_MS === 15 * 60_000, 'and the bound is fifteen minutes — far longer than the planner takes, far shorter than a day');
+  eq(launchPending(st({ armedAt: new Date(NOW + 60_000).toISOString() }), NOW), null, "a stamp in the future is a clock that disagrees, not a launch");
+
+  /* --- and the block that draws it --- */
+  const next = src('../../src/components/social/NextPublication.tsx');
+  is(
+    next.indexOf('הסבב הושק') < next.indexOf('הסבב עוד לא הושק'),
+    'the launched-and-building branch must come BEFORE the never-launched one — they answer the same three readout kinds with opposite facts',
+  );
+  is(/elapsedHe\(secs\)/.test(next), 'the line must count from the launch — a frozen sentence is the thing he reported');
+  is(/const slow = secs >= 120;/.test(next), 'and past two minutes it must stop saying "any moment now" and name what would explain the delay');
+  is(/הסבב הושק — התור עדיין לא נבנה/.test(next), 'with the honest wording for that case');
+  is(!/%/.test(next.slice(next.indexOf('function Words'))), 'and no percentage anywhere — nothing here knows how far along the planner is');
+  is(
+    /useTick\(at !== null \|\| Boolean\(armedAt\)/.test(next),
+    'the tick must run while a launch is pending, or the counter freezes at the second it first rendered',
+  );
+
+  const board = src('../../src/components/social/CampaignScheduleBoard.tsx');
+  is(/armedAt=\{armedAt\}/.test(board), 'the board no longer carries the launch instant through to the block');
+  const hero = src('../../src/components/social/LiveCampaignHero.tsx');
+  is(/armedAt=\{launchPending\(state, Date\.now\(\)\)\}/.test(hero), 'and the card no longer asks campaign.ts for the decision');
+
+  /* The fact itself has to be read, or every state carries null for ever. */
+  const client = src('../../src/lib/social/client.ts');
+  is(/\.from\('social_schedules'\)[\s\S]{0,200}\.eq\('active', true\)/.test(client), 'campaignStates no longer reads which rounds are armed');
+  is(/armedAt: armedAt\.get\(id\) \?\? null/.test(client), 'and no longer attaches it to the state');
 }
 
 console.log(`progress-indicator OK — ${checks} assertions`);

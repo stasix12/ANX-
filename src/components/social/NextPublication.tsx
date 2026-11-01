@@ -43,6 +43,7 @@ export function NextPublication({
   workerOnline,
   scheduleOn = false,
   neverLaunched = false,
+  armedAt = null,
   targetName = null,
   targetImage = null,
   className = '',
@@ -70,6 +71,24 @@ export function NextPublication({
    * the only one that names the action that ends it.
    */
   neverLaunched?: boolean;
+  /**
+   * LAUNCHED, AND THE QUEUE IS STILL ON ITS WAY — the instant it was sent.
+   *
+   * "אני מפעיל קמפיין מהספריה לתזמון מיידי, ולמעלה לוקח לו זמן איפה שרשום
+   *  ממתינים בתור וזה נראה כמו באג. אני רוצה שכל קמפיין שאני משיק שיהיה כמו
+   *  אינדיקטור של התקדמות שאני לא יחשוב שזה באג."
+   *
+   * Sending writes an ACTIVE schedule row; the queue rows themselves are
+   * written by the planner, which for groups is the program on his PC running
+   * on its own cadence. For the length of that gap this block said "הסבב עוד
+   * לא הושק" — a denial of what he had just done — and the counter above read
+   * zero. Given the instant of the launch it can say the true thing instead,
+   * and count, which is what he asked for.
+   *
+   * Set only when the round has an armed schedule and nothing in the queue
+   * yet; absent restores the previous wording exactly.
+   */
+  armedAt?: string | null;
   /**
    * WHICH GROUP IS NEXT, when the caller knows.
    *
@@ -121,7 +140,10 @@ export function NextPublication({
    * re-arms itself without anything watching for it.
    */
   const coarse = at !== null && new Date(at).getTime() - Date.now() > 3_600_000;
-  const now = useTick(at !== null, coarse ? 15_000 : 1_000);
+  /* Also while a launch is still being turned into rows: that line counts
+     too, and without this it would be frozen at the second it first rendered
+     — the exact fault it exists to answer. */
+  const now = useTick(at !== null || Boolean(armedAt), coarse ? 15_000 : 1_000);
 
   const left = at ? countdownTo(at, now) : null;
   const offline = workerOnline === false;
@@ -215,7 +237,7 @@ export function NextPublication({
           {offline && <Caveat>המחשב לא מחובר — הפרסום לא ייצא עד שהמחשב יחזור</Caveat>}
         </>
       ) : (
-        <Words readout={readout} scheduleOn={scheduleOn} neverLaunched={neverLaunched} />
+        <Words readout={readout} scheduleOn={scheduleOn} neverLaunched={neverLaunched} armedAt={armedAt} now={now} />
       )}
     </div>
   );
@@ -236,7 +258,62 @@ function instantOf(readout: ScheduleReadout): string | null {
 }
 
 /** The states with no instant, each saying what it has instead. */
-function Words({ readout, scheduleOn, neverLaunched }: { readout: ScheduleReadout; scheduleOn: boolean; neverLaunched: boolean }) {
+/**
+ * Seconds since the launch, in Hebrew, present tense and with the duals.
+ *
+ * A sibling of the product's other elapsed formatters rather than a reuse of
+ * one: those all say "לפני", and this sentence is about something that has
+ * not finished.
+ */
+function elapsedHe(secs: number): string {
+  if (secs < 60) return secs === 1 ? 'שנייה אחת' : secs === 2 ? 'שתי שניות' : `${secs} שניות`;
+  const min = Math.floor(secs / 60);
+  if (min < 60) return min === 1 ? 'דקה' : min === 2 ? 'שתי דקות' : `${min} דקות`;
+  const hours = Math.floor(min / 60);
+  return hours === 1 ? 'שעה' : hours === 2 ? 'שעתיים' : `${hours} שעות`;
+}
+
+function Words({
+  readout,
+  scheduleOn,
+  neverLaunched,
+  armedAt,
+  now,
+}: {
+  readout: ScheduleReadout;
+  scheduleOn: boolean;
+  neverLaunched: boolean;
+  armedAt: string | null;
+  now: number;
+}) {
+  /*
+   * ─── LAUNCHED, BUILDING THE QUEUE ────────────────────────────────────
+   *
+   * BEFORE the never-launched branch, because it is the same three readout
+   * kinds and the opposite fact: this round HAS been sent, and the rows are
+   * being written by the program on the PC.
+   *
+   * The counter is the honest part. It counts from the launch instant — a
+   * real column, not a timer — so after a minute it stops saying "any moment
+   * now" and starts naming the one thing that would explain the delay. There
+   * is no percentage: nothing here knows how far along the planner is.
+   */
+  if (armedAt && (readout.kind === 'window-open' || readout.kind === 'window-next' || readout.kind === 'none')) {
+    const secs = Math.max(0, Math.round((now - Date.parse(armedAt)) / 1000));
+    const slow = secs >= 120;
+    return (
+      <>
+        <p className={`mt-1 text-[14px] font-extrabold leading-5 ${slow ? 'text-warning-400' : 'text-brand-400'}`}>
+          {slow ? 'הסבב הושק — התור עדיין לא נבנה' : 'הסבב הושק — בונים את התור'}
+        </p>
+        <p dir="auto" className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">
+          {slow
+            ? `עברו ${elapsedHe(secs)} מההשקה. התור נבנה בתוכנה שעל המחשב — בדקו שהיא פתוחה ומחוברת.`
+            : `${elapsedHe(secs)} מההשקה. הפרסומים נכנסים לתור מהתוכנה שעל המחשב, בדרך כלל תוך כדקה.`}
+        </p>
+      </>
+    );
+  }
   /*
    * BEFORE EVERY OTHER WORDLESS STATE, and after none of them: a round that
    * has never been launched reaches here as 'window-open', 'window-next' or

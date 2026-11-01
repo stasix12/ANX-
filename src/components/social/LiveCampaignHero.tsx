@@ -6,6 +6,7 @@ import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/i
 import {
   canPauseRun,
   canResumeRun,
+  launchPending,
   neverLaunched,
   openRows,
   runBadge,
@@ -596,6 +597,10 @@ export function LiveCampaignHero({
              reporting a lull. Same expression the editor below is handed, and
              it asks about the round's whole life: see campaign.ts. */
           neverLaunched={neverLaunched(state)}
+          /* The same decision, from the same module: a launch whose rows have
+             not been written yet. The block then counts from it instead of
+             telling him to do the thing he just did. */
+          armedAt={launchPending(state, Date.now())}
           disabled={scheduleBusy}
         />
       )}

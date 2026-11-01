@@ -138,6 +138,7 @@ const TITLE: Record<string, string> = {
   stuck_rows_released: 'פרסומים תקועים שוחררו',
   stuck_rows_requeued: 'פרסומים תקועים חזרו לתור',
   queued_text_refreshed: 'נוסח הפוסט עודכן בתור',
+  weekly_hours_synced: 'שעות התזמון עודכנו',
 
   // The machine and the session.
   worker_stopped: 'המחשב התנתק',

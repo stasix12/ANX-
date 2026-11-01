@@ -35,6 +35,7 @@ import {
   saveCampaign,
   rescheduleCampaignQueue,
   setCampaignRepeat,
+  syncWeeklyHours,
   stopCampaign,
 } from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
@@ -364,6 +365,31 @@ export default function CampaignsPage() {
              dashboard's copy of this. A weekly row built from the OLD start
              hour is the card saying one thing while the engine does another. */
           const repeat = readRepeat(campaign);
+          if (!repeat.enabled) {
+            /*
+             * ─── AN ACTIVE WEEKLY ROW WITH THE SWITCH OFF STILL PUBLISHES ──
+             *
+             * "הוא לא מחליף לי את השעה לתזמון שקבעתי — הוא משאיר את אותו השעה
+             *  שהיה רשום בקמפיין."
+             *
+             * The guard above is right that a campaign which does not repeat
+             * has no weekly row to ARM. What it assumed is that there is then
+             * no weekly row at all — and a launch from the editor creates an
+             * active one without touching the repeat columns. In that state
+             * the campaign's hour was a second, ignored record and the planner
+             * kept using the hour it replaced.
+             *
+             * This re-arms the HOURS of rows that are already active and
+             * already weekly, and nothing else: it cannot create a recurrence
+             * the owner did not ask for, which is what the guard protects.
+             */
+            const synced = await syncWeeklyHours(campaign.id, next);
+            if (synced.skippedNoDay) {
+              toast('השעה נשמרה, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.', 'info');
+            } else if (synced.rearmed) {
+              toast(`השעה עודכנה גם בתזמון שהסבב באמת עובד לפיו (${synced.rearmed}) — הפרסומים הבאים ייצאו בשעה החדשה.`, 'success');
+            }
+          }
           if (repeat.enabled) {
             const armedNow = await setCampaignRepeat(campaign, repeat, next);
           /*
@@ -417,6 +443,30 @@ export default function CampaignsPage() {
               }`,
               'success',
             );
+          } else {
+            /*
+             * ─── A STORED HOUR THAT GOVERNS NOTHING MUST SAY SO ────────────
+             *
+             * rescheduleCampaignQueue returns immediately when the window
+             * switch is off — deliberately: with no window there is nothing to
+             * roll rows into, and re-spacing a queue because the owner turned a
+             * switch OFF would be a change he did not ask for. But it also
+             * swallowed the opposite case, which is the one he reported: he
+             * SET an hour, and nothing moved, and nothing said why.
+             *
+             * Only when the switch itself did not change — turning it off is a
+             * deliberate act and does not need this sentence — and only when
+             * the window content actually did.
+             */
+            const was = readSchedule(campaign);
+            const windowChanged =
+              next.start !== was.start || next.gapSeconds !== was.gapSeconds || next.days.join(',') !== was.days.join(',');
+            if (!next.enabled && next.enabled === was.enabled && windowChanged) {
+              toast(
+                'השעה נשמרה, אבל מתג התזמון של הסבב כבוי — עד שתדליקו אותו היא לא שולטת על הפרסומים, והם ימשיכו לפי מה שכבר בתור.',
+                'info',
+              );
+            }
           }
           await load();
         } catch (err) {

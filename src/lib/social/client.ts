@@ -1083,6 +1083,73 @@ export interface RepeatResult {
   needsLaunch: number;
 }
 
+/**
+ * ─── THE HOUR HE JUST SET HAS TO REACH THE ROW THAT PUBLISHES ────────────────
+ *
+ * "אחרי שאני מחזיר לפעילות קמפיין — אם שעה שנקבעה לו בתוך הקמפיין, ואז אני
+ *  רוצה לשנות את השעה ב'ערוך מועד' מהדף הראשי, הוא לא מחליף לי את השעה
+ *  לתזמון שקבעתי — הוא משאיר את אותו השעה שהיה רשום בקמפיין."
+ *
+ * TWO RECORDS FOR ONE THING, and the same shape as the groups that reverted
+ * overnight. The campaign row holds `schedule_start`; the row the PLANNER
+ * actually works from is a social_schedules row with its own `weekly` plan. The
+ * hour editor wrote the first and re-armed the second only `if (repeat.enabled)`
+ * — the CHZARA switch.
+ *
+ * But an ACTIVE weekly row can exist with that switch OFF: SchedulePicker's
+ * scheduleDraftToInput builds `mode: 'weekly'` straight from the launch, and
+ * createSchedule makes it active without touching the campaign's repeat
+ * columns. In that state the campaign's hour is a second, ignored record: the
+ * planner keeps producing rows at the weekly row's own hour, for ever, and
+ * every screen that reads the campaign row shows the hour he chose while the
+ * engine uses the one he replaced.
+ *
+ * SO THE SYNC IS NARROW ON PURPOSE. It re-arms the HOURS of rows that are
+ * already active and already weekly. It does not create a row, does not
+ * activate one, and does not touch the repeat switch — turning a change of
+ * hours into a recurrence nobody asked for is the fault the `if (repeat.enabled)`
+ * guard was written to prevent, and it stays prevented.
+ *
+ * AND IT REFUSES TO WRITE AN EMPTY PLAN. `weekly` is built as one occasion per
+ * CHOSEN day, so with no day chosen it is `{}` — an active row with no occasion,
+ * which plans nothing for ever. Writing that would silently disarm a round in
+ * the middle of a change of hours, so a dayless schedule is reported instead.
+ */
+export async function syncWeeklyHours(
+  campaignId: string,
+  schedule: CampaignSchedule,
+): Promise<{ rearmed: number; skippedNoDay: boolean }> {
+  if (!schedule.days.length) return { rearmed: 0, skippedNoDay: true };
+
+  const posts = unwrap<{ id: string }[]>(await db().from('social_posts').select('id').eq('campaign_id', campaignId));
+  const postIds = posts.map((p) => p.id);
+  if (!postIds.length) return { rearmed: 0, skippedNoDay: false };
+
+  /* ACTIVE and WEEKLY only. A retired row is the record of what was sent, and
+     a 'now'/'once'/'drip' row the owner set up himself is not this switch's. */
+  const rows = unwrap<{ id: string; weekly: WeeklyPlan | null }[]>(
+    await db().from('social_schedules').select('id, weekly').in('post_id', postIds).eq('mode', 'weekly').eq('active', true),
+  );
+  if (!rows.length) return { rearmed: 0, skippedNoDay: false };
+
+  /* The same arithmetic setCampaignRepeat uses, so the two cannot drift: one
+     occasion per chosen day, at the window's opening hour. */
+  const weekly: WeeklyPlan = {};
+  for (const day of schedule.days) weekly[String(day)] = [schedule.start];
+  const wanted = JSON.stringify(weekly);
+
+  const stale = rows.filter((r) => JSON.stringify(r.weekly ?? {}) !== wanted).map((r) => r.id);
+  if (!stale.length) return { rearmed: 0, skippedNoDay: false };
+
+  unwrap(await db().from('social_schedules').update({ weekly }).in('id', stale));
+  await logClientActivity('info', 'weekly_hours_synced', `השעות של ${stale.length} תזמונים פעילים עודכנו לשעה שנקבעה בסבב`, {
+    campaignId,
+    rearmed: stale.length,
+    start: schedule.start,
+  });
+  return { rearmed: stale.length, skippedNoDay: false };
+}
+
 export async function setCampaignRepeat(
   campaign: Pick<Campaign, 'id' | 'name'>,
   repeat: CampaignRepeat,

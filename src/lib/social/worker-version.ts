@@ -170,10 +170,16 @@ export const WORKER_VERSION = '4.21.0';
  * It now re-renders the rows that have not started, writing rendered_text and
  * dedupe_hash together. Browser-side; the PC reads the rows it is given.
  *
+ * AND ONE MORE, NO: client.ts gains syncWeeklyHours(). The hour the owner sets
+ * in "ערוך מועד" is written to the campaign row, but the row the PLANNER works
+ * from is a social_schedules weekly row with its own hours — and it was
+ * re-armed only when the CHZARA switch was on, while a launch from the editor
+ * creates an ACTIVE weekly row without touching that switch. Browser-side.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
  * server/worker.ts — are NOT in the worker's import closure either. They are
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '2776d1824d7ce320';
+export const WORKER_FINGERPRINT = '82d83cfb0243486e';

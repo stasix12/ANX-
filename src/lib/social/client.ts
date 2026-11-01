@@ -4004,6 +4004,45 @@ async function unplanTarget(targetId: string, scheduleIds: string[]): Promise<nu
 }
 
 /**
+ * ─── THE OTHER HALF OF unplanTarget, WHICH WAS NEVER WRITTEN ────────────────
+ *
+ * "פוסטים לא מתפרסמים בשעות שהגדרתי" — on groups the owner is certain he added.
+ *
+ * Removing a group from a running round takes it off the round's active
+ * schedules (unplanTarget, directly above), so the planner stops re-creating
+ * rows for it. ADDING one did not: addTargetsToQueue inserted queue rows and
+ * stopped, and setCampaignRepeat re-arms the weekly row with
+ * `{ mode, weekly, active }` and never touches `target_ids`.
+ *
+ * So the group publishes TODAY, from the rows that were just inserted, and
+ * from tomorrow the round silently reverts to the list it had before — because
+ * tomorrow's rows come from the schedule, and the schedule never heard about
+ * the group. Nothing says so on any screen, and the group is visibly in the
+ * round's list, so there is nothing to see.
+ *
+ * ONLY ACTIVE SCHEDULES, for exactly the reason unplanTarget gives: 'now',
+ * 'once' and 'drip' retire themselves the moment they are planned, and an
+ * inactive row is the record of what was sent. Rewriting it would be editing
+ * history rather than the plan.
+ */
+async function planTargets(postId: string, targetIds: string[]): Promise<number> {
+  if (!targetIds.length) return 0;
+  const schedules = unwrap<Pick<Schedule, 'id' | 'target_ids'>[]>(
+    await db().from('social_schedules').select('id, target_ids').eq('post_id', postId).eq('active', true),
+  );
+  let changed = 0;
+  for (const schedule of schedules) {
+    const had = schedule.target_ids ?? [];
+    const have = new Set(had);
+    const next = [...had, ...targetIds.filter((id) => !have.has(id))];
+    if (next.length === had.length) continue;
+    unwrap(await db().from('social_schedules').update({ target_ids: next }).eq('id', schedule.id));
+    changed += 1;
+  }
+  return changed;
+}
+
+/**
  * The browser's half of plan.ts's dedupe hash.
  *
  * rules.ts looks a publication up by dedupe_hash to catch the same content going
@@ -4162,12 +4201,42 @@ export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?
   );
 
   const inserted = unwrap<{ id: string }[]>(await db().from('social_queue').insert(rows).select('id'));
-  await logClientActivity('info', 'queue_targets_added', `${inserted.length} קבוצות נוספו לתור, כל אחת ${gapChoiceLabel(stampGapSeconds)} אחרי הקודמת`, {
-    targetIds: fresh,
-    added: inserted.length,
-    gapSeconds,
-    postId: plan.postId,
-    campaignId: opts.campaignId ?? null,
-  });
+
+  /*
+   * AND THE REPEAT LEARNS ABOUT THEM, which is the half that was missing.
+   *
+   * Without this the groups publish today — from the rows just inserted — and
+   * from tomorrow the round reverts to the list the schedule still holds. The
+   * rows are already in, so a failure here is reported rather than thrown: the
+   * owner's groups ARE queued, and what he needs to know is that tomorrow is
+   * not covered yet.
+   */
+  let repeated = 0;
+  let repeatProblem = '';
+  try {
+    repeated = await planTargets(plan.postId as string, fresh);
+  } catch (err) {
+    repeatProblem = friendlyMessage(err, 'הקבוצות נוספו לתור, אבל לא נוספו לחזרה היומית של הסבב.');
+  }
+
+  await logClientActivity(
+    repeatProblem ? 'warn' : 'info',
+    'queue_targets_added',
+    `${inserted.length} קבוצות נוספו לתור, כל אחת ${gapChoiceLabel(stampGapSeconds)} אחרי הקודמת${
+      repeatProblem
+        ? ` — אבל הן לא נוספו לחזרה של הסבב, ולכן מחר הוא יחזור לרשימה הקודמת: ${repeatProblem}`
+        : repeated
+          ? ' ונוספו גם לחזרה של הסבב, כך שהן ייצאו גם בפעמים הבאות'
+          : ''
+    }`,
+    {
+      targetIds: fresh,
+      added: inserted.length,
+      gapSeconds,
+      postId: plan.postId,
+      schedulesUpdated: repeated,
+      campaignId: opts.campaignId ?? null,
+    },
+  );
   return inserted.length;
 }

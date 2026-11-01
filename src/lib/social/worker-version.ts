@@ -157,10 +157,17 @@ export const WORKER_VERSION = '4.21.0';
  * BROWSER; the PC reads the settings they write, so the fix reaches the owner
  * with nothing to reinstall.
  *
+ * AND ONCE MORE, NO: client.ts. Removing a group from a running round took it
+ * off the round's active schedules; ADDING one never did, and the weekly
+ * re-arm writes only mode/hours/active. So an added group published today and
+ * the round reverted to the old list tomorrow — the strongest single
+ * explanation for "פוסטים לא מתפרסמים בשעות שהגדרתי" on groups he is certain he
+ * added. planTargets() is the mirror that was never written. Browser-side.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
  * server/worker.ts — are NOT in the worker's import closure either. They are
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '9bf39b87c7924008';
+export const WORKER_FINGERPRINT = '714251fc0bf96d9c';

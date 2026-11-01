@@ -164,10 +164,16 @@ export const WORKER_VERSION = '4.21.0';
  * explanation for "פוסטים לא מתפרסמים בשעות שהגדרתי" on groups he is certain he
  * added. planTargets() is the mirror that was never written. Browser-side.
  *
+ * AND AGAIN, NO: client.ts gains refreshQueuedText(). The planner freezes the
+ * rendered text onto each queue row and the worker publishes that snapshot, so
+ * editing a post changed only FUTURE rows while the editor said "הפוסט נשמר."
+ * It now re-renders the rows that have not started, writing rendered_text and
+ * dedupe_hash together. Browser-side; the PC reads the rows it is given.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
  * server/worker.ts — are NOT in the worker's import closure either. They are
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '173439ae42adb97f';
+export const WORKER_FINGERPRINT = '9e4cd9631fa9bdf5';

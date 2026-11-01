@@ -29,6 +29,7 @@ import {
   listSchedules,
   listTargets,
   listVariants,
+  refreshQueuedText,
   savePost,
   saveVariants,
   setScheduleActive,
@@ -436,8 +437,44 @@ export function PostEditor({ postId }: { postId?: string }) {
   async function onSave() {
     setBusy('save');
     try {
-      await persist();
-      setMessage({ tone: 'success', text: 'הפוסט נשמר.' });
+      const id = await persist();
+      /*
+       * ─── AND THE PUBLICATIONS ALREADY IN THE QUEUE SAY THE NEW TEXT ──────
+       *
+       * The planner freezes the rendered text onto each row when it creates it
+       * and the worker publishes that snapshot, so "הפוסט נשמר." used to be
+       * true of the post and false of the 292 rows waiting to go out. The
+       * owner fixes a phone number, is told it is saved, and the old number
+       * publishes for days.
+       *
+       * Reported rather than thrown: the POST is saved by the time this runs,
+       * and sha256Hex deliberately refuses outside a secure context rather
+       * than write an empty dedupe hash. Saying "השמירה נכשלה" there would be
+       * false in the other direction — so the message says which half
+       * happened.
+       */
+      let queued: { updated: number; truncated: boolean } | null = null;
+      let queueProblem = '';
+      try {
+        queued = await refreshQueuedText(id);
+      } catch (err) {
+        queueProblem = friendlyMessage(err, 'הפרסומים שממתינים בתור לא עודכנו.');
+      }
+      if (queueProblem) {
+        setMessage({
+          tone: 'error',
+          text: `הפוסט נשמר, אבל הפרסומים שכבר ממתינים בתור עדיין יֵצאו עם הנוסח הקודם: ${queueProblem}`,
+        });
+      } else if (queued?.updated) {
+        setMessage({
+          tone: 'success',
+          text: `הפוסט נשמר, ו${counted(queued.updated, 'פרסום אחד שממתין בתור עודכן', 'פרסומים שממתינים בתור עודכנו', 'שני פרסומים שממתינים בתור עודכנו')} לנוסח החדש.${
+            queued.truncated ? ' (עודכנו 500 הפרסומים הקרובים בתור)' : ''
+          }`,
+        });
+      } else {
+        setMessage({ tone: 'success', text: 'הפוסט נשמר.' });
+      }
     } catch (err) {
       setMessage({ tone: 'error', text: friendlyMessage(err, 'השמירה נכשלה.') });
     } finally {

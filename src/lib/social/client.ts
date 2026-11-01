@@ -7,7 +7,7 @@ import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from '
 import { MIN_GAP_SECONDS, gapChoiceLabel, readSchedule, readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
-import { dedupeKey } from './compose';
+import { dedupeKey, renderPostText } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
 import { accountGapLabel, accountGapSeconds, splitAccountGap } from './rules';
 import { checkCampaignInvariants, checkQueueInvariants, takeUnreported, type InvariantViolation } from './invariants';
@@ -744,6 +744,109 @@ export async function savePost(input: PostInput): Promise<Post> {
   const { id, ...rest } = input;
   if (id) return unwrap<Post>(await db().from('social_posts').update(rest).eq('id', id).select('*').single());
   return unwrap<Post>(await db().from('social_posts').insert(rest).select('*').single());
+}
+
+/**
+ * ─── EDITING THE TEXT HAS TO REACH THE PUBLICATIONS ALREADY WAITING ──────────
+ *
+ * "שינויים בהגדרות לא מתעדכנים מיידית" — and this is the version of it that
+ * actually publishes the wrong thing.
+ *
+ * The planner FREEZES the rendered text onto each queue row at the moment it
+ * creates it (plan.ts), and the worker publishes that snapshot:
+ * `item.rendered_text || renderPostText(...)`. So editing a post changed what
+ * FUTURE rows would say and nothing about the 292 already in the queue — while
+ * the editor answered "הפוסט נשמר." The owner fixes a phone number, a price, a
+ * typo, is told it is saved, and the old text goes out for days.
+ *
+ * Freezing is right, and it is not the bug: the row has to be able to publish
+ * without re-deriving anything, and a row that renders at publish time would
+ * change under a round that is already going out. What was missing is that an
+ * edit never reached the frozen copies.
+ *
+ * TWO THINGS MOVE TOGETHER OR NEITHER DOES. `dedupe_hash` is derived from the
+ * text, and rules.ts uses it to catch the same content going out twice. A row
+ * whose text was updated and whose hash was not is a row the duplicate rule can
+ * no longer see — so every update writes both, and a hash that cannot be
+ * computed (sha256Hex refuses outside a secure context, deliberately, rather
+ * than write an empty one) leaves the row ALONE rather than half-updated.
+ *
+ * ONLY ROWS THAT HAVE NOT STARTED. 'scheduled' and 'paused' — not
+ * 'publishing' or 'awaiting_confirmation', where the Post button may already
+ * have been pressed; not 'manual_pending', where a person is posting it by hand
+ * and may already have the old text in front of them; not 'needs_attention',
+ * which can be a row that is probably already live. The status is re-asserted
+ * in the UPDATE itself, so a row that starts publishing between the read and
+ * the write is not rewritten under the worker.
+ */
+export const TEXT_EDITABLE_STATUSES: QueueStatus[] = ['scheduled', 'paused'];
+
+/** How many rows one save re-renders. Beyond this the owner is told the rest were left. */
+const TEXT_REFRESH_LIMIT = 500;
+/** Same width as writeNewInstants' re-stamp: enough to be quick, few enough not to be a burst. */
+const TEXT_REFRESH_LANES = 6;
+
+export async function refreshQueuedText(postId: string): Promise<{ updated: number; unchanged: number; truncated: boolean }> {
+  const post = await getPost(postId);
+  if (!post) return { updated: 0, unchanged: 0, truncated: false };
+
+  const rows = unwrap<{ id: string; target_id: string; variant_id: string | null; rendered_text: string }[]>(
+    await db()
+      .from('social_queue')
+      .select('id, target_id, variant_id, rendered_text')
+      .eq('post_id', postId)
+      .in('status', TEXT_EDITABLE_STATUSES)
+      .order('scheduled_at')
+      .limit(TEXT_REFRESH_LIMIT + 1),
+  );
+  const truncated = rows.length > TEXT_REFRESH_LIMIT;
+  const work = truncated ? rows.slice(0, TEXT_REFRESH_LIMIT) : rows;
+  if (!work.length) return { updated: 0, unchanged: 0, truncated: false };
+
+  const variants = await listVariants(postId);
+  const variantText = new Map(variants.map((v) => [v.id, v.text]));
+  const mediaUrls = ((post.media as MediaItem[] | null) ?? []).map((m) => m.url);
+
+  /* What each row should say now. A variant that has since been deleted falls
+     back to the base text, which is what the planner itself would write for a
+     row with no variant. */
+  const planned = work
+    .map((row) => {
+      const text = renderPostText(post, row.variant_id ? { text: variantText.get(row.variant_id) ?? '' } : null);
+      return { row, text };
+    })
+    .filter((w) => w.text !== w.row.rendered_text);
+
+  let updated = 0;
+  for (let i = 0; i < planned.length; i += TEXT_REFRESH_LANES) {
+    const wave = planned.slice(i, i + TEXT_REFRESH_LANES);
+    const done = await Promise.all(
+      wave.map(async ({ row, text }) => {
+        const hash = await sha256Hex(dedupeKey(row.target_id, text, mediaUrls));
+        const changed = unwrap<{ id: string }[]>(
+          await db()
+            .from('social_queue')
+            .update({ rendered_text: text, dedupe_hash: hash })
+            .eq('id', row.id)
+            /* Re-asserted: a row the worker claimed in the meantime is its. */
+            .in('status', TEXT_EDITABLE_STATUSES)
+            .select('id'),
+        );
+        return changed.length;
+      }),
+    );
+    updated += done.reduce((n, c) => n + c, 0);
+  }
+
+  if (updated) {
+    await logClientActivity('info', 'queued_text_refreshed', `${updated} פרסומים שממתינים בתור עודכנו לנוסח החדש של הפוסט`, {
+      postId,
+      updated,
+      examined: work.length,
+      truncated,
+    });
+  }
+  return { updated, unchanged: work.length - planned.length, truncated };
 }
 
 /**

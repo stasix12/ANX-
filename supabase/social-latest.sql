@@ -1882,3 +1882,44 @@ begin
   select count(*) into n from public.social_schedules where drip_gap_seconds is null and mode <> 'now';
   raise notice 'v28: העמודה drip_gap_seconds נוספה. % תזמונים קיימים ימשיכו להשתמש בדקות.', n;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- v29 — סבבים ביום (ריצות). See supabase/social-schema-v29.sql for the whole
+-- story; the short version is that the engine has ALWAYS been able to run
+-- several occasions a day — social_schedules.weekly is an array of 'HH:MM' per
+-- weekday and slots.ts already loops it, in Asia/Jerusalem, across a
+-- daylight-saving change — and what never existed is a way to say there is
+-- more than one. Both writers of `weekly` build exactly [schedule_start].
+--
+-- This adds no scheduler. It adds the LIST those two writers build from, and
+-- it holds the SECOND and later occasions only: round one is schedule_start,
+-- the hour already on the card, because an hour stored in two places is the
+-- defect this product has been bitten by twice.
+--
+-- Empty by default, which readRounds() resolves to "one round a day" — exactly
+-- what every campaign does today. Safe to run again.
+-- To undo: supabase/social-schema-v29-rollback.sql.
+-- ---------------------------------------------------------------------------
+alter table public.social_campaigns
+  add column if not exists schedule_rounds jsonb not null default '[]'::jsonb;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'social_campaigns_schedule_rounds_ck'
+  ) then
+    alter table public.social_campaigns
+      add constraint social_campaigns_schedule_rounds_ck
+      check (jsonb_typeof(schedule_rounds) = 'array' and jsonb_array_length(schedule_rounds) <= 4);
+  end if;
+end $$;
+
+comment on column public.social_campaigns.schedule_rounds is
+  'סבבי פרסום נוספים באותו יום: [{"at":"HH:MM","enabled":true}]. הסבב הראשון הוא schedule_start ואינו כאן. ריק = סבב אחד ביום, ההתנהגות הקיימת.';
+
+do $$
+declare n bigint;
+begin
+  select count(*) into n from public.social_campaigns;
+  raise notice 'v29: העמודה schedule_rounds נוספה. % קמפיינים קיימים ממשיכים עם סבב אחד ביום, ללא שינוי.', n;
+end $$;

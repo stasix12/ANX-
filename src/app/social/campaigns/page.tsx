@@ -40,7 +40,7 @@ import {
 } from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
-import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { counted } from '@/lib/social/time';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
@@ -383,7 +383,7 @@ export default function CampaignsPage() {
              * already weekly, and nothing else: it cannot create a recurrence
              * the owner did not ask for, which is what the guard protects.
              */
-            const synced = await syncWeeklyHours(campaign.id, next);
+            const synced = await syncWeeklyHours(campaign.id, next, readRounds(campaign));
             if (synced.skippedNoDay) {
               toast('השעה נשמרה, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.', 'info');
             } else if (synced.rearmed) {

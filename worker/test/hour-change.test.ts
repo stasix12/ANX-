@@ -59,11 +59,26 @@ const sync = client.slice(client.indexOf('export async function syncWeeklyHours'
 
 /* ─── 2. the arithmetic cannot drift from the function it mirrors ───────── */
 {
-  const build = "for (const day of schedule.days) weekly[String(day)] = [schedule.start];";
+  /*
+   * IT USED TO COUNT TWO IDENTICAL COPIES. That was the best available check
+   * while the arithmetic was written out inline in both writers: if the two
+   * expressions matched character for character they could not disagree about
+   * the hour.
+   *
+   * They are now ONE FUNCTION, weeklyPlanFor(), which is the property that
+   * guard was approximating — so this asserts the stronger thing directly:
+   * both writers call it, and NEITHER builds a plan of its own. Two copies
+   * that drift are two different publishing hours for one round, and with
+   * סבבים ביום they would also be two different NUMBERS of rounds a day.
+   */
   eq(
-    (client.match(new RegExp(build.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? []).length,
+    (client.match(/weeklyPlanFor\(schedule, /g) ?? []).length,
     2,
-    'the weekly plan must be built by the SAME expression in syncWeeklyHours and setCampaignRepeat — two copies that drift are two different publishing hours for one round',
+    'syncWeeklyHours and setCampaignRepeat must both build the weekly plan through weeklyPlanFor — two copies that drift are two different publishing hours for one round',
+  );
+  is(
+    !/weekly\[String\(day\)\] = \[/.test(client),
+    'a writer has gone back to building the weekly plan inline, beside the shared builder — which is exactly the drift this guard exists to prevent',
   );
   is(/one occasion per chosen day, at the window's opening hour/i.test(client), 'and the rule must stay written down beside it');
 }
@@ -88,9 +103,22 @@ for (const [name, rel] of [
 ] as const) {
   const page = code(src(rel));
   is(
-    /if \(!repeat\.enabled\) \{[\s\S]{0,400}await syncWeeklyHours\(campaign\.id, next\)/.test(page),
+    /if \(!repeat\.enabled\) \{[\s\S]{0,400}await syncWeeklyHours\(campaign\.id, next, readRounds\(campaign\)\)/.test(page),
     `${name} must sync the active weekly row when the repeat switch is OFF — that is exactly the state his bug lives in`,
   );
+  /*
+   * THE THIRD ARGUMENT IS NOT COSMETIC, so it is pinned rather than skipped
+   * over with a wildcard. syncWeeklyHours REPLACES social_schedules.weekly;
+   * called without the campaign's extra rounds it would delete every סבב the
+   * owner had added, on the next unrelated save of the hour. It is a required
+   * parameter in client.ts for the same reason — so the typecheck finds a
+   * caller that forgot, instead of the owner finding it a week later.
+   */
+  is(
+    /readRounds\(campaign\)/.test(page),
+    `${name} must hand syncWeeklyHours the campaign's extra rounds — without them, saving the hour deletes every סבב ביום the owner set`,
+  );
+
   /* And the original guard must survive: with the switch ON, setCampaignRepeat
      does the full job, including creating a row from the launch's group list. */
   is(
@@ -98,7 +126,7 @@ for (const [name, rel] of [
     `${name} must still re-arm through setCampaignRepeat when the switch is ON — it creates the row a never-repeated round has none of`,
   );
   is(
-    page.indexOf('syncWeeklyHours(campaign.id, next)') < page.indexOf('setCampaignRepeat(campaign, repeat, next)'),
+    page.indexOf('syncWeeklyHours(campaign.id, next, readRounds(campaign))') < page.indexOf('setCampaignRepeat(campaign, repeat, next)'),
     `${name}: the two branches must be exclusive, not both writing the same row`,
   );
 }

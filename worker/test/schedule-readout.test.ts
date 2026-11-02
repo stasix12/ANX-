@@ -650,7 +650,20 @@ const st = (
 
   /* And the one place that builds the weekly plan still builds it from both. */
   const client = code('src/lib/social/client.ts');
-  is(/for \(const day of schedule\.days\) weekly\[String\(day\)\] = \[schedule\.start\];/.test(client), 'the weekly plan is one occasion per chosen day, at the window’s opening hour');
+  /*
+   * THE PLAN IS NO LONGER ONE OCCASION PER DAY, and that is the סבבים ביום
+   * feature rather than a regression: weekly[day] is now the window's opening
+   * hour PLUS whatever extra rounds the campaign carries. The intent of this
+   * assertion is unchanged — the plan is built from the campaign's own hours
+   * and from nothing else — so it is pinned on the shared builder, and
+   * worker/test/rounds.test.ts owns what the builder produces, including the
+   * case this line used to cover: no extra rounds, exactly one occasion.
+   */
+  is(/weeklyPlanFor\(schedule, /.test(client), 'the weekly plan must be built from the campaign’s own hours through the one shared builder');
+  is(
+    /for \(const day of schedule\.days\) weekly\[String\(day\)\] = \[\.\.\.starts\];/.test(code('src/lib/social/campaign-schedule.ts')),
+    'and that builder still writes one entry per CHOSEN day — a plan for a day the owner did not pick is a publication he did not ask for',
+  );
 }
 
 /* ──────────── 13. and no component may do this arithmetic itself ───────── */

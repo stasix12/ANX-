@@ -310,6 +310,202 @@ export interface CampaignRepeat {
  * window and stopped. 20 is the longest value that keeps a daily round at the
  * hour the owner chose.
  */
+/* ─────────── סבבים ביום (ריצות) — MORE THAN ONE OCCASION A DAY ──────────── */
+
+/**
+ * A SECOND PUBLICATION ROUND IN THE SAME DAY, FOR ONE CAMPAIGN.
+ *
+ * "הפעלת מספר סבבי פרסום לאותו קמפיין באותו היום." Round 1 at 03:30, round 2
+ * at 15:30, same campaign, same content, same groups — without duplicating the
+ * campaign.
+ *
+ * AND THE ENGINE HAS ALWAYS BEEN ABLE TO RUN THEM. social_schedules.weekly is
+ * Record<weekday, 'HH:MM'[]> and slots.ts already loops that array, converting
+ * every entry through zonedToUtc — so several occasions a day, in the right
+ * zone, across a daylight-saving change, is existing and tested behaviour.
+ * What never existed is a way to SAY there is more than one: both writers of
+ * `weekly` build exactly `[schedule.start]`, one entry per chosen day.
+ *
+ * So this is NOT A SECOND SCHEDULER — the product has a standing rule against
+ * one and has been bitten by it once — it is the list those two writers build.
+ *
+ * THE FIRST ROUND IS NOT IN THIS LIST. Round 1 is `schedule.start`, the hour
+ * already on the card. A round whose hour lived in two places is exactly the
+ * defect this product has been bitten by twice, and the owner reported it
+ * again this week ("הוא משאיר את אותה השעה שהיה רשום בקמפיין").
+ */
+export interface CampaignRound {
+  /** 'HH:MM', 24-hour, local — one of TIME_CHOICES. */
+  at: string;
+  /**
+   * Off KEEPS the row and its hour and plans nothing for it, so switching a
+   * round off and on again does not cost the owner the time he chose.
+   * "אסור למחוק מידע."
+   */
+  enabled: boolean;
+}
+
+/**
+ * FOUR EXTRA, AND THE NUMBER IS NOT A GUESS ABOUT TASTE.
+ *
+ * With the repeat armed, rules.ts refuses a second publication of one post to
+ * one group inside repeat_min_hours, whose floor is MIN_REPEAT_HOURS = 12 — so
+ * at most TWO rounds a day can ever reach the same groups, whatever is
+ * configured. limits.maxPerTargetPerDay (default 2) says the same thing from
+ * the other side. The cap is four rather than one because a round may be
+ * switched off, and because the owner is entitled to lay out his day; what the
+ * product must not do is let him believe round five will publish. The card
+ * states the arithmetic instead — see roundsVsRepeat().
+ */
+export const MAX_EXTRA_ROUNDS = 4;
+
+export type RoundFields = Partial<Pick<Campaign, 'schedule_rounds'>>;
+
+/**
+ * The stored rounds, defended against the column being absent, null, the wrong
+ * shape, or carrying an hour that is not an hour — all four of which a jsonb
+ * column can hand back, and the first of which is every database that has not
+ * run the migration yet.
+ */
+export function readRounds(campaign: RoundFields | null | undefined): CampaignRound[] {
+  const raw = campaign?.schedule_rounds;
+  if (!Array.isArray(raw)) return [];
+  const out: CampaignRound[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const at = String((item as { at?: unknown }).at ?? '');
+    if (toMinutes(at) === null) continue;
+    /* Absent reads as ON: a row that exists was added on purpose, and the one
+       way to have no round is to not have the row. */
+    const enabled = (item as { enabled?: unknown }).enabled !== false;
+    out.push({ at: normaliseTime(at), enabled });
+    if (out.length >= MAX_EXTRA_ROUNDS) break;
+  }
+  return out;
+}
+
+/** 'H:MM' and '3:5' both arrive from hand-written jsonb; store one spelling. */
+function normaliseTime(hm: string): string {
+  const mins = toMinutes(hm) ?? 0;
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+/** What goes in the column. Sorted, so two equal lists compare equal. */
+export function roundsColumn(rounds: CampaignRound[]): { schedule_rounds: CampaignRound[] } {
+  const seen = new Set<string>();
+  const out: CampaignRound[] = [];
+  for (const r of rounds) {
+    if (toMinutes(r.at) === null) continue;
+    const at = normaliseTime(r.at);
+    if (seen.has(at)) continue;
+    seen.add(at);
+    out.push({ at, enabled: r.enabled !== false });
+  }
+  out.sort((a, b) => (toMinutes(a.at) ?? 0) - (toMinutes(b.at) ?? 0));
+  return { schedule_rounds: out.slice(0, MAX_EXTRA_ROUNDS) };
+}
+
+/**
+ * EVERY HOUR THIS CAMPAIGN OPENS AT ON A CHOSEN DAY — round 1 first.
+ *
+ * This is the one list the weekly plan is built from, and the one list the
+ * card counts. A disabled round contributes nothing; a round set to the same
+ * hour as the window's opening is round 1 and not a second occasion.
+ */
+export function roundStarts(schedule: CampaignSchedule, rounds: CampaignRound[]): string[] {
+  const seen = new Set<string>([schedule.start]);
+  const out = [schedule.start];
+  for (const r of rounds) {
+    if (!r.enabled) continue;
+    const at = normaliseTime(r.at);
+    if (seen.has(at)) continue;
+    seen.add(at);
+    out.push(at);
+  }
+  return out.sort((a, b) => (toMinutes(a) ?? 0) - (toMinutes(b) ?? 0));
+}
+
+/**
+ * THE SMALLEST GAP BETWEEN TWO OCCASIONS, IN HOURS, AROUND THE CLOCK.
+ *
+ * Cyclic, because the campaign repeats daily: a round at 23:00 and one at
+ * 01:00 are two hours apart, not twenty-two. With a single occasion the answer
+ * is 24 — the same hour tomorrow — which is exactly what today's behaviour is
+ * and is why a one-round campaign measures as unchanged here.
+ */
+export function smallestRoundGapHours(starts: string[]): number {
+  const mins = starts.map((s) => toMinutes(s) ?? 0).sort((a, b) => a - b);
+  if (mins.length < 2) return 24;
+  let smallest = 24 * 60 - (mins[mins.length - 1] - mins[0]);
+  for (let i = 1; i < mins.length; i += 1) smallest = Math.min(smallest, mins[i] - mins[i - 1]);
+  return smallest / 60;
+}
+
+/**
+ * ─── WILL THE SECOND ROUND ACTUALLY PUBLISH? ──────────────────────────────
+ *
+ * The question the card has to answer out loud, because getting it wrong is
+ * silent: a second round whose groups are all refused still opens, still shows
+ * a queue, and publishes nothing.
+ *
+ * rules.ts refuses a second publication of one post to one group for ever when
+ * the repeat is off, and inside repeat_min_hours when it is on. So two rounds
+ * over the SAME groups need the repeat armed AND a window no longer than the
+ * gap between them. The owner's own example — 03:30 and 15:30 — is exactly 12
+ * hours, which is exactly MIN_REPEAT_HOURS: the closest two rounds the engine
+ * will ever allow, and it works only if the repeat window is lowered to match.
+ */
+export interface RoundsVerdict {
+  /** Every round will be allowed to publish to the campaign's groups. */
+  ok: boolean;
+  /** Hours between the two closest occasions, around the clock. */
+  smallestGapHours: number;
+  /** What repeat_min_hours would have to be for that gap to be allowed. */
+  neededHours: number;
+  /** Nothing to say: one round, or no conflict. */
+  reason: 'ok' | 'repeat-off' | 'window-too-long' | 'closer-than-the-floor';
+}
+
+export function roundsVsRepeat(starts: string[], repeat: CampaignRepeat): RoundsVerdict {
+  const smallestGapHours = smallestRoundGapHours(starts);
+  const neededHours = Math.floor(smallestGapHours);
+  if (starts.length < 2) return { ok: true, smallestGapHours, neededHours, reason: 'ok' };
+  /* Below the floor nothing helps: the 12 is a database CHECK and a deliberate
+     refusal to publish one advertisement into one group twice in a morning. */
+  if (smallestGapHours < MIN_REPEAT_HOURS) {
+    return { ok: false, smallestGapHours, neededHours, reason: 'closer-than-the-floor' };
+  }
+  if (!repeat.enabled) return { ok: false, smallestGapHours, neededHours, reason: 'repeat-off' };
+  if (repeat.minHours > smallestGapHours) {
+    return { ok: false, smallestGapHours, neededHours, reason: 'window-too-long' };
+  }
+  return { ok: true, smallestGapHours, neededHours, reason: 'ok' };
+}
+
+/**
+ * ─── THE WEEKLY PLAN, BUILT IN ONE PLACE ──────────────────────────────────
+ *
+ * `Record<weekday, 'HH:MM'[]>`, which is what social_schedules.weekly is and
+ * what slots.ts loops over.
+ *
+ * TWO WRITERS BUILD THIS AND THEY MUST NOT DRIFT. syncWeeklyHours() and
+ * setCampaignRepeat() both wrote `[schedule.start]` inline, four lines apart,
+ * with a comment on one of them saying "the same arithmetic setCampaignRepeat
+ * uses, so the two cannot drift". Two copies of an arithmetic are not one
+ * arithmetic; the moment rounds exist, whichever writer ran last decided how
+ * many occasions a day the campaign had. So both now call this.
+ *
+ * An empty day list produces an empty plan rather than a plan for no days —
+ * the callers refuse that case before reaching here, and this returning `{}`
+ * is what makes their refusal visible rather than silently arming nothing.
+ */
+export function weeklyPlanFor(schedule: CampaignSchedule, rounds: CampaignRound[]): Record<string, string[]> {
+  const starts = roundStarts(schedule, rounds);
+  const weekly: Record<string, string[]> = {};
+  for (const day of schedule.days) weekly[String(day)] = [...starts];
+  return weekly;
+}
+
 export const MIN_REPEAT_HOURS = 12;
 export const MAX_REPEAT_HOURS = 168;
 export const DEFAULT_CAMPAIGN_REPEAT: CampaignRepeat = { enabled: false, minHours: 20 };

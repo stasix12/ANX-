@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
-import { MIN_GAP_SECONDS, gapChoiceLabel, readSchedule, readRepeat, repeatColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields } from './campaign-schedule';
+import { MIN_GAP_SECONDS, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, weeklyPlanFor, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey, renderPostText } from './compose';
@@ -1118,6 +1118,16 @@ export interface RepeatResult {
 export async function syncWeeklyHours(
   campaignId: string,
   schedule: CampaignSchedule,
+  /*
+   * REQUIRED, AND DELIBERATELY NOT DEFAULTED TO [].
+   *
+   * This function REPLACES social_schedules.weekly. A default of [] would mean
+   * any caller that forgot the rounds silently deleted every extra occasion
+   * the owner had set, on the next unrelated save — the exact silent-loss
+   * shape this product keeps being bitten by. Required, so the typecheck finds
+   * every caller instead of the owner finding it in a week.
+   */
+  rounds: CampaignRound[],
 ): Promise<{ rearmed: number; skippedNoDay: boolean }> {
   if (!schedule.days.length) return { rearmed: 0, skippedNoDay: true };
 
@@ -1132,10 +1142,11 @@ export async function syncWeeklyHours(
   );
   if (!rows.length) return { rearmed: 0, skippedNoDay: false };
 
-  /* The same arithmetic setCampaignRepeat uses, so the two cannot drift: one
-     occasion per chosen day, at the window's opening hour. */
-  const weekly: WeeklyPlan = {};
-  for (const day of schedule.days) weekly[String(day)] = [schedule.start];
+  /* ONE builder, shared with setCampaignRepeat — see weeklyPlanFor(). The two
+     used to hold a copy each, four lines apart, with a comment claiming they
+     could not drift; the moment a campaign has more than one occasion a day,
+     whichever of them ran last decided how many it had. */
+  const weekly = weeklyPlanFor(schedule, rounds) as WeeklyPlan;
   const wanted = JSON.stringify(weekly);
 
   const stale = rows.filter((r) => JSON.stringify(r.weekly ?? {}) !== wanted).map((r) => r.id);
@@ -1151,7 +1162,11 @@ export async function syncWeeklyHours(
 }
 
 export async function setCampaignRepeat(
-  campaign: Pick<Campaign, 'id' | 'name'>,
+  /* `schedule_rounds` is in the parameter rather than read back here: arming
+     the repeat rebuilds `weekly`, and rebuilding it without the campaign's
+     extra occasions would delete them. The callers already hold the whole
+     campaign row, so the type simply asks for the field. */
+  campaign: Pick<Campaign, 'id' | 'name'> & RoundFields,
   repeat: CampaignRepeat,
   schedule: CampaignSchedule,
 ): Promise<RepeatResult> {
@@ -1183,8 +1198,10 @@ export async function setCampaignRepeat(
    * 21:50 because that is when he turned it on would publish four groups and
    * then defer two hundred to tomorrow.
    */
-  const weekly: WeeklyPlan = {};
-  for (const day of schedule.days) weekly[String(day)] = [schedule.start];
+  /* The same builder syncWeeklyHours uses, and the rounds come off the campaign
+     row this function was already handed — so arming the repeat cannot quietly
+     flatten a campaign's second round. */
+  const weekly = weeklyPlanFor(schedule, readRounds(campaign)) as WeeklyPlan;
 
   let armed = 0;
   let needsLaunch = 0;

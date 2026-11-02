@@ -250,4 +250,25 @@ export const WORKER_VERSION = '4.23.0';
  * the question too often rather than missing a change that mattered. The three
  * greps above are how to answer it in thirty seconds instead of guessing.
  */
-export const WORKER_FINGERPRINT = '3c27cd3ae7388f90';
+/*
+ * 3c27cd3ae7388f90 → 6b035b4b24294a66. סבבים ביום (ריצות). DOES THIS HAVE TO REACH THE PC? NO, and
+ * the measurement is the interesting part.
+ *
+ *   npm run build:app
+ *   grep -c slotsFor      dist/app/worker.cjs  → 3   (the PC runs the planner)
+ *   grep -c planQueue     dist/app/worker.cjs  → 3
+ *   grep -c weeklyPlanFor dist/app/worker.cjs  → 0   (it does not BUILD the plan)
+ *   grep -c roundStarts   dist/app/worker.cjs  → 0
+ *   grep -c readRounds    dist/app/worker.cjs  → 0
+ *
+ * That split is the whole architecture of this feature. The PC's planner reads
+ * social_schedules.weekly out of the database and has looped its 'HH:MM' array
+ * since the beginning; the new code only decides what goes INTO that column,
+ * and it runs in the browser when the owner saves. campaign-schedule.ts is in
+ * the bundle because rules.ts imports readSchedule from it, and esbuild shakes
+ * out the exports nothing on the PC calls — which is what the three zeroes are.
+ *
+ * So a machine still on 4.23.0 publishes two rounds a day correctly the moment
+ * the owner sets a second one. Nothing to install.
+ */
+export const WORKER_FINGERPRINT = '6b035b4b24294a66';

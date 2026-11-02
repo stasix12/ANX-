@@ -130,6 +130,19 @@ export interface Campaign {
    */
   repeat_enabled?: boolean;
   repeat_min_hours?: number;
+  /**
+   * EXTRA PUBLICATION ROUNDS IN THE SAME DAY — "סבבים ביום (ריצות)".
+   *
+   * `[{ at: 'HH:MM', enabled: boolean }]`, holding the SECOND and later
+   * occasions only: round one is schedule_start, the hour already on the card,
+   * because an hour stored in two places is the defect this product has been
+   * bitten by twice.
+   *
+   * ABSENT, NULL AND [] ALL MEAN "one round a day", which is what every
+   * campaign that exists today does — so a database that has not run
+   * social-latest.sql reads exactly its present behaviour through readRounds().
+   */
+  schedule_rounds?: { at: string; enabled: boolean }[];
   created_at: string;
 }
 

@@ -58,7 +58,7 @@ import {
   type TimelineRow,
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
-import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields } from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
@@ -1104,7 +1104,7 @@ export default function SocialDashboard() {
              * already weekly, and nothing else: it cannot create a recurrence
              * the owner did not ask for, which is what the guard protects.
              */
-            const synced = await syncWeeklyHours(campaign.id, next);
+            const synced = await syncWeeklyHours(campaign.id, next, readRounds(campaign));
             if (synced.skippedNoDay) {
               toast('השעה נשמרה, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.', 'info');
             } else if (synced.rearmed) {

@@ -100,6 +100,7 @@ const TITLE: Record<string, string> = {
      wondering where the repeats came from. */
   campaign_repeat_on: 'חזרה יומית הופעלה',
   campaign_repeat_off: 'חזרה יומית כובתה',
+  campaign_repeat_window: 'חלון החזרה הותאם לסבבים',
   campaign_repeat_needs_launch: 'החזרה היומית לא הופעלה — הסבב עוד לא הושק',
   /* A screen that stopped drawing. Two headlines, because the two are found
      in different places and mean different things to whoever is looking:

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { scheduleReadout } from '../../src/lib/social/schedule-readout';
 import { projectQueue, type AccountSpacing } from '../../src/lib/social/projection';
-import { DEFAULT_CAMPAIGN_REPEAT, readRepeat, repeatColumns, MIN_REPEAT_HOURS, MAX_REPEAT_HOURS, type CampaignRepeat, type CampaignSchedule } from '../../src/lib/social/campaign-schedule';
+import { DEFAULT_CAMPAIGN_REPEAT, REPEAT_WHEN_UNKNOWN, readRepeat, repeatColumns, MIN_REPEAT_HOURS, MAX_REPEAT_HOURS, type CampaignRepeat, type CampaignSchedule } from '../../src/lib/social/campaign-schedule';
 import { campaignState, neverLaunched, type CampaignState } from '../../src/lib/social/campaign';
 
 /**
@@ -340,9 +340,9 @@ const st = (
     'and a switched-off window names no hour either',
   );
   eq(
-    scheduleReadout(ref, st('completed', null), now, DEFAULT_CAMPAIGN_REPEAT),
+    scheduleReadout(ref, st('completed', null), now, REPEAT_WHEN_UNKNOWN),
     { kind: 'ended', stopped: false, repeats: false, opens: null },
-    'and one that does not, does not — the default is off, and names no hour',
+    'and one that does not, does not — an unknown repeat names no hour either',
   );
   /*
    * A ROUND HE STOPPED DOES NOT COME BACK, whatever the switch says. Stopping
@@ -358,7 +358,7 @@ const st = (
   for (const s of ['not_started', 'running'] as const) {
     eq(
       scheduleReadout(ref, st(s, null), now, on),
-      scheduleReadout(ref, st(s, null), now, DEFAULT_CAMPAIGN_REPEAT),
+      scheduleReadout(ref, st(s, null), now, REPEAT_WHEN_UNKNOWN),
       `the repeat switch does not change what a ${s} round says`,
     );
   }
@@ -369,15 +369,73 @@ const st = (
   /* A DATABASE THAT HAS NOT RUN v25 READS "OFF", exactly like a campaign whose
      owner never pressed the switch. That equivalence is the whole backward-
      compatibility story: nothing an existing round does changes. */
-  eq(readRepeat(null), DEFAULT_CAMPAIGN_REPEAT, 'no row at all reads as off');
-  eq(readRepeat({}), DEFAULT_CAMPAIGN_REPEAT, 'a row without the columns reads as off');
-  is(DEFAULT_CAMPAIGN_REPEAT.enabled === false, 'and the default is off, for every campaign that already exists');
+  eq(readRepeat(null), REPEAT_WHEN_UNKNOWN, 'no row at all reads as off');
+  eq(readRepeat({}), REPEAT_WHEN_UNKNOWN, 'a row without the columns reads as off');
   /* ONLY `true` IS ON. A string, a 1, a null — anything a loose read could
      turn into "yes" — must not switch on a feature that republishes. */
   for (const v of [1, 'true', 'yes', {}, [], null, undefined]) {
     is(readRepeat({ repeat_enabled: v } as never).enabled === false, `repeat_enabled = ${JSON.stringify(v)} is not "on"`);
   }
   is(readRepeat({ repeat_enabled: true } as never).enabled === true, 'and true is');
+
+  /*
+   * ─── TWO CONSTANTS, AND THEY MUST NOT BECOME ONE AGAIN ──────────────────
+   *
+   * "חזרה יומית תשאיר כברירת מחדל תמיד עובדת." — the owner, 02.11.2026. So a
+   * NEW campaign repeats by default, and DEFAULT_CAMPAIGN_REPEAT says so.
+   *
+   * THESE WERE THE SAME CONSTANT FOR ABOUT AN HOUR. rules.ts held it as the
+   * value a queue row publishes under when there is no campaign to read —
+   * `let repeat = DEFAULT_CAMPAIGN_REPEAT`, chosen precisely because it was
+   * OFF. Flipping it for the owner's request turned every orphan row, every
+   * failed campaign read and every pre-v25 database in the engine into a
+   * permission to publish the same post to the same group again. It typechecked
+   * and no test in this suite failed.
+   *
+   * So: what a new campaign STARTS AS, and what to assume when we COULD NOT
+   * FIND OUT, are different questions with opposite safe answers. These four
+   * assertions are what makes merging them red instead of silent.
+   */
+  is(DEFAULT_CAMPAIGN_REPEAT.enabled === true, 'a new campaign must repeat by default — the owner asked for it in those words');
+  is(REPEAT_WHEN_UNKNOWN.enabled === false, 'and not knowing must still mean "never twice", whatever that default becomes');
+  is(
+    DEFAULT_CAMPAIGN_REPEAT.enabled !== REPEAT_WHEN_UNKNOWN.enabled,
+    'the owner\u2019s default and the engine\u2019s fallback must not be the same value: one constant for both is how a UI default becomes a publishing permission',
+  );
+  eq(REPEAT_WHEN_UNKNOWN.minHours, DEFAULT_CAMPAIGN_REPEAT.minHours, 'the WINDOW is the same either way — only whether a repeat happens at all differs');
+
+  /*
+   * AND THE DATABASE MUST AGREE, or the owner's default is a label on a screen.
+   *
+   * readRepeat() is strict: only a stored `true` is on. That is deliberate —
+   * see the comment on it — and it means the owner's default has to be carried
+   * by the DATA, not by a loose read. v31 is where that happens: the column's
+   * default becomes true, and every ACTIVE campaign still on the old false is
+   * switched on. Without the migration the constant above is a promise nothing
+   * keeps; without this check the two can drift and nobody finds out.
+   */
+  const v31 = readFileSync(new URL('../../supabase/social-schema-v31.sql', import.meta.url), 'utf8');
+  const latestSql = readFileSync(new URL('../../supabase/social-latest.sql', import.meta.url), 'utf8');
+  for (const [where, sql] of [['v31', v31], ['social-latest.sql', latestSql]] as const) {
+    is(
+      /alter column repeat_enabled set default true/.test(sql),
+      `${where} must set the column default to true, or a new campaign is created off while DEFAULT_CAMPAIGN_REPEAT says on`,
+    );
+    is(
+      /set repeat_enabled = true[\s\S]{0,80}where repeat_enabled = false[\s\S]{0,60}and status = 'active'/.test(sql),
+      `${where} must switch the ACTIVE campaigns on — before v31 a stored false meant either "he pressed the switch" or "nobody ever chose", and only the data can tell them apart`,
+    );
+    is(
+      !/set repeat_enabled = false/.test(sql),
+      `${where} must not switch anything OFF — no migration may undo the owner's own choice`,
+    );
+  }
+  /* And paused or archived campaigns are deliberately NOT touched: a round he
+     stopped keeps the fact that it was not repeating. */
+  is(
+    /status = 'active'/.test(v31) && !/status in \(/.test(v31),
+    'v31 must touch active campaigns only, so a paused round keeps what the owner left it as',
+  );
 
   /*
    * THE FLOOR IS ENFORCED ON THE WAY IN AND ON THE WAY OUT.
@@ -500,13 +558,13 @@ const st = (
 
   /* What the card said before: the campaign's minute, and nothing else. */
   eq(
-    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT),
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, REPEAT_WHEN_UNKNOWN),
     { kind: 'due', at: at('2026-10-07T10:13').toISOString() },
     'without the account rule the card prints the campaign gap alone — the old answer',
   );
   /* What the engine will actually do: 10:12 + 65 minutes. */
   eq(
-    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, REPEAT_WHEN_UNKNOWN, defaults),
     { kind: 'due', at: at('2026-10-07T11:17').toISOString() },
     'THE OWNER\'S "כל דקה": the account-wide floor is 65 minutes and the card must say so',
   );
@@ -514,7 +572,7 @@ const st = (
   /* A PAGE IS NOT A GROUP. The surcharge is applied exactly where rules.ts
      applies it, so a page waits 45 minutes and not 65. */
   eq(
-    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString(), { channel: 'facebook_page' }), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString(), { channel: 'facebook_page' }), now, REPEAT_WHEN_UNKNOWN, defaults),
     { kind: 'due', at: at('2026-10-07T10:57').toISOString() },
     'a page target carries limits.minGapMinutes without the group surcharge',
   );
@@ -522,7 +580,7 @@ const st = (
      guessing upwards would hold a publication behind a rule that may not
      govern it. */
   eq(
-    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString(), { channel: '' }), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString(), { channel: '' }), now, REPEAT_WHEN_UNKNOWN, defaults),
     { kind: 'due', at: at('2026-10-07T10:57').toISOString() },
     'an unknown channel is not assumed to be a group',
   );
@@ -531,7 +589,7 @@ const st = (
      outranks a 65-minute account floor — the engine takes the max and so must
      the card. */
   const slow: CampaignSchedule = { ...ref, gapSeconds: 1800 };
-  const r = scheduleReadout(slow, st('running', at('2026-10-07T13:00').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, defaults);
+  const r = scheduleReadout(slow, st('running', at('2026-10-07T13:00').toISOString()), now, REPEAT_WHEN_UNKNOWN, defaults);
   eq(r, { kind: 'due', at: at('2026-10-07T13:00').toISOString() }, 'a stored instant beyond both floors is left alone');
 
   /*
@@ -547,7 +605,7 @@ const st = (
     lastPublishedAt: at('2026-10-07T23:30').toISOString(),
   };
   eq(
-    scheduleReadout(minute, st('running', at('2026-10-07T23:35').toISOString()), at('2026-10-07T23:35'), DEFAULT_CAMPAIGN_REPEAT, late),
+    scheduleReadout(minute, st('running', at('2026-10-07T23:35').toISOString()), at('2026-10-07T23:35'), REPEAT_WHEN_UNKNOWN, late),
     { kind: 'due', at: at('2026-10-08T08:00').toISOString() },
     'an account floor past the end of the day rolls to the next chosen day, it does not land at 00:35',
   );
@@ -556,11 +614,11 @@ const st = (
      out of an epoch. A database that has never published must not have every
      card's instant pushed forward by an hour. */
   eq(
-    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, { ...defaults, lastPublishedAt: null }),
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, REPEAT_WHEN_UNKNOWN, { ...defaults, lastPublishedAt: null }),
     { kind: 'due', at: at('2026-10-07T10:13').toISOString() },
     'an account that has never published imposes no floor');
   eq(
-    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, { ...defaults, minGapMinutes: 0, groupMinGapMinutes: 0 }),
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, REPEAT_WHEN_UNKNOWN, { ...defaults, minGapMinutes: 0, groupMinGapMinutes: 0 }),
     { kind: 'due', at: at('2026-10-07T10:13').toISOString() },
     'and neither does a gap of zero');
 
@@ -573,7 +631,7 @@ const st = (
    * assumption this file exists to stop relying on.
    */
   eq(
-    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, { ...defaults, lastPublishedAt: 'not-a-date' }),
+    scheduleReadout(minute, st('running', at('2026-10-07T10:13').toISOString()), now, REPEAT_WHEN_UNKNOWN, { ...defaults, lastPublishedAt: 'not-a-date' }),
     { kind: 'due', at: at('2026-10-07T10:13').toISOString() },
     'an unparseable last-publication imposes no floor rather than an invalid one',
   );
@@ -582,13 +640,13 @@ const st = (
      switch turns off; the account rule is a different rule and the engine
      enforces it either way. */
   eq(
-    scheduleReadout(off, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    scheduleReadout(off, st('running', at('2026-10-07T10:13').toISOString()), now, REPEAT_WHEN_UNKNOWN, defaults),
     { kind: 'due', at: at('2026-10-07T11:17').toISOString() },
     'the account floor is not the campaign window and does not switch off with it',
   );
   /* And with no schedule at all. */
   eq(
-    scheduleReadout(null, st('running', at('2026-10-07T10:13').toISOString()), now, DEFAULT_CAMPAIGN_REPEAT, defaults),
+    scheduleReadout(null, st('running', at('2026-10-07T10:13').toISOString()), now, REPEAT_WHEN_UNKNOWN, defaults),
     { kind: 'due', at: at('2026-10-07T11:17').toISOString() },
     'nor with a campaign that has no schedule',
   );
@@ -735,7 +793,7 @@ const st = (
     const now = at('2026-10-06T10:12');
     const iso = at(stamp).toISOString();
     /* What the CARD prints. */
-    const card = scheduleReadout(ref, st('running', iso), now, DEFAULT_CAMPAIGN_REPEAT, spacing);
+    const card = scheduleReadout(ref, st('running', iso), now, REPEAT_WHEN_UNKNOWN, spacing);
     /* What the "ממתינים" LIST prints for the same row — projectQueue, which
        is what src/app/social/page.tsx hands to <Timeline projected=…>. */
     const list = projectQueue(
@@ -772,7 +830,7 @@ const st = (
     slow,
     { ...(st('running', iso) as object), lastPublishedAt: lastPublished } as never,
     now,
-    DEFAULT_CAMPAIGN_REPEAT,
+    REPEAT_WHEN_UNKNOWN,
     { minGapMinutes: 0, groupMinGapMinutes: 0, lastPublishedAt: null },
   );
   const list = projectQueue(

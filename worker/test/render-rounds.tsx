@@ -70,7 +70,48 @@ const body = cases
   )
   .join('');
 
+/*
+ * ─── AND THE SAME CARD AT THE WIDTH THE RUN CARD GIVES IT ─────────────────
+ *
+ * THE PROBES ABOVE ARE 328px WIDE AT 360 AND THAT IS NOT NARROW ENOUGH.
+ *
+ * On the dashboard the panel sits inside the run card, which adds its own
+ * padding: the rounds card there measures 31→329, i.e. 298px. At that width
+ * the round row WRAPS and the ⋮ lands at the right end of the second line —
+ * which is the layout in which the old `absolute end-0` menu opened 63 pixels
+ * off the side of the card. Measured at 328px it fitted, so this file's own
+ * fixture could not see the defect and dashboard-hero.test.ts caught it alone.
+ * A guard that only one fixture can fail is one fixture away from silence.
+ *
+ * So the busiest case is drawn again at 298 and at 260 — the run card's width,
+ * and narrower still. These carry no `panel-probe` class on purpose: the
+ * resting pass asserts exactly six panels and reads them by index, while the
+ * open-menu pass walks `[data-rounds-card] details` across the whole page and
+ * picks these up for free.
+ */
+const narrow = [298, 260]
+  .map(
+    (w) => `
+  <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">three rounds at ${w}px — the width the run card gives this panel</p>
+  <div class="narrow-probe" style="width:${w}px">${renderToStaticMarkup(
+    createElement(CampaignSchedulePanel, {
+      schedule: base,
+      onChange: () => {},
+      campaignName: 'ניקוי ספות באר שבע',
+      repeat: { enabled: true, minHours: 12 },
+      onRepeatChange: () => {},
+      rounds: [
+        { at: '11:30', enabled: true },
+        { at: '15:30', enabled: true },
+        { at: '19:30', enabled: true },
+      ],
+      onRoundsChange: () => {},
+    } as never),
+  )}</div>`,
+  )
+  .join('');
+
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
-<body class="bg-ink-950"><div class="social-theme" style="padding:16px">${body}</div></body></html>`);
+<body class="bg-ink-950"><div class="social-theme" style="padding:16px">${body}${narrow}</div></body></html>`);

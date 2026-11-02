@@ -147,11 +147,40 @@ for (const word of ['הפרסום הבא', 'אין פרסומים מתוזמני
 is(/<NextPublication/.test(board), 'and the board draws that block rather than a second copy of it');
 is(/<NextPublication/.test(code('src/components/social/CampaignSchedulePanel.tsx')), 'as does the panel the campaigns card builds on');
 
-/* "ערוך מועד" OPENS THE SCHEDULE, which is what the owner asked it to do —
-   and the queue tuner it used to open is still reachable from inside. */
+/* "ערוך מועד" OPENS THE SCHEDULE, which is what the owner asked it to do. */
 is(/canSchedule \? \(/.test(hero) && /setEditingSchedule/.test(hero), '"ערוך מועד" opens the schedule editor');
 is(/<CampaignSchedulePanel/.test(hero), 'and the editor is the panel this product already had, not a new one');
-is(/onTune && \(/.test(hero), 'with the queue\'s own advanced settings kept inside it');
+
+/*
+ * ─── AND IT IS OPEN BEFORE HE TAPS ANYTHING ───────────────────────────────
+ *
+ * "את הסבבים תוסיף ישר לעמוד הראשי איפה שהקמפיין כמו בתמונה כאן!"
+ *
+ * The owner looked at this card and reported סבבים ביום missing. It was not
+ * missing; it was one tap away behind "ערוך מועד", which for a control he is
+ * meant to notice is the same as absent. His reference draws the whole block
+ * expanded on the main page, so the editor starts OPEN.
+ */
+is(/const \[editingSchedule, setEditingSchedule\] = useState\(true\);/.test(hero), 'the scheduling block must start OPEN — the owner reported the rounds missing while they sat behind a tap');
+
+/*
+ * ─── "תמחק את הגדרות התור המתקדמות" ───────────────────────────────────────
+ *
+ * Gone from this card, by name, at his request — it was taking a full-width
+ * row at the foot of a card already nine hundred pixels tall.
+ *
+ * AND THE TOOL ITSELF IS NOT DELETED, which is the half that needs a test.
+ * The queue tuner is what re-spaces a LIVE queue; destroying it to satisfy a
+ * request about a button would be answering the wrong thing. So it moved to
+ * the campaigns card's ⋯ menu, and this pins both halves: the row is gone from
+ * here, and the tool is still reachable there.
+ */
+is(!/הגדרות תור מתקדמות/.test(hero), 'the advanced-queue row must be gone from the run card — the owner asked for it by name');
+{
+  const listCard = code('src/components/social/CampaignCard.tsx');
+  is(/הגדרות תור מתקדמות/.test(listCard), 'but the queue tuner must still be reachable from the campaigns card — a button he wanted off one screen is not a request to delete the tool');
+  is(/onSelect: onTune/.test(listCard), 'and reachable as a working menu entry, not as a label');
+}
 
 /* BACKWARD COMPATIBLE. Without a schedule the card is the card as it was. */
 is(/schedule && onScheduleChange && \(/.test(hero), 'no schedule, no block — every other caller gets the old card');
@@ -281,6 +310,25 @@ async function main(): Promise<void> {
     for (const width of [360, 390, 430]) {
       const view = await browser.newPage({ viewport: { width, height: 900 } });
       await view.goto(`file://${path.join(dir, 'index.html')}`);
+      /*
+       * ─── OPEN EVERY <details> FIRST, OR THE NUMBERS ARE FICTION ─────────
+       *
+       * A closed <details> is not laid out. In current Chromium its content
+       * sits in ::details-content with content-visibility: hidden, so layout
+       * is skipped and getBoundingClientRect on a descendant returns a stale
+       * box. The run after the scheduling block began rendering by default,
+       * this suite failed with "a control escaped the card" — a round menu it
+       * placed at 276→385 against a card spanning 16→344. Measured OPEN, the
+       * same menu is 36→159: inside, and always had been. The component was
+       * correct and the measurement was not.
+       *
+       * Open is also the only state in which those controls exist for the
+       * owner. The escape and 40px checks below are about what a finger can
+       * reach, so they are taken with the menus reachable.
+       */
+      await view.evaluate(() => {
+        document.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''));
+      });
       await view.waitForTimeout(150);
       const seen = await view.evaluate(() => {
         const cards = [...document.querySelectorAll('.hero-probe > section')];
@@ -351,6 +399,35 @@ async function main(): Promise<void> {
                * escape rules above already apply to it like any other link.
                */
               badgeLinks: [...c.querySelectorAll('a[href^="/social/history?status="]')].length,
+              /*
+               * ─── סבבים ביום IS ON THIS SCREEN, FOUND BY ITS OWN TITLE ───
+               *
+               * "את הסבבים תוסיף ישר לעמוד הראשי איפה שהקמפיין כמו בתמונה
+               *  כאן!" — so it has to be in the markup of THIS card, with no
+               * tap, and this is the assertion that says so.
+               *
+               * BY ITS TITLE, AND THAT IS THE WHOLE POINT. The first version
+               * of this check greped the fixture for `data-schedule` and
+               * passed — on `data-schedule-board`, a different component —
+               * while the rounds card rendered exactly zero times behind 170
+               * green assertions. A prefix that matches something else is not
+               * a measurement. The card's own words cannot match anything but
+               * the card.
+               */
+              roundsCard: c.querySelectorAll('[data-rounds-card]').length,
+              /* AND THE ATTRIBUTE IS ON THE CARD, not on some other element
+                 that would satisfy the count while the card is gone. Its own
+                 words are the check: nothing else on this screen says them. */
+              roundsTitled: (c.querySelector('[data-rounds-card]')?.textContent || '').includes('סבבים ביום (ריצות)'),
+              /* And every round menu is OPEN, so `escaped` and `small` below
+                 are measuring laid-out boxes. False here means those two
+                 numbers came out of a subtree the browser skipped. */
+              menusOpen: [...c.querySelectorAll('details')].every((d) => d.hasAttribute('open')),
+              /* And it is inside the card, on both edges, like everything else. */
+              roundsInside: (() => {
+                const r = c.querySelector('[data-rounds-card]')?.getBoundingClientRect();
+                return r ? r.left >= box.left - 1 && r.right <= box.right + 1 : true;
+              })(),
               /* And nothing escapes the card's own box. */
               escaped: [...c.querySelectorAll('a,button')].filter((e) => {
                 const r = e.getBoundingClientRect();
@@ -372,9 +449,22 @@ async function main(): Promise<void> {
 
       seen.cards.forEach((c, i) => {
         const at = `${width}px, card ${i + 1}`;
+        assert.ok(c.menusOpen, `${at}: a <details> on this card is closed — a closed one is not laid out, so the escape and 40px checks below would be measuring a skipped subtree`);
         assert.equal(c.escaped, 0, `${at}: a control escaped the card`);
         assert.equal(c.small, 0, `${at}: a control under the 40px floor`);
         assert.deepEqual(c.clipped, [], `${at}: text this product wrote was cut off`);
+        /*
+         * THE ROUNDS CARD, ON THE MAIN PAGE, WITHOUT A TAP — and exactly one
+         * of it. A card with no schedule draws no block at all, which is the
+         * backward-compatibility case handled just below.
+         */
+        if (c.hasBoard) {
+          assert.equal(c.roundsCard, 1, `${at}: expected exactly one סבבים ביום card on the run card, got ${c.roundsCard} — the owner reported this feature missing while it sat behind "ערוך מועד"`);
+          assert.ok(c.roundsTitled, `${at}: [data-rounds-card] is there but does not carry the card's own title — the attribute moved and the count above now proves nothing`);
+          assert.ok(c.roundsInside, `${at}: the סבבים ביום card escapes the run card's own box`);
+        } else {
+          assert.equal(c.roundsCard, 0, `${at}: a card with no schedule must draw no rounds card either`);
+        }
         /* Card 7 is the one mounted with no schedule at all — the card as it
            was, which is the backward-compatibility case. */
         if (i === 6) {

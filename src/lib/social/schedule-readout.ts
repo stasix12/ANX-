@@ -1,5 +1,5 @@
 import {
-  DEFAULT_CAMPAIGN_REPEAT,
+  REPEAT_WHEN_UNKNOWN,
   nextAllowedAt,
   windowClosesAt,
   type CampaignRepeat,
@@ -177,7 +177,12 @@ export function scheduleReadout(
     lastPublishedAt?: string | null;
   },
   now: Date = new Date(),
-  repeat: CampaignRepeat = DEFAULT_CAMPAIGN_REPEAT,
+  /* UNKNOWN MEANS DO NOT PROMISE A REPEAT. Every real caller passes the
+     campaign's own row (schedule-readout.test.ts pins that), so this default
+     is only reached by a caller that does not know — and a card that answers
+     "it runs again tomorrow" without having read the switch is the screen
+     guessing. REPEAT_WHEN_UNKNOWN, not the owner's default for a new campaign. */
+  repeat: CampaignRepeat = REPEAT_WHEN_UNKNOWN,
   spacing: AccountSpacing = NO_SPACING,
 ): ScheduleReadout {
   const on = Boolean(schedule?.enabled);

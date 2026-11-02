@@ -540,7 +540,15 @@ export function CampaignSchedulePanel({
          * דקורטיביים" outranks a pixel for a control whose function cannot
          * exist.
          */
-        <div className="mt-1.5 rounded-2xl border border-ink-600 bg-ink-900 p-2.5">
+        /*
+         * data-rounds-card, SO A TEST CAN FIND IT WITHOUT GUESSING. The
+         * measured suites name the blocks they measure by attribute
+         * (data-schedule-board, data-next-publication) for one reason: a
+         * check that greped for `data-schedule` once matched
+         * data-schedule-board — a different component — and passed over a
+         * card that rendered zero times, behind 170 green assertions.
+         */
+        <div data-rounds-card className="mt-1.5 rounded-2xl border border-ink-600 bg-ink-900 p-2.5">
           <div className="flex items-start gap-2">
             <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-brand-300/15">
               <RepeatIcon className="h-3.5 w-3.5 text-brand-400" />
@@ -630,14 +638,60 @@ export function CampaignSchedulePanel({
                        * place to change it is the bug, not the feature.
                        */}
                       {extra ? (
-                        <details className="relative shrink-0">
+                        <details className="shrink-0">
                           <summary
                             aria-label={`פעולות לסבב ${i + 1} בשעה ${at}`}
                             className="grid h-10 w-10 cursor-pointer place-items-center rounded-xl text-mist-300 marker:hidden [&::-webkit-details-marker]:hidden"
                           >
                             <MoreIcon aria-hidden className="h-4 w-4" />
                           </summary>
-                          <div className="absolute end-0 z-10 mt-1 w-44 rounded-xl border border-ink-600 bg-ink-900 p-1.5 shadow-lg">
+                          {/*
+                            * IN FLOW, NOT FLOATING — and every number here was
+                            * measured with the menu OPEN, which took three
+                            * tries to get right and is the whole lesson.
+                            *
+                            * It was `absolute end-0 w-44` on the button's own
+                            * relative box. `end-0` is inset-inline-end: 0,
+                            * which in RTL pins the menu's LEFT edge to the
+                            * button and grows it rightwards. That is fine
+                            * while the row fits on one line and the ⋮ sits at
+                            * the row's left end. On the run card at 360px the
+                            * row WRAPS, the ⋮ lands at the right end of the
+                            * second line, and the open menu measured 269→392
+                            * against a card ending at 329 and a card frame
+                            * ending at 344: sixty-three pixels of a delete
+                            * button off the side of the screen.
+                            *
+                            * `start-0` only moves the overflow to the other
+                            * edge on a row that wraps the other way (−25).
+                            * Anchoring to the row with `inset-x-0` does not
+                            * work either, and the reason is worth writing
+                            * down: in current Chromium a <details> lays its
+                            * content out inside ::details-content, which is a
+                            * containing block of its own, so an absolutely
+                            * positioned child resolves against the 40px
+                            * summary however many ancestors are `relative`.
+                            * There is no corner and no inset that escapes it.
+                            *
+                            * So the menu is an ordinary block. Closed, the
+                            * content is skipped and the details stays the
+                            * 40×40 button. Open, the details grows and the
+                            * row — flex-wrap — gives it a line of its own,
+                            * inside the card by construction at every width.
+                            * max-w-full is the belt: a narrower card shrinks
+                            * the menu rather than pushing the page sideways.
+                            *
+                            * AND IT WAS INVISIBLE UNTIL TWO THINGS CHANGED.
+                            * The panel never rendered in the hero fixture
+                            * while it sat behind "ערוך מועד"; and a closed
+                            * <details> is content-visibility: hidden rather
+                            * than display: none, so measuring inside one
+                            * returns boxes that describe nothing on screen —
+                            * which first sent me to fix a component that was
+                            * fine. Both measured suites now force every
+                            * details OPEN before they measure anything.
+                            */}
+                          <div className="mt-1 w-44 max-w-full rounded-xl border border-ink-600 bg-ink-900 p-1.5 shadow-lg">
                             <label className="block text-[10px] font-bold leading-4 text-mist-300">
                               שעת התחלה
                               {/*

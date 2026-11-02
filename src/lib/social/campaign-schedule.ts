@@ -521,19 +521,155 @@ export function plusHours(hm: string, hours: number): string {
   return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
 }
 
+/**
+ * ─── WHAT SAVING ROUNDS HAS TO CHANGE BESIDES THE ROUNDS ──────────────────
+ *
+ * "יש לממש את הפונקציונליות בפועל ולא ליצור כפתורים דקורטיביים."
+ *
+ * One subtraction, and it is the line between a feature and a decoration.
+ * rules.ts refuses a second publication of one post to one group inside
+ * repeat_min_hours, whose default is 20. The owner's own example is 03:30 and
+ * 15:30 — twelve hours apart. With the default left alone, round two opens,
+ * builds a queue of two hundred rows, shows a progress bar, and DEFERS every
+ * one of them to 23:30, outside his publishing window, where they defer again
+ * until MAX_DEFERRALS throws them away. A round with a queue, a bar and a
+ * status that publishes nothing is exactly what he forbade.
+ *
+ * SO THE WINDOW COMES DOWN TO THE GAP HE PICKED, and never below
+ * MIN_REPEAT_HOURS — that twelve is a database CHECK and a deliberate refusal
+ * to put one advertisement into one group twice in a morning. Two rounds
+ * closer than that get `lowerTo: null` and the card's own refusal instead.
+ *
+ * AND THE SWITCH IS NOT PRESSED FOR HIM. With חזרה יומית off, no window
+ * arithmetic lets round two reach a group round one already reached; turning
+ * it on would be the screen overruling a choice he made. It is REPORTED, as
+ * repeatOff, and the toast and the card say so with the switch beside them.
+ *
+ * Pure on purpose: saveCampaignRounds() does the writing, this decides what.
+ */
+export function roundsWindowFix(
+  schedule: CampaignSchedule,
+  rounds: CampaignRound[],
+  repeat: CampaignRepeat,
+): { lowerTo: number | null; repeatOff: boolean } {
+  const starts = roundStarts(schedule, rounds);
+  const verdict = roundsVsRepeat(starts, repeat);
+  return {
+    lowerTo: verdict.reason === 'window-too-long' ? Math.max(MIN_REPEAT_HOURS, verdict.neededHours) : null,
+    repeatOff: starts.length > 1 && !repeat.enabled,
+  };
+}
+
+/**
+ * ─── WHAT THE OWNER IS TOLD WHEN ROUNDS ARE SAVED ─────────────────────────
+ *
+ * ONE BUILDER, BECAUSE THERE ARE TWO SCREENS. The dashboard and the campaigns
+ * list both save rounds, and both wrote this sentence inline — which is how
+ * `weekly` ended up with two copies of one arithmetic and why both now call
+ * weeklyPlanFor(). A toast is not arithmetic, but it carries two facts the
+ * owner cannot see anywhere else, and a screen that forgets one of them is a
+ * setting that changed without being mentioned:
+ *
+ *   · the repeat window came DOWN, by the app, so his rounds can publish;
+ *   · or more than one round is armed while חזרה יומית is OFF, in which case
+ *     the extra rounds will reach only groups the first one did not.
+ *
+ * The second is the honest half of refusing to press his switch for him.
+ */
+export function roundsSavedMessage(
+  name: string,
+  armedExtraRounds: number,
+  result: { skippedNoDay: boolean; windowLoweredTo?: number | null; repeatOff?: boolean },
+): { text: string; tone: 'info' | 'success' } {
+  if (result.skippedNoDay) {
+    return { text: 'הסבבים נשמרו, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.', tone: 'info' };
+  }
+  if (armedExtraRounds === 0) {
+    return { text: `הסבבים הנוספים של "${name}" כובו — השעות נשמרו ואפשר להחזיר אותם בכל רגע`, tone: 'success' };
+  }
+  const total = armedExtraRounds + 1;
+  /* OFF FIRST, because it is the one that stops a publication. A window that
+     was lowered is a detail; a repeat that is off means the extra rounds reach
+     only the groups the first round did not. */
+  if (result.repeatOff) {
+    return {
+      text: `"${name}" יפרסם ${total} סבבים בכל יום פרסום — אבל "חזרה יומית" כבויה, ולכן סבב נוסף יפרסם רק לקבוצות שהסבב הראשון לא הגיע אליהן. הפעילו אותה כדי שכל הסבבים יגיעו לכל הקבוצות.`,
+      tone: 'info',
+    };
+  }
+  if (typeof result.windowLoweredTo === 'number') {
+    return {
+      text: `"${name}" יפרסם ${total} סבבים בכל יום פרסום. חלון החזרה הותאם ל-${result.windowLoweredTo} שעות כדי שכל הסבבים יפרסמו לאותן קבוצות.`,
+      tone: 'success',
+    };
+  }
+  return { text: `"${name}" יפרסם ${total} סבבים בכל יום פרסום`, tone: 'success' };
+}
+
 export const MIN_REPEAT_HOURS = 12;
 export const MAX_REPEAT_HOURS = 168;
-export const DEFAULT_CAMPAIGN_REPEAT: CampaignRepeat = { enabled: false, minHours: 20 };
+
+/**
+ * ─── WHAT A NEW CAMPAIGN STARTS AS ────────────────────────────────────────
+ *
+ * "חזרה יומית תשאיר כברירת מחדל תמיד עובדת." — the owner, 02.11.2026. So a
+ * campaign he creates repeats daily until he presses the switch, and v31 sets
+ * the same default in the database so the two cannot disagree.
+ *
+ * THIS IS NOT THE ENGINE'S FALLBACK. See REPEAT_WHEN_UNKNOWN below: "what a
+ * new campaign starts as" and "what to assume when we could not find out" are
+ * two different questions, and they were one constant for about an hour,
+ * during which flipping this one would have turned a failed campaign read into
+ * a permission to publish the same post to the same group twice.
+ */
+export const DEFAULT_CAMPAIGN_REPEAT: CampaignRepeat = { enabled: true, minHours: 20 };
+
+/**
+ * ─── AND WHAT TO ASSUME WHEN THE ROW COULD NOT BE READ ────────────────────
+ *
+ * OFF. Always off, whatever the default for a new campaign becomes.
+ *
+ * rules.ts holds this before it reads the campaign, two hundred lines above
+ * the guard that uses it, and raises it only from a row it actually got back.
+ * A queue row with no campaign_id, a campaign whose read errored, a database
+ * that has never run v25 — each lands here, and each must get the behaviour
+ * this engine has always had: never the same post to the same group twice.
+ *
+ * A PERMISSION IS NOT SOMETHING TO FALL BACK INTO. Four reads in that file
+ * were fail-open this session and every one of them could double-publish; the
+ * fix was to make not-knowing mean wait. This constant is the same rule for
+ * the repeat, written down so that changing the owner's default cannot quietly
+ * change the engine's fallback. repeat-rules.test.ts pins both.
+ */
+export const REPEAT_WHEN_UNKNOWN: CampaignRepeat = { enabled: false, minHours: DEFAULT_CAMPAIGN_REPEAT.minHours };
 
 /** The two columns → the object, for a row written by any version of this app. */
 export function readRepeat(c: Partial<Campaign> | null | undefined): CampaignRepeat {
   const hours = Number(c?.repeat_min_hours ?? DEFAULT_CAMPAIGN_REPEAT.minHours);
   return {
     /*
-     * A DATABASE THAT HAS NOT RUN v25 READS `false`, exactly like one whose
-     * owner has never pressed the switch. Nothing about an existing round
-     * changes until it is pressed, which is the whole backward-compatibility
-     * story for this feature.
+     * ONLY `true` IS ON, AND THAT IS NOT A CONTRADICTION OF THE OWNER'S
+     * "חזרה יומית תשאיר כברירת מחדל תמיד עובדת".
+     *
+     * I tried `!== false` here first, and it is wrong in two places at once:
+     * rules.ts's fallback read selects `status` alone, so a database missing
+     * the columns would have read ON and republished to the same group; and a
+     * dashboard on that same database would have drawn "חוזר כל יום" over an
+     * engine that never repeats. A loose read buys the default by lying about
+     * what the row says.
+     *
+     * AND IT CANNOT TELL THE TWO FALSES APART ANYWAY. Before v31 the column
+     * defaulted to `false`, so a stored `false` means EITHER "he pressed the
+     * switch" OR "nobody ever chose" — the same value, two opposite
+     * intentions. No reader can resolve that; only the data can. So v31 does
+     * it once, in the database: the default becomes true, every ACTIVE
+     * campaign still on the old false is switched on, and paused or archived
+     * ones keep what they had. After it runs, every campaign he is running
+     * carries a real `true` and this strict read returns exactly that.
+     *
+     * So the owner's default lives in DEFAULT_CAMPAIGN_REPEAT (what a new
+     * campaign starts as, and what gets written) and in v31 (what the existing
+     * ones became). This function only reports what the row actually says.
      */
     enabled: c?.repeat_enabled === true,
     minHours: Number.isFinite(hours) ? Math.min(MAX_REPEAT_HOURS, Math.max(MIN_REPEAT_HOURS, Math.round(hours))) : DEFAULT_CAMPAIGN_REPEAT.minHours,

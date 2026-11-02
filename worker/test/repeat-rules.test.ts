@@ -313,11 +313,36 @@ async function main(): Promise<void> {
     const rules = readFileSync(new URL('../../src/lib/social/rules.ts', import.meta.url), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, ' ')
       .replace(/(^|[^:])\/\/.*$/gm, '$1 ');
-    /* THE DEFAULT IS THE SAFE ONE. A row with no campaign, or a campaign whose
-       read failed, must get "never twice" — a permission is not something to
-       fall back into. */
-    is(/let repeat: CampaignRepeat = DEFAULT_CAMPAIGN_REPEAT;/.test(rules), 'the repeat defaults to off before anything is read');
+    /*
+     * THE FALLBACK IS THE SAFE ONE, AND IT IS NOT THE OWNER'S DEFAULT.
+     *
+     * A row with no campaign_id never enters the `if (campaignId)` block at
+     * all, so whatever this line holds is what such a row publishes under. It
+     * used to read DEFAULT_CAMPAIGN_REPEAT, which was off — and then the owner
+     * asked for a new campaign to repeat by default, which turned that same
+     * constant ON. One edit, and every orphan queue row and every failed
+     * campaign read in this engine would have been handed a permission to
+     * publish the same post to the same group again.
+     *
+     * So the two questions have two constants, and this pins which one is
+     * here. A permission is not something to fall back into.
+     */
+    is(/let repeat: CampaignRepeat = REPEAT_WHEN_UNKNOWN;/.test(rules), 'the repeat must fall back to REPEAT_WHEN_UNKNOWN — "never twice" — before anything is read');
+    is(!/= DEFAULT_CAMPAIGN_REPEAT;/.test(rules), "and never to the owner's default for a NEW campaign, which is ON and would make a failed read a permission");
     is(/if \(campaign\) repeat = readRepeat\(campaign\);/.test(rules), 'and is only raised from a campaign row that was actually read');
+    /*
+     * AND ONLY FROM THE READ THAT NAMES THE COLUMNS. PostgREST refuses a whole
+     * read when a named column is absent, so the full select succeeding is the
+     * proof both columns exist. The fallback select names `status` alone; if
+     * readRepeat() were reached from there, a database that has never run v25
+     * would resolve its repeat from a row that cannot carry one.
+     */
+    const full = rules.indexOf("campaign = (full.data as");
+    const raise = rules.indexOf('if (campaign) repeat = readRepeat(campaign);');
+    const bare = rules.indexOf("campaign = (bare.data as");
+    is(full > 0 && raise > 0 && bare > 0, 'the two reads and the raise must all still be there');
+    is(raise > full, 'the repeat must be raised inside the branch where the full read succeeded');
+    is(raise > bare && full > bare, 'and after the fallback branch, which must not reach it');
     /* The gate above it is untouched: the owner's global switch still comes
        first, and `!== false` still means an older settings row blocks. */
     is(rules.includes('if (limits.blockRepeatToSameTarget !== false) {'), 'the global switch still gates the whole check');

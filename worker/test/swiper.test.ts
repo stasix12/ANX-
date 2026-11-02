@@ -272,32 +272,41 @@ async function main(): Promise<void> {
          taller than the viewport, so a `scrollIntoView` that forgot
          `block: 'nearest'` would show up here as the document moving. */
       /*
-       * THE PAGE IS PUT SOMEWHERE IT CAN MOVE FROM FIRST, and the strip is put
-       * fully in view.
+       * ─── THE "A DOT MOVES THE STRIP, NOT THE PAGE" RULE MOVED HOUSE ─────
        *
-       * Both halves are needed and both were learned the hard way. With the
-       * document at the top a `block: 'start'` jump has nowhere to go, so the
-       * assertion passed whether or not the bug was there. And with the strip
-       * only half on screen, `block: 'nearest'` CORRECTLY scrolls the page to
-       * reveal it — which is the behaviour we want and would read here as the
-       * failure we are looking for. Centring the strip removes both.
+       * It used to be asserted here: centre the strip in this 760px viewport,
+       * tap a dot, demand the document not move by a single pixel. That was a
+       * sharp test while a card was about five hundred pixels tall.
+       *
+       * IT CANNOT DISCRIMINATE ANY MORE, AND I MEASURED THAT RATHER THAN
+       * ASSUMING IT. The owner asked for the scheduling block to be open on
+       * the main page, so a card is 699px at 390 and 761px at 360 against a
+       * 760px viewport. CardSwiper calls
+       * `card.scrollIntoView({ block: 'nearest', inline: 'center' })`, and
+       * with a card that nearly fills the screen the browser nudges the page
+       * by 48px to sit the card against the bottom edge — measured: y 303→255,
+       * card top 13→61, bottom flush at 760. Meanwhile the BUG this rule
+       * exists to catch, `block: 'start'`, would have moved the page by 13px,
+       * because the card's top was already 13px below the fold. The correct
+       * behaviour moves it FURTHER than the defect. No threshold separates
+       * them at this height.
+       *
+       * So the rule is asserted in the tall-viewport block after this loop,
+       * where a whole card and its dots fit on screen and `nearest` is a
+       * genuine no-op while `start` still jumps. That version is mutation-
+       * checked: flipping line 189 of CardSwiper.tsx to `block: 'start'` turns
+       * it red. What stays here is everything this geometry CAN answer — that
+       * the dot brings the right card over, lights up, and moves the counter.
        */
-      await view.evaluate(() => {
-        document.querySelector('[role="group"]')!.scrollIntoView({ block: 'center' });
-      });
-      await view.waitForTimeout(250);
-      const beforeY = await view.evaluate(() => window.scrollY);
-      is(beforeY > 0, `${at}: the page did not scroll, so a strip that moves it cannot be caught`);
       await dots.nth(2).click();
       await view.waitForTimeout(500);
       const after = await view.evaluate(() => {
         const strip = document.querySelector('[role="group"]') as HTMLElement;
         const kids = strip.children as unknown as HTMLElement[];
         const step = Math.abs(kids[1].offsetLeft - kids[0].offsetLeft);
-        return { index: Math.round(Math.abs(strip.scrollLeft) / step), y: window.scrollY };
+        return { index: Math.round(Math.abs(strip.scrollLeft) / step) };
       });
       eq(after.index, 2, `${at}: tapping the third dot did not bring the third card over`);
-      eq(after.y, beforeY, `${at}: tapping a dot scrolled the page`);
       eq(await dots.nth(2).getAttribute('aria-current'), 'true', `${at}: the third dot did not light up`);
       eq((await position.innerText()).replace(/\s+/g, ' ').trim(), '3 / 3', `${at}: the position indicator did not follow the dot tap`);
 
@@ -335,16 +344,57 @@ async function main(): Promise<void> {
       const arrowBox = await back.boundingBox();
       is((arrowBox?.width ?? 0) >= 40 && (arrowBox?.height ?? 0) >= 40, `${at}: the arrow is not a tap target (${JSON.stringify(arrowBox)})`);
 
-      /* EACH CARD IS WHOLE AND SEPARATE — three schedule blocks, three sets of
-         controls, and card 3's switch is not card 1's. A strip that reused one
-         card's state across slides is the failure this cannot be allowed to
-         have, because it would write the wrong campaign's schedule. */
-      const switches = view.locator('[role="switch"]');
-      eq(await switches.count(), 3, `${at}: expected one schedule switch per card`);
-      await switches.nth(2).click();
+      /*
+       * EACH CARD IS WHOLE AND SEPARATE — three schedule blocks, three equal
+       * sets of controls, and card 3's switch is not card 1's. A strip that
+       * reused one card's state across slides is the failure this cannot be
+       * allowed to have, because it would write the wrong campaign's schedule.
+       *
+       * PER CARD, NOT A TOTAL OF THREE. This used to assert the total was 3,
+       * which said "one switch per card" only as long as a card had exactly
+       * one. The scheduling block is now open on the main page, by the owner's
+       * request, so each card also carries חזרה יומית — six in total, and the
+       * literal 3 went red on a strip that was perfectly separate. The number
+       * is now derived from the cards: however many switches a card grows, all
+       * three must carry the SAME number, and the first card's must be the
+       * window switch it has always been.
+       */
+      const shape = await view.evaluate(() => {
+        /* THE STRIP IS THE FIRST [role="group"], and the scoping matters: the
+           scheduling block inside each card carries role="group" as well, so
+           a bare `[role="group"] > *` matched twenty-seven elements. The rest
+           of this file has always addressed the strip as querySelector's first
+           hit; these do the same. */
+        const strip = document.querySelector('[role="group"]') as HTMLElement;
+        const cards = [...strip.children];
+        return {
+          cards: cards.length,
+          per: cards.map((c) => c.querySelectorAll('[role="switch"]').length),
+          total: strip.querySelectorAll('[role="switch"]').length,
+        };
+      });
+      eq(shape.cards, 3, `${at}: the strip drew ${shape.cards} cards, not three`);
+      is(shape.per[0] >= 1, `${at}: a card drew no schedule switch at all`);
+      eq(shape.per, [shape.per[0], shape.per[0], shape.per[0]], `${at}: the three cards drew ${JSON.stringify(shape.per)} switches — an unequal set means a card is missing a control or sharing one`);
+      eq(shape.total, shape.per[0] * 3, `${at}: ${shape.total} switches over three cards of ${shape.per[0]} — something outside the cards is drawing one`);
+
+      /*
+       * AND FLIPPING THE LAST CARD'S CHANGES ONLY ITS OWN. Addressed as "the
+       * first switch of the third card" rather than by a global index, because
+       * a global index silently means a different control the moment a card
+       * grows one — which is exactly what happened to the count above.
+       */
+      const own = (n: number) => view.locator('[role="group"]').first().locator('> *').nth(n).locator('[role="switch"]').first();
+      const before = await view.evaluate(() =>
+        [...(document.querySelector('[role="group"]') as HTMLElement).children].map((c) => c.querySelector('[role="switch"]')?.getAttribute('aria-checked') ?? ''),
+      );
+      eq(before, ['true', 'true', 'true'], `${at}: the three window switches did not start on`);
+      await own(2).click();
       await view.waitForTimeout(100);
       eq(
-        await view.evaluate(() => [...document.querySelectorAll('[role="switch"]')].map((s) => s.getAttribute('aria-checked'))),
+        await view.evaluate(() =>
+          [...(document.querySelector('[role="group"]') as HTMLElement).children].map((c) => c.querySelector('[role="switch"]')?.getAttribute('aria-checked') ?? ''),
+        ),
         ['true', 'true', 'false'],
         `${at}: flipping the third card's switch changed another card's`,
       );
@@ -352,6 +402,65 @@ async function main(): Promise<void> {
       eq(crashes, [], `${at}: the strip threw: ${crashes[0] ?? ''}`);
       await view.close();
       checks += 26;
+    }
+
+    /*
+     * ─── AND THE STRICT VERSION, WHERE THE CARD FITS ──────────────────────
+     *
+     * The bounded check above is as sharp as a 760px viewport allows now that
+     * a card is ~760px tall: a legitimate `block: 'nearest'` reveal and a
+     * `block: 'start'` jump can be a few pixels apart. So the original rule —
+     * a dot moves the strip and NOT the document, by zero pixels — is kept, on
+     * a viewport tall enough to hold a whole card with its dots.
+     *
+     * Not a real phone, and that is the point: it is the one geometry in which
+     * the assertion is unambiguous, and it is the one that would catch a
+     * `scrollIntoView` with the block argument dropped.
+     */
+    {
+      const tall = await browser.newPage({ viewport: { width: 390, height: 1400 } });
+      tall.on('pageerror', (e) => { throw e; });
+      await tall.goto(`file://${path.join(dir, 'index.html')}`);
+      await tall.waitForSelector('[data-schedule-board]');
+      /*
+       * SOMETHING ABOVE THE STRIP, or this assertion is the toothless one it
+       * used to be. The strip sits near the top of this fixture, so "fully in
+       * view" and "scrollY is 0" are the same position — and from the top of
+       * the document a `block: 'start'` jump has nowhere to go and passes.
+       * 600px of nothing above it means the strip can be fully on screen with
+       * the page scrolled, which is the only state that tells the two apart:
+       * `nearest` does nothing, `start` pulls the card's top to the fold.
+       */
+      await tall.evaluate(() => {
+        document.body.insertAdjacentHTML('afterbegin', '<div data-spacer style="height:600px"></div>');
+        const strip = document.querySelector('[role="group"]') as HTMLElement;
+        const b = strip.getBoundingClientRect();
+        window.scrollTo({ top: Math.max(0, b.top + window.scrollY - (window.innerHeight - b.height) / 2) });
+      });
+      await tall.waitForTimeout(250);
+      const fits = await tall.evaluate(() => {
+        const b = (document.querySelector('[role="group"]') as HTMLElement).getBoundingClientRect();
+        return { covered: b.top >= 0 && b.bottom <= window.innerHeight, y: Math.round(window.scrollY), h: Math.round(b.height) };
+      });
+      is(fits.covered, `a 1400px viewport must hold the whole strip (it is ${fits.h}px) or this check is the ambiguous one again`);
+
+      /* `button[...]`, like the loop above: the CARD carries the same
+         aria-label as its dot, so the bare attribute selector matches two
+         elements and waits for a card that is never a button. */
+      const dot3 = tall.locator('button[aria-label^="סבב "]').nth(2);
+      await dot3.scrollIntoViewIfNeeded();
+      await tall.waitForTimeout(150);
+      const settled = await tall.evaluate(() => Math.round(window.scrollY));
+      is(settled > 0, `the page must have somewhere to jump from after the dot was brought into view (y=${settled})`);
+      await dot3.click();
+      await tall.waitForTimeout(400);
+      eq(
+        await tall.evaluate(() => Math.round(window.scrollY)),
+        settled,
+        'tapping a dot moved the document, with the whole strip already on screen — that is a scrollIntoView without block: nearest',
+      );
+      await tall.close();
+      checks += 3;
     }
 
     /* ─── AND WITH ONE RUN, NO STRIP FURNITURE AT ALL ──────────────────── */

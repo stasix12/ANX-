@@ -1057,21 +1057,53 @@ console.log('unit tests OK');
   const campaignsPage = readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8');
   const dash = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
 
-  for (const [where, src] of [['the dashboard run card', hero], ['the campaign card', card]] as const) {
-    assert.ok(/onTune\?: \(\) => void;/.test(src), `${where} takes a handler for the queue tuner`);
-    assert.ok(/הגדרות תור מתקדמות/.test(src), `${where} draws it with the same words, so it is the same thing on both screens`);
-  }
-  /* A VISIBLE BUTTON, not only a menu row — "כמו בעמוד ראשי" is what it looks
-     like there, and the dashboard's is a button under the panel. */
+  /*
+   * ─── AND THEN HE ASKED FOR THE BUTTON BACK OFF BOTH CARDS ───────────────
+   *
+   * "תמחק את הגדרות התור המתקדמות" — 02.11.2026, with his own mockup of the
+   * run card attached. The paragraph above is the EARLIER instruction, kept
+   * because it is why the tool is reachable from the campaigns screen at all;
+   * this is the later one, and the later one wins.
+   *
+   * WHAT HE ASKED TO BE RID OF IS THE ROW, NOT THE TOOL, and the distinction
+   * is load-bearing. respaceQueue is still the only thing in the product that
+   * re-times rows already sitting in the queue — the evening it was asked for
+   * was an evening with 264 rows dated days ahead, holding every group through
+   * the one-open-row-per-target index, with the only other visible remedy
+   * being a red "אפס" that DELETES them. Deleting the way in would answer a
+   * request about a button by removing a capability.
+   *
+   * So: no full-width row on either card, and a working ⋯ entry on the
+   * campaigns card. Both halves are asserted, because either one alone is a
+   * half-done job that looks finished.
+   */
+  /*
+   * COMMENTS STRIPPED FIRST, AND THAT IS NOT A DETAIL. The hero keeps a
+   * comment saying the row was removed and why — which contains the very words
+   * this check forbids, so a raw read fails on the explanation for the fix.
+   * It is the fourth guard in this suite to be fooled by a sentence quoting
+   * code; the others now do the same thing.
+   */
+  const noComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1 ');
+  const heroCode = noComments(hero);
+  const cardCode = noComments(card);
+  assert.ok(!/הגדרות תור מתקדמות/.test(heroCode), 'the dashboard run card must no longer draw the advanced-queue row — the owner asked for it gone by name');
+  assert.ok(/הגדרות תור מתקדמות/.test(hero), 'and the comment explaining why it went must stay, or the next reader puts it back');
   assert.ok(
-    /\{onTune && \([\s\S]{0,400}הגדרות תור מתקדמות[\s\S]{0,120}<\/Button>/.test(card),
-    'the campaign card draws it as a button under the schedule panel, the way the dashboard does',
+    !/\{onTune && \([\s\S]{0,400}הגדרות תור מתקדמות[\s\S]{0,200}<\/Button>/.test(cardCode),
+    'nor may the campaign card draw it as a full-width button',
   );
-  /* ...and the overflow row is the FALLBACK for a card with no panel, not a
-     second copy of a control already on screen. */
+  assert.ok(/onTune\?: \(\) => void;/.test(card), 'but the campaign card still TAKES the handler — the tool is not deleted');
   assert.ok(
-    /onTune && !\(schedule && onScheduleChange\) \?/.test(card),
-    'the menu entry appears only when the button does not — one control per view',
+    /\.\.\.\(onTune \? \[\{ label: 'הגדרות תור מתקדמות'[\s\S]{0,160}onSelect: onTune \}\] : \[\]\)/.test(cardCode),
+    'and offers it as a working ⋯ entry: respaceQueue is the only thing that can re-time rows already in the queue, and a request about a button is not a request to lose that',
+  );
+  /* UNCONDITIONAL NOW. It used to appear only when the button did not —
+     `onTune && !(schedule && onScheduleChange)` — which was right while the
+     button existed and silently removes the only way in now that it does not. */
+  assert.ok(
+    !/onTune && !\(schedule && onScheduleChange\) \?/.test(cardCode),
+    'the ⋯ entry must no longer be conditional on the button it used to replace — with the button gone that condition hides the tuner on exactly the cards that have a schedule',
   );
 
   for (const [where, src] of [['the dashboard', dash], ['the campaigns screen', campaignsPage]] as const) {

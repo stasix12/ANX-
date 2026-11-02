@@ -420,7 +420,18 @@ export function LiveCampaignHero({
    * above — nothing became unreachable.
    */
   const canSchedule = Boolean(schedule && onScheduleChange);
-  const [editingSchedule, setEditingSchedule] = useState(false);
+  /*
+   * OPEN, NOT CLOSED — "את הסבבים תוסיף ישר לעמוד הראשי איפה שהקמפיין כמו
+   * בתמונה כאן".
+   *
+   * His reference draws the whole scheduling block expanded on the main page:
+   * the days, the hour, the gap, סבבים ביום and חזרה יומית, all visible
+   * without tapping anything. It was behind "ערוך מועד", which is why he
+   * looked at the card and reported the feature missing — it was there, one
+   * tap away, which for a control you are meant to notice is the same as not
+   * being there.
+   */
+  const [editingSchedule, setEditingSchedule] = useState(true);
 
   return (
     <HeroPanel ariaLabel="הסבב הפעיל" className="p-3.5">
@@ -702,12 +713,16 @@ export function LiveCampaignHero({
                screen the owner cannot read. */
             showHeader={false}
           />
-          {onTune && (
-            <Button variant="secondary" size="sm" onClick={onTune} className="mt-1.5 w-full justify-center gap-1.5">
-              <RepeatIcon aria-hidden className="h-3.5 w-3.5" />
-              הגדרות תור מתקדמות
-            </Button>
-          )}
+          {/*
+            "הגדרות תור מתקדמות" IS GONE FROM THIS CARD — the owner asked for
+            it: "תמחק את הגדרות התור המתקדמות".
+            The queue tuner itself is NOT deleted. It is a real tool — it is
+            what re-spaces a live queue — so it moved to the ⋯ menu rather
+            than being destroyed, and it is still offered from the publish
+            sheet the moment a launch queues rows. What the owner wanted back
+            is the ROW it was taking at the foot of a card that is already
+            nine hundred pixels tall.
+          */}
         </div>
       )}
 

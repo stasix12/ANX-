@@ -1947,3 +1947,39 @@ begin
   select count(*) into n from public.social_queue where round_at is null;
   raise notice 'v30: העמודה round_at נוספה. % שורות קיימות נספרות כסבב הראשון, ללא שינוי.', n;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- v31 — חזרה יומית פעילה כברירת מחדל. See supabase/social-schema-v31.sql for
+-- the whole story. The short version: "חזרה יומית תשאיר כברירת מחדל תמיד
+-- עובדת" — the owner, 02.11.2026. The default becomes true, and every ACTIVE
+-- campaign still carrying the old `false` is switched on. PAUSED and ARCHIVED
+-- campaigns are left exactly as they are, so a deliberate "not this one"
+-- survives for everything he is not currently running.
+--
+-- repeat_min_hours and its 12..168 CHECK are untouched: how CLOSE two
+-- publications to one group may be does not change, only whether a second one
+-- happens at all. That is what makes several rounds a day reach the same
+-- groups twice.
+--
+-- Safe to run again — the update matches only rows still on false.
+-- To undo: supabase/social-schema-v31-rollback.sql, which CANNOT restore
+-- which active campaigns were off before this ran, and says so.
+-- ---------------------------------------------------------------------------
+alter table public.social_campaigns
+  alter column repeat_enabled set default true;
+
+update public.social_campaigns
+   set repeat_enabled = true
+ where repeat_enabled = false
+   and status = 'active';
+
+comment on column public.social_campaigns.repeat_enabled is
+  'חזרה יומית: מותר לפרסם את אותו פוסט שוב לאותה קבוצה, בכפוף ל-repeat_min_hours. ברירת המחדל היא פעיל (v31); כבוי = לעולם לא פעמיים.';
+
+do $$
+declare n bigint; off_n bigint;
+begin
+  select count(*) into n from public.social_campaigns where repeat_enabled;
+  select count(*) into off_n from public.social_campaigns where not repeat_enabled;
+  raise notice 'v31: חזרה יומית פעילה ב-% קמפיינים. % נשארו כבויים (מושהים או שנעצרו).', n, off_n;
+end $$;

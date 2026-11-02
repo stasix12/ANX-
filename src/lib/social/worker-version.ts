@@ -52,7 +52,31 @@
  * drops the column the first time the database says it does not know it and
  * says so once in the activity log.
  */
-export const WORKER_VERSION = '4.25.0';
+/*
+ * 4.25.0 → 4.26.0. DOES THIS HAVE TO REACH THE PC? YES, and the greps are the
+ * answer rather than my opinion:
+ *
+ *   grep -c REPEAT_WHEN_UNKNOWN dist/app/worker.cjs → 2
+ *   grep -c readRepeat          dist/app/worker.cjs → 3
+ *   grep -c roundsWindowFix     dist/app/worker.cjs → 0   (dashboard only)
+ *   grep -c saveCampaignRounds  dist/app/worker.cjs → 0   (dashboard only)
+ *
+ * THE OWNER ASKED FOR חזרה יומית TO BE ON BY DEFAULT, and the first way I did
+ * that was to flip DEFAULT_CAMPAIGN_REPEAT to `enabled: true`. rules.ts holds
+ * that same constant as the value a queue row publishes under when there is no
+ * campaign to read — `let repeat = DEFAULT_CAMPAIGN_REPEAT`, chosen precisely
+ * because it was OFF. One edit, and every orphan row, every failed campaign
+ * read and every database without the v25 columns would have been handed a
+ * permission to publish the same post to the same group again. It typechecked
+ * and the suite stayed green.
+ *
+ * So the engine now holds REPEAT_WHEN_UNKNOWN — "never twice", whatever the
+ * owner's default becomes — readRepeat() only raises the repeat from the read
+ * that NAMES the two columns, and the owner's default is carried by the data
+ * (v31) rather than by a loose read. All three live in the file the PC bundles,
+ * so a PC left on 4.25.0 would keep deciding repeats by the old fallback.
+ */
+export const WORKER_VERSION = '4.26.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -318,4 +342,4 @@ export const WORKER_VERSION = '4.25.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = 'a798eb5d04af3e3a';
+export const WORKER_FINGERPRINT = 'f3a2442bda9041ea';

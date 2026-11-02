@@ -290,6 +290,115 @@ async function main(): Promise<void> {
     is(one(`select count(distinct worker_id) from social_queue where status='publishing'`) !== '0', 'no lane recorded itself as the claimer');
   }
 
+  /* ============================================ סבבים ביום, ON THIS SERVER */
+  /*
+   * TWO ROUNDS A DAY, TO THE SAME GROUP — the claim the whole feature rests
+   * on, asked of the server rather than of a comment.
+   *
+   * "הפעלת מספר סבבי פרסום לאותו קמפיין באותו היום" — round one at 03:30,
+   * round two at 15:30, same campaign, same content, same groups. Every other
+   * test of this feature in the suite is arithmetic over a list of 'HH:MM'
+   * strings. Whether a SECOND row for a group this campaign already published
+   * to can exist at all is not arithmetic: it is
+   * social_queue_one_open_per_target_idx, unique on target_id alone and
+   * partial over six statuses, and the answer lives in Postgres.
+   *
+   * So the two rounds are materialised in the order the planner materialises
+   * them — round two cannot be inserted while round one is still open, and
+   * fits the moment round one publishes — and both rows are checked to carry
+   * their own round_at, which is what every per-round counter reads.
+   */
+  {
+    exec(`delete from social_queue`);
+    const r1 = '55555555-5555-4555-8555-555555555570';
+    const r2 = '55555555-5555-4555-8555-555555555571';
+
+    /*
+     * v31: a campaign created now repeats by default, so two rounds over the
+     * same groups are allowed by the engine without anything being pressed.
+     *
+     * THIS ASKS THE DATABASE, NOT THE FILE, and the difference is measured:
+     * applySchema() runs the numbered migrations AND THEN social-latest.sql,
+     * so breaking v31.sql alone leaves this green — latest.sql puts the
+     * default back. Breaking both turns it red. That is the right shape: what
+     * matters to the owner is where a freshly migrated database ENDS UP, and
+     * social-latest.sql is the file he actually runs. If the two ever
+     * disagree, schedule-readout.test.ts checks each of them by name.
+     */
+    is(
+      one(`select column_default from information_schema.columns
+             where table_name='social_campaigns' and column_name='repeat_enabled'`).startsWith('true'),
+      'repeat_enabled no longer defaults to true on a freshly migrated database — חזרה יומית would start off and a second round would publish nothing',
+    );
+    /* v29 and v30, the two columns the feature stores itself in. */
+    is(one(`select to_regclass('public.social_campaigns') is not null`) === 't', 'the campaigns table is gone');
+    is(
+      one(`select count(*) from information_schema.columns
+             where table_name='social_campaigns' and column_name='schedule_rounds'`) === '1',
+      'social_campaigns.schedule_rounds is missing — v29 did not reach this database',
+    );
+    is(
+      one(`select count(*) from information_schema.columns
+             where table_name='social_queue' and column_name='round_at'`) === '1',
+      'social_queue.round_at is missing — v30 did not reach this database, and every per-round counter would read zero',
+    );
+    /* AND THE CAP IS THE DATABASE'S, not the screen's: four extra rounds. */
+    is(
+      refused(`update social_campaigns set schedule_rounds =
+         '[{"at":"06:00","enabled":true},{"at":"09:00","enabled":true},{"at":"12:00","enabled":true},
+           {"at":"15:00","enabled":true},{"at":"18:00","enabled":true}]'::jsonb
+         where id='${ids.campaign}'`),
+      'five extra rounds were accepted — the jsonb_array_length CHECK from v29 is not holding',
+    );
+    exec(`update social_campaigns set schedule_rounds =
+      '[{"at":"15:30","enabled":true}]'::jsonb, repeat_enabled = true, repeat_min_hours = 12
+      where id='${ids.campaign}'`);
+
+    /* Round one, at 03:30 local, open. */
+    exec(`
+      insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text, round_at)
+      values ('${r1}', '${ids.post}', '${ids.target}', '${ids.schedule}', '${ids.campaign}',
+              now(), 'scheduled', '${r1}', 'טקסט', '03:30')`);
+
+    /* ROUND TWO CANNOT EXIST YET, and that is the feature working rather than
+       failing: one open row per group, account-wide, is what stops the same
+       post being queued to one group twice over. */
+    is(
+      refused(`
+        insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text, round_at)
+        values ('${r2}', '${ids.post}', '${ids.target}', '${ids.schedule}', '${ids.campaign}',
+                now() + interval '12 hours', 'scheduled', '${r2}', 'טקסט', '15:30')`),
+      "round two was queued while round one was still open — the one-open-row-per-target index is what makes a round's progress countable at all",
+    );
+
+    /* AND IT FITS THE MOMENT ROUND ONE PUBLISHES. This is the sentence in the
+       index's own SQL comment — "a group that has published is free again
+       immediately, which is what makes a second round to the same groups
+       possible at all" — and here it is, run. */
+    exec(`update social_queue set status='published', published_at=now() where id='${r1}'`);
+    exec(`
+      insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text, round_at)
+      values ('${r2}', '${ids.post}', '${ids.target}', '${ids.schedule}', '${ids.campaign}',
+              now() + interval '12 hours', 'scheduled', '${r2}', 'טקסט', '15:30')`);
+    is(
+      one(`select count(*) from social_queue where target_id='${ids.target}'`) === '2',
+      'the same group could not receive a second round after the first published — the feature cannot work on this schema',
+    );
+    /* EACH ROW KNOWS WHICH ROUND IT IS. Taken off the rows rather than guessed
+       from scheduled_at, because a deferred row keeps its round and would
+       otherwise be counted in the next one. */
+    is(
+      one(`select round_at from social_queue where id='${r1}'`) === '03:30' &&
+        one(`select round_at from social_queue where id='${r2}'`) === '15:30',
+      'the two rows do not carry their own rounds, so "סבב 2 — מפרסם: 12 מתוך 50" would be a guess',
+    );
+    is(
+      one(`select count(*) from social_queue where campaign_id='${ids.campaign}' and round_at='15:30'`) === '1',
+      'the per-round count cannot be taken off the rows by round_at, which is exactly how the card reads it',
+    );
+    exec(`delete from social_queue; update social_campaigns set schedule_rounds='[]'::jsonb where id='${ids.campaign}'`);
+  }
+
   exec(`delete from social_queue; delete from social_targets where external_id like 'bulk%';`);
 
   console.log(`${NAME} OK — ${checks} assertions against a real Postgres`);

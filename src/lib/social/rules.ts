@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
-  DEFAULT_CAMPAIGN_REPEAT,
+  REPEAT_WHEN_UNKNOWN,
   isAllowedAt,
   nextAllowedAt,
   nextPublishAt,
@@ -274,12 +274,18 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   // Campaign pause/stop: leave the row alone until the owner resumes.
   /*
    * HOISTED, because the repeat guard that uses it is two hundred lines below
-   * and outside this block, and because its DEFAULT is the safe one: a row
-   * with no campaign, or a campaign whose read failed, gets "never twice" —
-   * the behaviour this engine has always had. A permission is not something to
+   * and outside this block, and because this value is the safe one: a row with
+   * no campaign, or a campaign whose read failed, gets "never twice" — the
+   * behaviour this engine has always had. A permission is not something to
    * fall back into.
+   *
+   * AND IT IS DELIBERATELY NOT DEFAULT_CAMPAIGN_REPEAT. That constant is what
+   * a NEW campaign starts as, and the owner has just asked for it to be ON. If
+   * this line still read it, flipping his default would have turned every
+   * failed campaign read in this engine into a permission to publish the same
+   * post to the same group again. Two questions, two constants.
    */
-  let repeat: CampaignRepeat = DEFAULT_CAMPAIGN_REPEAT;
+  let repeat: CampaignRepeat = REPEAT_WHEN_UNKNOWN;
   const campaignId = item.campaign_id ?? post.campaign_id;
   if (campaignId) {
     /*
@@ -355,10 +361,26 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
         };
       }
       campaign = (bare.data as Pick<Campaign, 'status'> | null) ?? null;
+      /*
+       * AND THIS ROW MAY NOT RAISE THE REPEAT. It carries `status` and nothing
+       * else, so readRepeat() would see no repeat_enabled at all — and since
+       * the owner's default became "on unless the switch was pressed", an
+       * absent column now reads ON. On a database that has never run v25 that
+       * would turn a missing column into a permission to publish the same post
+       * to the same group again, which is the opposite of what a fallback is
+       * for. `repeat` stays REPEAT_WHEN_UNKNOWN here, which is "never twice".
+       * repeat-rules.test.ts proves it with columnsMissing.
+       */
     } else {
       campaign = (full.data as (Pick<Campaign, 'status'> & ScheduleFields & Pick<Campaign, 'repeat_enabled' | 'repeat_min_hours'>) | null) ?? null;
+      /*
+       * ONLY A ROW THAT ACTUALLY CARRIES THE TWO COLUMNS DECIDES THE REPEAT.
+       * PostgREST refuses a whole read when a named column is absent, so this
+       * branch succeeding is itself the proof that both columns exist — which
+       * is what makes reading them here, and only here, correct.
+       */
+      if (campaign) repeat = readRepeat(campaign);
     }
-    if (campaign) repeat = readRepeat(campaign);
     if (campaign?.status === 'paused') {
       return { action: 'wait', until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(), reason: 'הסבב מושהה.' };
     }

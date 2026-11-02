@@ -365,20 +365,23 @@ const body = cases
       schedule: (schedule as CampaignSchedule | null) ?? undefined,
       onScheduleChange: schedule ? () => {} : undefined,
       /*
-       * סבבים ביום (ריצות) — PASSED, BUT NOT MEASURED HERE, and the
-       * difference cost me an hour so it is written down.
+       * סבבים ביום (ריצות) — AND IT IS MEASURED HERE NOW, which it was not
+       * for about an hour, so the history stays written down.
        *
-       * The hero draws CampaignSchedulePanel only behind `editingSchedule`, a
-       * useState that is false on a server render, so renderToStaticMarkup
-       * never reaches it. A grep for `data-schedule` in this fixture's output
-       * matches `data-schedule-board` — a different component — which is
-       * exactly how a card that rendered NOWHERE produced a green run of 170
-       * assertions. The card is measured by worker/test/rounds-card.test.ts,
-       * which renders the panel itself.
+       * The hero used to draw CampaignSchedulePanel only behind
+       * `editingSchedule`, a useState that was FALSE — so renderToStaticMarkup
+       * never reached the panel and this fixture rendered the rounds card zero
+       * times. A check that greped the output for `data-schedule` matched
+       * `data-schedule-board`, a different component, and passed: 170 green
+       * assertions over a card that existed nowhere in the markup.
        *
-       * Kept here because it is what the real screen passes when the owner
-       * taps "ערוך מועד", and a prop the fixture omits is a prop no type
-       * error will ever remind anyone about.
+       * The owner then looked at his own screen and reported the feature
+       * missing, which it effectively was — it sat behind a tap. The state now
+       * starts OPEN ("את הסבבים תוסיף ישר לעמוד הראשי"), so the panel renders
+       * here, and dashboard-hero.test.ts counts the card by its own attribute
+       * [data-rounds-card] and checks it carries its own title. Opening it
+       * immediately found a real defect the source review had not: the round
+       * menu overflowed the card by 41px at 360px.
        */
       rounds: schedule ? [{ at: '15:30', enabled: true }] : undefined,
       onRoundsChange: schedule ? () => {} : undefined,

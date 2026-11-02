@@ -39,7 +39,7 @@ import {
   stopCampaign, saveCampaignRounds,} from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
-import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, type CampaignRound,} from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { counted } from '@/lib/social/time';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
@@ -555,16 +555,28 @@ export default function CampaignsPage() {
       try {
         const written = roundsColumn(next);
         const result = await saveCampaignRounds(campaign, next, readSchedule(campaign));
-        setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? { ...c, ...written } : c)));
-        const armed = written.schedule_rounds.filter((r) => r.enabled).length;
-        toast(
-          result.skippedNoDay
-            ? 'הסבבים נשמרו, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.'
-            : armed === 0
-              ? `הסבבים הנוספים של "${campaign.name}" כובו — השעות נשמרו ואפשר להחזיר אותם בכל רגע`
-              : `"${campaign.name}" יפרסם ${armed + 1} סבבים בכל יום פרסום`,
-          result.skippedNoDay ? 'info' : 'success',
+        /*
+         * THE LOWERED WINDOW GOES INTO THE LIST TOO, not only into the row.
+         *
+         * saveCampaignRounds may bring repeat_min_hours down so the rounds can
+         * actually publish, and this screen does not reload after a save — the
+         * poll owns `campaigns` and replaces it wholesale. Merging only
+         * `written` would leave the card showing the old interval until the
+         * next poll, which is the complaint "שינויים בהגדרות קמפיין לא
+         * נשמרים" in its original form: the value was saved and the screen
+         * went on showing the one it replaced.
+         */
+        setCampaigns((list) =>
+          (list ?? []).map((c) =>
+            c.id === campaign.id
+              ? { ...c, ...written, ...(result.windowLoweredTo !== null ? { repeat_min_hours: result.windowLoweredTo } : {}) }
+              : c,
+          ),
         );
+        /* ONE BUILDER FOR BOTH SCREENS — see roundsSavedMessage(). It carries
+           the window the app lowered and the switch it would not press. */
+        const said = roundsSavedMessage(campaign.name, written.schedule_rounds.filter((r) => r.enabled).length, result);
+        toast(said.text, said.tone);
       } catch (err) {
         toast(friendlyMessage(err, 'שמירת הסבבים נכשלה.'), 'error');
       } finally {

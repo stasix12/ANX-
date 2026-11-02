@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
-import { MIN_GAP_SECONDS, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, weeklyPlanFor, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
+import { MIN_GAP_SECONDS, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey, renderPostText } from './compose';
@@ -1183,19 +1183,81 @@ export class RoundsColumnMissing extends Error {
 }
 
 export async function saveCampaignRounds(
-  campaign: Pick<Campaign, 'id' | 'name'>,
+  /* The two repeat columns come in on the row rather than being read back:
+     adding a round can only publish if the repeat window is no longer than the
+     gap between the rounds, and the callers already hold the whole campaign. */
+  campaign: Pick<Campaign, 'id' | 'name'> & Partial<Pick<Campaign, 'repeat_enabled' | 'repeat_min_hours'>>,
   rounds: CampaignRound[],
   schedule: CampaignSchedule,
-): Promise<{ rearmed: number; skippedNoDay: boolean }> {
+): Promise<{ rearmed: number; skippedNoDay: boolean; windowLoweredTo: number | null; repeatOff: boolean }> {
   const written = roundsColumn(rounds);
-  const res = await db().from('social_campaigns').update(written).eq('id', campaign.id);
+
+  /*
+   * ─── AND THE WINDOW HAS TO COME DOWN TO THE HOURS HE PICKED ─────────────
+   *
+   * "יש לממש את הפונקציונליות בפועל ולא ליצור כפתורים דקורטיביים."
+   *
+   * This is the line between a feature and a decoration, and it is one
+   * subtraction. rules.ts refuses a second publication of one post to one
+   * group inside repeat_min_hours, whose default is 20. The owner's own
+   * example is 03:30 and 15:30 — twelve hours apart. So with the default left
+   * alone, round two opens, builds a queue of two hundred rows, shows a
+   * progress bar, and DEFERS every single one of them to 23:30, which is
+   * outside his publishing window, where they defer again until MAX_DEFERRALS
+   * throws them away. A round that publishes nothing, with a queue and a bar
+   * and a status, is exactly the decorative button he forbade.
+   *
+   * So saving rounds lowers the window to the smallest gap between them — and
+   * NOT BELOW MIN_REPEAT_HOURS, which is a database CHECK and a deliberate
+   * refusal to put one advertisement into one group twice in a morning. The
+   * card already states the arithmetic (roundsVsRepeat), the toast says what
+   * changed, and the activity log records it. Nothing here is silent.
+   *
+   * WHAT IT DOES NOT DO IS PRESS HIS SWITCH. If חזרה יומית is OFF, round two
+   * cannot reach a group round one already reached, and no amount of window
+   * arithmetic changes that — turning the switch on for him would be the
+   * screen overruling a choice he made. It is reported instead, as `repeatOff`,
+   * and the card draws the switch beside the sentence.
+   */
+  const repeat = readRepeat(campaign);
+  const { lowerTo, repeatOff } = roundsWindowFix(schedule, written.schedule_rounds, repeat);
+
+  const patch: Record<string, unknown> = { ...written };
+  if (lowerTo !== null) patch.repeat_min_hours = lowerTo;
+
+  let res = await db().from('social_campaigns').update(patch).eq('id', campaign.id);
+  /*
+   * A DATABASE WITHOUT repeat_min_hours MUST STILL SAVE THE ROUNDS. PostgREST
+   * refuses the WHOLE write when one named column is absent, and that is how
+   * this product took its own dashboard down once this session. So the one
+   * column that is not the point of the call is dropped and the write retried;
+   * the rounds reach the database either way.
+   */
+  let windowLoweredTo = lowerTo;
+  if (res.error && lowerTo !== null && isMissingColumnNamed(res.error as { code?: string; message?: string }, 'repeat_min_hours')) {
+    windowLoweredTo = null;
+    res = await db().from('social_campaigns').update(written).eq('id', campaign.id);
+  }
   if (res.error) {
     if (isMissingColumnNamed(res.error as { code?: string; message?: string }, 'schedule_rounds')) throw new RoundsColumnMissing();
     throw new Error(res.error.message);
   }
+
+  if (windowLoweredTo !== null) {
+    await logClientActivity(
+      'info',
+      'campaign_repeat_window',
+      `חלון החזרה של "${campaign.name}" הורד ל-${windowLoweredTo} שעות כדי שכל הסבבים יפרסמו`,
+      { campaignId: campaign.id },
+    );
+  }
+
   /* The hours the engine will actually walk — same builder, same list. A
      round that is switched off is in the column and not in the plan. */
-  return syncWeeklyHours(campaign.id, schedule, written.schedule_rounds);
+  const synced = await syncWeeklyHours(campaign.id, schedule, written.schedule_rounds);
+  /* Reported, not fixed: more than one round over the same groups needs the
+     daily repeat armed, and that switch is his. */
+  return { ...synced, windowLoweredTo, repeatOff };
 }
 
 export async function setCampaignRepeat(

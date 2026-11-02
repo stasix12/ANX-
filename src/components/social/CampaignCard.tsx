@@ -361,7 +361,12 @@ export function CampaignCard({
        correct if the button is ever gated more narrowly. */
     ...(!turnOn && showResume && onResume ? [{ label: 'המשך קמפיין', icon: <PlayIcon className="h-4 w-4" />, onSelect: onResume }] : []),
     ...(addPostHref ? [{ label: 'הוסף פוסט', icon: <PlusIcon className="h-4 w-4" />, onSelect: () => { window.location.href = addPostHref; } }] : []),
-    ...(onTune && !(schedule && onScheduleChange) ? [{ label: 'הגדרות תור מתקדמות', icon: <RepeatIcon className="h-4 w-4" />, onSelect: onTune }] : []),
+    /* UNCONDITIONAL NOW. It used to appear only on a card with no schedule
+       panel, because the panel carried a visible button of its own; that
+       button is gone, so without this the queue tuner would be reachable from
+       no campaign card at all. Removing a row is not the same as removing a
+       tool. */
+    ...(onTune ? [{ label: 'הגדרות תור מתקדמות', icon: <RepeatIcon className="h-4 w-4" />, onSelect: onTune }] : []),
     ...(onComment ? [{ label: 'תגובה לפרסומים', icon: <MessageIcon className="h-4 w-4" />, onSelect: onComment }] : []),
     ...(onDuplicate ? [{ label: 'שכפל קמפיין', icon: <CopyIcon className="h-4 w-4" />, onSelect: onDuplicate }] : []),
     ...(!turnOn && onReopen ? [{ label: 'החזר לפעילות', icon: <RepeatIcon className="h-4 w-4" />, onSelect: onReopen }] : []),
@@ -657,17 +662,22 @@ export function CampaignCard({
             being a red "אפס" that deletes them. "כמו בעמוד ראשי" is what it
             looks like there: a button under the panel, not a row inside a menu.
 
-            So it stays a button, in the quiet variant and under the block whose
-            rows it re-times, with the primary action still the only filled one
-            at the foot. A card that draws no panel gets the ⋯ row instead —
-            one control per view.
+            AND THEN HE ASKED FOR IT BACK OFF: "תמחק את הגדרות התור
+            המתקדמות", 02.11.2026. The paragraph above is kept because it is
+            why the tuner is reachable from this screen at all — the later
+            instruction decides WHERE, not whether. It is a ⋯ entry now,
+            unconditional, and the note below says so.
           */}
-          {onTune && (
-            <Button variant="secondary" size="sm" onClick={onTune} className="mt-1.5 h-10 w-full !min-h-10 justify-center gap-1.5 !rounded-2xl">
-              <RepeatIcon aria-hidden className="h-3.5 w-3.5" />
-              הגדרות תור מתקדמות
-            </Button>
-          )}
+          {/*
+            "הגדרות תור מתקדמות" IS GONE FROM THIS CARD — the owner asked for
+            it: "תמחק את הגדרות התור המתקדמות".
+            The queue tuner itself is NOT deleted. It is a real tool — it is
+            what re-spaces a live queue — so it moved to the ⋯ menu rather
+            than being destroyed, and it is still offered from the publish
+            sheet the moment a launch queues rows. What the owner wanted back
+            is the ROW it was taking at the foot of a card that is already
+            nine hundred pixels tall.
+          */}
         </>
       )}
 

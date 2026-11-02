@@ -125,6 +125,11 @@ const KIND: Record<string, ActivityKind> = {
      the same post again tomorrow. */
   campaign_repeat_on: 'round',
   campaign_repeat_off: 'round',
+  /* The window between two publications to one group, lowered BY THE APP so
+     that every round the owner added can actually publish. He did not press
+     this, so it is the one repeat line he has no memory of choosing — which
+     is exactly why it has to be in his history under its own name. */
+  campaign_repeat_window: 'round',
   /*
    * The daily repeat could not be armed, because the round has never gone out
    * and there is no group list to repeat. 'failure' and not 'round': nothing

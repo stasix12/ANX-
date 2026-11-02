@@ -57,7 +57,7 @@ import {
   type QueueRow,
   type TimelineRow, saveCampaignRounds,} from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
-import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, roundsColumn, type CampaignRound,} from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
@@ -1321,15 +1321,10 @@ export default function SocialDashboard() {
       try {
         const written = roundsColumn(next);
         const result = await saveCampaignRounds(campaign, next, readSchedule(campaign));
-        const armed = written.schedule_rounds.filter((r) => r.enabled).length;
-        toast(
-          result.skippedNoDay
-            ? 'הסבבים נשמרו, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.'
-            : armed === 0
-              ? `הסבבים הנוספים של "${campaign.name}" כובו — השעות נשמרו ואפשר להחזיר אותם בכל רגע`
-              : `"${campaign.name}" יפרסם ${armed + 1} סבבים בכל יום פרסום`,
-          result.skippedNoDay ? 'info' : 'success',
-        );
+        /* ONE BUILDER FOR BOTH SCREENS — see roundsSavedMessage(). It carries
+           the window the app lowered and the switch it would not press. */
+        const said = roundsSavedMessage(campaign.name, written.schedule_rounds.filter((r) => r.enabled).length, result);
+        toast(said.text, said.tone);
         await load();
       } catch (err) {
         toast(friendlyMessage(err, 'שמירת הסבבים נכשלה.'), 'error');

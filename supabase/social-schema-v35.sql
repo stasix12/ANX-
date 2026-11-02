@@ -21,7 +21,12 @@
 --
 -- ─── מה הקובץ הזה עושה ─────────────────────────────────────────────────────
 --
---   1. מאפס ל-0 את חלון החזרה בכל הקמפיינים הקיימים.
+-- ─── לכל העסקים, במפורש ───────────────────────────────────────────────────
+--
+-- "התיקון הזה אמור להיות לכולם כולל הלקוחות שלי מה לא ברור 0 מגבלה."
+-- שום סינון לפי עסק. הבעלים הוא בעל הפלטפורמה והוא החליט עבור כולם.
+--
+--   1. מאפס ל-0 את חלון החזרה בכל הקמפיינים הקיימים, בכל העסקים.
 --   2. משנה את ברירת המחדל של העמודה ל-0, כדי שקמפיין חדש ייוולד פתוח.
 --   3. מכבה בהגדרות החשבון את שלוש החסימות הנותרות: רצפת החזרה, הכלל שאוסר
 --      על אותו פוסט לאותה קבוצה, וחלון התוכן הכפול.
@@ -99,15 +104,23 @@ begin
 end $$;
 
 -- ── מה יצא מזה, להסתכל עליו אחרי Run ─────────────────────────────────────
+--
+-- מסוכם על פני כל העסקים, לא לעסק אחד. הגרסה הקודמת של הבלוק הזה שאלה
+-- `(select value ->> '…' from social_settings where key = 'limits')` כתת-שאילתה
+-- של ערך יחיד, ועל מסד עם שמונה עסקים זה נפל על
+-- "more than one row returned by a subquery used as an expression" — והכשיל את
+-- כל הקובץ, כי עורך ה-SQL מריץ אותו כטרנזקציה אחת.
 select
   'v35 הוחל' as "מצב",
   (select count(*) from public.social_campaigns where repeat_min_hours = 0) as "קמפיינים פתוחים",
-  (select count(*) from public.social_campaigns where repeat_min_hours > 0) as "עדיין חסומים (0=הכל פתוח)",
+  (select count(*) from public.social_campaigns where repeat_min_hours > 0) as "עדיין חסומים",
   (select column_default from information_schema.columns
     where table_schema = 'public' and table_name = 'social_campaigns'
-      and column_name = 'repeat_min_hours') as "ברירת מחדל לקמפיין חדש",
-  (select value ->> 'repeatFloorHours' from public.social_settings where key = 'limits') as "רצפת חזרה",
-  (select value ->> 'blockRepeatToSameTarget' from public.social_settings where key = 'limits') as "חסימת אותו פוסט לאותה קבוצה",
-  (select value ->> 'dedupeDays' from public.social_settings where key = 'limits') as "חלון תוכן כפול (ימים)",
-  (select value ->> 'maxPerTargetPerDay' from public.social_settings where key = 'limits') as "מכסה יומית לקבוצה",
-  (select value ->> 'maxPerDay' from public.social_settings where key = 'limits') as "מכסה יומית כוללת";
+      and column_name = 'repeat_min_hours') as "ברירת מחדל",
+  (select count(*) from public.social_settings where key = 'limits') as "עסקים",
+  (select count(*) from public.social_settings
+    where key = 'limits' and value ->> 'repeatFloorHours' = '0') as "רצפה 0",
+  (select count(*) from public.social_settings
+    where key = 'limits' and value ->> 'blockRepeatToSameTarget' = 'false') as "בלי חסימת פוסט",
+  (select count(*) from public.social_settings
+    where key = 'limits' and value ->> 'dedupeDays' = '0') as "בלי תוכן כפול";

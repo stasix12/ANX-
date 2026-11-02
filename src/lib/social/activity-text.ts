@@ -143,6 +143,7 @@ const TITLE: Record<string, string> = {
   /* The sentence the engine wrote says WHICH read failed and is shown beneath
      this headline; the headline says what it cost: the post is still waiting. */
   rule_read_failed: 'הפרסום ממתין — נתון לא נקרא',
+  rounds_column_missing: 'חסר עדכון במסד — הסבבים לא מסומנים',
 
   // The machine and the session.
   worker_stopped: 'המחשב התנתק',

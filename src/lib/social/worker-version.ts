@@ -37,7 +37,22 @@
  * read zero for the second round for ever — a feature that works and a screen
  * that lies about it.
  */
-export const WORKER_VERSION = '4.24.0';
+/*
+ * 4.24.0 → 4.25.0, AND 4.24.0 MUST NOT BE THE ONE THAT INSTALLS.
+ *
+ * 4.24.0's planner writes social_queue.round_at on every insert, with no
+ * tolerance for the column being absent. PostgREST refuses the WHOLE write
+ * when a named column is missing — so on a database that has not run
+ * supabase/social-latest.sql, that planner would queue NOTHING. Not slower,
+ * not partially: the round would stop publishing, silently, while the
+ * dashboard went on looking alive.
+ *
+ * The same mistake had just blanked the owner's dashboard from the READ side,
+ * an hour before this was written. 4.25.0 carries the retry, so the planner
+ * drops the column the first time the database says it does not know it and
+ * says so once in the activity log.
+ */
+export const WORKER_VERSION = '4.25.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -303,4 +318,4 @@ export const WORKER_VERSION = '4.24.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = '15b6aa00632c3511';
+export const WORKER_FINGERPRINT = 'a798eb5d04af3e3a';

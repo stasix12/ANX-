@@ -241,6 +241,10 @@ const KIND: Record<string, ActivityKind> = {
    * lie in the other direction. `level` is 'warn', so it is still loud.
    */
   rule_read_failed: 'system',
+  /* The planner queued a round without being able to record which round it
+     was, because the database has not run social-latest.sql. The publishing
+     is unaffected; it is the installation that needs a minute. */
+  rounds_column_missing: 'system',
   commands_payload_missing: 'system',
 };
 

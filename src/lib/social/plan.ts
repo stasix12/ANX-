@@ -275,6 +275,8 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      * the schedule exactly as it found it.
      */
     let failed = 0;
+    /* Learned once per pass — see the note at the upsert. */
+    let roundColumnMissing = false;
     /* Rows this schedule wrote in THIS pass — the global `created` counts every
        schedule, and the question noteDropped asks is about this one. */
     let made = 0;
@@ -301,11 +303,28 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
         const variant = pickVariant(approved, schedule, targetId, targetIndex, rotation);
         const text = renderPostText(post as Post, variant);
         const hash = sha256(dedupeKey(targetId, text, media.map((m) => m.url)));
-        const { error: insErr, data } = await db
-          .from('social_queue')
-          .upsert(
-            {
-              schedule_id: schedule.id,
+        /*
+         * ─── A QUEUE ROW MUST NOT DIE ON A COLUMN THE DATABASE HAS NOT GOT ─
+         *
+         * round_at arrives with supabase/social-latest.sql. PostgREST refuses
+         * the WHOLE write when a named column is absent, so a planner that
+         * always sent it would queue NOTHING on a database that has not run
+         * the file — the round would simply stop publishing, silently, and
+         * the dashboard would look alive the whole time.
+         *
+         * That is not a hypothetical: the same mistake blanked the owner's
+         * dashboard an hour before this was written, and createSchedule has
+         * carried OPTIONAL_SCHEDULE_COLUMNS since the drip_gap_seconds
+         * incident for exactly this reason — eleven days of launches that
+         * queued nothing.
+         *
+         * So the column is dropped for the rest of the pass the first time
+         * the database says it does not know it. Once per pass, not once per
+         * row: a planner that re-learned this two hundred times would double
+         * every insert of every round.
+         */
+        const row: Record<string, unknown> = {
+          schedule_id: schedule.id,
               post_id: post.id,
               campaign_id: post.campaign_id ?? null,
               variant_id: variant?.id ?? null,
@@ -334,10 +353,25 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
               require_confirmation: Boolean(schedule.require_confirmation),
               dedupe_hash: hash,
               rendered_text: text,
-            },
-            { onConflict: 'schedule_id,target_id,scheduled_at', ignoreDuplicates: true },
-          )
-          .select('id');
+        };
+        if (roundColumnMissing) delete row.round_at;
+        const write = () =>
+          db
+            .from('social_queue')
+            .upsert(row, { onConflict: 'schedule_id,target_id,scheduled_at', ignoreDuplicates: true })
+            .select('id');
+        let { error: insErr, data } = await write();
+        if (insErr && !roundColumnMissing && isMissingRoundColumn(insErr)) {
+          roundColumnMissing = true;
+          delete row.round_at;
+          ({ error: insErr, data } = await write());
+          await note(
+            'warn',
+            'rounds_column_missing',
+            'התור נכתב בלי שיוך לסבב — צריך להריץ פעם אחת את supabase/social-latest.sql ב-Supabase. הפרסום עצמו ממשיך כרגיל.',
+            { schedule: schedule.id },
+          );
+        }
         if (insErr) {
           /* Another planner got this group first — see takenByAnotherPlanner(). */
           if (takenByAnotherPlanner(insErr)) {
@@ -504,6 +538,20 @@ async function enforcedSpacing(db: SupabaseClient): Promise<number> {
  * unique index on this table — (schedule_id, target_id, scheduled_at) — means
  * something different and is already handled by ignoreDuplicates.
  */
+/**
+ * "That column is not here" — and ONLY that.
+ *
+ * Postgres reports an unknown column as 42703 and PostgREST as PGRST204. A
+ * refused write, a dropped connection and an expired token are different
+ * answers and must keep failing loudly: the whole point of the retry beside
+ * this is that it fires for one cause and never hides another.
+ */
+function isMissingRoundColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === '42703' || error.code === 'PGRST204') return true;
+  return /round_at/.test(error.message ?? '') && /column|schema cache/i.test(error.message ?? '');
+}
+
 function takenByAnotherPlanner(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   return /social_queue_one_open_per_target_idx/i.test(error.message ?? '');

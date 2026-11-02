@@ -64,6 +64,10 @@ const SYSTEM_BY_DESIGN = new Set([
    * is the family of problem it is and the place the owner looks for one.
    */
   'rule_read_failed',
+  /* About the installation, not about a post: the queue was written, the
+     publication is unaffected, and the one thing missing is the label that
+     says which round it belonged to. */
+  'rounds_column_missing',
   'commands_payload_missing',
   'avatar_upload_blocked',
   'account_save_failed',

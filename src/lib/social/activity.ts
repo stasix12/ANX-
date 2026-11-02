@@ -193,6 +193,22 @@ const KIND: Record<string, ActivityKind> = {
    * nothing and then closed itself is the owner's evening.
    */
   plan_all_blocked: 'failure',
+  /*
+   * A SLOT HELD BY A ROW THAT CANNOT PUBLISH. 'failure' and not 'schedule',
+   * which is where its two siblings above sit, and the difference is the
+   * point: plan_slots_occupied means "the system is working — this instant
+   * already has a row of this post that WILL go out", while this means the
+   * opposite — the instant is held by a row that will never go out, so the
+   * publication the owner is expecting is not going to happen. Filed as quiet
+   * schedule news it would sit under a heading nobody opens, which is exactly
+   * the silence it was written to end.
+   */
+  plan_slots_tombstoned: 'failure',
+  /* The planner freeing one of those and queueing the publication after all.
+     'round' beside plan_revived, for the same reason that one carries: it is
+     the owner's round becoming real again, and it is the line that explains
+     why publications he had given up on suddenly appear in the queue. */
+  plan_slots_recycled: 'round',
   /* The feature that wrote this is gone ("לפרסם רק לאן שיש לקוחות"), and the
      entry stays because his history still holds rows that carry it. Deleting
      the label would not delete the rows — it would only make them unreadable. */

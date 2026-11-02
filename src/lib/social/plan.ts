@@ -306,6 +306,10 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      * being bitten by.
      */
     const occupied: string[] = [];
+    /* Slots freed from a cancelled row, and slots a FAILED row still holds —
+       see recycleTombstonedSlot() and noteTombstoned(). */
+    let recycledSlots = 0;
+    const tombstoned: string[] = [];
     /*
      * HOW MANY SLOTS COULD NOT BE WRITTEN AT ALL — and it is counted because
      * retiring the schedule depends on it.
@@ -438,6 +442,32 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
           created += 1;
           made += 1;
           rotation += 1;
+        } else {
+          /*
+           * NO ERROR AND NO ROW: ON CONFLICT DID NOTHING. The slot is held by
+           * a row occupiedSlots() did not count — see recycleTombstonedSlot(),
+           * where the whole of "עדיין לא מפרסם כלום" is written down. This
+           * branch did not exist, and its absence is why a campaign that could
+           * no longer place a single publication said nothing at all, once a
+           * minute, for ever.
+           */
+          const { schedule_id: _si, target_id: _ti, scheduled_at: _sa, ...plan } = row;
+          const retry = await recycleTombstonedSlot(db, { scheduleId: schedule.id, targetId, at: slot.toISOString() }, plan);
+          if (retry.error) {
+            failed += 1;
+            await note('error', 'plan_failed', retry.error, { schedule: schedule.id });
+            continue;
+          }
+          if (retry.recycled) {
+            taken.add(slotKey(targetId, slot));
+            waiting.add(targetId);
+            created += 1;
+            made += 1;
+            rotation += 1;
+            recycledSlots += 1;
+          } else {
+            tombstoned.push(targetId);
+          }
         }
       }
     }
@@ -451,6 +481,8 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      */
     await noteDropped(db, note, schedule.id, dropped, plannedAhead ? 0 : made);
     await noteOccupied(db, note, schedule.id, occupied, plannedAhead ? 0 : made);
+    /* Ungated on `made`, deliberately — see noteTombstoned(). */
+    await noteTombstoned(db, note, schedule.id, recycledSlots, tombstoned);
     /*
      * ─── AND THE ONE CASE noteDropped IS DELIBERATELY SILENT ABOUT ─────────
      *
@@ -705,6 +737,124 @@ async function noteOccupied(db: SupabaseClient, note: PlanLogger, scheduleId: st
 }
 
 /**
+ * ─── A CANCELLED ROW HAS TOMBSTONED ITS OWN SLOT. RECYCLE IT. ─────────────
+ *
+ *   "הוא מדלג ורושם הסבב נעצר למרות שלא עשיתי כלום"
+ *   "עדיין לא מפרסם כלום"
+ *
+ * Both of those, from one press, and this function is why they could not be
+ * explained from any screen.
+ *
+ * THE CONTRADICTION. `social_queue_slot_idx` is unique on (schedule_id,
+ * target_id, scheduled_at) and is DELIBERATELY NOT PARTIAL — the schema says
+ * so three times, because PostgREST cannot infer a partial index as an ON
+ * CONFLICT target, and the planner's idempotence rests on that inference. So
+ * the index counts a 'skipped' row like any other. But occupiedSlots() reads
+ * `.in('status', ['published', ...OPEN_STATUSES])` under a docstring that
+ * states the opposite in so many words: "Terminal rows are deliberately
+ * excluded: something already skipped or failed should be allowed to be
+ * planned again."
+ *
+ * The code's declared intent and the database therefore disagree, and the
+ * disagreement is SILENT. The write is `upsert(..., { ignoreDuplicates: true
+ * })`, which is ON CONFLICT DO NOTHING: a refused insert comes back with `data
+ * = []` and `error = null`. Not an error, not a duplicate, not a row. Every
+ * counter is gated on `data.length`, so `created`, `made` and `rotation` all
+ * stay put — and every log line in the pass is gated on `made > 0`. A schedule
+ * that can no longer place a single row reports absolutely nothing, once a
+ * minute, for ever.
+ *
+ * WHY HIS QUEUE STOPPED. "סיים ואפס" cancels every not-yet-started row of the
+ * round in one UPDATE, and the planner's horizon is 48 hours (HORIZON_HOURS),
+ * so one press tombstones every occasion for two days. The instants are
+ * clock-free — slotsFor derives them from the calendar and schedule.weekly,
+ * windowedStagger and the gap are deterministic — and re-arming the daily
+ * repeat reuses the SAME schedule row. So the relaunch recomputed the
+ * identical minutes for the identical groups, and the database refused every
+ * single insert without a word. Relaunching could never have worked.
+ *
+ * WHAT THIS DOES. On an empty result the slot is held by a row occupiedSlots()
+ * did not count, which can only be a terminal one — and never a published one,
+ * because 'published' IS in that set. So the holder is re-planned in place:
+ * the slot is reused, which is exactly what the docstring promised.
+ *
+ * ONLY 'skipped', NEVER 'failed'. A cancelled row is a non-event: nothing was
+ * attempted and nothing is lost by planning over it. A FAILED row is an
+ * attempt that happened and has its own retry policy with a ceiling
+ * (REVIVE_ATTEMPT_CEILING in worker/revive.ts); recycling it here would reset
+ * that ceiling and hand a permanently failing group unlimited attempts. A
+ * failed holder is reported instead, which is still infinitely better than the
+ * silence it replaces.
+ *
+ * AND `published_at IS NULL` ON TOP, belt and braces: the one outcome this
+ * must never be able to produce is a second publication to the same group, and
+ * a row that carries an instant is a row that went out.
+ */
+async function recycleTombstonedSlot(
+  db: SupabaseClient,
+  slot: { scheduleId: string; targetId: string; at: string },
+  plan: Record<string, unknown>,
+): Promise<{ recycled: boolean; error: string | null }> {
+  const { data, error } = await db
+    .from('social_queue')
+    .update({ ...plan, skip_reason: null, error: null })
+    .eq('schedule_id', slot.scheduleId)
+    .eq('target_id', slot.targetId)
+    .eq('scheduled_at', slot.at)
+    .eq('status', 'skipped')
+    .is('published_at', null)
+    .select('id');
+  if (error) return { recycled: false, error: error.message };
+  return { recycled: Boolean(data && data.length), error: null };
+}
+
+/**
+ * THE SLOT WAS TAKEN BY A ROW NOBODY COULD SEE — said out loud, ALWAYS.
+ *
+ * Deliberately NOT gated on `made > 0`, unlike noteDropped and noteOccupied.
+ * Their guard exists to stop a healthy repeating round writing the same line
+ * every minute, and it is right for them. It is exactly wrong here: the case
+ * this reports IS the pass that made nothing, and inheriting that guard is how
+ * a campaign that could no longer queue a single publication stayed silent
+ * through an entire evening of being asked why.
+ *
+ * `recycled` is the good news in the same line, because the owner should be
+ * able to see the repair happening rather than only the damage.
+ */
+async function noteTombstoned(
+  db: SupabaseClient,
+  note: PlanLogger,
+  scheduleId: string,
+  recycled: number,
+  refused: string[],
+): Promise<void> {
+  const unique = [...new Set(refused)];
+  if (!recycled && !unique.length) return;
+  let list = '';
+  if (unique.length) {
+    const { data } = await db.from('social_targets').select('name').in('id', unique.slice(0, DROPPED_NAMES_SHOWN));
+    const names = ((data ?? []) as { name: string | null }[]).map((t) => t.name).filter(Boolean);
+    const rest = unique.length - names.length;
+    list = names.length ? `: ${names.join(', ')}${rest > 0 ? ` ועוד ${rest}` : ''}` : '';
+  }
+  if (!unique.length) {
+    await note('info', 'plan_slots_recycled', `${recycled} שעות שהיו תפוסות בגלל פרסומים שבוטלו שוחררו וחזרו לתור`, {
+      scheduleId,
+      recycled,
+    });
+    return;
+  }
+  await note(
+    recycled ? 'warn' : 'error',
+    'plan_slots_tombstoned',
+    `${unique.length} קבוצות לא קיבלו שורה בתור: השעה שחושבה להן תפוסה על ידי פרסום קודם שנכשל${list}.${
+      recycled ? ` (${recycled} שעות אחרות כן שוחררו.)` : ' שנו את שעת ההתחלה של הסבב ב"ערוך מועד" כדי לחשב שעות אחרות.'
+    }`,
+    { scheduleId, refused: unique.length, targetIds: unique, recycled },
+  );
+}
+
+/**
  * NOT ONE GROUP GOT THROUGH — said plainly, because this is the launch that
  * looks like it worked and did nothing.
  *
@@ -803,7 +953,26 @@ async function noteDropped(db: SupabaseClient, note: PlanLogger, scheduleId: str
  * which is exactly what lets "המשך" resume it.
  */
 async function stoppedCampaigns(db: SupabaseClient, note: PlanLogger): Promise<Set<string>> {
-  const { data } = await db.from('social_campaigns').select('id').eq('status', 'archived');
+  /*
+   * FAIL CLOSED. This read used to discard its error — `const { data } =` —
+   * and an empty set does not mean "nothing is stopped": it disarms BOTH
+   * things that depend on it, for the whole pass. The sweep below cancels
+   * nothing, and the stop-guard at the top of each post's loop (`stopped.has(
+   * post.campaign_id)`) waves every stopped round through, so the planner
+   * writes a fresh queue for a campaign the owner has ended — which then
+   * publishes, or is cancelled again on the next pass with "הסבב נעצר".
+   *
+   * One dropped read on a home connection is enough. It is the same fault,
+   * in the same shape, that four reads in rules.ts were already fixed for:
+   * "A dropped connection here leaves `campaign` null ... and a campaign the
+   * owner PAUSED publishes."
+   *
+   * A throw is the right shape because planQueue's caller already catches,
+   * logs and retries in sixty seconds: one skipped pass with a visible reason
+   * beats a pass that plans blind.
+   */
+  const { data, error } = await db.from('social_campaigns').select('id').eq('status', 'archived');
+  if (error) throw new Error(error.message);
   const ids = (data ?? []).map((c) => c.id as string);
   if (!ids.length) return new Set();
 
@@ -854,6 +1023,9 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   const waiting = await targetsAlreadyWaiting(db, post.id);
   /* And the silent skip is collected here too — see noteOccupied(). */
   const occupied: string[] = [];
+  /* See recycleTombstonedSlot() and noteTombstoned(). */
+  let recycledSlots = 0;
+  const tombstoned: string[] = [];
   let created = 0;
   /* Rows this drip wrote in THIS pass — see noteDropped. */
   let made = 0;
@@ -884,24 +1056,24 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
     const variant = pickVariant(approved, schedule, targetId, targetIndex, 0);
     const text = renderPostText(post as Post, variant);
     const hash = sha256(dedupeKey(targetId, text, media.map((m) => m.url)));
+    /* Lifted out of the call so the recycle below can re-use the same plan —
+       two copies of a row's shape is how they drift apart. */
+    const dripRow: Record<string, unknown> = {
+      schedule_id: schedule.id,
+      post_id: post.id,
+      campaign_id: post.campaign_id ?? null,
+      variant_id: variant?.id ?? null,
+      target_id: targetId,
+      scheduled_at: at.toISOString(),
+      status: 'scheduled',
+      step: 'pending',
+      require_confirmation: Boolean(schedule.require_confirmation),
+      dedupe_hash: hash,
+      rendered_text: text,
+    };
     const { error, data } = await db
       .from('social_queue')
-      .upsert(
-        {
-          schedule_id: schedule.id,
-          post_id: post.id,
-          campaign_id: post.campaign_id ?? null,
-          variant_id: variant?.id ?? null,
-          target_id: targetId,
-          scheduled_at: at.toISOString(),
-          status: 'scheduled',
-          step: 'pending',
-          require_confirmation: Boolean(schedule.require_confirmation),
-          dedupe_hash: hash,
-          rendered_text: text,
-        },
-        { onConflict: 'schedule_id,target_id,scheduled_at', ignoreDuplicates: true },
-      )
+      .upsert(dripRow, { onConflict: 'schedule_id,target_id,scheduled_at', ignoreDuplicates: true })
       .select('id');
     if (error) {
       /* Another planner got this group first — see takenByAnotherPlanner(). */
@@ -919,10 +1091,31 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
       waiting.add(targetId);
       created += 1;
       made += 1;
+    } else {
+      /* The same silent refusal as the weekly branch — see
+         recycleTombstonedSlot(). "פרסם עכשיו" with several targets comes
+         through here, so it needs the repair and the report just as much. */
+      const { schedule_id: _si, target_id: _ti, scheduled_at: _sa, ...plan } = dripRow;
+      const retry = await recycleTombstonedSlot(db, { scheduleId: schedule.id, targetId, at: at.toISOString() }, plan);
+      if (retry.error) {
+        failed += 1;
+        await note('error', 'plan_failed', retry.error, { schedule: schedule.id });
+        continue;
+      }
+      if (retry.recycled) {
+        taken.add(slotKey(targetId, at));
+        waiting.add(targetId);
+        created += 1;
+        made += 1;
+        recycledSlots += 1;
+      } else {
+        tombstoned.push(targetId);
+      }
     }
   }
   await noteDropped(db, note, schedule.id, dropped, made);
   await noteOccupied(db, note, schedule.id, occupied, made);
+  await noteTombstoned(db, note, schedule.id, recycledSlots, tombstoned);
   /*
    * ─── AND A DRIP THAT QUEUED NOTHING SAYS SO ────────────────────────────
    *

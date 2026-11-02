@@ -88,6 +88,13 @@ assert.equal(
     `  The release workflow refuses to publish a version that is already out, so this change would\n` +
     `  never reach a single installed copy — silently, exactly as the 218-groups warning did.\n\n` +
     `  If it has to reach the PC: bump WORKER_VERSION in src/lib/social/worker-version.ts.\n` +
+    `  AND CHECK THAT THE NUMBER IS FREE, which this file cannot do for you: it has no network,\n` +
+    `  and the only authority on what is published is the release list itself. On 2026-11-02 a\n` +
+    `  rollback restored the tree to 4.31.0 while v4.35.0 was already out, and the two fixes that\n` +
+    `  followed were numbered 4.32.0 and 4.33.0 — both already published, so both would have\n` +
+    `  shipped to the website and to NOBODY'S PC. A rollback is the one event that makes this\n` +
+    `  file's version lower than the highest release, and therefore the one time a bump collides.\n` +
+    `  Ask GitHub, not this file: the next free number is above the newest published tag.\n` +
     `  Either way, set WORKER_FINGERPRINT to:\n\n      '${fingerprint}'\n`,
 );
 

@@ -181,7 +181,69 @@
  * the installer stops the loop on the ones already in his queue. Both halves
  * ship together for that reason.
  */
-export const WORKER_VERSION = '4.33.0';
+/*
+ * 4.33.0 → 4.36.0, AND THE JUMP IS THE POINT.
+ *
+ * v4.33.0, v4.34.0 and v4.35.0 ARE ALREADY PUBLISHED — 19:30, 19:55 and 20:02
+ * tonight, from the work that was then rolled back on the owner's
+ * instruction. The rollback restored the TREE; it could not unpublish a
+ * GitHub release. So after it the repository said 4.31.0 while 4.35.0 was out
+ * in the world.
+ *
+ * Two commits then went out tonight numbered 4.32.0 and 4.33.0, and v4.32.0
+ * had been published at 18:49. The release workflow refuses a version that is
+ * already out, so BOTH of those fixes would have shipped to the website and
+ * to nobody's PC — silently. That is not a hypothesis about this mechanism,
+ * it is the exact failure its own note already describes: "Two correct fixes
+ * to it shipped to the website and to nobody's PC, because the release
+ * workflow will not publish a version number that is already out, and nothing
+ * said so."
+ *
+ * It happened again because the fingerprint asks "does this have to reach the
+ * PC?" and I answered that question honestly each time — while never asking
+ * the other one: IS THIS NUMBER FREE? A rollback is the one event that can
+ * make the repository's version lower than the highest release, and it is
+ * exactly when the next bump is most likely to collide.
+ *
+ * So the next free number is 4.36.0, checked against the published list
+ * rather than against this file:
+ *
+ *   v4.35.0  2026-11-02T20:02Z   ← highest published
+ *   v4.34.0  2026-11-02T19:55Z
+ *   v4.33.0  2026-11-02T19:30Z   ← 531eea0 claimed this
+ *   v4.32.0  2026-11-02T18:49Z   ← 07c8d86 claimed this
+ *
+ * AND NOTE WHAT ELSE THIS MEANS. Those three published installers carry the
+ * PRE-ROLLBACK code. A machine that auto-updated to 4.35.0 is running the
+ * work that was reverted here, which is a different program from the one this
+ * repository describes. 4.36.0 is the first installer since the rollback that
+ * anyone can actually receive, and it carries the rollback AND everything
+ * fixed after it.
+ *
+ * WHAT IS IN IT, all of which executes on the PC:
+ *
+ *   • plan.ts: a cancelled row tombstoned its own slot for ever. The slot
+ *     index is unique and deliberately non-partial, so it counts a 'skipped'
+ *     row — while occupiedSlots()'s docstring says terminal rows may be
+ *     planned again. The upsert is ON CONFLICT DO NOTHING, so the refusal
+ *     came back as no error and no row, every counter is gated on that row,
+ *     and every log line is gated on the counters. One "סיים ואפס" tombstoned
+ *     48 hours of occasions; the relaunch recomputed the identical minutes
+ *     and was refused in silence, once a minute, for ever. The slot is
+ *     recycled now, in BOTH planner branches, and the refusal it cannot
+ *     repair is reported ungated.
+ *   • plan.ts stoppedCampaigns(): the archived-campaign read discarded its
+ *     error. An empty set disarms the sweep AND the stop-guard for a whole
+ *     pass, so one dropped read lets the planner queue a round the owner has
+ *     ended. Fails closed now.
+ *   • revive.ts + social-worker.ts: a failure of an archived run was handed
+ *     back every pass, spending an attempt to manufacture another "הסבב נעצר"
+ *     skip. Refused now, fail-closed on the read.
+ *   • rules.ts: the skip says WHICH round, when the row and the post disagree.
+ *   • composer.ts, social-worker.ts: 4.32.0's detach wait and hold-reason
+ *     reporting, which never reached a PC under their own number.
+ */
+export const WORKER_VERSION = '4.36.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -552,4 +614,19 @@ export const WORKER_VERSION = '4.33.0';
    presses publish and needs only the website. Shipping one without the other
    would either leave his existing queue on the treadmill or leave every future
    relaunch creating a new one. */
-export const WORKER_FINGERPRINT = '9b5a9489aac2f95c';
+/* 9b5a9489aac2f95c → bfba5e6d4490a8fe. Re-pinned for 4.36.0 above, where the
+   version question is answered twice: does this reach the PC (yes, all of it),
+   and IS THE NUMBER FREE (4.32.0 and 4.33.0 were not, which is why two
+   correct fixes tonight would have reached nobody). Measured:
+
+     npm run build:app
+     grep -c recycleTombstonedSlot dist/app/worker.cjs → 5   (the planner's)
+     grep -c plan_slots_tombstoned dist/app/worker.cjs → 1
+     grep -c stopped.has           dist/app/worker.cjs → 3   (revive.ts)
+     grep -c movedOn               dist/app/worker.cjs → 2   (rules.ts)
+     grep -c ensureRunForPost      dist/app/worker.cjs → 0   (client.ts is NOT)
+
+   activity.ts and activity-text.ts move again and ride along for the reason
+   they always do: the worker writes the event NAMES, the two maps that file
+   them and give them headlines are read by screens. */
+export const WORKER_FINGERPRINT = 'bfba5e6d4490a8fe';

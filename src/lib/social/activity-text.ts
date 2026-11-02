@@ -125,6 +125,8 @@ const TITLE: Record<string, string> = {
   plan_targets_skipped: 'קבוצות לא נכנסו לסבב',
   plan_slots_occupied: 'קבוצות שהשעה שלהן כבר תפוסה',
   plan_all_blocked: 'אף קבוצה לא נכנסה לתור',
+  plan_slots_tombstoned: 'השעה תפוסה בפרסום שלא ייצא',
+  plan_slots_recycled: 'שעות תפוסות שוחררו וחזרו לתור',
   /* The feature that wrote this is gone ("לפרסם רק לאן שיש לקוחות"), and the
      entry stays because his history still holds rows that carry it. Deleting
      the label would not delete the rows — it would only make them unreadable. */

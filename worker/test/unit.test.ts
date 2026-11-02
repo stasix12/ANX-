@@ -440,8 +440,27 @@ console.log('unit tests OK');
     2,
     'called from both branches, or a manual launch stays silent — "פרסם עכשיו" with several targets is the drip one',
   );
-  // And must record what they just planned, or a run plans the same slot twice.
-  assert.equal((planner.match(/taken\.add\(slotKey\(/g) ?? []).length, 2, 'both branches must record the slot they took');
+  /*
+   * And must record what they just planned, or a run plans the same slot twice.
+   *
+   * THIS WAS PINNED AT 2 — one per planner branch — and the pin broke the
+   * moment each branch grew a SECOND way to place a row: recycling a slot a
+   * cancelled publication had tombstoned (recycleTombstonedSlot in plan.ts).
+   * Four is not a regression, it is the same rule applied to twice as many
+   * paths, and a recycled slot needs recording for exactly the reason an
+   * inserted one does.
+   *
+   * So the requirement is asserted as a RELATION rather than a count: every
+   * place that puts a row in the queue increments `created`, and every one of
+   * them must also record the slot. That survives the next branch without
+   * having to be re-counted, and it still fails the way it is meant to — a
+   * path that creates a row and forgets the slot makes the two numbers
+   * disagree.
+   */
+  const placed = (planner.match(/created \+= 1;/g) ?? []).length;
+  const recorded = (planner.match(/taken\.add\(slotKey\(/g) ?? []).length;
+  assert.ok(placed >= 2, `the planner still has at least one row-placing path per branch — found ${placed}`);
+  assert.equal(recorded, placed, 'every path that places a row records the slot it took, or a run plans the same slot twice');
 
   /*
    * Terminal rows are excluded on purpose: a skipped or failed row may replan.
@@ -605,11 +624,23 @@ console.log('unit tests OK');
     2,
     'both planner branches count the slots they could not write — the recurring one and the drip',
   );
-  assert.equal(
-    (plan.match(/failed \+= 1;/g) ?? []).length,
-    2,
-    'and both increment it where plan_failed is written, not somewhere else',
-  );
+  /*
+   * PINNED AT 2 UNTIL EACH BRANCH GREW A SECOND WRITE — recycling a slot a
+   * cancelled publication had tombstoned (recycleTombstonedSlot in plan.ts).
+   * That write can fail for the same reasons the insert can, and it counts for
+   * the same reason: a schedule must not be retired as if it had succeeded.
+   *
+   * So the rule is asserted as a RELATION, which is what it always was in
+   * words: every increment of `failed` sits beside a plan_failed line, and
+   * every plan_failed line increments `failed`. A count would have to be
+   * re-counted on the next branch; this does not, and it still fails on the
+   * thing it is guarding — a write whose failure is logged but not counted,
+   * or counted but not logged.
+   */
+  const counted = (plan.match(/failed \+= 1;/g) ?? []).length;
+  const logged = (plan.match(/await note\('error', 'plan_failed'/g) ?? []).length;
+  assert.ok(counted >= 2, `each planner branch still counts what it could not write — found ${counted}`);
+  assert.equal(logged, counted, 'and every increment sits beside a plan_failed line, with none of either on its own');
   assert.equal(
     (plan.match(/if \(failed\) \{/g) ?? []).length,
     2,
@@ -1720,7 +1751,34 @@ console.log('unit tests OK');
    * all the time, and no check before a write can close the gap between the
    * check and the write. Only the write can, which is social-schema-v20.sql.
    */
-  assert.equal((planner.match(/waiting\.add\(targetId\);/g) ?? []).length, 4, 'both branches record the group they planned — and the one the database says is taken');
+  /*
+   * FOUR SINCE v20, SIX SINCE THE SLOT RECYCLE — and the number is the wrong
+   * thing to pin, which is why this is now a relation.
+   *
+   * A group is recorded as waiting on exactly two kinds of path: one that PUT
+   * A ROW IN THE QUEUE (`created += 1` — the insert, and since
+   * recycleTombstonedSlot, the recycle of a slot a cancelled publication had
+   * tombstoned), and one where THE DATABASE SAID IT IS ALREADY TAKEN
+   * (`takenByAnotherPlanner`, which is not a failure: the PC worker's tick and
+   * /api/social/run run at once all the time, and no check before a write can
+   * close the gap between the check and the write — only the write can, which
+   * is social-schema-v20.sql).
+   *
+   * So the invariant is: one `waiting.add` per row placed, plus one per
+   * refusal. Pinned as a count it had to be re-counted every time a branch
+   * grew a path, and the re-count is indistinguishable from accepting a
+   * regression. As a relation it fails on the real mistake — a path that
+   * places a row, or hears the row exists, and does not mark the group.
+   */
+  const placedRows = (planner.match(/created \+= 1;/g) ?? []).length;
+  const refusals = (planner.match(/if \(takenByAnotherPlanner\(/g) ?? []).length;
+  const marked = (planner.match(/waiting\.add\(targetId\);/g) ?? []).length;
+  assert.ok(placedRows >= 2 && refusals >= 2, `both branches still place rows and still handle the refusal — placed ${placedRows}, refusals ${refusals}`);
+  assert.equal(
+    marked,
+    placedRows + refusals,
+    'every row placed and every "another planner got there first" marks the group as waiting — no path does one without the other',
+  );
   assert.ok(planner.includes('function takenByAnotherPlanner'), 'a race with another planner is recognised as such');
   assert.equal(
     (planner.match(/if \(takenByAnotherPlanner\(/g) ?? []).length,
@@ -1777,8 +1835,47 @@ console.log('unit tests OK');
     assert.ok(!/\bdelete\s+from\b/i.test(v20), 'v20 must not delete anything — duplicates are marked, never removed');
   }
 
-  const planned = planner.slice(planner.indexOf('async function targetsAlreadyWaiting'), planner.indexOf('async function stoppedCampaigns'));
+  /*
+   * SCOPED TO ITS OWN BODY, not "everything between here and
+   * stoppedCampaigns". That slice spanned several unrelated functions, so the
+   * check could be satisfied — or broken — by code that has nothing to do with
+   * targetsAlreadyWaiting; recycleTombstonedSlot landed inside it and must
+   * mention 'skipped', because freeing a cancelled row is its entire job. This
+   * is the third guard in this project to be re-scoped for exactly that reason
+   * (see cadence-30s.test.ts, where a file-wide grep passed a tree whose
+   * scoping had been removed).
+   */
+  const plannedStart = planner.indexOf('async function targetsAlreadyWaiting');
+  assert.ok(plannedStart > -1, 'targetsAlreadyWaiting is still there — re-point this rather than deleting it');
+  const plannedEnd = planner.indexOf('\nasync function ', plannedStart + 10);
+  const planned = planner.slice(plannedStart, plannedEnd === -1 ? planner.length : plannedEnd);
   assert.ok(!planned.includes("'skipped'"), 'a cancelled row must not block replanning');
+  /*
+   * AND EXCLUDING IT FROM THE READ WAS ONLY HALF THE RULE — the half that was
+   * true, beside a database that made the other half false.
+   *
+   * social_queue_slot_idx is unique on (schedule_id, target_id, scheduled_at)
+   * and is deliberately non-partial, so it counts a 'skipped' row. So this
+   * assertion passed, occupiedSlots' docstring promised that terminal rows may
+   * be planned again, and the write was refused anyway — silently, because the
+   * upsert is ON CONFLICT DO NOTHING and returns no error and no row. One
+   * "סיים ואפס" therefore tombstoned 48 hours of occasions and the relaunch
+   * could not place a single publication:
+   *
+   *   "עדיין לא מפרסם כלום" · "הוא מדלג ורושם הסבב נעצר למרות שלא עשיתי כלום"
+   *
+   * The write half lives in worker/test/tombstoned-slot.test.ts, with its
+   * nine mutations. This line is the cross-reference, so the next person to
+   * read this assertion does not conclude, as it reads, that the question is
+   * settled.
+   */
+  assert.ok(
+    /* The PAREN matters: `recycleTombstonedSlotDisabled` contains
+       `recycleTombstonedSlot`, so a rename that switches the repair off passed
+       this check until a mutation proved it. */
+    planner.includes('async function recycleTombstonedSlot('),
+    'and the planner can actually FREE such a slot — excluding it from the read is not enough while the unique index still counts it',
+  );
   assert.ok(!planned.includes("'failed'"), 'a failed row must not block replanning');
   assert.ok(!planned.includes("'published'"), 'a finished publication must not block a later one');
 

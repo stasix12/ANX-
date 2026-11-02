@@ -66,20 +66,37 @@ alter table public.social_campaigns
   add constraint social_campaigns_repeat_min_hours_ck
   check (repeat_min_hours between 0 and 168);
 
--- 3+4 ── הגדרות החשבון. social_settings הוא jsonb בלי סכימה, אז המפתחות
---        נכתבים אחד-אחד לתוך הערך הקיים ושום הגדרה אחרת לא נדרסת.
-insert into public.social_settings (key, value)
-values ('limits', '{}'::jsonb)
-on conflict (key) do nothing;
-
-update public.social_settings
-   set value = value
-     || jsonb_build_object('repeatFloorHours', 0)
-     || jsonb_build_object('blockRepeatToSameTarget', false)
-     || jsonb_build_object('dedupeDays', 0)
-     || jsonb_build_object('maxPerTargetPerDay', 2000)
-     || jsonb_build_object('maxPerDay', greatest(coalesce((value ->> 'maxPerDay')::int, 0), 2000))
- where key = 'limits';
+-- 3+4 ── הגדרות החשבון.
+--
+-- ⚠️ בלי ON CONFLICT. היה כאן `on conflict (key)` והמסד ענה
+--    "there is no unique or exclusion constraint matching the ON CONFLICT
+--    specification" — כי v17 הרחיב את המפתח הראשי של social_settings מ-(key)
+--    ל-(tenant_id, key), ועל מסד שהריץ אותו אין יותר אילוץ על `key` לבדו.
+--    התנאי ב-v17 מותנה, אז יש מסדים עם כל אחת משתי הצורות, ו-UPDATE עובד על
+--    שתיהן. אם אין שורת 'limits' בכלל — נאמר על זה בקול ולא ננחש tenant_id,
+--    כי שורה עם עסק שגוי גרועה מאין שורה.
+--
+-- social_settings הוא jsonb בלי סכימה, אז המפתחות נכתבים אחד-אחד לתוך הערך
+-- הקיים ושום הגדרה אחרת (כולל המרווח של 30 השניות) לא נדרסת.
+do $$
+declare
+  rows_hit int;
+begin
+  update public.social_settings
+     set value = value
+       || jsonb_build_object('repeatFloorHours', 0)
+       || jsonb_build_object('blockRepeatToSameTarget', false)
+       || jsonb_build_object('dedupeDays', 0)
+       || jsonb_build_object('maxPerTargetPerDay', 2000)
+       || jsonb_build_object('maxPerDay', greatest(coalesce((value ->> 'maxPerDay')::int, 0), 2000))
+   where key = 'limits';
+  get diagnostics rows_hit = row_count;
+  if rows_hit = 0 then
+    raise notice 'v35: לא נמצאה שורת הגדרות "limits". פתחו פעם אחת את מסך ההגדרות באפליקציה (זה יוצר אותה) והריצו את הקובץ שוב.';
+  else
+    raise notice 'v35: % שורות הגדרות עודכנו.', rows_hit;
+  end if;
+end $$;
 
 -- ── מה יצא מזה, להסתכל עליו אחרי Run ─────────────────────────────────────
 select

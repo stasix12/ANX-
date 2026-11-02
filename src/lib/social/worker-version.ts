@@ -226,4 +226,28 @@ export const WORKER_VERSION = '4.23.0';
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = 'c3b546e14e93a9f2';
+/*
+ * c3b546e1 → 3c27cd3ae7388f90. DOES THIS HAVE TO REACH THE PC? NO, and this time the
+ * answer was MEASURED rather than argued.
+ *
+ * The change is in src/lib/social/client.ts (the browser data layer) and in
+ * worker/test/. The fingerprint covers all of src/lib/social, but only part of
+ * that directory is actually compiled into the installer — so the honest way
+ * to answer this question is to build and look:
+ *
+ *   npm run build:app
+ *   grep -c evaluateQueueItem dist/app/worker.cjs   → 3   (rules.ts IS in it)
+ *   grep -c respaceQueue      dist/app/worker.cjs   → 0   (client.ts is NOT)
+ *   grep -c QUEUE_SELECT_LITE dist/app/worker.cjs   → 0
+ *
+ * scripts/build-app.mjs has exactly two entry points, worker/social-worker.ts
+ * and desktop/main.ts, and client.ts is reachable from neither: the dashboard
+ * the app window shows is served from Vercel, not bundled. So WORKER_VERSION
+ * stays at 4.23.0 — which is already released — and the next installer build
+ * will correctly decline to publish a version that is already out.
+ *
+ * The fingerprint being wider than the bundle is the SAFE direction: it asks
+ * the question too often rather than missing a change that mattered. The three
+ * greps above are how to answer it in thirty seconds instead of guessing.
+ */
+export const WORKER_FINGERPRINT = '3c27cd3ae7388f90';

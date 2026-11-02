@@ -164,6 +164,28 @@ jobs:
           set -o pipefail
           npm run test:social 2>&1 | tee suite.log
 
+      # ─── AND WHEN IT FAILS, SAY WHY WHERE SOMEBODY WILL FIND IT ──────────
+      #
+      # GitHub appends the post-job cleanup AND a full postgres container dump
+      # after the last step — about ninety lines — so the assertion that
+      # actually failed ends up buried in the middle of the job log. Reading
+      # one failure cost three separate log fetches on the run that added this
+      # step. A short, targeted extract at the end is worth more than the whole
+      # log nobody can reach.
+      #
+      # It stays SHORT on purpose: the point is that a small tail of the job log
+      # contains the answer.
+      - name: what failed
+        if: failure()
+        run: |
+          echo '─────────── the first failing assertion ───────────'
+          grep -m1 -A10 -E 'AssertionError|CANNOT RUN|Could not resolve|✘ \[ERROR\]' suite.log \
+            || echo '(no assertion line — the suite died before asserting)'
+          echo '─────────── the last 15 lines ───────────'
+          tail -15 suite.log
+          echo '─────────── how far it got ───────────'
+          echo "suites that printed OK: $(grep -cE ' OK' suite.log || true)"
+
       # ─── AND THE PROOFS MUST NOT HAVE SKIPPED ─────────────────────────────
       #
       # A green run with these three absent is worse than a red one: it is the

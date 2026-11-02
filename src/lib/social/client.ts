@@ -1896,7 +1896,7 @@ export async function countCommentsDoneSince(sinceISO: string): Promise<number> 
 export async function listCommentsDone(limit = 40): Promise<QueueRow[]> {
   const res = await db()
     .from('social_queue')
-    .select(QUEUE_SELECT)
+    .select(COMMENT_ATTENTION_SELECT)
     .eq('comment_status', 'done')
     .order('comment_at', { ascending: false })
     .limit(limit);
@@ -1920,6 +1920,36 @@ export async function listCommentsDone(limit = 40): Promise<QueueRow[]> {
  *
  * Ordered by comment_at DESCENDING because an outcome has a time and this list
  * is about what just happened, not about publication order.
+ */
+/*
+ * ─── AND THE TWO DASHBOARD COMMENT LISTS USE IT TOO ───────────────────────
+ *
+ * listCommentsDone() and listCommentQueue() asked for QUEUE_SELECT — `*` plus
+ * three joins — so the dashboard re-downloaded up to a hundred whole post
+ * bodies every thirty seconds to draw a rail of names, times and coloured
+ * dots. Same column, same cost, same reason as QUEUE_SELECT_LITE above.
+ *
+ * VERIFIED BEFORE NARROWING, because these rows arrive through a cast and a
+ * missing column cannot fail a typecheck or a test. Every property read on
+ * both paths was traced — through page.tsx's DashboardData (which also
+ * round-trips the rows through localStorage via writeSnapshot/readSnapshot),
+ * into CommentTimeline, and on into TargetAvatar, CommentShot, comments.ts
+ * and time.ts. The whole set read is id, status, comment_status, comment_at,
+ * comment_note, comment_shot, published_at, scheduled_at, permalink,
+ * campaign_id and target.{id,name,channel,url,image_url} — which is exactly
+ * this list. Nothing reads rendered_text, error, skip_reason, step, step_at,
+ * method, attempts, worker_id, dedupe_hash, external_post_id, claimed_at,
+ * require_confirmation, confirmed_at, screenshot_path, schedule_id, post_id,
+ * variant_id, target_id or any metrics_* column on either path.
+ *
+ * TWO THINGS THAT MAKE THE COVERAGE GUARD IN performance.test.ts MATTER MORE
+ * than "a section draws nothing", both found during that trace:
+ *   · CommentTimeline:200 sorts on `(a.published_at ?? a.scheduled_at)
+ *     .localeCompare(...)` with no guard — a row missing BOTH columns would
+ *     THROW, not blank. Both are selected here, so it cannot happen today.
+ *   · CommentTimeline:523 falls back `row.permalink || row.target?.url` — so a
+ *     missing permalink would not blank the link, it would quietly point it at
+ *     the group instead of at the comment.
  */
 const COMMENT_ATTENTION_SELECT =
   'id, status, comment_status, comment_at, comment_note, comment_shot, published_at, scheduled_at, permalink, campaign_id, target:social_targets(id,name,channel,url,image_url)';
@@ -1980,7 +2010,7 @@ export async function listCommentsWaiting(limit = 60): Promise<QueueRow[]> {
 export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
   const res = await db()
     .from('social_queue')
-    .select(QUEUE_SELECT)
+    .select(COMMENT_ATTENTION_SELECT)
     .neq('comment_status', '')
     .order('published_at', { ascending: true })
     .limit(limit);
@@ -2647,6 +2677,42 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
 /** Ceiling for one campaign's own feed. Exported so the screen can disclose it. */
 export const CAMPAIGN_QUEUE_LIMIT = 1000;
 
+/*
+ * THE ROUND SCREEN'S OWN SELECT — the lite row plus the six columns this one
+ * screen draws that the lite read does not carry.
+ *
+ * campaignQueueWithStats asked for `*` plus three joins, up to
+ * CAMPAIGN_QUEUE_LIMIT rows, every five seconds — and `*` on social_queue
+ * carries rendered_text, the ENTIRE published post, per row. That column is
+ * already on record here as "the single biggest source of Supabase egress in
+ * this app, and the thing that put a free project over its 5GB cap with two
+ * users" (see QUEUE_SELECT_LITE above). The live board and the day rail were
+ * both narrowed for it; this screen — the one he leaves open to WATCH a round
+ * run — was not, and it is the heaviest read of the three: a thousand rows
+ * rather than two hundred, every five seconds rather than thirty.
+ *
+ * Nothing in this list draws the body. PublicationItem fetches one row's text
+ * on demand when it is opened (`row.rendered_text ?? fetchedText`), which is
+ * the whole reason the lite select exists.
+ *
+ * WHY NOT QUEUE_SELECT_LITE ITSELF. Lite drops six more columns that this
+ * screen does read, and losing them would not blank a row — two whole
+ * sections would vanish in silence, because these rows arrive through a CAST
+ * (unwrap<QueueRow[]>) and a missing column is `undefined` at runtime with
+ * nothing red anywhere. comment_status feeds commentProgress() and the
+ * `known > 0` guard above the "which groups commented" list; comment_note and
+ * comment_shot are the only explanation of a comment that failed; and
+ * CampaignReach sums metrics_comments and metrics_shares and stamps them with
+ * metrics_at. Those six are listed back in.
+ *
+ * Columns are listed explicitly off QueueItem, the same way lite is, because
+ * PostgREST has no "all but one". comment_at is the only other field gone, and
+ * the one consumer that reads it (CommentTimeline) is on the dashboard and is
+ * fed by its own reads, not by this one.
+ */
+const CAMPAIGN_FEED_SELECT =
+  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, method, metrics_seen, metrics_views, metrics_reactions, metrics_comments, metrics_shares, metrics_at, comment_status, comment_note, comment_shot, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
+
 /**
  * Every queue row of one campaign, with its target — the control centre's feed,
  * plus whether the read hit its ceiling. Same reason postUsage() and
@@ -2655,7 +2721,7 @@ export const CAMPAIGN_QUEUE_LIMIT = 1000;
  */
 export async function campaignQueueWithStats(campaignId: string): Promise<{ rows: QueueRow[]; truncated: boolean }> {
   const rows = unwrap<QueueRow[]>(
-    await db().from('social_queue').select(QUEUE_SELECT).eq('campaign_id', campaignId).order('scheduled_at').limit(CAMPAIGN_QUEUE_LIMIT),
+    await db().from('social_queue').select(CAMPAIGN_FEED_SELECT).eq('campaign_id', campaignId).order('scheduled_at').limit(CAMPAIGN_QUEUE_LIMIT),
   );
   return { rows, truncated: rows.length >= CAMPAIGN_QUEUE_LIMIT };
 }

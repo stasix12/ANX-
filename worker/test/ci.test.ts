@@ -133,7 +133,25 @@ const code = ci
   );
 }
 
-/* ──── 5. THE GATE'S OWN BUGS — its first run found two of them ────────── */
+/* ─── 5. A FAILURE HAS TO BE READABLE, or the gate costs more than it saves */
+{
+  /*
+   * GitHub appends the post-job cleanup and a whole postgres container dump
+   * after the final step — roughly ninety lines — so the assertion that failed
+   * sits in the MIDDLE of the job log, not at its end. Reading one failure
+   * through the API cost three separate fetches before this existed. The step
+   * prints a short, targeted extract so a small tail reaches the answer.
+   */
+  const at = code.indexOf('- name: what failed');
+  is(at > 0, 'the failure extract is gone — a failing run buries its own assertion behind ninety lines of container dump');
+  const step = code.slice(at, code.indexOf('- name: the real-Postgres proofs'));
+  is(/if: failure\(\)/.test(step), 'the extract must run only on failure, or every green run prints a grep of nothing');
+  is(/AssertionError/.test(step), 'and it must look for the assertion, which is the one line that says what went wrong');
+  is(/tail -15 suite\.log/.test(step), 'and print the end of the suite, for a failure that never reached an assertion');
+  is(at < code.indexOf('- name: the real-Postgres proofs'), 'it must come before the skip check, so the reason is nearer the end of the log than the guard that fires after it');
+}
+
+/* ──── 6. THE GATE'S OWN BUGS — its first run found two of them ────────── */
 {
   /*
    * `a | tee b` EXITS WITH TEE'S STATUS, NOT a's.
@@ -179,7 +197,7 @@ const code = ci
   is(!/ALLOW_UNMEASURED/.test(ci), 'the gate must not switch the measurement off — a skipped check is not a check');
 }
 
-/* ───── 6. the names agree across the two files, or the grep is hollow ──── */
+/* ───── 7. the names agree across the two files, or the grep is hollow ──── */
 {
   const nameOf = (rel: string) => /^const NAME = '([^']+)';/m.exec(src(rel))?.[1] ?? '';
   const proofs = [

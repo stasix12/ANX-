@@ -389,4 +389,256 @@ const code = (rel: string) =>
   is(/if \(\(countRes\.data \?\? \[\]\)\.length >= COUNTS_LIMIT\) return \{ kind: 'too-many-rounds' \};/.test(client), 'and it refuses to present a capped count as exact, naming which ceiling it hit');
 }
 
+/* ------------------------------------------------------------------ *
+ * 9. THE ROUND SCREEN STOPS DOWNLOADING THE POST BODY A THOUSAND TIMES
+ *    — and the CLASS of that bug is closed, not just this instance.
+ * ------------------------------------------------------------------ */
+{
+  const client = src('src/lib/social/client.ts');
+  const clientCode = code('src/lib/social/client.ts');
+
+  /*
+   * THE HEAVIEST READ IN THE PRODUCT, and it was the last one still asking
+   * for `*`.
+   *
+   * campaignQueueWithStats feeds the screen he leaves OPEN to watch a round
+   * run: up to CAMPAIGN_QUEUE_LIMIT rows, every five seconds. `*` on
+   * social_queue carries rendered_text — the entire published post, per row —
+   * which client.ts already records as "the single biggest source of Supabase
+   * egress in this app, and the thing that put a free project over its 5GB cap
+   * with two users". The live board and the day rail were both narrowed for
+   * exactly that; this one, a thousand rows at five seconds instead of two
+   * hundred at thirty, was not.
+   */
+  const feedAt = clientCode.indexOf('const CAMPAIGN_FEED_SELECT');
+  is(feedAt > 0, 'the round screen has no select of its own — it is back on `*`, which carries the whole post body per row');
+  const feed = clientCode.slice(feedAt, clientCode.indexOf(';', feedAt));
+
+  const body = clientCode.slice(
+    clientCode.indexOf('export async function campaignQueueWithStats'),
+    clientCode.indexOf('\n}\n', clientCode.indexOf('export async function campaignQueueWithStats')),
+  );
+  is(body.length > 200, 'campaignQueueWithStats is found');
+  is(/\.select\(CAMPAIGN_FEED_SELECT\)/.test(body), 'the round feed no longer uses its narrowed select');
+  is(!/\.select\(QUEUE_SELECT\)/.test(body), 'and it must not be back on QUEUE_SELECT, which is `*`');
+
+  /*
+   * AND THE BODY IS NOT IN IT. Read off the STRIPPED source: the comment above
+   * the select names rendered_text repeatedly, so the same check against the
+   * raw file passes on its own prose — the mistake this file's own header
+   * records three of.
+   */
+  is(!/rendered_text/.test(feed), 'the post body is downloaded to draw a list again — PublicationItem fetches one row on demand when it is opened');
+
+  /*
+   * THE SIX THAT MUST STAY, each named with the thing that goes blank without
+   * it. These rows arrive through a CAST (unwrap<QueueRow[]>), so a dropped
+   * column is `undefined` at runtime and TypeScript cannot see it: the section
+   * simply draws nothing. That is why each one is asserted by name rather than
+   * trusting a count.
+   */
+  const needed: [string, string][] = [
+    ['comment_status', 'commentProgress() and the "which groups commented" list are both behind `known > 0`'],
+    ['comment_note', 'the only explanation of a comment that failed'],
+    ['comment_shot', 'the picture of a comment that failed'],
+    ['metrics_comments', 'CampaignReach sums it'],
+    ['metrics_shares', 'CampaignReach sums it'],
+    ['metrics_at', 'CampaignReach stamps its numbers with it'],
+    ['step', 'PublicationItem draws which step a live row is on'],
+    ['step_at', 'and when that step was written'],
+    ['target_id', 'campaignState() groups by it'],
+    ['campaign_id', 'projectQueue keys the cascade by it'],
+    ['scheduled_at', 'the whole feed is ordered by it'],
+    ['status', 'every section on the screen is a status'],
+  ];
+  for (const [col, why] of needed) {
+    is(new RegExp(`\\b${col}\\b`).test(feed), `${col} is not selected — ${why}`);
+  }
+
+  /*
+   * ─── AND NOW THE CLASS, WHICH IS THE PART WORTH KEEPING ────────────────
+   *
+   * PostgREST has no "all but one", so every narrowed read here is a
+   * hand-typed list of columns. schema-columns.test.ts proves the row
+   * INTERFACES match the real table, and nothing proves the SELECTS do — so a
+   * future migration that adds a column to social_queue and to QueueItem
+   * passes the whole suite while two screens quietly stop receiving it. The
+   * cast means no typecheck, and `*` is the only reason that has never bitten.
+   *
+   * So the broad selects — the ones that mean "the row, minus the body" — must
+   * cover every field QueueItem declares, and anything they leave out must be
+   * named here with its reason. A new field fails this until somebody decides.
+   */
+  const types = src('src/lib/social/types.ts');
+  const itemBody = types.slice(types.indexOf('export interface QueueItem {'), types.indexOf('\n}', types.indexOf('export interface QueueItem {')));
+  const fields = [...itemBody.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]);
+  is(fields.length > 25, `QueueItem's fields are not being read (found ${fields.length}) — the coverage check below would pass on an empty list`);
+  is(fields.includes('rendered_text') && fields.includes('comment_status'), 'and the field walk found the two that matter to this section');
+
+  const columnsOf = (name: string) => {
+    const at = clientCode.indexOf(`const ${name} =`);
+    const raw = clientCode.slice(at, clientCode.indexOf(';', at));
+    const quoted = [...raw.matchAll(/'([^']*)'/g)].map((m) => m[1]).join('');
+    /* The joins are relations, not columns of this table. */
+    return quoted.replace(/\w+:\w+\([^)]*\)/g, '').split(',').map((c) => c.trim()).filter(Boolean);
+  };
+
+  /* Each exclusion carries its reason, so dropping a column is a decision
+     somebody wrote down rather than a gap nobody noticed. */
+  const broad: Record<string, Record<string, string>> = {
+    QUEUE_SELECT_LITE: {
+      rendered_text: 'the entire post body; PublicationItem fetches one row on demand',
+      comment_at: 'only CommentTimeline reads it, and it has its own reads',
+      comment_status: 'the live board draws no comment state',
+      comment_note: 'ditto',
+      comment_shot: 'ditto',
+      metrics_comments: 'the live board draws no metrics',
+      metrics_shares: 'ditto',
+      metrics_at: 'ditto',
+      /*
+       * FOUND BY THIS GUARD ON ITS FIRST RUN, and pre-existing: QUEUE_SELECT_LITE
+       * has never selected created_at, and nothing had ever asked whether that
+       * mattered. It does not. A queue row's created_at is read by no screen and
+       * by no component — the four `.order('created_at')` calls in the worker are
+       * on social_targets and social_worker_commands, and every created_at read in
+       * src/ is a Campaign's, a group's or a Post's. It is also not an ordering
+       * key for any queue read: the feeds order by scheduled_at, published_at or
+       * comment_at. Recorded rather than quietly tolerated, which is the whole
+       * point of this list.
+       */
+      created_at: 'read by no screen, no component and no queue ordering — verified across src/ and worker/',
+    },
+    CAMPAIGN_FEED_SELECT: {
+      rendered_text: 'the entire post body; PublicationItem fetches one row on demand',
+      comment_at: 'only CommentTimeline reads it, and it is on the dashboard',
+      /*
+       * FOUND BY THIS GUARD ON ITS FIRST RUN, and pre-existing: QUEUE_SELECT_LITE
+       * has never selected created_at, and nothing had ever asked whether that
+       * mattered. It does not. A queue row's created_at is read by no screen and
+       * by no component — the four `.order('created_at')` calls in the worker are
+       * on social_targets and social_worker_commands, and every created_at read in
+       * src/ is a Campaign's, a group's or a Post's. It is also not an ordering
+       * key for any queue read: the feeds order by scheduled_at, published_at or
+       * comment_at. Recorded rather than quietly tolerated, which is the whole
+       * point of this list.
+       */
+      created_at: 'read by no screen, no component and no queue ordering — verified across src/ and worker/',
+    },
+  };
+
+  for (const [name, excused] of Object.entries(broad)) {
+    const have = new Set(columnsOf(name));
+    is(have.size > 20, `${name} parsed to ${have.size} columns — the coverage check would be vacuous`);
+    const missing = fields.filter((f) => !have.has(f) && !(f in excused));
+    eq(
+      missing,
+      [],
+      `${name} does not select ${missing.join(', ')}, and there is no reason recorded for leaving ${missing.length > 1 ? 'them' : 'it'} out. ` +
+        'These rows arrive through a cast, so the column is undefined at runtime and nothing goes red — the screen just stops drawing it. ' +
+        'Either add the column to the select, or add it to this exclusion list with the reason.',
+    );
+    /* And an exclusion that no longer corresponds to a field is stale: it
+       would silently excuse a future column that happens to reuse the name. */
+    const stale = Object.keys(excused).filter((c) => !fields.includes(c));
+    eq(stale, [], `${name}'s exclusion list still excuses ${stale.join(', ')}, which QueueItem no longer declares`);
+  }
+
+  /*
+   * ─── EVERY SELECT IN THE FILE IS IN EXACTLY ONE OF THREE CLASSES ───────
+   *
+   * This check found three selects nobody had classified — COMMENT_WAIT_SELECT,
+   * ROLLUP_SELECT and LIVE_QUEUE_SELECT — on its first run, which is the whole
+   * argument for it. The classes:
+   *
+   *   broad    hand-typed, and MEANT to be the whole row minus the body. These
+   *            are the ones a forgotten column silently breaks, so they are
+   *            covered against QueueItem above.
+   *   minimal  hand-typed, purpose-built short lists for one small view. A new
+   *            column is not expected in them; what they need is pinned by the
+   *            tests that own their consumers.
+   *   star     asks for `*`. IMMUNE to this entire failure mode, because `*`
+   *            cannot forget a column — which is also why nothing here has ever
+   *            caught one.
+   *
+   * The classes are asserted, not just declared: a `star` entry must really
+   * contain `*`, so the day somebody replaces one with a hand-typed list it
+   * lands in this check unaccounted rather than keeping a pass it no longer
+   * earns. Stale names fail too.
+   */
+  const minimal = ['COMMENT_ATTENTION_SELECT', 'COMMENT_WAIT_SELECT', 'ROLLUP_SELECT', 'TIMELINE_SELECT'];
+  /*
+   * AND LIVE_QUEUE_SELECT IS A FINDING, not an exemption.
+   *
+   * It is '*, target:social_targets(*)' — the whole queue row AND every column
+   * of the joined group, for up to LIVE_QUEUE_LIMIT rows. It feeds
+   * liveQueuePlan(), which is the "ניהול התור הפעיל" sheet: the one the owner
+   * photographed with "לא קיבלנו אישור בזמן" on it. The write side of that
+   * sheet has been widened and measured (respace-speed.test.ts); the READ side
+   * still carries a post body per row before the sheet can draw anything.
+   * Narrowing it needs the same consumer walk the campaign feed above got —
+   * liveQueuePlan itself touches only campaign_id, post_id, scheduled_at,
+   * target and target_id, but it returns `rows: QueueRow[]` to the sheet, and
+   * what the SHEET reads has not been established yet. Listed here as `star`
+   * because `*` genuinely cannot lose a column; recorded in words because that
+   * is not the same as saying it is fine.
+   */
+  const star = ['QUEUE_SELECT', 'LIVE_QUEUE_SELECT'];
+
+  const declared = [...clientCode.matchAll(/const (\w*SELECT\w*) =/g)].map((m) => m[1]);
+  is(declared.length >= 5, `only ${declared.length} selects found in client.ts — the walk is not finding them`);
+  const unaccounted = declared.filter((n) => !(n in broad) && !minimal.includes(n) && !star.includes(n));
+  eq(
+    unaccounted,
+    [],
+    `client.ts declares ${unaccounted.join(', ')}, which is in none of the three classes. ` +
+      'A hand-typed select that nothing checks is how a column goes missing without a single test failing — ' +
+      'put it in `broad` (and give it an exclusion list), in `minimal`, or in `star` if it really asks for `*`.',
+  );
+
+  /* A name in any class that client.ts no longer declares is a pass nobody is
+     earning — and it would silently absolve a future select that reuses it. */
+  const ghosts = [...Object.keys(broad), ...minimal, ...star].filter((n) => !declared.includes(n));
+  eq(ghosts, [], `this check still classifies ${ghosts.join(', ')}, which client.ts no longer declares`);
+
+  /* And a `star` entry has to actually be one. */
+  for (const name of star) {
+    const at = clientCode.indexOf(`const ${name} =`);
+    const body = clientCode.slice(at, clientCode.indexOf(';', at));
+    is(
+      /'\s*\*/.test(body),
+      `${name} is classified as asking for \`*\` but no longer does — it is a hand-typed list now, so it belongs in \`broad\` with an exclusion list or in \`minimal\``,
+    );
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 10. AND THE DASHBOARD'S TWO COMMENT LISTS, same column, same cost.
+ * ------------------------------------------------------------------ */
+{
+  const clientCode = code('src/lib/social/client.ts');
+  for (const fn of ['listCommentsDone', 'listCommentQueue']) {
+    const at = clientCode.indexOf(`export async function ${fn}`);
+    is(at > 0, `${fn} is gone, or renamed — this guard is pinned to a name that no longer exists`);
+    const body = clientCode.slice(at, clientCode.indexOf('\n}', at));
+    is(
+      /\.select\(COMMENT_ATTENTION_SELECT\)/.test(body),
+      `${fn} is back on QUEUE_SELECT — the dashboard re-downloads up to a hundred whole post bodies every thirty seconds to draw a rail of names and dots`,
+    );
+    is(!/\.select\(QUEUE_SELECT\)/.test(body), `${fn} must not select \`*\``);
+  }
+
+  /*
+   * THE TWO ORDER COLUMNS, and they are not cosmetic: CommentTimeline:200
+   * sorts on `(a.published_at ?? a.scheduled_at).localeCompare(...)` with no
+   * guard at all, so a row missing BOTH would throw rather than draw nothing.
+   * The one failure mode in this whole area that is loud, and only because
+   * both columns happen to be selected.
+   */
+  const selAt = clientCode.indexOf('const COMMENT_ATTENTION_SELECT');
+  const sel = clientCode.slice(selAt, clientCode.indexOf(';', selAt));
+  for (const col of ['comment_at', 'published_at', 'scheduled_at', 'permalink', 'comment_status', 'comment_note']) {
+    is(new RegExp(`\\b${col}\\b`).test(sel), `COMMENT_ATTENTION_SELECT no longer carries ${col} — see the trace recorded above it in client.ts`);
+  }
+}
+
 console.log(`performance-pass guards OK — ${checks} assertions`);

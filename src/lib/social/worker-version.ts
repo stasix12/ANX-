@@ -97,7 +97,7 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.29.0';
+export const WORKER_VERSION = '4.30.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -161,6 +161,28 @@ export const WORKER_VERSION = '4.29.0';
  *     runs on the owner's machine for every group publication. An older copy
  *     would go on reading twenty for a row with no stored window and defer
  *     exactly the publications he has now told us three times to let through.
+ *
+ * AND 4.29.0 → 4.30.0, YES, AND THIS ONE IS A REGRESSION I SHIPPED.
+ *
+ *   • plan.ts: v33 removed the planner's pre-read of which groups a post is
+ *     already waiting for, on the owner's instruction, and within the hour his
+ *     own dashboard measured what that costs — 255 waiting at 18:51, 317 at
+ *     19:00, published frozen at 190. Sixty-two new rows in nine minutes and
+ *     not one publication.
+ *
+ *     The planner re-plans every active schedule every sixty seconds.
+ *     `plannedAhead` only decides what is written to the LOG; occupiedSlots
+ *     only refuses the same instant. So that read, backed by the unique index,
+ *     was the only thing stopping a schedule re-queueing the same group on
+ *     every tick, and I removed both halves in one commit.
+ *
+ *     It is back, scoped to the POST — which is not what he objected to. A
+ *     different campaign is still never blocked and the account-wide index
+ *     stays dropped; only "this post already has this group waiting" returns.
+ *
+ *     THIS MUST REACH THE PC, and urgently: the planner that is generating the
+ *     rows runs on his machine every sixty seconds. The website alone cannot
+ *     stop it.
  *
  * AND ANSWERED AGAIN, TWICE, BOTH TIMES NO: the fingerprint moves, the number
  * does not.
@@ -397,4 +419,4 @@ export const WORKER_VERSION = '4.29.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = 'f167c4545dd052c2';
+export const WORKER_FINGERPRINT = '23563902614087f3';

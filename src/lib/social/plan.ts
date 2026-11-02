@@ -225,7 +225,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      * publications, and the repeat window — which still defers a second row for
      * the same post and group rather than publishing it beside the first.
      */
-    const waiting = new Set<string>();
+    const waiting = await targetsAlreadyWaiting(db, post.id);
     /*
      * ───────── THE CAMPAIGN'S OWN WINDOW, BEFORE A SINGLE STAMP IS WRITTEN ──
      *
@@ -589,6 +589,46 @@ function takenByAnotherPlanner(error: { code?: string; message?: string } | null
 }
 
 /**
+ * ─── WHICH GROUPS THIS POST IS ALREADY WAITING FOR ─────────────────────────
+ *
+ * PER POST, AND THAT IS THE WHOLE POINT OF IT.
+ *
+ * v33 removed this check entirely, on the owner's instruction, and the
+ * consequence was measured on his own dashboard within the hour: 255 waiting
+ * at 18:51, 317 at 19:00, with the published count frozen at 190. Sixty-two
+ * new rows in nine minutes and not one publication. "אין שום קמפיין דולק
+ * ברקע... וזה רק עולה."
+ *
+ * The planner runs every sixty seconds and re-plans every active schedule.
+ * `plannedAhead` only decides what gets WRITTEN TO THE LOG — it never stopped
+ * the loop — and occupiedSlots only refuses the same instant. So the thing
+ * that actually stopped a schedule re-queueing the same group on every tick
+ * was this read, backed by the unique index. Removing both left nothing at
+ * all, and the queue grew without bound.
+ *
+ * SO IT COMES BACK SCOPED TO THE POST, WHICH IS NOT WHAT HE OBJECTED TO. His
+ * complaint was that a group another CAMPAIGN was holding made his
+ * Russian-language round unable to queue a single one of its fifty groups.
+ * That stays fixed: a different post is never blocked here, and the account
+ * -wide index stays dropped. What comes back is only "this post is already
+ * waiting for this group, so do not queue it again" — which is also what the
+ * rounds feature has always relied on.
+ *
+ * WHAT THIS IS NOT: it is not the repeat window. v34 stands, zero still means
+ * no minimum between two publications of the same post to one group. This
+ * decides whether a SECOND ROW IS CREATED while the first is still waiting,
+ * not how long the engine makes them wait.
+ */
+async function targetsAlreadyWaiting(db: SupabaseClient, postId: string): Promise<Set<string>> {
+  const { data } = await db
+    .from('social_queue')
+    .select('target_id')
+    .eq('post_id', postId)
+    .in('status', OPEN_STATUSES);
+  return new Set((data ?? []).map((r) => r.target_id as string));
+}
+
+/**
  * Says out loud which groups a launch quietly left out.
  *
  * Before v33 the planner skipped a group that already had any open row, and
@@ -753,9 +793,8 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   const media = (post.media ?? []) as MediaItem[];
   const slots = dripSlots(schedule, now);
   const taken = await occupiedSlots(db, post.id);
-  /* Empty for the same reason the weekly planner's is — see its note. Filled
-     only by a refusal the database actually made. */
-  const waiting = new Set<string>();
+  /* Per post, exactly as the weekly planner above — see its note. */
+  const waiting = await targetsAlreadyWaiting(db, post.id);
   let created = 0;
   /* Rows this drip wrote in THIS pass — see noteDropped. */
   let made = 0;

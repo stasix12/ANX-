@@ -1611,14 +1611,48 @@ console.log('unit tests OK');
    * repeat window — which still defers a second row for the same post and group
    * instead of publishing it beside the first.
    */
+  /*
+   * ─── AND IT IS PER POST, WHICH IS THE CORRECTION TO THE CORRECTION ───────
+   *
+   * This file asserted, for about forty minutes, that the pre-read was GONE
+   * entirely. It was, and his dashboard measured the consequence: 255 waiting
+   * at 18:51, 317 at 19:00, published frozen at 190. Sixty-two rows in nine
+   * minutes and not one publication — "אין שום קמפיין דולק ברקע... וזה רק
+   * עולה."
+   *
+   * The planner re-plans every active schedule every sixty seconds.
+   * `plannedAhead` only decides what is written to the log, and occupiedSlots
+   * only refuses the same instant — so with both this read and the unique
+   * index removed, nothing at all stopped a schedule queueing the same group
+   * again on every tick.
+   *
+   * It is scoped to the POST, which is not what he objected to: a different
+   * campaign is still never blocked, and the account-wide index stays
+   * dropped. Only "this post already has this group waiting" comes back.
+   */
   assert.ok(
-    !planner.includes('async function targetsAlreadyWaiting'),
-    'the account-wide pre-read is gone — it is what stopped a second campaign ever taking a group the first was holding',
+    planner.includes('async function targetsAlreadyWaiting'),
+    'the planner must refuse to queue a group this post is already waiting for, or every tick adds another row for it',
+  );
+  assert.ok(
+    /\.eq\('post_id', postId\)/.test(
+      planner.slice(planner.indexOf('async function targetsAlreadyWaiting'), planner.indexOf('async function targetsAlreadyWaiting') + 400),
+    ),
+    'scoped to the post — account-wide is what stopped a second campaign taking a group the first was holding',
   );
   assert.equal(
-    (planner.match(/const waiting = new Set<string>\(\);/g) ?? []).length,
+    (planner.match(/await targetsAlreadyWaiting\(db, post\.id\)/g) ?? []).length,
     2,
-    'both planner branches start with nothing refused, and learn only from refusals the database actually makes',
+    'both planner branches ask it, and both pass their own post',
+  );
+  /*
+   * AND THE RUNAWAY IS THE THING THIS GUARD IS ABOUT, so it is stated: a
+   * planner that starts each pass with an empty set has no memory of what is
+   * already queued, and `plannedAhead` will not save it.
+   */
+  assert.ok(
+    !/const waiting = new Set<string>\(\);/.test(planner),
+    'neither branch may start from an empty set — that is the shape that grew his queue by 62 rows in nine minutes',
   );
   /*
    * AND IT IS STILL FILLED, which is what keeps a database that has NOT run v33

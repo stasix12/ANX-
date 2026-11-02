@@ -3232,12 +3232,31 @@ const LIVE_QUEUE_LIMIT = 500;
  * How many re-stamps may be in flight at once.
  *
  * Every row is its own request — PostgREST has no per-row UPDATE ... FROM —
- * and one at a time meant one mobile round trip per publication. Six is the
- * number: enough that a queue of forty is two seconds instead of fifteen,
- * small enough that the direction of travel still holds between waves, where
- * the slot collisions are (see writeNewInstants).
+ * and one at a time meant one mobile round trip per publication.
+ *
+ * SIX WAS TOO FEW, AND THE OWNER FOUND THE EDGE OF IT. A 218-row queue is
+ * ceil(218/6) = 37 waves, and respaceQueue spends about six more round trips
+ * on the settings, the window read, the row read and the activity line — some
+ * forty-three in all, strictly one after another. On a phone on 4G that is
+ * past the sheet's ninety-second deadline, and what he got was "השינוי נשלח,
+ * אבל לא קיבלנו אישור בזמן" over a queue that had in fact been re-spaced
+ * correctly. The arithmetic was right and the report timed out.
+ *
+ * TWENTY-FOUR brings the same queue to ten waves and the whole mutation to
+ * about sixteen round trips. The ceiling on usefulness is the transport, not
+ * this number: Supabase is HTTP/2, so the requests multiplex over one
+ * connection, and a browser still on HTTP/1.1 serialises them six at a time by
+ * itself — no worse than today.
+ *
+ * WHY NOT MORE: the wave is also what keeps the direction of travel between
+ * waves, which is where the slot collisions are. A queue moving uniformly one
+ * way has none by construction; a mixed one hands its collisions to the retry
+ * pass below, and that pass is deliberately one row at a time. Widening the
+ * wave moves work INTO that serial pass, so a number large enough to make the
+ * whole queue one wave would be slower, not faster, on exactly the mixed
+ * queues that need the retry.
  */
-const RESTAMP_LANES = 6;
+const RESTAMP_LANES = 24;
 
 /**
  * NOTHING THE OWNER PRESSES MAY WAIT FOR EVER.

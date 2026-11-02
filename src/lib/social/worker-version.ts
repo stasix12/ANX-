@@ -201,10 +201,16 @@ export const WORKER_VERSION = '4.22.0';
  *
  * It runs on the PC and nowhere else.
  *
+ * AND ONE MORE, NO: client.ts widens RESTAMP_LANES from 6 to 24. A 218-row
+ * re-space was 37 waves plus six round trips of overhead, which on a phone on
+ * 4G is past the tuner's ninety-second deadline — so the owner was told the
+ * change had not been confirmed over a queue that was in fact re-spaced
+ * correctly. Browser-side; the PC reads the rows it is given.
+ *
  * The other src/lib/social files that ride along — crash.ts, campaign.ts,
  * client.ts, library.ts, activity.ts, activity-text.ts, server/sync.ts,
  * server/worker.ts — are NOT in the worker's import closure either. They are
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '0a2516d5ac48edfa';
+export const WORKER_FINGERPRINT = '999959d69e2da7cb';

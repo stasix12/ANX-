@@ -85,7 +85,30 @@ async function ceiling(): Promise<void> {
 
   is(/const RESTAMP_LANES = \d+;/.test(client), 'the wave size is gone — the rows are written one round trip at a time again');
   const lanes = Number(/const RESTAMP_LANES = (\d+);/.exec(client)?.[1]);
-  is(lanes >= 2 && lanes <= 12, `a wave of ${lanes} is outside the sane range: one at a time is the bug, and a flood is a different one`);
+  /*
+   * THE RANGE WAS 2..12 AND THE OWNER FOUND THE TOP OF IT.
+   *
+   * Twelve was chosen before there was any evidence about how big a real queue
+   * gets. His was 218 rows: at six lanes that is 37 waves plus about six round
+   * trips of overhead, and on a phone on 4G it ran past the sheet's
+   * ninety-second deadline — so he was told the change had not been confirmed
+   * over a queue that had in fact been re-spaced correctly, to the second.
+   *
+   * The intent of this assertion is unchanged and still worth keeping: one at a
+   * time is the bug this file exists for, and a flood is a different bug,
+   * because the wave is what holds the direction of travel between waves and
+   * anything it floods lands in a retry pass that is deliberately serial.
+   *
+   * What changed is that the number is no longer a guess. worker/test/
+   * respace-speed.test.ts derives it from the deadline, the row cap and a
+   * mobile round trip, and asserts the budget holds at half that speed too.
+   * This stays as the coarse sanity bound; that file owns the real one.
+   */
+  is(lanes >= 2 && lanes <= 64, `a wave of ${lanes} is outside the sane range: one at a time is the bug, and a flood is a different one`);
+  is(
+    lanes >= 16,
+    `a wave of ${lanes} is what timed out on a real 218-row queue — see worker/test/respace-speed.test.ts, which derives the floor from the sheet's own deadline`,
+  );
 
   is(/for \(let at = 0; at < ordered\.length; at \+= RESTAMP_LANES\)/.test(write), 'the main pass no longer walks the queue in waves');
   is(/await Promise\.all\(/.test(write), 'and the rows inside a wave are no longer in flight together');
@@ -113,7 +136,16 @@ async function ceiling(): Promise<void> {
 {
   const tuner = src('../../src/components/social/QueueTunerSheet.tsx');
   is(/const SHEET_DEADLINE_MS = 90_000;/.test(tuner), 'the sheet-wide deadline is gone — a stalled read can hold the button for ever');
-  is(/await withDeadline\(fn\(\)\)/.test(tuner), 'the mutation is no longer run under the deadline');
+  /* The call gained a second argument — the live row counter, so the message
+     can say how far it got instead of asking him to check by hand. The intent
+     here is unchanged: the mutation must RUN under the deadline. Pinned whole
+     rather than as a prefix, because a prefix that stops before the closing
+     paren passes whatever is added later, which is the weakness this suite has
+     been bitten by elsewhere. respace-speed.test.ts owns what the counter means. */
+  is(
+    /await withDeadline\(fn\(\), \(\) => progressRef\.current\)/.test(tuner),
+    'the mutation is no longer run under the deadline',
+  );
   is(/Promise\.race\(\[work, bell\]\)\.finally\(\(\) => clearTimeout\(timer\)\)/.test(tuner), 'the deadline no longer clears its own timer, or no longer races');
 
   /*
@@ -128,7 +160,14 @@ async function ceiling(): Promise<void> {
   is(/setProgress\(null\);[\s\S]{0,200}try \{/.test(run), 'the counter is not reset when a mutation starts');
   is(/finally \{[\s\S]{0,120}setBusy\(null\);[\s\S]{0,120}setProgress\(null\);/.test(run), 'the counter must be cleared with the spinner, in the same finally');
 
-  is(/onProgress: \(done, total\) => setProgress\(\{ done, total \}\)/.test(tuner), 'the re-space no longer reports its progress to the sheet');
+  /* The handler now writes the ref beside the state, so the deadline (which
+     fires from a timer, outside render) can read a count that is current. Both
+     writes are required: the ref alone leaves the visible line stale, the state
+     alone leaves the message blind. */
+  is(
+    /onProgress: \(done, total\) => \{\s*progressRef\.current = \{ done, total \};\s*setProgress\(\{ done, total \}\);\s*\}/.test(tuner),
+    'the re-space no longer reports its progress to the sheet',
+  );
   is(/busy === 'respace' && progress[\s\S]{0,120}מעדכן… \$\{progress\.done\} מתוך \$\{progress\.total\}/.test(tuner), 'the button no longer counts while it works — a still spinner is what he photographed');
 }
 

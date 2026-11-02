@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { ClockIcon, PlusIcon, SearchIcon, SpinnerIcon, TrashIcon } from '@/components/icons';
 import {
   addTargetsToQueue,
@@ -169,13 +169,41 @@ const MAX_GAP = 720 * 60;
  */
 const SHEET_DEADLINE_MS = 90_000;
 
-function withDeadline<T>(work: Promise<T>): Promise<T> {
+/**
+ * AND IT SAYS HOW FAR IT GOT, because it knows.
+ *
+ * The re-stamp already reports every row it writes — the sheet draws
+ * "מעדכן… 47 מתוך 218" from it. When the deadline then fired, the message
+ * threw that number away and said "check the list below, and if nothing
+ * changed, try again": the owner was asked to go and work out by hand
+ * something the screen had been counting a second earlier.
+ *
+ * The three answers are genuinely different and he has to act differently on
+ * each, so they are three sentences. All of them are counts of rows the
+ * database acknowledged, never an estimate.
+ */
+function withDeadline<T>(work: Promise<T>, soFar?: () => { done: number; total: number } | null): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const bell = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(
-      () => reject(new Error('השינוי נשלח, אבל לא קיבלנו אישור בזמן. בדקו ברשימה למטה מה נשמר — ואם לא השתנה כלום, נסו שוב.')),
-      SHEET_DEADLINE_MS,
-    );
+    timer = setTimeout(() => {
+      const at = soFar?.() ?? null;
+      if (at && at.total > 0 && at.done >= at.total) {
+        /* Everything was acknowledged and the confirmation is what is late.
+           Telling him to check whether anything changed would send him to
+           verify work that is demonstrably finished. */
+        reject(new Error(`כל ${at.total} הפרסומים עודכנו, אבל האישור הסופי לא חזר בזמן. התור למטה כבר מעודכן — אין צורך לנסות שוב.`));
+        return;
+      }
+      if (at && at.done > 0) {
+        reject(
+          new Error(
+            `עודכנו ${at.done} מתוך ${at.total} פרסומים והחיבור איטי מדי להספיק את השאר. מה שעודכן נשמר — אפשר ללחוץ שוב כדי להמשיך מהנקודה הזו.`,
+          ),
+        );
+        return;
+      }
+      reject(new Error('השינוי נשלח, אבל לא קיבלנו אישור בזמן. בדקו ברשימה למטה מה נשמר — ואם לא השתנה כלום, נסו שוב.'));
+    }, SHEET_DEADLINE_MS);
   });
   return Promise.race([work, bell]).finally(() => clearTimeout(timer));
 }
@@ -268,6 +296,11 @@ export function QueueTunerSheet({
    * is the difference between the two, on screen.
    */
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  /* A REF BESIDE THE STATE. The deadline fires from a timer, outside React's
+     render, so it would read whatever `progress` was closed over when the
+     mutation started — which is always null. The ref is the only copy that is
+     current at the instant the bell rings. */
+  const progressRef = useRef<{ done: number; total: number } | null>(null);
 
   const [gap, setGap] = useState(0);
   const [gapDirty, setGapDirty] = useState(false);
@@ -590,9 +623,10 @@ export function QueueTunerSheet({
     async (key: string, fn: () => Promise<string>) => {
       setBusy(key);
       setError(null);
+      progressRef.current = null;
       setProgress(null);
       try {
-        const message = await withDeadline(fn());
+        const message = await withDeadline(fn(), () => progressRef.current);
         await load(false);
         onChanged?.();
         toast(message);
@@ -611,7 +645,8 @@ export function QueueTunerSheet({
         setError(message);
       } finally {
         setBusy(null);
-        setProgress(null);
+        progressRef.current = null;
+      setProgress(null);
       }
     },
     [load, onChanged, toast],
@@ -684,7 +719,10 @@ export function QueueTunerSheet({
       const moved = await respaceQueue(gap, {
         ...(campaignId ? { campaignId } : {}),
         ...(anchor !== null ? { startAt: new Date(anchor).toISOString() } : {}),
-        onProgress: (done, total) => setProgress({ done, total }),
+        onProgress: (done, total) => {
+          progressRef.current = { done, total };
+          setProgress({ done, total });
+        },
       });
       return `${posts(moved)} ${agree(moved, 'תוזמן', 'תוזמנו')} מחדש, מרווח של ${gapChoiceLabel(gap)} ביניהם.`;
     });

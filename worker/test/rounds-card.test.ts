@@ -25,6 +25,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
 
+/*
+ * THE TWO CASES THIS FILE GAINED FOR HIS BUG, read by index as every case
+ * above them is. They are APPENDED in render-rounds.tsx on purpose: the six
+ * that came first are measured by probes that already pass, and none of their
+ * indices moves.
+ */
+const HIS = 6;
+const BELOW_FLOOR = 7;
+
 let checks = 0;
 const is = (c: unknown, msg: string) => {
   checks += 1;
@@ -109,6 +118,35 @@ async function main(): Promise<void> {
                   return { w: Math.round(r.width), h: Math.round(r.height), what: (e.getAttribute('aria-label') || e.textContent || e.tagName).trim().slice(0, 40) };
                 })
               : [];
+            /*
+             * ─── THE CONTROL THAT LOWERS THE WINDOW, FOUND BY WHAT IT IS ───
+             *
+             * NOT BY THE STRING IT CONTAINS, and that distinction is the whole
+             * reason this probe is in a browser. Two guards in this suite once
+             * passed over a feature that had been DELETED, because wrapping
+             * JSX in {false && …} leaves every word of it behind for a grep to
+             * find. A <p> reading "הורידו את החזרה ל-2 שעות" and a <button>
+             * that writes it are the same text and two different products;
+             * only a render tells them apart. So this asks for `button`
+             * elements and matches the label on the element it got back.
+             *
+             * AND IT MATCHES THE PREFIX, NOT THE WHOLE SHAPE. Requiring
+             * `ל-\d+ שעות$` looked stricter and was the exact opposite: a
+             * button reading "הורידו את החזרה ל-null שעות" would not have
+             * matched it, this probe would have reported NO BUTTON, and every
+             * assertion below about there being no button would have passed
+             * over a broken one. A mutation found that hole. The prefix finds
+             * the control; its numbers are then checked ON it, so a missing
+             * number fails instead of vanishing.
+             */
+            const fixBtn = card
+              ? [...card.querySelectorAll('button')].find((b) => /^הורידו את החזרה /.test((b.textContent ?? '').replace(/\s+/g, ' ').trim()))
+              : undefined;
+            const fixBox = fixBtn ? fixBtn.getBoundingClientRect() : null;
+            const cardBox = card ? card.getBoundingClientRect() : null;
+            /* The sentence it sits under — the card's first warning, which is
+               the one the verdict wrote. */
+            const warnP = card ? [...card.querySelectorAll('p')].find((e) => /לא יפרסם/.test(e.textContent ?? '')) : undefined;
             return {
               drawn: !!card,
               height: card ? Math.round(card.getBoundingClientRect().height) : 0,
@@ -128,6 +166,25 @@ async function main(): Promise<void> {
               counts: (card?.textContent ?? '').match(/\d+ מתוך \d+ קבוצות/g) ?? [],
               bars: card ? card.querySelectorAll('[style*="width"]').length : 0,
               warns: !!card && /לא יפרסם/.test(card.textContent ?? ''),
+              /* Null when there is no button at all — which for three of these
+                 cases is the right answer and is asserted as such below. */
+              fix:
+                fixBtn && fixBox && cardBox
+                  ? {
+                      text: (fixBtn.textContent ?? '').replace(/\s+/g, ' ').trim(),
+                      aria: (fixBtn.getAttribute('aria-label') ?? '').replace(/\s+/g, ' ').trim(),
+                      off: fixBtn.disabled,
+                      w: Math.round(fixBox.width),
+                      h: Math.round(fixBox.height),
+                      inside: fixBox.left >= cardBox.left - 1 && fixBox.right <= cardBox.right + 1,
+                      where: `${Math.round(fixBox.left)}→${Math.round(fixBox.right)} in ${Math.round(cardBox.left)}→${Math.round(cardBox.right)}`,
+                      /* A `w-full` box always measures perfectly; a label that
+                         does not fit inside it is clipped and unreadable, and
+                         no box measurement would ever notice. */
+                      clipped: fixBtn.scrollWidth > fixBtn.clientWidth + 1,
+                    }
+                  : null,
+              warn: warnP ? (warnP.textContent ?? '').replace(/\s+/g, ' ').trim() : null,
               /* No control may stick out of the card sideways. */
               wide: card
                 ? [...card.querySelectorAll('*')]
@@ -141,7 +198,7 @@ async function main(): Promise<void> {
 
       const at = `${width}px`;
       is(!seen.overflow, `${at}: the page scrolls sideways with the rounds card on it`);
-      eq(seen.panels.length, 6, `${at}: the fixture drew ${seen.panels.length} panels, not six`);
+      eq(seen.panels.length, 8, `${at}: the fixture drew ${seen.panels.length} panels, not eight — the original six, plus his own layout and the shape no window can fix`);
       for (const [i, p] of seen.panels.entries()) {
         is(p.drawn, `${at}: panel ${i} did not draw the card at all — which is the exact failure this file was written after`);
         is(p.menusShut, `${at}: panel ${i} drew a round menu already OPEN — the resting card is what the heights below describe`);
@@ -198,6 +255,107 @@ async function main(): Promise<void> {
       /* ── case 3: the cap ──────────────────────────────────────────────── */
       eq(seen.panels[3].rows, 4, `${at}: three armed rounds plus the window's own hour is four rows; a switched-off round is not planned and not listed`);
       is(!seen.panels[3].addButton, `${at}: at the cap the add button must be gone rather than present and refusing`);
+
+      /*
+       * ─── case 6: HIS OWN LAYOUT, AND THE BUTTON THAT WAS NOT THERE ──────
+       *
+       * "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם."
+       *
+       * He lowered the account's protection to two hours in Settings. This
+       * card re-measured his 01:30 and 23:30 against two — correctly, they are
+       * two hours apart around the clock — and then named his fix in a
+       * sentence: "הורידו את החזרה ל-2 שעות", a number with no control
+       * anywhere that set it. The campaign's own window had lost its editor
+       * when the advanced queue controls came out at his request, so the card
+       * was a dead end that printed its own answer.
+       *
+       * Every number below comes off a real <button> in a real layout. A grep
+       * of the fixture's output cannot do this: it would match the sentence.
+       */
+      {
+        const his = seen.panels[HIS];
+        is(his.drawn, `${at}: his own layout did not draw the rounds card at all`);
+        is(
+          !!his.fix,
+          `${at}: his own layout draws NO button to lower the window — the card says "${his.warn}" and leaves him nothing to press, which is the bug`,
+        );
+        const fix = his.fix!;
+        eq(
+          fix.text,
+          'הורידו את החזרה ל-2 שעות',
+          `${at}: the button must read exactly the window repeatFitFor() would write — got "${fix.text}"`,
+        );
+        is(
+          fix.aria.includes('ניקוי ספות באר שבע'),
+          `${at}: the button's accessible name must name the campaign — a list of twenty cards has twenty of these — got "${fix.aria}"`,
+        );
+        is(!fix.off, `${at}: the button is disabled on a card nothing else is writing`);
+        is(fix.h >= 40 && fix.w >= 40, `${at}: the button is ${fix.w}×${fix.h} — a finger needs 40 in both directions`);
+        is(fix.inside, `${at}: the button sticks out of the card sideways — ${fix.where}`);
+        is(!fix.clipped, `${at}: the button's label does not fit inside it and is clipped — ${fix.w}px of box, ${fix.text}`);
+      }
+
+      /*
+       * ─── AND THE TWO LAWS THAT HOLD FOR EVERY CARD ON THE PAGE ──────────
+       *
+       * ONE NUMBER, NOT TWO. The sentence and the button used to be two copies
+       * of one arithmetic — the card named a fix while the writer clamped
+       * something else — and now both go through repeatFitFor(). So what the
+       * button offers has to be the gap the sentence above it just measured,
+       * and it has to be less than the window that sentence says is armed:
+       * otherwise the card is telling him two things at once, or offering to
+       * change nothing.
+       *
+       * AND NO BUTTON WHERE A WINDOW CANNOT HELP. Rounds closer together than
+       * the account's floor, or a repeat switched off, cannot be fixed by any
+       * window — repeatColumns() clamps the write straight back up. A button
+       * there would do nothing and still look like the answer, which is the
+       * decorative control the owner forbade by name.
+       */
+      for (const [i, p] of seen.panels.entries()) {
+        const cannotFix = !!p.warn && (/בפחות מ-\d+ שעות/.test(p.warn) || /הפעילו את/.test(p.warn));
+        if (cannotFix) {
+          is(!p.fix, `${at}: panel ${i} offers "${p.fix?.text}" for a verdict no window can fix — "${p.warn}"`);
+          continue;
+        }
+        if (!p.fix) continue;
+        const offered = Number(p.fix.text.match(/ל-(\d+) שעות/)?.[1]);
+        const named = Number(p.fix.aria.match(/ל-(\d+) שעות/)?.[1]);
+        const gapHours = Number(p.warn?.match(/הסבבים מרוחקים ([\d.]+) שעות/)?.[1]);
+        const armedHours = Number(p.warn?.match(/מוגדרת ל-(\d+) שעות/)?.[1]);
+        is(
+          Number.isFinite(offered) && Number.isFinite(named),
+          `${at}: panel ${i}'s button names no number — "${p.fix.text}" / "${p.fix.aria}"`,
+        );
+        is(
+          Number.isFinite(gapHours) && Number.isFinite(armedHours),
+          `${at}: panel ${i} draws the button but the sentence above it states no gap and no window — "${p.warn}"`,
+        );
+        eq(offered, named, `${at}: panel ${i}'s button reads ל-${offered} and its accessible name reads ל-${named} — one control, two numbers`);
+        eq(
+          offered,
+          Math.floor(gapHours),
+          `${at}: panel ${i} measures the rounds ${gapHours} hours apart and offers to lower the window to ${offered} — the card is naming two different numbers`,
+        );
+        is(
+          offered < armedHours,
+          `${at}: panel ${i} offers to lower the window to ${offered} when the sentence says it is already ${armedHours} — the button would change nothing`,
+        );
+      }
+
+      /* ── the two shapes a window cannot fix, by name ───────────────────── */
+      is(seen.panels[1].warns, `${at}: the repeat-off case must still state the problem`);
+      eq(seen.panels[1].fix, null, `${at}: with the repeat OFF no window helps — a button here would write a number and publish nothing`);
+      is(seen.panels[BELOW_FLOOR].warns, `${at}: six hours against the floor of twelve must still state the problem`);
+      eq(
+        seen.panels[BELOW_FLOOR].fix,
+        null,
+        `${at}: below the account's floor no window helps — repeatColumns() clamps the write straight back to the floor`,
+      );
+      is(
+        /בפחות מ-12 שעות/.test(seen.panels[BELOW_FLOOR].warn ?? ''),
+        `${at}: the below-the-floor sentence must name the floor it is measuring against — got "${seen.panels[BELOW_FLOOR].warn}"`,
+      );
 
       /*
        * ─── SECOND PASS: EACH ⋮ MENU, OPEN, ONE AT A TIME ──────────────────
@@ -261,6 +419,50 @@ async function main(): Promise<void> {
           /* Shut again, so the next menu is measured on its own row heights
              and the page never carries two open at once. */
           await menu.evaluate((d) => d.removeAttribute('open'));
+        }
+      }
+
+      /*
+       * ─── AND HIS BUTTON AT THE RUN CARD'S OWN WIDTHS ────────────────────
+       *
+       * 298px and 260px — what the dashboard's run card leaves this panel once
+       * its own padding is taken out, narrower than any viewport above.
+       *
+       * THE BUTTON IS `w-full`, SO ITS BOX CAN NEVER MEASURE AS OVERFLOWING.
+       * What goes wrong at 260 is the LABEL: clipped inside a box whose
+       * numbers are perfect, a 40px control the owner cannot read, and no
+       * bounding box would ever catch it. So scrollWidth is read against
+       * clientWidth here, which is the only measurement that can.
+       */
+      {
+        const fits = await page.evaluate(() =>
+          [...document.querySelectorAll('.fit-probe')].map((p) => {
+            const card = p.querySelector('[data-rounds-card]');
+            const btn = card
+              ? [...card.querySelectorAll('button')].find((b) => /^הורידו את החזרה /.test((b.textContent ?? '').replace(/\s+/g, ' ').trim()))
+              : undefined;
+            if (!card || !btn) return null;
+            const box = btn.getBoundingClientRect();
+            const cardBox = card.getBoundingClientRect();
+            return {
+              text: (btn.textContent ?? '').replace(/\s+/g, ' ').trim(),
+              w: Math.round(box.width),
+              h: Math.round(box.height),
+              inside: box.left >= cardBox.left - 1 && box.right <= cardBox.right + 1,
+              where: `${Math.round(box.left)}→${Math.round(box.right)} in ${Math.round(cardBox.left)}→${Math.round(cardBox.right)}`,
+              clipped: btn.scrollWidth > btn.clientWidth + 1,
+              cardWidth: Math.round(cardBox.width),
+            };
+          }),
+        );
+        eq(fits.length, 2, `${at}: the two run-card-width probes must be on the page, found ${fits.length}`);
+        for (const [i, f] of fits.entries()) {
+          is(!!f, `${at}: run-card-width probe ${i} draws no button to lower the window`);
+          const g = f!;
+          eq(g.text, 'הורידו את החזרה ל-2 שעות', `${at}: probe ${i} must offer the same two hours at ${g.cardWidth}px — got "${g.text}"`);
+          is(g.h >= 40 && g.w >= 40, `${at}: probe ${i}'s button is ${g.w}×${g.h} at ${g.cardWidth}px — a finger needs 40 in both directions`);
+          is(g.inside, `${at}: probe ${i}'s button sticks out of the card — ${g.where}`);
+          is(!g.clipped, `${at}: probe ${i}'s button label is clipped at ${g.cardWidth}px — the box measures right and the words do not fit inside it`);
         }
       }
 

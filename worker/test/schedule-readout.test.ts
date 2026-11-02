@@ -677,7 +677,7 @@ const st = (
        so the screen can say when it armed nothing. The claim is unchanged: the
        re-arm happens on a schedule change, and only when the repeat is on. */
     is(
-      /if \(repeat\.enabled\)[\s\S]{0,200}setCampaignRepeat\(campaign, repeat, next\)/.test(src),
+      /if \(repeat\.enabled\)[\s\S]{0,200}setCampaignRepeat\(campaign, repeat, next[^)]*\)/.test(src),
       `${f} re-arms the daily repeat when the hours change`,
     );
     /* AND IT SAYS SO WHEN IT COULD NOT. A round that has never gone out has no

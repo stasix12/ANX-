@@ -21,7 +21,7 @@
  *   npx tsx worker/test/rounds.test.ts
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { slotsFor } from '../../src/lib/social/slots';
 import { zonedHM } from '../../src/lib/social/time';
 import {
@@ -36,13 +36,16 @@ import {
   roundsSavedMessage,
   editRoundTime,
   nextFreeRoundStart,
+  repeatFitFor,
   repeatFloorFrom,
   roundsVsRepeat,
   roundsWindowFix,
   smallestRoundGapHours,
   weeklyPlanFor,
   type CampaignRepeat,
+  type CampaignRound,
   type CampaignSchedule,
+  type RoundsVerdict,
 } from '../../src/lib/social/campaign-schedule';
 
 let checks = 0;
@@ -627,4 +630,322 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
   }
 }
 
+
+/* ── 10. THE NUMBER THE CARD NAMES IS THE NUMBER THE BUTTON WRITES ─────── */
+/*
+ * "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם." — the owner, 02.11.2026.
+ *
+ * He lowered the account's protection to two hours in Settings. His campaign
+ * has rounds at 01:30 and 23:30 — two hours apart ACROSS MIDNIGHT — against a
+ * repeat window of twelve. The card re-measured his rounds against the two he
+ * had just set, correctly, and then printed "הורידו את החזרה ל-2 שעות": a
+ * number with NO CONTROL ANYWHERE THAT SETS IT, because the campaign's own
+ * window lost its editor when the advanced queue controls came out at his
+ * request. And underneath that sentence every writer clamped back to the
+ * hard-coded twelve, so even a write of two was raised again on its way to the
+ * database. The setting was accepted by Settings and undone by the save.
+ *
+ * WHAT THIS SECTION PROVES is the arithmetic and the pass-through: ONE copy of
+ * "which window would let these rounds publish" (repeatFitFor), asked by both
+ * the writer and the card's button so the two cannot name one number and write
+ * another — and every caller handing down the account's floor instead of the
+ * constant. Whether the button is drawn and reachable is a measured question
+ * and belongs to the browser suite; this file owns the numbers and the wiring.
+ */
+{
+  const r = (at: string, enabled = true) => ({ at, enabled });
+
+  /* ── THE ONE FIX, ON EVERY VERDICT ────────────────────────────────────── */
+  {
+    /* A window longer than the gap is the ONE case a window can fix. */
+    const long = roundsVsRepeat(['03:30', '15:30'], repeat(true, 20));
+    eq(long.reason, 'window-too-long', 'his original example is still the fixable case');
+    eq(repeatFitFor(long, MIN_REPEAT_HOURS), 12, 'and the fix is the gap — twelve hours, which is what roundsWindowFix has always written');
+
+    /* AND IT IS THE GAP, NOT THE FLOOR. On an account whose protection is two
+       hours, rounds twelve hours apart must get a window of TWELVE: lowering
+       it to the floor would be the app choosing a tighter protection than his
+       rounds need, on his Facebook account, without being asked. */
+    const wide = roundsVsRepeat(['03:30', '15:30'], repeat(true, 20), 2);
+    eq(wide.reason, 'window-too-long', 'twelve hours apart on a two-hour floor is fixable too');
+    eq(repeatFitFor(wide, 2), 12, 'and the fix is the twelve his rounds need, not the two his floor would also permit');
+    eq(repeatFitFor(roundsVsRepeat(['06:00', '20:00'], repeat(true, 20), 2), 2), 10, 'and ten for a ten-hour gap — the arithmetic is the gap, whatever the floor is');
+
+    /*
+     * THE OTHER HALF OF THE Math.max, and what it is really defending — said
+     * plainly rather than dressed up as engine output. Two things make the
+     * floor side unreachable from roundsVsRepeat(): it answers
+     * 'closer-than-the-floor' BEFORE 'window-too-long', so a fixable verdict
+     * always has smallestGapHours >= floorHours, and neededHours is
+     * Math.floor of that gap, which for an integer floor is still >= it. The
+     * clamp therefore defends against a fractional floor or a change in the
+     * order of those two branches — and the ORDER is pinned by section 5. So
+     * it is driven here on a verdict built by hand, and this comment is here
+     * so nobody reads that as the engine producing it.
+     */
+    const byHand: RoundsVerdict = { ok: false, smallestGapHours: 2.5, neededHours: 2, reason: 'window-too-long' };
+    eq(repeatFitFor(byHand, 3), 3, 'the fix never goes under the floor it was given — a window the database would refuse is not a fix');
+
+    /* ── AND NULL EVERYWHERE A WINDOW CANNOT HELP ───────────────────────── */
+    const fine = roundsVsRepeat(['03:30', '15:30'], repeat(true, 12));
+    eq(fine.reason, 'ok', 'a window that already fits');
+    eq(repeatFitFor(fine, MIN_REPEAT_HOURS), null, 'nothing to offer when both rounds already publish — a button here would rewrite a setting for no reason');
+
+    const off = roundsVsRepeat(['03:30', '15:30'], repeat(false));
+    eq(off.reason, 'repeat-off', 'the switch is off');
+    eq(repeatFitFor(off, MIN_REPEAT_HOURS), null, 'no window makes a second publication legal while חזרה יומית is off — the fix is his switch, and the card must offer THAT');
+
+    const closer = roundsVsRepeat(['08:00', '14:00'], repeat(true, 12));
+    eq(closer.reason, 'closer-than-the-floor', 'six hours apart on a twelve-hour floor');
+    eq(
+      repeatFitFor(closer, MIN_REPEAT_HOURS),
+      null,
+      'rounds closer together than the account floor cannot be fixed by ANY window — a button there would write a number, the floor would still refuse the gap, and that is the decorative button one layer down',
+    );
+
+    /* ── AN OMITTED FLOOR BEHAVES AS THE TWELVE IT ALWAYS WAS ───────────── */
+    const needsFive: RoundsVerdict = { ok: false, smallestGapHours: 5, neededHours: 5, reason: 'window-too-long' };
+    eq(repeatFitFor(needsFive), MIN_REPEAT_HOURS, 'with no floor passed the default is MIN_REPEAT_HOURS, so an old caller writes exactly what it used to');
+    eq(repeatFitFor(needsFive, 2), 5, 'and an account that lowered its protection gets its own number through');
+    eq(repeatFitFor(long), repeatFitFor(long, MIN_REPEAT_HOURS), 'the default and the constant are the same answer on real engine output too');
+  }
+
+  /* ── ONE ARITHMETIC: THE WRITER AND THE CARD CANNOT DRIFT ──────────────-- */
+  {
+    /*
+     * THE ASSERTION THIS WHOLE EXPORT EXISTS FOR. roundsWindowFix() decides
+     * what the SAVE writes; repeatFitFor() decides what the BUTTON writes and
+     * what the sentence names. They were one expression copied into one place
+     * and are now one function asked twice — and this table is what stops
+     * anybody re-inlining it.
+     */
+    const table: [string, CampaignRound[], CampaignRepeat, number][] = [
+      ['03:30', [r('15:30')], repeat(true, 20), MIN_REPEAT_HOURS],
+      ['01:30', [r('23:30')], repeat(true, 12), 2],
+      ['06:00', [r('20:00')], repeat(true, 20), 2],
+      ['03:30', [r('06:30'), r('18:30')], repeat(true, 20), 3],
+      ['08:00', [r('12:00')], repeat(true, 20), MIN_REPEAT_HOURS],
+      ['03:30', [r('15:30')], repeat(false, 20), MIN_REPEAT_HOURS],
+      ['08:00', [], repeat(true, 20), MIN_REPEAT_HOURS],
+      ['03:30', [r('15:30', false)], repeat(true, 20), MIN_REPEAT_HOURS],
+      ['03:30', [r('15:30')], repeat(true, 12), MIN_REPEAT_HOURS],
+    ];
+    let offered = 0;
+    for (const [start, rounds, rep, floor] of table) {
+      const fix = roundsWindowFix(sched(start), rounds, rep, floor);
+      const fit = repeatFitFor(roundsVsRepeat(roundStarts(sched(start), rounds), rep, floor), floor);
+      const name = `${start} + [${rounds.map((x) => `${x.at}${x.enabled ? '' : ' off'}`).join(', ')}], repeat ${rep.enabled ? rep.minHours : 'off'}, floor ${floor}`;
+      eq(fix.lowerTo, fit, `the save and the card must name the same window for ${name} — one names it, the other writes it`);
+      if (fit !== null) offered += 1;
+    }
+    is(offered >= 4, `only ${offered} of the rows above produce a window at all — a table of nulls would prove nothing`);
+    /* And with BOTH floors left out, which is every caller that has not been
+       told the account's number yet. */
+    eq(
+      roundsWindowFix(sched('03:30'), [r('15:30')], repeat(true, 20)).lowerTo,
+      repeatFitFor(roundsVsRepeat(roundStarts(sched('03:30'), [r('15:30')]), repeat(true, 20))),
+      'and they agree on their defaults too, so the agreement does not depend on being passed a floor',
+    );
+  }
+
+  /* ── HIS OWN CASE, AS ARITHMETIC ───────────────────────────────────────── */
+  {
+    const floor = repeatFloorFrom({ repeatFloorHours: 2 });
+    eq(floor, 2, 'the two hours he typed into Settings survive repeatFloorFrom() — anything else and the rest of this block is about a number he never set');
+
+    const starts = roundStarts(sched('01:30'), [r('23:30')]);
+    eq(starts, ['01:30', '23:30'], 'his layout: the hour on the card and one extra round');
+
+    const his = roundsVsRepeat(starts, repeat(true, 12), floor);
+    eq(his.smallestGapHours, 2, '01:30 and 23:30 are TWO hours apart, around midnight — not twenty-two, because the campaign publishes again tomorrow');
+    eq(his.reason, 'window-too-long', 'so on his own floor the gap is legal and the campaign window is the only thing in the way');
+    eq(repeatFitFor(his, floor), 2, 'and the number the card names is two — the window his rounds actually need');
+
+    /* AND PRESSING IT GENUINELY MAKES HIS ROUNDS PUBLISHABLE. Asked of the
+       same function the card and the engine ask, not of my arithmetic about
+       it: a button that writes a number which still refuses to publish is the
+       complaint he opened with, moved one screen along. */
+    const after = roundsVsRepeat(starts, repeat(true, repeatFitFor(his, floor) as number), floor);
+    eq(after.reason, 'ok', 'after the write both of his rounds are allowed to reach the same groups');
+    is(after.ok, 'which is the whole of what he asked for');
+
+    /* And the save agrees, so the two routes to the same number cannot differ. */
+    eq(roundsWindowFix(sched('01:30'), [r('23:30')], repeat(true, 12), floor).lowerTo, 2, 'and saving his rounds would write the same two');
+
+    /*
+     * ─── THE STATE HE WAS ACTUALLY STUCK IN ────────────────────────────
+     *
+     * The same layout with the floor left at its default: his rounds are
+     * CLOSER than the protection, so no window helps and there is nothing to
+     * offer — which is why the Settings control had to exist first, and why
+     * this button must not appear here.
+     */
+    const stuck = roundsVsRepeat(starts, repeat(true, 12));
+    eq(stuck.reason, 'closer-than-the-floor', 'on the old hard twelve his two hours read as too close, and no campaign setting could have answered it');
+    eq(repeatFitFor(stuck), null, 'so no window is offered — the sentence points at the protection in Settings instead, which is the control he went and used');
+  }
+
+  /* ── THE PASS-THROUGH. EVERY WRITER GETS THE ACCOUNT'S FLOOR ──────────── */
+  /*
+   * These read raw source, and a raw-source guard is worth exactly what it is
+   * mutation-tested at: two guards in this suite once passed while the feature
+   * they named was deleted, because `{false && …}` leaves every string in
+   * place. Each check below was broken in src/, seen to fail with its own
+   * message, and restored.
+   */
+  {
+    /* Comments out, so a sentence ABOUT a call is never read as a call. */
+    const bare = (text: string) =>
+      text
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/(^|[^:\w])\/\/[^\n]*/g, '$1');
+
+    /* The arguments of one call, split at top-level commas. */
+    const argsAt = (text: string, open: number): string[] => {
+      const out: string[] = [];
+      let depth = 0;
+      let cur = '';
+      for (let i = open; i < text.length; i += 1) {
+        const ch = text[i];
+        if (ch === '(' || ch === '[' || ch === '{') {
+          depth += 1;
+          if (depth === 1) continue;
+        } else if (ch === ')' || ch === ']' || ch === '}') {
+          depth -= 1;
+          if (depth === 0) {
+            out.push(cur);
+            break;
+          }
+        } else if (ch === ',' && depth === 1) {
+          out.push(cur);
+          cur = '';
+          continue;
+        }
+        cur += ch;
+      }
+      return out.map((a) => a.trim()).filter((a) => a !== '');
+    };
+
+    /* ── THE TWO WRITERS THEMSELVES ─────────────────────────────────────── */
+    const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+    {
+      const start = client.indexOf('export async function setCampaignRepeat(');
+      const next = client.indexOf('\nexport ', start + 10);
+      const fn = bare(client.slice(start, next > start ? next : undefined));
+      is(fn.length > 300, 'setCampaignRepeat could not be isolated — every check in this block would be vacuous');
+      is(
+        /repeatColumns\(repeat,\s*floorHours\)/.test(fn),
+        'setCampaignRepeat must write repeatColumns(repeat, floorHours): repeatColumns clamps UP to its floor, so writing without one raises a two-hour window back to twelve on its way to the database — "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם" in its purest form',
+      );
+      is(!/repeatColumns\(repeat\)/.test(fn), 'and must not have a second, floorless write left beside it');
+      is(/floorHours: number = MIN_REPEAT_HOURS/.test(fn), 'and the floor is a defaulted parameter, so a caller with no settings row behaves exactly as it always has');
+    }
+    {
+      const save = bare(client.slice(client.indexOf('export async function saveCampaignRounds'), client.indexOf('export async function setCampaignRepeat(')));
+      is(save.length > 400, 'saveCampaignRounds could not be isolated — every check in this block would be vacuous');
+      is(
+        /readRepeat\(campaign,\s*floorHours\)/.test(save),
+        "saveCampaignRounds must read readRepeat(campaign, floorHours): readRepeat clamps the stored window UP to the floor it is given, so on the default it judges a two-hour window as twelve and lowers nothing the owner needs",
+      );
+      is(!/readRepeat\(campaign\)/.test(save), 'and must not read it on the default floor anywhere in that body');
+    }
+
+    /* ── AND EVERY CALL SITE, SCANNED ───────────────────────────────────── */
+    /*
+     * A SCAN, NOT A LIST OF LINES. The floor was hard-coded in eleven places
+     * at once; a guard naming the ones that were fixed would say nothing about
+     * the twelfth somebody adds next week. So every .ts/.tsx under src/ is
+     * walked and every call is counted — a new screen that forgets the floor
+     * fails this without anybody remembering to come back here.
+     */
+    const SRC = new URL('../../src/', import.meta.url);
+    const srcFiles = readdirSync(SRC, { recursive: true, encoding: 'utf8' }).filter((f) => /\.tsx?$/.test(f));
+    is(srcFiles.length > 20, `only ${srcFiles.length} source files were found under src/ — the scan below would be vacuous`);
+    /* Floors, not exact counts: a screen may legitimately stop calling one of
+       these, and lowering a number here is a deliberate act. */
+    for (const [name, atLeast] of [['setCampaignRepeat', 5], ['saveCampaignRounds', 2]] as [string, number][]) {
+      let sites = 0;
+      for (const rel of srcFiles) {
+        const text = bare(readFileSync(new URL(rel, SRC), 'utf8'));
+        const re = new RegExp(`(?<![\\w$.])${name}\\s*\\(`, 'g');
+        for (let m = re.exec(text); m; m = re.exec(text)) {
+          if (/function\s+$/.test(text.slice(Math.max(0, m.index - 40), m.index))) continue;
+          sites += 1;
+          const args = argsAt(text, m.index + m[0].length - 1);
+          is(
+            args.length >= 4,
+            `${rel}: ${name}(${args.join(', ')}) passes ${args.length} arguments and not four — without the account's floor this write clamps his window back up to ${MIN_REPEAT_HOURS}`,
+          );
+        }
+      }
+      is(sites >= atLeast, `only ${sites} call sites of ${name}( were found in src/ (expected at least ${atLeast}) — the per-site check above was vacuous`);
+    }
+
+    /* ── THE LIST SCREEN, WHICH ALREADY HAD THE NUMBER AND THREW IT AWAY ── */
+    {
+      const listSrc = bare(readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8'));
+      const loadStart = listSrc.indexOf('const load = useCallback');
+      const loadEnd = listSrc.indexOf('}, []);', loadStart);
+      is(loadStart > 0 && loadEnd > loadStart, 'load() could not be isolated in the campaigns screen — the check below would be vacuous');
+      is(
+        /setFloorHours\(repeatFloorFrom\(lim\)\)/.test(listSrc.slice(loadStart, loadEnd)),
+        "the campaigns screen's load() already read getLimits() and threw the repeat floor away — it must keep it, or this list goes on judging his rounds against twelve while the dashboard judges them against two",
+      );
+      is(
+        /floorHours=\{floorHours\}/.test(listSrc),
+        'and must hand that floor to the campaign card, or the same campaign reads one way on the dashboard and another in the list',
+      );
+      is(
+        /useState<number>\(MIN_REPEAT_HOURS\)/.test(listSrc),
+        'and until the first load answers it holds MIN_REPEAT_HOURS — a screen that does not yet know the account’s number must not act as though the protection were lower than it is',
+      );
+    }
+
+    /* ── THE SENTENCE, AND THE BUTTON THAT NOW ANSWERS IT ───────────────── */
+    {
+      const panel = bare(readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8'));
+      const from = panel.indexOf("verdict.reason === 'closer-than-the-floor'");
+      const to = panel.indexOf("verdict.reason === 'repeat-off'", from);
+      is(from > 0 && to > from, 'the closer-than-the-floor sentence could not be isolated in the panel — the checks below would be vacuous');
+      const sentence = panel.slice(from, to);
+      is(
+        /בפחות מ-\{floorHours\} שעות/.test(sentence),
+        'the sentence must name the floor it actually judged against — printing the constant told him the system refuses under twelve hours on the very screen that had just measured him against two',
+      );
+      is(!/MIN_REPEAT_HOURS/.test(sentence), 'and the hard-coded constant must be gone from that sentence, not merely joined by the prop');
+      /* The number named and the number written come from one call. */
+      is(/repeatFitFor\(verdict, floorHours\)/.test(panel), 'the card must ask repeatFitFor() for the window it offers, against the account floor');
+      is(
+        /onRepeatChange\(\{ \.\.\.repeat, minHours: repeatFit \}\)/.test(panel),
+        'and the button must write the very number it printed — a button labelled with one window that writes another is worse than the sentence it replaced',
+      );
+      /*
+       * AND THE TRIPWIRE FOR THE WAY THESE CHECKS GET DEFEATED. Two guards in
+       * this suite once passed while the thing they named was gone, because
+       * `{false && …}` leaves every string in the file. So the warning block
+       * is isolated and a render condition hard-wired to false is refused
+       * inside it — the one mutation a text guard cannot otherwise see. Scoped
+       * to that block rather than the file, because `false &&` elsewhere in a
+       * component is somebody else's business.
+       *
+       * WHAT THIS DOES NOT PROVE is that the button renders, is on screen and
+       * is reachable at 360px. That is measured, in the browser suite. This is
+       * a fence, not a measurement.
+       */
+      const blockFrom = panel.indexOf('verdict && !verdict.ok && (');
+      const blockTo = panel.indexOf('</button>', panel.indexOf('minHours: repeatFit'));
+      is(blockFrom > 0 && blockTo > blockFrom, 'the warning block could not be isolated in the panel — the two checks below would be vacuous');
+      const block = panel.slice(blockFrom, blockTo);
+      is(
+        /repeatFit !== null && repeat && onRepeatChange && \(/.test(block),
+        'the button must be drawn exactly when pressing it would change the answer — and a read-only caller, with no onRepeatChange, keeps the sentence that names the number instead',
+      );
+      is(
+        !/\bfalse\s*&&/.test(block),
+        'a render condition hard-wired to false is inside the warning block — that is exactly how a guard over raw source passes while the feature it names is deleted',
+      );
+    }
+  }
+}
 console.log(`rounds OK — ${checks} assertions over the list, the clock, the shipped slot engine and the one question the card must answer`);

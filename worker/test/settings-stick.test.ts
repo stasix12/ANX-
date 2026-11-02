@@ -108,7 +108,7 @@ for (const [name, page] of SCREENS) {
     !/before\.find\(\(o\) => o\.id === c\.id\)/.test(fn),
     'and it must not still be reverting the campaigns list — that list is refilled by load() and reverting it fights the read',
   );
-  is(/\[toast, load\]/.test(fn.slice(fn.length - 400)) || /\[toast, load\],/.test(page), 'changeSchedule must declare load() among its dependencies now that the settle path depends on the read');
+  is(/\[toast, load[,\]]/.test(fn.slice(fn.length - 400)) || /\[toast, load[,\]]/.test(page), 'changeSchedule must declare load() among its dependencies now that the settle path depends on the read');
 }
 
 /* ───────── 4. the queue tuner writes what it edits, and no more ────────── */

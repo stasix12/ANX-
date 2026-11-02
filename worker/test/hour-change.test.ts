@@ -122,11 +122,11 @@ for (const [name, rel] of [
   /* And the original guard must survive: with the switch ON, setCampaignRepeat
      does the full job, including creating a row from the launch's group list. */
   is(
-    /if \(repeat\.enabled\) \{[\s\S]{0,200}await setCampaignRepeat\(campaign, repeat, next\)/.test(page),
+    /if \(repeat\.enabled\) \{[\s\S]{0,200}await setCampaignRepeat\(campaign, repeat, next[^)]*\)/.test(page),
     `${name} must still re-arm through setCampaignRepeat when the switch is ON — it creates the row a never-repeated round has none of`,
   );
   is(
-    page.indexOf('syncWeeklyHours(campaign.id, next, readRounds(campaign))') < page.indexOf('setCampaignRepeat(campaign, repeat, next)'),
+    page.indexOf('syncWeeklyHours(campaign.id, next, readRounds(campaign))') < page.indexOf('setCampaignRepeat(campaign, repeat, next'),
     `${name}: the two branches must be exclusive, not both writing the same row`,
   );
 }

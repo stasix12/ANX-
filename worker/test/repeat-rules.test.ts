@@ -404,7 +404,7 @@ async function main(): Promise<void> {
       is(/עוד לא יצא אף פעם/.test(page), `${where} tells him the round has never gone out`);
       /* AND ON THE SCHEDULE SAVE TOO, which is the moment he actually asked
          about: "מתי שאני משנה ימים / שעות שזה יתעדכן באותו הרגע". */
-      is(/const armedNow = await setCampaignRepeat\(campaign, repeat, next\);/.test(page), `${where} re-arms on a schedule change`);
+      is(/const armedNow = await setCampaignRepeat\(campaign, repeat, next[^;]*\);/.test(page), `${where} re-arms on a schedule change`);
       is(/if \(!armedNow\.armed\)/.test(page), `${where} and says so on that save, not on an evening he spends waiting`);
     }
 

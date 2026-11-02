@@ -1283,7 +1283,7 @@ console.log('unit tests OK');
     'stopCampaign no longer retires the schedules — the re-arm below would be pointless',
   );
   const reopenAt = page.indexOf('await reopenCampaign(');
-  const rearmAt = page.indexOf('await setCampaignRepeat(campaign, repeat, schedule)');
+  const rearmAt = page.indexOf('await setCampaignRepeat(campaign, repeat, schedule');
   assert.ok(reopenAt > -1, 'the campaigns page no longer re-opens a stopped campaign');
   assert.ok(rearmAt > -1, 'the campaigns page re-opens a stopped campaign without re-arming its schedule — the planner will never see it again');
   assert.ok(

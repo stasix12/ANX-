@@ -364,6 +364,24 @@ const body = cases
       onTune: () => {},
       schedule: (schedule as CampaignSchedule | null) ?? undefined,
       onScheduleChange: schedule ? () => {} : undefined,
+      /*
+       * סבבים ביום (ריצות) — PASSED, BUT NOT MEASURED HERE, and the
+       * difference cost me an hour so it is written down.
+       *
+       * The hero draws CampaignSchedulePanel only behind `editingSchedule`, a
+       * useState that is false on a server render, so renderToStaticMarkup
+       * never reaches it. A grep for `data-schedule` in this fixture's output
+       * matches `data-schedule-board` — a different component — which is
+       * exactly how a card that rendered NOWHERE produced a green run of 170
+       * assertions. The card is measured by worker/test/rounds-card.test.ts,
+       * which renders the panel itself.
+       *
+       * Kept here because it is what the real screen passes when the owner
+       * taps "ערוך מועד", and a prop the fixture omits is a prop no type
+       * error will ever remind anyone about.
+       */
+      rounds: schedule ? [{ at: '15:30', enabled: true }] : undefined,
+      onRoundsChange: schedule ? () => {} : undefined,
     } as never),
   ))}</div>`,
   )

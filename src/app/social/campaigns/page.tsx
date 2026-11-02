@@ -36,11 +36,10 @@ import {
   rescheduleCampaignQueue,
   setCampaignRepeat,
   syncWeeklyHours,
-  stopCampaign,
-} from '@/lib/social/client';
+  stopCampaign, saveCampaignRounds,} from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
-import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds,} from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { counted } from '@/lib/social/time';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
@@ -542,6 +541,39 @@ export default function CampaignsPage() {
    * that publishes to every group in the round tomorrow morning — and it is
    * written and reloaded immediately so the card shows what it just armed.
    */
+  /*
+   * סבבים ביום — the hours, then the plan the engine walks.
+   *
+   * Optimistic like every other write on this screen, because the 60-second
+   * poll owns `campaigns` and replaces it wholesale: without writing the new
+   * value into the list, the card visibly reverts mid-edit, which is the
+   * complaint "שינויים בהגדרות קמפיין לא נשמרים" in its original form.
+   */
+  const changeRounds = useCallback(
+    async (campaign: Campaign, next: CampaignRound[]) => {
+      setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
+      try {
+        const written = roundsColumn(next);
+        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign));
+        setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? { ...c, ...written } : c)));
+        const armed = written.schedule_rounds.filter((r) => r.enabled).length;
+        toast(
+          result.skippedNoDay
+            ? 'הסבבים נשמרו, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.'
+            : armed === 0
+              ? `הסבבים הנוספים של "${campaign.name}" כובו — השעות נשמרו ואפשר להחזיר אותם בכל רגע`
+              : `"${campaign.name}" יפרסם ${armed + 1} סבבים בכל יום פרסום`,
+          result.skippedNoDay ? 'info' : 'success',
+        );
+      } catch (err) {
+        toast(friendlyMessage(err, 'שמירת הסבבים נכשלה.'), 'error');
+      } finally {
+        setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
+      }
+    },
+    [toast],
+  );
+
   const changeRepeat = useCallback(
     async (campaign: Campaign, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));

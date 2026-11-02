@@ -15,7 +15,7 @@ import {
   type CampaignState,
   type RunTone,
 } from '@/lib/social/campaign';
-import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { accountGapSeconds } from '@/lib/social/rules';
 import { countdownTo } from '@/lib/social/countdown';
@@ -265,6 +265,8 @@ export function LiveCampaignHero({
   onScheduleChange,
   repeat,
   onRepeatChange,
+  rounds,
+  onRoundsChange,
   spacing,
   scheduleBusy = false,
 }: {
@@ -325,6 +327,9 @@ export function LiveCampaignHero({
    * cannot write one must not offer it.
    */
   repeat?: CampaignRepeat;
+  /* סבבים ביום — the dashboard draws the same panel, so it carries the same pair. */
+  rounds?: CampaignRound[];
+  onRoundsChange?: (next: CampaignRound[]) => void;
   onRepeatChange?: (next: CampaignRepeat) => void;
   /**
    * The account-wide spacing rule, which the card cannot see from the campaign
@@ -676,6 +681,8 @@ export function LiveCampaignHero({
             onChange={onScheduleChange}
             repeat={repeat}
             onRepeatChange={onRepeatChange}
+            rounds={rounds}
+            onRoundsChange={onRoundsChange}
             campaignName={campaign.name}
             disabled={scheduleBusy}
             /* The second gate, so the panel can say which of the two is

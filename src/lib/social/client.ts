@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
-import { MIN_GAP_SECONDS, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, weeklyPlanFor, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
+import { MIN_GAP_SECONDS, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, weeklyPlanFor, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey, renderPostText } from './compose';
@@ -1159,6 +1159,43 @@ export async function syncWeeklyHours(
     start: schedule.start,
   });
   return { rearmed: stale.length, skippedNoDay: false };
+}
+
+/**
+ * ─── סבבים ביום (ריצות): SAVE THE HOURS, THEN RE-ARM THE PLAN ────────────
+ *
+ * Two writes, in this order, and the order is the point: the column is the
+ * owner's intent and social_schedules.weekly is what the engine reads. A card
+ * that wrote only the first would show two rounds and publish one.
+ *
+ * IT SAYS WHEN IT CANNOT SAVE. schedule_rounds arrives with
+ * supabase/social-latest.sql; until that is run PostgREST answers PGRST204 and
+ * every update throws something that means nothing to the person reading it.
+ * This turns that one case into the sentence that names the file — the same
+ * discipline as createSchedule's missing-column retry above, and the reason no
+ * screen in this product ever names a numbered migration.
+ */
+export class RoundsColumnMissing extends Error {
+  constructor() {
+    super('כדי להפעיל סבבים ביום צריך להריץ פעם אחת את supabase/social-latest.sql ב-Supabase. זה מוסיף עמודה ריקה אחת ולא נוגע בשום קמפיין קיים.');
+    this.name = 'RoundsColumnMissing';
+  }
+}
+
+export async function saveCampaignRounds(
+  campaign: Pick<Campaign, 'id' | 'name'>,
+  rounds: CampaignRound[],
+  schedule: CampaignSchedule,
+): Promise<{ rearmed: number; skippedNoDay: boolean }> {
+  const written = roundsColumn(rounds);
+  const res = await db().from('social_campaigns').update(written).eq('id', campaign.id);
+  if (res.error) {
+    if (isMissingColumnNamed(res.error as { code?: string; message?: string }, 'schedule_rounds')) throw new RoundsColumnMissing();
+    throw new Error(res.error.message);
+  }
+  /* The hours the engine will actually walk — same builder, same list. A
+     round that is switched off is in the column and not in the plan. */
+  return syncWeeklyHours(campaign.id, schedule, written.schedule_rounds);
 }
 
 export async function setCampaignRepeat(

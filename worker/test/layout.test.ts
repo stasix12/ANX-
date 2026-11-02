@@ -111,8 +111,25 @@ assert.deepEqual(
  * exempt — the media uploader's file input is one, opened by a labelled button.
  */
 const unlabelled: string[] = [];
+/*
+ * COMMENTS ARE BLANKED FIRST, AND THE LINE NUMBERS SURVIVE IT.
+ *
+ * This walked the raw source, so a comment that MENTIONS a control was read
+ * as one: a block comment in CampaignSchedulePanel.tsx explaining that the
+ * rounds card deliberately contains no <select> was reported as an unlabelled
+ * <select>, and the only way to satisfy it would have been to delete the
+ * explanation. That is the fourth guard in this suite to be fooled by a
+ * sentence quoting code, which is why every one of them now strips.
+ *
+ * Block comments are replaced by their own newlines rather than removed, so
+ * `${file}:${i + 1}` still points at the real line.
+ */
+const strip = (text: string): string =>
+  text
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/^(\s*)\/\/.*$/gm, '$1');
 for (const file of files) {
-  const lines = readFileSync(file, 'utf8').split('\n');
+  const lines = strip(readFileSync(file, 'utf8')).split('\n');
   lines.forEach((line, i) => {
     if (!/<(input|textarea|select)\b/.test(line)) return;
     const chunk = lines.slice(i, i + 6).join('\n');

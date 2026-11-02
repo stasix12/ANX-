@@ -223,7 +223,16 @@ const body = cases.map(([label, c, s, posts, media, paused]) => `
       /* CHZARA, so the repeat row the reference draws is measured too. The
          panel draws it only when BOTH arrive. */
       repeat: repeats[(c as { id: string }).id] ?? DEFAULT_CAMPAIGN_REPEAT,
-      onRepeatChange: schedules[(c as { id: string }).id] ? () => {} : undefined } as never),
+      onRepeatChange: schedules[(c as { id: string }).id] ? () => {} : undefined,
+      /*
+       * סבבים ביום IS NOT ON THIS CARD, and the number is why. Measured here
+       * with the rounds on, the tallest fixture went 901 → 1008px at 360px
+       * against a 910 ceiling — the card is already full. The owner's own
+       * reference draws the rounds on the RUN card (it sits beside "הגדרות
+       * תור מתקדמות" and "סיים את הסבב"), which is where it is wired, and
+       * render-hero.tsx measures it there.
+       */
+      } as never),
   )}</div>`).join('');
 
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">

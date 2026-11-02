@@ -9,12 +9,18 @@ import {
   daysLabel,
   gapLabel,
   scheduleSummary,
+  MAX_EXTRA_ROUNDS,
+  MIN_REPEAT_HOURS,
+  plusHours,
+  roundStarts,
+  roundsVsRepeat,
   type CampaignRepeat,
+  type CampaignRound,
   type CampaignSchedule,
 } from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
-import { CalendarIcon, CheckIcon, ChevronDownIcon, ClockIcon, RepeatIcon } from '@/components/icons';
+import { CalendarIcon, CheckIcon, ChevronDownIcon, ClockIcon, MoreIcon, PlusIcon, RepeatIcon, TrashIcon } from '@/components/icons';
 import { NextPublication } from './NextPublication';
 import { Toggle } from './ui';
 
@@ -77,6 +83,8 @@ export function CampaignSchedulePanel({
   disabled = false,
   repeat,
   onRepeatChange,
+  rounds,
+  onRoundsChange,
   accountFloorSeconds,
   neverLaunched = false,
   showHeader = true,
@@ -97,6 +105,17 @@ export function CampaignSchedulePanel({
    */
   repeat?: CampaignRepeat;
   onRepeatChange?: (next: CampaignRepeat) => void;
+  /**
+   * סבבים ביום (ריצות) — the SECOND and later occasions in one day.
+   *
+   * "הפעלת מספר סבבי פרסום לאותו קמפיין באותו היום." Pass both or neither,
+   * for the same reason the repeat does: the effect of a round is a time in
+   * social_schedules.weekly, and a screen that drew the list without being
+   * able to write it would show rounds that never run. Round ONE is not in
+   * here — it is schedule.start, the hour already on the card.
+   */
+  rounds?: CampaignRound[];
+  onRoundsChange?: (next: CampaignRound[]) => void;
   /** Only for the accessible names — four controls per card in a list of them. */
   campaignName: string;
   /** While the campaign's own row is being written by something else. */
@@ -161,6 +180,19 @@ export function CampaignSchedulePanel({
 }) {
   const set = (patch: Partial<CampaignSchedule>) => onChange({ ...schedule, ...patch });
   const canRepeat = Boolean(repeat && onRepeatChange);
+  const canRounds = Boolean(rounds && onRoundsChange);
+  /*
+   * EVERY HOUR THIS CAMPAIGN OPENS AT, round one first — the same function
+   * the weekly plan is built from, so what the card counts and what the
+   * engine plans cannot disagree. That pair disagreeing is the one way this
+   * product has repeatedly got itself into trouble.
+   */
+  const starts = roundStarts(schedule, rounds ?? []);
+  const verdict = repeat ? roundsVsRepeat(starts, repeat) : null;
+  /* ON when any extra round is armed. There is no separate "rounds enabled"
+     column and there must not be one: the switch IS the rounds, and a card
+     that could be on with nothing armed would be a promise about nothing. */
+  const roundsOn = (rounds ?? []).some((r) => r.enabled);
 
   /*
    * MULTI SELECT, and a tap is a toggle in both directions — including the
@@ -407,6 +439,207 @@ export function CampaignSchedulePanel({
           targetImage={nextTargetImage}
           className="mt-1.5"
         />
+      )}
+
+      {/* ─── 6. סבבים ביום (ריצות) — more than one occasion in a day ────── */}
+      {canRounds && rounds && onRoundsChange && (
+        /*
+         * "הפעלת מספר סבבי פרסום לאותו קמפיין באותו היום."
+         *
+         * ROUND ONE IS NOT IN THIS LIST. It is the hour in the block above,
+         * and the list holds the second and later occasions — an hour stored
+         * in two places is the defect this product has been bitten by twice.
+         * So the rows are NUMBERED from the combined list (roundStarts) while
+         * only rows 2..n are editable here, and the numbering is by the clock
+         * rather than by insertion order, because that is the order the
+         * engine walks them in.
+         *
+         * NO <select> AND NO aria-pressed IN THIS CARD, deliberately. The
+         * measured suite counts exactly two selects and exactly seven pressed
+         * chips inside [data-schedule] and checks they share a row and a
+         * width; a control here carrying either would join those sets and
+         * break a guard that is about the block above. The hour and the gap
+         * are TEXT, which is also what the owner's own reference draws — the
+         * editing lives behind the ⋮, in a <details> that needs no state, so
+         * this panel stays presentational.
+         *
+         * NO DRAG HANDLE, though the reference draws one. The rows are
+         * ordered by the clock, so dragging one above another would reorder
+         * nothing — and "יש לממש את הפונקציונליות בפועל ולא ליצור כפתורים
+         * דקורטיביים" outranks a pixel for a control whose function cannot
+         * exist.
+         */
+        <div className="mt-1.5 rounded-2xl border border-ink-600 bg-ink-900 p-2.5">
+          <div className="flex items-start gap-2">
+            <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-brand-300/15">
+              <RepeatIcon className="h-3.5 w-3.5 text-brand-400" />
+            </span>
+            <span className="min-w-0 grow">
+              <span className="block text-[12.5px] font-extrabold leading-4 text-brand-400">
+                סבבים ביום (ריצות)
+                <span className="ms-1 align-middle rounded-md bg-brand-300/15 px-1 py-px text-[9px] font-extrabold leading-3 text-brand-400">חדש</span>
+              </span>
+              <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">הפעלת מספר סבבי פרסום לאותו קמפיין באותו היום</span>
+            </span>
+            <span className="ms-auto -me-1 -my-1 flex shrink-0 items-center">
+              <Toggle
+                checked={roundsOn}
+                onChange={(on) => {
+                  if (disabled) return;
+                  /*
+                   * OFF KEEPS THE HOURS. Switching the card off disables every
+                   * round rather than deleting it, so switching it back on
+                   * does not cost the owner the times he chose —
+                   * "אסור למחוק מידע". ON with nothing in the list adds the
+                   * first extra round at the only spacing the engine will
+                   * ever allow for the same groups: twelve hours.
+                   */
+                  if (!on) return onRoundsChange(rounds.map((r) => ({ ...r, enabled: false })));
+                  if (rounds.length) return onRoundsChange(rounds.map((r) => ({ ...r, enabled: true })));
+                  onRoundsChange([{ at: plusHours(schedule.start, MIN_REPEAT_HOURS), enabled: true }]);
+                }}
+                label={`סבבים ביום עבור ${campaignName}`}
+              />
+            </span>
+          </div>
+
+          {roundsOn && (
+            <>
+              <ul className="mt-1.5 space-y-1">
+                {starts.map((at, i) => {
+                  /* `starts` already excludes a round that is switched off
+                     (roundStarts), so this only has to answer "is this hour
+                     the window's own, or an extra round's" — the window's has
+                     no menu, because its field is the block above. */
+                  const extra = rounds.find((r) => r.at === at);
+                  return (
+                    <li key={at} className="flex items-center gap-1.5 rounded-xl border border-ink-600 bg-ink-800 px-2 py-1">
+                      <span className="shrink-0 text-[11px] font-extrabold leading-4 text-mist-100">סבב {i + 1}</span>
+                      <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold leading-4 text-mist-200">
+                        <ClockIcon aria-hidden className="h-3 w-3 text-mist-400" />
+                        <span dir="ltr" className="tabular-nums">{at}</span>
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1 text-[10.5px] font-bold leading-4 text-mist-300">
+                        <RepeatIcon aria-hidden className="h-3 w-3 shrink-0 text-mist-400" />
+                        <span className="truncate">{gapLabel({ ...schedule, start: at })}</span>
+                      </span>
+                      <span
+                        className={`ms-auto shrink-0 rounded-lg px-1.5 py-px text-[9.5px] font-extrabold leading-4 ${
+                          extra ? 'bg-brand-300/15 text-brand-400' : 'bg-mist-500/15 text-mist-300'
+                        }`}
+                      >
+                        {extra ? 'ממתין' : 'קבוע'}
+                      </span>
+                      {/*
+                       * ROUND ONE HAS NO MENU, and that is not an omission:
+                       * its hour is the field in the block above. A second
+                       * place to change it is the bug, not the feature.
+                       */}
+                      {extra ? (
+                        <details className="relative shrink-0">
+                          <summary
+                            aria-label={`פעולות לסבב ${i + 1} בשעה ${at}`}
+                            className="grid h-10 w-10 cursor-pointer place-items-center rounded-xl text-mist-300 marker:hidden [&::-webkit-details-marker]:hidden"
+                          >
+                            <MoreIcon aria-hidden className="h-4 w-4" />
+                          </summary>
+                          <div className="absolute end-0 z-10 mt-1 w-44 rounded-xl border border-ink-600 bg-ink-900 p-1.5 shadow-lg">
+                            <label className="block text-[10px] font-bold leading-4 text-mist-300">
+                              שעת התחלה
+                              {/*
+                               * <input type="time"> rather than a dropdown:
+                               * a <select> here would join the two the suite
+                               * measures in the block above. It is also more
+                               * than the reference asks for — the hours there
+                               * are a half-hour grid and this accepts any
+                               * minute — and the engine takes any 'HH:MM'.
+                               */}
+                              <input
+                                type="time"
+                                aria-label={`שעת ההתחלה של סבב ${i + 1}`}
+                                defaultValue={at}
+                                disabled={disabled}
+                                onChange={(e) => {
+                                  const next = e.currentTarget.value;
+                                  if (!/^\d{2}:\d{2}$/.test(next)) return;
+                                  onRoundsChange(rounds.map((r) => (r.at === at ? { ...r, at: next } : r)));
+                                }}
+                                className="mt-0.5 h-10 w-full rounded-lg border border-ink-600 bg-ink-800 px-2 text-[12px] font-bold text-mist-100"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => onRoundsChange(rounds.map((r) => (r.at === at ? { ...r, enabled: false } : r)))}
+                              className="mt-1 flex h-10 w-full items-center gap-1.5 rounded-lg px-2 text-[11px] font-bold text-mist-200"
+                            >
+                              <ClockIcon aria-hidden className="h-3.5 w-3.5" />
+                              השהה את הסבב הזה
+                            </button>
+                            <button
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => onRoundsChange(rounds.filter((r) => r.at !== at))}
+                              className="flex h-10 w-full items-center gap-1.5 rounded-lg px-2 text-[11px] font-bold text-warning-400"
+                            >
+                              <TrashIcon aria-hidden className="h-3.5 w-3.5" />
+                              מחק את הסבב
+                            </button>
+                          </div>
+                        </details>
+                      ) : (
+                        <span className="grid h-10 w-10 shrink-0 place-items-center text-[9px] font-bold leading-3 text-mist-400">
+                          מהתזמון
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {rounds.length < MAX_EXTRA_ROUNDS && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onRoundsChange([...rounds, { at: plusHours(starts[starts.length - 1], MIN_REPEAT_HOURS), enabled: true }])}
+                  className="mt-1 flex h-10 w-full items-center justify-center gap-1 rounded-xl border border-dashed border-ink-600 text-[11px] font-extrabold text-brand-400"
+                >
+                  <PlusIcon aria-hidden className="h-3.5 w-3.5" />
+                  הוסף סבב נוסף
+                </button>
+              )}
+
+              {/*
+               * ─── THE ARITHMETIC, WHERE HE CAN SEE IT ───────────────────
+               *
+               * A second round whose groups are all refused still opens,
+               * still shows a queue, and publishes nothing — the owner would
+               * see a feature that works and an account that does not. So
+               * when the layout cannot publish, the card says so in his own
+               * numbers and names the one thing that would fix it. It does
+               * not change his spam protection by itself: that is his
+               * account, and the decision is his.
+               */}
+              {verdict && !verdict.ok && (
+                <p className="mt-1.5 text-[10.5px] font-bold leading-4 text-warning-400">
+                  {verdict.reason === 'closer-than-the-floor' ? (
+                    <>
+                      הסבבים מרוחקים {verdict.smallestGapHours} שעות זה מזה, והמערכת לא תפרסם את אותו פוסט לאותה קבוצה פעמיים בפחות מ-{MIN_REPEAT_HOURS} שעות
+                      — הרחיקו אותם, אחרת הסבב השני לא יפרסם לקבוצות של הראשון.
+                    </>
+                  ) : verdict.reason === 'repeat-off' ? (
+                    <>הפעילו את ״חזרה יומית״ למטה — בלעדיה המערכת מסרבת לפרסם את אותו פוסט לאותה קבוצה פעם שנייה, והסבב השני לא יפרסם כלום.</>
+                  ) : (
+                    <>
+                      הסבבים מרוחקים {verdict.smallestGapHours} שעות זה מזה, ו״חזרה יומית״ מוגדרת ל-{repeat?.minHours} שעות — לכן הסבב השני לא יפרסם לאף
+                      קבוצה שהראשון כבר פרסם לה. הורידו את החזרה ל-{verdict.neededHours} שעות כדי ששניהם יצאו.
+                    </>
+                  )}
+                </p>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       {/* ─── 6. חזרה יומית — the one control here that makes something happen ─ */}

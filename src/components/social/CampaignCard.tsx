@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { canPauseRun, canResumeRun, neverLaunched, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
-import { type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { accountGapSeconds } from '@/lib/social/rules';
 import { counted, formatDayMonthHe } from '@/lib/social/time';
@@ -100,6 +100,8 @@ export function CampaignCard({
   onScheduleChange,
   repeat,
   onRepeatChange,
+  rounds,
+  onRoundsChange,
   spacing,
   scheduleBusy = false,
 }: {
@@ -186,6 +188,9 @@ export function CampaignCard({
    */
   repeat?: CampaignRepeat;
   onRepeatChange?: (next: CampaignRepeat) => void;
+  /* סבבים ביום — pass both or neither, like the repeat above. */
+  rounds?: CampaignRound[];
+  onRoundsChange?: (next: CampaignRound[]) => void;
   /**
    * The account-wide spacing rule, which the card cannot see from the campaign
    * alone — rules.ts holds a row for the later of this and the campaign's own
@@ -625,6 +630,8 @@ export function CampaignCard({
             onChange={onScheduleChange}
             repeat={repeat}
             onRepeatChange={onRepeatChange}
+            rounds={rounds}
+            onRoundsChange={onRoundsChange}
             campaignName={campaign.name}
             disabled={scheduleBusy}
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}

@@ -506,6 +506,21 @@ export function weeklyPlanFor(schedule: CampaignSchedule, rounds: CampaignRound[
   return weekly;
 }
 
+/**
+ * 'HH:MM' plus N hours, wrapping at midnight.
+ *
+ * Used for the hour a NEW round opens at: twelve hours after the last one,
+ * because twelve is the closest two occasions the engine will ever let reach
+ * the same groups (MIN_REPEAT_HOURS). So the default the owner is offered is
+ * also the only one that works, which is the point — a default that cannot
+ * publish is a trap with a friendly face.
+ */
+export function plusHours(hm: string, hours: number): string {
+  const base = toMinutes(hm) ?? 0;
+  const mins = (((base + Math.round(hours * 60)) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
 export const MIN_REPEAT_HOURS = 12;
 export const MAX_REPEAT_HOURS = 168;
 export const DEFAULT_CAMPAIGN_REPEAT: CampaignRepeat = { enabled: false, minHours: 20 };

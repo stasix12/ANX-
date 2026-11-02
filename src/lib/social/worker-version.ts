@@ -271,4 +271,17 @@ export const WORKER_VERSION = '4.23.0';
  * So a machine still on 4.23.0 publishes two rounds a day correctly the moment
  * the owner sets a second one. Nothing to install.
  */
-export const WORKER_FINGERPRINT = '6b035b4b24294a66';
+/*
+ * 6b035b4b → 53c81757. The rounds WRITER (saveCampaignRounds in client.ts).
+ * Still NO on the PC, measured the same way as the two re-pins above:
+ *
+ *   grep -c saveCampaignRounds dist/app/worker.cjs → 0
+ *   grep -c roundsColumn       dist/app/worker.cjs → 0
+ *   grep -c slotsFor           dist/app/worker.cjs → 3
+ *
+ * Three times now the fingerprint has moved for a client.ts change that the
+ * installer does not carry. That is the fingerprint being WIDER than the
+ * bundle, which is the safe direction — it asks the question too often rather
+ * than missing one that mattered — and the greps answer it in thirty seconds.
+ */
+export const WORKER_FINGERPRINT = '53c8175721d46f0c';

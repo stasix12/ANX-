@@ -55,10 +55,9 @@ import {
   waitForWorkerCommand,
   type CommentTotals,
   type QueueRow,
-  type TimelineRow,
-} from '@/lib/social/client';
+  type TimelineRow, saveCampaignRounds,} from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
-import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds,} from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, roundsColumn, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
@@ -1311,6 +1310,34 @@ export default function SocialDashboard() {
    * he may already be on another screen. The reload afterwards is what makes
    * the card show the next round it just armed.
    */
+  /*
+   * סבבים ביום — the hours, then the plan the engine walks. Same two writes
+   * as the campaigns screen, in the same order: the column is the owner's
+   * intent and social_schedules.weekly is what the planner reads, so a screen
+   * that wrote only the first would show two rounds and publish one.
+   */
+  const changeRounds = useCallback(
+    async (campaign: Campaign, next: CampaignRound[]) => {
+      try {
+        const written = roundsColumn(next);
+        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign));
+        const armed = written.schedule_rounds.filter((r) => r.enabled).length;
+        toast(
+          result.skippedNoDay
+            ? 'הסבבים נשמרו, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.'
+            : armed === 0
+              ? `הסבבים הנוספים של "${campaign.name}" כובו — השעות נשמרו ואפשר להחזיר אותם בכל רגע`
+              : `"${campaign.name}" יפרסם ${armed + 1} סבבים בכל יום פרסום`,
+          result.skippedNoDay ? 'info' : 'success',
+        );
+        await load();
+      } catch (err) {
+        toast(friendlyMessage(err, 'שמירת הסבבים נכשלה.'), 'error');
+      }
+    },
+    [toast],
+  );
+
   const changeRepeat = useCallback(
     async (campaign: Pick<Campaign, 'id' | 'name'>, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
@@ -1839,6 +1866,8 @@ export default function SocialDashboard() {
                   }}
                   repeat={readRepeat(run.campaign)}
                   onRepeatChange={(next) => void changeRepeat(run.campaign, next)}
+                  rounds={readRounds(run.campaign)}
+                  onRoundsChange={(next) => void changeRounds(run.campaign, next)}
                   scheduleBusy={Boolean(scheduleBusy[run.campaign.id])}
                 />
               ))}

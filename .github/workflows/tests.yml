@@ -1,0 +1,135 @@
+# ─── THE SUITE RUNS ON EVERY PUSH, AND THE PROOFS ACTUALLY RUN ──────────────
+#
+# Until this file existed there was NO automatic gate on the test suite. The
+# only thing that ran on a push was Vercel's typecheck, which catches a wrong
+# type and nothing else — so the 3,000-odd assertions in worker/test were run
+# exactly when somebody remembered to run them. In one night of work the suite
+# caught four real defects before they reached production, every one of them
+# because it happened to be run by hand. That is not a gate, it is a habit.
+#
+# AND THE THREE THAT MATTER MOST WERE NEVER RUN AT ALL. queue-db, tenancy-db
+# and schema-columns need a real Postgres, so without one they SKIP — printing
+# a line that says to point ANX_TEST_DATABASE_URL at a throwaway server and
+# that "CI does this with a service container". There was no CI. Those three
+# are what prove the no-double-publish rule and that one business cannot see
+# another's rows, and on an ordinary run they print a skip and the suite exits
+# 0. Three times in one night they skipped here and had to be run separately.
+#
+# So this workflow does two things that a bare `npm test` would not:
+#
+#   1. it gives the suite a real Postgres, as a service container;
+#   2. it FAILS if any of those three skipped anyway. A service container that
+#      silently did not come up would otherwise hand back a green run with the
+#      two most important proofs missing — which is the exact trap that exists
+#      today, reproduced inside the thing meant to close it.
+name: tests
+
+on:
+  push:
+    branches: [claude/facebook-content-manager-gqtv66]
+  pull_request:
+  workflow_dispatch:
+
+# A newer commit contains the older one, so a run still going for an earlier
+# push is cancelled rather than left to report on code nobody is looking at.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: anxtest
+        ports: ['5432:5432']
+        # Without this the job starts running tests against a server that is
+        # still booting, and the three suites below skip — which is the one
+        # failure mode this whole file exists to prevent.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The one variable the db harness reads. It never points anywhere but a
+      # throwaway server: worker/test/db/harness.ts refuses to run without it.
+      ANX_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/anxtest
+      # Where the browser-driven tests look for Chromium. Both names are used:
+      # some tests read PLAYWRIGHT_BROWSERS_PATH through findChromium(), others
+      # default to /opt/pw-browsers/chromium unless PLAYWRIGHT_CHROMIUM is set.
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # playwright-core ships no installer, so the browser is fetched with the
+      # full package, pinned. --with-deps brings the system libraries Chromium
+      # needs on a bare runner.
+      - name: get a browser for the browser-driven tests
+        run: npx --yes playwright@1.49.0 install --with-deps chromium
+
+      # findChromium() walks PLAYWRIGHT_BROWSERS_PATH, but several tests want an
+      # exact binary. Resolve it once, here, rather than hard-coding a version
+      # directory that changes with every Playwright release.
+      - name: point the tests at that browser
+        run: |
+          BIN="$(find "$PLAYWRIGHT_BROWSERS_PATH" -type f \( -name chrome -o -name headless_shell \) | sort | head -1)"
+          test -n "$BIN" || { echo "::error::no chromium found under $PLAYWRIGHT_BROWSERS_PATH"; exit 1; }
+          echo "PLAYWRIGHT_CHROMIUM=$BIN" >> "$GITHUB_ENV"
+          echo "SOCIAL_BROWSER_EXECUTABLE=$BIN" >> "$GITHUB_ENV"
+          echo "using $BIN"
+
+      - name: psql, which the db harness shells out to
+        run: sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: typecheck
+        run: npx tsc --noEmit
+
+      # tee, so the skip check below reads what actually happened rather than
+      # trusting the exit code — which is 0 on a skip, by design.
+      - name: the suite
+        run: npm run test:social 2>&1 | tee suite.log
+
+      # ─── AND THE PROOFS MUST NOT HAVE SKIPPED ─────────────────────────────
+      #
+      # A green run with these three absent is worse than a red one: it is the
+      # state the product was already in, now carrying a tick. Each is named,
+      # so the failure says which proof went missing rather than "a test
+      # skipped".
+      - name: the real-Postgres proofs must have run
+        run: |
+          fail=0
+          for proof in "schema vs code (real postgres)" "queue (real postgres)" "tenancy (real postgres)"; do
+            if grep -qF "$proof SKIPPED" suite.log; then
+              echo "::error::'$proof' SKIPPED — the service container did not answer, so this run proves nothing about it"
+              fail=1
+            elif grep -qF "$proof OK" suite.log; then
+              echo "ok: $proof"
+            else
+              echo "::error::'$proof' neither ran nor skipped — it is missing from the suite entirely"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: keep the log when something went wrong
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-log
+          path: suite.log
+          retention-days: 7

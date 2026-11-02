@@ -103,6 +103,10 @@ const TITLE: Record<string, string> = {
    * the part that was done about it.
    */
   target_left: 'אי אפשר לפרסם בקבוצה — היא כובתה',
+  /* The same finding without the switch-off: the headline says what is true
+     and what is NOT, because "כובתה" is the part the owner would otherwise
+     assume. */
+  target_unpostable: 'נראה שאי אפשר לפרסם בקבוצה — היא נשארה פעילה',
   worker_window_storm: 'ריבוי חלונות דפדפן — פעולות הרקע נעצרו',
   nightly_group_check: 'בדיקה יומית של הקבוצות',
   campaign_paused: 'הסבב הושהה',

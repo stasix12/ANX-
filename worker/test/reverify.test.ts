@@ -193,44 +193,54 @@ function theBranch(): void {
   const head = worker.slice(worker.indexOf("err.why === 'no-composer-box'"));
   ok(/^[^\n]*!state\.asPage/.test(head), 'and never while signed in as a Page — the same guard the cannot_post branch carries');
 
-  const branch = head.slice(0, head.indexOf('ONE ATTEMPT') > 0 ? head.indexOf('ONE ATTEMPT') : 4000);
-
-  /* enabled:false is the whole of "שזה לא יעקב אותנו פעם הבאה" — rules.ts
-     skips a disabled target before it is ever claimed. */
-  ok(/enabled:\s*false/.test(branch), 'a confirmed refusal switches the group off, so no later round can queue, wait on, or fail it again');
-  ok(/last_status:\s*'left'/.test(branch), 'and it is marked as left, which is the state the groups screen draws in amber');
-
-  /* The two writes that must be gated on the CERTAIN verdict only. */
   /*
-   * ONE switch-off in this branch, and the test asks which verdict guards it
-   * rather than hoping the lines stay in the order they are in today: the
-   * LAST verdict compared before the write is the one that decides it.
+   * THE BRANCH, BOUNDED BY CODE. This used to cut at the comment heading
+   * 'ONE ATTEMPT' — in a source the test had already stripped comments from,
+   * so the cut never matched and `branch` was a flat 4000-character window
+   * that ran well past the branch into the terminal-failure write below it.
+   * Every "this branch must not contain X" assertion was therefore reading
+   * somebody else's code. `const failureLine` is the first statement after
+   * the branch and it is code, so it survives the strip.
    */
-  eq(branch.split('enabled: false').length - 1, 1, 'exactly one place in this branch switches a group off');
-  const disabling = branch.slice(0, branch.indexOf('enabled: false'));
-  /* EVERY comparison, `!==` included. Written as `=== 'cannot-post'` only,
-     this passed a tree where the guard had become `!== 'can-post'` — which
-     switches a group off on "could not tell", which is the verdict a Facebook
-     redesign produces. That mutation is the whole reason this file exists. */
-  const verdicts = disabling.match(/verdict\s*[=!]==\s*'[a-z-]+'/g) ?? [];
-  ok(verdicts.length > 0, 'the switch-off is guarded by a verdict at all');
-  eq(verdicts[verdicts.length - 1], "verdict === 'cannot-post'", 'and the test it is guarded by is EQUALS the certain verdict — not "anything but can-post", which would retire a group on "could not tell"');
+  const end = head.indexOf('const failureLine');
+  ok(end > 0, 'the branch is still followed by the terminal-failure write this test cuts at');
+  const branch = head.slice(0, end);
 
-  /* The blast radius. */
-  ok(/LEFT_AFTER_VERIFY_CAP/.test(branch), 'one run may only switch off so many groups — the cap is consulted in the branch');
-  /* And the cap's own branch is still about the certain verdict. Without this
-     the "we stopped switching groups off" sentence lands on a group that reads
-     perfectly well, once the cap has been reached by other groups. */
-  ok(/verdict === 'cannot-post' && \(state\.leftAfterVerify \?\? 0\) >= LEFT_AFTER_VERIFY_CAP/.test(branch), 'the cap only ever holds back a CONFIRMED refusal — it never speaks for a group that reads fine');
-  ok(/const LEFT_AFTER_VERIFY_CAP = \d+;/.test(worker), 'and the cap is a number in this file, not a guess at the call site');
-  const capAt = branch.indexOf('>= LEFT_AFTER_VERIFY_CAP');
-  ok(capAt > 0, 'the cap is compared in this branch, not merely declared somewhere');
-  ok(branch.indexOf('enabled: false') > capAt, 'and it is compared BEFORE this branch switches anything off');
-  ok(/leftAfterVerify = \(state\.leftAfterVerify \?\? 0\) \+ 1/.test(worker), 'each switch-off is counted, or the cap never arrives');
+  /*
+   * ─── IT REPORTS, AND IT MAY NOT SWITCH THE GROUP OFF ───────────────────
+   *
+   * The first version of this branch wrote `enabled: false` on a confirmed
+   * refusal, capped at fifteen a run. It shipped the evening it was written,
+   * the owner's publishing stopped on the first worker build that carried it,
+   * and it was the only change in that build able to stop publications at
+   * scale. The switch was withdrawn: it cannot be proven from here, because
+   * no local fixture reproduces what Facebook actually renders inside
+   * [role="main"] on his account, and the cost of being wrong is his group
+   * list going quiet one group at a time.
+   *
+   * These assertions are the inverse of the ones they replace, and they are
+   * the point of the file now: the knowledge is kept, the switch is not.
+   */
+  ok(!/enabled:\s*false/.test(branch), 'the re-verification may NOT switch a group off — it reports, and a person decides');
+  ok(!/last_status:/.test(branch), "…and may not restate the group's status either, or the groups screen draws a retirement that did not happen");
+  ok(/last_error:\s*why/.test(branch), 'what it DOES write is the reason, on the group, where the groups screen already prints it');
+  ok(/verdict === 'cannot-post'/.test(branch), 'and it still only says so on the certain verdict');
 
-  /* The owner is told, by name, every time — never a number that moved on its
-     own. */
-  ok(/logActivity\('warn', 'target_left'/.test(branch), 'and the owner is told which group was switched off, in the activity log');
+  /* The owner is told, by name, with a way in — that is the whole output of
+     this branch now. */
+  ok(/logActivity\('warn', 'target_unpostable'/.test(branch), 'the owner is told which group, in the activity log');
+  ok(/targetUrl: tt\.url/.test(branch), 'with the group\u2019s own address, so checking it is one tap');
+  ok(!/'target_left'/.test(branch), 'and NOT as target_left — that event means a group stopped receiving publications, which is exactly what no longer happens here');
+  /*
+   * A new event must be registered or it is filed by level alone, under a
+   * heading nobody opens. This is the fourth time that has happened in this
+   * project, so it is pinned here rather than remembered.
+   */
+  const reg = readFileSync(new URL('../../src/lib/social/activity.ts', import.meta.url), 'utf8');
+  const txt = readFileSync(new URL('../../src/lib/social/activity-text.ts', import.meta.url), 'utf8');
+  ok(/target_unpostable: 'failure'/.test(reg), 'the event is classified — a publication that did not happen is a failure, not system news');
+  ok(/target_unpostable: '[^']+'/.test(txt), 'and it has a Hebrew headline');
+  ok(/נשארה פעילה/.test(txt.slice(txt.indexOf('target_unpostable'), txt.indexOf('target_unpostable') + 120)), 'whose headline says the group is still ON — the part the owner would otherwise assume');
 
   /* THE ADDRESS IS PARSED AT THE CALL SITE. verifyCanPost takes a page
      carrying his live Facebook session; social_targets.url is a column. */

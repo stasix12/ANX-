@@ -97,7 +97,7 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.34.0';
+export const WORKER_VERSION = '4.35.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -507,4 +507,17 @@ export const WORKER_VERSION = '4.34.0';
  * wrong wait entirely; it is now three minutes for video, ninety seconds
  * otherwise, sliced so the terminal says it is alive every twenty seconds.
  */
-export const WORKER_FINGERPRINT = '82755bddfd142c41';
+/*
+ * 4.34.0 → 4.35.0. THE AUTOMATIC SWITCH-OFF IS WITHDRAWN.
+ * DOES THIS HAVE TO REACH THE PC? YES, and it is the most urgent kind: the
+ * thing being withdrawn runs on the PC and writes to his group list.
+ *
+ * 4.32.0 taught the re-verification to switch a group off when a second look
+ * found Facebook's refusal. 4.33.0 was the first build he ran with it, and on
+ * that build his publishing stopped — "עכשיו לא מפרסם בכלל כלום". It is the
+ * only change in that release able to stop publications at scale, and it
+ * cannot be proven from here: no local fixture reproduces what Facebook
+ * renders inside [role="main"] on his account. So it reports and no longer
+ * acts, and the reason is written on the group for him to act on.
+ */
+export const WORKER_FINGERPRINT = '429b7104d506f4c5';

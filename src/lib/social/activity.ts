@@ -90,6 +90,18 @@ const KIND: Record<string, ActivityKind> = {
    */
   target_left: 'failure',
   /*
+   * The same reading, WITHOUT the switch-off — see the branch in
+   * social-worker.ts that replaced it.
+   *
+   * It is its own event and not target_left because the two say different
+   * things about what happened: target_left means a group stopped receiving
+   * publications, this one means a publication did not happen and a group is
+   * worth looking at. Filed as a failure for the same reason target_left is:
+   * a publication the owner expected did not go out, and this is the only
+   * line that names which group and why.
+   */
+  target_unpostable: 'failure',
+  /*
    * ─── the Pages work merged in from the cloud-worker branch ─────────────
    *
    * Three events whose writers landed without an entry here, so they were

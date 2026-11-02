@@ -204,20 +204,6 @@ interface WorkerState {
    * hand corrects it at the next login check.
    */
   asPage?: boolean;
-  /**
-   * How many groups this process has switched off after a re-verification.
-   *
-   * THE BLAST RADIUS, and it is deliberately small. The re-verification below
-   * only ever acts on a sentence Facebook printed, so a redesign cannot reach
-   * it — but Facebook also renders a rail of SUGGESTED groups, each with its
-   * own "הצטרפות לקבוצה" button, and if one of those were ever read as the
-   * group's own refusal then a single round would retire the owner's whole
-   * list. membership.ts reads only inside `[role="main"]` to stop exactly
-   * that; this counter is what keeps the cost of being wrong about it to a
-   * handful of groups that the owner is told about by name, each of which he
-   * puts back with one tap.
-   */
-  leftAfterVerify?: number;
   /*
    * The menu rows last read — the question above, plus each identity's own
    * stored logo, which is what lets a switch report itself without stopping to
@@ -2703,35 +2689,51 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
     let verifyNote = '';
     if (err instanceof PublishError && err.why === 'no-composer-box' && !state.asPage) {
       const check = await reverifyPosting(state, tt, jobEnv.headless);
-      if (check.verdict === 'cannot-post' && (state.leftAfterVerify ?? 0) >= LEFT_AFTER_VERIFY_CAP) {
-        /* The cap is reached. The group is LEFT ON, because at this point the
-           likelier explanation is that something is wrong with the reading and
-           not with fifteen groups — and that possibility is said out loud
-           rather than absorbed. */
-        verifyNote = ` בדקנו שוב והקבוצה נראית סגורה לפרסום, אבל כבר כיבינו ${LEFT_AFTER_VERIFY_CAP} קבוצות בריצה הזאת ולכן עצרנו — בדקו את הקבוצות שכובו.`;
-        await logActivity('warn', 'worker_error', `עצרנו את כיבוי הקבוצות האוטומטי אחרי ${LEFT_AFTER_VERIFY_CAP} קבוצות בריצה אחת — "${tt.name}" נשארה פעילה. בדקו אם זה אמיתי.`, {
-          queueId: item.id,
-          targetId: tt.id,
-        });
-      } else if (check.verdict === 'cannot-post') {
-        state.leftAfterVerify = (state.leftAfterVerify ?? 0) + 1;
-        const quote = check.said ? ` ("${check.said}")` : '';
-        const why = `בדקנו את הקבוצה שוב בפייסבוק ואי אפשר לפרסם בה מהחשבון הזה${quote}. הקבוצה כובתה ולא ייכנסו אליה פרסומים חדשים. אם זו טעות — הפעילו אותה כאן; אם אתם רוצים לצאת ממנה, צאו בפייסבוק.`;
+      if (check.verdict === 'cannot-post') {
         /*
-         * `skipped`, not `failed`, and the difference is honesty: this row did
-         * not fail on its merits, it was never going to publish. It is the
-         * same write the cannot_post branch above makes, for the same reason —
-         * and it keeps the group's own failure count for real failures.
+         * ─── IT REPORTS. IT DOES NOT SWITCH THE GROUP OFF. ────────────────
+         *
+         * This branch used to write `enabled: false` the moment a second look
+         * found Facebook's refusal, capped at fifteen groups a run. It was
+         * shipped the same evening it was written and it is the only thing in
+         * that release that can stop publications at scale, so when the owner
+         * said "עכשיו לא מפרסם בכלל כלום" on the first worker version that
+         * carried it, it became the prime suspect — and a suspect with his
+         * group list as its blast radius does not get the benefit of the
+         * doubt while it is unproven.
+         *
+         * It cannot be proven from here. verifyCanPost is tested against
+         * local fixtures, and the one thing a fixture cannot reproduce is
+         * what Facebook actually renders inside [role="main"] on HIS account:
+         * a suggested-groups card, a membership prompt, a half-rendered
+         * skeleton — anything carrying "הצטרפות לקבוצה" there reads as a
+         * refusal, and every group it touches stops receiving publications
+         * until he notices and switches it back on one at a time.
+         *
+         * So the switch is withdrawn and the knowledge is kept. The reason is
+         * written on the GROUP, where the groups screen already prints it, and
+         * named in the activity log with a link — one tap from "השהה קבוצה"
+         * if he agrees with the reading. The row is still terminal for this
+         * round, because the publication genuinely did not happen.
+         *
+         * To bring the automatic switch-off back it needs evidence from the
+         * real account: a run where this branch names groups and he confirms,
+         * one by one, that it was right about every single one.
          */
+        const quote = check.said ? ` ("${check.said}")` : '';
+        const why = `בדקנו את הקבוצה שוב בפייסבוק ונראה שאי אפשר לפרסם בה מהחשבון הזה${quote}. הקבוצה נשארה פעילה — אם אתם מסכימים, השהו אותה במסך הקבוצות.`;
         await finish({ status: 'skipped', step: '', skip_reason: why, screenshot_path: screenshot });
-        await db.from('social_targets').update({ enabled: false, last_status: 'left', last_error: why }).eq('id', tt.id);
-        await logActivity('warn', 'target_left', `כובתה הקבוצה "${tt.name}" — אימות חוזר בפייסבוק מצא שאי אפשר לפרסם בה`, {
+        /* The reason only. `enabled` and `last_status` are NOT touched: this
+           check may not retire a group, and a wrong last_status would make the
+           groups screen draw it as one it had. */
+        await db.from('social_targets').update({ last_error: why }).eq('id', tt.id);
+        await logActivity('warn', 'target_unpostable', `"${tt.name}": אימות חוזר בפייסבוק מצא שאי אפשר לפרסם בה. הקבוצה נשארה פעילה — בדקו והשהו אותה אם זה נכון.`, {
           queueId: item.id,
           targetId: tt.id,
           detail: raw,
           targetUrl: tt.url ?? null,
         });
-        console.log(`[worker] ⛔ "${tt.name}": אימות חוזר — אי אפשר לפרסם. הקבוצה כובתה.`);
+        console.log(`[worker] ⚠ "${tt.name}": אימות חוזר — נראה שאי אפשר לפרסם. הקבוצה נשארה פעילה.`);
         return;
       } else if (check.verdict === 'can-post') {
         verifyNote = ' בדקנו שוב והתיבה כן קיימת — זו הייתה תקלה רגעית בטעינת העמוד, לא בעיה בקבוצה. הקבוצה נשארה פעילה ותקבל את הסבב הבא.';
@@ -2900,14 +2902,6 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
   await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified, verifyCutShort: Boolean(result.verifyCutShort), lookedIn: result.lookedIn ?? [] });
   console.log(`[worker] ✔ פורסם ל-"${tt.name}"${note ? ` (${note})` : ''}`);
 }
-
-/**
- * At most this many groups may be switched off by a re-verification in ONE
- * run of this process. See WorkerState.leftAfterVerify for why there is a cap
- * at all; fifteen is "a bad evening's worth of dead groups" and nowhere near
- * "something is wrong with the reading".
- */
-const LEFT_AFTER_VERIFY_CAP = 15;
 
 /** Hard stop. A verification is worth seconds, never the queue. */
 const REVERIFY_BUDGET_MS = 25_000;

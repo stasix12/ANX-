@@ -530,6 +530,20 @@ const code = (rel: string) =>
        */
       round_at: 'a database that has not run social-latest.sql has no such column, and PostgREST refuses the whole read — it blanked the dashboard once',
       created_at: 'read by no screen, no component and no queue ordering — verified across src/ and worker/',
+      /*
+       * updated_at is for FINISHED rows, and these reads carry waiting ones.
+       *
+       * It was added to QueueItem so the dashboard rail could place a
+       * cancelled row at the moment it was cancelled rather than at the slot
+       * it had been planned for — one whole-queue cancel was being replayed
+       * across an evening, one row at a time, and read as something still
+       * happening. TIMELINE_SELECT, which reads terminal rows, does select it
+       * (and orders by it). The lean feeds here draw rows that have not
+       * finished, where the column answers "when was this row last touched",
+       * which no screen asks and none should: a waiting row's instant is its
+       * schedule, and projectQueue is what computes it.
+       */
+      updated_at: 'only a FINISHED row needs it, and TIMELINE_SELECT — the read that carries those — selects and orders by it',
     },
     CAMPAIGN_FEED_SELECT: {
       rendered_text: 'the entire post body; PublicationItem fetches one row on demand',
@@ -569,6 +583,20 @@ const code = (rel: string) =>
        */
       round_at: 'a database that has not run social-latest.sql has no such column, and PostgREST refuses the whole read — it blanked the dashboard once',
       created_at: 'read by no screen, no component and no queue ordering — verified across src/ and worker/',
+      /*
+       * updated_at is for FINISHED rows, and these reads carry waiting ones.
+       *
+       * It was added to QueueItem so the dashboard rail could place a
+       * cancelled row at the moment it was cancelled rather than at the slot
+       * it had been planned for — one whole-queue cancel was being replayed
+       * across an evening, one row at a time, and read as something still
+       * happening. TIMELINE_SELECT, which reads terminal rows, does select it
+       * (and orders by it). The lean feeds here draw rows that have not
+       * finished, where the column answers "when was this row last touched",
+       * which no screen asks and none should: a waiting row's instant is its
+       * schedule, and projectQueue is what computes it.
+       */
+      updated_at: 'only a FINISHED row needs it, and TIMELINE_SELECT — the read that carries those — selects and orders by it',
     },
   };
 

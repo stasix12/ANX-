@@ -1614,9 +1614,9 @@ const QUEUE_SELECT_LITE =
  * a day of two hundred publications and twenty skips pays about two kilobytes
  * — against the ninety this select already costs for the names and pictures.
  */
-const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, skip_reason, target:social_targets(id,name,channel,image_url)';
+const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, updated_at, skip_reason, target:social_targets(id,name,channel,image_url)';
 
-export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'skip_reason' | 'target'>;
+export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'updated_at' | 'skip_reason' | 'target'>;
 
 /**
  * Today's finished publications, for the dashboard's rail.
@@ -1628,13 +1628,35 @@ export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'pub
  * turns the result round to run forwards in time.
  */
 export async function listTimelineDone(opts: { since: string; until: string; limit?: number }): Promise<TimelineRow[]> {
+  /*
+   * ─── BY WHEN IT HAPPENED, NOT BY THE SLOT IT WAS GIVEN ─────────────────
+   *
+   * This read filtered and ordered on `scheduled_at`, bounded to the past so
+   * that rows whose slot is still ahead could not sort to the top. The bound
+   * was a workaround for the wrong column: a cancelled row's slot says
+   * nothing about when it was cancelled, and nothing writes published_at on
+   * one.
+   *
+   * What that cost, twice in one evening: a single "אפס הכל" cancels the
+   * whole queue in one UPDATE, and every one of those rows keeps the minute
+   * it had been planned for — so the rail drew them one at a time as the
+   * clock reached 21:31, then 21:34, then 21:49, and the owner read a stream
+   * of fresh cancellations. "אף אחד לא עצר כלום."
+   *
+   * `updated_at` is maintained by the database on every write
+   * (social_queue_set_updated_at), so for a finished row it IS the moment it
+   * finished — the publish write, the skip write, the cancel's own UPDATE.
+   * Ordering and bounding by it makes the rail a record of what happened and
+   * when, and the past-bound stops being a workaround: a row cannot finish in
+   * the future.
+   */
   const res = await db()
     .from('social_queue')
     .select(TIMELINE_SELECT)
     .in('status', TERMINAL_STATUSES)
-    .gte('scheduled_at', opts.since)
-    .lte('scheduled_at', opts.until)
-    .order('scheduled_at', { ascending: false })
+    .gte('updated_at', opts.since)
+    .lte('updated_at', opts.until)
+    .order('updated_at', { ascending: false })
     .limit(opts.limit ?? 500);
   if (res.error) throw friendlyError(res.error);
   return (res.data ?? []) as unknown as TimelineRow[];
@@ -3252,7 +3274,19 @@ export async function cancelAllScheduled(): Promise<number> {
   const rows = unwrap<{ id: string }[]>(
     await db()
       .from('social_queue')
-      .update({ status: 'skipped', step: '', skip_reason: 'בוטל — עצירת כל התורים' })
+      /*
+       * THE REASON NAMES THE BUTTON HE PRESSED.
+       *
+       * It said "עצירת כל התורים", and the only two controls that reach here
+       * are labelled "אפס הכל" (the chip on the queue tile) and the panic
+       * button at the foot of the dashboard. So the owner reset his queue,
+       * met rows reading "בוטל — עצירת כל התורים" hours later, and told me —
+       * correctly, in his own vocabulary — "אף אחד לא עצר כלום".
+       *
+       * One action, one name. The sentence now says what was pressed and what
+       * it did, so the row can be traced back to the tap that made it.
+       */
+      .update({ status: 'skipped', step: '', skip_reason: 'בוטל — נמחק כל התור ("אפס הכל")' })
       .in('status', CANCELLABLE)
       /* See MAYBE_LIVE_STEP. */
       .neq('step', MAYBE_LIVE_STEP)

@@ -2906,7 +2906,18 @@ const scenario: { step: string; line: string }[] = [];
 
   const client = readFileSync('src/lib/social/client.ts', 'utf8');
   pin('cancel lists', client, "const CANCELLABLE: QueueItem['status'][] = CANCELLABLE_STATUSES;");
-  pin('bulk cancel', client, ".update({ status: 'skipped', step: '', skip_reason: 'בוטל — עצירת כל התורים' })\n      .in('status', CANCELLABLE)");
+  /*
+   * The wording moved: the reason now names the button that produces it
+   * ("אפס הכל"), because "עצירת כל התורים" matched no control on any screen
+   * and the owner read rows carrying it as something nobody had done. What is
+   * pinned is the SHAPE — a whole-queue cancel, filtered by status, that
+   * spares a row whose post may already be live.
+   */
+  pin('bulk cancel', client, "skip_reason: 'בוטל — נמחק כל התור (\"אפס הכל\")' })");
+  const cancelAll = client.slice(client.indexOf('export async function cancelAllScheduled'));
+  const cancelAllBody = cancelAll.slice(0, cancelAll.indexOf('\n}') + 2);
+  assert.ok(/\.in\('status', CANCELLABLE\)/.test(cancelAllBody), 'the whole-queue cancel still matches on the cancellable statuses');
+  assert.ok(/\.neq\('step', MAYBE_LIVE_STEP\)/.test(cancelAllBody), 'and still spares a row whose post may already be on Facebook');
 
   const campaign = readFileSync('src/lib/social/campaign.ts', 'utf8');
   pin('progress buckets', campaign, 'progress.finished = progress.published + progress.failed + progress.skipped;');
@@ -5313,18 +5324,36 @@ const scenario: { step: string; line: string }[] = [];
    * reason this block exists: the weight was never the row count, it was
    * rendered_text per row. The line below still holds that line.
    */
+  /*
+   * SEVEN, and the seventh is `updated_at` — the only instant a cancelled row
+   * has. Without it the rail placed a finished row at the slot it had been
+   * PLANNED for, so one whole-queue cancel drew itself across the evening,
+   * one row at a time, and read as a stream of fresh cancellations.
+   */
   assert.ok(
-    /const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, skip_reason, target:/.test(client),
-    'and it asks for the six things the rail draws, not `*` and three joins',
+    /const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, updated_at, skip_reason, target:/.test(client),
+    'and it asks for the seven things the rail draws, not `*` and three joins',
   );
+  const doneRead = client.slice(client.indexOf('export async function listTimelineDone'));
+  const doneBody = doneRead.slice(0, doneRead.indexOf('\n}') + 2);
+  assert.ok(/\.order\('updated_at'/.test(doneBody), 'and the day is ordered by when each row FINISHED, not by the slot it was given');
+  assert.ok(!/\.order\('scheduled_at'/.test(doneBody), 'the slot may not order the record of what happened');
   assert.ok(
     !/const TIMELINE_SELECT[^;]*rendered_text|const TIMELINE_SELECT[^;]*post:social_posts/.test(client),
     'never the post body or its media — that is what made showing the whole day look expensive',
   );
   {
-    const fn = client.slice(client.indexOf('export async function listTimelineDone'));
-    assert.ok(/\.in\('status', TERMINAL_STATUSES\)/.test(fn.slice(0, 700)), 'the statuses come from status.ts, not an inline list');
-    assert.ok(/\.lte\('scheduled_at', opts\.until\)/.test(fn.slice(0, 700)), 'and the past bound survives the move');
+    /* The FUNCTION, not its first 700 characters: a note added above the
+       query pushed the query itself out of that window and failed a correct
+       tree. doneBody is cut at the closing brace. */
+    assert.ok(/\.in\('status', TERMINAL_STATUSES\)/.test(doneBody), 'the statuses come from status.ts, not an inline list');
+    /*
+     * The past bound survives the move to `updated_at`, and on that column it
+     * is no longer a workaround for the wrong field — a row cannot finish in
+     * the future, so the bound is simply "today, up to now".
+     */
+    assert.ok(/\.lte\('updated_at', opts\.until\)/.test(doneBody), 'and the past bound survives the move');
+    assert.ok(/\.gte\('updated_at', opts\.since\)/.test(doneBody), 'bounded at both ends by the same column it is ordered by');
   }
   /*
    * THE WHOLE DAY, WITH NO TAP. It was six, then twelve behind a "show

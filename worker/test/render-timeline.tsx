@@ -38,6 +38,7 @@ const row = (over: Partial<TimelineRow> & { id: string; name: string }): Timelin
     status: over.status ?? 'skipped',
     scheduled_at: over.scheduled_at ?? at(7),
     published_at: over.published_at ?? null,
+    updated_at: over.updated_at ?? null,
     skip_reason: over.skip_reason ?? null,
     target: { id: `t-${over.id}`, name: over.name, channel: 'facebook_group', image_url: null },
   }) as unknown as TimelineRow;
@@ -46,6 +47,7 @@ export const REASONS = {
   off: 'היעד "שכונת סיגליות באר שבע" כבוי.',
   already: 'הפוסט הזה כבר פורסם ל-"באר שבע ביחד באמת".',
   stopped: 'הסבב נעצר.',
+  wiped: 'בוטל — נמחק כל התור ("אפס הכל")',
   long: 'בדקנו את הקבוצה שוב בפייסבוק ואי אפשר לפרסם בה מהחשבון הזה ("רק חברי הקבוצה יכולים לפרסם"). הקבוצה כובתה ולא ייכנסו אליה פרסומים חדשים. אם זו טעות — הפעילו אותה כאן; אם אתם רוצים לצאת ממנה, צאו בפייסבוק.',
 };
 
@@ -66,6 +68,20 @@ const waiting: TimelineRow[] = [
   row({ id: 'w3', name: 'רמות באר שבע', status: 'scheduled', scheduled_at: ahead(9) }),
 ];
 
+/*
+ * SCENE D — the whole-queue cancel. Three rows PLANNED for three different
+ * minutes across the evening, all cancelled in one write a minute ago. Placed
+ * by their slots they read as a stream of fresh cancellations spread over
+ * hours, which is exactly how the owner read them; placed by `updated_at`
+ * they are what they are — one event, one minute.
+ */
+const sweptAt = at(1);
+const swept: TimelineRow[] = [
+  row({ id: 's1', name: 'באר שבע שלכם', scheduled_at: at(70), updated_at: sweptAt, skip_reason: REASONS.wiped }),
+  row({ id: 's2', name: 'נווה מנחם', scheduled_at: at(40), updated_at: sweptAt, skip_reason: REASONS.wiped }),
+  row({ id: 's3', name: 'דירות להשכרה', scheduled_at: at(15), updated_at: sweptAt, skip_reason: REASONS.wiped }),
+];
+
 const scenes = [
   createElement(Timeline, { rows: waiting, done, limit: 40, total: 355 }),
   createElement(Timeline, { rows: [], done, limit: 40, total: 0 }),
@@ -74,6 +90,7 @@ const scenes = [
     done: [row({ id: 'x1', name: 'קבוצה ארוכה', skip_reason: REASONS.long, scheduled_at: at(4) })],
     limit: 40,
   }),
+  createElement(Timeline, { rows: [], done: swept, limit: 40 }),
 ];
 
 process.stdout.write(scenes.map((s) => renderToStaticMarkup(s)).join(MARK));

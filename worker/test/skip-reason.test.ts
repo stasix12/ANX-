@@ -58,8 +58,8 @@ for (const forbidden of ['rendered_text', 'error', 'meta', 'screenshot_path']) {
 /* ─────────────────────── 2. what the row actually says ────────────────── */
 
 const html = execFileSync('npx', ['tsx', 'worker/test/render-timeline.tsx'], { encoding: 'utf8', maxBuffer: 8 << 20 });
-const [busy, quiet, longOne] = html.split('<!--SCENE-->');
-ok(busy && quiet && longOne, 'the three scenes rendered');
+const [busy, quiet, longOne, swept] = html.split('<!--SCENE-->');
+ok(busy && quiet && longOne && swept, 'the four scenes rendered');
 
 /* The reasons are on the rows, verbatim. */
 ok(busy.includes('הפוסט הזה כבר פורסם ל-&quot;באר שבע ביחד באמת&quot;.'), 'a skipped row prints the rule that stopped it, in full');
@@ -96,7 +96,25 @@ ok(busy.includes('מיתר כרמית עמר') && busy.includes('רמות באר
  */
 eq(rows(quiet), 6, 'with nothing queued, every finished stop is drawn — that card is the day');
 
+/* ───── 3b. one cancel is drawn as one moment, not as an evening ───────── */
+
+/*
+ * THE SECOND THING THIS SCREEN DID TO HIM TONIGHT. "אף אחד לא עצר כלום."
+ *
+ * A whole-queue cancel is ONE UPDATE, and every row it touches keeps the
+ * minute it had been planned for. Drawn at those slots, the rail replays the
+ * cancel across the evening one row at a time, and it reads as something
+ * still happening. The scene has three rows planned 70, 40 and 15 minutes
+ * ago and all cancelled one minute ago; they must land on one clock reading.
+ */
+const clocks = (s: string) => (s.match(/tabular-nums[^>]*>([^<]+)</g) ?? []).map((m) => m.replace(/.*>/, ''));
+const sweptClocks = clocks(swept);
+eq(sweptClocks.length, 3, 'the three swept rows are drawn');
+eq(new Set(sweptClocks).size, 1, 'and all three carry the SAME minute — one cancel, one moment, not a stream across the evening');
+ok(sweptClocks.every((c) => c !== '—'), 'with a real instant on each, not a dash');
+
 const timeline = readFileSync(new URL('../../src/components/social/Timeline.tsx', import.meta.url), 'utf8');
+ok(/row\.published_at \?\? row\.updated_at \?\? row\.scheduled_at/.test(timeline), 'a finished stop is placed at when it finished, and falls back to its slot only when the database gave neither');
 ok(/const DONE_ON_SCREEN = \d+;/.test(timeline), 'the cap is a named constant with the reasoning beside it');
 ok(/waiting\.length \? finished\.slice\(-DONE_ON_SCREEN\) : finished/.test(timeline), 'and it applies only while something is still waiting');
 

@@ -109,6 +109,21 @@ function useTick(active: boolean): number {
  */
 const DONE_ON_SCREEN = 4;
 
+/**
+ * WHEN A FINISHED STOP ACTUALLY FINISHED.
+ *
+ * `published_at` for a publication, and for everything else `updated_at` —
+ * the column the database stamps on every write, which for a terminal row is
+ * the moment it became terminal. `scheduled_at` is the last resort and it is
+ * the WRONG answer for a cancelled row: one "אפס הכל" cancels the whole queue
+ * in a single UPDATE, and every one of those rows keeps the minute it had
+ * been planned for, so a rail placed by the slot drew them one at a time
+ * through the evening and read as a stream of fresh cancellations. It is the
+ * second thing on this screen tonight to turn one past event into an ongoing
+ * one; see listTimelineDone, which now bounds and orders by the same column.
+ */
+const doneAt = (row: TimelineRow): number => new Date(row.published_at ?? row.updated_at ?? row.scheduled_at).getTime();
+
 const STATUS_LINE: Partial<Record<QueueStatus, string>> = {
   publishing: 'מפרסם עכשיו',
   awaiting_confirmation: 'מוכן — ממתין לאישור שלכם',
@@ -261,7 +276,7 @@ export function Timeline({
      * minutes late would otherwise sit above one that went out on time —
      * the strip telling the afternoon out of order.
      */
-    .sort((a, b) => new Date(a.published_at ?? a.scheduled_at).getTime() - new Date(b.published_at ?? b.scheduled_at).getTime());
+    .sort((a, b) => doneAt(a) - doneAt(b));
   /*
    * AND THE FINISHED HALF IS CAPPED WHILE ANYTHING IS STILL WAITING.
    *
@@ -315,7 +330,7 @@ export function Timeline({
    */
   const stops = items.map((row) => {
     const doneLine = DONE_LINE[row.status];
-    if (doneLine) return { row, doneLine, at: row.published_at ?? row.scheduled_at };
+    if (doneLine) return { row, doneLine, at: row.published_at ?? row.updated_at ?? row.scheduled_at };
     const forecast = projected?.get(row.id);
     return { row, doneLine, at: forecast === undefined ? row.scheduled_at : forecast };
   });

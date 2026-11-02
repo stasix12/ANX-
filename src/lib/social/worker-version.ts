@@ -520,4 +520,18 @@ export const WORKER_VERSION = '4.35.0';
  * renders inside [role="main"] on his account. So it reports and no longer
  * acts, and the reason is written on the group for him to act on.
  */
-export const WORKER_FINGERPRINT = '429b7104d506f4c5';
+/*
+ * 429b7104 → cd43ac9d. The rail places a finished row at the moment it
+ * FINISHED (updated_at) instead of the slot it was planned for, and the
+ * whole-queue cancel's reason now names the button that produces it.
+ * DOES THIS HAVE TO REACH THE PC? NO:
+ *
+ *   grep -c TIMELINE_SELECT  dist/app/worker.cjs → 0
+ *   grep -c listTimelineDone dist/app/worker.cjs → 0
+ *   grep -c doneAt           dist/app/worker.cjs → 0
+ *
+ * client.ts is in the fingerprint because rules.ts and the planner import
+ * from it; the rail and its read are the dashboard's. 4.35.0 is not released
+ * yet either way, so the version does not move again.
+ */
+export const WORKER_FINGERPRINT = 'cd43ac9dbc727289';

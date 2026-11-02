@@ -247,6 +247,35 @@ export function Timeline({
    * what is next. Ordering, not counting — no number on this screen is
    * derived from it.
    */
+/**
+ * ─── מתי זה קרה. לא מתי זה היה אמור לקרות. ───────────────────────────────
+ *
+ *   "הוא מדלג ורושם הסבב נעצר למרות שלא עשיתי כלום"
+ *
+ * הרגע של שורה שהסתיימה חושב כאן פעמיים — פעם למיון ופעם להצבה — ושתיהן
+ * אמרו `published_at ?? scheduled_at`. על שורה שפורסמה זה נכון. על שורה
+ * שבוטלה זה שקר, ושקר שעלה יום שלם: שום דבר לא כותב `published_at` על שורה
+ * מבוטלת, ולכן היא הוצבה בדקה המתוכננת שלה.
+ *
+ * לחיצה אחת על "סיים ואפס" מבטלת כל שורה שטרם התחילה, ואופק התכנון הוא 48
+ * שעות — אז במרווח של 30 שניות אותה לחיצה מסמנת שורות ששעתן פזורה שתיים
+ * בדקה על פני יומיים. הפס הסתיר כל אחת מהן עד שהשעון הגיע לדקה שלה, ואז
+ * הציג אותה כאילו בוטלה עכשיו. אחת כל 30 שניות, במשך יומיים, מפעולה אחת
+ * שנעשתה שעות קודם ובצדק נחשבה גמורה.
+ *
+ * `updated_at` הוא הרגע הכתוב בפועל — הטריגר social_queue_set_updated_at
+ * חותם אותו בכל עדכון — ו-listTimelineDone מסנן ומסדר לפיו עכשיו.
+ *
+ * פונקציה אחת ולא שני ביטויים: שני חישובים של אותו רגע נסחפו זה מזה פעם
+ * אחת כבר (המיון תוקן והצבה לא), ואין שום דבר במסך שמראה את ההיסחפות.
+ *
+ * `published_at` עדיין קודם: על פרסום שיצא, הרגע שפייסבוק קיבלה אותו מדויק
+ * יותר מהרגע שבו נכתבה השורה. `scheduled_at` נשאר כמילוט אחרון, למסד שעוד
+ * לא בחר את העמודה או לשורה שנוצרה לפני שהטריגר קיים.
+ */
+const doneAt = (row: { published_at?: string | null; updated_at?: string | null; scheduled_at: string }) =>
+  row.published_at ?? row.updated_at ?? row.scheduled_at;
+
   const items = [...done]
     /*
      * By the moment it HAPPENED, not by the slot it was given. The read can
@@ -254,7 +283,7 @@ export function Timeline({
      * minutes late would otherwise sit above one that went out on time —
      * the strip telling the afternoon out of order.
      */
-    .sort((a, b) => new Date(a.published_at ?? a.scheduled_at).getTime() - new Date(b.published_at ?? b.scheduled_at).getTime())
+    .sort((a, b) => new Date(doneAt(a)).getTime() - new Date(doneAt(b)).getTime())
     .concat(waiting);
   /* Before the early return: a hook may not sit behind a condition. Ticking
      only while something is actually waiting keeps an idle screen idle. */
@@ -288,7 +317,7 @@ export function Timeline({
    */
   const stops = items.map((row) => {
     const doneLine = DONE_LINE[row.status];
-    if (doneLine) return { row, doneLine, at: row.published_at ?? row.scheduled_at };
+    if (doneLine) return { row, doneLine, at: doneAt(row) };
     const forecast = projected?.get(row.id);
     return { row, doneLine, at: forecast === undefined ? row.scheduled_at : forecast };
   });

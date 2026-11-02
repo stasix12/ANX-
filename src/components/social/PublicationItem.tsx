@@ -208,7 +208,15 @@ export function PublicationItem({
    */
   /* The row's own instant for the collapsed line: when it published, or when
      it is going to — projected, never the raw column. */
-  const at = row.published_at ?? (projectedAt === undefined || projectedAt === null ? row.scheduled_at : projectedAt);
+  /*
+   * `updated_at` בין השניים — ראו doneAt ב-Timeline.tsx. שורה שהסתיימה
+   * הוצבה בשעה המתוכננת שלה, ולכן ביטול מלפני שעות נקרא כאן כאילו קרה
+   * בדקה הזאת: "הוא מדלג ורושם הסבב נעצר למרות שלא עשיתי כלום". התחזית
+   * (projectedAt) נשארת אחריו, כי היא שייכת לשורה שעוד ממתינה — ושורה
+   * שהסתיימה כבר לא מנבאים לה.
+   */
+  const terminalAt = row.published_at ?? row.updated_at ?? null;
+  const at = terminalAt ?? (projectedAt === undefined || projectedAt === null ? row.scheduled_at : projectedAt);
   const isToday = zonedDateISO(new Date(at)) === zonedDateISO(new Date());
   /* Same rule as statusLine's: a held row has no instant to put a date on,
      so the collapsed line keeps the words instead of inventing a clock. */

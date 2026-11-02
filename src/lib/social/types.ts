@@ -342,6 +342,21 @@ export interface QueueItem {
    * "round one" — which is what a campaign with one occasion a day has.
    */
   round_at?: string | null;
+  /*
+   * WHEN THIS ROW LAST CHANGED — maintained by the trigger
+   * social_queue_set_updated_at, not by any writer.
+   *
+   * It is the only column that records when a row reached its terminal state.
+   * Nothing writes `published_at` on a skipped row, and `scheduled_at` keeps
+   * saying when the publication was MEANT to happen — so a row cancelled at
+   * 21:00 for tomorrow at 23:47 looks, to any read that asks those two, like
+   * something that will happen tomorrow at 23:47. failuresSince has read this
+   * column for exactly that reason since the "נכשלו היום" tile was fixed.
+   *
+   * OPTIONAL, because most reads do not select it: a type that promised it
+   * everywhere would be lying about every row returned by QUEUE_SELECT_LITE.
+   */
+  updated_at?: string | null;
   /** How this row was published: Graph API, local browser worker, or by hand. */
   method?: PublishMethod;
   /*

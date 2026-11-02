@@ -1628,7 +1628,7 @@ const QUEUE_SELECT =
  * the body is gone, and PublicationItem fetches it on demand when a row opens.
  */
 const QUEUE_SELECT_LITE =
-  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, method, metrics_seen, metrics_views, metrics_reactions, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
+  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, updated_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, method, metrics_seen, metrics_views, metrics_reactions, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
 
 /**
  * `order` matters more than it looks: the limit is applied AFTER the sort, so
@@ -1653,27 +1653,58 @@ const QUEUE_SELECT_LITE =
  * the cap looked expensive. It was expensive because of what each row
  * weighed, not because of how many there were.
  */
-const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, target:social_targets(id,name,channel,image_url)';
+const TIMELINE_SELECT =
+  'id, status, scheduled_at, published_at, updated_at, skip_reason, target:social_targets(id,name,channel,image_url)';
 
-export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'target'>;
+export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'updated_at' | 'skip_reason' | 'target'>;
 
 /**
  * Today's finished publications, for the dashboard's rail.
  *
- * Ordered DESCENDING and bounded to the past for the same reason listQueue's
- * caller was: a row can be terminal with its slot still in the future — a
- * duplicate skipped before its turn, a run stopped mid-flight — and unbounded
- * those future slots sort to the top and take every place. The component
- * turns the result round to run forwards in time.
+ * ─── מתי זה קרה, ולא מתי זה היה אמור לקרות ──────────────────────────────
+ *
+ *   "הוא מדלג ורושם הסבב נעצר למרות שלא עשיתי כלום"
+ *
+ * This read was bounded and ordered by `scheduled_at`, and that is the whole
+ * of why he spent a day believing something was still cancelling his queue.
+ *
+ * One press of "סיים ואפס" cancels every not-yet-started row of the round in
+ * a single UPDATE, and the planner's horizon is 48 hours (HORIZON_HOURS), so
+ * at a 30-second gap that one press marks rows whose `scheduled_at` runs two
+ * at a minute across the next two days. Nothing records WHEN they were
+ * cancelled on any column this read selected: `published_at` stays null on a
+ * skipped row, and `scheduled_at` still says tomorrow.
+ *
+ * So the rail HID each of those rows until the clock reached its planned
+ * minute — `.lte('scheduled_at', now)` — and then showed it, stamped at that
+ * minute, as if it had just been skipped. One every thirty seconds, through
+ * the night and through the next day, each reading "הסבב נעצר", from an
+ * action he took hours earlier and had every reason to consider finished.
+ *
+ * `updated_at` is the honest instant and it already exists: the trigger
+ * social_queue_set_updated_at has maintained it since the beginning (see
+ * failuresSince, which has read it for exactly this reason — "a row records
+ * WHEN it failed only through the trigger that stamps every update"). Bounded
+ * and ordered by it, the past-bound stops being a workaround for the wrong
+ * column: a row cannot have FINISHED in the future, so "today, up to now" is
+ * simply true of it.
+ *
+ * `skip_reason` rides along because the rail has the reason in hand and was
+ * printing a bare "דולג" over rows whose reason was the answer to his
+ * question.
+ *
+ * Ordered DESCENDING and bounded to the past for the reason listQueue's
+ * caller was: unbounded, those future slots sort to the top and take every
+ * place. The component turns the result round to run forwards in time.
  */
 export async function listTimelineDone(opts: { since: string; until: string; limit?: number }): Promise<TimelineRow[]> {
   const res = await db()
     .from('social_queue')
     .select(TIMELINE_SELECT)
     .in('status', TERMINAL_STATUSES)
-    .gte('scheduled_at', opts.since)
-    .lte('scheduled_at', opts.until)
-    .order('scheduled_at', { ascending: false })
+    .gte('updated_at', opts.since)
+    .lte('updated_at', opts.until)
+    .order('updated_at', { ascending: false })
     .limit(opts.limit ?? 500);
   if (res.error) throw friendlyError(res.error);
   return (res.data ?? []) as unknown as TimelineRow[];
@@ -2940,7 +2971,7 @@ export const CAMPAIGN_QUEUE_LIMIT = 1000;
  * fed by its own reads, not by this one.
  */
 const CAMPAIGN_FEED_SELECT =
-  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, method, metrics_seen, metrics_views, metrics_reactions, metrics_comments, metrics_shares, metrics_at, comment_status, comment_note, comment_shot, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
+  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, updated_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, method, metrics_seen, metrics_views, metrics_reactions, metrics_comments, metrics_shares, metrics_at, comment_status, comment_note, comment_shot, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
 
 /**
  * Every queue row of one campaign, with its target — the control centre's feed,

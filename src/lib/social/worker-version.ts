@@ -679,4 +679,32 @@ export const WORKER_VERSION = '4.37.0';
    measurement rather than the claim: the dashboard's data layer is not in the
    worker's import closure. So the PC needs this installer for the sweep, and
    the website carries the other six the moment it deploys. */
-export const WORKER_FINGERPRINT = 'bf8b2e3cce48629d';
+/* bf8b2e3cce48629d → 9a32515c2fa5fcb4. DOES THIS HAVE TO REACH THE PC? NO, and
+   it is the clearest no in this file: the change is entirely about WHEN a
+   finished row is drawn, and nothing on the PC draws anything. Measured:
+
+     npm run build:app
+     grep -c listTimelineDone dist/app/worker.cjs → 0
+     grep -c doneAt           dist/app/worker.cjs → 0
+     grep -c TIMELINE_SELECT  dist/app/worker.cjs → 0
+
+   Re-pinned once more after performance.test.ts refused the half-move: adding
+   updated_at to QueueItem made every LEAN feed promise a column it did not
+   select, and those rows arrive through a cast — so it would have been
+   undefined at runtime with nothing going red, and the history screen would
+   have kept drawing a cancelled row at its planned minute while the dashboard
+   rail drew it correctly. Two screens, two answers, one of them wrong, and no
+   test red. QUEUE_SELECT_LITE and CAMPAIGN_FEED_SELECT select it now (one
+   timestamp per row, not a post body), and the same three zeroes hold:
+
+     grep -c QUEUE_SELECT_LITE    dist/app/worker.cjs → 0
+     grep -c CAMPAIGN_FEED_SELECT dist/app/worker.cjs → 0
+
+   So 4.37.0 stays, and this fix reaches him the moment the website deploys —
+   with nothing to install. That matters here more than usual: it is the fix
+   for what he can SEE, and the one that stops him concluding, correctly from
+   the evidence on screen, that something is still cancelling his queue.
+
+   (types.ts moves too, for QueueItem.updated_at. It is a type; nothing
+   executes it.) */
+export const WORKER_FINGERPRINT = '0b61d85927951dcc';

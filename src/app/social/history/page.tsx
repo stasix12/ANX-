@@ -223,7 +223,9 @@ function HistoryScreen() {
      * A finished row keeps `published_at`, which is what the list is really
      * about for everything but the waiting rows.
      */
-    const when = (r: QueueRow) => r.published_at ?? projected.get(r.id) ?? r.scheduled_at;
+    /* `updated_at` לפני התחזית — ראו doneAt ב-Timeline.tsx. שורה שהסתיימה
+       מוצבת ברגע שבו היא הסתיימה, לא בשעה שתוכננה לה ולא בתחזית. */
+    const when = (r: QueueRow) => r.published_at ?? r.updated_at ?? projected.get(r.id) ?? r.scheduled_at;
     return kept.sort((a, b) => String(when(b)).localeCompare(String(when(a))));
   }, [rows, query, method, campaigns, projected]);
 

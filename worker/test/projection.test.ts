@@ -543,7 +543,15 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
      these stay as the structural pin that the projected value is what the
      line is built from at all. */
   is(/projectedAt === undefined \|\| projectedAt === null \? row\.scheduled_at : projectedAt/.test(item), 'and its status line is built from it');
-  is(/const at = row\.published_at \?\? \(projectedAt === undefined/.test(item), 'and so is the collapsed row\u2019s own clock');
+  /*
+   * הוצבע מחדש: השורה הזאת מחשבת עכשיו `terminalAt ?? (projectedAt === …)`,
+   * כש-terminalAt הוא `published_at ?? updated_at`. הכוונה כאן לא השתנתה —
+   * שהתחזית היא מה שבונה את השעון של שורה שעוד ממתינה — אבל שורה שהסתיימה
+   * חייבת להופיע ברגע שהסתיימה ולא בשעה שתוכננה לה: בלי updated_at, ביטול
+   * מלפני שעות נקרא כאילו קרה בדקה הזאת. ראו worker/test/done-at.test.ts.
+   */
+  is(/const at = terminalAt \?\? \(projectedAt === undefined/.test(item), 'and so is the collapsed row\u2019s own clock, for a row that is still WAITING');
+  is(/const terminalAt = row\.published_at \?\? row\.updated_at \?\? null;/.test(item), 'while a row that has FINISHED is placed at the moment it finished, ahead of any forecast');
   is(/const held = projectedAt === null/.test(item), 'and a held row is told apart from a row with no forecast');
   is(!/formatTimeHe\(row\.scheduled_at\)/.test(item), 'the raw column is no longer formatted as a publication time');
   is(/new Date\(projectedAt \?\? row\.scheduled_at\)\.getTime\(\) > Date\.now\(\) \+ 60_000/.test(item), '"הרץ עכשיו" is offered on the instant the row will really go out');

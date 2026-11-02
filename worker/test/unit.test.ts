@@ -5435,10 +5435,45 @@ const scenario: { step: string; line: string }[] = [];
     dash.includes("listTimelineDone({ since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: DONE_LIMIT })"),
     'today’s finished rows are their own read, bounded to today AND to the past',
   );
+  /*
+   * LEAN, ASSERTED AS LEANNESS RATHER THAN AS A COLUMN LIST.
+   *
+   * This pinned the exact five-column prefix, and the rail has since needed
+   * two more: `updated_at`, because a cancelled row has no other record of
+   * WHEN it was cancelled and was therefore drawn at the minute it had been
+   * planned for — one fresh-looking "הסבב נעצר" every thirty seconds for two
+   * days, from one press of "סיים ואפס" (see worker/test/done-at.test.ts) —
+   * and `skip_reason`, because the rail held the reason and printed a bare
+   * "דולג" over it.
+   *
+   * The rule being protected is that this read is NOT `*` plus three joins:
+   * `*` on social_queue carries rendered_text, the entire published post per
+   * row, which is what made drawing a name, a time and a dot expensive. A
+   * prefix pin cannot tell a column the rail needs from a column nobody
+   * needs, so it has to be re-typed every time the rail learns something —
+   * and re-typing a pin is indistinguishable from accepting a regression.
+   *
+   * So: no `*`, no joins but the one target the rail draws, every column named
+   * explicitly, and a ceiling on how many there may be. The ceiling is what
+   * keeps this a lean read; the exclusions below are what keep the expensive
+   * columns out by name.
+   */
+  const selMatch = client.match(/const TIMELINE_SELECT =\s*\n?\s*'([^']+)'/);
+  assert.ok(selMatch, 'TIMELINE_SELECT is still a single named column list');
+  const selText = selMatch![1];
+  assert.ok(!selText.includes('*'), 'the rail never asks for `*` — that is what carries rendered_text, the whole post body per row');
+  const joins = (selText.match(/:[a-z_]+\(/g) ?? []).length;
+  assert.equal(joins, 1, 'and exactly one join, the target it draws — three joins is what the old read cost');
+  /* ה-join מוסר לפני הספירה: `target:social_targets(id,name,channel,image_url)`
+     מכיל פסיקים, ו-split נאיבי ספר את העמודות שלו כעמודות של השורה. */
+  const columns = selText.replace(/[a-z_]+:[a-z_]+\([^)]*\)/g, '').split(',').filter((c) => c.trim()).length;
   assert.ok(
-    /const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, target:/.test(client),
-    'and it asks for the five things the rail draws, not `*` and three joins',
+    columns <= 8,
+    `the rail's read stays lean — ${columns} plain columns; if it genuinely needs more, raise this with the reason, do not delete it`,
   );
+  for (const needed of ['id', 'status', 'scheduled_at', 'published_at', 'updated_at', 'skip_reason']) {
+    assert.ok(new RegExp(`\\b${needed}\\b`).test(selText), `the rail cannot draw without ${needed}`);
+  }
   assert.ok(
     !/const TIMELINE_SELECT[^;]*rendered_text|const TIMELINE_SELECT[^;]*post:social_posts/.test(client),
     'never the post body or its media — that is what made showing the whole day look expensive',
@@ -5446,7 +5481,23 @@ const scenario: { step: string; line: string }[] = [];
   {
     const fn = client.slice(client.indexOf('export async function listTimelineDone'));
     assert.ok(/\.in\('status', TERMINAL_STATUSES\)/.test(fn.slice(0, 700)), 'the statuses come from status.ts, not an inline list');
-    assert.ok(/\.lte\('scheduled_at', opts\.until\)/.test(fn.slice(0, 700)), 'and the past bound survives the move');
+    /*
+     * THE PAST BOUND SURVIVES — ON THE COLUMN THAT MEANS WHAT IT SAYS.
+     *
+     * Pinned to `scheduled_at`, and that column was the bug: a row cancelled
+     * at 21:00 for 23:47 has `scheduled_at` in the future, so the bound HID it
+     * until 23:47 and then showed it as if it had just happened. The bound was
+     * never about the slot; it was a workaround for having no column that said
+     * when the row finished. `updated_at` is that column (the trigger
+     * social_queue_set_updated_at), and a row cannot finish in the future, so
+     * the bound is now simply true of it. See worker/test/done-at.test.ts.
+     */
+    assert.ok(/\.lte\('updated_at', opts\.until\)/.test(fn.slice(0, 700)), 'and the past bound survives the move, on the column that records when the row finished');
+    assert.ok(/\.gte\('updated_at', opts\.since\)/.test(fn.slice(0, 700)), 'with its lower bound on the same column — half a move leaves the window straddling two meanings');
+    assert.ok(
+      !/scheduled_at/.test(fn.slice(0, 700)),
+      'and the slot is not asked at all in this read: it is what the rail used to draw instead of the truth',
+    );
   }
   /*
    * THE WHOLE DAY, WITH NO TAP. It was six, then twelve behind a "show

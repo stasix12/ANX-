@@ -5288,9 +5288,17 @@ const scenario: { step: string; line: string }[] = [];
     dash.includes("listTimelineDone({ since: startOfZonedDay(now).toISOString(), until: now.toISOString(), limit: DONE_LIMIT })"),
     'today’s finished rows are their own read, bounded to today AND to the past',
   );
+  /*
+   * SIX NOW, AND THE SIXTH IS DELIBERATE. skip_reason joined the list when the
+   * owner asked "למה יש הרבה שורות של דולג" about a rail that printed one grey
+   * word over a sentence the database already held. It is the one column here
+   * that is not about placing a row on the strip, and it is affordable for the
+   * reason this block exists: the weight was never the row count, it was
+   * rendered_text per row. The line below still holds that line.
+   */
   assert.ok(
-    /const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, target:/.test(client),
-    'and it asks for the five things the rail draws, not `*` and three joins',
+    /const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, skip_reason, target:/.test(client),
+    'and it asks for the six things the rail draws, not `*` and three joins',
   );
   assert.ok(
     !/const TIMELINE_SELECT[^;]*rendered_text|const TIMELINE_SELECT[^;]*post:social_posts/.test(client),

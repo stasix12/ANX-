@@ -25,6 +25,28 @@ const is = (cond: unknown, msg: string) => { checks += 1; assert.ok(cond, msg); 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const out = path.join(root, 'dist', 'app');
 
+/*
+ * ─── SAY WHAT IS MISSING, rather than handing over esbuild's answer ────────
+ *
+ * The build below bundles desktop/updates.ts, so electron-updater has to be on
+ * disk — and it is deliberately NOT in package.json (see the manifest guard
+ * further down: in the manifest it reaches Vercel, where electron's postinstall
+ * once took the live website down for two and a half hours). On a fresh clone,
+ * therefore, this file fails with
+ *
+ *   ✘ [ERROR] Could not resolve "electron-updater"
+ *
+ * buried inside a Buffer dump of execFileSync's stderr, which says nothing
+ * about what to do. That cost a whole CI round trip to decode. Now it says.
+ */
+if (!existsSync(path.join(root, 'node_modules', 'electron-updater'))) {
+  throw new Error(
+    'package tests CANNOT RUN — electron-updater is not installed, and it is deliberately absent from package.json ' +
+      '(in the manifest it reaches Vercel and takes the website down — see the manifest guard in this file). ' +
+      'Install it for this run only:\n\n  npm install --no-save --no-audit --no-fund electron-updater@6\n',
+  );
+}
+
 /* Built here, with a marker in the environment, so the test cannot pass by
    reading a stale folder somebody built by hand last week. */
 const MARKER = `probe-${Date.now()}`;

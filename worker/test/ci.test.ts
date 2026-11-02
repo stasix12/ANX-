@@ -88,7 +88,52 @@ const code = ci
   is(/neither ran nor skipped/.test(ci), 'a proof missing from the chain entirely must fail too, not pass by producing no line at all');
 }
 
-/* ──── 4. THE GATE'S OWN BUGS — its first run found two of them ────────── */
+/* ─── 4. THE APP BUILD'S ONE UNDECLARED DEPENDENCY ──────────────────────── */
+{
+  /*
+   * THE SECOND RUN OF THIS WORKFLOW DIED HERE, five and a half minutes in.
+   *
+   * package.test.ts runs the real app build, which bundles desktop/updates.ts,
+   * so electron-updater must be resolvable on disk — and it is deliberately
+   * absent from package.json. That absence is load-bearing: the manifest guard
+   * in package.test.ts fails the build if anything matching electron* reaches
+   * the manifest or the lockfile, because it was a devDependency for ninety
+   * minutes and took the live website down for two and a half hours. So the
+   * only correct fix is the one build-app.yml already uses, --no-save, and
+   * these three assertions hold that shape:
+   *
+   *   · the test job installs it at all;
+   *   · at the SAME version the installer bundles, or a green run here proves
+   *     a build nobody ships;
+   *   · and never into the manifest, which is the outage above.
+   */
+  const build = src('../../.github/workflows/build-app.yml');
+  const buildCode = build
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n');
+  const spec = (text: string) => /electron-updater@(\S+)/.exec(text)?.[1] ?? '';
+  const here = spec(code);
+  const installer = spec(buildCode);
+
+  is(
+    here.length > 0,
+    'the test job no longer installs electron-updater — package.test.ts runs the real app build and the bundle cannot resolve it, which is exactly how the second run of this workflow died',
+  );
+  is(installer.length > 0, "and build-app.yml no longer installs it either, so there is nothing left to pin the test job's version to");
+  is(
+    here === installer,
+    `the test job bundles electron-updater@${here} and the installer bundles @${installer} — a green run here would be proving a build nobody ships`,
+  );
+  /* --no-save on the same line, not merely somewhere in the file. */
+  const line = code.split('\n').find((l) => l.includes('electron-updater@')) ?? '';
+  is(
+    /--no-save/.test(line),
+    'electron-updater must be installed --no-save: in the manifest it reaches Vercel, and it has already taken the live website down for two and a half hours once',
+  );
+}
+
+/* ──── 5. THE GATE'S OWN BUGS — its first run found two of them ────────── */
 {
   /*
    * `a | tee b` EXITS WITH TEE'S STATUS, NOT a's.
@@ -134,7 +179,7 @@ const code = ci
   is(!/ALLOW_UNMEASURED/.test(ci), 'the gate must not switch the measurement off — a skipped check is not a check');
 }
 
-/* ───── 5. the names agree across the two files, or the grep is hollow ──── */
+/* ───── 6. the names agree across the two files, or the grep is hollow ──── */
 {
   const nameOf = (rel: string) => /^const NAME = '([^']+)';/m.exec(src(rel))?.[1] ?? '';
   const proofs = [

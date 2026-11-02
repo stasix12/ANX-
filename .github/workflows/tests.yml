@@ -76,6 +76,30 @@ jobs:
 
       - run: npm ci
 
+      # ─── electron-updater, FOR THIS JOB ONLY ──────────────────────────────
+      #
+      # worker/test/package.test.ts runs the REAL app build
+      # (scripts/build-app.mjs), which bundles desktop/updates.ts — so this
+      # package has to be resolvable on disk. It is deliberately ABSENT from
+      # package.json, and that is not an oversight: package.test.ts fails the
+      # build if anything matching electron* appears in the manifest OR the
+      # lockfile, because it was a devDependency for about ninety minutes and
+      # took the live website down for two and a half hours. Vercel installs
+      # from the same manifest, and electron's postinstall fetches hundreds of
+      # megabytes of browser binary.
+      #
+      # So .github/workflows/build-app.yml installs it --no-save, and this is
+      # the same line minus electron and electron-builder: the bundle marks
+      # electron external, and nothing in the suite runs electron-builder.
+      # Verified by removing the package here and watching package.test.ts
+      # fail with the exact error the second run of this workflow died on.
+      #
+      # THE VERSION MUST MATCH build-app.yml's. If this job bundled a different
+      # major from the one the installer bundles, a green run here would be
+      # proving a build nobody ships — so ci.test.ts pins the two together.
+      - name: electron-updater, which the app build bundles
+        run: npm install --no-save --no-audit --no-fund electron-updater@6
+
       # playwright-core ships no installer, so the browser is fetched with the
       # full package, pinned. --with-deps brings the system libraries Chromium
       # needs on a bare runner.

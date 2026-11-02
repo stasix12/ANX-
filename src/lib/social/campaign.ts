@@ -41,7 +41,7 @@ export const RUN_STATE_TONE: Record<RunState, 'neutral' | 'good' | 'warn' | 'bad
 };
 
 /** Queue rows, with just the fields this module needs from the joined target. */
-export interface CampaignQueueRow extends Pick<QueueItem, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'target_id' | 'post_id'> {
+export interface CampaignQueueRow extends Pick<QueueItem, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'target_id' | 'post_id' | 'round_at'> {
   target?: { id: string; name: string; channel?: string; image_url?: string | null } | null;
 }
 
@@ -82,6 +82,17 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
    * are exact and nothing needs explaining.
    */
   countsNote?: CountsNote | null;
+  /**
+   * ONE SET OF NUMBERS PER ROUND OF THE DAY, keyed by the round's 'HH:MM'
+   * and by '' for rows that predate the column. See progressByRound().
+   *
+   * Present only when this state was built from ROWS. Built from `counts` it
+   * is ABSENT rather than zeroed, because the rollup groups by status alone
+   * and a per-round figure cannot be recovered from it — and a zero would
+   * read as "this round published nothing", which is a different claim from
+   * "nobody counted".
+   */
+  byRound?: Record<string, CampaignProgress>;
   /**
    * PUBLICATIONS THAT WENT OUT TODAY AND ARE NOT IN `progress`.
    *
@@ -200,6 +211,69 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
  * The buckets come from status.ts. Nothing here decides for itself what a
  * status means, which is the only way a tile and a card can be made to agree.
  */
+/**
+ * ─── ONE SET OF NUMBERS PER ROUND OF THE DAY ──────────────────────────────
+ *
+ * "סבב 2 — מפרסם: 12 מתוך 50."
+ *
+ * Keyed by the round's own 'HH:MM', off social_queue.round_at, which plan.ts
+ * recorded when it created the row. NOT re-derived from scheduled_at: a
+ * deferred row has moved, and a round guessed from the clock afterwards
+ * counts that publication in a round it was never part of.
+ *
+ * ROWS WITHOUT A ROUND ARE ROUND ONE, under the key ''. That is every row
+ * created before v30 and every row on a database that has not run
+ * social-latest.sql — and it is correct, because a campaign with one occasion
+ * a day has only ever had one round. The caller folds '' into the first
+ * round's figures rather than drawing a nameless extra row.
+ *
+ * THE SAME CLASSIFICATION AS campaignState, through status.ts, because a
+ * second opinion about which bucket 'awaiting_confirmation' belongs in is how
+ * a card and a row come to disagree.
+ */
+export function progressByRound<T extends CampaignQueueRow>(rows: T[]): Record<string, CampaignProgress> {
+  const out: Record<string, CampaignProgress> = {};
+  for (const r of rows) {
+    const key = typeof r.round_at === 'string' && r.round_at.length > 0 ? r.round_at : '';
+    const p = (out[key] ??= { ...EMPTY_PROGRESS });
+    p.total += 1;
+    if (r.status === 'published') p.published += 1;
+    else if (r.status === 'failed') p.failed += 1;
+    else if (r.status === 'skipped') p.skipped += 1;
+    else if (IN_FLIGHT_STATUSES.includes(r.status)) p.running += 1;
+    else if (NEEDS_HUMAN_STATUSES.includes(r.status)) p.manual += 1;
+    else p.scheduled += 1;
+  }
+  for (const p of Object.values(out)) p.finished = p.published + p.failed + p.skipped;
+  return out;
+}
+
+/**
+ * WHAT A ROUND IS DOING, in the owner's six words.
+ *
+ * "ממתין / מתחיל / מפרסם / הושלם / נכשל / בוטל" — and each one is read off
+ * the rows, never off the clock. A round whose hour has passed but whose rows
+ * have not been created yet is WAITING, not publishing, and saying otherwise
+ * is the kind of indicator this product has been asked to stop drawing.
+ */
+export type RoundState = 'waiting' | 'starting' | 'publishing' | 'done' | 'failed' | 'cancelled';
+
+export function roundState(p: CampaignProgress | undefined): RoundState {
+  if (!p || p.total === 0) return 'waiting';
+  if (p.finished >= p.total) {
+    /* Everything is over. WHICH ending it was is decided by what actually
+       happened, not by whether anything failed at all: one failure out of
+       fifty is a round that ran, and calling it "נכשל" would be a lie the
+       owner has to go and disprove. */
+    if (p.published > 0) return 'done';
+    if (p.failed > 0) return 'failed';
+    return 'cancelled';
+  }
+  if (p.running > 0) return 'publishing';
+  if (p.finished > 0) return 'publishing';
+  return 'waiting';
+}
+
 export function campaignState<T extends CampaignQueueRow>(
   rows: T[],
   campaign?: Pick<Campaign, 'status'> | null,
@@ -298,6 +372,8 @@ export function campaignState<T extends CampaignQueueRow>(
     }
   }
   progress.finished = progress.published + progress.failed + progress.skipped;
+  /* Only from rows — see the field's own note on why `counts` gets nothing. */
+  const byRound = opts.counts ? undefined : progressByRound(rows);
 
   const published = rows.filter((r) => r.published_at);
   /* Exact when the caller has it — see `counts.startedAt`. The row-derived
@@ -397,6 +473,7 @@ export function campaignState<T extends CampaignQueueRow>(
     state: resolveState(progress, campaign?.status, progress.total, startedAt !== null || progress.published > 0),
     truncated: opts.truncated ?? false,
     countsNote: opts.countsNote ?? null,
+    byRound,
     publishedOutsidePlanToday: opts.publishedOutsidePlanToday ?? 0,
     outsidePlanIsWhole: opts.outsidePlanIsWhole ?? true,
     todayOnly: opts.todayOnly ?? false,

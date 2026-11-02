@@ -17,7 +17,10 @@ import { DEFAULT_CAMPAIGN_SCHEDULE, type CampaignRound } from '@/lib/social/camp
 
 const base = { ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true, start: '03:30', days: [0, 1, 2, 3, 4], gapSeconds: 30 };
 
-const cases: [string, CampaignRound[], { enabled: boolean; minHours: number } | undefined][] = [
+type Prog = Record<string, { total: number; published: number; failed: number; skipped: number; scheduled: number; running: number; manual: number; finished: number }>;
+const prog = (o: Partial<Prog[string]>) => ({ total: 0, published: 0, failed: 0, skipped: 0, scheduled: 0, running: 0, manual: 0, finished: 0, ...o });
+
+const cases: [string, CampaignRound[], { enabled: boolean; minHours: number } | undefined, Prog?][] = [
   /* OFF — every campaign that exists today. The card is drawn, the list is not. */
   ['no extra rounds — the card as every campaign has it today', [], { enabled: false, minHours: 20 }],
   /* The owner's own reference: 03:30 and 15:30. */
@@ -30,11 +33,27 @@ const cases: [string, CampaignRound[], { enabled: boolean; minHours: number } | 
   ['four rounds, one switched off — the cap, and no add button',
     [{ at: '09:30', enabled: true }, { at: '15:30', enabled: true }, { at: '18:00', enabled: false }, { at: '21:30', enabled: true }],
     { enabled: true, minHours: 12 }],
+  /*
+   * THE NUMBERS. Round one is mid-flight — 12 of 50 handled, one in flight —
+   * and round two has not begun. Round one's key is '' as well as '03:30',
+   * because rows created before social_queue.round_at existed are its.
+   */
+  ['two rounds with real figures — round one publishing, round two waiting',
+    [{ at: '15:30', enabled: true }], { enabled: true, minHours: 12 },
+    {
+      '03:30': prog({ total: 30, published: 8, failed: 1, skipped: 1, running: 1, scheduled: 19, finished: 10 }),
+      '': prog({ total: 20, published: 2, scheduled: 18, finished: 2 }),
+      '15:30': prog({ total: 50, scheduled: 50 }),
+    }],
+  /* And a round that is over, beside one that never ran. */
+  ['round one finished, round two still waiting',
+    [{ at: '15:30', enabled: true }], { enabled: true, minHours: 12 },
+    { '03:30': prog({ total: 50, published: 48, failed: 2, finished: 50 }), '15:30': prog({ total: 50, scheduled: 50 }) }],
 ];
 
 const body = cases
   .map(
-    ([label, rounds, repeat]) => `
+    ([label, rounds, repeat, figures]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
   <div class="panel-probe">${renderToStaticMarkup(
     createElement(CampaignSchedulePanel, {
@@ -45,6 +64,7 @@ const body = cases
       onRepeatChange: repeat ? () => {} : undefined,
       rounds,
       onRoundsChange: () => {},
+      roundProgress: figures,
     } as never),
   )}</div>`,
   )

@@ -18,6 +18,8 @@ import {
   type CampaignRound,
   type CampaignSchedule,
 } from '@/lib/social/campaign-schedule';
+import { roundState, type RoundState } from '@/lib/social/campaign';
+import { EMPTY_PROGRESS, type CampaignProgress } from '@/lib/social/types';
 import { accountGapLabel } from '@/lib/social/rules';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 import { CalendarIcon, CheckIcon, ChevronDownIcon, ClockIcon, MoreIcon, PlusIcon, RepeatIcon, TrashIcon } from '@/components/icons';
@@ -76,6 +78,65 @@ import { Toggle } from './ui';
  * where there is room to spare; the extra room this rebuild spends is
  * VERTICAL, where nothing is competing for it.
  */
+/** The owner's own six words for what a round is doing. */
+const ROUND_LABEL: Record<RoundState, string> = {
+  waiting: 'ממתין',
+  starting: 'מתחיל',
+  publishing: 'מפרסם',
+  done: 'הושלם',
+  failed: 'נכשל',
+  cancelled: 'בוטל',
+};
+
+/*
+ * THE WORD IS COLOURED; THE PILL IS NOT, and that is a measurement rather
+ * than a taste.
+ *
+ * The first version tinted each pill with 15% of its own colour, and
+ * campaign-schedule.test.ts refused it on sight — it bans bg-warning-400/N in
+ * this file outright, because amber on an amber tint is 4.18:1. Computing the
+ * rest of the set confirmed it was not one unlucky pair. Over the row's own
+ * #f5f3ff:
+ *
+ *   on a 15% tint of itself      on the row
+ *   warning  4.00  ✗             warning  4.95  ✓
+ *   success  4.20  ✗             success  5.19  ✓
+ *   brand    5.41  ✓             brand    6.48  ✓
+ *                                mist-300 5.78  ✓
+ *
+ * So every state keeps its colour and loses its background. A coloured word
+ * on the row reads at 4.95 at worst, and the row's own border is what makes
+ * it a pill.
+ */
+const ROUND_TONE: Record<RoundState, string> = {
+  waiting: 'text-mist-300',
+  starting: 'text-brand-400',
+  publishing: 'text-brand-400',
+  done: 'text-success-400',
+  failed: 'text-warning-400',
+  cancelled: 'text-mist-300',
+};
+
+/**
+ * Round one's own rows PLUS the rows that predate social_queue.round_at.
+ * Adding the two is correct and not a fudge: a campaign with one occasion a
+ * day has only ever had one round, so every unrecorded row is its.
+ */
+function mergeProgress(a?: CampaignProgress, b?: CampaignProgress): CampaignProgress {
+  const z = a ?? EMPTY_PROGRESS;
+  const y = b ?? EMPTY_PROGRESS;
+  return {
+    total: z.total + y.total,
+    published: z.published + y.published,
+    failed: z.failed + y.failed,
+    skipped: z.skipped + y.skipped,
+    scheduled: z.scheduled + y.scheduled,
+    running: z.running + y.running,
+    manual: z.manual + y.manual,
+    finished: z.finished + y.finished,
+  };
+}
+
 export function CampaignSchedulePanel({
   schedule,
   onChange,
@@ -85,6 +146,7 @@ export function CampaignSchedulePanel({
   onRepeatChange,
   rounds,
   onRoundsChange,
+  roundProgress,
   accountFloorSeconds,
   neverLaunched = false,
   showHeader = true,
@@ -116,6 +178,15 @@ export function CampaignSchedulePanel({
    */
   rounds?: CampaignRound[];
   onRoundsChange?: (next: CampaignRound[]) => void;
+  /**
+   * ONE SET OF NUMBERS PER ROUND, keyed by its 'HH:MM' — CampaignState.byRound.
+   *
+   * Optional, and its absence is drawn as absence: a caller that cannot count
+   * per round (the rollup groups by status alone) gets a row with no figures
+   * rather than a row saying nought. "0 מתוך 50" and "nobody counted" are
+   * different sentences and only one of them is true.
+   */
+  roundProgress?: Record<string, CampaignProgress>;
   /** Only for the accessible names — four controls per card in a list of them. */
   campaignName: string;
   /** While the campaign's own row is being written by something else. */
@@ -512,8 +583,18 @@ export function CampaignSchedulePanel({
                      the window's own, or an extra round's" — the window's has
                      no menu, because its field is the block above. */
                   const extra = rounds.find((r) => r.at === at);
+                  /*
+                   * Round one carries the unrecorded rows too ('' — every row
+                   * created before the column existed, and every row on a
+                   * database that has not run social-latest.sql).
+                   */
+                  const own = roundProgress?.[at];
+                  const legacy = i === 0 ? roundProgress?.[''] : undefined;
+                  const p = own || legacy ? mergeProgress(own, legacy) : undefined;
+                  const counted = Boolean(p && p.total > 0);
+                  const st = roundState(p);
                   return (
-                    <li key={at} className="flex items-center gap-1.5 rounded-xl border border-ink-600 bg-ink-800 px-2 py-1">
+                    <li key={at} className="flex flex-wrap items-center gap-1.5 rounded-xl border border-ink-600 bg-ink-800 px-2 py-1">
                       <span className="shrink-0 text-[11px] font-extrabold leading-4 text-mist-100">סבב {i + 1}</span>
                       <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold leading-4 text-mist-200">
                         <ClockIcon aria-hidden className="h-3 w-3 text-mist-400" />
@@ -523,12 +604,25 @@ export function CampaignSchedulePanel({
                         <RepeatIcon aria-hidden className="h-3 w-3 shrink-0 text-mist-400" />
                         <span className="truncate">{gapLabel({ ...schedule, start: at })}</span>
                       </span>
+                      {/*
+                        * THE ROUND'S OWN STATE, off its own rows.
+                        *
+                        * Round one also owns every row written before
+                        * social_queue.round_at existed — key '' — because a
+                        * campaign with one occasion a day has only ever had
+                        * one round, and those rows are its.
+                        *
+                        * With no figures at all the pill says what is true of
+                        * the SETTING and nothing about the queue: a caller
+                        * that cannot count must not be made to look like a
+                        * round that published nothing.
+                        */}
                       <span
                         className={`ms-auto shrink-0 rounded-lg px-1.5 py-px text-[9.5px] font-extrabold leading-4 ${
-                          extra ? 'bg-brand-300/15 text-brand-400' : 'bg-mist-500/15 text-mist-300'
+                          ROUND_TONE[st] ?? 'text-mist-300'
                         }`}
                       >
-                        {extra ? 'ממתין' : 'קבוע'}
+                        {counted ? ROUND_LABEL[st] : extra ? 'מתוזמן' : 'קבוע'}
                       </span>
                       {/*
                        * ROUND ONE HAS NO MENU, and that is not an omission:
@@ -590,6 +684,25 @@ export function CampaignSchedulePanel({
                       ) : (
                         <span className="grid h-10 w-10 shrink-0 place-items-center text-[9px] font-bold leading-3 text-mist-400">
                           מהתזמון
+                        </span>
+                      )}
+                      {counted && p && st === 'publishing' && (
+                        /*
+                         * "סבב 2 — מפרסם: 12 מתוך 50." Handled, not published:
+                         * a group that was skipped or failed is done with,
+                         * and a bar that only counted successes would sit at
+                         * 40% over a round that has finished.
+                         */
+                        <span className="basis-full pt-1">
+                          <span className="block h-1 overflow-hidden rounded-full bg-ink-600">
+                            <span
+                              className="block h-full rounded-full bg-brand-400"
+                              style={{ width: `${Math.min(100, Math.round((p.finished / Math.max(1, p.total)) * 100))}%` }}
+                            />
+                          </span>
+                          <span className="mt-0.5 block text-[9.5px] font-bold leading-3 text-mist-300">
+                            {p.finished} מתוך {p.total} קבוצות
+                          </span>
                         </span>
                       )}
                     </li>

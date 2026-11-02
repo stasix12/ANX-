@@ -96,6 +96,12 @@ async function main(): Promise<void> {
               /* The menu is a <details>; only extra rounds have one. */
               menus: card ? card.querySelectorAll('details').length : 0,
               addButton: !!card && /הוסף סבב נוסף/.test(card.textContent ?? ''),
+              /* The state word on each row, and the "x מתוך y" line under a
+                 round that is running. Read as TEXT, because that is what the
+                 owner reads. */
+              pills: rows.map((r) => (r.textContent ?? '').match(/ממתין|מתחיל|מפרסם|הושלם|נכשל|בוטל|מתוזמן|קבוע/)?.[0] ?? ''),
+              counts: (card?.textContent ?? '').match(/\d+ מתוך \d+ קבוצות/g) ?? [],
+              bars: card ? card.querySelectorAll('[style*="width"]').length : 0,
               warns: !!card && /לא יפרסם/.test(card.textContent ?? ''),
               /* No control may stick out of the card sideways. */
               wide: card
@@ -108,7 +114,7 @@ async function main(): Promise<void> {
 
       const at = `${width}px`;
       is(!seen.overflow, `${at}: the page scrolls sideways with the rounds card on it`);
-      eq(seen.panels.length, 4, `${at}: the fixture drew ${seen.panels.length} panels, not four`);
+      eq(seen.panels.length, 6, `${at}: the fixture drew ${seen.panels.length} panels, not six`);
       for (const [i, p] of seen.panels.entries()) {
         is(p.drawn, `${at}: panel ${i} did not draw the card at all — which is the exact failure this file was written after`);
         is(!p.wide, `${at}: panel ${i} has something sticking out of the card sideways`);
@@ -132,6 +138,34 @@ async function main(): Promise<void> {
         seen.panels[2].height < 320,
         `${at}: the tallest shape of this card is ${seen.panels[2].height}px — over 320 it pushes the daily repeat off a phone screen`,
       );
+
+      /* ── case 4: REAL FIGURES, which is what the owner asked for ──────── */
+      {
+        const p = seen.panels[4];
+        eq(p.rows, 2, `${at}: two rounds`);
+        /*
+         * "סבב 2 — מפרסם: 12 מתוך 50." Round one is mid-flight, so it says
+         * מפרסם; round two has not begun, so it says ממתין. The word on each
+         * row comes off that round's OWN rows, never off the clock.
+         */
+        eq(p.pills, ['מפרסם', 'ממתין'], `${at}: the two rounds must report their own states, got ${JSON.stringify(p.pills)}`);
+        /*
+         * 12 OF 50, NOT 10 OF 30. Round one owns its own thirty rows AND the
+         * twenty written before social_queue.round_at existed — key '' — and
+         * HANDLED is counted, not published: a group that failed or was
+         * skipped is done with, and a bar counting only successes would sit
+         * at 40% over a round that had finished.
+         */
+        eq(p.counts, ['12 מתוך 50 קבוצות'], `${at}: the running round must count handled-of-total across its own rows and the unrecorded ones, got ${JSON.stringify(p.counts)}`);
+        is(p.bars >= 1, `${at}: a round that is publishing must draw a bar, not only a number`);
+      }
+
+      /* ── case 5: one over, one not started ────────────────────────────── */
+      {
+        const p = seen.panels[5];
+        eq(p.pills, ['הושלם', 'ממתין'], `${at}: a round whose rows are all finished says הושלם — and two failures out of fifty is still a round that ran`);
+        eq(p.counts, [], `${at}: a finished round draws no progress bar — the bar is for what is happening now`);
+      }
 
       /* ── case 3: the cap ──────────────────────────────────────────────── */
       eq(seen.panels[3].rows, 4, `${at}: three armed rounds plus the window's own hour is four rows; a switched-off round is not planned and not listed`);

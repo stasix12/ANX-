@@ -683,6 +683,11 @@ export function LiveCampaignHero({
             onRepeatChange={onRepeatChange}
             rounds={rounds}
             onRoundsChange={onRoundsChange}
+            /* The per-round figures, off the rows this state was built from.
+               Absent when the state came from the rollup's status counts,
+               which cannot be split by round — and absence is drawn as
+               absence rather than as nought. */
+            roundProgress={state.byRound}
             campaignName={campaign.name}
             disabled={scheduleBusy}
             /* The second gate, so the panel can say which of the two is

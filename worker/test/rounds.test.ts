@@ -168,8 +168,22 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
   /* Lowered to match: his example works, exactly at the floor. */
   const fixed = roundsVsRepeat(['03:30', '15:30'], repeat(true, 12));
   is(fixed.ok, 'at twelve hours the repeat window matches the gap and both rounds publish — the closest two rounds this engine will ever allow');
-  eq(fixed.neededHours, 12, 'and twelve is MIN_REPEAT_HOURS, so there is no room below it');
-  eq(MIN_REPEAT_HOURS, 12, 'the floor this file reasons about is the floor the database enforces');
+  eq(fixed.neededHours, 12, 'and twelve is the gap between HIS two rounds, which is what the arithmetic answers');
+  /*
+   * MIN_REPEAT_HOURS IS NOW ZERO, and this line is where that is recorded.
+   *
+   * It was 12 — the product's own judgement that one post should not reach
+   * one group twice in a working day — and it was the floor every default in
+   * campaign-schedule.ts was built from. The owner asked four times for it to
+   * go ("תוריד לגמרי את כל החסימות הקיימות כולל ה-20 שעות הכל אני לוקח
+   * אחריות על המשתמש שלי") and it is his account.
+   *
+   * Nothing above this line changed: the arithmetic that compares a round
+   * layout against a window a campaign actually SET is untouched, and still
+   * answers 12 for two rounds twelve hours apart. What is gone is the floor
+   * underneath, so a campaign that sets nothing is not given one.
+   */
+  eq(MIN_REPEAT_HOURS, 0, 'there is no floor under a campaign that sets no window — the owner removed it, in writing, four times');
 
   /*
    * THE REPEAT OFF IS THE DEFAULT, and with it a second round is not slowed
@@ -181,14 +195,27 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
   eq(off.reason, 'repeat-off', 'and the card must say THAT, not "lower the window"');
 
   /*
-   * CLOSER THAN THE FLOOR: nothing helps. 12 is a database CHECK and a
-   * deliberate refusal to put one advertisement into one group twice in a
-   * morning. The card must not offer a fix that the database would reject.
+   * THERE IS NO FLOOR LEFT TO BE CLOSER THAN.
+   *
+   * This used to be the case nothing could fix: twelve was a database CHECK
+   * and a deliberate refusal to put one advertisement into one group twice
+   * in a morning, so two rounds six hours apart were impossible however the
+   * repeat was set, and the card said so rather than offering a number the
+   * database would reject.
+   *
+   * With MIN_REPEAT_HOURS at 0 — the owner's decision, taken four times in
+   * writing — six hours apart is simply a window that has to come down to
+   * six, which IS a setting he can change. So the verdict is the ordinary
+   * one and it carries the number.
    */
   const tooClose = roundsVsRepeat(['08:00', '14:00'], repeat(true, 12));
-  is(!tooClose.ok, 'six hours apart cannot work however the repeat is set');
-  eq(tooClose.reason, 'closer-than-the-floor', 'and it is a different reason, because there is no setting that fixes it');
-  eq(roundsVsRepeat(['08:00', '14:00'], repeat(false)).reason, 'closer-than-the-floor', 'the floor is reported before the repeat switch, because it is the one that cannot be answered');
+  is(!tooClose.ok, 'six hours apart still does not work while the window is twelve');
+  eq(tooClose.reason, 'window-too-long', 'but it is now a window that can be lowered, not a floor that cannot — there is no floor');
+  eq(tooClose.neededHours, 6, 'and the card can name the number that fixes it');
+  /* And with the repeat OFF, the answer is the switch — there is no longer a
+     floor to report ahead of it. 'closer-than-the-floor' is now unreachable
+     for any layout, which is what removing the floor means. */
+  eq(roundsVsRepeat(['08:00', '14:00'], repeat(false)).reason, 'repeat-off', 'with no floor left, the thing to tell him about is the switch');
 }
 
 /* ───── 6. THE REAL SLOT ENGINE, RUN — two occasions a day, in Jerusalem ── */
@@ -315,20 +342,43 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
   /* ── a window ALREADY short enough is left alone ──────────────────────── */
   {
     eq(roundsWindowFix(sched('03:30'), [r('15:30')], repeat(true, 12)).lowerTo, null, 'a window that already fits is not rewritten');
-    eq(roundsWindowFix(sched('06:00'), [r('20:00')], repeat(true, 13)).lowerTo, null, '13 hours inside a 14-hour gap is fine and must not be touched');
+    /*
+     * 06:00 and 20:00 are fourteen hours apart ONE WAY and TEN the other —
+     * 20:00 to the next morning's 06:00 — and the engine has always measured
+     * the smaller. This line used to expect `null` and got it for the wrong
+     * reason: ten hours was below the old floor of twelve, so the verdict was
+     * the unfixable 'closer-than-the-floor' and nothing was offered. With no
+     * floor the same layout is simply a window that must come down to ten,
+     * which the card can now say and act on.
+     */
+    eq(roundsWindowFix(sched('06:00'), [r('20:00')], repeat(true, 13)).lowerTo, 10, 'the wrap-around gap is ten hours, and with no floor that is a number the card can offer');
+    eq(roundsWindowFix(sched('06:00'), [r('20:00')], repeat(true, 10)).lowerTo, null, 'and a window already at ten fits, so nothing is rewritten');
   }
 
   /*
-   * ── AND IT NEVER GOES UNDER THE FLOOR ─────────────────────────────────
+   * ── AND IT FOLLOWS THE FLOOR, WHATEVER THE FLOOR IS ───────────────────
    *
-   * Twelve is a CHECK in the database and a deliberate refusal to put one
-   * advertisement into one group twice in a morning. Two rounds four hours
-   * apart must get the card's refusal, NOT a window of four.
+   * Twelve used to be a CHECK in the database and a deliberate refusal to put
+   * one advertisement into one group twice in a morning, so two rounds four
+   * hours apart got the card's refusal and no number. The owner removed the
+   * floor — four times, in writing, taking responsibility for his own account
+   * — so four hours apart is now a window of four, and the card can both say
+   * it and press it.
+   *
+   * What the sweep below still proves is the COMPOSITION, and it still means
+   * something: no pair of rounds can produce a window under the floor that is
+   * actually configured. With the floor at zero that is a weaker statement
+   * than it was, which is exactly the change he asked for — and the moment an
+   * account sets a floor again, the same line tightens again with it.
    */
   {
     const fix = roundsWindowFix(sched('08:00'), [r('12:00')], repeat(true, 20));
-    eq(fix.lowerTo, null, 'two rounds four hours apart must not lower the window below the floor — the card refuses them instead');
-    eq(roundsVsRepeat(roundStarts(sched('08:00'), [r('12:00')]), repeat(true, 20)).reason, 'closer-than-the-floor', 'and that is the verdict the card draws');
+    eq(fix.lowerTo, 4, 'two rounds four hours apart now get a window of four — there is no floor to refuse them');
+    eq(roundsVsRepeat(roundStarts(sched('08:00'), [r('12:00')]), repeat(true, 20)).reason, 'window-too-long', 'and that is the verdict the card draws');
+    /* The floor is still OBEYED when there is one: the same layout under an
+       account that kept twelve is refused exactly as before. */
+    eq(roundsWindowFix(sched('08:00'), [r('12:00')], repeat(true, 20), 12).lowerTo, null, 'an account that sets a floor of twelve still gets the refusal');
+    eq(roundsVsRepeat(roundStarts(sched('08:00'), [r('12:00')]), repeat(true, 20), 12).reason, 'closer-than-the-floor', 'with the verdict that names it');
     /*
      * EVERY GAP UNDER THE FLOOR, SWEPT — and what this does and does not
      * prove, measured rather than assumed.
@@ -536,9 +586,18 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
   /* ── HIS OWN CASE, before and after ──────────────────────────────────── */
   {
     const his = [r('06:30'), r('18:30')];
-    const before = roundsVsRepeat(roundStarts(sched('03:30'), his), repeat(true, 12));
-    eq(before.reason, 'closer-than-the-floor', 'on the default floor his three rounds cannot publish — which is what his screen was doing');
+    /* The floor is PASSED here, 12, because that is the world this case was
+       about: his screen at the time refused the layout outright. The default
+       floor is now 0 and the same call without it answers 'window-too-long'
+       with a fix of three — which is the second half of this block. */
+    const before = roundsVsRepeat(roundStarts(sched('03:30'), his), repeat(true, 12), 12);
+    eq(before.reason, 'closer-than-the-floor', 'on a floor of twelve his three rounds cannot publish — which is what his screen was doing');
     eq(before.smallestGapHours, 3, 'and the closest two are three hours apart');
+    /* And with no floor at all — where the product is now — the same layout
+       needs nothing but a shorter window, which the card offers. */
+    const nowAdays = roundsVsRepeat(roundStarts(sched('03:30'), his), repeat(true, 12));
+    eq(nowAdays.reason, 'window-too-long', 'with no floor the same layout is fixable');
+    eq(nowAdays.neededHours, 3, 'by lowering the window to the three hours between his rounds');
 
     /* The setting he asked for, doing the one thing he asked it to do. */
     const after = roundsVsRepeat(roundStarts(sched('03:30'), his), repeat(true, 3), repeatFloorFrom({ repeatFloorHours: 3 }));
@@ -559,11 +618,14 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
 
   /* ── THE VERDICT TRAVELS, WHICH IS WHAT STOPS THE TOAST LYING ────────── */
   {
-    const fix = roundsWindowFix(sched('03:30'), [r('06:30'), r('18:30')], repeat(true, 12));
+    /* Judged against a floor of twelve, which is the case this block is about:
+       the verdict has to survive the trip to the toast. An account with no
+       floor reaches the same toast through 'window-too-long'. */
+    const fix = roundsWindowFix(sched('03:30'), [r('06:30'), r('18:30')], repeat(true, 12), 12);
     eq(fix.reason, 'closer-than-the-floor', 'the fix must carry the verdict, or the caller cannot tell this apart from success');
     eq(fix.lowerTo, null, 'there is nothing to lower — no window under the floor is legal');
     eq(fix.repeatOff, false, 'and the repeat is on, so that is not the reason either');
-    eq(fix.floorHours, MIN_REPEAT_HOURS, 'and it reports the floor it judged against, so the sentence can name the number');
+    eq(fix.floorHours, 12, 'and it reports the floor it judged against, so the sentence can name the number');
 
     const said = roundsSavedMessage('ניקוי ספות', 2, { skippedNoDay: false, ...fix });
     is(!/יפרסם 3 סבבים בכל יום פרסום$/.test(said.text), 'THE TOAST MUST NOT CLAIM THREE ROUNDS WILL PUBLISH — measured, his layout delivers two, one of them at 23:30');
@@ -581,12 +643,21 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
      * roundStarts() de-duplicates it away, so the card drew a row the engine
      * never got. A button that adds nothing while looking like it worked.
      */
-    const first = nextFreeRoundStart(['03:30']) as string;
+    /* Asked WITH a floor of twelve, which is what this case is about. The
+       default floor is now 0 — the owner removed it — and the same call
+       without it keeps offering slots, which is the second half below. */
+    const first = nextFreeRoundStart(['03:30'], 12) as string;
     is(first !== null, 'a day with one round must have somewhere to put a second');
-    is(smallestRoundGapHours(['03:30', first]) >= MIN_REPEAT_HOURS, `the proposed ${first} must clear the floor against 03:30`);
+    is(smallestRoundGapHours(['03:30', first]) >= 12, `the proposed ${first} must clear the floor against 03:30`);
 
-    const second = nextFreeRoundStart(['03:30', first]);
+    const second = nextFreeRoundStart(['03:30', first], 12);
     eq(second, null, 'on a twelve-hour floor a day holds exactly two rounds, so the third press must be offered nothing rather than a duplicate');
+
+    /* With no floor there is always room for another round, and the slot it
+       offers is still the roomiest free one rather than one minute away. */
+    const third = nextFreeRoundStart(['03:30', '15:30']);
+    is(third !== null, 'with no floor a third round can always be placed');
+    is(smallestRoundGapHours(['03:30', '15:30', third as string]) >= 5, `and it is still spread out, not bunched (${String(third)})`);
 
     /* And with the floor lowered, the day has room — each proposal clearing
        the floor against EVERY existing round, not just the last one. */
@@ -732,7 +803,7 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
     eq(off.reason, 'repeat-off', 'the switch is off');
     eq(repeatFitFor(off, MIN_REPEAT_HOURS), null, 'no window makes a second publication legal while חזרה יומית is off — the fix is his switch, and the card must offer THAT');
 
-    const closer = roundsVsRepeat(['08:00', '14:00'], repeat(true, 12));
+    const closer = roundsVsRepeat(['08:00', '14:00'], repeat(true, 12), 12);
     eq(closer.reason, 'closer-than-the-floor', 'six hours apart on a twelve-hour floor');
     eq(
       repeatFitFor(closer, MIN_REPEAT_HOURS),
@@ -740,9 +811,12 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
       'rounds closer together than the account floor cannot be fixed by ANY window — a button there would write a number, the floor would still refuse the gap, and that is the decorative button one layer down',
     );
 
-    /* ── AN OMITTED FLOOR BEHAVES AS THE TWELVE IT ALWAYS WAS ───────────── */
+    /* ── AN OMITTED FLOOR IS THE ACCOUNT'S DEFAULT, WHATEVER IT IS ──────── */
     const needsFive: RoundsVerdict = { ok: false, smallestGapHours: 5, neededHours: 5, reason: 'window-too-long' };
-    eq(repeatFitFor(needsFive), MIN_REPEAT_HOURS, 'with no floor passed the default is MIN_REPEAT_HOURS, so an old caller writes exactly what it used to');
+    /* With the default floor now 0, the fit IS the gap: five hours. The old
+       expectation (twelve) was the floor raising it, and that floor is gone. */
+    eq(repeatFitFor(needsFive), 5, 'with no floor passed, the fit is the gap itself — nothing raises it any more');
+    eq(repeatFitFor(needsFive, 12), 12, 'and an account that still sets twelve gets twelve, exactly as before');
     eq(repeatFitFor(needsFive, 2), 5, 'and an account that lowered its protection gets its own number through');
     eq(repeatFitFor(long), repeatFitFor(long, MIN_REPEAT_HOURS), 'the default and the constant are the same answer on real engine output too');
   }
@@ -817,9 +891,11 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
      * offer — which is why the Settings control had to exist first, and why
      * this button must not appear here.
      */
-    const stuck = roundsVsRepeat(starts, repeat(true, 12));
+    /* Judged against twelve, explicitly, because that is the world the
+       sentence above describes — the default floor is now 0. */
+    const stuck = roundsVsRepeat(starts, repeat(true, 12), 12);
     eq(stuck.reason, 'closer-than-the-floor', 'on the old hard twelve his two hours read as too close, and no campaign setting could have answered it');
-    eq(repeatFitFor(stuck), null, 'so no window is offered — the sentence points at the protection in Settings instead, which is the control he went and used');
+    eq(repeatFitFor(stuck, 12), null, 'so no window is offered — the sentence points at the protection in Settings instead, which is the control he went and used');
   }
 
   /* ── THE PASS-THROUGH. EVERY WRITER GETS THE ACCOUNT'S FLOOR ──────────── */

@@ -92,8 +92,13 @@ const cases: [string, CampaignRound[], { enabled: boolean; minHours: number } | 
    * this product is not allowed to have: it would write a six and
    * repeatColumns() would clamp it straight back to twelve.
    */
-  ['six hours apart against the default floor of twelve — the sentence, and NO button',
-    [{ at: '09:30', enabled: true }], { enabled: true, minHours: 12 }],
+  /* The floor is PASSED here now. It used to be omitted and the default was
+     twelve; the default is 0 since the owner removed the floor, and with no
+     floor this shape is simply a window to lower — which is a different panel
+     entirely. The case this fixture exists for is an account that KEEPS a
+     floor, so it states one. */
+  ['six hours apart against a floor of twelve — the sentence, and NO button',
+    [{ at: '09:30', enabled: true }], { enabled: true, minHours: 12 }, undefined, { floorHours: 12 }],
 ];
 
 const body = cases

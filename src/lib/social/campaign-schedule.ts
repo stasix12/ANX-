@@ -781,7 +781,36 @@ export function editRoundTime(rounds: CampaignRound[], starts: string[], from: s
   return { ok: true, rounds: rounds.map((r) => (r.at === from ? { ...r, at: to } : r)) };
 }
 
-export const MIN_REPEAT_HOURS = 12;
+/**
+ * ─── אין חלון חזרה כברירת מחדל. NO REPEAT WINDOW, BY DEFAULT. ────────────
+ *
+ * "תוריד לגמרי את כל החסימות הקיימות כולל ה-20 שעות הכל אני לוקח אחריות על
+ *  המשתמש שלי." — הבעלים, 02.11.2026. הפעם הרביעית שהוא אומר את זה.
+ *
+ * This was 12: the product's own judgement that the same post should not
+ * reach the same group twice in a working day. It is not a rule of
+ * Facebook's, it was never his, and it is the number every default in this
+ * file is built from — a campaign with no stored window reads it, the writer
+ * clamps UP to it, and the card prints it back at him. Three times I removed
+ * a twenty from somewhere and it returned from the next place that held one.
+ *
+ * Zero means: nothing in the code holds a publication back for having been
+ * there before. A campaign that WANTS a window still sets one on its own
+ * card, and that number is respected exactly as before — this is the floor
+ * under it, not a ceiling over it.
+ *
+ * WHAT IT COSTS, kept here rather than quietly dropped with the number:
+ * republishing the same post to the same group is the single clearest spam
+ * signal a group admin or Meta looks for, and group publishing runs through
+ * the owner's OWN browser and his own account. He has been told, in these
+ * words, four times, and has taken responsibility in writing.
+ *
+ * THE STORED ROWS ARE NOT REACHED FROM HERE. readRepeat returns what the
+ * campaign's own column says, and his existing campaigns carry 20 from the
+ * database's column default — supabase/social-schema-v35.sql is the other
+ * half of this and must be run.
+ */
+export const MIN_REPEAT_HOURS = 0;
 export const ABSOLUTE_MIN_REPEAT_HOURS = 0;
 
 /** The account's floor, clamped into what the column and the engine accept. */

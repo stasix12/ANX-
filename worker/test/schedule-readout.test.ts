@@ -445,12 +445,17 @@ const st = (
    * gets an account restricted fastest. The database has the same check — this
    * is the half that keeps a bad value from ever being sent.
    */
-  eq(readRepeat({ repeat_min_hours: 1 } as never).minHours, MIN_REPEAT_HOURS, 'an hour is raised to the floor');
+  /* With the default floor now 0 — the owner removed it, four times, in
+     writing — a stored hour reads back as the hour. An account that sets a
+     floor still has it respected, which is the line below. */
+  eq(readRepeat({ repeat_min_hours: 1 } as never).minHours, 1, 'with no floor, a stored hour reads back as it was stored');
+  eq(readRepeat({ repeat_min_hours: 1 } as never, 12).minHours, 12, 'and an account that keeps a floor of twelve still raises it');
   eq(readRepeat({ repeat_min_hours: 0 } as never).minHours, MIN_REPEAT_HOURS, 'and so is zero');
-  eq(readRepeat({ repeat_min_hours: -5 } as never).minHours, MIN_REPEAT_HOURS, 'and a negative');
+  eq(readRepeat({ repeat_min_hours: -5 } as never).minHours, MIN_REPEAT_HOURS, 'and a negative cannot go below the floor, whatever the floor is');
   eq(readRepeat({ repeat_min_hours: 9999 } as never).minHours, MAX_REPEAT_HOURS, 'and a week is the ceiling');
   eq(readRepeat({ repeat_min_hours: 'x' } as never).minHours, DEFAULT_CAMPAIGN_REPEAT.minHours, 'and nonsense falls back to the default');
-  eq(repeatColumns({ enabled: true, minHours: 2 }).repeat_min_hours, MIN_REPEAT_HOURS, 'and a write is clamped too, not only a read');
+  eq(repeatColumns({ enabled: true, minHours: 2 }).repeat_min_hours, 2, 'with no floor a write stores what was asked for');
+  eq(repeatColumns({ enabled: true, minHours: 2 }, 12).repeat_min_hours, 12, 'and a write is clamped to the floor too, not only a read, when there is one');
   eq(repeatColumns({ enabled: true, minHours: 20 }), { repeat_enabled: true, repeat_min_hours: 20 }, 'a legal value survives the round trip');
   /*
    * 20 AND NOT 24, and this is the arithmetic behind that choice: a round that

@@ -450,4 +450,23 @@ export const WORKER_VERSION = '4.32.0';
  * (social-worker.ts). Left on the dashboard alone, not one group would ever
  * be checked a second time — the dashboard never opens Facebook.
  */
-export const WORKER_FINGERPRINT = 'acbd41589979e650';
+/*
+ * acbd4158 → c05af866. The rail now prints a skip's own reason, and caps how
+ * many finished rows may stand above the waiting ones (client.ts + Timeline).
+ * DOES THIS HAVE TO REACH THE PC? NO — measured the same way as the three
+ * re-pins above:
+ *
+ *   npm run build:app
+ *   grep -c TIMELINE_SELECT   dist/app/worker.cjs → 0
+ *   grep -c listTimelineDone  dist/app/worker.cjs → 0
+ *   grep -c DONE_ON_SCREEN    dist/app/worker.cjs → 0
+ *
+ * client.ts is in the fingerprint because rules.ts and the planner import
+ * from it, and esbuild shakes out the exports the PC never calls — which is
+ * what the three zeroes are. The PC has written skip_reason on every skip
+ * since long before this; what changed is that one screen finally reads it.
+ * 4.32.0 is not released yet either way, so the version does not move again:
+ * a bump per edit publishes an installer per commit and teaches the updater
+ * to cry wolf.
+ */
+export const WORKER_FINGERPRINT = 'c05af8660ee9b8b6';

@@ -1591,9 +1591,26 @@ const QUEUE_SELECT_LITE =
  * the cap looked expensive. It was expensive because of what each row
  * weighed, not because of how many there were.
  */
-const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, target:social_targets(id,name,channel,image_url)';
+/*
+ * `skip_reason` IS ON THE LIST, and it is the one column here that is not
+ * about placing a row on the rail.
+ *
+ * "למה יש הרבה שורות של דולג" — six rows reading the single grey word "דולג",
+ * on a screen that had the answer to that question in the database and would
+ * not fetch it. Every skip this product writes carries a sentence saying
+ * exactly which rule stopped it ("היעד X כבוי", "הפוסט הזה כבר פורסם ל-X",
+ * "הסבב נעצר"), and the owner was left to infer one — wrongly, as it happened,
+ * and he would have changed a setting over it.
+ *
+ * It is affordable for the reason the note above makes: the weight here was
+ * never the number of rows, it was `rendered_text` per row. skip_reason is
+ * NULL on everything that published and a short sentence on what did not, so
+ * a day of two hundred publications and twenty skips pays about two kilobytes
+ * — against the ninety this select already costs for the names and pictures.
+ */
+const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, skip_reason, target:social_targets(id,name,channel,image_url)';
 
-export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'target'>;
+export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'skip_reason' | 'target'>;
 
 /**
  * Today's finished publications, for the dashboard's rail.

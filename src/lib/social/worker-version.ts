@@ -303,4 +303,4 @@ export const WORKER_VERSION = '4.24.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = '9b7e7abebed29eab';
+export const WORKER_FINGERPRINT = '15b6aa00632c3511';

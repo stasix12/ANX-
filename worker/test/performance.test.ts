@@ -506,6 +506,29 @@ const code = (rel: string) =>
        * comment_at. Recorded rather than quietly tolerated, which is the whole
        * point of this list.
        */
+      /*
+       * ROUND_AT IS DELIBERATELY NOT SELECTED HERE, and this entry is a scar.
+       *
+       * It WAS selected — this guard demanded it the moment the column
+       * appeared on QueueItem, and adding it was the wrong answer. PostgREST
+       * refuses the WHOLE read when one named column does not exist, so the
+       * dashboard of a database that had not yet run social-latest.sql
+       * stopped rendering entirely: a full-page "מבנה הנתונים לא מעודכן" and
+       * nothing else. The owner saw it on his phone at 05:45.
+       *
+       * The product's own rule, which this broke: a feature ships OFF for
+       * every row that already exists, and a database that has not run the
+       * SQL behaves exactly as before. A column that may not be there must
+       * never be in a read a screen depends on — see createSchedule's
+       * OPTIONAL_SCHEDULE_COLUMNS retry, which is the same lesson paid for
+       * once already.
+       *
+       * Per-round figures therefore come from a read that is allowed to fail,
+       * and progressByRound() answers {} — "nobody counted" — when no row
+       * carries a round, which is also the honest answer while the PC is
+       * still on the previous version.
+       */
+      round_at: 'a database that has not run social-latest.sql has no such column, and PostgREST refuses the whole read — it blanked the dashboard once',
       created_at: 'read by no screen, no component and no queue ordering — verified across src/ and worker/',
     },
     CAMPAIGN_FEED_SELECT: {
@@ -522,6 +545,29 @@ const code = (rel: string) =>
        * comment_at. Recorded rather than quietly tolerated, which is the whole
        * point of this list.
        */
+      /*
+       * ROUND_AT IS DELIBERATELY NOT SELECTED HERE, and this entry is a scar.
+       *
+       * It WAS selected — this guard demanded it the moment the column
+       * appeared on QueueItem, and adding it was the wrong answer. PostgREST
+       * refuses the WHOLE read when one named column does not exist, so the
+       * dashboard of a database that had not yet run social-latest.sql
+       * stopped rendering entirely: a full-page "מבנה הנתונים לא מעודכן" and
+       * nothing else. The owner saw it on his phone at 05:45.
+       *
+       * The product's own rule, which this broke: a feature ships OFF for
+       * every row that already exists, and a database that has not run the
+       * SQL behaves exactly as before. A column that may not be there must
+       * never be in a read a screen depends on — see createSchedule's
+       * OPTIONAL_SCHEDULE_COLUMNS retry, which is the same lesson paid for
+       * once already.
+       *
+       * Per-round figures therefore come from a read that is allowed to fail,
+       * and progressByRound() answers {} — "nobody counted" — when no row
+       * carries a round, which is also the honest answer while the PC is
+       * still on the previous version.
+       */
+      round_at: 'a database that has not run social-latest.sql has no such column, and PostgREST refuses the whole read — it blanked the dashboard once',
       created_at: 'read by no screen, no component and no queue ordering — verified across src/ and worker/',
     },
   };
@@ -542,6 +588,24 @@ const code = (rel: string) =>
     const stale = Object.keys(excused).filter((c) => !fields.includes(c));
     eq(stale, [], `${name}'s exclusion list still excuses ${stale.join(', ')}, which QueueItem no longer declares`);
   }
+
+  /*
+   * ─── AND THE ONE COLUMN THAT MAY NOT BE IN ANY OF THEM ─────────────────
+   *
+   * round_at arrives with supabase/social-latest.sql. PostgREST refuses the
+   * WHOLE read when a named column is absent, so the moment it went into
+   * these selects every screen of a database that had not run the file
+   * stopped rendering — a full-page "מבנה הנתונים לא מעודכן" and nothing
+   * else, on the owner's phone, at 05:45.
+   *
+   * The exclusion list above records WHY it is missing; this makes putting it
+   * back fail. Those are different jobs: an exclusion entry is satisfied by
+   * adding the column, which is exactly the mistake.
+   */
+  is(
+    !/round_at/.test(clientCode),
+    'a read in client.ts names round_at again — PostgREST refuses the whole read on a database that has not run social-latest.sql, and the dashboard renders nothing at all. Per-round figures must come from a read that is allowed to fail.',
+  );
 
   /*
    * ─── EVERY SELECT IN THE FILE IS IN EXACTLY ONE OF THREE CLASSES ───────

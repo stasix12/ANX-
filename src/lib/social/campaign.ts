@@ -232,6 +232,21 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
  * a card and a row come to disagree.
  */
 export function progressByRound<T extends CampaignQueueRow>(rows: T[]): Record<string, CampaignProgress> {
+  /*
+   * NOT ONE ROW CARRIES A ROUND → NOBODY COUNTED, and the answer is nothing
+   * rather than "all of them are round one".
+   *
+   * Three real states produce this, and in two of them round one owning every
+   * row would be a lie on screen:
+   *   · the database has not run social-latest.sql, so the column is absent;
+   *   · it has, but the PC is still on the previous version and its planner
+   *     is not writing the column yet — up to an hour after the release;
+   *   · the campaign genuinely has one round, where the card draws no list at
+   *     all and these figures are never read.
+   * An empty answer draws as absence, which the card already distinguishes
+   * from "this round published nothing".
+   */
+  if (!rows.some((r) => typeof r.round_at === 'string' && r.round_at.length > 0)) return {};
   const out: Record<string, CampaignProgress> = {};
   for (const r of rows) {
     const key = typeof r.round_at === 'string' && r.round_at.length > 0 ? r.round_at : '';

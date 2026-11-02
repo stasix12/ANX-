@@ -97,7 +97,7 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.31.0';
+export const WORKER_VERSION = '4.32.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -433,4 +433,21 @@ export const WORKER_VERSION = '4.31.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = '54a557efe154efed';
+/*
+ * 4.31.0 → 4.32.0. "לא מצאתי את תיבת 'כתבו משהו…'" — THE SECOND LOOK.
+ * DOES THIS HAVE TO REACH THE PC? YES, and measured as always:
+ *
+ *   npm run build:app
+ *   grep -c verifyCanPost         dist/app/worker.cjs → 3
+ *   grep -c no-composer-box       dist/app/worker.cjs → 2
+ *   grep -c LEFT_AFTER_VERIFY_CAP dist/app/worker.cjs → 4
+ *
+ * Every part of this runs on his machine: the throw that marks the one
+ * ambiguous composer failure (facebook/composer.ts), the re-verification that
+ * opens the group again and reads whether Facebook itself refuses it
+ * (facebook/membership.ts), and the branch that switches a confirmed-refused
+ * group off so no later round queues it, waits on it or fails on it
+ * (social-worker.ts). Left on the dashboard alone, not one group would ever
+ * be checked a second time — the dashboard never opens Facebook.
+ */
+export const WORKER_FINGERPRINT = 'acbd41589979e650';

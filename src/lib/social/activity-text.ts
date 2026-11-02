@@ -88,9 +88,21 @@ const TITLE: Record<string, string> = {
   // A round's own life.
   planned: 'נבנה סבב פרסום',
   drip_planned: 'נבנה סבב פרסום',
-  /* Written when Facebook's own page says this account cannot post in a
-     group — the group is switched off and the owner is told which one. */
-  target_left: 'יצאתם מקבוצה — היא כובתה',
+  /*
+   * Written when Facebook's own page says this account cannot post in a
+   * group — the group is switched off and the owner is told which one.
+   *
+   * THE HEADLINE SAYS WHAT WE KNOW, which is not what it used to claim.
+   * "יצאתם מקבוצה" asserts a membership we never read: all three writers of
+   * this event (the nightly sweep, the cannot_post branch, and the
+   * re-verification after a missing composer box) fire on one sentence —
+   * Facebook saying this account cannot post here — and that is also what a
+   * group whose admin stopped members posting looks like, with the owner
+   * still very much a member. The line underneath carries which of the two it
+   * was, when the page said; the headline states the part that is certain and
+   * the part that was done about it.
+   */
+  target_left: 'אי אפשר לפרסם בקבוצה — היא כובתה',
   worker_window_storm: 'ריבוי חלונות דפדפן — פעולות הרקע נעצרו',
   nightly_group_check: 'בדיקה יומית של הקבוצות',
   campaign_paused: 'הסבב הושהה',

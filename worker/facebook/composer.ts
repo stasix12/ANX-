@@ -18,6 +18,24 @@ export class PublishError extends Error {
     message: string,
     /** True once the Post button was clicked — a retry could double-post. */
     public afterSubmit = false,
+    /**
+     * WHICH failure this is, where `kind` cannot say.
+     *
+     * 'composer' covers four different things: the "כתבו משהו…" box was never
+     * found; it opened with no text field; the window that opened was a
+     * comment box; the "פרסום" button never became usable. Only the FIRST of
+     * those is ambiguous about the group itself — it is what a group you have
+     * left looks like, and also what a Facebook redesign looks like — and it
+     * is the only one worth going back and asking Facebook about (see
+     * facebook/membership.ts and the branch in social-worker.ts that calls
+     * it). The other three prove the composer opened, so the account can post
+     * there and nothing about the group is in question.
+     *
+     * A message regex would have told them apart too, until somebody improved
+     * the wording. This is the signal, and worker/test/reverify.test.ts holds
+     * it to the one throw that may carry it.
+     */
+    public why: '' | 'no-composer-box' = '',
   ) {
     super(message);
   }
@@ -280,7 +298,13 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   }
   if (!dialog) {
     assertUsable(await classifyPage(page));
-    throw new PublishError('composer', 'לא מצאתי את תיבת "כתבו משהו…" בקבוצה. ייתכן שאין הרשאת פרסום או ש-Facebook שינתה את הממשק (facebook/selectors.ts).');
+    throw new PublishError(
+      'composer',
+      'לא מצאתי את תיבת "כתבו משהו…" בקבוצה. ייתכן שאין הרשאת פרסום או ש-Facebook שינתה את הממשק (facebook/selectors.ts).',
+      false,
+      /* The one throw that gets a second look. See PublishError.why. */
+      'no-composer-box',
+    );
   }
   await input.onStep('composer_opened');
 

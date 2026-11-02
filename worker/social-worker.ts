@@ -39,6 +39,7 @@ import { PublishError } from './facebook/composer';
 import { PREP_HOLD_CAP_MS, commentOnPost, type CommentOutcome } from './facebook/composer';
 import { matchPosts, ourPostsInGroup } from './facebook/postIndex';
 import { downloadMedia, type LocalMedia } from './media';
+import { verifyCanPost, type PostingCheck } from './facebook/membership';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
 import type { FacebookProfile } from './facebook/profiles';
@@ -203,6 +204,20 @@ interface WorkerState {
    * hand corrects it at the next login check.
    */
   asPage?: boolean;
+  /**
+   * How many groups this process has switched off after a re-verification.
+   *
+   * THE BLAST RADIUS, and it is deliberately small. The re-verification below
+   * only ever acts on a sentence Facebook printed, so a redesign cannot reach
+   * it — but Facebook also renders a rail of SUGGESTED groups, each with its
+   * own "הצטרפות לקבוצה" button, and if one of those were ever read as the
+   * group's own refusal then a single round would retire the owner's whole
+   * list. membership.ts reads only inside `[role="main"]` to stop exactly
+   * that; this counter is what keeps the cost of being wrong about it to a
+   * handful of groups that the owner is told about by name, each of which he
+   * puts back with one tap.
+   */
+  leftAfterVerify?: number;
   /*
    * The menu rows last read — the question above, plus each identity's own
    * stored logo, which is what lets a switch report itself without stopping to
@@ -1708,7 +1723,10 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
         patch.last_status = 'left';
         patch.last_error = 'פייסבוק אומרת שאי אפשר לפרסם בקבוצה הזו מהחשבון הזה — כנראה יצאתם ממנה. הקבוצה כובתה ולא ייכנסו אליה פרסומים חדשים.';
         console.log(`[worker] ⛔ "${patch.name ?? target.name}": אי אפשר לפרסם — הקבוצה כובתה.`);
-        await logActivity('warn', 'target_left', `כובתה הקבוצה "${patch.name ?? target.name}" — אי אפשר לפרסם בה מהחשבון הזה`, { targetId: target.id });
+        /* With the group's own address, exactly as the publication failures
+           carry it: the answer to "why can't I post here" is inside the group
+           and the owner was looking the name up by hand. */
+        await logActivity('warn', 'target_left', `כובתה הקבוצה "${patch.name ?? target.name}" — אי אפשר לפרסם בה מהחשבון הזה`, { targetId: target.id, targetUrl: target.url ?? null });
       } else if (profile.canPost === true) {
         /* It can post, so whatever the last failure said about this group is
            no longer true. Left in place it would sit on the groups screen for
@@ -2643,6 +2661,85 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
       return;
     }
     /*
+     * ─── "לא מצאתי את תיבת 'כתבו משהו…'" — ASK FACEBOOK AGAIN ──────────────
+     *
+     * "שיש את השגיאה הזאת לא מצאתי כתוב משהו בפייסבוק לבצע אימות חוזר ובמידה
+     *  ואין להתנתק מהקבוצה הזאת, ולהסיר אותה מהרשימת קבוצות שלנו שזה לא יעקב
+     *  אותנו פעם הבאה."
+     *
+     * This is the commonest failure in the product and it has never said which
+     * of its two meanings it had. The publication could not tell: it looked at
+     * a page that had just finished loading, gave Facebook's refusal 800ms to
+     * appear (composer.ts, step 1) and had the next group's click waiting on
+     * its budget. So the question is asked again HERE — once, on a fresh page,
+     * with the time to be sure — and only then is anything decided.
+     *
+     *   'cannot-post' → Facebook itself says so, in the group's own column.
+     *                   The group is switched off, which is the whole of
+     *                   "שזה לא יעקב אותנו פעם הבאה": rules.ts skips a
+     *                   disabled target before it is ever claimed, so no
+     *                   later round queues it, waits on it or fails on it.
+     *   'can-post'   → the box is there on the second look. The group is
+     *                   untouched and the owner is told it was our miss, not
+     *                   his group, so he does not go hunting a membership
+     *                   problem that does not exist.
+     *   'unknown'    → nothing is established, so nothing is done. This is the
+     *                   verdict a Facebook REDESIGN produces, and it is why a
+     *                   redesign can cost a round but can never cost the owner
+     *                   his list of groups.
+     *
+     * LEAVING THE GROUP ON FACEBOOK IS NOT DONE FROM HERE, and that is on
+     * purpose: it is irreversible on his real account — a closed group can ask
+     * questions, or an admin, to get back in — it is driven by a judgement
+     * that is right most of the time rather than always, and it is not what
+     * the stated goal needs. A group that is off cannot hold a campaign up
+     * again whether he is still in it or not. The sentence written on it says
+     * which group, why, and that leaving it on Facebook is his call.
+     *
+     * NOT WHILE SIGNED IN AS A PAGE — the guard the cannot_post branch above
+     * carries, for the reason written there at length: most groups refuse
+     * Pages, and reading that as "you left" retires a working list.
+     */
+    let verifyNote = '';
+    if (err instanceof PublishError && err.why === 'no-composer-box' && !state.asPage) {
+      const check = await reverifyPosting(state, tt, jobEnv.headless);
+      if (check.verdict === 'cannot-post' && (state.leftAfterVerify ?? 0) >= LEFT_AFTER_VERIFY_CAP) {
+        /* The cap is reached. The group is LEFT ON, because at this point the
+           likelier explanation is that something is wrong with the reading and
+           not with fifteen groups — and that possibility is said out loud
+           rather than absorbed. */
+        verifyNote = ` בדקנו שוב והקבוצה נראית סגורה לפרסום, אבל כבר כיבינו ${LEFT_AFTER_VERIFY_CAP} קבוצות בריצה הזאת ולכן עצרנו — בדקו את הקבוצות שכובו.`;
+        await logActivity('warn', 'worker_error', `עצרנו את כיבוי הקבוצות האוטומטי אחרי ${LEFT_AFTER_VERIFY_CAP} קבוצות בריצה אחת — "${tt.name}" נשארה פעילה. בדקו אם זה אמיתי.`, {
+          queueId: item.id,
+          targetId: tt.id,
+        });
+      } else if (check.verdict === 'cannot-post') {
+        state.leftAfterVerify = (state.leftAfterVerify ?? 0) + 1;
+        const quote = check.said ? ` ("${check.said}")` : '';
+        const why = `בדקנו את הקבוצה שוב בפייסבוק ואי אפשר לפרסם בה מהחשבון הזה${quote}. הקבוצה כובתה ולא ייכנסו אליה פרסומים חדשים. אם זו טעות — הפעילו אותה כאן; אם אתם רוצים לצאת ממנה, צאו בפייסבוק.`;
+        /*
+         * `skipped`, not `failed`, and the difference is honesty: this row did
+         * not fail on its merits, it was never going to publish. It is the
+         * same write the cannot_post branch above makes, for the same reason —
+         * and it keeps the group's own failure count for real failures.
+         */
+        await finish({ status: 'skipped', step: '', skip_reason: why, screenshot_path: screenshot });
+        await db.from('social_targets').update({ enabled: false, last_status: 'left', last_error: why }).eq('id', tt.id);
+        await logActivity('warn', 'target_left', `כובתה הקבוצה "${tt.name}" — אימות חוזר בפייסבוק מצא שאי אפשר לפרסם בה`, {
+          queueId: item.id,
+          targetId: tt.id,
+          detail: raw,
+          targetUrl: tt.url ?? null,
+        });
+        console.log(`[worker] ⛔ "${tt.name}": אימות חוזר — אי אפשר לפרסם. הקבוצה כובתה.`);
+        return;
+      } else if (check.verdict === 'can-post') {
+        verifyNote = ' בדקנו שוב והתיבה כן קיימת — זו הייתה תקלה רגעית בטעינת העמוד, לא בעיה בקבוצה. הקבוצה נשארה פעילה ותקבל את הסבב הבא.';
+      } else {
+        verifyNote = ' בדקנו שוב ולא הצלחנו לקבוע אם אפשר לפרסם בקבוצה — לא שינינו בה כלום.';
+      }
+    }
+    /*
      * ─── ONE ATTEMPT. THEN ON TO THE NEXT GROUP. ──────────────────────────
      *
      * "אם לא הצליח לפרסם אחרי פעם ראשונה פשוט לדלג, שזה לא יעקב את כל הקמפיין."
@@ -2682,8 +2779,12 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
      * asking for a human (SessionError), a group that refuses the account
      * (cannot_post), and anything that may already be live (afterSubmit).
      */
-    await finish({ status: 'failed', step: 'failed', error: message, screenshot_path: screenshot });
-    await db.from('social_targets').update({ last_status: 'failed', last_error: message }).eq('id', tt.id);
+    /* The re-verification's answer travels with the failure, because the
+       failure sentence on its own is the one the owner has been reading for
+       weeks without being able to act on it. */
+    const failureLine = `${message}${verifyNote}`;
+    await finish({ status: 'failed', step: 'failed', error: failureLine, screenshot_path: screenshot });
+    await db.from('social_targets').update({ last_status: 'failed', last_error: failureLine }).eq('id', tt.id);
     /*
      * THE GROUP'S OWN ADDRESS GOES IN THE LOG LINE.
      *
@@ -2699,7 +2800,7 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
      * carry no targetUrl and get no button — a link that is guessed is worse
      * than none, and the group page in the app still reaches it.
      */
-    await logActivity('error', 'publish_failed', `${tt.name}: ${message}`, { queueId: item.id, step: lastStep, detail: raw, targetUrl: tt.url ?? null });
+    await logActivity('error', 'publish_failed', `${tt.name}: ${failureLine}`, { queueId: item.id, step: lastStep, detail: raw, targetUrl: tt.url ?? null });
     console.log(`[worker] ✖ ${raw}`);
     return;
   }
@@ -2798,6 +2899,64 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
   await db.from('social_targets').update(targetPatch).eq('id', tt.id).then(() => undefined, () => undefined);
   await logActivity('info', 'published', `פורסם לקבוצה "${result.groupTitle || tt.name}"${v ? ` (גרסה ${v.label})` : ''}${note ? ` — ${note}` : ''}`, { queueId: item.id, verified: result.verified, verifyCutShort: Boolean(result.verifyCutShort), lookedIn: result.lookedIn ?? [] });
   console.log(`[worker] ✔ פורסם ל-"${tt.name}"${note ? ` (${note})` : ''}`);
+}
+
+/**
+ * At most this many groups may be switched off by a re-verification in ONE
+ * run of this process. See WorkerState.leftAfterVerify for why there is a cap
+ * at all; fifteen is "a bad evening's worth of dead groups" and nowhere near
+ * "something is wrong with the reading".
+ */
+const LEFT_AFTER_VERIFY_CAP = 15;
+
+/** Hard stop. A verification is worth seconds, never the queue. */
+const REVERIFY_BUDGET_MS = 25_000;
+
+/**
+ * The second look, on its own page: "can this account still post here?"
+ *
+ * Called from runJobInner's failure path only, and only for the one composer
+ * failure that is ambiguous about the group — see the branch there, and
+ * facebook/membership.ts for what the answer is allowed to mean.
+ *
+ * THE ADDRESS IS PARSED HERE, exactly as the adapter parses it before a
+ * publication: this opens a page carrying the owner's live Facebook session
+ * and `social_targets.url` is a column any authenticated session can write.
+ * verifyCanPost takes the parsed address and does not re-check it, which is
+ * what lets the test drive it against local fixtures.
+ */
+async function reverifyPosting(state: WorkerState, target: SocialTarget, headless: boolean): Promise<PostingCheck> {
+  const group = parseGroupUrl(target.url);
+  if (!group) return { verdict: 'unknown', said: '' };
+  if (state.browserState === 'disconnected' || !session.hasProfile()) return { verdict: 'unknown', said: '' };
+  let page: Page | null = null;
+  try {
+    page = await session.newPage(headless, 'אימות חוזר לקבוצה');
+    /* A verification that hangs would hold the lane and the row behind it, so
+       the clock is the outer bound and 'unknown' is what running out means —
+       the same answer as every other thing this check cannot establish. */
+    const p = page;
+    /* The timer is CLEARED whichever side wins. Left pending it is a live
+       handle on a process the owner closes from a tray icon, and a shutdown
+       that waits twenty-five seconds for a check nobody is reading is the kind
+       of "the app will not close" this worker has had enough of. */
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        verifyCanPost(p, group.url),
+        new Promise<PostingCheck>((resolve) => {
+          timer = setTimeout(() => resolve({ verdict: 'unknown', said: '' }), REVERIFY_BUDGET_MS);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } catch (err) {
+    console.log(`[worker] ℹ אימות חוזר ל-"${target.name}" לא הושלם: ${safeError(err)}`);
+    return { verdict: 'unknown', said: '' };
+  } finally {
+    await page?.close().catch(() => undefined);
+  }
 }
 
 /** Three tries with a short backoff, for a write that must not be lost. */

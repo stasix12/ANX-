@@ -50,3 +50,10 @@ dev.log
 
 # פרטי כניסה של לקוחות ל-workers בענן — סודות, לעולם לא לריפו.
 worker/customers/*.env
+
+# Throwaway browser fixtures. A measured test has to live under worker/test/
+# to resolve playwright-core and the '@/...' alias, so an investigation that
+# needs to mount a component writes one here and deletes it afterwards — and
+# twice now one has been left behind and swept into a commit. Anything a
+# human wrote is named without the dot; this pattern is for the scratch only.
+worker/test/.tmp-*

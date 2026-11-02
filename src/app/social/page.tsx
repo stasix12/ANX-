@@ -184,6 +184,8 @@ interface DashboardData {
   lastPublished: string | null;
   /** Publications today has: gone out + still waiting before the next midnight. */
   plannedToday: number;
+  /** Waiting rows scheduled before the next LOCAL midnight — the tile's figure. */
+  waitingToday: number;
   control: ControlSettings;
   /**
    * Enabled targets, or null when the read was skipped.
@@ -482,6 +484,18 @@ export default function SocialDashboard() {
         /* Done plus still to come. Never smaller than what has gone out,
            because what has gone out is one of its two halves. */
         plannedToday: today + waitingToday,
+        /*
+         * STILL TO COME BEFORE MIDNIGHT, on its own — "ב ממתינים בתור לרשום
+         * רק את המספר פוסטים שמתוזמנים עד סוף היום ב 00:00".
+         *
+         * It was already being computed on this screen every poll
+         * (countWaitingWithin at the next LOCAL midnight, built from the
+         * calendar date in Asia/Jerusalem rather than now+24h, because two
+         * clock changes a year make one day 23 hours and another 25) and was
+         * being used for nothing but the sum above. The tile reads it now, so
+         * the owner's figure costs no extra query.
+         */
+        waitingToday,
         control,
         activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
         waitingForYou,
@@ -1690,19 +1704,69 @@ export default function SocialDashboard() {
                 dense
                 icon={<UsersIcon aria-hidden className="h-4 w-4" />}
                 tone={summary.queued ? 'brand' : 'neutral'}
-                label="ממתינים בתור"
-                value={summary.queued}
-                /* "יוצאים לפי התזמון" is true of this figure and false of the
-                   rows that need a person, so those are named rather than
-                   folded in. It is also the only place in the row they still
-                   appear now that their own tile is gone. */
-                sub={summary.needsHuman ? `ועוד ${summary.needsHuman} דורשים אתכם` : 'יוצאים לפי התזמון'}
+                /*
+                  ─── TODAY, BY NAME — "ובכותרת לרשום ממינים בתור להיום" ─────
+
+                  The figure was the WHOLE queue: 307 on the owner's screen,
+                  over a dashboard whose other three tiles are all about today.
+                  He asked for the rows scheduled before midnight, and for the
+                  label to say so.
+
+                  data.waitingToday is countWaitingWithin() at the next LOCAL
+                  midnight — already computed every poll for plannedToday, so
+                  this costs no query — and the boundary is the calendar date
+                  in Asia/Jerusalem rather than now+24h, which matters twice a
+                  year when a day is 23 or 25 hours long.
+
+                  IT IS NOT THE SAME STATUS SET AS summary.queued, and that is
+                  deliberate rather than overlooked: countWaitingWithin counts
+                  {scheduled, paused}, while `queued` adds the row that is
+                  `publishing` right now. A row being clicked this second is
+                  not "waiting in the queue for today", so leaving it out is
+                  the more honest reading of his words — and the sub-line below
+                  accounts for everything this number does not.
+                */
+                label="ממתינים בתור להיום"
+                value={data.waitingToday}
+                /*
+                  AND THE SUB-LINE CARRIES WHAT THE NUMBER NO LONGER DOES.
+
+                  A tile that silently dropped 266 rows would be the honest
+                  figure and a dishonest screen: the owner would tap it, land
+                  on a list of 307, and conclude the tile was broken. So the
+                  rest of the queue is named here, which also makes the
+                  arithmetic on screen add up — today plus later is the figure
+                  the "הפרסומים הקרובים" card below still prints whole, and the
+                  figure the list behind this tile shows.
+
+                  Rows that need a person keep their own clause, because
+                  "יוצאים לפי התזמון" is false of them.
+                */
+                sub={[
+                  summary.automaticWaiting > data.waitingToday ? `ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות` : '',
+                  summary.needsHuman ? `${summary.needsHuman} דורשים אתכם` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'יוצאים לפי התזמון'}
                 href="/social/history?status=scheduled"
                 action={
                   pending
                     ? {
-                        label: 'אפס',
-                        title: `אפס את התור (${pending})`,
+                        /*
+                          "אפס הכל", because this button is NOT scoped to today
+                          and must not borrow the tile's word for it.
+
+                          cancelAllScheduled() matches on status alone, with no
+                          date bound at all (client.ts) — so beside a tile that
+                          now says "להיום" a chip reading "אפס" would promise to
+                          clear today and in fact cancel every planned
+                          publication in every campaign, for every future day.
+                          The figure in the title and in the confirmation is
+                          already the whole-queue one; only the word was
+                          missing.
+                        */
+                        label: 'אפס הכל',
+                        title: `אפס את כל התור, לא רק היום (${pending})`,
                         busy: busy === 'discard',
                         onClick: () => void discardQueue(false),
                       }

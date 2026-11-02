@@ -1764,12 +1764,24 @@ async function main(): Promise<void> {
   pin('dashboard has no duplicate shortcut row', page, 'THE THREE SHORTCUT TILES USED TO SIT HERE');
   expect('guards', 'source-drift', 'QuickActions is gone rather than orphaned', page.includes('<QuickActions />'), false, NONE);
 
-  pin('page.tsx queued tile', page, 'value={summary.queued}');
+  /*
+   * RE-POINTED AGAIN, and INV-1 below is why this needs saying. The tile now
+   * shows the rows due before the next LOCAL midnight — "ב ממתינים בתור לרשום
+   * רק את המספר פוסטים שמתוזמנים עד סוף היום ב 00:00" — so the whole-queue
+   * figure moved to the sub-line beside it rather than off the screen.
+   *
+   * INV-1 is about the dashboard accounting for every unfinished row, NOT
+   * about which element carries which half. Both halves are pinned here so
+   * that dropping either one is a failure: the today figure in the tile, and
+   * the remainder named next to it.
+   */
+  pin('page.tsx queued tile is today-scoped', page, 'value={data.waitingToday}');
+  pin('page.tsx still accounts for the rest of the queue', page, 'summary.automaticWaiting - data.waitingToday} אחרי חצות');
   /* RE-POINTED with unit.test.ts: the tile is gone (always 0, so nobody read
      the row), the figure is not — it names itself in the queue tile's sub-line
      and still raises the banner above the row. INV-1 below is about the
      NUMBER being on screen, not about which element carries it. */
-  pin('page.tsx needs-you count survives the tile', page, 'ועוד ${summary.needsHuman} דורשים אתכם');
+  pin('page.tsx needs-you count survives the tile', page, '${summary.needsHuman} דורשים אתכם');
   pin('page.tsx pending figure is the cancellable count', page, 'const pending = summary.cancellable;');
   pin('page.tsx resetRun quotes what a stop can cancel', page, 'const waiting = cancellableRows(state.progress);');
   /*

@@ -2676,7 +2676,37 @@ const scenario: { step: string; line: string }[] = [];
   // The "next publications" list is read ascending: the limit is applied after
   // the sort, so descending returned the FURTHEST-OUT rows.
   pin('dashboard upcoming', dash, "listQueue({ status: AUTOMATIC_WAITING_STATUSES, limit: UPCOMING_LIMIT, order: 'asc' })");
-  pin('dashboard tiles', dash, 'value={summary.queued}');
+  /*
+   * RE-POINTED, AND THE RULE IS UNCHANGED. "ב ממתינים בתור לרשום רק את המספר
+   * פוסטים שמתוזמנים עד סוף היום ב 00:00" — the tile shows the rows due before
+   * the next LOCAL midnight now, not the whole queue.
+   *
+   * The rule here was never "the tile must read summary.queued": it is that
+   * the dashboard reads the ONE classification in status.ts rather than
+   * re-deriving who is waiting. data.waitingToday still does — it is
+   * countWaitingWithin(), which filters on AUTOMATIC_WAITING_STATUSES — so the
+   * needle moves to the figure and a second pin below holds the classification
+   * at its source. A hand-written list of statuses on this screen would still
+   * be the drift this block exists to catch.
+   */
+  pin('dashboard tiles', dash, 'value={data.waitingToday}');
+  pin('the today figure is the one classification, date-scoped', readFileSync('src/lib/social/client.ts', 'utf8'), ".in('status', AUTOMATIC_WAITING_STATUSES as unknown as string[])");
+  /*
+   * AND THE REST OF THE QUEUE IS STILL ON SCREEN. A tile scoped to today that
+   * silently dropped the other rows would be the honest figure on a dishonest
+   * screen: the owner taps it, lands on a list of all of them, and concludes
+   * the tile is broken. The sub-line names them, which is also what makes the
+   * arithmetic add up against the "הפרסומים הקרובים" card below, which still
+   * prints the whole queue.
+   */
+  pin('dashboard names the rows after midnight', dash, 'summary.automaticWaiting - data.waitingToday} אחרי חצות');
+  /*
+   * AND THE RESET CHIP DOES NOT BORROW THE TILE'S WORD FOR TODAY.
+   * cancelAllScheduled() matches on status with no date bound, so beside a
+   * "להיום" tile a chip reading "אפס" promises to clear today and in fact
+   * cancels every planned publication in every campaign, for every future day.
+   */
+  pin('the reset chip says it is not today-scoped', dash, "label: 'אפס הכל'");
   /*
    * RE-POINTED. needsHuman no longer has a tile of its own — it read 0 on
    * every screenshot the owner sent, and a tile that is always zero teaches
@@ -2687,7 +2717,7 @@ const scenario: { step: string; line: string }[] = [];
    * sub-line, which is what keeps a publication waiting for a person from
    * disappearing off this row entirely.
    */
-  pin('dashboard needs-you count', dash, 'summary.needsHuman ? `ועוד ${summary.needsHuman} דורשים אתכם`');
+  pin('dashboard needs-you count', dash, 'summary.needsHuman ? `${summary.needsHuman} דורשים אתכם`');
   /*
    * And it still decides the banner above the row, which is louder than the
    * tile ever was — now through `waitingForYou`, which is the same figure

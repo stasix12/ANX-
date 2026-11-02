@@ -689,18 +689,73 @@ export function CampaignCard({
         falls back to the campaign itself rather than drawing a dead button or
         leaving the foot empty.
       */}
-      <ButtonLink
-        href={editHref ?? link}
-        size="md"
-        /* Quiet while a turn-it-back-on button is drawn above — see the note
-           there. Filled on the reference's own running card, which is the one
-           the image draws. */
-        variant={turnOn ? 'secondary' : undefined}
-        className="mt-2.5 h-12 w-full !min-h-12 !rounded-2xl justify-center gap-2 !text-[14px]"
-      >
-        <PencilIcon aria-hidden className="h-4 w-4" />
-        {editHref ? 'עריכת קמפיין' : 'פתח קמפיין'}
-      </ButtonLink>
+      {/*
+        ─── 5. AND A WAY TO DELETE THE THING, ON THE CARD ──────────────────
+
+        "תוסיף אופציה למחוק קמפיין מהעמוד הזה." — the owner, with a screenshot
+        of this very screen, 25 finished campaigns on it.
+
+        IT WAS ALREADY THERE AND THAT IS THE POINT. 'מחק קמפיין' has been the
+        last entry of the ⋯ sheet for a long time, and campaigns/page.tsx hands
+        every card an onDelete. He looked at the screen and reported the
+        feature missing — which is the same report he made about סבבים ביום an
+        hour earlier, and the same cause: a control he is meant to find, behind
+        a tap he has no reason to take. The menu entry stays (it is where the
+        rest of the card's actions live, and other screens rely on it); this is
+        the one that is visible without opening anything.
+
+        AND IT COSTS NO HEIGHT. He asked me to take a full-width row OFF these
+        cards an hour ago — "תמחק את הגדרות התור המתקדמות" — so putting one
+        back would be answering one request by undoing another. The trash
+        shares the row the card already ends with: the editor grows to fill
+        what is left, and the card is exactly as tall as it was. Measured in
+        campaign-card.test.ts, which fails if that stops being true.
+
+        ICON ONLY, AND SAFE BECAUSE OF WHAT IT OPENS. It does not delete. It
+        asks removeCampaign()'s confirmation, which counts the publications
+        that have not gone out yet and says so before anything is written —
+        and the delete itself leaves every post and every published row
+        standing, because both foreign keys are `on delete set null`
+        (social-schema.sql:124, social-schema-v2.sql:46). "אסור למחוק מידע"
+        survives this button.
+      */}
+      <div className="mt-2.5 flex items-stretch gap-2">
+        <ButtonLink
+          href={editHref ?? link}
+          size="md"
+          /* Quiet while a turn-it-back-on button is drawn above — see the note
+             there. Filled on the reference's own running card, which is the one
+             the image draws. */
+          variant={turnOn ? 'secondary' : undefined}
+          className="h-12 grow !min-h-12 !rounded-2xl justify-center gap-2 !text-[14px]"
+        >
+          <PencilIcon aria-hidden className="h-4 w-4" />
+          {editHref ? 'עריכת קמפיין' : 'פתח קמפיין'}
+        </ButtonLink>
+        {onDelete && (
+          /*
+           * NAMED AFTER THE CAMPAIGN IT WOULD DELETE. A screen reader on a
+           * list of twenty-six cards reads twenty-six buttons called "מחק",
+           * and the one thing the owner needs to know before pressing is
+           * WHICH. The visible label is the icon; the accessible one carries
+           * the name.
+           */
+          <button
+            type="button"
+            /* campaign.name, NOT `name`. Written as a bare `name` first, and
+               it typechecked: in a .tsx with the DOM lib in scope that
+               resolves to window.name, a string, so every card would have
+               announced 'מחק את הקמפיין ""' and tsc would never have said a
+               word. unit.test.ts pins the campaign's own name here. */
+            aria-label={`מחק את הקמפיין "${campaign.name}"`}
+            disabled={busy}
+            onClick={onDelete}
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-ink-600 bg-ink-900 text-error-400 transition-colors hover:bg-error-300/12 disabled:pointer-events-none disabled:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error-400 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950"
+          >
+            <TrashIcon aria-hidden className="h-4.5 w-4.5" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

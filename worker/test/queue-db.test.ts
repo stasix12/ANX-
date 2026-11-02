@@ -399,6 +399,71 @@ async function main(): Promise<void> {
     exec(`delete from social_queue; update social_campaigns set schedule_rounds='[]'::jsonb where id='${ids.campaign}'`);
   }
 
+  /* ===================== DELETING A CAMPAIGN KEEPS HIS HISTORY ========== */
+  /*
+   * "אסור למחוק מידע", and a delete button that is now ONE TAP from the card.
+   *
+   * The owner asked for a visible way to delete a campaign
+   * ("תוסיף אופציה למחוק קמפיין מהעמוד הזה") and got one on the card itself,
+   * so the confirmation behind it is the only thing between a stray tap and a
+   * gone campaign. That confirmation promises him, in these words:
+   *
+   *   "הפוסטים עצמם יישארו במערכת ללא שיוך לקמפיין, והיסטוריית הפרסומים לא
+   *    נמחקת."
+   *
+   * WHETHER THAT IS TRUE IS A PROPERTY OF THE FOREIGN KEYS, not of the
+   * client code that shows the sentence. Both are `on delete set null`
+   * (social-schema.sql:124 for social_posts, social-schema-v2.sql:46 for
+   * social_queue) — but a CASCADE added to either one later would turn that
+   * promise into a lie silently, delete his publication history, and break
+   * the rule above, with nothing anywhere going red. So it is asked of the
+   * server.
+   */
+  {
+    exec(`delete from social_queue`);
+    const gone = '55555555-5555-4555-8555-555555555580';
+    const kept = '55555555-5555-4555-8555-555555555581';
+
+    /* A campaign with a post and two queue rows: one already published — the
+       history — and one still waiting. */
+    exec(`
+      insert into social_campaigns (id, name, status) values ('${gone}', 'קמפיין שנמחק', 'archived');
+      update social_posts set campaign_id = '${gone}' where id = '${ids.post}';
+      insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text, published_at)
+        values ('${kept}', '${ids.post}', '${ids.target}', '${ids.schedule}', '${gone}',
+                now() - interval '2 days', 'published', '${kept}', 'טקסט', now() - interval '2 days');
+    `);
+
+    /* THE DELETE ITSELF. deleteCampaign() in client.ts ends with exactly this
+       statement; everything before it is bookkeeping the server does not see. */
+    exec(`delete from social_campaigns where id = '${gone}'`);
+
+    is(one(`select count(*) from social_campaigns where id='${gone}'`) === '0', 'the campaign row survived its own delete');
+    is(
+      one(`select count(*) from social_queue where id='${kept}'`) === '1',
+      'THE PUBLISHED ROW WENT WITH THE CAMPAIGN — his publication history is deleted by a delete that promises it is not, and the rule is "אסור למחוק מידע"',
+    );
+    is(
+      one(`select campaign_id is null from social_queue where id='${kept}'`) === 't',
+      'the surviving row still points at a campaign that no longer exists',
+    );
+    is(
+      one(`select count(*) from social_posts where id='${ids.post}'`) === '1',
+      'THE POST WENT WITH THE CAMPAIGN — the confirmation promises the posts stay in the system',
+    );
+    is(
+      one(`select campaign_id is null from social_posts where id='${ids.post}'`) === 't',
+      'the post survived but still carries the dead campaign id',
+    );
+    /* And the published_at is intact: the row is the record of what went out,
+       not a husk of one. */
+    is(
+      one(`select published_at is not null and rendered_text <> '' from social_queue where id='${kept}'`) === 't',
+      'the surviving history row lost what made it history',
+    );
+    exec(`delete from social_queue; update social_posts set campaign_id = '${ids.campaign}' where id = '${ids.post}'`);
+  }
+
   exec(`delete from social_queue; delete from social_targets where external_id like 'bulk%';`);
 
   console.log(`${NAME} OK — ${checks} assertions against a real Postgres`);

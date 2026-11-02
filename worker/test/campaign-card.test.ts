@@ -213,6 +213,46 @@ async function main(): Promise<void> {
                     })
                     .filter(Boolean)
                 : [],
+              /*
+               * ─── THE DELETE THE OWNER ASKED TO BE ABLE TO SEE ──────────
+               *
+               * "תוסיף אופציה למחוק קמפיין מהעמוד הזה."
+               *
+               * MEASURED HERE BECAUSE A SOURCE CHECK CANNOT SEE IT. unit.test
+               * .ts pins the markup, and I proved that guard hollow by hand:
+               * wrapping the button in `{false && onDelete && (` leaves every
+               * string it greps for exactly where it was, and the suite stayed
+               * green over a card with no delete on it. Only a browser can
+               * tell a rendered control from a quoted one.
+               *
+               * By its accessible name, which is also the thing being
+               * asserted: twenty-six cards whose delete buttons are all called
+               * "מחק" tell a screen reader nothing about which campaign it is
+               * about to remove.
+               */
+              del: (() => {
+                const b = [...c.querySelectorAll('button')].find((e) => (e.getAttribute('aria-label') || '').startsWith('מחק את הקמפיין'));
+                if (!b) return null;
+                const r = b.getBoundingClientRect();
+                /* THE FOOTER EDITOR, BY ITS WORDS. `a[href*="/social/"]`
+                   matched the campaign-NAME link at the top of the card
+                   instead, and the row check failed on a layout that was
+                   correct — the two are several hundred pixels apart. */
+                const edit = [...c.querySelectorAll('a')]
+                  .find((e) => /עריכת קמפיין|פתח קמפיין/.test(e.textContent || ''))
+                  ?.getBoundingClientRect();
+                return {
+                  label: b.getAttribute('aria-label') || '',
+                  w: Math.round(r.width),
+                  h: Math.round(r.height),
+                  inside: r.left >= box.left - 1 && r.right <= box.right + 1,
+                  /* SAME ROW AS THE EDITOR, which is what makes it free of
+                     height. Compared by centre line rather than by top, so a
+                     one-pixel difference in border or padding does not read as
+                     a second row. */
+                  sameRowAsEditor: edit ? Math.abs((r.top + r.bottom) / 2 - (edit.top + edit.bottom) / 2) < 4 : false,
+                };
+              })(),
               /* Every control has to sit inside the card's own box. */
               escaped: [...c.querySelectorAll('a,button')].filter((e) => {
                 const b = e.getBoundingClientRect();
@@ -346,6 +386,66 @@ async function main(): Promise<void> {
        */
       const withPanel = seen.cards.filter((c) => c.panel);
       assert.equal(seen.cards.length - withPanel.length, 1, say(`${seen.cards.length - withPanel.length} cards rendered no scheduling panel — the fixture has exactly one such case`));
+
+      /*
+       * ─── EVERY CARD OFFERS A DELETE HE CAN SEE ────────────────────────
+       *
+       * "תוסיף אופציה למחוק קמפיין מהעמוד הזה." It was already in the ⋯ sheet
+       * and he reported it missing, which is the same report he made about
+       * סבבים ביום while that sat behind "ערוך מועד". A control he is meant to
+       * find and cannot is not a control.
+       *
+       * THESE RUN IN A BROWSER BECAUSE THE SOURCE GUARD IS NOT ENOUGH, and I
+       * know that rather than suspecting it: wrapping the button in
+       * `{false && onDelete && (` leaves every string unit.test.ts greps for
+       * exactly where it was, and that suite stayed green over a card with no
+       * delete button on it at all.
+       */
+      {
+        const dels = seen.cards.map((c) => c.del);
+        assert.equal(
+          dels.filter(Boolean).length,
+          seen.cards.length,
+          say(`${dels.filter(Boolean).length} of ${seen.cards.length} cards drew a delete button — every fixture here is handed onDelete, so a card without one is a card he cannot clear`),
+        );
+        for (const [i, d] of dels.entries()) {
+          if (!d) continue;
+          const at = `card ${i + 1}`;
+          assert.ok(d.w >= 40 && d.h >= 40, say(`${at}: the delete button is ${d.w}×${d.h} — a finger needs 40 in both directions`));
+          assert.ok(d.inside, say(`${at}: the delete button escapes the card's own box`));
+          /* NAMED AFTER ITS CAMPAIGN. A bare "מחק" on twenty-six cards is
+             twenty-six identical buttons to anyone not looking at the screen —
+             and the version of this that shipped first said 'מחק את הקמפיין ""'
+             because `name` resolved to window.name and typechecked. */
+          assert.ok(
+            /^מחק את הקמפיין "..*"$/.test(d.label),
+            say(`${at}: the delete button is labelled ${JSON.stringify(d.label)} — it must carry the campaign's own name, and an empty one means it is reading window.name`),
+          );
+          /* THE ROW IT SHARES IS WHY IT COSTS NOTHING. The owner asked for a
+             full-width row to come OFF this card an hour before asking for
+             this; a delete that took a row of its own would undo that. */
+          assert.ok(
+            d.sameRowAsEditor,
+            say(`${at}: the delete button is not on the same line as the editor — it has taken a row of its own, which is the row the owner just asked to be rid of`),
+          );
+        }
+        /*
+         * NOT A UNIQUENESS CHECK, AND THAT WAS MY FIRST VERSION OF IT.
+         *
+         * Two fixtures are both called "סבב פרסום", and so are two of the
+         * campaigns on the owner's own screen — nothing stops him naming two
+         * rounds the same thing, and nothing should. Demanding distinct labels
+         * tested the fixture's names, not the product. What matters is that
+         * every label carries a REAL name rather than the empty string that
+         * window.name would have produced.
+         */
+        const labels = dels.filter(Boolean).map((d) => d!.label);
+        assert.equal(
+          labels.filter((l) => l.length > 'מחק את הקמפיין ""'.length).length,
+          labels.length,
+          say(`a delete label carries no campaign name: ${labels.filter((l) => l.length <= 'מחק את הקמפיין ""'.length).join(' | ')}`),
+        );
+      }
 
       for (const [i, card] of seen.cards.entries()) {
         /*

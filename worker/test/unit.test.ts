@@ -1106,6 +1106,99 @@ console.log('unit tests OK');
     'the ⋯ entry must no longer be conditional on the button it used to replace — with the button gone that condition hides the tuner on exactly the cards that have a schedule',
   );
 
+  /*
+   * ─── AND A WAY TO DELETE A CAMPAIGN THAT HE CAN SEE ──────────────────────
+   *
+   * "תוסיף אופציה למחוק קמפיין מהעמוד הזה." — the owner, with a screenshot of
+   * the campaigns screen and twenty-five finished campaigns on it.
+   *
+   * IT WAS ALREADY THERE. 'מחק קמפיין' has been the last entry of the ⋯ sheet
+   * for a long time and campaigns/page.tsx hands every card an onDelete, so
+   * the honest reading of his message is not "build a delete" but "I cannot
+   * find the one you built". That is the second time in an hour — סבבים ביום
+   * was reported missing while it sat behind "ערוך מועד" — and the fix is the
+   * same shape: put the control where he is looking.
+   *
+   * SO BOTH MUST EXIST, and these assertions are a pair on purpose. The menu
+   * entry is where every other action on this card lives and other screens
+   * rely on it; the visible button is the one he will actually find. Losing
+   * either is a regression, and only the first of them has ever had a test.
+   */
+  assert.ok(
+    /\.\.\.\(onDelete \? \[\{ label: 'מחק קמפיין'[\s\S]{0,120}danger: true \}\] : \[\]\)/.test(cardCode),
+    "the ⋯ sheet must keep its 'מחק קמפיין' entry — it is where the rest of this card's actions live",
+  );
+  assert.ok(
+    /aria-label=\{`מחק את הקמפיין "\$\{campaign\.name\}"`\}/.test(cardCode),
+    'the campaign card must draw a VISIBLE delete control, named after the campaign it would delete — twenty-six buttons all called "מחק" tell a screen reader nothing about which one it is on',
+  );
+  /*
+   * campaign.name AND NOT `name`, which is the bug this line exists for.
+   *
+   * I wrote the bare `name` first and it TYPECHECKED: in a .tsx with the DOM
+   * lib in scope that resolves to window.name — a string — so every card would
+   * have announced 'מחק את הקמפיין ""' and tsc would never have mentioned it.
+   * Nothing else in this suite can see that; it is not a type error, not a
+   * render error, and not visible on screen.
+   */
+  assert.ok(
+    !/aria-label=\{`מחק את הקמפיין "\$\{name\}"`\}/.test(cardCode),
+    'the delete button is labelled with the GLOBAL `name` (window.name), not the campaign — it typechecks and announces an empty name on every card',
+  );
+  /*
+   * AND IT COSTS NO HEIGHT. He asked for a full-width row to come OFF these
+   * cards an hour ago; answering this request by putting one back would undo
+   * that one. The trash shares the row the card already ends with — the
+   * editor grows into what is left — so the card is exactly as tall as it
+   * was. campaign-card.test.ts measures the height; this pins the shape that
+   * makes the height possible, because a future edit could satisfy the
+   * measurement by shrinking something else.
+   */
+  assert.ok(
+    /<div className="mt-2\.5 flex items-stretch gap-2">[\s\S]{0,900}<ButtonLink[\s\S]{0,600}onDelete && \(/.test(cardCode),
+    'the delete button must share the footer row with the editor rather than taking a row of its own — a card that grows a row here is the row the owner just asked to be rid of',
+  );
+  assert.ok(
+    /className="h-12 grow !min-h-12/.test(cardCode),
+    'and the editor must GROW into the space the trash leaves, or the foot of the card is a short button and a gap',
+  );
+  /* 48px square: over the product's 40px floor in both directions, which the
+     measured suite enforces for every control on this card. */
+  assert.ok(/grid h-12 w-12 shrink-0 place-items-center/.test(cardCode), 'the trash must stay a 48px square — the floor for anything a thumb presses here is 40');
+  /* It opens the CONFIRMATION, never the delete. The page owns that: the card
+     is handed onDelete and calls it, and removeCampaign() is what counts the
+     unsent publications and asks. */
+  assert.ok(
+    /onClick=\{onDelete\}/.test(cardCode),
+    'the trash must call the handler the page gave it — a card that deleted anything itself would bypass the confirmation that counts what is about to be cancelled',
+  );
+  assert.ok(
+    /confirm\.ask\(\{[\s\S]{0,200}למחוק את הקמפיין\?/.test(campaignsPage),
+    'and the page must still ask before deleting — the visible button makes that confirmation the only thing between a stray tap and a deleted campaign',
+  );
+  /*
+   * AND THE CARD GOES BUSY WHILE THE DELETE RUNS.
+   *
+   * removeCampaign() runs under act(`del-${c.id}`): a stopCampaign, a
+   * deleteCampaign and a full eight-query reload. The card's `busy` prop
+   * listed pause-, resume-, dup- and open- and NOT del-, so the one control
+   * that is now visible on the card stayed live through the slowest write on
+   * the screen — a second tap re-opens the confirmation for a campaign that
+   * is already being deleted. Every key an action on this card can start must
+   * be in that list, which is what this checks rather than naming one.
+   */
+  {
+    const started = [...campaignsPage.matchAll(/act\(\s*`([a-z]+)-\$\{c\.id\}`/g)].map((m) => m[1]);
+    assert.ok(started.length >= 4, `only ${started.length} per-card act() keys found — the check below would be vacuous`);
+    const busyLine = /busy=\{([^}]*\}[^}]*)*\}/.exec(campaignsPage.slice(campaignsPage.indexOf('<CampaignCard')))?.[0] ?? '';
+    for (const key of new Set(started)) {
+      assert.ok(
+        busyLine.includes(`${key}-\${c.id}`),
+        `the card's busy prop does not cover act('${key}-…') — a control stays live through its own write, and the delete is now a VISIBLE button on that card`,
+      );
+    }
+  }
+
   for (const [where, src] of [['the dashboard', dash], ['the campaigns screen', campaignsPage]] as const) {
     /* The string alone is not a mount — a `{false && <QueueTunerSheet …>}`
        satisfies it while rendering nothing. What proves it is the sheet being

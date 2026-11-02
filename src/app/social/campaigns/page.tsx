@@ -914,7 +914,20 @@ export default function CampaignsPage() {
                 postCount={mine.length}
                 globalPaused={control?.paused ?? false}
                 workerOnline={workerOnline}
-                busy={busy === `pause-${c.id}` || busy === `resume-${c.id}` || busy === `dup-${c.id}` || busy === `open-${c.id}`}
+                /*
+                 * `del-` IS IN THIS LIST AND IT WAS NOT, which an audit of my
+                 * own change caught before the owner did.
+                 *
+                 * removeCampaign() runs under act(`del-${c.id}`) — a
+                 * stopCampaign, a deleteCampaign and then a full eight-query
+                 * reload. Every other key the card can start is here, so the
+                 * card greys out while they run; `del-` was missing, so the
+                 * one control that is now VISIBLE on the card stayed live
+                 * through the slowest write on the screen. A second tap on it
+                 * re-opens a confirmation for a campaign that is already being
+                 * deleted.
+                 */
+                busy={busy === `pause-${c.id}` || busy === `resume-${c.id}` || busy === `dup-${c.id}` || busy === `open-${c.id}` || busy === `del-${c.id}`}
                 onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הקמפיין נעצר.')}
                 onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הקמפיין ממשיך.')}
                 /*

@@ -150,4 +150,61 @@ for (const [name, page] of SCREENS) {
   is(/if \(!id \|\| !Object\.keys\(patch\)\.length\) return;/.test(writer), 'an empty patch must write nothing at all rather than issue a no-op UPDATE');
 }
 
+/* ───── 6. the repeat floor reaches the WRITE, not just the drawing ─────── */
+{
+  /*
+   * ─── A SETTING THAT STICKS ON SCREEN AND NOT IN THE DATABASE ────────────
+   *
+   * Caught in adversarial review before it reached the owner, and it would
+   * have been the worst version of this bug: the card READS the floor from
+   * fresh `data` on every render, so it correctly offered
+   * "הורידו את החזרה ל-2 שעות" — and the callback behind that button wrote
+   * repeatColumns(…, 12), clamping his 2 straight back up. Press, nothing
+   * changes, press again.
+   *
+   * The cause is structural rather than arithmetic. Every writer on the
+   * dashboard lives in a useCallback whose dependencies never change —
+   * changeRepeat's are [toast] with the exhaustive-deps lint suppressed,
+   * changeSchedule's are [toast, load], and both `load` and `toast` are
+   * themselves useCallback(…, []). So the callbacks are built once, on the
+   * first render, where `data` is the cold snapshot and carries no limits at
+   * all. Anything they read from `data` is frozen there for the life of the
+   * screen.
+   *
+   * No existing test could see it: the arithmetic is right, the prop is right,
+   * the typecheck is clean, and the rendered card shows the correct number.
+   * Only the value that reaches the database is wrong. So the guard is about
+   * SHAPE — the writers must not read `data` at all.
+   */
+  const page = src('../../src/app/social/page.tsx');
+
+  is(/const floorRef = useRef\(MIN_REPEAT_HOURS\)/.test(page), 'the dashboard keeps the account floor in a ref, because its writers are built once and never see a later `data`');
+  is(
+    /floorRef\.current = repeatFloorFrom\(data\?\.limits\)/.test(page),
+    'and that ref is refreshed from the settings the screen actually loaded',
+  );
+  is(/\}, \[data\?\.limits\]\);/.test(page), 'in an effect keyed on those settings, so it follows a change rather than a render');
+
+  /*
+   * THE WRITERS TAKE IT FROM THE REF. Both of these write repeat_min_hours —
+   * setCampaignRepeat through repeatColumns, saveCampaignRounds through its
+   * window fix — and repeatColumns CLAMPS UP to whatever floor it is handed,
+   * so a stale twelve here is not a wrong label, it is a wrong row.
+   */
+  for (const call of ['setCampaignRepeat', 'saveCampaignRounds']) {
+    const re = new RegExp(`await ${call}\\([^;]*floorRef\\.current`);
+    is(re.test(page), `${call} on the dashboard takes the floor from the ref, read at the moment of the tap`);
+  }
+
+  /*
+   * AND NOTHING INSIDE A CALLBACK READS IT FROM `data` ANY MORE. Exactly one
+   * `data?.limits` read is allowed on this screen — the effect above. The
+   * card's own prop uses `data.limits` without the `?`, because by then the
+   * screen has rendered and `data` is not null; that is a different string and
+   * is deliberately not matched here.
+   */
+  const inlineReads = page.split('repeatFloorFrom(data?.limits)').length - 1;
+  is(inlineReads === 1, `the only \`data?.limits\` read left on the dashboard must be the effect that feeds the ref — found ${inlineReads}; a writer that reads it inline is frozen at the first render`);
+}
+
 console.log(`settings stick OK — ${checks} assertions over both screens and the queue tuner`);

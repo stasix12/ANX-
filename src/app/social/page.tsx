@@ -57,7 +57,7 @@ import {
   type QueueRow,
   type TimelineRow, saveCampaignRounds,} from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
-import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, repeatFloorFrom, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
+import { MIN_REPEAT_HOURS, readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, repeatFloorFrom, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
@@ -253,7 +253,41 @@ export default function SocialDashboard() {
    * just does not make the owner watch.
    */
   const dashboardSeed = useState(() => readSnapshot<DashboardData>(SNAPSHOT.dashboard))[0];
+  /*
+   * ─── THE ACCOUNT'S REPEAT FLOOR, READ AT THE MOMENT OF THE TAP ───────────
+   *
+   * A REF AND NOT `data`, because every writer on this screen lives in a
+   * useCallback that is never recreated. changeRepeat's deps are [toast] with
+   * the exhaustive-deps lint suppressed; changeSchedule's are [toast, load];
+   * `load` is useCallback(…, []) and `toast` is ToastProvider's push, also
+   * useCallback(…, []). So neither dep ever changes, both callbacks are built
+   * once on the first render, and anything they close over is the FIRST
+   * render's value — which for `data` is the cold snapshot, carrying no
+   * limits at all.
+   *
+   * Measured consequence, found in review before it reached him: the run card
+   * draws its floor from fresh `data` and offers "הורידו את החזרה ל-2 שעות",
+   * and the callback behind that button writes repeatColumns(…, 12) — which
+   * clamps his 2 straight back up to 12. The card then re-reads 12, draws the
+   * same button again, and the toast talks about something else. A control
+   * labelled with an exact number that cannot write it is the decorative
+   * button this product is not allowed to have, and it would have been MY
+   * button.
+   *
+   * Kept current in an effect rather than assigned during render, so a render
+   * React throws away cannot leave the ref pointing at a floor that was never
+   * shown. The card keeps reading `data` directly: it re-renders, so it is
+   * never stale, and the two always agree because both come from the same
+   * `data.limits`.
+   */
+  const floorRef = useRef(MIN_REPEAT_HOURS);
   const [data, setData] = useState<DashboardData | null>(dashboardSeed);
+  /* Kept beside the state it mirrors. See floorRef's own note: the writers on
+     this screen are built once and cannot see a later `data`, so the number
+     they hand the database is read from here at the moment of the tap. */
+  useEffect(() => {
+    floorRef.current = repeatFloorFrom(data?.limits);
+  }, [data?.limits]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   /*
@@ -1098,7 +1132,7 @@ export default function SocialDashboard() {
            * weekly row to re-arm, and writing one here would turn a change of
            * hours into a recurrence he never asked for.
            */
-          const repeat = readRepeat(campaign, repeatFloorFrom(data?.limits));
+          const repeat = readRepeat(campaign, floorRef.current);
           if (!repeat.enabled) {
             /*
              * ─── AN ACTIVE WEEKLY ROW WITH THE SWITCH OFF STILL PUBLISHES ──
@@ -1125,7 +1159,7 @@ export default function SocialDashboard() {
             }
           }
           if (repeat.enabled) {
-            const armedNow = await setCampaignRepeat(campaign, repeat, next, repeatFloorFrom(data?.limits));
+            const armedNow = await setCampaignRepeat(campaign, repeat, next, floorRef.current);
             /*
              * AND IF THE RE-ARM COULD NOT HAPPEN, HE HEARS IT NOW — on the
              * save that he made, not on an evening he spends waiting. A round
@@ -1334,7 +1368,7 @@ export default function SocialDashboard() {
     async (campaign: Campaign, next: CampaignRound[]) => {
       try {
         const written = roundsColumn(next);
-        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign), repeatFloorFrom(data?.limits));
+        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign), floorRef.current);
         /* ONE BUILDER FOR BOTH SCREENS — see roundsSavedMessage(). It carries
            the window the app lowered and the switch it would not press. */
         const said = roundsSavedMessage(campaign.name, written.schedule_rounds.filter((r) => r.enabled).length, result);
@@ -1351,7 +1385,7 @@ export default function SocialDashboard() {
     async (campaign: Pick<Campaign, 'id' | 'name'>, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        const result = await setCampaignRepeat(campaign, next, scheduleOf(campaign as Campaign), repeatFloorFrom(data?.limits));
+        const result = await setCampaignRepeat(campaign, next, scheduleOf(campaign as Campaign), floorRef.current);
         await load();
         /*
          * THE TOAST SAYS WHAT HAPPENED, not what was asked for.

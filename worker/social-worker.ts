@@ -1351,11 +1351,29 @@ async function reviveFailedRows(state: WorkerState, limits: LimitsSettings, brow
   const { data: failed, error: failErr } = await failedQuery;
   if (failErr) throw new Error(failErr.message);
 
+  /*
+   * THE ROUNDS THE OWNER HAS STOPPED — see `stopped` in worker/revive.ts.
+   *
+   * Reviving a failure whose run is archived cannot publish it: rules.ts skips
+   * it with "הסבב נעצר." the moment its turn comes. So the old second pass
+   * spent a write and one of three attempts to manufacture a skipped row, on
+   * every idle pass, and the owner watched it happen — "הוא מדלג ורושם הסבב
+   * נעצר למרות שלא עשיתי כלום".
+   *
+   * FAIL CLOSED, like the two reads above it: a pass that cannot find out
+   * which runs are stopped does not run. The cost of being wrong the other way
+   * is the treadmill, and it is the thing being fixed.
+   */
+  const { data: dead, error: deadErr } = await db.from('social_campaigns').select('id').eq('status', 'archived');
+  if (deadErr) throw new Error(deadErr.message);
+  const stopped = new Set(((dead ?? []) as { id: string }[]).map((c) => c.id));
+
   const revivals = pickRevivable({
     open: (open ?? []) as OpenRow[],
     failed: (failed ?? []) as FailedRow[],
     nowMs: Date.now(),
     gapMs: accountGapSeconds(limits, browser, true) * 1000,
+    stopped,
   });
   if (!revivals.length) return;
 

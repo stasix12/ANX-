@@ -593,10 +593,40 @@ export async function ensureRunForPost(post: Pick<Post, 'id' | 'title' | 'campai
    * run keep null for ever: they publish on time and stay invisible on the
    * screen built to watch them, with no way to pause or stop them as a group.
    *
-   * Only orphans, and only rows that have not finished — a row belonging to an
-   * earlier run is that run's history and is never moved.
+   * Only rows that have not finished — a row that already PUBLISHED is its
+   * run's history and is never moved. OPEN_STATUSES is waiting + in-flight, so
+   * that promise is kept by the filter rather than by remembering it.
+   *
+   * ─── AND NOT ONLY ORPHANS. THIS IS THE FIX FOR "הסבב נעצר". ─────────────
+   *
+   * This read said `.is('campaign_id', null)` and its note said "a row
+   * belonging to an earlier run is that run's history and is never moved".
+   * That is right about a published row and wrong about a WAITING one, and the
+   * difference cost the owner a day:
+   *
+   *   "הוא מדלג ורושם הסבב נעצר למרות שלא עשיתי כלום"
+   *
+   * He reset a round — which archives it — and launched it again. The relaunch
+   * opened a fresh run and repointed the post, so his card correctly read
+   * פעיל. But rules.ts:290 reads `item.campaign_id ?? post.campaign_id`: THE
+   * ROW'S label wins. So every row still attached to the stopped run was
+   * skipped with "הסבב נעצר." as its turn came, one at a time, under a card
+   * that said the round was active — and worker/revive.ts handed the failures
+   * back for another attempt on every idle tick, each one burning an attempt
+   * to write the same skip again. plan.ts:812 swept them in bulk on top.
+   *
+   * A waiting row has no history to protect: it never published. Left on the
+   * stopped run it can never publish either — it is not "that run's history",
+   * it is a publication the owner is still expecting. So it comes with him.
+   *
+   * TWO WRITES, NOT ONE `.or()`. The stranded id reaches us from the browser
+   * (PostEditor passes post.campaign_id straight through), and PostgREST's
+   * `or=` takes a STRING — interpolating a caller-supplied value into it is a
+   * filter-injection surface. `.eq()` and `.is()` are parameterised by
+   * supabase-js, so the id never becomes syntax.
    */
-  const adopted = unwrap<{ id: string }[]>(
+  const stranded = post.campaign_id ?? null;
+  const orphans = unwrap<{ id: string }[]>(
     await db()
       .from('social_queue')
       .update({ campaign_id: run.id })
@@ -605,11 +635,39 @@ export async function ensureRunForPost(post: Pick<Post, 'id' | 'title' | 'campai
       .in('status', OPEN_STATUSES)
       .select('id'),
   );
+  /*
+   * Only reachable when the run we are leaving is finished or gone: the early
+   * return above hands back any run that is still active or paused, so this
+   * never moves a row out from under a round that is merely paused — which
+   * would be a stop the owner did not ask for.
+   */
+  const rescued = stranded
+    ? unwrap<{ id: string }[]>(
+        await db()
+          .from('social_queue')
+          .update({ campaign_id: run.id })
+          .eq('post_id', post.id)
+          .eq('campaign_id', stranded)
+          .in('status', OPEN_STATUSES)
+          .select('id'),
+      )
+    : [];
+  const adopted = [...orphans, ...rescued];
   if (adopted.length) {
-    await logClientActivity('info', 'run_adopted_queue', `${adopted.length} פרסומים שכבר המתינו בתור צורפו לסבב "${run.name}"`, {
-      campaignId: run.id,
-      adopted: adopted.length,
-    });
+    await logClientActivity(
+      'info',
+      'run_adopted_queue',
+      `${adopted.length} פרסומים שכבר המתינו בתור צורפו לסבב "${run.name}"${
+        rescued.length ? ` (${rescued.length} מהם נשארו תקועים על סבב שנעצר ולא היו יוצאים)` : ''
+      }`,
+      {
+        campaignId: run.id,
+        adopted: adopted.length,
+        orphans: orphans.length,
+        rescued: rescued.length,
+        strandedFrom: stranded,
+      },
+    );
   }
   return run.id;
 }

@@ -12,7 +12,6 @@ import {
   createSchedule,
   effectiveGroupGapSeconds,
   getBrowserSettings,
-  getCampaign,
   getLimits,
   getPost,
   hasPendingQueue,
@@ -891,8 +890,6 @@ export async function quickPublish(
    * reused - the launch below opens a fresh one, and its counter starts at
    * zero instead of carrying the finished round's totals forever.
    */
-  const previousRun = post.campaign_id ? await getCampaign(post.campaign_id) : null;
-  const runEnded = previousRun?.status === 'archived';
 
   const slots = slotsForDraft(draft, now);
   const startAt = slots[0]?.toISOString() ?? draft.startAt;
@@ -911,8 +908,22 @@ export async function quickPublish(
    * the same post reuses it, which is what makes "פורסם 12 פעמים" and the
    * progress bar accumulate across rounds instead of resetting.
    */
-  // One helper for both launch paths - see ensureRunForPost in ./client.
-  const runId = await ensureRunForPost({ id: post.id, title: post.title, campaign_id: runEnded ? null : post.campaign_id });
+  /*
+   * One helper for both launch paths — see ensureRunForPost in ./client.
+   *
+   * THE POST'S REAL RUN IS HANDED OVER, archived or not. This used to compute
+   * `runEnded` here and pass NULL in its place, which made the new run open
+   * correctly and threw away the one fact the helper needed: WHICH run was
+   * being left behind. Its waiting rows are still attached to that run, and
+   * rules.ts judges a row by the run on the ROW — so they were skipped with
+   * "הסבב נעצר" for ever under a card reading פעיל, and nothing had the id
+   * required to bring them across.
+   *
+   * The archived check was a duplicate in any case: ensureRunForPost already
+   * refuses to reuse a run that is not active or paused, and PostEditor has
+   * always passed post.campaign_id straight through. One decision, one place.
+   */
+  const runId = await ensureRunForPost({ id: post.id, title: post.title, campaign_id: post.campaign_id });
 
   // Only when something actually changed: an untouched post keeps its
   // updated_at, so publishing does not silently re-sort the library's "newest".

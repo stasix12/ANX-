@@ -78,9 +78,30 @@ export function pickRevivable(input: {
   nowMs: number;
   /** The account's own floor between publications, in milliseconds. */
   gapMs: number;
+  /**
+   * Runs the owner has STOPPED — social_campaigns.status 'archived'.
+   *
+   * A failure belonging to one of these may not come back, and the note this
+   * replaces is why it used to: "rules.ts still holds each row to its
+   * campaign's days and hours exactly as it does for a row the planner
+   * wrote." True, and it made this function a treadmill. rules.ts holds such a
+   * row by SKIPPING it — `campaign?.status === 'archived'` → "הסבב נעצר." —
+   * so every revival spent a write, spent one of three attempts, and produced
+   * a skipped row in the owner's feed. On an idle worker that is every pass.
+   *
+   *   "הוא מדלג ורושם הסבב נעצר למרות שלא עשיתי כלום"
+   *
+   * That was this loop. Deferring a decision to rules.ts is right when rules.ts
+   * might say yes; here the answer is known in advance and it is no.
+   *
+   * Optional, and absent means "nothing is stopped": a caller that cannot read
+   * the list behaves as before rather than reviving nothing at all.
+   */
+  stopped?: Set<string>;
 }): Revival[] {
   const { open, failed, nowMs } = input;
   const gapMs = Math.max(1000, Math.floor(input.gapMs) || 1000);
+  const stopped = input.stopped ?? new Set<string>();
 
   const busyCampaigns = new Set(open.filter((r) => STILL_WORKING.includes(r.status)).map((r) => r.campaign_id ?? ''));
   /*
@@ -96,6 +117,10 @@ export function pickRevivable(input: {
     (r) =>
       r.attempts < REVIVE_ATTEMPT_CEILING &&
       !busyCampaigns.has(r.campaign_id ?? '') &&
+      /* The round is over. See `stopped` above: reviving into it writes a
+         skip, not a publication. A row with no run at all is NOT stopped —
+         `stopped` never holds '' — so quick publishes keep their second pass. */
+      !(r.campaign_id && stopped.has(r.campaign_id)) &&
       !busyTargets.has(r.target_id),
   );
   if (!ready.length) return [];

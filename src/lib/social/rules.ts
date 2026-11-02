@@ -394,7 +394,38 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
     if (campaign?.status === 'paused') {
       return { action: 'wait', until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(), reason: 'הסבב מושהה.' };
     }
-    if (campaign?.status === 'archived') return { action: 'skip', reason: 'הסבב נעצר.' };
+    if (campaign?.status === 'archived') {
+      /*
+       * ─── WHICH ROUND WAS STOPPED, BECAUSE IT MAY NOT BE THE ONE HE SEES ──
+       *
+       * `campaignId` above is `item.campaign_id ?? post.campaign_id` — THE
+       * ROW'S label wins. That is correct for counting (a row belongs to the
+       * run that queued it) and it means this skip can fire on a run the owner
+       * is no longer looking at: he resets a round, launches it again, the card
+       * reads פעיל because the POST now belongs to a fresh run, and the rows
+       * left on the old one are skipped one at a time with a sentence naming no
+       * round at all.
+       *
+       *   "הוא מדלג ורושם הסבב נעצר למרות שלא עשיתי כלום"
+       *
+       * He was right twice: he had stopped nothing recently, and the round that
+       * was stopped is not the round that was running. The two fixes that stop
+       * it happening are elsewhere — client.ts ensureRunForPost brings a
+       * stopped run's WAITING rows across on relaunch, and worker/revive.ts no
+       * longer hands them back for another attempt. This sentence is the third,
+       * and the only one that would have let him tell me in one message instead
+       * of a day: when the row and the post disagree, SAY SO.
+       *
+       * No extra read and no extra column: both ids are already in hand.
+       */
+      const movedOn = Boolean(item.campaign_id && post.campaign_id && item.campaign_id !== post.campaign_id);
+      return {
+        action: 'skip',
+        reason: movedOn
+          ? 'הפרסום הזה נשאר משויך לסבב קודם שנעצר — הסבב שרץ עכשיו הוא אחר. השיקו את הפוסט מחדש כדי לצרף אליו את מה שממתין.'
+          : 'הסבב נעצר.',
+      };
+    }
 
     /*
      * ─── "תזמון פרסום": THE DAYS, THE HOURS AND THE INTERVAL ───────────────

@@ -146,7 +146,42 @@
  * them. The only part that is not the PC is BrowserStatusCard.tsx, which
  * draws the notice the heartbeat now carries — that ships with the website.
  */
-export const WORKER_VERSION = '4.32.0';
+/*
+ * 4.32.0 → 4.33.0. DOES THIS HAVE TO REACH THE PC? YES — the treadmill runs
+ * there.
+ *
+ *   "הוא מדלג ורושם הסבב נעצר למרות שלא עשיתי כלום"
+ *
+ * He reset a round, which archives it, and launched the post again. The
+ * relaunch opened a fresh run and repointed the post, so his card correctly
+ * read פעיל — but the rows already queued still carried the OLD run's id, and
+ * rules.ts:290 reads `item.campaign_id ?? post.campaign_id`: the ROW'S label
+ * wins. Three things then happened on his machine, every minute, with nobody
+ * touching anything:
+ *
+ *   • worker/revive.ts handed each failure back for another attempt, because
+ *     its note deferred the question to rules.ts — "rules.ts still holds each
+ *     row to its campaign's days and hours". It does: by SKIPPING it. So every
+ *     revival spent a write and one of three attempts to manufacture another
+ *     skipped row. It now refuses a failure whose run is archived, and the
+ *     worker reads that list and FAILS CLOSED, like the two reads beside it.
+ *   • rules.ts skipped the row with a sentence that named no round at all.
+ *     When the row and the post disagree it now says which, and what to do.
+ *   • plan.ts:812 swept the same rows in bulk on top. Untouched — it is right
+ *     about a genuinely stopped run; it was only ever finding rows that should
+ *     not have been there.
+ *
+ * All three are inside worker.cjs: revive.ts and social-worker.ts are the
+ * worker's own, and rules.ts IS the decision the PC makes before every click.
+ * A machine left on 4.32.0 keeps the treadmill exactly as it is.
+ *
+ * The fix that actually ends it is NOT on the PC — client.ts ensureRunForPost
+ * brings a stopped run's WAITING rows across on relaunch, and that runs in the
+ * browser when he presses publish. So the website alone stops NEW cases and
+ * the installer stops the loop on the ones already in his queue. Both halves
+ * ship together for that reason.
+ */
+export const WORKER_VERSION = '4.33.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -503,4 +538,18 @@ export const WORKER_VERSION = '4.32.0';
    row is filed and what headline it gets are read by screens. A PC on 4.31.0
    cannot write those names at all, which is why the version moves for the
    writer and not for these. */
-export const WORKER_FINGERPRINT = '240f061bfcece107';
+/* 240f061bfcece107 → 9b5a9489aac2f95c. Re-pinned for 4.33.0 above, and the
+   split it claims is MEASURED rather than argued:
+
+     npm run build:app
+     grep -c stopped.has       dist/app/worker.cjs → 3   (revive.ts: the PC's)
+     grep -c movedOn           dist/app/worker.cjs → 2   (rules.ts: the PC's)
+     grep -c 'נשאר משויך'      dist/app/worker.cjs → 1   (the new sentence)
+     grep -c ensureRunForPost  dist/app/worker.cjs → 0   (client.ts is NOT)
+
+   That last zero is the whole shape of this fix. The loop runs on the PC and
+   needs the installer; the thing that ENDS it runs in the browser when he
+   presses publish and needs only the website. Shipping one without the other
+   would either leave his existing queue on the treadmill or leave every future
+   relaunch creating a new one. */
+export const WORKER_FINGERPRINT = '9b5a9489aac2f95c';

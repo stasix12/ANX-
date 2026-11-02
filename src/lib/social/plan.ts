@@ -287,6 +287,26 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
 
     const dropped: string[] = [];
     /*
+     * ─── THE SKIP THAT SAID NOTHING ────────────────────────────────────────
+     *
+     * "עדיין יש חוסר התאמה יש 252 קבוצות של הקמפיין שאמור לפרסם אבל בפועל הוא
+     *  ספג רק 210 בממתינים תבדוק למה." — the owner, 02.11.2026.
+     *
+     * Four things can drop a group between "selected" and "queued". Three of
+     * them push onto `dropped` and end up in the activity log BY NAME. The
+     * fourth — `taken.has(slotKey(...))`, an instant this post already
+     * occupies — was a bare `continue`: no counter, no log, no trace. A group
+     * that fell through it was simply absent, and the only way to notice was
+     * to subtract two numbers on two screens, which is exactly what he had to
+     * do.
+     *
+     * It is usually RIGHT to skip: the instant is taken because a row for it
+     * already exists. But "correct" and "silent" are different things, and a
+     * launch that quietly plans 210 of 252 is the shape this product keeps
+     * being bitten by.
+     */
+    const occupied: string[] = [];
+    /*
      * HOW MANY SLOTS COULD NOT BE WRITTEN AT ALL — and it is counted because
      * retiring the schedule depends on it.
      *
@@ -325,7 +345,10 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
         // instant is inside the campaign's own window. See plannedSlots above.
         const slot = plannedSlots[slotIndex][targetIndex];
         // Already planned for this post by some other schedule.
-        if (taken.has(slotKey(targetId, slot))) continue;
+        if (taken.has(slotKey(targetId, slot))) {
+          occupied.push(targetId);
+          continue;
+        }
         const variant = pickVariant(approved, schedule, targetId, targetIndex, rotation);
         const text = renderPostText(post as Post, variant);
         const hash = sha256(dedupeKey(targetId, text, media.map((m) => m.url)));
@@ -427,6 +450,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      * nothing; this silences the one that planned a single refill.
      */
     await noteDropped(db, note, schedule.id, dropped, plannedAhead ? 0 : made);
+    await noteOccupied(db, note, schedule.id, occupied, plannedAhead ? 0 : made);
     /*
      * ─── AND THE ONE CASE noteDropped IS DELIBERATELY SILENT ABOUT ─────────
      *
@@ -648,6 +672,39 @@ async function targetsAlreadyWaiting(db: SupabaseClient, postId: string): Promis
 const DROPPED_NAMES_SHOWN = 8;
 
 /**
+ * ─── AND THE GROUPS WHOSE INSTANT WAS ALREADY TAKEN ───────────────────────
+ *
+ * Separate from noteDropped because it is a different fact and deserves
+ * different words. noteDropped means "this post is already waiting for that
+ * group". This means "the exact second this pass wanted is already spoken
+ * for by a row of this post" — which is how a re-plan avoids writing the same
+ * row twice, and is usually the system working.
+ *
+ * It is reported anyway, because the owner had to subtract 210 from 252 on
+ * two different screens to discover that forty-two groups were missing, and
+ * nothing anywhere would ever have told him. Silent and correct is still
+ * silent.
+ *
+ * It takes the same `made <= 0` guard as noteDropped: a pass that wrote
+ * nothing at all is either a top-up or a fully blocked launch, and the second
+ * one already has its own louder message.
+ */
+async function noteOccupied(db: SupabaseClient, note: PlanLogger, scheduleId: string, targetIds: string[], made: number): Promise<void> {
+  const unique = [...new Set(targetIds)];
+  if (!unique.length || made <= 0) return;
+  const { data } = await db.from('social_targets').select('name').in('id', unique.slice(0, DROPPED_NAMES_SHOWN));
+  const names = ((data ?? []) as { name: string | null }[]).map((t) => t.name).filter(Boolean);
+  const rest = unique.length - names.length;
+  const list = names.length ? `: ${names.join(', ')}${rest > 0 ? ` ועוד ${rest}` : ''}` : '';
+  await note(
+    'info',
+    'plan_slots_occupied',
+    `${unique.length} קבוצות לא קיבלו שורה חדשה כי השעה שחושבה להן כבר תפוסה בתור של הפוסט הזה${list}`,
+    { scheduleId, occupied: unique.length, targetIds: unique },
+  );
+}
+
+/**
  * NOT ONE GROUP GOT THROUGH — said plainly, because this is the launch that
  * looks like it worked and did nothing.
  *
@@ -795,6 +852,8 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   const taken = await occupiedSlots(db, post.id);
   /* Per post, exactly as the weekly planner above — see its note. */
   const waiting = await targetsAlreadyWaiting(db, post.id);
+  /* And the silent skip is collected here too — see noteOccupied(). */
+  const occupied: string[] = [];
   let created = 0;
   /* Rows this drip wrote in THIS pass — see noteDropped. */
   let made = 0;
@@ -815,7 +874,13 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
       continue;
     }
     // Already planned for this post by some other schedule.
-    if (taken.has(slotKey(targetId, at))) continue;
+    if (taken.has(slotKey(targetId, at))) {
+      /* Reported, exactly as in the weekly planner above — and this branch
+         matters more here, because "פרסם עכשיו" with more than one target is
+         a drip, so this is the loop every manual launch goes through. */
+      occupied.push(targetId);
+      continue;
+    }
     const variant = pickVariant(approved, schedule, targetId, targetIndex, 0);
     const text = renderPostText(post as Post, variant);
     const hash = sha256(dedupeKey(targetId, text, media.map((m) => m.url)));
@@ -857,6 +922,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
     }
   }
   await noteDropped(db, note, schedule.id, dropped, made);
+  await noteOccupied(db, note, schedule.id, occupied, made);
   /*
    * ─── AND A DRIP THAT QUEUED NOTHING SAYS SO ────────────────────────────
    *

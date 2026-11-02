@@ -412,9 +412,33 @@ console.log('unit tests OK');
     'both planner branches must check occupancy',
   );
   assert.equal(
-    (planner.match(/if \(taken\.has\(slotKey\(targetId, \w+\)\)\) continue;/g) ?? []).length,
+    (planner.match(/if \(taken\.has\(slotKey\(targetId, \w+\)\)\) \{/g) ?? []).length,
     2,
     'both planner branches must skip an occupied instant',
+  );
+  /*
+   * ─── AND SAY SO, WHICH IT DID NOT ───────────────────────────────────────
+   *
+   * "יש 252 קבוצות של הקמפיין שאמור לפרסם אבל בפועל הוא ספג רק 210 בממתינים
+   *  תבדוק למה." — 02.11.2026.
+   *
+   * Four things drop a group between selected and queued. Three pushed onto
+   * `dropped` and reached the activity log by name; this one was a bare
+   * `continue`. Skipping is usually correct — the instant is taken because a
+   * row for it already exists — but the owner had to subtract two numbers on
+   * two screens to find out that forty-two groups were missing, and nothing
+   * anywhere would ever have told him.
+   */
+  assert.equal(
+    (planner.match(/occupied\.push\(targetId\);/g) ?? []).length,
+    2,
+    'both planner branches must record the group whose instant was already taken',
+  );
+  assert.ok(planner.includes('async function noteOccupied'), 'and there must be something that writes it to the activity log');
+  assert.equal(
+    (planner.match(/await noteOccupied\(/g) ?? []).length,
+    2,
+    'called from both branches, or a manual launch stays silent — "פרסם עכשיו" with several targets is the drip one',
   );
   // And must record what they just planned, or a run plans the same slot twice.
   assert.equal((planner.match(/taken\.add\(slotKey\(/g) ?? []).length, 2, 'both branches must record the slot they took');

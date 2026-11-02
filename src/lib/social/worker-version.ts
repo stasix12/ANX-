@@ -97,7 +97,7 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.30.0';
+export const WORKER_VERSION = '4.31.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -183,6 +183,20 @@ export const WORKER_VERSION = '4.30.0';
  *     THIS MUST REACH THE PC, and urgently: the planner that is generating the
  *     rows runs on his machine every sixty seconds. The website alone cannot
  *     stop it.
+ *
+ * AND 4.30.0 → 4.31.0, YES — the silent skip.
+ *
+ *   • plan.ts: a group whose computed instant was already occupied by a row of
+ *     this post was skipped with a bare `continue` — no counter, no log, no
+ *     trace. Three of the four ways a group can be dropped between "selected"
+ *     and "queued" name it in the activity log; this one named nothing. The
+ *     owner found it the only way left: by subtracting 210 from 252 across two
+ *     screens. noteOccupied() now says it, from both planner branches — the
+ *     drip one matters most, because "פרסם עכשיו" with several targets goes
+ *     through it.
+ *
+ *     It reaches the PC for the same reason the last two did: the planner runs
+ *     there, so the line is only written if that copy knows to write it.
  *
  * AND ANSWERED AGAIN, TWICE, BOTH TIMES NO: the fingerprint moves, the number
  * does not.
@@ -419,4 +433,4 @@ export const WORKER_VERSION = '4.30.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = '23563902614087f3';
+export const WORKER_FINGERPRINT = '54a557efe154efed';

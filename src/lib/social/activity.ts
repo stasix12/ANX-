@@ -182,6 +182,10 @@ const KIND: Record<string, ActivityKind> = {
   cancelled: 'schedule',
   manual_pending: 'schedule',
   plan_targets_skipped: 'schedule',
+  /* The instant was already taken by a row of this post — see noteOccupied().
+     Same family as the line above: both are "a group the planner did not give
+     a row to this pass", and the owner reads them together. */
+  plan_slots_occupied: 'schedule',
   /*
    * A launch where NOT ONE group got through, because every one of them
    * already had a row waiting from another round. 'failure' and not

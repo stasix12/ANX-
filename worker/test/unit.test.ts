@@ -2986,7 +2986,27 @@ const scenario: { step: string; line: string }[] = [];
 
   const client = readFileSync('src/lib/social/client.ts', 'utf8');
   pin('cancel lists', client, "const CANCELLABLE: QueueItem['status'][] = CANCELLABLE_STATUSES;");
-  pin('bulk cancel', client, ".update({ status: 'skipped', step: '', skip_reason: 'בוטל — עצירת כל התורים' })\n      .in('status', CANCELLABLE)");
+  /*
+   * THE BULK CANCEL STILL READS THE ONE CLASSIFICATION — asserted on the CALL
+   * rather than on two adjacent lines.
+   *
+   * This was pinned to the two lines joined by a literal '\n', and it broke
+   * the moment a third filter went between them: `.neq('step',
+   * MAYBE_LIVE_STEP)`, which stops the cancel from erasing the only record
+   * that a parked row's post may already be on Facebook (see
+   * worker/test/maybe-live.test.ts and MAYBE_LIVE_STEP in ./status). The
+   * requirement was never "these are neighbours"; it is "this cancel is
+   * scoped by CANCELLABLE and not by a list of its own", and a third filter
+   * strengthens it rather than drifting from it.
+   */
+  const allCancelAt = client.indexOf("skip_reason: 'בוטל — עצירת כל התורים'");
+  assert.ok(allCancelAt > -1, 'the "אפס הכל" cancel is still there — re-point this rather than deleting it');
+  const allCancel = client.slice(allCancelAt, allCancelAt + 420);
+  assert.ok(/\.in\('status', CANCELLABLE\)/.test(allCancel), 'bulk cancel is scoped by the one classification, not by a list of its own');
+  assert.ok(
+    /\.neq\('step', MAYBE_LIVE_STEP\)/.test(allCancel),
+    'and it excludes the row whose post may already be live — erasing that step opens both duplicate guards at once',
+  );
 
   const campaign = readFileSync('src/lib/social/campaign.ts', 'utf8');
   pin('progress buckets', campaign, 'progress.finished = progress.published + progress.failed + progress.skipped;');

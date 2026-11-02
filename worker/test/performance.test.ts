@@ -314,7 +314,28 @@ const code = (rel: string) =>
   is(/const mayAlreadyBePosted = lastStep === 'publishing' \|\| lastStep === 'verifying';/.test(worker), 'the worker knows whether the final click had happened — lastStep is the composer’s own progress');
   is(/if \(afterSubmit\) \{[\s\S]{0,400}step: 'submitted'/.test(worker), 'a PublishError that says the button was pressed parks the row as submitted');
   is(/\.in\('status', \['publishing', 'awaiting_confirmation'\]\)/.test(worker) && /step: 'submitted', error: 'ה-worker הופסק/.test(worker), 'and so does the startup sweep of a job the worker died inside');
-  is(/\.neq\('step', 'submitted'\)/.test(client), 'AND THE BULK RE-ARM SKIPS EXACTLY THOSE — this is the line between a retry and a second post to the same group');
+  /*
+   * THROUGH THE CONSTANT NOW, AND THAT IS THE POINT OF THE CHANGE.
+   *
+   * This pinned the LITERAL `.neq('step', 'submitted')`, and the literal was
+   * itself the defect: the exclusion existed in resumeNeedsAttention alone
+   * while SEVEN bulk cancels wrote `step: ''` over the same rows, erasing the
+   * only record that the post might be live. One rule, written down in one
+   * function and ignored in seven — which is what a literal does.
+   *
+   * MAYBE_LIVE_STEP (src/lib/social/status.ts) is the single place that says
+   * which step means "may already be live", beside the status classification
+   * that creates the hazard in the first place. So the check asks for the
+   * CONSTANT, and worker/test/maybe-live.test.ts refuses a literal anywhere in
+   * these filters — it is what caught this very line still carrying one.
+   */
+  is(/\.neq\('step', MAYBE_LIVE_STEP\)/.test(client), 'AND THE BULK RE-ARM SKIPS EXACTLY THOSE — this is the line between a retry and a second post to the same group');
+  /* And the seven bulk cancels skip them too, which this guard never asked:
+     re-arming was only one of eight doors to the same second post. */
+  is(
+    (client.match(/\.neq\('step', MAYBE_LIVE_STEP\)/g) ?? []).length >= 7,
+    'and so does every bulk cancel — the re-arm was one door of eight, and maybe-live.test.ts scans for the rest',
+  );
   /* The owner is not left without a way back: per-row retry still covers them. */
   is(/const RETRYABLE: QueueItem\['status'\]\[\] = \[[^\]]*'needs_attention'/.test(client), 'the per-row "נסה שוב" still reaches them, which is the decision only the owner can make');
 

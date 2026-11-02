@@ -124,7 +124,11 @@ const code = worker
 
 ok(/\.from\('social_campaigns'\)\s*\.select\('id'\)\s*\.eq\('status', 'archived'\)/.test(code), 'the worker reads which runs are stopped');
 ok(/if \(deadErr\) throw new Error\(deadErr\.message\);/.test(code), 'and FAILS CLOSED: a pass that cannot find out does not run, because the cost of guessing wrong is the treadmill being fixed');
-ok(/stopped,\n\s*\}\);/.test(code), 'and hands the set to pickRevivable');
+/* `\s*` AND NEVER A BARE `\n`: the installer is built on a Windows runner, so
+   the file arrives with CRLF and a regex anchored on `\n` alone matches
+   nothing there — a guard that silently stops guarding on the one machine that
+   matters. package.test.ts enforces this, and it has now caught me twice. */
+ok(/stopped,\s*\}\);/.test(code), 'and hands the set to pickRevivable');
 /* Ordering: the read must come BEFORE the call that consumes it. */
 ok(code.indexOf("eq('status', 'archived')") < code.indexOf('stopped,'), 'the set is read before it is used');
 

@@ -68,6 +68,34 @@ export const TERMINAL_STATUSES: QueueStatus[] = withLifecycle('terminal');
 export const IN_FLIGHT_STATUSES: QueueStatus[] = withLifecycle('in_flight');
 /** Has not happened yet and is still meant to. */
 export const WAITING_STATUSES: QueueStatus[] = withLifecycle('waiting');
+
+/**
+ * ─── THE ROW WHOSE POST MAY ALREADY BE ON FACEBOOK ────────────────────────
+ *
+ *   "רשום דולג, אבל בפועל נכנסתי וראיתי שזה פרסם, זה חמור מאד"
+ *
+ * The composer's click sits between the steps 'publishing' and 'verifying'
+ * (worker/facebook/composer.ts), so a publication that broke down at or past
+ * the click MAY HAVE SUCCEEDED while nothing in the database says so. The
+ * worker marks exactly that case: it parks the row as needs_attention and
+ * writes this step, so one screen can act on it — a person checks the group
+ * and decides, and no automatic path ever retries it.
+ *
+ * WHY IT HAS TO LIVE HERE. `needs_attention` is inside WAITING_STATUSES and
+ * therefore inside CANCELLABLE_STATUSES, so EVERY bulk cancel in the product
+ * matched these rows — and each one writes `step: ''`, erasing the only
+ * record that the post might be live. Both duplicate guards then open at
+ * once: rules.ts counts rows with `status = 'published'`, and
+ * targetsAlreadyWaiting only holds a group while its row is OPEN. A cancel
+ * that is meant to prevent publications could therefore cause a second post
+ * to the same group.
+ *
+ * resumeNeedsAttention already excluded it (client.ts). The seven bulk
+ * cancels did not, which is why the exclusion is a shared constant rather
+ * than a literal in one function: a status list and a step list that live in
+ * different files drift, and this one drifts towards double-posting.
+ */
+export const MAYBE_LIVE_STEP = 'submitted';
 /** Everything that is not finished — waiting plus in flight. */
 export const OPEN_STATUSES: QueueStatus[] = [...WAITING_STATUSES, ...IN_FLIGHT_STATUSES];
 

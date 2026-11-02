@@ -5,7 +5,7 @@ import { zonedHM } from './time';
 import { dripSlots, slotsFor } from './slots';
 import { windowedStagger } from './projection';
 import { readSchedule, type CampaignSchedule } from './campaign-schedule';
-import { CANCELLABLE_STATUSES, OPEN_STATUSES } from './status';
+import { CANCELLABLE_STATUSES, MAYBE_LIVE_STEP, OPEN_STATUSES } from './status';
 import { DEFAULT_BROWSER, DEFAULT_LIMITS, type BrowserSettings, type LimitsSettings, type MediaItem, type Post, type Schedule, type SocialTarget, type Variant } from './types';
 import { accountGapSeconds } from './rules';
 import { pickVariant } from './variants';
@@ -979,6 +979,7 @@ async function stoppedCampaigns(db: SupabaseClient, note: PlanLogger): Promise<S
   const { data: stale } = await db
     .from('social_queue')
     .update({ status: 'skipped', step: '', skip_reason: 'הסבב נעצר' })
+    .neq('step', MAYBE_LIVE_STEP)
     .in('campaign_id', ids)
     // The same list stopCampaign() uses. It used to omit manual_pending and
     // needs_attention, so a stopped run went on handing the owner work while

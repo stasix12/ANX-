@@ -243,7 +243,40 @@
  *   • composer.ts, social-worker.ts: 4.32.0's detach wait and hold-reason
  *     reporting, which never reached a PC under their own number.
  */
-export const WORKER_VERSION = '4.36.0';
+/*
+ * 4.36.0 → 4.37.0. DOES THIS HAVE TO REACH THE PC? YES — plan.ts's sweep is
+ * one of the seven, and plan.ts runs there every sixty seconds.
+ *
+ *   "רשום דולג, אבל בפועל נכנסתי וראיתי שזה פרסם, זה חמור מאד"
+ *
+ * The composer's click sits between 'publishing' and 'verifying', so a
+ * publication that broke down at or past it MAY HAVE SUCCEEDED while nothing
+ * in the database says so. The worker marks exactly that: needs_attention
+ * plus step='submitted', a row for a person to check against the group and
+ * never for any automatic path to retry.
+ *
+ * But needs_attention is inside WAITING_STATUSES and therefore inside
+ * CANCELLABLE_STATUSES, and every bulk cancel writes `step: ''`. So each of
+ * them erased the only record that the post might be live — and both
+ * duplicate guards then open at once, because rules.ts counts rows with
+ * `status = 'published'` and targetsAlreadyWaiting holds a group only while
+ * its row is OPEN. A cancel meant to PREVENT publications could cause a
+ * second post to the same group.
+ *
+ * resumeNeedsAttention had the exclusion. The seven bulk cancels did not —
+ * and it was a literal in that one function, which is how a rule gets fixed
+ * in one place and left broken in seven. MAYBE_LIVE_STEP lives in status.ts
+ * now, beside the status classification that creates the hazard, and
+ * maybe-live.test.ts finds the bulk cancels BY SCANNING rather than from a
+ * stored list — a stored list is exactly what was not maintained when the
+ * seventh (plan.ts's sweep) was added later without one.
+ *
+ * ALSO IN THIS NUMBER: worker/test/stopped-run.test.ts carried a regex with a
+ * bare \n, which never matches on the Windows runner that builds the
+ * installer. package.test.ts caught it — for the second time tonight — and it
+ * made 4.36.0's own suite red after it had already been pushed.
+ */
+export const WORKER_VERSION = '4.37.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -629,4 +662,21 @@ export const WORKER_VERSION = '4.36.0';
    activity.ts and activity-text.ts move again and ride along for the reason
    they always do: the worker writes the event NAMES, the two maps that file
    them and give them headlines are read by screens. */
-export const WORKER_FINGERPRINT = 'bfba5e6d4490a8fe';
+/* bfba5e6d4490a8fe → bf8b2e3cce48629d. Re-pinned for 4.37.0 above. Both
+   questions answered: it reaches the PC (plan.ts's sweep is one of the seven
+   bulk cancels and plan.ts runs there every sixty seconds), and the number is
+   free — 4.36.0 is the highest this repository has claimed since the rollback,
+   and the newest published tag before tonight's pushes was v4.35.0.
+
+     npm run build:app
+     grep -c MAYBE_LIVE_STEP      dist/app/worker.cjs → 7   (status.ts + plan.ts)
+     grep -c stoppedCampaigns     dist/app/worker.cjs → 4   (plan.ts IS in it)
+     grep -c resumeNeedsAttention dist/app/worker.cjs → 0   (client.ts is NOT)
+     grep -c respaceQueue         dist/app/worker.cjs → 0
+     grep -c ensureRunForPost     dist/app/worker.cjs → 0
+
+   client.ts's six are NOT in the bundle, and those three zeroes are the
+   measurement rather than the claim: the dashboard's data layer is not in the
+   worker's import closure. So the PC needs this installer for the sweep, and
+   the website carries the other six the moment it deploys. */
+export const WORKER_FINGERPRINT = 'bf8b2e3cce48629d';

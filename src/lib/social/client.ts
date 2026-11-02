@@ -20,6 +20,7 @@ import {
   OPEN_STATUSES,
   summarizeQueue,
   type QueueSummary,
+  MAYBE_LIVE_STEP,
 } from './status';
 import { upsertScoped } from './tenant';
 import {
@@ -701,6 +702,7 @@ export async function deleteCampaign(id: string): Promise<number> {
     await db()
       .from('social_queue')
       .update({ status: 'skipped', step: '', skip_reason: 'הסבב נמחק' })
+      .neq('step', MAYBE_LIVE_STEP)
       .eq('campaign_id', id)
       .in('status', CANCELLABLE)
       .select('id'),
@@ -968,6 +970,7 @@ export async function archivePost(id: string): Promise<void> {
     await db()
       .from('social_queue')
       .update({ status: 'skipped', step: '', skip_reason: 'הפוסט הועבר לארכיון' })
+      .neq('step', MAYBE_LIVE_STEP)
       .eq('post_id', id)
       .in('status', CANCELLABLE),
   );
@@ -1589,6 +1592,7 @@ export async function setScheduleActive(id: string, active: boolean): Promise<vo
       await db()
         .from('social_queue')
         .update({ status: 'skipped', step: '', skip_reason: 'התזמון בוטל' })
+        .neq('step', MAYBE_LIVE_STEP)
         .eq('schedule_id', id)
         .in('status', CANCELLABLE),
     );
@@ -1851,8 +1855,17 @@ export async function resumeNeedsAttention(postId?: string): Promise<number> {
      * and no count, pressed after clearing a Facebook checkpoint. It must not
      * be able to repost. The owner's way back for these rows is the per-row
      * "נסה שוב", pressed while looking at that row and its screenshot.
+     *
+     * THROUGH THE CONSTANT, not the literal it used to be. This exclusion
+     * lived here alone and the seven bulk cancels did not have it — so the
+     * step's meaning was written down in one function and ignored in seven,
+     * and the drift was towards double-posting. MAYBE_LIVE_STEP (./status) is
+     * now the one place that says which step means "may already be live", and
+     * worker/test/maybe-live.test.ts refuses a literal here for exactly that
+     * reason: a literal is how a rule gets fixed in one place and left broken
+     * everywhere else.
      */
-    .neq('step', 'submitted');
+    .neq('step', MAYBE_LIVE_STEP);
   if (postId) q = q.eq('post_id', postId);
   const rows = unwrap<{ id: string }[]>(await q.select('id'));
   return rows.length;
@@ -1905,6 +1918,7 @@ export async function stopCampaign(id: string): Promise<number> {
     await db()
       .from('social_queue')
       .update({ status: 'skipped', step: '', skip_reason: 'הסבב נעצר' })
+      .neq('step', MAYBE_LIVE_STEP)
       .eq('campaign_id', id)
       .in('status', CANCELLABLE)
       .select('id'),
@@ -3222,6 +3236,7 @@ export async function cancelAllScheduled(): Promise<number> {
     await db()
       .from('social_queue')
       .update({ status: 'skipped', step: '', skip_reason: 'בוטל — עצירת כל התורים' })
+      .neq('step', MAYBE_LIVE_STEP)
       .in('status', CANCELLABLE)
       .select('id'),
   );
@@ -4474,6 +4489,7 @@ export async function removeTargetFromQueue(targetId: string, opts: { campaignId
   let query = db()
     .from('social_queue')
     .update({ status: 'skipped', step: '', skip_reason: name ? `הקבוצה "${name}" הוסרה מהתור` : 'הקבוצה הוסרה מהתור' })
+    .neq('step', MAYBE_LIVE_STEP)
     .eq('target_id', targetId)
     .in('status', CANCELLABLE);
   if (opts.campaignId) query = query.eq('campaign_id', opts.campaignId);

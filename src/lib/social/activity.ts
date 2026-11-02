@@ -90,18 +90,6 @@ const KIND: Record<string, ActivityKind> = {
    */
   target_left: 'failure',
   /*
-   * The same reading, WITHOUT the switch-off — see the branch in
-   * social-worker.ts that replaced it.
-   *
-   * It is its own event and not target_left because the two say different
-   * things about what happened: target_left means a group stopped receiving
-   * publications, this one means a publication did not happen and a group is
-   * worth looking at. Filed as a failure for the same reason target_left is:
-   * a publication the owner expected did not go out, and this is the only
-   * line that names which group and why.
-   */
-  target_unpostable: 'failure',
-  /*
    * ─── the Pages work merged in from the cloud-worker branch ─────────────
    *
    * Three events whose writers landed without an entry here, so they were
@@ -174,17 +162,6 @@ const KIND: Record<string, ActivityKind> = {
   schedule_column_missing: 'failure',
   campaign_deleted: 'round',
   stopped_campaign_swept: 'round',
-  /*
-   * The other half of that sweep: rows it deliberately did NOT cancel,
-   * because the "פרסום" click may already have landed on them.
-   *
-   * 'failure' and not 'round', although no publication failed: this is the
-   * one line that says a post may be live on Facebook with nothing in the
-   * database recording it, and it asks the owner to go and look. Filed with
-   * the round's own life it would sit under a heading nobody opens — which is
-   * exactly how "רשום דולג, אבל בפועל זה פרסם" happened in the first place.
-   */
-  stopped_campaign_maybe_live: 'failure',
   worker_run: 'round',
 
   // The queue moving: postponed, skipped, re-armed, re-spaced, handed to a human.

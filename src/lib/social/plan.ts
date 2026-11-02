@@ -815,37 +815,9 @@ async function stoppedCampaigns(db: SupabaseClient, note: PlanLogger): Promise<S
     // needs_attention, so a stopped run went on handing the owner work while
     // its own card read "נעצר" — a stop that did not stop everything.
     .in('status', CANCELLABLE_STATUSES)
-    /*
-     * EXCEPT A ROW WHOSE POST MAY ALREADY BE ON FACEBOOK.
-     *
-     * "רשום דולג , אבל בפועל נכנסתי וראיתי שזה פרסם , זה חמור מאד." This
-     * sweep is the one cancel in the product that nobody presses: it runs on
-     * every planner pass over every archived campaign. A row the worker
-     * parked at `step: 'submitted'` — the mark meaning the "פרסום" click may
-     * already have landed — is `needs_attention`, which is in CANCELLABLE, so
-     * this wrote "דולג" over a live post and cleared the mark with it.
-     *
-     * Worse than the wrong word: rules.ts's duplicate guards count rows with
-     * `status = 'published'` and targetsAlreadyWaiting only holds a group
-     * while a row for that post is OPEN, so turning the row terminal released
-     * both and the next pass of THIS SAME FUNCTION's caller queued the post to
-     * that group again. See MAYBE_LIVE_STEP in client.ts for the full note.
-     */
-    .neq('step', 'submitted')
     .select('id');
   if (stale?.length) {
     await note('warn', 'stopped_campaign_swept', `${stale.length} פרסומים של סבב שנעצר בוטלו`, { cancelled: stale.length });
-  }
-  /* And the ones this pass deliberately left behind, said once rather than
-     every pass: they stay in "דורש טיפול" until a person checks the group. */
-  const { count: parked } = await db
-    .from('social_queue')
-    .select('id', { count: 'exact', head: true })
-    .in('campaign_id', ids)
-    .in('status', CANCELLABLE_STATUSES)
-    .eq('step', 'submitted');
-  if (parked) {
-    await note('warn', 'stopped_campaign_maybe_live', `${parked} פרסומים של סבב שנעצר נשארו ב"דורש טיפול" — ייתכן שהם כבר פורסמו`, { maybeLive: parked });
   }
   return new Set(ids);
 }

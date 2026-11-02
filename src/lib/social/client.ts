@@ -645,8 +645,6 @@ export async function deleteCampaign(id: string): Promise<number> {
       .update({ status: 'skipped', step: '', skip_reason: 'הסבב נמחק' })
       .eq('campaign_id', id)
       .in('status', CANCELLABLE)
-      /* Not a row whose post may already be live — see MAYBE_LIVE_STEP. */
-      .neq('step', MAYBE_LIVE_STEP)
       .select('id'),
   );
 
@@ -913,9 +911,7 @@ export async function archivePost(id: string): Promise<void> {
       .from('social_queue')
       .update({ status: 'skipped', step: '', skip_reason: 'הפוסט הועבר לארכיון' })
       .eq('post_id', id)
-      .in('status', CANCELLABLE)
-      /* See MAYBE_LIVE_STEP: a parked row may already be on Facebook. */
-      .neq('step', MAYBE_LIVE_STEP),
+      .in('status', CANCELLABLE),
   );
 }
 
@@ -1536,9 +1532,7 @@ export async function setScheduleActive(id: string, active: boolean): Promise<vo
         .from('social_queue')
         .update({ status: 'skipped', step: '', skip_reason: 'התזמון בוטל' })
         .eq('schedule_id', id)
-        .in('status', CANCELLABLE)
-        /* See MAYBE_LIVE_STEP. */
-        .neq('step', MAYBE_LIVE_STEP),
+        .in('status', CANCELLABLE),
     );
   }
 }
@@ -1597,26 +1591,9 @@ const QUEUE_SELECT_LITE =
  * the cap looked expensive. It was expensive because of what each row
  * weighed, not because of how many there were.
  */
-/*
- * `skip_reason` IS ON THE LIST, and it is the one column here that is not
- * about placing a row on the rail.
- *
- * "למה יש הרבה שורות של דולג" — six rows reading the single grey word "דולג",
- * on a screen that had the answer to that question in the database and would
- * not fetch it. Every skip this product writes carries a sentence saying
- * exactly which rule stopped it ("היעד X כבוי", "הפוסט הזה כבר פורסם ל-X",
- * "הסבב נעצר"), and the owner was left to infer one — wrongly, as it happened,
- * and he would have changed a setting over it.
- *
- * It is affordable for the reason the note above makes: the weight here was
- * never the number of rows, it was `rendered_text` per row. skip_reason is
- * NULL on everything that published and a short sentence on what did not, so
- * a day of two hundred publications and twenty skips pays about two kilobytes
- * — against the ninety this select already costs for the names and pictures.
- */
-const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, updated_at, skip_reason, target:social_targets(id,name,channel,image_url)';
+const TIMELINE_SELECT = 'id, status, scheduled_at, published_at, target:social_targets(id,name,channel,image_url)';
 
-export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'updated_at' | 'skip_reason' | 'target'>;
+export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'published_at' | 'target'>;
 
 /**
  * Today's finished publications, for the dashboard's rail.
@@ -1628,35 +1605,13 @@ export type TimelineRow = Pick<QueueRow, 'id' | 'status' | 'scheduled_at' | 'pub
  * turns the result round to run forwards in time.
  */
 export async function listTimelineDone(opts: { since: string; until: string; limit?: number }): Promise<TimelineRow[]> {
-  /*
-   * ─── BY WHEN IT HAPPENED, NOT BY THE SLOT IT WAS GIVEN ─────────────────
-   *
-   * This read filtered and ordered on `scheduled_at`, bounded to the past so
-   * that rows whose slot is still ahead could not sort to the top. The bound
-   * was a workaround for the wrong column: a cancelled row's slot says
-   * nothing about when it was cancelled, and nothing writes published_at on
-   * one.
-   *
-   * What that cost, twice in one evening: a single "אפס הכל" cancels the
-   * whole queue in one UPDATE, and every one of those rows keeps the minute
-   * it had been planned for — so the rail drew them one at a time as the
-   * clock reached 21:31, then 21:34, then 21:49, and the owner read a stream
-   * of fresh cancellations. "אף אחד לא עצר כלום."
-   *
-   * `updated_at` is maintained by the database on every write
-   * (social_queue_set_updated_at), so for a finished row it IS the moment it
-   * finished — the publish write, the skip write, the cancel's own UPDATE.
-   * Ordering and bounding by it makes the rail a record of what happened and
-   * when, and the past-bound stops being a workaround: a row cannot finish in
-   * the future.
-   */
   const res = await db()
     .from('social_queue')
     .select(TIMELINE_SELECT)
     .in('status', TERMINAL_STATUSES)
-    .gte('updated_at', opts.since)
-    .lte('updated_at', opts.until)
-    .order('updated_at', { ascending: false })
+    .gte('scheduled_at', opts.since)
+    .lte('scheduled_at', opts.until)
+    .order('scheduled_at', { ascending: false })
     .limit(opts.limit ?? 500);
   if (res.error) throw friendlyError(res.error);
   return (res.data ?? []) as unknown as TimelineRow[];
@@ -1759,37 +1714,6 @@ const RETRYABLE: QueueItem['status'][] = ['failed', 'skipped', 'needs_attention'
  */
 const CANCELLABLE: QueueItem['status'][] = CANCELLABLE_STATUSES;
 
-/**
- * The step the worker stamps on a row whose "פרסום" click may ALREADY have
- * landed on Facebook — see worker/social-worker.ts, which writes it from four
- * places (the startup sweep, the stranded sweep, and the two in-job parks).
- *
- * ─── WHY EVERY BULK CANCEL HAS TO KNOW ABOUT IT ──────────────────────────
- *
- * "רשום דולג , אבל בפועל נכנסתי וראיתי שזה פרסם , זה חמור מאד."
- *
- * A parked row is `needs_attention`, which is a WAITING status, which means
- * it is in CANCELLABLE. So every cancel in this file — delete the campaign,
- * stop the round, archive the post, switch a schedule off, "עצירת כל התורים",
- * remove a group from the queue — used to sweep it to 'skipped' along with
- * the rows that genuinely never ran, writing `step: ''` on the way and
- * erasing the only mark saying the post might be live. The planner's own
- * sweep of stopped campaigns (plan.ts) did it with nobody pressing anything.
- *
- * The owner then reads "דולג" over a post that is on Facebook. That is the
- * visible half. The dangerous half is what it does to the next round:
- * rules.ts's two duplicate guards both count rows with `status = 'published'`
- * and this row never got that status, while `targetsAlreadyWaiting` (plan.ts)
- * only holds a group back while a row for that post is still OPEN. Turning
- * the row terminal releases both at once, so the planner queues the same post
- * to the same group again and it publishes a SECOND time, from his account,
- * with no undo.
- *
- * resumeNeedsAttention has refused these rows since it was written, for
- * exactly this reason, and the eight cancels did not. They do now.
- */
-export const MAYBE_LIVE_STEP = 'submitted';
-
 async function guardedUpdate(id: string, allowed: QueueItem['status'][], patch: Partial<QueueItem>): Promise<boolean> {
   const rows = unwrap<{ id: string }[]>(await db().from('social_queue').update(patch).eq('id', id).in('status', allowed).select('id'));
   return rows.length > 0;
@@ -1826,18 +1750,7 @@ export async function retryQueueItem(id: string): Promise<boolean> {
 }
 
 export async function cancelQueueItem(id: string): Promise<boolean> {
-  /*
-   * `step` IS NOT CLEARED HERE, and that is the difference between this and
-   * the bulk cancels above.
-   *
-   * This is one row, pressed by a person looking at that row, its error and
-   * its screenshot — so unlike a sweep it is a decision, and it is allowed to
-   * go through even on a row marked MAYBE_LIVE_STEP. What it may not do is
-   * destroy the mark while doing it: `step: ''` would leave a terminal row
-   * with nothing on it saying a publication might be out there, and that mark
-   * is the only record once the status is no longer 'needs_attention'.
-   */
-  return guardedUpdate(id, CANCELLABLE, { status: 'skipped', skip_reason: 'בוטל ידנית' });
+  return guardedUpdate(id, CANCELLABLE, { status: 'skipped', step: '', skip_reason: 'בוטל ידנית' });
 }
 
 /**
@@ -1936,36 +1849,12 @@ export async function stopCampaign(id: string): Promise<number> {
       .update({ status: 'skipped', step: '', skip_reason: 'הסבב נעצר' })
       .eq('campaign_id', id)
       .in('status', CANCELLABLE)
-      /* See MAYBE_LIVE_STEP. Counted below and said out loud, because a stop
-         that quietly leaves rows behind is its own surprise. */
-      .neq('step', MAYBE_LIVE_STEP)
       .select('id'),
   );
-  /*
-   * AND WHAT THE STOP DELIBERATELY DID NOT TOUCH.
-   *
-   * A row parked at MAYBE_LIVE_STEP is left as it is, so the sentence has to
-   * account for it: otherwise "N פרסומים בוטלו" is a complete-sounding
-   * number over a queue that still holds rows, and the owner meets them
-   * later with no idea why they survived a stop.
-   */
-  const { count: parked } = await db()
-    .from('social_queue')
-    .select('id', { count: 'exact', head: true })
-    .eq('campaign_id', id)
-    .in('status', CANCELLABLE)
-    .eq('step', MAYBE_LIVE_STEP);
-  const left = parked ?? 0;
-  await logClientActivity(
-    'warn',
-    'campaign_stopped',
-    `הסבב "${campaign?.name ?? ''}" נעצר — ${rows.length} פרסומים שטרם התחילו בוטלו${left ? `. ${counted(left, 'פרסום אחד', 'פרסומים', 'שני פרסומים')} נשארו ב"דורש טיפול" כי ייתכן שהם כבר פורסמו — בדקו בקבוצות` : ''}`,
-    {
-      campaignId: id,
-      cancelled: rows.length,
-      maybeLive: left,
-    },
-  );
+  await logClientActivity('warn', 'campaign_stopped', `הסבב "${campaign?.name ?? ''}" נעצר — ${rows.length} פרסומים שטרם התחילו בוטלו`, {
+    campaignId: id,
+    cancelled: rows.length,
+  });
   return rows.length;
 }
 
@@ -3274,22 +3163,8 @@ export async function cancelAllScheduled(): Promise<number> {
   const rows = unwrap<{ id: string }[]>(
     await db()
       .from('social_queue')
-      /*
-       * THE REASON NAMES THE BUTTON HE PRESSED.
-       *
-       * It said "עצירת כל התורים", and the only two controls that reach here
-       * are labelled "אפס הכל" (the chip on the queue tile) and the panic
-       * button at the foot of the dashboard. So the owner reset his queue,
-       * met rows reading "בוטל — עצירת כל התורים" hours later, and told me —
-       * correctly, in his own vocabulary — "אף אחד לא עצר כלום".
-       *
-       * One action, one name. The sentence now says what was pressed and what
-       * it did, so the row can be traced back to the tap that made it.
-       */
-      .update({ status: 'skipped', step: '', skip_reason: 'בוטל — נמחק כל התור ("אפס הכל")' })
+      .update({ status: 'skipped', step: '', skip_reason: 'בוטל — עצירת כל התורים' })
       .in('status', CANCELLABLE)
-      /* See MAYBE_LIVE_STEP. */
-      .neq('step', MAYBE_LIVE_STEP)
       .select('id'),
   );
   return rows.length;
@@ -4542,9 +4417,7 @@ export async function removeTargetFromQueue(targetId: string, opts: { campaignId
     .from('social_queue')
     .update({ status: 'skipped', step: '', skip_reason: name ? `הקבוצה "${name}" הוסרה מהתור` : 'הקבוצה הוסרה מהתור' })
     .eq('target_id', targetId)
-    .in('status', CANCELLABLE)
-    /* See MAYBE_LIVE_STEP. */
-    .neq('step', MAYBE_LIVE_STEP);
+    .in('status', CANCELLABLE);
   if (opts.campaignId) query = query.eq('campaign_id', opts.campaignId);
   const rows = unwrap<{ id: string; schedule_id: string | null }[]>(await query.select('id, schedule_id'));
 

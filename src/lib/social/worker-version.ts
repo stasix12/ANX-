@@ -97,7 +97,7 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.35.0';
+export const WORKER_VERSION = '4.31.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -433,105 +433,4 @@ export const WORKER_VERSION = '4.35.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-/*
- * 4.31.0 → 4.32.0. "לא מצאתי את תיבת 'כתבו משהו…'" — THE SECOND LOOK.
- * DOES THIS HAVE TO REACH THE PC? YES, and measured as always:
- *
- *   npm run build:app
- *   grep -c verifyCanPost         dist/app/worker.cjs → 3
- *   grep -c no-composer-box       dist/app/worker.cjs → 2
- *   grep -c LEFT_AFTER_VERIFY_CAP dist/app/worker.cjs → 4
- *
- * Every part of this runs on his machine: the throw that marks the one
- * ambiguous composer failure (facebook/composer.ts), the re-verification that
- * opens the group again and reads whether Facebook itself refuses it
- * (facebook/membership.ts), and the branch that switches a confirmed-refused
- * group off so no later round queues it, waits on it or fails on it
- * (social-worker.ts). Left on the dashboard alone, not one group would ever
- * be checked a second time — the dashboard never opens Facebook.
- */
-/*
- * acbd4158 → c05af866. The rail now prints a skip's own reason, and caps how
- * many finished rows may stand above the waiting ones (client.ts + Timeline).
- * DOES THIS HAVE TO REACH THE PC? NO — measured the same way as the three
- * re-pins above:
- *
- *   npm run build:app
- *   grep -c TIMELINE_SELECT   dist/app/worker.cjs → 0
- *   grep -c listTimelineDone  dist/app/worker.cjs → 0
- *   grep -c DONE_ON_SCREEN    dist/app/worker.cjs → 0
- *
- * client.ts is in the fingerprint because rules.ts and the planner import
- * from it, and esbuild shakes out the exports the PC never calls — which is
- * what the three zeroes are. The PC has written skip_reason on every skip
- * since long before this; what changed is that one screen finally reads it.
- * 4.32.0 is not released yet either way, so the version does not move again:
- * a bump per edit publishes an installer per commit and teaches the updater
- * to cry wolf.
- */
-/*
- * 4.32.0 → 4.33.0. "רשום דולג , אבל בפועל נכנסתי וראיתי שזה פרסם."
- * DOES THIS HAVE TO REACH THE PC? YES, and it is the one kind of yes that
- * cannot wait: the fix stops a LIVE publication being recorded as cancelled,
- * which is what releases both duplicate guards and lets the same post go out
- * to the same group a second time from his account.
- *
- *   npm run build:app
- *   grep -c stoppedCampaigns            dist/app/worker.cjs → 3
- *   grep -c stopped_campaign_maybe_live dist/app/worker.cjs → 1
- *   grep -c MAYBE_LIVE_STEP             dist/app/worker.cjs → 5
- *
- * The planner's sweep of stopped campaigns runs INSIDE the PC worker on every
- * planning pass, with nobody pressing anything — so the machine that would
- * double-post is the machine that needs the guard. The six cancels in
- * client.ts are pressed in the dashboard and are fixed there, but
- * MAYBE_LIVE_STEP ships too because rules.ts and the planner import from that
- * file.
- */
-/*
- * 4.33.0 → 4.34.0. "זה נתקע פשוט" — the terminal on `verifying`, 208
- * publications queued behind it, nothing moving.
- * DOES THIS HAVE TO REACH THE PC? YES. This IS the PC: the composer runs
- * nowhere else, and the freeze was in the wait right after its click.
- *
- *   npm run build:app
- *   grep -c SUBMIT_DETACH_VIDEO_MS dist/app/worker.cjs → 2
- *   grep -c SUBMIT_DETACH_MS       dist/app/worker.cjs → 2
- *   grep -c DETACH_TICK_MS         dist/app/worker.cjs → 2
- *
- * The wait for Facebook's post window to close had been given
- * VIDEO_UPLOAD_TIMEOUT — fifteen minutes — for any post carrying a video,
- * and the owner's posts are all video. One lane, so one lingering dialog
- * froze the whole queue for a quarter of an hour with nothing printed. The
- * upload is already proven finished before the click, so that number was the
- * wrong wait entirely; it is now three minutes for video, ninety seconds
- * otherwise, sliced so the terminal says it is alive every twenty seconds.
- */
-/*
- * 4.34.0 → 4.35.0. THE AUTOMATIC SWITCH-OFF IS WITHDRAWN.
- * DOES THIS HAVE TO REACH THE PC? YES, and it is the most urgent kind: the
- * thing being withdrawn runs on the PC and writes to his group list.
- *
- * 4.32.0 taught the re-verification to switch a group off when a second look
- * found Facebook's refusal. 4.33.0 was the first build he ran with it, and on
- * that build his publishing stopped — "עכשיו לא מפרסם בכלל כלום". It is the
- * only change in that release able to stop publications at scale, and it
- * cannot be proven from here: no local fixture reproduces what Facebook
- * renders inside [role="main"] on his account. So it reports and no longer
- * acts, and the reason is written on the group for him to act on.
- */
-/*
- * 429b7104 → cd43ac9d. The rail places a finished row at the moment it
- * FINISHED (updated_at) instead of the slot it was planned for, and the
- * whole-queue cancel's reason now names the button that produces it.
- * DOES THIS HAVE TO REACH THE PC? NO:
- *
- *   grep -c TIMELINE_SELECT  dist/app/worker.cjs → 0
- *   grep -c listTimelineDone dist/app/worker.cjs → 0
- *   grep -c doneAt           dist/app/worker.cjs → 0
- *
- * client.ts is in the fingerprint because rules.ts and the planner import
- * from it; the rail and its read are the dashboard's. 4.35.0 is not released
- * yet either way, so the version does not move again.
- */
-export const WORKER_FINGERPRINT = 'cd43ac9dbc727289';
+export const WORKER_FINGERPRINT = '54a557efe154efed';

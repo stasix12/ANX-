@@ -102,28 +102,6 @@ function useTick(active: boolean): number {
   return now;
 }
 
-/**
- * How many finished stops may sit above the waiting ones. See the note at the
- * one use: the rail's box is about six rows, and an uncapped finished half
- * pushed every upcoming publication off a card that calls itself "הקרובים".
- */
-const DONE_ON_SCREEN = 4;
-
-/**
- * WHEN A FINISHED STOP ACTUALLY FINISHED.
- *
- * `published_at` for a publication, and for everything else `updated_at` —
- * the column the database stamps on every write, which for a terminal row is
- * the moment it became terminal. `scheduled_at` is the last resort and it is
- * the WRONG answer for a cancelled row: one "אפס הכל" cancels the whole queue
- * in a single UPDATE, and every one of those rows keeps the minute it had
- * been planned for, so a rail placed by the slot drew them one at a time
- * through the evening and read as a stream of fresh cancellations. It is the
- * second thing on this screen tonight to turn one past event into an ongoing
- * one; see listTimelineDone, which now bounds and orders by the same column.
- */
-const doneAt = (row: TimelineRow): number => new Date(row.published_at ?? row.updated_at ?? row.scheduled_at).getTime();
-
 const STATUS_LINE: Partial<Record<QueueStatus, string>> = {
   publishing: 'מפרסם עכשיו',
   awaiting_confirmation: 'מוכן — ממתין לאישור שלכם',
@@ -269,35 +247,15 @@ export function Timeline({
    * what is next. Ordering, not counting — no number on this screen is
    * derived from it.
    */
-  const finished = [...done]
+  const items = [...done]
     /*
      * By the moment it HAPPENED, not by the slot it was given. The read can
      * only order by scheduled_at, and a publication that went out four
      * minutes late would otherwise sit above one that went out on time —
      * the strip telling the afternoon out of order.
      */
-    .sort((a, b) => doneAt(a) - doneAt(b));
-  /*
-   * AND THE FINISHED HALF IS CAPPED WHILE ANYTHING IS STILL WAITING.
-   *
-   * `limit` only ever capped the waiting rows (above); `done` was spread
-   * whole, and the caller reads up to five hundred of them. The box is about
-   * six rows tall. So on any busy evening the card headed "הפרסומים הקרובים"
-   * opened on nothing but rows that had already finished — and the owner, who
-   * reads that card as a forecast, asked why his upcoming publications were
-   * all being skipped. They were not upcoming. The screen said they were.
-   *
-   * The dashboard already switches its own heading to "מה קרה היום" when the
-   * queue is empty, which is the same fix from the other end and the reason
-   * the cap lifts entirely when `waiting` is empty: with nothing to come, the
-   * finished rows ARE the card and all of them belong in it.
-   *
-   * Four, because the box holds between six and seven stops: enough that the
-   * run's last few minutes are still on screen above the fold, and never so
-   * many that the next publication is below it. Nothing is lost — the day in
-   * full is the history screen, and every row here opens its own sheet.
-   */
-  const items = (waiting.length ? finished.slice(-DONE_ON_SCREEN) : finished).concat(waiting);
+    .sort((a, b) => new Date(a.published_at ?? a.scheduled_at).getTime() - new Date(b.published_at ?? b.scheduled_at).getTime())
+    .concat(waiting);
   /* Before the early return: a hook may not sit behind a condition. Ticking
      only while something is actually waiting keeps an idle screen idle. */
   const now = useTick(items.some((r) => r.status === 'scheduled'));
@@ -330,7 +288,7 @@ export function Timeline({
    */
   const stops = items.map((row) => {
     const doneLine = DONE_LINE[row.status];
-    if (doneLine) return { row, doneLine, at: row.published_at ?? row.updated_at ?? row.scheduled_at };
+    if (doneLine) return { row, doneLine, at: row.published_at ?? row.scheduled_at };
     const forecast = projected?.get(row.id);
     return { row, doneLine, at: forecast === undefined ? row.scheduled_at : forecast };
   });
@@ -351,11 +309,6 @@ export function Timeline({
          * sentence below.
          */
         const standing = isInFlight(row.status) || needsHuman(row.status);
-        /* Only a skip has one, and only a skip may replace its word with it:
-           'פורסם' and 'נכשל' are complete sentences about what happened, and a
-           failure's own text is the error, which belongs in the sheet with its
-           screenshot rather than on a 30px row. */
-        const skipWhy = row.status === 'skipped' ? (row.skip_reason ?? '').trim() : '';
         const line = STATUS_LINE[row.status];
         const tone = STATUS_TONE[row.status];
         const body = (
@@ -375,29 +328,7 @@ export function Timeline({
                   campaign card prints for this row. See the header. */}
               {row.status === 'scheduled' && <Countdown at={at} now={now} />}
               {line && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{line}</p>}
-              {/*
-                THE REASON, NOT THE WORD — "למה יש הרבה שורות של דולג".
-                
-                Six rows reading nothing but the grey word "דולג" sent the
-                owner looking for a cause in the only thing the row did show,
-                its hour, and he arrived at the wrong one: two publications on
-                the same second colliding. They do not collide — the spacing
-                rule DEFERS a row and costs it nothing (rules.ts) — and the
-                sentence saying what actually stopped each of those six was
-                sitting unread in skip_reason the whole time.
-                
-                So a skipped stop prints its own reason, exactly as the queue
-                rows do (PublicationItem.tsx), and keeps the bare word only
-                for the rows written before this or by a path that left the
-                reason empty. Two lines at most: this rail is a column of
-                stops, not a place to read a paragraph, and the full text is
-                one tap away in the detail sheet.
-              */}
-              {doneLine && (
-                <p dir="auto" className={`text-[11px] font-bold ${TONE_TEXT[tone]} ${skipWhy ? 'line-clamp-2 leading-snug' : ''}`}>
-                  {skipWhy || doneLine}
-                </p>
-              )}
+              {doneLine && <p className={`text-[11px] font-bold ${TONE_TEXT[tone]}`}>{doneLine}</p>}
             </div>
           </>
         );

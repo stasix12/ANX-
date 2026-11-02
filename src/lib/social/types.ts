@@ -316,18 +316,6 @@ export interface QueueItem {
   skip_reason: string | null;
   claimed_at: string | null;
   published_at: string | null;
-  /**
-   * WHEN THIS ROW WAS LAST WRITTEN — maintained by the database, not by us
-   * (social_queue_set_updated_at, supabase/social-schema.sql).
-   *
-   * For a row that has finished it is the moment it finished, and that is the
-   * only honest instant a cancelled or skipped row has: nothing writes
-   * published_at on those, so every screen that wanted to place one in time
-   * had to fall back on the slot it was PLANNED for. One bulk cancel at 21:00
-   * then reads, on the dashboard rail, as a stream of cancellations at 21:31,
-   * 21:34 and 21:49 — which is exactly what it was mistaken for.
-   */
-  updated_at?: string | null;
   step?: QueueStep;
   step_at?: string | null;
   worker_id?: string | null;

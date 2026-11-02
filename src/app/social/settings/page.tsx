@@ -658,14 +658,14 @@ export default function SettingsPage() {
                             aria-hidden
                             className={`h-2.5 w-2.5 shrink-0 rounded-full ${w.online ? 'bg-success-400' : 'bg-ink-600'}`}
                           />
-                          <span dir="auto" className="min-w-0 grow truncate font-bold text-mist-100">{w.name || w.host || '—'}</span>
+                          <span className="min-w-0 grow truncate font-bold text-mist-100">{w.name || w.host || '—'}</span>
                           <span className={`shrink-0 text-[11px] font-extrabold ${w.online ? 'text-success-400' : 'text-mist-500'}`}>
                             {w.online ? (w.busy ? 'מפרסם עכשיו' : 'מחובר') : 'מנותק'}
                           </span>
                         </div>
-                        <dl className="mt-1.5 grid grid-cols-[auto_1fr] [&>*]:min-w-0 gap-x-2 gap-y-0.5 text-[11px] leading-4">
+                        <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px] leading-4">
                           <dt className="text-mist-500">עסק</dt>
-                          <dd dir="auto" className="min-w-0 truncate text-mist-300">{w.tenantName || '— לא משויך לעסק'}</dd>
+                          <dd className="min-w-0 truncate text-mist-300">{w.tenantName || '— לא משויך לעסק'}</dd>
                           <dt className="text-mist-500">משתמש פייסבוק</dt>
                           <dd className="min-w-0 truncate text-mist-300">
                             {w.fbUserName || (w.fbUserId ? <span dir="ltr">{w.fbUserId}</span> : '— לא ידוע')}
@@ -701,9 +701,9 @@ export default function SettingsPage() {
                     {presence.users.map((u) => (
                       <div key={u.id} className="rounded-xl border border-ink-700 px-3 py-2.5">
                         <p className="truncate font-bold text-mist-100" dir="ltr">{u.email || u.id}</p>
-                        <dl className="mt-1 grid grid-cols-[auto_1fr] [&>*]:min-w-0 gap-x-2 gap-y-0.5 text-[11px] leading-4">
+                        <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px] leading-4">
                           <dt className="text-mist-500">עסקים</dt>
-                          <dd dir="auto" className="min-w-0 truncate text-mist-300">{u.tenants.length ? u.tenants.join(' · ') : '— לא משויך'}</dd>
+                          <dd className="min-w-0 truncate text-mist-300">{u.tenants.length ? u.tenants.join(' · ') : '— לא משויך'}</dd>
                           <dt className="text-mist-500">כניסה אחרונה</dt>
                           <dd className="min-w-0 text-mist-300">{u.lastSignInAt ? <Stamp iso={u.lastSignInAt} /> : '— מעולם לא נכנס'}</dd>
                         </dl>

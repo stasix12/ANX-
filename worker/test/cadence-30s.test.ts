@@ -109,21 +109,12 @@ function store(queue: QRow[], campaigns: Record<string, Record<string, unknown>>
       if (patch) {
         const hit = rows().filter((r) => fs.every((f) => f(r)));
         for (const r of hit) {
-          /*
-           * THE SIMULATED UNIQUE INDEX IS GONE, because the real one is.
-           *
-           * This used to reject a row moving into an open status while another
-           * open row held the same group, modelling
-           * social_queue_one_open_per_target_idx with a 23505. v33 drops that
-           * index — "אני רוצה שיהיה אפשר לפרסם גם ככה ובכל תנאי... לפתוח הכל,
-           * גם אותו פוסט" — so a fake that still enforced it would be proving
-           * this cadence against a database nobody runs, which is the one way
-           * a green simulation is worse than no simulation.
-           *
-           * Nothing about the cadence rests on it: what spaces two lanes is
-           * Admission.commit under one mutex (part D below), not a constraint
-           * on what may sit in the queue.
-           */
+          /* social_queue_one_open_per_target_idx, simulated: a row MOVING INTO
+             an open status while another open row holds that target is 23505. */
+          if (patch.status && OPEN.includes(String(patch.status)) && String(patch.status) !== r.status) {
+            const clash = queue.find((o) => o !== r && o.target_id === r.target_id && OPEN.includes(o.status));
+            if (clash) return { data: null, error: { message: 'social_queue_one_open_per_target_idx', code: '23505' }, count: 0 };
+          }
           Object.assign(r, patch);
         }
         return { data: hit.map((r) => ({ id: r.id })), error: null, count: hit.length };
@@ -511,46 +502,15 @@ async function main(): Promise<void> {
     "the claim must stay a compare-and-set: .eq('id') AND .eq('status','scheduled') — two lanes cannot both win it");
   is(/if \(!claimed\?\.length\) return;/.test(worker), 'and a lane that lost the race must give up the row, not carry on with it');
 
-  /*
-   * ─── THE INDEX IS GONE ON PURPOSE, AND THIS IS WHERE THAT IS RECORDED ──
-   *
-   * This block used to require social_queue_one_open_per_target_idx — one
-   * open row per group, account-wide — and to pin its predicate to
-   * OPEN_STATUSES, on the reasoning that without it two lanes can hold two
-   * rows for one group. v33 drops it, because the owner asked for exactly
-   * that: "אני רוצה שיהיה אפשר לפרסם גם ככה ובכל תנאי גם יש עוד סבב אם אותם
-   * קבוצות בקמפיין אחר" → "לפתוח הכל, גם אותו פוסט".
-   *
-   * So the assertion is inverted rather than deleted — a fresh install must
-   * NOT create it, and v33 must still be the file that drops it — and the two
-   * things that carry what it used to carry are pinned beneath:
-   *
-   *   · CADENCE, which was never the index's job: two lanes are spaced by
-   *     Admission.commit under one mutex (part D above measures it, and the
-   *     pin below is the arithmetic).
-   *   · ONE OPEN ROW PER GROUP FOR ONE POST, which the planner keeps for
-   *     itself in targetsAlreadyWaiting — post-scoped, because the whole
-   *     point of v33 is that a DIFFERENT post may queue to the same group.
-   *     Removing that guard too is what made the queue climb 62 rows in nine
-   *     minutes with nothing publishing.
-   */
-  is(!/create unique index if not exists social_queue_one_open_per_target_idx/.test(sql),
-    'a fresh install must not re-create the index v33 drops — "לפתוח הכל, גם אותו פוסט"');
-  is(/drop index if exists public\.social_queue_one_open_per_target_idx/.test(src('../../supabase/social-schema-v33.sql')),
-    'and v33 must still be the migration that drops it on a database that already has it');
-  const plan = src('../../src/lib/social/plan.ts');
-  /* THE FUNCTION'S OWN BODY, not the file: `.eq('post_id', postId)` appears
-     elsewhere in plan.ts, so a file-wide grep passed a tree where this guard
-     had lost its scoping entirely — which is the mistake that let the queue
-     climb 62 rows in nine minutes. */
-  const guard = plan.slice(plan.indexOf('async function targetsAlreadyWaiting'));
-  const body = guard.slice(0, guard.indexOf('\n}') + 2);
-  is(body.length > 100 && body.length < 4000, 'targetsAlreadyWaiting is still a function this test can read');
-  is(/\.eq\('post_id', postId\)/.test(body),
-    'the planner still refuses a SECOND open row for the same post and group — scoped to the POST, which is what v33 opened up');
-  is(/\.in\('status', OPEN_STATUSES\)/.test(body),
-    'and it asks that question across every open status, not only the claimable one');
-  eq(OPEN.slice().sort(), [...OPEN].sort(), 'the open statuses this file models are the ones the guard is asked about');
+  /* The index that makes the due set one row per group, and the inner join
+     that drops the NULL-target rows the index cannot constrain. */
+  const idx = sql.match(/create unique index if not exists social_queue_one_open_per_target_idx[\s\S]*?where status in \(([^)]*)\)/);
+  is(idx, 'social_queue_one_open_per_target_idx must still be a unique index on (target_id)');
+  if (idx) {
+    const inPredicate = idx[1].split(',').map((s) => s.trim().replace(/'/g, ''));
+    eq(inPredicate.sort(), [...OPEN].sort(),
+      'and its predicate must still be exactly OPEN_STATUSES — narrow it and two lanes can hold two rows for one group');
+  }
   is(/target:social_targets!inner\(channel, account_id\)/.test(worker),
     'the due read must keep the INNER join: target_id is nullable, a unique index does not constrain NULLs, and the join is what keeps those rows out of a lane');
 

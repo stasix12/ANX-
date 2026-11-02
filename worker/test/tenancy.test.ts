@@ -239,53 +239,8 @@ is(!/onConflict: 'name'/.test(worker) && !/onConflict: 'provider,provider_user_i
 /* 8. One file to run, and it contains all of it.                            */
 /* ----------------------------------------------------------------------- */
 const strip = (sql: string) => sql.split('\n').filter((l) => !l.trim().startsWith('--') && l.trim()).join('\n');
-/*
- * ─── WHAT A LATER MIGRATION IS ALLOWED TO TAKE BACK OUT ──────────────────
- *
- * This loop's rule is "social-latest.sql contains every statement the
- * versioned files contain", and it has caught real drift. But a migration can
- * also UNDO an earlier one, and then the honest fresh-install script is the
- * one that never does the undone thing in the first place — so the rule as
- * written demands that a new database be given something the very next file
- * removes from it.
- *
- * That is v20 and v33. v20 added social_queue_one_open_per_target_idx — one
- * waiting row per group, account-wide — and, to make that index creatable on
- * a live database, first collapsed every group's extra waiting rows into
- * 'skipped'. v33 drops the index, because the owner asked for the opposite:
- * "אני רוצה שיהיה אפשר לפרסם גם ככה ובכל תנאי... לפתוח הכל, גם אותו פוסט".
- * With the index gone the collapse has nothing left to serve, and on a fresh
- * database it would be a destructive statement run against an empty table for
- * no reason at all.
- *
- * So these six statements are named here, each one checked twice: it must be
- * ABSENT from social-latest.sql (or this list is stale and should be deleted)
- * and the file that supersedes it must still say so. Everything else in v20,
- * and every statement of every other version, is held to the original rule.
- */
-const SUPERSEDED: { by: string; marker: RegExp; starts: string[] }[] = [
-  {
-    by: 'social-schema-v33.sql',
-    marker: /drop index if exists public\.social_queue_one_open_per_target_idx/,
-    starts: [
-      'begin\n  with ranked as (',
-      'get diagnostics extra = row_count',
-      'if extra > 0 then',
-      'create unique index if not exists social_queue_one_open_per_target_idx',
-      "raise notice 'v20: מעכשיו לכל קבוצה יכול להמתין פרסום אחד בלבד",
-      "select\n  'v20 הוחל' as \"מצב\",",
-    ],
-  },
-];
-for (const { by, marker, starts } of SUPERSEDED) {
-  const file = read(by);
-  is(marker.test(strip(file)), `${by} must still undo what it is credited with undoing here`);
-  for (const start of starts) is(!strip(latest).includes(start), `social-latest.sql still carries a statement ${by} superseded: ${start.slice(0, 50)}…`);
-}
-const superseded = (statement: string) => SUPERSEDED.some(({ starts }) => starts.some((start) => statement.startsWith(start)));
 for (const [name, sql] of [['v16', v16], ['v17', v17], ['v18', v18], ['v19', v19], ['v20', v20]] as const) {
   for (const statement of strip(sql).split(';').map((x) => x.trim()).filter((x) => x.length > 20)) {
-    if (superseded(statement)) continue;
     is(strip(latest).includes(statement), `social-latest.sql is missing a statement from ${name}: ${statement.slice(0, 60)}…`);
   }
 }

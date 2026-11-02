@@ -97,7 +97,7 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.27.0';
+export const WORKER_VERSION = '4.28.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -127,6 +127,24 @@ export const WORKER_VERSION = '4.27.0';
  *     nothing said so. The first failure is terminal now, except for the
  *     faults that are this computer's own (a closed Chromium window, a
  *     dropped line), which are handed back with the attempt unspent.
+ *
+ * AND ANSWERED OUT LOUD AGAIN, 4.27.0 → 4.28.0, AND IT IS YES — v33.
+ *
+ *   • plan.ts no longer pre-refuses a group that has an open row. It used to
+ *     read every open row in the account, whatever post it belonged to, and
+ *     skip any group already spoken for — so a second campaign could never
+ *     take a group a first campaign was holding. The owner's Russian-language
+ *     round carries fifty groups, another campaign held an open row for every
+ *     one, and the planner dropped all fifty every pass: "אף קבוצה לא נכנסה
+ *     לתור", night after night. He asked for it open — "לפתוח הכל, גם אותו
+ *     פוסט" — and v33 drops the database index behind it.
+ *
+ *     THIS ONE MUST REACH THE PC, which is exactly the hole this fingerprint
+ *     exists to close. plan.ts is not under worker/, but build-app.mjs aliases
+ *     `@` to src and the planner is inside worker.cjs: the machine plans its
+ *     own queue every sixty seconds. Ship the database change without this and
+ *     his PC goes on pre-refusing all fifty groups against an index that is no
+ *     longer there — the website would be fixed and nothing would publish.
  *
  * AND ANSWERED AGAIN, TWICE, BOTH TIMES NO: the fingerprint moves, the number
  * does not.
@@ -363,4 +381,4 @@ export const WORKER_VERSION = '4.27.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = '27ef7d1dfb7515c9';
+export const WORKER_FINGERPRINT = 'ed03f74295e94efa';

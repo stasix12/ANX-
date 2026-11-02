@@ -1586,34 +1586,56 @@ console.log('unit tests OK');
   assert.ok(unplan.includes("eq('active', true)"), 'only a schedule that can still fire is worth editing');
 
   /*
-   * ...and the other half of the same race: re-spacing and hand-adding both move
-   * a row OFF the instant its schedule would plan it on, which leaves that instant
-   * free for the next tick to fill. Matching on the target, not only the instant,
-   * is what stops the owner setting the gap and watching the queue double.
+   * ─── THE PLANNER NO LONGER PRE-REFUSES A GROUP — v33, AND IT IS HIS CALL ──
+   *
+   * This file used to assert the opposite, in his own words. v20 made the rule
+   * one waiting publication per GROUP, account-wide, because he said
+   * "לא רוצה בכלל שתיהיה אופציה לפרסם פעמיים לאותן קבוצה" after watching every
+   * group queue twice in one minute and every duplicate read דולג.
+   *
+   * On 02.11.2026 he replaced that instruction. His Russian-language round
+   * carries fifty groups; another campaign of his held an open row for every
+   * one, so the planner dropped all fifty every pass — "אף קבוצה לא נכנסה
+   * לתור", night after night. Asked directly which of the two sentences stands,
+   * because they contradict each other and the contradiction was recorded here,
+   * he chose: "לפתוח הכל, גם אותו פוסט".
+   *
+   * So the pre-read is gone — not narrowed to the post, which is what his first
+   * sentence alone would have bought him. Both sentences are his; this comment
+   * is the record of which is in force and when it changed, so nobody later
+   * reads the removal as drift.
+   *
+   * WHAT DID NOT CHANGE, and it is the part worth being precise about: nothing
+   * here ever decided what PUBLISHES. rules.ts still holds each group's daily
+   * quota, the account ceiling, the gap between any two publications, and the
+   * repeat window — which still defers a second row for the same post and group
+   * instead of publishing it beside the first.
    */
-  assert.ok(planner.includes('async function targetsAlreadyWaiting'), 'the planner must know which groups already have something waiting');
+  assert.ok(
+    !planner.includes('async function targetsAlreadyWaiting'),
+    'the account-wide pre-read is gone — it is what stopped a second campaign ever taking a group the first was holding',
+  );
   assert.equal(
-    (planner.match(/await targetsAlreadyWaiting\(db\)/g) ?? []).length,
+    (planner.match(/const waiting = new Set<string>\(\);/g) ?? []).length,
     2,
-    'both planner branches must check which groups are already waiting',
+    'both planner branches start with nothing refused, and learn only from refusals the database actually makes',
   );
   /*
-   * AND IT MUST NOT BE SCOPED TO ONE POST. It was `plannedTargets(db, postId)`,
-   * and that is the hole the owner found: every group queued twice, in the same
-   * minute, every row later skipped.
-   *
-   *   ערד-ערדניקים  16:09  דולג
-   *   ערד-ערדניקים  16:09  דולג
-   *
-   * Two campaigns with two different posts, planning the same groups from the
-   * same base time with the same stagger. A per-post check cannot see the other
-   * post; the queue's (schedule_id, target_id, scheduled_at) index cannot see
-   * the other schedule. The rule is per GROUP now, which is what the owner
-   * asked for: "לא רוצה בכלל שתיהיה אופציה לפרסם פעמיים לאותן קבוצה".
+   * AND IT IS STILL FILLED, which is what keeps a database that has NOT run v33
+   * graceful. The v20 index is still standing there, the insert is refused, and
+   * the handler puts the group into `waiting` so the rest of the pass leaves it
+   * alone and noteDropped names it. Deleting this would turn an un-migrated
+   * database from "reports which groups it could not take" into a pass that
+   * retries the same refusal for every slot.
    */
-  const waitingFn = planner.slice(planner.indexOf('async function targetsAlreadyWaiting'), planner.indexOf('/**\n * Says out loud'));
-  assert.ok(!/post_id/.test(waitingFn), 'the check must be per group, not per post — a second post to the same group is the exact bug');
-  assert.ok(/OPEN_STATUSES/.test(waitingFn), 'and it must use the one shared definition of "not finished"');
+  assert.ok(
+    /if \(takenByAnotherPlanner\(insErr\)\) \{[\s\S]{0,120}waiting\.add\(targetId\)/.test(planner),
+    'a refusal from the database must still be remembered for the rest of the pass',
+  );
+  assert.ok(
+    /takenByAnotherPlanner/.test(planner) && /social_queue_one_open_per_target\(_post\)\?_idx/.test(planner),
+    'and the refusal is recognised by either index name, so an un-migrated database is handled rather than crashed',
+  );
   /*
    * Updated with the fix that made the skip audible: the shape this pinned was
    * a bare `if (waiting.has(targetId)) continue;`, which was correct and
@@ -1647,10 +1669,26 @@ console.log('unit tests OK');
     2,
     'in both branches — and it must never be written to the log as plan_failed, which is an error line for the system working correctly',
   );
-  const raceFn = planner.slice(planner.indexOf('function takenByAnotherPlanner'), planner.indexOf('/**\n * Groups that already have a publication WAITING'));
+  /* A fixed window rather than the next doc comment: the block this used to
+     stop at belonged to targetsAlreadyWaiting(), which v33 removed, and
+     indexOf returned -1 — slicing to -1 quietly handed the assertion the whole
+     file minus one character, so it would have passed on a mention anywhere. */
+  const raceStart = planner.indexOf('function takenByAnotherPlanner');
+  const raceFn = planner.slice(raceStart, raceStart + 600);
+  assert.ok(raceStart > -1, 'takenByAnotherPlanner is found');
   assert.ok(
-    /social_queue_one_open_per_target_idx/.test(raceFn),
+    /social_queue_one_open_per_target\(_post\)\?_idx/.test(raceFn),
     'matched on the index name — 23505 alone would also swallow the slot index, which means something else entirely',
+  );
+  /*
+   * BOTH NAMES, because v33 may not have been applied yet. A database still on
+   * v20 raises the account-wide name; one that was briefly on the narrowed form
+   * raises the (target, post) name. Recognising only one of them turns the
+   * other into a plan_failed error line for the system working correctly.
+   */
+  assert.ok(
+    /\(_post\)\?/.test(raceFn),
+    'and it recognises the narrowed name too, so no database raises an error line for a refusal this code understands',
   );
   /*
    * THE DATABASE'S RULE AND THE CODE'S MUST BE THE SAME RULE.

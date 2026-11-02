@@ -140,12 +140,32 @@ async function main(): Promise<void> {
     is(again.every((r) => !r.includes(row)), 'a PUBLISHED row was claimed again — this is a double publication');
   }
 
-  /* ================================================ ONE OPEN ROW PER TARGET */
+  /* ========================================= SEVERAL OPEN ROWS PER TARGET */
   /*
-   * social_queue_one_open_per_target_idx is unique on target_id alone, partial
-   * over the open statuses. It is the strongest constraint in this schema and
-   * it is ACCOUNT-WIDE: two different campaigns cannot both hold a waiting row
-   * for the same group.
+   * ─── v33 REMOVED THE STRONGEST CONSTRAINT IN THIS SCHEMA, AND HE ASKED ────
+   *
+   * social_queue_one_open_per_target_idx was unique on target_id alone, partial
+   * over the open statuses, and ACCOUNT-WIDE: two different campaigns could not
+   * both hold a waiting row for one group. That rule was v20's, and v20 was his
+   * — "לא רוצה בכלל שתיהיה אופציה לפרסם פעמיים לאותן קבוצה", after he watched
+   * every group queue twice in a minute and every duplicate read דולג.
+   *
+   * It cost him an evening in the other direction. His Russian-language round
+   * carries fifty groups; another campaign held an open row for every one of
+   * them, so the planner dropped all fifty every pass and the log read
+   * "אף קבוצה לא נכנסה לתור" with nothing he could do. Asked which of his two
+   * contradictory instructions stands, he chose: "לפתוח הכל, גם אותו פוסט",
+   * 02.11.2026.
+   *
+   * So this test now asserts the OPPOSITE of what it asserted before, and the
+   * inversion is deliberate rather than a loosened guard. Two rows for one
+   * group — the same post, even — must both be accepted.
+   *
+   * WHAT IS NOT TESTED HERE BECAUSE IT DID NOT CHANGE: whether either row
+   * PUBLISHES. That is rules.ts — each group's daily quota, the account
+   * ceiling, the gap between publications, and the repeat window, which still
+   * defers a second row for the same post and group rather than sending it
+   * beside the first. This file is about what the QUEUE will hold.
    */
   {
     exec(`delete from social_queue`);
@@ -155,21 +175,39 @@ async function main(): Promise<void> {
     const second = refused(`
       insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text)
       values ('${b}', '${ids.post}', '${ids.target}', '${ids.schedule}', '${ids.campaign}', now() + interval '1 day', 'scheduled', '${b}', 'טקסט')`);
-    is(second, 'two OPEN rows for one group were allowed — the engine assumes they cannot be');
-    /* And the moment the first leaves the open statuses, the second fits. */
-    exec(`update social_queue set status='published', published_at=now() where id='${a}'`);
-    queueRow(b, ids.target, "now() + interval '1 day'");
-    is(one(`select count(*) from social_queue where target_id='${ids.target}'`) === '2', 'a second row could not follow a published one');
+    is(!second, 'a second OPEN row for one group was REFUSED — v33 dropped that index, so this database has not been migrated');
+    is(
+      one(`select count(*) from social_queue where target_id='${ids.target}' and status='scheduled'`) === '2',
+      'both rows must be waiting for the same group at once — this is the whole of what he asked for',
+    );
+    /*
+     * AND THE EXACT-DUPLICATE KEY IS STILL THERE. (schedule_id, target_id,
+     * scheduled_at) was never part of v20 and v33 does not touch it, so two
+     * planners racing still cannot write the same row twice for one schedule
+     * and instant. "לפתוח הכל" is about the owner's campaigns, not about
+     * letting a race corrupt the queue.
+     */
+    const sameInstant = refused(`
+      insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text)
+      values ('55555555-5555-4555-8555-555555555555', '${ids.post}', '${ids.target}', '${ids.schedule}', '${ids.campaign}',
+        (select scheduled_at from social_queue where id='${a}'), 'scheduled', 'x', 'טקסט')`);
+    is(sameInstant, 'the same schedule, group and instant was accepted twice — the slot key is gone, which v33 must not have touched');
   }
 
   /* ================================================== A ROW STUCK PUBLISHING */
   /*
-   * The PC dies mid-publication. The row stays 'publishing', which is one of
-   * the OPEN statuses in the partial index above — so that group is blocked
-   * from ever receiving another row until something moves it.
+   * The PC dies mid-publication and the row stays 'publishing'.
    *
-   * This is the shape of a queue that stops and says nothing, so the test
-   * states it rather than assuming somebody remembers.
+   * UNDER v20 THAT BLOCKED THE GROUP FOR GOOD: 'publishing' was one of the open
+   * statuses in the partial index, so nothing else could ever be queued for that
+   * group until somebody moved the row. That was the shape of a queue that stops
+   * and says nothing, and worker/revive.ts exists because of it.
+   *
+   * v33 dropped the index, so an abandoned row no longer takes its group hostage
+   * — which is a real gain the owner did not specifically ask for and gets
+   * anyway. revive.ts still matters: the stuck row itself is still stuck, still
+   * counted as in-flight, and still needs releasing. What has changed is that
+   * the REST of his publishing no longer waits on it.
    */
   {
     exec(`delete from social_queue`);
@@ -180,7 +218,11 @@ async function main(): Promise<void> {
     const blocked = refused(`
       insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text)
       values ('55555555-5555-4555-8555-555555555556', '${ids.post}', '${ids.target}', '${ids.schedule}', '${ids.campaign}', now(), 'scheduled', 'h-stuck', 'טקסט')`);
-    is(blocked, 'a row abandoned in publishing no longer blocks its group — the partial index changed');
+    is(!blocked, 'a row abandoned in publishing still blocks its group — v33 dropped that index, so this database has not been migrated');
+    is(
+      one(`select count(*) from social_queue where target_id='${ids.target}'`) === '2',
+      'the new row must exist beside the stuck one, so one dead publication cannot hold up a group for ever',
+    );
 
     /* WHAT RELEASES IT. The worker sweeps 'publishing' and
        'awaiting_confirmation' to 'needs_attention' at startup — so the group is
@@ -191,7 +233,14 @@ async function main(): Promise<void> {
       `select count(*) from social_queue where status in
          ('scheduled','manual_pending','needs_attention','awaiting_confirmation','paused','publishing')`,
     );
-    is(openCount === '1', 'the stuck row is not the only open row — the fixture drifted');
+    /* TWO since v33: the stuck row, and the one that was refused before it and
+       is now accepted beside it. The point of the count is still that nothing
+       has swept or released the stuck row on its own. */
+    is(openCount === '2', 'the stuck row and its new neighbour are not both open — the fixture drifted');
+    is(
+      one(`select count(*) from social_queue where status='publishing'`) === '1',
+      'and nothing released the stuck row by itself — there is still no lease and no reaper',
+    );
   }
 
   /* ====================================================== THE SLOT COLLISION */
@@ -249,13 +298,16 @@ async function main(): Promise<void> {
     is(due.length === 10, `the due read returned ${due.length} rows for a ten-minute window, expected 10`);
     is(ms < 2000, `the due read took ${ms}ms over a thousand rows`);
 
-    /* AND THE ONE-OPEN-PER-TARGET RULE HOLDS AT THAT SIZE: a thousand rows for
-       a thousand groups is legal, a second for any of them is not. */
+    /* AND A SECOND ROW FOR ONE OF THOSE GROUPS IS NOW ACCEPTED AT THAT SIZE —
+       v33. It is asserted at a thousand rows and not only at two, because the
+       index that used to refuse it was the only thing keeping the table's open
+       set one-per-group, and dropping it changes what the planner's inserts
+       cost under load as well as what they mean. */
     const slipped = refused(`
       insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text)
-        select gen_random_uuid(), '${ids.post}', t.id, '${ids.schedule}', '${ids.campaign}', now(), 'scheduled', gen_random_uuid()::text, 'טקסט'
+        select gen_random_uuid(), '${ids.post}', t.id, '${ids.schedule}', '${ids.campaign}', now() + interval '1 hour', 'scheduled', gen_random_uuid()::text, 'טקסט'
           from social_targets t where t.external_id = 'bulk1'`);
-    is(slipped, 'a second open row slipped past the per-target index at a thousand rows');
+    is(!slipped, 'a second open row for a group was refused at a thousand rows — v33 dropped that index, so this database has not been migrated');
   }
 
   /* ======================================================= EIGHT LANES, 50 ROWS */
@@ -360,29 +412,36 @@ async function main(): Promise<void> {
       values ('${r1}', '${ids.post}', '${ids.target}', '${ids.schedule}', '${ids.campaign}',
               now(), 'scheduled', '${r1}', 'טקסט', '03:30')`);
 
-    /* ROUND TWO CANNOT EXIST YET, and that is the feature working rather than
-       failing: one open row per group, account-wide, is what stops the same
-       post being queued to one group twice over. */
+    /*
+     * ROUND TWO MAY NOW EXIST ALONGSIDE ROUND ONE — v33.
+     *
+     * This assertion was the inverse until 02.11.2026: round two could not be
+     * inserted while round one was open, and that sequencing was the feature
+     * working rather than failing. The owner replaced the rule behind it
+     * ("לפתוח הכל, גם אותו פוסט"), so both rounds' rows can sit in the queue at
+     * once and each still carries its own round_at, which is what every
+     * per-round counter reads.
+     *
+     * WHAT STOPS ROUND TWO PUBLISHING INTO ROUND ONE'S GROUPS IS NOT THIS
+     * INDEX and never was — it is the repeat window in rules.ts, which defers
+     * the second row until the window has passed. Dropping the index changed
+     * when the row is CREATED, not when it goes out.
+     */
     is(
-      refused(`
+      !refused(`
         insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text, round_at)
         values ('${r2}', '${ids.post}', '${ids.target}', '${ids.schedule}', '${ids.campaign}',
                 now() + interval '12 hours', 'scheduled', '${r2}', 'טקסט', '15:30')`),
-      "round two was queued while round one was still open — the one-open-row-per-target index is what makes a round's progress countable at all",
+      'round two was refused while round one was open — v33 dropped that index, so this database has not been migrated',
     );
 
-    /* AND IT FITS THE MOMENT ROUND ONE PUBLISHES. This is the sentence in the
-       index's own SQL comment — "a group that has published is free again
-       immediately, which is what makes a second round to the same groups
-       possible at all" — and here it is, run. */
+    /* Round one publishes, as it would. Round two is ALREADY in the queue now
+       rather than waiting to be insertable, so nothing is inserted here — the
+       row exists from the assertion above and the counts below are about it. */
     exec(`update social_queue set status='published', published_at=now() where id='${r1}'`);
-    exec(`
-      insert into social_queue (id, post_id, target_id, schedule_id, campaign_id, scheduled_at, status, dedupe_hash, rendered_text, round_at)
-      values ('${r2}', '${ids.post}', '${ids.target}', '${ids.schedule}', '${ids.campaign}',
-              now() + interval '12 hours', 'scheduled', '${r2}', 'טקסט', '15:30')`);
     is(
       one(`select count(*) from social_queue where target_id='${ids.target}'`) === '2',
-      'the same group could not receive a second round after the first published — the feature cannot work on this schema',
+      'the same group does not hold both rounds — the per-round counters read these rows',
     );
     /* EACH ROW KNOWS WHICH ROUND IT IS. Taken off the rows rather than guessed
        from scheduled_at, because a deferred row keeps its round and would

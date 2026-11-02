@@ -199,7 +199,33 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     const approved = (variants ?? []) as Variant[];
     const media = (post.media ?? []) as MediaItem[];
     const taken = await occupiedSlots(db, post.id);
-    const waiting = await targetsAlreadyWaiting(db);
+    /*
+     * ─── THE PLANNER NO LONGER PRE-REFUSES A GROUP — v33 ────────────────────
+     *
+     * "אני רוצה שיהיה אפשר לפרסם גם ככה ובכל תנאי גם יש עוד סבב אם אותם קבוצות
+     *  בקמפיין אחר", and, asked which of his two contradictory instructions
+     * stands: "לפתוח הכל, גם אותו פוסט". 02.11.2026.
+     *
+     * This used to be targetsAlreadyWaiting(db) — every open row in the
+     * account, whatever post it belonged to — so a group another campaign was
+     * holding was simply unavailable. His Russian-language round carries fifty
+     * groups, another campaign held an open row for every one, and the planner
+     * dropped all fifty every pass: "אף קבוצה לא נכנסה לתור", night after
+     * night, with nothing he could do about it.
+     *
+     * IT STARTS EMPTY AND IS STILL FILLED, by the duplicate-key handler below.
+     * That is what keeps a database which has NOT yet run v33 graceful: the
+     * index is still there, the insert is refused, the group goes into this set
+     * and the rest of the pass leaves it alone — reported through noteDropped
+     * exactly as before. So the planner now asks the database instead of
+     * guessing, which is also the only correct order when two planners race.
+     *
+     * NOTHING ABOUT PUBLISHING IS DECIDED HERE. What actually goes out is
+     * rules.ts: each group's daily quota, the account ceiling, the gap between
+     * publications, and the repeat window — which still defers a second row for
+     * the same post and group rather than publishing it beside the first.
+     */
+    const waiting = new Set<string>();
     /*
      * ───────── THE CAMPAIGN'S OWN WINDOW, BEFORE A SINGLE STAMP IS WRITTEN ──
      *
@@ -281,7 +307,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
        schedule, and the question noteDropped asks is about this one. */
     let made = 0;
     for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
-      // Something is already waiting for this group — see targetsAlreadyWaiting().
+      // The database refused this group earlier in THIS pass — see `waiting`.
       if (waiting.has(targetId)) {
         dropped.push(targetId);
         continue;
@@ -410,13 +436,18 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      * But it also silences the launch where NOTHING got through, and that is
      * the one a person most needs to hear about.
      *
-     * targetsAlreadyWaiting() is GLOBAL (see it: one select over social_queue
-     * with no post or campaign filter), so a group is blocked by an open row
-     * from ANY round. An owner with a few hundred rows already waiting can
-     * launch a second round over the same groups and get: zero rows, zero log
-     * lines, and — for a 'now' or 'once' schedule — the schedule retiring
-     * itself at the end of this very pass. The launch reports success and
-     * leaves nothing behind. Nothing on any screen would ever say why.
+     * UNTIL v33 the planner refused a group that had an open row from ANY
+     * round, so an owner with a few hundred rows already waiting could launch
+     * a second round over the same groups and get: zero rows, zero log lines,
+     * and — for a 'now' or 'once' schedule — the schedule retiring itself at
+     * the end of this very pass. The launch reported success and left nothing
+     * behind. That is the state this message was written for, and it is the
+     * state the owner spent an evening in.
+     *
+     * v33 removed the rule, so on a migrated database `dropped` fills only
+     * from a refusal the database actually made — which happens only where the
+     * v20 index is still standing. The message therefore still matters, and it
+     * now means something sharper: this database has not been migrated.
      *
      * So the fully-blocked pass speaks. Not on a top-up (`plannedAhead`),
      * which is the steady state of every repeating round and has not changed
@@ -554,57 +585,19 @@ function isMissingRoundColumn(error: { code?: string; message?: string } | null)
 
 function takenByAnotherPlanner(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
-  return /social_queue_one_open_per_target_idx/i.test(error.message ?? '');
-}
-
-/**
- * Groups that already have a publication WAITING — whatever post it is for.
- *
- * THIS USED TO BE SCOPED TO ONE POST, and that is the hole the owner found:
- * two rows for the same group in the same minute, both later skipped.
- *
- *   ערד-ערדניקים   16:09   דולג
- *   ערד-ערדניקים   16:09   דולג
- *
- * Neither of the two things that are supposed to prevent that could see it.
- * The queue's unique index is (schedule_id, target_id, scheduled_at), so it
- * only ever looks inside ONE schedule. And this check matched on post_id, so
- * it only ever looked at ONE post. A second campaign, with a different post,
- * planning the same groups from the same base time with the same one-minute
- * stagger, passes both — and every group is queued twice.
- *
- * Publishing was never in danger: rules.ts refuses a post that has already
- * gone to a target, which is why every one of those rows reads דולג. But
- * "safe" is not the same as "right". The owner is shown a queue twice the
- * length of the truth, told nothing about which half is real, and then watches
- * half of it fail for a reason that describes something they never did.
- *
- * So the rule is now the one they asked for: one waiting publication per
- * group. Not per post, not per schedule — per group. A group is free again the
- * moment its row leaves the queue, and noteDropped() below says out loud which
- * groups a launch left out and why, because a launch that silently plans 30 of
- * 130 groups is its own kind of lie.
- *
- * social/social-schema-v20.sql enforces the same rule in the database, because
- * a check in application code cannot survive two planners running at once —
- * both read this set, both find the group free, both insert.
- *
- * Terminal rows are deliberately excluded: something cancelled, skipped or
- * failed is finished, and may be planned again.
- */
-async function targetsAlreadyWaiting(db: SupabaseClient): Promise<Set<string>> {
-  const { data } = await db.from('social_queue').select('target_id').in('status', OPEN_STATUSES);
-  return new Set((data ?? []).map((r) => r.target_id as string));
+  return /social_queue_one_open_per_target(_post)?_idx/i.test(error.message ?? '');
 }
 
 /**
  * Says out loud which groups a launch quietly left out.
  *
- * targetsAlreadyWaiting() is right to skip a group that already has a row —
- * a second row could never publish (rules.ts refuses a post that has gone to a
- * target once) and would only make the queue longer than the truth. But the
- * skip was completely silent, and for a 'now' or 'once' schedule the schedule
- * then retires itself at the end of the pass. Relaunching a post to 28 groups
+ * Before v33 the planner skipped a group that already had any open row, and
+ * it was right to: a second row for the SAME POST could never publish
+ * (rules.ts refuses a post that has gone to a target once) and would only make
+ * the queue longer than the truth. What it could not tell apart was a second
+ * row for a DIFFERENT post, which can. The skip was also completely silent,
+ * and for a 'now' or 'once' schedule the schedule then retires itself at the
+ * end of the pass. Relaunching a post to 28 groups
  * while group #7 still sits in needs_attention from the previous round produced
  * 27 rows, no row for #7 ever, and nothing anywhere naming #7.
  *
@@ -760,7 +753,9 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
   const media = (post.media ?? []) as MediaItem[];
   const slots = dripSlots(schedule, now);
   const taken = await occupiedSlots(db, post.id);
-  const waiting = await targetsAlreadyWaiting(db);
+  /* Empty for the same reason the weekly planner's is — see its note. Filled
+     only by a refusal the database actually made. */
+  const waiting = new Set<string>();
   let created = 0;
   /* Rows this drip wrote in THIS pass — see noteDropped. */
   let made = 0;
@@ -775,7 +770,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
     const at = slots[targetIndex];
     if (!at) continue;
     if (at > last) last = at;
-    // Something is already waiting for this group — see targetsAlreadyWaiting().
+    // The database refused this group earlier in THIS pass — see `waiting`.
     if (waiting.has(targetId)) {
       dropped.push(targetId);
       continue;
@@ -830,9 +825,9 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
    * did, and it is the loop that every "פרסם עכשיו" goes through —
    * draftFor() makes any launch with more than one target a 'drip'.
    *
-   * targetsAlreadyWaiting() is GLOBAL: a group is blocked by an open row
-   * from ANY round. So an owner whose 218-group round is mid-flight presses
-   * publish on a second post over the same groups and gets zero rows, and
+   * Until v33 a group was blocked by an open row from ANY round. So an owner
+   * whose 218-group round was mid-flight pressed publish on a second post over
+   * the same groups and got zero rows, and
    * then — because `made === 0` silences noteDropped and nothing else here
    * asks the question — zero log lines, while the line below retires the
    * schedule for good. The launch reports success. The post sits in the

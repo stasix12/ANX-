@@ -61,7 +61,7 @@ const RULES: Rule[] = [
    * that group, and the answer is to wait for it or cancel it.
    */
   {
-    match: /social_queue_one_open_per_target_idx/i,
+    match: /social_queue_one_open_per_target(_post)?_idx/i,
     text: 'לאחת הקבוצות כבר ממתין פרסום בתור. אפשר להוסיף אותה שוב אחרי שהפרסום הקיים יֵצא, או לבטל אותו.',
   },
   { match: /duplicate key|already exists|unique constraint/i, text: 'הפריט הזה כבר קיים במערכת.' },

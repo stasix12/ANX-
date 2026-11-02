@@ -1122,58 +1122,59 @@ declare
   extra   integer;
   groups  integer;
 begin
-  -- ------------------------------------------------------------------ 1/3
-  -- The duplicates that already exist. The index cannot be created while they
-  -- are there, and they must not be deleted: they are the owner's record of
-  -- what was attempted. So the EXTRA rows — never the first of each group —
-  -- are marked skipped, with a reason that says what happened and does not
-  -- pretend to be anything else.
-  with ranked as (
-    select
-      id,
-      row_number() over (partition by target_id order by scheduled_at, created_at, id) as n
-    from public.social_queue
-    where status in ('scheduled', 'manual_pending', 'needs_attention', 'awaiting_confirmation', 'paused', 'publishing')
-  )
-  update public.social_queue q
-     set status      = 'skipped',
-         step        = '',
-         skip_reason = 'כפילות — לקבוצה הזו כבר המתין פרסום אחר. מעכשיו זה נמנע מראש.'
-    from ranked r
-   where q.id = r.id
-     and r.n > 1;
-  get diagnostics extra = row_count;
-
-  if extra > 0 then
-    raise notice 'v20: % שורות כפולות סומנו כדולגו (לא נמחקו — הן בהיסטוריה).', extra;
-  end if;
-
-  -- ------------------------------------------------------------------ 2/3
-  -- The rule itself. Partial, so it constrains only what is still waiting: a
-  -- group that has published is free again immediately, which is what makes a
-  -- second round to the same groups possible at all.
+  -- ------------------------------------------------------------------ 1/2
+  -- NOTHING IS COLLAPSED HERE ANY MORE — v33.
   --
-  -- The status list is written out rather than referenced because an index
-  -- predicate has to be immutable — it is OPEN_STATUSES from
-  -- src/lib/social/status.ts, and worker/test/unit.test.ts fails the build if
-  -- the two ever drift apart.
-  create unique index if not exists social_queue_one_open_per_target_idx
-    on public.social_queue (target_id)
-    where status in ('scheduled', 'manual_pending', 'needs_attention', 'awaiting_confirmation', 'paused', 'publishing');
+  -- This block used to mark every group's SECOND waiting publication as
+  -- skipped, because the index below could not be created while they existed.
+  -- v20 was entitled to do that: at that moment those rows were the same post
+  -- queued twice and could never have published. They can now — the owner
+  -- asked for exactly that, in these words, on 02.11.2026: "לפתוח הכל, גם אותו
+  -- פוסט" — so a file that is re-run over a live database must not reach into
+  -- his queue and decide which of his campaigns loses its place in line.
+  -- "אסור למחוק מידע."
+  --
+  -- The statement is gone rather than commented out, so there is nothing here
+  -- for a future edit to switch back on by accident.
+  extra := 0;
+
+  -- ------------------------------------------------------------------ 2/2
+  -- AND THE RULE ITSELF IS GONE, which is the change v33 exists for.
+  --
+  -- social_queue_one_open_per_target_idx refused a second waiting publication
+  -- for a group ACROSS THE WHOLE ACCOUNT, so a second campaign could not take
+  -- a group a first campaign was holding. His Russian-language round carried
+  -- fifty groups, another campaign held an open row for every one, and the
+  -- planner dropped all fifty every pass — "אף קבוצה לא נכנסה לתור", night
+  -- after night.
+  --
+  -- NOTHING ABOUT PUBLISHING CHANGES BY DROPPING IT. This constraint only ever
+  -- governed what may SIT in the queue. What actually goes out is still
+  -- rules.ts: each group's own daily quota (maxPerTargetPerDay, counted across
+  -- every post), the account's daily ceiling, the gap between any two
+  -- publications, and the repeat window — which still defers a second row for
+  -- the same post and group until that window has passed.
+  --
+  -- social_queue's own unique key (schedule_id, target_id, scheduled_at) is
+  -- untouched, so a planner race still cannot write two identical rows.
+  drop index if exists public.social_queue_one_open_per_target_idx;
+  drop index if exists public.social_queue_one_open_per_target_post_idx;
 
   -- ------------------------------------------------------------------ 3/3
   select count(distinct target_id) into groups
     from public.social_queue
    where status in ('scheduled', 'manual_pending', 'needs_attention', 'awaiting_confirmation', 'paused', 'publishing');
 
-  raise notice 'v20: מעכשיו לכל קבוצה יכול להמתין פרסום אחד בלבד. כרגע ממתינים ל-% קבוצות.', groups;
+  raise notice 'v33: לקבוצה יכולים להמתין כמה פרסומים. כרגע ממתינים ל-% קבוצות.', groups;
+  raise notice 'מה שמחליט מה באמת יוצא לא השתנה: מכסה יומית לכל קבוצה, תקרה יומית, המרווח בין פרסומים וחלון החזרה.';
 end $$;
 
 select
-  'v20 הוחל' as "מצב",
+  'v20 + v33 הוחלו' as "מצב",
   count(*) filter (where status in ('scheduled', 'manual_pending', 'needs_attention', 'awaiting_confirmation', 'paused', 'publishing')) as "ממתינים",
   count(distinct target_id) filter (where status in ('scheduled', 'manual_pending', 'needs_attention', 'awaiting_confirmation', 'paused', 'publishing')) as "קבוצות",
-  count(*) filter (where skip_reason like 'כפילות%') as "כפילויות שנוקו"
+  (select count(*) from pg_indexes where schemaname = 'public'
+    and indexname in ('social_queue_one_open_per_target_idx', 'social_queue_one_open_per_target_post_idx')) as "אינדקסים חוסמים (0 = נפתח)"
 from public.social_queue;
 -- ─────────────────────────── from social-schema-v21.sql ───────────────────────────
 

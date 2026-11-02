@@ -9,7 +9,20 @@
  * fixed. The only evidence was a version number in one line of its terminal
  * output, which nobody reads.
  */
-export const WORKER_VERSION = '4.22.0';
+/*
+ * 4.23.0 — DOES THIS HAVE TO REACH THE PC? YES, and it is the clearest yes so
+ * far: rules.ts IS the decision the PC makes before every single click.
+ *
+ * Four reads in it discarded their error and read the empty result that came
+ * back as a fact — so one dropped connection between his Windows machine and
+ * Supabase did not delay a publication, it removed a rule: a paused campaign
+ * published, the campaign's own interval was not applied, the minimum gap
+ * protecting his Facebook account was not enforced, and the same post
+ * published twice to the same group. Left on the dashboard alone this fix
+ * would protect the hosted worker and change nothing at all about the machine
+ * that actually publishes his posts.
+ */
+export const WORKER_VERSION = '4.23.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -213,4 +226,4 @@ export const WORKER_VERSION = '4.22.0';
  * inside worker.cjs because the alias puts all of src/lib/social there;
  * nothing on the PC executes them.
  */
-export const WORKER_FINGERPRINT = '999959d69e2da7cb';
+export const WORKER_FINGERPRINT = 'c3b546e14e93a9f2';

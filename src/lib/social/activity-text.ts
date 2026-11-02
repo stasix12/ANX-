@@ -140,6 +140,9 @@ const TITLE: Record<string, string> = {
   queued_text_refreshed: 'נוסח הפוסט עודכן בתור',
   weekly_hours_synced: 'שעות התזמון עודכנו',
   step_write_lost: 'רישום שלב פרסום נכשל',
+  /* The sentence the engine wrote says WHICH read failed and is shown beneath
+     this headline; the headline says what it cost: the post is still waiting. */
+  rule_read_failed: 'הפרסום ממתין — נתון לא נקרא',
 
   // The machine and the session.
   worker_stopped: 'המחשב התנתק',

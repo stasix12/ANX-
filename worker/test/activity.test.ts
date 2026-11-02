@@ -56,6 +56,14 @@ const SYSTEM_BY_DESIGN = new Set([
      not about a post — and the one notice that must never be missed. */
   'account_scope_narrowed',
   'metrics_columns_missing',
+  /*
+   * A read the publish engine needed came back as an error, so it refused to
+   * guess and held the post. 'system' AND NOT 'failure': nothing failed to
+   * publish — the row is still queued with its attempt unspent — and nothing
+   * failed to schedule either. It belongs beside "המחשב התנתק", because that
+   * is the family of problem it is and the place the owner looks for one.
+   */
+  'rule_read_failed',
   'commands_payload_missing',
   'avatar_upload_blocked',
   'account_save_failed',

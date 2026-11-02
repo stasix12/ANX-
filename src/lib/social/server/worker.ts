@@ -406,6 +406,17 @@ async function processItem(item: QueueItem, limits: LimitsSettings, browser: Bro
     // Parked, not attempted: the instant moves forward so the row is not
     // immediately due again, and the attempt the claim just counted is given
     // back. Nothing was tried, so nothing should be spent.
+    /*
+     * A WAIT THE MACHINE CAUSED HAS TO REACH A SCREEN.
+     *
+     * An ordinary wait — "הסבב מושהה" — happens on every poll of every paused
+     * campaign, and logging those would bury the feed. `attention` marks the
+     * other kind: the engine refused to guess because a read failed. Without
+     * this line, a database that cannot be read is a queue that quietly stops
+     * moving with nothing anywhere saying why — and that is how every defect
+     * in this product has been found so far: by the owner, not by the system.
+     */
+    if (decision.attention) await logActivity('warn', 'rule_read_failed', decision.reason, { queueId: item.id, until: decision.until });
     await db
       .from('social_queue')
       .update({ status: 'scheduled', step: 'pending', scheduled_at: decision.until, attempts: Math.max(0, item.attempts - 1) })

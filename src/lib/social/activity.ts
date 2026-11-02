@@ -233,6 +233,14 @@ const KIND: Record<string, ActivityKind> = {
      and not a failure: he asked for it, and it succeeded. */
   disconnected: 'system',
   metrics_columns_missing: 'system',
+  /*
+   * 'system' AND NOT 'failure', deliberately. Nothing failed to publish: a
+   * read failed, the engine refused to guess, and the row is still in the
+   * queue with its attempt unspent. Calling it a failure would put it in the
+   * count the owner reads as "posts that did not go out", which would be a
+   * lie in the other direction. `level` is 'warn', so it is still loud.
+   */
+  rule_read_failed: 'system',
   commands_payload_missing: 'system',
 };
 

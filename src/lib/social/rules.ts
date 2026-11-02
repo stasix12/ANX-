@@ -37,7 +37,16 @@ export type RuleDecision =
   | { action: 'publish'; notBefore?: string }
   | { action: 'skip'; reason: string }
   | { action: 'defer'; until: string; reason: string }
-  | { action: 'wait'; until: string; reason: string };
+  /**
+   * `attention` marks a wait that is the MACHINE'S fault rather than a
+   * decision: a read that failed, where the engine has no answer and refuses
+   * to guess. An ordinary wait ("הסבב מושהה") happens on every poll of every
+   * paused campaign and must stay silent; this one must reach the activity
+   * log, or a database that cannot be read becomes a queue that never moves
+   * with nothing anywhere saying why — which is the shape of every bug in
+   * this product the owner has had to discover for himself.
+   */
+  | { action: 'wait'; until: string; reason: string; attention?: boolean };
 
 export interface RuleContext {
   item: QueueItem;
@@ -323,10 +332,29 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
           action: 'wait',
           until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(),
           reason: 'לא הצלחנו לקרוא את הגדרות התזמון של הסבב — ננסה שוב בעוד רגע.',
+          attention: true,
         };
       }
-      const { data } = await db.from('social_campaigns').select('status').eq('id', campaignId).maybeSingle();
-      campaign = (data as Pick<Campaign, 'status'> | null) ?? null;
+      /*
+       * AND THE FALLBACK READ IS A READ TOO.
+       *
+       * This is the one query left that decides whether the campaign is
+       * paused or stopped, and it used to throw its error away. A dropped
+       * connection here leaves `campaign` null, `campaign?.status === 'paused'`
+       * false, `=== 'archived'` false — and a campaign the owner PAUSED
+       * publishes. He has pressed pause and watched posts go out; this is one
+       * of the paths that can do it.
+       */
+      const bare = await db.from('social_campaigns').select('status').eq('id', campaignId).maybeSingle();
+      if (bare.error) {
+        return {
+          action: 'wait',
+          until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(),
+          reason: 'לא הצלחנו לקרוא אם הסבב פעיל — ננסה שוב בעוד רגע.',
+          attention: true,
+        };
+      }
+      campaign = (bare.data as Pick<Campaign, 'status'> | null) ?? null;
     } else {
       campaign = (full.data as (Pick<Campaign, 'status'> & ScheduleFields & Pick<Campaign, 'repeat_enabled' | 'repeat_min_hours'>) | null) ?? null;
     }
@@ -365,7 +393,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
        * and the two are enforced together — a row waits for whichever is
        * later, which is what holdFor() above is for.
        */
-      const { data: lastOwn } = await db
+      const own = await db
         .from('social_queue')
         .select('published_at')
         .eq('campaign_id', campaignId)
@@ -374,7 +402,25 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
         .order('published_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      const lastAt = lastOwn?.published_at ? new Date(lastOwn.published_at) : null;
+      /*
+       * A FAILED READ IS NOT "NOTHING HAS PUBLISHED YET".
+       *
+       * Those two answers arrive in the same variable and mean opposite
+       * things. `null` tells nextPublishAt() there is no previous publication,
+       * so the campaign's own interval — the "כל X דקות" the owner set — has
+       * nothing to measure from and every row is allowed through at once. One
+       * dropped connection and a round that was spaced a minute apart goes out
+       * in a burst, which is exactly what gets a Facebook account restricted.
+       */
+      if (own.error) {
+        return {
+          action: 'wait',
+          until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(),
+          reason: 'לא הצלחנו לקרוא מתי הסבב פרסם לאחרונה — ננסה שוב בעוד רגע.',
+          attention: true,
+        };
+      }
+      const lastAt = own.data?.published_at ? new Date(own.data.published_at) : null;
       const allowed = nextPublishAt(schedule, now, lastAt);
       if (!allowed) {
         /*
@@ -483,7 +529,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
    * different questions and only the second one can answer this.
    */
   if (limits.blockRepeatToSameTarget !== false) {
-    const { data: previous } = await db
+    const seen = await db
       .from('social_queue')
       .select('published_at')
       .eq('status', 'published')
@@ -492,6 +538,29 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
       .neq('id', item.id)
       .order('published_at', { ascending: false })
       .limit(1);
+    /*
+     * THE READ THAT STOPS A POST GOING OUT TWICE TO ONE GROUP.
+     *
+     * It discarded its error, and the row below reads an undefined list as an
+     * empty one — "this post has never reached this group". So a single
+     * PostgREST hiccup turned the whole no-double-publish rule off for that
+     * row, and the post published again to a group that already had it. That
+     * is the complaint this engine exists to make impossible, and it was one
+     * failed request away the entire time.
+     *
+     * The unique index social_queue_one_open_per_target_idx does not cover
+     * this: it constrains OPEN rows per target, not a second publication of
+     * the same post hours later.
+     */
+    if (seen.error) {
+      return {
+        action: 'wait',
+        until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(),
+        reason: 'לא הצלחנו לבדוק אם הפוסט הזה כבר פורסם לקבוצה — ננסה שוב בעוד רגע.',
+        attention: true,
+      };
+    }
+    const previous = seen.data;
     const last = previous?.[0]?.published_at ?? null;
     if (previous && previous.length > 0) {
       if (!repeat.enabled) return { action: 'skip', reason: `הפוסט הזה כבר פורסם ל-"${target.name}".` };
@@ -556,7 +625,7 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   }
 
   // Minimum spacing between any two publications (groups get extra spacing).
-  const { data: last } = await db
+  const recent = await db
     .from('social_queue')
     .select('published_at')
     .eq('status', 'published')
@@ -564,6 +633,22 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
     .order('published_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  /*
+   * AND THE LAST OF THE FOUR. `last?.published_at` on a failed read is
+   * undefined, the whole spacing block is skipped, and the minimum gap
+   * between any two publications — the single setting standing between this
+   * product and a restricted Facebook account — is not enforced at all. No
+   * screen would show anything: the post publishes, successfully, too soon.
+   */
+  if (recent.error) {
+    return {
+      action: 'wait',
+      until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(),
+      reason: 'לא הצלחנו לקרוא מתי בוצע הפרסום האחרון — ננסה שוב בעוד רגע.',
+      attention: true,
+    };
+  }
+  const last = recent.data;
   if (last?.published_at) {
     const gapSeconds = accountGapSeconds(limits, ctx.browser, target.channel === 'facebook_group');
     const gapMs = gapSeconds * 1000;

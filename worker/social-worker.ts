@@ -2313,6 +2313,17 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
     // Parked, not attempted — see the same branch in server/worker.ts. Without
     // the new instant this row is due again on the next 5-second poll, and the
     // claim has already spent one of its attempts.
+    /*
+     * A WAIT THE MACHINE CAUSED HAS TO REACH A SCREEN.
+     *
+     * An ordinary wait — "הסבב מושהה" — happens on every poll of every paused
+     * campaign, and logging those would bury the feed. `attention` marks the
+     * other kind: the engine refused to guess because a read failed. Without
+     * this line, a database that cannot be read is a queue that quietly stops
+     * moving with nothing anywhere saying why — and that is how every defect
+     * in this product has been found so far: by the owner, not by the system.
+     */
+    if (decision.attention) await logActivity('warn', 'rule_read_failed', decision.reason, { queueId: item.id, until: decision.until });
     await finish({ status: 'scheduled', step: 'pending', scheduled_at: decision.until, attempts: item.attempts });
     console.log(`[worker] ⏸ "${t?.name ?? item.target_id}": ${decision.reason}`);
     return;

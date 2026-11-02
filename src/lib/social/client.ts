@@ -1220,10 +1220,15 @@ export async function saveCampaignRounds(
    * and a status, is exactly the decorative button he forbade.
    *
    * So saving rounds lowers the window to the smallest gap between them — and
-   * NOT BELOW MIN_REPEAT_HOURS, which is a database CHECK and a deliberate
-   * refusal to put one advertisement into one group twice in a morning. The
-   * card already states the arithmetic (roundsVsRepeat), the toast says what
-   * changed, and the activity log records it. Nothing here is silent.
+   * NOT BELOW `floorHours`, which is the account's own protection from
+   * Settings (repeatFloorHours, defaulting to MIN_REPEAT_HOURS) and a database
+   * CHECK of one hour. It used to be a hard twelve in both places; the owner
+   * asked to be able to move it — "תוסיף אופציה בהגדרות לשחק עם זה" — so the
+   * refusal to put one advertisement into one group twice in a morning is now
+   * HIS number rather than ours, stated on the Settings screen with its
+   * consequence beside it. The card states the arithmetic (roundsVsRepeat),
+   * the toast says what changed, and the activity log records it. Nothing
+   * here is silent.
    *
    * WHAT IT DOES NOT DO IS PRESS HIS SWITCH. If חזרה יומית is OFF, round two
    * cannot reach a group round one already reached, and no amount of window
@@ -1231,7 +1236,7 @@ export async function saveCampaignRounds(
    * screen overruling a choice he made. It is reported instead, as `repeatOff`,
    * and the card draws the switch beside the sentence.
    */
-  const repeat = readRepeat(campaign);
+  const repeat = readRepeat(campaign, floorHours);
   const fix = roundsWindowFix(schedule, written.schedule_rounds, repeat, floorHours);
   const { lowerTo, repeatOff } = fix;
 
@@ -1289,8 +1294,22 @@ export async function setCampaignRepeat(
   campaign: Pick<Campaign, 'id' | 'name'> & RoundFields,
   repeat: CampaignRepeat,
   schedule: CampaignSchedule,
+  /*
+   * ─── THE ACCOUNT'S FLOOR, OR THIS WRITE UNDOES THE SETTING ──────────────
+   *
+   * repeatColumns() clamps `repeat_min_hours` UP to its floor argument, whose
+   * default is the hard-coded twelve. So every caller that omitted this
+   * quietly rewrote a two-hour window back to twelve on its way to the
+   * database — the owner's "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם" in
+   * its purest form: the setting was accepted by the screen, accepted by
+   * Settings, and then raised back by the one function that saves it.
+   *
+   * Defaulted, so a caller that genuinely has no settings row behaves exactly
+   * as it always has rather than writing an unprotected number.
+   */
+  floorHours: number = MIN_REPEAT_HOURS,
 ): Promise<RepeatResult> {
-  unwrap(await db().from('social_campaigns').update(repeatColumns(repeat)).eq('id', campaign.id));
+  unwrap(await db().from('social_campaigns').update(repeatColumns(repeat, floorHours)).eq('id', campaign.id));
 
   const posts = unwrap<{ id: string }[]>(await db().from('social_posts').select('id').eq('campaign_id', campaign.id));
   const postIds = posts.map((p) => p.id);

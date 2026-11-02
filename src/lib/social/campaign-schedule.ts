@@ -524,6 +524,33 @@ export function plusHours(hm: string, hours: number): string {
 }
 
 /**
+ * ─── THE WINDOW THAT WOULD LET THESE ROUNDS PUBLISH ───────────────────────
+ *
+ * "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם." — the owner, 02.11.2026.
+ *
+ * He lowered the account's protection to two hours, the card correctly
+ * re-measured his rounds against two, and then told him to "הורידו את החזרה
+ * ל-2 שעות" — a sentence naming a number with NO CONTROL ANYWHERE THAT SETS
+ * IT. The campaign's own repeat window had been left with no editor at all
+ * when the advanced queue controls came out at his request, so the only thing
+ * in the product that could lower it was saveCampaignRounds(), and only while
+ * the rounds were being changed. A card that states the fix and cannot apply
+ * it is the decorative button this product is not allowed to have.
+ *
+ * So the arithmetic lives here, ONE copy, and both callers ask it: the writer
+ * (roundsWindowFix, when rounds are saved) and the card's own button. They
+ * cannot drift into naming one number and writing another.
+ *
+ * Null for every other verdict, including 'closer-than-the-floor' — rounds
+ * closer together than the account's floor cannot be fixed by a window at
+ * all, and offering a button that silently did nothing would be the same
+ * failure one layer down.
+ */
+export function repeatFitFor(verdict: RoundsVerdict, floorHours: number = MIN_REPEAT_HOURS): number | null {
+  return verdict.reason === 'window-too-long' ? Math.max(floorHours, verdict.neededHours) : null;
+}
+
+/**
  * ─── WHAT SAVING ROUNDS HAS TO CHANGE BESIDES THE ROUNDS ──────────────────
  *
  * "יש לממש את הפונקציונליות בפועל ולא ליצור כפתורים דקורטיביים."
@@ -558,7 +585,7 @@ export function roundsWindowFix(
   const starts = roundStarts(schedule, rounds);
   const verdict = roundsVsRepeat(starts, repeat, floorHours);
   return {
-    lowerTo: verdict.reason === 'window-too-long' ? Math.max(floorHours, verdict.neededHours) : null,
+    lowerTo: repeatFitFor(verdict, floorHours),
     repeatOff: starts.length > 1 && !repeat.enabled,
     /*
      * THE VERDICT TRAVELS WITH THE FIX, and it did not before.

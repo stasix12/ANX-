@@ -14,6 +14,7 @@ import {
   editRoundTime,
   nextFreeRoundStart,
   roundStarts,
+  repeatFitFor,
   roundsVsRepeat,
   type CampaignRepeat,
   type CampaignRound,
@@ -270,6 +271,11 @@ export function CampaignSchedulePanel({
    */
   const starts = roundStarts(schedule, rounds ?? []);
   const verdict = repeat ? roundsVsRepeat(starts, repeat, floorHours) : null;
+  /* The window that would let these rounds publish, from the ONE copy of that
+     arithmetic the writer also uses — see repeatFitFor(). Null for every
+     verdict a window cannot fix, so the button below is drawn only when
+     pressing it would actually change the answer. */
+  const repeatFit = verdict ? repeatFitFor(verdict, floorHours) : null;
   /* ON when any extra round is armed. There is no separate "rounds enabled"
      column and there must not be one: the switch IS the rounds, and a card
      that could be on with nothing armed would be a promise about nothing. */
@@ -880,21 +886,63 @@ export function CampaignSchedulePanel({
                * account, and the decision is his.
                */}
               {verdict && !verdict.ok && (
+                <>
                 <p className="mt-1.5 text-[10.5px] font-bold leading-4 text-warning-400">
                   {verdict.reason === 'closer-than-the-floor' ? (
                     <>
-                      הסבבים מרוחקים {verdict.smallestGapHours} שעות זה מזה, והמערכת לא תפרסם את אותו פוסט לאותה קבוצה פעמיים בפחות מ-{MIN_REPEAT_HOURS} שעות
-                      — הרחיקו אותם, אחרת הסבב השני לא יפרסם לקבוצות של הראשון.
+                      הסבבים מרוחקים {verdict.smallestGapHours} שעות זה מזה, והמערכת לא תפרסם את אותו פוסט לאותה קבוצה פעמיים בפחות מ-{floorHours} שעות
+                      — הרחיקו אותם, או הורידו את ההגנה בהגדרות, אחרת הסבב השני לא יפרסם לקבוצות של הראשון.
                     </>
                   ) : verdict.reason === 'repeat-off' ? (
                     <>הפעילו את ״חזרה יומית״ למטה — בלעדיה המערכת מסרבת לפרסם את אותו פוסט לאותה קבוצה פעם שנייה, והסבב השני לא יפרסם כלום.</>
                   ) : (
                     <>
                       הסבבים מרוחקים {verdict.smallestGapHours} שעות זה מזה, ו״חזרה יומית״ מוגדרת ל-{repeat?.minHours} שעות — לכן הסבב השני לא יפרסם לאף
-                      קבוצה שהראשון כבר פרסם לה. הורידו את החזרה ל-{verdict.neededHours} שעות כדי ששניהם יצאו.
+                      קבוצה שהראשון כבר פרסם לה.
+                      {/* The instruction stays ONLY where there is no button to
+                          do it — a caller that cannot write the repeat draws
+                          the panel read-only, and telling him to press
+                          something that is not there would be worse than
+                          telling him the number. */}
+                      {repeatFit !== null && repeat && onRepeatChange ? '' : ` הורידו את החזרה ל-${verdict.neededHours} שעות כדי ששניהם יצאו.`}
                     </>
                   )}
                 </p>
+                {/*
+                 * ─── AND THE THING THAT ACTUALLY DOES IT ────────────────────
+                 *
+                 * "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם."
+                 *
+                 * He lowered the account's protection to two hours in Settings,
+                 * this card correctly re-measured his 01:30 and 23:30 against
+                 * two — and then told him to "הורידו את החזרה ל-2 שעות" with
+                 * nothing anywhere that sets it. The campaign's own window lost
+                 * its editor when the advanced queue controls came out at his
+                 * request, so the only thing left that could lower it was
+                 * saveCampaignRounds(), and only while the rounds were being
+                 * changed. His rounds were already saved. The card was a
+                 * dead end that named its own fix.
+                 *
+                 * IT IS NOT DONE FOR HIM. Pressing this is a decision about his
+                 * Facebook account — the same decision the Settings screen
+                 * states the consequence of — so it is one tap, labelled with
+                 * the exact number it will write, and nothing moves until he
+                 * takes it. The write goes through onRepeatChange, which is the
+                 * same path the switch above uses: one writer, one toast, one
+                 * line in the activity log.
+                 */}
+                {repeatFit !== null && repeat && onRepeatChange && (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    aria-label={`הורידו את החזרה ל-${repeatFit} שעות עבור ${campaignName}`}
+                    onClick={() => onRepeatChange({ ...repeat, minHours: repeatFit })}
+                    className="mt-1.5 flex h-10 w-full items-center justify-center gap-1 rounded-xl border border-ink-600 bg-ink-900 text-[11px] font-extrabold text-warning-400 disabled:opacity-50"
+                  >
+                    הורידו את החזרה ל-{repeatFit} שעות
+                  </button>
+                )}
+                </>
               )}
             </>
           )}

@@ -1098,7 +1098,7 @@ export default function SocialDashboard() {
            * weekly row to re-arm, and writing one here would turn a change of
            * hours into a recurrence he never asked for.
            */
-          const repeat = readRepeat(campaign);
+          const repeat = readRepeat(campaign, repeatFloorFrom(data?.limits));
           if (!repeat.enabled) {
             /*
              * ─── AN ACTIVE WEEKLY ROW WITH THE SWITCH OFF STILL PUBLISHES ──
@@ -1125,7 +1125,7 @@ export default function SocialDashboard() {
             }
           }
           if (repeat.enabled) {
-            const armedNow = await setCampaignRepeat(campaign, repeat, next);
+            const armedNow = await setCampaignRepeat(campaign, repeat, next, repeatFloorFrom(data?.limits));
             /*
              * AND IF THE RE-ARM COULD NOT HAPPEN, HE HEARS IT NOW — on the
              * save that he made, not on an evening he spends waiting. A round
@@ -1351,7 +1351,7 @@ export default function SocialDashboard() {
     async (campaign: Pick<Campaign, 'id' | 'name'>, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        const result = await setCampaignRepeat(campaign, next, scheduleOf(campaign as Campaign));
+        const result = await setCampaignRepeat(campaign, next, scheduleOf(campaign as Campaign), repeatFloorFrom(data?.limits));
         await load();
         /*
          * THE TOAST SAYS WHAT HAPPENED, not what was asked for.
@@ -1923,7 +1923,7 @@ export default function SocialDashboard() {
                     groupMinGapSeconds: data.browser.groupMinGapSeconds,
                     lastPublishedAt: data.lastPublished,
                   }}
-                  repeat={readRepeat(run.campaign)}
+                  repeat={readRepeat(run.campaign, repeatFloorFrom(data.limits))}
                   onRepeatChange={(next) => void changeRepeat(run.campaign, next)}
                   /* The account's repeat floor, so the rounds card judges
                      against the number in Settings — "תוסיף אופציה בהגדרות

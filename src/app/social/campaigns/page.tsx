@@ -39,7 +39,7 @@ import {
   stopCampaign, saveCampaignRounds,} from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
-import { readRepeat, readSchedule, repeatColumns, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
+import { MIN_REPEAT_HOURS, readRepeat, readSchedule, repeatColumns, repeatFloorFrom, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { counted } from '@/lib/social/time';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
@@ -93,6 +93,24 @@ export default function CampaignsPage() {
    */
   const [control, setControl] = useState<ControlSettings | null>(seed?.control ?? null);
   const [spacing, setSpacing] = useState<AccountSpacing | undefined>(undefined);
+  /*
+   * ─── THE ACCOUNT'S REPEAT FLOOR, WHICH THIS SCREEN DID NOT KNOW ──────────
+   *
+   * "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם."
+   *
+   * Every floor-sensitive call here ran on the hard-coded twelve: the cards
+   * judged his rounds against twelve, readRepeat() raised a stored two back to
+   * twelve before drawing it, and setCampaignRepeat() wrote twelve over it. So
+   * the number he set in Settings was honoured by the dashboard and silently
+   * undone by the list one tap away — the same value, two screens, two
+   * answers. getLimits() was ALREADY in this screen's load(); only its repeat
+   * floor was being thrown away.
+   *
+   * MIN_REPEAT_HOURS until the first load answers, which is the protective
+   * direction: a screen that does not yet know the account's number must not
+   * act as though the protection were lower than it is.
+   */
+  const [floorHours, setFloorHours] = useState<number>(MIN_REPEAT_HOURS);
   const [workerOnline, setWorkerOnline] = useState<boolean | undefined>(seed?.workerOnline);
   /*
    * WHICH ROUND THE COMMENT SHEET IS ABOUT — and null when it is closed, so
@@ -140,6 +158,7 @@ export default function CampaignsPage() {
         getBrowserSettings(),
         lastPublishedAt(),
       ]);
+      setFloorHours(repeatFloorFrom(lim));
       setSpacing({
         minGapMinutes: lim.minGapMinutes,
         groupMinGapMinutes: brw.groupMinGapMinutes,
@@ -256,8 +275,8 @@ export default function CampaignsPage() {
   );
 
   const readoutFor = useCallback(
-    (c: Campaign) => scheduleReadout(scheduleOf(c), stateOf(c), new Date(), readRepeat(c), spacing),
-    [scheduleOf, stateOf, spacing],
+    (c: Campaign) => scheduleReadout(scheduleOf(c), stateOf(c), new Date(), readRepeat(c, floorHours), spacing),
+    [scheduleOf, stateOf, spacing, floorHours],
   );
 
   const visible = useMemo(() => {
@@ -363,7 +382,7 @@ export default function CampaignsPage() {
           /* And the repeat is re-armed with the new hours — see the note on the
              dashboard's copy of this. A weekly row built from the OLD start
              hour is the card saying one thing while the engine does another. */
-          const repeat = readRepeat(campaign);
+          const repeat = readRepeat(campaign, floorHours);
           if (!repeat.enabled) {
             /*
              * ─── AN ACTIVE WEEKLY ROW WITH THE SWITCH OFF STILL PUBLISHES ──
@@ -390,7 +409,7 @@ export default function CampaignsPage() {
             }
           }
           if (repeat.enabled) {
-            const armedNow = await setCampaignRepeat(campaign, repeat, next);
+            const armedNow = await setCampaignRepeat(campaign, repeat, next, floorHours);
           /*
            * AND IF THE RE-ARM COULD NOT HAPPEN, HE HEARS IT NOW — on the save
            * that he made, not on an evening he spends waiting.
@@ -492,7 +511,7 @@ export default function CampaignsPage() {
       clearTimeout(scheduleTimers.current[campaign.id]);
       scheduleTimers.current[campaign.id] = setTimeout(run, 600);
     },
-    [toast, load],
+    [toast, load, floorHours],
   );
 
   /*
@@ -554,7 +573,7 @@ export default function CampaignsPage() {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
         const written = roundsColumn(next);
-        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign));
+        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign), floorHours);
         /*
          * THE LOWERED WINDOW GOES INTO THE LIST TOO, not only into the row.
          *
@@ -583,15 +602,15 @@ export default function CampaignsPage() {
         setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
       }
     },
-    [toast],
+    [toast, floorHours],
   );
 
   const changeRepeat = useCallback(
     async (campaign: Campaign, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        const result = await setCampaignRepeat(campaign, next, readSchedule(campaign));
-        setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? { ...c, ...repeatColumns(next) } : c)));
+        const result = await setCampaignRepeat(campaign, next, readSchedule(campaign), floorHours);
+        setCampaigns((list) => (list ?? []).map((c) => (c.id === campaign.id ? { ...c, ...repeatColumns(next, floorHours) } : c)));
         /*
          * THE TOAST SAYS WHAT HAPPENED, not what was asked for.
          *
@@ -616,7 +635,7 @@ export default function CampaignsPage() {
         setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
       }
     },
-    [toast],
+    [toast, floorHours],
   );
 
   /**
@@ -672,7 +691,7 @@ export default function CampaignsPage() {
     try {
       await reopenCampaign(campaign.id);
       reopened = true;
-      const repeat = readRepeat(campaign);
+      const repeat = readRepeat(campaign, floorHours);
       const schedule = readSchedule(campaign);
       if (!repeat.enabled) {
         /* Nothing is armed and nothing pretends otherwise. The two routes out
@@ -681,7 +700,7 @@ export default function CampaignsPage() {
            nothing he can see. */
         toast('הקמפיין חזר לפעילות, אבל החזרה היומית כבויה — הדליקו אותה בכרטיס, או פתחו את הפוסט והשיקו אותו מחדש.', 'info');
       } else {
-        const armed = await setCampaignRepeat(campaign, repeat, schedule);
+        const armed = await setCampaignRepeat(campaign, repeat, schedule, floorHours);
         /*
          * A WEEKLY PLAN IS BUILT OUT OF THE CHOSEN DAYS — `for (const day of
          * schedule.days) weekly[day] = [start]` — so with no day chosen it is
@@ -1003,8 +1022,12 @@ export default function CampaignsPage() {
                 schedule={scheduleOf(c)}
                 onScheduleChange={(next) => changeSchedule(c, next)}
                 spacing={spacing}
-                repeat={readRepeat(c)}
+                repeat={readRepeat(c, floorHours)}
                 onRepeatChange={(next) => void changeRepeat(c, next)}
+                /* The account's own protection from Settings, so this list
+                   measures his rounds against the same number the dashboard
+                   and the engine do. */
+                floorHours={floorHours}
                 scheduleBusy={scheduleBusy[c.id] ?? false}
               />            );
           })}

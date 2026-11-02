@@ -388,14 +388,41 @@ export function CampaignCard({
       <div className="flex items-start gap-2.5">
         <div className="flex min-w-0 grow flex-col">
           <div className="flex items-start gap-1">
-            {/* The reference's square ⋯, bordered like the controls it holds.
-                `!rounded-xl` because the component's own `rounded-full` is a
-                one-class radius utility in the same layer and the later-emitted
-                one would otherwise decide. */}
+            {/*
+              ─── THE ⋯, AND IT WAS NOT BORDERED ───────────────────────────
+              *
+              * The comment here used to read "the reference's square ⋯,
+              * bordered like the controls it holds" — and the class list
+              * carried no border at all, so it never was. OverflowMenu's own
+              * classes (ui.tsx) give it `text-mist-500` and no box, which
+              * left an 18×21px grey ellipsis glyph, measured at 4.97:1, as the
+              * ONLY affordance for every action on this card: stop, duplicate,
+              * add a post, comment, the queue tuner — and delete.
+              *
+              * THAT IS WHY THE OWNER COULD NOT FIND THE DELETE. He reported
+              * "תוסיף אופציה למחוק קמפיין מהעמוד הזה" about a screen that has
+              * offered it for a long time. A browser measurement settled where
+              * the fault was and it was not where I guessed: the sheet opens
+              * fine, nothing inside it scrolls, and 'מחק קמפיין' sits 101px
+              * ABOVE the fold at his tablet width. The menu was never hard to
+              * read. It was hard to SEE there was a menu.
+              *
+              * So the comment's own claim is now true. The box is the one the
+              * counters and the readouts on this card wear, and the glyph is
+              * mist-300 rather than fine-print mist-500.
+              *
+              * `!rounded-xl` because the component's own `rounded-full` is a
+              * one-class radius utility in the same layer and the later-emitted
+              * one would otherwise decide. The height is left to the component
+              * — it asks for h-11 and wins, so this is a 44px target and the
+              * `h-10` the card used to pass never applied. Not worth an `!`:
+              * 44 is over the 40px floor, and the measured suite checks the
+              * number rather than the intention.
+              */}
             <OverflowMenu
               label={`עוד פעולות ל${campaign.name}`}
               actions={menu}
-              className="-ms-1 -mt-1 h-10 w-10 shrink-0 !rounded-xl"
+              className="-ms-1 -mt-1 shrink-0 !rounded-xl border border-ink-600 bg-ink-900 !text-mist-300"
             />
             {/*
               A 20px LINE IS NOT A TARGET, and this card learned that once

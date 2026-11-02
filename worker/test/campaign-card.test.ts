@@ -253,6 +253,40 @@ async function main(): Promise<void> {
                   sameRowAsEditor: edit ? Math.abs((r.top + r.bottom) / 2 - (edit.top + edit.bottom) / 2) < 4 : false,
                 };
               })(),
+              /*
+               * ─── THE ⋯ MUST LOOK LIKE A CONTROL ────────────────────────
+               *
+               * ITS OWN COMMENT CLAIMED IT WAS BORDERED AND IT WAS NOT, for
+               * as long as this card has existed. A browser measurement of
+               * the shipped card returned borderTopWidth "0px", background
+               * rgba(0,0,0,0) and an 18×21px ellipsis glyph at 4.97:1 — a
+               * faint grey mark, with no box, as the ONLY affordance for every
+               * action this card has: stop, duplicate, add a post, comment,
+               * the queue tuner and delete.
+               *
+               * THAT IS WHAT THE OWNER WAS REPORTING. He asked for a delete
+               * "מהעמוד הזה" on a screen that had offered one for months. The
+               * same measurement proved the sheet itself was never the
+               * problem: it opens, nothing inside it scrolls, and 'מחק קמפיין'
+               * sits 101px ABOVE the fold at his tablet width.
+               *
+               * A comment is not a border. This measures the computed style,
+               * because that is the only thing that would have caught it.
+               */
+              dots: (() => {
+                const b = c.querySelector('button[aria-haspopup="menu"]');
+                if (!b) return null;
+                const r = b.getBoundingClientRect();
+                const st = getComputedStyle(b);
+                return {
+                  w: Math.round(r.width),
+                  h: Math.round(r.height),
+                  border: Math.round(parseFloat(st.borderTopWidth) * 100) / 100,
+                  /* A background counts as a box too — either is an affordance,
+                     neither is 'a glyph floating in the card'. */
+                  tinted: st.backgroundColor !== 'rgba(0, 0, 0, 0)' && st.backgroundColor !== 'transparent',
+                };
+              })(),
               /* Every control has to sit inside the card's own box. */
               escaped: [...c.querySelectorAll('a,button')].filter((e) => {
                 const b = e.getBoundingClientRect();
@@ -386,6 +420,19 @@ async function main(): Promise<void> {
        */
       const withPanel = seen.cards.filter((c) => c.panel);
       assert.equal(seen.cards.length - withPanel.length, 1, say(`${seen.cards.length - withPanel.length} cards rendered no scheduling panel — the fixture has exactly one such case`));
+
+      /*
+       * ─── AND THE MENU THAT HOLDS THE REST OF THEM LOOKS LIKE A BUTTON ──
+       */
+      for (const [i, d] of seen.cards.map((c) => c.dots).entries()) {
+        const at = `card ${i + 1}`;
+        assert.ok(d, say(`${at}: no ⋯ menu trigger at all`));
+        assert.ok(d!.w >= 40 && d!.h >= 40, say(`${at}: the ⋯ is ${d!.w}×${d!.h} — under the 40px floor for anything a thumb presses`));
+        assert.ok(
+          d!.border > 0 || d!.tinted,
+          say(`${at}: the ⋯ has no box — border ${d!.border}px and no background. It is the only way in to stop, duplicate, comment, the queue tuner and DELETE, and as a bare glyph the owner reported the delete missing from a screen that had it`),
+        );
+      }
 
       /*
        * ─── EVERY CARD OFFERS A DELETE HE CAN SEE ────────────────────────

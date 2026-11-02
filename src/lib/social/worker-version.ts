@@ -97,7 +97,7 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.32.0';
+export const WORKER_VERSION = '4.33.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -469,4 +469,23 @@ export const WORKER_VERSION = '4.32.0';
  * a bump per edit publishes an installer per commit and teaches the updater
  * to cry wolf.
  */
-export const WORKER_FINGERPRINT = 'c05af8660ee9b8b6';
+/*
+ * 4.32.0 → 4.33.0. "רשום דולג , אבל בפועל נכנסתי וראיתי שזה פרסם."
+ * DOES THIS HAVE TO REACH THE PC? YES, and it is the one kind of yes that
+ * cannot wait: the fix stops a LIVE publication being recorded as cancelled,
+ * which is what releases both duplicate guards and lets the same post go out
+ * to the same group a second time from his account.
+ *
+ *   npm run build:app
+ *   grep -c stoppedCampaigns            dist/app/worker.cjs → 3
+ *   grep -c stopped_campaign_maybe_live dist/app/worker.cjs → 1
+ *   grep -c MAYBE_LIVE_STEP             dist/app/worker.cjs → 5
+ *
+ * The planner's sweep of stopped campaigns runs INSIDE the PC worker on every
+ * planning pass, with nobody pressing anything — so the machine that would
+ * double-post is the machine that needs the guard. The six cancels in
+ * client.ts are pressed in the dashboard and are fixed there, but
+ * MAYBE_LIVE_STEP ships too because rules.ts and the planner import from that
+ * file.
+ */
+export const WORKER_FINGERPRINT = '8e179f1177842881';

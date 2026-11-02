@@ -583,7 +583,24 @@ console.log('unit tests OK');
   );
   const sweep = plan.slice(plan.indexOf('async function stoppedCampaigns'), plan.indexOf('async function planDrip'));
   assert.ok(sweep.includes("'skipped'"), 'rows that slipped through must be cancelled, not left counting down');
-  assert.ok(!sweep.includes("'published'"), 'the sweep must never touch what already went out');
+  /*
+   * CODE ONLY. This read the function's whole text, comments included, and
+   * failed the moment the sweep grew a note explaining WHY it must not touch
+   * a row whose post may already be on Facebook — a note that necessarily
+   * contains the word it forbids. The rule is about what the sweep does, not
+   * about what it is allowed to say.
+   */
+  const sweepCode = sweep.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.ok(!sweepCode.includes("'published'"), 'the sweep must never touch what already went out');
+  /*
+   * AND IT MUST LEAVE A MAYBE-LIVE ROW ALONE. 'needs_attention' is in
+   * CANCELLABLE_STATUSES, so this sweep — the one cancel nobody presses —
+   * used to write "דולג" over a row the worker had parked because its
+   * "פרסום" click may already have landed, clearing the mark with it. That
+   * releases both duplicate guards and the next pass republishes to the same
+   * group. See worker/test/maybe-live.test.ts for the whole chain.
+   */
+  assert.ok(sweepCode.includes(`.neq('step', 'submitted')`), 'and it must not cancel a row whose post may already be live');
   assert.ok(!sweep.includes("'paused',\n") || sweep.includes("'paused'"), 'sweep status list is explicit');
 
   /*

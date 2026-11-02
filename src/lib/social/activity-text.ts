@@ -125,6 +125,9 @@ const TITLE: Record<string, string> = {
   campaign_stopped: 'הסבב נעצר',
   campaign_deleted: 'הסבב נמחק',
   stopped_campaign_swept: 'נוקו פרסומים מסבב שנעצר',
+  /* The headline says what to DO, because this line exists only to send
+     somebody to look at a group. */
+  stopped_campaign_maybe_live: 'ייתכן שפרסומים מסבב שנעצר כבר יצאו — בדקו',
   worker_run: 'סיכום סבב עבודה',
 
   // The queue moving.

@@ -162,6 +162,17 @@ const KIND: Record<string, ActivityKind> = {
   schedule_column_missing: 'failure',
   campaign_deleted: 'round',
   stopped_campaign_swept: 'round',
+  /*
+   * The other half of that sweep: rows it deliberately did NOT cancel,
+   * because the "פרסום" click may already have landed on them.
+   *
+   * 'failure' and not 'round', although no publication failed: this is the
+   * one line that says a post may be live on Facebook with nothing in the
+   * database recording it, and it asks the owner to go and look. Filed with
+   * the round's own life it would sit under a heading nobody opens — which is
+   * exactly how "רשום דולג, אבל בפועל זה פרסם" happened in the first place.
+   */
+  stopped_campaign_maybe_live: 'failure',
   worker_run: 'round',
 
   // The queue moving: postponed, skipped, re-armed, re-spaced, handed to a human.

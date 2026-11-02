@@ -645,6 +645,8 @@ export async function deleteCampaign(id: string): Promise<number> {
       .update({ status: 'skipped', step: '', skip_reason: 'הסבב נמחק' })
       .eq('campaign_id', id)
       .in('status', CANCELLABLE)
+      /* Not a row whose post may already be live — see MAYBE_LIVE_STEP. */
+      .neq('step', MAYBE_LIVE_STEP)
       .select('id'),
   );
 
@@ -911,7 +913,9 @@ export async function archivePost(id: string): Promise<void> {
       .from('social_queue')
       .update({ status: 'skipped', step: '', skip_reason: 'הפוסט הועבר לארכיון' })
       .eq('post_id', id)
-      .in('status', CANCELLABLE),
+      .in('status', CANCELLABLE)
+      /* See MAYBE_LIVE_STEP: a parked row may already be on Facebook. */
+      .neq('step', MAYBE_LIVE_STEP),
   );
 }
 
@@ -1532,7 +1536,9 @@ export async function setScheduleActive(id: string, active: boolean): Promise<vo
         .from('social_queue')
         .update({ status: 'skipped', step: '', skip_reason: 'התזמון בוטל' })
         .eq('schedule_id', id)
-        .in('status', CANCELLABLE),
+        .in('status', CANCELLABLE)
+        /* See MAYBE_LIVE_STEP. */
+        .neq('step', MAYBE_LIVE_STEP),
     );
   }
 }
@@ -1731,6 +1737,37 @@ const RETRYABLE: QueueItem['status'][] = ['failed', 'skipped', 'needs_attention'
  */
 const CANCELLABLE: QueueItem['status'][] = CANCELLABLE_STATUSES;
 
+/**
+ * The step the worker stamps on a row whose "פרסום" click may ALREADY have
+ * landed on Facebook — see worker/social-worker.ts, which writes it from four
+ * places (the startup sweep, the stranded sweep, and the two in-job parks).
+ *
+ * ─── WHY EVERY BULK CANCEL HAS TO KNOW ABOUT IT ──────────────────────────
+ *
+ * "רשום דולג , אבל בפועל נכנסתי וראיתי שזה פרסם , זה חמור מאד."
+ *
+ * A parked row is `needs_attention`, which is a WAITING status, which means
+ * it is in CANCELLABLE. So every cancel in this file — delete the campaign,
+ * stop the round, archive the post, switch a schedule off, "עצירת כל התורים",
+ * remove a group from the queue — used to sweep it to 'skipped' along with
+ * the rows that genuinely never ran, writing `step: ''` on the way and
+ * erasing the only mark saying the post might be live. The planner's own
+ * sweep of stopped campaigns (plan.ts) did it with nobody pressing anything.
+ *
+ * The owner then reads "דולג" over a post that is on Facebook. That is the
+ * visible half. The dangerous half is what it does to the next round:
+ * rules.ts's two duplicate guards both count rows with `status = 'published'`
+ * and this row never got that status, while `targetsAlreadyWaiting` (plan.ts)
+ * only holds a group back while a row for that post is still OPEN. Turning
+ * the row terminal releases both at once, so the planner queues the same post
+ * to the same group again and it publishes a SECOND time, from his account,
+ * with no undo.
+ *
+ * resumeNeedsAttention has refused these rows since it was written, for
+ * exactly this reason, and the eight cancels did not. They do now.
+ */
+export const MAYBE_LIVE_STEP = 'submitted';
+
 async function guardedUpdate(id: string, allowed: QueueItem['status'][], patch: Partial<QueueItem>): Promise<boolean> {
   const rows = unwrap<{ id: string }[]>(await db().from('social_queue').update(patch).eq('id', id).in('status', allowed).select('id'));
   return rows.length > 0;
@@ -1767,7 +1804,18 @@ export async function retryQueueItem(id: string): Promise<boolean> {
 }
 
 export async function cancelQueueItem(id: string): Promise<boolean> {
-  return guardedUpdate(id, CANCELLABLE, { status: 'skipped', step: '', skip_reason: 'בוטל ידנית' });
+  /*
+   * `step` IS NOT CLEARED HERE, and that is the difference between this and
+   * the bulk cancels above.
+   *
+   * This is one row, pressed by a person looking at that row, its error and
+   * its screenshot — so unlike a sweep it is a decision, and it is allowed to
+   * go through even on a row marked MAYBE_LIVE_STEP. What it may not do is
+   * destroy the mark while doing it: `step: ''` would leave a terminal row
+   * with nothing on it saying a publication might be out there, and that mark
+   * is the only record once the status is no longer 'needs_attention'.
+   */
+  return guardedUpdate(id, CANCELLABLE, { status: 'skipped', skip_reason: 'בוטל ידנית' });
 }
 
 /**
@@ -1866,12 +1914,36 @@ export async function stopCampaign(id: string): Promise<number> {
       .update({ status: 'skipped', step: '', skip_reason: 'הסבב נעצר' })
       .eq('campaign_id', id)
       .in('status', CANCELLABLE)
+      /* See MAYBE_LIVE_STEP. Counted below and said out loud, because a stop
+         that quietly leaves rows behind is its own surprise. */
+      .neq('step', MAYBE_LIVE_STEP)
       .select('id'),
   );
-  await logClientActivity('warn', 'campaign_stopped', `הסבב "${campaign?.name ?? ''}" נעצר — ${rows.length} פרסומים שטרם התחילו בוטלו`, {
-    campaignId: id,
-    cancelled: rows.length,
-  });
+  /*
+   * AND WHAT THE STOP DELIBERATELY DID NOT TOUCH.
+   *
+   * A row parked at MAYBE_LIVE_STEP is left as it is, so the sentence has to
+   * account for it: otherwise "N פרסומים בוטלו" is a complete-sounding
+   * number over a queue that still holds rows, and the owner meets them
+   * later with no idea why they survived a stop.
+   */
+  const { count: parked } = await db()
+    .from('social_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('campaign_id', id)
+    .in('status', CANCELLABLE)
+    .eq('step', MAYBE_LIVE_STEP);
+  const left = parked ?? 0;
+  await logClientActivity(
+    'warn',
+    'campaign_stopped',
+    `הסבב "${campaign?.name ?? ''}" נעצר — ${rows.length} פרסומים שטרם התחילו בוטלו${left ? `. ${counted(left, 'פרסום אחד', 'פרסומים', 'שני פרסומים')} נשארו ב"דורש טיפול" כי ייתכן שהם כבר פורסמו — בדקו בקבוצות` : ''}`,
+    {
+      campaignId: id,
+      cancelled: rows.length,
+      maybeLive: left,
+    },
+  );
   return rows.length;
 }
 
@@ -3182,6 +3254,8 @@ export async function cancelAllScheduled(): Promise<number> {
       .from('social_queue')
       .update({ status: 'skipped', step: '', skip_reason: 'בוטל — עצירת כל התורים' })
       .in('status', CANCELLABLE)
+      /* See MAYBE_LIVE_STEP. */
+      .neq('step', MAYBE_LIVE_STEP)
       .select('id'),
   );
   return rows.length;
@@ -4434,7 +4508,9 @@ export async function removeTargetFromQueue(targetId: string, opts: { campaignId
     .from('social_queue')
     .update({ status: 'skipped', step: '', skip_reason: name ? `הקבוצה "${name}" הוסרה מהתור` : 'הקבוצה הוסרה מהתור' })
     .eq('target_id', targetId)
-    .in('status', CANCELLABLE);
+    .in('status', CANCELLABLE)
+    /* See MAYBE_LIVE_STEP. */
+    .neq('step', MAYBE_LIVE_STEP);
   if (opts.campaignId) query = query.eq('campaign_id', opts.campaignId);
   const rows = unwrap<{ id: string; schedule_id: string | null }[]>(await query.select('id, schedule_id'));
 

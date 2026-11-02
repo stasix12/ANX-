@@ -31,6 +31,7 @@ import {
   parseGroupShareUrl,
   TIMEZONE,
   type ActivityEntry,
+  type AdminPresence,
   type WeeklyPlan,
   type BrowserSettings,
   type BusinessSettings,
@@ -3027,6 +3028,25 @@ export async function listWorkers(): Promise<(SocialWorker & { online: boolean }
     online: Boolean(w.last_seen_at && new Date(w.last_seen_at).getTime() > cutoff) && w.status !== 'offline',
   }));
 }
+
+/**
+ * ─── THE OWNER'S PANEL: WHO IS CONNECTED, AND UNDER WHICH USER ──────────────
+ *
+ * "ותוסיף רק אצלי, לא אצל הלקוחות."
+ *
+ * ASKED OF THE SERVER, NOT OF THE DATABASE, and that is the whole point. Every
+ * other read in this file goes straight to Supabase with the signed-in
+ * person's own token, where RLS decides what they may see — which is exactly
+ * why this question cannot be asked that way: the answer spans every business,
+ * and the owner's token can see his own. So it is a route, the allowlist lives
+ * in the server's environment, and the browser is told nothing it has not
+ * earned.
+ *
+ * A CUSTOMER GETS `admin: false` AND NOT AN ERROR. The screen then draws no
+ * panel, nothing is logged in their console, and the payload carries no hint
+ * that anyone else exists. Only a transport or server failure throws.
+ */
+export const loadAdminPresence = () => callSocialApi<AdminPresence>('/api/social/admin/presence', { method: 'GET' });
 
 /**
  * Queue one instruction for the local worker.

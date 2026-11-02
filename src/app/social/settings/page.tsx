@@ -6,14 +6,21 @@ import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
 import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
-import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, saveSetting, setPaused } from '@/lib/social/client';
+import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, loadAdminPresence, saveSetting, setPaused } from '@/lib/social/client';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { ABSOLUTE_MIN_REPEAT_HOURS, MAX_REPEAT_HOURS, MIN_REPEAT_HOURS, repeatFloorFrom } from '@/lib/social/campaign-schedule';
-import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type BrowserSettings, type BusinessSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
+import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type BusinessSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
 import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
 import { friendlyMessage } from '@/lib/social/errors';
 
-type Tab = 'limits' | 'browser' | 'business';
+type Tab = 'limits' | 'browser' | 'business' | 'admin';
+
+/* How often the admin panel re-asks while it is open. "כל רגע נתון" is what
+   was asked for, and a presence screen that does not refresh is a photograph:
+   it would show a machine as connected for as long as the tab stayed open. Ten
+   seconds is well inside WORKER_OFFLINE_AFTER_SECONDS (90), so a machine that
+   stops answering goes grey here within one cutoff rather than two. */
+const PRESENCE_POLL_MS = 10_000;
 
 /**
  * Settings, in three sections rather than one long scroll. The wording here
@@ -45,6 +52,23 @@ export default function SettingsPage() {
    */
   const [workerVersion, setWorkerVersion] = useState<string | null>(null);
 
+  /*
+   * ─── THE OWNER'S PANEL, AND WHY IT IS NULL FOR EVERYONE ELSE ─────────────
+   *
+   * "ותוסיף רק אצלי, לא אצל הלקוחות."
+   *
+   * The server answers every signed-in person, and answers a customer
+   * `admin: false` with empty lists — so this state is never the thing keeping
+   * the panel hidden. It cannot be: anything the browser decides, a customer's
+   * browser can be told to decide differently. The gate is the allowlist in
+   * the server's environment (server/auth.ts), and what arrives here is
+   * already the whole of what this person is allowed to see.
+   *
+   * Null means "not asked yet, or the ask failed" — drawn as nothing, exactly
+   * like `admin: false`, because a panel about who is connected may not guess.
+   */
+  const [presence, setPresence] = useState<AdminPresence | null>(null);
+
   useEffect(() => {
     Promise.all([
       getLimits(),
@@ -52,8 +76,15 @@ export default function SettingsPage() {
       getBusiness(),
       getBrowserSettings(),
       listWorkers().catch(() => []),
+      /* Swallowed on purpose: a customer, or a deployment with no allowlist
+         configured, must not see "טעינה נכשלה" over a panel they were never
+         going to be shown. A real failure for the OWNER shows as the panel
+         staying away, which is the same thing the gate does — so the tab
+         simply does not appear and nothing on this screen is wrong. */
+      loadAdminPresence().catch(() => null),
     ])
-      .then(([l, c, b, br, workers]) => {
+      .then(([l, c, b, br, workers, pres]) => {
+        setPresence(pres);
         setLimits(l);
         setControl(c);
         setBusiness(b);
@@ -64,6 +95,30 @@ export default function SettingsPage() {
       })
       .catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
   }, []);
+
+  /*
+   * ─── "כל רגע נתון" ───────────────────────────────────────────────────────
+   *
+   * Only while the panel is on screen, and only for somebody the server has
+   * already called an admin. A presence screen that polled from the settings
+   * page in general would cost every customer a request every ten seconds for
+   * an answer they are not allowed to have.
+   *
+   * A failed refresh keeps the last good answer rather than blanking the list
+   * — one dropped poll on a phone's flaky connection is not evidence that
+   * everybody disconnected. The timestamps on the rows are what age, and they
+   * are drawn from the server's own clock.
+   */
+  const isAdmin = presence?.admin === true;
+  useEffect(() => {
+    if (!isAdmin || tab !== 'admin') return;
+    const id = setInterval(() => {
+      void loadAdminPresence()
+        .then((p) => setPresence(p))
+        .catch(() => undefined);
+    }, PRESENCE_POLL_MS);
+    return () => clearInterval(id);
+  }, [isAdmin, tab]);
 
   /**
    * Save what this form edits, onto the rows as they are NOW.
@@ -260,6 +315,9 @@ export default function SettingsPage() {
               { value: 'limits', label: 'קצב ומגבלות' },
               { value: 'browser', label: 'פרסום בקבוצות' },
               { value: 'business', label: 'פרטי העסק' },
+              /* Appended rather than woven in, so the three tabs every
+                 customer sees keep their order and their widths. */
+              ...(isAdmin ? [{ value: 'admin' as const, label: 'ניהול' }] : []),
             ]}
           />
 
@@ -559,6 +617,113 @@ export default function SettingsPage() {
                 </Field>
               </div>
             </Card>
+          )}
+
+          {/*
+            ─── ניהול — THE PANEL ONLY THE OWNER OF THE PRODUCT SEES ─────────
+
+            "ותוסיף רק אצלי, לא אצל הלקוחות. בהגדרות פאנל אדמין שאני ידע כל
+             רגע נתון מי מחובר באפליקציה ומאיזה משתמש."
+
+            `isAdmin` comes from the server's own answer, not from anything
+            this browser worked out, and the tab above does not exist without
+            it. The second guard here is not belt-and-braces for security —
+            the security is the allowlist in the server's environment — it is
+            so a stale `tab` value can never render an empty panel.
+
+            IT SHOWS PRESENCE AND IDENTITY AND NOTHING ELSE. No token, no
+            cookie, no password, and not the login screenshot column: a panel
+            that answers "who is connected" has no business carrying a picture
+            of somebody's own screen.
+          */}
+          {tab === 'admin' && isAdmin && presence && (
+            <>
+              <Card
+                title="מי מחובר עכשיו"
+                subtitle={`${presence.workers.filter((w) => w.online).length} מחוברים מתוך ${presence.workers.length} מחשבים · מתרענן לבד כל 10 שניות`}
+              >
+                {presence.workers.length === 0 ? (
+                  <Notice tone="info">אף מחשב לא נרשם עדיין. מחשב נכנס לרשימה הזו ברגע שהתוכנה עליו נפתחת פעם אחת.</Notice>
+                ) : (
+                  <div className="mt-1 space-y-2">
+                    {presence.workers.map((w) => (
+                      <div key={w.id} className="rounded-xl border border-ink-700 px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          {/* The dot is the SAME rule the dashboard chip uses —
+                              computed on the server so there is one definition
+                              of "מחובר" in the product, not two. */}
+                          <span
+                            aria-hidden
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${w.online ? 'bg-success-400' : 'bg-ink-600'}`}
+                          />
+                          <span className="min-w-0 grow truncate font-bold text-mist-100">{w.name || w.host || '—'}</span>
+                          <span className={`shrink-0 text-[11px] font-extrabold ${w.online ? 'text-success-400' : 'text-mist-500'}`}>
+                            {w.online ? (w.busy ? 'מפרסם עכשיו' : 'מחובר') : 'מנותק'}
+                          </span>
+                        </div>
+                        <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px] leading-4">
+                          <dt className="text-mist-500">עסק</dt>
+                          <dd className="min-w-0 truncate text-mist-300">{w.tenantName || '— לא משויך לעסק'}</dd>
+                          <dt className="text-mist-500">משתמש פייסבוק</dt>
+                          <dd className="min-w-0 truncate text-mist-300">
+                            {w.fbUserName || (w.fbUserId ? <span dir="ltr">{w.fbUserId}</span> : '— לא ידוע')}
+                          </dd>
+                          <dt className="text-mist-500">מחשב</dt>
+                          <dd className="min-w-0 truncate text-mist-300" dir="ltr">{w.host || '—'}</dd>
+                          <dt className="text-mist-500">גרסה</dt>
+                          <dd className="min-w-0 truncate text-mist-300" dir="ltr">{w.version || '—'}</dd>
+                          <dt className="text-mist-500">אות חיים אחרון</dt>
+                          <dd className="min-w-0 text-mist-300">{w.last_seen_at ? <Stamp iso={w.last_seen_at} /> : '— מעולם'}</dd>
+                        </dl>
+                        {/* What the machine itself said is wrong, in its own
+                            words, rather than a status word standing in for it. */}
+                        {w.attention_message && (
+                          <p className="mt-1.5 text-[11px] font-bold leading-4 text-warning-400">{w.attention_message}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {presence.truncated.workers && (
+                  <div className="mt-2.5">
+                    <Notice tone="warn">הרשימה נקטעה — יש יותר מחשבים ממה שמוצג כאן.</Notice>
+                  </div>
+                )}
+              </Card>
+
+              <Card title="משתמשים" subtitle="מי יכול להיכנס לדשבורד, ומתי נכנס לאחרונה">
+                {presence.users.length === 0 ? (
+                  <Notice tone="info">אין עדיין משתמשים רשומים.</Notice>
+                ) : (
+                  <div className="mt-1 space-y-2">
+                    {presence.users.map((u) => (
+                      <div key={u.id} className="rounded-xl border border-ink-700 px-3 py-2.5">
+                        <p className="truncate font-bold text-mist-100" dir="ltr">{u.email || u.id}</p>
+                        <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px] leading-4">
+                          <dt className="text-mist-500">עסקים</dt>
+                          <dd className="min-w-0 truncate text-mist-300">{u.tenants.length ? u.tenants.join(' · ') : '— לא משויך'}</dd>
+                          <dt className="text-mist-500">כניסה אחרונה</dt>
+                          <dd className="min-w-0 text-mist-300">{u.lastSignInAt ? <Stamp iso={u.lastSignInAt} /> : '— מעולם לא נכנס'}</dd>
+                        </dl>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {presence.truncated.users && (
+                  <div className="mt-2.5">
+                    <Notice tone="warn">הרשימה נקטעה — יש יותר משתמשים ממה שמוצג כאן.</Notice>
+                  </div>
+                )}
+                {/*
+                  SAID OUT LOUD, because the two lists answer two different
+                  questions and the difference matters when something is wrong.
+                */}
+                <p className="mt-2.5 text-[11px] leading-4 text-mist-500">
+                  ״כניסה אחרונה״ היא כניסה לדשבורד באתר — לא הפעלה של התוכנה במחשב. מחשב יכול לפרסם שבועות בלי שאף אחד ייכנס לדשבורד,
+                  ולהפך.
+                </p>
+              </Card>
+            </>
           )}
 
           <Button size="lg" className="w-full" busy={busy} onClick={save}>

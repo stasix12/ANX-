@@ -803,3 +803,81 @@ export function parseGroupUrl(input: string): { url: string; externalId: string 
   const externalId = decodeURIComponent(m[1]);
   return { url: `https://www.facebook.com/groups/${externalId}`, externalId };
 }
+
+/* ===========================================================================
+ * THE OWNER'S OWN PANEL — who is connected, and under which user
+ *
+ * "ותוסיף רק אצלי, לא אצל הלקוחות. בהגדרות פאנל אדמין שאני ידע כל רגע נתון מי
+ *  מחובר באפליקציה ומאיזה משתמש." — 02.11.2026.
+ *
+ * Two different questions hide inside "מאיזה משתמש", and the panel answers
+ * both rather than picking one:
+ *
+ *   · WHICH FACEBOOK ACCOUNT each running copy of the app is signed in as —
+ *     social_workers.fb_user_name, which is what actually publishes;
+ *   · WHICH PERSON owns the business that copy belongs to — the dashboard
+ *     login, from social_tenant_members and Supabase Auth.
+ *
+ * NOTHING SECRET TRAVELS. No access token, no cookie, no password, and
+ * deliberately not social_workers.login_shot — that column holds a screenshot
+ * of whatever Facebook was asking mid-login, which can show a person's own
+ * screen. The panel reports presence and identity, which is what was asked
+ * for, and stops there.
+ * ======================================================================== */
+
+/** One running copy of the desktop app, as the owner's panel sees it. */
+export interface AdminWorkerPresence {
+  id: string;
+  /** The machine's own name for itself, and its operating-system host. */
+  name: string;
+  host: string;
+  version: string;
+  status: WorkerStatus;
+  browser_state: BrowserState;
+  attention_message: string;
+  last_seen_at: string | null;
+  /** The SAME rule the dashboard chip uses: spoke recently AND did not say
+   *  goodbye. Computed on the server so one definition serves both. */
+  online: boolean;
+  /** Whether it is mid-job right now — a job id is not shown, only that there
+   *  is one, because the id means nothing to a person reading this. */
+  busy: boolean;
+  /** The business it belongs to. `tenantName` is '' when the row predates
+   *  tenancy or its business row is gone — stated as absence, never guessed. */
+  tenantId: string | null;
+  tenantName: string;
+  /** The Facebook account its browser is signed in as. Empty when the worker
+   *  has not read one; an empty string is "not known", not "nobody". */
+  fbUserId: string;
+  fbUserName: string;
+}
+
+/** One person who can sign in to the dashboard, and when they last did. */
+export interface AdminUserPresence {
+  id: string;
+  email: string;
+  lastSignInAt: string | null;
+  createdAt: string | null;
+  /** Every business this person may act for, by name. */
+  tenants: string[];
+}
+
+/**
+ * The panel's whole payload.
+ *
+ * `admin: false` is what a signed-in CUSTOMER gets — a 200 with nothing in it,
+ * rather than a 403 the client would have to read out of an error string. The
+ * lists are then empty and the screen draws no panel at all.
+ *
+ * `truncated` is named rather than silent: a cap that quietly cuts the list is
+ * a panel that says "everyone" while showing some.
+ */
+export interface AdminPresence {
+  admin: boolean;
+  /** Server time, so the screen can age the heartbeats against the clock that
+   *  decided they were fresh rather than against the phone's own. */
+  now: string;
+  workers: AdminWorkerPresence[];
+  users: AdminUserPresence[];
+  truncated: { workers: boolean; users: boolean };
+}

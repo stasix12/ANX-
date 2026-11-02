@@ -97,7 +97,7 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.33.0';
+export const WORKER_VERSION = '4.34.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -488,4 +488,23 @@ export const WORKER_VERSION = '4.33.0';
  * MAYBE_LIVE_STEP ships too because rules.ts and the planner import from that
  * file.
  */
-export const WORKER_FINGERPRINT = '8e179f1177842881';
+/*
+ * 4.33.0 → 4.34.0. "זה נתקע פשוט" — the terminal on `verifying`, 208
+ * publications queued behind it, nothing moving.
+ * DOES THIS HAVE TO REACH THE PC? YES. This IS the PC: the composer runs
+ * nowhere else, and the freeze was in the wait right after its click.
+ *
+ *   npm run build:app
+ *   grep -c SUBMIT_DETACH_VIDEO_MS dist/app/worker.cjs → 2
+ *   grep -c SUBMIT_DETACH_MS       dist/app/worker.cjs → 2
+ *   grep -c DETACH_TICK_MS         dist/app/worker.cjs → 2
+ *
+ * The wait for Facebook's post window to close had been given
+ * VIDEO_UPLOAD_TIMEOUT — fifteen minutes — for any post carrying a video,
+ * and the owner's posts are all video. One lane, so one lingering dialog
+ * froze the whole queue for a quarter of an hour with nothing printed. The
+ * upload is already proven finished before the click, so that number was the
+ * wrong wait entirely; it is now three minutes for video, ninety seconds
+ * otherwise, sliced so the terminal says it is alive every twenty seconds.
+ */
+export const WORKER_FINGERPRINT = '82755bddfd142c41';

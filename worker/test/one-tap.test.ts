@@ -92,10 +92,40 @@ for (const path of PATHS) {
   is(/export async function ensureRunForPost/.test(client), 'ensureRunForPost is gone — this test names it as one of the two writes a double tap duplicated');
   is(/export async function createSchedule/.test(client), 'createSchedule is gone — same');
 
-  const ensure = client.slice(client.indexOf('export async function ensureRunForPost'), client.indexOf('export async function ensureRunForPost') + 1400);
+  /*
+   * STILL READ-THEN-CREATE, asserted as the SHAPE rather than as the two
+   * function names it used to be.
+   *
+   * The create half was `saveCampaign({ name: post.title … })` and is now
+   * `createRunWithRepeat(…)`, which writes repeat_enabled and repeat_min_hours
+   * explicitly instead of leaving them to the database's default. That was the
+   * whole of "זה פשוט מדלג על הפוסטים": rules.ts checks the repeat SWITCH
+   * before the repeat WINDOW, so a campaign created with two fields skipped
+   * every group the post had already reached, and v35's zeroing of the window
+   * could not reach it. See worker/test/repeat-switch.test.ts.
+   *
+   * Nothing about atomicity changed — it is still a read, then a separate
+   * write, with only the ref between a double tap and two runs — so this rule
+   * stands. Pinning the callee's NAME made a rename look like a relaxation,
+   * which is the opposite of what this file is for.
+   */
+  /* נחתך עד ה-export הבא ולא לפי ספירת תווים: חלון קבוע הפסיק להגיע לקריאה
+     ברגע שנוספה מעליה הערה, והבדיקה "נכשלה" על קוד תקין. שלישית הלילה. */
+  const ensureAt = client.indexOf('export async function ensureRunForPost');
+  const ensureEnd = client.indexOf('\nexport ', ensureAt + 10);
+  const ensure = client.slice(ensureAt, ensureEnd === -1 ? client.length : ensureEnd);
+  is(/const existing = await getCampaign\(post\.campaign_id\);/.test(ensure), 'ensureRunForPost still READS first — getCampaign');
   is(
-    /const existing = await getCampaign\(post\.campaign_id\);/.test(ensure) && /await saveCampaign\(\{ name: post\.title/.test(ensure),
-    'ensureRunForPost is still read-then-create — getCampaign, then saveCampaign — so the launch path has nothing but the ref between a double tap and two runs. If this ever becomes atomic, relax the rule knowingly rather than by accident.',
+    /const run = await createRunWithRepeat\(/.test(ensure),
+    'and then CREATES in a separate write, so the launch path has nothing but the ref between a double tap and two runs',
+  );
+  /* And the create half is not secretly atomic: an upsert or an ON CONFLICT
+     would make the ref unnecessary, and that is the change this rule wants
+     made knowingly. */
+  const createFn = client.slice(client.indexOf('async function createRunWithRepeat'), client.indexOf('export async function ensureRunForPost'));
+  is(
+    !/upsert\(|onConflict/.test(createFn),
+    'createRunWithRepeat is a plain insert, not an upsert — if it ever becomes atomic, relax this rule knowingly rather than by accident',
   );
 }
 

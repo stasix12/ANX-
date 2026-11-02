@@ -276,7 +276,30 @@
  * installer. package.test.ts caught it — for the second time tonight — and it
  * made 4.36.0's own suite red after it had already been pushed.
  */
-export const WORKER_VERSION = '4.37.0';
+/*
+ * 4.37.0 → 4.38.0. v4.37.0 פורסם ב-23:33, ולכן המספר תפוס — זאת השאלה השנייה
+ * שהקובץ הזה למד לשאול הלילה, אחרי ששני תיקונים נכונים כמעט נשלחו למספרים
+ * שכבר היו בחוץ ולא היו מגיעים לאף מחשב.
+ *
+ *   "זה לא מפרסם, זה פשוט מדלג על הפוסטים, כמו שהיה מקודם"
+ *
+ * אחרי ש-v35 אפס כל רצפה — "0 מגבלה" — זה עדיין דילג, וזאת הסיבה: v35 הוריד
+ * את המרווח בין שני פרסומים לאותה קבוצה ולא נגע במתג שמתיר פרסום חוזר בכלל
+ * (grep -c repeat_enabled v35.sql → 0). rules.ts:629 בודק את המתג לפני
+ * המרווח, אז על פוסט שכבר פורסם ל-252 הקבוצות מתג כבוי מדלג על כל 252 מיד —
+ * המרווח לא נבדק אפילו פעם אחת, ולכן אפסון שלו לא יכול היה לשנות דבר.
+ *
+ * ולמה המתג היה כבוי: ensureRunForPost פתח קמפיין עם { name, status } בלבד,
+ * ו-DEFAULT_CAMPAIGN_REPEAT — שההערה שלו אומרת "what a new campaign starts
+ * as, AND WHAT GETS WRITTEN" — לא נכתב לשום מקום. כל השקה מחדש פתחה קמפיין
+ * חדש שנשען על ברירת מחדל שאיש לא כתב.
+ *
+ * DOES THIS HAVE TO REACH THE PC? כן — rules.ts היא ההחלטה שהמחשב עושה לפני
+ * כל קליק, והיא הצד שקורא את המתג. הכתיבה עצמה בדפדפן (client.ts), אבל מחשב
+ * שנשאר על 4.37.0 ימשיך להחליט לפי אותו קוד — ולכן שני החצאים נשלחים יחד,
+ * כפי שנשלחו ב-4.33.0.
+ */
+export const WORKER_VERSION = '4.38.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -707,4 +730,4 @@ export const WORKER_VERSION = '4.37.0';
 
    (types.ts moves too, for QueueItem.updated_at. It is a type; nothing
    executes it.) */
-export const WORKER_FINGERPRINT = '0b61d85927951dcc';
+export const WORKER_FINGERPRINT = 'c3566ae148e84306';

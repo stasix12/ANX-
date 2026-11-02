@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
-import { MIN_GAP_SECONDS, MIN_REPEAT_HOURS, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
+import { DEFAULT_CAMPAIGN_REPEAT, MIN_GAP_SECONDS, MIN_REPEAT_HOURS, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey, renderPostText } from './compose';
@@ -580,12 +580,86 @@ export async function saveCampaign(input: Partial<Campaign> & { name: string }):
  * resetting. A run the owner STOPPED is finished and is not reused - the next
  * launch opens a fresh one, counting from zero.
  */
+/** העמודות שקמפיין חדש מנסה לכתוב, ושמסד שלא עודכן עשוי לא להכיר. */
+const OPTIONAL_CAMPAIGN_COLUMNS = ['repeat_enabled', 'repeat_min_hours'] as const;
+
+/**
+ * קמפיין חדש, עם ברירת המחדל של המוצר כתובה בו במפורש.
+ *
+ * אותה דיסציפלינה של createSchedule ומאותה סיבה: ניסיון אחד עם העמודות,
+ * ואם — ורק אם — מסד הנתונים אומר שהעמודה לא קיימת, ניסיון שני בלעדיהן.
+ * לא על כתיבה שנדחתה, לא על חיבור שנפל ולא על טוקן שפג: אלה תשובות אחרות
+ * וחייבות להמשיך להיכשל בקול.
+ *
+ * ונאמר בפעם הבאה שהוא מסתכל, כי מסד בלי העמודות האלה חוזר להתנהגות שבה
+ * פוסט לא יוצא פעמיים לאותה קבוצה — וזאת בדיוק ההגבלה שהוא ביקש להסיר.
+ */
+async function createRunWithRepeat(name: string): Promise<Campaign> {
+  const wanted = {
+    name,
+    status: 'active' as const,
+    repeat_enabled: DEFAULT_CAMPAIGN_REPEAT.enabled,
+    repeat_min_hours: DEFAULT_CAMPAIGN_REPEAT.minHours,
+  };
+  const first = await db().from('social_campaigns').insert(wanted).select('*').single();
+  if (!first.error) return first.data as Campaign;
+
+  const missing = OPTIONAL_CAMPAIGN_COLUMNS.filter((c) =>
+    isMissingColumnNamed(first.error as { code?: string; message?: string }, c),
+  );
+  if (!missing.length) return unwrap<Campaign>(first);
+
+  const rest = { ...(wanted as Record<string, unknown>) };
+  for (const c of missing) delete rest[c];
+  const second = unwrap<Campaign>(await db().from('social_campaigns').insert(rest).select('*').single());
+  await logClientActivity(
+    'warn',
+    'campaign_column_missing',
+    `הסבב נפתח, אבל בבסיס הנתונים חסרה העמודה ${missing.join(', ')} — ולכן אותו פוסט לא יֵצא שוב לקבוצה שהוא כבר פורסם אליה. הריצו את supabase/social-latest.sql כדי לאפשר את זה.`,
+    { columns: missing, campaignId: second.id },
+  );
+  return second;
+}
+
 export async function ensureRunForPost(post: Pick<Post, 'id' | 'title' | 'campaign_id'>): Promise<string> {
   if (post.campaign_id) {
     const existing = await getCampaign(post.campaign_id);
     if (existing && existing.status !== 'archived') return existing.id;
   }
-  const run = await saveCampaign({ name: post.title.trim() || 'סבב פרסום', status: 'active' });
+  /*
+   * ─── וְהַמְּתָג, שֶׁלֹּא נִכְתַּב כְּלָל ───────────────────────────────────────
+   *
+   *   "זה לא מפרסם, זה פשוט מדלג על הפוסטים, כמו שהיה מקודם"
+   *   "0 מגבלה"
+   *
+   * זה נכתב `{ name, status: 'active' }` — שני שדות. repeat_enabled
+   * ו-repeat_min_hours נפלו לברירת המחדל של מסד הנתונים, ו-
+   * DEFAULT_CAMPAIGN_REPEAT — ההערה שלו אומרת במילים שלה "what a new campaign
+   * starts as, AND WHAT GETS WRITTEN" — לא נכתב לאף מקום.
+   *
+   * ולמה זה בדיוק הסימפטום שלו: rules.ts:629 בודק את המתג לפני המרווח —
+   *
+   *     if (previous && previous.length > 0) {
+   *       if (!repeat.enabled) return { action: 'skip', reason: `הפוסט הזה כבר פורסם ל-"${'$'}{target.name}"` };
+   *
+   * — אז על פוסט שכבר פורסם ל-252 הקבוצות, מתג כבוי מדלג על כל 252 מיד, לפני
+   * שהמרווח נבדק בכלל. v35 אפס את repeat_min_hours ואת כל הרצפות, ולא נגע
+   * ב-repeat_enabled אפילו פעם אחת (grep -c repeat_enabled v35.sql → 0). לכן
+   * "0 מגבלה" הוריד את המרווח והשאיר את המתג, וכל השקה מחדש פתחה קמפיין חדש
+   * שנשען על ברירת מחדל שאיש לא כתב.
+   *
+   * v31 הופך את ברירת המחדל במסד ל-true, וזה נכון וקיים — אבל ברירת מחדל של
+   * מסד נתונים אינה החלטה של המוצר: היא תלויה בכך שקובץ מסוים הורץ, והערך
+   * שלפניו היה false. מוצר שמסתמך עליה אומר דבר אחד בקוד ודבר אחר בפועל,
+   * בדיוק בנקודה שבה אי אפשר להבדיל בין "הוא כיבה" לבין "אף אחד לא בחר" —
+   * מה ש-readRepeat מסביר באריכות ולא יכול לפתור.
+   *
+   * אז הערכים נכתבים במפורש, וממשיכים להיכתב גם אם העמודות אינן קיימות:
+   * PostgREST מסרב לכל הכתיבה כשעמודה אחת חסרה, ולכן כתיבה תמימה הייתה הורגת
+   * כל השקה על מסד שלא הריץ v25 — זאת בדיוק התקלה ש-OPTIONAL_SCHEDULE_COLUMNS
+   * למעלה הוא הצלקת שלה, אחת-עשרה ימים של השקות שלא הכניסו כלום לתור.
+   */
+  const run = await createRunWithRepeat(post.title.trim() || 'סבב פרסום');
   unwrap(await db().from('social_posts').update({ campaign_id: run.id }).eq('id', post.id));
 
   /*

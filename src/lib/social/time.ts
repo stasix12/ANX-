@@ -145,6 +145,21 @@ export function formatTimeHe(iso: string | Date, tz = TIMEZONE): string {
   return formatter('he-IL', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
 }
 
+/**
+ * 'HH:MM' ON THE LOCAL CLOCK AT AN INSTANT — a STORED KEY, not a display
+ * string.
+ *
+ * formatTimeHe() answers the same question for a screen, through a he-IL
+ * formatter; this one is for social_queue.round_at, where the value is
+ * compared against the campaign's own round hours and must be one spelling
+ * for ever. A locale formatter is the wrong tool for a key: it is allowed to
+ * change what it emits.
+ */
+export function zonedHM(date: Date, tz = TIMEZONE): string {
+  const p = partsInZone(date, tz);
+  return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
+}
+
 /** The second of the local clock at an instant, in the zone. */
 export function zonedSecond(date: Date, tz = TIMEZONE): number {
   return partsInZone(date, tz).second;

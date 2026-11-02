@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { dedupeKey, renderPostText } from './compose';
+import { zonedHM } from './time';
 import { dripSlots, slotsFor } from './slots';
 import { windowedStagger } from './projection';
 import { readSchedule, type CampaignSchedule } from './campaign-schedule';
@@ -310,6 +311,24 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
               variant_id: variant?.id ?? null,
               target_id: targetId,
               scheduled_at: slot.toISOString(),
+              /*
+               * WHICH ROUND OF THE DAY THIS ROW IS, recorded now and never
+               * recomputed — "כל סבב חייב לקבל מזהה עצמאי".
+               *
+               * `slot` is this target's own instant INSIDE the occasion
+               * (windowedStagger spaces the groups out from it), so the round
+               * is taken from the OCCASION, slots[slotIndex], and not from
+               * the row's own time. Taking it from `slot` would put the tail
+               * of a long round into the next one as soon as the stagger ran
+               * past it.
+               *
+               * And it is stored rather than derived because rules.ts moves
+               * instants: the account gap, a daily ceiling and a read that
+               * failed all defer a row, and a round guessed from the clock
+               * afterwards counts that publication in a round it was never
+               * part of.
+               */
+              round_at: zonedHM(slots[slotIndex], schedule.timezone || undefined),
               status: 'scheduled',
               step: 'pending',
               require_confirmation: Boolean(schedule.require_confirmation),

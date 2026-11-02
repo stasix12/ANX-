@@ -1463,7 +1463,7 @@ const QUEUE_SELECT =
  * the body is gone, and PublicationItem fetches it on demand when a row opens.
  */
 const QUEUE_SELECT_LITE =
-  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, method, metrics_seen, metrics_views, metrics_reactions, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
+  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, round_at, method, metrics_seen, metrics_views, metrics_reactions, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
 
 /**
  * `order` matters more than it looks: the limit is applied AFTER the sort, so
@@ -2415,7 +2415,7 @@ function isMissingRelation(error: { code?: string; message?: string } | null): b
  * what is waiting and a bounded answer about what is over. It could not be
  * both, so it was neither.
  */
-const ROLLUP_SELECT = 'id, status, scheduled_at, published_at, target_id, post_id, campaign_id, target:social_targets(id,name,channel,image_url)';
+const ROLLUP_SELECT = 'id, status, scheduled_at, published_at, target_id, post_id, campaign_id, round_at, target:social_targets(id,name,channel,image_url)';
 
 export async function campaignStates(campaignIds?: string[]): Promise<Record<string, CampaignState>> {
   if (campaignIds && campaignIds.length === 0) return {};
@@ -2765,7 +2765,7 @@ export const CAMPAIGN_QUEUE_LIMIT = 1000;
  * fed by its own reads, not by this one.
  */
 const CAMPAIGN_FEED_SELECT =
-  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, method, metrics_seen, metrics_views, metrics_reactions, metrics_comments, metrics_shares, metrics_at, comment_status, comment_note, comment_shot, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
+  'id, schedule_id, post_id, variant_id, target_id, scheduled_at, status, attempts, dedupe_hash, external_post_id, permalink, error, skip_reason, claimed_at, published_at, step, step_at, worker_id, screenshot_path, require_confirmation, confirmed_at, campaign_id, round_at, method, metrics_seen, metrics_views, metrics_reactions, metrics_comments, metrics_shares, metrics_at, comment_status, comment_note, comment_shot, target:social_targets(id,name,channel,url,image_url), post:social_posts(id,title,media,link_url), variant:social_variants(id,label)';
 
 /**
  * Every queue row of one campaign, with its target — the control centre's feed,

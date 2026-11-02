@@ -1923,3 +1923,27 @@ begin
   select count(*) into n from public.social_campaigns;
   raise notice 'v29: העמודה schedule_rounds נוספה. % קמפיינים קיימים ממשיכים עם סבב אחד ביום, ללא שינוי.', n;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- v30 — round_at. See supabase/social-schema-v30.sql for the whole story; the
+-- short version is that a row's round can be GUESSED from scheduled_at right
+-- up until the row is deferred, and then the guess counts a publication in a
+-- round it was never part of. So the round is recorded when the row is
+-- created and never recomputed.
+--
+-- 'HH:MM' local, written by src/lib/social/plan.ts. NULL is "round one",
+-- which is every row that exists today. Safe to run again.
+-- To undo: supabase/social-schema-v30-rollback.sql.
+-- ---------------------------------------------------------------------------
+alter table public.social_queue
+  add column if not exists round_at text;
+
+comment on column public.social_queue.round_at is
+  'הסבב ביום שאליו שייכת השורה: ''HH:MM'' מקומי, השעה שממנה המתכנן יצר אותה. ריק = הסבב הראשון, וכך גם כל שורה שנוצרה לפני הפיצ''ר.';
+
+do $$
+declare n bigint;
+begin
+  select count(*) into n from public.social_queue where round_at is null;
+  raise notice 'v30: העמודה round_at נוספה. % שורות קיימות נספרות כסבב הראשון, ללא שינוי.', n;
+end $$;

@@ -22,7 +22,22 @@
  * would protect the hosted worker and change nothing at all about the machine
  * that actually publishes his posts.
  */
-export const WORKER_VERSION = '4.23.0';
+/*
+ * 4.23.0 → 4.24.0. DOES THIS HAVE TO REACH THE PC? YES — and it is the first
+ * part of סבבים ביום that does, which is exactly why the question is asked
+ * every time rather than answered once for a feature.
+ *
+ *   grep -c round_at  dist/app/worker.cjs → 1
+ *   grep -c zonedHM   dist/app/worker.cjs → 3
+ *   grep -c planQueue dist/app/worker.cjs → 3
+ *
+ * The PC's planner is the thing that CREATES queue rows, so it is the only
+ * place that can record which round of the day a row belongs to. Left on
+ * 4.23.0 the rounds would publish correctly and every per-round counter would
+ * read zero for the second round for ever — a feature that works and a screen
+ * that lies about it.
+ */
+export const WORKER_VERSION = '4.24.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -284,4 +299,8 @@ export const WORKER_VERSION = '4.23.0';
  * bundle, which is the safe direction — it asks the question too often rather
  * than missing one that mattered — and the greps answer it in thirty seconds.
  */
-export const WORKER_FINGERPRINT = '53c8175721d46f0c';
+/* Re-pinned after round_at was added to the three selects that count it.
+   4.24.0 is not released yet, so the version does not move again — a bump per
+   edit would publish an installer per commit and teach the updater to cry
+   wolf. The PC change that earns 4.24.0 is the planner write above. */
+export const WORKER_FINGERPRINT = '9fc3bed5ad0cbd53';

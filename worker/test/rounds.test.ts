@@ -21,7 +21,9 @@
  *   npx tsx worker/test/rounds.test.ts
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { slotsFor } from '../../src/lib/social/slots';
+import { zonedHM } from '../../src/lib/social/time';
 import {
   DEFAULT_CAMPAIGN_SCHEDULE,
   MAX_EXTRA_ROUNDS,
@@ -221,6 +223,47 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
   const hours = [...new Set(across.map(local))].sort();
   eq(hours, ['03:30', '15:30'], 'every occasion either side of the clock change is still at the hour the owner chose — no round drifts by an hour');
   is(across.length >= 4, `three days should carry at least four occasions across the change, got ${across.length}`);
+}
+
+/* ───── 7. WHICH ROUND A QUEUE ROW BELONGS TO, recorded not guessed ────── */
+{
+  /*
+   * "כל סבב חייב לקבל מזהה עצמאי." social_queue.round_at holds the occasion's
+   * local 'HH:MM', written once by plan.ts.
+   *
+   * WHAT IS RUN HERE AND WHAT IS READ, stated plainly rather than blurred:
+   * zonedHM() is RUN, including across the clock change, because that is the
+   * value that gets stored. planQueue() itself cannot be driven from this
+   * suite — it speaks PostgREST, and the local Postgres the db tests use has
+   * none — so the line that writes the column is PINNED as source, with the
+   * one plausible mistake pinned against explicitly.
+   */
+  const tz = 'Asia/Jerusalem';
+  eq(zonedHM(new Date('2026-11-02T03:30:00+02:00'), tz), '03:30', 'the stored round is the occasion on the local clock');
+  eq(zonedHM(new Date('2026-11-02T15:30:00+02:00'), tz), '15:30', 'and the second occasion likewise');
+  /* Summer time: the same local hours, two different UTC offsets, one spelling. */
+  eq(zonedHM(new Date('2026-10-24T03:30:00+03:00'), tz), '03:30', 'the stored round does not change when the clock does — it is a local hour, not an offset');
+  eq(zonedHM(new Date('2026-10-24T15:30:00+03:00'), tz), '15:30', 'likewise the afternoon round the day before the change');
+  /* A key, not a display string: zero-padded, 24-hour, no locale marks. */
+  eq(zonedHM(new Date('2026-11-02T09:05:00+02:00'), tz), '09:05', 'single-digit hours are padded, so two equal rounds compare equal as text');
+
+  const plan = readFileSync(new URL('../../src/lib/social/plan.ts', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  is(/round_at: zonedHM\(/.test(plan), 'the planner no longer records which round it stamped a row from — per-round progress would be a guess again');
+  /*
+   * FROM THE OCCASION, NOT FROM THE ROW'S OWN INSTANT, and this is the whole
+   * assertion. windowedStagger spaces each target out from the occasion, so a
+   * round of two hundred groups at thirty seconds runs an hour and a half past
+   * its own start. Taking the round from `slot` — the row's time — would push
+   * the tail of a long round into the next one, which is exactly the lie the
+   * column exists to prevent.
+   */
+  is(
+    /round_at: zonedHM\(slots\[slotIndex\]/.test(plan),
+    "the round is taken from the row's own instant instead of from the occasion — the tail of a long round would be counted in the next one",
+  );
+  is(!/round_at: zonedHM\(slot,/.test(plan), 'and `slot` is the staggered instant, not the occasion');
 }
 
 console.log(`rounds OK — ${checks} assertions over the list, the clock, the shipped slot engine and the one question the card must answer`);

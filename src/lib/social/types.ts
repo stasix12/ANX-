@@ -323,6 +323,25 @@ export interface QueueItem {
   require_confirmation?: boolean;
   confirmed_at?: string | null;
   campaign_id?: string | null;
+  /**
+   * WHICH ROUND OF THE DAY THIS ROW BELONGS TO — 'HH:MM' local, the occasion
+   * the planner stamped it from.
+   *
+   * "כל סבב חייב לקבל מזהה עצמאי, תור עצמאי, סטטוס עצמאי ומעקב התקדמות
+   * עצמאי." Written once, by plan.ts, at the moment the row is created.
+   *
+   * IT IS RECORDED AND NOT DERIVED, and that is the whole reason the column
+   * exists. A round could be guessed from scheduled_at — the latest occasion
+   * at or before it — right up until a row is DEFERRED: the gap, a daily
+   * ceiling or a failed read move the instant, and the guess then counts the
+   * row in a round it was never part of. A progress bar that moves a
+   * publication from one round to another is worse than no progress bar.
+   *
+   * ABSENT on every row created before this column existed, and on every
+   * database that has not run social-latest.sql, so the readers treat null as
+   * "round one" — which is what a campaign with one occasion a day has.
+   */
+  round_at?: string | null;
   /** How this row was published: Graph API, local browser worker, or by hand. */
   method?: PublishMethod;
   /*

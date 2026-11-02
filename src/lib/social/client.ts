@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
-import { MIN_GAP_SECONDS, MIN_REPEAT_HOURS, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
+import { MIN_GAP_SECONDS, MIN_REPEAT_HOURS, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey, renderPostText } from './compose';
@@ -1398,7 +1398,7 @@ export async function setCampaignRepeat(
   await logClientActivity(
     'warn',
     'campaign_repeat_on',
-    `"${campaign.name}" יחזור על עצמו בכל יום פרסום — אותו פוסט לאותן קבוצות, לא יותר מפעם ב-${repeat.minHours} שעות`,
+    `"${campaign.name}" יחזור על עצמו בכל יום פרסום — אותו פוסט לאותן קבוצות, ${repeatWindowSentence(repeat.minHours)}`,
     { campaignId: campaign.id, minHours: repeat.minHours, armed, needsLaunch },
   );
   return { armed, needsLaunch };

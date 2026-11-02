@@ -15,6 +15,7 @@ import {
   nextFreeRoundStart,
   roundStarts,
   repeatFitFor,
+  repeatWindowSentence,
   roundsVsRepeat,
   type CampaignRepeat,
   type CampaignRound,
@@ -1012,8 +1013,7 @@ export function CampaignSchedulePanel({
               ) : (
                 <>
                   אותו פוסט יפורסם שוב לאותן קבוצות בכל יום פרסום, החל מהשעה{' '}
-                  <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. לא יותר מפעם ב-{repeat.minHours} שעות לאותה
-                  קבוצה.
+                  <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. {repeatWindowSentence(repeat.minHours)}.
                   {/* The consequence, not the mechanism. He is the one whose
                       account carries it, so he is the one who has to read it. */}
                   <span className="mt-0.5 block text-warning-400">

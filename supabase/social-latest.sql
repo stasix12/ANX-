@@ -2003,10 +2003,10 @@ alter table public.social_campaigns
 
 alter table public.social_campaigns
   add constraint social_campaigns_repeat_min_hours_ck
-  check (repeat_min_hours between 1 and 168);
+  check (repeat_min_hours between 0 and 168);
 
 comment on column public.social_campaigns.repeat_min_hours is
-  'המינימום שחייב לעבור בין פרסום של הפוסט הזה לקבוצה לבין הפרסום הבא לאותה קבוצה, בשעות. 1–168. ברירת המחדל של החשבון היא 12 ונקבעת בהגדרות (repeatFloorHours).';
+  'המינימום שחייב לעבור בין פרסום של הפוסט הזה לקבוצה לבין הפרסום הבא לאותה קבוצה, בשעות. 0–168, כאשר 0 פירושו בלי מרווח מינימלי בכלל (v34). ברירת המחדל של האפליקציה היא 12 ונקבעת בהגדרות (repeatFloorHours).';
 
 do $$
 declare below int;

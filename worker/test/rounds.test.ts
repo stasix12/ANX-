@@ -28,6 +28,9 @@ import {
   DEFAULT_CAMPAIGN_SCHEDULE,
   MAX_EXTRA_ROUNDS,
   ABSOLUTE_MIN_REPEAT_HOURS,
+  DEFAULT_CAMPAIGN_REPEAT,
+  readRepeat,
+  repeatWindowSentence,
   MAX_REPEAT_HOURS,
   MIN_REPEAT_HOURS,
   readRounds,
@@ -489,11 +492,45 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
     eq(repeatFloorFrom(null), MIN_REPEAT_HOURS, 'an account that never set a floor keeps the twelve it has always had');
     eq(repeatFloorFrom({}), MIN_REPEAT_HOURS, 'and so does one whose settings row has no such key');
     eq(repeatFloorFrom({ repeatFloorHours: 3 }), 3, 'the owner’s own number is what governs');
-    eq(repeatFloorFrom({ repeatFloorHours: 0 }), ABSOLUTE_MIN_REPEAT_HOURS, 'zero is raised to the one hour the column can actually store');
-    eq(repeatFloorFrom({ repeatFloorHours: -9 }), ABSOLUTE_MIN_REPEAT_HOURS, 'and so is a negative');
+    /*
+     * ─── ZERO IS A NUMBER NOW, AND IT IS HIS ────────────────────────────
+     *
+     * "לא הסרת את המגבלה של ה-20 שעות! תמחק את זה כבר." — 02.11.2026, after
+     * "לפתוח הכל, גם אותו פוסט". This assertion was the inverse until then:
+     * zero was raised to one hour, and this file asserted the absolute floor
+     * could never be under an hour because the column stores whole hours. v34
+     * widens the CHECK to 0..168 and zero now means what it says — no minimum
+     * at all between two publications of the same post to the same group.
+     *
+     * A NEGATIVE IS STILL NOT A NUMBER. Zero is a setting; minus nine is a
+     * mistake, and the database would refuse it anyway.
+     */
+    eq(repeatFloorFrom({ repeatFloorHours: 0 }), 0, 'zero stays zero — no minimum at all, which is what he asked for three times');
+    eq(repeatFloorFrom({ repeatFloorHours: -9 }), ABSOLUTE_MIN_REPEAT_HOURS, 'a negative is raised to the absolute floor');
     eq(repeatFloorFrom({ repeatFloorHours: 9999 }), MAX_REPEAT_HOURS, 'and a year is the ceiling');
     eq(repeatFloorFrom({ repeatFloorHours: 'x' } as never), MIN_REPEAT_HOURS, 'nonsense falls back to the default rather than to zero');
-    is(ABSOLUTE_MIN_REPEAT_HOURS >= 1, 'the absolute floor must never be under an hour — repeat_min_hours is whole hours');
+    eq(ABSOLUTE_MIN_REPEAT_HOURS, 0, 'the absolute floor is zero — see its note, and v34');
+
+    /*
+     * AND THE 20 IS GONE FROM THE ONE PLACE THAT KEPT STAMPING IT. He created
+     * a campaign and the activity log said "לא יותר מפעם ב-20 שעות" two
+     * minutes later; the number came from DEFAULT_CAMPAIGN_REPEAT.minHours,
+     * which no screen and no setting could reach.
+     */
+    eq(DEFAULT_CAMPAIGN_REPEAT.minHours, MIN_REPEAT_HOURS, 'a new campaign starts on the documented default, not an undocumented twenty');
+    is(DEFAULT_CAMPAIGN_REPEAT.minHours !== 20, 'the hard-coded twenty must not come back');
+
+    /*
+     * AND A ROW WITH NO STORED WINDOW READS THE ACCOUNT'S FLOOR, not the
+     * constant — which is what made his own setting unreachable.
+     */
+    eq(readRepeat({ repeat_enabled: true } as never, 2).minHours, 2, 'an unstored window reads the account floor');
+    eq(readRepeat({ repeat_enabled: true } as never, 0).minHours, 0, 'including a floor of zero');
+    eq(readRepeat({ repeat_enabled: true } as never).minHours, MIN_REPEAT_HOURS, 'and the documented default when no floor is passed');
+
+    /* The sentence a screen prints must not read "פעם ב-0 שעות". */
+    is(/לא יותר מפעם ב-5 שעות/.test(repeatWindowSentence(5)), 'a real window is stated in hours');
+    is(!/0/.test(repeatWindowSentence(0)), 'and a window of nought is described, not printed as a number');
   }
 
   /* ── HIS OWN CASE, before and after ──────────────────────────────────── */

@@ -700,9 +700,20 @@ export function roundsSavedMessage(
  * it. Every function below takes the floor as a parameter defaulting to this,
  * so a caller that does not know about the setting behaves exactly as before.
  *
- * ABSOLUTE_MIN_REPEAT_HOURS is the one that is not negotiable, and it is one
- * hour rather than zero for a dull reason: repeat_min_hours is stored in whole
- * hours, so one is simply the smallest thing the column can say.
+ * ABSOLUTE_MIN_REPEAT_HOURS IS NOW ZERO, AND THAT IS THE OWNER'S DECISION.
+ *
+ * "לא הסרת את המגבלה של ה-20 שעות! תמחק את זה כבר." — 02.11.2026, his third
+ * and plainest telling, after "לפתוח הכל, גם אותו פוסט". It was one hour, for
+ * the dull reason that repeat_min_hours is stored in whole hours and one is the
+ * smallest thing the column could say. Zero is what the column says now (v34
+ * widens the CHECK), and zero means there is no window at all: rules.ts
+ * computes `repeat.minHours * 3_600_000` and a window of nought milliseconds
+ * excludes nothing, so the same post may reach the same group again on the
+ * very next round.
+ *
+ * It is still a number HE sets, per account, and it still defaults to
+ * MIN_REPEAT_HOURS for an account that has never said otherwise. Nobody gets
+ * zero by accident.
  */
 /**
  * ─── THE HOUR A NEW ROUND SHOULD OPEN AT ──────────────────────────────────
@@ -771,7 +782,7 @@ export function editRoundTime(rounds: CampaignRound[], starts: string[], from: s
 }
 
 export const MIN_REPEAT_HOURS = 12;
-export const ABSOLUTE_MIN_REPEAT_HOURS = 1;
+export const ABSOLUTE_MIN_REPEAT_HOURS = 0;
 
 /** The account's floor, clamped into what the column and the engine accept. */
 export function repeatFloorFrom(limits?: { repeatFloorHours?: number } | null): number {
@@ -780,6 +791,24 @@ export function repeatFloorFrom(limits?: { repeatFloorHours?: number } | null): 
   return Math.min(MAX_REPEAT_HOURS, Math.max(ABSOLUTE_MIN_REPEAT_HOURS, Math.round(raw)));
 }
 export const MAX_REPEAT_HOURS = 168;
+
+/**
+ * ─── HOW THE WINDOW READS ON A SCREEN, INCLUDING WHEN THERE ISN'T ONE ──────
+ *
+ * Two places print this clause — the campaign panel and the activity log — and
+ * both interpolated the number straight in. With the floor now able to be
+ * zero, that produced "לא יותר מפעם ב-0 שעות לאותה קבוצה", which is not a
+ * limit, is not Hebrew, and reads like a bug in a product whose whole
+ * discipline is that a screen never says something the engine will not do.
+ *
+ * One builder, so the two cannot drift, and the zero case says what zero
+ * actually means rather than printing it.
+ */
+export function repeatWindowSentence(minHours: number): string {
+  return minHours > 0
+    ? `לא יותר מפעם ב-${minHours} שעות לאותה קבוצה`
+    : 'בלי מרווח מינימלי — אותו פוסט יכול לצאת שוב לאותה קבוצה בכל סבב';
+}
 
 /**
  * ─── WHAT A NEW CAMPAIGN STARTS AS ────────────────────────────────────────
@@ -793,8 +822,23 @@ export const MAX_REPEAT_HOURS = 168;
  * two different questions, and they were one constant for about an hour,
  * during which flipping this one would have turned a failed campaign read into
  * a permission to publish the same post to the same group twice.
+ *
+ * ─── THE 20 THAT WOULD NOT DIE ────────────────────────────────────────────
+ *
+ * minHours was a hard-coded 20 here, and that is the number he kept seeing:
+ * "לא הסרת את המגבלה של ה-20 שעות! תמחק את זה כבר." He was right and I had
+ * missed it twice. Making the floor adjustable (Settings) and dropping the
+ * queue constraint (v33) did nothing to this line — every campaign he created
+ * was still stamped with twenty hours, from a constant, and the account's own
+ * floor could only ever raise a stored number toward itself, never lower this
+ * one.
+ *
+ * It is MIN_REPEAT_HOURS now, so the product's default is the documented
+ * twelve rather than an undocumented twenty — and readRepeat() falls back to
+ * the ACCOUNT'S floor rather than to this constant, so an account that has set
+ * its own number gets its own number for a row that has never stored one.
  */
-export const DEFAULT_CAMPAIGN_REPEAT: CampaignRepeat = { enabled: true, minHours: 20 };
+export const DEFAULT_CAMPAIGN_REPEAT: CampaignRepeat = { enabled: true, minHours: MIN_REPEAT_HOURS };
 
 /**
  * ─── AND WHAT TO ASSUME WHEN THE ROW COULD NOT BE READ ────────────────────
@@ -817,7 +861,12 @@ export const REPEAT_WHEN_UNKNOWN: CampaignRepeat = { enabled: false, minHours: D
 
 /** The two columns → the object, for a row written by any version of this app. */
 export function readRepeat(c: Partial<Campaign> | null | undefined, floorHours: number = MIN_REPEAT_HOURS): CampaignRepeat {
-  const hours = Number(c?.repeat_min_hours ?? DEFAULT_CAMPAIGN_REPEAT.minHours);
+  /* THE ACCOUNT'S FLOOR, NOT THE PRODUCT'S CONSTANT. A row that has never
+     stored a window reads as whatever this account's floor says — so the owner
+     who set 2 (or 0) sees 2 (or 0), and an account that never said anything
+     still sees MIN_REPEAT_HOURS, which is what repeatFloorFrom() returns for
+     settings it cannot read. See DEFAULT_CAMPAIGN_REPEAT's note. */
+  const hours = Number(c?.repeat_min_hours ?? floorHours);
   return {
     /*
      * ONLY `true` IS ON, AND THAT IS NOT A CONTRADICTION OF THE OWNER'S
@@ -847,7 +896,7 @@ export function readRepeat(c: Partial<Campaign> | null | undefined, floorHours: 
     /* CLAMPED TO THE ACCOUNT'S FLOOR, not to the constant. A row storing 3
        on an account whose floor is 3 must read back as 3; clamping it to 12
        here would silently overrule the setting the owner just changed. */
-    minHours: Number.isFinite(hours) ? Math.min(MAX_REPEAT_HOURS, Math.max(floorHours, Math.round(hours))) : DEFAULT_CAMPAIGN_REPEAT.minHours,
+    minHours: Number.isFinite(hours) ? Math.min(MAX_REPEAT_HOURS, Math.max(floorHours, Math.round(hours))) : floorHours,
   };
 }
 

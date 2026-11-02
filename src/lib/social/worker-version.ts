@@ -97,7 +97,7 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.28.0';
+export const WORKER_VERSION = '4.29.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -145,6 +145,22 @@ export const WORKER_VERSION = '4.28.0';
  *     own queue every sixty seconds. Ship the database change without this and
  *     his PC goes on pre-refusing all fifty groups against an index that is no
  *     longer there — the website would be fixed and nothing would publish.
+ *
+ * AND ANSWERED OUT LOUD AGAIN, 4.28.0 → 4.29.0, AND IT IS YES — v34.
+ *
+ *   • campaign-schedule.ts: DEFAULT_CAMPAIGN_REPEAT.minHours was a hard-coded
+ *     20, and readRepeat() fell back to it for any campaign row with no stored
+ *     window. So every campaign the owner created was stamped with twenty
+ *     hours between two publications of the same post to one group, from a
+ *     constant no screen and no setting could reach — "לא הסרת את המגבלה של
+ *     ה-20 שעות! תמחק את זה כבר." The constant is MIN_REPEAT_HOURS now and
+ *     the fallback is the ACCOUNT'S floor, which may be zero.
+ *
+ *     THIS MUST REACH THE PC. rules.ts calls readRepeat(campaign,
+ *     repeatFloorFrom(limits)) on every single row it decides, and rules.ts
+ *     runs on the owner's machine for every group publication. An older copy
+ *     would go on reading twenty for a row with no stored window and defer
+ *     exactly the publications he has now told us three times to let through.
  *
  * AND ANSWERED AGAIN, TWICE, BOTH TIMES NO: the fingerprint moves, the number
  * does not.
@@ -381,4 +397,4 @@ export const WORKER_VERSION = '4.28.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = 'ed03f74295e94efa';
+export const WORKER_FINGERPRINT = 'f167c4545dd052c2';

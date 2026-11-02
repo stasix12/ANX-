@@ -143,7 +143,38 @@ const STEP_WRITE_REFUSED = 'step write refused';
 interface WorkerState {
   id: string;
   browserState: 'connected' | 'needs_auth' | 'disconnected' | 'unknown';
+  /**
+   * WHY THIS WORKER CANNOT WORK — and nothing else.
+   *
+   * The top of tick() reads this and returns: set, the worker publishes
+   * NOTHING, in every campaign, for every group, until a person clears it.
+   * That is the right answer for an expired Facebook session or a window
+   * storm, and it is the wrong answer for anything a human merely ought to
+   * know. See `notice` directly below, and the comment on it.
+   */
   attention: string;
+  /**
+   * SOMETHING HE SHOULD KNOW — which is NOT the same as a reason to stop.
+   *
+   * learnAccountScope() used to write its sentence into `attention`: "N
+   * Facebook accounts in the system, M groups belong to another one — they
+   * will not publish from this computer." Every word of that is true and
+   * none of it is a reason to stop publishing the groups that DO belong
+   * here. It closed the gate at the top of tick() all the same, so a warning
+   * about SOME groups silenced ALL of them.
+   *
+   * And it could not be cleared. "המשך סבב" blanks `attention` and sets the
+   * browser state back to 'unknown', so the next tick runs the login check —
+   * which calls recordAccount → learnAccountScope → sets it again. One tick
+   * later the worker was dead for the same reason, for ever. Three hours of
+   * "עדיין לא מפרסם כלום" with a queue of sixty-eight rows and a green
+   * Facebook session.
+   *
+   * So the two meanings are two fields now. This one is carried to the
+   * dashboard on the heartbeat and written to the activity log; it never
+   * reaches the gate.
+   */
+  notice: string;
   /**
    * THE ROWS THIS PROCESS IS HOLDING — a SET, because there can now be more
    * than one lane.
@@ -376,6 +407,7 @@ async function main(): Promise<void> {
     id: worker.id,
     browserState: session.hasProfile() ? 'unknown' : 'disconnected',
     attention: '',
+    notice: '',
     currentJobs: new Set<string>(),
     lanes: [],
     admission: new Admission(),
@@ -863,7 +895,10 @@ async function tick(state: WorkerState): Promise<void> {
     console.error('[worker] שחרור שורות תקועות נכשל:', safeError(err));
   }
 
-  if (control.paused) return idle(state, 'התורים מושהים בלוח הבקרה.');
+  /* Each of these three is a sentence that answers "למה לא מפרסם" — see
+     idle(). They are the only three ways the gate closes, and every one of
+     them now reaches the owner's screen instead of his terminal. */
+  if (control.paused) return idle(state, 'התורים מושהים בלוח הבקרה.', 'info');
   if (state.attention) return idle(state, `ממתין לטיפול ידני: ${state.attention}`);
   if (state.browserState === 'disconnected') return idle(state, 'אין חיבור לפייסבוק — לחצו "התחבר לפייסבוק" בלוח הבקרה.');
 
@@ -1361,11 +1396,51 @@ async function reviveFailedRows(state: WorkerState, limits: LimitsSettings, brow
   console.log(`[worker] \u21bb ${back} פרסומים שנכשלו חזרו לסוף התור${taken ? ` (${taken} קבוצות כבר תפוסות)` : ''}`);
 }
 
-function idle(state: WorkerState, reason: string): void {
-  if (!state.idleNoticeShown) {
-    console.log(`[worker] ${reason}`);
-    state.idleNoticeShown = true;
-  }
+/**
+ * THE WORKER IS HOLDING BACK, AND IT SAYS SO WHERE HE CAN READ IT.
+ *
+ * This wrote one line to `console.log` and nothing else — and that one line
+ * is the whole answer to the question this product gets asked more than any
+ * other: "עדיין לא מפרסם כלום". The sentence existed, in Hebrew, correct,
+ * naming the exact gate; it was printed into a black window on a machine in
+ * another country, once, latched so it never printed again.
+ *
+ * So an evening went like this: a queue of sixty-eight rows, a green
+ * Facebook light, five hours, eleven screenshots, and me asking him three
+ * times to go and photograph a terminal — for a sentence the machine had
+ * already written and thrown away. Twice before, the same shape: "Twice now
+ * the owner has had to film their own monitor to tell me something the
+ * machine was in a position to say itself" (the window-storm breaker).
+ *
+ * It goes to the activity log now, which is the one channel that is on every
+ * screen he uses: level 'warn' clears NotificationBell's own predicate
+ * (`NOTABLE.has(event) || level !== 'info'`), so it reaches the bell without
+ * the bell having to learn a new event name. This is the same fix, for the
+ * same reason, that 'comments_waiting' already carries a note about —
+ * "it is the sentence that explains a queue that is not moving, and at level
+ * 'info' alone the bell's own predicate dropped it."
+ *
+ * ONCE PER EPISODE, NOT ONCE PER TICK. `idleNoticeShown` already had exactly
+ * that meaning for the console line and is cleared in one place only — the
+ * tick that gets past these gates and reaches real work (see
+ * `state.idleNoticeShown = false` below the session check). A worker held for
+ * six hours writes one line; a worker that publishes and then stops again
+ * writes a second. A tick that merely finds nothing due never comes here at
+ * all, so this cannot become a heartbeat.
+ *
+ * A DELIBERATE PAUSE IS NOT A WARNING. He pressed that button himself and the
+ * dashboard already reads "המערכת מושהית" in its own right; an amber badge
+ * for it would be the feed crying wolf about the one state he caused. That
+ * call passes 'info' — still written, still the answer if he goes looking,
+ * and not a notification.
+ */
+async function idle(state: WorkerState, reason: string, level: 'info' | 'warn' = 'warn'): Promise<void> {
+  if (state.idleNoticeShown) return;
+  console.log(`[worker] ${reason}`);
+  /* Latched BEFORE the write, so a database error cannot turn one notice into
+     one per tick — the same discipline heartbeat() follows for the pulse. */
+  state.idleNoticeShown = true;
+  await logActivity(level, 'worker_holding', reason, { attention: state.attention, notice: state.notice });
 }
 
 /* -------------------------------------------------- the nightly check */
@@ -2972,12 +3047,74 @@ async function learnAccountScope(state: WorkerState, db: SupabaseClient, fbUserI
       .not('account_id', 'is', null)
       .neq('account_id', state.accountRow ?? NO_ACCOUNT);
     if (stranded.count) {
-      const says = `יש ${state.accountsTotal} חשבונות פייסבוק במערכת, ו-${stranded.count} קבוצות שייכות לחשבון אחר — הן לא יפורסמו מהמחשב הזה.`;
-      if (state.attention !== says) {
-        state.attention = says;
-        await logActivity('warn', 'account_scope_narrowed', says, { accounts: state.accountsTotal, stranded: stranded.count });
+      /*
+       * AND IT COUNTS WHAT THIS COMPUTER *CAN* PUBLISH, which is the half
+       * that was missing. "M groups belong to another account" does not tell
+       * him whether the answer is "most of them still work" or "this machine
+       * will publish nothing at all" — and those are completely different
+       * problems with completely different remedies. The second number makes
+       * them one glance apart.
+       */
+      const mineCount = await db
+        .from('social_targets')
+        .select('id', { count: 'exact', head: true })
+        .eq('channel', 'facebook_group')
+        .or(`account_id.eq.${state.accountRow ?? NO_ACCOUNT},account_id.is.null`);
+      const mine = mineCount.error ? null : (mineCount.count ?? 0);
+      const says =
+        mine === 0
+          ? `המחשב הזה מחובר לחשבון פייסבוק שאף קבוצה לא שייכת לו: כל ${stranded.count} הקבוצות שייכות לחשבון אחר מתוך ${state.accountsTotal} החשבונות במערכת. כל עוד זה המצב, לא יֵצא מכאן שום פרסום לקבוצות — עברו בחזרה לחשבון שהקבוצות שייכות לו (הצ'יפ בראש המסך), או שייכו את הקבוצות לחשבון הזה.`
+          : `יש ${state.accountsTotal} חשבונות פייסבוק במערכת, ו-${stranded.count} קבוצות שייכות לחשבון אחר — הן לא יפורסמו מהמחשב הזה.${
+              mine === null ? '' : ` ${mine} קבוצות כן שייכות לחשבון הזה וממשיכות לפרסם כרגיל.`
+            }`;
+      /*
+       * ─── A NOTICE, NOT THE GATE. THIS LINE IS THE FIX. ──────────────────
+       *
+       * It used to be `state.attention = says`, and `attention` is what the
+       * top of tick() returns on: so this sentence — which is about SOME
+       * groups, and is only ever true because somebody deliberately added a
+       * second Facebook account — stopped the worker publishing ANY group,
+       * in ANY campaign, and stopped every chore with it.
+       *
+       * Worse, it was unbreakable. The only things that blank `attention`
+       * are the login, check, logout, switch and resume commands, and all
+       * five of them run a login check on the way — recordAccount() →
+       * learnAccountScope() → here → set again. So "המשך סבב" worked for
+       * exactly one tick and the worker was dead again before the next
+       * screenshot could be taken. That is a permanent, un-clearable halt
+       * reachable by a supported action (adding an account, switching
+       * identity), and it reports itself as "ממתין לטיפול ידני" — a sentence
+       * that invites exactly the manual action that cannot help.
+       *
+       * The narrowing still announces itself; the comment above this block
+       * calls that "the one thing the step cannot ship without" and it is
+       * right. It announces itself on the card (heartbeat carries `notice`)
+       * and in the activity log, which is where it belonged: the queue
+       * narrowing is news, not a fault, and news must not be able to stop a
+       * business publishing.
+       *
+       * The GROUPS of the other account are still never touched from here —
+       * queueScope() does that, in account-scope.ts, by filtering the due
+       * query. That protection is untouched and is the one that matters: it
+       * is what stops this browser publishing another identity's group under
+       * the wrong name. Nothing about this change widens what may be
+       * published; it only stops a true sentence from being a brake.
+       */
+      if (state.notice !== says) {
+        state.notice = says;
+        await logActivity('warn', 'account_scope_narrowed', says, {
+          accounts: state.accountsTotal,
+          stranded: stranded.count,
+          mine,
+        });
       }
+    } else if (state.notice) {
+      /* The narrowing ended — the groups were re-assigned, or the identity
+         switched back. A notice nobody retracts is a notice nobody believes. */
+      state.notice = '';
     }
+  } else if (state.notice) {
+    state.notice = '';
   }
 
   if (state.accountsTotal === 1 && state.accountRow) {
@@ -4516,7 +4653,20 @@ async function heartbeat(state: WorkerState, status: 'online' | 'needs_attention
     .update({
       status,
       browser_state: browserOverride ?? state.browserState,
-      attention_message: state.attention,
+      /*
+       * THE BLOCK IF THERE IS ONE, OTHERWISE THE NEWS — and `status` is
+       * untouched either way, so a notice can never present itself as a
+       * fault. The dashboard reads the two apart exactly that way:
+       * BrowserStatusCard's `needsHuman` is (status === 'needs_attention' ||
+       * browser_state === 'needs_auth'), so a worker that is online and
+       * connected with a sentence here renders it as news, under its own
+       * heading, instead of under "Facebook דורש פעולה ידנית" — which would
+       * be a lie about a queue that is merely narrower than he thinks.
+       *
+       * No migration: this is the column that has carried the worker's one
+       * sentence to the dashboard since the beginning.
+       */
+      attention_message: state.attention || state.notice,
       current_job_id: [...state.currentJobs][0] ?? null,
       debug_mode: debugMode,
       last_seen_at: new Date().toISOString(),
@@ -4525,10 +4675,44 @@ async function heartbeat(state: WorkerState, status: 'online' | 'needs_attention
     .eq('id', state.id);
 }
 
+/**
+ * A settings row, or the factory defaults — AND IT SAYS WHICH.
+ *
+ * The defaults are not neutral. DEFAULT_BROWSER (src/lib/social/types.ts) is
+ * the first-run posture, and every value in it is deliberately hostile to
+ * publishing: `testMode: true` and `requireConfirmation: true`, which stop the
+ * worker before EVERY "פרסום" click and wait up to fifteen minutes for a
+ * person to approve it on screen; `maxPerCampaignPerDay: 8`;
+ * `groupMinGapMinutes: 20`. That is exactly right for somebody's first round
+ * and exactly wrong for a queue of two hundred.
+ *
+ * A MISSING ROW IS THEREFORE A STOPPED QUEUE, AND IT LOOKED LIKE NOTHING.
+ * This returned the fallback and said not a word, so "the settings row for
+ * 'browser' is absent" and "the system is broken" were the same screen: a
+ * worker that is online, a Facebook light that is green, rows that are due,
+ * and nothing coming out. The row can be absent for ordinary reasons — a
+ * tenant that never opened the settings screen, a key the dashboard has not
+ * written yet — and after v17 widened social_settings' primary key from
+ * (key) to (tenant_id, key) there is a second shape in the wild for a read
+ * that filters on `key` alone.
+ *
+ * Once per key per process. It is a fact about this machine's configuration,
+ * not an event, so repeating it on every tick would bury the feed it is
+ * trying to reach — and the ticks are five seconds apart.
+ */
+const defaultedSettings = new Set<string>();
+
 async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const db = await workerDb();
   const row = unwrap<{ value: Record<string, unknown> } | null>(await db.from('social_settings').select('value').eq('key', key).maybeSingle());
-  return row ? ({ ...fallback, ...row.value } as T) : fallback;
+  if (row) return { ...fallback, ...row.value } as T;
+  if (!defaultedSettings.has(key)) {
+    defaultedSettings.add(key);
+    const says = `אין שורת הגדרות "${key}" במסד הנתונים, ולכן התוכנה עובדת לפי ברירות המחדל של התקנה חדשה. עבור "browser" זה אומר מצב בדיקה ואישור ידני לפני כל פרסום — כלומר התור לא יזוז בלי אישור. פתחו את מסך ההגדרות ושמרו אותן פעם אחת.`;
+    console.warn(`[worker] ⚠ ${says}`);
+    await logActivity('warn', 'settings_defaulted', says, { key });
+  }
+  return fallback;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

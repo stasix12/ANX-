@@ -193,6 +193,40 @@ const IMAGE_UPLOAD_TIMEOUT = 3 * 60_000;
 const VIDEO_UPLOAD_TIMEOUT = 15 * 60_000;
 
 /**
+ * ─── HOW LONG TO WAIT FOR THE POST WINDOW TO CLOSE AFTER THE CLICK ───────
+ *
+ * "זה נתקע פשוט" — a terminal sitting on `verifying` with nothing after it,
+ * two hundred publications queued behind it and not one of them moving.
+ *
+ * It was not stuck. The detach wait below was given VIDEO_UPLOAD_TIMEOUT for
+ * a post carrying a video: FIFTEEN MINUTES, on a worker that publishes in one
+ * lane, with no line printed in between. Every video publication whose dialog
+ * did not close promptly froze the entire queue for a quarter of an hour.
+ *
+ * It was the wrong number, not a cautious one. Fifteen minutes is how long
+ * the UPLOAD may take, and the upload is already finished by the time this
+ * line runs — waitForUploads() does not return until Facebook's own progress
+ * bar has appeared and gone (see its note on why a preview is not proof). So
+ * the bytes are at Facebook; what is left is Facebook accepting the post and
+ * taking the window down, which is seconds. The two waits had been collapsed
+ * into one constant.
+ *
+ * Video keeps a longer allowance than a photo because Facebook sometimes
+ * holds the dialog open while it starts re-encoding, and nothing is lost by
+ * being patient for a minute. What IS lost by being patient for fifteen is
+ * every other group's turn.
+ *
+ * AND RUNNING OUT IS NOT AN ERROR ABOUT THE POST. The throw below carries
+ * afterSubmit = true, so the row is parked as "may already be published,
+ * check the group" and is never retried automatically. Shortening this makes
+ * the queue move; it cannot make a post go out twice.
+ */
+const SUBMIT_DETACH_MS = 90_000;
+const SUBMIT_DETACH_VIDEO_MS = 3 * 60_000;
+/** How often the wait says it is still alive, so a terminal never looks frozen. */
+const DETACH_TICK_MS = 20_000;
+
+/**
  * THE FLOOR THE BUDGET MAY NEVER CUT INTO — the checks that are about
  * CORRECTNESS rather than about evidence.
  *
@@ -370,10 +404,26 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
 
   // 7. Verify --------------------------------------------------------------
   await input.onStep('verifying');
-  try {
-    await dialog.waitFor({ state: 'detached', timeout: input.video ? VIDEO_UPLOAD_TIMEOUT : 90_000 });
-  } catch {
-    // Still open: either an error banner or a slow upload.
+  /*
+   * WAITED IN SLICES, AND IT SAYS SO WHILE IT WAITS. See SUBMIT_DETACH_MS.
+   * One `waitFor` with a long timeout is indistinguishable, from the outside,
+   * from a crashed process — which is exactly how it was reported.
+   */
+  const clickedAt = Date.now();
+  const detachBy = clickedAt + (input.video ? SUBMIT_DETACH_VIDEO_MS : SUBMIT_DETACH_MS);
+  let detached = false;
+  while (!detached && Date.now() < detachBy) {
+    const slice = Math.min(DETACH_TICK_MS, detachBy - Date.now());
+    detached = await dialog
+      .waitFor({ state: 'detached', timeout: slice })
+      .then(() => true)
+      .catch(() => false);
+    if (!detached && Date.now() < detachBy) {
+      console.log(`[worker]    ממתין לסגירת חלון הפוסט… ${Math.round((Date.now() - clickedAt) / 1000)} שניות`);
+    }
+  }
+  if (!detached) {
+    // Still open: either an error banner, or Facebook simply never took it down.
     if (await fb.failureText(page).isVisible({ timeout: 1000 }).catch(() => false)) {
       throw new PublishError('rejected', `Facebook דחה את הפוסט: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);
     }

@@ -275,6 +275,31 @@ export function BrowserStatusCard({
           </Notice>
         </div>
       )}
+      {/*
+        * THE SAME COLUMN, WHEN IT IS NOT A FAULT.
+        *
+        * social_workers.attention_message carries two different kinds of
+        * sentence now (see heartbeat() in worker/social-worker.ts): the reason
+        * the worker CANNOT work, and something the owner should know while it
+        * works fine. The first arrives with status 'needs_attention' or
+        * browser_state 'needs_auth' and is drawn above, under Facebook's name.
+        * The second arrives on a worker that is online and connected, and had
+        * nowhere to be drawn at all — so the one sentence explaining a queue
+        * that is narrower than he thinks was written every five seconds into a
+        * column no screen rendered.
+        *
+        * Not headed "Facebook דורש פעולה ידנית", because Facebook does not: the
+        * block above would have claimed an authentication problem over a
+        * message about which groups belong to which account, and sent him to
+        * press "בדוק שוב" on a login that was never broken.
+        */}
+      {!needsHuman && worker?.online && worker.attention_message && (
+        <div className="mt-3">
+          <Notice tone="warn">
+            <strong>שימו לב.</strong> {worker.attention_message}
+          </Notice>
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button busy={busy === 'login'} disabled={!worker?.online} onClick={() => send('login')}>
           התחבר לפייסבוק

@@ -4979,9 +4979,39 @@ const scenario: { step: string; line: string }[] = [];
    * the first: the queue matches nothing, the heartbeat says online, the
    * dashboard is green, and the rows pile up past due. That is the one
    * failure this owner cannot detect for himself.
+   *
+   * THIS CHECK USED TO READ `state.attention = says`, AND THAT PIN WAS THE
+   * BUG — which is worth writing down, because the assertion was right about
+   * the requirement and wrong about the mechanism, and it held the mechanism
+   * in place for weeks.
+   *
+   * `attention` is not "a sentence for the card". It is the field the top of
+   * tick() RETURNS on: set, the worker publishes nothing, in every campaign,
+   * for every group, and every chore stops too. So pinning this sentence
+   * there pinned a permanent halt — and an un-clearable one, because the five
+   * commands that blank `attention` all run a login check on the way, which
+   * calls recordAccount → learnAccountScope → sets it again one tick later.
+   * A supported action (adding an account, switching identity) could stop a
+   * business publishing for ever, reported as "ממתין לטיפול ידני" — inviting
+   * the one manual action that cannot help it.
+   *
+   * The requirement is unchanged and is asserted below in full: the narrowing
+   * reaches the activity log AND the dashboard card. What changed is that it
+   * travels as `notice`, which the heartbeat carries into the same column the
+   * card has always read, with `status` untouched. worker/test/hold-reason
+   * .test.ts holds the rest of this guarantee and proves eight mutations of
+   * it caught, the first of them being a revert to the line above.
    */
   assert.ok(/'account_scope_narrowed'/.test(localWorker), 'a worker taking no work writes it in the activity log');
-  assert.ok(/state\.attention = says;/.test(localWorker), 'and on the dashboard card, not only in a log nobody has open');
+  assert.ok(/state\.notice = says;/.test(localWorker), 'and on the dashboard card, not only in a log nobody has open');
+  assert.ok(
+    /attention_message: state\.attention \|\| state\.notice,/.test(localWorker),
+    'the card reads it off the heartbeat — a notice with nowhere to be drawn is the same as no notice',
+  );
+  assert.ok(
+    !/state\.attention = says;/.test(localWorker),
+    'and it is NOT the gate: news about some groups may never stop all of them',
+  );
   /* A read that merely came back empty must not un-learn a known account. */
   assert.ok(/if \(mine\.data\) state\.accountRow =/.test(localWorker), 'a transient empty read never blanks the account already identified');
   /* Adoption fills a gap and never moves a group, and stops the moment the

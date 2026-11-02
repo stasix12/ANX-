@@ -97,7 +97,56 @@
  * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
  * already has a red banner for on the settings screen.
  */
-export const WORKER_VERSION = '4.31.0';
+/*
+ * 4.31.0 → 4.32.0. DOES THIS HAVE TO REACH THE PC? YES, THREE TIMES OVER —
+ * every line of this change executes on his machine and nowhere else.
+ *
+ *   • social-worker.ts, learnAccountScope(): a warning wrote itself into
+ *     `state.attention`, and `attention` is what the top of tick() RETURNS
+ *     on. So "N Facebook accounts exist and M groups belong to another one"
+ *     — true, useful, and about SOME groups — stopped the worker publishing
+ *     ANY group, in ANY campaign, and stopped every chore with it.
+ *
+ *     AND IT COULD NOT BE CLEARED. The five commands that blank `attention`
+ *     (login, check, logout, switch, resume) each run a login check on the
+ *     way, which calls recordAccount → learnAccountScope → sets it again.
+ *     "המשך סבב" bought exactly one tick. That is a permanent halt reachable
+ *     by a supported action — adding an account, switching identity — that
+ *     reports itself as "ממתין לטיפול ידני", inviting the one manual action
+ *     which cannot help. `notice` is a second field now; the gate never
+ *     reads it. queueScope() is untouched, so nothing published widens.
+ *
+ *   • social-worker.ts, idle(): the three gates each carry a correct Hebrew
+ *     sentence naming exactly why nothing is coming out, and all three went
+ *     to `console.log` on a Windows box, once, latched. Nine messages in one
+ *     evening — "עדיין לא מפרסם כלום" — answered by me asking him to go and
+ *     photograph a terminal, for a sentence the machine had already written
+ *     and thrown away. It goes to the activity log now, at 'warn', which is
+ *     what clears NotificationBell's own predicate and puts it in the bell
+ *     on every screen he uses.
+ *
+ *   • facebook/composer.ts: the wait for Facebook's post window to close
+ *     after the click had been given VIDEO_UPLOAD_TIMEOUT — FIFTEEN MINUTES
+ *     — for any post carrying a video. He publishes video; the worker runs
+ *     one lane. So one lingering dialog froze the whole queue for a quarter
+ *     of an hour, printing nothing. The upload is already finished by then
+ *     (waitForUploads), so the number was wrong, not cautious: 90s for a
+ *     photo, 3min for video, waited in 20-second slices that say so.
+ *
+ *   • social-worker.ts, getSetting(): a missing settings row returned
+ *     DEFAULT_BROWSER without a word — and that default is `testMode: true`
+ *     plus `requireConfirmation: true`, which stop the worker before EVERY
+ *     "פרסום" click and wait fifteen minutes for an approval on screen, at
+ *     eight a day, with a twenty-minute surcharge between group posts. Right
+ *     for a first round; for a queue of two hundred it is a stopped queue
+ *     that looks like a broken one. It announces itself now, once per key.
+ *
+ * A PC LEFT ON 4.31.0 GETS NONE OF IT: the gate, the reporting and the
+ * composer all live inside worker.cjs, and the dashboard cannot reach past
+ * them. The only part that is not the PC is BrowserStatusCard.tsx, which
+ * draws the notice the heartbeat now carries — that ships with the website.
+ */
+export const WORKER_VERSION = '4.32.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -433,4 +482,25 @@ export const WORKER_VERSION = '4.31.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = '54a557efe154efed';
+/* 54a557efe154efed → 240f061bfcece107. Re-pinned for 4.32.0 above, where the
+   "does this reach the PC?" question is answered in full — and measured:
+
+     npm run build:app
+     grep -c SUBMIT_DETACH_VIDEO_MS dist/app/worker.cjs → 2
+     grep -c DETACH_TICK_MS         dist/app/worker.cjs → 2
+     grep -c worker_holding         dist/app/worker.cjs → 1
+     grep -c account_scope_narrowed dist/app/worker.cjs → 1
+     grep -c settings_defaulted     dist/app/worker.cjs → 1
+
+   All five are the PC's own code. BrowserStatusCard.tsx moves in the same
+   change and is NOT in the bundle (it is the website's card, drawing the
+   sentence the heartbeat carries), which is the fingerprint being wider than
+   the installer — the safe direction.
+
+   activity.ts and activity-text.ts move too, and ride along for the reason
+   they have ridden along before: the worker only WRITES the event names
+   ('worker_holding', 'settings_defaulted'); the two maps that decide how a
+   row is filed and what headline it gets are read by screens. A PC on 4.31.0
+   cannot write those names at all, which is why the version moves for the
+   writer and not for these. */
+export const WORKER_FINGERPRINT = '240f061bfcece107';

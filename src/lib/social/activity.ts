@@ -238,6 +238,32 @@ const KIND: Record<string, ActivityKind> = {
   discover_unread: 'system',
 
   account_scope_narrowed: 'system',
+  /*
+   * ─── THE QUEUE IS NOT MOVING, AND THIS IS THE LINE THAT SAYS WHY ───────
+   *
+   * 'failure' and not 'system', for the reason target_left and
+   * worker_window_storm both carry in their own notes: nothing is broken and
+   * nothing was lost, but a publication that was going to happen now is not,
+   * and this is the only line naming the cause. Filed as quiet system news it
+   * would sit under a heading nobody opens — which is precisely the failure
+   * this event was created to end. It was written to a terminal before, once,
+   * and cost an evening of screenshots.
+   *
+   * The one awkward member is the deliberate pause, which is also filed here
+   * while being nobody's fault. It is written at level 'info' for that reason
+   * (see idle() in worker/social-worker.ts), so it is not announced; and the
+   * dashboard says "המערכת מושהית" in its own right. A heading that is
+   * slightly wrong for the one state he caused himself is a much smaller
+   * error than a heading nobody opens for the two he did not.
+   */
+  worker_holding: 'failure',
+  /*
+   * A missing settings row, running on the first-run defaults — which are
+   * testMode + requireConfirmation, i.e. the worker stops before every click
+   * and waits for an approval. Same filing, same reason: the consequence is a
+   * queue that does not move, whatever the cause is called.
+   */
+  settings_defaulted: 'failure',
   /* The owner disconnected Facebook and every token was deleted. System news
      and not a failure: he asked for it, and it succeeded. */
   disconnected: 'system',

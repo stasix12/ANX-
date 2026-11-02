@@ -157,6 +157,10 @@ const TITLE: Record<string, string> = {
   comment_claim_failed: 'תגובה לא ננעלה לעיבוד',
   discover_unread: 'לא זוהתה חברות בקבוצה',
   account_scope_narrowed: 'הגישה צומצמה לחשבון אחד',
+  /* The headline is the QUESTION he is asking when he comes looking, so it is
+     worded as the answer to it. The message under it carries which gate. */
+  worker_holding: 'הפרסום מושהה — הסיבה בפנים',
+  settings_defaulted: 'ההגדרות לא נשמרו — התוכנה על ברירות מחדל',
   disconnected: 'החיבור לפייסבוק נותק',
   metrics_columns_missing: 'חסר עדכון במסד הנתונים',
   commands_payload_missing: 'חסר עדכון במסד הנתונים',

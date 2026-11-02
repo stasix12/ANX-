@@ -76,7 +76,28 @@
  * (v31) rather than by a loose read. All three live in the file the PC bundles,
  * so a PC left on 4.25.0 would keep deciding repeats by the old fallback.
  */
-export const WORKER_VERSION = '4.26.0';
+/*
+ * 4.26.0 → 4.27.0. DOES THIS HAVE TO REACH THE PC? YES, and the greps answer
+ * it rather than my opinion:
+ *
+ *   grep -c repeatFloorFrom    dist/app/worker.cjs → 3
+ *   grep -c readRepeat         dist/app/worker.cjs → 3
+ *   grep -c editRoundTime      dist/app/worker.cjs → 0   (the card only)
+ *   grep -c nextFreeRoundStart dist/app/worker.cjs → 0   (the card only)
+ *
+ * THE 12-HOUR PROTECTION IS THE ACCOUNT'S SETTING NOW, not a constant:
+ * "תוסיף אופציה בהגדרות לשחק עם זה". rules.ts reads it —
+ * readRepeat(campaign, repeatFloorFrom(limits)) — and rules.ts is the
+ * decision the PC makes before every click.
+ *
+ * A PC LEFT ON 4.26.0 WOULD MAKE THE SETTING DECORATIVE, and silently: it
+ * reads the same settings row, does not know the key, clamps the campaign
+ * back up to twelve and refuses the publication anyway. The owner would move
+ * the number, watch the card say his rounds are fine, and get nothing — which
+ * is exactly the failure mode the "לא לשלוח את אותו פוסט פעמיים" switch
+ * already has a red banner for on the settings screen.
+ */
+export const WORKER_VERSION = '4.27.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -342,4 +363,4 @@ export const WORKER_VERSION = '4.26.0';
    4.24.0 is not released yet, so the version does not move again — a bump per
    edit would publish an installer per commit and teach the updater to cry
    wolf. The PC change that earns 4.24.0 is the planner write above. */
-export const WORKER_FINGERPRINT = 'f3a2442bda9041ea';
+export const WORKER_FINGERPRINT = '27ef7d1dfb7515c9';

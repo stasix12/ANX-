@@ -329,7 +329,14 @@ async function main(): Promise<void> {
      */
     is(/let repeat: CampaignRepeat = REPEAT_WHEN_UNKNOWN;/.test(rules), 'the repeat must fall back to REPEAT_WHEN_UNKNOWN — "never twice" — before anything is read');
     is(!/= DEFAULT_CAMPAIGN_REPEAT;/.test(rules), "and never to the owner's default for a NEW campaign, which is ON and would make a failed read a permission");
-    is(/if \(campaign\) repeat = readRepeat\(campaign\);/.test(rules), 'and is only raised from a campaign row that was actually read');
+    is(
+      /if \(campaign\) repeat = readRepeat\(campaign, repeatFloorFrom\(limits\)\);/.test(rules),
+      'the repeat must be raised from the campaign row AND clamped to the ACCOUNT\u2019s floor — readRepeat raises anything below the floor up to it, so a hard-coded twelve here would read a campaign the owner deliberately set to three hours back as twelve and refuse it, leaving the Settings control governing nothing',
+    );
+    is(
+      !/readRepeat\(campaign\)[;,]/.test(rules),
+      'and never with the floor left out, which is the spelling that silently restores the old hard twelve',
+    );
     /*
      * AND ONLY FROM THE READ THAT NAMES THE COLUMNS. PostgREST refuses a whole
      * read when a named column is absent, so the full select succeeding is the
@@ -338,7 +345,7 @@ async function main(): Promise<void> {
      * would resolve its repeat from a row that cannot carry one.
      */
     const full = rules.indexOf("campaign = (full.data as");
-    const raise = rules.indexOf('if (campaign) repeat = readRepeat(campaign);');
+    const raise = rules.indexOf('if (campaign) repeat = readRepeat(campaign, repeatFloorFrom(limits));');
     const bare = rules.indexOf("campaign = (bare.data as");
     is(full > 0 && raise > 0 && bare > 0, 'the two reads and the raise must all still be there');
     is(raise > full, 'the repeat must be raised inside the branch where the full read succeeded');

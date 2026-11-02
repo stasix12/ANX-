@@ -268,6 +268,7 @@ export function LiveCampaignHero({
   rounds,
   onRoundsChange,
   spacing,
+  floorHours,
   scheduleBusy = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status'>;
@@ -340,6 +341,9 @@ export function LiveCampaignHero({
    * than newly wrong.
    */
   spacing?: AccountSpacing;
+  /** How close two publications of one post to one group may be, in hours —
+      the account's setting, defaulted by the panel when absent. */
+  floorHours?: number;
   /** While that write is in flight, so the controls cannot be raced. */
   scheduleBusy?: boolean;
 }) {
@@ -704,6 +708,9 @@ export function LiveCampaignHero({
             /* The second gate, so the panel can say which of the two is
                actually deciding — see the note on the prop. */
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
+            /* The account's own repeat floor, so the card judges the rounds
+               against the number in Settings rather than a constant. */
+            floorHours={floorHours}
             /* Neither control below can produce a publication until the round
                is launched once — a question about its whole life, not today's
                counter. See campaign.ts. */

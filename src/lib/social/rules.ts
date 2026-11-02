@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   REPEAT_WHEN_UNKNOWN,
+  repeatFloorFrom,
   isAllowedAt,
   nextAllowedAt,
   nextPublishAt,
@@ -379,7 +380,16 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
        * branch succeeding is itself the proof that both columns exist — which
        * is what makes reading them here, and only here, correct.
        */
-      if (campaign) repeat = readRepeat(campaign);
+      /*
+       * CLAMPED TO THE ACCOUNT'S FLOOR, NOT TO THE CONSTANT.
+       *
+       * readRepeat() raises anything below the floor up to it. With the floor
+       * hard-coded at twelve, a campaign the owner deliberately set to three
+       * hours — which the database now accepts, and which Settings now offers
+       * — would have been read back here as twelve and refused anyway. The
+       * setting would have existed on one screen and governed nothing.
+       */
+      if (campaign) repeat = readRepeat(campaign, repeatFloorFrom(limits));
     }
     if (campaign?.status === 'paused') {
       return { action: 'wait', until: new Date(now.getTime() + WAIT_MINUTES * 60_000).toISOString(), reason: 'הסבב מושהה.' };

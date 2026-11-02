@@ -466,13 +466,15 @@ export interface RoundsVerdict {
   reason: 'ok' | 'repeat-off' | 'window-too-long' | 'closer-than-the-floor';
 }
 
-export function roundsVsRepeat(starts: string[], repeat: CampaignRepeat): RoundsVerdict {
+export function roundsVsRepeat(starts: string[], repeat: CampaignRepeat, floorHours: number = MIN_REPEAT_HOURS): RoundsVerdict {
   const smallestGapHours = smallestRoundGapHours(starts);
   const neededHours = Math.floor(smallestGapHours);
   if (starts.length < 2) return { ok: true, smallestGapHours, neededHours, reason: 'ok' };
-  /* Below the floor nothing helps: the 12 is a database CHECK and a deliberate
-     refusal to publish one advertisement into one group twice in a morning. */
-  if (smallestGapHours < MIN_REPEAT_HOURS) {
+  /* Below the floor nothing a campaign can set will help — but the floor
+     itself is now the account's (repeatFloorFrom), not a constant, because
+     the owner asked to be able to move it. It defaults to MIN_REPEAT_HOURS,
+     so a caller that does not pass one behaves exactly as it always has. */
+  if (smallestGapHours < floorHours) {
     return { ok: false, smallestGapHours, neededHours, reason: 'closer-than-the-floor' };
   }
   if (!repeat.enabled) return { ok: false, smallestGapHours, neededHours, reason: 'repeat-off' };
@@ -551,12 +553,26 @@ export function roundsWindowFix(
   schedule: CampaignSchedule,
   rounds: CampaignRound[],
   repeat: CampaignRepeat,
-): { lowerTo: number | null; repeatOff: boolean } {
+  floorHours: number = MIN_REPEAT_HOURS,
+): { lowerTo: number | null; repeatOff: boolean; reason: RoundsVerdict['reason']; smallestGapHours: number; floorHours: number } {
   const starts = roundStarts(schedule, rounds);
-  const verdict = roundsVsRepeat(starts, repeat);
+  const verdict = roundsVsRepeat(starts, repeat, floorHours);
   return {
-    lowerTo: verdict.reason === 'window-too-long' ? Math.max(MIN_REPEAT_HOURS, verdict.neededHours) : null,
+    lowerTo: verdict.reason === 'window-too-long' ? Math.max(floorHours, verdict.neededHours) : null,
     repeatOff: starts.length > 1 && !repeat.enabled,
+    /*
+     * THE VERDICT TRAVELS WITH THE FIX, and it did not before.
+     *
+     * 'closer-than-the-floor' was the one answer nothing acted on: lowerTo
+     * stayed null, repeatOff stayed false, and the caller had no way to tell
+     * that apart from "everything is fine". So saving rounds three hours
+     * apart produced the flat success toast "יפרסם 3 סבבים בכל יום פרסום"
+     * over a layout that publishes two, at an hour he never chose, and
+     * silently drops the third. Measured, not supposed.
+     */
+    reason: verdict.reason,
+    smallestGapHours: verdict.smallestGapHours,
+    floorHours,
   };
 }
 
@@ -579,7 +595,16 @@ export function roundsWindowFix(
 export function roundsSavedMessage(
   name: string,
   armedExtraRounds: number,
-  result: { skippedNoDay: boolean; windowLoweredTo?: number | null; repeatOff?: boolean },
+  result: {
+    skippedNoDay: boolean;
+    windowLoweredTo?: number | null;
+    repeatOff?: boolean;
+    /* The verdict, so this can stop claiming success over a layout that
+       cannot publish — see the 'closer-than-the-floor' branch below. */
+    reason?: RoundsVerdict['reason'];
+    smallestGapHours?: number;
+    floorHours?: number;
+  },
 ): { text: string; tone: 'info' | 'success' } {
   if (result.skippedNoDay) {
     return { text: 'הסבבים נשמרו, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.', tone: 'info' };
@@ -588,6 +613,33 @@ export function roundsSavedMessage(
     return { text: `הסבבים הנוספים של "${name}" כובו — השעות נשמרו ואפשר להחזיר אותם בכל רגע`, tone: 'success' };
   }
   const total = armedExtraRounds + 1;
+
+  /*
+   * ─── THE ROUNDS ARE TOO CLOSE TOGETHER, AND THIS USED TO SAY "SAVED" ────
+   *
+   * THE WORST THING THIS FUNCTION HAS DONE. With rounds three hours apart it
+   * returned the flat success line "יפרסם 3 סבבים בכל יום פרסום" — and the
+   * measurement of what actually happens is: the engine defers round two from
+   * 06:30 to 23:30, that parked row is the single open row the group is
+   * allowed, so it blocks round three's occasion entirely, and the owner gets
+   * TWO publications a day at an hour he never chose instead of the three he
+   * was just promised. Nothing else on the screen corrected it.
+   *
+   * 'closer-than-the-floor' is also the only verdict no campaign setting can
+   * fix — lowering the window cannot go under the floor — so this sentence
+   * names the two things that CAN: move the rounds apart, or raise the floor
+   * in Settings, which is the control the owner asked for by name.
+   */
+  if (result.reason === 'closer-than-the-floor') {
+    const gap = result.smallestGapHours ?? 0;
+    const floor = result.floorHours ?? MIN_REPEAT_HOURS;
+    const gapText = Number.isInteger(gap) ? String(gap) : gap.toFixed(1);
+    return {
+      text: `השעות נשמרו, אבל הסבבים מרוחקים רק ${gapText} שעות זה מזה והמערכת לא מפרסמת את אותו פוסט לאותה קבוצה פעמיים בפחות מ-${floor} שעות — ולכן סבב נוסף יידחה ויפרסם בשעה אחרת, או לא יפרסם בכלל. הרחיקו את הסבבים, או שנו את ההגנה בהגדרות.`,
+      tone: 'info',
+    };
+  }
+
   /* OFF FIRST, because it is the one that stops a publication. A window that
      was lowered is a detail; a repeat that is off means the extra rounds reach
      only the groups the first round did not. */
@@ -606,7 +658,100 @@ export function roundsSavedMessage(
   return { text: `"${name}" יפרסם ${total} סבבים בכל יום פרסום`, tone: 'success' };
 }
 
+/**
+ * ─── THE FLOOR, AND IT IS NOW A DEFAULT RATHER THAN A LAW ─────────────────
+ *
+ * Twelve hours between two publications of one post to one group. This
+ * product's own judgement — "not twice in one working day" — and never a rule
+ * of Facebook's.
+ *
+ * "תוסיף אופציה בהגדרות לשחק עם זה." The owner asked for it to be adjustable
+ * after it silently cost him a layout he had chosen: rounds at 03:30, 06:30
+ * and 18:30 were saved and armed, and the engine answered by deferring round
+ * two to 23:30 and losing round three. So this is what an account gets when
+ * it has never said otherwise, and LimitsSettings.repeatFloorHours overrides
+ * it. Every function below takes the floor as a parameter defaulting to this,
+ * so a caller that does not know about the setting behaves exactly as before.
+ *
+ * ABSOLUTE_MIN_REPEAT_HOURS is the one that is not negotiable, and it is one
+ * hour rather than zero for a dull reason: repeat_min_hours is stored in whole
+ * hours, so one is simply the smallest thing the column can say.
+ */
+/**
+ * ─── THE HOUR A NEW ROUND SHOULD OPEN AT ──────────────────────────────────
+ *
+ * "+ הוסף סבב נוסף" used to propose `plusHours(lastStart, 12)` and nothing
+ * else, and from a 03:30 campaign the SECOND press proposes 03:30 again:
+ * 03:30 + 12 = 15:30, 15:30 + 12 = 27:30, which wraps to 03:30 — round one's
+ * own hour. roundStarts() de-duplicates, so the card drew a row the engine
+ * never received and the column carried a round that did not exist. A button
+ * that adds nothing while looking like it worked is the decorative control
+ * the owner forbade.
+ *
+ * So the hour is SEARCHED for rather than computed: walk the half-hours of
+ * the clock and take the first one at least `floorHours` from every occasion
+ * already there, counting around midnight. Returns null when the day is full,
+ * which is the honest answer and is what hides the button.
+ *
+ * Half-hours because that is the grid the rest of this card offers (TIME_CHOICES)
+ * and the owner's own reference draws.
+ */
+export function nextFreeRoundStart(starts: string[], floorHours: number = MIN_REPEAT_HOURS): string | null {
+  const taken = starts.map((s) => toMinutes(s) ?? 0);
+  const floor = Math.max(1, Math.round(floorHours * 60));
+  let best: { at: string; worst: number } | null = null;
+  for (let m = 0; m < 1440; m += 30) {
+    if (taken.includes(m)) continue;
+    /* The closest existing occasion, around the clock. */
+    let worst = 24 * 60;
+    for (const t of taken) {
+      const d = Math.abs(m - t);
+      worst = Math.min(worst, Math.min(d, 1440 - d));
+    }
+    if (worst < floor) continue;
+    /* The roomiest free slot, so three rounds land spread out rather than
+       bunched at the first hour that happens to clear the floor. */
+    if (!best || worst > best.worst) best = { at: `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`, worst };
+  }
+  return best?.at ?? null;
+}
+
+/**
+ * ─── MOVING ONE ROUND TO ANOTHER HOUR ─────────────────────────────────────
+ *
+ * A pure decision, because the panel that calls it may hold no state and
+ * because a check written inline there cannot be driven by a test: wrapping
+ * the guard in `if (false && …)` left every string a source regex looks for
+ * exactly where it was, and the suite stayed green over a card that had lost
+ * the protection.
+ *
+ * 'taken' IS THE ONE THAT COST A ROUND. Measured on the shipped card: with
+ * rounds at 03:30, 06:30 and 18:30, setting the third to 06:30 produced two
+ * identical entries — and roundsColumn() and roundStarts() both de-duplicate,
+ * so the round disappeared from the screen AND from the database with nothing
+ * said. While the duplicate existed, one edit rewrote BOTH entries, because
+ * rounds are matched by their time.
+ */
+export type RoundEdit =
+  | { ok: true; rounds: CampaignRound[] }
+  | { ok: false; reason: 'invalid' | 'unchanged' | 'taken' };
+
+export function editRoundTime(rounds: CampaignRound[], starts: string[], from: string, to: string): RoundEdit {
+  if (!/^\d{2}:\d{2}$/.test(to)) return { ok: false, reason: 'invalid' };
+  if (to === from) return { ok: false, reason: 'unchanged' };
+  if (starts.includes(to)) return { ok: false, reason: 'taken' };
+  return { ok: true, rounds: rounds.map((r) => (r.at === from ? { ...r, at: to } : r)) };
+}
+
 export const MIN_REPEAT_HOURS = 12;
+export const ABSOLUTE_MIN_REPEAT_HOURS = 1;
+
+/** The account's floor, clamped into what the column and the engine accept. */
+export function repeatFloorFrom(limits?: { repeatFloorHours?: number } | null): number {
+  const raw = Number(limits?.repeatFloorHours);
+  if (!Number.isFinite(raw)) return MIN_REPEAT_HOURS;
+  return Math.min(MAX_REPEAT_HOURS, Math.max(ABSOLUTE_MIN_REPEAT_HOURS, Math.round(raw)));
+}
 export const MAX_REPEAT_HOURS = 168;
 
 /**
@@ -644,7 +789,7 @@ export const DEFAULT_CAMPAIGN_REPEAT: CampaignRepeat = { enabled: true, minHours
 export const REPEAT_WHEN_UNKNOWN: CampaignRepeat = { enabled: false, minHours: DEFAULT_CAMPAIGN_REPEAT.minHours };
 
 /** The two columns → the object, for a row written by any version of this app. */
-export function readRepeat(c: Partial<Campaign> | null | undefined): CampaignRepeat {
+export function readRepeat(c: Partial<Campaign> | null | undefined, floorHours: number = MIN_REPEAT_HOURS): CampaignRepeat {
   const hours = Number(c?.repeat_min_hours ?? DEFAULT_CAMPAIGN_REPEAT.minHours);
   return {
     /*
@@ -672,13 +817,16 @@ export function readRepeat(c: Partial<Campaign> | null | undefined): CampaignRep
      * ones became). This function only reports what the row actually says.
      */
     enabled: c?.repeat_enabled === true,
-    minHours: Number.isFinite(hours) ? Math.min(MAX_REPEAT_HOURS, Math.max(MIN_REPEAT_HOURS, Math.round(hours))) : DEFAULT_CAMPAIGN_REPEAT.minHours,
+    /* CLAMPED TO THE ACCOUNT'S FLOOR, not to the constant. A row storing 3
+       on an account whose floor is 3 must read back as 3; clamping it to 12
+       here would silently overrule the setting the owner just changed. */
+    minHours: Number.isFinite(hours) ? Math.min(MAX_REPEAT_HOURS, Math.max(floorHours, Math.round(hours))) : DEFAULT_CAMPAIGN_REPEAT.minHours,
   };
 }
 
 /** The object → the two columns, for saveCampaign(). */
-export function repeatColumns(r: CampaignRepeat): { repeat_enabled: boolean; repeat_min_hours: number } {
-  return { repeat_enabled: r.enabled, repeat_min_hours: Math.min(MAX_REPEAT_HOURS, Math.max(MIN_REPEAT_HOURS, Math.round(r.minHours))) };
+export function repeatColumns(r: CampaignRepeat, floorHours: number = MIN_REPEAT_HOURS): { repeat_enabled: boolean; repeat_min_hours: number } {
+  return { repeat_enabled: r.enabled, repeat_min_hours: Math.min(MAX_REPEAT_HOURS, Math.max(floorHours, Math.round(r.minHours))) };
 }
 
 /**

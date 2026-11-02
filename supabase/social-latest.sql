@@ -1983,3 +1983,33 @@ begin
   select count(*) into off_n from public.social_campaigns where not repeat_enabled;
   raise notice 'v31: חזרה יומית פעילה ב-% קמפיינים. % נשארו כבויים (מושהים או שנעצרו).', n, off_n;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- v32 — ההגנה של 12 שעות הופכת לברירת מחדל שאפשר לשנות. See
+-- supabase/social-schema-v32.sql for the whole story. The short version:
+-- "תוסיף אופציה בהגדרות לשחק עם זה" — the owner, 02.11.2026. The CHECK v25
+-- added refused anything under 12 hours; that twelve was this product's own
+-- judgement, not a rule of Facebook's. The database floor becomes 1 (the
+-- smallest a whole-hours column can say) and the app still defaults to 12
+-- for any account that has not changed it in Settings.
+--
+-- NO EXISTING CAMPAIGN CHANGES. Every stored value is already 12 or more.
+-- To undo: supabase/social-schema-v32-rollback.sql, which REFUSES while any
+-- campaign is under 12 rather than quietly raising it.
+-- ---------------------------------------------------------------------------
+alter table public.social_campaigns
+  drop constraint if exists social_campaigns_repeat_min_hours_ck;
+
+alter table public.social_campaigns
+  add constraint social_campaigns_repeat_min_hours_ck
+  check (repeat_min_hours between 1 and 168);
+
+comment on column public.social_campaigns.repeat_min_hours is
+  'המינימום שחייב לעבור בין פרסום של הפוסט הזה לקבוצה לבין הפרסום הבא לאותה קבוצה, בשעות. 1–168. ברירת המחדל של החשבון היא 12 ונקבעת בהגדרות (repeatFloorHours).';
+
+do $$
+declare below int;
+begin
+  select count(*) into below from public.social_campaigns where repeat_min_hours < 12;
+  raise notice 'v32: הרצפה במסד ירדה ל-שעה אחת. % קמפיינים נמצאים כרגע מתחת ל-12 שעות (ברירת המחדל של האפליקציה עדיין 12).', below;
+end $$;

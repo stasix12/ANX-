@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
-import { MIN_GAP_SECONDS, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
+import { MIN_GAP_SECONDS, MIN_REPEAT_HOURS, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey, renderPostText } from './compose';
@@ -1189,7 +1189,19 @@ export async function saveCampaignRounds(
   campaign: Pick<Campaign, 'id' | 'name'> & Partial<Pick<Campaign, 'repeat_enabled' | 'repeat_min_hours'>>,
   rounds: CampaignRound[],
   schedule: CampaignSchedule,
-): Promise<{ rearmed: number; skippedNoDay: boolean; windowLoweredTo: number | null; repeatOff: boolean }> {
+  /* The account's repeat floor. Defaulted so an older caller behaves exactly
+     as it did, and passed by the screens so the save judges the layout
+     against the same number the card drew its verdict from. */
+  floorHours: number = MIN_REPEAT_HOURS,
+): Promise<{
+  rearmed: number;
+  skippedNoDay: boolean;
+  windowLoweredTo: number | null;
+  repeatOff: boolean;
+  reason: RoundsVerdict['reason'];
+  smallestGapHours: number;
+  floorHours: number;
+}> {
   const written = roundsColumn(rounds);
 
   /*
@@ -1220,7 +1232,8 @@ export async function saveCampaignRounds(
    * and the card draws the switch beside the sentence.
    */
   const repeat = readRepeat(campaign);
-  const { lowerTo, repeatOff } = roundsWindowFix(schedule, written.schedule_rounds, repeat);
+  const fix = roundsWindowFix(schedule, written.schedule_rounds, repeat, floorHours);
+  const { lowerTo, repeatOff } = fix;
 
   const patch: Record<string, unknown> = { ...written };
   if (lowerTo !== null) patch.repeat_min_hours = lowerTo;
@@ -1257,7 +1270,15 @@ export async function saveCampaignRounds(
   const synced = await syncWeeklyHours(campaign.id, schedule, written.schedule_rounds);
   /* Reported, not fixed: more than one round over the same groups needs the
      daily repeat armed, and that switch is his. */
-  return { ...synced, windowLoweredTo, repeatOff };
+  /*
+   * THE VERDICT GOES BACK TO THE SCREEN, and it did not before.
+   *
+   * 'closer-than-the-floor' was invisible to the caller — lowerTo null,
+   * repeatOff false, indistinguishable from success — so the toast said
+   * "יפרסם 3 סבבים בכל יום פרסום" over a layout measured to publish two, one
+   * of them at an hour the owner never chose.
+   */
+  return { ...synced, windowLoweredTo, repeatOff, reason: fix.reason, smallestGapHours: fix.smallestGapHours, floorHours: fix.floorHours };
 }
 
 export async function setCampaignRepeat(

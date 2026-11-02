@@ -27,11 +27,16 @@ import { zonedHM } from '../../src/lib/social/time';
 import {
   DEFAULT_CAMPAIGN_SCHEDULE,
   MAX_EXTRA_ROUNDS,
+  ABSOLUTE_MIN_REPEAT_HOURS,
+  MAX_REPEAT_HOURS,
   MIN_REPEAT_HOURS,
   readRounds,
   roundStarts,
   roundsColumn,
   roundsSavedMessage,
+  editRoundTime,
+  nextFreeRoundStart,
+  repeatFloorFrom,
   roundsVsRepeat,
   roundsWindowFix,
   smallestRoundGapHours,
@@ -456,6 +461,169 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
       !/rounds=\{/.test(list),
       'the campaigns LIST card is still not passed rounds (measured: 1008px against a 910px ceiling) — the moment it is, the assertion above stops being pre-emptive and the height ceiling in campaign-card.test.ts has to be re-measured',
     );
+  }
+}
+
+/* ── 9. THE FLOOR IS THE ACCOUNT'S NOW, AND THE TOAST STOPPED LYING ────── */
+/*
+ * "את ההגנה של החזרה יומית של אותו הפוסט לאותו קבוצה יש הגנה של 12 שעות
+ *  תוסיף אופציה בהגדרות לשחק עם זה." — the owner, 02.11.2026.
+ *
+ * WHAT HIS SCREEN WAS ACTUALLY DOING, measured by driving the real engine
+ * before any of this was written: rounds at 03:30, 06:30 and 18:30 were saved
+ * and armed into social_schedules.weekly; the planner created rows; and
+ * evaluateQueueItem DEFERRED round two from 06:30 to 23:30 — at which point
+ * that parked row is the single open row the group is allowed, so it blocked
+ * round three's occasion entirely. Three rounds asked for, two delivered, one
+ * of them at an hour he never chose. And the toast said
+ * "יפרסם 3 סבבים בכל יום פרסום".
+ */
+{
+  const r = (at: string, enabled = true) => ({ at, enabled });
+
+  /* ── the floor comes off the account, and is absent by default ───────── */
+  {
+    eq(repeatFloorFrom(null), MIN_REPEAT_HOURS, 'an account that never set a floor keeps the twelve it has always had');
+    eq(repeatFloorFrom({}), MIN_REPEAT_HOURS, 'and so does one whose settings row has no such key');
+    eq(repeatFloorFrom({ repeatFloorHours: 3 }), 3, 'the owner’s own number is what governs');
+    eq(repeatFloorFrom({ repeatFloorHours: 0 }), ABSOLUTE_MIN_REPEAT_HOURS, 'zero is raised to the one hour the column can actually store');
+    eq(repeatFloorFrom({ repeatFloorHours: -9 }), ABSOLUTE_MIN_REPEAT_HOURS, 'and so is a negative');
+    eq(repeatFloorFrom({ repeatFloorHours: 9999 }), MAX_REPEAT_HOURS, 'and a year is the ceiling');
+    eq(repeatFloorFrom({ repeatFloorHours: 'x' } as never), MIN_REPEAT_HOURS, 'nonsense falls back to the default rather than to zero');
+    is(ABSOLUTE_MIN_REPEAT_HOURS >= 1, 'the absolute floor must never be under an hour — repeat_min_hours is whole hours');
+  }
+
+  /* ── HIS OWN CASE, before and after ──────────────────────────────────── */
+  {
+    const his = [r('06:30'), r('18:30')];
+    const before = roundsVsRepeat(roundStarts(sched('03:30'), his), repeat(true, 12));
+    eq(before.reason, 'closer-than-the-floor', 'on the default floor his three rounds cannot publish — which is what his screen was doing');
+    eq(before.smallestGapHours, 3, 'and the closest two are three hours apart');
+
+    /* The setting he asked for, doing the one thing he asked it to do. */
+    const after = roundsVsRepeat(roundStarts(sched('03:30'), his), repeat(true, 3), repeatFloorFrom({ repeatFloorHours: 3 }));
+    eq(after.reason, 'ok', 'with the account floor at three hours the same layout is allowed');
+    is(after.ok, 'and the card says so');
+  }
+
+  /* ── AND THE WINDOW STILL HAS TO COME DOWN WITH IT ───────────────────── */
+  {
+    /* Floor 3, window still the default 20: the gap is legal now, so this is
+       'window-too-long' rather than 'closer-than-the-floor', and the fix
+       lowers the window to the gap — to THREE, not to twelve. */
+    const fix = roundsWindowFix(sched('03:30'), [r('06:30')], repeat(true, 20), 3);
+    eq(fix.reason, 'window-too-long', 'a legal gap against a long window is the case the app can fix by itself');
+    eq(fix.lowerTo, 3, 'and it lowers to the gap, not to the old constant — clamping to 12 here would overrule the setting he just changed');
+    eq(roundsVsRepeat(roundStarts(sched('03:30'), [r('06:30')]), repeat(true, fix.lowerTo as number), 3).reason, 'ok', 'and the result publishes');
+  }
+
+  /* ── THE VERDICT TRAVELS, WHICH IS WHAT STOPS THE TOAST LYING ────────── */
+  {
+    const fix = roundsWindowFix(sched('03:30'), [r('06:30'), r('18:30')], repeat(true, 12));
+    eq(fix.reason, 'closer-than-the-floor', 'the fix must carry the verdict, or the caller cannot tell this apart from success');
+    eq(fix.lowerTo, null, 'there is nothing to lower — no window under the floor is legal');
+    eq(fix.repeatOff, false, 'and the repeat is on, so that is not the reason either');
+    eq(fix.floorHours, MIN_REPEAT_HOURS, 'and it reports the floor it judged against, so the sentence can name the number');
+
+    const said = roundsSavedMessage('ניקוי ספות', 2, { skippedNoDay: false, ...fix });
+    is(!/יפרסם 3 סבבים בכל יום פרסום$/.test(said.text), 'THE TOAST MUST NOT CLAIM THREE ROUNDS WILL PUBLISH — measured, his layout delivers two, one of them at 23:30');
+    is(/3 שעות/.test(said.text), 'it must name the gap he actually set');
+    is(/12 שעות/.test(said.text), 'and the protection that refuses it');
+    is(/בהגדרות/.test(said.text), 'and point at the setting that can change it, which is the control he asked for by name');
+    eq(said.tone, 'info', 'and it is not a success — a round that will not publish never is');
+  }
+
+  /* ── "+ הוסף סבב נוסף" MUST NOT PROPOSE AN HOUR THAT IS ALREADY TAKEN ── */
+  {
+    /*
+     * THE SECOND PRESS USED TO PROPOSE ROUND ONE'S OWN HOUR. From 03:30 it
+     * offered 15:30, then 15:30 + 12 = 27:30 which wraps to 03:30 — and
+     * roundStarts() de-duplicates it away, so the card drew a row the engine
+     * never got. A button that adds nothing while looking like it worked.
+     */
+    const first = nextFreeRoundStart(['03:30']) as string;
+    is(first !== null, 'a day with one round must have somewhere to put a second');
+    is(smallestRoundGapHours(['03:30', first]) >= MIN_REPEAT_HOURS, `the proposed ${first} must clear the floor against 03:30`);
+
+    const second = nextFreeRoundStart(['03:30', first]);
+    eq(second, null, 'on a twelve-hour floor a day holds exactly two rounds, so the third press must be offered nothing rather than a duplicate');
+
+    /* And with the floor lowered, the day has room — each proposal clearing
+       the floor against EVERY existing round, not just the last one. */
+    let starts = ['03:30'];
+    for (let n = 0; n < 3; n += 1) {
+      const at = nextFreeRoundStart(starts, 3);
+      is(at !== null, `a three-hour floor must still have room after ${starts.length} rounds`);
+      is(!starts.includes(at as string), `${at} is already taken — this is the duplicate the old arithmetic produced`);
+      starts = [...starts, at as string];
+      is(
+        smallestRoundGapHours(starts) >= 3,
+        `after adding ${at} the closest pair is ${smallestRoundGapHours(starts)}h, under the three-hour floor: ${starts.join(', ')}`,
+      );
+    }
+  }
+
+  /* ── AND THE PANEL ASKS FOR A FREE HOUR RATHER THAN COMPUTING ONE ────── */
+  {
+    const panel = readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+    is(/nextFreeRoundStart\(starts, floorHours\)/.test(panel), 'the add button must ask for a free hour, against the account floor');
+    is(!/plusHours\(/.test(panel), 'and must not carry the wrapping arithmetic that proposed an hour already in use');
+    is(/rounds\.length < MAX_EXTRA_ROUNDS && nextFreeRoundStart\(/.test(panel), 'and must disappear when the day has no room left, rather than offering a press that does nothing');
+    /* THE SAVE BUTTON HE ASKED FOR, and the write that is no longer per-keystroke. */
+    is(/type="submit"/.test(panel), 'the round menu must carry a submit button — "אין כפתור שאני שומר את ההגדרות"');
+    is(/שמור את השעה/.test(panel), 'and it must say so in his own words');
+    is(/onSubmit=\{\(e\) => \{/.test(panel), 'and the write must happen on submit');
+    is(
+      !/<input\s+type="time"[\s\S]{0,400}onChange=/.test(panel),
+      'the time field must NOT write on change any more — it used to arm an intermediate hour like 01:30 into weekly while he was still typing 18:30',
+    );
+    is(/new FormData\(e\.currentTarget\)/.test(panel), 'and it reads its own field rather than holding a draft in state, which this panel is not allowed to do');
+    /*
+     * AND IT REFUSES AN HOUR ANOTHER ROUND ALREADY HOLDS.
+     *
+     * Measured before this guard existed: with rounds at 03:30, 06:30 and
+     * 18:30, setting the third to 06:30 produced two identical entries, and
+     * both roundsColumn() and roundStarts() de-duplicate — so the round
+     * vanished from the card AND from the database with nothing said. Worse,
+     * while the duplicate existed, one edit rewrote BOTH entries, because the
+     * handler matches rounds by their time.
+     */
+    is(/editRoundTime\(rounds, starts, at,/.test(panel), 'the save must ask editRoundTime() rather than deciding inline — an inline guard here cannot be driven, and the first one was hollow under an `if (false && …)` mutation');
+    is(/reportValidity\(\)/.test(panel), 'and must say so with the browser\u2019s own validation, which needs no state');
+  }
+
+  /* ── AND THE DECISION ITSELF, DRIVEN ─────────────────────────────────── */
+  {
+    const list = [r('06:30'), r('18:30')];
+    const starts3 = ['03:30', '06:30', '18:30'];
+
+    const moved = editRoundTime(list, starts3, '18:30', '21:00');
+    is(moved.ok, 'a free hour must be accepted');
+    eq(moved.ok && moved.rounds.map((x) => x.at), ['06:30', '21:00'], 'and only the round being edited moves');
+
+    /*
+     * THE ONE THAT COST A ROUND. Measured on the shipped card: setting round
+     * three to 06:30 produced two identical entries, roundsColumn() and
+     * roundStarts() both de-duplicated, and the round vanished from the
+     * screen and the database with nothing said.
+     */
+    const clash = editRoundTime(list, starts3, '18:30', '06:30');
+    is(!clash.ok, 'an hour another round already holds must be REFUSED, not de-duplicated into one round');
+    eq(!clash.ok && clash.reason, 'taken', 'and the reason must say which, so the screen can tell him');
+    /* Proof of what it prevents: the write the old handler would have made. */
+    eq(
+      roundsColumn(list.map((x) => (x.at === '18:30' ? { ...x, at: '06:30' } : x))).schedule_rounds.length,
+      1,
+      'the old behaviour collapsed two rounds into one on the way to the database — which is the loss this refusal exists to stop',
+    );
+
+    eq(!editRoundTime(list, starts3, '18:30', '18:30').ok && 'unchanged', 'unchanged', 'saving the same hour writes nothing');
+    eq(!editRoundTime(list, starts3, '18:30', '').ok && 'invalid', 'invalid', 'and a half-typed value is refused rather than armed');
+    /* The window's own hour counts as taken: it is in `starts` and is not an
+       extra round, so moving onto it would hide a round behind the window. */
+    eq(!editRoundTime(list, starts3, '18:30', '03:30').ok && 'taken', 'taken', "the window's own hour is taken too — a round hidden behind it is a round that never runs");
   }
 }
 

@@ -103,6 +103,7 @@ export function CampaignCard({
   rounds,
   onRoundsChange,
   spacing,
+  floorHours,
   scheduleBusy = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status' | 'created_at'>;
@@ -200,6 +201,9 @@ export function CampaignCard({
    * than newly wrong.
    */
   spacing?: AccountSpacing;
+  /** How close two publications of one post to one group may be, in hours —
+      the account's setting, defaulted by the panel when absent. */
+  floorHours?: number;
   /** The campaign's row is being written; the panel's controls hold still. */
   scheduleBusy?: boolean;
 }) {
@@ -667,6 +671,9 @@ export function CampaignCard({
             campaignName={campaign.name}
             disabled={scheduleBusy}
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
+            /* The account's own repeat floor, so the card judges the rounds
+               against the number in Settings rather than a constant. */
+            floorHours={floorHours}
             /* Neither control in the panel can produce a publication until
                the round is launched once — and "once" is a question about the
                round's whole life, not about today's counter. See campaign.ts. */

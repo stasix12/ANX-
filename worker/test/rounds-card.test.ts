@@ -235,7 +235,13 @@ async function main(): Promise<void> {
           await page.waitForTimeout(30);
           const seenMenu = await menu.evaluate((d) => {
             const card = d.closest('[data-rounds-card]')!.getBoundingClientRect();
-            const box = d.querySelector('div')!.getBoundingClientRect();
+            /* The menu's own box. It is a <form> now, not a <div>: the time
+               field writes on submit rather than on every keystroke, which is
+               the save button the owner asked for. `:scope > *` takes whatever
+               element the menu is, so this probe does not break again the next
+               time it changes. */
+            const panel = [...d.children].find((e) => e.tagName !== 'SUMMARY') as HTMLElement;
+            const box = panel.getBoundingClientRect();
             return {
               open: d.hasAttribute('open'),
               inside: box.left >= card.left - 1 && box.right <= card.right + 1,

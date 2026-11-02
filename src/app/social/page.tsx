@@ -57,7 +57,7 @@ import {
   type QueueRow,
   type TimelineRow, saveCampaignRounds,} from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
-import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
+import { readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, repeatFloorFrom, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
@@ -1320,7 +1320,7 @@ export default function SocialDashboard() {
     async (campaign: Campaign, next: CampaignRound[]) => {
       try {
         const written = roundsColumn(next);
-        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign));
+        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign), repeatFloorFrom(data?.limits));
         /* ONE BUILDER FOR BOTH SCREENS — see roundsSavedMessage(). It carries
            the window the app lowered and the switch it would not press. */
         const said = roundsSavedMessage(campaign.name, written.schedule_rounds.filter((r) => r.enabled).length, result);
@@ -1861,6 +1861,10 @@ export default function SocialDashboard() {
                   }}
                   repeat={readRepeat(run.campaign)}
                   onRepeatChange={(next) => void changeRepeat(run.campaign, next)}
+                  /* The account's repeat floor, so the rounds card judges
+                     against the number in Settings — "תוסיף אופציה בהגדרות
+                     לשחק עם זה" — rather than the old hard-coded twelve. */
+                  floorHours={repeatFloorFrom(data.limits)}
                   rounds={readRounds(run.campaign)}
                   onRoundsChange={(next) => void changeRounds(run.campaign, next)}
                   scheduleBusy={Boolean(scheduleBusy[run.campaign.id])}

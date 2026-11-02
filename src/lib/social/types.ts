@@ -615,6 +615,31 @@ export interface LimitsSettings {
   minGapSeconds?: number;
   dedupeDays: number;
   /**
+   * ─── HOW CLOSE TWO PUBLICATIONS OF ONE POST TO ONE GROUP MAY BE ─────────
+   *
+   * "את ההגנה של החזרה יומית של אותו הפוסט לאותו קבוצה יש הגנה של 12 שעות
+   *  תוסיף אופציה בהגדרות לשחק עם זה" — the owner, 02.11.2026.
+   *
+   * MIN_REPEAT_HOURS has been a hard 12 in three clamps and a database CHECK.
+   * It is this product's own judgement, not a rule of Facebook's, and it was
+   * blocking a layout he had deliberately chosen: rounds at 03:30, 06:30 and
+   * 18:30, three hours apart, which the engine answered by deferring round two
+   * to 23:30 and losing round three entirely.
+   *
+   * WHAT IT COSTS TO LOWER IT, said here because the type is where the next
+   * reader arrives: republishing the same post to the same group is the single
+   * clearest spam signal a group admin or Meta looks for, and group publishing
+   * runs through the owner's OWN browser session, so the account at risk is
+   * his. Twelve hours was chosen as "not twice in one working day". Below that
+   * is his call to make about his own account, and this is him making it.
+   *
+   * OPTIONAL AND ABSENT BY DEFAULT, like minGapSeconds beside it:
+   * social_settings is jsonb with no schema, so an account that has never
+   * touched this has no key and keeps the hard 12. Nothing changes until
+   * something writes it.
+   */
+  repeatFloorHours?: number;
+  /**
    * Whether one post may reach the same group only once, ever.
    *
    * rules.ts has always enforced this with no time window at all: a post that

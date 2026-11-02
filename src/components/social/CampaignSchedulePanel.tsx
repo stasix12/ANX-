@@ -11,7 +11,8 @@ import {
   scheduleSummary,
   MAX_EXTRA_ROUNDS,
   MIN_REPEAT_HOURS,
-  plusHours,
+  editRoundTime,
+  nextFreeRoundStart,
   roundStarts,
   roundsVsRepeat,
   type CampaignRepeat,
@@ -148,6 +149,7 @@ export function CampaignSchedulePanel({
   onRoundsChange,
   roundProgress,
   accountFloorSeconds,
+  floorHours = MIN_REPEAT_HOURS,
   neverLaunched = false,
   showHeader = true,
   readout,
@@ -234,6 +236,14 @@ export function CampaignSchedulePanel({
    */
   accountFloorSeconds?: number;
   /**
+   * HOW CLOSE TWO PUBLICATIONS OF ONE POST TO ONE GROUP MAY BE, in hours.
+   *
+   * The account's setting — "תוסיף אופציה בהגדרות לשחק עם זה" — rather than
+   * the constant it used to be. Defaulted to MIN_REPEAT_HOURS so every caller
+   * that does not know about the setting draws exactly what it drew before.
+   */
+  floorHours?: number;
+  /**
    * THIS ROUND HAS NEVER GONE OUT, so neither control below can produce a
    * publication yet — and that is the one fact this panel was missing.
    *
@@ -259,7 +269,7 @@ export function CampaignSchedulePanel({
    * product has repeatedly got itself into trouble.
    */
   const starts = roundStarts(schedule, rounds ?? []);
-  const verdict = repeat ? roundsVsRepeat(starts, repeat) : null;
+  const verdict = repeat ? roundsVsRepeat(starts, repeat, floorHours) : null;
   /* ON when any extra round is armed. There is no separate "rounds enabled"
      column and there must not be one: the switch IS the rounds, and a card
      that could be on with nothing armed would be a promise about nothing. */
@@ -570,12 +580,16 @@ export function CampaignSchedulePanel({
                    * round rather than deleting it, so switching it back on
                    * does not cost the owner the times he chose —
                    * "אסור למחוק מידע". ON with nothing in the list adds the
-                   * first extra round at the only spacing the engine will
-                   * ever allow for the same groups: twelve hours.
+                   * first extra round at the roomiest hour the account's own
+                   * floor allows, which used to be a flat +12 and could land
+                   * on top of the window's own hour once the clock wrapped.
                    */
                   if (!on) return onRoundsChange(rounds.map((r) => ({ ...r, enabled: false })));
                   if (rounds.length) return onRoundsChange(rounds.map((r) => ({ ...r, enabled: true })));
-                  onRoundsChange([{ at: plusHours(schedule.start, MIN_REPEAT_HOURS), enabled: true }]);
+                  {
+                    const at = nextFreeRoundStart(starts, floorHours);
+                    if (at) onRoundsChange([{ at, enabled: true }]);
+                  }
                 }}
                 label={`סבבים ביום עבור ${campaignName}`}
               />
@@ -691,7 +705,33 @@ export function CampaignSchedulePanel({
                             * fine. Both measured suites now force every
                             * details OPEN before they measure anything.
                             */}
-                          <div className="mt-1 w-44 max-w-full rounded-xl border border-ink-600 bg-ink-900 p-1.5 shadow-lg">
+                          <form
+                            /* THE WRITE HAPPENS ON SUBMIT AND NOWHERE ELSE —
+                               see the note on the save button below. */
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const field = e.currentTarget.elements.namedItem('at') as HTMLInputElement | null;
+                              /* THE DECISION IS editRoundTime's, not this
+                                 handler's — a guard written inline here
+                                 cannot be driven by a test, and the one that
+                                 was proved hollow under an `if (false && …)`
+                                 mutation while the suite stayed green. */
+                              const edit = editRoundTime(rounds, starts, at, String(new FormData(e.currentTarget).get('at') ?? ''));
+                              if (edit.ok) {
+                                field?.setCustomValidity('');
+                                onRoundsChange(edit.rounds);
+                                return;
+                              }
+                              /* 'taken' is the one that used to cost him a
+                                 round, silently. The browser's own validation
+                                 says so, which needs no state. */
+                              if (edit.reason === 'taken') {
+                                field?.setCustomValidity('כבר יש סבב בשעה הזאת. בחרו שעה אחרת.');
+                                field?.reportValidity();
+                              }
+                            }}
+                            className="mt-1 w-44 max-w-full rounded-xl border border-ink-600 bg-ink-900 p-1.5 shadow-lg"
+                          >
                             <label className="block text-[10px] font-bold leading-4 text-mist-300">
                               שעת התחלה
                               {/*
@@ -704,17 +744,54 @@ export function CampaignSchedulePanel({
                                */}
                               <input
                                 type="time"
+                                name="at"
                                 aria-label={`שעת ההתחלה של סבב ${i + 1}`}
                                 defaultValue={at}
                                 disabled={disabled}
-                                onChange={(e) => {
-                                  const next = e.currentTarget.value;
-                                  if (!/^\d{2}:\d{2}$/.test(next)) return;
-                                  onRoundsChange(rounds.map((r) => (r.at === at ? { ...r, at: next } : r)));
-                                }}
                                 className="mt-0.5 h-10 w-full rounded-lg border border-ink-600 bg-ink-800 px-2 text-[12px] font-bold text-mist-100"
                               />
                             </label>
+                            {/*
+                              ─── A SAVE BUTTON, WHICH THE OWNER ASKED FOR ──
+                              *
+                              * "בהוספת סבב אין כפתור שאני שומר את ההגדרות."
+                              *
+                              * HE WAS RIGHT, AND IT WAS WORSE THAN MISSING.
+                              * The field above used to write on every
+                              * onChange with no debounce, so typing 18:30
+                              * saved 01:30 on the way and ARMED it into
+                              * social_schedules.weekly — a real hour the
+                              * engine would have published at. And because
+                              * each row is keyed by its own start time, that
+                              * write remounted the row and shut this menu
+                              * while he was still typing. The scheduling
+                              * block directly above has been debounced for
+                              * exactly this reason since the day it was
+                              * written; this had nothing.
+                              *
+                              * UNCONTROLLED, AND THAT IS NOT A STYLE CHOICE.
+                              * campaign-schedule.test.ts asserts this panel
+                              * holds no React state of its own — "what is on
+                              * screen is what the page has, which is what the
+                              * database has" — so a draft cannot live here.
+                              * A form reads its own field on submit: no
+                              * state, the button he asked for, and exactly
+                              * one write. (That guard greps the raw source
+                              * for the hook's name, so this paragraph must
+                              * not spell it — a comment quoting the thing a
+                              * guard forbids has fooled five checks in this
+                              * repo already, and here it would fail CLOSED,
+                              * which is the safe direction and still a
+                              * pointless red run.)
+                              */}
+                            <button
+                              type="submit"
+                              disabled={disabled}
+                              className="mt-1 flex h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-brand-400 px-2 text-[11px] font-extrabold text-white disabled:pointer-events-none disabled:bg-ink-700"
+                            >
+                              <ClockIcon aria-hidden className="h-3.5 w-3.5" />
+                              שמור את השעה
+                            </button>
                             <button
                               type="button"
                               disabled={disabled}
@@ -733,7 +810,7 @@ export function CampaignSchedulePanel({
                               <TrashIcon aria-hidden className="h-3.5 w-3.5" />
                               מחק את הסבב
                             </button>
-                          </div>
+                          </form>
                         </details>
                       ) : (
                         <span className="grid h-10 w-10 shrink-0 place-items-center text-[9px] font-bold leading-3 text-mist-400">
@@ -764,11 +841,26 @@ export function CampaignSchedulePanel({
                 })}
               </ul>
 
-              {rounds.length < MAX_EXTRA_ROUNDS && (
+              {/*
+                THE BUTTON IS GONE WHEN THERE IS NOWHERE TO PUT A ROUND, and
+                the hour it proposes is SEARCHED for rather than computed.
+
+                It used to offer plusHours(lastStart, 12) unconditionally. From
+                a 03:30 campaign the second press proposes 03:30 again — 15:30
+                plus twelve wraps past midnight onto round one's own hour —
+                and roundStarts() de-duplicates it away: the card drew a row,
+                the column gained a round, and the engine received nothing.
+                Pressing a button and having nothing happen is exactly the
+                decorative control the owner forbade.
+              */}
+              {rounds.length < MAX_EXTRA_ROUNDS && nextFreeRoundStart(starts, floorHours) && (
                 <button
                   type="button"
                   disabled={disabled}
-                  onClick={() => onRoundsChange([...rounds, { at: plusHours(starts[starts.length - 1], MIN_REPEAT_HOURS), enabled: true }])}
+                  onClick={() => {
+                    const at = nextFreeRoundStart(starts, floorHours);
+                    if (at) onRoundsChange([...rounds, { at, enabled: true }]);
+                  }}
                   className="mt-1 flex h-10 w-full items-center justify-center gap-1 rounded-xl border border-dashed border-ink-600 text-[11px] font-extrabold text-brand-400"
                 >
                   <PlusIcon aria-hidden className="h-3.5 w-3.5" />

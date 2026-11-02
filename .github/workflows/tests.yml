@@ -52,7 +52,7 @@ jobs:
         # still booting, and the three suites below skip — which is the one
         # failure mode this whole file exists to prevent.
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d anxtest"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -99,10 +99,46 @@ jobs:
       - name: typecheck
         run: npx tsc --noEmit
 
+      # ─── THE BUILD IS NOT OPTIONAL HERE ───────────────────────────────────
+      #
+      # Eight files in this suite measure the real rendered product in a
+      # browser, and they read the compiled stylesheet out of
+      # .next/static/chunks. Without a build seven of them SKIP and
+      # discovery-row refuses to run at all — which is exactly how the first
+      # run of this workflow died, at test 26, with
+      #
+      #   discovery row measurement CANNOT RUN - no built CSS.
+      #
+      # What those eight measure is measured nowhere else in the suite: that
+      # every control a thumb has to hit is 40px in both directions, that no
+      # screen pushes the page sideways at 360px, that a Cyrillic group name
+      # still resolves left-to-right, that a campaign card has not silently
+      # grown back the height the owner asked to be rid of. Adding the build
+      # does not weaken this run, it is the only way those assertions ever
+      # execute here.
+      #
+      # It needs no secrets. Every Supabase client in this app is deliberately
+      # `null` until its environment variables exist, so the storefront builds
+      # before the admin panel's project does; measured here at 27 seconds on
+      # a cold tree.
+      - name: build, so the measured tests have real CSS to measure
+        run: npm run build
+
       # tee, so the skip check below reads what actually happened rather than
       # trusting the exit code — which is 0 on a skip, by design.
+      #
+      # AND pipefail, WHICH THE FIRST RUN OF THIS FILE TAUGHT ME ABOUT MY OWN
+      # CODE. In bash, `a | tee b` exits with tee's status, not a's. The suite
+      # crashed at test 26 and this step reported SUCCESS in nine seconds. The
+      # only reason that run went red at all is the skip check below, which
+      # noticed the three proofs were missing from a log that stopped early —
+      # i.e. the guard caught the gate's own bug on its first outing. Without
+      # pipefail this step is decoration: every failure after the first
+      # printing test would be reported as a pass.
       - name: the suite
-        run: npm run test:social 2>&1 | tee suite.log
+        run: |
+          set -o pipefail
+          npm run test:social 2>&1 | tee suite.log
 
       # ─── AND THE PROOFS MUST NOT HAVE SKIPPED ─────────────────────────────
       #

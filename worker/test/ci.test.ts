@@ -37,6 +37,19 @@ const is = (cond: boolean, what: string) => {
 const src = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 const ci = src('../../.github/workflows/tests.yml');
 
+/*
+ * A SENTENCE QUOTING A COMMAND IS NOT THE COMMAND. Three guards in this suite
+ * have already been defeated by exactly that — a comment two hundred lines
+ * above a call made `indexOf` report the call in the wrong order — so every
+ * ORDERING or PRESENCE assertion below reads the YAML with its comment lines
+ * removed. This file is heavily commented on purpose, which makes it the most
+ * exposed of the lot.
+ */
+const code = ci
+  .split('\n')
+  .filter((line) => !/^\s*#/.test(line))
+  .join('\n');
+
 /* ─────────────── 1. it runs, on the branch the product ships from ──────── */
 {
   is(/name: tests/.test(ci), 'the test workflow is gone');
@@ -50,9 +63,17 @@ const ci = src('../../.github/workflows/tests.yml');
 {
   is(/image: postgres:16/.test(ci), 'the three real-Postgres suites need a server, and without one they skip');
   is(/ANX_TEST_DATABASE_URL: postgresql:\/\//.test(ci), 'and the one variable the harness reads must be set');
+  /*
+   * The probe names its user and its database. Bare `pg_isready` connects as
+   * the invoking OS user, which inside the postgres image is root — a role the
+   * server has never heard of — so the first run of this workflow printed
+   * `FATAL: role "root" does not exist` ten times before going healthy. It did
+   * answer, because the error proves the socket is up, but a health check that
+   * logs a FATAL on every beat is a health check nobody will read twice.
+   */
   is(
-    /--health-cmd pg_isready/.test(ci),
-    'the container must be health-checked: tests that start against a still-booting server skip, which is the failure this workflow exists to prevent',
+    /--health-cmd "pg_isready -U postgres -d anxtest"/.test(code),
+    'the container must be health-checked as a role that exists, against the database the tests use: tests that start against a still-booting server skip, which is the failure this workflow exists to prevent',
   );
 }
 
@@ -67,7 +88,53 @@ const ci = src('../../.github/workflows/tests.yml');
   is(/neither ran nor skipped/.test(ci), 'a proof missing from the chain entirely must fail too, not pass by producing no line at all');
 }
 
-/* ───── 4. the names agree across the two files, or the grep is hollow ──── */
+/* ──── 4. THE GATE'S OWN BUGS — its first run found two of them ────────── */
+{
+  /*
+   * `a | tee b` EXITS WITH TEE'S STATUS, NOT a's.
+   *
+   * On the first run of this workflow the suite crashed at test 26 and this
+   * step reported SUCCESS in nine seconds. The only reason that run went red
+   * at all is the skip check in section 3, which noticed three proofs missing
+   * from a log that had stopped early — the guard caught the gate's own bug on
+   * its first outing, which is the best argument for the guard there is.
+   *
+   * Without pipefail, every failure after the first printing suite is reported
+   * as a pass: 3,000 assertions behind a green tick.
+   */
+  const suite = code.slice(code.indexOf('- name: the suite'), code.indexOf('- name: the real-Postgres proofs'));
+  is(suite.length > 40, 'the step that runs the suite is gone, or the step after it was renamed');
+  is(/set -o pipefail/.test(suite), "the suite's exit code is swallowed by tee again — a crashed suite reports success in nine seconds");
+  is(
+    suite.indexOf('set -o pipefail') < suite.indexOf('npm run test:social'),
+    'pipefail must be set before the pipe it governs, in the same shell',
+  );
+
+  /*
+   * AND THE EIGHT MEASURED SUITES NEED A BUILD.
+   *
+   * campaign-card, comment-timeline, crm-shell, dashboard-hero, discovery-row,
+   * quick-comments, schedule-panel and swiper each load the compiled
+   * stylesheet out of .next/static/chunks and measure the real rendered
+   * product in a browser. Without a build seven of them skip and discovery-row
+   * throws — which is how the first run of this file died. Everything they
+   * assert (a 40px thumb target, no sideways scroll at 360px, a card that has
+   * not regrown the height the owner asked to lose) is asserted nowhere else.
+   */
+  const build = code.indexOf('run: npm run build');
+  is(build > 0, 'nothing builds the app, so seven measured suites skip and discovery-row refuses to run — that is how the first run of this workflow died');
+  is(build < code.indexOf('npm run test:social'), 'the build must come before the suite, or the measured tests still find no CSS to measure');
+
+  /*
+   * And the escape hatch must stay unused HERE. ALLOW_UNMEASURED=1 exists for
+   * a person who deliberately wants the rest of the suite without waiting for
+   * a build; typing it into the gate would turn the one suite that refuses to
+   * skip into one that skips quietly, on every push, for ever.
+   */
+  is(!/ALLOW_UNMEASURED/.test(ci), 'the gate must not switch the measurement off — a skipped check is not a check');
+}
+
+/* ───── 5. the names agree across the two files, or the grep is hollow ──── */
 {
   const nameOf = (rel: string) => /^const NAME = '([^']+)';/m.exec(src(rel))?.[1] ?? '';
   const proofs = [

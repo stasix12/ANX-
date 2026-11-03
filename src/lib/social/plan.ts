@@ -676,11 +676,27 @@ function takenByAnotherPlanner(error: { code?: string; message?: string } | null
  * not how long the engine makes them wait.
  */
 async function targetsAlreadyWaiting(db: SupabaseClient, postId: string): Promise<Set<string>> {
-  const { data } = await db
+  const { data, error } = await db
     .from('social_queue')
     .select('target_id')
     .eq('post_id', postId)
     .in('status', OPEN_STATUSES);
+  /*
+   * FAIL CLOSED, for the same reason stoppedCampaigns() does.
+   *
+   * The error was discarded and `data ?? []` turned a dropped read into an
+   * empty set — "nothing is waiting for this post" — which is the one answer
+   * that re-queues every group on every pass. And the index that used to
+   * catch the duplicate underneath is gone: social-latest.sql drops both
+   * social_queue_one_open_per_target_idx and ..._post_idx, so
+   * takenByAnotherPlanner() can never fire on a migrated database. This read
+   * is the only per-post brake left.
+   *
+   * Throwing is safe here: planQueue's caller catches, writes plan_failed and
+   * retries on the next pass, which is a minute of nothing rather than a
+   * round written twice.
+   */
+  if (error) throw new Error(error.message);
   return new Set((data ?? []).map((r) => r.target_id as string));
 }
 

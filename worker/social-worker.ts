@@ -215,6 +215,9 @@ interface WorkerState {
   lastUpdateCheckAt?: number;
   /** Same, for the round-comment columns. */
   commentNoticeShown?: boolean;
+  /** Latched so a refused claim says itself once, not every poll. See the
+      claim in runJobInner(). */
+  claimNoticeShown?: boolean;
   /** When the "comments are waiting for a free window" line was last written. */
   commentStarvedNoticeAt?: number;
   /** The last reason the update check could not run — said once, not per tick. */
@@ -442,26 +445,51 @@ async function main(): Promise<void> {
    * parks, with the same word and the same sentence.
    */
   const MAYBE_LIVE_STEPS = ['publishing', 'verifying', 'submitted'];
-  await db
+  /*
+   * BOTH WRITES BELOW ARE CHECKED, and they were not.
+   *
+   * This runs on the first requests the process makes, before the pulse has
+   * started — exactly when a token refresh or a policy problem is most likely
+   * and least visible. A refused write here leaves rows on 'publishing' with
+   * a maybe-live step: absent from "דורשים אתכם", and holding their group out
+   * of every round the planner builds, because one open row per target is
+   * what the planner reads. The only backstop is sweepStranded(), which the
+   * note above says this sweep exists to pre-empt, and which waits fifteen
+   * minutes from claimed_at before it looks.
+   */
+  const { error: parkErr } = await db
     .from('social_queue')
     .update({ status: 'needs_attention', step: 'submitted', error: 'ה-worker הופסק באמצע העבודה. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".' })
     .eq('worker_id', state.id)
     .in('status', ['publishing', 'awaiting_confirmation'])
     .in('step', MAYBE_LIVE_STEPS);
+  if (parkErr) {
+    console.error('[worker] ✗ שחזור אחרי הפעלה מחדש נכשל:', parkErr.message);
+    await logActivity('error', 'write_failed', `שחזור אחרי הפעלה מחדש נכשל — פרסומים שאולי עלו לא הועברו ל"דורשים אתכם": ${parkErr.message}`, {
+      what: 'startup_park',
+      detail: parkErr.message,
+    });
+  }
   /*
    * And everything that never reached the click goes straight back into the
    * queue. Nothing was posted, so there is nothing for a person to check:
    * parking it would be asking the owner to confirm an event that did not
    * happen, and the group stays locked while he does.
    */
-  const { data: requeued } = await db
+  const { data: requeued, error: requeueErr } = await db
     .from('social_queue')
     .update({ status: 'scheduled', step: 'pending', scheduled_at: new Date().toISOString(), error: '' })
     .eq('worker_id', state.id)
     .in('status', ['publishing', 'awaiting_confirmation'])
     .not('step', 'in', `(${MAYBE_LIVE_STEPS.join(',')})`)
     .select('id');
-  if (requeued?.length) {
+  if (requeueErr) {
+    console.error('[worker] ✗ החזרת פרסומים לתור אחרי הפעלה מחדש נכשלה:', requeueErr.message);
+    await logActivity('error', 'write_failed', `שחזור אחרי הפעלה מחדש נכשל — פרסומים שלא הגיעו ללחיצה לא הוחזרו לתור: ${requeueErr.message}`, {
+      what: 'startup_requeue',
+      detail: requeueErr.message,
+    });
+  } else if (requeued?.length) {
     console.log(`[worker] ↻ ${requeued.length} פרסומים שלא הגיעו ללחיצה הוחזרו לתור אחרי ההפעלה מחדש.`);
   }
 
@@ -2375,13 +2403,55 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
   const db = await workerDb();
   const now = new Date().toISOString();
   const attempts = item.attempts + 1;
-  const { data: claimed } = await db
+  /*
+   * ─── THE CLAIM, AND THE TWO OPPOSITE FACTS IT USED TO COLLAPSE ──────────
+   *
+   * This kept only `data`, so `if (!claimed?.length) return;` answered two
+   * completely different questions the same way:
+   *
+   *   · another lane won the compare-and-set — ordinary, expected, silent
+   *   · THE DATABASE REFUSED THIS WRITE — row-level security, an expired
+   *     token, a migration that was never run, a dropped connection
+   *
+   * supabase-js resolves rather than throws on the second, so the worker
+   * returned and polled again. And nothing else in the product would have
+   * said a word: the due SELECT above throws on its own error, but a SELECT
+   * stays legal under an UPDATE-only policy denial; idleNoticeShown is
+   * cleared before the lanes start, so idle()'s `worker_holding` cannot fire;
+   * the lane's catch needs a throw and nothing throws. A queue that cannot be
+   * claimed at all looks exactly like a queue with nothing due — which is the
+   * sentence this product has had to explain more times tonight than any
+   * other.
+   *
+   * The comment chore already had this fix, sixty lines away, with the note
+   * "SAID, not swallowed — discarding it left the terminal silent, the log
+   * silent". This is the same line on the publishing path, and it was the one
+   * that mattered.
+   */
+  const { data: claimed, error: claimErr } = await db
     .from('social_queue')
     .update({ status: 'publishing', step: 'opening', step_at: now, claimed_at: now, worker_id: state.id, attempts })
     .eq('id', item.id)
     .eq('status', 'scheduled')
     .select('id');
+  if (claimErr) {
+    /* ONCE PER EPISODE, like every other notice in this file: the tick runs
+       every few seconds and a permission fault does not clear by itself, so
+       an unlatched line here buries its own feed. Cleared on the first claim
+       that works, below. */
+    if (!state.claimNoticeShown) {
+      state.claimNoticeShown = true;
+      state.notice = 'לא הצלחנו לתפוס פרסומים מהתור. התור נראה עומד אף שהמחשב פועל.';
+      console.error('[worker] ✗ תפיסת פרסום נכשלה:', claimErr.message);
+      await logActivity('error', 'claim_failed', 'לא הצלחנו לתפוס פרסום מהתור — התור עומד אף שהמחשב פועל.', {
+        queueId: item.id,
+        detail: claimErr.message,
+      });
+    }
+    return;
+  }
   if (!claimed?.length) return;
+  state.claimNoticeShown = false;
   state.currentJobs.add(item.id);
   /* Both of these are in the same unguarded window as the rules below — see
      the note there. heartbeat() calls workerDb(), which throws when a token
@@ -3017,10 +3087,29 @@ async function waitForConfirmation(queueId: string, page: Page): Promise<'confir
    * without anybody being asked. The owner is told "המערכת תעצור ותחכה לאישור
    * שלכם", so this must be a question every single time.
    */
-  await db
+  /*
+   * AND THE PARK ITSELF IS CHECKED, because a refused write here does not
+   * fail — it CANCELS.
+   *
+   * This was a bare await. If the write did not land the row stayed
+   * 'publishing', the poll below read a status that is not
+   * 'awaiting_confirmation', and returned 'declined' — which the caller
+   * turns into a terminal `skipped` reading "הפרסום בוטל לפני הלחיצה
+   * הסופית". Nobody cancelled anything. The owner is told he stopped a
+   * publication he never saw, and the row is dead: 'skipped' is terminal.
+   *
+   * Handing it back instead costs five minutes and cannot double-post — the
+   * Post button has not been touched.
+   */
+  const { data: parked, error: parkErr } = await db
     .from('social_queue')
     .update({ status: 'awaiting_confirmation', confirmed_at: null, screenshot_path: screenshot, step: 'ready_to_publish', step_at: new Date().toISOString() })
-    .eq('id', queueId);
+    .eq('id', queueId)
+    .select('id');
+  if (parkErr || !parked?.length) {
+    console.error('[worker] ✗ לא הצלחנו לבקש אישור על המסך:', parkErr?.message ?? 'השורה לא עודכנה');
+    return 'stopped';
+  }
   console.log('[worker]    ממתין לאישור סופי בלוח הבקרה…');
   const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -4307,7 +4396,7 @@ async function runCampaignComments(state: WorkerState, headless: boolean, roomMs
      * the latest one for THIS campaign is all three fixes at once and needs no
      * state of its own.
      */
-    const { data: previous } = await db
+    const { data: previous, error: previousErr } = await db
       .from('social_queue')
       .select('comment_at')
       .eq('campaign_id', row.campaign_id)
@@ -4316,6 +4405,15 @@ async function runCampaignComments(state: WorkerState, headless: boolean, roomMs
       .order('comment_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+    /*
+     * A SPACING READ THAT FAILED MEANS WAIT, NOT GO — the same rule
+     * spacingGate() states in those words for publications, three thousand
+     * lines above, and the same reason: `since` would be undefined, the gap
+     * below is guarded on `since`, and the whole rate limit would simply not
+     * apply. One dropped request and this account comments as fast as the
+     * chore can loop, which is how an account gets flagged.
+     */
+    if (previousErr) continue;
     const gapSec = Math.max(5, Math.min(600, Number(campaign?.comment_gap_seconds) || COMMENT_GAP_DEFAULT_SEC));
     const waitMs = Math.round(gapSec * 1000 * (1 + jitterFor(row.id)));
     const since = (previous as { comment_at?: string } | null)?.comment_at;

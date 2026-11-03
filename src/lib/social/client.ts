@@ -4752,13 +4752,29 @@ export async function addTargetsToQueue(targetIds: string[], opts: { campaignId?
    * change here. Publishing is not at risk either way: the workers run one job
    * at a time and rules.ts refuses a post that has already gone to a target.
    */
-  const { data: openRows } = await db()
+  /*
+   * AND A FAILED READ IS NOT "NO GROUP IS SPOKEN FOR".
+   *
+   * The error was discarded, so one dropped request turned this into an empty
+   * list and every group looked free. That is not a cosmetic miscount: the
+   * `already` set built above comes from liveQueuePlan, which reads only
+   * AUTOMATIC_WAITING_STATUSES ('scheduled', 'paused'). A group whose row is
+   * 'publishing', 'needs_attention', 'manual_pending' or
+   * 'awaiting_confirmation' is caught HERE and nowhere else — so a failure
+   * here adds a second row for a group that already has one in flight.
+   *
+   * Refusing is the right direction: the owner can press again, and the sheet
+   * reports its count from the insert's own .select('id'), so nothing
+   * downstream invents a number from this.
+   */
+  const openRes = await db()
     .from('social_queue')
     .select('target_id')
     .eq('post_id', plan.postId)
     .in('target_id', wanted)
     .in('status', OPEN_STATUSES);
-  for (const row of (openRows ?? []) as { target_id: string }[]) already.add(row.target_id);
+  if (openRes.error) throw friendlyError(openRes.error);
+  for (const row of (openRes.data ?? []) as { target_id: string }[]) already.add(row.target_id);
   const fresh = wanted.filter((id) => !already.has(id));
   // Skipping instead of double-booking: a second row for the same group and the
   // same post would be skipped by rules.ts anyway ("הפוסט הזה כבר פורסם ל-…").

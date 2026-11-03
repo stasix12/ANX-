@@ -78,6 +78,11 @@ const KIND: Record<string, ActivityKind> = {
    * ever mention them. Filed as quiet system news it would sit under a
    * heading nobody opens — which is how this cost a full night.
    */
+  /* The worker could not TAKE a row out of the queue. Filed with the
+     failures and not as system news for the reason write_failed carries: a
+     queue that cannot be claimed looks exactly like a queue with nothing
+     due, and this line is the only thing that tells them apart. */
+  claim_failed: 'failure',
   write_failed: 'failure',
   write_partial: 'failure',
   account_save_failed: 'failure',

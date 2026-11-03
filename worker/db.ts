@@ -66,7 +66,31 @@ export async function workerDb(): Promise<SupabaseClient> {
    * perfectly and would otherwise send the worker into a loop of requests
    * that every one of them fails with no explanation on screen.
    */
-  const { data: existing } = await c.auth.getSession();
+  const { data: existing, error: sessionError } = await c.auth.getSession();
+
+  /*
+   * ─── A FAILED READ IS NOT AN ABSENT SESSION ───────────────────────────
+   *
+   * The same distinction the block below draws for getUser(), missing here.
+   * auth-js returns `{ session: null, error }` when the stored access token
+   * is past its window AND the refresh REQUEST itself failed — DNS, a 429,
+   * the sixty-second ceiling in timed-fetch.ts. It deliberately does NOT
+   * delete the session for a retryable fetch error, so the refresh token is
+   * still sitting in the file and will work again in a minute.
+   *
+   * Falling through to signInInteractively() on that answer opens a browser
+   * window asking a question nobody is awake to answer, at four in the
+   * morning, on a machine whose whole job is to keep publishing. Worse, the
+   * worker stops until somebody does.
+   *
+   * Throwing instead keeps the identity and lets the next start retry the
+   * refresh — which is what the stored token was for.
+   */
+  if (!existing.session && sessionError) {
+    throw new Error(
+      `לא הצלחנו לקרוא את החיבור השמור (${sessionError.message}). החיבור לא נמחק — ננסה שוב בהפעלה הבאה.`,
+    );
+  }
 
   /*
    * A FILE IS HERE BUT NO SESSION CAME OUT OF IT. Said out loud, because the

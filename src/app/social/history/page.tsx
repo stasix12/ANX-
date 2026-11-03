@@ -20,7 +20,7 @@ import { cancelQueueItem, listCampaigns, listQueue, queueGates, retryQueueItem, 
 import { projectQueue } from '@/lib/social/projection';
 import { counted, startOfZonedDay, zonedToUtc } from '@/lib/social/time';
 import { AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES, NEEDS_HUMAN_STATUSES } from '@/lib/social/status';
-import { type PublishMethod, type QueueStatus } from '@/lib/social/types';
+import { type QueueStatus } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { InboxIcon } from '@/components/icons';
 
@@ -31,7 +31,7 @@ import { InboxIcon } from '@/components/icons';
  * what waits for a person — awaiting_confirmation belongs to the second, which
  * is where the queue list has always put it.
  */
-const STATUS_GROUPS: { value: string; label: string; statuses: QueueStatus[] }[] = [
+const STATUS_GROUPS: { value: string; label: string; statuses: QueueStatus[]; hidden?: true }[] = [
   { value: '', label: 'הכל', statuses: [] },
   { value: 'published', label: 'פורסמו', statuses: ['published'] },
   /*
@@ -43,11 +43,26 @@ const STATUS_GROUPS: { value: string; label: string; statuses: QueueStatus[] }[]
    * 'paused' is the status no worker claims (CLAIMABLE_STATUSES is
    * ['scheduled'] alone), so on its own it is exactly that intervention's list.
    */
-  { value: 'stuck', label: 'תקועים', statuses: ['paused'] },
+  /*
+   * HIDDEN, NOT DELETED — and the difference is two links on the dashboard.
+   *
+   * "בהיסטוריה למחוק קטגוריות: תקועים, ידניים" — so neither is offered in the
+   * bar any more. But the dashboard's own intervention cards link straight in
+   * here with ?status=paused and ?status=needs_attention, and those links are
+   * pressed at the one moment something is wrong. Delete the buckets and the
+   * mapping below finds nothing, the link lands on an unfiltered list, and
+   * "N פרסומים תקועים" opens five hundred rows — the exact fault the comment
+   * that used to sit here was written about.
+   *
+   * So they keep working as a destination and stop existing as a button. A
+   * hidden bucket that IS the current filter re-appears in the bar, because a
+   * list filtered for a reason the screen does not show is worse than either.
+   */
+  { value: 'stuck', label: 'תקועים', statuses: ['paused'], hidden: true },
   { value: 'pending', label: 'ממתינים', statuses: [...AUTOMATIC_WAITING_STATUSES, ...IN_FLIGHT_STATUSES] },
   { value: 'failed', label: 'נכשלו', statuses: ['failed'] },
   { value: 'skipped', label: 'דולגו', statuses: ['skipped'] },
-  { value: 'manual', label: 'ידניים', statuses: NEEDS_HUMAN_STATUSES },
+  { value: 'manual', label: 'ידניים', statuses: NEEDS_HUMAN_STATUSES, hidden: true },
 ];
 
 const RANGES: { value: string; label: string; days: number | null }[] = [
@@ -75,7 +90,7 @@ export default function HistoryPage() {
 }
 
 /**
- * History as a working tool: filter by outcome, method and date, search by
+ * History as a working tool: filter by outcome and date, search by
  * group / campaign / post, and open any publication for its full detail
  * (including the plain-language reason it failed).
  *
@@ -103,7 +118,13 @@ function HistoryScreen() {
    * he came in with.
    */
   const [onlyCampaign, setOnlyCampaign] = useState<string>(params.get('campaign') ?? '');
-  const [method, setMethod] = useState<PublishMethod | ''>('');
+  /*
+   * NO METHOD FILTER ANY MORE. "הכל מתפרסם מאותו המקום אצלי ואצל הלקוחות ככה
+   * שזה לא רלוונטי" — every publication on this product goes out through the
+   * browser on a PC, so a filter offering "API רשמי" and "בסיוע דפדפן" split
+   * one real category into three imaginary ones. The column is untouched and
+   * every row still carries its method; only the filter is gone.
+   */
   /*
    * "All" when the owner arrived from a dashboard tile, 30 days otherwise.
    *
@@ -206,7 +227,6 @@ function HistoryScreen() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const kept = (rows ?? []).filter((r) => {
-      if (method && (r.method ?? '') !== method) return false;
       if (!q) return true;
       const campaignName = r.campaign_id ? campaigns[r.campaign_id] ?? '' : '';
       return [r.target?.name, r.post?.title, campaignName, r.rendered_text].some((v) => v?.toLowerCase().includes(q));
@@ -227,7 +247,7 @@ function HistoryScreen() {
        מוצבת ברגע שבו היא הסתיימה, לא בשעה שתוכננה לה ולא בתחזית. */
     const when = (r: QueueRow) => r.published_at ?? r.updated_at ?? projected.get(r.id) ?? r.scheduled_at;
     return kept.sort((a, b) => String(when(b)).localeCompare(String(when(a))));
-  }, [rows, query, method, campaigns, projected]);
+  }, [rows, query, campaigns, projected]);
 
   const page = filtered.slice(0, limit);
 
@@ -270,7 +290,7 @@ function HistoryScreen() {
               label="תוצאה"
               value={group}
               onChange={setGroup}
-              options={STATUS_GROUPS.map((g) => ({ value: g.value, label: g.label }))}
+              options={STATUS_GROUPS.filter((g) => !g.hidden || g.value === group).map((g) => ({ value: g.value, label: g.label }))}
               className="min-w-max"
             />
             <div className="flex flex-wrap items-center gap-2">
@@ -280,19 +300,6 @@ function HistoryScreen() {
                 value={range}
                 onChange={setRange}
                 options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
-                className="min-w-max"
-              />
-              <SegmentedControl
-                size="sm"
-                label="שיטה"
-                value={method}
-                onChange={setMethod}
-                options={[
-                  { value: '', label: 'כל השיטות' },
-                  { value: 'api', label: 'API רשמי' },
-                  { value: 'browser', label: 'בסיוע דפדפן' },
-                  { value: 'manual', label: 'ידני' },
-                ]}
                 className="min-w-max"
               />
             </div>
@@ -358,7 +365,6 @@ function HistoryScreen() {
                   onClick={() => {
                     setQuery('');
                     setGroup('');
-                    setMethod('');
                     setRange('all');
                   }}
                 >

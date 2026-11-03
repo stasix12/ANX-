@@ -1234,11 +1234,17 @@ export function LiveQueueHero({
           <div className="mt-2">
             {/*
               THE BAR OF THE REFERENCE, measured off it rather than guessed:
-              a 18px track, a fill rounded at BOTH ends so it reads as a pill
-              inside the track rather than as a block filling it, and the
-              violet-to-blue gradient sampled from the recording (#6d2ffd →
-              #4a5cfb). Paused keeps the grey it always had — a paused round
-              that still wore the brand gradient would look like it was running.
+              a 18px track and a fill rounded at BOTH ends so it reads as a
+              pill inside the track rather than as a block filling it.
+
+              THE GRADIENT IS THE THEME'S NOW, not the recording's. It was
+              sampled violet-to-blue (#6d2ffd → #4a5cfb) from the original
+              reference; the product is blue — "אין להשאיר צבעי סגול מהעיצוב
+              הישן" — so .anx-bar runs brand-600 → brand-300 and moves with
+              the theme instead of holding a second opinion about what the
+              brand fill is. Paused keeps the grey it always had: a paused
+              round still wearing the brand gradient would look like it was
+              running.
             */}
             <ProgressBar
               segments={[

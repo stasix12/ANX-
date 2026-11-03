@@ -118,7 +118,7 @@ const CONFETTI: readonly Piece[] = [
 /** Brand violet, brand blue, the tick's green and a warm accent — the same
     four colours the panel already uses, so the celebration does not introduce
     a palette of its own. */
-const CONFETTI_FILL = ['#7c3aed', '#4a5cfb', '#22c55e', '#f59e0b'];
+const CONFETTI_FILL = ['#1557d6', '#2563eb', '#22c55e', '#f59e0b'];
 
 /**
  * THE ROBOT — ONE PICTURE, EVERY STATE.
@@ -337,20 +337,20 @@ export function PublishingScene({
     >
       <defs>
         <linearGradient id="anx-tile" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#7b5cf5" />
-          <stop offset="100%" stopColor="#2f6fe4" />
+          <stop offset="0%" stopColor="#2563eb" />
+          <stop offset="100%" stopColor="#1244ab" />
         </linearGradient>
         <radialGradient id="anx-bounce-skin" cx="0.35" cy="0.3" r="0.8">
-          <stop offset="0%" stopColor="#a78bfa" />
-          <stop offset="60%" stopColor="#7c3aed" />
-          <stop offset="100%" stopColor="#5b21b6" />
+          <stop offset="0%" stopColor="#7eb0f8" />
+          <stop offset="60%" stopColor="#1557d6" />
+          <stop offset="100%" stopColor="#0e3686" />
         </radialGradient>
         <radialGradient id="anx-lamp">
-          <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.55" />
-          <stop offset="100%" stopColor="#a78bfa" stopOpacity="0" />
+          <stop offset="0%" stopColor="#7eb0f8" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#7eb0f8" stopOpacity="0" />
         </radialGradient>
         <filter id="anx-soft" x="-40%" y="-40%" width="180%" height="180%">
-          <feDropShadow dx="0" dy="3" stdDeviation="4" floodColor="#4c1d95" floodOpacity="0.16" />
+          <feDropShadow dx="0" dy="3" stdDeviation="4" floodColor="#0b2545" floodOpacity="0.16" />
         </filter>
         {/*
           TWO MARKERS, NOT ONE WITH currentColor. A marker is its own element:
@@ -359,10 +359,10 @@ export function PublishingScene({
           is why the first build drew four black arrowheads on purple paths.
         */}
         <marker id="anx-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#c9b8f8" />
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#bcd6fb" />
         </marker>
         <marker id="anx-arrow-hot" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c3aed" />
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#1557d6" />
         </marker>
       </defs>
 
@@ -378,7 +378,7 @@ export function PublishingScene({
             key={i}
             d={arc(i)}
             fill="none"
-            stroke={hot ? '#7c3aed' : '#c9b8f8'}
+            stroke={hot ? '#1557d6' : '#bcd6fb'}
             strokeOpacity={hot ? 1 : 0.75}
             strokeWidth={hot ? 2.4 : 2}
             strokeLinecap="round"
@@ -416,7 +416,7 @@ export function PublishingScene({
           cy={FLOOR.y}
           rx="40"
           ry="5.5"
-          fill="#7c3aed"
+          fill="#1557d6"
           opacity="0.11"
         />
       )}
@@ -507,7 +507,7 @@ export function PublishingScene({
             cy={BALL_FLOOR + 2}
             rx={BALL.r + 2}
             ry="3"
-            fill="#4c1d95"
+            fill="#0b2545"
             opacity="0.16"
           />
           <g className="anx-bounce">
@@ -591,7 +591,7 @@ export function PublishingScene({
                 height={TILE_SIZE + 10}
                 rx="18"
                 fill="none"
-                stroke="#7c3aed"
+                stroke="#1557d6"
                 strokeWidth="2"
                 strokeOpacity={travelling ? 0.45 : 0.3}
                 style={{ transformOrigin: `${cx}px ${cy}px` }}

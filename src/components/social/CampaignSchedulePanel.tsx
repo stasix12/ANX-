@@ -418,12 +418,16 @@ export function CampaignSchedulePanel({
                      *
                      * grad-primary is the product's gradient for a primary
                      * action and globals.css does name "a selected chip" among
-                     * its uses — but it runs out to #a855f7, where a white
-                     * label measures 3.96:1. On a 220px button the text sits
-                     * in the middle of that ramp and never reaches the light
-                     * end; on a 40px chip it covers the whole of it. This
-                     * pair's lightest end is brand-500 at 5.70, and FilterRow
-                     * in Discovery.tsx already carries the same note for the
+                     * its uses. Under the purple theme it ran out to #a855f7,
+                     * where a white label measured 3.96:1 — on a 220px button
+                     * the text sits in the middle of that ramp and never
+                     * reaches the light end, but on a 40px chip it covers the
+                     * whole of it. The blue theme's light end (#2563eb) is
+                     * 5.17 and no longer fails; the pair is kept anyway,
+                     * because a chip wearing the primary ACTION's gradient
+                     * drifts again the next time that gradient is tuned for a
+                     * button. This pair's lightest end is brand-500 at 6.24,
+                     * and FilterRow in Discovery.tsx already carries the same note for the
                      * same reason.
                      */
                     ? 'border-transparent bg-gradient-to-l from-brand-600 to-brand-500 text-on-brand shadow-[0_2px_8px_-2px_rgba(124,58,237,0.45)]'

@@ -2132,7 +2132,25 @@ export default function SocialDashboard() {
                    list is no longer about; `soon.length` is the capped read and
                    would print the ceiling as a fact. */
                 total={data.upcomingSoon}
-                done={data.doneToday}
+                /*
+                 * ─── ONLY IN THE MODE WHERE THEY BELONG ──────────────────
+                 *
+                 *   "בפרסומים הקרובים להראות רק את הפרסומים שצריכים לצאת"
+                 *
+                 * This card changes its own name two lines up:
+                 * `soon.length ? 'הפרסומים הקרובים' : 'מה קרה היום'`. The
+                 * finished rows are what makes the SECOND title true, and
+                 * they were handed over in both modes — so a card headed
+                 * "the upcoming publications" was mostly rows marked דולג,
+                 * stamped 08:05 at a quarter past three in the afternoon.
+                 * Past events under a heading that promises the future.
+                 *
+                 * Nothing is lost: when there is nothing upcoming the card
+                 * IS the day and still draws every one of them, and the
+                 * history screen holds the rest. What goes is the
+                 * contradiction between a title and its own list.
+                 */
+                done={soon.length ? [] : data.doneToday}
                 onOpen={(row) => setDetail(row.id)}
               />
             </Card>

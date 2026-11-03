@@ -320,9 +320,17 @@ export function CampaignScheduleBoard({
                     schedule.days.includes(day)
                       ? /* The selected chip the editor and the discovery screen
                            both draw: brand-600 → brand-500, whose lightest end
-                           still measures 5.70 behind white. `.grad-primary`
-                           runs out to #a855f7 at 3.96 and would fail on a chip
-                           this small, where the label covers the whole ramp. */
+                           measures 6.24 behind white.
+
+                           IT IS STILL NOT `.grad-primary`, and the reason
+                           changed with the theme. Under purple that gradient
+                           ran out to #a855f7 at 3.96 and would have failed on
+                           a chip this small; the blue theme's own light end
+                           (#2563eb) measures 5.17, which passes. The pair is
+                           kept because it is the chip's own ramp on two
+                           screens and a chip that quietly becomes the primary
+                           ACTION's gradient is a chip that will drift again
+                           the next time that gradient is tuned for a button. */
                         'bg-gradient-to-l from-brand-600 to-brand-500 text-on-brand'
                       : /* An unselected chip is white on a white box — 1.0:1 —
                            so the edge is the only thing that makes it a chip.

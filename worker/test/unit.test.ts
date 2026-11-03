@@ -5419,7 +5419,20 @@ const scenario: { step: string; line: string }[] = [];
    * its own read, its own statuses, from status.ts rather than an inline
    * list, and the waiting read left exactly as it was.
    */
-  assert.ok(dash.includes('done={data.doneToday}'), 'the strip must be handed the finished rows');
+  /*
+   * THE FINISHED ROWS, IN THE MODE THAT CLAIMS THEM.
+   *
+   * This pinned `done={data.doneToday}` — handed over unconditionally. The
+   * card renames itself on the same data (`soon.length ? 'הפרסומים הקרובים'
+   * : 'מה קרה היום'`), so under the first title the list was mostly rows
+   * marked דולג: "בפרסומים הקרובים להראות רק את הפרסומים שצריכים לצאת".
+   * The claim is the same — the strip must be handed the finished rows —
+   * and it is now asked of the mode where that title is true.
+   */
+  assert.ok(
+    dash.includes('done={soon.length ? [] : data.doneToday}'),
+    'the strip must be handed the finished rows when it is the day, and only then',
+  );
   /*
    * RE-POINTED. The read moved out of listQueue into listTimelineDone(), and
    * that is the whole fix rather than a refactor: QUEUE_SELECT is `*` plus

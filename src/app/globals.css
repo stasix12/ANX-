@@ -1330,70 +1330,73 @@
   color: var(--color-mist-100);
 
   /*
-   * PREMIUM PURPLE, LIGHT. A theme swap, not a rebuild.
+   * ROYAL BLUE, LIGHT. A theme swap, not a rebuild — again.
+   *
+   * "לבצע שדרוג עיצובי מקיף לכל האפליקציה בהתאם לתמונת הרפרנס… יש להגדיר
+   *  מערכת צבעים גלובלית אחת (Design Tokens) ולהחיל אותה על כל העמודים."
    *
    * The whole module already speaks in these token names — ink-* for grounds,
    * mist-* for text, brand-* for the accent — so re-resolving them here turns
-   * the product from navy to light purple without a single component being
-   * touched. That is the point of the names: markup describes ROLE, the theme
-   * decides colour.
+   * the product from purple to blue without a single component being touched.
+   * That is the point of the names: markup describes ROLE, the theme decides
+   * colour. The previous swap (navy → purple) is the proof this works; this is
+   * the same move, and it is why the brief's "one global colour system" costs
+   * one block rather than a sweep through two hundred files.
    *
-   * The ratio the brief asked for — roughly 80% white surfaces, 15% purple,
-   * 5% gradient — is enforced by which tokens carry purple: the grounds are
-   * white and near-white, and purple lives in brand-*, which is what fills a
-   * button, a selected chip and an active tab. Purple is the accent; it is
-   * not the page.
+   * The reference's proportions are the same discipline the purple theme
+   * enforced: the grounds are white and a pale blue tint, and the blue lives
+   * in brand-*, which is what fills a button, a selected day chip, a lit
+   * toggle and the active tab. Blue is the accent; it is not the page.
    *
-   * Every ratio below is measured, not chosen by eye — worker/test/
-   * contrast.test.ts fails the build on anything under 4.5:1.
+   * EVERY VALUE BELOW IS MEASURED. worker/test/contrast.test.ts recomputes all
+   * eighteen pairs from these tokens and fails under 4.5:1; the ratios in the
+   * comments are from that same calculation, not from eye.
    */
 
-  /* Grounds: page → inputs → cards → sheets and tracks. Cards and inputs are
-     both pure white on purpose; the separation between them is the border and
-     the shadow, not a shade. */
-  --color-ink-950: #f7f5ff;
+  /* Grounds: page → inputs → cards → sheets and tracks. The page carries the
+     reference's pale blue tint; cards and inputs are pure white, and the
+     separation between them is the border and the shadow, not a shade. */
+  --color-ink-950: #eaf1fd;
   --color-ink-900: #ffffff;
   --color-ink-850: #ffffff;
-  --color-ink-800: #f5f3ff;
+  --color-ink-800: #e4edfc;
 
-  /* The hairline: a real, soft line now rather than the translucent value the
-     dark theme needed. On white it is a whisper, which is what a light premium
-     surface wants — the card is lifted by its shadow, not fenced by its edge. */
-  --color-ink-700: #e7e2f3;
+  /* The hairline: a soft blue line. On white it is a whisper, which is what
+     the reference's cards are — lifted by their shadow, not fenced by an edge. */
+  --color-ink-700: #d4e2f7;
   /* A control's edge is the only thing telling a finger where an input is, so
-     it stays a MEASURED non-text boundary: 3.50:1 on a card, 3.25 on the page,
-     3.19 on a sheet — above the 3:1 WCAG 1.4.11 asks of a UI component. The
-     brief's softer #ded8ea sits at 1.39 and would leave a text field with no
-     measurable edge at all, so the decorative hairline above takes that job
-     and the control edge keeps this one. */
-  --color-ink-600: #8d82b5;
+     it stays a MEASURED non-text boundary: 3.51:1 on a card and 3.09 on the
+     page — above the 3:1 WCAG 1.4.11 asks of a UI component. A prettier,
+     paler blue here would leave a text field with no measurable edge, which
+     is the mistake the decorative hairline above exists to absorb. */
+  --color-ink-600: #6f8ab5;
 
-  /* Text: primary near-black with a blue cast → secondary → fine print. The
-     muted step is darker than the brief's #98a2b3 (2.6:1 on white) for the
-     same reason: 11px fine print is the smallest type in the product. */
-  --color-mist-100: #172033;
-  --color-mist-300: #52607a;
-  --color-mist-500: #667085;
+  /* Text: near-black with a blue cast → secondary → fine print. The fine-print
+     step stays dark enough to survive the sheet as well as the card (4.68 on
+     ink-800): 11px is the smallest type in the product. */
+  --color-mist-100: #0d1a2d;
+  --color-mist-300: #46566f;
+  --color-mist-500: #5a6a80;
 
-  /* The purple, split by JOB rather than by lightness — the same discipline
-     the navy theme used. brand-500 is every fill a white label sits on
-     (5.70:1). brand-400 is every purple WORD (7.10 on a card). brand-300 is
-     the indicator step — progress fills, dots, the active-nav pill, focus
-     rings — where 3:1 applies and it measures 4.23 on a card, 3.92 on the
-     page. Using the bright accent as text is exactly the mistake the split
-     exists to prevent. */
-  --color-brand-300: #8b5cf6;
-  --color-brand-400: #6d28d9;
-  --color-brand-500: #7c3aed;
-  --color-brand-600: #6d28d9;
-  --color-brand-700: #5b21b6;
+  /* The blue, split by JOB rather than by lightness — the same discipline the
+     purple theme used, kept because it is what stops the bright accent being
+     used as text. brand-500 is every fill a white label sits on (6.24).
+     brand-400 is every blue WORD (7.06 on a card). brand-300 is the indicator
+     step — progress fills, dots, the active-nav pill, focus rings, the lit
+     toggle — where 3:1 applies and it measures 5.17 on a card, 4.55 on the
+     page. */
+  --color-brand-300: #2563eb;
+  --color-brand-400: #1550c4;
+  --color-brand-500: #1557d6;
+  --color-brand-600: #1244ab;
+  --color-brand-700: #0e3686;
   --color-on-brand: #ffffff;
 
-  /* State colour for a LIGHT ground. The navy theme's values sit near 1.8:1 on
-     a white card, so each theme carries its own — and the brief's #12b76a and
-     #f5a524 are indicator greens and ambers: as TEXT on white they measure
-     2.5 and 1.9. These are their readable twins, and the bright originals stay
-     where they belong, on the dots and bar segments. */
+  /* State colour for a LIGHT ground, unchanged: these were already chosen as
+     the readable twins of the bright indicator green and amber, and they
+     measure 5.69 / 6.57 / 5.43 on a card and 4.83 / 5.58 / 4.60 on a sheet
+     against the new grounds. Changing them to match a blue theme would be a
+     colour decision with no reason behind it — success is not bluer today. */
   --color-success-400: #067647;
   --color-success-500: #047857;
   --color-error-300: #f04438;
@@ -1402,18 +1405,14 @@
   --color-warning-400: #b54708;
   --color-on-state: #ffffff;
 
-  /* Shadows are cast in deep violet rather than black. Black on a white-purple
+  /* Shadows are cast in deep navy rather than black. Black on a white-blue
      ground reads as grey dirt; the ground's own hue, darkened, reads as depth. */
-  --color-shadow: #2e1065;
+  --color-shadow: #0b2545;
 
   /*
-   * RADIUS, as three values rather than a dozen.
-   *
-   * 18px cards, 22px sheets and modals, 16px tiles, and — the one the brief
-   * asks for that the base scale does not give — 14px on buttons, inputs and
-   * chips, every one of which is `rounded-xl` today. Overriding the scale
-   * variable moves all of them at once, which is the whole reason they were
-   * written as a scale.
+   * RADIUS, as three values rather than a dozen. Unchanged by the swap: the
+   * reference's corners are the same soft radii this theme already draws, and
+   * moving them would be a rebuild rather than a repaint.
    */
   --radius-card: 1.125rem;
   --radius-tile: 1rem;
@@ -1450,7 +1449,11 @@
  */
 html:has(.social-theme),
 body:has(.social-theme) {
-  background-color: #f7f5ff;
+  /* The page ground, repeated here because a :root-level element cannot read
+     a variable its own descendant declares. Kept in step with
+     --color-ink-950 by hand — the one place in this file where the same
+     colour is written twice, and the reason it carries this note. */
+  background-color: #eaf1fd;
 }
 
 /*
@@ -1509,17 +1512,20 @@ body:has(.social-theme) .site-backdrop {
  * everything is not a premium product, it is a loud one.
  */
 .social-theme .grad-primary {
-  background-image: linear-gradient(135deg, #6d28d9 0%, #7c3aed 45%, #a855f7 100%);
+  /* brand-600 → brand-500 → brand-300: the token ramp, written out because a
+     gradient cannot interpolate CSS variables in every browser the app runs
+     in. The stops ARE the tokens — change the theme and these move with it. */
+  background-image: linear-gradient(135deg, #1244ab 0%, #1557d6 45%, #2563eb 100%);
   border-color: transparent;
 }
 .social-theme :is(a, button).grad-primary:hover {
-  background-image: linear-gradient(135deg, #5b21b6 0%, #6d28d9 45%, #8b5cf6 100%);
+  background-image: linear-gradient(135deg, #0e3686 0%, #1244ab 45%, #1557d6 100%);
 }
 
 /* The deeper one, for a full-width feature area. */
 .social-theme .grad-hero {
-  background-image: linear-gradient(135deg, #5b21b6 0%, #7c3aed 50%, #a855f7 100%);
-  box-shadow: 0 16px 40px rgba(124, 58, 237, 0.22);
+  background-image: linear-gradient(135deg, #0e3686 0%, #1557d6 50%, #2f7ef5 100%);
+  box-shadow: 0 16px 40px rgba(21, 87, 214, 0.26);
 }
 
 /* No grey tap-flash on iOS — the scale dip below is the feedback. 150ms and

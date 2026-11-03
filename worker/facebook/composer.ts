@@ -14,7 +14,7 @@ export type ComposerStep = 'opening' | 'composer_opened' | 'uploading_media' | '
 
 export class PublishError extends Error {
   constructor(
-    public kind: 'cannot_post' | 'composer' | 'upload' | 'rejected' | 'timeout',
+    public kind: 'cannot_post' | 'composer' | 'upload' | 'rejected' | 'timeout' | 'rate_limited',
     message: string,
     /** True once the Post button was clicked — a retry could double-post. */
     public afterSubmit = false,
@@ -520,6 +520,32 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   }
   await dialogNode?.dispose().catch(() => undefined);
   if (!detached) {
+    /*
+     * ─── FIRST, THE ONE ANSWER THAT IS NOT A MYSTERY ────────────────────
+     *
+     * The owner's screenshot of 03/11 19:08 — saved by this very step — shows
+     * the composer still open, his text still in it, and Facebook's own
+     * notice underneath: the account is being limited for posting too often.
+     * The window did not close because THE POST WAS REFUSED, and saying "the
+     * window did not close, go and check the group" instead is worse than
+     * silence: it sends him to look for a post that is not there and hides
+     * the fact that the queue is still running at full speed into a wall.
+     *
+     * afterSubmit is FALSE here, and deliberately. Everywhere else in this
+     * file a click that is not followed by a clean close is treated as
+     * "might be live, never retry" — the rule that protects against posting
+     * twice. This branch is the one case where Facebook has said in words
+     * that it did not take the post: the dialog is still holding the text it
+     * refused. So the row is an honest failure that may be tried again later,
+     * not a publication somebody has to go and check by hand.
+     */
+    if (await fb.rateLimitText(page).isVisible({ timeout: 1000 }).catch(() => false)) {
+      throw new PublishError(
+        'rate_limited',
+        'פייסבוק הגביל את קצב הפרסום מהחשבון הזה ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה. צריך להאט את קצב הפרסום ולנסות שוב מאוחר יותר.',
+        false,
+      );
+    }
     // Still open: either an error banner, or Facebook simply never took it down.
     if (await fb.failureText(page).isVisible({ timeout: 1000 }).catch(() => false)) {
       throw new PublishError('rejected', `Facebook דחה את הפוסט: ${await fb.failureText(page).innerText().catch(() => '')}`.trim(), true);

@@ -85,6 +85,26 @@ export const patterns = {
   postButton: /^(post|publish|פרסום|פרסם|פרסמי|פרסמו|опубликовать)$/i,
   /** Toasts / banners that mean "post did not go out". */
   postFailed: /something went wrong|couldn'?t (be )?(post|shar)|try again later|משהו השתבש|לא ניתן לפרסם|לא הצלחנו|נסו שוב מאוחר יותר|что-то пошло не так|не удалось опубликовать/i,
+  /*
+   * FACEBOOK SAYING "YOU ARE POSTING TOO FAST", IN ITS OWN WORDS.
+   *
+   * Photographed on the owner's machine, 03/11 19:08, in the screenshot the
+   * worker itself saved at the `verifying` step:
+   *
+   *   "אנו מגבילים את התדירות שבה אפשר לפרסם, להגיב או לעשות דברים אחרים
+   *    בפרק זמן נתון כדי לסייע בהגנה על הקהילה מפני ספאם. אפשר לנסות שוב
+   *    מאוחר יותר."
+   *
+   * The composer stays open, the text stays in the box, and the post is NOT
+   * accepted. Nothing in this file matched that sentence — postFailed above
+   * carries "נסו שוב מאוחר יותר" (plural imperative) while Facebook writes
+   * "אפשר לנסות שוב מאוחר יותר", so it missed by one word, and every one of
+   * these became the generic 'חלון הפוסט לא נסגר אחרי הלחיצה על "פרסום"'.
+   * That sentence sends the owner to check a group for a post that was never
+   * there, and says nothing about the only thing that matters: the account is
+   * being throttled and the queue is still running at full speed.
+   */
+  rateLimited: /מגביל(ים)? את התדירות|מפני ספאם|אפשר לנסות שוב מאוחר יותר|we limit how often|protect (our|the) community from spam|you'?re temporarily blocked|ограничива(ем|ется) частот|от спама|попроб(уйте|овать) (снова )?позже/i,
   /** Group requires admin approval — the post exists but is pending. */
   pendingApproval: /pending (admin )?approval|will be reviewed|awaiting approval|ממתין לאישור|יאושר על ידי מנהל|ожидает одобрения|на проверке/i,
   /** Not a member / cannot post here. */
@@ -221,6 +241,8 @@ export const fb = {
   /** Text anywhere on the page that indicates a security interstitial. */
   checkpointText: (page: Page): Locator => page.getByText(patterns.checkpoint).first(),
   failureText: (page: Page): Locator => page.getByText(patterns.postFailed).first(),
+  /** Facebook's own rate-limit notice, wherever on the page it is shown. */
+  rateLimitText: (page: Page): Locator => page.getByText(patterns.rateLimited).first(),
   pendingText: (page: Page): Locator => page.getByText(patterns.pendingApproval).first(),
   cannotPostText: (page: Page): Locator => page.getByText(patterns.cannotPost).first(),
 };

@@ -104,6 +104,7 @@ const TITLE: Record<string, string> = {
      and it has to read as its own event when he scrolls past it a week later
      wondering where the repeats came from. */
   campaign_repeat_on: 'חזרה יומית הופעלה',
+  campaign_repeat_refused: 'חזרה יומית לא הופעלה — הסבב הסתיים',
   campaign_repeat_off: 'חזרה יומית כובתה',
   campaign_repeat_window: 'חלון החזרה הותאם לסבבים',
   campaign_repeat_needs_launch: 'החזרה היומית לא הופעלה — הסבב עוד לא הושק',

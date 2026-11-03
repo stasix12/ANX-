@@ -148,6 +148,10 @@ const KIND: Record<string, ActivityKind> = {
      ROUND, and the one activity line that says his account is about to publish
      the same post again tomorrow. */
   campaign_repeat_on: 'round',
+  /* The switch was pressed on a round that has finished, and nothing was
+     armed. A failure and not quiet round news: the owner asked for something
+     and it did not happen, and this is the only line that says why. */
+  campaign_repeat_refused: 'failure',
   campaign_repeat_off: 'round',
   /* The window between two publications to one group, lowered BY THE APP so
      that every round the owner added can actually publish. He did not press

@@ -35,6 +35,7 @@ import {
   saveCampaign,
   rescheduleCampaignQueue,
   setCampaignRepeat,
+  repeatRefusedText,
   syncWeeklyHours,
   stopCampaign, saveCampaignRounds,} from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
@@ -423,7 +424,8 @@ export default function CampaignsPage() {
            */
             if (!armedNow.armed) {
               toast(
-                `התזמון נשמר, אבל "${campaign.name}" עוד לא יצא אף פעם — אין ממה להעתיק את רשימת הקבוצות, ולכן לא ייכנסו פרסומים לתור. השיקו אותו פעם אחת וזה יתפוס מיד.`,
+                repeatRefusedText(campaign.name, armedNow.refused) ??
+                  `התזמון נשמר, אבל "${campaign.name}" עוד לא יצא אף פעם — אין ממה להעתיק את רשימת הקבוצות, ולכן לא ייכנסו פרסומים לתור. השיקו אותו פעם אחת וזה יתפוס מיד.`,
                 'error',
               );
             }
@@ -626,7 +628,9 @@ export default function CampaignsPage() {
             ? `החזרה היומית של "${campaign.name}" כובתה — הסבב הנוכחי ימשיך כרגיל`
             : result.armed
               ? `"${campaign.name}" יחזור על עצמו בכל יום פרסום`
-              : `"${campaign.name}" עוד לא יצא אף פעם, ולכן אין ממה להעתיק את רשימת הקבוצות. השיקו אותו פעם אחת — בחרו קבוצות ושלחו — ומשם זה יחזור כל יום לבד.`,
+              : /* THREE FACTS, NOT ONE. See repeatRefusedText(). */
+                (repeatRefusedText(campaign.name, result.refused) ??
+                `"${campaign.name}" עוד לא יצא אף פעם, ולכן אין ממה להעתיק את רשימת הקבוצות. השיקו אותו פעם אחת — בחרו קבוצות ושלחו — ומשם זה יחזור כל יום לבד.`),
           !next.enabled ? 'success' : result.armed ? 'info' : 'error',
         );
       } catch (err) {

@@ -1217,6 +1217,37 @@ export type ScheduleInput = Omit<Schedule, 'id' | 'created_at' | 'planned_until'
 export interface RepeatResult {
   armed: number;
   needsLaunch: number;
+  /**
+   * SET WHEN NOTHING WAS ARMED BECAUSE NOTHING COULD BE — see
+   * setCampaignRepeat(). 'archived': the round is finished, and arming it
+   * would only manufacture publications the engine refuses. 'unknown': we
+   * could not read whether it is finished, and guessing wrong in that
+   * direction costs a thousand skipped rows.
+   *
+   * It exists so the toast can stop saying "יחזור על עצמו בכל יום פרסום"
+   * over a round that will do no such thing. `armed === 0` alone cannot tell
+   * these apart from "never launched", and the screen said the wrong one.
+   */
+  refused?: 'archived' | 'unknown';
+}
+
+/**
+ * WHAT TO SAY WHEN THE REPEAT ARMED NOTHING.
+ *
+ * `armed === 0` had one sentence — "עוד לא יצא אף פעם" — and it is now one of
+ * three different facts. Saying the wrong one is not a cosmetic slip: it sends
+ * the owner to launch a round that is already launched, or leaves him
+ * believing a finished round will publish tomorrow. setCampaignRepeat() tells
+ * them apart; this turns that into his words.
+ */
+export function repeatRefusedText(name: string, refused?: 'archived' | 'unknown'): string | null {
+  if (refused === 'archived') {
+    return `"${name}" הסתיים, ולכן החזרה היומית לא הופעלה. סבב שהסתיים יכול רק לייצר פרסומים שהמנוע ידלג עליהם — השיקו את הפוסט מחדש כדי לפרסם שוב.`;
+  }
+  if (refused === 'unknown') {
+    return `לא הצלחנו לבדוק אם "${name}" עדיין פעיל, ולכן לא הפעלנו את החזרה היומית. נסו שוב בעוד רגע.`;
+  }
+  return null;
 }
 
 /**
@@ -1445,6 +1476,49 @@ export async function setCampaignRepeat(
    */
   floorHours: number = MIN_REPEAT_HOURS,
 ): Promise<RepeatResult> {
+  /*
+   * ─── A FINISHED ROUND MAY NOT BE RE-ARMED ────────────────────────────────
+   *
+   *   "תבדוק אם ה supbase למה הכל דולג עכשיו"
+   *
+   * 1,085 publications skipped with "הסבב נעצר", and his own database named
+   * the cause: the queue row AND the post both point at a campaign whose
+   * status is 'archived'. Three minutes before, the bell showed
+   * "חזרה יומית הופעלה" several times over.
+   *
+   * THE LOOP, IN THREE STEPS, ALL OF THEM THIS FILE'S:
+   *
+   *   1. stopCampaign() archives the run and switches its posts' schedules
+   *      off. It deliberately leaves post.campaign_id pointing at the
+   *      archived run — that is the run's history and must not be rewritten.
+   *   2. THIS function then looked up those same posts BY that campaign_id
+   *      and wrote `active: true` back onto their weekly schedules, with no
+   *      look at the campaign's status at all. A dead round, publishing again.
+   *   3. planQueue stamps each new row with the POST's campaign_id — still
+   *      the archived one — and rules.ts correctly refuses every single one:
+   *      "הסבב נעצר". The card reads פעיל, because it is drawing a DIFFERENT
+   *      campaign row with the same name.
+   *
+   * So the engine was right all night and the data was wrong, and this is the
+   * line that made it wrong. Arming an archived round cannot produce a
+   * publication — only rows that are skipped the moment they are looked at.
+   *
+   * AND IT FAILS CLOSED. A read that could not answer is not permission: the
+   * cost of guessing "active" is the thousand rows above, and the cost of
+   * guessing "archived" is one toast asking him to press again.
+   */
+  const status = await db().from('social_campaigns').select('status').eq('id', campaign.id).maybeSingle();
+  if (status.error) return { armed: 0, needsLaunch: 0, refused: 'unknown' };
+  if ((status.data as { status?: string } | null)?.status === 'archived') {
+    await logClientActivity(
+      'warn',
+      'campaign_repeat_refused',
+      `"${campaign.name}" הסתיים, ולכן החזרה היומית לא הופעלה — סבב שהסתיים יכול רק לייצר פרסומים שהמנוע ידלג עליהם`,
+      { campaignId: campaign.id },
+    );
+    return { armed: 0, needsLaunch: 0, refused: 'archived' };
+  }
+
   unwrap(await db().from('social_campaigns').update(repeatColumns(repeat, floorHours)).eq('id', campaign.id));
 
   const posts = unwrap<{ id: string }[]>(await db().from('social_posts').select('id').eq('campaign_id', campaign.id));

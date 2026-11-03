@@ -1528,21 +1528,21 @@ export default function SocialDashboard() {
             title: 'הפרסום עומד — המחשב לא מחובר',
             body: `הפרסום הבא היה אמור לצאת ב-${stampText(stalledSince)} ואף אחד לא לקח אותו. פרסום לקבוצות יוצא רק כשהתוכנה פועלת על המחשב שלכם.`,
             actionLabel: 'מה לעשות',
-            href: '/social/settings#browser-status',
+            href: '/social#pc',
           }
         : !data.workerOnline && summary.queued > 0
           ? {
               title: 'התוכנה במחשב לא פועלת',
               body: `${counted(summary.queued, 'פרסום אחד ממתין בתור', 'פרסומים ממתינים בתור', 'שני פרסומים ממתינים בתור')} ואף אחד מהם לא יֵצא: הפרסום לקבוצות נעשה מהדפדפן שעל המחשב שלכם. פתחו את התיקייה ולחצו פעמיים על start-worker.cmd, והשאירו את החלון פתוח.`,
               actionLabel: 'מה לעשות',
-              href: '/social/settings#browser-status',
+              href: '/social#pc',
             }
           : data.workerNeedsAuth
           ? {
               title: 'פייסבוק מבקשת אימות במחשב',
               body: 'התוכנה במחשב פועלת, אבל חלון הדפדפן שלה מחכה שתתחברו לפייסבוק. עד אז פרסום לקבוצות לא יצא.',
               actionLabel: 'מה לעשות',
-              href: '/social/settings#browser-status',
+              href: '/social#pc',
             }
           : waitingForYou > 0
             ? {

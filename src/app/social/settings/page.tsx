@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
-import { BrowserStatusCard } from '@/components/social/BrowserStatusCard';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, loadAdminPresence, saveSetting, setPaused } from '@/lib/social/client';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
@@ -13,7 +12,7 @@ import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type AdminPresence, 
 import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
 import { friendlyMessage } from '@/lib/social/errors';
 
-type Tab = 'limits' | 'browser' | 'business' | 'admin';
+type Tab = 'limits' | 'admin';
 
 /* How often the admin panel re-asks while it is open. "כל רגע נתון" is what
    was asked for, and a presence screen that does not refresh is a photograph:
@@ -307,19 +306,36 @@ export default function SettingsPage() {
       {!loaded && !error && <Loading />}
       {loaded && (
         <div className="space-y-4 pb-4">
-          <SegmentedControl
-            label="חלקי ההגדרות"
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: 'limits', label: 'קצב ומגבלות' },
-              { value: 'browser', label: 'פרסום בקבוצות' },
-              { value: 'business', label: 'פרטי העסק' },
-              /* Appended rather than woven in, so the three tabs every
-                 customer sees keep their order and their widths. */
-              ...(isAdmin ? [{ value: 'admin' as const, label: 'ניהול' }] : []),
-            ]}
-          />
+          {/*
+            ONE PAGE FOR A CUSTOMER, TWO FOR AN ADMIN.
+            *
+            * "תמחק את שתי העמודים האלה זה מבלבל את הלקוחות" — the two tabs a
+            * customer had no use for are gone: "פרסום בקבוצות", whose page was
+            * mostly a notice about Meta's terms and about CAPTCHA, and
+            * "פרטי העסק".
+            *
+            * The connection was NOT deleted with its tab. It is the same
+            * BrowserStatusCard, and it already drops from the computer icon in
+            * the header on every screen — so "המשך סבב", "התחבר לפייסבוק" and
+            * "בדוק שוב" are one tap from anywhere, which is nearer than they
+            * were. The two cards on that tab that actually did something — the
+            * safety switches and the group pacing — moved up into
+            * "קצב ומגבלות", which is what they are.
+            *
+            * A segmented control with one option is a decoration, so a
+            * customer never sees one.
+          */}
+          {isAdmin && (
+            <SegmentedControl
+              label="חלקי ההגדרות"
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: 'limits', label: 'קצב ומגבלות' },
+                { value: 'admin' as const, label: 'ניהול' },
+              ]}
+            />
+          )}
 
           {tab === 'limits' && (
             <>
@@ -511,33 +527,6 @@ export default function SettingsPage() {
                   </p>
                 )}
               </Card>
-            </>
-          )}
-
-          {tab === 'browser' && (
-            <>
-              {/*
-                THE CONNECTION LIVES HERE NOW, not on the dashboard.
-                *
-                * The owner asked for the "התוכנה במחשב פועלת ומחוברת" strip
-                * off the home screen and a computer icon in the header
-                * instead. Moved rather than deleted: this card is the ONLY
-                * place in the product with "התחבר לפייסבוק", "בדוק חיבור" and
-                * the profile reset, and deleting it would have taken away the
-                * one way to reconnect at exactly the moment it is needed. The
-                * header's icon links straight to it, and it keeps its
-                * #browser-status id so every existing link still lands on it.
-              */}
-              <BrowserStatusCard id="browser-status" />
-
-              <Card title="פרסום בקבוצות — איך זה עובד">
-                <Notice tone="warn">
-                  ל-Meta אין API לפרסום בקבוצות מאז אפריל 2024. הפרסום בקבוצות נעשה דרך חלון Chrome אמיתי על המחשב שלכם, מהחשבון שלכם. זו
-                  אינה אינטגרציה רשמית של פייסבוק; היא עשויה לנגוד בתנאי השימוש, והשימוש בה באחריותכם. המערכת לא עוקפת CAPTCHA, אימות או
-                  חסימה — כשפייסבוק מבקשת אדם, התוכנה עוצרת וממתינה לכם.
-                </Notice>
-              </Card>
-
               <Card title="בטיחות הריצה">
                 <div className="space-y-2.5">
                   {(
@@ -593,51 +582,9 @@ export default function SettingsPage() {
                   </Field>
                 </div>
               </Card>
-
             </>
           )}
 
-          {tab === 'business' && (
-            <Card title="פרטי העסק" subtitle="ברירות מחדל שנכנסות לכל פוסט חדש">
-              <div className="grid gap-4">
-                <Field label="שם העסק">
-                  <input className={inputClass} value={business.name} onChange={(e) => setBusiness({ ...business, name: e.target.value })} />
-                </Field>
-                <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
-                  <Field label="טלפון לתצוגה">
-                    <input className={inputClass} dir="ltr" inputMode="tel" value={business.phone} onChange={(e) => setBusiness({ ...business, phone: e.target.value })} />
-                  </Field>
-                  <Field label="WhatsApp (בינלאומי, בלי +)">
-                    <input className={inputClass} dir="ltr" inputMode="numeric" value={business.whatsapp} onChange={(e) => setBusiness({ ...business, whatsapp: e.target.value })} />
-                  </Field>
-                </div>
-                <Field label="ערים / אזורים" hint="מופרד בפסיקים">
-                  <input className={inputClass} value={business.cities.join(', ')} onChange={(e) => setBusiness({ ...business, cities: splitList(e.target.value) })} />
-                </Field>
-                <Field label="שירותים" hint="מופרד בפסיקים">
-                  <input className={inputClass} value={business.services.join(', ')} onChange={(e) => setBusiness({ ...business, services: splitList(e.target.value) })} />
-                </Field>
-              </div>
-            </Card>
-          )}
-
-          {/*
-            ─── ניהול — THE PANEL ONLY THE OWNER OF THE PRODUCT SEES ─────────
-
-            "ותוסיף רק אצלי, לא אצל הלקוחות. בהגדרות פאנל אדמין שאני ידע כל
-             רגע נתון מי מחובר באפליקציה ומאיזה משתמש."
-
-            `isAdmin` comes from the server's own answer, not from anything
-            this browser worked out, and the tab above does not exist without
-            it. The second guard here is not belt-and-braces for security —
-            the security is the allowlist in the server's environment — it is
-            so a stale `tab` value can never render an empty panel.
-
-            IT SHOWS PRESENCE AND IDENTITY AND NOTHING ELSE. No token, no
-            cookie, no password, and not the login screenshot column: a panel
-            that answers "who is connected" has no business carrying a picture
-            of somebody's own screen.
-          */}
           {tab === 'admin' && isAdmin && presence && (
             <>
               <Card

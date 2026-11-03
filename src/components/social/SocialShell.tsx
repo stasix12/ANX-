@@ -270,6 +270,31 @@ export function SocialShell({
   /* The header's connection panel. Closed on every navigation below, with the
      "more" sheet, so it can never be left hanging over the next screen. */
   const [pcOpen, setPcOpen] = useState(false);
+  /*
+   * "#pc" OPENS THIS PANEL FROM ANYWHERE.
+   *
+   * The connection used to live on a settings tab, and four places linked
+   * straight at it — the dashboard's three intervention cards and the setup
+   * checklist — all of them at the moment somebody is stuck and needs it. The
+   * tab is gone ("תמחק את שתי העמודים האלה זה מבלבל את הלקוחות") and the card
+   * is here, so those links point at `/social#pc` instead and the panel they
+   * meant to open still opens.
+   *
+   * The hash is cleared as it is read: left in place, a refresh would reopen
+   * the panel over whatever the person had moved on to, and the Back button
+   * would walk through states nobody chose.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const open = () => {
+      if (window.location.hash !== '#pc') return;
+      setPcOpen(true);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    };
+    open();
+    window.addEventListener('hashchange', open);
+    return () => window.removeEventListener('hashchange', open);
+  }, [pathname]);
   useEffect(() => {
     if (!pcOpen) return;
     const onKey = (e: KeyboardEvent) => {

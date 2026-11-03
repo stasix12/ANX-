@@ -207,7 +207,25 @@ function main() {
   const page = stripComments(readFileSync(new URL('../../src/app/social/settings/page.tsx', import.meta.url), 'utf8'));
 
   is(/presence\?\.admin === true/.test(page), "the screen's own notion of admin is the server's answer, not a local guess");
-  is(/isAdmin \? \[\{ value: 'admin'/.test(page), 'the tab exists only when the server said so');
+  /*
+   * THE REQUIREMENT, NOT THE SHAPE IT HAPPENED TO HAVE.
+   *
+   * This pinned `isAdmin ? [{ value: 'admin'` — the ternary that appended the
+   * admin tab to a three-tab bar. Two of those tabs were deleted ("תמחק את
+   * שתי העמודים האלה זה מבלבל את הלקוחות"), the bar now renders only for an
+   * admin at all, and the ternary went with them — so a guard that is still
+   * exactly as tight failed a test written against its spelling. The rule
+   * being protected is the one below: the admin tab must be unreachable
+   * unless the SERVER said admin.
+   */
+  const adminGate = page.indexOf('{isAdmin && (');
+  is(adminGate > 0, 'the tab bar itself renders only when the server said admin');
+  const gated = page.slice(adminGate, page.indexOf('{tab ===', adminGate));
+  is(/value: 'admin'/.test(gated), 'and the admin tab is inside that guard');
+  is(
+    (page.match(/value: 'admin'/g) ?? []).length === 1,
+    'it appears nowhere else — no second, ungated way to select it',
+  );
   is(/tab === 'admin' && isAdmin && presence/.test(page), 'and the panel itself re-checks, so a stale tab cannot draw an empty one');
   /*
    * The poll is conditional on BOTH, or every customer pays a request every

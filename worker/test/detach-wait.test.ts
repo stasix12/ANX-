@@ -78,12 +78,33 @@ const composer = stripComments(readFileSync(new URL('../facebook/composer.ts', i
 
 /* ─────────── 1. the two waits are two numbers ─────────────────────────── */
 
+/*
+ * ONE CONSTANT MAY NOW BE WRITTEN IN TERMS OF ANOTHER.
+ *
+ * `SUBMIT_DETACH_VIDEO_MS = VIDEO_UPLOAD_TIMEOUT` is the honest spelling of
+ * "as long as the upload may take, because Facebook transcodes inside the
+ * same dialog" — and the first version of this helper evaluated the
+ * right-hand side in an empty scope, so a name rather than an arithmetic
+ * literal crashed it. It resolves names against the other constants in the
+ * file now, to a fixed point, which also means a chain of two cannot quietly
+ * read as null and skip the assertion that depends on it.
+ */
+const CONSTS: Record<string, string> = {};
+for (const m of composer.matchAll(/const ([A-Z][A-Z0-9_]*) = ([^;]+);/g)) CONSTS[m[1]] = m[2];
+
 const num = (name: string): number | null => {
-  const m = composer.match(new RegExp(`const ${name} = ([^;]+);`));
-  if (!m) return null;
+  let expr = CONSTS[name];
+  if (expr === undefined) return null;
+  /* Substitute referenced constants until none are left. Bounded, so a
+     circular definition fails the test instead of hanging it. */
+  for (let pass = 0; pass < 8 && /[A-Z][A-Z0-9_]{2,}/.test(expr); pass++) {
+    expr = expr.replace(/[A-Z][A-Z0-9_]{2,}/g, (ref) => (CONSTS[ref] !== undefined ? `(${CONSTS[ref]})` : ref));
+  }
+  if (/[A-Za-z]/.test(expr.replace(/_/g, ''))) return null;
   /* `3 * 60_000` — evaluated rather than parsed, so the test reads what the
      code means and not how it is spelled. */
-  return Number(Function(`"use strict"; return (${m[1].replace(/_/g, '')});`)());
+  const value = Number(Function(`"use strict"; return (${expr.replace(/_/g, '')});`)());
+  return Number.isFinite(value) ? value : null;
 };
 
 const upload = num('VIDEO_UPLOAD_TIMEOUT');
@@ -92,10 +113,46 @@ const detachPlain = num('SUBMIT_DETACH_MS');
 
 eq(upload, 15 * 60_000, 'the UPLOAD may still take fifteen minutes — that wait is not what was wrong');
 ok(detachVideo !== null && detachPlain !== null, 'the detach wait has constants of its own');
-ok((detachVideo as number) < (upload as number), 'and waiting for the window to close is no longer the upload timeout');
-ok((detachVideo as number) <= 5 * 60_000, `a video post may not hold the only lane for more than five minutes after the click (is ${(detachVideo as number) / 60_000}m)`);
+
+/*
+ * ─── THE TWO ASSERTIONS THAT USED TO LIVE HERE WERE WRONG, AND THEY WOULD
+ *     HAVE BLOCKED THE FIX ─────────────────────────────────────────────────
+ *
+ * They read:
+ *   ok(detachVideo < upload,        'waiting for the window to close is no longer the upload timeout');
+ *   ok(detachVideo <= 5 * 60_000,   'a video post may not hold the only lane for more than five minutes');
+ *
+ * Both encoded an ARGUMENT rather than a measurement: that waitForUploads()
+ * proves the bytes are at Facebook, so all that remains is the window coming
+ * down, which is seconds. Sound, and false. For a video Facebook holds the
+ * dialog open through TRANSCODING — work it does after the upload and before
+ * it will accept the post, minutes long, invisible to waitForUploads(), and
+ * nothing to do with bandwidth.
+ *
+ * His account settled it. 22:18 the constant went from 15 minutes to 3.
+ * ~21:10 was the last video post that reached a group. By 04:10 there were
+ * 215 attempts that day and 0 publications, every one ending in "חלון הפוסט
+ * לא נסגר אחרי הלחיצה על פרסום" — and the group opened by hand held nothing
+ * but the post from before the change. `git log --since 21:13 -- worker/`
+ * names composer.ts exactly once in that window, in that commit.
+ *
+ * So the allowance goes back to the value that demonstrably published, and
+ * the floor below is written as a FLOOR: this number may be raised, never
+ * quietly shortened again on an argument. What actually fixed "זה נתקע פשוט"
+ * was never the number — it was the slicing in section 3, which turned
+ * fifteen minutes of silence into fifteen minutes that say how long they have
+ * waited. That part stands, and that part is what this file really guards.
+ */
+ok(
+  (detachVideo as number) >= 15 * 60_000,
+  `a video post gets at least the fifteen minutes that demonstrably published; shortening it to 3 stopped 215 publications in one night (is ${(detachVideo as number) / 60_000}m)`,
+);
 ok((detachPlain as number) >= 60_000, 'but a photo post still gets a full minute and a half — Facebook is sometimes slow and a false timeout costs a human check');
-ok((detachVideo as number) >= (detachPlain as number), 'and a video is given at least as long as a photo, because it may be re-encoded');
+ok(
+  (detachPlain as number) <= 5 * 60_000,
+  'and a PHOTO is still held to a short wait: the transcoding that justifies the long one does not happen for a photo, so a photo stuck past a few minutes is a real fault, not patience',
+);
+ok((detachVideo as number) > (detachPlain as number), 'a video is given strictly longer than a photo, because only the video is re-encoded');
 
 /* ─────────── 2. the click site uses them, and nothing else ────────────── */
 
@@ -110,6 +167,27 @@ ok(/waitForUploads\([^)]*VIDEO_UPLOAD_TIMEOUT/.test(composer), 'the upload itsel
 
 ok(/DETACH_TICK_MS/.test(block), 'the wait is sliced, so the terminal is not silent for minutes');
 ok(/ממתין לסגירת חלון הפוסט/.test(block), 'and each slice prints how long it has been waiting');
+
+/*
+ * ─── AND IT TELLS THE DATABASE IT IS ALIVE, NOT ONLY THE TERMINAL ────────
+ *
+ * The slices made the wait legible to somebody standing at the machine. They
+ * did nothing for the dashboard, which calls a worker offline after ninety
+ * seconds of silence — and with the video allowance back at fifteen minutes
+ * that silence is now ten times the threshold. A publication going perfectly
+ * would read as "המחשב לא מחובר" ninety seconds after the click, and
+ * pickStranded() reads the same ninety seconds as "that worker is gone", so
+ * the row could be taken off a lane that is still holding it.
+ *
+ * onHold is the worker's heartbeat (social-worker.ts passes
+ * `async () => heartbeat(state, 'online')`). The hold loop has always called
+ * it; this one has to as well, for the same reason and more so.
+ */
+ok(/onHold\?\.\(\)/.test(block), 'the detach wait beats while it waits — the longest wait in the function may not be its most silent');
+ok(/onHold\?\.\(\)\.catch\(/.test(block), 'and a failed heartbeat does not abort a publication that is still in progress');
+
+const holdBlock = composer.slice(composer.indexOf('const holdFrom'), composer.indexOf("onStep('publishing')"));
+ok(/onHold\?\.\(\)/.test(holdBlock), 'the notBefore hold still beats too — this test must not trade one silence for another');
 const tick = num('DETACH_TICK_MS');
 ok(tick !== null && (tick as number) <= 30_000, 'a line at least every thirty seconds, or it still reads as frozen');
 

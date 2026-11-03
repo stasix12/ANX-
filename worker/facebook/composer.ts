@@ -41,7 +41,20 @@ export interface ComposeInput {
    * another. Null means the gap is already open and nothing is held.
    */
   notBefore?: string | null;
-  /** Called every few seconds while the post is held for `notBefore`. */
+  /**
+   * Called every few seconds during ANY long wait inside publishToGroup, so
+   * the caller can say it is still alive.
+   *
+   * It used to be called only during the `notBefore` hold, and the worker
+   * implements it as a heartbeat — the dashboard calls a machine offline
+   * after ninety seconds of silence. That was enough while every other wait
+   * was short. It stopped being enough the moment the detach wait went back
+   * to fifteen minutes for video: a publication that was going perfectly
+   * would have shown up as "המחשב לא מחובר" ninety seconds after the click,
+   * and the server's own stranded-row sweep reads the same ninety seconds as
+   * "that worker is gone" and may take the row off a lane that is still
+   * holding it. Two faults, one silence.
+   */
   onHold?: () => Promise<void>;
   /**
    * THE SLOT, TAKEN AFTER THE PREPARATION AND BEFORE THE HOLD.
@@ -220,9 +233,44 @@ const VIDEO_UPLOAD_TIMEOUT = 15 * 60_000;
  * afterSubmit = true, so the row is parked as "may already be published,
  * check the group" and is never retried automatically. Shortening this makes
  * the queue move; it cannot make a post go out twice.
+ *
+ * ─── EVERYTHING ABOVE THE LINE WAS WRONG ABOUT VIDEO, AND IT COST HIM A NIGHT
+ *
+ * The paragraph above argues the upload is finished by the time this runs, so
+ * three minutes is plenty. The argument is sound and the conclusion is false,
+ * and his own account settled it:
+ *
+ *   22:18  this constant goes from 15 minutes to 3 (commit 07c8d86)
+ *   ~21:10 the last video post that actually reached a group
+ *   04:10  215 attempts today, 0 published, every one of them ending in
+ *          "חלון הפוסט לא נסגר אחרי הלחיצה על פרסום", and the group checked
+ *          by hand: nothing there but the post from before the change
+ *
+ * It is the only change to the publishing path in that window — `git log
+ * --since 21:13 -- worker/` names composer.ts once, in that commit, and
+ * nothing else that touches the click.
+ *
+ * WHAT THE ARGUMENT MISSED. waitForUploads() proves the BYTES arrived. For a
+ * photo that is nearly the whole job and the dialog closes in seconds. For a
+ * video Facebook keeps the dialog open through transcoding, which it does
+ * AFTER the upload and before it will accept the post — minutes of work that
+ * waitForUploads() cannot see and that has nothing to do with bandwidth. So
+ * the two waits were not "collapsed into one constant" by mistake. The long
+ * one was load-bearing.
+ *
+ * SO WHY NOT SIMPLY REVERT? Because "זה נתקע פשוט" was also real, and the
+ * part of that fix that mattered was never the number. A fifteen-minute wait
+ * that prints its age every twenty seconds, on a row whose `step` says
+ * `verifying` on his screen, is not the thing he reported: that was fifteen
+ * minutes of total silence, indistinguishable from a crash. The slices stay.
+ * The allowance goes back to the value that demonstrably published.
+ *
+ * FIFTEEN AND NOT SOME CLEVERER NUMBER. The only measurement anyone has is
+ * that 15 worked and 3 does not. Eight would be a guess dressed up as
+ * caution, and this constant has now been guessed at once already.
  */
 const SUBMIT_DETACH_MS = 90_000;
-const SUBMIT_DETACH_VIDEO_MS = 3 * 60_000;
+const SUBMIT_DETACH_VIDEO_MS = VIDEO_UPLOAD_TIMEOUT;
 /** How often the wait says it is still alive, so a terminal never looks frozen. */
 const DETACH_TICK_MS = 20_000;
 
@@ -420,6 +468,11 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
       .catch(() => false);
     if (!detached && Date.now() < detachBy) {
       console.log(`[worker]    ממתין לסגירת חלון הפוסט… ${Math.round((Date.now() - clickedAt) / 1000)} שניות`);
+      /* ALIVE, AND SAYING SO. Without this the longest wait in the function
+         is also its most silent one — see onHold. A heartbeat failure must
+         not abort a publication that is still in progress, so it is swallowed
+         here; the next slice tries again. */
+      await input.onHold?.().catch(() => {});
     }
   }
   if (!detached) {

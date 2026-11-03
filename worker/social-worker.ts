@@ -258,8 +258,14 @@ interface WorkerState {
    * The same latch as addressTried and for the same reason: a group whose
    * author page cannot be read yields no writes, so without this the sweep
    * re-opens that one group every tick and no other group is ever reached.
+   *
+   * A MAP AND NOT A SET, because addressTried's own shape has a defect this
+   * one cannot afford: it is never cleared, so a group whose page was blocked
+   * once is never looked at again for the life of the process — and rows
+   * parked in that same group an hour later are invisible with it. The
+   * instant is kept so the group comes back round in VERIFY_GROUP_AGAIN_MS.
    */
-  submittedTried?: Set<string>;
+  submittedTried?: Map<string, number>;
   /**
    * Rows a chore just failed on, and the instant each may be tried again.
    *
@@ -4124,6 +4130,11 @@ const VERIFY_GROUPS_PER_TICK = 1;
 /** How many parked rows to consider in one pass. */
 const VERIFY_ROWS_SCANNED = 200;
 
+/** How long before a group is worth opening again. A page that was blocked,
+    or a post that had not rendered yet, is a temporary condition — but one
+    worth a browser window only every couple of hours. */
+const VERIFY_GROUP_AGAIN_MS = 2 * 60 * 60_000;
+
 /**
  * DID THE POST ACTUALLY GO UP? — asking the group instead of asking the owner.
  *
@@ -4160,13 +4171,23 @@ async function verifySubmitted(state: WorkerState, headless: boolean): Promise<v
   const db = await workerDb();
   const now = Date.now();
 
-  const { data, error } = await db
+  /*
+   * SCOPED LIKE EVERY OTHER QUEUE READ, and the review is why.
+   *
+   * This was the one read in the worker that was not. Two identities are live
+   * on this database at once; unscoped, worker A reads a row B parked for B's
+   * group, opens that group under A's id — a group A is not even in — and
+   * decides about B's publication. account-scope.ts exists for exactly this.
+   */
+  const scope = queueScope(state);
+  let parked = db
     .from('social_queue')
-    .select('id, rendered_text, updated_at, published_at, target_id, target:social_targets(name, url)')
+    .select('id, rendered_text, updated_at, claimed_at, published_at, target_id, target:social_targets!inner(name, url, channel, account_id)')
     .eq('status', 'needs_attention')
     .eq('step', 'submitted')
-    .order('updated_at')
-    .limit(VERIFY_ROWS_SCANNED);
+    .eq('target.channel', 'facebook_group');
+  if (scope) parked = parked.or(`account_id.eq.${scope},account_id.is.null`, { referencedTable: 'target' });
+  const { data, error } = await parked.order('updated_at').limit(VERIFY_ROWS_SCANNED);
   /*
    * A failed read is not "nothing to verify". Saying so out loud is the whole
    * lesson of AUDIT-silent-writes.md: the reads that decided in our place all
@@ -4182,6 +4203,7 @@ async function verifySubmitted(state: WorkerState, headless: boolean): Promise<v
     id: string;
     rendered_text: string;
     updated_at: string | null;
+    claimed_at: string | null;
     published_at: string | null;
     target_id: string;
     target: { name: string; url: string } | { name: string; url: string }[] | null;
@@ -4200,10 +4222,10 @@ async function verifySubmitted(state: WorkerState, headless: boolean): Promise<v
     byGroup.set(group.url, [...(byGroup.get(group.url) ?? []), row]);
   }
 
-  const todo = [...byGroup].filter(([groupUrl]) => !state.submittedTried?.has(groupUrl));
+  const todo = [...byGroup].filter(([groupUrl]) => (state.submittedTried?.get(groupUrl) ?? 0) <= now - VERIFY_GROUP_AGAIN_MS);
   for (const [groupUrl, groupRows] of todo.slice(0, VERIFY_GROUPS_PER_TICK)) {
     if (stopping) break;
-    state.submittedTried = (state.submittedTried ?? new Set()).add(groupUrl);
+    state.submittedTried = (state.submittedTried ?? new Map()).set(groupUrl, now);
     const page = await session.newPage(headless, 'בדיקה אם הפוסט עלה');
     try {
       const read = await readOurPostsInGroup(page, groupUrl, state.accountId);
@@ -4222,58 +4244,48 @@ async function verifySubmitted(state: WorkerState, headless: boolean): Promise<v
         if (!row) continue;
         const name = (Array.isArray(row.target) ? row.target[0]?.name : row.target?.name) ?? 'הקבוצה';
 
-        if (verdict.outcome === 'live') {
-          const landed = await applied(
-            db
-              .from('social_queue')
-              .update({
-                status: 'published',
-                step: 'published',
-                permalink: verdict.url,
-                /* The moment the worker clicked, not the moment we looked.
-                   See the header: the gap is measured from this column. */
-                published_at: row.published_at || row.updated_at || new Date().toISOString(),
-                error: 'הפוסט נמצא בקבוצה בבדיקה חוזרת — לא היה צריך לפרסם אותו שוב.',
-              })
-              .eq('id', verdict.id)
-              .eq('status', 'needs_attention')
-              .eq('step', 'submitted'),
-            1,
-            'סימון פרסום שאומת בקבוצה',
-          );
-          if (landed) {
-            await logActivity('info', 'submitted_verified_live', `בדקנו בקבוצה "${name}" — הפוסט כן עלה. סימנו אותו כפורסם ולא ננסה שוב.`, { queueId: verdict.id, permalink: verdict.url });
-          }
-          continue;
-        }
+        if (verdict.outcome !== 'live') continue;
 
-        if (verdict.outcome === 'absent') {
-          const landed = await applied(
-            db
-              .from('social_queue')
-              .update({
-                status: 'scheduled',
-                step: 'pending',
-                scheduled_at: new Date().toISOString(),
-                error: '',
-                worker_id: null,
-                claimed_at: null,
-              })
-              .eq('id', verdict.id)
-              .eq('status', 'needs_attention')
-              .eq('step', 'submitted'),
-            1,
-            'החזרת פרסום שלא נמצא בקבוצה לתור',
-          );
-          if (landed) {
-            await logActivity('info', 'submitted_verified_absent', `בדקנו בקבוצה "${name}" — הפוסט לא עלה. החזרנו אותו לתור.`, { queueId: verdict.id });
-          }
+        const landed = await applied(
+          db
+            .from('social_queue')
+            .update({
+              status: 'published',
+              step: 'published',
+              permalink: verdict.url,
+              /*
+               * WHEN IT WENT LIVE, NOT WHEN WE LOOKED — the spacing gate and
+               * the daily ceilings both read this column, so "now" would
+               * charge this check to the owner's next publication.
+               *
+               * claimed_at and NOT updated_at: a trigger moves updated_at on
+               * every write to the row, and the startup sweep, the stranded
+               * sweep and the address pass all write to parked rows. It is
+               * the last thing that touched the row, which is not a time
+               * anything went live. claimed_at is stamped once, at the claim,
+               * seconds before the click, and nothing moves it afterwards.
+               */
+              published_at: row.published_at || row.claimed_at || row.updated_at || new Date().toISOString(),
+              /* NOT an error string. social_queue.error is printed verbatim
+                 and in red by ErrorDetail.tsx, and this row is a success. The
+                 explanation goes to the feed, where it reads as news. */
+              error: null,
+            })
+            .eq('id', verdict.id)
+            .eq('status', 'needs_attention')
+            .eq('step', 'submitted'),
+          1,
+          'סימון פרסום שאומת בקבוצה',
+        );
+        if (landed) {
+          await logActivity('info', 'submitted_verified_live', `בדקנו בקבוצה "${name}" — הפוסט כן עלה. סימנו אותו כפורסם, והוא כבר לא ממתין לבדיקה שלכם.`, { queueId: verdict.id, permalink: verdict.url });
         }
-        /* 'unknown' writes nothing, on purpose. The row stays parked. */
+        /* Every other verdict writes NOTHING, on purpose. The row stays
+           parked and the owner decides, exactly as before this existed. */
       }
 
       const tally = verdictTally(verdicts);
-      console.log(`[worker] 🔎 ${groupUrl}: ${tally.live} עלו, ${tally.absent} לא עלו, ${tally.unknown} לא הוכרעו.`);
+      console.log(`[worker] 🔎 ${groupUrl}: ${tally.live} אותרו בקבוצה, ${tally.unknown} נשארו לבדיקה ידנית.`);
     } catch (err) {
       console.error('[worker] ℹ בדיקת פרסומים ממתינים לא הצליחה (השורות נשארות כפי שהן):', err instanceof Error ? err.message.split('\n')[0] : err);
     } finally {

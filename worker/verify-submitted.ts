@@ -17,19 +17,45 @@ import { normalizeForMatch, type GroupPostsRead } from './facebook/postIndex';
  * /groups/<id>/user/<us>/ — lists ONLY our posts in that group, which is
  * exactly the question, and postIndex.ts already reads it for the comments.
  *
- * ────────────────────── THE ASYMMETRY THAT RULES THIS FILE ─────────────────
+ * ────────────────── WHY THIS FILE CANNOT SAY "IT IS NOT THERE" ─────────────
  *
- * The two mistakes are not the same size.
+ * The first version of this module had a third verdict — 'absent' — which put
+ * the row back on the queue. An adversarial review of it found SIX separate
+ * ways a post that was plainly live would be declared absent and published a
+ * second time, and the worst of them was not an edge case:
+ *
+ *   • `ok: true` from readOurPostsInGroup means `page.goto` resolved and
+ *     classifyPage saw no login form. It is NOT a statement that the author
+ *     feed rendered. A cold profile, a slow response or an interstitial
+ *     served after the classification yields `{ ok: true, posts: [] }`, and
+ *     every parked row in that group would be republished.
+ *   • matchPosts deliberately refuses to match when two of our posts fit the
+ *     same text — "picking either is a coin toss". A campaign with חזרה
+ *     יומית puts the same words in a group every day, so after a week the
+ *     author page holds seven identical posts and NO row can ever match.
+ *     That is not a race: it fires every single time.
+ *   • A post waiting in the group's admin-approval queue is not on the author
+ *     page at all — and admin approval is one of the likeliest reasons the
+ *     publish dialog never closed in the first place.
+ *   • Publishing as a Page lists nothing under /user/<personal id>/.
+ *   • And while the underlying fault is still live, park → "absent" →
+ *     republish → park is a loop with no end: one more live copy per cycle.
+ *
+ * The two mistakes were never the same size —
  *
  *   Saying "it is live" when it is not  →  one post silently never goes out.
  *   Saying "it is not live" when it is  →  the same post goes to the same
  *                                          group twice, publicly, forever.
  *
- * So "absent" — the verdict that puts a row back on the queue — is the one
- * that has to earn it, and three separate things must all be true before it
- * can be reached. Everything else resolves to `unknown`, which changes
- * nothing and leaves the row parked exactly as it is today. An unknown costs
- * the owner a manual check: the price of never being the second mistake.
+ * — and no amount of guarding made the second one rare enough to be worth its
+ * price. So this module decides ONE thing: whether our post is positively,
+ * textually ON the page. When it is, the row stops being a question. When it
+ * is not, for ANY reason, nothing is written and the row stays parked exactly
+ * as it is today.
+ *
+ * That is still worth having. A row the sweep confirms becomes a real
+ * `published` row, which is the only form rules.ts's two duplicate guards can
+ * see — so confirming a post is itself a defence against publishing it twice.
  */
 
 /** A parked row, as the sweep reads it out of the queue. */
@@ -40,31 +66,34 @@ export interface SubmittedRow {
 }
 
 export type Verdict =
-  /** Found on the group's author page. The row is a publication after all. */
+  /** Found on the group's author page, by text, beyond doubt. The row is a
+      publication after all, and saying so is what stops it being published
+      again — rules.ts's two duplicate guards both count `status='published'`
+      rows and cannot see a parked one. */
   | { id: string; outcome: 'live'; url: string }
-  /** Read the page, our text is long enough to be evidence, and it is not
-      there. Safe to put back on the queue. */
-  | { id: string; outcome: 'absent' }
-  /** Anything else. Nothing is written; the row stays parked for a human. */
+  /** Everything else. NOTHING is written; the row stays parked for a human,
+      exactly as it is today. */
   | { id: string; outcome: 'unknown'; why: VerdictDoubt };
 
 export type VerdictDoubt =
   /** The author page did not load, or Facebook showed a wall instead. */
   | 'unreadable'
-  /** Our own text is too short, or too much of it is emoji, to prove absence.
-      A dozen letters match half a feed; see matchPosts in postIndex.ts. */
+  /** Our own text is too short, or too much of it is emoji, to be matched at
+      all. A dozen letters match half a feed; see matchPosts in postIndex.ts. */
   | 'no-evidence'
-  /** Parked too recently — Facebook's own page has not caught up yet. */
-  | 'too-soon';
+  /** The page was read and our post was not positively identified on it.
+      THIS IS NOT "the post is not there" — see the header. */
+  | 'not-found';
 
 /*
  * HOW MUCH OF OUR OWN TEXT HAS TO SURVIVE THE TRIP.
  *
- * matchPosts already refuses to MATCH on fewer than 12 letters, because a
- * dozen letters match half a feed. Declaring something ABSENT is the heavier
- * claim, so the bar is higher: a post whose normalised text is shorter than
- * this is one whose absence we cannot prove — it is an image, a line of
- * emoji, a two-word caption — and it stays parked rather than being retried.
+ * matchPosts refuses to match on fewer than 12 letters, because a dozen
+ * letters match half a feed. Marking a row `published` is a heavier claim, so
+ * the bar here is higher: below it the row is left alone. It also closes the
+ * one route to a FALSE 'live' the review found — matchPosts' last rule pairs
+ * a lone unmatched row with a lone unmatched post by position, which would
+ * hand a two-word caption yesterday's unrelated permalink.
  */
 export const MIN_EVIDENCE_LETTERS = 40;
 
@@ -72,8 +101,8 @@ export const MIN_EVIDENCE_LETTERS = 40;
  * HOW LONG TO LET FACEBOOK CATCH UP BEFORE BELIEVING ITS OWN PAGE.
  *
  * The author page is not instantaneous. A post that went live thirty seconds
- * ago can be missing from it, and believing that would be exactly the second
- * mistake. Ten minutes is far longer than the page needs and costs nothing:
+ * ago can be missing from it, so looking that early is simply a wasted page
+ * load. Ten minutes is far longer than the page needs and costs nothing:
  * these rows have been parked for hours.
  */
 export const VERIFY_AFTER_MS = 10 * 60_000;
@@ -86,9 +115,25 @@ export function ripeForVerify(parkedAt: string | null | undefined, now: number):
   return now - at >= VERIFY_AFTER_MS;
 }
 
-/** Is our own text substantial enough for its absence to mean anything? */
+/** Is our own text substantial enough to identify a post by? */
 export function provableText(text: string): boolean {
   return normalizeForMatch(text || '').length >= MIN_EVIDENCE_LETTERS;
+}
+
+/**
+ * Does the post at this address really carry our words?
+ *
+ * matchPosts' final rule pairs one leftover row with one leftover post by
+ * POSITION, with no text agreement at all — correct for its own job (saving an
+ * address for a comment) and not nearly enough to declare a row published. So
+ * the pairing is re-checked here against the page's own copy of the text, by
+ * the same containment rule matchPosts uses when it does match on text.
+ */
+export function textAgrees(ours: string, theirs: string): boolean {
+  const mine = normalizeForMatch(ours || '');
+  const other = normalizeForMatch(theirs || '');
+  if (mine.length < MIN_EVIDENCE_LETTERS || other.length < 12) return false;
+  return other.includes(mine.slice(0, 60)) || mine.includes(other.slice(0, 60));
 }
 
 /**
@@ -111,20 +156,25 @@ export function decideSubmitted(
    * and not a list of posts: a login wall must never be able to say "absent".
    */
   if (!read.ok) return rows.map((r) => ({ id: r.id, outcome: 'unknown', why: 'unreadable' }));
+  const textAt = new Map(read.posts.map((p) => [p.url, p.text]));
 
   return rows.map((row): Verdict => {
-    const url = matched[row.id];
-    if (url) return { id: row.id, outcome: 'live', url };
     if (!provableText(row.text)) return { id: row.id, outcome: 'unknown', why: 'no-evidence' };
-    return { id: row.id, outcome: 'absent' };
+    const url = matched[row.id];
+    /* Not matched, or matched only by matchPosts' positional fallback: either
+       way we have not identified this post, and "not identified" is never
+       "not there". The row stays exactly as it is. */
+    if (!url || !textAgrees(row.text, textAt.get(url) ?? '')) {
+      return { id: row.id, outcome: 'unknown', why: 'not-found' };
+    }
+    return { id: row.id, outcome: 'live', url };
   });
 }
 
 /** One line for the log, so a sweep that decided nothing still says so. */
-export function verdictTally(verdicts: Verdict[]): { live: number; absent: number; unknown: number } {
+export function verdictTally(verdicts: Verdict[]): { live: number; unknown: number } {
   return {
     live: verdicts.filter((v) => v.outcome === 'live').length,
-    absent: verdicts.filter((v) => v.outcome === 'absent').length,
     unknown: verdicts.filter((v) => v.outcome === 'unknown').length,
   };
 }

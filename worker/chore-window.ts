@@ -42,7 +42,7 @@ export const CHORE_NEEDS_MS = {
       the same way, plus one small write per row it resolves. Budgeted a little
       above it because what follows the read is a decision about a real
       publication, and a sweep cut off halfway leaves rows parked. */
-  verifySubmitted: 60_000,
+  verifySubmitted: 120_000,
   shareLinks: 45_000,
   profiles: 60_000,
   /** Scrolls a feed twenty times. */

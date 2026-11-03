@@ -1,5 +1,6 @@
 /*
- * THE 139 PARKED PUBLICATIONS, AS A TEST.
+ * THE 139 PARKED PUBLICATIONS, AND THE SIX WAYS THE FIRST FIX WOULD HAVE
+ * PUBLISHED THEM TWICE.
  *
  * 03/11, from the owner's own database: worker@stas published 136 posts and
  * then stopped at 09:22. Everything after that reached the group, clicked
@@ -7,14 +8,18 @@
  * step 'submitted', which the worker refuses to retry because the post may be
  * live and a retry would post it twice in a real group under his own account.
  *
- * verify-submitted.ts goes and looks instead. Every case below is about the
- * one thing that can go wrong with that: saying "it is not there" when it is.
+ * The first version of verify-submitted.ts had a third verdict, 'absent',
+ * which put such a row back on the queue. An adversarial review found six
+ * independent routes by which a plainly live post would reach it — and the
+ * worst was not an edge case but a certainty: a campaign with חזרה יומית puts
+ * the same words in a group every day, so matchPosts, which deliberately
+ * refuses to choose between two posts that fit the same text, can never match
+ * any of them. Every one of those rows would have been republished.
  *
- *   wrong "live"    → one post silently never goes out.
- *   wrong "absent"  → the same post, twice, in a real group, forever.
- *
- * So the suite is weighted the way the damage is. Most of it is about the
- * ways 'absent' must NOT be reachable.
+ * So 'absent' is gone. This module now decides one thing — is our post
+ * positively, textually ON the page — and writes nothing in every other case.
+ * The suite below is mostly about that: the cases that USED to requeue and
+ * now must not.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -24,8 +29,10 @@ import {
   decideSubmitted,
   provableText,
   ripeForVerify,
+  textAgrees,
   verdictTally,
   type SubmittedRow,
+  type Verdict,
 } from '../verify-submitted';
 import type { GroupPostsRead } from '../facebook/postIndex';
 
@@ -33,119 +40,171 @@ let checks = 0;
 const is = (cond: unknown, msg: string) => { checks += 1; assert.ok(cond, msg); };
 const eq = (a: unknown, b: unknown, msg: string) => { checks += 1; assert.equal(a, b, msg); };
 
-/* The owner's real post text, long enough to be evidence of its own absence. */
+/* The owner's real post text, well over the evidence bar. */
 const REAL = 'מחפשים אוכל טוב בבאר שבע? פתחנו משאית אוכל חדשה ליד הקניון, בואו לטעום ותגידו לנו מה דעתכם';
+const OTHER = 'דירת 4 חדרים להשכרה בשכונה ו, משופצת, כניסה מיידית, לפרטים התקשרו בשעות הערב';
 const SHORT = 'בואו 🔥';
 const EMOJI = '🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥';
 
 const rows = (...texts: string[]): SubmittedRow[] => texts.map((text, i) => ({ id: `r${i}`, text }));
+const url = (i: number) => `https://www.facebook.com/groups/1/posts/${i}/`;
 const ok = (...texts: string[]): GroupPostsRead => ({
   ok: true,
-  posts: texts.map((text, i) => ({ url: `https://www.facebook.com/groups/1/posts/${i}/`, text })),
+  posts: texts.map((text, i) => ({ url: url(i), text })),
 });
+/* No verdict in the new design may ever requeue anything. */
+const never = (out: Verdict[], msg: string) =>
+  is(out.every((v) => v.outcome === 'live' || v.outcome === 'unknown'), msg);
 
-// ─────────────── 1. An unreadable page can NEVER say "absent" ───────────────
-/*
- * This is the single line the whole feature's safety rests on. postIndex's
- * ourPostsInGroup flattens "login wall" and "no posts here" into the same
- * empty list; a decision taken on that would retry a live post.
- */
+// ══════════ 1. THE VERDICT THAT PUBLISHED TWICE NO LONGER EXISTS ═══════════
+{
+  const all: Verdict[] = [
+    ...decideSubmitted(rows(REAL), { ok: false, why: 'blocked' }, {}),
+    ...decideSubmitted(rows(REAL), { ok: true, posts: [] }, {}),
+    ...decideSubmitted(rows(REAL), ok(OTHER), {}),
+    ...decideSubmitted(rows(SHORT), ok(REAL), { r0: url(0) }),
+  ];
+  never(all, 'NOTHING this module can return puts a row back on the queue');
+  is(!JSON.stringify(all).includes('absent'), "and the word 'absent' is not in any verdict");
+}
+
+// ══════════ 2. An unreadable page decides nothing ══════════════════════════
 for (const why of ['no-author', 'navigation', 'blocked'] as const) {
   const out = decideSubmitted(rows(REAL, REAL), { ok: false, why }, {});
-  eq(out.length, 2, `${why}: every row gets a verdict`);
-  is(out.every((v) => v.outcome === 'unknown'), `${why}: nothing is decided on a page that was not read`);
-  is(out.every((v) => v.outcome === 'unknown' && v.why === 'unreadable'), `${why}: and it says why`);
-  is(!out.some((v) => v.outcome === 'absent'), `${why}: ABSENT IS UNREACHABLE — this is the duplicate guard`);
+  eq(out.length, 2, `${why}: every row still gets a verdict`);
+  is(out.every((v) => v.outcome === 'unknown' && v.why === 'unreadable'), `${why}: and it is "we do not know"`);
 }
 
-// ─────────────────────── 2. Found means found ───────────────────────────────
+// ══════════ 3. THE FINDING THAT KILLED THE FIRST DESIGN ════════════════════
+/*
+ * ok:true means page.goto resolved and classifyPage saw no login form. It is
+ * NOT a statement that the author feed rendered: a cold profile, a slow
+ * response, or an interstitial served after the classification all produce
+ * {ok:true, posts:[]}. The first version called that "absent" and would have
+ * republished every parked row in the group.
+ */
 {
-  const out = decideSubmitted(rows(REAL), ok(REAL), { r0: 'https://www.facebook.com/groups/1/posts/0/' });
-  eq(out[0].outcome, 'live', 'a matched row is a publication, not a failure');
-  eq(out[0].outcome === 'live' && out[0].url, 'https://www.facebook.com/groups/1/posts/0/', 'and it carries the address');
+  const out = decideSubmitted(rows(REAL, REAL, REAL), { ok: true, posts: [] }, {});
+  is(out.every((v) => v.outcome === 'unknown' && v.why === 'not-found'),
+    'a page that came back empty is NOT evidence of absence — it may simply not have rendered');
+  never(out, 'and above all it does not requeue three live posts');
 }
 
-// ───────────────── 3. Absent, only with real evidence ───────────────────────
+// ══════════ 4. The repeat campaign — the certainty, not the race ═══════════
+/*
+ * חזרה יומית puts identical text in the group every day. matchPosts finds
+ * seven candidates, refuses to choose ("picking either is a coin toss"), and
+ * returns nothing for the row. The old code read that silence as absence.
+ */
 {
-  const out = decideSubmitted(rows(REAL), ok('משהו אחר לגמרי שפורסם בקבוצה הזאת לפני שבוע ואין לו שום קשר'), {});
-  eq(out[0].outcome, 'absent', 'page read, text long, no match — the post is genuinely not there');
-}
-{
-  /* The page read fine and holds nothing of ours. That is still an answer. */
-  const out = decideSubmitted(rows(REAL), { ok: true, posts: [] }, {});
-  eq(out[0].outcome, 'absent', 'an EMPTY page that was genuinely read is evidence; an unread one is not');
+  const week = ok(REAL, REAL, REAL, REAL, REAL, REAL, REAL);
+  const out = decideSubmitted(rows(REAL), week, {});
+  eq(out[0].outcome, 'unknown', 'seven identical posts of ours: unmatched is not missing');
+  eq(out[0].outcome === 'unknown' && out[0].why, 'not-found', 'and it says so plainly');
+  never(out, 'the 8th copy is never published');
 }
 
-// ─────────── 4. Text that cannot prove its own absence stays parked ─────────
+// ══════════ 5. A match must be a TEXT match, not a positional one ══════════
+/*
+ * matchPosts' last rule pairs one leftover row with one leftover post by
+ * position, with no text agreement at all. Correct for saving an address;
+ * nowhere near enough to call a row published.
+ */
+{
+  const out = decideSubmitted(rows(REAL), ok(OTHER), { r0: url(0) });
+  eq(out[0].outcome, 'unknown', "a positional pairing with somebody else's text is not our post");
+  eq(out[0].outcome === 'unknown' && out[0].why, 'not-found', 'and it is not treated as proof of anything');
+}
+{
+  const out = decideSubmitted(rows(SHORT), ok(REAL), { r0: url(0) });
+  eq(out[0].outcome, 'unknown', 'a two-word caption paired by position never becomes a publication');
+  eq(out[0].outcome === 'unknown' && out[0].why, 'no-evidence', 'the evidence bar is checked before the match');
+}
+is(!textAgrees(REAL, OTHER), 'two unrelated posts do not agree');
+is(!textAgrees(SHORT, SHORT), 'and a short string agrees with nothing, including itself');
+is(textAgrees(REAL, REAL + ' עוד…'), "Facebook's truncated copy still agrees with ours");
+is(textAgrees(REAL, REAL.replace(/[,?]/g, '')), 'punctuation does not break the agreement');
+
+// ══════════ 6. And when it really is there, say so ═════════════════════════
+{
+  const out = decideSubmitted(rows(REAL), ok(REAL), { r0: url(0) });
+  eq(out[0].outcome, 'live', 'our words, on the page, at that address — that is a publication');
+  eq(out[0].outcome === 'live' && out[0].url, url(0), 'and it carries the address');
+}
+{
+  /* Two different posts of ours, each matched to its own. */
+  const out = decideSubmitted(rows(REAL, OTHER), ok(REAL, OTHER), { r0: url(0), r1: url(1) });
+  is(out.every((v) => v.outcome === 'live'), 'two distinct posts resolve independently');
+}
+
+// ══════════ 7. Text that cannot identify a post at all ═════════════════════
 for (const [label, text] of [['short', SHORT], ['emoji only', EMOJI], ['empty', '']] as const) {
-  const out = decideSubmitted(rows(text), ok('משהו אחר'), {});
-  eq(out[0].outcome, 'unknown', `${label}: never requeued — its absence proves nothing`);
-  eq(out[0].outcome === 'unknown' && out[0].why, 'no-evidence', `${label}: and it says why`);
+  const out = decideSubmitted(rows(text), ok(OTHER), {});
+  eq(out[0].outcome === 'unknown' && out[0].why, 'no-evidence', `${label}: left alone`);
 }
 is(!provableText(SHORT), 'a two-word caption is not evidence');
 is(!provableText(EMOJI), 'emoji vanish in normalisation, so an emoji wall is not evidence');
 is(provableText(REAL), "the owner's real post text is");
-is(MIN_EVIDENCE_LETTERS > 12, 'the bar to declare ABSENCE is higher than the bar matchPosts uses to MATCH');
+is(MIN_EVIDENCE_LETTERS > 12, 'the bar here is higher than the one matchPosts matches on');
 
-// ───────────────────── 5. Facebook is allowed to lag ────────────────────────
+// ══════════ 8. Facebook is allowed to lag ══════════════════════════════════
 {
   const now = Date.parse('2026-11-03T17:30:00.000Z');
   const minutes = (n: number) => new Date(now - n * 60_000).toISOString();
-  is(!ripeForVerify(minutes(0), now), 'a row parked this second is not verified');
+  is(!ripeForVerify(minutes(0), now), 'a row parked this second is not looked at');
   is(!ripeForVerify(minutes(9), now), 'nor one parked nine minutes ago');
   is(ripeForVerify(minutes(11), now), 'eleven minutes is enough for the author page to catch up');
-  is(ripeForVerify(minutes(600), now), 'and the real ones had been parked for hours');
-  is(!ripeForVerify(null, now), 'a row with no timestamp is never verified');
+  is(!ripeForVerify(null, now), 'a row with no timestamp is never looked at');
   is(!ripeForVerify('not a date', now), 'and neither is one with a broken timestamp');
   eq(VERIFY_AFTER_MS, 10 * 60_000, 'ten minutes, and changing it is a decision not a typo');
 }
 
-// ─────────────────────────── 6. The tally ───────────────────────────────────
+// ══════════ 9. The tally ═══════════════════════════════════════════════════
 {
-  const out = decideSubmitted(
-    rows(REAL, REAL + ' שונה', SHORT),
-    ok(REAL),
-    { r0: 'https://www.facebook.com/groups/1/posts/0/' },
-  );
+  const out = decideSubmitted(rows(REAL, OTHER, SHORT), ok(REAL), { r0: url(0) });
   const t = verdictTally(out);
-  eq(t.live, 1, 'one found');
-  eq(t.absent, 1, 'one genuinely missing');
-  eq(t.unknown, 1, 'one undecidable');
+  eq(t.live, 1, 'one identified');
+  eq(t.unknown, 2, 'two left for a human');
+  is(!('absent' in t), 'the tally has no requeue column, because there is no requeue');
 }
 
-// ────────── 7. THE SOURCE PINS — the guards that silently vanish ────────────
+// ══════ 10. THE SOURCE PINS — the guards that vanish without a sound ═══════
 const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
 const sweep = worker.slice(worker.indexOf('async function verifySubmitted'));
 const body = sweep.slice(0, sweep.indexOf('\nconst COMMENTS_PER_TICK'));
 is(body.length > 500, 'found the sweep body to pin');
 
-/*
- * The one that matters most. ourPostsInGroup returns [] for a login wall AND
- * for an empty group; swapping it back in here would compile, pass every
- * other test, and quietly start posting duplicates in production.
- */
+/* THE ONE THAT MATTERS MOST. Re-introducing a requeue here is the whole of
+   the duplicate risk, and it would compile and pass everything else. */
+is(!body.includes("status: 'scheduled'"), 'THE SWEEP NEVER PUTS A ROW BACK ON THE QUEUE — six duplicate routes live behind this line');
+is(!body.includes("step: 'pending'"), 'nor resets a row to pending');
+is(!body.includes('scheduled_at:'), 'nor touches scheduled_at, which is queue order');
+eq((body.match(/\.update\(\{/g) ?? []).length, 1, 'exactly ONE write, and it marks a row published');
+
+/* ourPostsInGroup flattens a login wall and an empty group into the same []. */
 is(body.includes('readOurPostsInGroup'), 'the sweep reads the page with the variant that reports failure');
-is(!/[^d]ourPostsInGroup\(/.test(body), 'and never with the one that flattens a login wall into "no posts here"');
+is(!/[^d]ourPostsInGroup\(/.test(body), 'and never with the one that cannot tell a wall from an empty group');
 
-/* Both writes must re-state the state they were decided on: between the read
-   and the write the owner may have pressed "נסה שוב" on that very row. */
-const writes = body.split('.update({').slice(1);
-eq(writes.length, 2, 'exactly two writes: mark published, and put back on the queue');
-for (const [i, w] of writes.entries()) {
-  const upTo = w.slice(0, w.indexOf('applied') >= 0 ? w.indexOf('applied') : 1200);
-  is(upTo.includes(".eq('status', 'needs_attention')"), `write ${i + 1} only touches a row still parked`);
-  is(upTo.includes(".eq('step', 'submitted')"), `write ${i + 1} only touches a row still at 'submitted'`);
-}
+/* The read is scoped like every other queue read in the worker. */
+is(body.includes('queueScope(state)'), 'the parked rows are read under this account only');
+is(body.includes('account_id.eq.'), 'with the same filter the due query uses');
+is(body.includes("social_targets!inner"), 'and an inner join, so the filter can bite');
 
-/* Both go through applied(): a refused write must not be logged as a success.
-   This is the lesson of AUDIT-silent-writes.md, and it cost a night. */
-eq((body.match(/await applied\(/g) ?? []).length, 2, 'both writes are measured, never assumed');
+/* The write re-states the state it was decided on, and is measured. */
+is(body.includes(".eq('status', 'needs_attention')"), 'the write only touches a row still parked');
+is(body.includes(".eq('step', 'submitted')"), "and still at 'submitted' — the owner may have pressed נסה שוב meanwhile");
+eq((body.match(/await applied\(/g) ?? []).length, 1, 'the write is measured, never assumed');
 
-/* published_at is the click, not the check: the spacing gate reads it. */
-is(body.includes('row.published_at || row.updated_at'), 'a recovered publication is stamped when it went live, not when we looked');
-is(!/published_at: new Date\(\)\.toISOString\(\),/.test(body.split('row.published_at')[0]), 'and "now" is only the last-resort fallback');
+/* published_at is the click, and claimed_at is the only column that holds it:
+   a trigger moves updated_at on every write, including other sweeps'. */
+is(body.includes('row.published_at || row.claimed_at'), 'a recovered publication is stamped from claimed_at, not from the last write to the row');
+is(!/published_at: row\.updated_at/.test(body), 'updated_at alone is never the publication time');
 
-/* Ripeness is applied to the rows, not merely exported. */
-is(body.includes('ripeForVerify'), 'the sweep filters by ripeness');
+/* A success must not arrive wearing a red error sentence. */
+is(body.includes('error: null'), 'a verified row carries no error text — ErrorDetail prints that column verbatim');
+
+/* The group latch re-arms, or a blocked group is dead for the process. */
+is(body.includes('VERIFY_GROUP_AGAIN_MS'), 'a group that could not be read comes back round');
+is(body.includes('ripeForVerify'), 'and rows are only looked at once Facebook has had time');
 
 console.log(`verify-submitted OK — ${checks} checks`);

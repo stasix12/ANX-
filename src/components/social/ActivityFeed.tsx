@@ -76,6 +76,11 @@ const EVENT_MARK: Record<string, { icon: React.ComponentType<{ className?: strin
    */
   picture_upload_failed: { icon: XCircleIcon, tone: 'bad' },
   plan_failed: { icon: XCircleIcon, tone: 'bad' },
+  /* A write that did not land, and one that landed on fewer rows than it
+     asked for. Both red: the second is the quieter and the worse, because
+     the rows it did not touch stay wedged and nothing else names them. */
+  write_failed: { icon: XCircleIcon, tone: 'bad' },
+  write_partial: { icon: XCircleIcon, tone: 'bad' },
   plan_retry: { icon: ClockIcon, tone: 'warn' },
   plan_revived: { icon: RepeatIcon, tone: 'brand' },
   plan_targets_skipped: { icon: AlertTriangleIcon, tone: 'warn' },

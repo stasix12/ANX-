@@ -1224,6 +1224,76 @@ async function plan(state: WorkerState): Promise<void> {
  * enforced where it is tested.
  */
 /**
+ * ─── A WRITE THAT DID NOT LAND MUST NOT BE REPORTED AS ONE THAT DID ─────────
+ *
+ * "stuck_rows_requeued × 12 ב-30 דקות" — the owner's own activity log, 03:37,
+ * with no `published` and no `publish_failed` anywhere near it.
+ *
+ * Twelve lines, every two minutes, each announcing that stuck publications had
+ * been freed and returned to the queue. The sweep runs every two minutes and
+ * had found the SAME rows every time: either the UPDATE was matching nothing,
+ * or it was being rejected, and the log said "שוחררו" regardless — because the
+ * log line was written from `decided.requeue.length`, the number of rows the
+ * sweep WANTED to free, never from the number the database actually changed.
+ *
+ * That is the exact shape of bug that cost this product a full night: an
+ * `upsert` with `ignoreDuplicates` returning `data: []` and `error: null`, a
+ * bulk cancel bounded by a status filter that matched nothing, a planner that
+ * stamped `planned_until` after every insert had failed. In each case the
+ * machine did nothing and the screen said it had. The owner then spends hours
+ * debugging the publishing engine, because the only instrument he has is
+ * lying to him.
+ *
+ * So: one helper, used by every write in this file whose outcome a person is
+ * going to read.
+ *
+ *   - It asks the database to RETURN the rows it changed (`.select('id')`), so
+ *     the count is measured, not assumed.
+ *   - A transport or policy error is logged as an error event and counted as
+ *     zero. The caller then writes no success line at all, which is the
+ *     honest outcome and the one that makes the next sweep's silence mean
+ *     something.
+ *   - A write that lands on FEWER rows than it asked for is logged too, with
+ *     both numbers. Row-level security, a check constraint and a concurrent
+ *     claim all look exactly like this, and all three are invisible otherwise.
+ *   - It never throws. A sweep that cannot free a row must not take the
+ *     publishing loop down with it; the caller's own try/catch is the backstop
+ *     for the reads, and this is the backstop for the writes.
+ */
+type CountableWrite = {
+  select: (columns: string) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
+};
+
+async function applied(write: CountableWrite, asked: number, what: string): Promise<number> {
+  let data: unknown[] | null = null;
+  let error: { message: string } | null = null;
+  try {
+    ({ data, error } = await write.select('id'));
+  } catch (err) {
+    error = { message: safeError(err) };
+  }
+  if (error) {
+    await logActivity('error', 'write_failed', `העדכון "${what}" נכשל ולא שינה כלום במסד הנתונים: ${error.message}`, {
+      what,
+      asked,
+      landed: 0,
+      detail: error.message,
+    });
+    return 0;
+  }
+  const landed = data?.length ?? 0;
+  if (landed < asked) {
+    await logActivity(
+      'warn',
+      'write_partial',
+      `העדכון "${what}" היה אמור לשנות ${asked} שורות ושינה ${landed}. השורות החסרות נשארו בדיוק כפי שהיו.`,
+      { what, asked, landed },
+    );
+  }
+  return landed;
+}
+
+/**
  * ─── A ROW NOBODY IS HOLDING, FREED HERE TOO ─────────────────────────────────
  *
  * The rules are in worker/stranded.ts, with their own test; this is the
@@ -1283,33 +1353,45 @@ async function sweepStranded(state: WorkerState): Promise<void> {
   });
 
   if (decided.park.length) {
-    await db
-      .from('social_queue')
-      .update({
-        status: 'needs_attention',
-        step: 'submitted',
-        error: 'הפרסום נקטע באמצע ואין מי שמחזיק אותו. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".',
-      })
-      .in('id', decided.park);
-    await logActivity(
-      'warn',
+    const landed = await applied(
+      db
+        .from('social_queue')
+        .update({
+          status: 'needs_attention',
+          step: 'submitted',
+          error: 'הפרסום נקטע באמצע ואין מי שמחזיק אותו. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".',
+        })
+        .in('id', decided.park),
+      decided.park.length,
       'stuck_rows_released',
-      `${decided.park.length} פרסומים נתקעו אחרי שהלחיצה אולי כבר בוצעה — הועברו ל"דורשים אתכם" לבדיקה בקבוצה`,
-      { parked: decided.park.length },
     );
+    if (landed > 0) {
+      await logActivity(
+        'warn',
+        'stuck_rows_released',
+        `${landed} פרסומים נתקעו אחרי שהלחיצה אולי כבר בוצעה — הועברו ל"דורשים אתכם" לבדיקה בקבוצה`,
+        { parked: landed },
+      );
+    }
   }
 
   if (decided.requeue.length) {
-    await db
-      .from('social_queue')
-      .update({ status: 'scheduled', step: 'pending', scheduled_at: new Date().toISOString(), error: '', worker_id: null, claimed_at: null })
-      .in('id', decided.requeue);
-    await logActivity(
-      'info',
+    const landed = await applied(
+      db
+        .from('social_queue')
+        .update({ status: 'scheduled', step: 'pending', scheduled_at: new Date().toISOString(), error: '', worker_id: null, claimed_at: null })
+        .in('id', decided.requeue),
+      decided.requeue.length,
       'stuck_rows_requeued',
-      `${decided.requeue.length} פרסומים שלא הגיעו ללחיצה שוחררו וחזרו לתור — הקבוצות שלהם היו חסומות לסבבים הבאים`,
-      { requeued: decided.requeue.length },
     );
+    if (landed > 0) {
+      await logActivity(
+        'info',
+        'stuck_rows_requeued',
+        `${landed} פרסומים שלא הגיעו ללחיצה שוחררו וחזרו לתור — הקבוצות שלהם היו חסומות לסבבים הבאים`,
+        { requeued: landed },
+      );
+    }
   }
 }
 

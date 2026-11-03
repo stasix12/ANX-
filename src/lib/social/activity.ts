@@ -61,6 +61,25 @@ const KIND: Record<string, ActivityKind> = {
   worker_error: 'failure',
   browser_start_failed: 'failure',
   plan_failed: 'failure',
+  /*
+   * ─── A WRITE THE DATABASE DID NOT TAKE ─────────────────────────────────
+   *
+   * "stuck_rows_requeued × 12" — twelve lines in thirty minutes, each saying
+   * stuck publications had been freed, on rows that never moved. The sweep
+   * wrote its UPDATE and never looked at the answer: supabase-js resolves on
+   * a failed write rather than throwing, and an UPDATE matching nothing
+   * resolves with no error at all. The count came from what the code wanted.
+   *
+   * applied() in worker/social-worker.ts now measures what landed, and these
+   * are the two events it raises when the measurement disagrees with the
+   * intention. BOTH are failures, and write_partial especially: "I asked for
+   * 17 and changed 11" means six rows are still wedged, still holding six
+   * groups out of every future round, and nothing else in the product will
+   * ever mention them. Filed as quiet system news it would sit under a
+   * heading nobody opens — which is how this cost a full night.
+   */
+  write_failed: 'failure',
+  write_partial: 'failure',
   account_save_failed: 'failure',
   /* The list of profiles could not be written. Filed with the account it
      belongs to: it means the same thing — the machine learned something about

@@ -69,6 +69,10 @@ const TITLE: Record<string, string> = {
   browser_start_failed: 'הדפדפן לא נפתח',
   picture_upload_failed: 'תמונות קבוצות לא נשמרו',
   plan_failed: 'תכנון הסבב נכשל',
+  /* מכוון לבעל המערכת ולא למפתח: "לא נשמר" הוא מה שקרה, והשורה עצמה נושאת
+     את שם העדכון ואת שני המספרים. */
+  write_failed: 'עדכון לא נשמר במסד הנתונים',
+  write_partial: 'עדכון נשמר חלקית',
   plan_retry: 'הסבב יתוכנן שוב',
   plan_revived: 'סבב הוחזר לתכנון',
   account_save_failed: 'שמירת החשבון נכשלה',

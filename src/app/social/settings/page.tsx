@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Button, Card, Field, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
+import { Button, Card, Field, InfoDot, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, loadAdminPresence, saveSetting, setPaused } from '@/lib/social/client';
 import { WORKER_VERSION } from '@/lib/social/worker-version';
 import { ABSOLUTE_MIN_REPEAT_HOURS, MAX_REPEAT_HOURS, MIN_REPEAT_HOURS, repeatFloorFrom } from '@/lib/social/campaign-schedule';
@@ -406,6 +406,52 @@ export default function SettingsPage() {
                         הזה כבר פורסם ל…״.
                       </p>
                     </div>
+                    {/*
+                      THE WARNINGS MOVED HERE, AND THEY NO LONGER ARRIVE WITH
+                      THE TAP.
+                      *
+                      * "הסברים ואזהרות לא ייפתחו אוטומטית ויזיזו את המסך. יש
+                      *  להעביר אותם לאייקון מידע."
+                      *
+                      * Three blocks used to appear and disappear under this
+                      * switch depending on its state and on the version of
+                      * the program on his PC — each of them several lines,
+                      * each pushing the rest of the card down while the thumb
+                      * was still on the switch. They are the same words, in a
+                      * sheet, on a dot that is always here.
+                    */}
+                    <InfoDot title="מניעת פרסום חוזר לאותה קבוצה">
+                      {limits.blockRepeatToSameTarget === false && workerVersion && workerVersion !== WORKER_VERSION && (
+                        <p className="text-error-400">
+                          <strong>הכיבוי עדיין לא תקף לקבוצות.</strong> התוכנה שעל המחשב מריצה גרסה{' '}
+                          <span dir="ltr">{workerVersion}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>, והיא זו שמפרסמת לקבוצות —
+                          גרסה ישנה לא מכירה את המתג הזה ותמשיך לדלג. סגרו את חלון התוכנה במחשב ולחצו פעמיים על{' '}
+                          <code dir="ltr">start-worker.cmd</code> כדי לעדכן אותה. פרסום לדפי פייסבוק כבר עובד לפי המתג.
+                        </p>
+                      )}
+                      {limits.blockRepeatToSameTarget === false ? (
+                        <p className="text-warning-400">
+                          כיביתם את ההגנה. מעכשיו אותו פוסט יכול לצאת שוב ושוב לאותה קבוצה, ומה שימנע חזרה מיידית זה רק ״מניעת כפילות״
+                          למעלה ({limits.dedupeDays} ימים), שבודקת טקסט ומדיה זהים. פרסום לקבוצות יוצא מחשבון הפייסבוק שלכם דרך הדפדפן שעל
+                          המחשב, ולא דרך API, ולכן תוכן חוזר לאותה קבוצה מסכן את החשבון האישי שלכם. אם אתם מפרסמים מבצע חוזר — עדיף לשנות
+                          את הנוסח בין סבב לסבב.
+                        </p>
+                      ) : (
+                        <p>
+                          כשמופעל, פוסט שכבר פורסם לקבוצה לא יצא אליה שוב — לעולם. המרווח שמתחת קובע כמה זמן חייב לעבור בין שני פרסומים
+                          של אותו פוסט לאותה קבוצה, והוא מה שמחליט כמה סבבים ביום אפשר באמת להריץ לאותן קבוצות.
+                        </p>
+                      )}
+                      {repeatFloorFrom(limits) < MIN_REPEAT_HOURS && limits.blockRepeatToSameTarget !== false && (
+                        <p className="text-warning-400">
+                          {repeatFloorFrom(limits) === 0
+                            ? 'ביטלתם את ההגנה לגמרי — אין מרווח מינימלי בין שני פרסומים של אותו פוסט לאותה קבוצה. '
+                            : `הורדתם את ההגנה ל-${repeatFloorFrom(limits)} שעות במקום ${MIN_REPEAT_HOURS}. מעכשיו אותו פוסט יכול לצאת לאותה `}
+                          קבוצה פעמיים באותו יום עבודה. תוכן חוזר לאותה קבוצה בפרק זמן קצר הוא בדיוק מה שמנהלי קבוצות ומערכות הסינון של
+                          Meta מחפשים — והחשבון שבסיכון הוא שלכם. זו החלטה שלכם, והמערכת מבצעת אותה.
+                        </p>
+                      )}
+                    </InfoDot>
                     <Toggle
                       checked={limits.blockRepeatToSameTarget !== false}
                       onChange={(v) => setLimits({ ...limits, blockRepeatToSameTarget: v })}
@@ -413,97 +459,52 @@ export default function SettingsPage() {
                     />
                   </div>
                   {/*
-                    The switch is enforced in rules.ts, which runs in TWO
-                    places: on the server for Pages, and on the owner's own PC
-                    for groups. An older copy on that PC does not know this key
-                    exists — it reads the same settings row, ignores the field
-                    and goes on skipping — so saving the switch looks like it
-                    did nothing at all. Groups are almost everything this owner
-                    publishes, so that silence is the whole feature failing.
+                    THE FIELD STAYS, AND IT STAYS PUT.
+                    *
+                    * It is a control, not an explanation, so it does not
+                    * belong in the sheet with the warnings. But it used to
+                    * appear and vanish with the switch above it, and a card
+                    * that changes height under a thumb is the thing the owner
+                    * asked to be rid of. It is always drawn now, and simply
+                    * cannot be edited while the protection it belongs to is
+                    * off — which is also a clearer statement of what it is.
+                    *
+                    * MIN_REPEAT_HOURS was a hard 12 in three clamps and a
+                    * database CHECK, and it was quietly costing him a layout
+                    * he had chosen on purpose. Measured by driving the real
+                    * engine: with rounds at 03:30, 06:30 and 18:30 the queue
+                    * row for round two was DEFERRED from 06:30 to 23:30, and
+                    * because a group may hold only one open row, that parked
+                    * row then blocked round three entirely. He asked for
+                    * three publications a day, the system delivered two — one
+                    * at an hour he never chose — and the card said it had
+                    * saved three.
                   */}
-                  {limits.blockRepeatToSameTarget === false && workerVersion && workerVersion !== WORKER_VERSION && (
-                    <div className="mt-2.5">
-                      <Notice tone="error">
-                        <strong>הכיבוי עדיין לא תקף לקבוצות.</strong> התוכנה שעל המחשב מריצה גרסה{' '}
-                        <span dir="ltr">{workerVersion}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>, והיא זו שמפרסמת לקבוצות —
-                        גרסה ישנה לא מכירה את המתג הזה ותמשיך לדלג. סגרו את חלון התוכנה במחשב ולחצו פעמיים על{' '}
-                        <code dir="ltr">start-worker.cmd</code> כדי לעדכן אותה. פרסום לדפי פייסבוק כבר עובד לפי המתג.
-                      </Notice>
-                    </div>
-                  )}
-                  {/*
-                    ─── AND HOW CLOSE IS TOO CLOSE, WHICH USED TO BE A LAW ──
-
-                    "את ההגנה של החזרה יומית של אותו הפוסט לאותו קבוצה יש הגנה
-                     של 12 שעות תוסיף אופציה בהגדרות לשחק עם זה."
-                     — the owner, 02.11.2026.
-
-                    MIN_REPEAT_HOURS was a hard 12 in three clamps and a
-                    database CHECK, and it was quietly costing him a layout he
-                    had chosen on purpose. Measured by driving the real engine:
-                    with rounds at 03:30, 06:30 and 18:30 the queue row for
-                    round two was DEFERRED from 06:30 to 23:30, and because a
-                    group may hold only one open row, that parked row then
-                    blocked round three entirely. He asked for three
-                    publications a day, the system delivered two — one at an
-                    hour he never chose — and the card said it had saved three.
-
-                    It sits inside THIS card rather than beside the other gaps
-                    on purpose: it belongs to the toggle above it, and the two
-                    boxes further up ("מרווח מינימלי בין פרסומים",
-                    "מרווח נוסף בין קבוצות") are a different number about a
-                    different thing. Three gaps on one screen is already one
-                    too many to keep straight; a fourth that looked like a
-                    sibling of those two would be unreadable.
-                  */}
-                  {limits.blockRepeatToSameTarget !== false && (
-                    <div className="mt-3 border-t border-ink-700 pt-3">
-                      <Field
-                        label="מרווח מינימלי בין שני פרסומים של אותו פוסט לאותה קבוצה (שעות)"
-                        hint="ברירת המחדל היא 12. זה המספר שקובע כמה סבבים ביום אפשר באמת להריץ לאותן קבוצות"
-                      >
-                        <input
-                          type="number"
-                          min={ABSOLUTE_MIN_REPEAT_HOURS}
-                          max={MAX_REPEAT_HOURS}
-                          inputMode="numeric"
-                          className={inputClass}
-                          value={limits.repeatFloorHours ?? MIN_REPEAT_HOURS}
-                          onChange={(e) =>
-                            setLimits({
-                              ...limits,
-                              repeatFloorHours: Math.min(
-                                MAX_REPEAT_HOURS,
-                                Math.max(ABSOLUTE_MIN_REPEAT_HOURS, Math.round(Number(e.target.value) || MIN_REPEAT_HOURS)),
-                              ),
-                            })
-                          }
-                        />
-                      </Field>
-                      {repeatFloorFrom(limits) < MIN_REPEAT_HOURS && (
-                        <div className="mt-2.5">
-                          <Notice tone="warn">
-                            {repeatFloorFrom(limits) === 0
-                              ? 'ביטלתם את ההגנה לגמרי — אין מרווח מינימלי בין שני פרסומים של אותו פוסט לאותה קבוצה. '
-                              : `הורדתם את ההגנה ל-${repeatFloorFrom(limits)} שעות במקום ${MIN_REPEAT_HOURS}. מעכשיו אותו פוסט יכול לצאת לאותה`}
-                            קבוצה פעמיים באותו יום עבודה. פרסום לקבוצות יוצא מחשבון הפייסבוק שלכם דרך הדפדפן שעל המחשב ולא דרך API, ולכן
-                            תוכן חוזר לאותה קבוצה בפרק זמן קצר הוא בדיוק מה שמנהלי קבוצות ומערכות הסינון של Meta מחפשים — והחשבון שבסיכון
-                            הוא שלכם. זו החלטה שלכם, והמערכת מבצעת אותה.
-                          </Notice>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {limits.blockRepeatToSameTarget === false && (
-                    <div className="mt-2.5">
-                      <Notice tone="warn">
-                        כיביתם את ההגנה. מעכשיו אותו פוסט יכול לצאת שוב ושוב לאותה קבוצה, ומה שימנע חזרה מיידית זה רק ״מניעת כפילות״ למעלה
-                        ({limits.dedupeDays} ימים), שבודקת טקסט ומדיה זהים. פרסום לקבוצות יוצא מחשבון הפייסבוק שלכם דרך הדפדפן שעל המחשב, ולא
-                        דרך API, ולכן תוכן חוזר לאותה קבוצה מסכן את החשבון האישי שלכם. אם אתם מפרסמים מבצע חוזר — עדיף לשנות את הנוסח בין
-                        סבב לסבב.
-                      </Notice>
-                    </div>
-                  )}
+                  <div className="mt-3 border-t border-ink-700 pt-3">
+                    <Field
+                      label="מרווח מינימלי בין שני פרסומים של אותו פוסט לאותה קבוצה (שעות)"
+                      hint="ברירת המחדל היא 12. זה המספר שקובע כמה סבבים ביום אפשר באמת להריץ לאותן קבוצות"
+                    >
+                      <input
+                        type="number"
+                        min={ABSOLUTE_MIN_REPEAT_HOURS}
+                        max={MAX_REPEAT_HOURS}
+                        inputMode="numeric"
+                        disabled={limits.blockRepeatToSameTarget === false}
+                        className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                        value={limits.repeatFloorHours ?? MIN_REPEAT_HOURS}
+                        onChange={(e) =>
+                          setLimits({
+                            ...limits,
+                            repeatFloorHours: Math.min(
+                              MAX_REPEAT_HOURS,
+                              Math.max(ABSOLUTE_MIN_REPEAT_HOURS, Math.round(Number(e.target.value) || MIN_REPEAT_HOURS)),
+                            ),
+                          })
+                        }
+                      />
+                    </Field>
+                  </div>
                 </div>
               </Card>
 

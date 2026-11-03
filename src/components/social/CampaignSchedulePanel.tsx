@@ -621,8 +621,18 @@ export function CampaignSchedulePanel({
             <span className="ms-auto -me-1 -my-1 flex shrink-0 items-center">
               <Toggle
                 checked={roundsOn}
+                /*
+                 * `disabled` BELONGS TO THE SWITCH, not to the handler.
+                 *
+                 * It used to be swallowed here — `if (disabled) return` — and
+                 * while the switch could not move on its own that was merely
+                 * silent. It is not silent any more: the knob moves on the
+                 * tap now, so a handler that quietly does nothing produces a
+                 * switch that crosses, sits there as if saved, and slides
+                 * back. The switch has to know, and it does.
+                 */
+                disabled={disabled}
                 onChange={(on) => {
-                  if (disabled) return;
                   /*
                    * OFF KEEPS THE HOURS. Switching the card off disables every
                    * round rather than deleting it, so switching it back on
@@ -634,10 +644,27 @@ export function CampaignSchedulePanel({
                    */
                   if (!on) return onRoundsChange(rounds.map((r) => ({ ...r, enabled: false })));
                   if (rounds.length) return onRoundsChange(rounds.map((r) => ({ ...r, enabled: true })));
-                  {
-                    const at = nextFreeRoundStart(starts, floorHours);
-                    if (at) onRoundsChange([{ at, enabled: true }]);
-                  }
+                  const at = nextFreeRoundStart(starts, floorHours);
+                  if (at) return onRoundsChange([{ at, enabled: true }]);
+                  /*
+                   * AND THE CASE WITH NO ROOM IN IT, WHICH USED TO BE SILENCE.
+                   *
+                   * nextFreeRoundStart returns null when the account's own
+                   * minimum spacing leaves no hour free — raise the floor to
+                   * 23 hours and there is nowhere a second round can go. The
+                   * old code fell off the end of this function: nothing was
+                   * written, nothing was said, and with an optimistic knob
+                   * that reads as "saved" for as long as the guess stands.
+                   *
+                   * Rejecting is the honest answer. The switch puts itself
+                   * back at once — a rejection is the fastest answer it can
+                   * get — and says why.
+                   */
+                  return Promise.reject(
+                    new Error(
+                      `אין שעה פנויה לסבב נוסף: המרווח המינימלי בין שני פרסומים של אותו פוסט לאותה קבוצה הוא ${floorHours} שעות. הקטינו אותו בהגדרות כדי להוסיף סבב.`,
+                    ),
+                  );
                 }}
                 label={`סבבים ביום עבור ${campaignName}`}
               />
@@ -1059,10 +1086,27 @@ export function CampaignSchedulePanel({
                     <p className="text-warning-400">
                       פרסום חוזר של אותה מודעה לאותן קבוצות עלול לגרום להסרה מהקבוצות או להגבלת החשבון שלכם בפייסבוק.
                     </p>
-                    <p>
-                      אותו פוסט יפורסם שוב לאותן קבוצות בכל יום פרסום, החל מהשעה{' '}
-                      <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. {repeatWindowSentence(repeat.minHours)}.
-                    </p>
+                    {/*
+                      THE TENSE FOLLOWS THE SWITCH.
+                      *
+                      * The paragraph this replaced only ever rendered while
+                      * the repeat was ON, so it could speak in the present.
+                      * The dot is always here, and describing a daily repeat
+                      * as a thing that happens — on a campaign whose repeat
+                      * is off — is the screen telling him something untrue
+                      * about his own account.
+                    */}
+                    {repeat.enabled ? (
+                      <p>
+                        אותו פוסט מתפרסם שוב לאותן קבוצות בכל יום פרסום, החל מהשעה{' '}
+                        <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. {repeatWindowSentence(repeat.minHours)}.
+                      </p>
+                    ) : (
+                      <p>
+                        החזרה היומית כבויה — הפוסט יצא פעם אחת בלבד. אם תדליקו אותה, אותו פוסט יפורסם שוב לאותן קבוצות בכל יום פרסום, החל
+                        מהשעה <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. {repeatWindowSentence(repeat.minHours)}.
+                      </p>
+                    )}
                   </>
                 )}
               </InfoDot>

@@ -5618,9 +5618,31 @@ const scenario: { step: string; line: string }[] = [];
   //    switches it off — and the quick-publish warning stops promising a skip
   //    that will no longer happen.
   assert.ok(settings.includes('blockRepeatToSameTarget'), 'the settings screen must expose the switch');
+  /*
+   * THE REQUIREMENT, NOT THE ELEMENT IT USED TO BE.
+   *
+   * This pinned `Notice tone="warn"` within 600 characters of the state —
+   * the inline block that appeared under the switch the moment it went off.
+   * That block is gone on purpose: "הסברים ואזהרות לא ייפתחו אוטומטית ויזיזו
+   * את המסך. יש להעביר אותם לאייקון מידע." It pushed the rest of the card
+   * down while the thumb was still on the switch.
+   *
+   * What must still be true is what the comment above this block always said
+   * it was: the owner is told what switching it off costs, on the screen that
+   * switches it off. So the test asks for that — the words, tied to the off
+   * state, on this screen — and no longer for the shape they arrive in.
+   */
   assert.ok(
-    /blockRepeatToSameTarget === false[\s\S]{0,600}Notice tone="warn"/.test(settings),
-    'turning it off must raise a warning on the settings screen, not switch silently',
+    /blockRepeatToSameTarget === false[\s\S]{0,900}(Notice tone="warn"|text-warning-400)/.test(settings),
+    'turning it off must still raise a warning on the settings screen, not switch silently',
+  );
+  assert.ok(
+    settings.includes('מסכן את החשבון האישי שלכם'),
+    'and the warning still names the cost in the owner\'s own terms — his Facebook account, not an abstraction',
+  );
+  assert.ok(
+    /<InfoDot title="מניעת פרסום חוזר לאותה קבוצה">/.test(settings),
+    'it is reachable from an always-present info dot, so nothing appears or disappears under the thumb',
   );
   assert.ok(
     sheet.includes('ctx.limits.blockRepeatToSameTarget === false'),
@@ -5649,9 +5671,21 @@ const scenario: { step: string; line: string }[] = [];
     /workerVersion !== WORKER_VERSION/.test(settings),
     'the settings screen must compare the PC worker version, or turning the switch off silently does nothing for groups',
   );
+  /*
+   * Same move as the pin above, and the same reason: the inline Notice that
+   * used to appear here is now a paragraph inside the info sheet, because it
+   * pushed the card down under the thumb. The DISTINCTION it exists for is
+   * untouched and still pinned — the risk of the setting is a warning, the
+   * setting not being in force at all is an error, and they must not read
+   * the same.
+   */
   assert.ok(
-    /blockRepeatToSameTarget === false && workerVersion[\s\S]{0,400}Notice tone="error"/.test(settings),
+    /blockRepeatToSameTarget === false && workerVersion[\s\S]{0,400}(Notice tone="error"|text-error-400)/.test(settings),
     'and it must say so loudly — a warn tone is for the risk of the setting, an error tone for the setting not being in force',
+  );
+  assert.ok(
+    settings.includes('הכיבוי עדיין לא תקף לקבוצות'),
+    'and it still says the one thing that matters: the switch he just moved does nothing for groups until the PC updates',
   );
   const workerVersionSrc = readFileSync(new URL('../../src/lib/social/worker-version.ts', import.meta.url), 'utf8');
   assert.ok(

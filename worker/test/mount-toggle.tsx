@@ -20,10 +20,31 @@ function Case({
      ignore  — the save "succeeds" but the parent never changes: the exact
                shape of a caller that swallows its own error
      reject  — the save fails */
-  mode: 'commit' | 'ignore' | 'reject';
+  mode: 'commit' | 'ignore' | 'reject' | 'blind';
   delay?: number;
 }) {
   const [on, setOn] = useState(false);
+  /*
+   * 'blind' is the shape half the real call sites have: the handler starts
+   * the write and returns NOTHING, so the switch is told when it began and
+   * never when it finished. It is the case the first version of this
+   * component got wrong — it dropped its guess mid-write and the knob slid
+   * back, then forward again when the refetch landed.
+   */
+  if (mode === 'blind') {
+    return (
+      <div style={{ padding: 8 }}>
+        <Toggle
+          checked={on}
+          label={id}
+          onChange={(next) => {
+            window.__calls.push(`${id}:${next}`);
+            setTimeout(() => setOn(next), delay);
+          }}
+        />
+      </div>
+    );
+  }
   return (
     <div style={{ padding: 8 }}>
       <Toggle
@@ -46,5 +67,11 @@ createRoot(document.getElementById('root')!).render(
     <Case id="slow" mode="commit" delay={400} />
     <Case id="fails" mode="reject" delay={120} />
     <Case id="silent" mode="ignore" delay={60} />
+    <Case id="blind" mode="blind" delay={700} />
+    {/* A switch the screen has locked: the tap must not reach the handler AND
+        must not move the knob, which is the part the optimistic guess broke. */}
+    <div style={{ padding: 8 }}>
+      <Toggle checked={false} disabled label="locked" onChange={(next) => { window.__calls.push(`locked:${next}`); }} />
+    </div>
   </div>,
 );

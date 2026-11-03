@@ -338,25 +338,37 @@ export const inputClass =
  * The switch reads as a 28px track but is tapped as 44px: the track is an
  * inner span so the button itself can carry the full hit area.
  */
-/**
- * HOW LONG THE KNOB TAKES TO CROSS. 180ms, asked for by name.
- *
- * It is also the colour fade, so the track and the knob arrive together — a
- * knob that lands before its track has changed colour is the thing that reads
- * as cheap.
- */
+/** How long the knob takes to cross, and the colour with it. Asked for by name. */
 const TOGGLE_MS = 180;
 
 /**
- * HOW LONG A LOCAL GUESS MAY OUTLIVE THE WRITE THAT CONFIRMED IT.
+ * HOW LONG A LOCAL GUESS MAY STAND, AND WHY THERE ARE TWO NUMBERS.
  *
- * The caller usually sets its own state AFTER its await, which is a tick or
- * two later than ours. Dropping the guess the instant the promise settles
- * would show the OLD value for those ticks — a flick back and forth that is
- * worse than the delay it was meant to remove. So the guess stands a little
- * longer, and the prop takes over the moment it agrees or this runs out.
+ * When `onChange` hands back a promise, the caller has told us when it is
+ * done — including, in every caller here, its own refetch. So the guess only
+ * has to outlive React committing that state: a frame or two, not a second.
+ * The first version waited 900ms for ALL callers, and against a caller that
+ * catches its own error that meant the red "failed" toast and a switch still
+ * showing the new value, side by side, for most of a second.
+ *
+ * When `onChange` returns nothing we have no such signal, and a short wait
+ * would be worse than no optimism at all: the guess would be dropped while
+ * the write is still in flight and the knob would slide back, then forward
+ * again when the refetch lands — a flicker that was not there before. So a
+ * blind caller gets a long leash, and the prop ends it the moment it agrees.
  */
-const SETTLE_MS = 900;
+const SETTLE_TOLD_MS = 120;
+const SETTLE_BLIND_MS = 5_000;
+
+/**
+ * AND A CAP ON A WRITE THAT NEVER ANSWERS AT ALL.
+ *
+ * A request that neither resolves nor rejects — a phone changing cell, a
+ * socket held open — would otherwise leave `saving` true for ever: the switch
+ * frozen on a value nobody saved, refusing further taps. After this it goes
+ * back to the stored value and becomes usable again.
+ */
+const STUCK_MS = 20_000;
 
 /**
  * THE SWITCH. One component, every screen, and three promises it must keep.
@@ -367,18 +379,18 @@ const SETTLE_MS = 900;
  *   1. IT MOVES ON THE TAP. The knob used to wait for `checked` to come back
  *      from the caller's save, so a tap on a slow line looked like a tap that
  *      missed. It now moves on a local guess, immediately.
- *   2. THE GUESS IS NEVER THE TRUTH. The guess is dropped the moment `checked`
- *      agrees with it, and unconditionally after SETTLE_MS — so what is on
- *      screen is the server's answer, not ours, within a second either way.
- *      A save that fails, or one whose caller quietly swallows the error,
- *      ends with the knob back where it was.
+ *   2. THE GUESS IS NEVER THE TRUTH. It is dropped the moment `checked`
+ *      agrees, and otherwise after the window above — so what is on screen is
+ *      the server's answer, not ours. A save that fails, or one whose caller
+ *      quietly swallows the error, ends with the knob back where it was.
  *   3. ONE TAP AT A TIME. A second tap while the first is in flight is
  *      ignored rather than queued: two writes racing on one row is how a
  *      switch ends up disagreeing with the thing it controls.
  *
- * `onChange` may return a promise; when it rejects the knob returns and the
- * reason is said once, briefly. Callers that do their own toasting are
- * unaffected — they resolve, and rule 2 still corrects the picture.
+ * The guard and the press identity are REFS, not state. Two clicks delivered
+ * in one task — a genuine double tap, a synthetic dblclick, a label that
+ * forwards its own click — both read the same render's `saving`, and state is
+ * a render too late to stop the second. A ref is not.
  */
 export function Toggle({
   checked,
@@ -394,30 +406,72 @@ export function Toggle({
   const toast = useToast();
   const [guess, setGuess] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
-  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const busy = useRef(false);
+  const press = useRef(0);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const shown = guess ?? checked;
+
+  const clearTimers = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  };
 
   /* The prop is the truth. The moment it agrees, the guess has no job left. */
   useEffect(() => {
-    if (guess !== null && checked === guess) setGuess(null);
+    if (guess !== null && checked === guess) {
+      clearTimers();
+      setGuess(null);
+    }
   }, [checked, guess]);
 
-  useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
+  useEffect(() => () => clearTimers(), []);
 
-  const press = async () => {
-    if (saving || disabled) return;
+  const tap = async () => {
+    /* The ref, not `saving`: see the note on the component. */
+    if (busy.current || disabled) return;
+    const mine = press.current + 1;
+    press.current = mine;
+    busy.current = true;
     const next = !shown;
+    clearTimers();
     setGuess(next);
-    setSaving(true);
+
+    /* Only a caller that hands back a promise can be said to be saving. */
+    const answer = onChange(next) as Promise<unknown> | void;
+    const told = !!answer && typeof (answer as Promise<unknown>).then === 'function';
+    if (told) setSaving(true);
+
+    /* Whatever happens to the write, the switch must become usable again. */
+    timers.current.push(
+      setTimeout(() => {
+        if (press.current !== mine) return;
+        busy.current = false;
+        setSaving(false);
+        setGuess(null);
+      }, STUCK_MS),
+    );
+
     try {
-      await onChange(next);
-      if (settle.current) clearTimeout(settle.current);
-      settle.current = setTimeout(() => setGuess(null), SETTLE_MS);
+      if (told) await answer;
     } catch (err) {
-      setGuess(null);
-      toast(err instanceof Error && err.message ? err.message : 'לא הצלחנו לשמור את השינוי.', 'error');
+      /* A rejection is an answer, and the fastest one: no window at all. */
+      if (press.current === mine) {
+        clearTimers();
+        setGuess(null);
+        toast(err instanceof Error && err.message ? err.message : 'לא הצלחנו לשמור את השינוי.', 'error');
+      }
     } finally {
-      setSaving(false);
+      /* A later tap owns the switch now; this one must not touch it again. */
+      if (press.current === mine) {
+        busy.current = false;
+        setSaving(false);
+        clearTimers();
+        timers.current.push(
+          setTimeout(() => {
+            if (press.current === mine) setGuess(null);
+          }, told ? SETTLE_TOLD_MS : SETTLE_BLIND_MS),
+        );
+      }
     }
   };
 
@@ -429,7 +483,7 @@ export function Toggle({
       aria-label={label}
       aria-busy={saving}
       disabled={disabled}
-      onClick={press}
+      onClick={tap}
       className={`relative flex h-11 w-12 shrink-0 items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 ${
         disabled ? 'cursor-not-allowed opacity-50' : saving ? 'cursor-wait' : ''
       }`}
@@ -442,7 +496,7 @@ export function Toggle({
           "light grey": the white knob measures 3.03 against it, and anything
           paler takes that under the 3:1 floor contrast.test.ts enforces. */}
       <span
-        className={`h-7 w-full rounded-full transition-colors ease-out motion-reduce:transition-none ${checkedTrack(shown)}`}
+        className={`h-7 w-full rounded-full transition-colors ease-out motion-reduce:transition-none ${shown ? 'bg-brand-300' : 'bg-ink-600'}`}
         style={{ transitionDuration: `${TOGGLE_MS}ms` }}
       />
       {/* The knob stays literal white rather than a token: it is the one mark
@@ -450,23 +504,20 @@ export function Toggle({
           available on each (3.40 on the on-track, 3.03 on the off-track).
 
           MOVED BY TRANSFORM, not by inset-inline-start: the transform runs on
-          the compositor, which is what the difference between "smooth" and
-          "nearly smooth" is on a phone. `start-1` is the OFF position and the
-          logical variants carry it across in the direction the document reads,
-          so RTL is not a special case with its own arithmetic. */}
+          the compositor, which is the difference between "smooth" and "nearly
+          smooth" on a phone. The travel is 20px, not 24: the track is 48 wide,
+          the knob 20, and it sits 4 from the start — so 24 would put it hard
+          against the far edge while the OFF state keeps its 4px inset. The
+          logical variants carry it in the direction the document reads, so
+          RTL is not a special case with arithmetic of its own. */}
       <span
         className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-transform ease-out motion-reduce:transition-none start-1 ${
-          shown ? 'ltr:translate-x-6 rtl:-translate-x-6' : ''
+          shown ? 'ltr:translate-x-5 rtl:-translate-x-5' : ''
         } ${saving ? 'ring-2 ring-white/70' : ''}`}
         style={{ transitionDuration: `${TOGGLE_MS}ms` }}
       />
     </button>
   );
-}
-
-/** Kept out of the JSX so the two track colours are one decision, named. */
-function checkedTrack(on: boolean): string {
-  return on ? 'bg-brand-300' : 'bg-ink-600';
 }
 
 /**

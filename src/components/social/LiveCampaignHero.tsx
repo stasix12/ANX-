@@ -26,6 +26,7 @@ import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
 import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
 import { CampaignScheduleBoard } from './CampaignScheduleBoard';
 import { CampaignSchedulePanel } from './CampaignSchedulePanel';
+import { ProgressRing } from './ProgressRing';
 import { PostCover } from './PostCover';
 import { stageElapsed } from './PublicationItem';
 import { TargetAvatar } from './TargetAvatar';
@@ -439,50 +440,82 @@ export function LiveCampaignHero({
 
   return (
     <HeroPanel ariaLabel="הסבב הפעיל" className="p-3.5">
-      <div className="flex items-start gap-3">
-        <PostCover media={media} className="h-16 w-16 sm:h-24 sm:w-24" />
+      {/*
+        ─── THE HEADER BLOCK OF THE REFERENCE ──────────────────────────────
+        *
+        * "כרטיס קמפיין עליון: תמונת הקמפיין המקורית בצד הכרטיס, שם הקמפיין,
+        *  מספר הקבוצות, מספר הפרסומים שטופלו, אחוז התקדמות וטבעת התקדמות."
+        *
+        * Every one of those five facts was already on this card and already
+        * loaded from the run — the image is still <PostCover media={media} />,
+        * the same media the campaign owns, so "התמונה חייבת להישאר מחוברת
+        * לנתוני הקמפיין האמיתיים" costs nothing: nothing about where the
+        * value comes from changed. What changed is that they now sit together
+        * on the blue ground the reference draws, with the ring that was
+        * already built for the run's own screen.
+        *
+        * WHITE HERE IS MEASURED. The gradient's three stops read 11.11 / 6.24
+        * / 5.17 against white; its lightest stop was moved from #2f7ef5
+        * (3.87, under AA) for exactly this block — see .grad-hero.
+        *
+        * The status pill moved OUT, down beside the outcome line. The
+        * reference has no pill in this block, and a chip whose whole job is a
+        * tone — green for running, amber for attention — cannot keep that job
+        * on a blue ground.
+      */}
+      <div className="grad-hero -mx-3.5 -mt-3.5 mb-3 flex items-center gap-3 rounded-t-[inherit] p-3.5">
+        <PostCover media={media} className="h-16 w-16 shrink-0 sm:h-20 sm:w-20" />
         <div className="min-w-0 grow">
-          <div className="flex min-w-0 items-start justify-between gap-2">
-            <Link href={`/social/campaigns/${campaign.id}`} dir="auto" className="block min-h-11 min-w-0 truncate py-1.5 text-[15px] font-extrabold leading-5 text-mist-100">
-              {campaign.name}
-            </Link>
-            <StatePill tone={pillTone} label={badge.label} live={badge.live} href={runBadgeHref(badge, campaign.id)} />
-          </div>
-          {/* When the run started, and how many GROUPS it publishes to — both
-              facts the card loaded and never showed. `startedAt` is null until
-              the first real publication, and the honest line then says so
-              rather than substituting the record's creation time, which can
-              be days earlier. */}
-          <p dir="auto" className="truncate text-xs leading-4 text-mist-500">
-            {/* Two facts, not four. The service and the city used to be
-                appended here and, measured at 375, they pushed "30 קבוצות"
-                into an ellipsis — decoration crowding out the two things the
-                owner asked this line for. They are on the run's own screen,
-                one tap away. */}
-            {/* THE GROUP COUNT IS A LOWER BOUND, NOT A SECRET. It used to be
-                dropped entirely when the count was approximate, which
-                subtracts a true fact instead of qualifying it — the row-derived
-                figure is always a floor, never an overstatement. */}
-            {/*
-              "טרם יצא פרסום" IS A LIFETIME CLAIM AND `startedAt` IS NOT ONE.
-              Without the v27 views campaign.ts derives it from the rows it was
-              handed, and for a repeating round those are TODAY'S — so a round
-              that published thirty-one posts this morning printed "no
-              publication has ever gone out", directly beside a comment strip
-              offering to comment on them. `everPublished` is the field that
-              WAS given the unscoped array, and it is exact on both paths, so
-              it is what answers "ever". `startedAt` keeps feeding resolveState
-              untouched: widening THAT would flip the badge to 'running' with
-              nothing published today and fire the invariant on every poll.
-            */}
-            {[
-              startedAt ? `התחיל ${relativeHe(startedAt)}` : state.everPublished > 0 ? 'יצאו פרסומים בעבר' : 'טרם יצא פרסום',
-              targetCount ? `${state.truncated ? 'לפחות ' : ''}${counted(targetCount, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')}` : '',
-            ]
-              .filter(Boolean)
-              .join(' · ')}
+          <Link
+            href={`/social/campaigns/${campaign.id}`}
+            dir="auto"
+            /* min-h-11 AND the padding come across with it. The name is a
+               LINK to the run's own screen, so it is a tap target, and moving
+               it into the header dropped it to 20px — dashboard-hero.test.ts
+               hit-tests every control against the product's 40px floor and
+               caught it on the first run. */
+            className="flex min-h-11 min-w-0 items-center truncate py-1.5 text-[15px] font-extrabold leading-5 text-white"
+          >
+            {campaign.name}
+          </Link>
+          {(targetCount ?? 0) > 0 && (
+            <span className="mt-1 inline-block rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-bold text-white">
+              {`${state.truncated ? 'לפחות ' : ''}${counted(targetCount ?? 0, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')}`}
+            </span>
+          )}
+          <p dir="ltr" className="mt-1.5 text-[13px] font-extrabold tabular-nums text-white">
+            {`${view.handled} / ${view.total}`}
+          </p>
+          <p dir="auto" className="text-[11px] font-bold text-white/85">
+            {`${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
           </p>
         </div>
+        <ProgressRing
+          percent={view.percent}
+          label={`${view.percent}%`}
+          sub="התקדמות"
+          size={78}
+          stroke={8}
+          tone="on-brand"
+        />
+      </div>
+
+      {/*
+        WHAT IS LEFT OF THE OLD TOP ROW, and it is deliberately little.
+        The cover, the name and the group count moved into the header above —
+        "כל נתון יוצג פעם אחת בלבד" — so what remains is the one fact the
+        header has no room for and the pill, which needs a light ground to
+        carry its tone.
+      */}
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <p dir="auto" className="min-w-0 truncate text-xs leading-4 text-mist-500">
+          {startedAt
+            ? `התחיל ${relativeHe(startedAt)}`
+            : state.everPublished > 0
+              ? 'יצאו פרסומים בעבר'
+              : 'טרם יצא פרסום'}
+        </p>
+        <StatePill tone={pillTone} label={badge.label} live={badge.live} href={runBadgeHref(badge, campaign.id)} />
       </div>
 
       <div className="mt-3">

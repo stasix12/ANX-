@@ -1524,7 +1524,14 @@ body:has(.social-theme) .site-backdrop {
 
 /* The deeper one, for a full-width feature area. */
 .social-theme .grad-hero {
-  background-image: linear-gradient(135deg, #0e3686 0%, #1557d6 50%, #2f7ef5 100%);
+  /* THE LIGHT STOP IS 5.17:1 AGAINST WHITE, NOT 3.87.
+     The hero block carries white text now — the campaign name, the figures
+     and the ring — and the stop this gradient opened with (#2f7ef5) left
+     that text at 3.87, under AA, on the corner where the gradient is
+     lightest. contrast.test.ts measures tokens and cannot see a gradient
+     stop, so this one is measured by hand and written down: white reads
+     11.11 / 6.24 / 5.17 across the three stops. */
+  background-image: linear-gradient(135deg, #0e3686 0%, #1557d6 50%, #2563eb 100%);
   box-shadow: 0 16px 40px rgba(21, 87, 214, 0.26);
 }
 

@@ -594,7 +594,7 @@ async function main(): Promise<void> {
   // Check the Facebook login right away so the dashboard shows 🟢/🟡 at once.
   if (session.hasProfile()) {
     try {
-      const browser = await getSetting<BrowserSettings>('browser', DEFAULT_BROWSER);
+      const browser = await browserSettings();
       const check = await session.checkLogin(!browser.debugMode);
       state.browserState = check.state;
       state.lastCheckAt = Date.now();
@@ -923,7 +923,7 @@ async function sessionReady(state: WorkerState, headless: boolean): Promise<bool
 
 async function tick(state: WorkerState): Promise<void> {
   const db = await workerDb();
-  const browser = await getSetting<BrowserSettings>('browser', DEFAULT_BROWSER);
+  const browser = await browserSettings();
   const control = await getSetting<ControlSettings>('control', { paused: false, rateLimitedUntil: null });
   const limits = await getSetting<LimitsSettings>('limits', DEFAULT_LIMITS);
   const headless = !browser.debugMode;
@@ -5121,6 +5121,36 @@ async function clearChallenge(state: WorkerState): Promise<void> {
 
 /* ------------------------------------------------------------ helpers */
 
+/**
+ * THE BROWSER SETTINGS, WITH THE THREE SWITCHES THAT NO LONGER EXIST FORCED.
+ *
+ * "כל מה שקשור לבטיחות הרצה גם תמחק והחלון דפדפן שיהיה תמיד סגור כברירת
+ *  מחדל לא צריך שזה יפתח לי חלונות במחשב וגם לא ללקוחות"
+ *
+ * Deleting the three toggles from the settings screen is not the same as
+ * turning them off. Their values live in a saved row, and every machine that
+ * has ever run this product has `debugMode: true` in it — that is what opens
+ * a Chromium window for every round. A customer whose row also says
+ * requireConfirmation would sit waiting for an approval with no switch left
+ * to give it.
+ *
+ * So the reads are normalised here, in the one place both of them pass
+ * through, rather than migrated: no SQL to run, no row to miss, and a
+ * customer who never updates their dashboard is covered the moment their
+ * worker does.
+ *
+ * SOCIAL_BROWSER_HEADED=1 still opens a visible window. It is an environment
+ * variable on a developer's machine, not something a customer can reach.
+ *
+ * Signing in is NOT affected and must not be: interactiveLogin opens its own
+ * visible window regardless (session.ts, newPage(false, 'התחברות ידנית')),
+ * so "התחבר לפייסבוק" still shows the person the page they type into.
+ */
+async function browserSettings(): Promise<BrowserSettings> {
+  const stored = await getSetting<BrowserSettings>('browser', DEFAULT_BROWSER);
+  return { ...stored, debugMode: env.forceHeaded, testMode: false, requireConfirmation: false };
+}
+
 async function heartbeat(state: WorkerState, status: 'online' | 'needs_attention' | 'offline', debugMode = false, browserOverride?: WorkerState['browserState']): Promise<void> {
   /* Recorded BEFORE the write, so a transition the database refused is still
      the status the pulse repeats — the alternative is a pulse that keeps
@@ -5189,7 +5219,21 @@ async function getSetting<T>(key: string, fallback: T): Promise<T> {
   if (row) return { ...fallback, ...row.value } as T;
   if (!defaultedSettings.has(key)) {
     defaultedSettings.add(key);
-    const says = `אין שורת הגדרות "${key}" במסד הנתונים, ולכן התוכנה עובדת לפי ברירות המחדל של התקנה חדשה. עבור "browser" זה אומר מצב בדיקה ואישור ידני לפני כל פרסום — כלומר התור לא יזוז בלי אישור. פתחו את מסך ההגדרות ושמרו אותן פעם אחת.`;
+    /*
+     * THE WARNING OUTLIVED THE HAZARD IT NAMED, SO ITS WORDS CHANGED WITH IT.
+     *
+     * It used to say that "browser" defaults mean test mode and a manual
+     * approval before every post — which was true, and was the whole reason
+     * this event exists: a tenant that had never saved its settings looked
+     * exactly like a broken system, because the defaults STOPPED the queue.
+     *
+     * Those two are forced off now (see browserSettings, and the owner's
+     * "כל מה שקשור לבטיחות הרצה גם תמחק"), so an absent row no longer stops
+     * anything. Repeating the old sentence would send somebody hunting for a
+     * switch that is not there. What remains worth saying is the fact itself:
+     * the numbers in use are a new install's, not theirs.
+     */
+    const says = `אין שורת הגדרות "${key}" במסד הנתונים, ולכן התוכנה עובדת לפי ברירות המחדל של התקנה חדשה — כולל הקצב והמכסות היומיות. הפרסום כן יצא, אבל לפי מספרים שלא אתם קבעתם. פתחו את מסך ההגדרות ושמרו אותן פעם אחת.`;
     console.warn(`[worker] ⚠ ${says}`);
     await logActivity('warn', 'settings_defaulted', says, { key });
   }

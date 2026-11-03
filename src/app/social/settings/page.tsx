@@ -527,26 +527,6 @@ export default function SettingsPage() {
                   </p>
                 )}
               </Card>
-              <Card title="בטיחות הריצה">
-                <div className="space-y-2.5">
-                  {(
-                    [
-                      ['testMode', 'מצב בדיקה', 'קבוצה אחת בלבד לכל פרסום, ואישור ידני חובה לפני הלחיצה הסופית. כבו אחרי שהבדיקה הראשונה עברה.'],
-                      ['requireConfirmation', 'אישור לפני כל פרסום', 'התוכנה שבמחשב עוצרת לפני "פרסום", מצלמת מסך, ומחכה לאישור שלכם בלוח הבקרה.'],
-                      ['debugMode', 'חלון דפדפן גלוי', 'Playwright רץ עם חלון פתוח כדי שתראו בדיוק מה קורה. כבו לריצה שקטה ברקע.'],
-                    ] as const
-                  ).map(([key, label, hint]) => (
-                    <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-ink-700 px-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="font-bold text-mist-100">{label}</p>
-                        <p className="text-xs leading-snug text-mist-500">{hint}</p>
-                      </div>
-                      <Toggle checked={browser[key]} onChange={(v) => setBrowser({ ...browser, [key]: v })} label={label} />
-                    </div>
-                  ))}
-                </div>
-              </Card>
-
               <Card title="קצב הקבוצות">
                 <div className="grid gap-4 sm:grid-cols-3 [&>*]:min-w-0">
                   <Field label="עבודות דפדפן במקביל" hint="1 מומלץ — חלון אחד שעושה דבר אחד">

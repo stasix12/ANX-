@@ -43,17 +43,43 @@ is(/type Tab = 'limits' \| 'admin';/.test(settings), 'and the type says so, so a
 is(/\{isAdmin && \(\s*<SegmentedControl/.test(settings), 'the tab bar shows only for an admin, who still has two');
 
 // ───────────────── 2. The controls that did real work survived ─────────────
-is(settings.includes('<Card title="בטיחות הריצה">'), 'the safety switches moved, they were not deleted');
-is(settings.includes('<Card title="קצב הקבוצות">'), 'and so did the group pacing');
-for (const key of ['testMode', 'requireConfirmation', 'debugMode', 'concurrentJobs', 'maxPerCampaignPerDay', 'groupMinGapMinutes']) {
+/*
+ * "כל מה שקשור לבטיחות הרצה גם תמחק והחלון דפדפן שיהיה תמיד סגור כברירת מחדל
+ *  לא צריך שזה יפתח לי חלונות במחשב וגם לא ללקוחות"
+ *
+ * So the safety card went too — and DELETING THE SWITCHES IS NOT TURNING THEM
+ * OFF. Their values live in a saved row, every machine that has run this
+ * product has `debugMode: true` in it, and a customer whose row also says
+ * requireConfirmation would have waited for an approval with no switch left
+ * to give it. Both halves are pinned: gone from the screen, forced in the
+ * worker.
+ */
+is(!settings.includes('<Card title="בטיחות הריצה">'), 'the safety card is gone from the screen');
+for (const key of ['testMode', 'requireConfirmation', 'debugMode']) {
+  is(!new RegExp(`browser\\.${key}`).test(settings), `${key} is no longer editable anywhere in settings`);
+}
+is(settings.includes('<Card title="קצב הקבוצות">'), 'but the group pacing, which does real work, stayed');
+for (const key of ['concurrentJobs', 'maxPerCampaignPerDay', 'groupMinGapMinutes']) {
   is(settings.includes(key), `${key} is still editable`);
 }
+
+const worker = read('worker/social-worker.ts');
+const types = read('src/lib/social/types.ts');
+is(/async function browserSettings\(\)/.test(worker), 'the worker reads browser settings through one normaliser');
+eq((worker.match(/getSetting<BrowserSettings>/g) ?? []).length, 1, 'and only the normaliser reads them raw — no second, unforced path');
+is(/testMode: false, requireConfirmation: false/.test(worker), 'test mode and per-post confirmation are forced off whatever the saved row says');
+is(/debugMode: env\.forceHeaded/.test(worker), 'and the browser window stays shut unless a developer sets SOCIAL_BROWSER_HEADED=1');
+is(/debugMode: false,/.test(types) && /testMode: false,/.test(types) && /requireConfirmation: false,/.test(types),
+  'the shipped defaults agree, so a brand-new machine never opens a window either');
+/* Signing in must still show a window, or nobody can ever connect Facebook. */
+const session = read('worker/facebook/session.ts');
+is(/newPage\(false, 'התחברות ידנית'\)/.test(session), 'the login window is still visible — it opens regardless of debugMode');
 /* They must be INSIDE the one remaining customer tab, not orphaned. */
 const limitsAt = settings.indexOf("{tab === 'limits' && (");
 const adminAt = settings.indexOf("{tab === 'admin'");
-const safetyAt = settings.indexOf('<Card title="בטיחות הריצה">');
+const pacingAt = settings.indexOf('<Card title="קצב הקבוצות">');
 is(limitsAt > 0 && adminAt > limitsAt, 'found both blocks');
-is(safetyAt > limitsAt && safetyAt < adminAt, 'the rescued cards sit inside "קצב ומגבלות", where a customer will find them');
+is(pacingAt > limitsAt && pacingAt < adminAt, 'the rescued pacing card sits inside "קצב ומגבלות", where a customer will find it');
 
 // ───────────────── 3. The connection is still reachable ────────────────────
 /*

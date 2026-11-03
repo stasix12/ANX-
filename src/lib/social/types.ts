@@ -592,9 +592,33 @@ export interface BrowserSettings {
 }
 
 export const DEFAULT_BROWSER: BrowserSettings = {
-  debugMode: true,
-  testMode: true,
-  requireConfirmation: true,
+  /*
+   * ALL THREE SHIP OFF NOW, AND THE WORKER NO LONGER ASKS.
+   *
+   * "כל מה שקשור לבטיחות הרצה גם תמחק והחלון דפדפן שיהיה תמיד סגור כברירת
+   *  מחדל לא צריך שזה יפתח לי חלונות במחשב וגם לא ללקוחות"
+   *
+   * debugMode shipped TRUE, which is why a Chromium window opened on his
+   * machine — and on every customer's — for every round. testMode capped a
+   * publication at one group, and requireConfirmation stopped before each
+   * post to wait for a tap. The three switches that controlled them are gone
+   * from the settings screen, so a stored `true` would have been a state
+   * nobody could leave: a customer whose row says requireConfirmation would
+   * wait for an approval with no switch left to turn it off.
+   *
+   * These defaults are therefore not the whole answer — browserSettings() in
+   * worker/social-worker.ts forces the same three on every read, so the rows
+   * already saved as `true` stop mattering the moment the worker updates.
+   * SOCIAL_BROWSER_HEADED=1 is the one way back to a visible window, and it
+   * is a developer's environment variable, not a customer's screen.
+   *
+   * Signing in is unaffected: interactiveLogin opens its own visible window
+   * (session.ts newPage(false, 'התחברות ידנית')) whatever this says, so
+   * "התחבר לפייסבוק" still shows the person the page they must type into.
+   */
+  debugMode: false,
+  testMode: false,
+  requireConfirmation: false,
   concurrentJobs: 1,
   maxPerCampaignPerDay: 8,
   groupMinGapMinutes: 20,

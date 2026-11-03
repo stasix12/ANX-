@@ -188,10 +188,33 @@ const settings = body('getSetting');
 ok(/'settings_defaulted'/.test(settings), 'a settings row that is absent says so — the defaults stop the queue, so arriving at them silently is a stopped queue with no explanation');
 ok(/defaultedSettings\.has\(key\)/.test(settings), 'once per key per process: the ticks are five seconds apart, and a fact about configuration is not an event');
 ok(/defaultedSettings\.add\(key\)/.test(code), 'and the key is remembered before the write, so a failed write cannot repeat it every tick');
-ok(/מצב בדיקה ואישור ידני/.test(settings), 'and it names the two defaults that actually stop the queue, rather than saying "defaults"');
+/*
+ * THE SENTENCE MOVED BECAUSE THE HAZARD DID. It used to name the two defaults
+ * that stopped the queue; those are forced off now, so an absent row no
+ * longer stops anything and pointing at a switch that no longer exists would
+ * send somebody hunting. What must still be named is what IS at stake.
+ */
+ok(/הקצב והמכסות היומיות/.test(settings), 'and it names what the defaults now decide — the rate and the daily caps — rather than saying "defaults"');
+ok(!/מצב בדיקה ואישור ידני/.test(settings), 'and no longer points at two switches the product no longer has');
 
 const browserDefaults = readFileSync(new URL('../../src/lib/social/types.ts', import.meta.url), 'utf8');
 const block = browserDefaults.slice(browserDefaults.indexOf('export const DEFAULT_BROWSER'), browserDefaults.indexOf('export interface ActivityEntry'));
-ok(/testMode: true/.test(block) && /requireConfirmation: true/.test(block), 'the defaults are still the cautious ones — this test exists to make the fallback LOUD, not to loosen it');
+/*
+ * THIS PINNED `testMode: true` AND `requireConfirmation: true`, and it was
+ * right to: while those were the defaults, arriving at them silently was a
+ * stopped queue with no explanation. The owner then had the three safety
+ * switches deleted outright — "כל מה שקשור לבטיחות הרצה גם תמחק" — and the
+ * worker forces all three off on every read, so the defaults can no longer
+ * stop anything and there is no switch left to turn back on.
+ *
+ * The requirement did not disappear with them; it inverted. What must now be
+ * guaranteed is that a first run NEVER opens a browser window on somebody's
+ * machine and never waits for an approval nobody can give.
+ */
+ok(/debugMode: false/.test(block), 'a brand-new machine never opens a browser window — "לא צריך שזה יפתח לי חלונות במחשב וגם לא ללקוחות"');
+ok(/testMode: false/.test(block) && /requireConfirmation: false/.test(block), 'and never waits for an approval the screen no longer has a switch for');
+const forced = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+ok(/debugMode: env\.forceHeaded, testMode: false, requireConfirmation: false/.test(forced),
+  'and a row already SAVED as true is overridden too — deleting a switch is not turning it off');
 
 console.log(`✓ hold-reason: ${checks} בדיקות עברו`);

@@ -448,6 +448,37 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   }
   await input.onStep('publishing');
   assertUsable(await classifyPage(page));
+  /*
+   * ─── THE NODE WE ARE ABOUT TO POST IN, PINNED BEFORE WE POST IN IT ───────
+   *
+   * `dialog` is a Locator. A Locator is a QUERY, re-run on every use, and the
+   * question it answers below is "does this selector still match anything" —
+   * not "did the window I clicked פרסום in go away". Those are the same
+   * question only while nothing else on the page can satisfy the selector.
+   *
+   * Something else can. fb.composerDialog's own comment says it: "Facebook
+   * pages carry several role=dialog nodes (chat pop-outs, notification
+   * panels)", and it tries to exclude them with `.filter({ has: textbox })` —
+   * but a Messenger chat pop-out IS a dialog and it DOES contain a textbox,
+   * so the filter keeps it. When the name-gated first candidate does not
+   * match (the label Facebook gives the composer is not in
+   * patterns.composerDialog for every locale), firstVisible falls through to
+   * `getByRole('dialog').filter({ has: textbox }).last()`. That picks the
+   * composer correctly while it is the newest dialog — and then, the instant
+   * the composer is removed, resolves to the chat window instead.
+   *
+   * So the post goes up, the composer closes, the selector still matches, and
+   * ninety seconds later the row is parked with "חלון הפוסט לא נסגר אחרי
+   * הלחיצה על פרסום" — on a publication that succeeded. No code has to change
+   * for this to start happening: a chat window opening is enough, which is
+   * why it began at 09:22 on a worker whose files had not moved since 04:38,
+   * and why a second machine eleven versions behind failed identically.
+   *
+   * An element handle is not a query. It is THAT node, and `isConnected`
+   * answers the question actually being asked. The locator stays as the
+   * fallback for the one case a handle cannot be taken.
+   */
+  const dialogNode = await dialog.elementHandle().catch(() => null);
   await postButton.click();
 
   // 7. Verify --------------------------------------------------------------
@@ -462,10 +493,22 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
   let detached = false;
   while (!detached && Date.now() < detachBy) {
     const slice = Math.min(DETACH_TICK_MS, detachBy - Date.now());
-    detached = await dialog
-      .waitFor({ state: 'detached', timeout: slice })
-      .then(() => true)
-      .catch(() => false);
+    detached = dialogNode
+      ? await page
+          /* Inline, never a named const: tsx rewrites `const f = () => …` into
+             `__name(() => …)`, the helper does not travel to the browser, and
+             the predicate dies on its first statement. See postIndex.ts. */
+          .waitForFunction(
+            (el) => !el.isConnected || el.getClientRects().length === 0,
+            dialogNode,
+            { timeout: slice, polling: 250 },
+          )
+          .then(() => true)
+          .catch(() => false)
+      : await dialog
+          .waitFor({ state: 'detached', timeout: slice })
+          .then(() => true)
+          .catch(() => false);
     if (!detached && Date.now() < detachBy) {
       console.log(`[worker]    ממתין לסגירת חלון הפוסט… ${Math.round((Date.now() - clickedAt) / 1000)} שניות`);
       /* ALIVE, AND SAYING SO. Without this the longest wait in the function
@@ -475,6 +518,7 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
       await input.onHold?.().catch(() => {});
     }
   }
+  await dialogNode?.dispose().catch(() => undefined);
   if (!detached) {
     // Still open: either an error banner, or Facebook simply never took it down.
     if (await fb.failureText(page).isVisible({ timeout: 1000 }).catch(() => false)) {

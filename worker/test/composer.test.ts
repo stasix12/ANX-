@@ -514,6 +514,64 @@ async function main() {
     console.log('✓ a post that is genuinely nowhere is still reported honestly, with the addresses it tried');
   }
 
+  /*
+   * ─── THE 03/11 FAILURE, REPRODUCED ──────────────────────────────────────
+   *
+   * "הפסיק לפרסם אחרי השינוי האחרון". 139 rows parked that day, every one of
+   * them with 'חלון הפוסט לא נסגר אחרי הלחיצה על "פרסום"', on a worker whose
+   * files had not moved since 04:38 — and a second machine eleven versions
+   * behind failed identically. No code changed, so the page did.
+   *
+   * fb.composerDialog's own comment names what else is on these pages: "chat
+   * pop-outs, notification panels". It excludes them with
+   * `.filter({ has: textbox })` — and a Messenger chat pop-out is a dialog
+   * that contains a textbox, so the filter keeps it. When the name-gated
+   * first candidate does not match, firstVisible falls through to
+   * `getByRole('dialog').filter({ has: textbox }).last()`, which is the
+   * composer while the composer is the newest dialog, and the chat window the
+   * moment the composer is removed.
+   *
+   * ?chat=1&plainname=1 is exactly that page. The publication below SUCCEEDS;
+   * before the fix the same call sat out the full SUBMIT_DETACH_MS and threw
+   * the owner's sentence on a post that was already live in the group.
+   */
+  {
+    const ctx = await browser.newContext({ locale: 'he-IL' });
+    const pageD = await ctx.newPage();
+    const steps: string[] = [];
+    const withChat = await publishToGroup(pageD, {
+      groupUrl: `${fixture}?chat=1&plainname=1`,
+      text: 'דירה 3 חדרים להשכרה בערד, משופצת, כניסה מיידית — 052-0000000',
+      images: [],
+      video: null,
+      onStep: async (st) => {
+        steps.push(st);
+      },
+    });
+    assert.equal(
+      withChat.outcome,
+      'published',
+      'a chat window that outlives the composer must not read as "the post window did not close"',
+    );
+    assert.ok(steps.includes('verifying'), 'it really went through the detach wait');
+    /* The scenario has to still be true at the end, or the assertion above
+       passed for the wrong reason — a mock that quietly closed its own chat
+       would prove nothing. */
+    const chatStillOpen = await pageD.evaluate(() => !!document.querySelector('#chat'));
+    assert.ok(chatStillOpen, 'the chat pop-out is still on the page, which is the whole point');
+    const stillMatches = await pageD
+      .getByRole('dialog')
+      .filter({ has: pageD.locator('[contenteditable="true"], [role="textbox"]') })
+      .count();
+    assert.ok(
+      stillMatches > 0,
+      'and the OLD selector still matches something — so the old code would have waited out the full allowance here',
+    );
+    await pageD.close();
+    await ctx.close();
+    console.log('✓ a chat pop-out outliving the composer no longer reads as "the window did not close"');
+  }
+
   await browser.close();
   console.log('composer tests OK');
 }

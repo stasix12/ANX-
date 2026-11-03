@@ -205,14 +205,39 @@
     });
     document.querySelector('#decoy').insertBefore(box, decoyList);
   });
+  /*
+   * THE PAGE AS IT ACTUALLY IS ON THE OWNER'S MACHINE — ?chat=1
+   *
+   * Facebook keeps a Messenger chat pop-out on these pages, and it is a
+   * role="dialog" that CONTAINS A TEXTBOX, so fb.composerDialog's
+   * `.filter({ has: textbox })` does not exclude it. It is appended here on
+   * load and never closes, exactly like the real one.
+   *
+   * ?plainname=1 drops the composer's accessible name below
+   * patterns.composerDialog, which is what sends firstVisible past the
+   * name-gated candidate and onto `getByRole('dialog').filter(...).last()`.
+   * Together they are the owner's 03/11 failure: the composer closes, the
+   * chat does not, and a locator that only asks "does the selector still
+   * match anything" never sees a detach.
+   */
+  const params = new URLSearchParams(location.search);
+  if (params.get('chat') === '1') {
+    const chat = document.createElement('div');
+    chat.id = 'chat';
+    chat.setAttribute('role', 'dialog');
+    chat.setAttribute('aria-label', 'צ׳אט');
+    chat.innerHTML = '<div class="panel"><strong>צ׳אט</strong>'
+      + '<div role="textbox" contenteditable="true" aria-label="הודעה">שלום</div></div>';
+    document.body.appendChild(chat);
+  }
   document.getElementById('trigger').addEventListener('click', () => {
-    if (document.querySelector('[role=dialog]')) return;
+    if (document.querySelector('[role=dialog]:not(#chat)')) return;
     const dlg = document.createElement('div');
     dlg.setAttribute('role', 'dialog');
-    dlg.setAttribute('aria-label', 'יצירת פוסט');
+    dlg.setAttribute('aria-label', params.get('plainname') === '1' ? 'חלון' : 'יצירת פוסט');
     dlg.innerHTML = `
       <div class="panel">
-        <h2>יצירת פוסט</h2>
+        <h2>${params.get('plainname') === '1' ? 'חלון' : 'יצירת פוסט'}</h2>
         <div role="textbox" contenteditable="true" aria-label="כתבו משהו…" id="editor"></div>
         <div class="preview" id="preview"></div>
         <div style="margin:10px 0">

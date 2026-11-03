@@ -2802,6 +2802,42 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
       console.log(`[worker] ⚠ ${raw}`);
       return;
     }
+    /*
+     * ─── פייסבוק אמר "מהר מדי" — עוצרים הכל, ואומרים את זה למעלה ─────────
+     *
+     * "ברגע שיש דבר כזה לשלוח התראה חמורה למעלה ליד התמונה של השם משתמש שלי
+     *  ולרשום שפייסבוק הגבילה את הפרסום שלי ! ולעצור הכל מיד"
+     *
+     * מצולם אצלו, 03/11 19:08: חלון הפוסט פתוח, הטקסט שלו בפנים, ומתחת
+     * ההודעה של פייסבוק על הגבלת תדירות. עד עכשיו זה נפל להודעה הגנרית
+     * "החלון לא נסגר", המערכת המשיכה לקבוצה הבאה, וחזרה על זה מאות פעמים
+     * מול חשבון חסום — כי כל שער קצב במערכת נמדד מהפרסום המוצלח האחרון,
+     * וכשאין הצלחות אין גם מרווח. כישלון רצוף לא האט כלום; הוא האיץ.
+     *
+     * state.attention הוא בדיוק המנגנון הנכון ולא צריך חדש: הוא עוצר את
+     * הפרסום בתחילת ה-tick הבא, הוא נשלח ב-heartbeat כ-attention_message,
+     * ו-status 'needs_attention' הוא מה שמדליק את "נדרשת התערבות" ליד שמו
+     * ותמונתו בראש המסך. הבעלים מנקה אותו עם "המשך" בלוח הבקרה, כמו כל
+     * מצב אחר שדורש אותו.
+     *
+     * השורה נרשמת failed ולא needs_attention, ובמכוון: הפוסט לא עלה —
+     * פייסבוק סירב לו בכתב והחלון עדיין החזיק את הטקסט — ולכן אין פה מה
+     * לבדוק בקבוצה. ורק שורה אחת נרשמת כך, כי מכאן לא ממשיכים.
+     */
+    if (err instanceof PublishError && err.kind === 'rate_limited') {
+      state.attention = 'פייסבוק הגביל את קצב הפרסום של החשבון ולא קיבל את הפוסט. עצרנו את הפרסום מיד כדי לא להחמיר את ההגבלה. הפוסטים שלא יצאו לא פורסמו בכלל — אפשר להמשיך מאוחר יותר, ורצוי להגדיל קודם את המרווח בין פרסומים.';
+      await finish({ status: 'failed', step: 'failed', error: message, screenshot_path: screenshot });
+      await db.from('social_targets').update({ last_status: 'failed', last_error: message }).eq('id', tt.id);
+      await heartbeat(state, 'needs_attention', jobEnv.browser.debugMode);
+      await logActivity('error', 'rate_limited', `פייסבוק הגביל את קצב הפרסום של החשבון (${tt.name}). עצרנו את הפרסום. הפוסט לא עלה לקבוצה.`, {
+        queueId: item.id,
+        step: lastStep,
+        detail: raw,
+        targetUrl: tt.url ?? null,
+      });
+      console.error(`[worker] ⛔ פייסבוק הגביל את קצב הפרסום — עוצר. (${tt.name})`);
+      return;
+    }
     if (err instanceof PublishError && err.kind === 'cannot_post') {
       /*
        * A PAGE BEING REFUSED IS NOT A GROUP YOU LEFT.

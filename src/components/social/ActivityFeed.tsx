@@ -87,6 +87,7 @@ const EVENT_MARK: Record<string, { icon: React.ComponentType<{ className?: strin
      it is back on the queue, not done. */
   submitted_verified_live: { icon: CheckCircleIcon, tone: 'good' },
   verify_read_failed: { icon: XCircleIcon, tone: 'bad' },
+  rate_limited: { icon: XCircleIcon, tone: 'bad' },
   verify_window_full: { icon: AlertTriangleIcon, tone: 'warn' },
   plan_retry: { icon: ClockIcon, tone: 'warn' },
   plan_revived: { icon: RepeatIcon, tone: 'brand' },

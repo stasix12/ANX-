@@ -100,6 +100,9 @@ const KIND: Record<string, ActivityKind> = {
      system news: while it cannot read, every parked publication stays parked
      and nothing else in the product will say why. */
   verify_read_failed: 'failure',
+  /* פייסבוק הגביל את קצב הפרסום. הכישלון החמור ביותר שיש: הוא עוצר את
+     המערכת כולה, והוא על החשבון עצמו ולא על קבוצה אחת. */
+  rate_limited: 'failure',
   /* The backlog outgrew one pass's window. A warning and not quiet system
      news: while it holds, publications parked today may not be looked at. */
   verify_window_full: 'failure',

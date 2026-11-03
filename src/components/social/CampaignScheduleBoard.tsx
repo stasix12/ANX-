@@ -235,6 +235,27 @@ export function CampaignScheduleBoard({
           Measured at 360, 390 and 430 by worker/test/dashboard-hero.test.ts,
           which fails on a single clipped character in any of them.
         */}
+        {/*
+          ─── AND NOT WHILE THE EDITOR IS OPEN ──────────────────────────────
+          *
+          *   "וכאן למה יש פעמיים גם תזמון פרסום וגם למטה ימים אם שעות ???
+          *    זה מיותר נראה לי"
+          *
+          * He was looking at his own card with "ערוך מועד" pressed, and the
+          * same three fields were drawn twice: once here as the readout, and
+          * again below as the editor. They are genuinely different things —
+          * these are buttons that OPEN the editor, those are the controls —
+          * but nothing on screen says so, because both are three rounded
+          * boxes with the same labels, the same icons and the same values.
+          *
+          * So while the editor is open the readout stands down. The switch
+          * and "ערוך מועד" stay exactly where they are, because they are the
+          * way back; only the duplicated trio goes. Close the editor and the
+          * readout returns.
+          *
+          * "אין להציג פעמיים הגדרות ימי פרסום או שעות."
+          */}
+        {!editing && (
         <div className="mt-1.5 grid grid-cols-2 gap-1 [&>*]:min-w-0 @[300px]:grid-cols-[1.6fr_1.1fr_1fr]">
           <Box
             label="ימי פרסום"
@@ -335,6 +356,7 @@ export function CampaignScheduleBoard({
             </span>
           </Box>
         </div>
+        )}
       </div>
 
       {/*

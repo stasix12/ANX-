@@ -369,10 +369,35 @@ export function CampaignSchedulePanel({
           each gap is six pixels back across the row, which is what buys the
           seventh chip its 40th.
         */}
+        {/*
+          ─── THE LABEL THE DAY ROW LOST WHEN THE READOUT STOOD DOWN ────────
+          *
+          * The chips used to sit under "ימי פרסום" in the board's readout
+          * above, and the editor needed no label of its own because the word
+          * was already on screen. The readout stands down while the editor is
+          * open — "אין להציג פעמיים הגדרות ימי פרסום או שעות" — and the word
+          * went with it, leaving seven bare letters.
+          *
+          * dashboard-hero.test.ts caught it on a card whose schedule is OFF,
+          * which is the case that matters most: "כאשר כבוי: התזמון מושבת אך
+          * ההגדרות נשמרות". A row of letters with nothing naming it is not a
+          * saved setting a person can recognise.
+          *
+          * It is also what the reference draws — the day chips sit under
+          * "ימי פרסום" there too. Same type scale and colour as the two
+          * labels beside it, so the three read as one row of fields.
+        */}
+        <span
+          aria-hidden
+          dir="auto"
+          className={`block text-center text-[10px] font-bold leading-4 text-mist-300 ${showHeader ? 'mt-2' : 'mt-0.5'}`}
+        >
+          ימי פרסום
+        </span>
         <div
           role="group"
           aria-label={`ימי פרסום ל${campaignName}`}
-          className={`grid grid-cols-7 gap-[3px] [&>*]:min-w-0 ${showHeader ? 'mt-2' : 'mt-0.5'}`}
+          className="mt-1 grid grid-cols-7 gap-[3px] [&>*]:min-w-0"
         >
           {DAY_LABELS.map((label, day) => {
             const on = schedule.days.includes(day);

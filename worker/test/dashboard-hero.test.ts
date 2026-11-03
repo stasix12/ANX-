@@ -339,7 +339,45 @@ async function main(): Promise<void> {
             const b = c.querySelector('[data-schedule-board]');
             const br = b?.getBoundingClientRect();
             const boxes = b ? [...b.querySelectorAll('button[aria-expanded]')].map((e) => e.getBoundingClientRect()) : [];
-            const chips = b ? [...b.querySelectorAll('[data-must-fit]')].filter((e) => /^[א-ת]׳$/.test((e.textContent || '').trim())) : [];
+            /*
+             * THE DAY CHIPS OF THE WHOLE CARD, not of the board.
+             *
+             * They were counted inside [data-schedule-board] because that is
+             * where the only set lived. The editor below draws its own seven,
+             * and with it open by default the card carried FOURTEEN — the
+             * duplication the owner reported in those words: "וכאן למה יש
+             * פעמיים גם תזמון פרסום וגם למטה ימים אם שעות ??? זה מיותר נראה
+             * לי". Counting them per-component could never see that; counting
+             * them per-CARD is the assertion the requirement actually makes.
+             */
+            /* COMPONENT-AGNOSTIC ON PURPOSE. The board drew its days as spans
+               carrying [data-must-fit]; the editor draws them as buttons with
+               [aria-pressed] and no such attribute. Keying on either one asks
+               "does THIS FILE still draw days", which is how the card ended up
+               with two sets and every assertion stayed green. Keying on the
+               TEXT asks what the requirement asks: how many day chips does a
+               person see on this card. */
+            /*
+             * The INNERMOST element whose whole text is a day letter. The
+             * editor's chip is a <button> holding the letter AND a check
+             * icon, so "no element children" missed it while "any match"
+             * counted the button and its span twice; the deepest match counts
+             * each visible chip exactly once, in either component.
+             *
+             * WRITTEN WITHOUT A NAMED HELPER. Assigning the predicate to a
+             * const makes tsx wrap it in __name(), which does not exist in
+             * the page — account.test.ts calls this out in those words,
+             * "this browser reproduces the __name hazard, which is the
+             * point". Inside page.evaluate the test of a day letter is
+             * spelled out at each use instead.
+             */
+            const chips = [...c.querySelectorAll('*')].filter(
+              (e) =>
+                /^[א-ת]׳$/.test((e.textContent || '').trim()) &&
+                ![...e.children].some((k) => /^[א-ת]׳$/.test((k.textContent || '').trim())),
+            );
+            /* The editor's own day row, so "exactly one set" can say WHICH. */
+            const panelChips = [...c.querySelectorAll('[data-schedule] [aria-pressed]')].length;
             /* BY ITS OWN ATTRIBUTE. It used to be "the board's last child",
                which was true while the board drew its own strip; the block is
                a shared component now and the probe names it. */
@@ -372,6 +410,7 @@ async function main(): Promise<void> {
               /* The strip is its own container directly under the block. */
               stripIsOwnBlock: sr && br ? sr.width > 0 && sr.bottom <= br.bottom + 1 : true,
               readouts: boxes.length,
+              panelChips,
               /* The three sit on ONE row above 300px of space. Below that the
                  days take a row of their own, which is two. */
               readoutRows: new Set(boxes.map((r) => Math.round(r.top))).size,
@@ -483,12 +522,30 @@ async function main(): Promise<void> {
         assert.ok(c.belowProgress, `${at}: the block is not under the progress bar`);
         assert.ok(c.aboveActions, `${at}: the block is not above the action row`);
         assert.ok(c.stripIsOwnBlock, `${at}: "הפרסום הבא" is not its own container under the block`);
-        assert.equal(c.readouts, 3, `${at}: expected three readouts, got ${c.readouts}`);
-        assert.equal(c.chips, 7, `${at}: expected seven day chips, got ${c.chips}`);
+        /*
+         * ─── ONE SET OF SETTINGS PER CARD, AND THIS USED TO DEMAND TWO ─────
+         *
+         * It read `readouts === 3`: the board's trio of tappable readouts,
+         * days / gap / start. That was right while they were the only place
+         * those three values appeared. The editor beneath them opens BY
+         * DEFAULT (LiveCampaignHero: useState(true)), and it draws the same
+         * three as real controls — so every card on the dashboard carried
+         * both, and the day row twice over.
+         *
+         *   "וכאן למה יש פעמיים גם תזמון פרסום וגם למטה ימים אם שעות ???"
+         *   "אין להציג פעמיים הגדרות ימי פרסום או שעות."
+         *
+         * The board's readouts stand down while the editor is open, so with
+         * the fixture rendering the open state there are none — and the
+         * requirement the old line was reaching for is asserted directly
+         * below instead: the card shows SEVEN day chips, once, on one row.
+         * That holds whichever component supplies them, which is what makes
+         * it a statement about the card rather than about a file.
+         */
+        assert.equal(c.readouts, 0, `${at}: the readout trio must stand down while the editor is open, got ${c.readouts}`);
+        assert.equal(c.chips, 7, `${at}: the card must show the seven days ONCE, got ${c.chips}`);
         assert.equal(c.chipRows, 1, `${at}: the seven days must stay on one row`);
-        /* THE REFERENCE'S OWN ROW, at the widths the owner's phone reports.
-           360 is allowed the two-row fallback and nothing else is. */
-        assert.equal(c.readoutRows, width >= 390 ? 1 : 2, `${at}: readouts on ${c.readoutRows} row(s)`);
+        assert.equal(c.panelChips, 7, `${at}: and the editor is the one supplying them, got ${c.panelChips}`);
         assert.ok(c.text.includes('תזמון פרסום'), `${at}: the block has lost its title`);
         /*
          * THE BLOCK ALWAYS LEADS WITH ITS OWN NAME, and then says one of the

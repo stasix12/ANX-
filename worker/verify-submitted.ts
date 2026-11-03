@@ -128,6 +128,15 @@ export function provableText(text: string): boolean {
  * address for a comment) and not nearly enough to declare a row published. So
  * the pairing is re-checked here against the page's own copy of the text, by
  * the same containment rule matchPosts uses when it does match on text.
+ *
+ * KNOWN AND ACCEPTED LIMIT. `theirs` is the whole [role="article"] innerText,
+ * which includes the post's comment thread, so a comment under post A that
+ * quotes the opening line of post B can make B's row agree with A. The cost
+ * is bounded and is on the safe side of this file's asymmetry: the row is
+ * marked published against the wrong address, so one post does not go out.
+ * It cannot cause a second publication. Narrowing it by offset — "the body is
+ * the first N characters" — was considered and rejected: a long post's body
+ * runs past any N, and a false NEGATIVE there costs the feature its purpose.
  */
 export function textAgrees(ours: string, theirs: string): boolean {
   const mine = normalizeForMatch(ours || '');

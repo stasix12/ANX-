@@ -100,6 +100,9 @@ const KIND: Record<string, ActivityKind> = {
      system news: while it cannot read, every parked publication stays parked
      and nothing else in the product will say why. */
   verify_read_failed: 'failure',
+  /* The backlog outgrew one pass's window. A warning and not quiet system
+     news: while it holds, publications parked today may not be looked at. */
+  verify_window_full: 'failure',
   account_save_failed: 'failure',
   /* The list of profiles could not be written. Filed with the account it
      belongs to: it means the same thing — the machine learned something about

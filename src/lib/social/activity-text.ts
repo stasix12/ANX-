@@ -77,6 +77,7 @@ const TITLE: Record<string, string> = {
   /* הכותרת היא התשובה לשאלה שהוא בא לשאול — "אז מה קרה עם הפוסט הזה?" */
   submitted_verified_live: 'נבדק בקבוצה — הפוסט עלה',
   verify_read_failed: 'בדיקת הפרסומים הממתינים נכשלה',
+  verify_window_full: 'יותר מדי פרסומים ממתינים לבדיקה',
   plan_retry: 'הסבב יתוכנן שוב',
   plan_revived: 'סבב הוחזר לתכנון',
   account_save_failed: 'שמירת החשבון נכשלה',

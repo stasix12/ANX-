@@ -4226,6 +4226,25 @@ async function verifySubmitted(state: WorkerState, headless: boolean): Promise<v
     return;
   }
   if (!data?.length) return;
+  /*
+   * SATURATION MUST NOT BE SILENT.
+   *
+   * Rows the sweep cannot decide write nothing, so they keep their updated_at
+   * and hold their place at the head of this ascending window for ever. When
+   * the window comes back full, newly parked rows may be behind it and will
+   * never be read — and the per-group line printed at the end of a pass looks
+   * exactly the same whether that is happening or not. Said once, where the
+   * owner can see it, rather than inferred later from a backlog that stopped
+   * shrinking.
+   */
+  if (data.length >= VERIFY_ROWS_SCANNED) {
+    await logActivity(
+      'warn',
+      'verify_window_full',
+      `יש לפחות ${VERIFY_ROWS_SCANNED} פרסומים שממתינים לבדיקה. אנחנו בודקים את הוותיקים שבהם, וייתכן שחדשים יותר לא ייבדקו עד שאלה ייסגרו.`,
+      { scanned: data.length },
+    );
+  }
 
   const rows = (data as unknown as {
     id: string;

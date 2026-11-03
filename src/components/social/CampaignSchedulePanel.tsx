@@ -26,7 +26,7 @@ import { accountGapLabel } from '@/lib/social/rules';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 import { CalendarIcon, CheckIcon, ChevronDownIcon, ClockIcon, MoreIcon, PlusIcon, RepeatIcon, TrashIcon } from '@/components/icons';
 import { NextPublication } from './NextPublication';
-import { Toggle } from './ui';
+import { InfoDot, Toggle } from './ui';
 
 /**
  * "תזמון פרסום" — the panel inside every campaign card.
@@ -1029,56 +1029,54 @@ export function CampaignSchedulePanel({
               <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">הפעל חזרה יומית של הקמפיין</span>
             </span>
             <span className="ms-auto -me-1 -my-1 flex shrink-0 items-center">
+              {/*
+                THE EXPLANATION NO LONGER ARRIVES WITH THE TAP.
+                *
+                * "הסברים ואזהרות לא ייפתחו אוטומטית ויזיזו את המסך. יש
+                *  להעביר אותם לאייקון מידע."
+                *
+                * This paragraph used to appear the moment the switch went on
+                * — under the switch, pushing everything below it down while
+                * the thumb was still there. It is the same words, in a sheet,
+                * on a dot that is ALWAYS present: nothing appears, nothing
+                * disappears, and the row cannot change height.
+              */}
+              <InfoDot title="חזרה יומית">
+                {neverLaunched ? (
+                  <>
+                    <p>
+                      הסבב הזה עוד לא יצא אף פעם, ולכן אין עדיין רשימת קבוצות לחזור אליה — החזרה היומית לא תיכנס לפעולה והתזמון לא יכניס
+                      פרסומים לתור.
+                    </p>
+                    <p className="text-warning-400">
+                      השיקו אותו פעם אחת — הוסיפו פוסט, בחרו קבוצות ושלחו — ומאותו רגע התזמון והחזרה יעבדו לבד.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    {/* The consequence to HIS Facebook account leads, because
+                        it is the one thing here he cannot undo. */}
+                    <p className="text-warning-400">
+                      פרסום חוזר של אותה מודעה לאותן קבוצות עלול לגרום להסרה מהקבוצות או להגבלת החשבון שלכם בפייסבוק.
+                    </p>
+                    <p>
+                      אותו פוסט יפורסם שוב לאותן קבוצות בכל יום פרסום, החל מהשעה{' '}
+                      <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. {repeatWindowSentence(repeat.minHours)}.
+                    </p>
+                  </>
+                )}
+              </InfoDot>
+              {/* `disabled` was swallowed inside onChange, so a tap on a
+                  locked switch did nothing and said nothing. The switch owns
+                  that state now and shows it. */}
               <Toggle
                 checked={repeat.enabled}
-                onChange={(enabled) => !disabled && onRepeatChange({ ...repeat, enabled })}
+                disabled={disabled}
+                onChange={(enabled) => onRepeatChange({ ...repeat, enabled })}
                 label={`חזרה יומית עבור ${campaignName}`}
               />
             </span>
           </div>
-          {(neverLaunched || repeat.enabled) && (
-            <p className="mt-1.5 text-[10.5px] font-bold leading-4 text-mist-300">
-              {neverLaunched ? (
-                /*
-                 * SAID BEFORE THE PROMISE, not instead of the switch. The
-                 * switch stays usable — he may well be arming a round he is
-                 * about to launch — but the sentence under it may not describe
-                 * something that cannot happen yet.
-                 */
-                <>
-                  הסבב הזה עוד לא יצא אף פעם, ולכן אין עדיין רשימת קבוצות לחזור אליה — החזרה היומית לא תיכנס לפעולה והתזמון לא יכניס פרסומים לתור.
-                  <span className="mt-0.5 block text-warning-400">
-                    השיקו אותו פעם אחת — הוסיפו פוסט, בחרו קבוצות ושלחו — ומאותו רגע התזמון והחזרה יעבדו לבד.
-                  </span>
-                </>
-              ) : (
-                <>
-                  {/*
-                   * THE WARNING STAYS OPEN. THE MECHANISM FOLDS.
-                   *
-                   * "הסברים ארוכים יעברו לחלונית מידע נפתחת" — and this block
-                   * is two different things under one paragraph. The second
-                   * is the consequence to HIS Facebook account, which he
-                   * carries and nobody else does; a safety line behind a tap
-                   * is a safety line that is not read. The first is how the
-                   * repeat works, which he can open when he wants it.
-                   */}
-                  <span className="block text-warning-400">
-                    פרסום חוזר של אותה מודעה לאותן קבוצות עלול לגרום להסרה מהקבוצות או להגבלת החשבון שלכם בפייסבוק.
-                  </span>
-                  <details className="group mt-1">
-                    <summary className="flex min-h-9 cursor-pointer list-none items-center text-brand-400 [&::-webkit-details-marker]:hidden">
-                      איך החזרה היומית עובדת
-                    </summary>
-                    <span className="block">
-                      אותו פוסט יפורסם שוב לאותן קבוצות בכל יום פרסום, החל מהשעה{' '}
-                      <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. {repeatWindowSentence(repeat.minHours)}.
-                    </span>
-                  </details>
-                </>
-              )}
-            </p>
-          )}
         </div>
       )}
     </div>

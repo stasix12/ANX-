@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircleIcon, ChevronIcon, CloseIcon, DotIcon, SpinnerIcon, TrashIcon, XCircleIcon } from '@/components/icons';
+import { AlertCircleIcon, CheckCircleIcon, ChevronIcon, CloseIcon, DotIcon, SpinnerIcon, TrashIcon, XCircleIcon } from '@/components/icons';
 import { QUEUE_STATUS_LABEL, type PublishMethod, type QueueStatus } from '@/lib/social/types';
 
 /**
@@ -338,28 +338,135 @@ export const inputClass =
  * The switch reads as a 28px track but is tapped as 44px: the track is an
  * inner span so the button itself can carry the full hit area.
  */
-export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+/**
+ * HOW LONG THE KNOB TAKES TO CROSS. 180ms, asked for by name.
+ *
+ * It is also the colour fade, so the track and the knob arrive together — a
+ * knob that lands before its track has changed colour is the thing that reads
+ * as cheap.
+ */
+const TOGGLE_MS = 180;
+
+/**
+ * HOW LONG A LOCAL GUESS MAY OUTLIVE THE WRITE THAT CONFIRMED IT.
+ *
+ * The caller usually sets its own state AFTER its await, which is a tick or
+ * two later than ours. Dropping the guess the instant the promise settles
+ * would show the OLD value for those ticks — a flick back and forth that is
+ * worse than the delay it was meant to remove. So the guess stands a little
+ * longer, and the prop takes over the moment it agrees or this runs out.
+ */
+const SETTLE_MS = 900;
+
+/**
+ * THE SWITCH. One component, every screen, and three promises it must keep.
+ *
+ * "המתג צריך להגיב מיד מבחינה חזותית, אבל אין להציג פעולה כאילו נשמרה בשרת
+ *  לפני שהתקבל אישור."
+ *
+ *   1. IT MOVES ON THE TAP. The knob used to wait for `checked` to come back
+ *      from the caller's save, so a tap on a slow line looked like a tap that
+ *      missed. It now moves on a local guess, immediately.
+ *   2. THE GUESS IS NEVER THE TRUTH. The guess is dropped the moment `checked`
+ *      agrees with it, and unconditionally after SETTLE_MS — so what is on
+ *      screen is the server's answer, not ours, within a second either way.
+ *      A save that fails, or one whose caller quietly swallows the error,
+ *      ends with the knob back where it was.
+ *   3. ONE TAP AT A TIME. A second tap while the first is in flight is
+ *      ignored rather than queued: two writes racing on one row is how a
+ *      switch ends up disagreeing with the thing it controls.
+ *
+ * `onChange` may return a promise; when it rejects the knob returns and the
+ * reason is said once, briefly. Callers that do their own toasting are
+ * unaffected — they resolve, and rule 2 still corrects the picture.
+ */
+export function Toggle({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void | Promise<unknown>;
+  label?: string;
+  disabled?: boolean;
+}) {
+  const toast = useToast();
+  const [guess, setGuess] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shown = guess ?? checked;
+
+  /* The prop is the truth. The moment it agrees, the guess has no job left. */
+  useEffect(() => {
+    if (guess !== null && checked === guess) setGuess(null);
+  }, [checked, guess]);
+
+  useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
+
+  const press = async () => {
+    if (saving || disabled) return;
+    const next = !shown;
+    setGuess(next);
+    setSaving(true);
+    try {
+      await onChange(next);
+      if (settle.current) clearTimeout(settle.current);
+      settle.current = setTimeout(() => setGuess(null), SETTLE_MS);
+    } catch (err) {
+      setGuess(null);
+      toast(err instanceof Error && err.message ? err.message : 'לא הצלחנו לשמור את השינוי.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <button
       type="button"
       role="switch"
-      aria-checked={checked}
+      aria-checked={shown}
       aria-label={label}
-      onClick={() => onChange(!checked)}
-      className="relative flex h-11 w-12 shrink-0 items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950"
+      aria-busy={saving}
+      disabled={disabled}
+      onClick={press}
+      className={`relative flex h-11 w-12 shrink-0 items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 ${
+        disabled ? 'cursor-not-allowed opacity-50' : saving ? 'cursor-wait' : ''
+      }`}
     >
       {/* The ON track is brand-300, the indicator blue — a track is a fill,
           not a label, so the 3:1 bar applies and the brighter step reads far
-          better against the OFF state than the button surface does. */}
-      <span className={`h-7 w-full rounded-full transition-colors ${checked ? 'bg-brand-300' : 'bg-ink-600'}`} />
+          better against the OFF state than the button surface does.
+
+          The OFF track stays ink-600 and must not be lightened for being
+          "light grey": the white knob measures 3.03 against it, and anything
+          paler takes that under the 3:1 floor contrast.test.ts enforces. */}
+      <span
+        className={`h-7 w-full rounded-full transition-colors ease-out motion-reduce:transition-none ${checkedTrack(shown)}`}
+        style={{ transitionDuration: `${TOGGLE_MS}ms` }}
+      />
       {/* The knob stays literal white rather than a token: it is the one mark
           that has to read against BOTH track colours, and white is the best
-          available on each (3.40 on the on-track, 3.03 on the off-track). */}
+          available on each (3.40 on the on-track, 3.03 on the off-track).
+
+          MOVED BY TRANSFORM, not by inset-inline-start: the transform runs on
+          the compositor, which is what the difference between "smooth" and
+          "nearly smooth" is on a phone. `start-1` is the OFF position and the
+          logical variants carry it across in the direction the document reads,
+          so RTL is not a special case with its own arithmetic. */}
       <span
-        className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-[inset-inline-start] ${checked ? 'start-6' : 'start-1'}`}
+        className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-transform ease-out motion-reduce:transition-none start-1 ${
+          shown ? 'ltr:translate-x-6 rtl:-translate-x-6' : ''
+        } ${saving ? 'ring-2 ring-white/70' : ''}`}
+        style={{ transitionDuration: `${TOGGLE_MS}ms` }}
       />
     </button>
   );
+}
+
+/** Kept out of the JSX so the two track colours are one decision, named. */
+function checkedTrack(on: boolean): string {
+  return on ? 'bg-brand-300' : 'bg-ink-600';
 }
 
 /**
@@ -1375,6 +1482,63 @@ export function OverflowMenu({ label, actions, className = '' }: { label: string
             </li>
           ))}
         </ul>
+      </Sheet>
+    </>
+  );
+}
+
+/**
+ * THE EXPLANATION THAT DOES NOT MOVE THE SCREEN.
+ *
+ * "הסברים ואזהרות לא ייפתחו אוטומטית ויזיזו את המסך. יש להעביר אותם לאייקון
+ *  מידע."
+ *
+ * A paragraph that appears when a switch goes on pushes everything under it
+ * down at the exact moment the thumb is still over the switch — so the next
+ * tap lands on whatever slid into that place. The text was not the problem;
+ * the text arriving unasked, in the flow, was.
+ *
+ * Built on Sheet rather than a popover for one reason that matters on a
+ * phone: a popover is absolutely positioned inside whatever card it was
+ * written in, and every one of those cards clips its overflow somewhere. The
+ * sheet is portalled out, so it cannot be cut off, cannot be squeezed by a
+ * narrow column, and is already the pattern OverflowMenu uses — one way to
+ * say "more, over here", not two.
+ *
+ * 44px, like every other tap target: it sits in rows beside a Toggle that is
+ * already h-11, so it adds nothing to the height it stands in.
+ */
+export function InfoDot({
+  title = 'הסבר',
+  children,
+  className = '',
+}: {
+  title?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={title}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={(e) => {
+          /* The row around it is often itself clickable — a card that opens a
+             campaign, a label that toggles the switch. Asking for the
+             explanation must not also do that. */
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 ${className}`}
+      >
+        <AlertCircleIcon className="h-4 w-4" />
+      </button>
+      <Sheet open={open} onClose={() => setOpen(false)} title={title}>
+        <div className="space-y-2 pb-4 text-[13px] font-bold leading-5 text-mist-300">{children}</div>
       </Sheet>
     </>
   );

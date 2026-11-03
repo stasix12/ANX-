@@ -76,7 +76,6 @@ const TITLE: Record<string, string> = {
   write_partial: 'עדכון נשמר חלקית',
   /* הכותרת היא התשובה לשאלה שהוא בא לשאול — "אז מה קרה עם הפוסט הזה?" */
   submitted_verified_live: 'נבדק בקבוצה — הפוסט עלה',
-  submitted_verified_absent: 'נבדק בקבוצה — הוחזר לתור',
   verify_read_failed: 'בדיקת הפרסומים הממתינים נכשלה',
   plan_retry: 'הסבב יתוכנן שוב',
   plan_revived: 'סבב הוחזר לתכנון',

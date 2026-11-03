@@ -168,43 +168,85 @@ is(MIN_EVIDENCE_LETTERS > 12, 'the bar here is higher than the one matchPosts ma
   is(!('absent' in t), 'the tally has no requeue column, because there is no requeue');
 }
 
-// ══════ 10. THE SOURCE PINS — the guards that vanish without a sound ═══════
+// ══════ 10. THE SOURCE PINS — the guards that vanish without a sound ══════
+/*
+ * A reviewer took the first version of this section apart, so it is now
+ * written against the ways it was actually defeated:
+ *   • the window was keyed on a neighbouring declaration, so renaming that
+ *     neighbour silently widened it to the whole 259 KB file;
+ *   • the negative pins matched COMMENTS, so documenting the invariant broke
+ *     the test that asserts it;
+ *   • `!/[^d]ourPostsInGroup\(/` was defeated by `import { ourPostsInGroup as
+ *     readPosts }` — the reviewer applied that substitution and it passed;
+ *   • nothing checked that production calls the module these 60 checks test,
+ *     or that the chore is wired in at all.
+ */
 const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
-const sweep = worker.slice(worker.indexOf('async function verifySubmitted'));
-const body = sweep.slice(0, sweep.indexOf('\nconst COMMENTS_PER_TICK'));
-is(body.length > 500, 'found the sweep body to pin');
+const FROM = 'async function verifySubmitted';
+const TO = '\nconst COMMENTS_PER_TICK';
+const from = worker.indexOf(FROM);
+const to = worker.indexOf(TO, from);
+is(from > 0, 'found the sweep');
+is(to > from, 'found its end — a -1 here would silently widen every pin below to the whole file');
+const body = worker.slice(from, to);
+is(body.length > 1000 && body.length < 20_000, `the window is the sweep and nothing else (${body.length} chars)`);
 
-/* THE ONE THAT MATTERS MOST. Re-introducing a requeue here is the whole of
-   the duplicate risk, and it would compile and pass everything else. */
-is(!body.includes("status: 'scheduled'"), 'THE SWEEP NEVER PUTS A ROW BACK ON THE QUEUE — six duplicate routes live behind this line');
-is(!body.includes("step: 'pending'"), 'nor resets a row to pending');
-is(!body.includes('scheduled_at:'), 'nor touches scheduled_at, which is queue order');
-eq((body.match(/\.update\(\{/g) ?? []).length, 1, 'exactly ONE write, and it marks a row published');
+/* Comments are documentation, not behaviour. The negative pins below must not
+   fire on a sentence explaining the very rule they protect. */
+const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+is(code.includes('await applied('), 'the stripped body is still the code');
 
-/* ourPostsInGroup flattens a login wall and an empty group into the same []. */
-is(body.includes('readOurPostsInGroup'), 'the sweep reads the page with the variant that reports failure');
-is(!/[^d]ourPostsInGroup\(/.test(body), 'and never with the one that cannot tell a wall from an empty group');
+// ── The one that matters most: no requeue, ever ──────────────────────────
+is(!/status:\s*'scheduled'/.test(code), 'THE SWEEP NEVER PUTS A ROW BACK ON THE QUEUE — six duplicate routes live behind this');
+is(!/step:\s*'pending'/.test(code), 'nor resets a row to pending');
+is(!/scheduled_at\s*:/.test(code), 'nor touches scheduled_at, which is queue order');
+eq((code.match(/\.update\(\{/g) ?? []).length, 1, 'exactly ONE write, and it marks a row published');
+is(/status:\s*'published'/.test(code), 'and that write is the publication one');
 
-/* The read is scoped like every other queue read in the worker. */
-is(body.includes('queueScope(state)'), 'the parked rows are read under this account only');
-is(body.includes('account_id.eq.'), 'with the same filter the due query uses');
-is(body.includes("social_targets!inner"), 'and an inner join, so the filter can bite');
+// ── Production must use the module these checks test ─────────────────────
+is(/\bdecideSubmitted\s*\(/.test(code), 'the sweep decides through decideSubmitted — sections 1-9 are about a module nothing calls otherwise');
+is(/\bmatchPosts\s*\(/.test(code), 'and feeds it matchPosts, which is the seam the text cross-check defends');
+is(/\bverdict\.outcome\s*!==\s*'live'/.test(code), "and acts on 'live' alone, skipping every other verdict");
 
-/* The write re-states the state it was decided on, and is measured. */
-is(body.includes(".eq('status', 'needs_attention')"), 'the write only touches a row still parked');
-is(body.includes(".eq('step', 'submitted')"), "and still at 'submitted' — the owner may have pressed נסה שוב meanwhile");
-eq((body.match(/await applied\(/g) ?? []).length, 1, 'the write is measured, never assumed');
+// ── And the chore must actually run ──────────────────────────────────────
+const chores = worker.slice(worker.indexOf('const chores:'), worker.indexOf('for (const chore of chores)'));
+is(chores.includes('run: verifySubmitted'), 'the chore is wired into the chore list — one deleted line and the feature is dead with the suite green');
+is(chores.includes('CHORE_NEEDS_MS.verifySubmitted'), 'with its own browser-window budget');
 
-/* published_at is the click, and claimed_at is the only column that holds it:
-   a trigger moves updated_at on every write, including other sweeps'. */
-is(body.includes('row.published_at || row.claimed_at'), 'a recovered publication is stamped from claimed_at, not from the last write to the row');
-is(!/published_at: row\.updated_at/.test(body), 'updated_at alone is never the publication time');
+// ── The unsafe reader, alias-proof ───────────────────────────────────────
+/* ourPostsInGroup flattens a login wall and an empty group into the same [].
+   Checking the call site alone was defeated by renaming it on import. */
+const imports = worker.slice(0, worker.indexOf('\n\n'));
+const postIndexImport = (worker.match(/import \{[^}]*\} from '\.\/facebook\/postIndex';/) ?? [''])[0];
+is(postIndexImport.includes('readOurPostsInGroup'), 'the safe reader is imported');
+is(!/\bourPostsInGroup\s+as\s+/.test(postIndexImport), 'and the unsafe one is NOT aliased to a name these pins cannot see');
+is(/\breadOurPostsInGroup\s*\(/.test(code), 'the sweep reads the page with the variant that reports failure');
+is(!/(?<!read)OurPostsInGroup\s*\(/i.test(code.replace(/readOurPostsInGroup/g, '')), 'and never with the one that cannot tell a wall from an empty group');
+is(imports.length > 0, 'import block located');
 
-/* A success must not arrive wearing a red error sentence. */
-is(body.includes('error: null'), 'a verified row carries no error text — ErrorDetail prints that column verbatim');
+// ── Scoped like every other queue read ───────────────────────────────────
+is(code.includes('queueScope(state)'), 'the parked rows are read under this account only');
+is(code.includes('account_id.eq.'), 'with the same filter the due query uses');
+is(code.includes('social_targets!inner'), 'and an inner join, so the filter can bite');
 
-/* The group latch re-arms, or a blocked group is dead for the process. */
-is(body.includes('VERIFY_GROUP_AGAIN_MS'), 'a group that could not be read comes back round');
-is(body.includes('ripeForVerify'), 'and rows are only looked at once Facebook has had time');
+// ── The write re-states what it was decided on, and is measured ──────────
+const write = code.slice(code.indexOf('.update({'), code.indexOf('await applied(') >= 0 ? code.length : undefined);
+is(/\.eq\('status',\s*'needs_attention'\)/.test(write), 'the write only touches a row still parked');
+is(/\.eq\('step',\s*'submitted'\)/.test(write), "and still at 'submitted' — the owner may have pressed נסה שוב meanwhile");
+eq((code.match(/await applied\(/g) ?? []).length, 1, 'the write is measured, never assumed');
+is(/step_at\s*:/.test(write), "step_at is stamped, or the row reads as hours old in a stage it entered a second ago");
+is(/error:\s*null/.test(write), 'a verified row carries no error text — ErrorDetail prints that column verbatim');
+is(/published_at:\s*row\.published_at \|\| row\.claimed_at/.test(write),
+  'published_at comes from claimed_at, not from the last write to the row — the spacing gate reads it');
+
+// ── Ripeness and the latch: the DIRECTION, not just the name ─────────────
+/* Pinned by name only, both of these pass when inverted — and inverted they
+   are exactly the two defects they were added to prevent. */
+is(/filter\(\(r\) => ripeForVerify\(r\.updated_at, now\)\)/.test(code),
+  'ripe rows are KEPT (a `!` here verifies only rows parked in the last ten minutes — the opposite of the point)');
+is(/<=\s*now - VERIFY_GROUP_AGAIN_MS/.test(code),
+  'a group is revisited once it is OLDER than the re-arm window (a `>=` makes the latch permanent)');
+is(/VERIFY_EVERY_MS/.test(code) && /submittedSweptAt/.test(code),
+  'the sweep throttles its own browser windows — one per tick trips the idle window-storm breaker in under four minutes');
 
 console.log(`verify-submitted OK — ${checks} checks`);

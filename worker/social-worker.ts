@@ -267,6 +267,19 @@ interface WorkerState {
    */
   submittedTried?: Map<string, number>;
   /**
+   * When the verification sweep last opened a window.
+   *
+   * WITHOUT THIS THE FEATURE TAKES THE WHOLE MACHINE DOWN. The sweep opens one
+   * browser window per tick, the tick is five seconds, and the backlog it was
+   * written for is 139 rows spread over 139 groups. That is the 41st window
+   * inside three and a half minutes — past IDLE_WINDOW_LIMIT — so the storm
+   * breaker at the top of the chore block fires, parks the worker on
+   * `attention`, and stops every background chore INCLUDING the comments the
+   * owner is actively waiting on. A backlog that has sat for eight hours does
+   * not need a window every five seconds.
+   */
+  submittedSweptAt?: number;
+  /**
    * Rows a chore just failed on, and the instant each may be tried again.
    *
    * THE SAME DEFECT addressTried was added for, in the chores that never got
@@ -4127,8 +4140,22 @@ async function resolveAddresses(state: WorkerState, headless: boolean): Promise<
  */
 const VERIFY_GROUPS_PER_TICK = 1;
 
-/** How many parked rows to consider in one pass. */
-const VERIFY_ROWS_SCANNED = 200;
+/**
+ * How many parked rows to consider in one pass.
+ *
+ * Deliberately far above the 139 this was written for. Rows the sweep cannot
+ * decide write nothing — that is the whole safety rule — so they keep their
+ * updated_at and stay at the head of this ascending window for ever. Above
+ * this many permanently undecidable rows (a post awaiting admin approval, a
+ * Page's posts, text too short to identify) a newly parked row would never be
+ * read at all. The headroom buys time; it does not remove the limit.
+ */
+const VERIFY_ROWS_SCANNED = 500;
+
+/** The shortest gap between two of this sweep's browser windows. See
+    WorkerState.submittedSweptAt: at one window per five-second tick this
+    feature trips the idle window-storm breaker in under four minutes. */
+const VERIFY_EVERY_MS = 4 * 60_000;
 
 /** How long before a group is worth opening again. A page that was blocked,
     or a post that had not rendered yet, is a temporary condition — but one
@@ -4168,8 +4195,9 @@ const VERIFY_GROUP_AGAIN_MS = 2 * 60 * 60_000;
 async function verifySubmitted(state: WorkerState, headless: boolean): Promise<void> {
   if (state.browserState !== 'connected' || !session.hasProfile()) return;
   if (!state.accountId) return;
-  const db = await workerDb();
   const now = Date.now();
+  if (now - (state.submittedSweptAt ?? 0) < VERIFY_EVERY_MS) return;
+  const db = await workerDb();
 
   /*
    * SCOPED LIKE EVERY OTHER QUEUE READ, and the review is why.
@@ -4226,6 +4254,7 @@ async function verifySubmitted(state: WorkerState, headless: boolean): Promise<v
   for (const [groupUrl, groupRows] of todo.slice(0, VERIFY_GROUPS_PER_TICK)) {
     if (stopping) break;
     state.submittedTried = (state.submittedTried ?? new Map()).set(groupUrl, now);
+    state.submittedSweptAt = now;
     const page = await session.newPage(headless, 'בדיקה אם הפוסט עלה');
     try {
       const read = await readOurPostsInGroup(page, groupUrl, state.accountId);
@@ -4252,6 +4281,10 @@ async function verifySubmitted(state: WorkerState, headless: boolean): Promise<v
             .update({
               status: 'published',
               step: 'published',
+              /* Every other status write in this file stamps it; without it a
+                 row verified at 17:40 reads as eight hours in the 'published'
+                 stage, because step_at still holds the moment it was parked. */
+              step_at: new Date().toISOString(),
               permalink: verdict.url,
               /*
                * WHEN IT WENT LIVE, NOT WHEN WE LOOKED — the spacing gate and

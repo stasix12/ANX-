@@ -956,4 +956,4 @@ export const WORKER_VERSION = '4.44.0';
 
    (types.ts moves too, for QueueItem.updated_at. It is a type; nothing
    executes it.) */
-export const WORKER_FINGERPRINT = '57b2dd8d4dceb77b';
+export const WORKER_FINGERPRINT = 'c90a8e47b43b7974';

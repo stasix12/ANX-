@@ -40,7 +40,6 @@ const KIND: Record<string, ActivityKind> = {
    * the parking lot and put back on the queue. Neither is a failure.
    */
   submitted_verified_live: 'success',
-  submitted_verified_absent: 'success',
   run_adopted_queue: 'success',
   worker_started: 'success',
   worker_self_update: 'success',

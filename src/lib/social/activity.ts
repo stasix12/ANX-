@@ -209,6 +209,11 @@ const KIND: Record<string, ActivityKind> = {
      the owner's round becoming real again, and it is the line that explains
      why publications he had given up on suddenly appear in the queue. */
   plan_slots_recycled: 'round',
+  /* מסד נתונים שלא הריץ v25 אינו מכיר את repeat_enabled, והסבב נפתח בלעדיו —
+     כלומר אותו פוסט לא יחזור לקבוצה שהוא כבר פורסם אליה. 'failure' ולא
+     'system', מאותה סיבה שתיעד target_left: שום דבר לא שבור, אבל פרסום
+     שהבעלים מצפה לו לא יֵצא, וזאת השורה היחידה שאומרת את זה. */
+  campaign_column_missing: 'failure',
   /* The feature that wrote this is gone ("לפרסם רק לאן שיש לקוחות"), and the
      entry stays because his history still holds rows that carry it. Deleting
      the label would not delete the rows — it would only make them unreadable. */

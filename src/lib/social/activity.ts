@@ -29,6 +29,18 @@ const KIND: Record<string, ActivityKind> = {
   published: 'success',
   quick_published: 'success',
   group_share_resolved: 'success',
+  /*
+   * A row the worker had parked at "I clicked פרסום and then lost the window"
+   * — resolved by going back to the group and looking. 'success' and not
+   * 'system' for the reason group_join is: it is the machine doing the thing
+   * the owner would otherwise have done by hand, on his own account, and this
+   * line is the only record that a publication he was told to check turned
+   * out to be fine. Both outcomes are filed here: a post that WAS live is a
+   * publication recovered, and one that was not is a publication rescued from
+   * the parking lot and put back on the queue. Neither is a failure.
+   */
+  submitted_verified_live: 'success',
+  submitted_verified_absent: 'success',
   run_adopted_queue: 'success',
   worker_started: 'success',
   worker_self_update: 'success',
@@ -85,6 +97,10 @@ const KIND: Record<string, ActivityKind> = {
   claim_failed: 'failure',
   write_failed: 'failure',
   write_partial: 'failure',
+  /* The read that feeds the verification sweep. A failure and not quiet
+     system news: while it cannot read, every parked publication stays parked
+     and nothing else in the product will say why. */
+  verify_read_failed: 'failure',
   account_save_failed: 'failure',
   /* The list of profiles could not be written. Filed with the account it
      belongs to: it means the same thing — the machine learned something about

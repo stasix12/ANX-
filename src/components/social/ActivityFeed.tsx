@@ -82,6 +82,12 @@ const EVENT_MARK: Record<string, { icon: React.ComponentType<{ className?: strin
   claim_failed: { icon: XCircleIcon, tone: 'bad' },
   write_failed: { icon: XCircleIcon, tone: 'bad' },
   write_partial: { icon: XCircleIcon, tone: 'bad' },
+  /* Good news, both of them: one publication that turned out to be fine, one
+     freed from the parking lot. 'brand' and not 'good' for the absent case —
+     it is back on the queue, not done. */
+  submitted_verified_live: { icon: CheckCircleIcon, tone: 'good' },
+  submitted_verified_absent: { icon: RepeatIcon, tone: 'brand' },
+  verify_read_failed: { icon: XCircleIcon, tone: 'bad' },
   plan_retry: { icon: ClockIcon, tone: 'warn' },
   plan_revived: { icon: RepeatIcon, tone: 'brand' },
   plan_targets_skipped: { icon: AlertTriangleIcon, tone: 'warn' },

@@ -44,22 +44,48 @@ export interface GroupPost {
 const PASSES = 10;
 
 /**
- * Every post WE made in this group, newest first, each with its own address.
+ * WHY AN EMPTY LIST IS NOT AN ANSWER, AND WHO HAS TO CARE.
  *
- * Returns an empty list when the page could not be read — a login wall, a
- * group that no longer loads. The caller must not treat that as "we have no
- * posts here", which is why nothing here throws it away silently.
+ * `ourPostsInGroup` returns [] for two different facts: "this page says we
+ * have no posts here" and "this page could not be read at all". Its own doc
+ * has always said the caller must not confuse them, and for the caller it was
+ * written for — saving an address it would otherwise look up later — the
+ * confusion is harmless: the address is simply not saved.
+ *
+ * It stopped being harmless the moment a caller DECIDED something on it.
+ * verify-submitted.ts asks "is the post the worker clicked Post on actually in
+ * the group?", and a wrong "no" there sends the same post to the same group a
+ * second time, under the owner's own account, with no undo. A login wall must
+ * never be able to produce that answer.
+ *
+ * So the read reports WHY it is empty, and the decision refuses to decide
+ * unless the page was genuinely read. `ourPostsInGroup` is kept exactly as it
+ * was, on top of this, so the address pass is untouched.
  */
-export async function ourPostsInGroup(page: Page, groupUrl: string, authorId: string): Promise<GroupPost[]> {
-  if (!authorId) return [];
+export type GroupPostsRead =
+  /** The page loaded and was read. `posts` may legitimately be empty. */
+  | { ok: true; posts: GroupPost[] }
+  /** Nothing was learned. Never, ever to be read as "no posts here". */
+  | { ok: false; why: 'no-author' | 'navigation' | 'blocked' };
+
+/**
+ * Every post WE made in this group, newest first, each with its own address —
+ * and, unlike `ourPostsInGroup`, an honest answer when the page was not read.
+ */
+export async function readOurPostsInGroup(
+  page: Page,
+  groupUrl: string,
+  authorId: string,
+): Promise<GroupPostsRead> {
+  if (!authorId) return { ok: false, why: 'no-author' };
   const where = `${groupUrl.replace(/\/+$/, '')}/user/${authorId}/`;
   try {
     await page.goto(where, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   } catch {
-    return [];
+    return { ok: false, why: 'navigation' };
   }
   await page.waitForTimeout(3000);
-  if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return [];
+  if ((await classifyPage(page).catch(() => 'ok' as const)) !== 'ok') return { ok: false, why: 'blocked' };
 
   const found = new Map<string, string>();
   let lastCount = -1;
@@ -109,7 +135,20 @@ export async function ourPostsInGroup(page: Page, groupUrl: string, authorId: st
     await page.waitForTimeout(1200);
   }
 
-  return [...found].map(([url, text]) => ({ url, text }));
+  return { ok: true, posts: [...found].map(([url, text]) => ({ url, text })) };
+}
+
+/**
+ * Every post WE made in this group, newest first, each with its own address.
+ *
+ * Returns an empty list when the page could not be read — a login wall, a
+ * group that no longer loads. The caller must not treat that as "we have no
+ * posts here", which is why nothing here throws it away silently. A caller
+ * that DECIDES on the answer must use `readOurPostsInGroup` instead.
+ */
+export async function ourPostsInGroup(page: Page, groupUrl: string, authorId: string): Promise<GroupPost[]> {
+  const read = await readOurPostsInGroup(page, groupUrl, authorId);
+  return read.ok ? read.posts : [];
 }
 
 /**

@@ -37,7 +37,8 @@ import { logActivity, safeError, unwrap, workerDb } from './db';
 import { env } from './env';
 import { PublishError } from './facebook/composer';
 import { PREP_HOLD_CAP_MS, commentOnPost, type CommentOutcome } from './facebook/composer';
-import { matchPosts, ourPostsInGroup } from './facebook/postIndex';
+import { matchPosts, ourPostsInGroup, readOurPostsInGroup } from './facebook/postIndex';
+import { decideSubmitted, ripeForVerify, verdictTally } from './verify-submitted';
 import { downloadMedia, type LocalMedia } from './media';
 import { readGroupProfile } from './facebook/profile';
 import type { AccountProfile } from './facebook/account';
@@ -251,6 +252,14 @@ interface WorkerState {
    * asked again and again and no other group is ever reached.
    */
   addressTried?: Set<string>;
+  /**
+   * Groups whose parked "submitted" rows have already been verified this run.
+   *
+   * The same latch as addressTried and for the same reason: a group whose
+   * author page cannot be read yields no writes, so without this the sweep
+   * re-opens that one group every tick and no other group is ever reached.
+   */
+  submittedTried?: Set<string>;
   /**
    * Rows a chore just failed on, and the instant each may be tried again.
    *
@@ -1095,6 +1104,13 @@ async function tick(state: WorkerState): Promise<void> {
     const chores: { run: (s: WorkerState, h: boolean, roomMs: number) => Promise<unknown>; needs: number }[] = [
       { run: runCampaignComments, needs: CHORE_NEEDS_MS.commentKnown },
       { run: resolveAddresses, needs: CHORE_NEEDS_MS.addresses },
+      /*
+       * AFTER the addresses and BEFORE the cosmetic chores. It opens the same
+       * kind of page the address pass does and costs the same, but what it
+       * resolves is a row the owner is actually blocked on: 139 publications
+       * parked on 03/11 waiting for a human to open a group and look.
+       */
+      { run: verifySubmitted, needs: CHORE_NEEDS_MS.verifySubmitted },
       { run: resolveShareLinks, needs: CHORE_NEEDS_MS.shareLinks },
       { run: syncGroupProfiles, needs: CHORE_NEEDS_MS.profiles },
     ];
@@ -4093,6 +4109,173 @@ async function resolveAddresses(state: WorkerState, headless: boolean): Promise<
       }
     } catch (err) {
       console.error('[worker] ℹ איתור כתובות לא הצליח (ממשיכים רגיל):', err instanceof Error ? err.message.split('\n')[0] : err);
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+}
+
+/**
+ * How many groups to verify per tick. One, for the same reason as
+ * GROUPS_PER_TICK: this opens a real Facebook page and reads it.
+ */
+const VERIFY_GROUPS_PER_TICK = 1;
+
+/** How many parked rows to consider in one pass. */
+const VERIFY_ROWS_SCANNED = 200;
+
+/**
+ * DID THE POST ACTUALLY GO UP? — asking the group instead of asking the owner.
+ *
+ * "הפסיק לפרסם אחרי השינוי האחרון". On 03/11 this machine published 136 posts
+ * and then stopped at 09:22 — every attempt after that reached the group,
+ * clicked "פרסום", and the dialog never closed. The branch at the top of this
+ * file's error handling does the only safe thing with that: parks the row at
+ * `needs_attention` / step 'submitted' and never retries it, because the post
+ * may well be live and a retry posts it twice under the owner's own account
+ * with no undo. By evening there were 139 rows parked that way, and the only
+ * thing that could unstick them was a person opening 139 groups.
+ *
+ * So the machine opens them. /groups/<id>/user/<us>/ lists ONLY our posts in
+ * that group — the exact question — and postIndex.ts already reads it.
+ *
+ * WHAT THIS IS ALLOWED TO DO, and what it very deliberately is not:
+ *
+ *   found      → the row WAS a publication. Mark it published, keep the
+ *                address, and stamp published_at with the moment the worker
+ *                clicked — not now. The spacing rule measures the next post's
+ *                gap from that column, and "now" would charge this check to
+ *                the gap.
+ *   absent     → put it back on the queue, which is the only outcome that
+ *                actually gets the post out. verify-submitted.ts spells out
+ *                the three things that must all be true first.
+ *   anything   → write NOTHING. The row stays parked exactly as it is today.
+ *   else         An unknown costs a manual check; a wrong "absent" costs a
+ *                duplicate in a real group, forever. They are not the same
+ *                size, and this sweep is built around that asymmetry.
+ */
+async function verifySubmitted(state: WorkerState, headless: boolean): Promise<void> {
+  if (state.browserState !== 'connected' || !session.hasProfile()) return;
+  if (!state.accountId) return;
+  const db = await workerDb();
+  const now = Date.now();
+
+  const { data, error } = await db
+    .from('social_queue')
+    .select('id, rendered_text, updated_at, published_at, target_id, target:social_targets(name, url)')
+    .eq('status', 'needs_attention')
+    .eq('step', 'submitted')
+    .order('updated_at')
+    .limit(VERIFY_ROWS_SCANNED);
+  /*
+   * A failed read is not "nothing to verify". Saying so out loud is the whole
+   * lesson of AUDIT-silent-writes.md: the reads that decided in our place all
+   * decided the comfortable way.
+   */
+  if (error) {
+    await logActivity('warn', 'verify_read_failed', `לא הצלחתי לקרוא את הפרסומים הממתינים לבדיקה: ${error.message}`, { detail: error.message });
+    return;
+  }
+  if (!data?.length) return;
+
+  const rows = (data as unknown as {
+    id: string;
+    rendered_text: string;
+    updated_at: string | null;
+    published_at: string | null;
+    target_id: string;
+    target: { name: string; url: string } | { name: string; url: string }[] | null;
+  }[]).filter((r) => ripeForVerify(r.updated_at, now));
+  if (!rows.length) return;
+
+  /* One group at a time, all of its rows together — the author page answers
+     for every row in that group at once, so asking per row would open the
+     same page five times. */
+  const byGroup = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const url = groupUrlOf(row.target);
+    if (!url) continue;
+    const group = parseGroupUrl(url);
+    if (!group) continue;
+    byGroup.set(group.url, [...(byGroup.get(group.url) ?? []), row]);
+  }
+
+  const todo = [...byGroup].filter(([groupUrl]) => !state.submittedTried?.has(groupUrl));
+  for (const [groupUrl, groupRows] of todo.slice(0, VERIFY_GROUPS_PER_TICK)) {
+    if (stopping) break;
+    state.submittedTried = (state.submittedTried ?? new Set()).add(groupUrl);
+    const page = await session.newPage(headless, 'בדיקה אם הפוסט עלה');
+    try {
+      const read = await readOurPostsInGroup(page, groupUrl, state.accountId);
+      const matched = read.ok && read.posts.length
+        ? matchPosts(groupRows.map((r) => ({ id: r.id, text: r.rendered_text })), read.posts)
+        : {};
+      const verdicts = decideSubmitted(
+        groupRows.map((r) => ({ id: r.id, text: r.rendered_text })),
+        read,
+        matched,
+      );
+
+      for (const verdict of verdicts) {
+        if (stopping) break;
+        const row = groupRows.find((r) => r.id === verdict.id);
+        if (!row) continue;
+        const name = (Array.isArray(row.target) ? row.target[0]?.name : row.target?.name) ?? 'הקבוצה';
+
+        if (verdict.outcome === 'live') {
+          const landed = await applied(
+            db
+              .from('social_queue')
+              .update({
+                status: 'published',
+                step: 'published',
+                permalink: verdict.url,
+                /* The moment the worker clicked, not the moment we looked.
+                   See the header: the gap is measured from this column. */
+                published_at: row.published_at || row.updated_at || new Date().toISOString(),
+                error: 'הפוסט נמצא בקבוצה בבדיקה חוזרת — לא היה צריך לפרסם אותו שוב.',
+              })
+              .eq('id', verdict.id)
+              .eq('status', 'needs_attention')
+              .eq('step', 'submitted'),
+            1,
+            'סימון פרסום שאומת בקבוצה',
+          );
+          if (landed) {
+            await logActivity('info', 'submitted_verified_live', `בדקנו בקבוצה "${name}" — הפוסט כן עלה. סימנו אותו כפורסם ולא ננסה שוב.`, { queueId: verdict.id, permalink: verdict.url });
+          }
+          continue;
+        }
+
+        if (verdict.outcome === 'absent') {
+          const landed = await applied(
+            db
+              .from('social_queue')
+              .update({
+                status: 'scheduled',
+                step: 'pending',
+                scheduled_at: new Date().toISOString(),
+                error: '',
+                worker_id: null,
+                claimed_at: null,
+              })
+              .eq('id', verdict.id)
+              .eq('status', 'needs_attention')
+              .eq('step', 'submitted'),
+            1,
+            'החזרת פרסום שלא נמצא בקבוצה לתור',
+          );
+          if (landed) {
+            await logActivity('info', 'submitted_verified_absent', `בדקנו בקבוצה "${name}" — הפוסט לא עלה. החזרנו אותו לתור.`, { queueId: verdict.id });
+          }
+        }
+        /* 'unknown' writes nothing, on purpose. The row stays parked. */
+      }
+
+      const tally = verdictTally(verdicts);
+      console.log(`[worker] 🔎 ${groupUrl}: ${tally.live} עלו, ${tally.absent} לא עלו, ${tally.unknown} לא הוכרעו.`);
+    } catch (err) {
+      console.error('[worker] ℹ בדיקת פרסומים ממתינים לא הצליחה (השורות נשארות כפי שהן):', err instanceof Error ? err.message.split('\n')[0] : err);
     } finally {
       await page.close().catch(() => undefined);
     }

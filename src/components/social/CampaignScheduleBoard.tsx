@@ -67,6 +67,7 @@ export function CampaignScheduleBoard({
   pauseLabel = null,
   disabled = false,
   editing = false,
+  children,
 }: {
   schedule: CampaignSchedule;
   /** The one control here that writes: the switch in the header. */
@@ -125,6 +126,8 @@ export function CampaignScheduleBoard({
   disabled?: boolean;
   /** Whether the editor below is open, for the boxes' aria-expanded. */
   editing?: boolean;
+  /** The settings this card's switch governs — see the slot below. */
+  children?: React.ReactNode;
 }) {
   return (
     <div data-schedule-board className="mt-3">
@@ -357,6 +360,25 @@ export function CampaignScheduleBoard({
           </Box>
         </div>
         )}
+
+        {/*
+          ─── THE EDITOR BELONGS INSIDE THIS CARD, NOT AFTER THE BUTTONS ────
+          *
+          * "כרטיס תזמון — לרכז בכרטיס אחד: הפעלה וכיבוי קמפיין, ימי פרסום,
+          *  שעת התחלה, הפרש בין פרסומים, חזרה יומית, מספר סבבים ביום."
+          *
+          * Those six were split across the card: the title and the switch
+          * here, the four controls in a panel rendered AFTER the action row,
+          * with "פתח סבב" and "השהה סבב" sitting between the switch and the
+          * settings it governs. One subject, two blocks, a row of unrelated
+          * buttons in the middle.
+          *
+          * A SLOT RATHER THAN AN IMPORT. This component must not know what a
+          * schedule panel is — the campaigns screen draws the same panel with
+          * no board around it, and a board that reached for the panel itself
+          * would make one of those two the special case.
+        */}
+        {children}
       </div>
 
       {/*

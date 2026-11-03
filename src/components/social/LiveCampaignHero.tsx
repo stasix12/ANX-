@@ -655,7 +655,58 @@ export function LiveCampaignHero({
              telling him to do the thing he just did. */
           armedAt={launchPending(state, Date.now())}
           disabled={scheduleBusy}
-        />
+        >
+          {/*
+            THE EDITOR, IN THE CARD, directly under the button that opened it.
+            The same panel the campaigns screen has carried since 3.84.0 — one
+            editor, one stored schedule, no second mechanism — and the queue's own
+            advanced settings kept reachable from inside it, so repointing the
+            button above cost nothing.
+          */}
+          {canSchedule && editingSchedule && schedule && onScheduleChange && (
+            <div className="mt-1">
+              <CampaignSchedulePanel
+                schedule={schedule}
+                onChange={onScheduleChange}
+                repeat={repeat}
+                onRepeatChange={onRepeatChange}
+                rounds={rounds}
+                onRoundsChange={onRoundsChange}
+                /* The per-round figures, off the rows this state was built from.
+                   Absent when the state came from the rollup's status counts,
+                   which cannot be split by round — and absence is drawn as
+                   absence rather than as nought. */
+                roundProgress={state.byRound}
+                campaignName={campaign.name}
+                disabled={scheduleBusy}
+                /* The second gate, so the panel can say which of the two is
+                   actually deciding — see the note on the prop. */
+                accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
+                /* The account's own repeat floor, so the card judges the rounds
+                   against the number in Settings rather than a constant. */
+                floorHours={floorHours}
+                /* Neither control below can produce a publication until the round
+                   is launched once — a question about its whole life, not today's
+                   counter. See campaign.ts. */
+                neverLaunched={neverLaunched(state)}
+                /* The title and the switch are already in the readout block above
+                   this one. Two live switches for one setting on one card is a
+                   screen the owner cannot read. */
+                showHeader={false}
+              />
+              {/*
+                "הגדרות תור מתקדמות" IS GONE FROM THIS CARD — the owner asked for
+                it: "תמחק את הגדרות התור המתקדמות".
+                The queue tuner itself is NOT deleted. It is a real tool — it is
+                what re-spaces a live queue — so it moved to the ⋯ menu rather
+                than being destroyed, and it is still offered from the publish
+                sheet the moment a launch queues rows. What the owner wanted back
+                is the ROW it was taking at the foot of a card that is already
+                nine hundred pixels tall.
+              */}
+            </div>
+          )}
+        </CampaignScheduleBoard>
       )}
 
       {/*
@@ -715,56 +766,6 @@ export function LiveCampaignHero({
         )}
       </div>
 
-      {/*
-        THE EDITOR, IN THE CARD, directly under the button that opened it.
-        The same panel the campaigns screen has carried since 3.84.0 — one
-        editor, one stored schedule, no second mechanism — and the queue's own
-        advanced settings kept reachable from inside it, so repointing the
-        button above cost nothing.
-      */}
-      {canSchedule && editingSchedule && schedule && onScheduleChange && (
-        <div className="mt-1">
-          <CampaignSchedulePanel
-            schedule={schedule}
-            onChange={onScheduleChange}
-            repeat={repeat}
-            onRepeatChange={onRepeatChange}
-            rounds={rounds}
-            onRoundsChange={onRoundsChange}
-            /* The per-round figures, off the rows this state was built from.
-               Absent when the state came from the rollup's status counts,
-               which cannot be split by round — and absence is drawn as
-               absence rather than as nought. */
-            roundProgress={state.byRound}
-            campaignName={campaign.name}
-            disabled={scheduleBusy}
-            /* The second gate, so the panel can say which of the two is
-               actually deciding — see the note on the prop. */
-            accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
-            /* The account's own repeat floor, so the card judges the rounds
-               against the number in Settings rather than a constant. */
-            floorHours={floorHours}
-            /* Neither control below can produce a publication until the round
-               is launched once — a question about its whole life, not today's
-               counter. See campaign.ts. */
-            neverLaunched={neverLaunched(state)}
-            /* The title and the switch are already in the readout block above
-               this one. Two live switches for one setting on one card is a
-               screen the owner cannot read. */
-            showHeader={false}
-          />
-          {/*
-            "הגדרות תור מתקדמות" IS GONE FROM THIS CARD — the owner asked for
-            it: "תמחק את הגדרות התור המתקדמות".
-            The queue tuner itself is NOT deleted. It is a real tool — it is
-            what re-spaces a live queue — so it moved to the ⋯ menu rather
-            than being destroyed, and it is still offered from the publish
-            sheet the moment a launch queues rows. What the owner wanted back
-            is the ROW it was taking at the foot of a card that is already
-            nine hundred pixels tall.
-          */}
-        </div>
-      )}
 
       {/* The counter belongs to this run, and this run is what the card is
           about. Closing it is how the owner says "that round is done" - the

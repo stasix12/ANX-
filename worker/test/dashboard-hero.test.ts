@@ -385,8 +385,15 @@ async function main(): Promise<void> {
                     .map((e) => (e.textContent || '').trim().slice(0, 24))
                 : [],
               /* Every control on the card, including the chips' own boxes and
-                 the switch, carries the product's 40px floor. */
-              small: [...c.querySelectorAll('a,button,select,[role="switch"]')]
+                 the switch, carries the product's 40px floor.
+
+                 input[type="time"] joined the list when the start hour stopped
+                 being a <select> — "בשעת ההתחלה אני רוצה לבחור בדיוק איזה זמן
+                 שבא לי ולא בקפיצות של 30 דק". Adding it is not bookkeeping: it
+                 is a finger-sized control on the busiest card in the product,
+                 and for one release it was the only one this floor could not
+                 see. */
+              small: [...c.querySelectorAll('a,button,select,input[type="time"],[role="switch"]')]
                 .map((e) => e.getBoundingClientRect())
                 .filter((r) => r.width > 0 && (r.height < 40 || r.width < 24))
                 .length,

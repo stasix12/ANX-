@@ -686,10 +686,42 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
     is(/type="submit"/.test(panel), 'the round menu must carry a submit button — "אין כפתור שאני שומר את ההגדרות"');
     is(/שמור את השעה/.test(panel), 'and it must say so in his own words');
     is(/onSubmit=\{\(e\) => \{/.test(panel), 'and the write must happen on submit');
+    /*
+     * ─── SCOPED TO THE ROUND'S OWN FIELD, AND IT WAS NOT ──────────────────
+     *
+     * This read `!/<input\s+type="time"[\s\S]{0,400}onChange=/` across the
+     * WHOLE file, which was right while the round menu held the only time
+     * input in it. The campaign's start hour is a time input too now —
+     * "בשעת ההתחלה אני רוצה לבחור בדיוק איזה זמן שבא לי ולא בקפיצות של 30
+     * דק" — and that field has ALWAYS written live: it was a <select> whose
+     * onChange went straight to set(), and the card above debounces the save
+     * and reverts it on failure.
+     *
+     * So the old pattern would have failed on a change it has no opinion
+     * about, which is the second time tonight a guard has been found holding
+     * a mechanism rather than a requirement. The requirement is about THIS
+     * input: the one inside the round menu, named `at`, whose per-keystroke
+     * write armed a real round in social_schedules.weekly. It is now asked
+     * of exactly that tag.
+     */
+    const tags = panel.match(/<input[\s\S]*?\/>/g) ?? [];
+    const roundField = tags.filter((t) => /name="at"/.test(t));
+    is(roundField.length === 1, "the round menu still has exactly one hour field — re-point this rather than deleting it");
     is(
-      !/<input\s+type="time"[\s\S]{0,400}onChange=/.test(panel),
-      'the time field must NOT write on change any more — it used to arm an intermediate hour like 01:30 into weekly while he was still typing 18:30',
+      !/onChange=/.test(roundField[0]),
+      'the ROUND time field must NOT write on change — it used to arm an intermediate hour like 01:30 into weekly while he was still typing 18:30',
     );
+    is(/type="time"/.test(roundField[0]), 'and it is still a clock, not a list');
+
+    /*
+     * AND THE OTHER ONE IS DELIBERATE. A second time input exists now; this
+     * names it, so it cannot grow to three without somebody saying why.
+     */
+    const timeFields = tags.filter((t) => /type="time"/.test(t));
+    is(timeFields.length === 2, `two time fields in this panel: the round's hour and the campaign's start hour (found ${timeFields.length})`);
+    const startField = timeFields.find((t) => !/name="at"/.test(t)) as string;
+    is(/onChange=/.test(startField), 'the START hour does write live — its summary line updates on the spot, which is what the card promises');
+    is(/dir="ltr"/.test(startField), 'and it is an LTR island, so "06:47" is not reversed inside the RTL card');
     is(/new FormData\(e\.currentTarget\)/.test(panel), 'and it reads its own field rather than holding a draft in state, which this panel is not allowed to do');
     /*
      * AND IT REFUSES AN HOUR ANOTHER ROUND ALREADY HOLDS.

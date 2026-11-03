@@ -304,7 +304,23 @@ async function main(): Promise<void> {
                 if (!p) return null;
                 const pr = p.getBoundingClientRect();
                 const chips = [...p.querySelectorAll('[aria-pressed]')].map((e) => e.getBoundingClientRect());
-                const fields = [...p.querySelectorAll('select')].map((e) => e.getBoundingClientRect());
+                /*
+                 * THE CARD'S TWO FIELDS, WHICHEVER CONTROL EACH ONE IS.
+                 *
+                 * This read `select` alone, which was right while both were
+                 * dropdowns. The start hour is an <input type="time"> now —
+                 * "בשעת ההתחלה אני רוצה לבחור בדיוק איזה זמן שבא לי ולא
+                 * בקפיצות של 30 דק" — so counting selects would have found
+                 * one and failed the "TWO FIELDS, NOT THREE" assertion below
+                 * on a change it has no opinion about. That assertion is
+                 * about the card's LAYOUT: how many fields the reference
+                 * draws, that they sit on one row and share a width. None of
+                 * that cares which element renders them, and the widths
+                 * measured here are the reason it must not: a time input and
+                 * a select that disagree by a pixel is exactly the defect
+                 * this block exists to catch.
+                 */
+                const fields = [...p.querySelectorAll('select, input[type="time"]')].map((e) => e.getBoundingClientRect());
                 /*
                  * BOTH BY THEIR OWN ATTRIBUTE NOW, not by position among the
                  * paragraphs. The panel used to be four elements and "the

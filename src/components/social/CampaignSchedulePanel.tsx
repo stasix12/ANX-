@@ -5,7 +5,6 @@ import {
   DAY_NAMES,
   GAP_CHOICES,
   gapChoiceLabel,
-  TIME_CHOICES,
   daysLabel,
   gapLabel,
   scheduleSummary,
@@ -430,14 +429,27 @@ export function CampaignSchedulePanel({
 
         {/* ─── 3. the two fields, in the reference's own order ────────────── */}
         <div className="mt-2 grid grid-cols-2 gap-2 [&>*]:min-w-0">
-          <Pick
+          {/*
+            ─── ANY MINUTE, NOT EVERY HALF HOUR ──────────────────────────────
+            *
+            * "בשעת ההתחלה אני רוצה לבחור בדיוק איזה זמן שבא לי ולא בקפיצות
+            *  של 30 דק" — the owner, 03.11.2026, 05:55.
+            *
+            * This was a <select> over TIME_CHOICES: 48 options, every half
+            * hour. Nothing underneath ever needed that grid — the column is
+            * plain 'HH:MM' text, normaliseTime() accepts any minute, and the
+            * rounds editor inside this very panel has used <input type="time">
+            * since the day it was written. The list was the only thing
+            * rounding him off, and it was rounding him to the nearest thirty
+            * minutes on the one field that decides when his day starts.
+            */}
+          <TimePick
             label="שעת התחלה"
             aria={`שעת התחלה ב${campaignName}`}
             icon={<ClockIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />}
             value={schedule.start}
             disabled={disabled}
             onChange={(v) => set({ start: v })}
-            options={TIME_CHOICES.map((t) => ({ value: t, label: t }))}
           />
           <Pick
             label="הפרש בין פרסומים"
@@ -1092,6 +1104,70 @@ function Pick({
           ))}
         </select>
         <ChevronDownIcon aria-hidden className="pointer-events-none absolute inset-y-0 start-2 my-auto h-3.5 w-3.5 text-mist-500" />
+      </span>
+    </label>
+  );
+}
+
+/**
+ * THE SAME FIELD AS Pick, WITH A CLOCK INSTEAD OF A LIST.
+ *
+ * Drawn to match its neighbour exactly — same height, same radius, same
+ * border and focus ring — because the two sit side by side in one grid and
+ * the owner asked for a different VALUE SET, not a different card.
+ *
+ * TWO THINGS IT DOES THAT A BARE <input type="time"> DOES NOT:
+ *
+ * ONE — IT NEVER COMMITS HALF AN HOUR. An incomplete time input reports
+ * `''`, and some browsers report an hour with no minutes while the second
+ * field is still being typed. Writing that through would ARM a real hour on
+ * the campaign — the rounds editor in this file carries the scar: "typing
+ * 18:30 saved 01:30 on the way". So only a complete HH:MM is passed on, and
+ * anything else is left as the draft it is.
+ *
+ * TWO — IT IS AN LTR ISLAND. "06:47" is a European number run around a
+ * neutral colon; inside an RTL card with no strong character in the string,
+ * `dir="auto"` resolves to RTL and the clock reads backwards. The board that
+ * displays this same value states the rule in those words.
+ *
+ * step={60} keeps seconds out of the picker: the engine stores minutes and a
+ * seconds wheel would offer a precision nothing downstream can keep.
+ */
+function TimePick({
+  label,
+  aria,
+  icon,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  aria: string;
+  icon: React.ReactNode;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block min-w-0 rounded-2xl bg-ink-900 p-1.5">
+      <span className="flex min-w-0 items-center justify-center gap-1 text-center text-[10px] font-bold leading-4 text-mist-300">
+        {icon}
+        <span dir="auto" className="min-w-0 truncate">{label}</span>
+      </span>
+      <span className="relative mt-1 block">
+        <input
+          type="time"
+          step={60}
+          dir="ltr"
+          aria-label={aria}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (/^\d{2}:\d{2}$/.test(v)) onChange(v);
+          }}
+          className="h-10 min-h-10 w-full cursor-pointer appearance-none rounded-xl border border-ink-600 bg-ink-900 px-2 text-center text-[13px] font-extrabold tabular-nums text-mist-100 transition-colors hover:border-brand-300 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300/40 disabled:cursor-not-allowed disabled:opacity-60"
+        />
       </span>
     </label>
   );

@@ -157,7 +157,17 @@ export function gapChoiceLabel(seconds: number): string {
     which is the safe direction for a number that paces an account. */
 export const gapMinutesFor = (seconds: number): number => Math.max(1, Math.ceil(seconds / 60));
 
-/** Every half hour of the clock, which is what the two time selects offer. */
+/**
+ * Every half hour of the clock.
+ *
+ * IT IS NO LONGER WHAT THE START-HOUR FIELD OFFERS. "בשעת ההתחלה אני רוצה
+ * לבחור בדיוק איזה זמן שבא לי ולא בקפיצות של 30 דק" — that field is an
+ * <input type="time"> now and accepts any minute, which is all this column
+ * ever stored. What is left of this list is the SUGGESTION grid: the hour
+ * nextFreeRoundStart() proposes for a new round, where walking 1,440 minutes
+ * to offer "04:07" would be precision nobody asked for. A round's own hour,
+ * once it exists, is edited by a time input too.
+ */
 export const TIME_CHOICES: string[] = Array.from({ length: 48 }, (_, i) =>
   `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`,
 );

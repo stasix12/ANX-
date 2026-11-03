@@ -168,11 +168,85 @@ async function main(): Promise<void> {
      * "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק הכרטיס... להשאיר רק: שעת
      *  התחלת הפרסום, הפרש בין פרסום לפרסום, ימי הפרסום שנבחרו."
      * ---------------------------------------------------------------- */
-    const fields = page.locator('[data-schedule] select');
+    /*
+     * TWO FIELDS, AND THEY ARE NO LONGER THE SAME KIND OF CONTROL.
+     *
+     * This read `[data-schedule] select` and counted two. The start hour is
+     * an <input type="time"> now — "בשעת ההתחלה אני רוצה לבחור בדיוק איזה זמן
+     * שבא לי ולא בקפיצות של 30 דק" — so counting selects alone would quietly
+     * drop to one and this assertion would have gone red for the right change.
+     * The claim it was making is about how many CONTROLS the card offers, and
+     * that is what it counts now; which element each one is is asserted
+     * separately below, because that distinction is the fix.
+     */
+    const fields = page.locator('[data-schedule] select, [data-schedule] input[type="time"]');
     eq(await fields.count(), 2, 'TWO FIELDS, not three — the closing hour has no control any more');
+    eq(await page.locator('[data-schedule] input[type="time"]').count(), 1, 'and the start hour is a clock, not a list');
+    eq(await page.locator('[data-schedule] select').count(), 1, 'while the interval stays a list, because its choices are a decision and not a continuum');
+
     /* The reference's own order: the start time first, the interval second. */
-    await fields.nth(0).selectOption('06:30');
+    const start = page.locator('[data-schedule] input[type="time"]');
+    await start.fill('06:30');
     is((await summary()).includes('06:30'), 'changing the start time updates the summary on the spot');
+
+    /*
+     * ─── AND IT NEVER COMMITS HALF AN HOUR ───────────────────────────────
+     *
+     * fill() writes a whole value, so it cannot reach this at all — which is
+     * why the guard went unmeasured until a mutation proved it. Typed one
+     * segment at a time, a time input reports `''` while the minutes are
+     * still missing, and some browsers report the hour alone. Either one,
+     * written through, ARMS a real hour on the campaign: the rounds editor in
+     * this same panel carries the scar — "typing 18:30 saved 01:30 on the
+     * way" — and that one went as far as the database.
+     *
+     * So: type ONLY the hour, and demand that nothing was handed to the page.
+     */
+    /*
+     * ─── AND IT NEVER COMMITS HALF AN HOUR ───────────────────────────────
+     *
+     * PINNED IN THE SOURCE, AND THAT IS A STATEMENT ABOUT THE BROWSER, NOT A
+     * SHORTCUT. I tried to drive it: click the field, type the segments one
+     * at a time, read what reached the page. Chromium fires NOTHING until
+     * both segments are filled — `pressSequentially` produced zero change
+     * events — so the partial commit this guard exists to stop cannot be
+     * reproduced here however it is typed, and a mutation that deleted the
+     * guard left every behavioural assertion above green.
+     *
+     * The hazard is real even so, and this file's own neighbour is the
+     * evidence: the rounds editor a few hundred lines down carries the scar
+     * "typing 18:30 saved 01:30 on the way" — a partial hour that reached
+     * the DATABASE and armed a round. A browser that reports a lone hour
+     * meets the guard; this assertion is what keeps the guard there.
+     */
+    const panelSrc = readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8');
+    /* Anchored on the COMPONENT, not on `type="time"`: that string also
+       appears in the prose above the field, and a window that opens on a
+       comment is a guard that reads its own explanation. */
+    const at = panelSrc.indexOf('function TimePick(');
+    is(at > -1, 'TimePick is still the control behind the start hour — re-point this rather than deleting it');
+    const end = panelSrc.indexOf('/** Re-exported', at);
+    is(end > at, 'the component still ends before the re-export — re-point this rather than widening it');
+    const commit = panelSrc.slice(at, end);
+    /* A plain substring, not a regex: the thing being matched IS a regex
+       literal, and escaping one inside another is how a guard ends up
+       matching nothing and passing on its own emptiness. */
+    is(
+      commit.includes('if (/^\\d{2}:\\d{2}$/.test(v)) onChange(v);'),
+      'only a complete HH:MM is passed on; a partial value is left as the draft it is',
+    );
+    await start.fill('06:30');
+
+    /*
+     * AND AN HOUR THE OLD GRID COULD NOT EXPRESS. 06:47 is not on any
+     * half-hour, so this one line is the whole request: if the field ever
+     * goes back to a list of 48, it cannot be filled and this fails.
+     */
+    await start.fill('06:47');
+    is((await summary()).includes('06:47'), 'any minute, not every half hour — the grid of 48 is gone');
+    eq(await start.getAttribute('step'), '60', 'and no seconds wheel: the engine stores minutes');
+    eq(await start.getAttribute('dir'), 'ltr', 'the clock reads left to right inside the RTL card, like every other hour in this product');
+    await start.fill('06:30');
     /* The select's values are SECONDS now — "תעשה אופציה של 30 40 50 שניות" —
        so twenty-five minutes is 1500. Driven through the real control rather
        than through the component's props, which is the point of this file. */

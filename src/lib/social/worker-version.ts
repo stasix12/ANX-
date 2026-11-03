@@ -419,7 +419,25 @@
  * DOES THIS HAVE TO REACH THE PC? כן, כולו. התפיסה, מטאטא ההפעלה מחדש,
  * חניית האישור, מרווח התגובות וקריאת ה-session רצים שם בלבד.
  */
-export const WORKER_VERSION = '4.41.0';
+/*
+ * 4.41.0 → 4.42.0. v4.41.0 פורסם ב-02:51 והוא הגבוה ברשימה.
+ *
+ *   "בשעת ההתחלה אני רוצה לבחור בדיוק איזה זמן שבא לי ולא בקפיצות של 30 דק"
+ *
+ * שעת ההתחלה בכרטיס הקמפיין הייתה <select> מעל TIME_CHOICES: 48 אפשרויות,
+ * כל חצי שעה. שום דבר מתחת לא נזקק לרשת הזו — העמודה היא טקסט 'HH:MM' פשוט,
+ * normaliseTime מקבלת כל דקה, ועורך הסבבים בתוך אותו פאנל עצמו משתמש
+ * ב-<input type="time"> מהיום שנכתב. הרשימה הייתה הדבר היחיד שעיגל אותו,
+ * והיא עיגלה לחצי שעה הקרובה בדיוק בשדה שקובע מתי היום שלו מתחיל.
+ *
+ * DOES THIS HAVE TO REACH THE PC? לא, ואני אומר את זה במפורש כי השומר דרש
+ * מספר חדש והוא צודק בכך שאינו יודע להבדיל. השינוי כולו ב-TSX שנשלח עם
+ * האתר. טביעת האצבע זזה בגלל הערה אחת ב-campaign-schedule.ts — קובץ שנארז
+ * גם ל-worker — ולא בגלל שורת קוד שרצה שם. התנהגות ה-worker ב-4.42.0 זהה
+ * לחלוטין ל-4.41.0. לא הזזתי את ההערה כדי לעקוף את השומר: לשחק עם מה שהוא
+ * מודד הוא בדיוק איך שומר מפסיק לשמור.
+ */
+export const WORKER_VERSION = '4.42.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -850,4 +868,4 @@ export const WORKER_VERSION = '4.41.0';
 
    (types.ts moves too, for QueueItem.updated_at. It is a type; nothing
    executes it.) */
-export const WORKER_FINGERPRINT = '7c40ebde12a550d9';
+export const WORKER_FINGERPRINT = '6cfe8a6349872786';

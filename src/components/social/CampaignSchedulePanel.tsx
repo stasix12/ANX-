@@ -1049,13 +1049,28 @@ export function CampaignSchedulePanel({
                 </>
               ) : (
                 <>
-                  אותו פוסט יפורסם שוב לאותן קבוצות בכל יום פרסום, החל מהשעה{' '}
-                  <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. {repeatWindowSentence(repeat.minHours)}.
-                  {/* The consequence, not the mechanism. He is the one whose
-                      account carries it, so he is the one who has to read it. */}
-                  <span className="mt-0.5 block text-warning-400">
+                  {/*
+                   * THE WARNING STAYS OPEN. THE MECHANISM FOLDS.
+                   *
+                   * "הסברים ארוכים יעברו לחלונית מידע נפתחת" — and this block
+                   * is two different things under one paragraph. The second
+                   * is the consequence to HIS Facebook account, which he
+                   * carries and nobody else does; a safety line behind a tap
+                   * is a safety line that is not read. The first is how the
+                   * repeat works, which he can open when he wants it.
+                   */}
+                  <span className="block text-warning-400">
                     פרסום חוזר של אותה מודעה לאותן קבוצות עלול לגרום להסרה מהקבוצות או להגבלת החשבון שלכם בפייסבוק.
                   </span>
+                  <details className="group mt-1">
+                    <summary className="flex min-h-9 cursor-pointer list-none items-center text-brand-400 [&::-webkit-details-marker]:hidden">
+                      איך החזרה היומית עובדת
+                    </summary>
+                    <span className="block">
+                      אותו פוסט יפורסם שוב לאותן קבוצות בכל יום פרסום, החל מהשעה{' '}
+                      <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span>. {repeatWindowSentence(repeat.minHours)}.
+                    </span>
+                  </details>
                 </>
               )}
             </p>

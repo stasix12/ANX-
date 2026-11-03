@@ -211,11 +211,32 @@ export function CampaignScheduleBoard({
           these cards is reserved for the daily repeat.
         */}
         {!schedule.enabled && (
-          <p className="mt-1.5 rounded-xl bg-ink-900 px-2 py-1.5 text-[10.5px] font-bold leading-4 text-mist-300">
-            <span className="font-extrabold text-mist-100">זה לא עוצר את הקמפיין</span> — התזמון הכבוי רק מבטל את הגבלת
-            הימים והשעות, והפרסומים יֵצאו לפי התור. ההגדרות למטה שמורות ואינן בתוקף כרגע.
-            {pauseLabel ? <> לעצירת הפרסום עצמו: <span className="font-extrabold text-mist-100">{pauseLabel}</span>.</> : null}
-          </p>
+          /*
+           * ─── THE REASSURANCE STAYS, THE PARAGRAPH FOLDS ──────────────────
+           *
+           * "הסברים ארוכים יעברו לחלונית מידע נפתחת… יש לצמצם משמעותית את
+           *  אורך העמוד הראשי."
+           *
+           * Four lines of explanation sat open on every card whose schedule
+           * is off, which is most of them. But the FIRST clause is not an
+           * explanation — it is the answer to the question the switch itself
+           * provokes ("have I just stopped my campaign?"), and folding that
+           * away would save height by hiding the one line that stops a
+           * panic. So the clause is the summary, always visible, and the
+           * mechanism and the pointer to the real stop are behind it.
+           *
+           * <details>, so it needs no state and survives a re-render mid-tap.
+           */
+          <details className="group mt-1.5 rounded-xl bg-ink-900 px-2 py-1.5">
+            <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1 text-[10.5px] font-bold leading-4 text-mist-300 [&::-webkit-details-marker]:hidden">
+              <span className="font-extrabold text-mist-100">זה לא עוצר את הקמפיין</span>
+              <span className="text-brand-400 group-open:hidden">· מה זה כן עושה</span>
+            </summary>
+            <p className="pb-0.5 text-[10.5px] font-bold leading-4 text-mist-300">
+              התזמון הכבוי רק מבטל את הגבלת הימים והשעות, והפרסומים יֵצאו לפי התור. ההגדרות למטה שמורות ואינן בתוקף כרגע.
+              {pauseLabel ? <> לעצירת הפרסום עצמו: <span className="font-extrabold text-mist-100">{pauseLabel}</span>.</> : null}
+            </p>
+          </details>
         )}
 
         {/*

@@ -50,6 +50,7 @@ import {
   setCampaignRepeat,
   repeatRefusedText,
   syncWeeklyHours,
+  applyGapFloor,
   sendWorkerCommand,
   setPaused,
   stopCampaign,
@@ -1366,6 +1367,52 @@ export default function SocialDashboard() {
    * intent and social_schedules.weekly is what the planner reads, so a screen
    * that wrote only the first would show two rounds and publish one.
    */
+  /*
+   * ─── THE GAP, WRITTEN WHERE THE ENGINE READS IT ────────────────────────
+   *
+   * "קודם כל שאני משיק קמפיין אני מגדיר מרווח פרסום 30 שניות ומסך ראשי מופיע
+   *  לי 10 דק זה לא מסונכרן זה בעיה ראשונה."
+   *
+   * Three numbers wore that name and the card showed the only inert one; the
+   * panel's onAccountGapChange prop records the whole anatomy. The part that
+   * belongs here is the WRITE, and why it is two calls:
+   *
+   *   applyGapFloor()  — the account's own gap, in BOTH directions. This is
+   *     the number spacingGate() and rules.ts compare against, and the number
+   *     the launch sheet already writes. changeSchedule's own matchAccountTo
+   *     can only LOWER it, and only while the schedule flag is up, which is
+   *     exactly how 30 seconds went in at launch and ten minutes afterwards
+   *     were refused in silence.
+   *   changeSchedule() — everything else that has always happened on a gap
+   *     change: the column, the re-arm, the re-stamp of rows already queued.
+   *     Reused rather than reimplemented, because that path is tested.
+   *
+   * The campaign's own column is written too, to the same number. It governs
+   * nothing today, but plan.ts takes max(account, campaign) when a schedule
+   * flag is up, and the two disagreeing is how a card comes to promise an
+   * hour the queue will never use.
+   */
+  const changeAccountGap = useCallback(
+    async (campaign: Campaign, seconds: number) => {
+      try {
+        const floor = await applyGapFloor(seconds);
+        await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: seconds });
+        /* The SUM is what the engine compares against — minGap plus the group
+           surcharge — so that is the number the toast names, not the one he
+           picked. They differ whenever the surcharge had to absorb part of it,
+           and a toast naming the other one would be the same lie this whole
+           change is here to end. */
+        toast(
+          `המרווח בין פרסומים עודכן ל-${accountGapLabel(floor.minGapSeconds + floor.groupMinGapSeconds)} — זה חל על כל הסבבים בחשבון, לא רק על זה.`,
+          'info',
+        );
+      } catch (err) {
+        toast(friendlyMessage(err, 'עדכון המרווח נכשל.'), 'error');
+      }
+    },
+    [changeSchedule, toast],
+  );
+
   const changeRepeat = useCallback(
     async (campaign: Pick<Campaign, 'id' | 'name'>, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
@@ -1933,6 +1980,9 @@ export default function SocialDashboard() {
                      the campaign's own row; the write is the block above. */
                   schedule={scheduleOf(run.campaign)}
                   onScheduleChange={(next) => changeSchedule(run.campaign, next)}
+                  /* The gap is the ACCOUNT's, so it does not travel through
+                     onScheduleChange — see changeAccountGap. */
+                  onAccountGapChange={(sec) => void changeAccountGap(run.campaign, sec)}
                   spacing={{
                     minGapMinutes: data.limits.minGapMinutes,
                     groupMinGapMinutes: data.browser.groupMinGapMinutes,

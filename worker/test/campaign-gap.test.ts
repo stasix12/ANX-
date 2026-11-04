@@ -295,6 +295,85 @@ async function main(): Promise<void> {
     is(/const ownWindow = ownId \? \(await campaignWindows\(\[ownId\]\)\)/.test(code), 'addTargetsToQueue no longer reads the campaign\u2019s window at all');
   }
 
+  /* ══════════════════════════════════════════════════════════════════════
+     THE NUMBER ON THE CARD IS THE NUMBER THE ENGINE USES.
+
+     "קודם כל שאני משיק קמפיין אני מגדיר מרווח פרסום 30 שניות ומסך ראשי מופיע
+      לי 10 דק זה לא מסונכרן זה בעיה ראשונה."
+
+     Three numbers carried the name "מרווח בין פרסומים":
+       1. the launch sheet's, written to the ACCOUNT settings by
+          applyGapFloor() (library.ts) — the real one;
+       2. the run card's, `schedule_gap_seconds` on the campaign row, which
+          plan.ts reads only while the schedule flag is UP and which no gate
+          reads at publish time at all;
+       3. the account settings, which spacingGate() and evaluateQueueItem()
+          both compare against.
+
+     And the write was one-directional: changeSchedule guards its
+     matchAccountGapTo behind `next.enabled`, so with the flag down the card's
+     number governed nothing and could not even lower the floor. He launched
+     at thirty seconds, set the card to ten minutes, and published every
+     thirty — which is the cadence Facebook rate-limited the account over.
+
+     The owner's decision was "את המספר האמיתי". These hold the three pieces
+     of that in place. Comments stripped first.
+     ══════════════════════════════════════════════════════════════════════ */
+  {
+    const bare = (rel: string) =>
+      readFileSync(new URL(rel, import.meta.url), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1 ');
+    const panel = bare('../../src/components/social/CampaignSchedulePanel.tsx');
+    const dash = bare('../../src/app/social/page.tsx');
+    const hero = bare('../../src/components/social/LiveCampaignHero.tsx');
+    for (const [name, src] of [['panel', panel], ['dashboard', dash], ['hero', hero]] as const) {
+      assert.ok(src.length > 2000, `${name} did not load — ${src.length} chars, and every check below would pass on emptiness`);
+    }
+
+    /* 1 — WHAT IS SHOWN. The field and the summary read the account's gap. */
+    assert.ok(
+      /const effectiveGapSeconds =\s*typeof accountFloorSeconds === 'number'/.test(panel),
+      'the panel must resolve the gap from the ACCOUNT floor before drawing it',
+    );
+    assert.ok(/value=\{String\(effectiveGapSeconds\)\}/.test(panel), 'and the field must show that, not the campaign\'s stored number');
+    assert.ok(!/value=\{String\(shown\.gapSeconds\)\}/.test(panel), 'the field is back on the campaign column — that is the number the engine never reads');
+    assert.ok((panel.match(/gapLabel\(gapShown\)/g) ?? []).length >= 2, 'both summary sentences must name the same resolved gap');
+    assert.ok(!/gapLabel\(shown\)/.test(panel), 'a summary is still naming the campaign\'s own gap');
+
+    /* 2 — WHAT IS WRITTEN. applyGapFloor, symmetric, before anything else. */
+    assert.ok(/onAccountGapChange/.test(panel), 'the panel must hand the change to its caller rather than writing the campaign column');
+    assert.ok(/onAccountGapChange=\{onAccountGapChange\}/.test(hero), 'the run card must pass that handler through');
+    assert.ok(/onAccountGapChange=\{\(sec\) => void changeAccountGap\(/.test(dash), 'and the dashboard must wire it to a handler of its own');
+    assert.ok(
+      /const floor = await applyGapFloor\(seconds\);/.test(dash),
+      'THE WRITE: applyGapFloor with no lowerOnly — the asymmetric call is exactly what refused his ten minutes',
+    );
+    assert.ok(
+      !/applyGapFloor\(seconds, \{ lowerOnly/.test(dash),
+      'the dashboard is lowering only again — raising the gap would be silently refused',
+    );
+    const handler = dash.slice(dash.indexOf('const changeAccountGap'), dash.indexOf('const changeRepeat'));
+    assert.ok(handler.length > 200, 'the handler could not be isolated — the checks over it would be vacuous');
+    assert.ok(
+      handler.indexOf('applyGapFloor') < handler.indexOf('changeSchedule'),
+      'the account floor must be written BEFORE the campaign save, or the re-stamp uses the old floor',
+    );
+    assert.ok(
+      /gapSeconds: seconds/.test(handler),
+      'and the campaign column must be written to the same number — plan.ts takes max(account, campaign), and two numbers disagreeing is the fault being fixed',
+    );
+
+    /* 3 — AND THE ENGINE STILL READS ONLY THE ACCOUNT'S. This is the fact the
+           whole change rests on; if it ever stops being true, the card goes
+           back to showing something the queue does not obey. */
+    const rules = bare('../../src/lib/social/rules.ts');
+    const worker = bare('../../worker/social-worker.ts');
+    assert.ok(/accountGapSeconds\(limits, ctx\.browser/.test(rules), 'the per-row gate must read the account gap');
+    assert.ok(/accountGapSeconds\(limits, browser, true\)/.test(worker), 'and so must the worker\'s spacing gate');
+    assert.ok(!/schedule\.gapSeconds/.test(rules), 'rules.ts is reading the campaign gap — then the card and the gate have two sources again');
+  }
+
   console.log(`campaign gap tests OK — ${checks} assertions, decided by the real engine against a fake database`);
 }
 

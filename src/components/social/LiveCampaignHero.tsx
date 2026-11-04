@@ -267,6 +267,7 @@ export function LiveCampaignHero({
   repeat,
   onRepeatChange,
   spacing,
+  onAccountGapChange,
   floorHours,
   scheduleBusy = false,
 }: {
@@ -338,6 +339,10 @@ export function LiveCampaignHero({
    * than newly wrong.
    */
   spacing?: AccountSpacing;
+  /** Writes the account's own gap — the only one the engine enforces. See the
+      panel's prop of the same name for why this card no longer writes the
+      campaign's. */
+  onAccountGapChange?: (seconds: number) => void;
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
@@ -675,6 +680,7 @@ export function LiveCampaignHero({
                 /* The second gate, so the panel can say which of the two is
                    actually deciding — see the note on the prop. */
                 accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
+                onAccountGapChange={onAccountGapChange}
                 /* The account's own repeat floor, so the card judges the rounds
                    against the number in Settings rather than a constant. */
                 floorHours={floorHours}

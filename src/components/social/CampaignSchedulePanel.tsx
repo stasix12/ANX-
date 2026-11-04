@@ -151,6 +151,7 @@ export function CampaignSchedulePanel({
   onRepeatChange,
   roundProgress,
   accountFloorSeconds,
+  onAccountGapChange,
   floorHours = MIN_REPEAT_HOURS,
   neverLaunched = false,
   showHeader = true,
@@ -227,6 +228,35 @@ export function CampaignSchedulePanel({
    */
   accountFloorSeconds?: number;
   /**
+   * WRITES THE ACCOUNT'S OWN GAP, which is the only gap the engine enforces.
+   *
+   * "קודם כל שאני משיק קמפיין אני מגדיר מרווח פרסום 30 שניות ומסך ראשי מופיע
+   *  לי 10 דק זה לא מסונכרן."
+   *
+   * He was right, and it was worse than unsynchronised. Three numbers carried
+   * the name "מרווח בין פרסומים":
+   *
+   *   1. the launch sheet's — written to the ACCOUNT settings by
+   *      applyGapFloor(), and therefore the real one;
+   *   2. this card's — `schedule_gap_seconds` on the campaign row, read only
+   *      by plan.ts while the schedule flag is UP, and by nothing at publish
+   *      time, so with the flag down it governed nothing at all;
+   *   3. the account settings, which is what spacingGate() and rules.ts both
+   *      actually compare against.
+   *
+   * And the write was asymmetric: respaceQueue() calls applyGapFloor with
+   * `lowerOnly` when the change comes from a campaign, so his 30 seconds went
+   * in at launch and the 10 minutes he set here afterwards were refused
+   * silently. The card promised ten minutes over a queue publishing every
+   * thirty seconds.
+   *
+   * The owner's decision: "את המספר האמיתי" — this field shows and writes the
+   * account's gap, in both directions, exactly as the launch sheet does. One
+   * number, one meaning. The handler is the caller's because it is the caller
+   * that owns the write and the reload.
+   */
+  onAccountGapChange?: (seconds: number) => void;
+  /**
    * HOW CLOSE TWO PUBLICATIONS OF ONE POST TO ONE GROUP MAY BE, in hours.
    *
    * The account's setting — "תוסיף אופציה בהגדרות לשחק עם זה" — rather than
@@ -285,6 +315,15 @@ export function CampaignSchedulePanel({
    * must reason about the hour the engine will actually use.
    */
   const starts = roundStarts(shown, []);
+  /*
+   * THE GAP ON SCREEN IS THE ACCOUNT'S, NOT THE CAMPAIGN'S — see
+   * onAccountGapChange. Falls back to the campaign's stored value only for a
+   * caller that does not hand the account floor down (the campaigns list
+   * before its own wiring), so nothing renders blank.
+   */
+  const effectiveGapSeconds =
+    typeof accountFloorSeconds === 'number' && Number.isFinite(accountFloorSeconds) ? accountFloorSeconds : shown.gapSeconds;
+  const gapShown = { ...shown, gapSeconds: effectiveGapSeconds };
   const verdict = repeat ? roundsVsRepeat(starts, repeat, floorHours) : null;
   /* The window that would let these rounds publish, from the ONE copy of that
      arithmetic the writer also uses — see repeatFitFor(). Null for every
@@ -479,9 +518,9 @@ export function CampaignSchedulePanel({
             label="הפרש בין פרסומים"
             aria={`הפרש בין פרסומים ב${campaignName}`}
             icon={<RepeatIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />}
-            value={String(shown.gapSeconds)}
+            value={String(effectiveGapSeconds)}
             disabled={disabled}
-            onChange={(v) => set({ gapSeconds: Number(v) })}
+            onChange={(v) => (onAccountGapChange ? onAccountGapChange(Number(v)) : set({ gapSeconds: Number(v) }))}
             /* Seconds, so the three sub-minute steps the owner asked for can
                exist at all. gapChoiceLabel does the spelling, here and in the
                summary line, so the two cannot drift. */
@@ -526,7 +565,7 @@ export function CampaignSchedulePanel({
                   RTL that caused it. Same fix as <Stamp>: an explicit island.
                 */
                 <span className="mt-px block">
-                  משעה <span dir="ltr" className="inline-block tabular-nums">{shown.start}</span> · {gapLabel(shown)}
+                  משעה <span dir="ltr" className="inline-block tabular-nums">{shown.start}</span> · {gapLabel(gapShown)}
                 </span>
               )}
             </span>
@@ -541,7 +580,7 @@ export function CampaignSchedulePanel({
               so one sentence covers both and the reader is never asked to
               know which.
             */
-            <span className="min-w-0">מפרסם בכל יום, בכל שעה · {gapLabel(shown)}</span>
+            <span className="min-w-0">מפרסם בכל יום, בכל שעה · {gapLabel(gapShown)}</span>
           )}
         </div>
 

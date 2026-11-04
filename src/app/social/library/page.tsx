@@ -27,7 +27,6 @@ import {
 } from '@/components/social/ui';
 import { archivePost, duplicatePost, getBusiness, savePost } from '@/lib/social/client';
 import {
-  LIBRARY_USAGE_LIMIT,
   deleteCategory,
   filterLibrary,
   listCategoriesWithState,
@@ -79,7 +78,6 @@ export default function LibraryPage() {
      replaces all of it. */
   const seed = useState(() => readSnapshot<LibrarySnapshot>(SNAPSHOT.library))[0];
   const [items, setItems] = useState<LibraryPost[] | null>(seed?.items ?? null);
-  const [truncated, setTruncated] = useState(false);
   const [categories, setCategories] = useState<ContentCategory[]>(seed?.categories ?? []);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   /* v8 has not been run: the categories are not "empty", they are unavailable,
@@ -136,7 +134,6 @@ export default function LibraryPage() {
         getBusiness(),
       ]);
       setItems(rows.items);
-      setTruncated(rows.truncated);
       setCategories(cats.items);
       setCategorySchemaMissing(cats.schemaMissing);
       setBusinessName(business.name);
@@ -327,11 +324,6 @@ export default function LibraryPage() {
           <Notice tone="warn">
             הקטגוריות עדיין לא זמינות. פתחו את Supabase → SQL Editor והריצו פעם אחת את הקובץ{' '}
             <code dir="ltr" className="break-all">supabase/social-schema-v8.sql</code> מתוך הפרויקט. כל השאר בספרייה — החיפוש, הסינון והפרסום המהיר — עובד גם בלי זה.
-          </Notice>
-        )}
-        {truncated && (
-          <Notice tone="warn">
-            מספרי הפרסומים מחושבים על {LIBRARY_USAGE_LIMIT} הפרסומים האחרונים בלבד, ולכן אצל פוסטים ותיקים הם עשויים להיות נמוכים מהאמת. ההיסטוריה המלאה נמצאת במסך היסטוריה.
           </Notice>
         )}
 

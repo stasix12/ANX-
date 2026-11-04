@@ -2220,6 +2220,30 @@ console.log('unit tests OK');
     'the usage read has a ceiling, and a ceiling presented as a total is a made-up number',
   );
 
+  /*
+   * THE CEILING IS A DATA FACT, NOT A BANNER. The owner asked for the orange
+   * strip at the top of the library to go: it opened the screen on a caveat
+   * about counting instead of on his posts, and his customers read it as an
+   * error. The flag above stays — listLibraryWithStats still reports a capped
+   * read, and anything that wants to reason about it still can. What may not
+   * come back is the page-level Notice that spent the first fold of a phone
+   * explaining arithmetic.
+   *
+   * Comments are stripped first: a future note that merely NAMES the constant
+   * must not fail this, only code that renders it again.
+   */
+  const libraryPage = readFileSync(new URL('../../src/app/social/library/page.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(
+    !libraryPage.includes('LIBRARY_USAGE_LIMIT'),
+    'the library screen must not print the usage ceiling at the owner again',
+  );
+  assert.ok(
+    !/truncated/.test(libraryPage),
+    'and must not keep the state that drove that banner — a dead flag is how a deleted banner grows back',
+  );
+
   console.log('content-library tests OK');
 }
 

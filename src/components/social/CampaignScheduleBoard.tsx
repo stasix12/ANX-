@@ -8,9 +8,9 @@ import {
   DAY_NAMES,
   daysLabel,
   gapLabel,
+  shownSchedule,
   type CampaignSchedule,
 } from '@/lib/social/campaign-schedule';
-import { Toggle } from './ui';
 
 /*
  * THE SECONDS AND THE SHRINKING FIGURE MOVED WITH THE STRIP.
@@ -57,7 +57,6 @@ import { Toggle } from './ui';
  */
 export function CampaignScheduleBoard({
   schedule,
-  onToggle,
   onEdit,
   readout,
   campaignName,
@@ -70,8 +69,6 @@ export function CampaignScheduleBoard({
   children,
 }: {
   schedule: CampaignSchedule;
-  /** The one control here that writes: the switch in the header. */
-  onToggle: (enabled: boolean) => void;
   /** Opens the editor — the three boxes and "ערוך מועד" share it. */
   onEdit: () => void;
   /**
@@ -129,6 +126,16 @@ export function CampaignScheduleBoard({
   /** The settings this card's switch governs — see the slot below. */
   children?: React.ReactNode;
 }) {
+  /*
+   * WHAT IS DRAWN IS WHAT THE ENGINE WILL DO, and for a campaign with the
+   * stored flag down those are not the same thing: its row still holds the
+   * days and the hour it had when the flag went down, and the engine reads
+   * neither. This card used to draw them anyway, under a switch — which is
+   * how "א׳–ה׳, 11:05" came to sit above a round publishing on Saturday at
+   * three in the morning. shownSchedule() resolves the row into the schedule
+   * the engine is actually running. Nothing is written; see its comment.
+   */
+  const shown = shownSchedule(schedule);
   return (
     <div data-schedule-board className="mt-3">
       {/* ─── the lavender block: header, then the three readouts ────────── */}
@@ -148,96 +155,27 @@ export function CampaignScheduleBoard({
         <div className="flex items-center gap-1.5">
           <CalendarIcon aria-hidden className="h-4 w-4 shrink-0 text-brand-400" />
           <span className="text-[13px] font-extrabold leading-4 text-brand-400">תזמון פרסום</span>
-          {/* `-my-1.5` takes the switch's 44px TOUCH target out of the row's
-              height without shrinking it: the track it paints is 28px and
-              centred, so the 6px it overhangs top and bottom falls in the
-              block's own padding and touches nothing. The header is then the
-              32px the reference draws, and the control is still 44. */}
-          <span className="ms-auto -me-1 -my-1.5 flex items-center gap-1.5">
-            {/*
-              "פעיל" / "ללא הגבלה" — the reference prints the word beside the
-              switch, and it is not decoration: a switch on its own is read by
-              colour alone, and this card is the one the owner glances at
-              rather than studies.
+          {/*
+            THE SWITCH IS GONE, AND SO IS THE WORD BESIDE IT.
 
-              THE OFF WORD IS NO LONGER "כבוי", AND THAT IS A BUG REPORT, NOT
-              A PREFERENCE. "בעיה חמורה מאד יש קמפיין שמכובה והוא מוציא
-              פרסומים שלו" — sent with a screenshot of THIS header reading
-              "תזמון פרסום · כבוי" above a round that had published nineteen
-              times that morning. Both halves were true and the pair was
-              unreadable: the switch gates days and hours, so off is a WIDER
-              permission than on, and no word that means "turned off" can say
-              that. "ללא הגבלה" says what off does, and the line below says
-              what it does not do.
-            */}
-            {/* NOT TRUNCATED, and `data-must-fit` instead: this is one of two
-                literals rather than a name of unknown length, and an "ללא
-                הגבל…" would be a worse answer than a header one character
-                tighter. The measured suite fails on a clipped character here
-                at every width it drives. */}
-            <span
-              data-must-fit
-              className={`shrink-0 text-[12px] font-bold leading-4 ${schedule.enabled ? 'text-mist-100' : 'text-mist-300'}`}
-            >
-              {schedule.enabled ? 'פעיל' : 'ללא הגבלה'}
-            </span>
-            <Toggle checked={schedule.enabled} onChange={onToggle} label={`תזמון פרסום ל${campaignName}`} />
+            "הכפתור של התזמון פרסום מבלבל למה צריך אותו." It was needed by the
+            database, not by the person: the flag it wrote decides whether the
+            days and the hour below are enforced, which is a thing no label
+            ever managed to say. It was called "כבוי" and read as "this
+            campaign is stopped" over a round that had published nineteen
+            times that morning; renaming it "ללא הגבלה" and folding two
+            paragraphs of explanation under it left three separate elements on
+            one card all saying the same sentence.
+
+            So the days say it themselves now: every day lit with the hour at
+            midnight IS "no limit", and that is what the row below draws for a
+            campaign whose stored flag is down. See shownSchedule().
+          */}
+          <span data-must-fit className="ms-auto shrink-0 text-[11px] font-bold leading-4 text-mist-300">
+            {daysLabel(shown)}
           </span>
         </div>
 
-        {/*
-          ─── WHAT "OFF" MEANS, WHERE THE WORD "OFF" IS ────────────────────
-
-          "בעיה חמורה מאד יש קמפיין שמכובה והוא מוציא פרסומים שלו וכנגד יש
-           קמפיין אחד שהוא כבוי והוא לא מוציא ממנו כלום."
-
-          Two campaigns, both read as "off", opposite behaviour — and the
-          engine was right about both. One had this switch off, which removes
-          the day-and-hour restriction and therefore lets the queue run
-          whenever it likes; the other was a campaign the owner had STOPPED,
-          which is a different control in a different place. The card gave him
-          one word for the two facts.
-
-          The campaigns list has said this in words since the panel was built
-          ("התזמון כבוי — הקמפיין מפרסם ללא הגבלת ימים ושעות"); this block,
-          the one on the screen he actually opens, said only "כבוי" and then
-          drew the days, the hour and the gap underneath exactly as it draws
-          them when they are in force. So it is here, in the same words, and
-          it says the other half too: the settings below are kept and are not
-          being applied. "כאשר כבוי: התזמון מושבת אך ההגדרות נשמרות."
-
-          IT IS NOT A WARNING AND IT IS NOT AMBER. Nothing is wrong — this is
-          the state most campaigns in the account are in, and the amber on
-          these cards is reserved for the daily repeat.
-        */}
-        {!schedule.enabled && (
-          /*
-           * ─── THE REASSURANCE STAYS, THE PARAGRAPH FOLDS ──────────────────
-           *
-           * "הסברים ארוכים יעברו לחלונית מידע נפתחת… יש לצמצם משמעותית את
-           *  אורך העמוד הראשי."
-           *
-           * Four lines of explanation sat open on every card whose schedule
-           * is off, which is most of them. But the FIRST clause is not an
-           * explanation — it is the answer to the question the switch itself
-           * provokes ("have I just stopped my campaign?"), and folding that
-           * away would save height by hiding the one line that stops a
-           * panic. So the clause is the summary, always visible, and the
-           * mechanism and the pointer to the real stop are behind it.
-           *
-           * <details>, so it needs no state and survives a re-render mid-tap.
-           */
-          <details className="group mt-1.5 rounded-xl bg-ink-900 px-2 py-1.5">
-            <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1 text-[10.5px] font-bold leading-4 text-mist-300 [&::-webkit-details-marker]:hidden">
-              <span className="font-extrabold text-mist-100">זה לא עוצר את הקמפיין</span>
-              <span className="text-brand-400 group-open:hidden">· מה זה כן עושה</span>
-            </summary>
-            <p className="pb-0.5 text-[10.5px] font-bold leading-4 text-mist-300">
-              התזמון הכבוי רק מבטל את הגבלת הימים והשעות, והפרסומים יֵצאו לפי התור. ההגדרות למטה שמורות ואינן בתוקף כרגע.
-              {pauseLabel ? <> לעצירת הפרסום עצמו: <span className="font-extrabold text-mist-100">{pauseLabel}</span>.</> : null}
-            </p>
-          </details>
-        )}
 
         {/*
           THREE BOXES, IN THE REFERENCE'S OWN ORDER AND PROPORTIONS: days,
@@ -283,7 +221,7 @@ export function CampaignScheduleBoard({
         <div className="mt-1.5 grid grid-cols-2 gap-1 [&>*]:min-w-0 @[300px]:grid-cols-[1.6fr_1.1fr_1fr]">
           <Box
             label="ימי פרסום"
-            aria={`ימי פרסום: ${daysLabel(schedule)}. פתיחת עריכת התזמון של ${campaignName}`}
+            aria={`ימי פרסום: ${daysLabel(shown)}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}
             editing={editing}
@@ -317,7 +255,7 @@ export function CampaignScheduleBoard({
                   title={DAY_NAMES[day]}
                   data-must-fit
                   className={`flex h-5 min-w-0 items-center justify-center rounded-md text-[10px] font-extrabold ${
-                    schedule.days.includes(day)
+                    shown.days.includes(day)
                       ? /* The selected chip the editor and the discovery screen
                            both draw: brand-600 → brand-500, whose lightest end
                            measures 6.24 behind white.
@@ -350,20 +288,20 @@ export function CampaignScheduleBoard({
                and the words the editor under this block uses. They were
                "פוסטים" here and "פוסט לפוסט" there, for one setting. */
             label="הפרש בין פרסומים"
-            aria={`הפרש בין פרסומים: ${gapLabel(schedule)}. פתיחת עריכת התזמון של ${campaignName}`}
+            aria={`הפרש בין פרסומים: ${gapLabel(shown)}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}
             editing={editing}
           >
             <span className="flex w-full min-w-0 items-center justify-center gap-[3px]">
               <RepeatIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />
-              <span data-must-fit className="min-w-0 truncate text-[11px] font-extrabold leading-4 text-mist-100">{gapLabel(schedule)}</span>
+              <span data-must-fit className="min-w-0 truncate text-[11px] font-extrabold leading-4 text-mist-100">{gapLabel(shown)}</span>
             </span>
           </Box>
 
           <Box
             label="שעת התחלה"
-            aria={`שעת התחלה: ${schedule.start}. פתיחת עריכת התזמון של ${campaignName}`}
+            aria={`שעת התחלה: ${shown.start}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}
             editing={editing}
@@ -383,7 +321,7 @@ export function CampaignScheduleBoard({
                 to midnight.
               */}
               <span data-must-fit dir="ltr" className="min-w-0 truncate text-[11px] font-extrabold leading-4 tabular-nums text-mist-100">
-                {schedule.start}
+                {shown.start}
               </span>
             </span>
           </Box>

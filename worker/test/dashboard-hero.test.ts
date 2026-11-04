@@ -137,9 +137,21 @@ for (const literal of ['08:10', '01.10.2026', '08:00', '22:00', '10 דקות']) 
    And "שעות פרסום" became "שעת התחלה": there is no closing hour left to make
    it a plural. "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק הכרטיס." */
 const nextPubSrc = code('src/components/social/NextPublication.tsx');
-for (const word of ['תזמון פרסום', 'פעיל', 'ללא הגבלה', 'כבוי', 'ימי פרסום', 'הפרש בין פרסומים', 'שעת התחלה']) {
+for (const word of ['תזמון פרסום', 'ימי פרסום', 'הפרש בין פרסומים', 'שעת התחלה']) {
   is(board.includes(word), `the board prints "${word}", in the brief's own wording`);
 }
+/*
+ * AND THREE WORDS IT MAY NOT PRINT ANY MORE. "פעיל", "ללא הגבלה" and "כבוי"
+ * were the two positions of a switch and the name of the bug that switch
+ * caused. The owner removed the control — "הכפתור של התזמון פרסום מבלבל למה
+ * צריך אותו" — so the card has no state to name: it draws the schedule the
+ * engine is running and lets the days speak. A word from the old pair
+ * reappearing means the switch came back with it.
+ */
+for (const word of ['פעיל', 'ללא הגבלה', 'כבוי']) {
+  is(!board.includes(word), `the board no longer names a switch position — "${word}" is back`);
+}
+is(!/<Toggle/.test(board), 'and carries no switch of its own');
 is(!board.includes('שעות פרסום'), 'and no longer offers a RANGE of hours — there is one hour now');
 for (const word of ['הפרסום הבא', 'אין פרסומים מתוזמנים', 'מושהה', 'הסבב הסתיים', 'הסבב הופסק', 'לא נבחר יום פרסום', 'בעוד']) {
   is(nextPubSrc.includes(word), `the next-publication block prints "${word}"`);
@@ -252,8 +264,8 @@ const pairs: [string, number[], number[], number][] = [
   ['mist-300 on the strip — the day under the date', rgb(token('mist-300')), tint20, 4.5],
   ['mist-300 on the strip — "לא מתוזמן"', rgb(token('mist-300')), tint20, 4.5],
   ['brand-400 on the block — the title', rgb(token('brand-400')), tint10, 4.5],
-  ['mist-100 on the block — the word "פעיל"', rgb(token('mist-100')), tint10, 4.5],
-  ['mist-300 on the block — the word "כבוי"', rgb(token('mist-300')), tint10, 4.5],
+  ['mist-100 on the block — a value inside it', rgb(token('mist-100')), tint10, 4.5],
+  ['mist-300 on the block — the day list in the header', rgb(token('mist-300')), tint10, 4.5],
   ['mist-300 on a readout box — its label, and an unselected chip', rgb(token('mist-300')), rgb(token('ink-900')), 4.5],
   ['mist-100 on a readout box — its value', rgb(token('mist-100')), rgb(token('ink-900')), 4.5],
   ['on-brand on brand-500 — a selected chip at the gradient\'s lightest end', rgb(token('on-brand')), rgb(token('brand-500')), 4.5],
@@ -578,7 +590,11 @@ async function main(): Promise<void> {
       assert.match(reference.strip, /\d{2}\.\d{2}/, `${width}: the reference card prints no date`);
       assert.match(reference.strip, /היום \(|מחר \(|מחרתיים \(|יום |שבת/, `${width}: the reference card does not say which day`);
       assert.match(reference.strip, /בעוד |אמור לצאת עכשיו|באיחור/, `${width}: the reference card has no countdown under its instant`);
-      assert.ok(reference.text.includes('פעיל'), `${width}: a live schedule must read "פעיל"`);
+      /* The header names the days instead of a switch position. This card is
+         the one built from the owner's reference image, whose schedule is
+         א׳–ג׳ and ה׳ (render-hero.tsx: `image`), so that is what it must say —
+         a label that drifted to another fixture's week would fail here. */
+      assert.ok(reference.text.includes('א׳, ב׳, ג׳, ה׳'), `${width}: a live schedule must name the days it publishes on`);
       /* And nothing above it moved. */
       assert.ok(reference.text.includes('50 / 50') || reference.text.includes('50 /'), `${width}: the card's own figures changed`);
       assert.ok(reference.text.includes('40 מתוך 50 פורסמו'), `${width}: the breakdown line changed`);
@@ -589,44 +605,59 @@ async function main(): Promise<void> {
       assert.doesNotMatch(noDay.strip, /\d{1,2}:\d{2}/, `${width}: a schedule with no day printed a time anyway`);
 
       /*
-       * 5 — THE SWITCH OFF, AND WHAT THAT IS NOT.
+       * 5 — THE CAMPAIGN WITH NO LIMIT, AND HOW IT IS NOW DRAWN.
        *
        * "בעיה חמורה מאד יש קמפיין שמכובה והוא מוציא פרסומים שלו" — sent with
        * a screenshot of this exact card: the header read "תזמון פרסום · כבוי"
        * and the block under it read "אמור לצאת עכשיו" over a round that had
        * published nineteen times that morning. Both were true. The pair was
-       * unreadable, because this switch gates DAYS AND HOURS and off is
-       * therefore a wider permission than on — the one thing the word "כבוי"
-       * cannot say.
+       * unreadable, because the switch gated DAYS AND HOURS and off was a
+       * WIDER permission than on — the one thing the word "כבוי" cannot say.
        *
-       * So the word beside the switch is "ללא הגבלה", the block below says
-       * that off does not stop the campaign, and the queue's own instant is
-       * still printed, because it is still what will happen.
+       * The first fix renamed the word and added two paragraphs under it. The
+       * owner's fix removes the control: a campaign with the stored flag down
+       * is one that publishes every day at any hour, so the card draws seven
+       * lit days and midnight, which is what the engine will actually do.
+       *
+       * THE ORIGINAL BUG IS THEREFORE CLOSED STRUCTURALLY, not verbally:
+       * there is no "off" on this card to misread. These assertions hold the
+       * card to that, and to the fact it must not lose — the queued instant.
        */
-      assert.ok(off.text.includes('ללא הגבלה'), `${width}: a schedule that is off must say it restricts nothing`);
+      for (const word of ['כבוי', 'ללא הגבלה', 'פעיל']) {
+        assert.ok(!off.text.includes(word), `${width}: THE BUG — the card is naming a switch position again ("${word}")`);
+      }
       assert.ok(
-        off.text.includes('זה לא עוצר את הקמפיין'),
-        `${width}: THE BUG — the card lets "off" be read as a campaign that has been turned off`,
+        off.text.includes('כל הימים'),
+        `${width}: a campaign with no window must show the week it actually publishes on, not the days left in its row`,
+      );
+      /* These fixtures are drawn with the editor open, so the hour lives in an
+         <input value>, which carries no text. The summary strip is where the
+         resolved schedule is readable, and it is the line that used to read
+         "התזמון כבוי — …": a switch position. It now states the consequence. */
+      assert.ok(
+        off.text.includes('מפרסם בכל יום, בכל שעה'),
+        `${width}: the summary must state what this campaign actually does, not name a control`,
       );
       assert.ok(
-        off.text.includes('ההגדרות למטה שמורות ואינן בתוקף'),
-        `${width}: and does not say that the days and the hour under it are not being applied`,
+        !off.text.includes('התזמון כבוי'),
+        `${width}: and must not go back to naming the switch that was removed`,
       );
-      /* AND IT POINTS AT THE CONTROL THAT DOES STOP IT — by the label on the
-         button in the row below, which this fixture draws because the round
-         still has rows to hold back. */
-      assert.ok(off.text.includes('לעצירת הפרסום עצמו'), `${width}: the card does not say where the real stop is`);
-      assert.ok(off.text.includes('השהה סבב'), `${width}: and the button it names is not the one on the card`);
-      assert.match(off.strip, / בשעה \d{2}:\d{2}/, `${width}: a queued publication is still a fact when the schedule is off`);
-      /* AND THE SETTINGS ARE STILL THERE TO READ AND TO EDIT. "כאשר כבוי:
-         התזמון מושבת אך ההגדרות נשמרות" — not hidden, not emptied. */
-      assert.ok(off.text.includes('ימי פרסום'), `${width}: a schedule that is off lost its saved settings from the card`);
-      /* The sentence belongs to the off state alone: on the reference card it
-         would be a paragraph contradicting the three boxes beside it. */
+      /* Scoped to the claim rather than to the digits: "08:00" can legitimately
+         appear on this card as a queued instant or inside the repeat sentence.
+         What may never appear is the stored-but-ignored hour presented as THIS
+         schedule's opening time, which is what "משעה 08:00" says. */
       assert.ok(
-        !reference.text.includes('זה לא עוצר את הקמפיין'),
-        `${width}: a LIVE schedule is told that it does not restrict anything`,
+        !off.text.includes('משעה 08:00'),
+        `${width}: THE INERT HOUR IS BACK ON SCREEN as this schedule's start — that pairing is the original bug report`,
       );
+      assert.ok(
+        !off.text.includes('זה לא עוצר את הקמפיין'),
+        `${width}: an explanation of a control that no longer exists`,
+      );
+      assert.match(off.strip, / בשעה \d{2}:\d{2}/, `${width}: a queued publication is still a fact when the schedule limits nothing`);
+      /* AND THE SETTINGS ARE STILL THERE TO READ AND TO EDIT — the row keeps
+         what it holds; only the drawing of it changed. */
+      assert.ok(off.text.includes('ימי פרסום'), `${width}: a schedule with no window lost its settings from the card`);
 
       /*
        * 6 — A FINISHED ROUND WITH NOTHING QUEUED, and the schedule still on.

@@ -284,25 +284,65 @@ async function main(): Promise<void> {
     eq(gapValues.slice(0, 4).join(','), '30,40,50,60', 'and the VALUES are seconds — the label alone could say anything');
 
     /* ---------------------------------------------------------------- *
-     * 3. THE SWITCH — "התזמון מושבת אך ההגדרות נשמרות".
+     * 3. THERE IS NO SWITCH ANY MORE — THE DAYS DECIDE.
+     *
+     * RE-POINTED, NOT DELETED. This section used to turn the schedule's own
+     * switch off and on and prove that "ההגדרות נשמרות" across it. The owner
+     * removed that switch — "הכפתור של התזמון פרסום מבלבל למה צריך אותו" —
+     * and chose "the days decide" instead, so the requirement it was guarding
+     * changed shape rather than going away:
+     *
+     *   • the panel offers no schedule switch at all;
+     *   • every day lit with the hour at midnight is stored the way this
+     *     product has always stored "no limit": with `enabled` down. That
+     *     matters beyond tidiness — client.ts refuses to re-stamp a queue
+     *     while the flag is down, so a UI that raised it on a campaign that
+     *     limits nothing would re-space rows nobody asked to re-space;
+     *   • and narrowing it again raises the flag, with the days intact.
      * ---------------------------------------------------------------- */
-    const toggle = page.locator('[data-schedule] [role="switch"]');
-    await toggle.click();
-    eq(await toggle.getAttribute('aria-checked'), 'false', 'the switch turns the window off');
-    is(
-      (await summary()).includes('התזמון כבוי'),
-      'and the summary says what that MEANS rather than the word "כבוי" on its own — the campaign publishes without a window again',
+    eq(
+      await page.locator('[data-schedule] [role="switch"][aria-label*="תזמון פרסום"]').count(),
+      0,
+      'the schedule has no switch of its own any more — the days are the control',
     );
 
-    await toggle.click();
+    /* ד׳ is the one day not chosen above, so this tap is what makes it a full
+       week. The hour then goes to midnight, and the pair of them is a
+       schedule that permits everything. */
+    await day('יום רביעי').click();
+    await start.fill('00:00');
+    const unlimited = (await changes()).at(-1)!;
+    eq(unlimited.days, [0, 1, 2, 3, 4, 5, 6], 'all seven days are what was written');
+    eq(unlimited.start, '00:00', 'from midnight');
+    eq(
+      unlimited.enabled,
+      false,
+      'AND THE STORED FLAG GOES DOWN: "every day from midnight" and "no window" are the same schedule, and the engine already has one way of saying it',
+    );
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ משעה 06:30 · כל 25 דקות',
-      'AND TURNING IT BACK ON FINDS EVERYTHING EXACTLY AS IT WAS — "ההגדרות נשמרות", down to the six days, the hour and the interval',
+      'מפרסם בכל יום, בכל שעה · כל 25 דקות',
+      'and the summary says the consequence in one sentence instead of naming a switch position',
     );
-    const afterToggle = (await changes()).at(-1)!;
-    eq(afterToggle.days, [0, 1, 2, 4, 5, 6], 'and the schedule handed to the page still carries them, so nothing is lost on the way to the database');
-    eq(afterToggle.gapSeconds, 1500, 'including the interval');
+
+    /* Narrow it again by one day and the flag comes straight back up. */
+    await day('שבת').click();
+    const narrowed = (await changes()).at(-1)!;
+    eq(narrowed.days, [0, 1, 2, 3, 4, 5], 'six days is a limit');
+    eq(narrowed.enabled, true, 'so the flag is raised — the engine must enforce the week again');
+    is(
+      (await summary()).includes('ימי פרסום:'),
+      'and the summary goes back to listing the days it will publish on',
+    );
+
+    /* Back to the state the sections below expect: the six days and 06:30
+       this file has been building since the top. */
+    await day('שבת').click();
+    await day('יום רביעי').click();
+    await start.fill('06:30');
+    const restored = (await changes()).at(-1)!;
+    eq(restored.days, [0, 1, 2, 4, 5, 6], 'the six days are back');
+    eq(restored.gapSeconds, 1500, 'and nothing was lost on the way — the interval is still twenty-five minutes');
 
     /* ---------------------------------------------------------------- *
      * 4. NO DAY AT ALL, which is reachable in six taps and must not look

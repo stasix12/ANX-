@@ -19,6 +19,9 @@ import {
   type CampaignRepeat,
   type CampaignRound,
   type CampaignSchedule,
+  fromShown,
+  publishesAlways,
+  shownSchedule,
 } from '@/lib/social/campaign-schedule';
 import { roundState, type RoundState } from '@/lib/social/campaign';
 import { EMPTY_PROGRESS, type CampaignProgress } from '@/lib/social/types';
@@ -260,7 +263,22 @@ export function CampaignSchedulePanel({
    */
   neverLaunched?: boolean;
 }) {
-  const set = (patch: Partial<CampaignSchedule>) => onChange({ ...schedule, ...patch });
+  /*
+   * ─── THE TWO TRANSLATIONS, AND EVERY READ AND WRITE GOES THROUGH THEM ───
+   *
+   * The switch that used to sit in this panel's header is gone — "הכפתור של
+   * התזמון פרסום מבלבל למה צריך אותו" — and the days decide instead. The
+   * stored flag it wrote is NOT gone: four places outside this file read it
+   * as a mode, one of them re-stamps a live queue, so it is still written,
+   * just never by a control of its own.
+   *
+   * `shown` is the schedule the engine is actually running, which for a row
+   * with the flag down is every day from midnight regardless of the inert
+   * days sitting in the column. `fromShown` puts the flag back on the way
+   * out. Nothing here writes unless the person changes something.
+   */
+  const shown = shownSchedule(schedule);
+  const set = (patch: Partial<CampaignSchedule>) => onChange(fromShown({ ...shown, ...patch }));
   const canRepeat = Boolean(repeat && onRepeatChange);
   const canRounds = Boolean(rounds && onRoundsChange);
   /*
@@ -291,9 +309,9 @@ export function CampaignSchedulePanel({
    * discover it from an empty queue.
    */
   const toggleDay = (day: number) =>
-    set({ days: schedule.days.includes(day) ? schedule.days.filter((d) => d !== day) : [...schedule.days, day].sort((a, b) => a - b) });
+    set({ days: shown.days.includes(day) ? shown.days.filter((d) => d !== day) : [...shown.days, day].sort((a, b) => a - b) });
 
-  const noDays = schedule.days.length === 0;
+  const noDays = shown.days.length === 0;
 
   /* Shown only while the two genuinely disagree, which makes it self-clearing:
      once the write lands the floor equals the gap and the line goes away on
@@ -330,22 +348,6 @@ export function CampaignSchedulePanel({
             <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">
               בחר את ימי הפרסום והגדר את שעת ההתחלה
             </span>
-          </span>
-          {/*
-            THE SWITCH SITS AT THE OTHER END — `ms-auto`, not a fixed order, so
-            it is at the card's left on this RTL page and would be at the right
-            on an LTR one without this file knowing which.
-
-            Its accessible name carries the campaign, because a screen reader
-            moving down this list otherwise meets twenty switches all called
-            "תזמון פרסום".
-          */}
-          <span className="ms-auto -me-1 -my-1 flex shrink-0 items-center">
-            <Toggle
-              checked={schedule.enabled}
-              onChange={(v) => set({ enabled: v })}
-              label={`תזמון פרסום ל${campaignName}`}
-            />
           </span>
         </div>
 
@@ -400,7 +402,7 @@ export function CampaignSchedulePanel({
           className="mt-1 grid grid-cols-7 gap-[3px] [&>*]:min-w-0"
         >
           {DAY_LABELS.map((label, day) => {
-            const on = schedule.days.includes(day);
+            const on = shown.days.includes(day);
             return (
               <button
                 key={day}
@@ -476,7 +478,7 @@ export function CampaignSchedulePanel({
             label="שעת התחלה"
             aria={`שעת התחלה ב${campaignName}`}
             icon={<ClockIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />}
-            value={schedule.start}
+            value={shown.start}
             disabled={disabled}
             onChange={(v) => set({ start: v })}
           />
@@ -484,7 +486,7 @@ export function CampaignSchedulePanel({
             label="הפרש בין פרסומים"
             aria={`הפרש בין פרסומים ב${campaignName}`}
             icon={<RepeatIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />}
-            value={String(schedule.gapSeconds)}
+            value={String(shown.gapSeconds)}
             disabled={disabled}
             onChange={(v) => set({ gapSeconds: Number(v) })}
             /* Seconds, so the three sub-minute steps the owner asked for can
@@ -515,13 +517,13 @@ export function CampaignSchedulePanel({
           className={`mt-2 flex min-w-0 items-start gap-1.5 rounded-2xl px-2.5 py-2 text-[11px] font-bold leading-4 ${
             /* A white strip rather than an amber tint: warning-400 on 20% of
                brand-300 is 4.21:1, and on white it is 5.43. */
-            noDays && schedule.enabled ? 'bg-ink-900 text-warning-400' : 'bg-brand-300/20 text-brand-400'
+            noDays ? 'bg-ink-900 text-warning-400' : 'bg-brand-300/20 text-brand-400'
           }`}
         >
           <CalendarIcon aria-hidden className="mt-0.5 h-3 w-3 shrink-0" />
-          {schedule.enabled ? (
+          {!publishesAlways(schedule) ? (
             <span className="min-w-0">
-              <span className="block truncate">ימי פרסום: {daysLabel(schedule)}</span>
+              <span className="block truncate">ימי פרסום: {daysLabel(shown)}</span>
               {!noDays && (
                 /*
                   THE HOUR IS ITS OWN LTR ISLAND. "09:00" is a European number
@@ -531,28 +533,34 @@ export function CampaignSchedulePanel({
                   RTL that caused it. Same fix as <Stamp>: an explicit island.
                 */
                 <span className="mt-px block">
-                  משעה <span dir="ltr" className="inline-block tabular-nums">{schedule.start}</span> · {gapLabel(schedule)}
+                  משעה <span dir="ltr" className="inline-block tabular-nums">{shown.start}</span> · {gapLabel(shown)}
                 </span>
               )}
             </span>
           ) : (
-            /* Off is a state with a consequence, so it says the consequence
-               rather than the word "כבוי" on its own: this campaign publishes
-               whenever the queue says, which is what it did before this panel
-               existed. */
-            <span className="min-w-0">התזמון כבוי — הקמפיין מפרסם ללא הגבלת ימים ושעות</span>
+            /*
+              NO LIMIT AT ALL, SAID AS A CONSEQUENCE AND NOT AS A SWITCH
+              POSITION. This used to read "התזמון כבוי — הקמפיין מפרסם ללא
+              הגבלת ימים ושעות", which spent its first two words on a control
+              that no longer exists before getting to the fact. Every day lit
+              and the hour at midnight means exactly this, whether the row
+              stores it as the flag being down or as seven days from 00:00,
+              so one sentence covers both and the reader is never asked to
+              know which.
+            */
+            <span className="min-w-0">מפרסם בכל יום, בכל שעה · {gapLabel(shown)}</span>
           )}
         </div>
 
         {/* ─── 4b. the floor this gap is about to move, if it is about to ─ */}
-        {schedule.enabled && willLowerFloor && (
+        {willLowerFloor && (
           /* mist-300 on the white strip rather than amber: this is not a risk,
              it is a fact about scope. The amber on this panel is reserved for
              חזרה יומית, which is the one control here that can cost him his
              account. */
           <p className="mt-1.5 rounded-xl bg-ink-900 px-2 py-1.5 text-[10.5px] font-bold leading-4 text-mist-300">
             המרווח המינימלי של כל החשבון הוא כרגע {accountGapLabel(accountFloorSeconds as number)}, והוא זה שקובע. בשמירה הוא ירד ל-
-            {accountGapLabel(schedule.gapSeconds)} <span className="text-brand-400">לכל הסבבים</span>, לא רק לזה.
+            {accountGapLabel(shown.gapSeconds)} <span className="text-brand-400">לכל הסבבים</span>, לא רק לזה.
           </p>
         )}
       </div>

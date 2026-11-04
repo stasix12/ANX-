@@ -803,11 +803,21 @@ async function main(): Promise<void> {
           `${where}: the two fields are different widths — ${p.fieldWidths.join(', ')}px`,
         );
 
-        /* "✓ Toggle" — two now, and both are real switches rather than styled
-           divs, so a screen reader says "on"/"off" for each: the window's own
-           and חזרה יומית's. They are 300px apart and control different things;
-           the fault this counts against is a THIRD appearing for one setting. */
-        assert.equal(p.switches, 2, `${where}: ${p.switches} switches in the panel — the window's and the daily repeat's`);
+        /*
+         * "✓ Toggle" — ONE now, and it is חזרה יומית's.
+         *
+         * RE-POINTED, NOT RELAXED. This counted two: the window's own switch
+         * and the daily repeat's. The owner removed the first — "הכפתור של
+         * התזמון פרסום מבלבל למה צריך אותו" — because it named a state
+         * ("פעיל" / "ללא הגבלה") that no label could make readable, and the
+         * seven day chips say the same thing by being lit. The repeat's
+         * switch stays: it is a genuine on/off with no other expression.
+         *
+         * Still an equality and not a `<=`, for the reason the line above it
+         * gives: the fault being guarded is a switch CREEPING BACK for a
+         * setting the controls already express.
+         */
+        assert.equal(p.switches, 1, `${where}: ${p.switches} switches in the panel — only חזרה יומית has one; the window is expressed by its own day chips`);
 
         assert.equal(p.daysLabel.startsWith('ימי פרסום'), true, `${where}: the row of seven is not named "ימי פרסום" for a screen reader — "${p.daysLabel}"`);
 
@@ -836,9 +846,18 @@ async function main(): Promise<void> {
          * sentence: days, window and interval.
          */
         assert.ok(!p.summaryClipped, `${where}: the summary line is cut off — "${p.summary}"`);
+        /* The second alternative was "התזמון כבוי — …", which opened on the
+           position of a switch. That switch is gone, so the sentence now
+           opens on the consequence instead: "מפרסם בכל יום, בכל שעה · …". The
+           requirement is unchanged — the line is one of exactly two shapes
+           and never something improvised. */
         assert.ok(
-          /^ימי פרסום:/.test(p.summary) || /^התזמון כבוי/.test(p.summary),
+          /^ימי פרסום:/.test(p.summary) || /^מפרסם בכל יום, בכל שעה/.test(p.summary),
           `${where}: the summary line says something else — "${p.summary}"`,
+        );
+        assert.ok(
+          !/התזמון כבוי|ללא הגבלה/.test(p.summary),
+          `${where}: the summary is naming the removed switch again — "${p.summary}"`,
         );
         /*
          * AND NO CLOSING HOUR IN IT. "אין להציג שעת סיום גם בשורת הסיכום."

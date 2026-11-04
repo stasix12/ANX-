@@ -1057,6 +1057,95 @@ export function nextPublishAt(
   return nextAllowedAt(s, earliest, tz);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   THE SWITCH IS GONE FROM THE SCREEN. THE FLAG IS NOT GONE FROM THE ENGINE.
+   ══════════════════════════════════════════════════════════════════════════
+
+   "הכפתור של התזמון פרסום מבלבל למה צריך אותו" — and the answer was that it
+   is needed by the DATABASE and not by the person. The owner then chose:
+   delete the switch, let the days decide.
+
+   WHY THE STORED FLAG MAY NOT SIMPLY BE RETIRED. `enabled` is not only the
+   gate in isAllowedAt(). Four other places read it as a MODE:
+
+     • client.ts — the re-stamp that moves queued rows into the window returns
+       immediately while it is false ("nothing moves when the window is
+       switched off"). Flipping it true on a live campaign would re-space a
+       queue nobody asked to re-space.
+     • rules.ts, projection.ts and schedule-readout.ts each branch on it.
+
+   So nothing is migrated, nothing is written on anybody's behalf, and the
+   engine is not touched by one character. What changes is the TRANSLATION at
+   the edge of the screen, in these two functions.
+
+   THE EQUIVALENCE THIS RESTS ON, which is exact and is proved by the two
+   functions above rather than asserted here:
+
+     isAllowedAt({enabled: false, …})            → true, always.
+     isAllowedAt({enabled: true, days: all 7,
+                  start: '00:00'}, at)           → `at >= midnight of at's own
+                                                    day`, which is true for
+                                                    every instant in that day.
+
+     nextAllowedAt({enabled: false}, from)       → from.
+     nextAllowedAt({enabled: true, all 7,
+                    '00:00'}, from)              → from.
+
+   "No limit" and "every day, from midnight" are therefore the same schedule
+   said two ways, and the screen may pick whichever of the two a person can
+   read without being taught. */
+
+/** The seven days, in the numbering zonedWeekday() returns. */
+export const EVERY_DAY: readonly number[] = [0, 1, 2, 3, 4, 5, 6];
+
+/** Midnight: the earliest a day can open, and therefore "no hour limit". */
+export const DAY_OPENS = '00:00';
+
+/**
+ * WHAT THE SCREEN DRAWS for a stored schedule.
+ *
+ * A campaign whose flag is off has days and an hour sitting in its row that
+ * the engine does not read — the owner's own campaign had א׳–ה׳ and 11:05
+ * stored while publishing on Saturday at 03:00, which is precisely the pair
+ * of facts that made the old header unreadable. Drawing those inert values is
+ * the bug; drawing what the engine will actually do is the fix.
+ *
+ * The stored values are NOT destroyed by this. They stay in the row, unread,
+ * exactly as `schedule_end` has since the closing hour was removed. They are
+ * overwritten only if the person edits the days themselves, which is them
+ * choosing, not us.
+ */
+export function shownSchedule(s: CampaignSchedule): CampaignSchedule {
+  if (s.enabled) return s;
+  return { ...s, days: [...EVERY_DAY], start: DAY_OPENS };
+}
+
+/**
+ * AND THE FLAG THAT COMES BACK OUT of what the screen now shows.
+ *
+ * Every seventh day lit and the hour at midnight is a schedule that permits
+ * everything, so it is stored the way this product has always stored "permits
+ * everything": with the flag down. Anything narrower raises it.
+ *
+ * NO DAY AT ALL IS NOT "no limit" — it is a campaign that may never publish,
+ * which is a real state with its own warning on the panel. It keeps the flag
+ * up, or that warning would be a lie.
+ */
+export function limitsNothing(days: readonly number[], start: string): boolean {
+  return days.length === EVERY_DAY.length && start === DAY_OPENS;
+}
+
+/** The stored schedule for what the screen is showing. */
+export function fromShown(shown: CampaignSchedule): CampaignSchedule {
+  return { ...shown, enabled: !limitsNothing(shown.days, shown.start) };
+}
+
+/** True when this campaign publishes on any day at any hour — however it is
+    stored. The summary line says that in words instead of listing a week. */
+export function publishesAlways(s: CampaignSchedule): boolean {
+  return !s.enabled || limitsNothing(s.days, s.start);
+}
+
 /**
  * "א׳, ב׳, ג׳, ה׳" — or the two sentences that are not a list of days.
  *

@@ -630,7 +630,6 @@ export function LiveCampaignHero({
       {schedule && onScheduleChange && (
         <CampaignScheduleBoard
           schedule={schedule}
-          onToggle={(enabled) => onScheduleChange({ ...schedule, enabled })}
           onEdit={() => setEditingSchedule((v) => !v)}
           editing={editingSchedule}
           readout={readout}

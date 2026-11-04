@@ -352,12 +352,17 @@ async function main(): Promise<void> {
        *
        * PER CARD, NOT A TOTAL OF THREE. This used to assert the total was 3,
        * which said "one switch per card" only as long as a card had exactly
-       * one. The scheduling block is now open on the main page, by the owner's
-       * request, so each card also carries חזרה יומית — six in total, and the
-       * literal 3 went red on a strip that was perfectly separate. The number
-       * is now derived from the cards: however many switches a card grows, all
-       * three must carry the SAME number, and the first card's must be the
-       * window switch it has always been.
+       * one, and the literal went red on a strip that was perfectly separate.
+       * The number is derived from the cards instead: however many controls a
+       * card grows, all three must carry the SAME number.
+       *
+       * AND THE CONTROL IT ADDRESSES IS NOW A DAY CHIP. It was the schedule's
+       * own switch until the owner removed it — "הכפתור של התזמון פרסום מבלבל
+       * למה צריך אותו" — and the days became the control. That makes this a
+       * sharper test than it was, not a weaker one: the chip is the thing that
+       * now writes a campaign's window, so a strip that shared state between
+       * slides would write the wrong campaign's days, which is the exact
+       * failure this section exists to catch.
        */
       const shape = await view.evaluate(() => {
         /* THE STRIP IS THE FIRST [role="group"], and the scoping matters: the
@@ -369,14 +374,14 @@ async function main(): Promise<void> {
         const cards = [...strip.children];
         return {
           cards: cards.length,
-          per: cards.map((c) => c.querySelectorAll('[role="switch"]').length),
-          total: strip.querySelectorAll('[role="switch"]').length,
+          per: cards.map((c) => c.querySelectorAll('[aria-label="שבת"][aria-pressed]').length),
+          total: strip.querySelectorAll('[aria-label="שבת"][aria-pressed]').length,
         };
       });
       eq(shape.cards, 3, `${at}: the strip drew ${shape.cards} cards, not three`);
-      is(shape.per[0] >= 1, `${at}: a card drew no schedule switch at all`);
-      eq(shape.per, [shape.per[0], shape.per[0], shape.per[0]], `${at}: the three cards drew ${JSON.stringify(shape.per)} switches — an unequal set means a card is missing a control or sharing one`);
-      eq(shape.total, shape.per[0] * 3, `${at}: ${shape.total} switches over three cards of ${shape.per[0]} — something outside the cards is drawing one`);
+      is(shape.per[0] >= 1, `${at}: a card drew no day control at all`);
+      eq(shape.per, [shape.per[0], shape.per[0], shape.per[0]], `${at}: the three cards drew ${JSON.stringify(shape.per)} day controls — an unequal set means a card is missing a control or sharing one`);
+      eq(shape.total, shape.per[0] * 3, `${at}: ${shape.total} day controls over three cards of ${shape.per[0]} — something outside the cards is drawing one`);
 
       /*
        * AND FLIPPING THE LAST CARD'S CHANGES ONLY ITS OWN. Addressed as "the
@@ -384,19 +389,23 @@ async function main(): Promise<void> {
        * a global index silently means a different control the moment a card
        * grows one — which is exactly what happened to the count above.
        */
-      const own = (n: number) => view.locator('[role="group"]').first().locator('> *').nth(n).locator('[role="switch"]').first();
-      const before = await view.evaluate(() =>
-        [...(document.querySelector('[role="group"]') as HTMLElement).children].map((c) => c.querySelector('[role="switch"]')?.getAttribute('aria-checked') ?? ''),
-      );
-      eq(before, ['true', 'true', 'true'], `${at}: the three window switches did not start on`);
+      const own = (n: number) => view.locator('[role="group"]').first().locator('> *').nth(n).locator('[aria-label="שבת"]').first();
+      const pressed = () =>
+        view.evaluate(() =>
+          [...(document.querySelector('[role="group"]') as HTMLElement).children].map(
+            (c) => c.querySelector('[aria-label="שבת"]')?.getAttribute('aria-pressed') ?? '',
+          ),
+        );
+      const before = await pressed();
+      eq(before, [before[0], before[0], before[0]], `${at}: the three cards did not start in the same state — ${JSON.stringify(before)}`);
+      is(before[0] === 'true' || before[0] === 'false', `${at}: the day control has no pressed state to read — "${before[0]}"`);
       await own(2).click();
       await view.waitForTimeout(100);
+      const flipped = before[0] === 'true' ? 'false' : 'true';
       eq(
-        await view.evaluate(() =>
-          [...(document.querySelector('[role="group"]') as HTMLElement).children].map((c) => c.querySelector('[role="switch"]')?.getAttribute('aria-checked') ?? ''),
-        ),
-        ['true', 'true', 'false'],
-        `${at}: flipping the third card's switch changed another card's`,
+        await pressed(),
+        [before[0], before[0], flipped],
+        `${at}: choosing a day on the third card changed another card's`,
       );
 
       eq(crashes, [], `${at}: the strip threw: ${crashes[0] ?? ''}`);

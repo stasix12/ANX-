@@ -19,6 +19,12 @@ import {
   scheduleColumns,
   scheduleSummary,
   type CampaignSchedule,
+  EVERY_DAY,
+  DAY_OPENS,
+  shownSchedule,
+  fromShown,
+  publishesAlways,
+  limitsNothing,
 } from '../../src/lib/social/campaign-schedule';
 
 /**
@@ -505,7 +511,14 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   const panel = readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8');
   is(/aria-pressed=\{on\}/.test(panel), 'each day is a pressed-state control, so a screen reader can say which are chosen');
   is(/grid-cols-7/.test(panel), 'and the seven are a grid of seven, which is what keeps them on one row at every width');
-  is(/schedule\.days\.includes\(day\) \? schedule\.days\.filter/.test(panel), 'tapping a chosen day un-chooses it — "חובה לאפשר Multi Select", in both directions');
+  /* RE-POINTED AT `shown`, NOT WEAKENED. The panel reads the schedule the
+     ENGINE is running rather than the row as stored — a campaign that limits
+     nothing has seven lit days whatever its column says — so the multi-select
+     is expressed over that resolved value. The requirement is the one it
+     always was: a tap in either direction. */
+  is(/shown\.days\.includes\(day\) \? shown\.days\.filter/.test(panel), 'tapping a chosen day un-chooses it — "חובה לאפשר Multi Select", in both directions');
+  is(/const shown = shownSchedule\(schedule\)/.test(panel), 'and what it reads is the resolved schedule, so the chips cannot show days the engine is ignoring');
+  is(/onChange\(fromShown\(/.test(panel), 'while what it writes puts the stored flag back — the engine keeps the column it has always had');
   is(/dir="ltr"/.test(panel), 'the clock range is an LTR island, or the bidi algorithm prints "22:00 – 08:00"');
   is(!/useState/.test(panel), 'the panel holds no state of its own — what is on screen is what the page has, which is what the database has');
   /*
@@ -723,6 +736,66 @@ function ch(v: number): number {
    */
   eq(say(windowClosesAt(ref, at('2026-10-25T10:00'))), say(at('2026-10-26T00:00')), 'the close is local midnight on the day the clock goes back — a 25-hour day, and still one day');
   eq(say(windowClosesAt(ref, at('2026-03-29T10:00'))), say(at('2026-03-30T00:00')), 'and on a summer-time Sunday too');
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE EQUIVALENCE THE REMOVED SWITCH RESTS ON.
+
+   The owner deleted the schedule switch — "הכפתור של התזמון פרסום מבלבל למה
+   צריך אותו" — and chose "the days decide". That is only safe if these two
+   schedules are the SAME schedule to the engine:
+
+       { enabled: false, … anything … }
+       { enabled: true, days: all seven, start: '00:00' }
+
+   The UI now translates between them in both directions, so if they ever
+   stop being equivalent the screen starts lying about what will publish.
+   It is asserted here against the real gate functions, across a whole week
+   including both Israeli clock changes, rather than argued in a comment.
+   ══════════════════════════════════════════════════════════════════════════ */
+{
+  const stored = { enabled: false, days: [0, 1, 2, 4], start: '11:05', gapSeconds: 600 };
+  const drawn = shownSchedule(stored);
+  eq(drawn.days, [0, 1, 2, 3, 4, 5, 6], 'a schedule with the flag down is drawn as a full week');
+  eq(drawn.start, DAY_OPENS, 'opening at midnight');
+  eq(drawn.gapSeconds, 600, 'and its interval is untouched — only the window is resolved');
+  eq(stored.days, [0, 1, 2, 4], 'THE STORED ROW IS NOT MUTATED: the inert days are still in it, unread');
+
+  /* Hour by hour across an ordinary week AND both clock changes, which is
+     where a "same thing" argument about midnight would break if it were
+     going to break. */
+  let compared = 0;
+  for (const day of ['2026-09-28', '2026-10-24', '2026-10-25', '2026-10-26', '2026-03-28', '2026-03-29', '2026-03-30']) {
+    for (let h = 0; h < 24; h += 1) {
+      const when = at(`${day}T${String(h).padStart(2, '0')}:30`);
+      is(
+        isAllowedAt(stored, when) === isAllowedAt(drawn, when),
+        `${day} ${h}:30 — "no window" and "every day from midnight" disagreed about whether publishing is allowed`,
+      );
+      eq(
+        say(nextAllowedAt(stored, when)),
+        say(nextAllowedAt(drawn, when)),
+        `${day} ${h}:30 — the two spellings pointed at different next instants`,
+      );
+      compared += 1;
+    }
+  }
+  is(compared === 168, `the week was walked in full — ${compared} hours compared`);
+
+  /* AND BACK. What the screen shows is turned into what the row stores. */
+  eq(fromShown(drawn).enabled, false, 'a full week from midnight is stored the way it has always been stored: flag down');
+  eq(fromShown({ ...drawn, days: [0, 1, 2, 3, 4, 5] }).enabled, true, 'six days is a limit, so the flag goes up');
+  eq(fromShown({ ...drawn, start: '00:01' }).enabled, true, 'and so is one minute past midnight');
+  eq(
+    fromShown({ ...drawn, days: [] }).enabled,
+    true,
+    'NO DAY AT ALL IS NOT "no limit" — it is a campaign that may never publish, and the panel warns about it. Storing it with the flag down would silently turn that into "publish always"',
+  );
+  is(limitsNothing(EVERY_DAY, DAY_OPENS), 'the predicate agrees with the writer it is built from');
+  is(!limitsNothing([0, 1, 2, 3, 4, 5, 6], '08:00'), 'an hour is a limit even when every day is chosen');
+  is(publishesAlways(stored), 'a flag-down row publishes always');
+  is(publishesAlways({ ...drawn, enabled: true }), 'and so does a full week from midnight with the flag up — both spellings answer the same');
+  is(!publishesAlways({ ...drawn, enabled: true, days: [0] }), 'one day a week does not');
 }
 
 console.log(`campaign schedule tests OK — ${checks} assertions`);

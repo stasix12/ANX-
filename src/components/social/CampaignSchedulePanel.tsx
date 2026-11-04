@@ -149,8 +149,6 @@ export function CampaignSchedulePanel({
   disabled = false,
   repeat,
   onRepeatChange,
-  rounds,
-  onRoundsChange,
   roundProgress,
   accountFloorSeconds,
   floorHours = MIN_REPEAT_HOURS,
@@ -173,17 +171,6 @@ export function CampaignSchedulePanel({
    */
   repeat?: CampaignRepeat;
   onRepeatChange?: (next: CampaignRepeat) => void;
-  /**
-   * סבבים ביום (ריצות) — the SECOND and later occasions in one day.
-   *
-   * "הפעלת מספר סבבי פרסום לאותו קמפיין באותו היום." Pass both or neither,
-   * for the same reason the repeat does: the effect of a round is a time in
-   * social_schedules.weekly, and a screen that drew the list without being
-   * able to write it would show rounds that never run. Round ONE is not in
-   * here — it is schedule.start, the hour already on the card.
-   */
-  rounds?: CampaignRound[];
-  onRoundsChange?: (next: CampaignRound[]) => void;
   /**
    * ONE SET OF NUMBERS PER ROUND, keyed by its 'HH:MM' — CampaignState.byRound.
    *
@@ -280,24 +267,30 @@ export function CampaignSchedulePanel({
   const shown = shownSchedule(schedule);
   const set = (patch: Partial<CampaignSchedule>) => onChange(fromShown({ ...shown, ...patch }));
   const canRepeat = Boolean(repeat && onRepeatChange);
-  const canRounds = Boolean(rounds && onRoundsChange);
   /*
    * EVERY HOUR THIS CAMPAIGN OPENS AT, round one first — the same function
    * the weekly plan is built from, so what the card counts and what the
    * engine plans cannot disagree. That pair disagreeing is the one way this
    * product has repeatedly got itself into trouble.
    */
-  const starts = roundStarts(schedule, rounds ?? []);
+  /*
+   * THE HOURS THIS CAMPAIGN OPENS AT. One, now that סבבים ביום is gone —
+   * roundStarts() is still the caller rather than a bare [shown.start],
+   * because it is the same function the weekly plan is built from, and that
+   * pair disagreeing is the one way this product has repeatedly got itself
+   * into trouble.
+   *
+   * `shown`, not `schedule`: a campaign with the stored flag down opens at
+   * midnight whatever hour is left in its row, and the repeat verdict below
+   * must reason about the hour the engine will actually use.
+   */
+  const starts = roundStarts(shown, []);
   const verdict = repeat ? roundsVsRepeat(starts, repeat, floorHours) : null;
   /* The window that would let these rounds publish, from the ONE copy of that
      arithmetic the writer also uses — see repeatFitFor(). Null for every
      verdict a window cannot fix, so the button below is drawn only when
      pressing it would actually change the answer. */
   const repeatFit = verdict ? repeatFitFor(verdict, floorHours) : null;
-  /* ON when any extra round is armed. There is no separate "rounds enabled"
-     column and there must not be one: the switch IS the rounds, and a card
-     that could be on with nothing armed would be a promise about nothing. */
-  const roundsOn = (rounds ?? []).some((r) => r.enabled);
 
   /*
    * MULTI SELECT, and a tap is a toggle in both directions — including the
@@ -578,454 +571,24 @@ export function CampaignSchedulePanel({
         />
       )}
 
-      {/* ─── 6. סבבים ביום (ריצות) — more than one occasion in a day ────── */}
-      {canRounds && rounds && onRoundsChange && (
-        /*
-         * "הפעלת מספר סבבי פרסום לאותו קמפיין באותו היום."
-         *
-         * ROUND ONE IS NOT IN THIS LIST. It is the hour in the block above,
-         * and the list holds the second and later occasions — an hour stored
-         * in two places is the defect this product has been bitten by twice.
-         * So the rows are NUMBERED from the combined list (roundStarts) while
-         * only rows 2..n are editable here, and the numbering is by the clock
-         * rather than by insertion order, because that is the order the
-         * engine walks them in.
-         *
-         * NO <select> AND NO aria-pressed IN THIS CARD, deliberately. The
-         * measured suite counts exactly two selects and exactly seven pressed
-         * chips inside [data-schedule] and checks they share a row and a
-         * width; a control here carrying either would join those sets and
-         * break a guard that is about the block above. The hour and the gap
-         * are TEXT, which is also what the owner's own reference draws — the
-         * editing lives behind the ⋮, in a <details> that needs no state, so
-         * this panel stays presentational.
-         *
-         * NO DRAG HANDLE, though the reference draws one. The rows are
-         * ordered by the clock, so dragging one above another would reorder
-         * nothing — and "יש לממש את הפונקציונליות בפועל ולא ליצור כפתורים
-         * דקורטיביים" outranks a pixel for a control whose function cannot
-         * exist.
-         */
-        /*
-         * data-rounds-card, SO A TEST CAN FIND IT WITHOUT GUESSING. The
-         * measured suites name the blocks they measure by attribute
-         * (data-schedule-board, data-next-publication) for one reason: a
-         * check that greped for `data-schedule` once matched
-         * data-schedule-board — a different component — and passed over a
-         * card that rendered zero times, behind 170 green assertions.
-         */
-        <div data-rounds-card className="mt-1.5 rounded-2xl border border-ink-600 bg-ink-900 p-2.5">
-          <div className="flex items-start gap-2">
-            <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-brand-300/15">
-              <RepeatIcon className="h-3.5 w-3.5 text-brand-400" />
-            </span>
-            <span className="min-w-0 grow">
-              <span className="block text-[12.5px] font-extrabold leading-4 text-brand-400">
-                סבבים ביום (ריצות)
-                <span className="ms-1 align-middle rounded-md bg-brand-300/15 px-1 py-px text-[9px] font-extrabold leading-3 text-brand-400">חדש</span>
-              </span>
-              <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">הפעלת מספר סבבי פרסום לאותו קמפיין באותו היום</span>
-            </span>
-            <span className="ms-auto -me-1 -my-1 flex shrink-0 items-center">
-              <Toggle
-                checked={roundsOn}
-                /*
-                 * `disabled` BELONGS TO THE SWITCH, not to the handler.
-                 *
-                 * It used to be swallowed here — `if (disabled) return` — and
-                 * while the switch could not move on its own that was merely
-                 * silent. It is not silent any more: the knob moves on the
-                 * tap now, so a handler that quietly does nothing produces a
-                 * switch that crosses, sits there as if saved, and slides
-                 * back. The switch has to know, and it does.
-                 */
-                disabled={disabled}
-                onChange={(on) => {
-                  /*
-                   * OFF KEEPS THE HOURS. Switching the card off disables every
-                   * round rather than deleting it, so switching it back on
-                   * does not cost the owner the times he chose —
-                   * "אסור למחוק מידע". ON with nothing in the list adds the
-                   * first extra round at the roomiest hour the account's own
-                   * floor allows, which used to be a flat +12 and could land
-                   * on top of the window's own hour once the clock wrapped.
-                   */
-                  if (!on) return onRoundsChange(rounds.map((r) => ({ ...r, enabled: false })));
-                  if (rounds.length) return onRoundsChange(rounds.map((r) => ({ ...r, enabled: true })));
-                  const at = nextFreeRoundStart(starts, floorHours);
-                  if (at) return onRoundsChange([{ at, enabled: true }]);
-                  /*
-                   * AND THE CASE WITH NO ROOM IN IT, WHICH USED TO BE SILENCE.
-                   *
-                   * nextFreeRoundStart returns null when the account's own
-                   * minimum spacing leaves no hour free — raise the floor to
-                   * 23 hours and there is nowhere a second round can go. The
-                   * old code fell off the end of this function: nothing was
-                   * written, nothing was said, and with an optimistic knob
-                   * that reads as "saved" for as long as the guess stands.
-                   *
-                   * Rejecting is the honest answer. The switch puts itself
-                   * back at once — a rejection is the fastest answer it can
-                   * get — and says why.
-                   */
-                  return Promise.reject(
-                    new Error(
-                      `אין שעה פנויה לסבב נוסף: המרווח המינימלי בין שני פרסומים של אותו פוסט לאותה קבוצה הוא ${floorHours} שעות. הקטינו אותו בהגדרות כדי להוסיף סבב.`,
-                    ),
-                  );
-                }}
-                label={`סבבים ביום עבור ${campaignName}`}
-              />
-            </span>
-          </div>
-
-          {roundsOn && (
-            <>
-              <ul className="mt-1.5 space-y-1">
-                {starts.map((at, i) => {
-                  /* `starts` already excludes a round that is switched off
-                     (roundStarts), so this only has to answer "is this hour
-                     the window's own, or an extra round's" — the window's has
-                     no menu, because its field is the block above. */
-                  const extra = rounds.find((r) => r.at === at);
-                  /*
-                   * Round one carries the unrecorded rows too ('' — every row
-                   * created before the column existed, and every row on a
-                   * database that has not run social-latest.sql).
-                   */
-                  const own = roundProgress?.[at];
-                  const legacy = i === 0 ? roundProgress?.[''] : undefined;
-                  const p = own || legacy ? mergeProgress(own, legacy) : undefined;
-                  const counted = Boolean(p && p.total > 0);
-                  const st = roundState(p);
-                  return (
-                    <li key={at} className="flex flex-wrap items-center gap-1.5 rounded-xl border border-ink-600 bg-ink-800 px-2 py-1">
-                      <span className="shrink-0 text-[11px] font-extrabold leading-4 text-mist-100">סבב {i + 1}</span>
-                      <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold leading-4 text-mist-200">
-                        <ClockIcon aria-hidden className="h-3 w-3 text-mist-400" />
-                        <span dir="ltr" className="tabular-nums">{at}</span>
-                      </span>
-                      <span className="flex min-w-0 items-center gap-1 text-[10.5px] font-bold leading-4 text-mist-300">
-                        <RepeatIcon aria-hidden className="h-3 w-3 shrink-0 text-mist-400" />
-                        <span className="truncate">{gapLabel({ ...schedule, start: at })}</span>
-                      </span>
-                      {/*
-                        * THE ROUND'S OWN STATE, off its own rows.
-                        *
-                        * Round one also owns every row written before
-                        * social_queue.round_at existed — key '' — because a
-                        * campaign with one occasion a day has only ever had
-                        * one round, and those rows are its.
-                        *
-                        * With no figures at all the pill says what is true of
-                        * the SETTING and nothing about the queue: a caller
-                        * that cannot count must not be made to look like a
-                        * round that published nothing.
-                        */}
-                      <span
-                        className={`ms-auto shrink-0 rounded-lg px-1.5 py-px text-[9.5px] font-extrabold leading-4 ${
-                          ROUND_TONE[st] ?? 'text-mist-300'
-                        }`}
-                      >
-                        {counted ? ROUND_LABEL[st] : extra ? 'מתוזמן' : 'קבוע'}
-                      </span>
-                      {/*
-                       * ROUND ONE HAS NO MENU, and that is not an omission:
-                       * its hour is the field in the block above. A second
-                       * place to change it is the bug, not the feature.
-                       */}
-                      {extra ? (
-                        <details className="shrink-0">
-                          <summary
-                            aria-label={`פעולות לסבב ${i + 1} בשעה ${at}`}
-                            className="grid h-10 w-10 cursor-pointer place-items-center rounded-xl text-mist-300 marker:hidden [&::-webkit-details-marker]:hidden"
-                          >
-                            <MoreIcon aria-hidden className="h-4 w-4" />
-                          </summary>
-                          {/*
-                            * IN FLOW, NOT FLOATING — and every number here was
-                            * measured with the menu OPEN, which took three
-                            * tries to get right and is the whole lesson.
-                            *
-                            * It was `absolute end-0 w-44` on the button's own
-                            * relative box. `end-0` is inset-inline-end: 0,
-                            * which in RTL pins the menu's LEFT edge to the
-                            * button and grows it rightwards. That is fine
-                            * while the row fits on one line and the ⋮ sits at
-                            * the row's left end. On the run card at 360px the
-                            * row WRAPS, the ⋮ lands at the right end of the
-                            * second line, and the open menu measured 269→392
-                            * against a card ending at 329 and a card frame
-                            * ending at 344: sixty-three pixels of a delete
-                            * button off the side of the screen.
-                            *
-                            * `start-0` only moves the overflow to the other
-                            * edge on a row that wraps the other way (−25).
-                            * Anchoring to the row with `inset-x-0` does not
-                            * work either, and the reason is worth writing
-                            * down: in current Chromium a <details> lays its
-                            * content out inside ::details-content, which is a
-                            * containing block of its own, so an absolutely
-                            * positioned child resolves against the 40px
-                            * summary however many ancestors are `relative`.
-                            * There is no corner and no inset that escapes it.
-                            *
-                            * So the menu is an ordinary block. Closed, the
-                            * content is skipped and the details stays the
-                            * 40×40 button. Open, the details grows and the
-                            * row — flex-wrap — gives it a line of its own,
-                            * inside the card by construction at every width.
-                            * max-w-full is the belt: a narrower card shrinks
-                            * the menu rather than pushing the page sideways.
-                            *
-                            * AND IT WAS INVISIBLE UNTIL TWO THINGS CHANGED.
-                            * The panel never rendered in the hero fixture
-                            * while it sat behind "ערוך מועד"; and a closed
-                            * <details> is content-visibility: hidden rather
-                            * than display: none, so measuring inside one
-                            * returns boxes that describe nothing on screen —
-                            * which first sent me to fix a component that was
-                            * fine. Both measured suites now force every
-                            * details OPEN before they measure anything.
-                            */}
-                          <form
-                            /* THE WRITE HAPPENS ON SUBMIT AND NOWHERE ELSE —
-                               see the note on the save button below. */
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              const field = e.currentTarget.elements.namedItem('at') as HTMLInputElement | null;
-                              /* THE DECISION IS editRoundTime's, not this
-                                 handler's — a guard written inline here
-                                 cannot be driven by a test, and the one that
-                                 was proved hollow under an `if (false && …)`
-                                 mutation while the suite stayed green. */
-                              const edit = editRoundTime(rounds, starts, at, String(new FormData(e.currentTarget).get('at') ?? ''));
-                              if (edit.ok) {
-                                field?.setCustomValidity('');
-                                onRoundsChange(edit.rounds);
-                                return;
-                              }
-                              /* 'taken' is the one that used to cost him a
-                                 round, silently. The browser's own validation
-                                 says so, which needs no state. */
-                              if (edit.reason === 'taken') {
-                                field?.setCustomValidity('כבר יש סבב בשעה הזאת. בחרו שעה אחרת.');
-                                field?.reportValidity();
-                              }
-                            }}
-                            className="mt-1 w-44 max-w-full rounded-xl border border-ink-600 bg-ink-900 p-1.5 shadow-lg"
-                          >
-                            <label className="block text-[10px] font-bold leading-4 text-mist-300">
-                              שעת התחלה
-                              {/*
-                               * <input type="time"> rather than a dropdown:
-                               * a <select> here would join the two the suite
-                               * measures in the block above. It is also more
-                               * than the reference asks for — the hours there
-                               * are a half-hour grid and this accepts any
-                               * minute — and the engine takes any 'HH:MM'.
-                               */}
-                              <input
-                                type="time"
-                                name="at"
-                                aria-label={`שעת ההתחלה של סבב ${i + 1}`}
-                                defaultValue={at}
-                                disabled={disabled}
-                                className="mt-0.5 h-10 w-full rounded-lg border border-ink-600 bg-ink-800 px-2 text-[12px] font-bold text-mist-100"
-                              />
-                            </label>
-                            {/*
-                              ─── A SAVE BUTTON, WHICH THE OWNER ASKED FOR ──
-                              *
-                              * "בהוספת סבב אין כפתור שאני שומר את ההגדרות."
-                              *
-                              * HE WAS RIGHT, AND IT WAS WORSE THAN MISSING.
-                              * The field above used to write on every
-                              * onChange with no debounce, so typing 18:30
-                              * saved 01:30 on the way and ARMED it into
-                              * social_schedules.weekly — a real hour the
-                              * engine would have published at. And because
-                              * each row is keyed by its own start time, that
-                              * write remounted the row and shut this menu
-                              * while he was still typing. The scheduling
-                              * block directly above has been debounced for
-                              * exactly this reason since the day it was
-                              * written; this had nothing.
-                              *
-                              * UNCONTROLLED, AND THAT IS NOT A STYLE CHOICE.
-                              * campaign-schedule.test.ts asserts this panel
-                              * holds no React state of its own — "what is on
-                              * screen is what the page has, which is what the
-                              * database has" — so a draft cannot live here.
-                              * A form reads its own field on submit: no
-                              * state, the button he asked for, and exactly
-                              * one write. (That guard greps the raw source
-                              * for the hook's name, so this paragraph must
-                              * not spell it — a comment quoting the thing a
-                              * guard forbids has fooled five checks in this
-                              * repo already, and here it would fail CLOSED,
-                              * which is the safe direction and still a
-                              * pointless red run.)
-                              */}
-                            <button
-                              type="submit"
-                              disabled={disabled}
-                              className="mt-1 flex h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-brand-400 px-2 text-[11px] font-extrabold text-white disabled:pointer-events-none disabled:bg-ink-700"
-                            >
-                              <ClockIcon aria-hidden className="h-3.5 w-3.5" />
-                              שמור את השעה
-                            </button>
-                            <button
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => onRoundsChange(rounds.map((r) => (r.at === at ? { ...r, enabled: false } : r)))}
-                              className="mt-1 flex h-10 w-full items-center gap-1.5 rounded-lg px-2 text-[11px] font-bold text-mist-200"
-                            >
-                              <ClockIcon aria-hidden className="h-3.5 w-3.5" />
-                              השהה את הסבב הזה
-                            </button>
-                            <button
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => onRoundsChange(rounds.filter((r) => r.at !== at))}
-                              className="flex h-10 w-full items-center gap-1.5 rounded-lg px-2 text-[11px] font-bold text-warning-400"
-                            >
-                              <TrashIcon aria-hidden className="h-3.5 w-3.5" />
-                              מחק את הסבב
-                            </button>
-                          </form>
-                        </details>
-                      ) : (
-                        <span className="grid h-10 w-10 shrink-0 place-items-center text-[9px] font-bold leading-3 text-mist-400">
-                          מהתזמון
-                        </span>
-                      )}
-                      {counted && p && st === 'publishing' && (
-                        /*
-                         * "סבב 2 — מפרסם: 12 מתוך 50." Handled, not published:
-                         * a group that was skipped or failed is done with,
-                         * and a bar that only counted successes would sit at
-                         * 40% over a round that has finished.
-                         */
-                        <span className="basis-full pt-1">
-                          <span className="block h-1 overflow-hidden rounded-full bg-ink-600">
-                            <span
-                              className="block h-full rounded-full bg-brand-400"
-                              style={{ width: `${Math.min(100, Math.round((p.finished / Math.max(1, p.total)) * 100))}%` }}
-                            />
-                          </span>
-                          <span className="mt-0.5 block text-[9.5px] font-bold leading-3 text-mist-300">
-                            {p.finished} מתוך {p.total} קבוצות
-                          </span>
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-
-              {/*
-                THE BUTTON IS GONE WHEN THERE IS NOWHERE TO PUT A ROUND, and
-                the hour it proposes is SEARCHED for rather than computed.
-
-                It used to offer plusHours(lastStart, 12) unconditionally. From
-                a 03:30 campaign the second press proposes 03:30 again — 15:30
-                plus twelve wraps past midnight onto round one's own hour —
-                and roundStarts() de-duplicates it away: the card drew a row,
-                the column gained a round, and the engine received nothing.
-                Pressing a button and having nothing happen is exactly the
-                decorative control the owner forbade.
-              */}
-              {rounds.length < MAX_EXTRA_ROUNDS && nextFreeRoundStart(starts, floorHours) && (
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => {
-                    const at = nextFreeRoundStart(starts, floorHours);
-                    if (at) onRoundsChange([...rounds, { at, enabled: true }]);
-                  }}
-                  className="mt-1 flex h-10 w-full items-center justify-center gap-1 rounded-xl border border-dashed border-ink-600 text-[11px] font-extrabold text-brand-400"
-                >
-                  <PlusIcon aria-hidden className="h-3.5 w-3.5" />
-                  הוסף סבב נוסף
-                </button>
-              )}
-
-              {/*
-               * ─── THE ARITHMETIC, WHERE HE CAN SEE IT ───────────────────
-               *
-               * A second round whose groups are all refused still opens,
-               * still shows a queue, and publishes nothing — the owner would
-               * see a feature that works and an account that does not. So
-               * when the layout cannot publish, the card says so in his own
-               * numbers and names the one thing that would fix it. It does
-               * not change his spam protection by itself: that is his
-               * account, and the decision is his.
-               */}
-              {verdict && !verdict.ok && (
-                <>
-                <p className="mt-1.5 text-[10.5px] font-bold leading-4 text-warning-400">
-                  {verdict.reason === 'closer-than-the-floor' ? (
-                    <>
-                      הסבבים מרוחקים {verdict.smallestGapHours} שעות זה מזה, והמערכת לא תפרסם את אותו פוסט לאותה קבוצה פעמיים בפחות מ-{floorHours} שעות
-                      — הרחיקו אותם, או הורידו את ההגנה בהגדרות, אחרת הסבב השני לא יפרסם לקבוצות של הראשון.
-                    </>
-                  ) : verdict.reason === 'repeat-off' ? (
-                    <>הפעילו את ״חזרה יומית״ למטה — בלעדיה המערכת מסרבת לפרסם את אותו פוסט לאותה קבוצה פעם שנייה, והסבב השני לא יפרסם כלום.</>
-                  ) : (
-                    <>
-                      הסבבים מרוחקים {verdict.smallestGapHours} שעות זה מזה, ו״חזרה יומית״ מוגדרת ל-{repeat?.minHours} שעות — לכן הסבב השני לא יפרסם לאף
-                      קבוצה שהראשון כבר פרסם לה.
-                      {/* The instruction stays ONLY where there is no button to
-                          do it — a caller that cannot write the repeat draws
-                          the panel read-only, and telling him to press
-                          something that is not there would be worse than
-                          telling him the number. */}
-                      {repeatFit !== null && repeat && onRepeatChange ? '' : ` הורידו את החזרה ל-${verdict.neededHours} שעות כדי ששניהם יצאו.`}
-                    </>
-                  )}
-                </p>
-                {/*
-                 * ─── AND THE THING THAT ACTUALLY DOES IT ────────────────────
-                 *
-                 * "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם."
-                 *
-                 * He lowered the account's protection to two hours in Settings,
-                 * this card correctly re-measured his 01:30 and 23:30 against
-                 * two — and then told him to "הורידו את החזרה ל-2 שעות" with
-                 * nothing anywhere that sets it. The campaign's own window lost
-                 * its editor when the advanced queue controls came out at his
-                 * request, so the only thing left that could lower it was
-                 * saveCampaignRounds(), and only while the rounds were being
-                 * changed. His rounds were already saved. The card was a
-                 * dead end that named its own fix.
-                 *
-                 * IT IS NOT DONE FOR HIM. Pressing this is a decision about his
-                 * Facebook account — the same decision the Settings screen
-                 * states the consequence of — so it is one tap, labelled with
-                 * the exact number it will write, and nothing moves until he
-                 * takes it. The write goes through onRepeatChange, which is the
-                 * same path the switch above uses: one writer, one toast, one
-                 * line in the activity log.
-                 */}
-                {repeatFit !== null && repeat && onRepeatChange && (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    aria-label={`הורידו את החזרה ל-${repeatFit} שעות עבור ${campaignName}`}
-                    onClick={() => onRepeatChange({ ...repeat, minHours: repeatFit })}
-                    className="mt-1.5 flex h-10 w-full items-center justify-center gap-1 rounded-xl border border-ink-600 bg-ink-900 text-[11px] font-extrabold text-warning-400 disabled:opacity-50"
-                  >
-                    הורידו את החזרה ל-{repeatFit} שעות
-                  </button>
-                )}
-                </>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
+      {/*
+        ─── סבבים ביום (ריצות) — REMOVED AT THE OWNER'S REQUEST ─────────────
+        *
+        * "למחוק גם את הסבבים זה מסוכן."
+        *
+        * The control let one campaign publish more than once a day by adding
+        * extra start hours to its weekly plan. It is the one switch in this
+        * product that multiplies how fast an account posts, and it sat on the
+        * main screen days after Facebook rate-limited that account.
+        *
+        * Removed WHOLE, not hidden: the panel no longer takes rounds, and the
+        * weekly plan is no longer built from them, so a campaign cannot keep
+        * producing extra occasions with nothing on screen to show it — which
+        * is the failure the schedule switch above this one was just fixed
+        * for. The `schedule_rounds` COLUMN is untouched and nothing is
+        * deleted from it; it is simply not read any more, exactly as
+        * `schedule_end` has not been read since the closing hour was removed.
+      */}
       {/* ─── 6. חזרה יומית — the one control here that makes something happen ─ */}
       {canRepeat && repeat && onRepeatChange && (
         /*

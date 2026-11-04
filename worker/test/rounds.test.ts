@@ -229,20 +229,38 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
    * No new scheduling code is under test here. weeklyPlanFor() builds the
    * plan; the SHIPPED slotsFor() turns it into instants.
    */
-  const weekly = weeklyPlanFor(sched('03:30', [0, 1, 2, 3, 4, 5, 6]), [{ at: '15:30', enabled: true }]);
-  eq(weekly['1'], ['03:30', '15:30'], 'the plan handed to the engine carries both occasions for a chosen day');
+  /*
+   * ─── INVERTED BY THE OWNER, AND THIS IS NOW THE SAFETY PROPERTY ────────
+   *
+   * "למחוק גם את הסבבים זה מסוכן." סבבים ביום was the one control in this
+   * product that multiplied how fast an account posts, and it was removed
+   * days after Facebook rate-limited that account.
+   *
+   * So the claim this block runs is the opposite of the one it was written
+   * for: weeklyPlanFor() no longer TAKES rounds, and the plan it hands the
+   * engine carries exactly one occasion a day — whatever `schedule_rounds`
+   * still holds for that campaign. The column is untouched; it is simply
+   * never read. A second hour appearing here again means a campaign can
+   * double its own rate with nothing on screen to show it.
+   */
+  const weekly = weeklyPlanFor(sched('03:30', [0, 1, 2, 3, 4, 5, 6]));
+  eq(weekly['1'], ['03:30'], 'the plan handed to the engine carries ONE occasion for a chosen day');
 
   const plan = { mode: 'weekly' as const, timezone: 'Asia/Jerusalem', run_at: null, weekly, interval_days: null, interval_time: null };
   const from = new Date('2026-11-02T00:00:00+02:00');
   const until = new Date('2026-11-03T00:00:00+02:00');
   const slots = slotsFor(plan, from, until).map((d) => d.toISOString());
-  eq(slots.length, 2, 'the shipped slot engine produces TWO occasions in one day from one schedule row — no second scheduler is involved');
-  eq(slots[0], new Date('2026-11-02T03:30:00+02:00').toISOString(), 'round one lands at 03:30 local');
-  eq(slots[1], new Date('2026-11-02T15:30:00+02:00').toISOString(), 'round two lands at 15:30 local');
+  eq(slots.length, 1, 'the shipped slot engine produces exactly ONE occasion in a day — the extra-rounds path is gone, not merely hidden');
+  eq(slots[0], new Date('2026-11-02T03:30:00+02:00').toISOString(), 'at the hour the schedule names');
 
-  /* And one round is still one occasion, which is every campaign today. */
-  const onePlan = { ...plan, weekly: weeklyPlanFor(sched('03:30', [0, 1, 2, 3, 4, 5, 6]), []) };
-  eq(slotsFor(onePlan, from, until).length, 1, 'a campaign with no extra rounds still gets exactly one occasion a day');
+  /*
+   * AND A STORED ROUND CANNOT BRING THE SECOND ONE BACK. This is the case
+   * that matters for a campaign that HAD rounds before they were removed:
+   * the column still holds them, and the plan must come out the same as for
+   * a campaign that never had any.
+   */
+  const hadRounds = { ...plan, weekly: weeklyPlanFor(sched('03:30', [0, 1, 2, 3, 4, 5, 6])) };
+  eq(slotsFor(hadRounds, from, until).length, 1, 'a campaign whose row still holds an armed round gets one occasion a day all the same');
 
   /*
    * ─── ACROSS THE CLOCK CHANGE ──────────────────────────────────────────
@@ -261,8 +279,12 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
   const local = (d: Date) =>
     new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
   const hours = [...new Set(across.map(local))].sort();
-  eq(hours, ['03:30', '15:30'], 'every occasion either side of the clock change is still at the hour the owner chose — no round drifts by an hour');
-  is(across.length >= 4, `three days should carry at least four occasions across the change, got ${across.length}`);
+  /* One hour now rather than two, and the requirement is unchanged: it must
+     be the same hour on the local clock either side of the change. The
+     drift this guards against is the offset leaking into a wall-clock
+     value, which one occasion exposes exactly as well as two did. */
+  eq(hours, ['03:30'], 'the occasion either side of the clock change is still at the hour the owner chose — it does not drift by an hour');
+  is(across.length >= 3, `three days should carry at least three occasions across the change, got ${across.length}`);
 }
 
 /* ───── 7. WHICH ROUND A QUEUE ROW BELONGS TO, recorded not guessed ────── */
@@ -306,791 +328,81 @@ const repeat = (enabled: boolean, minHours = 20): CampaignRepeat => ({ enabled, 
   is(!/round_at: zonedHM\(slot,/.test(plan), 'and `slot` is the staggered instant, not the occasion');
 }
 
-/* ───── 8. THE WINDOW HAS TO COME DOWN, OR THE FEATURE IS A DECORATION ──── */
+/* ───── 8. THE FEATURE IS GONE, AND THESE ARE THE DOORS IT CANNOT COME BACK
+            THROUGH ──────────────────────────────────────────────────────── */
 /*
- * "יש לממש את הפונקציונליות בפועל ולא ליצור כפתורים דקורטיביים."
+ * "למחוק גם את הסבבים זה מסוכן."
  *
- * Section 6 above proves the card can SAY that a second round will not
- * publish. This proves the app DOES something about it. The owner's own
- * example is the case: 03:30 and 15:30, twelve hours apart, against a repeat
- * window whose default is twenty — so without this subtraction every row of
- * round two defers past his publishing window and is eventually thrown away.
+ * Sections 8, 9 and 10 used to test the WRITER (saveCampaignRounds), the toast
+ * it produced and the card that drove it. All three are deleted: סבבים ביום
+ * was the one control in this product that multiplies how fast an account
+ * posts, and it was removed days after Facebook rate-limited that account.
+ *
+ * REPLACED, NOT DROPPED. The requirement inverted, so the guard inverts with
+ * it. Everything above this line still runs — the stored shape, the list, the
+ * clock arithmetic, the real slot engine — because `schedule_rounds` is still
+ * a column with values in it ("אסור למחוק מידע") and the pure functions that
+ * read it still exist. What may never come back is a path from that column to
+ * a published post, and each of these is one such path nailed shut.
+ *
+ * Comments are stripped before every negative, so a note explaining the
+ * removal cannot satisfy a check that the removal happened.
  */
 {
-  const r = (at: string, enabled = true) => ({ at, enabled });
+  const bare = (rel: string) =>
+    readFileSync(new URL(rel, import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1 ');
 
-  /* ── the owner's own example, start to finish ──────────────────────────── */
-  {
-    const fix = roundsWindowFix(sched('03:30'), [r('15:30')], repeat(true, 20));
-    eq(fix.lowerTo, 12, 'his 03:30 + 15:30 against the default 20-hour window must lower it to 12, or round two publishes nothing');
-    eq(fix.repeatOff, false, 'and with the repeat armed there is nothing else in the way');
-    /* AND THE LOWERED WINDOW ACTUALLY ALLOWS IT — asked of the same function
-       the card and the engine ask, not of my arithmetic about it. */
-    const after = roundsVsRepeat(roundStarts(sched('03:30'), [r('15:30')]), repeat(true, fix.lowerTo as number));
-    eq(after.reason, 'ok', 'and after the fix the verdict must be ok — a lowering that still refuses is worth nothing');
-    is(after.ok, 'both rounds will be allowed to reach the same groups');
+  const client = bare('../../src/lib/social/client.ts');
+  const sched_ = bare('../../src/lib/social/campaign-schedule.ts');
+  const panel = bare('../../src/components/social/CampaignSchedulePanel.tsx');
+  const board = bare('../../src/components/social/CampaignScheduleBoard.tsx');
+  const dash = bare('../../src/app/social/page.tsx');
+  const camps = bare('../../src/app/social/campaigns/page.tsx');
+  const hero = bare('../../src/components/social/LiveCampaignHero.tsx');
+  const card = bare('../../src/components/social/CampaignCard.tsx');
+
+  /* 0 — NOT VACUOUS. Every negative below is satisfied by an unreadable file,
+         so each source is proved to have arrived first. */
+  for (const [name, src] of [['client', client], ['campaign-schedule', sched_], ['panel', panel], ['board', board],
+                             ['dashboard', dash], ['campaigns', camps], ['hero', hero], ['card', card]] as const) {
+    is(src.length > 2000, `${name} did not load — ${src.length} chars, and every check over it would pass on emptiness`);
   }
 
-  /* ── one round changes nothing. The whole backward-compatibility story. ── */
-  {
-    const fix = roundsWindowFix(sched('08:00'), [], repeat(true, 20));
-    eq(fix.lowerTo, null, 'a campaign with one occasion a day must not have its window touched');
-    eq(fix.repeatOff, false, 'and nothing is reported about a switch it does not need');
-    eq(roundsWindowFix(sched('08:00'), [r('20:00', false)], repeat(true, 20)).lowerTo, null, 'nor one whose only extra round is switched OFF');
+  /* 1 — THE WRITER. Nothing can fill the column any more. */
+  is(!/saveCampaignRounds/.test(client), 'the rounds writer is back in client.ts');
+  is(!/RoundsColumnMissing/.test(client), 'and so is the migration error that only it could raise');
+  for (const [name, src] of [['dashboard', dash], ['campaigns', camps]] as const) {
+    is(!/saveCampaignRounds/.test(src), `the ${name} screen is calling the rounds writer again`);
+    is(!/roundsColumn\(/.test(src), `the ${name} screen is building the rounds column again`);
   }
 
-  /* ── a window ALREADY short enough is left alone ──────────────────────── */
-  {
-    eq(roundsWindowFix(sched('03:30'), [r('15:30')], repeat(true, 12)).lowerTo, null, 'a window that already fits is not rewritten');
-    /*
-     * 06:00 and 20:00 are fourteen hours apart ONE WAY and TEN the other —
-     * 20:00 to the next morning's 06:00 — and the engine has always measured
-     * the smaller. This line used to expect `null` and got it for the wrong
-     * reason: ten hours was below the old floor of twelve, so the verdict was
-     * the unfixable 'closer-than-the-floor' and nothing was offered. With no
-     * floor the same layout is simply a window that must come down to ten,
-     * which the card can now say and act on.
-     */
-    eq(roundsWindowFix(sched('06:00'), [r('20:00')], repeat(true, 13)).lowerTo, 10, 'the wrap-around gap is ten hours, and with no floor that is a number the card can offer');
-    eq(roundsWindowFix(sched('06:00'), [r('20:00')], repeat(true, 10)).lowerTo, null, 'and a window already at ten fits, so nothing is rewritten');
+  /* 2 — THE PLAN. Even a column full of armed rounds cannot add an hour. */
+  is(
+    /export function weeklyPlanFor\(schedule: CampaignSchedule\): Record<string, string\[\]>/.test(sched_),
+    'weeklyPlanFor takes rounds again — that is the parameter the extra occasions arrived through',
+  );
+  is(/roundStarts\(schedule, \[\]\)/.test(sched_), 'and it builds the plan from the schedule alone');
+  is(!/readRounds\(/.test(client), 'client.ts is reading the stored rounds again');
+  is(!/readRounds\(/.test(dash) && !/readRounds\(/.test(camps), 'a screen is reading the stored rounds again');
+  is(
+    /syncWeeklyHours\(\s*campaignId: string,[\s\S]{0,400}schedule: CampaignSchedule,\s*\): Promise/.test(client),
+    'syncWeeklyHours takes a rounds argument again — that is the other door into social_schedules.weekly',
+  );
+
+  /* 3 — THE CONTROL. No card, no switch, no prop, on any screen. */
+  for (const [name, src] of [['panel', panel], ['board', board], ['hero', hero], ['card', card]] as const) {
+    is(!/סבבים ביום/.test(src), `the ${name} draws the rounds control again`);
+    is(!/data-rounds-card/.test(src), `the ${name} draws the rounds card again`);
+    is(!/onRoundsChange/.test(src), `the ${name} can write rounds again`);
   }
+  is(!/rounds=\{/.test(dash) && !/rounds=\{/.test(camps), 'a screen is handing rounds to the panel again');
+  is(!/roundsSavedMessage\(/.test(dash) && !/roundsSavedMessage\(/.test(camps), 'a screen is announcing a rounds save again');
 
-  /*
-   * ── AND IT FOLLOWS THE FLOOR, WHATEVER THE FLOOR IS ───────────────────
-   *
-   * Twelve used to be a CHECK in the database and a deliberate refusal to put
-   * one advertisement into one group twice in a morning, so two rounds four
-   * hours apart got the card's refusal and no number. The owner removed the
-   * floor — four times, in writing, taking responsibility for his own account
-   * — so four hours apart is now a window of four, and the card can both say
-   * it and press it.
-   *
-   * What the sweep below still proves is the COMPOSITION, and it still means
-   * something: no pair of rounds can produce a window under the floor that is
-   * actually configured. With the floor at zero that is a weaker statement
-   * than it was, which is exactly the change he asked for — and the moment an
-   * account sets a floor again, the same line tightens again with it.
-   */
-  {
-    const fix = roundsWindowFix(sched('08:00'), [r('12:00')], repeat(true, 20));
-    eq(fix.lowerTo, 4, 'two rounds four hours apart now get a window of four — there is no floor to refuse them');
-    eq(roundsVsRepeat(roundStarts(sched('08:00'), [r('12:00')]), repeat(true, 20)).reason, 'window-too-long', 'and that is the verdict the card draws');
-    /* The floor is still OBEYED when there is one: the same layout under an
-       account that kept twelve is refused exactly as before. */
-    eq(roundsWindowFix(sched('08:00'), [r('12:00')], repeat(true, 20), 12).lowerTo, null, 'an account that sets a floor of twelve still gets the refusal');
-    eq(roundsVsRepeat(roundStarts(sched('08:00'), [r('12:00')]), repeat(true, 20), 12).reason, 'closer-than-the-floor', 'with the verdict that names it');
-    /*
-     * EVERY GAP UNDER THE FLOOR, SWEPT — and what this does and does not
-     * prove, measured rather than assumed.
-     *
-     * It proves the COMPOSITION: no pair of rounds, however close, can come
-     * out of roundsWindowFix() with a window under twelve hours. That is the
-     * property that matters, and it is the one the database CHECK would
-     * otherwise have to catch at write time.
-     *
-     * It does NOT exercise the Math.max() clamp in roundsWindowFix, and I
-     * checked rather than guessing: deleting the clamp leaves this whole file
-     * green, because roundsVsRepeat answers 'closer-than-the-floor' before it
-     * ever answers 'window-too-long', so neededHours cannot be under twelve by
-     * the time the clamp sees it. The clamp is defence against that ORDER
-     * changing — and the order is pinned by section 6, which goes red on both
-     * halves of that mutation. The clamp stays; this comment is here so nobody
-     * reads the sweep as proof of it.
-     */
-    for (const at of ['08:30', '09:00', '11:00', '15:00', '19:59']) {
-      const f = roundsWindowFix(sched('08:00'), [r(at)], repeat(true, 20));
-      is(f.lowerTo === null || f.lowerTo >= MIN_REPEAT_HOURS, `a round at ${at} must never produce a window under ${MIN_REPEAT_HOURS} hours (got ${String(f.lowerTo)})`);
-    }
-  }
-
-  /* ── THE SWITCH IS HIS. Reported, never pressed. ───────────────────────── */
-  {
-    const fix = roundsWindowFix(sched('03:30'), [r('15:30')], repeat(false, 20));
-    eq(fix.repeatOff, true, 'with חזרה יומית off, a second round must be reported as unable to reach the same groups');
-    /*
-     * THE BODY, NOT THE SIGNATURE. saveCampaignRounds's parameter type names
-     * both repeat columns because the function READS them, so a check over the
-     * whole function would be satisfied by the type annotation alone and would
-     * prove nothing about what is written.
-     */
-    const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
-    const save = client.slice(client.indexOf('export async function saveCampaignRounds'), client.indexOf('export async function setCampaignRepeat('));
-    const whole = save.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    const code = whole.slice(whole.indexOf('const written ='));
-    is(save.length > 400, 'saveCampaignRounds is gone, or the function after it was renamed');
-    is(code.length > 300, 'its body could not be isolated — every check below would be vacuous');
-    is(/roundsWindowFix\(/.test(code), 'the writer must ask roundsWindowFix() rather than carrying a second copy of the arithmetic');
-    is(!/repeat_enabled/.test(code), 'and it must NEVER write repeat_enabled — pressing the owner’s switch for him is the screen overruling a choice he made');
-    is(/repeat_min_hours/.test(code), 'it does write the window, which is the one thing it is allowed to change');
-    is(/logClientActivity\(/.test(code), 'and a window the app lowered by itself must reach his history — he has no memory of choosing it');
-  }
-
-  /*
-   * ── AND A DATABASE WITHOUT THE WINDOW COLUMN MUST STILL SAVE THE ROUNDS ─
-   *
-   * PostgREST refuses the WHOLE write when one named column is absent. That is
-   * not a hypothetical: adding round_at to three screen selects blanked this
-   * owner's entire dashboard earlier this session. So the column that is not
-   * the point of the call is dropped and the write retried.
-   */
-  {
-    /*
-     * THE BODY, NOT THE SIGNATURE. saveCampaignRounds's parameter type names
-     * both repeat columns because the function READS them, so a check over the
-     * whole function would be satisfied by the type annotation alone and would
-     * prove nothing about what is written.
-     */
-    const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
-    const save = client.slice(client.indexOf('export async function saveCampaignRounds'), client.indexOf('export async function setCampaignRepeat('));
-    const whole = save.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    const code = whole.slice(whole.indexOf('const written ='));
-    is(code.length > 300, 'its body could not be isolated — every check below would be vacuous');
-    is(
-      /isMissingColumnNamed\([\s\S]{0,80}'repeat_min_hours'\)/.test(code),
-      'a database without repeat_min_hours must not lose the rounds too — the write has to be retried without it',
-    );
-    const retry = code.indexOf("update(written)");
-    is(retry > code.indexOf("'repeat_min_hours'"), 'and the retry must come after the check, writing the rounds alone');
-    is(
-      /windowLoweredTo = null;/.test(code),
-      'and the owner must not be told a window was lowered on a database that has no such column',
-    );
-  }
-
-  /* ── THE SENTENCE HE READS. One builder, both screens. ─────────────────── */
-  {
-    const m = (armed: number, res: Parameters<typeof roundsSavedMessage>[2]) => roundsSavedMessage('בוקר טוב', armed, res);
-    is(/לא נבחר אף יום פרסום/.test(m(1, { skippedNoDay: true }).text), 'no publishing day chosen is said first — nothing else matters until a day is picked');
-    eq(m(1, { skippedNoDay: true }).tone, 'info', 'and it is not celebrated as a success');
-    is(/כובו/.test(m(0, { skippedNoDay: false }).text), 'every extra round switched off says so');
-    is(/2 סבבים/.test(m(1, { skippedNoDay: false }).text), 'one extra round is TWO rounds a day — the first one counts');
-    is(/3 סבבים/.test(m(2, { skippedNoDay: false }).text), 'and two extra rounds are three');
-    /* The window, named with its number. A toast that says "saved" while a
-       setting he chose has quietly changed is the complaint this product
-       already has a name for. */
-    const lowered = m(1, { skippedNoDay: false, windowLoweredTo: 12 });
-    is(/12 שעות/.test(lowered.text), 'a window the app lowered must be named, with its number, in the toast he actually reads');
-    is(/חלון החזרה/.test(lowered.text), 'and named as what it is');
-    /* And OFF outranks it: one stops a publication, the other is a detail. */
-    const off = m(1, { skippedNoDay: false, windowLoweredTo: 12, repeatOff: true });
-    is(/חזרה יומית/.test(off.text) && /כבוי/.test(off.text), 'a repeat that is OFF must be the sentence he gets, even when a window was also lowered');
-    eq(off.tone, 'info', 'and it is not a success — a round that will not reach its groups never is');
-    /* Both screens must use it rather than writing their own. */
-    for (const rel of ['../../src/app/social/page.tsx', '../../src/app/social/campaigns/page.tsx']) {
-      const screen = readFileSync(new URL(rel, import.meta.url), 'utf8');
-      is(/roundsSavedMessage\(/.test(screen), `${rel} must build the rounds toast with the shared builder`);
-      is(!/סבבים בכל יום פרסום`/.test(screen), `${rel} must not carry its own copy of the sentence — two copies is how one screen forgets the window`);
-    }
-
-    /*
-     * ─── AND THE SCREEN MUST SHOW THE WINDOW IT JUST CHANGED ──────────────
-     *
-     * THE DASHBOARD IS THE ONLY SCREEN THAT SAVES ROUNDS TODAY, and the two
-     * assertions below are not the same kind of claim. Saying so because I
-     * nearly shipped the second one as if it were.
-     */
-    const dash = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
-    is(/rounds=\{readRounds\(run\.campaign\)\}/.test(dash), 'the dashboard must pass the campaign\u2019s rounds to the run card, or the feature is wired to nothing');
-    const saver = dash.slice(dash.indexOf('const changeRounds = useCallback'), dash.indexOf('const changeRepeat = useCallback'));
-    is(/await load\(\)/.test(saver), 'and must re-read after saving rounds, which is how its card learns the window the save lowered');
-
-    /*
-     * THE CAMPAIGNS LIST IS A PRE-EMPTIVE GUARD, NOT A MEASUREMENT.
-     *
-     * That screen has a changeRounds of its own — and nothing calls it: the
-     * list card is never passed `rounds`, and it predates this change (it is
-     * dead in HEAD too). The reason is measured and recorded in render-card
-     * .tsx: with the rounds on, the tallest fixture went 901 → 1008px at 360px
-     * against a 910px ceiling. The owner's reference puts them on the RUN
-     * card, which is where they are.
-     *
-     * So this pins the writer for the day the card can hold them. It proves
-     * the code is correct, NOT that the screen does this today — and the
-     * second assertion is what stops anyone reading it the other way.
-     */
-    const list = readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8');
-    is(
-      /repeat_min_hours: result\.windowLoweredTo/.test(list),
-      'if the campaigns screen ever saves rounds it must merge the lowered window into its own list — a poll owns that list and replaces it wholesale, so merging only the rounds column leaves the card printing the interval the save just replaced',
-    );
-    is(
-      !/rounds=\{/.test(list),
-      'the campaigns LIST card is still not passed rounds (measured: 1008px against a 910px ceiling) — the moment it is, the assertion above stops being pre-emptive and the height ceiling in campaign-card.test.ts has to be re-measured',
-    );
-  }
-}
-
-/* ── 9. THE FLOOR IS THE ACCOUNT'S NOW, AND THE TOAST STOPPED LYING ────── */
-/*
- * "את ההגנה של החזרה יומית של אותו הפוסט לאותו קבוצה יש הגנה של 12 שעות
- *  תוסיף אופציה בהגדרות לשחק עם זה." — the owner, 02.11.2026.
- *
- * WHAT HIS SCREEN WAS ACTUALLY DOING, measured by driving the real engine
- * before any of this was written: rounds at 03:30, 06:30 and 18:30 were saved
- * and armed into social_schedules.weekly; the planner created rows; and
- * evaluateQueueItem DEFERRED round two from 06:30 to 23:30 — at which point
- * that parked row is the single open row the group is allowed, so it blocked
- * round three's occasion entirely. Three rounds asked for, two delivered, one
- * of them at an hour he never chose. And the toast said
- * "יפרסם 3 סבבים בכל יום פרסום".
- */
-{
-  const r = (at: string, enabled = true) => ({ at, enabled });
-
-  /* ── the floor comes off the account, and is absent by default ───────── */
-  {
-    eq(repeatFloorFrom(null), MIN_REPEAT_HOURS, 'an account that never set a floor keeps the twelve it has always had');
-    eq(repeatFloorFrom({}), MIN_REPEAT_HOURS, 'and so does one whose settings row has no such key');
-    eq(repeatFloorFrom({ repeatFloorHours: 3 }), 3, 'the owner’s own number is what governs');
-    /*
-     * ─── ZERO IS A NUMBER NOW, AND IT IS HIS ────────────────────────────
-     *
-     * "לא הסרת את המגבלה של ה-20 שעות! תמחק את זה כבר." — 02.11.2026, after
-     * "לפתוח הכל, גם אותו פוסט". This assertion was the inverse until then:
-     * zero was raised to one hour, and this file asserted the absolute floor
-     * could never be under an hour because the column stores whole hours. v34
-     * widens the CHECK to 0..168 and zero now means what it says — no minimum
-     * at all between two publications of the same post to the same group.
-     *
-     * A NEGATIVE IS STILL NOT A NUMBER. Zero is a setting; minus nine is a
-     * mistake, and the database would refuse it anyway.
-     */
-    eq(repeatFloorFrom({ repeatFloorHours: 0 }), 0, 'zero stays zero — no minimum at all, which is what he asked for three times');
-    eq(repeatFloorFrom({ repeatFloorHours: -9 }), ABSOLUTE_MIN_REPEAT_HOURS, 'a negative is raised to the absolute floor');
-    eq(repeatFloorFrom({ repeatFloorHours: 9999 }), MAX_REPEAT_HOURS, 'and a year is the ceiling');
-    eq(repeatFloorFrom({ repeatFloorHours: 'x' } as never), MIN_REPEAT_HOURS, 'nonsense falls back to the default rather than to zero');
-    eq(ABSOLUTE_MIN_REPEAT_HOURS, 0, 'the absolute floor is zero — see its note, and v34');
-
-    /*
-     * AND THE 20 IS GONE FROM THE ONE PLACE THAT KEPT STAMPING IT. He created
-     * a campaign and the activity log said "לא יותר מפעם ב-20 שעות" two
-     * minutes later; the number came from DEFAULT_CAMPAIGN_REPEAT.minHours,
-     * which no screen and no setting could reach.
-     */
-    eq(DEFAULT_CAMPAIGN_REPEAT.minHours, MIN_REPEAT_HOURS, 'a new campaign starts on the documented default, not an undocumented twenty');
-    is(DEFAULT_CAMPAIGN_REPEAT.minHours !== 20, 'the hard-coded twenty must not come back');
-
-    /*
-     * AND A ROW WITH NO STORED WINDOW READS THE ACCOUNT'S FLOOR, not the
-     * constant — which is what made his own setting unreachable.
-     */
-    eq(readRepeat({ repeat_enabled: true } as never, 2).minHours, 2, 'an unstored window reads the account floor');
-    eq(readRepeat({ repeat_enabled: true } as never, 0).minHours, 0, 'including a floor of zero');
-    eq(readRepeat({ repeat_enabled: true } as never).minHours, MIN_REPEAT_HOURS, 'and the documented default when no floor is passed');
-
-    /* The sentence a screen prints must not read "פעם ב-0 שעות". */
-    is(/לא יותר מפעם ב-5 שעות/.test(repeatWindowSentence(5)), 'a real window is stated in hours');
-    is(!/0/.test(repeatWindowSentence(0)), 'and a window of nought is described, not printed as a number');
-  }
-
-  /* ── HIS OWN CASE, before and after ──────────────────────────────────── */
-  {
-    const his = [r('06:30'), r('18:30')];
-    /* The floor is PASSED here, 12, because that is the world this case was
-       about: his screen at the time refused the layout outright. The default
-       floor is now 0 and the same call without it answers 'window-too-long'
-       with a fix of three — which is the second half of this block. */
-    const before = roundsVsRepeat(roundStarts(sched('03:30'), his), repeat(true, 12), 12);
-    eq(before.reason, 'closer-than-the-floor', 'on a floor of twelve his three rounds cannot publish — which is what his screen was doing');
-    eq(before.smallestGapHours, 3, 'and the closest two are three hours apart');
-    /* And with no floor at all — where the product is now — the same layout
-       needs nothing but a shorter window, which the card offers. */
-    const nowAdays = roundsVsRepeat(roundStarts(sched('03:30'), his), repeat(true, 12));
-    eq(nowAdays.reason, 'window-too-long', 'with no floor the same layout is fixable');
-    eq(nowAdays.neededHours, 3, 'by lowering the window to the three hours between his rounds');
-
-    /* The setting he asked for, doing the one thing he asked it to do. */
-    const after = roundsVsRepeat(roundStarts(sched('03:30'), his), repeat(true, 3), repeatFloorFrom({ repeatFloorHours: 3 }));
-    eq(after.reason, 'ok', 'with the account floor at three hours the same layout is allowed');
-    is(after.ok, 'and the card says so');
-  }
-
-  /* ── AND THE WINDOW STILL HAS TO COME DOWN WITH IT ───────────────────── */
-  {
-    /* Floor 3, window still the default 20: the gap is legal now, so this is
-       'window-too-long' rather than 'closer-than-the-floor', and the fix
-       lowers the window to the gap — to THREE, not to twelve. */
-    const fix = roundsWindowFix(sched('03:30'), [r('06:30')], repeat(true, 20), 3);
-    eq(fix.reason, 'window-too-long', 'a legal gap against a long window is the case the app can fix by itself');
-    eq(fix.lowerTo, 3, 'and it lowers to the gap, not to the old constant — clamping to 12 here would overrule the setting he just changed');
-    eq(roundsVsRepeat(roundStarts(sched('03:30'), [r('06:30')]), repeat(true, fix.lowerTo as number), 3).reason, 'ok', 'and the result publishes');
-  }
-
-  /* ── THE VERDICT TRAVELS, WHICH IS WHAT STOPS THE TOAST LYING ────────── */
-  {
-    /* Judged against a floor of twelve, which is the case this block is about:
-       the verdict has to survive the trip to the toast. An account with no
-       floor reaches the same toast through 'window-too-long'. */
-    const fix = roundsWindowFix(sched('03:30'), [r('06:30'), r('18:30')], repeat(true, 12), 12);
-    eq(fix.reason, 'closer-than-the-floor', 'the fix must carry the verdict, or the caller cannot tell this apart from success');
-    eq(fix.lowerTo, null, 'there is nothing to lower — no window under the floor is legal');
-    eq(fix.repeatOff, false, 'and the repeat is on, so that is not the reason either');
-    eq(fix.floorHours, 12, 'and it reports the floor it judged against, so the sentence can name the number');
-
-    const said = roundsSavedMessage('ניקוי ספות', 2, { skippedNoDay: false, ...fix });
-    is(!/יפרסם 3 סבבים בכל יום פרסום$/.test(said.text), 'THE TOAST MUST NOT CLAIM THREE ROUNDS WILL PUBLISH — measured, his layout delivers two, one of them at 23:30');
-    is(/3 שעות/.test(said.text), 'it must name the gap he actually set');
-    is(/12 שעות/.test(said.text), 'and the protection that refuses it');
-    is(/בהגדרות/.test(said.text), 'and point at the setting that can change it, which is the control he asked for by name');
-    eq(said.tone, 'info', 'and it is not a success — a round that will not publish never is');
-  }
-
-  /* ── "+ הוסף סבב נוסף" MUST NOT PROPOSE AN HOUR THAT IS ALREADY TAKEN ── */
-  {
-    /*
-     * THE SECOND PRESS USED TO PROPOSE ROUND ONE'S OWN HOUR. From 03:30 it
-     * offered 15:30, then 15:30 + 12 = 27:30 which wraps to 03:30 — and
-     * roundStarts() de-duplicates it away, so the card drew a row the engine
-     * never got. A button that adds nothing while looking like it worked.
-     */
-    /* Asked WITH a floor of twelve, which is what this case is about. The
-       default floor is now 0 — the owner removed it — and the same call
-       without it keeps offering slots, which is the second half below. */
-    const first = nextFreeRoundStart(['03:30'], 12) as string;
-    is(first !== null, 'a day with one round must have somewhere to put a second');
-    is(smallestRoundGapHours(['03:30', first]) >= 12, `the proposed ${first} must clear the floor against 03:30`);
-
-    const second = nextFreeRoundStart(['03:30', first], 12);
-    eq(second, null, 'on a twelve-hour floor a day holds exactly two rounds, so the third press must be offered nothing rather than a duplicate');
-
-    /* With no floor there is always room for another round, and the slot it
-       offers is still the roomiest free one rather than one minute away. */
-    const third = nextFreeRoundStart(['03:30', '15:30']);
-    is(third !== null, 'with no floor a third round can always be placed');
-    is(smallestRoundGapHours(['03:30', '15:30', third as string]) >= 5, `and it is still spread out, not bunched (${String(third)})`);
-
-    /* And with the floor lowered, the day has room — each proposal clearing
-       the floor against EVERY existing round, not just the last one. */
-    let starts = ['03:30'];
-    for (let n = 0; n < 3; n += 1) {
-      const at = nextFreeRoundStart(starts, 3);
-      is(at !== null, `a three-hour floor must still have room after ${starts.length} rounds`);
-      is(!starts.includes(at as string), `${at} is already taken — this is the duplicate the old arithmetic produced`);
-      starts = [...starts, at as string];
-      is(
-        smallestRoundGapHours(starts) >= 3,
-        `after adding ${at} the closest pair is ${smallestRoundGapHours(starts)}h, under the three-hour floor: ${starts.join(', ')}`,
-      );
-    }
-  }
-
-  /* ── AND THE PANEL ASKS FOR A FREE HOUR RATHER THAN COMPUTING ONE ────── */
-  {
-    const panel = readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8')
-      .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ');
-    is(/nextFreeRoundStart\(starts, floorHours\)/.test(panel), 'the add button must ask for a free hour, against the account floor');
-    is(!/plusHours\(/.test(panel), 'and must not carry the wrapping arithmetic that proposed an hour already in use');
-    is(/rounds\.length < MAX_EXTRA_ROUNDS && nextFreeRoundStart\(/.test(panel), 'and must disappear when the day has no room left, rather than offering a press that does nothing');
-    /* THE SAVE BUTTON HE ASKED FOR, and the write that is no longer per-keystroke. */
-    is(/type="submit"/.test(panel), 'the round menu must carry a submit button — "אין כפתור שאני שומר את ההגדרות"');
-    is(/שמור את השעה/.test(panel), 'and it must say so in his own words');
-    is(/onSubmit=\{\(e\) => \{/.test(panel), 'and the write must happen on submit');
-    /*
-     * ─── SCOPED TO THE ROUND'S OWN FIELD, AND IT WAS NOT ──────────────────
-     *
-     * This read `!/<input\s+type="time"[\s\S]{0,400}onChange=/` across the
-     * WHOLE file, which was right while the round menu held the only time
-     * input in it. The campaign's start hour is a time input too now —
-     * "בשעת ההתחלה אני רוצה לבחור בדיוק איזה זמן שבא לי ולא בקפיצות של 30
-     * דק" — and that field has ALWAYS written live: it was a <select> whose
-     * onChange went straight to set(), and the card above debounces the save
-     * and reverts it on failure.
-     *
-     * So the old pattern would have failed on a change it has no opinion
-     * about, which is the second time tonight a guard has been found holding
-     * a mechanism rather than a requirement. The requirement is about THIS
-     * input: the one inside the round menu, named `at`, whose per-keystroke
-     * write armed a real round in social_schedules.weekly. It is now asked
-     * of exactly that tag.
-     */
-    const tags = panel.match(/<input[\s\S]*?\/>/g) ?? [];
-    const roundField = tags.filter((t) => /name="at"/.test(t));
-    is(roundField.length === 1, "the round menu still has exactly one hour field — re-point this rather than deleting it");
-    is(
-      !/onChange=/.test(roundField[0]),
-      'the ROUND time field must NOT write on change — it used to arm an intermediate hour like 01:30 into weekly while he was still typing 18:30',
-    );
-    is(/type="time"/.test(roundField[0]), 'and it is still a clock, not a list');
-
-    /*
-     * AND THE OTHER ONE IS DELIBERATE. A second time input exists now; this
-     * names it, so it cannot grow to three without somebody saying why.
-     */
-    const timeFields = tags.filter((t) => /type="time"/.test(t));
-    is(timeFields.length === 2, `two time fields in this panel: the round's hour and the campaign's start hour (found ${timeFields.length})`);
-    const startField = timeFields.find((t) => !/name="at"/.test(t)) as string;
-    is(/onChange=/.test(startField), 'the START hour does write live — its summary line updates on the spot, which is what the card promises');
-    is(/dir="ltr"/.test(startField), 'and it is an LTR island, so "06:47" is not reversed inside the RTL card');
-    is(/new FormData\(e\.currentTarget\)/.test(panel), 'and it reads its own field rather than holding a draft in state, which this panel is not allowed to do');
-    /*
-     * AND IT REFUSES AN HOUR ANOTHER ROUND ALREADY HOLDS.
-     *
-     * Measured before this guard existed: with rounds at 03:30, 06:30 and
-     * 18:30, setting the third to 06:30 produced two identical entries, and
-     * both roundsColumn() and roundStarts() de-duplicate — so the round
-     * vanished from the card AND from the database with nothing said. Worse,
-     * while the duplicate existed, one edit rewrote BOTH entries, because the
-     * handler matches rounds by their time.
-     */
-    is(/editRoundTime\(rounds, starts, at,/.test(panel), 'the save must ask editRoundTime() rather than deciding inline — an inline guard here cannot be driven, and the first one was hollow under an `if (false && …)` mutation');
-    is(/reportValidity\(\)/.test(panel), 'and must say so with the browser\u2019s own validation, which needs no state');
-  }
-
-  /* ── AND THE DECISION ITSELF, DRIVEN ─────────────────────────────────── */
-  {
-    const list = [r('06:30'), r('18:30')];
-    const starts3 = ['03:30', '06:30', '18:30'];
-
-    const moved = editRoundTime(list, starts3, '18:30', '21:00');
-    is(moved.ok, 'a free hour must be accepted');
-    eq(moved.ok && moved.rounds.map((x) => x.at), ['06:30', '21:00'], 'and only the round being edited moves');
-
-    /*
-     * THE ONE THAT COST A ROUND. Measured on the shipped card: setting round
-     * three to 06:30 produced two identical entries, roundsColumn() and
-     * roundStarts() both de-duplicated, and the round vanished from the
-     * screen and the database with nothing said.
-     */
-    const clash = editRoundTime(list, starts3, '18:30', '06:30');
-    is(!clash.ok, 'an hour another round already holds must be REFUSED, not de-duplicated into one round');
-    eq(!clash.ok && clash.reason, 'taken', 'and the reason must say which, so the screen can tell him');
-    /* Proof of what it prevents: the write the old handler would have made. */
-    eq(
-      roundsColumn(list.map((x) => (x.at === '18:30' ? { ...x, at: '06:30' } : x))).schedule_rounds.length,
-      1,
-      'the old behaviour collapsed two rounds into one on the way to the database — which is the loss this refusal exists to stop',
-    );
-
-    eq(!editRoundTime(list, starts3, '18:30', '18:30').ok && 'unchanged', 'unchanged', 'saving the same hour writes nothing');
-    eq(!editRoundTime(list, starts3, '18:30', '').ok && 'invalid', 'invalid', 'and a half-typed value is refused rather than armed');
-    /* The window's own hour counts as taken: it is in `starts` and is not an
-       extra round, so moving onto it would hide a round behind the window. */
-    eq(!editRoundTime(list, starts3, '18:30', '03:30').ok && 'taken', 'taken', "the window's own hour is taken too — a round hidden behind it is a round that never runs");
-  }
-}
-
-
-/* ── 10. THE NUMBER THE CARD NAMES IS THE NUMBER THE BUTTON WRITES ─────── */
-/*
- * "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם." — the owner, 02.11.2026.
- *
- * He lowered the account's protection to two hours in Settings. His campaign
- * has rounds at 01:30 and 23:30 — two hours apart ACROSS MIDNIGHT — against a
- * repeat window of twelve. The card re-measured his rounds against the two he
- * had just set, correctly, and then printed "הורידו את החזרה ל-2 שעות": a
- * number with NO CONTROL ANYWHERE THAT SETS IT, because the campaign's own
- * window lost its editor when the advanced queue controls came out at his
- * request. And underneath that sentence every writer clamped back to the
- * hard-coded twelve, so even a write of two was raised again on its way to the
- * database. The setting was accepted by Settings and undone by the save.
- *
- * WHAT THIS SECTION PROVES is the arithmetic and the pass-through: ONE copy of
- * "which window would let these rounds publish" (repeatFitFor), asked by both
- * the writer and the card's button so the two cannot name one number and write
- * another — and every caller handing down the account's floor instead of the
- * constant. Whether the button is drawn and reachable is a measured question
- * and belongs to the browser suite; this file owns the numbers and the wiring.
- */
-{
-  const r = (at: string, enabled = true) => ({ at, enabled });
-
-  /* ── THE ONE FIX, ON EVERY VERDICT ────────────────────────────────────── */
-  {
-    /* A window longer than the gap is the ONE case a window can fix. */
-    const long = roundsVsRepeat(['03:30', '15:30'], repeat(true, 20));
-    eq(long.reason, 'window-too-long', 'his original example is still the fixable case');
-    eq(repeatFitFor(long, MIN_REPEAT_HOURS), 12, 'and the fix is the gap — twelve hours, which is what roundsWindowFix has always written');
-
-    /* AND IT IS THE GAP, NOT THE FLOOR. On an account whose protection is two
-       hours, rounds twelve hours apart must get a window of TWELVE: lowering
-       it to the floor would be the app choosing a tighter protection than his
-       rounds need, on his Facebook account, without being asked. */
-    const wide = roundsVsRepeat(['03:30', '15:30'], repeat(true, 20), 2);
-    eq(wide.reason, 'window-too-long', 'twelve hours apart on a two-hour floor is fixable too');
-    eq(repeatFitFor(wide, 2), 12, 'and the fix is the twelve his rounds need, not the two his floor would also permit');
-    eq(repeatFitFor(roundsVsRepeat(['06:00', '20:00'], repeat(true, 20), 2), 2), 10, 'and ten for a ten-hour gap — the arithmetic is the gap, whatever the floor is');
-
-    /*
-     * THE OTHER HALF OF THE Math.max, and what it is really defending — said
-     * plainly rather than dressed up as engine output. Two things make the
-     * floor side unreachable from roundsVsRepeat(): it answers
-     * 'closer-than-the-floor' BEFORE 'window-too-long', so a fixable verdict
-     * always has smallestGapHours >= floorHours, and neededHours is
-     * Math.floor of that gap, which for an integer floor is still >= it. The
-     * clamp therefore defends against a fractional floor or a change in the
-     * order of those two branches — and the ORDER is pinned by section 5. So
-     * it is driven here on a verdict built by hand, and this comment is here
-     * so nobody reads that as the engine producing it.
-     */
-    const byHand: RoundsVerdict = { ok: false, smallestGapHours: 2.5, neededHours: 2, reason: 'window-too-long' };
-    eq(repeatFitFor(byHand, 3), 3, 'the fix never goes under the floor it was given — a window the database would refuse is not a fix');
-
-    /* ── AND NULL EVERYWHERE A WINDOW CANNOT HELP ───────────────────────── */
-    const fine = roundsVsRepeat(['03:30', '15:30'], repeat(true, 12));
-    eq(fine.reason, 'ok', 'a window that already fits');
-    eq(repeatFitFor(fine, MIN_REPEAT_HOURS), null, 'nothing to offer when both rounds already publish — a button here would rewrite a setting for no reason');
-
-    const off = roundsVsRepeat(['03:30', '15:30'], repeat(false));
-    eq(off.reason, 'repeat-off', 'the switch is off');
-    eq(repeatFitFor(off, MIN_REPEAT_HOURS), null, 'no window makes a second publication legal while חזרה יומית is off — the fix is his switch, and the card must offer THAT');
-
-    const closer = roundsVsRepeat(['08:00', '14:00'], repeat(true, 12), 12);
-    eq(closer.reason, 'closer-than-the-floor', 'six hours apart on a twelve-hour floor');
-    eq(
-      repeatFitFor(closer, MIN_REPEAT_HOURS),
-      null,
-      'rounds closer together than the account floor cannot be fixed by ANY window — a button there would write a number, the floor would still refuse the gap, and that is the decorative button one layer down',
-    );
-
-    /* ── AN OMITTED FLOOR IS THE ACCOUNT'S DEFAULT, WHATEVER IT IS ──────── */
-    const needsFive: RoundsVerdict = { ok: false, smallestGapHours: 5, neededHours: 5, reason: 'window-too-long' };
-    /* With the default floor now 0, the fit IS the gap: five hours. The old
-       expectation (twelve) was the floor raising it, and that floor is gone. */
-    eq(repeatFitFor(needsFive), 5, 'with no floor passed, the fit is the gap itself — nothing raises it any more');
-    eq(repeatFitFor(needsFive, 12), 12, 'and an account that still sets twelve gets twelve, exactly as before');
-    eq(repeatFitFor(needsFive, 2), 5, 'and an account that lowered its protection gets its own number through');
-    eq(repeatFitFor(long), repeatFitFor(long, MIN_REPEAT_HOURS), 'the default and the constant are the same answer on real engine output too');
-  }
-
-  /* ── ONE ARITHMETIC: THE WRITER AND THE CARD CANNOT DRIFT ──────────────-- */
-  {
-    /*
-     * THE ASSERTION THIS WHOLE EXPORT EXISTS FOR. roundsWindowFix() decides
-     * what the SAVE writes; repeatFitFor() decides what the BUTTON writes and
-     * what the sentence names. They were one expression copied into one place
-     * and are now one function asked twice — and this table is what stops
-     * anybody re-inlining it.
-     */
-    const table: [string, CampaignRound[], CampaignRepeat, number][] = [
-      ['03:30', [r('15:30')], repeat(true, 20), MIN_REPEAT_HOURS],
-      ['01:30', [r('23:30')], repeat(true, 12), 2],
-      ['06:00', [r('20:00')], repeat(true, 20), 2],
-      ['03:30', [r('06:30'), r('18:30')], repeat(true, 20), 3],
-      ['08:00', [r('12:00')], repeat(true, 20), MIN_REPEAT_HOURS],
-      ['03:30', [r('15:30')], repeat(false, 20), MIN_REPEAT_HOURS],
-      ['08:00', [], repeat(true, 20), MIN_REPEAT_HOURS],
-      ['03:30', [r('15:30', false)], repeat(true, 20), MIN_REPEAT_HOURS],
-      ['03:30', [r('15:30')], repeat(true, 12), MIN_REPEAT_HOURS],
-    ];
-    let offered = 0;
-    for (const [start, rounds, rep, floor] of table) {
-      const fix = roundsWindowFix(sched(start), rounds, rep, floor);
-      const fit = repeatFitFor(roundsVsRepeat(roundStarts(sched(start), rounds), rep, floor), floor);
-      const name = `${start} + [${rounds.map((x) => `${x.at}${x.enabled ? '' : ' off'}`).join(', ')}], repeat ${rep.enabled ? rep.minHours : 'off'}, floor ${floor}`;
-      eq(fix.lowerTo, fit, `the save and the card must name the same window for ${name} — one names it, the other writes it`);
-      if (fit !== null) offered += 1;
-    }
-    is(offered >= 4, `only ${offered} of the rows above produce a window at all — a table of nulls would prove nothing`);
-    /* And with BOTH floors left out, which is every caller that has not been
-       told the account's number yet. */
-    eq(
-      roundsWindowFix(sched('03:30'), [r('15:30')], repeat(true, 20)).lowerTo,
-      repeatFitFor(roundsVsRepeat(roundStarts(sched('03:30'), [r('15:30')]), repeat(true, 20))),
-      'and they agree on their defaults too, so the agreement does not depend on being passed a floor',
-    );
-  }
-
-  /* ── HIS OWN CASE, AS ARITHMETIC ───────────────────────────────────────── */
-  {
-    const floor = repeatFloorFrom({ repeatFloorHours: 2 });
-    eq(floor, 2, 'the two hours he typed into Settings survive repeatFloorFrom() — anything else and the rest of this block is about a number he never set');
-
-    const starts = roundStarts(sched('01:30'), [r('23:30')]);
-    eq(starts, ['01:30', '23:30'], 'his layout: the hour on the card and one extra round');
-
-    const his = roundsVsRepeat(starts, repeat(true, 12), floor);
-    eq(his.smallestGapHours, 2, '01:30 and 23:30 are TWO hours apart, around midnight — not twenty-two, because the campaign publishes again tomorrow');
-    eq(his.reason, 'window-too-long', 'so on his own floor the gap is legal and the campaign window is the only thing in the way');
-    eq(repeatFitFor(his, floor), 2, 'and the number the card names is two — the window his rounds actually need');
-
-    /* AND PRESSING IT GENUINELY MAKES HIS ROUNDS PUBLISHABLE. Asked of the
-       same function the card and the engine ask, not of my arithmetic about
-       it: a button that writes a number which still refuses to publish is the
-       complaint he opened with, moved one screen along. */
-    const after = roundsVsRepeat(starts, repeat(true, repeatFitFor(his, floor) as number), floor);
-    eq(after.reason, 'ok', 'after the write both of his rounds are allowed to reach the same groups');
-    is(after.ok, 'which is the whole of what he asked for');
-
-    /* And the save agrees, so the two routes to the same number cannot differ. */
-    eq(roundsWindowFix(sched('01:30'), [r('23:30')], repeat(true, 12), floor).lowerTo, 2, 'and saving his rounds would write the same two');
-
-    /*
-     * ─── THE STATE HE WAS ACTUALLY STUCK IN ────────────────────────────
-     *
-     * The same layout with the floor left at its default: his rounds are
-     * CLOSER than the protection, so no window helps and there is nothing to
-     * offer — which is why the Settings control had to exist first, and why
-     * this button must not appear here.
-     */
-    /* Judged against twelve, explicitly, because that is the world the
-       sentence above describes — the default floor is now 0. */
-    const stuck = roundsVsRepeat(starts, repeat(true, 12), 12);
-    eq(stuck.reason, 'closer-than-the-floor', 'on the old hard twelve his two hours read as too close, and no campaign setting could have answered it');
-    eq(repeatFitFor(stuck, 12), null, 'so no window is offered — the sentence points at the protection in Settings instead, which is the control he went and used');
-  }
-
-  /* ── THE PASS-THROUGH. EVERY WRITER GETS THE ACCOUNT'S FLOOR ──────────── */
-  /*
-   * These read raw source, and a raw-source guard is worth exactly what it is
-   * mutation-tested at: two guards in this suite once passed while the feature
-   * they named was deleted, because `{false && …}` leaves every string in
-   * place. Each check below was broken in src/, seen to fail with its own
-   * message, and restored.
-   */
-  {
-    /* Comments out, so a sentence ABOUT a call is never read as a call. */
-    const bare = (text: string) =>
-      text
-        .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
-        .replace(/\/\*[\s\S]*?\*\//g, ' ')
-        .replace(/(^|[^:\w])\/\/[^\n]*/g, '$1');
-
-    /* The arguments of one call, split at top-level commas. */
-    const argsAt = (text: string, open: number): string[] => {
-      const out: string[] = [];
-      let depth = 0;
-      let cur = '';
-      for (let i = open; i < text.length; i += 1) {
-        const ch = text[i];
-        if (ch === '(' || ch === '[' || ch === '{') {
-          depth += 1;
-          if (depth === 1) continue;
-        } else if (ch === ')' || ch === ']' || ch === '}') {
-          depth -= 1;
-          if (depth === 0) {
-            out.push(cur);
-            break;
-          }
-        } else if (ch === ',' && depth === 1) {
-          out.push(cur);
-          cur = '';
-          continue;
-        }
-        cur += ch;
-      }
-      return out.map((a) => a.trim()).filter((a) => a !== '');
-    };
-
-    /* ── THE TWO WRITERS THEMSELVES ─────────────────────────────────────── */
-    const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
-    {
-      const start = client.indexOf('export async function setCampaignRepeat(');
-      const next = client.indexOf('\nexport ', start + 10);
-      const fn = bare(client.slice(start, next > start ? next : undefined));
-      is(fn.length > 300, 'setCampaignRepeat could not be isolated — every check in this block would be vacuous');
-      is(
-        /repeatColumns\(repeat,\s*floorHours\)/.test(fn),
-        'setCampaignRepeat must write repeatColumns(repeat, floorHours): repeatColumns clamps UP to its floor, so writing without one raises a two-hour window back to twelve on its way to the database — "שיניתי לפחות מ-12 שעות ועדין לא נותן לפרסם" in its purest form',
-      );
-      is(!/repeatColumns\(repeat\)/.test(fn), 'and must not have a second, floorless write left beside it');
-      is(/floorHours: number = MIN_REPEAT_HOURS/.test(fn), 'and the floor is a defaulted parameter, so a caller with no settings row behaves exactly as it always has');
-    }
-    {
-      const save = bare(client.slice(client.indexOf('export async function saveCampaignRounds'), client.indexOf('export async function setCampaignRepeat(')));
-      is(save.length > 400, 'saveCampaignRounds could not be isolated — every check in this block would be vacuous');
-      is(
-        /readRepeat\(campaign,\s*floorHours\)/.test(save),
-        "saveCampaignRounds must read readRepeat(campaign, floorHours): readRepeat clamps the stored window UP to the floor it is given, so on the default it judges a two-hour window as twelve and lowers nothing the owner needs",
-      );
-      is(!/readRepeat\(campaign\)/.test(save), 'and must not read it on the default floor anywhere in that body');
-    }
-
-    /* ── AND EVERY CALL SITE, SCANNED ───────────────────────────────────── */
-    /*
-     * A SCAN, NOT A LIST OF LINES. The floor was hard-coded in eleven places
-     * at once; a guard naming the ones that were fixed would say nothing about
-     * the twelfth somebody adds next week. So every .ts/.tsx under src/ is
-     * walked and every call is counted — a new screen that forgets the floor
-     * fails this without anybody remembering to come back here.
-     */
-    const SRC = new URL('../../src/', import.meta.url);
-    const srcFiles = readdirSync(SRC, { recursive: true, encoding: 'utf8' }).filter((f) => /\.tsx?$/.test(f));
-    is(srcFiles.length > 20, `only ${srcFiles.length} source files were found under src/ — the scan below would be vacuous`);
-    /* Floors, not exact counts: a screen may legitimately stop calling one of
-       these, and lowering a number here is a deliberate act. */
-    for (const [name, atLeast] of [['setCampaignRepeat', 5], ['saveCampaignRounds', 2]] as [string, number][]) {
-      let sites = 0;
-      for (const rel of srcFiles) {
-        const text = bare(readFileSync(new URL(rel, SRC), 'utf8'));
-        const re = new RegExp(`(?<![\\w$.])${name}\\s*\\(`, 'g');
-        for (let m = re.exec(text); m; m = re.exec(text)) {
-          if (/function\s+$/.test(text.slice(Math.max(0, m.index - 40), m.index))) continue;
-          sites += 1;
-          const args = argsAt(text, m.index + m[0].length - 1);
-          is(
-            args.length >= 4,
-            `${rel}: ${name}(${args.join(', ')}) passes ${args.length} arguments and not four — without the account's floor this write clamps his window back up to ${MIN_REPEAT_HOURS}`,
-          );
-        }
-      }
-      is(sites >= atLeast, `only ${sites} call sites of ${name}( were found in src/ (expected at least ${atLeast}) — the per-site check above was vacuous`);
-    }
-
-    /* ── THE LIST SCREEN, WHICH ALREADY HAD THE NUMBER AND THREW IT AWAY ── */
-    {
-      const listSrc = bare(readFileSync(new URL('../../src/app/social/campaigns/page.tsx', import.meta.url), 'utf8'));
-      const loadStart = listSrc.indexOf('const load = useCallback');
-      const loadEnd = listSrc.indexOf('}, []);', loadStart);
-      is(loadStart > 0 && loadEnd > loadStart, 'load() could not be isolated in the campaigns screen — the check below would be vacuous');
-      is(
-        /setFloorHours\(repeatFloorFrom\(lim\)\)/.test(listSrc.slice(loadStart, loadEnd)),
-        "the campaigns screen's load() already read getLimits() and threw the repeat floor away — it must keep it, or this list goes on judging his rounds against twelve while the dashboard judges them against two",
-      );
-      is(
-        /floorHours=\{floorHours\}/.test(listSrc),
-        'and must hand that floor to the campaign card, or the same campaign reads one way on the dashboard and another in the list',
-      );
-      is(
-        /useState<number>\(MIN_REPEAT_HOURS\)/.test(listSrc),
-        'and until the first load answers it holds MIN_REPEAT_HOURS — a screen that does not yet know the account’s number must not act as though the protection were lower than it is',
-      );
-    }
-
-    /* ── THE SENTENCE, AND THE BUTTON THAT NOW ANSWERS IT ───────────────── */
-    {
-      const panel = bare(readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8'));
-      const from = panel.indexOf("verdict.reason === 'closer-than-the-floor'");
-      const to = panel.indexOf("verdict.reason === 'repeat-off'", from);
-      is(from > 0 && to > from, 'the closer-than-the-floor sentence could not be isolated in the panel — the checks below would be vacuous');
-      const sentence = panel.slice(from, to);
-      is(
-        /בפחות מ-\{floorHours\} שעות/.test(sentence),
-        'the sentence must name the floor it actually judged against — printing the constant told him the system refuses under twelve hours on the very screen that had just measured him against two',
-      );
-      is(!/MIN_REPEAT_HOURS/.test(sentence), 'and the hard-coded constant must be gone from that sentence, not merely joined by the prop');
-      /* The number named and the number written come from one call. */
-      is(/repeatFitFor\(verdict, floorHours\)/.test(panel), 'the card must ask repeatFitFor() for the window it offers, against the account floor');
-      is(
-        /onRepeatChange\(\{ \.\.\.repeat, minHours: repeatFit \}\)/.test(panel),
-        'and the button must write the very number it printed — a button labelled with one window that writes another is worse than the sentence it replaced',
-      );
-      /*
-       * AND THE TRIPWIRE FOR THE WAY THESE CHECKS GET DEFEATED. Two guards in
-       * this suite once passed while the thing they named was gone, because
-       * `{false && …}` leaves every string in the file. So the warning block
-       * is isolated and a render condition hard-wired to false is refused
-       * inside it — the one mutation a text guard cannot otherwise see. Scoped
-       * to that block rather than the file, because `false &&` elsewhere in a
-       * component is somebody else's business.
-       *
-       * WHAT THIS DOES NOT PROVE is that the button renders, is on screen and
-       * is reachable at 360px. That is measured, in the browser suite. This is
-       * a fence, not a measurement.
-       */
-      const blockFrom = panel.indexOf('verdict && !verdict.ok && (');
-      const blockTo = panel.indexOf('</button>', panel.indexOf('minHours: repeatFit'));
-      is(blockFrom > 0 && blockTo > blockFrom, 'the warning block could not be isolated in the panel — the two checks below would be vacuous');
-      const block = panel.slice(blockFrom, blockTo);
-      is(
-        /repeatFit !== null && repeat && onRepeatChange && \(/.test(block),
-        'the button must be drawn exactly when pressing it would change the answer — and a read-only caller, with no onRepeatChange, keeps the sentence that names the number instead',
-      );
-      is(
-        !/\bfalse\s*&&/.test(block),
-        'a render condition hard-wired to false is inside the warning block — that is exactly how a guard over raw source passes while the feature it names is deleted',
-      );
-    }
-  }
+  /* 4 — AND THE DATA IS STILL THERE. The guard above must not be satisfied by
+         someone having deleted the column instead. "אסור למחוק מידע." */
+  is(/schedule_rounds/.test(bare('../../src/lib/social/types.ts')), 'the schedule_rounds column was removed from the model — the values in it are the owner\'s');
+  is(/export function readRounds\(/.test(sched_), 'and the reader that can still make sense of them is gone too');
 }
 console.log(`rounds OK — ${checks} assertions over the list, the clock, the shipped slot engine and the one question the card must answer`);

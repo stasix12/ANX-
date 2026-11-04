@@ -511,8 +511,15 @@ export function roundsVsRepeat(starts: string[], repeat: CampaignRepeat, floorHo
  * the callers refuse that case before reaching here, and this returning `{}`
  * is what makes their refusal visible rather than silently arming nothing.
  */
-export function weeklyPlanFor(schedule: CampaignSchedule, rounds: CampaignRound[]): Record<string, string[]> {
-  const starts = roundStarts(schedule, rounds);
+export function weeklyPlanFor(schedule: CampaignSchedule): Record<string, string[]> {
+  /*
+   * ONE OCCASION A DAY. סבבים ביום was removed — "למחוק גם את הסבבים זה
+   * מסוכן" — so the only hour in the plan is the schedule's own. It still
+   * goes through roundStarts() rather than being written inline, for the
+   * reason the comment above gives: two copies of this arithmetic is how the
+   * two writers drifted the first time.
+   */
+  const starts = roundStarts(schedule, []);
   const weekly: Record<string, string[]> = {};
   for (const day of schedule.days) weekly[String(day)] = [...starts];
   return weekly;

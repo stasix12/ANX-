@@ -551,7 +551,7 @@
  *
  * DOES THIS HAVE TO REACH THE PC? כן, זה כל העניין — החלון נפתח שם.
  */
-export const WORKER_VERSION = '4.46.0';
+export const WORKER_VERSION = '4.47.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -982,4 +982,4 @@ export const WORKER_VERSION = '4.46.0';
 
    (types.ts moves too, for QueueItem.updated_at. It is a type; nothing
    executes it.) */
-export const WORKER_FINGERPRINT = '569b0b5d27ac2b6b';
+export const WORKER_FINGERPRINT = 'e0ba3042c408e50a';

@@ -100,8 +100,6 @@ export function CampaignCard({
   onScheduleChange,
   repeat,
   onRepeatChange,
-  rounds,
-  onRoundsChange,
   spacing,
   floorHours,
   scheduleBusy = false,
@@ -190,8 +188,6 @@ export function CampaignCard({
   repeat?: CampaignRepeat;
   onRepeatChange?: (next: CampaignRepeat) => void;
   /* סבבים ביום — pass both or neither, like the repeat above. */
-  rounds?: CampaignRound[];
-  onRoundsChange?: (next: CampaignRound[]) => void;
   /**
    * The account-wide spacing rule, which the card cannot see from the campaign
    * alone — rules.ts holds a row for the later of this and the campaign's own
@@ -666,8 +662,6 @@ export function CampaignCard({
             onChange={onScheduleChange}
             repeat={repeat}
             onRepeatChange={onRepeatChange}
-            rounds={rounds}
-            onRoundsChange={onRoundsChange}
             campaignName={campaign.name}
             disabled={scheduleBusy}
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}

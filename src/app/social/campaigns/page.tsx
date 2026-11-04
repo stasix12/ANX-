@@ -37,7 +37,7 @@ import {
   setCampaignRepeat,
   repeatRefusedText,
   syncWeeklyHours,
-  stopCampaign, saveCampaignRounds,} from '@/lib/social/client';
+  stopCampaign,} from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { MIN_REPEAT_HOURS, readRepeat, readSchedule, repeatColumns, repeatFloorFrom, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
@@ -402,7 +402,7 @@ export default function CampaignsPage() {
              * already weekly, and nothing else: it cannot create a recurrence
              * the owner did not ask for, which is what the guard protects.
              */
-            const synced = await syncWeeklyHours(campaign.id, next, readRounds(campaign));
+            const synced = await syncWeeklyHours(campaign.id, next);
             if (synced.skippedNoDay) {
               toast('השעה נשמרה, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.', 'info');
             } else if (synced.rearmed) {
@@ -570,43 +570,6 @@ export default function CampaignsPage() {
    * value into the list, the card visibly reverts mid-edit, which is the
    * complaint "שינויים בהגדרות קמפיין לא נשמרים" in its original form.
    */
-  const changeRounds = useCallback(
-    async (campaign: Campaign, next: CampaignRound[]) => {
-      setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
-      try {
-        const written = roundsColumn(next);
-        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign), floorHours);
-        /*
-         * THE LOWERED WINDOW GOES INTO THE LIST TOO, not only into the row.
-         *
-         * saveCampaignRounds may bring repeat_min_hours down so the rounds can
-         * actually publish, and this screen does not reload after a save — the
-         * poll owns `campaigns` and replaces it wholesale. Merging only
-         * `written` would leave the card showing the old interval until the
-         * next poll, which is the complaint "שינויים בהגדרות קמפיין לא
-         * נשמרים" in its original form: the value was saved and the screen
-         * went on showing the one it replaced.
-         */
-        setCampaigns((list) =>
-          (list ?? []).map((c) =>
-            c.id === campaign.id
-              ? { ...c, ...written, ...(result.windowLoweredTo !== null ? { repeat_min_hours: result.windowLoweredTo } : {}) }
-              : c,
-          ),
-        );
-        /* ONE BUILDER FOR BOTH SCREENS — see roundsSavedMessage(). It carries
-           the window the app lowered and the switch it would not press. */
-        const said = roundsSavedMessage(campaign.name, written.schedule_rounds.filter((r) => r.enabled).length, result);
-        toast(said.text, said.tone);
-      } catch (err) {
-        toast(friendlyMessage(err, 'שמירת הסבבים נכשלה.'), 'error');
-      } finally {
-        setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
-      }
-    },
-    [toast, floorHours],
-  );
-
   const changeRepeat = useCallback(
     async (campaign: Campaign, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));

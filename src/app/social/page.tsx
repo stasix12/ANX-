@@ -56,7 +56,7 @@ import {
   waitForWorkerCommand,
   type CommentTotals,
   type QueueRow,
-  type TimelineRow, saveCampaignRounds,} from '@/lib/social/client';
+  type TimelineRow,} from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { MIN_REPEAT_HOURS, readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, repeatFloorFrom, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
@@ -1152,7 +1152,7 @@ export default function SocialDashboard() {
              * already weekly, and nothing else: it cannot create a recurrence
              * the owner did not ask for, which is what the guard protects.
              */
-            const synced = await syncWeeklyHours(campaign.id, next, readRounds(campaign));
+            const synced = await syncWeeklyHours(campaign.id, next);
             if (synced.skippedNoDay) {
               toast('השעה נשמרה, אבל לא נבחר אף יום פרסום — עד שתבחרו יום, לא ייכנסו פרסומים לתור.', 'info');
             } else if (synced.rearmed) {
@@ -1366,23 +1366,6 @@ export default function SocialDashboard() {
    * intent and social_schedules.weekly is what the planner reads, so a screen
    * that wrote only the first would show two rounds and publish one.
    */
-  const changeRounds = useCallback(
-    async (campaign: Campaign, next: CampaignRound[]) => {
-      try {
-        const written = roundsColumn(next);
-        const result = await saveCampaignRounds(campaign, next, readSchedule(campaign), floorRef.current);
-        /* ONE BUILDER FOR BOTH SCREENS — see roundsSavedMessage(). It carries
-           the window the app lowered and the switch it would not press. */
-        const said = roundsSavedMessage(campaign.name, written.schedule_rounds.filter((r) => r.enabled).length, result);
-        toast(said.text, said.tone);
-        await load();
-      } catch (err) {
-        toast(friendlyMessage(err, 'שמירת הסבבים נכשלה.'), 'error');
-      }
-    },
-    [toast],
-  );
-
   const changeRepeat = useCallback(
     async (campaign: Pick<Campaign, 'id' | 'name'>, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
@@ -1967,8 +1950,6 @@ export default function SocialDashboard() {
                      against the number in Settings — "תוסיף אופציה בהגדרות
                      לשחק עם זה" — rather than the old hard-coded twelve. */
                   floorHours={repeatFloorFrom(data.limits)}
-                  rounds={readRounds(run.campaign)}
-                  onRoundsChange={(next) => void changeRounds(run.campaign, next)}
                   scheduleBusy={Boolean(scheduleBusy[run.campaign.id])}
                 />
               ))}

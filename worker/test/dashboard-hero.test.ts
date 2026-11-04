@@ -512,14 +512,24 @@ async function main(): Promise<void> {
         assert.equal(c.small, 0, `${at}: a control under the 40px floor`);
         assert.deepEqual(c.clipped, [], `${at}: text this product wrote was cut off`);
         /*
-         * THE ROUNDS CARD, ON THE MAIN PAGE, WITHOUT A TAP — and exactly one
-         * of it. A card with no schedule draws no block at all, which is the
-         * backward-compatibility case handled just below.
+         * AND NO ROUNDS CARD, WHICH IS THE OPPOSITE OF WHAT THIS LINE ASKED
+         * FOR UNTIL TODAY.
+         *
+         * It used to require exactly one סבבים ביום card here, because the
+         * owner had reported the feature missing while it sat behind "ערוך
+         * מועד". He has since removed the feature itself: "למחוק גם את
+         * הסבבים זה מסוכן" — it is the one control that multiplies how fast
+         * an account posts, and Facebook rate-limited his account days
+         * earlier. Measured in the browser rather than grepped, because a
+         * card can come back through a prop as easily as through markup.
          */
         if (c.hasBoard) {
-          assert.equal(c.roundsCard, 1, `${at}: expected exactly one סבבים ביום card on the run card, got ${c.roundsCard} — the owner reported this feature missing while it sat behind "ערוך מועד"`);
-          assert.ok(c.roundsTitled, `${at}: [data-rounds-card] is there but does not carry the card's own title — the attribute moved and the count above now proves nothing`);
-          assert.ok(c.roundsInside, `${at}: the סבבים ביום card escapes the run card's own box`);
+          assert.equal(c.roundsCard, 0, `${at}: a סבבים ביום card is on the run card again — got ${c.roundsCard}`);
+          /* The two lines that followed — "the attribute carries the card's
+             own title" and "the card does not escape its box" — were about a
+             card that is gone. Zero is zero; there is nothing left to place
+             or to title, and keeping them would be two assertions about an
+             element that never renders. */
         } else {
           assert.equal(c.roundsCard, 0, `${at}: a card with no schedule must draw no rounds card either`);
         }

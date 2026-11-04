@@ -186,12 +186,16 @@ for (const [name, page] of SCREENS) {
   is(/\}, \[data\?\.limits\]\);/.test(page), 'in an effect keyed on those settings, so it follows a change rather than a render');
 
   /*
-   * THE WRITERS TAKE IT FROM THE REF. Both of these write repeat_min_hours —
-   * setCampaignRepeat through repeatColumns, saveCampaignRounds through its
-   * window fix — and repeatColumns CLAMPS UP to whatever floor it is handed,
-   * so a stale twelve here is not a wrong label, it is a wrong row.
+   * THE WRITER TAKES IT FROM THE REF. It writes repeat_min_hours through
+   * repeatColumns, which CLAMPS UP to whatever floor it is handed, so a stale
+   * twelve here is not a wrong label, it is a wrong row.
+   *
+   * ONE WRITER NOW, NOT TWO. saveCampaignRounds was the other, and it is gone
+   * with סבבים ביום — "למחוק גם את הסבבים זה מסוכן". The list is kept as a
+   * loop rather than flattened to a single check, so the day a second writer
+   * of this column appears it is added here instead of being forgotten.
    */
-  for (const call of ['setCampaignRepeat', 'saveCampaignRounds']) {
+  for (const call of ['setCampaignRepeat']) {
     const re = new RegExp(`await ${call}\\([^;]*floorRef\\.current`);
     is(re.test(page), `${call} on the dashboard takes the floor from the ref, read at the moment of the tap`);
   }

@@ -722,7 +722,10 @@ const st = (
    * worker/test/rounds.test.ts owns what the builder produces, including the
    * case this line used to cover: no extra rounds, exactly one occasion.
    */
-  is(/weeklyPlanFor\(schedule, /.test(client), 'the weekly plan must be built from the campaign’s own hours through the one shared builder');
+  /* One argument now — סבבים ביום is gone, so the builder takes the schedule
+     and nothing else. The claim is unchanged: one builder, never an inline
+     copy of the arithmetic. */
+  is(/weeklyPlanFor\(schedule\)/.test(client), 'the weekly plan must be built from the campaign’s own hours through the one shared builder');
   is(
     /for \(const day of schedule\.days\) weekly\[String\(day\)\] = \[\.\.\.starts\];/.test(code('src/lib/social/campaign-schedule.ts')),
     'and that builder still writes one entry per CHOSEN day — a plan for a day the owner did not pick is a publication he did not ask for',

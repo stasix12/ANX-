@@ -1284,17 +1284,16 @@ export function repeatRefusedText(name: string, refused?: 'archived' | 'unknown'
  */
 export async function syncWeeklyHours(
   campaignId: string,
-  schedule: CampaignSchedule,
   /*
-   * REQUIRED, AND DELIBERATELY NOT DEFAULTED TO [].
+   * THE ROUNDS ARGUMENT IS GONE, AND ITS WARNING WITH IT.
    *
-   * This function REPLACES social_schedules.weekly. A default of [] would mean
-   * any caller that forgot the rounds silently deleted every extra occasion
-   * the owner had set, on the next unrelated save — the exact silent-loss
-   * shape this product keeps being bitten by. Required, so the typecheck finds
-   * every caller instead of the owner finding it in a week.
+   * It used to be required and deliberately not defaulted to [], because a
+   * caller that forgot it would silently delete every extra occasion the
+   * owner had set. There are no extra occasions any more — סבבים ביום was
+   * removed — so the plan is the schedule's own hour and nothing else, and
+   * there is no longer anything a caller can forget.
    */
-  rounds: CampaignRound[],
+  schedule: CampaignSchedule,
 ): Promise<{ rearmed: number; skippedNoDay: boolean }> {
   if (!schedule.days.length) return { rearmed: 0, skippedNoDay: true };
 
@@ -1313,7 +1312,7 @@ export async function syncWeeklyHours(
      used to hold a copy each, four lines apart, with a comment claiming they
      could not drift; the moment a campaign has more than one occasion a day,
      whichever of them ran last decided how many it had. */
-  const weekly = weeklyPlanFor(schedule, rounds) as WeeklyPlan;
+  const weekly = weeklyPlanFor(schedule) as WeeklyPlan;
   const wanted = JSON.stringify(weekly);
 
   const stale = rows.filter((r) => JSON.stringify(r.weekly ?? {}) !== wanted).map((r) => r.id);
@@ -1328,130 +1327,22 @@ export async function syncWeeklyHours(
   return { rearmed: stale.length, skippedNoDay: false };
 }
 
-/**
- * ─── סבבים ביום (ריצות): SAVE THE HOURS, THEN RE-ARM THE PLAN ────────────
+/*
+ * ─── סבבים ביום (ריצות) — THE WRITER IS GONE WITH THE CONTROL ────────────
  *
- * Two writes, in this order, and the order is the point: the column is the
- * owner's intent and social_schedules.weekly is what the engine reads. A card
- * that wrote only the first would show two rounds and publish one.
+ * "למחוק גם את הסבבים זה מסוכן."
  *
- * IT SAYS WHEN IT CANNOT SAVE. schedule_rounds arrives with
- * supabase/social-latest.sql; until that is run PostgREST answers PGRST204 and
- * every update throws something that means nothing to the person reading it.
- * This turns that one case into the sentence that names the file — the same
- * discipline as createSchedule's missing-column retry above, and the reason no
- * screen in this product ever names a numbered migration.
+ * saveCampaignRounds() and RoundsColumnMissing lived here. They wrote
+ * `schedule_rounds` and rebuilt the weekly plan from it, which is how one
+ * campaign came to publish more than once a day. The owner removed the
+ * feature after Facebook rate-limited the account, and a writer nothing calls
+ * is how a removed feature comes back: the column is still there, so anything
+ * that could still fill it is a loaded gun.
+ *
+ * The COLUMN and every value in it are untouched — "אסור למחוק מידע". They
+ * are simply never read and never written again, exactly like `schedule_end`
+ * since the closing hour was removed.
  */
-export class RoundsColumnMissing extends Error {
-  constructor() {
-    super('כדי להפעיל סבבים ביום צריך להריץ פעם אחת את supabase/social-latest.sql ב-Supabase. זה מוסיף עמודה ריקה אחת ולא נוגע בשום קמפיין קיים.');
-    this.name = 'RoundsColumnMissing';
-  }
-}
-
-export async function saveCampaignRounds(
-  /* The two repeat columns come in on the row rather than being read back:
-     adding a round can only publish if the repeat window is no longer than the
-     gap between the rounds, and the callers already hold the whole campaign. */
-  campaign: Pick<Campaign, 'id' | 'name'> & Partial<Pick<Campaign, 'repeat_enabled' | 'repeat_min_hours'>>,
-  rounds: CampaignRound[],
-  schedule: CampaignSchedule,
-  /* The account's repeat floor. Defaulted so an older caller behaves exactly
-     as it did, and passed by the screens so the save judges the layout
-     against the same number the card drew its verdict from. */
-  floorHours: number = MIN_REPEAT_HOURS,
-): Promise<{
-  rearmed: number;
-  skippedNoDay: boolean;
-  windowLoweredTo: number | null;
-  repeatOff: boolean;
-  reason: RoundsVerdict['reason'];
-  smallestGapHours: number;
-  floorHours: number;
-}> {
-  const written = roundsColumn(rounds);
-
-  /*
-   * ─── AND THE WINDOW HAS TO COME DOWN TO THE HOURS HE PICKED ─────────────
-   *
-   * "יש לממש את הפונקציונליות בפועל ולא ליצור כפתורים דקורטיביים."
-   *
-   * This is the line between a feature and a decoration, and it is one
-   * subtraction. rules.ts refuses a second publication of one post to one
-   * group inside repeat_min_hours, whose default is 20. The owner's own
-   * example is 03:30 and 15:30 — twelve hours apart. So with the default left
-   * alone, round two opens, builds a queue of two hundred rows, shows a
-   * progress bar, and DEFERS every single one of them to 23:30, which is
-   * outside his publishing window, where they defer again until MAX_DEFERRALS
-   * throws them away. A round that publishes nothing, with a queue and a bar
-   * and a status, is exactly the decorative button he forbade.
-   *
-   * So saving rounds lowers the window to the smallest gap between them — and
-   * NOT BELOW `floorHours`, which is the account's own protection from
-   * Settings (repeatFloorHours, defaulting to MIN_REPEAT_HOURS) and a database
-   * CHECK of one hour. It used to be a hard twelve in both places; the owner
-   * asked to be able to move it — "תוסיף אופציה בהגדרות לשחק עם זה" — so the
-   * refusal to put one advertisement into one group twice in a morning is now
-   * HIS number rather than ours, stated on the Settings screen with its
-   * consequence beside it. The card states the arithmetic (roundsVsRepeat),
-   * the toast says what changed, and the activity log records it. Nothing
-   * here is silent.
-   *
-   * WHAT IT DOES NOT DO IS PRESS HIS SWITCH. If חזרה יומית is OFF, round two
-   * cannot reach a group round one already reached, and no amount of window
-   * arithmetic changes that — turning the switch on for him would be the
-   * screen overruling a choice he made. It is reported instead, as `repeatOff`,
-   * and the card draws the switch beside the sentence.
-   */
-  const repeat = readRepeat(campaign, floorHours);
-  const fix = roundsWindowFix(schedule, written.schedule_rounds, repeat, floorHours);
-  const { lowerTo, repeatOff } = fix;
-
-  const patch: Record<string, unknown> = { ...written };
-  if (lowerTo !== null) patch.repeat_min_hours = lowerTo;
-
-  let res = await db().from('social_campaigns').update(patch).eq('id', campaign.id);
-  /*
-   * A DATABASE WITHOUT repeat_min_hours MUST STILL SAVE THE ROUNDS. PostgREST
-   * refuses the WHOLE write when one named column is absent, and that is how
-   * this product took its own dashboard down once this session. So the one
-   * column that is not the point of the call is dropped and the write retried;
-   * the rounds reach the database either way.
-   */
-  let windowLoweredTo = lowerTo;
-  if (res.error && lowerTo !== null && isMissingColumnNamed(res.error as { code?: string; message?: string }, 'repeat_min_hours')) {
-    windowLoweredTo = null;
-    res = await db().from('social_campaigns').update(written).eq('id', campaign.id);
-  }
-  if (res.error) {
-    if (isMissingColumnNamed(res.error as { code?: string; message?: string }, 'schedule_rounds')) throw new RoundsColumnMissing();
-    throw new Error(res.error.message);
-  }
-
-  if (windowLoweredTo !== null) {
-    await logClientActivity(
-      'info',
-      'campaign_repeat_window',
-      `חלון החזרה של "${campaign.name}" הורד ל-${windowLoweredTo} שעות כדי שכל הסבבים יפרסמו`,
-      { campaignId: campaign.id },
-    );
-  }
-
-  /* The hours the engine will actually walk — same builder, same list. A
-     round that is switched off is in the column and not in the plan. */
-  const synced = await syncWeeklyHours(campaign.id, schedule, written.schedule_rounds);
-  /* Reported, not fixed: more than one round over the same groups needs the
-     daily repeat armed, and that switch is his. */
-  /*
-   * THE VERDICT GOES BACK TO THE SCREEN, and it did not before.
-   *
-   * 'closer-than-the-floor' was invisible to the caller — lowerTo null,
-   * repeatOff false, indistinguishable from success — so the toast said
-   * "יפרסם 3 סבבים בכל יום פרסום" over a layout measured to publish two, one
-   * of them at an hour the owner never chose.
-   */
-  return { ...synced, windowLoweredTo, repeatOff, reason: fix.reason, smallestGapHours: fix.smallestGapHours, floorHours: fix.floorHours };
-}
 
 export async function setCampaignRepeat(
   /* `schedule_rounds` is in the parameter rather than read back here: arming
@@ -1550,7 +1441,7 @@ export async function setCampaignRepeat(
   /* The same builder syncWeeklyHours uses, and the rounds come off the campaign
      row this function was already handed — so arming the repeat cannot quietly
      flatten a campaign's second round. */
-  const weekly = weeklyPlanFor(schedule, readRounds(campaign)) as WeeklyPlan;
+  const weekly = weeklyPlanFor(schedule) as WeeklyPlan;
 
   let armed = 0;
   let needsLaunch = 0;

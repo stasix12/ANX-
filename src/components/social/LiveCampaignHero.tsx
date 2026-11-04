@@ -266,8 +266,6 @@ export function LiveCampaignHero({
   onScheduleChange,
   repeat,
   onRepeatChange,
-  rounds,
-  onRoundsChange,
   spacing,
   floorHours,
   scheduleBusy = false,
@@ -330,8 +328,6 @@ export function LiveCampaignHero({
    */
   repeat?: CampaignRepeat;
   /* סבבים ביום — the dashboard draws the same panel, so it carries the same pair. */
-  rounds?: CampaignRound[];
-  onRoundsChange?: (next: CampaignRound[]) => void;
   onRepeatChange?: (next: CampaignRepeat) => void;
   /**
    * The account-wide spacing rule, which the card cannot see from the campaign
@@ -669,8 +665,6 @@ export function LiveCampaignHero({
                 onChange={onScheduleChange}
                 repeat={repeat}
                 onRepeatChange={onRepeatChange}
-                rounds={rounds}
-                onRoundsChange={onRoundsChange}
                 /* The per-round figures, off the rows this state was built from.
                    Absent when the state came from the rollup's status counts,
                    which cannot be split by round — and absence is drawn as

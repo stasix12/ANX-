@@ -71,8 +71,11 @@ const sync = client.slice(client.indexOf('export async function syncWeeklyHours'
    * that drift are two different publishing hours for one round, and with
    * סבבים ביום they would also be two different NUMBERS of rounds a day.
    */
+  /* `weeklyPlanFor(schedule)` — one argument now. סבבים ביום was removed
+     ("למחוק גם את הסבבים זה מסוכן"), so the builder no longer takes rounds;
+     the drift this counts against is unchanged, and so is the count. */
   eq(
-    (client.match(/weeklyPlanFor\(schedule, /g) ?? []).length,
+    (client.match(/weeklyPlanFor\(schedule\)/g) ?? []).length,
     2,
     'syncWeeklyHours and setCampaignRepeat must both build the weekly plan through weeklyPlanFor — two copies that drift are two different publishing hours for one round',
   );
@@ -103,20 +106,23 @@ for (const [name, rel] of [
 ] as const) {
   const page = code(src(rel));
   is(
-    /if \(!repeat\.enabled\) \{[\s\S]{0,400}await syncWeeklyHours\(campaign\.id, next, readRounds\(campaign\)\)/.test(page),
+    /if \(!repeat\.enabled\) \{[\s\S]{0,400}await syncWeeklyHours\(campaign\.id, next\)/.test(page),
     `${name} must sync the active weekly row when the repeat switch is OFF — that is exactly the state his bug lives in`,
   );
   /*
-   * THE THIRD ARGUMENT IS NOT COSMETIC, so it is pinned rather than skipped
-   * over with a wildcard. syncWeeklyHours REPLACES social_schedules.weekly;
-   * called without the campaign's extra rounds it would delete every סבב the
-   * owner had added, on the next unrelated save of the hour. It is a required
-   * parameter in client.ts for the same reason — so the typecheck finds a
-   * caller that forgot, instead of the owner finding it a week later.
+   * THE THIRD ARGUMENT IS GONE, AND SO IS WHAT IT PROTECTED.
+   *
+   * It used to be pinned here rather than skipped over with a wildcard:
+   * syncWeeklyHours REPLACES social_schedules.weekly, and calling it without
+   * the campaign's extra rounds deleted every סבב the owner had added on the
+   * next unrelated save of the hour. There are no extra rounds any more —
+   * "למחוק גם את הסבבים זה מסוכן" — so the pin inverts: a screen that goes
+   * back to reading them is a screen that can put extra hours in the plan
+   * again, with no control on any card to show it.
    */
   is(
-    /readRounds\(campaign\)/.test(page),
-    `${name} must hand syncWeeklyHours the campaign's extra rounds — without them, saving the hour deletes every סבב ביום the owner set`,
+    !/readRounds\(campaign\)/.test(page),
+    `${name} is reading the stored rounds again — that is the path the extra publishing hours came back through`,
   );
 
   /* And the original guard must survive: with the switch ON, setCampaignRepeat
@@ -126,7 +132,7 @@ for (const [name, rel] of [
     `${name} must still re-arm through setCampaignRepeat when the switch is ON — it creates the row a never-repeated round has none of`,
   );
   is(
-    page.indexOf('syncWeeklyHours(campaign.id, next, readRounds(campaign))') < page.indexOf('setCampaignRepeat(campaign, repeat, next'),
+    page.indexOf('syncWeeklyHours(campaign.id, next)') < page.indexOf('setCampaignRepeat(campaign, repeat, next'),
     `${name}: the two branches must be exclusive, not both writing the same row`,
   );
 }

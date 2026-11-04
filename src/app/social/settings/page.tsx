@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
+import { ScreenProbe } from '@/components/social/ScreenProbe';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, InfoDot, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, loadAdminPresence, saveSetting, setPaused } from '@/lib/social/client';
@@ -653,6 +654,15 @@ export default function SettingsPage() {
                   ולהפך.
                 </p>
               </Card>
+
+              {/*
+                WHAT THE DEVICE GIVES THE APP. Admin only, like the two cards
+                above it: it answers a question no amount of reading this
+                repository can answer — whether a strip of empty screen is
+                inside our layout viewport (ours to use) or outside it (the
+                browser's, and unreachable from CSS). See ScreenProbe.
+              */}
+              <ScreenProbe />
             </>
           )}
 

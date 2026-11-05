@@ -101,6 +101,7 @@ export function CampaignCard({
   repeat,
   onRepeatChange,
   spacing,
+  onAccountGapChange,
   floorHours,
   scheduleBusy = false,
 }: {
@@ -197,6 +198,10 @@ export function CampaignCard({
    * than newly wrong.
    */
   spacing?: AccountSpacing;
+  /** Writes the ACCOUNT's gap — the only one the engine enforces. Without it
+      this card shows the account's number and writes the campaign's, which is
+      the two screens disagreeing. See the panel's prop of the same name. */
+  onAccountGapChange?: (seconds: number) => void;
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
@@ -665,6 +670,7 @@ export function CampaignCard({
             campaignName={campaign.name}
             disabled={scheduleBusy}
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
+            onAccountGapChange={onAccountGapChange}
             /* The account's own repeat floor, so the card judges the rounds
                against the number in Settings rather than a constant. */
             floorHours={floorHours}

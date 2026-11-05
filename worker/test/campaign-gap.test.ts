@@ -327,7 +327,9 @@ async function main(): Promise<void> {
     const panel = bare('../../src/components/social/CampaignSchedulePanel.tsx');
     const dash = bare('../../src/app/social/page.tsx');
     const hero = bare('../../src/components/social/LiveCampaignHero.tsx');
-    for (const [name, src] of [['panel', panel], ['dashboard', dash], ['hero', hero]] as const) {
+    const card = bare('../../src/components/social/CampaignCard.tsx');
+    const camps = bare('../../src/app/social/campaigns/page.tsx');
+    for (const [name, src] of [['panel', panel], ['dashboard', dash], ['hero', hero], ['card', card], ['campaigns', camps]] as const) {
       assert.ok(src.length > 2000, `${name} did not load — ${src.length} chars, and every check below would pass on emptiness`);
     }
 
@@ -363,6 +365,27 @@ async function main(): Promise<void> {
       /gapSeconds: seconds/.test(handler),
       'and the campaign column must be written to the same number — plan.ts takes max(account, campaign), and two numbers disagreeing is the fault being fixed',
     );
+
+    /* 2b — BOTH SCREENS, OR THEY DISAGREE.
+     *
+     * "שעת פרסום ותזמון הפוסטים לא מסונכרן בן מסך פרסום קמפיינים לבין המסך
+     *  הראשי."
+     *
+     * The campaigns list already handed the card accountFloorSeconds, so it
+     * SHOWED the account's gap — and went on writing the campaign's column,
+     * which the engine never reads. A gap set there reverted on the next read
+     * while the same field on the dashboard stuck. Two screens, one field,
+     * one writer.
+     */
+    assert.ok(/onAccountGapChange=\{onAccountGapChange\}/.test(card), 'the campaigns card must pass the account-gap handler through');
+    assert.ok(/onAccountGapChange=\{\(sec\) => void changeAccountGap\(/.test(camps), 'and the campaigns screen must wire it');
+    assert.ok(/const floor = await applyGapFloor\(seconds\);/.test(camps), 'with the same symmetric write the dashboard makes');
+    assert.ok(!/applyGapFloor\(seconds, \{ lowerOnly/.test(camps), 'the campaigns screen is lowering only — raising would be refused in silence');
+    for (const [name, src] of [['dashboard', dash], ['campaigns', camps]] as const) {
+      const h = src.slice(src.indexOf('const changeAccountGap'), src.indexOf('const changeRepeat'));
+      assert.ok(h.length > 200, `${name}: the handler could not be isolated — the order check below would be vacuous`);
+      assert.ok(h.indexOf('applyGapFloor') < h.indexOf('changeSchedule'), `${name}: the account floor must be written before the campaign save`);
+    }
 
     /* 3 — AND THE ENGINE STILL READS ONLY THE ACCOUNT'S. This is the fact the
            whole change rests on; if it ever stops being true, the card goes

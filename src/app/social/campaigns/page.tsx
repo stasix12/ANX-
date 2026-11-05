@@ -37,7 +37,8 @@ import {
   setCampaignRepeat,
   repeatRefusedText,
   syncWeeklyHours,
-  stopCampaign,} from '@/lib/social/client';
+  stopCampaign,
+  applyGapFloor,} from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { MIN_REPEAT_HOURS, readRepeat, readSchedule, repeatColumns, repeatFloorFrom, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
@@ -570,6 +571,31 @@ export default function CampaignsPage() {
    * value into the list, the card visibly reverts mid-edit, which is the
    * complaint "שינויים בהגדרות קמפיין לא נשמרים" in its original form.
    */
+  /*
+   * THE SAME WRITE THE DASHBOARD MAKES — see its changeAccountGap.
+   *
+   * This screen already SHOWED the account's gap (it hands the card
+   * accountFloorSeconds) while still writing the campaign's column, so a gap
+   * changed here reverted on the next read and the two screens disagreed:
+   * "שעת פרסום ותזמון הפוסטים לא מסונכרן בן מסך פרסום קמפיינים לבין המסך
+   * הראשי". One field, one number, one writer, on both screens.
+   */
+  const changeAccountGap = useCallback(
+    async (campaign: Campaign, seconds: number) => {
+      try {
+        const floor = await applyGapFloor(seconds);
+        await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: seconds });
+        toast(
+          `המרווח בין פרסומים עודכן ל-${accountGapLabel(floor.minGapSeconds + floor.groupMinGapSeconds)} — זה חל על כל הסבבים בחשבון, לא רק על זה.`,
+          'info',
+        );
+      } catch (err) {
+        toast(friendlyMessage(err, 'עדכון המרווח נכשל.'), 'error');
+      }
+    },
+    [changeSchedule, toast],
+  );
+
   const changeRepeat = useCallback(
     async (campaign: Campaign, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
@@ -989,6 +1015,8 @@ export default function CampaignsPage() {
                 schedule={scheduleOf(c)}
                 onScheduleChange={(next) => changeSchedule(c, next)}
                 spacing={spacing}
+                /* The gap is the ACCOUNT's — see changeAccountGap. */
+                onAccountGapChange={(sec) => void changeAccountGap(c, sec)}
                 repeat={readRepeat(c, floorHours)}
                 onRepeatChange={(next) => void changeRepeat(c, next)}
                 /* The account's own protection from Settings, so this list

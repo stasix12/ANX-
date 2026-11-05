@@ -228,6 +228,8 @@ const KIND: Record<string, ActivityKind> = {
      the schedule was deliberately left open, and the next pass writes them.
      The `plan_failed` row in the same pass is the red one. */
   plan_retry: 'schedule',
+  plan_targets_gone: 'schedule',
+  plan_targets_unverified: 'schedule',
   cancelled: 'schedule',
   manual_pending: 'schedule',
   plan_targets_skipped: 'schedule',

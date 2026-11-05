@@ -513,15 +513,61 @@ async function dismissDiscoveredFor(ids: string[]): Promise<void> {
   }
 }
 
+/**
+ * ─── A DELETED GROUP MUST LEAVE THE ROUNDS THAT LISTED IT ─────────────────
+ *
+ * "לעתיד קבוצות שמחקתי שיזהה אותם ולא יעתקב אליהם בסבב הבא."
+ *
+ * `social_schedules.target_ids` is a plain uuid[] with no foreign key, so
+ * deleting a group left its id in every round that had ever included it.
+ * `social_queue.target_id` DOES have one, with ON DELETE CASCADE — the
+ * group's queued rows go with it, and every later attempt to plan a new one
+ * is refused by the database:
+ *
+ *     insert or update on table "social_queue"
+ *     violates foreign key constraint "social_queue_target_id_fkey"
+ *
+ * Measured on the owner's live database on 05/11: ten deleted groups across
+ * two active rounds, `failed=14` and `failed=6` written to the activity log
+ * once a minute, for ever, under a sentence claiming the database could not
+ * be reached.
+ *
+ * AFTER THE DELETE, NEVER BEFORE. If this ran first and the delete then
+ * failed, a round would have lost a group that still exists — the one
+ * outcome worse than the bug. And it never throws: the owner's action
+ * succeeded, the clean-up is housekeeping, and plan.ts skips a stale id
+ * anyway (liveTargetIds). Silence here costs a line in the log, not a
+ * publication.
+ */
+async function forgetTargetsInSchedules(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  try {
+    const rows = unwrap<{ id: string; target_ids: string[] | null }[]>(
+      await db().from('social_schedules').select('id, target_ids').overlaps('target_ids', ids),
+    );
+    const gone = new Set(ids);
+    for (const row of rows ?? []) {
+      const listed = row.target_ids ?? [];
+      const kept = listed.filter((t) => !gone.has(t));
+      if (kept.length === listed.length) continue;
+      await db().from('social_schedules').update({ target_ids: kept }).eq('id', row.id);
+    }
+  } catch {
+    /* See the note above: plan.ts no longer fails on a stale id. */
+  }
+}
+
 export async function bulkDeleteTargets(ids: string[]): Promise<void> {
   if (!ids.length) return;
   await dismissDiscoveredFor(ids);
   unwrap(await db().from('social_targets').delete().in('id', ids));
+  await forgetTargetsInSchedules(ids);
 }
 
 export async function deleteTarget(id: string): Promise<void> {
   await dismissDiscoveredFor([id]);
   unwrap(await db().from('social_targets').delete().eq('id', id));
+  await forgetTargetsInSchedules([id]);
 }
 
 export async function getAccount(): Promise<SocialAccount | null> {

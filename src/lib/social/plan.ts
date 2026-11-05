@@ -143,6 +143,34 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
 
   const { data: schedules, error } = await db.from('social_schedules').select('*').eq('active', true);
   if (error) throw new Error(error.message);
+  /*
+   * ─── GROUPS THAT NO LONGER EXIST ARE NOT PLANNED FOR ───────────────────
+   *
+   * "לעתיד קבוצות שמחקתי שיזהה אותם ולא יעתקב אליהם בסבב הבא."
+   *
+   * A schedule's `target_ids` is a plain uuid[] with no foreign key of its
+   * own, so deleting a group leaves its id sitting in every schedule that
+   * listed it. `social_queue.target_id` DOES have one, with ON DELETE
+   * CASCADE — so the group's queue rows go, and every later attempt to write
+   * a new one is refused:
+   *
+   *     insert or update on table "social_queue"
+   *     violates foreign key constraint "social_queue_target_id_fkey"
+   *
+   * Measured on the owner's live database on 05/11: ten deleted groups across
+   * two active schedules produced `failed=14` and `failed=6` in the activity
+   * log once a minute, for ever, and the line above them claimed the database
+   * could not be reached — which is what sent two people hunting a connection
+   * problem that did not exist.
+   *
+   * ONE READ PER PASS, for every schedule at once. The ids are then filtered
+   * before the slot maths, so a round of 252 groups with 7 deleted plans 245
+   * slots instead of planning 252 and losing 7 of them to an error.
+   */
+  const live = await liveTargetIds(
+    db,
+    [...new Set(((schedules ?? []) as Schedule[]).flatMap((s) => s.target_ids ?? []))],
+  );
   let created = 0;
   /*
    * ROWS THAT BUILT A ROUND, as opposed to rows that TOPPED ONE UP.
@@ -274,7 +302,36 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
       spacingSeconds,
       campaignSchedule?.enabled ? campaignSchedule.gapSeconds : 0,
     );
-    const plannedSlots = slots.map((slot) => windowedStagger(slot, schedule.target_ids.length, stampGapSeconds, campaignSchedule));
+    /* The groups this schedule can actually publish to — see liveTargetIds().
+       `missingTargets` is what the owner deleted and nothing cleaned up. */
+    const listedTargets = schedule.target_ids ?? [];
+    const presentTargets = listedTargets.filter((id) => live.has(id));
+    const absentTargets = listedTargets.length - presentTargets.length;
+    /*
+     * AND A SECOND RAIL, BECAUSE THE FIRST ONE IS PER CHUNK.
+     *
+     * A partial read — one chunk answered, the next refused — can still make
+     * a large share of a round look deleted. The owner's real case was seven
+     * groups of 252 and three of 56; a filter that wants to remove half a
+     * round has not found deletions, it has found a read it should not trust.
+     *
+     * Above the ceiling the stored list is used unchanged. The foreign-key
+     * errors come back, which is noisy and visible and exactly what this
+     * change set out to remove — and that is the right trade: noise is
+     * recoverable, a round that quietly publishes to nobody is not.
+     */
+    const tooManyMissing = absentTargets > Math.max(1, Math.floor(listedTargets.length / 5));
+    const targetIds = tooManyMissing ? listedTargets : presentTargets;
+    const missingTargets = tooManyMissing ? 0 : absentTargets;
+    if (tooManyMissing) {
+      await note(
+        'warn',
+        'plan_targets_unverified',
+        `לא הצלחנו לאמת אילו קבוצות עדיין קיימות (${absentTargets} מתוך ${listedTargets.length} לא נמצאו) — הסבב מתוכנן עם כל הרשימה כדי לא לדלג על קבוצות בטעות.`,
+        { schedule: schedule.id, absent: absentTargets, listed: listedTargets.length },
+      );
+    }
+    const plannedSlots = slots.map((slot) => windowedStagger(slot, targetIds.length, stampGapSeconds, campaignSchedule));
 
     /*
      * HAS THIS SCHEDULE ALREADY BEEN PLANNED past the end of this window?
@@ -330,7 +387,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
     /* Rows this schedule wrote in THIS pass — the global `created` counts every
        schedule, and the question noteDropped asks is about this one. */
     let made = 0;
-    for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
+    for (const [targetIndex, targetId] of targetIds.entries()) {
       // The database refused this group earlier in THIS pass — see `waiting`.
       if (waiting.has(targetId)) {
         dropped.push(targetId);
@@ -433,7 +490,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
             break;
           }
           failed += 1;
-          await note('error', 'plan_failed', insErr.message, { schedule: schedule.id });
+          await note('error', 'plan_failed', planErrorText(insErr.message), { schedule: schedule.id, raw: insErr.message });
           continue;
         }
         if (data && data.length) {
@@ -455,7 +512,7 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
           const retry = await recycleTombstonedSlot(db, { scheduleId: schedule.id, targetId, at: slot.toISOString() }, plan);
           if (retry.error) {
             failed += 1;
-            await note('error', 'plan_failed', retry.error, { schedule: schedule.id });
+            await note('error', 'plan_failed', planErrorText(retry.error), { schedule: schedule.id, raw: retry.error });
             continue;
           }
           if (retry.recycled) {
@@ -521,11 +578,38 @@ export async function planQueue({ db, now = new Date(), log }: PlanOptions): Pro
      * same plan again costs nothing and creates no second copy — which is
      * exactly why leaving the schedule alone is safe.
      */
+    /*
+     * AND THE GROUPS THAT ARE GONE ARE REPORTED, not silently dropped.
+     *
+     * "a launch that quietly plans 210 of 252 is the shape this product keeps
+     * being bitten by" — the note three hundred lines above this one. Skipping
+     * a deleted group is right, and doing it without a word is how a round
+     * that reaches 245 of 252 looks identical to one that reaches all of them.
+     * info, not warn: nothing is wrong, something is merely smaller.
+     */
+    if (missingTargets > 0) {
+      await note(
+        'info',
+        'plan_targets_gone',
+        `${missingTargets} ${missingTargets === 1 ? 'קבוצה שנמחקה דולגה' : 'קבוצות שנמחקו דולגו'} — הן כבר לא קיימות ברשימת הקבוצות.`,
+        { schedule: schedule.id, missing: missingTargets },
+      );
+    }
     if (failed) {
       await note(
         'warn',
         'plan_retry',
-        `${failed} פרסומים לא נכתבו לתור כי לא הייתה גישה למסד הנתונים. הסבב לא נסגר — ננסה שוב בבדיקה הבאה.`,
+        /*
+         * IT DOES NOT KNOW WHY, SO IT NO LONGER SAYS WHY.
+         *
+         * This read "כי לא הייתה גישה למסד הנתונים" for EVERY failed write.
+         * On the owner's live database the cause was ten deleted groups still
+         * listed in the schedule — a foreign-key refusal, with the database
+         * perfectly reachable — and this sentence sent him, and me, hunting a
+         * connection problem for an hour. The reason is in the red line
+         * beside it, written by planErrorText(); this one counts.
+         */
+        `${failed} פרסומים לא נכתבו לתור — הסיבה רשומה בשורה האדומה שלידה. הסבב לא נסגר, ננסה שוב בבדיקה הבאה.`,
         { schedule: schedule.id, failed },
       );
       continue;
@@ -940,6 +1024,85 @@ async function noteAllBlocked(
  * The information is not lost, only the repetition: the pass that first finds
  * a group busy is the pass that names it.
  */
+/**
+ * WHICH OF THESE GROUPS STILL EXIST — one read, however many ids.
+ *
+ * A schedule's target_ids is a uuid[] with no foreign key, so it keeps every
+ * group the owner has ever deleted. social_queue.target_id DOES have one, so
+ * every attempt to plan for a deleted group is refused by the database. This
+ * is what lets the planner skip them instead of failing on them, once per
+ * pass rather than once per group.
+ *
+ * CHUNKED, because PostgREST puts the whole `in` list in the URL and a round
+ * of three hundred groups would otherwise build a URL long enough to be
+ * refused by the proxy in front of it.
+ *
+ * FAIL-OPEN AND SAY SO: if the read itself fails there is no way to tell a
+ * deleted group from a reachable one, and answering "none of them exist"
+ * would silently cancel an entire round. Every id is treated as live, which
+ * is exactly the behaviour this function replaced.
+ */
+const TARGET_ID_CHUNK = 100;
+
+export async function liveTargetIds(db: SupabaseClient, ids: string[]): Promise<Set<string>> {
+  const live = new Set<string>();
+  const unique = [...new Set(ids.filter(Boolean))];
+  for (let i = 0; i < unique.length; i += TARGET_ID_CHUNK) {
+    const chunk = unique.slice(i, i + TARGET_ID_CHUNK);
+    const { data, error } = await db.from('social_targets').select('id').in('id', chunk);
+    const rows = (data ?? []) as { id: string }[];
+    /*
+     * TWO WAYS TO LEARN NOTHING, AND NEITHER MEANS "DELETED".
+     *
+     * An error is the obvious one. The other is an answer of zero rows with
+     * no error at all — RLS that does not match this caller, a tenant column
+     * the request did not carry, a stale schema cache. "None of these hundred
+     * groups exist" is a far stronger claim than any of those, and acting on
+     * it cancels an entire round: every target filtered out, no slots, no
+     * publications, and nothing on screen saying why.
+     *
+     * The suite caught exactly this — plan-noise.test.ts drives the real
+     * planner against a fake database whose social_targets answers `[]`, and
+     * a round that should have logged "nothing could be placed" placed and
+     * logged nothing at all. A read that teaches nothing leaves the list
+     * exactly as it found it.
+     */
+    if (error || rows.length === 0) {
+      for (const id of chunk) live.add(id);
+      continue;
+    }
+    for (const row of rows) live.add(row.id);
+  }
+  return live;
+}
+
+/**
+ * THE SENTENCE A PLANNING FAILURE DESERVES.
+ *
+ * `plan_failed` logged `insErr.message` verbatim — a Postgres error in
+ * English — and the activity feed replaces any message with no Hebrew in it
+ * by "תקלה טכנית. הפרטים המלאים נשמרו ביומן במערכת." So the one line that
+ * said what had actually gone wrong was the one line the owner could not
+ * read, and finding it meant opening "פרטים מלאים" on the right row.
+ *
+ * The errors worth naming are named. Everything else is passed through
+ * unchanged rather than flattened into a guess — an unknown error reaching
+ * the owner in English is bad; an unknown error being described as something
+ * it is not is worse.
+ */
+export function planErrorText(message: string): string {
+  if (/social_queue_target_id_fkey|violates foreign key constraint/i.test(message)) {
+    return 'הקבוצה הזאת כבר לא קיימת — היא נמחקה מרשימת הקבוצות, והפרסום אליה לא נכתב.';
+  }
+  if (/fetch failed|network|ECONNRESET|ETIMEDOUT/i.test(message)) {
+    return 'לא הייתה גישה למסד הנתונים ברגע הזה — ננסה שוב בבדיקה הבאה.';
+  }
+  if (/JWT|invalid api key|not authorized|permission denied|RLS/i.test(message)) {
+    return 'המסד דחה את הבקשה מטעמי הרשאה. ייתכן שהמפתח של החשבון הוחלף.';
+  }
+  return message;
+}
+
 async function noteDropped(db: SupabaseClient, note: PlanLogger, scheduleId: string, targetIds: string[], made: number): Promise<void> {
   if (!targetIds.length || made <= 0) return;
   const { data } = await db.from('social_targets').select('name').in('id', targetIds.slice(0, DROPPED_NAMES_SHOWN));
@@ -1053,7 +1216,14 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
      moment `planned_until` is set, so a network blip would bury the whole
      multi-day campaign on its first pass. */
   let failed = 0;
-  for (const [targetIndex, targetId] of schedule.target_ids.entries()) {
+  const dripLive = await liveTargetIds(db, schedule.target_ids ?? []);
+  const dripListed = schedule.target_ids ?? [];
+  const dripPresent = dripListed.filter((id) => dripLive.has(id));
+  /* The same ceiling as the weekly path: a filter that wants to remove most
+     of a round has found a read to distrust, not a round to shrink. */
+  const dripTargets =
+    dripListed.length - dripPresent.length > Math.max(1, Math.floor(dripListed.length / 5)) ? dripListed : dripPresent;
+  for (const [targetIndex, targetId] of dripTargets.entries()) {
     const at = slots[targetIndex];
     if (!at) continue;
     if (at > last) last = at;
@@ -1100,7 +1270,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
         continue;
       }
       failed += 1;
-      await note('error', 'plan_failed', error.message, { schedule: schedule.id });
+      await note('error', 'plan_failed', planErrorText(error.message), { schedule: schedule.id, raw: error.message });
       continue;
     }
     if (data?.length) {
@@ -1116,7 +1286,7 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
       const retry = await recycleTombstonedSlot(db, { scheduleId: schedule.id, targetId, at: at.toISOString() }, plan);
       if (retry.error) {
         failed += 1;
-        await note('error', 'plan_failed', retry.error, { schedule: schedule.id });
+        await note('error', 'plan_failed', planErrorText(retry.error), { schedule: schedule.id, raw: retry.error });
         continue;
       }
       if (retry.recycled) {
@@ -1161,7 +1331,9 @@ async function planDrip(db: SupabaseClient, schedule: Schedule, now: Date, note:
     await note(
       'warn',
       'plan_retry',
-      `${failed} פרסומים לא נכתבו לתור כי לא הייתה גישה למסד הנתונים. ההפצה ההדרגתית לא נסגרה — ננסה שוב בבדיקה הבאה.`,
+      /* Same correction as the weekly path above: the count is known, the
+         cause is in the red line beside it. */
+      `${failed} פרסומים לא נכתבו לתור — הסיבה רשומה בשורה האדומה שלידה. ההפצה ההדרגתית לא נסגרה, ננסה שוב בבדיקה הבאה.`,
       { schedule: schedule.id, failed },
     );
     return created;

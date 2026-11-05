@@ -731,9 +731,31 @@ console.log('unit tests OK');
    * (schedule, target, scheduled_at) index would reject, silently shrinking
    * the round). Proved as arithmetic in worker/test/projection.test.ts.
    */
+  /*
+   * RE-POINTED, AND THE RULE GOT STRONGER RATHER THAN WEAKER.
+   *
+   * The needle held `schedule.target_ids.length` — the list AS STORED. A
+   * schedule's target_ids is a plain uuid[] with no foreign key, so it keeps
+   * every group the owner has ever deleted; social_queue.target_id has one,
+   * so each of those is refused by the database when the planner tries to
+   * write it. Measured on the owner's live database on 05/11: seven deleted
+   * groups in a round of 252 meant 252 slots planned and seven publications
+   * lost to a foreign-key error once a minute, for ever.
+   *
+   * Counting off the groups that still exist is the same rule applied to the
+   * right set — "silently shrinking the round", in the words of the comment
+   * above, is precisely what the stored list was causing. The instants are
+   * still one per target, still cascaded, still inside the campaign window.
+   * worker/test/deleted-groups.test.ts holds the filtering itself, and the
+   * negative that no loop may walk the stored list again.
+   */
   assert.ok(
-    planSrc.includes('windowedStagger(slot, schedule.target_ids.length, stampGapSeconds, campaignSchedule)'),
+    planSrc.includes('windowedStagger(slot, targetIds.length, stampGapSeconds, campaignSchedule)'),
     'the planner must give each target its own instant inside an occasion, and inside the campaign window',
+  );
+  assert.ok(
+    planSrc.includes('const presentTargets = listedTargets.filter((id) => live.has(id));'),
+    'and those targets are the ones that still exist — a deleted group cannot be given an instant the database will refuse',
   );
   /*
    * AND IT STAMPS AT THE LATER OF THE TWO GATES.

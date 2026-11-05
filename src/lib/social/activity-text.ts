@@ -80,6 +80,8 @@ const TITLE: Record<string, string> = {
   rate_limited: 'פייסבוק הגביל את קצב הפרסום',
   verify_window_full: 'יותר מדי פרסומים ממתינים לבדיקה',
   plan_retry: 'הסבב יתוכנן שוב',
+  plan_targets_gone: 'קבוצות שנמחקו דולגו',
+  plan_targets_unverified: 'לא אומתה רשימת הקבוצות',
   plan_revived: 'סבב הוחזר לתכנון',
   account_save_failed: 'שמירת החשבון נכשלה',
   profiles_save_failed: 'רשימת הפרופילים לא נשמרה',

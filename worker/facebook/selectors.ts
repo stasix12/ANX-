@@ -104,7 +104,45 @@ export const patterns = {
    * there, and says nothing about the only thing that matters: the account is
    * being throttled and the queue is still running at full speed.
    */
-  rateLimited: /מגביל(ים)? את התדירות|מפני ספאם|אפשר לנסות שוב מאוחר יותר|we limit how often|protect (our|the) community from spam|you'?re temporarily blocked|ограничива(ем|ется) частот|от спама|попроб(уйте|овать) (снова )?позже/i,
+  /*
+   * ─── TIGHTENED AFTER IT HALTED THE BUSINESS ON A PAGE NOBODY LIMITED ───
+   *
+   * "פייסבוק לא הגביל אותי, זה טעות של הרובוט בדקתי ידנית במחשב נותן לפרסם."
+   *
+   * The first version of this pattern carried nine alternatives, six of them
+   * fragments that an ordinary group page contains all day:
+   *
+   *   מפני ספאם                     — two words. Israeli admins paste
+   *                                   Facebook's own wording into the group
+   *                                   rules, so the rules themselves match.
+   *   אפשר לנסות שוב מאוחר יותר      — Facebook's GENERIC closer, on every
+   *                                   "משהו השתבש" too. postFailed already
+   *                                   owns that sentence; carrying it here as
+   *                                   well upgraded one retryable row into a
+   *                                   halt of everything — and only for a
+   *                                   Hebrew or Russian UI, because the
+   *                                   English closer was never in the list.
+   *   от спама / попробуйте позже    — the same two, in the language half of
+   *                                   Be'er Sheva comments in.
+   *   you're temporarily blocked     — already in `checkpoint` below, where it
+   *                                   belongs: that is an identity block, not
+   *                                   a pacing notice, and the two need
+   *                                   different things from the owner.
+   *
+   * What is left is the SUBJECT of Facebook's own sentence — it limits the
+   * FREQUENCY — plus the spam clause with the context that makes it Facebook
+   * speaking rather than a group rule quoting it. The owner's verbatim
+   * notice, photographed on 03/11 and pinned in rate-limited.test.ts, still
+   * matches on its first clause.
+   *
+   * WORDING IS HALF THE FIX AND NOT THE FIX. A group admin can paste the
+   * whole sentence into the rules and no amount of tightening would tell the
+   * difference. What makes that harmless is that the search is no longer
+   * page-wide: see rateLimit.ts, which reads the dialog the Post button was
+   * clicked in, minus our own draft, and Facebook's own live regions — and
+   * nothing else.
+   */
+  rateLimited: /מגביל(?:ים|ות|ה)?\s+את\s+התדירות|(?:בהגנה|להגן|הגנה)\s+על\s+הקהילה\s+מפני\s+ספאם|we\s+limit\s+how\s+often|(?:help\s+)?protect\s+(?:our|the)\s+community\s+from\s+spam|ограничива(?:ем|ется)\s+частот/i,
   /** Group requires admin approval — the post exists but is pending. */
   pendingApproval: /pending (admin )?approval|will be reviewed|awaiting approval|ממתין לאישור|יאושר על ידי מנהל|ожидает одобрения|на проверке/i,
   /** Not a member / cannot post here. */
@@ -241,8 +279,17 @@ export const fb = {
   /** Text anywhere on the page that indicates a security interstitial. */
   checkpointText: (page: Page): Locator => page.getByText(patterns.checkpoint).first(),
   failureText: (page: Page): Locator => page.getByText(patterns.postFailed).first(),
-  /** Facebook's own rate-limit notice, wherever on the page it is shown. */
-  rateLimitText: (page: Page): Locator => page.getByText(patterns.rateLimited).first(),
+  /*
+   * THE PAGE-WIDE RATE-LIMIT LOCATOR IS GONE. It read the group's feed, its
+   * rules, its comments and the worker's own draft, and `.first()` made it
+   * MISS a real notice whenever a hidden earlier match sat above it: one root
+   * cause, both failure directions. Detection now lives in rateLimit.ts,
+   * which asks only containers whose content Facebook controls.
+   *
+   * These two stay page-wide on purpose: a security interstitial REPLACES the
+   * page, and the failure banner is read only after the rate-limit question
+   * has already been answered.
+   */
   pendingText: (page: Page): Locator => page.getByText(patterns.pendingApproval).first(),
   cannotPostText: (page: Page): Locator => page.getByText(patterns.cannotPost).first(),
 };

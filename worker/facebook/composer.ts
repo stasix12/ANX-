@@ -1,6 +1,7 @@
 import type { FileChooser, Locator, Page } from 'playwright-core';
 import { parseGroupUrl } from '@/lib/social/types';
 import { fb, firstAttached, firstVisible, patterns } from './selectors';
+import { facebookSaidTooFast } from './rateLimit';
 import { assertUsable, classifyPage } from './session';
 
 /**
@@ -518,6 +519,15 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
       await input.onHold?.().catch(() => {});
     }
   }
+  /*
+   * READ BEFORE THE HANDLE GOES, and only in the one state where Facebook
+   * has something to say. `dialogNode` is the dialog the Post button was
+   * clicked in — the strongest scope available, and the reason the check no
+   * longer reads the group's feed. It used to be disposed one line above
+   * this branch, which is why the first version of the check had nothing
+   * narrower than `page` to ask. See rateLimit.ts for what that cost.
+   */
+  const tooFast = detached ? null : await facebookSaidTooFast(page, dialogNode, input.text);
   await dialogNode?.dispose().catch(() => undefined);
   if (!detached) {
     /*
@@ -539,10 +549,13 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
      * refused. So the row is an honest failure that may be tried again later,
      * not a publication somebody has to go and check by hand.
      */
-    if (await fb.rateLimitText(page).isVisible({ timeout: 1000 }).catch(() => false)) {
+    if (tooFast) {
+      /* QUOTED, because the branch beside this one quotes what it matched and
+         this one did not: when it fired on 05/11 nothing in the row, the log
+         or the banner said which words had been found. */
       throw new PublishError(
         'rate_limited',
-        'פייסבוק הגביל את קצב הפרסום מהחשבון הזה ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה. צריך להאט את קצב הפרסום ולנסות שוב מאוחר יותר.',
+        `פייסבוק הגביל את קצב הפרסום מהחשבון הזה ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה. צריך להאט את קצב הפרסום ולנסות שוב מאוחר יותר. (מה שפייסבוק כתבה: "${tooFast}")`,
         false,
       );
     }

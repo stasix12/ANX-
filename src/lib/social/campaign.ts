@@ -514,11 +514,43 @@ export function campaignState<T extends CampaignQueueRow>(
    * the counts the rows are all there is, and `truncated` already says
    * whether that is the whole round.
    */
+  /*
+   * A FLOOR COUNTED OFF A PREVIEW IS NOT A FLOOR, IT IS A WRONG NUMBER, and
+   * this is the correction to the first version of this block.
+   *
+   * It read `opts.counts?.publishedTargetCount ?? <distinct over rows>`. On a
+   * database with v27's counting views and not v38's two columns — which is
+   * every database until social-latest.sql is run again — `rows` is a PREVIEW
+   * chosen by the open read plus the most recent finished ones, and for a
+   * round whose publications are all older than that preview it is EMPTY.
+   * Reproduced against this function: counts saying 204 published, the column
+   * null, no rows → the card printed
+   *
+   *     "פורסם לפחות ל-0 מתוך 252 קבוצות היום · 252 קבוצות עוד לא קיבלו פרסום"
+   *
+   * over a round that had reached 204 groups. "לפחות" does not rescue that:
+   * a floor of zero is not information, and a card that understates by two
+   * hundred is worse than the row ratio it replaced.
+   *
+   * So the figure is produced only where it MEANS something: from the view's
+   * own aggregate, or from rows that are the whole set this state is about —
+   * which is exactly the case where no counts were supplied. Otherwise it is
+   * ABSENT, groupProgress() reports `usable: false`, and the card draws what
+   * it drew before plus one line naming the file that fixes it.
+   *
+   * `r.target_id` is required in the set: a published row whose group has
+   * since been deleted carries null, and every null collapses to ONE phantom
+   * member — the view's count(distinct) skips them, so including them here is
+   * two different answers to one question.
+   */
+  const publishedFromRows = new Set(
+    rows.filter((r) => r.status === 'published' && r.target_id).map((r) => r.target_id),
+  ).size;
+  const rowsAreTheWholeSet = !opts.counts;
   const publishedTargetCount =
-    opts.counts?.publishedTargetCount ??
-    new Set(rows.filter((r) => r.status === 'published').map((r) => r.target_id)).size;
+    opts.counts?.publishedTargetCount ?? (rowsAreTheWholeSet ? publishedFromRows : undefined);
   const publishedTargetCountIsWhole =
-    opts.counts?.publishedTargetCount != null ? true : !opts.counts && !(opts.truncated ?? false);
+    opts.counts?.publishedTargetCount != null ? true : rowsAreTheWholeSet && !(opts.truncated ?? false);
 
   const done = rows
     .filter((r) => TERMINAL_STATUSES.includes(r.status))
@@ -980,9 +1012,29 @@ export function groupProgress(state: CampaignState, totalGroups?: number): Group
    * reading a pre-v38 database's missing column as a zero.
    */
   const hasCount = state.publishedTargetCount != null;
-  const published = Math.max(0, Math.min(total, state.publishedTargetCount ?? 0));
-  const hedged = !hasCount || !(state.publishedTargetCountIsWhole ?? true) || (state.truncated ?? false);
-  const percent = hedged ? Math.min(99, ratio(published, total)) : ratio(published, total);
+  const raw = Math.max(0, state.publishedTargetCount ?? 0);
+  const published = Math.min(total, raw);
+  /*
+   * CLAMPING IS NOT AGREEING. When the numerator arrives from one read and
+   * the denominator from another, `raw > total` means the two disagree — and
+   * printing the clamped pair as an exact "252 מתוך 252" asserts a completion
+   * neither read claimed. It is clamped so the card cannot say 260 of 252,
+   * and hedged so it cannot say it with confidence.
+   */
+  const disagree = raw > total;
+  /*
+   * AND 100% MAY NOT BE PRINTED WHILE PUBLICATIONS ARE STILL QUEUED.
+   *
+   * Groups and publications are different counts, and a round with two
+   * occasions a day reaches all 252 groups by midday with 252 more rows
+   * waiting for 18:00. A solid green bar and "100%" over a running round with
+   * 252 open rows is the same false completion `ratio()` already refuses for
+   * a capped read — so the same ceiling applies, from the same progress this
+   * state carries.
+   */
+  const stillOpen = openRows(state.progress) > 0;
+  const hedged = !hasCount || disagree || !(state.publishedTargetCountIsWhole ?? true) || (state.truncated ?? false);
+  const percent = hedged || stillOpen ? Math.min(99, ratio(published, total)) : ratio(published, total);
   const atLeast = hedged ? 'לפחות ' : '';
   /* The scope travels with the numbers, exactly as it does in runProgress():
      a repeating round's figures are TODAY'S, and a true number under a

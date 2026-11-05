@@ -517,10 +517,43 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
      is expressed over that resolved value. The requirement is the one it
      always was: a tap in either direction. */
   is(/shown\.days\.includes\(day\) \? shown\.days\.filter/.test(panel), 'tapping a chosen day un-chooses it — "חובה לאפשר Multi Select", in both directions');
-  is(/const shown = shownSchedule\(schedule\)/.test(panel), 'and what it reads is the resolved schedule, so the chips cannot show days the engine is ignoring');
+  /* RE-POINTED AGAIN, and the rule is untouched: the panel renders the
+     schedule the ENGINE is running, not the row as stored. The resolved value
+     is now named `stored` because one field — the hour — is draped over it
+     while the wheel is moving (see the draft guard below), so the needle moves
+     to the two lines that carry the rule between them. */
+  is(/const stored = shownSchedule\(schedule\)/.test(panel), 'and what it reads is the resolved schedule, so the chips cannot show days the engine is ignoring');
+  is(
+    /const shown = startDraft \? \{ \.\.\.stored, start: startDraft \} : stored;/.test(panel),
+    'and everything drawn reads that resolved value, with only the hour being picked laid over it',
+  );
   is(/onChange\(fromShown\(/.test(panel), 'while what it writes puts the stored flag back — the engine keeps the column it has always had');
   is(/dir="ltr"/.test(panel), 'the clock range is an LTR island, or the bidi algorithm prints "22:00 – 08:00"');
-  is(!/useState/.test(panel), 'the panel holds no state of its own — what is on screen is what the page has, which is what the database has');
+  /*
+   * ─── THE PANEL HOLDS ONE PIECE OF STATE NOW, AND IT IS NAMED ───────────
+   *
+   * This read `!/useState/` — "the panel holds no state of its own, what is
+   * on screen is what the page has, which is what the database has" — and
+   * that rule bought something real: a panel with its own copy of a setting
+   * drifts from the row and shows a window the engine never heard of.
+   *
+   * It is deliberately broken for exactly one field, and the reason is
+   * measured rather than argued. "אני עוד לא מספיק לבחור וזה זורק אותי
+   * מהבחירה ומשנה את השעה איפה שעצרתי אם האצבע": the hour is a controlled
+   * <input type="time">, and the iOS wheel fires `change` on every notch it
+   * passes. Writing each one through is a round trip, so mid-scroll React put
+   * the server's last confirmed hour back into the open picker and iOS closed
+   * it under the finger — and it was one database write per notch.
+   *
+   * So the rule becomes exact instead of absolute: the panel may hold the
+   * hour THAT IS BEING PICKED, and nothing else. Both halves are checked —
+   * the count, so a second useState cannot appear unnoticed, and the name, so
+   * this one cannot quietly become a copy of a setting.
+   * worker/test/time-picker.test.ts drives the whole thing in a browser.
+   */
+  eq((panel.match(/useState[(<]/g) ?? []).length, 1, 'the panel holds exactly one piece of state');
+  is(/const \[startDraft, setStartDraft\] = useState<string \| null>\(null\)/.test(panel), 'and it is the hour being picked, not a copy of anything the page owns');
+  is(/if \(next && \/\^\\d\{2\}:\\d\{2\}\$\/\.test\(next\) && next !== stored\.start\) set\(\{ start: next \}\)/.test(panel), 'which is written once, on close, and only when it actually moved');
   /*
    * AND THE ONE PIECE OF STATE IN THE BLOCK IT DRAWS IS A CLOCK.
    *

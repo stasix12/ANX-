@@ -393,14 +393,44 @@ const cases = [
    * status counts are exact and the group count is not, and before this case
    * existed nothing on the card could tell the difference.
    */
-  ['the group count is a floor: exact rows, no v38 columns', camp('18', 'ניקוי ספות באר שבע'),
+  ['no v38 columns: the card falls back and asks for the one file', camp('18', 'ניקוי ספות באר שבע'),
     st(prog({ total: 730, published: 204, failed: 3, skipped: 271, scheduled: 252, finished: 478 }), {
       state: 'running',
       todayOnly: true,
       targetCount: 252,
-      publishedTargetCount: 61,
+      /*
+       * ABSENT, which is what a database with v27's views and not v38's two
+       * columns produces — every database until social-latest.sql is run
+       * again. The first version of this card counted the published groups
+       * off the preview instead and rendered "פורסם לפחות ל-0 מתוך 252
+       * קבוצות היום" over a round that had reached 204 of them.
+       *
+       * So this fixture measures the FALLBACK: the publications ratio the
+       * card drew before, the group pill back on screen, and the paragraph
+       * naming the file that supplies the missing number. It is also the
+       * longest paragraph this card can draw.
+       */
+      publishedTargetCount: undefined,
       publishedTargetCountIsWhole: false,
       startedAt: beforeClock(WINDOW_OPEN, 6),
+      nextAt: afterClock(WINDOW_OPEN, 1),
+    }),
+    252, sched.reference, WINDOW_OPEN],
+  /*
+   * 19 — EVERY GROUP HAS THE POST AND THE DAY IS NOT OVER.
+   *
+   * Two occasions a day over 252 groups: by midday round one has reached all
+   * of them and round two's 252 rows are waiting for 18:00. "100%" and a
+   * solid green bar over that is a false completion, so the ring stops at 99
+   * and the line beside it still counts the publications that have not gone.
+   */
+  ['every group has it, and 252 publications are still queued', camp('19', 'פרסומת לרוסים'),
+    st(prog({ total: 504, published: 252, scheduled: 252, finished: 252 }), {
+      state: 'running',
+      todayOnly: true,
+      targetCount: 252,
+      publishedTargetCount: 252,
+      startedAt: beforeClock(WINDOW_OPEN, 5),
       nextAt: afterClock(WINDOW_OPEN, 1),
     }),
     252, sched.reference, WINDOW_OPEN],

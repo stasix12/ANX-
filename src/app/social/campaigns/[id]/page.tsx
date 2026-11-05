@@ -55,7 +55,6 @@ import {
   canPauseRun,
   canResumeRun,
   cancellableRows,
-  groupProgress,
   runBadge,
   runProgress,
   type CampaignState,
@@ -373,18 +372,27 @@ export default function CampaignControlCenter() {
   const showResume = Boolean(state) && canResumeRun(state!.progress, campaign.status);
   const view = state ? runProgress(state.progress, state.todayOnly, state.truncated) : null;
   /*
-   * THE SAME PAIR THE DASHBOARD AND THE CAMPAIGNS CARD NOW LEAD WITH, so the
-   * third screen does not answer "how far along is this" in a third unit.
+   * ─── THIS SCREEN DELIBERATELY DOES NOT LEAD WITH GROUPS ────────────────
    *
-   * "שיספור רק את הקבוצות שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם, לא צריך
-   *  את המספר המנופח הזה זה מבלבל לקוחות."
+   * It did, for one commit, and that was wrong: an adversarial review of the
+   * change found it and the claim was reproduced against the real code.
    *
-   * This screen keeps the row figures and SHOULD: it is the per-publication
-   * feed, the place the 274 skipped and the 3 failed are listed one by one and
-   * acted on. What changes is the headline — the ring — which is the one thing
-   * here that was a ratio of publications under a card about groups.
+   * The dashboard and the campaigns card get their group pair from v38's
+   * aggregate over EVERY row, scoped to today for a repeating round. This
+   * screen builds its state from its OWN feed — one campaign, up to
+   * CAMPAIGN_QUEUE_LIMIT rows, over the round's whole life and with no counts
+   * passed in. So a repeating round three days old showed "252 / 252 קבוצות"
+   * and 99% here while the dashboard showed "204 מתוך 252" and 81% for the
+   * same round in the same minute: two screens, two answers, one tap apart —
+   * the exact fault the group pair was introduced to end, reintroduced by
+   * putting it on a screen whose numbers mean something else.
+   *
+   * Groups belong here only once this screen reads the same aggregate. Until
+   * then the ring is what it has always been — how much of THIS FEED has been
+   * handled — which is the honest answer to the question this screen is
+   * about: it is the per-publication list, where the 274 skipped and the 3
+   * failed are shown one by one and acted on.
    */
-  const groups = state ? groupProgress(state) : null;
 
   /*
    * ───────── WHEN THIS ROUND'S ROWS WILL ACTUALLY GO OUT ─────────
@@ -515,12 +523,8 @@ export default function CampaignControlCenter() {
                 presentational, so this is the label that is read out.
                 ProgressRing should take it as a prop; see the report.
               */}
-              <div role="img" aria-label={groups?.usable ? groups.ariaLabel : view.ariaLabel}>
-                <ProgressRing
-                  percent={groups?.usable ? groups.percent : view.percent}
-                  label={`${groups?.usable ? groups.percent : view.percent}%`}
-                  sub={groups?.usable ? `${groups.published} / ${groups.total} קבוצות` : `${view.handled} / ${view.total} טופלו`}
-                />
+              <div role="img" aria-label={view.ariaLabel}>
+                <ProgressRing percent={view.percent} label={`${view.percent}%`} sub={`${view.handled} / ${view.total} טופלו`} />
               </div>
               {/*
                 The four-figure <dl> that used to sit here is gone.

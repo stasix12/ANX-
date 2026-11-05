@@ -2648,9 +2648,20 @@ export async function campaignCounts(campaignIds?: string[]): Promise<CountsRead
     e.lifetime[row.status] = (e.lifetime[row.status] ?? 0) + (row.total ?? 0);
     e.today[row.status] = (e.today[row.status] ?? 0) + (row.today ?? 0);
   }
-  /* The groups view is a SEPARATE grouping (per campaign, not per status), so
-     a database that has one and not the other still gets exact counts — the
-     group total simply falls back to the rows, which is what it was. */
+  /*
+   * The groups view is a SEPARATE grouping (per campaign, not per status), so
+   * a database that has one and not the other still gets exact counts — the
+   * group total simply falls back to the rows, which is what it was.
+   *
+   * BUT ONLY FOR A MISSING VIEW. `if (!targetRes.error)` swallowed every other
+   * failure too: a 401 after a token-refresh race, an RLS refusal, a dropped
+   * mobile connection. The counts request beside it succeeds, so this returned
+   * kind 'exact' with `targets: 0` — and `truncated` is false on an exact
+   * answer, so the card dropped the group pair and the group pill without one
+   * word saying a read had failed. The same distinction isMissingRelation()
+   * already draws for the counts read above, drawn here too.
+   */
+  if (targetRes.error && !isMissingRelation(targetRes.error)) return { kind: 'read-failed' };
   if (!targetRes.error) {
     for (const row of (targetRes.data ?? []) as CampaignTargetRow[]) {
       const e = entry(row.campaign_id);

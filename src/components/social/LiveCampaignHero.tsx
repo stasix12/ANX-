@@ -665,7 +665,21 @@ export function LiveCampaignHero({
                  קיבלו פרסום · 274 פרסומים דולגו" cannot be read as one count
                  of one thing, which is exactly what "478 / 730" beside "252
                  קבוצות" was. */
-              [groups.label, groups.waitingLabel, lostNote].filter(Boolean).join(' · ')
+              /* `open` BELONGS IN THIS LINE even though it is publications:
+                 a round with two occasions a day reaches all 252 groups by
+                 midday with 252 rows still waiting for 18:00, and a line
+                 reading "פורסם ל-252 מתוך 252 קבוצות היום" with nothing after
+                 it says the day is over. groupProgress() already refuses to
+                 print 100% while anything is open; this is the same fact in
+                 words. */
+              [
+                groups.label,
+                groups.waitingLabel,
+                lostNote,
+                open > 0 ? counted(open, 'פרסום אחד עוד לא יצא', 'פרסומים עוד לא יצאו', 'שני פרסומים עוד לא יצאו') : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')
             : [view.publishedLabel, view.note, open > 0 ? `${open} עוד לא יצאו` : ''].filter(Boolean).join(' · ')}
         </p>
         {/*
@@ -694,24 +708,26 @@ export function LiveCampaignHero({
           </p>
         )}
         {/*
-          THE GROUP FIGURE HAS ITS OWN REASON TO BE APPROXIMATE, and it is not
-          `truncated`.
+          THE PAIR IS ABSENT, NOT APPROXIMATE, AND THAT IS THE CORRECTION.
 
-          With the counting views present the per-status numbers really are
-          exact, so `truncated` is false and the warning below never shows —
-          but a database that has those views and not the two columns v38 adds
-          cannot count GROUPS that published, and the figure above it is then
-          counted off the rows this card was handed, which are a preview. That
-          is a floor, it says "לפחות", and the owner had no way to learn that
-          one run of the one file turns it into the real number.
+          The first version of this card counted the published groups off the
+          rows it was handed whenever v38's column was missing, and said
+          "לפחות". Reproduced against the real code: with the counting views
+          present and that column absent, a round that had reached 204 of 252
+          groups rendered "פורסם לפחות ל-0 מתוך 252 קבוצות היום" — the rows are
+          a preview, and for a round whose publications are older than it, an
+          empty one. A floor of zero is not a hedge, it is a wrong number.
 
-          Rendered only in that gap: when the round's counts are already
-          flagged approximate the sentence below says the same thing about all
-          of them, and two paragraphs asking for the same file is noise.
+          So campaignState() now produces no group figure at all in that case,
+          the card falls back to the publications ratio it drew before, and
+          this paragraph says what is missing and which single file supplies
+          it. `!state.truncated` keeps it off a card that is already saying
+          its numbers are partial — two paragraphs asking for the same file is
+          noise.
         */}
-        {groups.usable && groups.hedged && !state.truncated && (
+        {!groups.usable && (targetCount ?? 0) > 0 && !state.truncated && (
           <p className="mt-1.5 text-xs text-mist-500">
-            {`מספר הקבוצות שפורסמו הוא מספר מינימום — למספר המדויק צריך להריץ פעם אחת את ${LATEST_SCHEMA_FILE} ב-SQL Editor של Supabase. הוא לא מוחק, לא מאפס את התור ולא משנה שום פרסום.`}
+            {`כדי לראות לכמה מתוך ${targetCount} הקבוצות הפוסט כבר יצא, צריך להריץ פעם אחת את ${LATEST_SCHEMA_FILE} ב-SQL Editor של Supabase. הוא לא מוחק, לא מאפס את התור ולא משנה שום פרסום.`}
           </p>
         )}
         {state.truncated && (

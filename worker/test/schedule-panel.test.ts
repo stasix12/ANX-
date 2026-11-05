@@ -186,7 +186,23 @@ async function main(): Promise<void> {
 
     /* The reference's own order: the start time first, the interval second. */
     const start = page.locator('[data-schedule] input[type="time"]');
-    await start.fill('06:30');
+    /*
+     * FILLING THE HOUR IS NOT FINISHING WITH IT, and that is the product's
+     * behaviour now rather than a quirk of this harness.
+     *
+     * The field holds the hour being picked and writes once, when the picker
+     * closes — because writing every notch of the iOS wheel through was a
+     * round trip that put the saved hour back into the open picker and closed
+     * it under the owner's finger ("אני עוד לא מספיק לבחור וזה זורק אותי
+     * מהבחירה"). Playwright's fill() types and fires `change`; it does not
+     * blur, so on its own it leaves a draft exactly as a half-finished scroll
+     * does. setStart() is fill-then-close, which is what a person does.
+     */
+    const setStart = async (hhmm: string) => {
+      await start.fill(hhmm);
+      await start.evaluate((el) => (el as HTMLInputElement).blur());
+    };
+    await setStart('06:30');
     is((await summary()).includes('06:30'), 'changing the start time updates the summary on the spot');
 
     /*
@@ -231,22 +247,34 @@ async function main(): Promise<void> {
     /* A plain substring, not a regex: the thing being matched IS a regex
        literal, and escaping one inside another is how a guard ends up
        matching nothing and passing on its own emptiness. */
+    /* RE-POINTED, NOT WEAKENED. The callback is `onDraft` now — the hour is
+       held on the panel while the wheel moves and written once when the
+       picker closes, because writing every notch through was a round trip
+       that snapped the open picker shut under the finger. The rule this
+       assertion exists for is untouched and is now enforced TWICE: a partial
+       value may not become a draft here, and commitStart() re-tests the
+       complete form before it writes. worker/test/time-picker.test.ts drives
+       both in a browser. */
     is(
-      commit.includes('if (/^\\d{2}:\\d{2}$/.test(v)) onChange(v);'),
+      commit.includes('if (/^\\d{2}:\\d{2}$/.test(v)) onDraft(v);'),
       'only a complete HH:MM is passed on; a partial value is left as the draft it is',
     );
-    await start.fill('06:30');
+    is(
+      commit.includes('onBlur={onCommit}'),
+      'and the picker closing is what writes it — not every notch of the wheel',
+    );
+    await setStart('06:30');
 
     /*
      * AND AN HOUR THE OLD GRID COULD NOT EXPRESS. 06:47 is not on any
      * half-hour, so this one line is the whole request: if the field ever
      * goes back to a list of 48, it cannot be filled and this fails.
      */
-    await start.fill('06:47');
+    await setStart('06:47');
     is((await summary()).includes('06:47'), 'any minute, not every half hour — the grid of 48 is gone');
     eq(await start.getAttribute('step'), '60', 'and no seconds wheel: the engine stores minutes');
     eq(await start.getAttribute('dir'), 'ltr', 'the clock reads left to right inside the RTL card, like every other hour in this product');
-    await start.fill('06:30');
+    await setStart('06:30');
     /* The select's values are SECONDS now — "תעשה אופציה של 30 40 50 שניות" —
        so twenty-five minutes is 1500. Driven through the real control rather
        than through the component's props, which is the point of this file. */
@@ -310,7 +338,7 @@ async function main(): Promise<void> {
        week. The hour then goes to midnight, and the pair of them is a
        schedule that permits everything. */
     await day('יום רביעי').click();
-    await start.fill('00:00');
+    await setStart('00:00');
     const unlimited = (await changes()).at(-1)!;
     eq(unlimited.days, [0, 1, 2, 3, 4, 5, 6], 'all seven days are what was written');
     eq(unlimited.start, '00:00', 'from midnight');
@@ -339,7 +367,7 @@ async function main(): Promise<void> {
        this file has been building since the top. */
     await day('שבת').click();
     await day('יום רביעי').click();
-    await start.fill('06:30');
+    await setStart('06:30');
     const restored = (await changes()).at(-1)!;
     eq(restored.days, [0, 1, 2, 4, 5, 6], 'the six days are back');
     eq(restored.gapSeconds, 1500, 'and nothing was lost on the way — the interval is still twenty-five minutes');

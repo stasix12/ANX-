@@ -501,7 +501,7 @@ async function main(): Promise<void> {
          17 and 18 are his own numbers (730 publications over 252 groups) with
          the group figure exact and then as a floor. Both draw the widest
          sentence this card can produce, which is why they are measured. */
-      assert.equal(seen.cards.length, 18, `${width}: expected 18 cards, got ${seen.cards.length}`);
+      assert.equal(seen.cards.length, 19, `${width}: expected 19 cards, got ${seen.cards.length}`);
       /* Across the board, not per card: most states are about the run and
          lead nowhere on purpose, and a badge that leads nowhere must stay a
          plain label. */

@@ -1010,6 +1010,36 @@ export const WORKER_VERSION = '4.49.0';
 
    The two SQL columns behind it are a VIEW — public.social_campaign_targets,
    in supabase/social-latest.sql — and a view reads. Until that file is run
-   the app counts groups off the rows it can see and says "לפחות" on screen,
-   which is what worker/test/group-count.test.ts §3 and §4 hold it to. */
-export const WORKER_FINGERPRINT = '7ca88ae958bc7438';
+   the card draws the publications ratio it always drew and one line names the
+   file, which is what worker/test/group-count.test.ts §4 and §6 hold it to.
+
+   ─── RE-PINNED ONCE MORE: the corrections an adversarial review found in the
+   above, plus the hour field. 4.49.0 still stays. ─────────────────────────
+
+   The review of that change reported a regression I had shipped and it
+   reproduced: with v27's counting views present and v38's columns absent, the
+   published-group figure was counted off the preview rows, and for a round
+   whose publications are older than that preview the card rendered "פורסם
+   לפחות ל-0 מתוך 252 קבוצות היום" over a round that had reached 204. The
+   figure is now ABSENT in that case rather than a floor of zero. Four more
+   from the same pass: the round screen no longer draws a group ring at all
+   (its feed is a different scope and it contradicted the dashboard), 100% may
+   not be printed while publications are still queued, a clamped disagreement
+   between two reads is hedged rather than asserted, and a groups read that
+   fails for any reason other than a missing view no longer passes as exact.
+
+   And the hour field — "אני עוד לא מספיק לבחור וזה זורק אותי מהבחירה" — now
+   keeps its draft on the panel and writes once, when the picker closes,
+   instead of once per notch of the iOS wheel.
+
+   DOES THIS HAVE TO REACH THE PC? Still no, and asked of the build again:
+
+     npm run build:app
+     grep -c groupProgress        dist/app/worker.cjs → 0
+     grep -c publishedTargetCount dist/app/worker.cjs → 0
+     grep -c targets_published    dist/app/worker.cjs → 0
+     grep -c campaignState        dist/app/worker.cjs → 0
+     grep -c campaign_targets     dist/app/worker.cjs → 0
+     grep -c startDraft           dist/app/worker.cjs → 0
+     grep -c TimePick             dist/app/worker.cjs → 0 */
+export const WORKER_FINGERPRINT = 'b59edacf5a4c2676';

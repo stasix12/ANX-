@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import {
   DAY_LABELS,
   DAY_NAMES,
@@ -294,8 +296,42 @@ export function CampaignSchedulePanel({
    * days sitting in the column. `fromShown` puts the flag back on the way
    * out. Nothing here writes unless the person changes something.
    */
-  const shown = shownSchedule(schedule);
-  const set = (patch: Partial<CampaignSchedule>) => onChange(fromShown({ ...shown, ...patch }));
+  const stored = shownSchedule(schedule);
+  const set = (patch: Partial<CampaignSchedule>) => onChange(fromShown({ ...stored, ...patch }));
+  /*
+   * ─── THE HOUR IS HELD WHILE THE FINGER IS STILL ON THE WHEEL ───────────
+   *
+   * "במסך הראשי שאני בא לשנות את הזמן אני עוד לא מספיק לבחור וזה זורק אותי
+   *  מהבחירה ומשנה את השעה איפה שעצרתי אם האצבע."
+   *
+   * <input type="time"> is CONTROLLED here, and on iOS the wheel fires
+   * `change` on every notch it passes. Each one went straight to
+   * onScheduleChange, which is a write to Supabase and a round trip — so
+   * while the wheel was still moving the `value` prop was whatever the server
+   * had last confirmed, React wrote that back into the open picker, and iOS
+   * closed it on the number the finger happened to be over. It also meant one
+   * database write per notch scrolled.
+   *
+   * So the hour the FIELD shows while it is being edited is local, and the
+   * campaign is written once, when the picker closes. Nothing else about the
+   * schedule changes: the days and the interval still commit on the spot,
+   * because neither of them is a wheel.
+   *
+   * THE SUMMARY STILL MOVES WITH IT — "הסיכום חייב להתעדכן LIVE כאשר המשתמש
+   * משנה: ימים, שעת התחלה, הפרש בין פוסטים" — because the draft lives HERE
+   * and not inside the field: every line below reads `shown`, which is the
+   * stored schedule with the draft laid over it.
+   */
+  const [startDraft, setStartDraft] = useState<string | null>(null);
+  const shown = startDraft ? { ...stored, start: startDraft } : stored;
+  const commitStart = () => {
+    /* Only a complete, actually-different hour is worth a write. Clearing the
+       draft first means the field goes back to following the campaign the
+       moment the picker is closed, whichever way it was closed. */
+    const next = startDraft;
+    setStartDraft(null);
+    if (next && /^\d{2}:\d{2}$/.test(next) && next !== stored.start) set({ start: next });
+  };
   const canRepeat = Boolean(repeat && onRepeatChange);
   /*
    * EVERY HOUR THIS CAMPAIGN OPENS AT, round one first — the same function
@@ -512,7 +548,10 @@ export function CampaignSchedulePanel({
             icon={<ClockIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />}
             value={shown.start}
             disabled={disabled}
-            onChange={(v) => set({ start: v })}
+            /* While the wheel moves: the panel's own draft, no write. */
+            onDraft={setStartDraft}
+            /* When the picker closes: one write, if anything actually moved. */
+            onCommit={commitStart}
           />
           <Pick
             label="הפרש בין פרסומים"
@@ -812,7 +851,7 @@ function Pick({
  * border and focus ring — because the two sit side by side in one grid and
  * the owner asked for a different VALUE SET, not a different card.
  *
- * TWO THINGS IT DOES THAT A BARE <input type="time"> DOES NOT:
+ * THREE THINGS IT DOES THAT A BARE <input type="time"> DOES NOT:
  *
  * ONE — IT NEVER COMMITS HALF AN HOUR. An incomplete time input reports
  * `''`, and some browsers report an hour with no minutes while the second
@@ -820,6 +859,18 @@ function Pick({
  * the campaign — the rounds editor in this file carries the scar: "typing
  * 18:30 saved 01:30 on the way". So only a complete HH:MM is passed on, and
  * anything else is left as the draft it is.
+ *
+ * THREE — IT REPORTS MOVEMENT AND COMPLETION SEPARATELY, and that is what
+ * makes it usable on a phone at all. `onDraft` fires on every notch the iOS
+ * wheel passes and goes nowhere near the database; `onCommit` fires once,
+ * when the field is done. A single `onChange` that wrote through was the bug:
+ * the write is a round trip, the controlled `value` snapped back to the
+ * server's answer mid-scroll, and iOS closed the picker on whatever the
+ * finger was over. See the draft block at the top of the panel.
+ *
+ * `blur` AND `change`-while-not-focused, because the two platforms end this
+ * differently: tapping away blurs, while the iOS picker's own ✓ fires a final
+ * change and may leave focus where it was.
  *
  * TWO — IT IS AN LTR ISLAND. "06:47" is a European number run around a
  * neutral colon; inside an RTL card with no strong character in the string,
@@ -834,14 +885,18 @@ function TimePick({
   aria,
   icon,
   value,
-  onChange,
+  onDraft,
+  onCommit,
   disabled,
 }: {
   label: string;
   aria: string;
   icon: React.ReactNode;
   value: string;
-  onChange: (v: string) => void;
+  /** Every notch of the wheel. Must not write anything. */
+  onDraft: (v: string) => void;
+  /** The field is done — write once, if anything moved. */
+  onCommit: () => void;
   disabled?: boolean;
 }) {
   return (
@@ -860,7 +915,15 @@ function TimePick({
           disabled={disabled}
           onChange={(e) => {
             const v = e.target.value;
-            if (/^\d{2}:\d{2}$/.test(v)) onChange(v);
+            if (/^\d{2}:\d{2}$/.test(v)) onDraft(v);
+            /* A change that arrives while the field is NOT focused is the
+               picker's own confirmation on a platform that does not blur. */
+            if (document.activeElement !== e.currentTarget) onCommit();
+          }}
+          onBlur={onCommit}
+          /* Enter on a keyboard is "done" as much as closing a wheel is. */
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
           }}
           className="h-10 min-h-10 w-full cursor-pointer appearance-none rounded-xl border border-ink-600 bg-ink-900 px-2 text-center text-[13px] font-extrabold tabular-nums text-mist-100 transition-colors hover:border-brand-300 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300/40 disabled:cursor-not-allowed disabled:opacity-60"
         />

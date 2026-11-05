@@ -77,16 +77,29 @@ begin
   execute 'grant select on public.social_campaign_targets to authenticated';
   execute 'grant select on public.social_campaign_targets to service_role';
 
+  -- ── גם ההערה בתוך השמירה ────────────────────────────────────────────────
+  -- היא ישבה מחוץ ל-do, ולכן על Postgres ישן יותר מ-15 ההודעה "דילגנו"
+  -- הייתה מודפסת ומיד אחריה שגיאה על view שלא קיים — כלומר הקובץ היה נכשל
+  -- בדיוק במקרה שהשומר נועד להגן עליו.
+  execute $c$
+    comment on view public.social_campaign_targets is
+      'Distinct groups a campaign reaches, and how many of them already have the post (lifetime, and today in Asia/Jerusalem). A separate grouping from social_campaign_counts because a distinct count cannot be summed across statuses — a group with one published row and one waiting row would be counted twice. targets_published / targets_published_today added in v38, at the end of the select so create-or-replace stays legal. security_invoker: subject to the caller''s RLS on social_queue.'
+  $c$;
+
   raise notice 'v38: הכרטיס יכול מעכשיו לכתוב "פורסם ל-X מתוך Y קבוצות" — שני המספרים מאותו אגרגט.';
 end $$;
 
-comment on view public.social_campaign_targets is
-  'Distinct groups a campaign reaches, and how many of them already have the post (lifetime, and today in Asia/Jerusalem). A separate grouping from social_campaign_counts because a distinct count cannot be summed across statuses — a group with one published row and one waiting row would be counted twice. targets_published / targets_published_today added in v38, at the end of the select so create-or-replace stays legal. security_invoker: subject to the caller''s RLS on social_queue.';
-
 -- ── מה זה אומר עכשיו ───────────────────────────────────────────────────────
-select
-  'v38 הוחל' as "מצב",
-  count(*) as "סבבים",
-  sum(targets) as "קבוצות בסך הכול",
-  sum(targets_published) as "מתוכן קיבלו פרסום"
-from public.social_campaign_targets;
+-- גם זה מוגן: על Postgres ישן ה-view לא נוצר, ובלי השומר הזה השורה האחרונה
+-- של הקובץ הייתה הופכת דילוג מסודר לשגיאה.
+do $$
+begin
+  if current_setting('server_version_num')::int < 150000 then
+    return;
+  end if;
+  perform 1 from public.social_campaign_targets limit 1;
+  raise notice 'v38: % סבבים בטבלה, % קבוצות בסך הכול, % מתוכן קיבלו פרסום.',
+    (select count(*) from public.social_campaign_targets),
+    (select coalesce(sum(targets), 0) from public.social_campaign_targets),
+    (select coalesce(sum(targets_published), 0) from public.social_campaign_targets);
+end $$;

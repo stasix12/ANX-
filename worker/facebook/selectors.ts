@@ -141,8 +141,24 @@ export const patterns = {
    * page-wide: see rateLimit.ts, which reads the dialog the Post button was
    * clicked in, minus our own draft, and Facebook's own live regions — and
    * nothing else.
+   * PUT BACK, AND THE REASON IT CAME OUT WAS WRONG. The first tightening
+   * dropped "you're temporarily blocked" on the grounds that `checkpoint`
+   * below already carries it. It does — but THIS branch never asks: the
+   * composer calls classifyPage before the click and again after a clean
+   * detach, and nowhere in between (composer.ts). So dropping it did not
+   * move the signal to another handler, it deleted it: the row fell to the
+   * generic timeout throw, which parks one row and returns WITHOUT setting
+   * state.attention, so the gate never closes and the queue keeps going. That
+   * is the 03/11 failure this brake exists to prevent, reintroduced by a
+   * cleanup. join.ts:81 calls these "Facebook's own words when it is us it is
+   * refusing… Any of them stops the run", and it is right.
+   *
+   * They are safe to carry BECAUSE the read is scoped now: "חסימה זמנית" is
+   * not something an ordinary group post says, and even if one did, the feed
+   * is no longer read. Only the words this file is sure of are listed — not
+   * join.ts's "מוגבל" or "יותר מדי", which are ordinary Hebrew.
    */
-  rateLimited: /מגביל(?:ים|ות|ה)?\s+את\s+התדירות|(?:בהגנה|להגן|הגנה)\s+על\s+הקהילה\s+מפני\s+ספאם|we\s+limit\s+how\s+often|(?:help\s+)?protect\s+(?:our|the)\s+community\s+from\s+spam|ограничива(?:ем|ется)\s+частот/i,
+  rateLimited: /מגביל(?:ים|ות|ה)?\s+את\s+התדירות|(?:בהגנה|להגן|הגנה)\s+על\s+הקהילה\s+מפני\s+ספאם|חסימה\s+זמנית|we\s+limit\s+how\s+often|(?:help\s+)?protect\s+(?:our|the)\s+community\s+from\s+spam|you'?re\s+temporarily\s+(?:blocked|restricted)|ограничива(?:ем|ется)\s+частот|временно\s+заблокирован/i,
   /** Group requires admin approval — the post exists but is pending. */
   pendingApproval: /pending (admin )?approval|will be reviewed|awaiting approval|ממתין לאישור|יאושר על ידי מנהל|ожидает одобрения|на проверке/i,
   /** Not a member / cannot post here. */

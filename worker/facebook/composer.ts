@@ -550,13 +550,29 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
      * not a publication somebody has to go and check by hand.
      */
     if (tooFast) {
-      /* QUOTED, because the branch beside this one quotes what it matched and
-         this one did not: when it fired on 05/11 nothing in the row, the log
-         or the banner said which words had been found. */
+      /*
+       * ─── WHAT WE MAY CLAIM, AND WHAT WE MAY ONLY SUSPECT ───────────────
+       *
+       * `afterSubmit` false means "safe to try again": the row goes back as
+       * an ordinary failure. That is the right answer ONLY when Facebook
+       * visibly refused the post, and the one thing that shows it refused is
+       * our own text still sitting in the box. Until now the branch asserted
+       * that in a comment and passed `false` unconditionally — so a false
+       * positive, which is what 05/11 was, could hand a post that had
+       * actually gone up back to the queue to go up again.
+       *
+       * Measured now. Draft still held → Facebook refused it, say so and let
+       * it be retried. Not held → we do not know, so the row is parked as
+       * "might already be live" and the message does not pretend otherwise.
+       * MAYBE_LIVE_STEP exists for exactly this doubt.
+       */
+      const refused = tooFast.draftHeld;
       throw new PublishError(
         'rate_limited',
-        `פייסבוק הגביל את קצב הפרסום מהחשבון הזה ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה. צריך להאט את קצב הפרסום ולנסות שוב מאוחר יותר. (מה שפייסבוק כתבה: "${tooFast}")`,
-        false,
+        refused
+          ? `פייסבוק הגביל את קצב הפרסום מהחשבון הזה ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה. צריך להאט את קצב הפרסום ולנסות שוב מאוחר יותר. (מה שפייסבוק כתבה: "${tooFast.notice}")`
+          : `פייסבוק הגביל את קצב הפרסום מהחשבון הזה. הטקסט כבר לא היה בחלון, ולכן אי אפשר לדעת אם הפוסט עלה — בדקו בקבוצה לפני שמנסים שוב. (מה שפייסבוק כתבה: "${tooFast.notice}")`,
+        !refused,
       );
     }
     // Still open: either an error banner, or Facebook simply never took it down.

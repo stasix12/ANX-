@@ -2826,8 +2826,34 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
      */
     if (err instanceof PublishError && err.kind === 'rate_limited') {
       state.attention = 'פייסבוק הגביל את קצב הפרסום של החשבון ולא קיבל את הפוסט. עצרנו את הפרסום מיד כדי לא להחמיר את ההגבלה. הפוסטים שלא יצאו לא פורסמו בכלל — אפשר להמשיך מאוחר יותר, ורצוי להגדיל קודם את המרווח בין פרסומים.';
-      await finish({ status: 'failed', step: 'failed', error: message, screenshot_path: screenshot });
-      await db.from('social_targets').update({ last_status: 'failed', last_error: message }).eq('id', tt.id);
+      /*
+       * ─── AND THE ROW'S FATE FOLLOWS THE PROOF, NOT THE DETECTION ───────
+       *
+       * This used to write `failed` unconditionally, on the reasoning in the
+       * comment above: Facebook refused the post in writing, so there is
+       * nothing in the group to check and the row may be tried again. That
+       * reasoning is only as good as the detection — and on 05/11 the
+       * detection was wrong, which made "may be tried again" a route to
+       * posting something that was already live a second time. Every guard
+       * against that counts `step = 'submitted'` (MAYBE_LIVE_STEP), and this
+       * branch was the one that never set it.
+       *
+       * composer.ts now measures the one thing that tells them apart — our
+       * own text still in the box — and carries it in `afterSubmit`. Held:
+       * refused, `failed`, retryable, as before. Not held, or the job had
+       * already reached a step where the click had happened: parked, for the
+       * owner to look before anything goes out again.
+       */
+      const maybeLive = err.afterSubmit || mayAlreadyBePosted;
+      await finish(
+        maybeLive
+          ? { status: 'needs_attention', step: 'submitted', error: message, screenshot_path: screenshot }
+          : { status: 'failed', step: 'failed', error: message, screenshot_path: screenshot },
+      );
+      await db
+        .from('social_targets')
+        .update({ last_status: maybeLive ? 'needs_attention' : 'failed', last_error: message })
+        .eq('id', tt.id);
       await heartbeat(state, 'needs_attention', jobEnv.browser.debugMode);
       await logActivity('error', 'rate_limited', `פייסבוק הגביל את קצב הפרסום של החשבון (${tt.name}). עצרנו את הפרסום. הפוסט לא עלה לקבוצה.`, {
         queueId: item.id,

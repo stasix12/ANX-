@@ -46,6 +46,37 @@ for (const other of [
   is(patterns.rateLimited.test(other), `the same notice in another language is recognised: ${other.slice(0, 28)}…`);
 }
 
+/*
+ * ─── AND THE WORDS FACEBOOK USES WHEN IT IS BLOCKING US ───────────────────
+ *
+ * UNTESTED UNTIL NOW, WHICH IS HOW IT WAS DELETED. A tightening of this
+ * pattern dropped "you're temporarily blocked" on the grounds that
+ * `patterns.checkpoint` already carries it. It does — but the composer never
+ * asks classifyPage in the branch that raises the brake, so the signal did
+ * not move to another handler: it vanished. The row then fell to the generic
+ * timeout, which parks ONE row and returns without setting state.attention,
+ * so the gate stays open and the queue keeps running into the block. That is
+ * the 03/11 failure, reintroduced by a cleanup, and the suite stayed green
+ * through it because nothing here named these words.
+ *
+ * join.ts:81 calls them "Facebook's own words when it is us it is refusing…
+ * Any of them stops the run."
+ */
+for (const blocked of [
+  "You're temporarily blocked from posting",
+  'חסימה זמנית מפרסום בקבוצות',
+  'Вы временно заблокированы',
+]) {
+  is(patterns.rateLimited.test(blocked), `Facebook blocking the account stops the run too: ${blocked.slice(0, 30)}…`);
+}
+
+/* But only the words this file is sure of. join.ts also lists "מוגבל" and
+   "יותר מדי" — ordinary Hebrew, and carrying them here would put the brake
+   back on the hair trigger it has just come off. */
+for (const ordinary of ['המקום מוגבל ל-20 משתתפים', 'יותר מדי אנשים נרשמו לאירוע']) {
+  is(!patterns.rateLimited.test(ordinary), `and ordinary Hebrew is not a block: ${ordinary.slice(0, 26)}…`);
+}
+
 /* It must not fire on an ordinary post, or every publication becomes a halt. */
 /*
  * ─── THE 05/11 FALSE POSITIVE, ONE STRING PER WAY IT FIRED ────────────────
@@ -96,11 +127,27 @@ is(atRate < atTimeout, 'and before the timeout sentence that used to swallow it'
 
 const branch = composer.slice(atRate, atTimeout);
 is(/'rate_limited'/.test(branch), 'it throws its own kind, not a generic one');
+/*
+ * ─── RE-POINTED, AND THE REQUIREMENT IS STRONGER THAN IT WAS ──────────────
+ *
+ * This used to demand `afterSubmit` be the literal `false`, on the reasoning
+ * that Facebook had said in writing it did not take the post. That reasoning
+ * is only as sound as the detection, and on 05/11 the detection was wrong —
+ * which turned "safe to retry" into a route to publishing a post that was
+ * already live a second time. Every guard against that reads
+ * MAYBE_LIVE_STEP, and this was the one branch that never set it.
+ *
+ * So the flag must now be DERIVED from the one thing that tells a refusal
+ * from a false alarm: our own text still sitting in the dialog.
+ */
+is(!/,\s*false,\s*\)/.test(branch), 'afterSubmit is a constant again — then a false positive can republish a post that is already up');
+is(/!refused/.test(branch), 'it is derived from whether the draft is still in the box');
+is(/tooFast\.draftHeld/.test(branch), 'and that proof comes from the detector, which reads it off the dialog');
+is(/לא עלה לקבוצה/.test(branch), 'when the draft IS held the message still says plainly that the post did not go up');
 is(
-  /,\s*false,\s*\)/.test(branch),
-  'with afterSubmit FALSE — Facebook said in writing it did not take the post, so this is not a "might be live, go and look" row',
+  /אי אפשר לדעת אם הפוסט עלה/.test(branch),
+  'and when it is not, the message says so instead of promising something nobody checked',
 );
-is(/לא עלה לקבוצה/.test(branch), 'and the message says plainly that the post did not go up');
 
 // ───────────── 3. The worker stops everything and says so at the top ───────
 const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
@@ -112,8 +159,17 @@ is(stop.length > 200, 'found the branch body');
 is(/state\.attention\s*=\s*'/.test(stop), 'it raises attention — which is what stops the next tick AND lights the banner by his name');
 is(/פייסבוק הגביל את קצב הפרסום/.test(stop), 'and the banner says who limited what, in his language');
 is(/heartbeat\(state, 'needs_attention'/.test(stop), "it heartbeats 'needs_attention', which is what the header reads");
-is(/status: 'failed'/.test(stop), 'the row is an honest failure, not a publication to go and check');
-is(!/status: 'needs_attention'/.test(stop), 'and is NOT parked for a manual group check — there is nothing in the group to check');
+/*
+ * Both fates, and the test that chooses between them. The old pair demanded
+ * `failed` and forbade `needs_attention` outright; that is exactly the
+ * unconditional claim that made a false positive dangerous.
+ */
+is(/const maybeLive = err\.afterSubmit \|\| mayAlreadyBePosted/.test(stop), 'the row\'s fate is decided by the proof, not by the detection alone');
+is(/status: 'failed'/.test(stop), 'a proven refusal is an honest failure the queue may try again');
+is(
+  /status: 'needs_attention', step: 'submitted'/.test(stop),
+  'and anything unproven is parked as MIGHT ALREADY BE LIVE — step \'submitted\' is what every duplicate guard in the product reads',
+);
 is(/logActivity\('error', 'rate_limited'/.test(stop), 'and it is filed at error level under its own event');
 
 /*
@@ -181,8 +237,29 @@ async function browserPass(): Promise<void> {
     const caught = await facebookSaidTooFast(page, composer, DRAFT);
     is(caught !== null, "Facebook's own notice, in the dialog the post was submitted in, still stops everything");
     is(
-      (caught ?? '').includes('מגבילים את התדירות'),
-      `and the sentence it matched comes back to be quoted — got "${(caught ?? '').slice(0, 40)}"`,
+      (caught?.notice ?? '').includes('מגבילים את התדירות'),
+      `and the sentence it matched comes back to be quoted — got "${(caught?.notice ?? '').slice(0, 40)}"`,
+    );
+    is(
+      caught?.draftHeld === true,
+      'and the draft is still in the box, which is the proof that Facebook refused the post rather than took it',
+    );
+
+    /* ── 2b. THE SAME NOTICE, WITH THE BOX EMPTY. Facebook limited the
+           account — but our text is gone, so whether this post went up is
+           not something anyone here knows. The row must be parked, not
+           handed back to the queue. This is the case that republished a live
+           post before the proof existed. */
+    composer = await mount(`
+      <div id="composer" role="dialog" aria-label="צור פוסט">
+        <div contenteditable="true"></div>
+        <div>${REAL}</div>
+      </div>`);
+    const unproven = await facebookSaidTooFast(page, composer, DRAFT);
+    is(unproven !== null, 'the notice is still read when the box is empty');
+    is(
+      unproven?.draftHeld === false,
+      'but nothing proves Facebook refused this post, so the row may not be marked retryable',
     );
 
     /* ── 3. OUR OWN WORDS ARE NEVER FACEBOOK SPEAKING. A post about spam

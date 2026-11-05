@@ -106,22 +106,68 @@ async function textOf(el: Locator | ElementHandle<Element>): Promise<string> {
 }
 
 /**
+ * IS OUR OWN DRAFT STILL IN THE BOX?
+ *
+ * The branch that raises the brake has always ASSERTED this — its comment
+ * reads "the dialog is still holding the text it refused" — and nothing ever
+ * checked it. That assertion is what lets the row be written as a plain
+ * `failed` that the queue may try again, instead of being parked as
+ * "might already be live". On a true rate limit the assertion is right: the
+ * post was refused and the text stayed. On a FALSE one — which is what
+ * happened on 05/11 — it is a guess, and the direction it guesses in is the
+ * one that republishes a post that is already up. `MAYBE_LIVE_STEP` exists
+ * for exactly that doubt and this branch never used it.
+ *
+ * So it is measured. The longest line of the draft is looked for in the
+ * dialog, because a contenteditable re-wraps what it is given but does not
+ * rewrite the words. A draft with nothing long enough to be distinctive — a
+ * picture-only post, a two-word ad — answers FALSE, which routes the row to
+ * the cautious side. Unknown is not the same as refused.
+ */
+const DISTINCTIVE = 12;
+
+export function draftStillHeld(dialogText: string, draft: string): boolean {
+  const longest = draft
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length >= DISTINCTIVE)
+    .sort((a, b) => b.length - a.length)[0];
+  if (!longest) return false;
+  return dialogText.includes(longest);
+}
+
+/** What the page said, and whether our words are still in the box. */
+export interface TooFast {
+  /** The sentence that matched, for the owner to read in the error. */
+  notice: string;
+  /** True only when the draft is provably still in the dialog, i.e. Facebook
+      visibly did NOT take it. False means "not proven", never "it went up". */
+  draftHeld: boolean;
+}
+
+/**
  * Facebook's own "you are posting too often" notice, as the sentence it was
  * found in — or null, which is the answer for every ordinary page.
  *
  * `composer` is the dialog handle pinned BEFORE the Post click; `draft` is
  * the text this product typed into it. Both may be absent, and absence only
- * costs a place to look.
+ * costs a place to look — and costs the `draftHeld` proof, which is the safe
+ * direction.
  */
 export async function facebookSaidTooFast(
   page: Page,
   composer: ElementHandle<Element> | null,
   draft: string,
-): Promise<string | null> {
-  /* 1 — the dialog the post was actually submitted in, minus our own words. */
+): Promise<TooFast | null> {
+  /* 1 — the dialog the post was actually submitted in, minus our own words.
+         The same read answers both questions, so the draft is never looked
+         for on a page that has already moved on. */
+  let draftHeld = false;
   if (composer) {
-    const hit = noticeIn(withoutLines(await textOf(composer), draft));
-    if (hit) return hit;
+    const dialogText = await textOf(composer);
+    draftHeld = draftStillHeld(dialogText, draft);
+    const hit = noticeIn(withoutLines(dialogText, draft));
+    if (hit) return { notice: hit, draftHeld };
   }
 
   /* 2 — the regions a page uses to announce something. Visible only: an
@@ -140,7 +186,7 @@ export async function facebookSaidTooFast(
          used to hide a notice that was on screen. */
       if (!(await el.isVisible().catch(() => false))) continue;
       const hit = noticeIn(withoutLines(await textOf(el), draft));
-      if (hit) return hit;
+      if (hit) return { notice: hit, draftHeld };
     }
   }
   return null;

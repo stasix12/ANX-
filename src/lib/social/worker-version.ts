@@ -981,5 +981,35 @@ export const WORKER_VERSION = '4.49.0';
    the evidence on screen, that something is still cancelling his queue.
 
    (types.ts moves too, for QueueItem.updated_at. It is a type; nothing
-   executes it.) */
-export const WORKER_FINGERPRINT = 'f098c46c1664d3e4';
+   executes it.)
+
+   ─── RE-PINNED AGAIN, and 4.49.0 stays, for the same reason and with the
+   same proof. ──────────────────────────────────────────────────────────────
+
+   "שיספור רק את הקבוצות שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם" — the
+   cards now lead with groups instead of publications. That moved
+   campaign.ts (the state and a new groupProgress) and client.ts (the counts
+   read asks the groups view for `*` and parses two new columns).
+
+   DOES THIS HAVE TO REACH THE PC? No, and it cannot: the worker imports
+   account-scope, cities, compose, discovery, errors, plan, rules, status,
+   tenant, time, types and this file — and neither campaign.ts nor client.ts
+   is among them. Asked of the build rather than of the import list:
+
+     npm run build:app
+     grep -c groupProgress        dist/app/worker.cjs → 0
+     grep -c publishedTargetCount dist/app/worker.cjs → 0
+     grep -c targets_published    dist/app/worker.cjs → 0
+     grep -c campaignState        dist/app/worker.cjs → 0
+     grep -c campaign_targets     dist/app/worker.cjs → 0
+
+   So this reaches him when the website deploys, with nothing to install, and
+   a release number is not burned on a change no installed copy carries. The
+   publishing engine, the queue order, the publish instants, the publishing
+   window and every existing queue were not touched.
+
+   The two SQL columns behind it are a VIEW — public.social_campaign_targets,
+   in supabase/social-latest.sql — and a view reads. Until that file is run
+   the app counts groups off the rows it can see and says "לפחות" on screen,
+   which is what worker/test/group-count.test.ts §3 and §4 hold it to. */
+export const WORKER_FINGERPRINT = '7ca88ae958bc7438';

@@ -186,6 +186,38 @@ export interface CampaignState<T extends CampaignQueueRow = CampaignQueueRow> {
    * which is what the dashboard used to do for itself.
    */
   targetCount: number;
+  /**
+   * AND HOW MANY OF THOSE GROUPS ACTUALLY GOT THE POST — the other half of
+   * the only pair of numbers the owner asked for.
+   *
+   * "שיספור רק את הקבוצות שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם, לא צריך
+   *  את המספר המנופח הזה זה מבלבל לקוחות."
+   *
+   * The card had `targetCount` (252 groups) beside `progress` (478 of 730
+   * ROWS) and no number that answered "how many of the groups". 730 is not a
+   * made-up figure — it is publications, and a round plans the same group more
+   * than once — but it is not the figure he or a customer reads the card for,
+   * and the two sat one line apart with nothing saying they count different
+   * things.
+   *
+   * DISTINCT groups with at least one PUBLISHED row, in the same scope as
+   * `targetCount` (today's for a repeating round, the round's life otherwise).
+   * A distinct count cannot be summed out of the per-status rollup — a group
+   * with one published row and one waiting row would be counted twice — so it
+   * comes from the groups view's own aggregate, and falls back to the rows.
+   */
+  publishedTargetCount?: number;
+  /**
+   * False when `publishedTargetCount` is a FLOOR and not the round's own
+   * count — the rows it was derived from were a preview.
+   *
+   * It is NOT `truncated`. With v27's counting views present `truncated` is
+   * false, because the per-status numbers really are exact; a database that
+   * has those views but not v38's two columns has exact row counts and a
+   * group figure counted off a capped preview, which is the 28/28 shape all
+   * over again if nothing says so. So this figure carries its own honesty.
+   */
+  publishedTargetCountIsWhole?: boolean;
   /** Last scheduled_at still ahead of us — the plan's own end, not a guess. */
   estimatedCompletionAt: string | null;
   nextAt: string | null;
@@ -347,6 +379,14 @@ export function campaignState<T extends CampaignQueueRow>(
        */
       targetCount?: number;
       /**
+       * DISTINCT groups with a published row — v38's `targets_published`.
+       *
+       * Null (or absent) means this database cannot answer it, which is not
+       * the same as zero: zero reads as "this round published to no group at
+       * all". Null falls through to the rows and marks the figure a floor.
+       */
+      publishedTargetCount?: number | null;
+      /**
        * The round's FIRST publication, over every row it has ever had.
        *
        * `startedAt` is otherwise the earliest published_at among the rows
@@ -460,6 +500,25 @@ export function campaignState<T extends CampaignQueueRow>(
    */
   const targetCount =
     opts.counts?.targetCount ?? new Set([...rows.filter((r) => !isTerminal(r.status)), ...rows.filter((r) => isTerminal(r.status))].map((r) => r.target_id)).size;
+  /*
+   * AND HOW MANY OF THEM GOT THE POST. Same grouping, one filter.
+   *
+   * `status === 'published'` and not `published_at`: a row that carries a
+   * timestamp but ended some other way is not a group this round published
+   * to, and status.ts owns which status means success for every other figure
+   * on this state.
+   *
+   * WHOLENESS IS ITS OWN QUESTION here. With the counts present the rows are
+   * a preview, so a set built from them is a count of what fitted — exactly
+   * the fault `targetCount` was moved into the database to escape. Without
+   * the counts the rows are all there is, and `truncated` already says
+   * whether that is the whole round.
+   */
+  const publishedTargetCount =
+    opts.counts?.publishedTargetCount ??
+    new Set(rows.filter((r) => r.status === 'published').map((r) => r.target_id)).size;
+  const publishedTargetCountIsWhole =
+    opts.counts?.publishedTargetCount != null ? true : !opts.counts && !(opts.truncated ?? false);
 
   const done = rows
     .filter((r) => TERMINAL_STATUSES.includes(r.status))
@@ -495,6 +554,8 @@ export function campaignState<T extends CampaignQueueRow>(
     startedAt,
     everPublished,
     targetCount,
+    publishedTargetCount,
+    publishedTargetCountIsWhole,
     /*
      * THE ROUND'S MOST RECENT PUBLICATION, exact when the caller has it.
      *
@@ -844,6 +905,106 @@ export function runProgress(progress: CampaignProgress, todayOnly = false, trunc
     publishedLabel: total ? `${atLeast}${published} מתוך ${total} ${agree(published, 'פורסם', 'פורסמו')}` : nothing,
     note: unpublishedNote(progress),
     ariaLabel: total ? `${percent}% — ${handledLabel}` : handledLabel,
+  };
+}
+
+/**
+ * ─── THE PAIR OF NUMBERS HE ACTUALLY ASKED FOR ────────────────────────────
+ *
+ * "שיספור רק את הקבוצות שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם, לא צריך את
+ *  המספר המנופח הזה זה מבלבל לקוחות."
+ *
+ * The hero printed `478 / 730 טופלו` — PUBLICATIONS, handled out of planned —
+ * one line under a pill reading `252 קבוצות`. Both figures were true and
+ * neither was the one being read: a round plans the same group more than once,
+ * so the row total is a multiple of the group total and the ratio beside it
+ * looks like a round three times bigger than the work.
+ *
+ * This view is the same card in GROUPS: how many groups the round is meant to
+ * reach, and how many of them have the post. Nothing here touches `progress`,
+ * `resolveState` or any publishing decision — runProgress() is untouched and
+ * still draws the round's own screen, where a publication IS the subject.
+ *
+ * WHAT IT WILL NOT DO is invent certainty. `publishedTargetCountIsWhole` is
+ * false whenever the figure was counted off a preview, and then every sentence
+ * here opens with "לפחות" and the percentage stops at 99 — the same discipline
+ * runProgress() applies to `truncated`, for the same reason: 100% is the
+ * loudest way to print a ceiling as a total.
+ *
+ * "פורסם לפחות ל-204 מתוך 252 קבוצות" — the hedge goes between the verb and
+ * the preposition. "פורסם ל-לפחות 204" is not a sentence in any language.
+ *
+ * `totalGroups` may be passed in by a card that already holds the figure as a
+ * prop, so the pill and the ratio beside it cannot come from two places and
+ * disagree. Absent, it is the state's own.
+ */
+export interface GroupProgressView {
+  /** Groups this round is meant to publish to. */
+  total: number;
+  /** Groups that already have at least one successful publication. */
+  published: number;
+  /** Groups with no publication yet — whatever the reason. */
+  waiting: number;
+  /** 0–100 over groups. 100 only when none is left. */
+  percent: number;
+  /** "פורסם ל-204 מתוך 252 קבוצות" — scope and hedge included. */
+  label: string;
+  /** "48 קבוצות עוד לא קיבלו פרסום", or '' when none are left. */
+  waitingLabel: string;
+  ariaLabel: string;
+  /** True when either figure is a floor rather than the round's own count. */
+  hedged: boolean;
+  /**
+   * FALSE MEANS DO NOT DRAW THIS, and a card that asks must honour it.
+   *
+   * A round with no groups counted yet — nothing planned, or a queue whose
+   * rows carry no target — would render "פורסם ל-0 מתוך 0 קבוצות", which is a
+   * sentence about nothing drawn over a card that may well be mid-flight. The
+   * caller falls back to what it drew before.
+   */
+  usable: boolean;
+}
+
+export function groupProgress(state: CampaignState, totalGroups?: number): GroupProgressView {
+  const total = Math.max(0, totalGroups ?? state.targetCount ?? 0);
+  /* Clamped to the total: a floor counted off a preview can only ever be
+     smaller, but a card may be handed a `totalGroups` prop from one read and a
+     published count from another, and "פורסם ל-260 מתוך 252" is the kind of
+     sentence that makes everything else on the card suspect. */
+  /*
+   * ABSENT IS NOT ZERO, and the two fields are optional so that every state
+   * built by hand — the measured fixtures, the render harnesses — keeps
+   * compiling. A missing count must therefore fall back to the row view in
+   * the caller rather than render "פורסם ל-0 מתוך 252 קבוצות" over a round
+   * that has published two hundred times, which is the same mistake as
+   * reading a pre-v38 database's missing column as a zero.
+   */
+  const hasCount = state.publishedTargetCount != null;
+  const published = Math.max(0, Math.min(total, state.publishedTargetCount ?? 0));
+  const hedged = !hasCount || !(state.publishedTargetCountIsWhole ?? true) || (state.truncated ?? false);
+  const percent = hedged ? Math.min(99, ratio(published, total)) : ratio(published, total);
+  const atLeast = hedged ? 'לפחות ' : '';
+  /* The scope travels with the numbers, exactly as it does in runProgress():
+     a repeating round's figures are TODAY'S, and a true number under a
+     sentence that does not say what it is about is the fault this whole
+     module keeps being fixed for. */
+  const scope = state.todayOnly ? ' היום' : '';
+  const waiting = Math.max(0, total - published);
+  return {
+    total,
+    published,
+    waiting,
+    percent,
+    /* `agree` and not `counted`: the digit goes before "מתוך" here, and
+       counted() owns where the digit goes — see its note in time.ts. */
+    label: total ? `פורסם ${atLeast}ל-${published} מתוך ${total} ${agree(total, 'קבוצה', 'קבוצות')}${scope}` : '',
+    /* "עוד לא קיבלו פרסום" and not "ממתינות": a group whose only publication
+       FAILED is not waiting for anything, and both belong in this number. The
+       words have to cover the failed ones too or the line is a promise. */
+    waitingLabel: waiting > 0 ? `${counted(waiting, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')} עוד לא ${agree(waiting, 'קיבלה', 'קיבלו')} פרסום` : '',
+    ariaLabel: total ? `${percent}% — פורסם ${atLeast}ל-${published} מתוך ${total} ${agree(total, 'קבוצה', 'קבוצות')}${scope}` : '',
+    hedged,
+    usable: total > 0 && hasCount,
   };
 }
 

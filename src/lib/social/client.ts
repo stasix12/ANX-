@@ -2515,6 +2515,9 @@ export interface CampaignTargetRow {
   campaign_id: string;
   targets: number;
   targets_today: number;
+  /** v38. Absent on a database that has not run social-latest.sql since. */
+  targets_published?: number | null;
+  targets_published_today?: number | null;
   first_published_at: string | null;
   last_published_at: string | null;
 }
@@ -2525,6 +2528,16 @@ export interface CampaignExactCounts {
   /** DISTINCT groups this round reaches — not its row count. */
   targets: number;
   targetsToday: number;
+  /**
+   * DISTINCT groups that already have the post — v38's two columns.
+   *
+   * NULL, not 0, when this database cannot answer: zero is a claim ("no group
+   * got it"), null is the absence of one, and the state layer falls through to
+   * the rows and marks the figure a floor. A database that has v27's views but
+   * not v38's columns is every database until social-latest.sql is run again.
+   */
+  publishedTargets: number | null;
+  publishedTargetsToday: number | null;
   /** The round's FIRST publication, over every row it has ever had. */
   firstPublishedAt: string | null;
   lastPublishedAt: string | null;
@@ -2563,10 +2576,26 @@ export async function campaignCounts(campaignIds?: string[]): Promise<CountsRead
    * the code below TELL whether it hit it instead of guessing.
    */
   let counts = db().from('social_campaign_counts').select('campaign_id, status, total, today').limit(COUNTS_LIMIT);
-  let targets = db()
-    .from('social_campaign_targets')
-    .select('campaign_id, targets, targets_today, first_published_at, last_published_at')
-    .limit(COUNTS_LIMIT);
+  /*
+   * `*` HERE, AND ONLY HERE, AND IT IS THE CAREFUL CHOICE.
+   *
+   * Every other select in this file names its columns, because `*` on
+   * social_queue drags rendered_text — the whole published post, per row —
+   * across a metered mobile connection, and that is on record as the single
+   * biggest source of egress this app ever had.
+   *
+   * This is not social_queue. It is an aggregate view: ONE row per campaign,
+   * a handful of ints and two timestamps, no text column at all. And naming
+   * the columns has a cost the queue reads do not have — asking for a column
+   * a database does not have yet makes PostgREST fail the WHOLE request, so
+   * adding v38's two columns to the list would have taken `targets`,
+   * `targets_today` and `first_published_at` down with them on every database
+   * that has not run the migration. The group count would then be re-derived
+   * from a capped preview with nothing saying so, which is the exact fault
+   * this view was added to end. `*` returns what the database actually has,
+   * and the parser below treats a missing column as "cannot answer".
+   */
+  let targets = db().from('social_campaign_targets').select('*').limit(COUNTS_LIMIT);
   if (campaignIds) {
     counts = counts.in('campaign_id', campaignIds);
     targets = targets.in('campaign_id', campaignIds);
@@ -2604,7 +2633,16 @@ export async function campaignCounts(campaignIds?: string[]): Promise<CountsRead
 
   const out: CampaignCountMap = {};
   const entry = (id: string) =>
-    (out[id] ??= { lifetime: {}, today: {}, targets: 0, targetsToday: 0, firstPublishedAt: null, lastPublishedAt: null });
+    (out[id] ??= {
+      lifetime: {},
+      today: {},
+      targets: 0,
+      targetsToday: 0,
+      publishedTargets: null,
+      publishedTargetsToday: null,
+      firstPublishedAt: null,
+      lastPublishedAt: null,
+    });
   for (const row of (countRes.data ?? []) as CampaignCountRow[]) {
     const e = entry(row.campaign_id);
     e.lifetime[row.status] = (e.lifetime[row.status] ?? 0) + (row.total ?? 0);
@@ -2618,6 +2656,11 @@ export async function campaignCounts(campaignIds?: string[]): Promise<CountsRead
       const e = entry(row.campaign_id);
       e.targets = row.targets ?? 0;
       e.targetsToday = row.targets_today ?? 0;
+      /* `?? null` and NOT `?? 0`: on a pre-v38 database the key is absent, and
+         a 0 here would print "פורסם ל-0 מתוך 252 קבוצות" over a round that has
+         published two hundred times. Null routes it to the rows. */
+      e.publishedTargets = row.targets_published ?? null;
+      e.publishedTargetsToday = row.targets_published_today ?? null;
       e.firstPublishedAt = row.first_published_at ?? null;
       e.lastPublishedAt = row.last_published_at ?? null;
     }
@@ -2942,6 +2985,9 @@ export async function campaignStates(campaignIds?: string[]): Promise<Record<str
             progress: todayOnly ? exact.today : exact.lifetime,
             everPublished: exact.lifetime.published ?? 0,
             targetCount: todayOnly ? exact.targetsToday : exact.targets,
+            /* The SAME scope as the line above, or the card would read
+               "today's published groups out of the round's whole life". */
+            publishedTargetCount: todayOnly ? exact.publishedTargetsToday : exact.publishedTargets,
             /*
              * THE ROUND'S FIRST PUBLICATION, from the database.
              *

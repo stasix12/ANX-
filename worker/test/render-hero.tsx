@@ -37,6 +37,22 @@ const st = (p: unknown, extra: Partial<CampaignState> = {}): CampaignState =>
     state: 'running',
     truncated: false,
     targetCount: 0,
+    /*
+     * THE GROUP FIGURES, AND THEY ARE DERIVED FROM THE PROGRESS ON PURPOSE.
+     *
+     * The card leads with "פורסם ל-X מתוך Y קבוצות" now, so a fixture that
+     * leaves these out renders the FALLBACK — the row ratio — and measures a
+     * card nobody is shown. Most cases here publish one row per group, so
+     * `progress.published` IS the number of groups that got the post; the two
+     * cases where it is not say so themselves.
+     *
+     * Exact by default. The hedged wording ("לפחות", and the paragraph that
+     * says which file makes it exact) has its own case below, because its
+     * sentence is the longest one this card can draw and that is the one a
+     * measured suite exists to catch.
+     */
+    publishedTargetCount: (p as { published?: number }).published ?? 0,
+    publishedTargetCountIsWhole: true,
     startedAt: null,
     /* THE ROUND'S WHOLE LIFE, stated rather than left out. neverLaunched()
        reads it, and a fixture that omits it is a fixture making no claim
@@ -340,6 +356,54 @@ const cases = [
   ['never launched — no window sentence may be printed over it', camp('16', 'סבב חדש'),
     st(prog({ total: 0 }), { state: 'not_started' }),
     0, sched.reference, WINDOW_OPEN],
+  /*
+   * 17 — HIS NUMBERS, EXACTLY AS HE SENT THEM, and the reason this card was
+   * changed at all.
+   *
+   *   "סה״כ פורסמו 204 מה זה המספרים האלה 478/730"
+   *   "שיספור רק את הקבוצות שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם, לא
+   *    צריך את המספר המנופח הזה זה מבלבל לקוחות."
+   *
+   * 730 publications over 252 groups: the round plans the same group nearly
+   * three times, so the row ratio is a number three times the size of the
+   * work and the group total sat one line below it saying something else.
+   *
+   * This is also the WIDEST the card can get — three-digit numerator, three-
+   * digit denominator, "48 קבוצות עוד לא קיבלו פרסום", and 274 publications
+   * that did not make it, all on the line under the bar.
+   */
+  ['HIS NUMBERS: 730 publications over 252 groups', camp('17', 'פרסומת לרוסים'),
+    st(prog({ total: 730, published: 204, failed: 3, skipped: 271, scheduled: 252, finished: 478 }), {
+      state: 'running',
+      todayOnly: true,
+      targetCount: 252,
+      publishedTargetCount: 204,
+      startedAt: beforeClock(WINDOW_OPEN, 6),
+      nextAt: afterClock(WINDOW_OPEN, 1),
+    }),
+    252, sched.reference, WINDOW_OPEN],
+  /*
+   * 18 — THE SAME CARD WITHOUT v38's TWO COLUMNS, which is every database
+   * until social-latest.sql is run again.
+   *
+   * The group figure is then counted off the rows this card was handed — a
+   * preview — so it is a FLOOR: every sentence says "לפחות", the percentage
+   * may not reach 100, and a paragraph says which file turns it into the real
+   * number. `truncated` is FALSE here, which is the whole point: the per-
+   * status counts are exact and the group count is not, and before this case
+   * existed nothing on the card could tell the difference.
+   */
+  ['the group count is a floor: exact rows, no v38 columns', camp('18', 'ניקוי ספות באר שבע'),
+    st(prog({ total: 730, published: 204, failed: 3, skipped: 271, scheduled: 252, finished: 478 }), {
+      state: 'running',
+      todayOnly: true,
+      targetCount: 252,
+      publishedTargetCount: 61,
+      publishedTargetCountIsWhole: false,
+      startedAt: beforeClock(WINDOW_OPEN, 6),
+      nextAt: afterClock(WINDOW_OPEN, 1),
+    }),
+    252, sched.reference, WINDOW_OPEN],
 ] as const;
 
 const body = cases

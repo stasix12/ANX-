@@ -6,6 +6,7 @@ import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/i
 import {
   canPauseRun,
   canResumeRun,
+  groupProgress,
   launchPending,
   neverLaunched,
   openRows,
@@ -361,6 +362,44 @@ export function LiveCampaignHero({
    * its SUCCESS, on its own line under the bar and never folded in.
    */
   const view = runProgress(progress, state.todayOnly, state.truncated);
+  /*
+   * ─── AND THE SAME CARD IN GROUPS, WHICH IS WHAT IS READ ────────────────
+   *
+   * "סה״כ פורסמו 204 מה זה המספרים האלה 478/730" — and then, after the
+   * answer: "שיספור רק את הקבוצות שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם,
+   * לא צריך את המספר המנופח הזה זה מבלבל לקוחות."
+   *
+   * 478 / 730 is PUBLICATIONS, and both numbers are true: a round plans the
+   * same group more than once, so the rows are a multiple of the groups. It
+   * sat one line under a pill reading "252 קבוצות" with nothing saying the
+   * two count different things, which is how a card about 252 groups reads
+   * as a job three times the size.
+   *
+   * The figures on this card are the pair he asked for: groups the round is
+   * meant to reach, and groups that already have the post. `runProgress` is
+   * untouched and still draws the round's own screen, where a publication IS
+   * the subject and "730 פרסומים" is the right denominator.
+   *
+   * `targetCount` is passed rather than taken from the state so the ratio
+   * and the number the dashboard already held cannot come from two reads and
+   * disagree.
+   */
+  const groups = groupProgress(state, targetCount ?? undefined);
+  /*
+   * WHAT THE GROUP FIGURES CANNOT SAY, in the unit they are not in.
+   *
+   * A skipped or failed publication is not a group, and there is no group-wise
+   * count of either — a group can have one of each. They stay on the card
+   * because a round losing 274 publications is not something to learn about
+   * from a badge, and the noun is written into every one of them so nothing
+   * here can be read as a count of groups.
+   */
+  const lostNote = [
+    progress.skipped > 0 ? counted(progress.skipped, 'פרסום אחד דולג', 'פרסומים דולגו') : '',
+    progress.failed > 0 ? counted(progress.failed, 'פרסום אחד נכשל', 'פרסומים נכשלו') : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const open = openRows(progress);
   /*
    * One opinion about the state — the label, the colour, and whether the dot
@@ -479,22 +518,40 @@ export function LiveCampaignHero({
           >
             {campaign.name}
           </Link>
-          {(targetCount ?? 0) > 0 && (
+          {/*
+            THE PILL IS GONE AND ITS NUMBER IS NOT. It carried "252 קבוצות",
+            which is now the denominator of the figure directly below it —
+            "כל נתון יוצג פעם אחת בלבד", and a total printed twice two lines
+            apart is how this card came to have three counts of three
+            different things on it.
+
+            The fallback keeps it: with no group count to put under the ratio
+            (a queue whose rows carry no target), the pill is the only place
+            the groups appear at all.
+          */}
+          {!groups.usable && (targetCount ?? 0) > 0 && (
             <span className="mt-1 inline-block rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-bold text-white">
               {`${state.truncated ? 'לפחות ' : ''}${counted(targetCount ?? 0, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')}`}
             </span>
           )}
           <p dir="ltr" className="mt-1.5 text-[13px] font-extrabold tabular-nums text-white">
-            {`${view.handled} / ${view.total}`}
+            {/* NO HEDGE MARK ON THIS LINE, and that is the card's existing
+                rule rather than a new one: `view.handled / view.total` never
+                carried "לפחות" either — the hedge belongs to the sentence
+                three lines down, which has room to say the word, and to the
+                note under it that says what to do about it. */}
+            {groups.usable ? `${groups.published} / ${groups.total}` : `${view.handled} / ${view.total}`}
           </p>
           <p dir="auto" className="text-[11px] font-bold text-white/85">
-            {`${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
+            {groups.usable
+              ? `${agree(groups.published, 'קבוצה קיבלה', 'קבוצות קיבלו')} את הפוסט${state.todayOnly ? ' היום' : ''}`
+              : `${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
           </p>
         </div>
         <ProgressRing
-          percent={view.percent}
-          label={`${view.percent}%`}
-          sub="התקדמות"
+          percent={groups.usable ? groups.percent : view.percent}
+          label={`${groups.usable ? groups.percent : view.percent}%`}
+          sub={groups.usable ? 'מהקבוצות' : 'התקדמות'}
           size={78}
           stroke={8}
           tone="on-brand"
@@ -532,12 +589,28 @@ export function LiveCampaignHero({
             thousand times showed "27 / 269 טופלו" with nothing saying those
             are today's, directly under a schedule block reading "כל דקה".
           */}
-          <Ratio
-            done={view.handled}
-            total={view.total}
-            suffix={`${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
-          />
-          <p className="text-lg font-extrabold tabular-nums text-brand-400">{view.percent}%</p>
+          {/*
+            RE-POINTED FROM ROWS TO GROUPS, and the rule the old pair carried
+            is intact: the big figure beside a bar may not be the SUCCESS
+            count drawn over a PROGRESS bar, which is how one failed row of 29
+            printed "0%". Both figures here are the same pair now — groups
+            reached out of groups planned — so the bar, the ring and the digits
+            cannot disagree about what they are a fraction of.
+          */}
+          {groups.usable ? (
+            <Ratio
+              done={groups.published}
+              total={groups.total}
+              suffix={`${agree(groups.published, 'קבוצה קיבלה', 'קבוצות קיבלו')} את הפוסט${state.todayOnly ? ' היום' : ''}`}
+            />
+          ) : (
+            <Ratio
+              done={view.handled}
+              total={view.total}
+              suffix={`${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
+            />
+          )}
+          <p className="text-lg font-extrabold tabular-nums text-brand-400">{groups.usable ? groups.percent : view.percent}%</p>
         </div>
         {/* Segmented, and that is forced by the figure above it: a single
             green fill drawn at the HANDLED ratio would paint a failed row
@@ -545,16 +618,34 @@ export function LiveCampaignHero({
             tone maps, so the two bars now mean the same thing on both
             screens. Their total width is view.percent by construction. */}
         <div className="mt-2">
-          <ProgressBar
-            segments={[
-              { value: progress.published, className: TONE_FILL.good },
-              { value: progress.failed, className: TONE_FILL.bad },
-              { value: progress.skipped, className: TONE_FILL.neutral },
-            ]}
-            total={progress.total}
-            ariaLabel={view.ariaLabel}
-            height="h-2.5"
-          />
+          {groups.usable ? (
+            /*
+              ONE SEGMENT, BECAUSE THERE IS ONLY ONE GROUP-WISE OUTCOME WE CAN
+              HONESTLY DRAW. The three-segment bar was rows: published, failed,
+              skipped, each a count of publications. There is no group-wise
+              "failed" — one group can hold a published row and a failed row at
+              once — so inventing a second segment here would be a bar whose
+              widths are three counts of two different things. The publications
+              that did not make it are named in words under the bar instead.
+            */
+            <ProgressBar
+              segments={[{ value: groups.published, className: TONE_FILL.good }]}
+              total={groups.total}
+              ariaLabel={groups.ariaLabel}
+              height="h-2.5"
+            />
+          ) : (
+            <ProgressBar
+              segments={[
+                { value: progress.published, className: TONE_FILL.good },
+                { value: progress.failed, className: TONE_FILL.bad },
+                { value: progress.skipped, className: TONE_FILL.neutral },
+              ]}
+              total={progress.total}
+              ariaLabel={view.ariaLabel}
+              height="h-2.5"
+            />
+          )}
         </div>
         {/* What the run actually produced, and what became of the rest — one
             word per outcome instead of one word covering three. This line is
@@ -568,7 +659,14 @@ export function LiveCampaignHero({
             numbers under one phrase is how the screen started arguing with
             itself. */}
         <p className="mt-1.5 text-xs text-mist-500">
-          {[view.publishedLabel, view.note, open > 0 ? `${open} עוד לא יצאו` : ''].filter(Boolean).join(' · ')}
+          {groups.usable
+            ? /* THE GROUP SENTENCE, THEN WHAT IS LEFT, THEN WHAT WAS LOST —
+                 and every number in it names its own unit. "48 קבוצות עוד לא
+                 קיבלו פרסום · 274 פרסומים דולגו" cannot be read as one count
+                 of one thing, which is exactly what "478 / 730" beside "252
+                 קבוצות" was. */
+              [groups.label, groups.waitingLabel, lostNote].filter(Boolean).join(' · ')
+            : [view.publishedLabel, view.note, open > 0 ? `${open} עוד לא יצאו` : ''].filter(Boolean).join(' · ')}
         </p>
         {/*
           ONE SENTENCE PER CAUSE, because they are not the same problem.
@@ -593,6 +691,27 @@ export function LiveCampaignHero({
         {state.todayOnly && (state.publishedOutsidePlanToday ?? 0) > 0 && (
           <p className="mt-1.5 text-xs text-mist-400">
             {`ועוד ${state.outsidePlanIsWhole === false ? 'לפחות ' : ''}${counted(state.publishedOutsidePlanToday ?? 0, 'פרסום אחד', 'פרסומים', 'שני פרסומים')} של הסבב יצאו היום מחוץ למתוכנן להיום`}
+          </p>
+        )}
+        {/*
+          THE GROUP FIGURE HAS ITS OWN REASON TO BE APPROXIMATE, and it is not
+          `truncated`.
+
+          With the counting views present the per-status numbers really are
+          exact, so `truncated` is false and the warning below never shows —
+          but a database that has those views and not the two columns v38 adds
+          cannot count GROUPS that published, and the figure above it is then
+          counted off the rows this card was handed, which are a preview. That
+          is a floor, it says "לפחות", and the owner had no way to learn that
+          one run of the one file turns it into the real number.
+
+          Rendered only in that gap: when the round's counts are already
+          flagged approximate the sentence below says the same thing about all
+          of them, and two paragraphs asking for the same file is noise.
+        */}
+        {groups.usable && groups.hedged && !state.truncated && (
+          <p className="mt-1.5 text-xs text-mist-500">
+            {`מספר הקבוצות שפורסמו הוא מספר מינימום — למספר המדויק צריך להריץ פעם אחת את ${LATEST_SCHEMA_FILE} ב-SQL Editor של Supabase. הוא לא מוחק, לא מאפס את התור ולא משנה שום פרסום.`}
           </p>
         )}
         {state.truncated && (

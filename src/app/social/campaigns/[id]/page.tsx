@@ -55,6 +55,7 @@ import {
   canPauseRun,
   canResumeRun,
   cancellableRows,
+  groupProgress,
   runBadge,
   runProgress,
   type CampaignState,
@@ -371,6 +372,19 @@ export default function CampaignControlCenter() {
   const showPause = Boolean(state) && canPauseRun(state!.progress, campaign.status);
   const showResume = Boolean(state) && canResumeRun(state!.progress, campaign.status);
   const view = state ? runProgress(state.progress, state.todayOnly, state.truncated) : null;
+  /*
+   * THE SAME PAIR THE DASHBOARD AND THE CAMPAIGNS CARD NOW LEAD WITH, so the
+   * third screen does not answer "how far along is this" in a third unit.
+   *
+   * "שיספור רק את הקבוצות שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם, לא צריך
+   *  את המספר המנופח הזה זה מבלבל לקוחות."
+   *
+   * This screen keeps the row figures and SHOULD: it is the per-publication
+   * feed, the place the 274 skipped and the 3 failed are listed one by one and
+   * acted on. What changes is the headline — the ring — which is the one thing
+   * here that was a ratio of publications under a card about groups.
+   */
+  const groups = state ? groupProgress(state) : null;
 
   /*
    * ───────── WHEN THIS ROUND'S ROWS WILL ACTUALLY GO OUT ─────────
@@ -501,8 +515,12 @@ export default function CampaignControlCenter() {
                 presentational, so this is the label that is read out.
                 ProgressRing should take it as a prop; see the report.
               */}
-              <div role="img" aria-label={view.ariaLabel}>
-                <ProgressRing percent={view.percent} label={`${view.percent}%`} sub={`${view.handled} / ${view.total} טופלו`} />
+              <div role="img" aria-label={groups?.usable ? groups.ariaLabel : view.ariaLabel}>
+                <ProgressRing
+                  percent={groups?.usable ? groups.percent : view.percent}
+                  label={`${groups?.usable ? groups.percent : view.percent}%`}
+                  sub={groups?.usable ? `${groups.published} / ${groups.total} קבוצות` : `${view.handled} / ${view.total} טופלו`}
+                />
               </div>
               {/*
                 The four-figure <dl> that used to sit here is gone.

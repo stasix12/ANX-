@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { canPauseRun, canResumeRun, neverLaunched, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
+import { canPauseRun, canResumeRun, groupProgress, neverLaunched, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { accountGapSeconds } from '@/lib/social/rules';
@@ -275,6 +275,17 @@ export function CampaignCard({
         ? { label: 'החזר לפעילות', icon: <RepeatIcon aria-hidden className="h-4 w-4" />, onSelect: onReopen }
         : null;
   const view = runProgress(state.progress, state.todayOnly, state.truncated);
+  /*
+   * THE SAME PAIR OF NUMBERS THE DASHBOARD HERO NOW LEADS WITH, and it is
+   * here so the two screens cannot answer "how far along is this" in two
+   * different units one tap apart — the fault he reported twice already
+   * ("לא מסונכרן בין מסך פרסום קמפיינים לבין המסך הראשי").
+   *
+   * The three counters below stay PUBLICATIONS, which is what they have
+   * always been and what their own words say. This line is GROUPS, and says
+   * so in the sentence itself.
+   */
+  const groups = groupProgress(state);
   const { total, published, skipped, failed } = state.progress;
 
   /*
@@ -570,6 +581,10 @@ export function CampaignCard({
             <Stat value={view.open} label="ממתינים" icon={<ClockIcon aria-hidden className="h-4 w-4 shrink-0 text-brand-400" />} />
             <Stat value={failed} label="נכשלו" icon={<AlertCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-error-400" />} />
           </div>
+          {/* "פורסם ל-204 מתוך 252 קבוצות" — the denominator a customer
+              actually reads the card for. Hidden when there is no group count
+              to print, rather than rendered as 0 of 0. */}
+          {groups.usable && <p className="mt-1.5 text-[11px] font-bold leading-4 text-mist-500">{groups.label}</p>}
           {finishedClean && (
             /* "✅ הקמפיין הסתיים בהצלחה" — only when every row published. The
                badge above already says it ended; this says it ended WELL,

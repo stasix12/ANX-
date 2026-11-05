@@ -1812,8 +1812,36 @@ async function main(): Promise<void> {
    * entirely in `done={view.handled}`, which is what the needle now reads.
    * INV-2d above still pins both full sentences, grammar included.
    */
-  pin('LiveCampaignHero ratio counts handled rows', hero, 'done={view.handled}');
-  pin('LiveCampaignHero ratio counts them out of the round', hero, 'total={view.total}');
+  /*
+   * RE-POINTED A THIRD TIME, and this one changes the UNIT rather than the
+   * wording.
+   *
+   * "סה״כ פורסמו 204 מה זה המספרים האלה 478/730 … שיספור רק את הקבוצות
+   *  שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם, לא צריך את המספר המנופח הזה
+   *  זה מבלבל לקוחות."
+   *
+   * The pair this pin protected was PUBLICATIONS: handled out of planned. Both
+   * numbers were true and neither was the one being read — a round plans the
+   * same group nearly three times, so the row ratio is a figure three times
+   * the size of the work, and the group total sat one line below it saying
+   * something else. The card leads with groups now.
+   *
+   * THE RULE THE OLD NEEDLE CARRIED IS KEPT, and it is the one that matters:
+   * the big figure beside a bar may not be a SUCCESS count drawn over a
+   * PROGRESS bar — the fault that printed "0%" for a round with one failed row
+   * of 29. The group pair is both at once (groups reached out of groups
+   * planned), so the digits, the ring and the bar are fractions of the same
+   * thing by construction, which is a stronger guarantee than the old pin
+   * could give. The row path is pinned on the line after it, because it is
+   * still what a card with no group count draws.
+   *
+   * worker/test/group-count.test.ts is where the arithmetic, the Hebrew, the
+   * floor, the read and the migration behind these two lines are held.
+   */
+  pin('LiveCampaignHero ratio counts the groups that got the post', hero, 'done={groups.published}');
+  pin('LiveCampaignHero ratio counts them out of the groups the round reaches', hero, 'total={groups.total}');
+  pin('and with no group count it draws the rows exactly as it did', hero, 'done={view.handled}');
+  pin('out of the round', hero, 'total={view.total}');
   /* AND IT SAYS WHICH DAY IT IS ABOUT. runProgress() puts "היום" into
      handledLabel for a repeating round on purpose; this card renders the raw
      figures instead of that label, so the word never reached the screen — a

@@ -497,7 +497,11 @@ async function main(): Promise<void> {
       });
 
       assert.equal(seen.overflow, false, `${width}: the page scrolls sideways`);
-      assert.equal(seen.cards.length, 16, `${width}: expected 16 cards, got ${seen.cards.length}`);
+      /* 18 since the card began leading with GROUPS rather than rows: cases
+         17 and 18 are his own numbers (730 publications over 252 groups) with
+         the group figure exact and then as a floor. Both draw the widest
+         sentence this card can produce, which is why they are measured. */
+      assert.equal(seen.cards.length, 18, `${width}: expected 18 cards, got ${seen.cards.length}`);
       /* Across the board, not per card: most states are about the run and
          lead nowhere on purpose, and a badge that leads nowhere must stay a
          plain label. */
@@ -605,9 +609,25 @@ async function main(): Promise<void> {
          א׳–ג׳ and ה׳ (render-hero.tsx: `image`), so that is what it must say —
          a label that drifted to another fixture's week would fail here. */
       assert.ok(reference.text.includes('א׳, ב׳, ג׳, ה׳'), `${width}: a live schedule must name the days it publishes on`);
-      /* And nothing above it moved. */
-      assert.ok(reference.text.includes('50 / 50') || reference.text.includes('50 /'), `${width}: the card's own figures changed`);
-      assert.ok(reference.text.includes('40 מתוך 50 פורסמו'), `${width}: the breakdown line changed`);
+      /*
+       * AND THE FIGURES ABOVE IT ARE NOW GROUPS — re-pointed, because that is
+       * the change, and the rule the old pair carried is kept.
+       *
+       * It pinned "50 / 50" (handled out of planned, in PUBLICATIONS) and the
+       * publications sentence under the bar. "סה״כ פורסמו 204 מה זה המספרים
+       * האלה 478/730" — the row ratio counts a round that plans the same group
+       * nearly three times, so it reads as a job three times the size, and it
+       * sat one line above a pill saying "252 קבוצות". "שיספור רק את הקבוצות
+       * שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם."
+       *
+       * This fixture publishes one row per group, so its figures are the same
+       * digits in the new unit: 40 of 50 groups. What is pinned is that BOTH
+       * numbers on the card are the same pair — the header, the ring and the
+       * sentence cannot be fractions of different things again.
+       */
+      assert.ok(reference.text.includes('40 / 50'), `${width}: the card's own figures changed`);
+      assert.ok(reference.text.includes('פורסם ל-40 מתוך 50 קבוצות'), `${width}: the breakdown line changed`);
+      assert.ok(!reference.text.includes('50 / 50'), `${width}: the header went back to counting handled publications`);
 
       /* 4 — no day chosen. The stored instant may NOT be printed: the engine
              will not publish at it. */
@@ -749,8 +769,10 @@ async function main(): Promise<void> {
       assert.ok(ended.strip.includes('התזמון יחול על הסבב הבא'), `${width}: the card does not say what the setting above it still does`);
       assert.doesNotMatch(ended.strip, /\d{1,2}:\d{2}/, `${width}: THE BUG — a finished round printed a time: "${ended.strip.replace(/\s+/g, ' ')}"`);
       assert.ok(!ended.strip.includes('יום הפרסום הבא'), `${width}: a finished round was told about a window`);
-      /* And the numbers above it did not move. */
-      assert.ok(ended.text.includes('196 מתוך 219 פורסמו'), `${width}: the breakdown line changed`);
+      /* And the numbers above it did not move — in groups, re-pointed with
+         the reference card's pair above for the same reason. 219 rows over 219
+         groups here, so the digits are unchanged and only the unit is named. */
+      assert.ok(ended.text.includes('פורסם ל-196 מתוך 219 קבוצות'), `${width}: the breakdown line changed`);
       /* A ROUND CANNOT HAVE STARTED IN THE FUTURE, and a card that says it did
          is a card drawn at a minute the fixture does not agree with. This
          caught exactly that: "התחיל בעוד 5 ימים" over a finished round. */

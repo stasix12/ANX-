@@ -1838,7 +1838,39 @@ begin
        * answer, and the database is the only thing that can give it.
        */
       min(q.published_at) filter (where q.status = 'published') as first_published_at,
-      max(q.published_at) filter (where q.status = 'published') as last_published_at
+      max(q.published_at) filter (where q.status = 'published') as last_published_at,
+      /*
+       * ─── v38 ADDED THESE TWO, AND THEY GO LAST ───────────────────────────
+       *
+       * "שיספור רק את הקבוצות שאליהם אמור לצאת הפרסום וכמה פורסם מתוכם, לא
+       *  צריך את המספר המנופח הזה זה מבלבל לקוחות."
+       *
+       * The card had the DENOMINATOR in groups (`targets`, above) and the
+       * NUMERATOR in publications — "478 / 730" one line under "252 קבוצות".
+       * Both numbers were true and the pair was not a ratio of anything: a
+       * round plans the same group more than once, so the rows are a multiple
+       * of the groups.
+       *
+       * AT THE END OF THE SELECT ON PURPOSE. `create or replace view` may add
+       * columns after the existing ones and may not reorder or remove any, so
+       * putting them here is what lets this file stay runnable twice — which
+       * is the one promise it makes.
+       *
+       * `status = 'published'` and not `published_at is not null`: a row can
+       * carry a timestamp and still have ended some other way, and status is
+       * what every other figure in the app counts success by.
+       *
+       * TODAY IS SCHEDULED_AT HERE TOO, matching `targets_today` exactly. By
+       * published_at instead, a group whose post went out this morning but was
+       * due yesterday would be inside the numerator and outside the
+       * denominator — a card reading "פורסם ל-253 מתוך 252 קבוצות".
+       */
+      count(distinct q.target_id) filter (where q.status = 'published')::int as targets_published,
+      count(distinct q.target_id) filter (
+        where q.status = 'published'
+          and (q.scheduled_at at time zone 'Asia/Jerusalem')::date
+            = (now() at time zone 'Asia/Jerusalem')::date
+      )::int as targets_published_today
     from public.social_queue q
     where q.campaign_id is not null
     group by q.campaign_id
@@ -1849,7 +1881,7 @@ begin
 end $$;
 
 comment on view public.social_campaign_targets is
-  'Distinct groups a campaign reaches (lifetime, and today in Asia/Jerusalem). A separate grouping from social_campaign_counts because a distinct count cannot be summed across statuses. security_invoker: subject to the caller''s RLS on social_queue.';
+  'Distinct groups a campaign reaches, and how many of them already have the post (lifetime, and today in Asia/Jerusalem). A separate grouping from social_campaign_counts because a distinct count cannot be summed across statuses — a group with one published row and one waiting row would be counted twice. targets_published / targets_published_today added in v38, at the end of the select so create-or-replace stays legal. security_invoker: subject to the caller''s RLS on social_queue.';
 
 -- ─── 5. what it says right now ─────────────────────────────────────────────
 select

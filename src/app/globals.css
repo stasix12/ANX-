@@ -1733,87 +1733,213 @@ body:has(.social-theme) .site-backdrop {
 
 /*
  * ══════════════════════════════════════════════════════════════════════════
- * THE ANX ASSISTANT — the reference, rebuilt
+ * THE ANX ASSISTANT — a character that lives IN the card, not on it
  * ══════════════════════════════════════════════════════════════════════════
  *
- * See src/components/social/PublishingStage.tsx for what is his and what is
- * ours. Everything that moves here is `transform` or `opacity`: measured over
- * six seconds of the full cycle, 359 frames, 60.0 fps on a 1280 desktop and
- * on a 390 phone, with zero frames over 20ms.
+ * "אין להציג רקע כחול מלבני מאחורי הרובוט. אין להציג מסגרת של תמונה או וידאו.
+ *  הרקע של התוכנה חייב להמשיך בצורה טבעית מאחורי הרובוט."
+ *
+ * There is NO BACKGROUND IN THIS BLOCK. Not a tinted one, not a faked one —
+ * none. The nine pose images carry real alpha (scripts/anx-cutout.mjs), so
+ * whatever the card is painted in that day is what shows between the robot's
+ * arm and his coffee. The only two things drawn behind him are light: a pool
+ * of the app's OWN accent and a contact shadow under him, both mixed from the
+ * theme's tokens, which is what stops a lit 3D character reading as a sticker.
+ *
+ * Every colour below is a token. Not one hex is written here except the
+ * Facebook blue, which is a brand mark and belongs to Facebook.
+ *
+ * Everything that moves is `transform` or `opacity` — the two properties the
+ * compositor can run without laying the page out or painting it again.
+ * worker/test/scene-states.test.ts reads these keyframes and fails on a third.
  */
 .anx-stage {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 340fr) minmax(0, 380fr);
-  border-radius: 16px;
-  overflow: hidden;
-  /*
-   * THE PANEL'S BACKGROUND IS THE PICTURE ITSELF — 40x14 pixels stretched.
-   *
-   * The reference is ONE image, so its left and right share a background, and
-   * a crop beside a flat panel shows the join as a hard line down the middle.
-   * Sampling that background into a gradient failed twice: the GIF is
-   * dithered, so a single pixel is noise, and every column near the crop's
-   * edge is crossed by the chair or the laptop, so an average is not
-   * background either. A downscale of the picture matches it at every height
-   * by construction, costs one kilobyte, and needs no filter at runtime.
-   * Mirrored, so the blurred robot lands under the sharp one.
-   */
-  background: url(/social/anx/plate.webp) center / 100% 100% no-repeat;
+  grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+  align-items: center;
+  gap: 2px;
 }
 
 /* ── the character ────────────────────────────────────────────────────── */
-.anx-scene {
+.anx-figure {
   position: relative;
   grid-column: 2;
-  aspect-ratio: 380 / 237;
-  align-self: start;
-  /* feathered into the plate, so there is no edge where the crop ends */
-  -webkit-mask-image: linear-gradient(to left, #000 86%, transparent 100%);
-  mask-image: linear-gradient(to left, #000 86%, transparent 100%);
+  grid-row: 1;
+  min-width: 0;
+  /* the pose canvas, which every pose is rendered into at the same scale */
+  aspect-ratio: 440 / 276;
 }
-.anx-scene img {
+.anx-poses {
+  position: absolute;
+  inset: 0;
+}
+.anx-poses img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
   opacity: 0;
-  transition: opacity 220ms linear;
+  transition: opacity 260ms linear;
   will-change: opacity;
 }
-.anx-scene img.anx-on { opacity: 1; }
+.anx-poses img.anx-on { opacity: 1; }
 
-/* The beat on top of the held pose. Nine poses are not continuous motion;
-   this is what keeps a held one from reading as a still. */
-.anx-beat-breathe img.anx-on { animation: anx-stage-breathe 5.5s ease-in-out infinite; }
+/*
+ * THE LIGHT HE SITS IN. A pool of the app's accent behind him and a soft
+ * contact shadow under him. Both are single static gradients — one paint
+ * each, nothing per frame — and both are mixed from the live theme, so the
+ * character picks up the room he is actually in rather than the one he was
+ * rendered in.
+ */
+.anx-ambient,
+.anx-contact {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+}
+.anx-ambient {
+  inset: 4% 6% 10%;
+  background: radial-gradient(
+    58% 56% at 50% 46%,
+    color-mix(in oklab, var(--color-brand-500) 18%, transparent) 0%,
+    color-mix(in oklab, var(--color-brand-500) 7%, transparent) 46%,
+    transparent 72%
+  );
+}
+.anx-contact {
+  inset-inline: 20%;
+  bottom: 4%;
+  height: 8%;
+  background: radial-gradient(
+    50% 50% at 50% 50%,
+    color-mix(in oklab, var(--color-mist-100) 26%, transparent) 0%,
+    transparent 72%
+  );
+}
+
+/*
+ * THE BEAT ON TOP OF THE HELD POSE. Nine poses are nine poses; this is what
+ * keeps a held one from reading as a photograph. It runs on the wrapper, so
+ * the eyelids below ride the same breath as the face they close over.
+ */
+.anx-beat-breathe .anx-poses { animation: anx-stage-breathe 5.5s ease-in-out infinite; }
 @keyframes anx-stage-breathe {
   0%, 100% { transform: translateY(0) scale(1); }
-  50%      { transform: translateY(-1.2%) scale(1.006); }
+  50%      { transform: translateY(-1.1%) scale(1.005); }
 }
-.anx-beat-work img.anx-on { animation: anx-stage-work 2.4s ease-in-out infinite; }
+.anx-beat-work .anx-poses { animation: anx-stage-work 2.4s ease-in-out infinite; }
 @keyframes anx-stage-work {
   0%, 100% { transform: translateY(0) scale(1); }
   50%      { transform: translateY(-0.5%) scale(1.004); }
 }
-.anx-beat-cheer img.anx-on { animation: anx-stage-cheer 1.1s ease-in-out infinite; }
+.anx-beat-cheer .anx-poses { animation: anx-stage-cheer 1.1s ease-in-out infinite; }
 @keyframes anx-stage-cheer {
   0%, 100% { transform: translateY(0) scale(1); }
-  35%      { transform: translateY(-2.4%) scale(1.012); }
+  35%      { transform: translateY(-2.2%) scale(1.011); }
 }
 /* `still` is a pose with no beat at all, and `off` is the disconnected
    machine: the reference has no frame for either, so these two are the only
-   places in the design that are approximated. */
-.anx-beat-off img.anx-on { filter: grayscale(0.78) brightness(0.92); }
+   places in the design that are approximated. The grey is a static
+   declaration — a filter inside a keyframe would be recomputed sixty times a
+   second. */
+.anx-beat-off .anx-poses img.anx-on { filter: grayscale(0.78) brightness(0.94); }
 
-/* ── the beam ─────────────────────────────────────────────────────────── */
-.anx-beam { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.anx-beam path { fill: none; stroke-linecap: round; opacity: 0; transition: opacity 220ms ease; }
-.anx-beam-glow { stroke: #4aa3ff; stroke-width: 7; filter: blur(3px); }
-.anx-beam-core { stroke: url(#anx-beam-grad); stroke-width: 2.6; stroke-dasharray: 8 8; }
-.anx-lit path { opacity: 0.55; }
-.anx-lit .anx-beam-core { opacity: 1; animation: anx-beamflow 1.1s linear infinite; }
-@keyframes anx-beamflow { to { stroke-dashoffset: -32; } }
+/*
+ * THE BLINK. Two lids in the visor's own measured colour (src/components/
+ * social/anxPoses.ts), closing over the eye lights of whichever pose is
+ * showing. Collapsed to nothing for 92% of the cycle, which costs the
+ * compositor one transform and the page nothing.
+ */
+.anx-lid {
+  position: absolute;
+  border-radius: 46%;
+  transform: scaleY(0);
+  transform-origin: 50% 6%;
+  will-change: transform;
+  pointer-events: none;
+}
+.anx-beat-breathe .anx-lid,
+.anx-beat-work .anx-lid { animation: anx-blink 5.4s ease-in-out infinite; }
+@keyframes anx-blink {
+  0%, 91%, 100% { transform: scaleY(0); }
+  94%, 96%      { transform: scaleY(1); }
+}
+
+/* ── the post on its way, and the trail behind it ─────────────────────── */
+.anx-flight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.anx-trail {
+  position: absolute;
+  inset: 0;
+}
+.anx-trail path { fill: none; stroke-linecap: round; }
+.anx-trail-glow {
+  stroke: color-mix(in oklab, var(--color-brand-300) 34%, transparent);
+  stroke-width: 7;
+}
+.anx-trail-core {
+  stroke: url(#anx-trail-grad);
+  stroke-width: 2.6;
+  stroke-dasharray: 8 8;
+  animation: anx-trailflow 1.1s linear infinite;
+}
+@keyframes anx-trailflow { to { stroke-dashoffset: -32; } }
+
+/*
+ * THE POST ITSELF, in the app's card skin — the same white, the same radius
+ * and the same shadow every other card on this screen wears. Two nested
+ * elements: the outer carries the straight run to the group, the inner the
+ * lift and the shrink, and the two together are an arc. Both are transforms.
+ */
+.anx-parcel {
+  position: absolute;
+  width: 56px;
+  margin: -15px 0 0 -28px;
+  animation: anx-fly 1.15s linear infinite;
+  will-change: transform;
+}
+@keyframes anx-fly {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(var(--anx-tx), var(--anx-ty), 0); }
+}
+.anx-parcel-in {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: var(--radius-lg);
+  background: var(--color-ink-850);
+  border: 1px solid var(--color-ink-700);
+  box-shadow: 0 2px 6px rgba(40, 20, 80, 0.06), 0 8px 20px rgba(40, 20, 80, 0.12);
+  animation: anx-fly-arc 1.15s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  will-change: transform, opacity;
+}
+@keyframes anx-fly-arc {
+  0%   { transform: translateY(0) scale(0.9); opacity: 0; }
+  14%  { transform: translateY(-7px) scale(1); opacity: 1; }
+  50%  { transform: translateY(-15px) scale(0.92); opacity: 1; }
+  86%  { opacity: 1; }
+  100% { transform: translateY(0) scale(0.6); opacity: 0; }
+}
+.anx-parcel-pic {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex: none;
+  background: color-mix(in oklab, var(--color-brand-500) 72%, transparent);
+}
+.anx-parcel-line {
+  height: 3px;
+  flex: 1;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--color-mist-500) 34%, transparent);
+}
+.anx-parcel-short { flex: 0 0 11px; }
 
 /* ── the words, the groups, the rail ──────────────────────────────────── */
 .anx-side {
@@ -1821,112 +1947,197 @@ body:has(.social-theme) .site-backdrop {
   grid-column: 1;
   grid-row: 1;
   min-width: 0;
-  padding: 10px 14px 8px;
+  padding: 8px 10px 6px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-/* A scrim, not a panel: the plate behind the text is the picture's own
-   background and is busy in places. This lifts it just enough to read and
-   fades to nothing where the crop begins. */
-.anx-side::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(to left, rgba(223,234,252,0) 0%, rgba(223,234,252,.45) 28%, rgba(223,234,252,.72) 70%, rgba(223,234,252,.8) 100%);
-}
-.anx-side > * { position: relative; }
 .anx-head { display: flex; align-items: center; gap: 8px; }
 .anx-head-dot {
-  width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center;
-  background: rgba(255,255,255,.8); color: #1557d6; font-size: 13px; font-weight: 800; flex: none;
-  box-shadow: 0 1px 4px rgba(11,37,69,.12);
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 13px;
+  font-weight: 800;
+  background: color-mix(in oklab, var(--color-brand-500) 13%, transparent);
+  color: var(--color-brand-400);
 }
-.anx-stage h3 { margin: 0; font-size: clamp(14px, 3.4vw, 19px); font-weight: 800; letter-spacing: -0.2px; color: #0b2545; }
-.anx-sub { margin: 0; font-size: clamp(10.5px, 2.8vw, 12.5px); font-weight: 700; color: #1b3a66; }
+.anx-stage h3 {
+  margin: 0;
+  font-size: clamp(14px, 3.4vw, 19px);
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--color-mist-100);
+}
+.anx-sub {
+  margin: 0;
+  font-size: clamp(10.5px, 2.8vw, 12.5px);
+  font-weight: 700;
+  color: var(--color-mist-300);
+}
 
 .anx-cards { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
 .anx-cards li {
   position: relative;
-  width: min(248px, 100%);
+  width: min(252px, 100%);
   margin-inline-start: auto;
-  display: flex; align-items: center; gap: 7px;
-  padding: 4px 7px;
-  border-radius: 10px;
-  background: rgba(255,255,255,.92);
-  box-shadow: 0 2px 8px rgba(11,37,69,.18);
-  transition: box-shadow 200ms ease, background 200ms ease;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  /* the app's own card: same radius, same ground, same hairline, same lift */
+  border-radius: var(--radius-lg);
+  background: var(--color-ink-850);
+  border: 1px solid var(--color-ink-700);
+  box-shadow: 0 2px 6px rgba(40, 20, 80, 0.03), 0 8px 24px rgba(40, 20, 80, 0.06);
+  transition: box-shadow 200ms ease, border-color 200ms ease;
 }
-.anx-cards li.anx-target { background: #fff; box-shadow: 0 0 0 2px rgba(21,87,214,.45), 0 4px 14px rgba(21,87,214,.22); }
-.anx-cards li.anx-landed { box-shadow: 0 0 0 2px rgba(34,197,94,.55), 0 4px 14px rgba(34,197,94,.22); }
-.anx-fb { width: 22px; height: 22px; border-radius: 7px; background: #1877f2; color: #fff; font-weight: 800; display: grid; place-items: center; font-size: 13px; flex: none; }
-.anx-ppl { width: 20px; height: 20px; flex: none; color: #3c5a86; }
-.anx-lines { flex: 1; min-width: 64px; display: grid; gap: 3px; }
-.anx-lines i { display: block; height: 4px; border-radius: 3px; background: #aabfdd; }
+.anx-cards li.anx-target {
+  border-color: color-mix(in oklab, var(--color-brand-500) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand-500) 16%, transparent),
+    0 6px 16px rgba(40, 20, 80, 0.1);
+}
+.anx-cards li.anx-landed {
+  border-color: color-mix(in oklab, var(--color-success-400) 62%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-success-400) 16%, transparent),
+    0 6px 16px rgba(40, 20, 80, 0.1);
+}
+/* Facebook's own blue, which is the one mark on this card that is not ours
+   to re-colour. */
+.anx-fb {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: #1877f2;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.anx-fb svg { width: 15px; height: 15px; }
+.anx-ppl { width: 20px; height: 20px; flex: none; color: var(--color-mist-500); }
+.anx-lines { flex: 1; min-width: 56px; display: grid; gap: 3px; }
+.anx-lines i {
+  display: block;
+  height: 4px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--color-mist-500) 32%, transparent);
+}
 .anx-lines i:last-child { width: 55%; }
 .anx-tick {
-  width: 18px; height: 18px; border-radius: 999px; background: #22c55e; flex: none;
-  display: grid; place-items: center;
-  animation: anx-tickin 0.32s cubic-bezier(.34,1.4,.64,1) 1;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--color-success-400);
+  color: var(--color-on-brand);
+  animation: anx-tickin 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) 1;
 }
 .anx-tick svg { width: 12px; height: 12px; }
-@keyframes anx-tickin { from { transform: scale(0); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } to { transform: scale(1); } }
+@keyframes anx-tickin {
+  from { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  to   { transform: scale(1); }
+}
 
 .anx-rail {
   position: relative;
-  list-style: none; display: flex; align-items: center; margin: 2px 0 0; padding: 6px 8px;
-  border-radius: 12px; background: rgba(255,255,255,.72);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--color-ink-800) 60%, transparent);
 }
 /* ONE line behind the four. Four per-item connectors, each a full item wide,
    overhang the rail at its ends. */
 .anx-rail::before {
-  content: ""; position: absolute; top: 17px; inset-inline: 12%;
-  height: 2px; background: #b9cae4; border-radius: 2px;
+  content: "";
+  position: absolute;
+  top: 17px;
+  inset-inline: 12%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-ink-700);
 }
 .anx-rail li { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .anx-rail-ic {
-  width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center;
-  background: #fff; color: #7b93b8; font-size: 11px; font-weight: 900; z-index: 1;
-  box-shadow: 0 1px 4px rgba(11,37,69,.14);
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 900;
+  background: var(--color-ink-850);
+  border: 1px solid var(--color-ink-700);
+  color: var(--color-mist-500);
   transition: transform 200ms ease;
 }
-.anx-rail li[data-step="done"] .anx-rail-ic { color: #fff; background: #22c55e; }
-.anx-rail li[data-step="publishing"] .anx-rail-ic { color: #1557d6; }
-.anx-rail li.anx-live .anx-rail-ic { transform: scale(1.12); }
-.anx-rail li.anx-live[data-step="waiting"] .anx-rail-ic,
-.anx-rail li.anx-live[data-step="publishing"] .anx-rail-ic { color: #fff; background: #1557d6; box-shadow: 0 0 0 4px rgba(21,87,214,.18); }
-.anx-rail span:last-child { font-size: 10px; font-weight: 800; color: #27456f; white-space: nowrap; }
-.anx-rail li.anx-live span:last-child { color: #1557d6; }
+/* "השלב הפעיל יודגש בכחול והשלב שהושלם בירוק" — and a step counts as
+   completed only when the live step is genuinely past it in this
+   publication's own order. Nothing is green while the queue is only waiting. */
+.anx-rail li[data-past] .anx-rail-ic {
+  background: var(--color-success-400);
+  border-color: transparent;
+  color: var(--color-on-brand);
+}
+.anx-rail li.anx-live .anx-rail-ic {
+  transform: scale(1.12);
+  background: var(--color-brand-500);
+  border-color: transparent;
+  color: var(--color-on-brand);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-brand-500) 15%, transparent);
+}
+.anx-rail li.anx-live[data-step="done"] .anx-rail-ic {
+  background: var(--color-success-400);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-success-400) 15%, transparent);
+}
+.anx-rail span:last-child { font-size: 10px; font-weight: 800; color: var(--color-mist-300); white-space: nowrap; }
+.anx-rail li.anx-live span:last-child { color: var(--color-brand-400); }
+.anx-rail li[data-past] span:last-child { color: var(--color-success-400); }
 .anx-spin { animation: anx-railspin 1.1s linear infinite; }
 @keyframes anx-railspin { to { transform: rotate(360deg); } }
 
+/* ── the phone ────────────────────────────────────────────────────────── */
+/* "באייפון: הרובוט יוקטן בצורה פרופורציונלית … לא תהיה גלילה אופקית מיותרת
+    … האנימציה לא תגרום לקפיצות בפריסת העמוד." The figure keeps its aspect
+    ratio, so the row it occupies is reserved before the first image decodes
+    and nothing below it moves when they arrive. */
 @media (max-width: 640px) {
   .anx-stage { grid-template-columns: 1fr; }
-  .anx-scene { grid-column: 1; grid-row: 1; -webkit-mask-image: linear-gradient(to bottom, #000 88%, transparent 100%); mask-image: linear-gradient(to bottom, #000 88%, transparent 100%); }
-  .anx-side { grid-column: 1; grid-row: 2; padding: 8px 12px 10px; }
-  .anx-side::before { background: linear-gradient(to top, rgba(223,234,252,.8) 60%, rgba(223,234,252,.4) 100%); }
+  .anx-figure { grid-column: 1; grid-row: 1; }
+  .anx-side { grid-column: 1; grid-row: 2; padding: 2px 8px 8px; }
+  .anx-cards li { width: 100%; }
 }
 
 /*
  * SWITCHED OFF, NOT HIDDEN.
  *
  * A reader who asked their phone for less motion still gets the whole scene —
- * the robot, the groups, the ring around the active destination and the tick
- * on an arrival that happened. What they do not get is anything that moves.
+ * the character, the groups, the ring around the active destination and the
+ * tick on an arrival that happened. What they do not get is anything that
+ * moves. publishing-stage.test.ts does not read this list: it asks every
+ * element in the stage whether anything is running on it, which is the
+ * question a list of names cannot answer.
  */
 @media (prefers-reduced-motion: reduce) {
-  /* The stage, and the two things on the card beside it that still move. The
-     list that used to be here named twenty-six classes from the drawn scene;
-     every one of them went with it. publishing-stage.test.ts does not read
-     this list at all — it asks every element in the stage whether anything is
-     running on it, which is the question a list of names cannot answer. */
-  .anx-scene img,
-  .anx-beat-breathe img.anx-on,
-  .anx-beat-work img.anx-on,
-  .anx-beat-cheer img.anx-on,
-  .anx-beam-core,
-  .anx-lit .anx-beam-core,
+  .anx-poses img,
+  .anx-beat-breathe .anx-poses,
+  .anx-beat-work .anx-poses,
+  .anx-beat-cheer .anx-poses,
+  .anx-beat-breathe .anx-lid,
+  .anx-beat-work .anx-lid,
+  .anx-trail-core,
+  .anx-parcel,
+  .anx-parcel-in,
   .anx-tick,
   .anx-spin,
   .anx-bar-live,
@@ -1934,4 +2145,7 @@ body:has(.social-theme) .site-backdrop {
   .anx-num-in {
     animation: none !important;
   }
+  /* with no flight to watch, the post would otherwise sit frozen on his hand */
+  .anx-parcel { display: none; }
+  .anx-poses img { transition: none; }
 }

@@ -76,7 +76,15 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
    * expressions and nothing but this line makes them say the same thing.
    */
   is(/aria-label="22 מתוך 48[^"]*"/.test(html), `the bar's own label must say the same thing — got: ${(html.match(/aria-label="[^"]*מתוך[^"]*"/) ?? [])[0]}`);
-  const fill = Number((html.match(/width:\s*([\d.]+)%/) ?? [])[1]);
+  /*
+   * MEASURED FROM THE BAR'S OWN LABEL ONWARDS. "the first width:% in the
+   * card" was never the bar — it was only the first one by accident, and the
+   * robot above it now carries per-cent widths of its own (the eyelids, which
+   * are placed over the eye lights of a 440px pose). Anchoring on the label
+   * the assertion above already pins is both narrower and stable.
+   */
+  const bar = html.slice(html.indexOf('aria-label="22 מתוך 48'));
+  const fill = Number((bar.match(/width:\s*([\d.]+)%/) ?? [])[1]);
   is(Math.abs(fill - (22 / 48) * 100) < 0.5, `the bar must be filled to 22 of 48 (${(22 / 48 * 100).toFixed(1)}%), not to 22 of the ceiling — got ${fill}%`);
 }
 

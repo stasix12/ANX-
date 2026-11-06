@@ -249,15 +249,18 @@ const code = ladder.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
    * group while the media was still uploading.
    */
   /*
-   * RE-POINTED ONTO THE NEW STAGE. The old scene drew its own post card and
-   * the claim was that the card does not travel while the row is still being
-   * prepared. The reference's own frames carry the card now — it is in the
-   * robot's hand in pose 4 and leaving in pose 5 — so the claim moved to the
-   * BEAM, which is the only thing this file still draws on that journey: it
-   * is lit for `sending` and for nothing else.
+   * RE-POINTED ONTO THE NEW STAGE, TWICE. The drawn scene's claim was that
+   * its post card does not travel while the row is still being prepared;
+   * when the reference's frames replaced the drawing the claim moved to the
+   * beam. The post is a card of ours again — flown from the hand to the
+   * group in the app's own skin — so the claim is back where it started, and
+   * it is the same claim: the flight belongs to `sending` and to nothing
+   * else. A post crossing the panel while the media is still uploading would
+   * be a publication the engine has not attempted.
    */
-  is(/const travelling = playing === 'sending';/.test(scene), 'the beam belongs to one state');
-  is(/anx-lit/.test(scene) && /travelling \? ' anx-lit' : ''/.test(scene), 'and it is lit only while that state is live');
+  is(/const travelling = phase === 'sending';/.test(scene), 'the post in flight belongs to one state');
+  is(/if \(!travelling\) \{\s*setFlight\(null\);/.test(scene), 'and the flight is torn down the moment that state ends');
+  is(/\{flight && \(/.test(scene), 'so the post and its trail are not in the page at all unless one is really on its way');
 }
 
 {
@@ -294,7 +297,17 @@ const code = ladder.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
    * keyframe costs a layout or a paint PER FRAME, which on a phone is where
    * 60fps becomes 24.
    */
-  const added = ['anx-stage-breathe', 'anx-stage-work', 'anx-stage-cheer', 'anx-beamflow', 'anx-tickin', 'anx-railspin'];
+  const added = [
+    'anx-stage-breathe',
+    'anx-stage-work',
+    'anx-stage-cheer',
+    'anx-blink',
+    'anx-trailflow',
+    'anx-fly',
+    'anx-fly-arc',
+    'anx-tickin',
+    'anx-railspin',
+  ];
   /*
    * The whole `@keyframes` rule and nothing after it. Braces are counted
    * rather than a fixed window being taken, because these rules are three
@@ -341,7 +354,7 @@ const code = ladder.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
      */
     is(!/filter:/.test(block), `@keyframes ${name} does not animate a filter`);
   }
-  is(/\.anx-beat-off img\.anx-on \{ filter:/.test(css), 'the disconnected robot is greyed by a static declaration, not by a keyframe');
+  is(/\.anx-beat-off \.anx-poses img\.anx-on \{ filter:/.test(css), 'the disconnected robot is greyed by a static declaration, not by a keyframe');
 }
 
 console.log(`scene states OK — ${checks} assertions`);

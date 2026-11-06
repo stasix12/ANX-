@@ -22,10 +22,12 @@
  */
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium, type Page } from 'playwright-core';
+import { ANX_FACES } from '../../src/components/social/anxPoses';
 
 let checks = 0;
 const eq = (a: unknown, b: unknown, msg: string) => { checks += 1; assert.deepEqual(a, b, msg); };
@@ -74,20 +76,52 @@ async function main(): Promise<void> {
 <body class="bg-ink-950"><div class="social-theme"><div id="root"></div></div><script src="scene.js"></script></body></html>`,
   );
 
+  /*
+   * SERVED, NOT OPENED FROM DISK.
+   *
+   * The nine poses are referenced by absolute path — /social/anx/pose-N.webp
+   * — which under file:// resolves to the root of the filesystem and 404s.
+   * The old scene ran that way and never once decoded a frame: every check
+   * on it passed against a broken image with a bounding box. Over http the
+   * pictures are really fetched, really decoded, and §5b below can ask the
+   * one question that matters about them — whether they are transparent.
+   */
+  const TYPES: Record<string, string> = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript',
+    '.css': 'text/css',
+    '.webp': 'image/webp',
+    '.png': 'image/png',
+  };
+  const server = createServer((req, res) => {
+    const url = (req.url ?? '/').split('?')[0];
+    const file = url.startsWith('/social/')
+      ? path.resolve('public' + url)
+      : path.join(dir, path.basename(url) || 'index.html');
+    if (!existsSync(file)) {
+      res.writeHead(404).end('no');
+      return;
+    }
+    res.writeHead(200, { 'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream' });
+    res.end(readFileSync(file));
+  });
+  await new Promise<void>((ready) => server.listen(0, '127.0.0.1', ready));
+  const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM ?? '/opt/pw-browsers/chromium' });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
     const crashes: string[] = [];
     page.on('pageerror', (e) => crashes.push(String(e)));
-    await page.goto(`file://${path.join(dir, 'index.html')}`);
+    await page.goto(`${origin}/index.html`);
     await page.waitForSelector('[data-stage]');
 
     /* ── 1. IT CANNOT INVENT A PUBLICATION ──────────────────────────────── */
     {
       eq(await ticks(page), 0, 'nothing published, nothing ticked');
       is(
-        (await page.locator('.anx-beam.anx-lit').count()) > 0,
-        'and yet the beam IS lit — "busy" is allowed to be decorative, because it claims nothing about an outcome',
+        (await page.locator('[data-parcel]').count()) > 0,
+        'and yet a post IS in the air — "busy" is allowed to be decorative, because it claims nothing about an outcome',
       );
       /* Longer than every loop in the stage. */
       await page.waitForTimeout(3200);
@@ -158,58 +192,58 @@ async function main(): Promise<void> {
         await page.waitForTimeout(250);
         return page.evaluate(() => {
           const stage = document.querySelector('[data-stage]') as HTMLElement;
-          const on = stage.querySelector('.anx-scene img.anx-on') as HTMLImageElement | null;
+          const on = stage.querySelector('.anx-poses img.anx-on') as HTMLImageElement | null;
           return {
             stage: stage.dataset.stage,
             frame: on ? Number(on.dataset.frame) : -1,
-            beam: stage.querySelectorAll('.anx-beam.anx-lit').length,
+            parcel: stage.querySelectorAll('[data-parcel]').length,
             active: stage.querySelectorAll('[data-active]').length,
             ticks: stage.querySelectorAll('[data-tick]').length,
             rail: (stage.querySelector('[data-rail]') as HTMLElement).dataset.rail,
             live: (stage.querySelector('li.anx-live') as HTMLElement | null)?.dataset.step ?? '',
             title: (stage.querySelector('[data-stage-title]')?.textContent ?? '').trim(),
-            beat: [...stage.querySelector('.anx-scene')!.classList].find((c) => c.startsWith('anx-beat-')),
-            robots: stage.querySelectorAll('.anx-scene img').length,
+            beat: [...stage.querySelector('.anx-figure')!.classList].find((c) => c.startsWith('anx-beat-')),
+            robots: stage.querySelectorAll('.anx-poses img').length,
           };
         });
       };
 
       const waiting = await seenIn('waiting');
-      eq(waiting.frame, 0, 'WAITING: the reference’s first pose — at the laptop, eyes smiling');
-      eq(waiting.beam, 0, 'and nothing travels — the gap between publications is not a publication');
+      is([0, 1].includes(waiting.frame), `WAITING: at the laptop — his stage 1, which glances up and smiles (got ${waiting.frame})`);
+      eq(waiting.parcel, 0, 'and nothing travels — the gap between publications is not a publication');
       eq(waiting.ticks, 0, 'and nothing is marked');
       eq(waiting.rail, 'waiting', 'the rail says ממתין');
       eq(waiting.title, 'מחכה לעבודות', 'and so does the title, in his own words');
 
       const preparing = await seenIn('preparing');
       is([1, 2, 3].includes(preparing.frame), `PREPARING: one of the reference's poses 2-4 — got ${preparing.frame}`);
-      eq(preparing.beam, 0, 'NOTHING CROSSES THE SCENE YET: before the final click nothing has been submitted to Facebook');
+      eq(preparing.parcel, 0, 'NOTHING CROSSES THE SCENE YET: before the final click nothing has been submitted to Facebook');
       eq(preparing.active, 1, 'but the group it is for is named, because the row has one');
       eq(preparing.rail, 'queued', 'and the rail says בתור');
 
       const sending = await seenIn('sending');
       eq(sending.frame, 4, 'PUBLISHING: the reference’s pose 5, the card leaving the hand');
-      eq(sending.beam, 1, 'and the beam is lit, towards the group it is going to');
+      eq(sending.parcel, 1, 'and a post is travelling, towards the group it is really going to');
       eq(sending.rail, 'publishing', 'with the rail on מפרסם עכשיו');
 
       const done = await seenIn('done');
       is([5, 6].includes(done.frame), `DONE: one of the celebration poses — got ${done.frame}`);
-      eq(done.beam, 0, 'nothing travels — the day has nothing left to send');
+      eq(done.parcel, 0, 'nothing travels — the day has nothing left to send');
       eq(done.active, 0, 'and no group is named as the next destination, because there is no next one');
       eq(done.title, 'הרובוט סיים לפרסם', 'the exact sentence he asked for');
 
       const paused = await seenIn('paused');
-      eq(paused.beam, 0, 'PAUSED: nothing travels');
+      eq(paused.parcel, 0, 'PAUSED: nothing travels');
       eq(paused.active, 0, 'and no group is named — nothing is going anywhere');
       eq(paused.beat, 'anx-beat-still', 'and the pose is still: he switched it off himself');
 
       const error = await seenIn('error');
-      eq(error.beam + error.active + error.ticks, 0, 'ERROR: nothing in the air, nothing named, nothing marked');
+      eq(error.parcel + error.active + error.ticks, 0, 'ERROR: nothing in the air, nothing named, nothing marked');
       eq(error.title, 'נדרשת פעולה שלכם', 'and it says what it is');
 
       const offline = await seenIn('offline');
       eq(offline.beat, 'anx-beat-off', 'OFFLINE: the picture is greyed');
-      eq(offline.beam + offline.active + offline.ticks, 0, 'and nothing claims to be moving on a machine that is not connected');
+      eq(offline.parcel + offline.active + offline.ticks, 0, 'and nothing claims to be moving on a machine that is not connected');
       eq(offline.title, 'המחשב לא מחובר', 'and it says so');
 
       /* ONE CHARACTER, NINE POSES — his instruction that the robot must look
@@ -219,7 +253,7 @@ async function main(): Promise<void> {
       for (const m of ['waiting', 'preparing', 'sending', 'done', 'paused', 'error', 'offline']) {
         const s = await seenIn(m);
         eq(
-          await page.evaluate(() => document.querySelectorAll('[data-stage] .anx-scene img.anx-on').length),
+          await page.evaluate(() => document.querySelectorAll('[data-stage] .anx-poses img.anx-on').length),
           1,
           `${m.toUpperCase()}: exactly one pose is visible — a cross-fade, never two characters at once`,
         );
@@ -232,11 +266,11 @@ async function main(): Promise<void> {
       await page.evaluate(() => window.__mode('sending'));
       await page.waitForTimeout(150);
       const img = await page.evaluate(() => {
-        const i = document.querySelector('[data-stage] .anx-scene img.anx-on') as HTMLImageElement;
+        const i = document.querySelector('[data-stage] .anx-poses img.anx-on') as HTMLImageElement;
         return { src: i.getAttribute('src') ?? '', w: i.getBoundingClientRect().width, h: i.getBoundingClientRect().height };
       });
-      is(img.src.includes('/social/anx/scene-'), `the character is the reference's own frame, not a drawing of it (${img.src})`);
-      is(Math.abs(img.w / img.h - 380 / 237) < 0.06, `and it keeps the frame's proportions (${img.w.toFixed(0)}x${img.h.toFixed(0)})`);
+      is(img.src.includes('/social/anx/pose-'), `the character is the reference's own frame, not a drawing of it (${img.src})`);
+      is(Math.abs(img.w / img.h - 440 / 276) < 0.06, `and it keeps the frame's proportions (${img.w.toFixed(0)}x${img.h.toFixed(0)})`);
 
       for (const width of [320, 360, 390, 430, 1280]) {
         await page.setViewportSize({ width, height: 900 });
@@ -244,7 +278,7 @@ async function main(): Promise<void> {
         const seen = await page.evaluate(() => {
           const st = document.querySelector('[data-stage]') as HTMLElement;
           const r = st.getBoundingClientRect();
-          const pic = (st.querySelector('.anx-scene img.anx-on') as HTMLElement).getBoundingClientRect();
+          const pic = (st.querySelector('.anx-poses img.anx-on') as HTMLElement).getBoundingClientRect();
           return {
             overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
             w: Math.round(r.width),
@@ -254,9 +288,166 @@ async function main(): Promise<void> {
         });
         is(!seen.overflow, `${width}px: the stage must not push the page sideways`);
         is(seen.w <= seen.inner, `${width}px: it is ${seen.w}px inside a ${seen.inner}px screen`);
-        is(Math.abs(seen.ratio - 380 / 237) < 0.06, `${width}px: and the character is never squashed (${seen.ratio.toFixed(2)})`);
+        is(Math.abs(seen.ratio - 440 / 276) < 0.06, `${width}px: and the character is never squashed (${seen.ratio.toFixed(2)})`);
       }
       await page.setViewportSize({ width: 390, height: 900 });
+    }
+
+    /* ── 5b. THE ROOM IS GONE, AND THE CARD SHOWS THROUGH ───────────────── */
+    /*
+     * "אין להציג רקע כחול מלבני מאחורי הרובוט … יש להשתמש בשקיפות אמיתית
+     *  ולא ברקע לבן או כחול המדמה שקיפות … אל תסתפק בהגדרת CSS של
+     *  background: transparent אם הרקע כבר מוטמע בתוך התמונה."
+     *
+     * This is the section that cannot be satisfied by a stylesheet. It
+     * decodes each pose in the browser and reads its ALPHA CHANNEL: a frame
+     * with the room still baked into it is opaque in all four corners, and no
+     * CSS rule anywhere can change that. It then checks that nothing in the
+     * stage paints a rectangle behind the character either.
+     */
+    {
+      /* Named helpers are deliberately NOT declared inside these evaluates:
+         the bundler instruments a named function expression with its own
+         __name(), which does not exist in the page — the same hazard
+         composer.test.ts reproduces. Everything here is inline on purpose. */
+      const alpha = await page.evaluate(() =>
+        Promise.all(
+          [0, 1, 2, 3, 4, 5, 6, 7, 8].map(async (i) => {
+            const img = new Image();
+            img.src = `/social/anx/pose-${i}.webp`;
+            await img.decode();
+            const c = document.createElement('canvas');
+            c.width = img.naturalWidth;
+            c.height = img.naturalHeight;
+            c.getContext('2d')!.drawImage(img, 0, 0);
+            const { data } = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+            let clear = 0;
+            for (let k = 3; k < data.length; k += 4) if (data[k] === 0) clear++;
+            return {
+              i,
+              w: c.width,
+              h: c.height,
+              clear: clear / (data.length / 4),
+              corners: [
+                data[3],
+                data[(c.width - 1) * 4 + 3],
+                data[(c.height - 1) * c.width * 4 + 3],
+                data[((c.height - 1) * c.width + c.width - 1) * 4 + 3],
+              ],
+            };
+          }),
+        ),
+      );
+      for (const a of alpha) {
+        eq(a.corners, [0, 0, 0, 0], `pose ${a.i}: ALL FOUR CORNERS ARE TRANSPARENT — the room is not in the pixels any more`);
+        is(a.clear > 0.25, `pose ${a.i}: and ${(a.clear * 100).toFixed(0)}% of it is see-through, so the card shows through around him`);
+        eq([a.w, a.h], [440, 276], `pose ${a.i}: on the one canvas every pose is aligned into`);
+      }
+
+      /*
+       * AND NOTHING BEHIND HIM IS A PANEL. The two things that ARE drawn
+       * behind the character — a pool of the app's accent and a contact
+       * shadow — are gradients with no colour of their own; everything else
+       * in the figure must be fully transparent, or it is the blue rectangle
+       * by another name.
+       */
+      const grounds = await page.evaluate(() => {
+        const fig = document.querySelector('[data-stage]') as HTMLElement;
+        return [...fig.querySelectorAll<HTMLElement>('*')]
+          .concat(fig)
+          /* the eyelids are ON the face, not behind it, and the post in
+             flight is a card by design — neither is a backdrop */
+          .filter(
+            (el) =>
+              !el.closest('.anx-side') &&
+              !el.hasAttribute('data-lid') &&
+              !el.hasAttribute('data-parcel') &&
+              !el.closest('[data-parcel]'),
+          )
+          .map((el) => {
+            const st = getComputedStyle(el);
+            return {
+              cls: el.className?.toString().slice(0, 28) ?? el.tagName,
+              colour: st.backgroundColor,
+              image: st.backgroundImage,
+            };
+          })
+          .filter((r) => r.colour !== 'rgba(0, 0, 0, 0)' || (r.image !== 'none' && !r.image.startsWith('radial-gradient')));
+      });
+      eq(grounds, [], 'NOTHING BEHIND THE CHARACTER IS PAINTED: no fill, no picture, no rectangle — only the two radial pools of light');
+
+      /*
+       * THE EYELID IS THE FACE'S OWN COLOUR, not a guess at it. Each pose is
+       * lit differently, so the visor is a different near-black in each one;
+       * the generator measures it off the bridge between the eyes and this
+       * checks the lid on screen is painted in exactly that. A lid in the
+       * wrong colour does not read as a blink — it reads as a sticker.
+       */
+      await page.evaluate(() => window.__mode('preparing'));
+      await page.waitForTimeout(250);
+      const lids = await page.evaluate(() => {
+        const on = document.querySelector('[data-stage] .anx-poses img.anx-on') as HTMLImageElement;
+        return {
+          frame: Number(on.dataset.frame),
+          paints: [...document.querySelectorAll<HTMLElement>('[data-lid]')].map((el) => getComputedStyle(el).backgroundColor),
+        };
+      });
+      const face = ANX_FACES[lids.frame];
+      is(face !== null, `pose ${lids.frame} is one of the open-eyed ones, so it has lids`);
+      eq(lids.paints.length, 2, 'two of them — one per eye');
+      const want = face!.visor.replace('#', '');
+      const rgb = `rgb(${parseInt(want.slice(0, 2), 16)}, ${parseInt(want.slice(2, 4), 16)}, ${parseInt(want.slice(4, 6), 16)})`;
+      eq(lids.paints, [rgb, rgb], `and both are the visor's own measured colour (${face!.visor})`);
+
+      /*
+       * AND THE PARTS THAT ARE OURS WEAR THE APP'S OWN SKIN. Read off the
+       * live theme rather than written down here: a group card must be the
+       * card ground, the card hairline and the card radius this product uses
+       * everywhere else, so it cannot drift when the theme changes.
+       */
+      const skin = await page.evaluate(() => {
+        const root = getComputedStyle(document.querySelector('.social-theme')!);
+        /* a plain one: the destination wears a brand ring and the one that
+           just landed wears a green one, and neither is the resting skin */
+        const card = getComputedStyle(document.querySelector('[data-card]:not([data-active])')!);
+        /* a scratch element, so a token's value is read back the way the
+           browser resolved it rather than compared as text */
+        const probe = document.createElement('div');
+        document.body.appendChild(probe);
+        probe.style.color = root.getPropertyValue('--color-ink-850').trim();
+        const wantBg = getComputedStyle(probe).color;
+        probe.style.color = root.getPropertyValue('--color-ink-700').trim();
+        const wantBorder = getComputedStyle(probe).color;
+        probe.remove();
+        return {
+          bg: card.backgroundColor,
+          wantBg,
+          border: card.borderTopColor,
+          wantBorder,
+          radius: card.borderRadius,
+          wantRadius: root.getPropertyValue('--radius-lg').trim(),
+        };
+      });
+      eq(skin.bg, skin.wantBg, 'a group card is painted in the app’s own card ground, from the token');
+      eq(skin.border, skin.wantBorder, 'with the app’s own hairline');
+      is(
+        skin.radius.startsWith(parseFloat(skin.wantRadius) * 16 + 'px') || skin.radius === skin.wantRadius,
+        `and the app’s own corner radius (${skin.radius} vs ${skin.wantRadius})`,
+      );
+
+      /*
+       * NO HEX IN THE STYLESHEET EITHER, bar one. Facebook's blue is a brand
+       * mark and is not ours to re-colour; everything else in this block has
+       * to come from a token, or a theme change leaves the robot's card
+       * behind.
+       */
+      const css = readFileSync(new URL('../../src/app/globals.css', import.meta.url), 'utf8');
+      /* lastIndexOf: an older comment further up POINTS at this block by
+         name, and slicing from that one would drag a hundred lines of the
+         progress bar's own colours in with it. */
+      const block = css.slice(css.lastIndexOf('THE ANX ASSISTANT'));
+      const hexes = [...block.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((m) => m[0]).filter((h) => h !== '#1877f2' && h !== '#fff');
+      eq(hexes, [], `every colour in the stage comes from a theme token — found ${hexes.join(', ')}`);
     }
 
     /* ── 6. THE ANIMATIONS EXIST IN THE FIRST PLACE ─────────────────────── */
@@ -270,7 +461,7 @@ async function main(): Promise<void> {
       await page.evaluate(() => window.__mode('sending'));
       await page.waitForTimeout(200);
       const alive = await page.evaluate(() =>
-        ['[data-stage] .anx-scene img.anx-on', '[data-stage] .anx-beam-core'].map((sel) => {
+        ['[data-stage] .anx-poses', '[data-stage] .anx-trail-core', '[data-stage] [data-parcel]'].map((sel) => {
           const el = document.querySelector(sel);
           return { sel, name: el ? getComputedStyle(el).animationName : 'absent', n: el ? el.getAnimations().length : -1 };
         }),
@@ -281,7 +472,7 @@ async function main(): Promise<void> {
       await page.evaluate(() => window.__mode('waiting'));
       await page.waitForTimeout(200);
       const breath = await page.evaluate(() => {
-        const el = document.querySelector('[data-stage] .anx-scene img.anx-on')!;
+        const el = document.querySelector('[data-stage] .anx-poses')!;
         return { name: getComputedStyle(el).animationName, n: el.getAnimations().length };
       });
       eq(breath.name, 'anx-stage-breathe', 'and a held pose still breathes, so nine stills do not read as a slideshow');
@@ -291,7 +482,7 @@ async function main(): Promise<void> {
     /* ── 7. REDUCED MOTION: SWITCHED OFF, NOT HIDDEN ────────────────────── */
     {
       const quiet = await browser.newPage({ viewport: { width: 390, height: 900 }, reducedMotion: 'reduce' });
-      await quiet.goto(`file://${path.join(dir, 'index.html')}`);
+      await quiet.goto(`${origin}/index.html`);
       await quiet.waitForSelector('[data-stage]');
       await quiet.evaluate(() => { window.__publish(1); window.__mode('sending'); });
       await quiet.waitForTimeout(200);
@@ -299,7 +490,7 @@ async function main(): Promise<void> {
         [...document.querySelectorAll('[data-stage] *')].filter((el) => el.getAnimations().length > 0).length,
       );
       eq(moving, 0, 'reduced motion: NOTHING in the stage is running an animation — every element asked, not a list of class names');
-      is((await quiet.locator('[data-stage] .anx-scene img.anx-on').count()) === 1, 'but the character is still on screen');
+      is((await quiet.locator('[data-stage] .anx-poses img.anx-on').count()) === 1, 'but the character is still on screen');
       is((await quiet.locator('[data-stage] [data-tick]').count()) > 0, 'and the tick that was earned is still there — the state was never in the motion');
       await quiet.close();
     }
@@ -320,7 +511,7 @@ async function main(): Promise<void> {
             title: (p.querySelector('h2')?.textContent ?? '').trim(),
             stage: st?.dataset.stage ?? 'none',
             said: (st?.querySelector('[data-stage-title]')?.textContent ?? '').trim(),
-            beam: p.querySelectorAll('.anx-beam.anx-lit').length,
+            parcel: p.querySelectorAll('[data-parcel]').length,
           };
         });
       await page.evaluate(() => { window.__mode('sending'); window.__plan(170, 248); window.__system('active', true, false); });
@@ -330,13 +521,13 @@ async function main(): Promise<void> {
       await page.waitForTimeout(250);
       const held = await show();
       eq(held.stage, 'preparing', 'the row says "מעלה מדיה", so the stage is preparing');
-      eq(held.beam, 0, 'and nothing crosses the scene, because nothing has been submitted');
+      eq(held.parcel, 0, 'and nothing crosses the scene, because nothing has been submitted');
 
       await page.evaluate(() => window.__step('publishing'));
       await page.waitForTimeout(250);
       const clicking = await show();
       eq(clicking.stage, 'sending', 'AT THE CLICK: the stage is sending');
-      eq(clicking.beam, 1, 'and the beam is lit');
+      eq(clicking.parcel, 1, 'and a post is on its way');
       eq(clicking.title, 'רובוט בפעולה', 'with the panel’s own headline untouched by any of this');
 
       /* A backlog waiting for a person stops nothing, so it may not stop the
@@ -389,9 +580,9 @@ async function main(): Promise<void> {
        * third party, and nothing heavier than the nine frames.
        */
       is(!/https?:\/\//.test(code), 'and every picture is served from this product, not fetched from somebody else');
-      is(/\/social\/anx\/scene-\$\{i\}\.webp/.test(code), 'from the nine reference frames in public/social/anx');
+      is(/\/social\/anx\/pose-\$\{i\}\.webp/.test(code), 'from the nine reference frames in public/social/anx');
       const assets = readdirSync(path.resolve('public/social/anx'));
-      eq(assets.filter((f) => /^scene-\d\.webp$/.test(f)).length, 9, 'all nine are on disk');
+      eq(assets.filter((f) => /^pose-\d\.webp$/.test(f)).length, 9, 'all nine are on disk');
       const bytes = assets.reduce((n, f) => n + statSync(path.resolve('public/social/anx', f)).size, 0);
       is(bytes < 400_000, `and they are ${(bytes / 1024).toFixed(0)} KB in all — a dashboard card, not a download`);
     }
@@ -400,6 +591,7 @@ async function main(): Promise<void> {
     await page.close();
   } finally {
     await browser.close();
+    await new Promise<void>((done) => server.close(() => done()));
   }
 
   console.log(`publishing stage OK — ${checks} assertions, driven in a real browser`);

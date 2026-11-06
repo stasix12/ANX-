@@ -145,6 +145,64 @@ export interface TooFast {
   draftHeld: boolean;
 }
 
+/** A sighting that has been put to the page a second time. */
+export interface TooFastConfirmed extends TooFast {
+  /**
+   * BOTH READS SAW IT. Only this may freeze the account's publishing.
+   */
+  confirmed: boolean;
+  /** What the second read found, for the log. Null when it found nothing. */
+  secondNotice: string | null;
+}
+
+/**
+ * HOW LONG TO WAIT BETWEEN THE TWO READS.
+ *
+ * Long enough that a banner which was on its way out has gone, short enough
+ * that the dialog is still the dialog the post was clicked in — it is held
+ * open by the caller for exactly this window. A real account-level limit does
+ * not clear itself in a second; a transient toast does.
+ */
+export const CONFIRM_DELAY_MS = 1200;
+
+/**
+ * ─── ASK TWICE, AND ONLY THEN BELIEVE IT ──────────────────────────────────
+ *
+ * "אתה נכנס לפייסבוק מאמת פעמיים שרשום שפייסבוק הגבילה את הפרסום למניעת
+ *  ספאם."
+ *
+ * The answer to a rate limit is now a THREE-HOUR FREEZE of the whole
+ * account's publishing, which is a far bigger hammer than the single parked
+ * row this check used to produce. A false positive used to cost one row and a
+ * banner the owner could clear; it would now cost three hours of a working
+ * day — and this check has had a false positive, on 05/11, in production, on
+ * his account. The header of this file is that incident.
+ *
+ * So the sighting is put to the page a second time, after a beat, through the
+ * same narrow reader. Both reads must find Facebook's own words before
+ * anything is frozen. One read alone still parks the row and still tells the
+ * owner what it saw — it simply may not stop the account.
+ *
+ * `pause` is injected rather than taken from the page so this can be driven
+ * in a test without a real second of waiting, and so the caller keeps control
+ * of the dialog it is holding open.
+ */
+export async function facebookSaidTooFastTwice(
+  page: Page,
+  composer: ElementHandle<Element> | null,
+  draft: string,
+  pause: (ms: number) => Promise<void>,
+): Promise<TooFastConfirmed | null> {
+  const first = await facebookSaidTooFast(page, composer, draft);
+  if (!first) return null;
+  await pause(CONFIRM_DELAY_MS).catch(() => undefined);
+  /* The SAME question, not a cheaper one: a second read that looked in more
+     places than the first could confirm a sighting the first would never have
+     made. */
+  const second = await facebookSaidTooFast(page, composer, draft).catch(() => null);
+  return { ...first, confirmed: Boolean(second), secondNotice: second?.notice ?? null };
+}
+
 /**
  * Facebook's own "you are posting too often" notice, as the sentence it was
  * found in — or null, which is the answer for every ordinary page.

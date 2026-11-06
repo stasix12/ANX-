@@ -1977,6 +1977,10 @@ export default function SocialDashboard() {
                   key={run.campaign.id}
                   campaign={run.campaign}
                   state={run.state}
+                  /* The freeze, straight off the setting the worker writes.
+                     The card draws it as a live countdown under the next
+                     instant — the line it would otherwise contradict. */
+                  frozenUntil={data.control.rateLimitedUntil}
                   /* Keyed by id, so pausing one run does not grey out the two
                      beside it in the strip. */
                   busy={campBusy(run.campaign.id)}

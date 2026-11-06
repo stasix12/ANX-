@@ -19,6 +19,8 @@ import {
   DEFAULT_BROWSER,
   DEFAULT_LIMITS,
   PENDING_SHARE_PREFIX,
+  RATE_LIMIT_FREEZE_HOURS,
+  RATE_LIMIT_FREEZE_MS,
   parseGroupUrl,
   type BrowserSettings,
   type ControlSettings,
@@ -154,6 +156,14 @@ interface WorkerState {
    * know. See `notice` directly below, and the comment on it.
    */
   attention: string;
+  /**
+   * The attention message above was written by the rate-limit freeze.
+   *
+   * It exists so the freeze can take its own banner down when it expires and
+   * cannot take down somebody else's — a Facebook login prompt raised while
+   * the account was frozen must survive the thaw.
+   */
+  freezeHold: boolean;
   /**
    * SOMETHING HE SHOULD KNOW — which is NOT the same as a reason to stop.
    *
@@ -438,6 +448,7 @@ async function main(): Promise<void> {
     id: worker.id,
     browserState: session.hasProfile() ? 'unknown' : 'disconnected',
     attention: '',
+    freezeHold: false,
     notice: '',
     currentJobs: new Set<string>(),
     lanes: [],
@@ -951,10 +962,64 @@ async function tick(state: WorkerState): Promise<void> {
     console.error('[worker] שחרור שורות תקועות נכשל:', safeError(err));
   }
 
+  /*
+   * ─── FACEBOOK SAID "TOO FAST", AND THE CLOCK IS STILL RUNNING ──────────
+   *
+   * "ומקפיא את הפרסום למשך 3 שעות — אחרי שנגמר 3 שעות חוזר לפרסם רגיל."
+   *
+   * THE INSTANT IS IN THE DATABASE, and that is the whole difference from
+   * what this replaced. The old answer to a rate limit was `state.attention`
+   * — a string on the running process — so it stopped the queue until a
+   * person pressed "המשך", and closing and reopening the program wiped it
+   * silently: the queue went straight back to the pace that earned the limit,
+   * with nobody deciding. Measured on his account on 06/11: four hours of a
+   * working day with 104 publications already overdue, waiting on a button.
+   *
+   * A row in social_settings survives the restart and expires on its own. The
+   * owner has nothing to press.
+   *
+   * IT IS ASKED BEFORE THE MANUAL HOLD below, because while a freeze is
+   * standing it is the true answer to "למה לא מפרסם" — and the only one with
+   * an hour attached to it.
+   */
+  if (control.paused) return idle(state, 'התורים מושהים בלוח הבקרה.', 'info');
+  if (control.rateLimitedUntil) {
+    const until = new Date(control.rateLimitedUntil);
+    const left = until.getTime() - Date.now();
+    if (Number.isFinite(until.getTime()) && left > 0) {
+      /* One expression, then one `return idle(state, …)` — the shape every
+         gate in this function has, and the one hold-reason.test.ts counts. */
+      const held = `פייסבוק הגבילה את קצב הפרסום — הפרסום מוקפא ל-${RATE_LIMIT_FREEZE_HOURS} שעות ויחזור אוטומטית ב-${hhmmOf(until)} (עוד ${Math.ceil(left / 60_000)} דק׳).`;
+      return idle(state, held);
+    }
+    /*
+     * ─── AND THE THAW, WHICH IS THE HALF THAT IS EASY TO FORGET ──────────
+     *
+     * Cleared HERE, on the first tick past the instant, rather than by
+     * whoever wrote it: the process that set the freeze may have been closed
+     * hours ago. Clearing it before the work below means this very tick
+     * publishes — the owner does not wait another cycle for a three-hour
+     * timer that has already finished.
+     *
+     * THE "once per episode" LATCH IS NOT TOUCHED HERE, and that is on
+     * purpose: this tick falls through to real work, which is the one place
+     * that clears it (see idle(), and worker/test/hold-reason.test.ts, which
+     * refuses a second). The thaw announces itself with an event of its own
+     * instead, which no latch can swallow.
+     */
+    await saveWorkerSetting('control', { ...control, rateLimitedUntil: null });
+    control.rateLimitedUntil = null;
+    if (state.freezeHold) {
+      state.attention = '';
+      state.freezeHold = false;
+    }
+    await logActivity('info', 'rate_limit_cleared', `ההקפאה של ${RATE_LIMIT_FREEZE_HOURS} שעות הסתיימה — הפרסום חוזר לפעול כרגיל.`);
+    console.log('[worker] ההקפאה הסתיימה — ממשיכים לפרסם.');
+  }
+
   /* Each of these three is a sentence that answers "למה לא מפרסם" — see
      idle(). They are the only three ways the gate closes, and every one of
      them now reaches the owner's screen instead of his terminal. */
-  if (control.paused) return idle(state, 'התורים מושהים בלוח הבקרה.', 'info');
   if (state.attention) return idle(state, `ממתין לטיפול ידני: ${state.attention}`);
   if (state.browserState === 'disconnected') return idle(state, 'אין חיבור לפייסבוק — לחצו "התחבר לפייסבוק" בלוח הבקרה.');
 
@@ -1597,6 +1662,13 @@ async function reviveFailedRows(state: WorkerState, limits: LimitsSettings, brow
  * call passes 'info' — still written, still the answer if he goes looking,
  * and not a notification.
  */
+/** HH:MM in the account's own zone, for a sentence a person reads. The
+    worker has no formatter of its own and this is the only place that needs
+    one — Intl is in the runtime, so there is nothing to add. */
+function hhmmOf(at: Date): string {
+  return new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }).format(at);
+}
+
 async function idle(state: WorkerState, reason: string, level: 'info' | 'warn' = 'warn'): Promise<void> {
   if (state.idleNoticeShown) return;
   console.log(`[worker] ${reason}`);
@@ -2825,7 +2897,22 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
      * לבדוק בקבוצה. ורק שורה אחת נרשמת כך, כי מכאן לא ממשיכים.
      */
     if (err instanceof PublishError && err.kind === 'rate_limited') {
-      state.attention = 'פייסבוק הגביל את קצב הפרסום של החשבון ולא קיבל את הפוסט. עצרנו את הפרסום מיד כדי לא להחמיר את ההגבלה. הפוסטים שלא יצאו לא פורסמו בכלל — אפשר להמשיך מאוחר יותר, ורצוי להגדיל קודם את המרווח בין פרסומים.';
+      /*
+       * ─── SEEN TWICE, OR NOT AT ALL ─────────────────────────────────────
+       *
+       * "אתה נכנס לפייסבוק מאמת פעמיים שרשום שפייסבוק הגבילה את הפרסום
+       *  למניעת ספאם … ומקפיא את הפרסום למשך 3 שעות."
+       *
+       * The composer put the notice to the page twice (rateLimit.ts). Only
+       * two agreeing reads may freeze the account, because a freeze is three
+       * hours of a working day and this check has had a false positive in
+       * production — 05/11, on his own account, on a group he could post to
+       * by hand a minute later.
+       *
+       * A single sighting still parks THIS row and still tells him what it
+       * saw. It simply does not stop the account.
+       */
+      const confirmed = err.rateLimit?.confirmed ?? false;
       /*
        * ─── AND THE ROW'S FATE FOLLOWS THE PROOF, NOT THE DETECTION ───────
        *
@@ -2854,14 +2941,62 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
         .from('social_targets')
         .update({ last_status: maybeLive ? 'needs_attention' : 'failed', last_error: message })
         .eq('id', tt.id);
+      /*
+       * ─── THE FREEZE, WRITTEN WHERE A RESTART CANNOT LOSE IT ────────────
+       *
+       * Three hours in social_settings, not a flag on this process. See the
+       * gate at the top of tick() for why, and types.ts for the number.
+       *
+       * The banner beside his photo is still raised — "ולעצור הכל מיד",
+       * asked for on 03/11 and still right — but it now carries an hour and
+       * is taken down by the thaw rather than by a button. `freezeHold` is
+       * what lets the thaw take down THIS banner and not somebody else's.
+       */
+      if (confirmed) {
+        const until = new Date(Date.now() + RATE_LIMIT_FREEZE_MS);
+        const control = await getSetting<ControlSettings>('control', { paused: false, rateLimitedUntil: null });
+        await saveWorkerSetting('control', { ...control, rateLimitedUntil: until.toISOString() });
+        state.attention = `פייסבוק הגבילה את קצב הפרסום של החשבון. הפרסום מוקפא ל-${RATE_LIMIT_FREEZE_HOURS} שעות ויחזור אוטומטית ב-${hhmmOf(until)}, בלי שתצטרכו לעשות דבר.`;
+        state.freezeHold = true;
+      }
       await heartbeat(state, 'needs_attention', jobEnv.browser.debugMode);
-      await logActivity('error', 'rate_limited', `פייסבוק הגביל את קצב הפרסום של החשבון (${tt.name}). עצרנו את הפרסום. הפוסט לא עלה לקבוצה.`, {
-        queueId: item.id,
-        step: lastStep,
-        detail: raw,
-        targetUrl: tt.url ?? null,
-      });
-      console.error(`[worker] ⛔ פייסבוק הגביל את קצב הפרסום — עוצר. (${tt.name})`);
+      /*
+       * ─── AND THE LINE IN THE FEED FOLLOWS THE ROW'S OWN VERDICT ────────
+       *
+       * It used to end with "הפוסט לא עלה לקבוצה" as a fixed string, in a
+       * branch that may have just parked the row as `submitted` — which in
+       * this product means the opposite: "it may already be up, go and
+       * look". Found live on 06/11 on row acbe7be1, where the feed and the
+       * row said different things about the same publication.
+       *
+       * The screenshot goes with it. The worker has saved one at the failing
+       * step all along and nothing carried it to the feed, so the one
+       * picture that settles "did it or didn't it" was reachable only from
+       * the history screen.
+       */
+      await logActivity(
+        'error',
+        'rate_limited',
+        `פייסבוק הגביל את קצב הפרסום של החשבון (${tt.name}). ${
+          maybeLive ? 'ייתכן שהפוסט כבר עלה — בדקו בקבוצה.' : 'הפוסט לא עלה לקבוצה.'
+        }${confirmed ? ` הפרסום מוקפא ל-${RATE_LIMIT_FREEZE_HOURS} שעות ויחזור אוטומטית.` : ' נראה פעם אחת בלבד, ולכן לא הקפאנו את הפרסום.'}`,
+        {
+          queueId: item.id,
+          step: lastStep,
+          detail: raw,
+          targetUrl: tt.url ?? null,
+          screenshot: screenshot ?? null,
+          confirmed,
+          notice: err.rateLimit?.notice ?? null,
+          secondNotice: err.rateLimit?.secondNotice ?? null,
+          frozenUntil: confirmed ? new Date(Date.now() + RATE_LIMIT_FREEZE_MS).toISOString() : null,
+        },
+      );
+      console.error(
+        confirmed
+          ? `[worker] ⛔ פייסבוק הגביל את קצב הפרסום — מקפיא ${RATE_LIMIT_FREEZE_HOURS} שעות. (${tt.name})`
+          : `[worker] ⚠ נראתה הודעת הגבלה פעם אחת בלבד — לא מקפיא. (${tt.name})`,
+      );
       return;
     }
     if (err instanceof PublishError && err.kind === 'cannot_post') {

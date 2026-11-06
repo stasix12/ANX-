@@ -61,6 +61,7 @@ export function CampaignScheduleBoard({
   readout,
   campaignName,
   workerOnline,
+  frozenUntil = null,
   neverLaunched = false,
   armedAt = null,
   pauseLabel = null,
@@ -98,6 +99,9 @@ export function CampaignScheduleBoard({
    * nothing.
    */
   workerOnline?: boolean;
+  /** Publishing is frozen until this instant — passed through to
+      <NextPublication>, which draws the countdown. Null means it is not. */
+  frozenUntil?: string | null;
   /** The round has never gone out — passed through to <NextPublication>. */
   neverLaunched?: boolean;
   /**
@@ -368,6 +372,9 @@ export function CampaignScheduleBoard({
         workerOnline={workerOnline}
         neverLaunched={neverLaunched}
         armedAt={armedAt}
+        /* Straight through to the line that answers "when does the next one
+           go out" — see the prop's own note. */
+        frozenUntil={frozenUntil}
         className="mt-1.5"
       />
     </div>

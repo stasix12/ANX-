@@ -106,7 +106,28 @@ eq((code.match(/state\.idleNoticeShown = false/g) ?? []).length, 1, 'the latch i
 
 const tick = body('tick');
 const gates = [...tick.matchAll(/return idle\(state, ([^;]+)\);/g)].map((m) => m[1]);
-eq(gates.length, 3, 'the three gates at the top of tick() are the only ways the worker holds back');
+/*
+ * RE-POINTED, NOT RELAXED. This was three, and the claim behind the number is
+ * the one that matters: every way the worker holds back goes through idle(),
+ * so every one of them reaches the owner's screen instead of his terminal.
+ * There is a fourth now — Facebook's own rate limit, which freezes publishing
+ * for three hours and lifts itself — and it is enumerated here for the same
+ * reason the other three are. If it ever stops going through idle(), this
+ * number catches it.
+ */
+eq(gates.length, 4, 'the four gates at the top of tick() are the only ways the worker holds back');
+/* Its sentence is built one line above the return — the three others are
+   written inline — so it is read off the tick body rather than off the
+   captured argument, which here is the name the expression was given. */
+ok(/מוקפא/.test(tick) && /const held = /.test(tick), 'the rate-limit freeze is one of them, and it says the queue is frozen');
+ok(
+  gates.some((g) => /held/.test(g) && !/'info'/.test(g)),
+  'at warn level — it is the answer to "למה לא מפרסם" for as long as it stands',
+);
+ok(
+  /ויחזור אוטומטית ב-\$\{hhmmOf\(until\)\}/.test(tick),
+  'and it is the only gate that names when it ends: the owner has nothing to press, so the sentence has to say so',
+);
 
 ok(
   gates.some((g) => /התורים מושהים/.test(g) && /'info'/.test(g)),

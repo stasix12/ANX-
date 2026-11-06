@@ -271,6 +271,7 @@ export function LiveCampaignHero({
   spacing,
   onAccountGapChange,
   floorHours,
+  frozenUntil = null,
   scheduleBusy = false,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status'>;
@@ -348,6 +349,14 @@ export function LiveCampaignHero({
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
+  /**
+   * PUBLISHING IS FROZEN UNTIL THIS INSTANT — `control.rateLimitedUntil`.
+   *
+   * Carried, not decided: the dashboard reads the setting and this card hands
+   * it to the one block that draws time. Optional, so a caller that does not
+   * know about freezes renders exactly what it rendered before.
+   */
+  frozenUntil?: string | null;
   /** While that write is in flight, so the controls cannot be raced. */
   scheduleBusy?: boolean;
 }) {
@@ -771,6 +780,10 @@ export function LiveCampaignHero({
           editing={editingSchedule}
           readout={readout}
           campaignName={campaign.name}
+          /* "ושיהיה גם טיימר במסך הראשי ליד כרטיסיית הקמפיין שזה סופר את
+             ה-3 שעות בגלל המגבלה." It is drawn inside the block below, under
+             the instant it contradicts — see NextPublication's own note. */
+          frozenUntil={frozenUntil}
           /* So the block under it can withdraw its own promise when the PC
              that does the publishing is not connected: "אם המחשב מנותק, יש
              להציג אזהרת חיבור, בלי להבטיח שהפרסום יצא במועד." */

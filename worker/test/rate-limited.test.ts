@@ -156,7 +156,21 @@ is(start > 0, 'the worker has a branch for it');
 const stop = worker.slice(start, worker.indexOf("err.kind === 'cannot_post'", start));
 is(stop.length > 200, 'found the branch body');
 
-is(/state\.attention\s*=\s*'/.test(stop), 'it raises attention — which is what stops the next tick AND lights the banner by his name');
+/*
+ * RE-POINTED, NOT WEAKENED. The claim is unchanged — the banner by his name
+ * is still raised, and it is still what stops the next tick. Two things about
+ * it moved, and both are asserted here rather than dropped:
+ *
+ *   it is now a TEMPLATE, because the sentence carries the hour the freeze
+ *   ends at ("ויחזור אוטומטית ב-18:47"), which a fixed string cannot;
+ *
+ *   and it is raised only on a sighting that survived a second read. A
+ *   three-hour freeze of the whole account may not be earned by one glance —
+ *   see worker/test/rate-freeze.test.ts, which owns that rule.
+ */
+is(/state\.attention\s*=\s*`/.test(stop), 'it raises attention — which is what stops the next tick AND lights the banner by his name');
+is(/if \(confirmed\) \{/.test(stop), 'and only once the notice has been read twice on the page');
+is(/state\.freezeHold = true/.test(stop), 'marked as the freeze’s own banner, so the thaw can take down this one and not somebody else’s');
 is(/פייסבוק הגביל את קצב הפרסום/.test(stop), 'and the banner says who limited what, in his language');
 is(/heartbeat\(state, 'needs_attention'/.test(stop), "it heartbeats 'needs_attention', which is what the header reads");
 /*
@@ -170,7 +184,11 @@ is(
   /status: 'needs_attention', step: 'submitted'/.test(stop),
   'and anything unproven is parked as MIGHT ALREADY BE LIVE — step \'submitted\' is what every duplicate guard in the product reads',
 );
-is(/logActivity\('error', 'rate_limited'/.test(stop), 'and it is filed at error level under its own event');
+/* The call is written across several lines now that it carries the
+   screenshot and what both reads saw, so the pin spans them. The claim —
+   error level, its own event name — is unchanged. */
+is(/logActivity\(\s*'error',\s*'rate_limited'/.test(stop), 'and it is filed at error level under its own event');
+is(/screenshot: screenshot \?\? null/.test(stop), 'with the picture of the failure attached, so the feed can show it');
 
 /*
  * ORDER IS THE WHOLE THING. `mayAlreadyBePosted` is true here — the step is

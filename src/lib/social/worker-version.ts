@@ -621,7 +621,7 @@
  *
  * התזמון, סדר התור, חישוב זמני הפרסום, חלון הפרסום והתורים הקיימים לא נגעו.
  */
-export const WORKER_VERSION = '4.50.0';
+export const WORKER_VERSION = '4.51.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1112,4 +1112,4 @@ export const WORKER_VERSION = '4.50.0';
      grep -c campaign_targets     dist/app/worker.cjs → 0
      grep -c startDraft           dist/app/worker.cjs → 0
      grep -c TimePick             dist/app/worker.cjs → 0 */
-export const WORKER_FINGERPRINT = '91c49dc35d1fa157';
+export const WORKER_FINGERPRINT = '800798c8700c7ab0';

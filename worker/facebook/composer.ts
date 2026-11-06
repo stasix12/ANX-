@@ -1,7 +1,7 @@
 import type { FileChooser, Locator, Page } from 'playwright-core';
 import { parseGroupUrl } from '@/lib/social/types';
 import { fb, firstAttached, firstVisible, patterns } from './selectors';
-import { facebookSaidTooFast } from './rateLimit';
+import { facebookSaidTooFastTwice } from './rateLimit';
 import { assertUsable, classifyPage } from './session';
 
 /**
@@ -19,6 +19,18 @@ export class PublishError extends Error {
     message: string,
     /** True once the Post button was clicked — a retry could double-post. */
     public afterSubmit = false,
+    /**
+     * ONLY ON kind 'rate_limited': WHAT THE TWO READS SAW.
+     *
+     * Carried on the error rather than re-derived by the worker, because by
+     * the time the worker has it the page is gone — and because the one
+     * decision that depends on it, freezing the account's publishing for
+     * three hours, must be made from what was actually on screen and not from
+     * the kind of the error. `confirmed` false means the notice was seen
+     * once: the row is still parked and the owner is still told, but nothing
+     * is frozen.
+     */
+    public rateLimit: { confirmed: boolean; notice: string; secondNotice: string | null } | null = null,
   ) {
     super(message);
   }
@@ -527,7 +539,11 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
    * this branch, which is why the first version of the check had nothing
    * narrower than `page` to ask. See rateLimit.ts for what that cost.
    */
-  const tooFast = detached ? null : await facebookSaidTooFast(page, dialogNode, input.text);
+  /* TWICE, and before the handle is disposed — see rateLimit.ts. The dialog
+     is held open across the pause on purpose: it is the narrowest place
+     Facebook's own words can appear, and a second read against a wider scope
+     would not be the same question. */
+  const tooFast = detached ? null : await facebookSaidTooFastTwice(page, dialogNode, input.text, (ms) => page.waitForTimeout(ms));
   await dialogNode?.dispose().catch(() => undefined);
   if (!detached) {
     /*
@@ -567,12 +583,21 @@ export async function publishToGroup(page: Page, input: ComposeInput): Promise<C
        * MAYBE_LIVE_STEP exists for exactly this doubt.
        */
       const refused = tooFast.draftHeld;
+      /*
+       * AND WHETHER IT WAS SEEN ONCE OR TWICE IS SAID IN THE MESSAGE ITSELF.
+       *
+       * A single sighting no longer stops the account, so the row the owner
+       * reads must not imply that it did. He gets the same sentence about the
+       * post either way — that part is about this row — plus, when it was
+       * seen twice, the freeze and the hour it ends.
+       */
       throw new PublishError(
         'rate_limited',
         refused
           ? `פייסבוק הגביל את קצב הפרסום מהחשבון הזה ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה. צריך להאט את קצב הפרסום ולנסות שוב מאוחר יותר. (מה שפייסבוק כתבה: "${tooFast.notice}")`
           : `פייסבוק הגביל את קצב הפרסום מהחשבון הזה. הטקסט כבר לא היה בחלון, ולכן אי אפשר לדעת אם הפוסט עלה — בדקו בקבוצה לפני שמנסים שוב. (מה שפייסבוק כתבה: "${tooFast.notice}")`,
         !refused,
+        { confirmed: tooFast.confirmed, notice: tooFast.notice, secondNotice: tooFast.secondNotice },
       );
     }
     // Still open: either an error banner, or Facebook simply never took it down.

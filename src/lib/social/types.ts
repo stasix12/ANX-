@@ -696,8 +696,36 @@ export interface LimitsSettings {
   blockRepeatToSameTarget: boolean;
 }
 
+/**
+ * ─── HOW LONG PUBLISHING STAYS FROZEN AFTER FACEBOOK SAYS "TOO FAST" ──────
+ *
+ * "ומקפיא את הפרסום למשך 3 שעות — אחרי שנגמר 3 שעות חוזר לפרסם רגיל."
+ *
+ * THE NUMBER IS HERE AND NOT IN THE WORKER because three things have to agree
+ * about it: the machine that sets the freeze, the gate that holds the queue
+ * behind it, and the countdown the owner reads on his phone. A constant in
+ * one of them and a literal in the other two is how a screen ends up counting
+ * down to an instant that nothing is waiting for.
+ */
+export const RATE_LIMIT_FREEZE_HOURS = 3;
+export const RATE_LIMIT_FREEZE_MS = RATE_LIMIT_FREEZE_HOURS * 3_600_000;
+
 export interface ControlSettings {
   paused: boolean;
+  /**
+   * PUBLISHING IS FROZEN UNTIL THIS INSTANT, and then it is not.
+   *
+   * Written when Facebook's own rate-limit notice has been read TWICE on the
+   * page (worker/facebook/rateLimit.ts), and read by three places: the
+   * worker's tick, which claims nothing while it stands; the server's own
+   * report; and the dashboard, which counts it down beside the campaign.
+   *
+   * It lives in the database and not in the worker's memory, and that is the
+   * point: the hold this replaces was a field on the running process, so
+   * closing and reopening the program cleared it silently and the queue went
+   * straight back to the pace that earned the limit. An instant in a row
+   * survives a restart and expires on its own.
+   */
   rateLimitedUntil: string | null;
 }
 

@@ -573,7 +573,21 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
      hours and minutes and is not moving — a campaigns list is twenty of these
      cards, and a flat one-second tick is twenty re-renders a second for a
      figure that has not changed. */
-  is(/coarse \? 15_000 : 1_000/.test(nextPubSrc), 'and a card counting down in hours ticks at a fifteenth of the rate');
+  /*
+   * RE-POINTED, NOT RELAXED. The reason for the slow tick is unchanged and is
+   * still asserted: a card whose line reads in hours and minutes is not
+   * moving, and a campaigns list is twenty of them.
+   *
+   * What was added is the one case where a card IS moving while its own slot
+   * is hours away — publishing frozen after Facebook's rate limit, counting
+   * the three hours down in seconds beside it. A fifteen-second tick there
+   * would draw a timer that jumps, which is worse than no timer.
+   */
+  is(/coarse && !frozenUntil \? 15_000 : 1_000/.test(nextPubSrc), 'and a card counting down in hours ticks at a fifteenth of the rate');
+  is(
+    /Boolean\(frozenUntil\)/.test(nextPubSrc),
+    'unless a freeze is counting down on it, which is seconds on screen and has to move like it',
+  );
   is(/if \(!active\) return;/.test(nextPubSrc), 'and armed only when there is an instant to count down to — a list of finished rounds runs no timers');
 
   /* The migration, and the one file the owner is ever told to run. */

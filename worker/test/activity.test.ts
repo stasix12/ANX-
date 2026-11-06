@@ -55,6 +55,15 @@ const SYSTEM_BY_DESIGN = new Set([
   /* A worker that has narrowed itself to no work. About the installation,
      not about a post — and the one notice that must never be missed. */
   'account_scope_narrowed',
+  /*
+   * THE END OF A RATE-LIMIT FREEZE. System news on purpose: no publication
+   * succeeded here and none failed — the machine simply came back on its own
+   * after the three hours Facebook's own notice bought. It is the closing
+   * half of `rate_limited`, which is filed as a failure, and it has to be
+   * written: without it the queue starts moving again with nothing in the
+   * feed saying when, or why it had stopped.
+   */
+  'rate_limit_cleared',
   'metrics_columns_missing',
   /*
    * A read the publish engine needed came back as an error, so it refused to

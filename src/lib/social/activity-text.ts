@@ -78,6 +78,7 @@ const TITLE: Record<string, string> = {
   submitted_verified_live: 'נבדק בקבוצה — הפוסט עלה',
   verify_read_failed: 'בדיקת הפרסומים הממתינים נכשלה',
   rate_limited: 'פייסבוק הגביל את קצב הפרסום',
+  rate_limit_cleared: 'ההקפאה הסתיימה — הפרסום חזר',
   verify_window_full: 'יותר מדי פרסומים ממתינים לבדיקה',
   plan_retry: 'הסבב יתוכנן שוב',
   plan_targets_gone: 'קבוצות שנמחקו דולגו',

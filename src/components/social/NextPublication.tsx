@@ -46,9 +46,27 @@ export function NextPublication({
   armedAt = null,
   targetName = null,
   targetImage = null,
+  frozenUntil = null,
   className = '',
 }: {
   readout: ScheduleReadout;
+  /**
+   * ─── PUBLISHING IS FROZEN UNTIL THIS INSTANT ─────────────────────────────
+   *
+   * "ושיהיה גם טיימר במסך הראשי ליד כרטיסיית הקמפיין שזה סופר את ה-3 שעות
+   *  בגלל המגבלה."
+   *
+   * `control.rateLimitedUntil`, straight through. It is drawn HERE, under the
+   * instant, and not as a banner somewhere else on the screen, because this
+   * line is the one the owner reads to answer "when does the next one go
+   * out?" — and while a freeze stands, the honest answer to that question is
+   * the freeze, not the slot. His own screen on 06/11 said "אמור לצאת עכשיו"
+   * over a queue that Facebook had stopped four hours earlier.
+   *
+   * Null, absent, or an instant in the past all mean "not frozen", so a
+   * caller that never heard of this renders exactly what it rendered before.
+   */
+  frozenUntil?: string | null;
   /**
    * Whether the campaign's own window is switched on.
    *
@@ -143,9 +161,20 @@ export function NextPublication({
   /* Also while a launch is still being turned into rows: that line counts
      too, and without this it would be frozen at the second it first rendered
      — the exact fault it exists to answer. */
-  const now = useTick(at !== null || Boolean(armedAt), coarse ? 15_000 : 1_000);
+  /* AND WHILE A FREEZE IS STANDING, whatever the queue looks like: the
+     countdown below is the only moving thing on the card then, and a card
+     with nothing scheduled would otherwise render it once and leave it. */
+  const now = useTick(at !== null || Boolean(armedAt) || Boolean(frozenUntil), coarse && !frozenUntil ? 15_000 : 1_000);
 
   const left = at ? countdownTo(at, now) : null;
+  /*
+   * THE FREEZE'S OWN COUNTDOWN, from the same helper the slot uses — so the
+   * two clocks on this card cannot drift apart or format differently. It
+   * stops existing the moment the instant passes, which is also the moment
+   * the worker's next tick lifts the freeze.
+   */
+  const thaw = frozenUntil ? countdownTo(frozenUntil, now) : null;
+  const frozen = Boolean(thaw && !thaw.due);
   const offline = workerOnline === false;
 
   return (
@@ -204,9 +233,30 @@ export function NextPublication({
             seconds and rules.ts parks a row for a minute at a time: a row just
             past its slot is ordinary, not a fault.
           */}
-          <p className={`mt-0.5 flex items-center gap-1.5 text-[11.5px] font-bold leading-4 ${left?.overdue ? 'text-warning-400' : 'text-mist-300'}`}>
+          {/*
+            THE FREEZE OUTRANKS THE SLOT, and it has to.
+            
+            Both sentences are about the same question — when does the next
+            one go out — and only one of them can be true. "אמור לצאת עכשיו"
+            printed over an account Facebook has stopped is the screen
+            promising something nothing is doing, which is the one thing this
+            panel may never say. So while the freeze stands it IS the line,
+            and the slot above it keeps its own instant unchanged: the row is
+            still stamped for then, it simply cannot leave yet.
+          */}
+          <p
+            data-next-wait
+            className={`mt-0.5 flex items-center gap-1.5 text-[11.5px] font-bold leading-4 ${
+              frozen ? 'text-warning-400' : left?.overdue ? 'text-warning-400' : 'text-mist-300'
+            }`}
+          >
             <ClockIcon aria-hidden className="h-3 w-3 shrink-0" />
-            {!left ? null : left.overdue ? (
+            {frozen ? (
+              <span data-frozen>
+                {'מוקפא · חוזר לפרסם בעוד '}
+                <span dir="ltr" className="inline-block tabular-nums">{thaw!.label}</span>
+              </span>
+            ) : !left ? null : left.overdue ? (
               <span>באיחור · {relativeHe(at)}</span>
             ) : left.due ? (
               <span>אמור לצאת עכשיו</span>
@@ -217,6 +267,13 @@ export function NextPublication({
               </span>
             )}
           </p>
+          {/* AND WHY, once, under it — a timer with no reason beside it is a
+              machine that stopped for no stated cause. */}
+          {frozen && (
+            <p data-frozen-why className="mt-0.5 text-[11px] font-bold leading-4 text-mist-300">
+              פייסבוק הגבילה את קצב הפרסום. אין מה לעשות — הפרסום יחזור לבד.
+            </p>
+          )}
 
           {/*
             THE PC, AND ONLY WHEN IT IS KNOWN TO BE OFF.

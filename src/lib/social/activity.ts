@@ -103,6 +103,13 @@ const KIND: Record<string, ActivityKind> = {
   /* פייסבוק הגביל את קצב הפרסום. הכישלון החמור ביותר שיש: הוא עוצר את
      המערכת כולה, והוא על החשבון עצמו ולא על קבוצה אחת. */
   rate_limited: 'failure',
+  /*
+   * וההפשרה אחרי שלוש השעות. 'system' ולא 'success': שום פרסום לא הצליח כאן
+   * — מה שקרה הוא שהמכונה חזרה לעבוד מעצמה. הוא הסוף של האירוע שלמעלה, ולכן
+   * הוא חייב להיכתב: בלעדיו התור פשוט מתחיל לזוז שוב בלי שאף אחד יידע למה
+   * הוא נעצר ומתי בדיוק חזר.
+   */
+  rate_limit_cleared: 'system',
   /* The backlog outgrew one pass's window. A warning and not quiet system
      news: while it holds, publications parked today may not be looked at. */
   verify_window_full: 'failure',

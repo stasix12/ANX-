@@ -1563,7 +1563,23 @@ export default function SocialDashboard() {
         : !data.workerOnline && summary.queued > 0
           ? {
               title: 'התוכנה במחשב לא פועלת',
-              body: `${counted(summary.queued, 'פרסום אחד ממתין בתור', 'פרסומים ממתינים בתור', 'שני פרסומים ממתינים בתור')} ואף אחד מהם לא יֵצא: הפרסום לקבוצות נעשה מהדפדפן שעל המחשב שלכם. פתחו את התיקייה ולחצו פעמיים על start-worker.cmd, והשאירו את החלון פתוח.`,
+              /*
+               * TODAY'S COUNT, by the same iron rule — this sentence used
+               * `summary.queued` and so announced a whole week's queue as
+               * though it were tonight's problem.
+               *
+               * AND IT STILL FIRES WHEN TODAY IS EMPTY. The alert is about a
+               * PC that is off while work is queued; at 23:00 with nothing
+               * left today and five hundred rows for tomorrow, a number would
+               * read "0 ממתינים" and look like a bug. The gate stays on the
+               * whole queue; only the SENTENCE is scoped, and when today has
+               * nothing it says what is true instead of printing a zero.
+               */
+              body: `${
+                data.waitingToday > 0
+                  ? counted(data.waitingToday, 'פרסום אחד ממתין בתור להיום', 'פרסומים ממתינים בתור להיום', 'שני פרסומים ממתינים בתור להיום')
+                  : 'הפרסומים הקרובים ממתינים בתור'
+              } ואף אחד מהם לא יֵצא: הפרסום לקבוצות נעשה מהדפדפן שעל המחשב שלכם. פתחו את התיקייה ולחצו פעמיים על start-worker.cmd, והשאירו את החלון פתוח.`,
               actionLabel: 'מה לעשות',
               href: '/social#pc',
             }
@@ -1771,7 +1787,13 @@ export default function SocialDashboard() {
               <StatCard
                 dense
                 icon={<UsersIcon aria-hidden className="h-4 w-4" />}
-                tone={summary.queued ? 'brand' : 'neutral'}
+                /* THE COLOUR FOLLOWS THE NUMBER IT DECORATES. It came from
+                   `summary.queued` — the whole queue — so at 23:00 with
+                   nothing left today and five hundred rows for tomorrow the
+                   tile lit up brand-coloured over a figure of 0. A tile whose
+                   tone and value disagree is the same fault as two screens
+                   that disagree, in one element. */
+                tone={data.waitingToday ? 'brand' : 'neutral'}
                 /*
                   ─── TODAY, BY NAME — "ובכותרת לרשום ממינים בתור להיום" ─────
 
@@ -2099,9 +2121,45 @@ export default function SocialDashboard() {
                * otherwise show an empty card over "50 ממתינים בתור" and read
                * as a fault.
                */
+              /*
+               * ─── "ממתינים בתור" IS TODAY'S, EVERYWHERE, FROM NOW ON ─────
+               *
+               * "מהיום כלל ברזל, חישוב של ממתינים בתור זה רק מה שאמור לצאת
+               *  באותו היום."
+               *
+               * This clause printed `summary.queued` — the whole queue, every
+               * day it holds. On his screen that was "560 ממתינים בתור" on a
+               * day that was going to publish 285, over a dashboard whose
+               * every other figure is about today. The tile above it had
+               * already been moved to today by name; this had not, so the two
+               * disagreed by a factor of two on the same screen.
+               *
+               * `data.waitingToday` is countWaitingWithin() at the next LOCAL
+               * midnight — already computed every poll, so this costs no
+               * query, and the boundary is the calendar date in
+               * Asia/Jerusalem rather than now+24h, which matters twice a year
+               * when a day is 23 or 25 hours long.
+               *
+               * THE REST IS NAMED, NEVER DROPPED. A card that quietly stopped
+               * counting 275 rows would be the honest number on a dishonest
+               * screen: he would tap through to a longer list and conclude the
+               * card was broken. Same discipline as the tile's sub-line.
+               *
+               * The 24-hour clause keeps its own window because it says so in
+               * words, and because it is what he asked this card for by name
+               * ("להראות רק את מה שעומד להתפרסם בתווך זמן של 24 שעות").
+               */
               subtitle={
                 soon.length
-                  ? `${data.upcomingSoon} ב-24 השעות הקרובות · ${summary.queued} ממתינים בתור`
+                  ? [
+                      `${data.upcomingSoon} ב-24 השעות הקרובות`,
+                      `${data.waitingToday} ממתינים בתור להיום`,
+                      summary.automaticWaiting > data.waitingToday
+                        ? `ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות`
+                        : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
                   : summary.automaticWaiting
                     ? `אין פרסום ב-24 השעות הקרובות · ${summary.automaticWaiting} ממתינים אחר כך`
                     : data.doneToday.length

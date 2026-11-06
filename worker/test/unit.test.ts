@@ -2974,13 +2974,28 @@ const scenario: { step: string; line: string }[] = [];
    * The cap is never printed as a total — and the rule got STRONGER when this
    * card became a window on the next 24 hours rather than the whole queue.
    *
-   * Two numbers are on it now and each has one honest source: how many are due
+   * Two numbers are on it and each has one honest source: how many are due
    * inside the window (data.upcomingSoon, an exact head count from the
-   * database) and how many are waiting in all (summary.queued, the same figure
-   * the "בתור" tile reads). Neither may be `soon.length` or
+   * database) and how many are waiting TODAY (data.waitingToday, the same
+   * figure the "בתור" tile reads). Neither may be `soon.length` or
    * `data.upcoming.length` — both of those are the capped read.
+   *
+   * RE-POINTED AT THE SECOND FIGURE, and the rule is unchanged while the
+   * number it names has moved. It was `summary.queued`, the whole queue on
+   * every day it holds, and the owner made that a standing rule rather than a
+   * bug: "מהיום כלל ברזל, חישוב של ממתינים בתור זה רק מה שאמור לצאת באותו
+   * היום." On his screen the tile said 285 and this card said 560, ten
+   * centimetres apart, on a day that was going to publish 285.
+   *
+   * `summary.queued` is still the right thing to GATE on — a PC that is off
+   * while work is queued is a problem whichever day the work belongs to — so
+   * the rule is about printing. worker/test/waiting-today.test.ts holds it as
+   * a negative across the whole screen, which is what stops a fourth surface
+   * being written the old way.
    */
-  pin('upcoming subtitle', dash, '`${data.upcomingSoon} ב-24 השעות הקרובות · ${summary.queued} ממתינים בתור`');
+  pin('upcoming subtitle', dash, '`${data.waitingToday} ממתינים בתור להיום`');
+  pin('upcoming subtitle window half', dash, '`${data.upcomingSoon} ב-24 השעות הקרובות`');
+  pin('and what falls after midnight is named, never dropped', dash, '`ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות`');
   pin('upcoming window count is exact', dash, 'countWaitingWithin(');
   pin('upcoming footer total', dash, 'total={data.upcomingSoon}');
   assert.ok(!dash.includes('data.upcoming.length} ממתינים'), 'a capped array length must not be printed as the queue');

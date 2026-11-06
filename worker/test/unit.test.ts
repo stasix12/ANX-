@@ -2928,7 +2928,11 @@ const scenario: { step: string; line: string }[] = [];
    * at its source. A hand-written list of statuses on this screen would still
    * be the drift this block exists to catch.
    */
-  pin('dashboard tiles', dash, 'value={data.waitingToday}');
+  /* The four tiles became one panel with four columns — "לא ארבע כרטיסיות
+     נפרדות" — so the figure is a field on an item rather than a prop on a
+     card. The rule is untouched: the dashboard reads the one classification
+     instead of re-deriving who is waiting. */
+  pin('dashboard tiles', dash, 'value: data.waitingToday');
   pin('the today figure is the one classification, date-scoped', readFileSync('src/lib/social/client.ts', 'utf8'), ".in('status', AUTOMATIC_WAITING_STATUSES as unknown as string[])");
   /*
    * AND THE REST OF THE QUEUE IS STILL ON SCREEN. A tile scoped to today that
@@ -3405,8 +3409,11 @@ const scenario: { step: string; line: string }[] = [];
    * the only bar left lives.
    */
   const flow = readFileSync('src/components/social/LiveFlow.tsx', 'utf8');
-  pin('the day figure is printed whole, never clamped', dash, 'value={data.today}');
-  pin('and the ceiling is a sentence beside it, not a cap on it', dash, 'sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`}');
+  pin('the day figure is printed whole, never clamped', dash, 'value: data.today');
+  /* The ceiling used to be a sub-line under that figure. The panel the four
+     cards became has no room for it and no need: the sentence under the
+     system card says the same thing in full, and it is pinned above. */
+  pin('and the ceiling is a sentence beside the bar, not a cap on the figure', cards, 'היא לא מכסה רשמית של פייסבוק');
   pin('the card itself prints no figures at all', flow, '── 7: THE FOUR FIGURES, AND WHY THEY ARE NOT HERE');
   pin('and the only fill on the card is a stage position', flow, 'style={shown === null ? undefined : { width: `${shown}%` }}');
   pin('which cannot pass a hundred by construction', flow, '((i + 1) / (PIPELINE.length + 1)) * 100');
@@ -3476,7 +3483,9 @@ const scenario: { step: string; line: string }[] = [];
    * by their own tile rather than by the state ladder. So the needle moves to
    * the tile, wherever its number comes from.
    */
-  assert.ok(/label="נכשלו היום"[\s\S]{0,200}value=\{data\.failedToday\}/.test(dash), 'failures are reported by their own tile');
+  /* RE-POINTED AGAIN, same rule. The four tiles are one panel with four
+     columns now, so the tile is a column and its props are object fields. */
+  assert.ok(/label: 'נכשלו היום',[\s\S]{0,200}value: data\.failedToday,/.test(dash), 'failures are reported by their own column');
   assert.ok(!/value=\{summary\.failed\}/.test(dash), 'and that tile counts one day, not every day since the install');
 
   console.log('dashboard cross-scope invariant tests OK');

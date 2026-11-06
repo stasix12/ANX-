@@ -14,7 +14,7 @@ import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Timeline } from '@/components/social/Timeline';
 import { projectQueue, spacingFrom } from '@/lib/social/projection';
-import { AlertBar, Button, ButtonLink, Card, ErrorState, Skeleton, SkeletonTiles, StatCard, useConfirm, useToast } from '@/components/social/ui';
+import { AlertBar, Button, ButtonLink, Card, ErrorState, Skeleton, StatStrip, useConfirm, useToast } from '@/components/social/ui';
 import {
   callSocialApi,
   campaignStates,
@@ -1708,7 +1708,10 @@ export default function SocialDashboard() {
            skeleton of four tiles alone made the page jump when the data came. */
         <div className="space-y-5">
           <Skeleton className="h-[248px] rounded-card" />
-          <SkeletonTiles count={4} />
+          {/* ONE panel, 86px — the shape that is about to land. Four skeleton
+              boxes here made the page jump when the data came and the strip
+              replaced them. Measured by stat-strip.test.ts at 390px. */}
+          <Skeleton className="h-[86px] rounded-card" />
           <Skeleton className="h-[168px] rounded-card" />
         </div>
       )}
@@ -1796,180 +1799,121 @@ export default function SocialDashboard() {
             Colour marks the status, not the tile. A tile whose value is 0 goes
             neutral — a red zero is noise, not a warning. */}
           <section>
-            {/* Four across on a phone, not two. The row is scanned as one
-                line of numbers, and halving its height is what let the two
-                primary actions above it sit above the fold. */}
-            <div className="grid grid-cols-4 gap-2 md:gap-2.5 [&>*]:min-w-0">
-              <StatCard
-                dense
-                icon={<SendIcon aria-hidden className="h-4 w-4" />}
-                tone={data.today ? 'good' : 'neutral'}
-                label="פורסמו היום"
-                value={data.today}
-                sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`}
-                /* The week under the day, asked for by name. On a morning
-                   before the first publication the figure above is 0 and the
-                   tile reads as no progress at all; this is the line that says
-                   otherwise, and it is green because it only ever counts
-                   things that worked. */
-                note={data.weekPublished ? `${data.weekPublished} מתחילת השבוע` : undefined}
-                /* &range=1, because this tile alone is a TODAY count
-                   (countPublishedSince(startOfZonedDay)). The other three are
-                   all-time head counts and history opens "all" for them; this
-                   one used to do the same, so tapping "7" opened every
-                   publication ever made. */
-                href="/social/history?status=published&range=1"
-              />
-              {/* Tiles 2 and 3 together are every row that has not finished,
-                  each counted once (status.ts): what moves on its own, and
-                  what will not move until the owner acts. They used to leave
-                  publishing, awaiting_confirmation and paused out of both.
+            {/*
+              ONE PANEL, FOUR COLUMNS — "לא ארבע כרטיסיות נפרדות".
 
-                  Tile 3 is named "דורשים טיפול" but MUST stay summary.needsHuman.
-                  Narrowing it to counts.needs_attention — which the label
-                  invites — would hide awaiting_confirmation and manual_pending
-                  from the control centre and break the invariant that
-                  queued + needsHuman === open (invariants.ts). */}
-              {/* THE RESET LIVES ON THE NUMBER IT RESETS.
-                  It was only at the foot of the screen, beside "pause", where
-                  it is found by somebody who already knows it exists. The
-                  question "why are there 214 things in my queue" is asked
-                  while looking at this tile, and the answer belongs here.
-                  Same confirmation and same write as the one below — one
-                  implementation, so the count in the question stays the count
-                  the write delivers. */}
-              <StatCard
-                dense
-                icon={<UsersIcon aria-hidden className="h-4 w-4" />}
-                /* THE COLOUR FOLLOWS THE NUMBER IT DECORATES. It came from
-                   `summary.queued` — the whole queue — so at 23:00 with
-                   nothing left today and five hundred rows for tomorrow the
-                   tile lit up brand-coloured over a figure of 0. A tile whose
-                   tone and value disagree is the same fault as two screens
-                   that disagree, in one element. */
-                tone={data.waitingToday ? 'brand' : 'neutral'}
-                /*
-                  ─── TODAY, BY NAME — "ובכותרת לרשום ממינים בתור להיום" ─────
+              These were four separate cards with their own borders, shadows
+              and a gap between them. The reference he drew is a single white
+              panel with three hairlines in it, and at 390px that is the
+              difference between four small boxes competing and one line of
+              figures being read.
 
-                  The figure was the WHOLE queue: 307 on the owner's screen,
-                  over a dashboard whose other three tiles are all about today.
-                  He asked for the rows scheduled before midnight, and for the
-                  label to say so.
+              NOTHING ABOUT THE NUMBERS CHANGED: same reads, same tones, same
+              links, same confirmation behind "אפס הכל". What changed is the
+              box they sit in, the icon moving to the top of each column, and
+              the filler sub-lines going away — "מאז חצות" and "על הפוסטים
+              שפורסמו" said nothing and cost a row of height each. The lines
+              that carry a real figure stayed.
+            */}
+            <StatStrip
+              items={[
+                {
+                  key: 'published',
+                  icon: <SendIcon aria-hidden className="h-[18px] w-[18px]" />,
+                  /* Colour marks the status, not the column: a tile whose
+                     value is 0 goes neutral — a red zero is noise. */
+                  tone: data.today ? 'good' : 'neutral',
+                  label: 'פורסמו היום',
+                  value: data.today,
+                  /* The week under the day, asked for by name. On a morning
+                     before the first publication the figure above is 0 and the
+                     column reads as no progress at all; this is the line that
+                     says otherwise. The daily ceiling it used to name is a
+                     whole sentence under the panel below, so it is not lost.
+                     */
+                  sub: data.weekPublished ? `${data.weekPublished} מתחילת השבוע` : undefined,
+                  /* &range=1, because this column alone is a TODAY count
+                     (countPublishedSince(startOfZonedDay)); without it a tap
+                     on "7" opened every publication ever made. */
+                  href: '/social/history?status=published&range=1',
+                },
+                {
+                  key: 'waiting',
+                  icon: <UsersIcon aria-hidden className="h-[18px] w-[18px]" />,
+                  /* The colour follows the number it decorates: at 23:00 with
+                     nothing left today and five hundred rows for tomorrow,
+                     `summary.queued` lit this brand-coloured over a 0. */
+                  tone: data.waitingToday ? 'brand' : 'neutral',
+                  /*
+                    TODAY, BY NAME — "ובכותרת לרשום ממינים בתור להיום".
 
-                  data.waitingToday is countWaitingWithin() at the next LOCAL
-                  midnight — already computed every poll for plannedToday, so
-                  this costs no query — and the boundary is the calendar date
-                  in Asia/Jerusalem rather than now+24h, which matters twice a
-                  year when a day is 23 or 25 hours long.
+                    data.waitingToday is countWaitingWithin() at the next LOCAL
+                    midnight — already computed every poll for plannedToday, so
+                    it costs no query — and the boundary is the calendar date in
+                    Asia/Jerusalem rather than now+24h, which matters twice a
+                    year when a day is 23 or 25 hours long.
 
-                  IT IS NOT THE SAME STATUS SET AS summary.queued, and that is
-                  deliberate rather than overlooked: countWaitingWithin counts
-                  {scheduled, paused}, while `queued` adds the row that is
-                  `publishing` right now. A row being clicked this second is
-                  not "waiting in the queue for today", so leaving it out is
-                  the more honest reading of his words — and the sub-line below
-                  accounts for everything this number does not.
-                */
-                label="ממתינים בתור להיום"
-                value={data.waitingToday}
-                /*
-                  AND THE SUB-LINE CARRIES WHAT THE NUMBER NO LONGER DOES.
-
-                  A tile that silently dropped 266 rows would be the honest
-                  figure and a dishonest screen: the owner would tap it, land
-                  on a list of 307, and conclude the tile was broken. So the
-                  rest of the queue is named here, which also makes the
-                  arithmetic on screen add up — today plus later is the figure
-                  the "הפרסומים הקרובים" card below still prints whole, and the
-                  figure the list behind this tile shows.
-
-                  Rows that need a person keep their own clause, because
-                  "יוצאים לפי התזמון" is false of them.
-                */
-                sub={[
-                  summary.automaticWaiting > data.waitingToday ? `ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות` : '',
-                  summary.needsHuman ? `${summary.needsHuman} דורשים אתכם` : '',
-                ]
-                  .filter(Boolean)
-                  .join(' · ') || 'יוצאים לפי התזמון'}
-                href="/social/history?status=scheduled"
-                action={
-                  pending
+                    The reference writes this column "ממתינים בתור". The word
+                    he asked for stays: the number is today's and the list
+                    behind it is not, so a label that dropped "להיום" would be
+                    the tile-and-list disagreement he reported in the first
+                    place.
+                  */
+                  label: 'ממתינים היום',
+                  value: data.waitingToday,
+                  /* What the number does not hold, named — unless the reset is
+                     on screen, which takes this row (StatStrip). */
+                  sub: summary.automaticWaiting > data.waitingToday ? `ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות` : summary.needsHuman ? `${summary.needsHuman} דורשים אתכם` : undefined,
+                  href: '/social/history?status=scheduled',
+                  /* THE RESET LIVES ON THE NUMBER IT RESETS. "אפס הכל", not
+                     "אפס": cancelAllScheduled() matches on status with no date
+                     bound at all, so beside a column that says "להיום" a chip
+                     reading "אפס" would promise to clear today and in fact
+                     cancel every planned publication in every campaign. Same
+                     confirmation and same write as the one at the foot of the
+                     screen — one implementation. */
+                  action: pending
                     ? {
-                        /*
-                          "אפס הכל", because this button is NOT scoped to today
-                          and must not borrow the tile's word for it.
-
-                          cancelAllScheduled() matches on status alone, with no
-                          date bound at all (client.ts) — so beside a tile that
-                          now says "להיום" a chip reading "אפס" would promise to
-                          clear today and in fact cancel every planned
-                          publication in every campaign, for every future day.
-                          The figure in the title and in the confirmation is
-                          already the whole-queue one; only the word was
-                          missing.
-                        */
                         label: 'אפס הכל',
                         title: `אפס את כל התור, לא רק היום (${pending})`,
                         busy: busy === 'discard',
                         onClick: () => void discardQueue(false),
                       }
-                    : undefined
-                }
-              />
-              {/*
-                TODAY, like the tile at the other end of this row.
-                summary.failed is an ALL-TIME count, and printing it here put
-                "38 נכשלו" beside "0 פורסמו היום" — one tile about this
-                morning, the tile three across about every day since the
-                product existed, same row, same size. The owner read the 38 as
-                today's and asked why. They were reading the row correctly.
-
-                The old failures are not deleted and not hidden: the tile links
-                into the history, which still holds every one of them. What
-                changes is that this row is now four numbers about one day, and
-                tomorrow morning it starts from zero. */}
-              <StatCard
-                dense
-                icon={<AlertTriangleIcon aria-hidden className="h-4 w-4" />}
-                tone={data.failedToday ? 'bad' : 'neutral'}
-                label="נכשלו היום"
-                value={data.failedToday}
-                /* The chip REPLACES the sub-line rather than stacking under
-                   it, so only this tile's row grows and its neighbour grows
-                   with it — CSS grid keeps the pair level. It is a <span>
-                   inside the tile's own link, never a nested anchor. */
-                chipLabel={data.failedToday ? 'טפל עכשיו' : undefined}
-                sub={data.skippedToday ? `ועוד ${data.skippedToday} ${agree(data.skippedToday, 'דולג', 'דולגו')}` : 'מאז חצות'}
-                /* &range=1 for the same reason the published tile carries it:
-                   a tile that counts today must open today. */
-                href="/social/history?status=failed&range=1"
-              />
-              {/*
-                COMMENTS, WHERE "דורשים טיפול" USED TO BE.
-
-                That tile read 0 on every screenshot the owner has sent, and a
-                tile that is always zero teaches people to stop reading the
-                row. Removing it does not hide the work: a publication waiting
-                for a person raises the intervention banner at the top of this
-                screen, which is louder than a tile, and the queue tile below
-                names the count in its own sub-line so the number never leaves
-                the row entirely.
-
-                What takes its place is the other half of what this product
-                does. Comments were counted only in a card further down, so the
-                row of numbers about today was silent about half the work. */}
-              <StatCard
-                dense
-                icon={<MessageIcon aria-hidden className="h-4 w-4" />}
-                tone={data.commentsToday.done ? 'good' : 'neutral'}
-                label="תגובות היום"
-                value={data.commentsToday.done}
-                sub={data.commentTotals.pending ? `${data.commentTotals.pending} ממתינות` : 'על הפוסטים שפורסמו'}
-                note={data.weekComments ? `${data.weekComments} מתחילת השבוע` : undefined}
-                href="/social/history?status=published&range=1"
-              />
-            </div>
+                    : undefined,
+                },
+                {
+                  key: 'failed',
+                  icon: <AlertTriangleIcon aria-hidden className="h-[18px] w-[18px]" />,
+                  tone: data.failedToday ? 'bad' : 'neutral',
+                  /* TODAY, like the column at the other end. summary.failed is
+                     an ALL-TIME count, and printing it here put "38 נכשלו"
+                     beside "0 פורסמו היום" — one number about this morning,
+                     one about every day since the product existed, same row,
+                     same size. The old failures are not hidden: the column
+                     links into the history, which holds every one of them. */
+                  label: 'נכשלו היום',
+                  value: data.failedToday,
+                  /* The reference's own chip, in his words. */
+                  chipLabel: data.failedToday ? 'טיפול נדרש' : undefined,
+                  sub: data.skippedToday ? `ועוד ${data.skippedToday} ${agree(data.skippedToday, 'דולג', 'דולגו')}` : undefined,
+                  href: '/social/history?status=failed&range=1',
+                },
+                {
+                  key: 'comments',
+                  icon: <MessageIcon aria-hidden className="h-[18px] w-[18px]" />,
+                  /* "תגובות היום — כחול כהה": the ink navy, at every value.
+                     This is the one metric the reference does not colour by
+                     status, and it is right — a comment that went out is not
+                     an achievement to light up, it is the other half of the
+                     work this product does. */
+                  tone: 'neutral',
+                  label: 'תגובות היום',
+                  value: data.commentsToday.done,
+                  sub: data.commentTotals.pending ? `${data.commentTotals.pending} ממתינות` : data.weekComments ? `${data.weekComments} מתחילת השבוע` : undefined,
+                  href: '/social/history?status=published&range=1',
+                },
+              ]}
+            />
           </section>
 
           {/* 2 — IS IT WORKING, when is the next one and to which group.

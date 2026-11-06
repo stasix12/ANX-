@@ -80,8 +80,23 @@ const live = code(dash);
 /* ─── §2 — and what the three surfaces print instead ─────────────────────── */
 
 {
-  pin('the tile counts today', live, 'value={data.waitingToday}');
-  pin('and says so', live, 'label="ממתינים בתור להיום"');
+  pin('the column counts today', live, 'value: data.waitingToday');
+  /*
+   * RE-POINTED, AND THE RULE GOT STRONGER RATHER THAN WEAKER.
+   *
+   * This pinned the exact words "ממתינים בתור להיום". The four tiles became
+   * one panel of four columns — "לא ארבע כרטיסיות נפרדות" — and in a column
+   * 89px wide that label wraps onto two lines at every phone width, which is
+   * the ragged, taller panel he asked not to have. It reads "ממתינים היום"
+   * now, on one line, and the reference he drew writes it shorter still.
+   *
+   * What may NOT happen is the scope going missing: the figure is today's and
+   * the list behind it is not, so the label has to say which day. That is the
+   * rule, and it is asserted here as a pattern rather than as one spelling —
+   * a label that drops "היום" fails whatever else it says.
+   */
+  checks += 1;
+  assert.ok(/label: 'ממתינים[^']*היום'/.test(live), 'and the label still says WHICH DAY the figure is about');
 
   pin('the upcoming card counts today', live, '`${data.waitingToday} ממתינים בתור להיום`');
   pin('the PC-is-off alert counts today', live, "counted(data.waitingToday, 'פרסום אחד ממתין בתור להיום'");

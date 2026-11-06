@@ -1666,9 +1666,12 @@ async function main(): Promise<void> {
    * apart, same row, same size, one about this morning and one about every
    * day since the install. The owner read the 38 as today's and asked why.
    */
-  pin('page.tsx failures tile counts today', page, 'value={data.failedToday}');
-  pin('page.tsx failures tile says which day', page, 'label="נכשלו היום"');
-  pin('page.tsx failures tile opens today', page, "href=\"/social/history?status=failed&range=1\"");
+  /* RE-POINTED, and the rule is untouched. The four tiles became one panel
+     with four columns — "לא ארבע כרטיסיות נפרדות" — so each tile's props are
+     fields on an item instead of attributes on a card. */
+  pin('page.tsx failures column counts today', page, 'value: data.failedToday');
+  pin('page.tsx failures column says which day', page, "label: 'נכשלו היום'");
+  pin('page.tsx failures column opens today', page, "href: '/social/history?status=failed&range=1'");
   pin('page.tsx skips counted today too', page, 'data.skippedToday');
   pin('client.ts failures are counted from an instant', client, 'export async function countFailuresSince(sinceISO: string)');
   pin('client.ts uses the finish stamp, as listLiveQueue does', client, ".eq('status', status).gte('updated_at', sinceISO)");
@@ -1685,8 +1688,11 @@ async function main(): Promise<void> {
   pin('time.ts knows where the week starts', readFileSync(new URL('../../src/lib/social/time.ts', import.meta.url), 'utf8'), 'export function startOfZonedWeek');
   pin('page.tsx counts the week from Sunday', page, 'countPublishedSince(startOfZonedWeek(now).toISOString())');
   pin('page.tsx counts the week of comments too', page, 'countCommentsDoneSince(startOfZonedWeek(now).toISOString())');
-  pin('published tile carries the week', page, 'note={data.weekPublished ?');
-  pin('comments tile carries the week', page, 'note={data.weekComments ?');
+  /* The week moved from a third line under the figure to the column's one
+     secondary line — the panel has room for one, and the week is what it
+     carries when there is nothing to act on. */
+  pin('published column carries the week', page, 'sub: data.weekPublished ?');
+  pin('comments column carries the week', page, 'data.weekComments ?');
   /* The two spans must never be confused for one another, so the second line
      says which it is rather than being a bare number under a daily figure. */
   pin('the week line says it is the week', page, 'מתחילת השבוע');
@@ -1775,7 +1781,7 @@ async function main(): Promise<void> {
    * that dropping either one is a failure: the today figure in the tile, and
    * the remainder named next to it.
    */
-  pin('page.tsx queued tile is today-scoped', page, 'value={data.waitingToday}');
+  pin('page.tsx queued column is today-scoped', page, 'value: data.waitingToday');
   pin('page.tsx still accounts for the rest of the queue', page, 'summary.automaticWaiting - data.waitingToday} אחרי חצות');
   /* RE-POINTED with unit.test.ts: the tile is gone (always 0, so nobody read
      the row), the figure is not — it names itself in the queue tile's sub-line

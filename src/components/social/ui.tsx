@@ -1102,22 +1102,6 @@ export function SkeletonList({ rows = 4 }: { rows?: number }) {
   );
 }
 
-/**
- * The stat row while it loads. Grid, gap, count and radius all match the real
- * row in StatCard — a placeholder that is the wrong shape is worse than none,
- * because the page jumps when the numbers land. The height is the tile's own:
- * p-3 + the label + a 30px figure + the sub line, and one step taller from
- * `sm`, where the figure goes to 34.
- */
-export function SkeletonTiles({ count = 4 }: { count?: number }) {
-  return (
-    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
-      {Array.from({ length: count }).map((_, i) => (
-        <Skeleton key={i} className="h-[93px] rounded-tile sm:h-[101px]" />
-      ))}
-    </div>
-  );
-}
 
 /* --------------------------------------------------------------- toasts */
 
@@ -1854,6 +1838,120 @@ export function StatCard({
           {action.label}
         </span>
       </button>
+    </div>
+  );
+}
+
+/**
+ * ONE PANEL, FOUR COLUMNS — the day's numbers as a single instrument.
+ *
+ * "אני רוצה פאנל סטטיסטיקות אחד, אופקי, אלגנטי ומחולק לארבע עמודות — בדיוק
+ *  כמו ברפרנס. לא ארבע כרטיסיות נפרדות."
+ *
+ * The row above this was four separate cards with their own borders, their
+ * own shadows and a gap between them, and at 390px that is four small boxes
+ * competing with each other instead of one line of figures. The reference he
+ * drew is one white panel: a thin blue-grey border, a minimal shadow, four
+ * equal columns and three hairlines between them.
+ *
+ * WHAT EACH COLUMN IS, from the reference, right to left: a small outline
+ * icon, the figure in the metric's own colour, and a short label under it.
+ * Then ONE secondary element, and only when it carries something real — a
+ * call to action where there is one, otherwise a figure that would otherwise
+ * not be on the screen at all.
+ *
+ * THE COLOURS ARE THE PRODUCT'S OWN TOKENS, not a second palette: green for
+ * what published, brand blue for what is waiting, red for what failed, and
+ * the ink navy for the comments. A figure of 0 goes neutral whatever its
+ * metric — a red zero is noise, not a warning — which is the rule the four
+ * cards already carried and the reference itself draws (its "0 תגובות היום"
+ * is navy, not green).
+ *
+ * The dividers are inset by design: `before:inset-y-*` rather than a border,
+ * so they stop short of the panel's own edge the way they do in the drawing.
+ */
+export type StatStripItem = {
+  key: string;
+  /** The small outline mark at the top of the column. aria-hidden by its caller. */
+  icon: React.ReactNode;
+  value: string | number;
+  label: string;
+  /** Colours the icon and the figure. `neutral` is the ink navy. */
+  tone: Tone;
+  href: string;
+  /** One short line under the label — only ever a real figure, never filler. */
+  sub?: string;
+  /** A call to action in place of that line, inside the column's own link. */
+  chipLabel?: string;
+  /**
+   * A control that belongs to this number. A SIBLING OF THE LINK, never
+   * inside it: a button nested in an anchor is invalid HTML and browsers
+   * resolve it by doing both — the click opens the confirmation AND navigates
+   * away from it. Same reason the cards it replaces kept them apart.
+   */
+  action?: { label: string; onClick: () => void; busy?: boolean; title?: string };
+};
+
+export function StatStrip({ items }: { items: StatStripItem[] }) {
+  return (
+    <div className="overflow-hidden rounded-card border border-ink-700 bg-ink-850 shadow-[0_1px_2px_rgba(40,20,80,0.03),0_6px_18px_rgba(40,20,80,0.05)]">
+      <ul className="grid grid-cols-4 [&>*]:min-w-0">
+        {items.map((it, i) => (
+          <li
+            key={it.key}
+            className={`relative flex min-w-0 flex-col ${
+              i > 0 ? 'before:absolute before:inset-y-2 before:start-0 before:w-px before:bg-ink-700 before:content-[""]' : ''
+            }`}
+          >
+            <Link
+              href={it.href}
+              className="flex flex-1 flex-col items-center px-1 pb-1 pt-1.5 text-center transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 active:scale-[0.985]"
+            >
+              <span className={`inline-flex ${TONE_TEXT[it.tone]}`}>{it.icon}</span>
+              {/* The figure leads the column — the label is read second, to
+                  find out which number you just looked at. */}
+              <b className={`mt-0.5 text-[clamp(18px,5.5vw,23px)] font-extrabold leading-[1.06] tabular-nums transition-colors duration-150 ${FIGURE[it.tone]}`}>
+                {it.value}
+              </b>
+              <span dir="auto" className="text-[clamp(9.5px,2.7vw,11px)] font-bold leading-[1.15] text-mist-100">{it.label}</span>
+              {it.chipLabel ? (
+                <span
+                  className={`mt-0.5 inline-flex max-w-full items-center gap-px rounded-full px-1 text-[clamp(8px,2.3vw,10px)] font-extrabold leading-[1.45] ${TONE_TINT[it.tone]} ${TONE_TEXT[it.tone]}`}
+                >
+                  <span className="truncate">{it.chipLabel}</span>
+                  <ChevronIcon aria-hidden className="h-2 w-2 shrink-0 rtl:rotate-180" />
+                </span>
+              ) : (
+                /* The action takes this row when there is one, so the line
+                   never ends up behind a button — the rule the cards this
+                   replaces already carried. */
+                !it.action &&
+                it.sub && (
+                  <span dir="auto" className="mt-px text-[clamp(8px,2.3vw,10px)] font-semibold leading-[1.25] text-mist-500">
+                    {it.sub}
+                  </span>
+                )
+              )}
+            </Link>
+            {it.action && (
+              <button
+                type="button"
+                onClick={it.action.onClick}
+                disabled={it.action.busy}
+                title={it.action.title ?? it.action.label}
+                className="mx-0.5 mb-1 inline-flex h-[15px] items-center justify-center gap-px rounded-full bg-ink-800 px-1 text-[clamp(8px,2.3vw,10px)] font-extrabold leading-none text-mist-500 transition-colors hover:bg-ink-700 hover:text-mist-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-40"
+              >
+                {it.action.busy ? (
+                  <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <TrashIcon aria-hidden className="h-2 w-2 shrink-0" />
+                )}
+                <span dir="auto" className="truncate">{it.action.label}</span>
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

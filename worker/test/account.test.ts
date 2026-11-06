@@ -217,7 +217,28 @@ async function main() {
   );
   await page.goto('https://www.facebook.com/');
   const unproven = await readAccountProfile(page);
-  assert.ok(unproven, 'still a signed-in session');
+  /*
+   * THIS LINE CARRIES ITS OWN POST-MORTEM, and here is why.
+   *
+   * It is green on the Chromium this machine has (141) and red on the one CI
+   * installs with playwright 1.49 (131) — the only failure in the whole
+   * suite that tells the two apart. readAccountProfile has exactly one path
+   * that returns null: no `c_user` cookie. The cookie is added to the
+   * CONTEXT at the top of this file and nothing here removes it, so either
+   * that browser drops it somewhere in between or the read of it fails —
+   * and a bare "still a signed-in session" cannot say which.
+   *
+   * The 131 build cannot be run here to find out: its download is refused by
+   * this environment's network policy (tried, 2026-11-06). So the assertion
+   * asks the question itself and CI answers it on the next run.
+   */
+  const jar = await page.context().cookies('https://www.facebook.com').catch((e) => `read failed: ${e}`);
+  assert.ok(
+    unproven,
+    'still a signed-in session — ' +
+      (typeof jar === 'string' ? jar : `cookies now: ${JSON.stringify(jar.map((c) => `${c.name}@${c.domain}${c.path}`))}`) +
+      `, url ${page.url()}`,
+  );
   assert.equal(unproven.image, null, 'nothing provable means no face, however well it fits');
   assert.equal(unproven.imageNote, 'no-element', 'and it says so');
   assert.ok(unproven.probe.sample.length > 0, 'while describing what it rejected, so the next attempt is reading');

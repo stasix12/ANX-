@@ -130,7 +130,6 @@ async function main(): Promise<void> {
     await page.evaluate(() => {
       window.__plan(22, 48);
       window.__publish(22);
-      window.__failed(2);
       window.__system('active', true, false);
     });
     await page.waitForTimeout(250);
@@ -153,10 +152,8 @@ async function main(): Promise<void> {
           bar: bar?.dataset.bar ?? '',
           pct: (card.querySelector('.anxf-pct')?.textContent ?? '').trim(),
           rows: [...card.querySelectorAll('[data-row]')].map((el) => (el as HTMLElement).dataset.row),
-          tiles: [...card.querySelectorAll('[data-tile]')].map((el) => ({
-            k: (el as HTMLElement).dataset.tile,
-            n: (el.querySelector('b')?.textContent ?? '').trim(),
-          })),
+          /* The card must carry NO figures of its own — see §4. */
+          tiles: card.querySelectorAll('[data-tile]').length,
         };
       });
 
@@ -251,38 +248,35 @@ async function main(): Promise<void> {
       await page.waitForTimeout(200);
     }
 
-    /* ── §4 — THE FIGURES ARE THE DATABASE'S ───────────────────────────── */
+    /* ── §4 — AND IT CARRIES NO FIGURES OF ITS OWN ────────────────────── */
+    /*
+     * "כאן למחוק את הריבועים מתחת עם המספרים."
+     *
+     * This section used to measure four tiles on this card: "פרסומים היום",
+     * "הצלחות" with its share, "נכשלו" and "קבוצות". They are gone, because
+     * they were a second copy of the row of stat tiles that sits a little
+     * further down the same screen — and that row says more about the same
+     * numbers: the daily ceiling under the first, the week under it, "טפל
+     * עכשיו" and the skipped count under the second, and every tile a link
+     * into the history filtered to itself.
+     *
+     * WHAT THOSE ASSERTIONS PROTECTED, AND WHERE IT LIVES NOW:
+     *
+     *   • "the four figures come from the counts the screen was handed" —
+     *     the row below is fed by the same reads (data.today,
+     *     data.failedToday) and is covered by today-count.test.ts.
+     *   • "פרסומים היום is exactly the successes plus the failures" — that
+     *     sum existed only on the deleted tile. The row below prints the two
+     *     numbers separately and never adds them, so there is no arithmetic
+     *     left to get wrong.
+     *   • "nothing attempted, no share" — the share was the deleted tile's
+     *     too, for the same reason.
+     *
+     * What is asserted instead is the deletion itself: this card prints no
+     * figure tiles at all, at any width (§7 re-checks it at six of them).
+     */
     {
-      const t = await read();
-      eq(t.tiles, [
-        { k: 'today', n: '24' },
-        { k: 'success', n: '22' },
-        { k: 'failed', n: '2' },
-        { k: 'groups', n: '28' },
-      ], 'the four figures, in the reference’s own order, from the counts the screen was handed');
-      is(
-        (await page.evaluate(() => (document.querySelector('[data-tile="success"]')?.textContent ?? ''))).includes('92%'),
-        'and the share is computed from those two rather than stored anywhere',
-      );
-      /* ATTEMPTED IS THE SUM, which is the one arithmetic claim on the card. */
-      const sum = t.tiles.find((x) => x.k === 'success')!.n;
-      const bad = t.tiles.find((x) => x.k === 'failed')!.n;
-      eq(String(Number(sum) + Number(bad)), t.tiles.find((x) => x.k === 'today')!.n, 'and "פרסומים היום" is exactly the successes plus the failures');
-
-      await page.evaluate(() => {
-        window.__publish(0);
-        window.__failed(0);
-      });
-      await page.waitForTimeout(220);
-      is(
-        !(await page.evaluate(() => document.querySelector('[data-tile="success"]')!.textContent!)).includes('%'),
-        'NOTHING ATTEMPTED, NO SHARE: "0 מתוך 0" is a division, not a fact',
-      );
-      await page.evaluate(() => {
-        window.__publish(22);
-        window.__failed(2);
-      });
-      await page.waitForTimeout(220);
+      eq((await read()).tiles, 0, 'the card carries no figure tiles of its own — the row below the card owns the numbers');
     }
 
     /* ── §5 — THE ROOM IS GONE, AND THE CARD SHOWS THROUGH ─────────────── */
@@ -430,15 +424,13 @@ async function main(): Promise<void> {
           const card = document.querySelector('[data-panel] [data-flow]') as HTMLElement;
           const r = card.getBoundingClientRect();
           const pic = (card.querySelector('.anx-poses img.anx-on') as HTMLElement).getBoundingClientRect();
-          const tiles = [...card.querySelectorAll<HTMLElement>('[data-tile]')].map((el) => el.getBoundingClientRect());
+          const tiles = [...card.querySelectorAll<HTMLElement>('[data-tile]')];
           return {
             overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
             w: Math.round(r.width),
             inner: document.documentElement.clientWidth,
             ratio: pic.width / pic.height,
             tiles: tiles.length,
-            /* four across, never wrapped to two rows */
-            oneRow: tiles.every((t) => Math.abs(t.top - tiles[0].top) < 2),
             cut: [...card.querySelectorAll<HTMLElement>('.anxf-lb, .anxf-row-at, .anxf-pct')].some((el) => el.scrollWidth > el.clientWidth + 1),
             /*
              * THE QUEUE AGAINST ITS OWN CARD, measured on the card's CONTENT
@@ -474,8 +466,7 @@ async function main(): Promise<void> {
         is(!seen.overflow, `${width}px: the card must not push the page sideways`);
         is(seen.w <= seen.inner, `${width}px: it is ${seen.w}px inside a ${seen.inner}px screen`);
         is(Math.abs(seen.ratio - 440 / 276) < 0.06, `${width}px: and the character is never squashed (${seen.ratio.toFixed(2)})`);
-        eq(seen.tiles, 4, `${width}px: all four figures are there`);
-        is(seen.oneRow, `${width}px: and they are one row, as the reference draws them`);
+        eq(seen.tiles, 0, `${width}px: and no figure tiles came back onto the card`);
         is(!seen.cut, `${width}px: nothing on the card is cut off mid-word`);
       }
       /* And at the width he photographed, the long name really is being cut
@@ -553,23 +544,13 @@ async function main(): Promise<void> {
       );
       is(/const percent = now \? progressOfStep\(now\.step\) : null;/.test(code), 'and that source is the row’s own stage');
       /*
-       * AND THE FOUR FIGURES NEED A SOURCE THAT CAN ACTUALLY ARRIVE.
-       *
-       * "קבוצות" printed "–" on his screen while the same card reported 107
-       * publications that day. The dash is the honest fallback for a figure
-       * the database did not give — and this one could never be given: it was
-       * counted off listTargets(), which the dashboard stops calling the
-       * moment the setup checklist latches closed, i.e. on every account that
-       * has ever published. A tile whose number cannot arrive is a decoration
-       * with a dash in it.
+       * THE CARD HANDS OUT NO FIGURES, so nothing on it can disagree with the
+       * row of tiles below it. (The "קבוצות" tile is what made this worth
+       * writing down: its number came from a read this screen stops making
+       * once anything has published, so it printed a dash for ever. The tile
+       * is gone, and with it the count that fed it.)
        */
-      const dash = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
-      const dashCode = dash.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-      is(/countEnabledTargets\(\)/.test(dashCode), 'the groups figure is COUNTED by the database — head: true, no rows');
-      is(
-        !/activeTargets:\s*targets\s*\?/.test(dashCode),
-        'and it is NOT read off listTargets(), which this screen stops calling once anything has published',
-      );
+      is(!/data-tile/.test(code), 'no figure tile may come back onto this card');
       const assets = readdirSync(path.resolve('public/social/anx'));
       eq(assets.filter((f) => /^pose-\d\.webp$/.test(f)).length, 9, 'all nine poses are on disk');
       const bytes = assets.reduce((n, f) => n + statSync(path.resolve('public/social/anx', f)).size, 0);

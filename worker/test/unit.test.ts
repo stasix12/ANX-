@@ -3396,8 +3396,18 @@ const scenario: { step: string; line: string }[] = [];
    * rule the pin carries is the same one — A FIGURE IS NEVER CLAMPED, ONLY A
    * FILL IS — so it moves to where the figures and the fill now live.
    */
+  /*
+   * RE-POINTED A THIRD TIME, and still not weakened. "כאן למחוק את הריבועים
+   * מתחת עם המספרים" — the four counted figures came off the ANX card, because
+   * the row of stat tiles a little further down this screen already carried
+   * the same numbers with more beside them. So the FIGURE half of the rule
+   * moves to that row, and the FILL half stays on the card, which is where
+   * the only bar left lives.
+   */
   const flow = readFileSync('src/components/social/LiveFlow.tsx', 'utf8');
-  pin('the figures are printed whole', flow, '<b>{stats.attempts}</b>');
+  pin('the day figure is printed whole, never clamped', dash, 'value={data.today}');
+  pin('and the ceiling is a sentence beside it, not a cap on it', dash, 'sub={`מתוך ${data.limits.maxPerDay} שהגדרתם`}');
+  pin('the card itself prints no figures at all', flow, '── 7: THE FOUR FIGURES, AND WHY THEY ARE NOT HERE');
   pin('and the only fill on the card is a stage position', flow, 'style={shown === null ? undefined : { width: `${shown}%` }}');
   pin('which cannot pass a hundred by construction', flow, '((i + 1) / (PIPELINE.length + 1)) * 100');
   pin('and is null, never zero, when the row has no stage', flow, 'if (i < 0) return null;');

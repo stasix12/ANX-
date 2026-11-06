@@ -1133,20 +1133,5 @@ export const WORKER_VERSION = '4.52.0';
      grep -c campaignState        dist/app/worker.cjs → 0
      grep -c campaign_targets     dist/app/worker.cjs → 0
      grep -c startDraft           dist/app/worker.cjs → 0
-     grep -c TimePick             dist/app/worker.cjs → 0
-
-   ─── AND AGAIN, 06/11: the "קבוצות" tile's own number. 4.52.0 stays. ──────
-
-   The tile printed "–" on every account that has ever published, for ever.
-   It counted `activeTargets` off listTargets(), and listTargets() is skipped
-   on this screen the moment the setup checklist latches closed — a dash that
-   means "the read failed" standing over a system doing 107 publications a
-   day. client.ts gained countEnabledTargets(): `head: true, count: 'exact'`,
-   so the database answers with a figure and no row crosses the wire. The
-   reason listTargets() was taken off the poll is untouched.
-
-   DOES THIS HAVE TO REACH THE PC? No, and asked of the build:
-
-     npm run build:app
-     grep -c countEnabledTargets  dist/app/worker.cjs → 0 */
-export const WORKER_FINGERPRINT = 'fd76f7f3a64615b2';
+     grep -c TimePick             dist/app/worker.cjs → 0 */
+export const WORKER_FINGERPRINT = 'd68f063c61c06561';

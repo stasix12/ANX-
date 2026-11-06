@@ -2381,63 +2381,13 @@ body:has(.social-theme) .site-backdrop {
 .anxf-fb-xl svg { width: 62%; height: 62%; }
 .anxf-ppl { width: 17px; height: 17px; flex: none; color: var(--color-brand-400); }
 
-/* ── 7: the four figures ─────────────────────────────────────────────── */
-.anxf-tiles {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-/* "רקע לבן עם גוון צבע עדין" — the tint says which figure it is before the
-   number is read, and it is mixed from the same token the number uses. */
-.anxf-tiles li[data-tile="today"] { background: color-mix(in oklab, var(--color-brand-500) 5%, var(--color-ink-850)); }
-.anxf-tiles li[data-tile="success"] { background: color-mix(in oklab, var(--color-success-400) 7%, var(--color-ink-850)); }
-.anxf-tiles li[data-tile="failed"] { background: color-mix(in oklab, var(--color-error-300) 7%, var(--color-ink-850)); }
-.anxf-tiles li[data-tile="groups"] { background: color-mix(in oklab, var(--color-brand-500) 5%, var(--color-ink-850)); }
-.anxf-tiles li {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 11px 3px 10px;
-  border-radius: var(--radius-lg);
-  background: var(--color-ink-850);
-  border: 1px solid var(--color-ink-700);
-  box-shadow: 0 1px 3px rgba(40, 20, 80, 0.04), 0 6px 18px rgba(40, 20, 80, 0.05);
-}
-.anxf-tiles b {
-  font-size: clamp(17px, 5.4vw, 24px);
-  font-weight: 900;
-  line-height: 1.1;
-  color: var(--color-mist-100);
-  font-variant-numeric: tabular-nums;
-}
-.anxf-tiles span {
-  font-size: clamp(9px, 2.7vw, 11px);
-  font-weight: 700;
-  text-align: center;
-  color: var(--color-mist-300);
-  line-height: 1.15;
-}
-.anxf-tiles i { font-style: normal; display: block; }
-.anxf-tile-ic { width: 28px; height: 28px; display: grid; place-items: center; }
-.anxf-tile-ic svg { width: 100%; height: 100%; }
-/* Scoped to the tile, because `.anxf-tiles b` and `.anxf-tiles span` are two
-   classes deep and would otherwise out-rank a bare tone class — which is how
-   the green figure and the red one came out grey on the first screenshot. */
-.anxf-tiles .anxf-good,
-.anxf-tiles b.anxf-good,
-.anxf-tiles span.anxf-good { color: var(--color-success-400); }
-.anxf-tiles .anxf-bad,
-.anxf-tiles b.anxf-bad,
-.anxf-tiles span.anxf-bad { color: var(--color-error-300); }
-.anxf-tiles .anxf-brand { color: var(--color-brand-400); }
-.anxf-good { color: var(--color-success-400); }
-.anxf-bad { color: var(--color-error-300); }
-.anxf-brand { color: var(--color-brand-400); }
+/* ── 7: the four figures — DELETED ──────────────────────────────────────
+   "כאן למחוק את הריבועים מתחת עם המספרים."
+   The card's own four tiles were a second copy of the stat row further down
+   the same screen, which carries the same numbers with the daily ceiling,
+   the week, "טפל עכשיו" and a link into the history under each. The rules
+   for them (.anxf-tiles, .anxf-tile-ic and the three tone classes) went with
+   the markup; nothing else in this block used them. */
 
 /* ── wider than a phone ──────────────────────────────────────────────── */
 /* "במחשב יש להתאים את הפריסה לרוחב הקיים של האפליקציה, תוך שמירה על אותה
@@ -2452,7 +2402,6 @@ body:has(.social-theme) .site-backdrop {
   .anxf-box { padding: 9px 4px 8px; }
   .anxf-ic { width: 24px; height: 24px; }
   .anxf-now-cover { width: 62px; height: 46px; }
-  .anxf-tiles { gap: 10px; }
 }
 
 /*

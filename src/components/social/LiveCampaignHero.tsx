@@ -32,7 +32,7 @@ import { PostCover } from './PostCover';
 import { stageElapsed } from './PublicationItem';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
-import { LiveFlow, type FlowRow, type FlowStats } from './LiveFlow';
+import { LiveFlow, type FlowRow } from './LiveFlow';
 import { sceneModeFor, type SceneMode } from './sceneState';
 import { SYSTEM_STATE_TONE, type SystemState } from './systemState';
 
@@ -963,7 +963,6 @@ export function LiveQueueHero({
   inFlight = 0,
   inFlightRows = [],
   flowRows = [],
-  flowStats = { attempts: 0, success: 0, failed: 0, groups: null },
   workerOnline,
   publishingBlocked = false,
   intervention = null,
@@ -1063,7 +1062,6 @@ export function LiveQueueHero({
    */
   flowRows?: readonly FlowRow[];
   /** The four figures under it, counted in the database by that same screen. */
-  flowStats?: FlowStats;
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
   /**
@@ -1338,7 +1336,6 @@ export function LiveQueueHero({
            queued, and drawing it with a spinner would say a dead worker is
            working. It goes back to being the next one up, which it is. */
         rows={working ? flowRows : flowRows.map((r) => (r.state === 'live' ? { ...r, state: 'next' as const, note: null } : r))}
-        stats={flowStats}
       />
 
       {ceilingReached && (

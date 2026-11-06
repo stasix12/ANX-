@@ -235,15 +235,6 @@ export type FlowRow = {
   note?: string | null;
 };
 
-export type FlowStats = {
-  /** Publications ATTEMPTED today — the successes plus the failures. */
-  attempts: number;
-  success: number;
-  failed: number;
-  /** Groups the campaigns are publishing to. */
-  groups: number | null;
-};
-
 const TONE: Record<SceneMode, { line: string; tone: 'good' | 'warn' | 'bad' | 'mute' }> = {
   waiting: { line: 'מערכת הפרסום פעילה', tone: 'good' },
   preparing: { line: 'מערכת הפרסום פעילה', tone: 'good' },
@@ -260,7 +251,6 @@ export function LiveFlow({
   headline,
   now,
   rows,
-  stats,
 }: {
   mode: SceneMode;
   /** "פרסום אחד ממתין לכם" — counted off the real queue by the screen. */
@@ -268,7 +258,6 @@ export function LiveFlow({
   /** The publication going out right now, or null when none is. */
   now: { name: string; step: QueueStep | null; cover: string | null } | null;
   rows: readonly FlowRow[];
-  stats: FlowStats;
 }) {
   const at = STATION_OF[mode];
   const state = TONE[mode];
@@ -460,48 +449,20 @@ export function LiveFlow({
         </div>
       )}
 
-      {/* ── 7: the four figures ───────────────────────────────────────── */}
-      <ul className="anxf-tiles">
-        <li data-tile="today">
-          <FacebookMark />
-          <b>{stats.attempts}</b>
-          <span>פרסומים היום</span>
-        </li>
-        <li data-tile="success">
-          <span className="anxf-tile-ic anxf-good" aria-hidden>
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="12" cy="12" r="11" />
-              <path d="m6.6 12.4 3.6 3.6 7.2-8" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <b className="anxf-good">{stats.success}</b>
-          <span className="anxf-good">
-            הצלחות
-            {/* The share, only when something was attempted: "0 מתוך 0" is a
-                division, not a fact. */}
-            {stats.attempts > 0 && <i> ({Math.round((stats.success / stats.attempts) * 100)}%)</i>}
-          </span>
-        </li>
-        <li data-tile="failed">
-          <span className="anxf-tile-ic anxf-bad" aria-hidden>
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="12" cy="12" r="11" />
-              <path d="M8.6 8.6 15.4 15.4M15.4 8.6 8.6 15.4" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
-            </svg>
-          </span>
-          <b>{stats.failed}</b>
-          <span className="anxf-bad">נכשלו</span>
-        </li>
-        <li data-tile="groups">
-          <span className="anxf-tile-ic anxf-brand" aria-hidden>
-            <PeopleMark />
-          </span>
-          {/* Null means the read was skipped, and a dash says so rather than
-              printing a zero that would read as "you have no groups". */}
-          <b>{stats.groups ?? '—'}</b>
-          <span>קבוצות</span>
-        </li>
-      </ul>
+      {/*
+        ── 7: THE FOUR FIGURES, AND WHY THEY ARE NOT HERE ────────────────
+        "כאן למחוק את הריבועים מתחת עם המספרים."
+
+        They were a second copy. This screen already carries a row of four
+        stat tiles a little further down — "פורסמו היום" with the daily
+        ceiling and the week under it, "נכשלו היום" with "טפל עכשיו" and the
+        skipped count, the comments and the queue — and every one of those
+        opens the history filtered to itself. The four here opened nothing
+        and said less, directly above them.
+
+        Nothing was lost with them: the three numbers they printed are the
+        same three the row below prints, from the same reads.
+      */}
     </section>
   );
 }

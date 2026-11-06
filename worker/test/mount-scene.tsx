@@ -42,8 +42,6 @@ declare global {
      * that needs a person also STOPS the engine. A backlog does not.
      */
     __system: (state: SystemState, online: boolean, blocked: boolean) => void;
-    /** Today's failures, for the red figure and the queue's failed row. */
-    __failed: (n: number) => void;
     /** Rows for the queue list, when a test needs a particular shape. */
     __rows: (rows: FlowRow[] | null) => void;
   }
@@ -53,7 +51,6 @@ function Harness() {
   const [mode, setMode] = useState<SceneMode>('sending');
   const [day, setDay] = useState<[number, number]>([0, 0]);
   const [step, setStep] = useState<QueueStep>('uploading_media');
-  const [failed, setFailed] = useState(0);
   const [rows, setRows] = useState<FlowRow[] | null>(null);
   const [system, setSystem] = useState<{ state: SystemState; online: boolean; blocked: boolean } | null>(null);
   /* ONE SOURCE FOR THE DAY'S COUNT. It was two — a `published` state and
@@ -64,7 +61,6 @@ function Harness() {
   window.__mode = setMode;
   window.__plan = (done, total) => setDay([done, total]);
   window.__step = setStep;
-  window.__failed = setFailed;
   window.__rows = setRows;
   window.__system = (state, online, blocked) => setSystem({ state, online, blocked });
 
@@ -131,12 +127,6 @@ function Harness() {
               : []
           }
           flowRows={queue}
-          flowStats={{
-            attempts: day[0] + failed,
-            success: day[0],
-            failed,
-            groups: 28,
-          }}
           fbAccount={{ name: 'Stas Terehin', avatar: 'https://example.invalid/a.jpg' }}
           profiles={[
             { name: 'Stas Terehin', kind: 'profile', image: 'https://example.invalid/a.jpg' },

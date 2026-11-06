@@ -18,7 +18,7 @@ def rkeep(T,Z):
     w=np.where(back,w,1.0)
     # floor: on the ring (below ZTOP) round down to 22.6, above it slope to the grip (18.6) over 4 mm
     sz=np.clip((Z-ZA)/(ZTOP-ZA),0,1); sz=sz*sz*(3-2*sz)
-    floor=np.where(Z<ZTOP, rf-(rf-RW)*sz, np.maximum(RG, RW-(RW-RG)*np.clip((Z-ZTOP)/4.0,0,1)))
+    floor=np.where(Z<ZTOP+0.3, rf-(rf-RW)*sz, 12.0)          # above the ring: nothing but the real grip (added back below)
     return np.maximum(floor, floor+(rf-floor)*w)
 nth=1440; zs=np.arange(ZA,ZF+0.3,0.1); th=np.linspace(0,2*np.pi,nth,endpoint=False)
 T,Z=np.meshgrid(th,zs); R=rkeep(T,Z)
@@ -31,7 +31,11 @@ nb=len(V); V=np.vstack([V,[cx,cy,zs[0]],[cx,cy,zs[-1]]])
 for j in range(nth): F.append((nb,idx(0,j+1),idx(0,j))); F.append((nb+1,idx(nz-1,j),idx(nz-1,j+1)))
 K=mf.Manifold(mf.Mesh(vert_properties=np.asarray(V,np.float32),tri_verts=np.asarray(F,np.uint32)))
 print('keep-envelope status',K.status(),'vol %.0f'%K.volume())
-remove=mf.Manifold.cylinder(zs[-1]-zs[0],45,45,256).translate([cx,cy,zs[0]]) - K
+# the real grip outline (taken just above the flare) is always kept
+gp=[np.asarray(q) for q in M.slice(ZF+0.8).to_polygons()]
+ar=lambda q:0.5*np.sum(q[:,0]*np.roll(q[:,1],-1)-np.roll(q[:,0],-1)*q[:,1])
+GRIP=mf.CrossSection([max([q for q in gp if ar(q)>0],key=ar)]).offset(1.6,mf.JoinType.Round).offset(-0.6,mf.JoinType.Round).extrude(ZF+0.4-ZTOP).translate([0,0,ZTOP])
+remove=mf.Manifold.cylinder(zs[-1]-zs[0],45,45,256).translate([cx,cy,zs[0]]) - K - GRIP
 N=M-remove; N=max(N.decompose(),key=lambda q:q.volume())
 print('axis %.2f %.2f RO %.2f | removed %.0f mm3'%(cx,cy,RO,M.volume()-N.volume()))
 k=N.to_mesh(); tt=trimesh.Trimesh(np.asarray(k.vert_properties)[:,:3].astype(np.float64),np.asarray(k.tri_verts),process=False)

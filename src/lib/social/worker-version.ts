@@ -621,7 +621,29 @@
  *
  * התזמון, סדר התור, חישוב זמני הפרסום, חלון הפרסום והתורים הקיימים לא נגעו.
  */
-export const WORKER_VERSION = '4.51.0';
+/*
+ * 4.51.0 → 4.52.0, AND THE ANSWER IS YES.
+ *
+ * worker/facebook/account.ts — reading the owner's Facebook account for the
+ * dashboard — fetches their avatar through `context.request`, which shares
+ * the browser's cookie jar by design. On CI's Chromium 131 that jar ends up
+ * EMPTY after three such fetches to an address that does not resolve;
+ * measured, printed by the assertion itself: `cookies now: []`. On the
+ * Chromium here it does not happen, which is why the account test has passed
+ * locally and never once in CI.
+ *
+ * Whether that build empties it from exactly there is NOT established. What
+ * is established is the consequence, and the consequence is the owner's
+ * session: an empty jar on facebook.com is a signed-out worker, which stops
+ * publishing until somebody signs in again. So the fetch now puts the jar
+ * back if it finds it emptied, and a decoration can no longer end a session.
+ *
+ * This runs on the PC — account.ts is called by the worker — so it has to
+ * reach it.
+ *
+ * התזמון, סדר התור, מנגנון הפרסום וחישוב זמני הפרסום לא נגעו.
+ */
+export const WORKER_VERSION = '4.52.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1112,4 +1134,4 @@ export const WORKER_VERSION = '4.51.0';
      grep -c campaign_targets     dist/app/worker.cjs → 0
      grep -c startDraft           dist/app/worker.cjs → 0
      grep -c TimePick             dist/app/worker.cjs → 0 */
-export const WORKER_FINGERPRINT = '800798c8700c7ab0';
+export const WORKER_FINGERPRINT = 'd68f063c61c06561';

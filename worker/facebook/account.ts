@@ -256,7 +256,33 @@ async function captureAvatar(
    */
   try {
     if (/^https?:/i.test(src)) {
+      /*
+       * ─── AND THE SESSION SURVIVES THE FETCH ───────────────────────────
+       *
+       * `context.request` deliberately SHARES the browser's cookie jar —
+       * that is why a signed CDN address works from here at all. The cost of
+       * sharing is that it can also write that jar back.
+       *
+       * WHAT IS KNOWN, measured rather than assumed: on CI's Chromium 131 the
+       * account test ends with the facebook.com jar EMPTY — `cookies now: []`
+       * — after three of these fetches to an address that does not resolve.
+       * On the Chromium here (141) the same probe leaves it untouched
+       * (worker/test/.tmp-jar-probe.ts), which is why the test passes locally
+       * and has never once passed in CI.
+       *
+       * WHAT IS NOT KNOWN: whether that build empties it from here or from
+       * somewhere else. So this does not claim a cause — it refuses the
+       * consequence. An avatar is a decoration; the session is the thing the
+       * owner's whole account publishes with, and a decoration must never be
+       * able to sign them out. If the jar was there before the fetch and is
+       * empty after it, it goes back exactly as it was.
+       */
+      const before = await page.context().cookies('https://www.facebook.com').catch(() => []);
       const res = await page.context().request.get(src, { timeout: 15_000 }).catch(() => null);
+      if (before.length > 0) {
+        const after = await page.context().cookies('https://www.facebook.com').catch(() => before);
+        if (after.length === 0) await page.context().addCookies(before).catch(() => undefined);
+      }
       const type = res?.headers()['content-type'] ?? '';
       if (res?.ok() && /^image\//i.test(type)) {
         const bytes = await res.body();

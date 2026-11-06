@@ -1863,95 +1863,134 @@ body:has(.social-theme) .site-backdrop {
   gap: 12px;
 }
 
-/* ── 1-3: the headline, the character, the lockup, the live line ──────── */
-.anxf-head {
+/* ── 1: the banner ───────────────────────────────────────────────────── */
+/*
+ * THE CHARACTER'S BACKGROUND IS THIS BANNER. The nine poses carry real alpha,
+ * so a transparent character takes the colour of whatever it is put on: the
+ * first reference wanted him on a white card and he sat on a white card, this
+ * one wants him on deep blue and the same nine files do it. No second set of
+ * assets, and no rectangle behind him — the banner IS the surface.
+ */
+.anxf-banner {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42%;
-  /* Bottom-aligned, as the reference has him: his desk sits on the same line
-     the live-system line sits on, rather than floating in the middle of the
-     block. */
+  /* Measured, not chosen: at 390px the words column has to hold a pill
+     reading "מערכת הפרסום פעילה" on one line — about 140px — and anything
+     wider for the character clipped it against the banner's own edge. */
+  grid-template-columns: auto minmax(0, 1fr) 34%;
+  /* He stands on the banner's floor rather than floating in the middle of
+     it, which is where the reference has him. */
   align-items: end;
-  gap: 2px;
-  /*
-   * THE CHARACTER IS ZOOMED, AND A ZOOM OVERFLOWS ITS BOX. Measured at 320px:
-   * he reached two pixels past the left edge of the screen and the whole page
-   * gained a horizontal scrollbar — "אין לגרום לגלילה אופקית", and two pixels
-   * is enough to break it. `clip` confines him without ever becoming a scroll
-   * container; the margin lets the zoom breathe over the card's own padding,
-   * which is transparent in every pose.
-   */
-  overflow: clip;
-  overflow-clip-margin: 10px;
+  gap: 8px;
+  padding: 10px 12px 0;
+  border-radius: var(--radius-card);
+  background: linear-gradient(
+    118deg,
+    color-mix(in oklab, var(--color-brand-700) 84%, black) 0%,
+    var(--color-brand-700) 44%,
+    var(--color-brand-600) 100%
+  );
+  border: 1px solid color-mix(in oklab, var(--color-brand-300) 45%, transparent);
+  box-shadow: 0 4px 14px rgba(40, 20, 80, 0.1),
+    0 14px 34px -12px color-mix(in oklab, var(--color-brand-700) 45%, transparent);
+  /* The character is zoomed inside his box and a zoom overflows it; measured
+     at 320px he reached past the screen and the whole page gained a sideways
+     scrollbar. The banner is where that is contained now. */
+  overflow: hidden;
 }
+/* "גלים כחולים עדינים בחלק התחתון" — two of them, painted once, never
+   animated: a moving wave behind a character is the heavy effect the brief
+   rules out. */
+.anxf-waves {
+  position: absolute;
+  inset: auto 0 0 0;
+  width: 100%;
+  height: 46%;
+  pointer-events: none;
+}
+.anxf-waves path { fill: rgba(255, 255, 255, 0.07); }
+
 .anxf-words {
-  grid-column: 1;
+  grid-column: 2;
+  grid-row: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: 7px;
+  padding-bottom: 12px;
 }
 .anxf h2 {
   margin: 0;
   /* One line in the reference, and one line here for the sentence it draws.
-     The count is data, though — "26 פרסומים ממתינים לכם" is four characters
-     longer than "פרסום אחד" — so it is allowed to wrap, balanced, rather
-     than shrink to fit a number nobody can predict. */
+     The count is data, though — "196 פרסומים" is four characters longer than
+     "פרסום אחד" — so it is allowed to wrap, balanced, rather than shrink to
+     fit a number nobody can predict. */
   text-wrap: balance;
   font-size: clamp(16px, 4.8vw, 22px);
   font-weight: 800;
-  line-height: 1.22;
+  line-height: 1.2;
   letter-spacing: -0.4px;
-  color: var(--color-mist-100);
-}
-/* THE LOCKUP: "ANX" in the product's navy, "Live Flow" in a filled pill. */
-.anxf-logo {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-style: italic;
-  font-weight: 900;
-  letter-spacing: -0.2px;
-  white-space: nowrap;
-}
-.anxf-logo-anx {
-  font-size: clamp(17px, 5.4vw, 24px);
-  color: var(--color-brand-400);
-}
-.anxf-logo-pill {
-  font-size: clamp(13.5px, 4.2vw, 19px);
-  padding: 3px 13px 4px;
-  border-radius: 999px;
   color: var(--color-on-brand);
-  background: linear-gradient(135deg, var(--color-brand-500), var(--color-brand-300));
-  box-shadow: 0 2px 8px color-mix(in oklab, var(--color-brand-500) 28%, transparent);
 }
 .anxf-state {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: clamp(11px, 3.2vw, 13px);
+  gap: 7px;
+  padding: 3px 11px 4px;
+  border-radius: 999px;
+  font-size: clamp(10px, 2.9vw, 12.5px);
   font-weight: 700;
-  color: var(--color-mist-300);
+  /* One line, as the reference draws it: the pill broke into three in a
+     narrow column and read as a paragraph in a badge. */
+  white-space: nowrap;
+  color: var(--color-on-brand);
+  background: color-mix(in oklab, var(--color-success-400) 30%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-success-400) 70%, transparent);
 }
 .anxf-state i {
   width: 9px;
   height: 9px;
   border-radius: 999px;
   flex: none;
-  background: var(--color-mist-500);
+  background: limegreen;
 }
-.anxf-state[data-tone="good"] i { background: var(--color-success-400); }
-.anxf-state[data-tone="warn"] i { background: var(--color-warning-400); }
-.anxf-state[data-tone="bad"] i { background: var(--color-error-300); }
+.anxf-state[data-tone="warn"] {
+  background: color-mix(in oklab, var(--color-warning-400) 34%, transparent);
+  border-color: color-mix(in oklab, var(--color-warning-400) 75%, transparent);
+}
+.anxf-state[data-tone="warn"] i { background: orange; }
+.anxf-state[data-tone="bad"] {
+  background: color-mix(in oklab, var(--color-error-300) 30%, transparent);
+  border-color: color-mix(in oklab, var(--color-error-300) 70%, transparent);
+}
+.anxf-state[data-tone="bad"] i { background: tomato; }
+.anxf-state[data-tone="mute"] {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.anxf-state[data-tone="mute"] i { background: rgba(255, 255, 255, 0.75); }
 
+/*
+ * EVERY CELL NAMES ITS ROW, and that is not decoration. Grid's own
+ * auto-placement only ever moves FORWARD: the character is written first in
+ * the markup and sits in column 3, so the words at column 2 and the Facebook
+ * tile at column 1 were both placed on a SECOND ROW — the banner came out
+ * half empty with the tile stranded under it. Seen in the comparison
+ * screenshot, not reasoned about.
+ */
 .anxf-robot {
   position: relative;
-  grid-column: 2;
+  grid-column: 3;
+  grid-row: 1;
   aspect-ratio: 440 / 276;
   min-width: 0;
+  /* The thin rule the reference draws between the character and the words. */
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.16);
+  padding-inline-start: 8px;
+  /* The gap the zoom needs under him, so the banner's floor is his desk's. */
+  margin-bottom: -4px;
 }
 /*
  * HE FILLS HIS CORNER. The pose canvas is sized for the WIDEST of the nine —
@@ -1960,7 +1999,7 @@ body:has(.social-theme) .site-backdrop {
  * The scale is on the <img>, not on the wrapper, because the wrapper is
  * carrying the breath; two transforms on one element would fight.
  */
-.anxf-robot .anx-poses img { scale: 1.56; }
+.anxf-robot .anx-poses img { scale: 1.74; }
 
 /* ── 4: the four stations ────────────────────────────────────────────── */
 .anxf-stations {
@@ -1977,15 +2016,15 @@ body:has(.social-theme) .site-backdrop {
   align-items: center;
   gap: 1px;
 }
-.anxf-arrow {
-  width: 14px;
-  height: 14px;
+/* "התחנות מחוברות בקו כחול דק" — a line, and nothing else. The arrows that
+   stood here came from the first reference; this one joins them. */
+.anxf-link {
+  width: 12px;
+  height: 2px;
   flex: none;
-  color: color-mix(in oklab, var(--color-brand-500) 55%, transparent);
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--color-brand-500) 45%, transparent);
 }
-/* RTL: the flow runs right to left, so the arrow that joins two stations
-   points the way the queue actually moves. */
-[dir="rtl"] .anxf-arrow { transform: scaleX(-1); }
 .anxf-box {
   flex: 1;
   min-width: 0;
@@ -2076,6 +2115,11 @@ body:has(.social-theme) .site-backdrop {
   align-items: center;
   gap: 10px;
 }
+/* The rule the reference draws between the Facebook mark and the words. */
+.anxf-now-words {
+  border-inline-end: 1px solid var(--color-ink-700);
+  padding-inline-end: 10px;
+}
 .anxf-now-words { flex: 1; min-width: 0; }
 .anxf-now-kicker {
   margin: 0;
@@ -2100,8 +2144,8 @@ body:has(.social-theme) .site-backdrop {
   color: var(--color-mist-300);
 }
 .anxf-now-cover {
-  width: 62px;
-  height: 48px;
+  width: 66px;
+  height: 52px;
   flex: none;
   border-radius: 9px;
   overflow: hidden;
@@ -2176,8 +2220,32 @@ body:has(.social-theme) .site-backdrop {
 }
 
 /* ── 6: the queue ────────────────────────────────────────────────────── */
+.anxf-qcard {
+  border-radius: var(--radius-tile);
+  background: var(--color-ink-850);
+  border: 1px solid var(--color-ink-700);
+  box-shadow: 0 2px 6px rgba(40, 20, 80, 0.03), 0 10px 26px rgba(40, 20, 80, 0.06);
+  padding: 9px 10px 10px;
+}
+.anxf-qtop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.anxf-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: clamp(11px, 3.2vw, 13px);
+  font-weight: 800;
+  color: var(--color-brand-400);
+  white-space: nowrap;
+}
+.anxf-all svg { width: 15px; height: 15px; }
 .anxf-qhead {
-  margin: 2px 0 0;
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2194,15 +2262,41 @@ body:has(.social-theme) .site-backdrop {
   gap: 7px;
 }
 .anxf-queue li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
   border-radius: var(--radius-lg);
   background: var(--color-ink-850);
   border: 1px solid var(--color-ink-700);
   box-shadow: 0 1px 3px rgba(40, 20, 80, 0.04);
 }
+/* The row is a door: the reference draws a chevron on every one of them, and
+   a chevron that opens nothing is the decorative button this product does not
+   ship. It goes to the list that already holds every publication and its
+   error — an existing screen, not a new one. */
+.anxf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  min-height: 44px;
+}
+.anxf-row-go {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--color-brand-400);
+}
+/* "פרסום שנכשל: רקע ורדרד עדין, מסגרת אדומה דקה." */
+.anxf-queue li[data-row="failed"] {
+  background: color-mix(in oklab, var(--color-error-300) 8%, var(--color-ink-850));
+  border-color: color-mix(in oklab, var(--color-error-300) 40%, transparent);
+}
+.anxf-queue li[data-row="failed"] .anxf-row-name { color: var(--color-error-400); }
+.anxf-queue li[data-row="failed"] .anxf-row-go { color: var(--color-error-300); }
+.anxf-row-why {
+  font-size: clamp(9.5px, 2.9vw, 11.5px);
+  font-weight: 600;
+  color: var(--color-error-400);
+}
+.anxf-row-why b { font-weight: 900; }
 .anxf-queue li[data-row="live"] {
   background: color-mix(in oklab, var(--color-brand-500) 7%, var(--color-ink-850));
   border-color: color-mix(in oklab, var(--color-brand-500) 45%, transparent);
@@ -2250,8 +2344,20 @@ body:has(.social-theme) .site-backdrop {
   color: #fff;
 }
 .anxf-fb svg { width: 17px; height: 17px; }
-.anxf-fb-lg { width: 54px; height: 54px; border-radius: 15px; }
-.anxf-fb-lg svg { width: 34px; height: 34px; }
+.anxf-fb-lg { width: 60px; height: 60px; border-radius: 17px; }
+.anxf-fb-lg svg { width: 38px; height: 38px; }
+/* The banner's own, which the reference draws as a lit app tile rather than
+   a flat square: Facebook's blue lifted towards white at the top-left. */
+.anxf-fb-xl {
+  width: clamp(46px, 13vw, 70px);
+  height: clamp(46px, 13vw, 70px);
+  border-radius: 24%;
+  grid-column: 1;
+  grid-row: 1;
+  background: linear-gradient(155deg, color-mix(in oklab, #1877f2 62%, white) 0%, #1877f2 62%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.26);
+}
+.anxf-fb-xl svg { width: 62%; height: 62%; }
 .anxf-ppl { width: 17px; height: 17px; flex: none; color: var(--color-brand-400); }
 
 /* ── 7: the four figures ─────────────────────────────────────────────── */
@@ -2263,6 +2369,12 @@ body:has(.social-theme) .site-backdrop {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
+/* "רקע לבן עם גוון צבע עדין" — the tint says which figure it is before the
+   number is read, and it is mixed from the same token the number uses. */
+.anxf-tiles li[data-tile="today"] { background: color-mix(in oklab, var(--color-brand-500) 5%, var(--color-ink-850)); }
+.anxf-tiles li[data-tile="success"] { background: color-mix(in oklab, var(--color-success-400) 7%, var(--color-ink-850)); }
+.anxf-tiles li[data-tile="failed"] { background: color-mix(in oklab, var(--color-error-300) 7%, var(--color-ink-850)); }
+.anxf-tiles li[data-tile="groups"] { background: color-mix(in oklab, var(--color-brand-500) 5%, var(--color-ink-850)); }
 .anxf-tiles li {
   min-width: 0;
   display: flex;
@@ -2312,10 +2424,10 @@ body:has(.social-theme) .site-backdrop {
     third of it instead of a share that would make him a postage stamp. */
 @media (min-width: 641px) {
   .anxf { gap: 14px; }
-  .anxf-head { grid-template-columns: minmax(0, 1fr) 32%; }
+  .anxf-banner { grid-template-columns: auto minmax(0, 1fr) 30%; padding: 12px 16px; }
   /* A narrower column and the same zoom put his laptop through the side of
      the card — seen on the 900px shot before it was measured. */
-  .anxf-robot .anx-poses img { scale: 1.22; }
+  .anxf-robot .anx-poses img { scale: 1.12; }
   .anxf-box { padding: 9px 4px 8px; }
   .anxf-ic { width: 24px; height: 24px; }
   .anxf-now-cover { width: 62px; height: 46px; }

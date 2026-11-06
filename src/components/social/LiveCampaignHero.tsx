@@ -1308,7 +1308,14 @@ export function LiveQueueHero({
     : null;
 
   return (
-    <HeroPanel ariaLabel="מצב המערכת">
+    /*
+     * NO WHITE CARD AROUND IT ANY MORE. The first reference put every part
+     * inside one; this one stands them on the page as separate blocks — a
+     * banner, a row of stations, the publication going out, the queue, four
+     * figures — each with its own surface. Wrapping them would put a card
+     * inside a card, which is the one thing the reference plainly does not do.
+     */
+    <section aria-label="מצב המערכת">
       {/*
         ─── THE WHOLE CARD IS THE REFERENCE NOW ──────────────────────────
         
@@ -1417,6 +1424,6 @@ export function LiveQueueHero({
         READ rather than assumed. The props stay on the component — the screen
         still passes them and the campaign screen still uses them.
       */}
-    </HeroPanel>
+    </section>
   );
 }

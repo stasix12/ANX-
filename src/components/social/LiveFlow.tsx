@@ -11,9 +11,16 @@ import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
  * "התמונה המצורפת היא מפרט העיצוב הסופי והמחייב. אני דורש להעתיק את העיצוב
  *  שבתמונה בצורה מדויקת ככל האפשר, ולא ליצור עיצוב בהשראתה."
  *
- * Top to bottom, in his order: the headline, the robot and the Live Flow
- * lockup, the live-system line, four stations joined by arrows, the card for
- * the publication going out right now, the queue, and four figures.
+ * Top to bottom, in his order: a banner carrying the character, the count
+ * and the live-system pill; four stations joined by a thin line; the card for
+ * the publication going out right now; the queue, in a card of its own with
+ * a way into the full list; and four figures.
+ *
+ * REVISED AGAINST A SECOND REFERENCE. The first put every part inside one
+ * white card and carried an "ANX Live Flow" lockup; this one stands the parts
+ * on the page as separate blocks, puts the character on a deep blue banner,
+ * joins the stations with a line instead of arrows, and says in as many
+ * words: "אין להוסיף את הכיתוב Live Flow". The lockup is gone.
  *
  * ─── WHAT EVERY NUMBER ON IT IS ───────────────────────────────────────────
  *
@@ -282,31 +289,36 @@ export function LiveFlow({
 
   return (
     <section className="anxf" data-flow={mode} aria-label="מצב הפרסום">
-      {/* ── 1-3: the headline, the robot, the lockup, the live line ────── */}
-      <div className="anxf-head">
+      {/* ── 1: the banner — the character, the count, the live pill ────── */}
+      {/*
+        THE ROBOT'S BACKGROUND IS THIS BANNER, and that is the whole reason
+        the poses were cut out of their room: a transparent character takes
+        the colour of whatever it is put on. The first reference wanted him on
+        a white card and he sat on a white card; this one wants him on deep
+        blue and the same nine files do it with no second set of assets.
+      */}
+      <div className="anxf-banner" data-banner>
+        <svg aria-hidden className="anxf-waves" viewBox="0 0 400 120" preserveAspectRatio="none">
+          <path d="M0 96 C 70 72, 140 112, 210 88 S 340 60, 400 84 L400 120 L0 120 Z" />
+          <path d="M0 108 C 90 90, 150 122, 240 102 S 350 84, 400 100 L400 120 L0 120 Z" opacity=".5" />
+        </svg>
+        <AnxRobot mode={mode} />
         <div className="anxf-words">
           <h2 data-flow-title dir="auto">{headline}</h2>
-          <p className="anxf-logo" aria-label="ANX Live Flow">
-            <span className="anxf-logo-anx">ANX</span>
-            <span className="anxf-logo-pill">Live Flow</span>
-          </p>
           <p className="anxf-state" data-tone={state.tone}>
             <i aria-hidden />
             {state.line}
           </p>
         </div>
-        <AnxRobot mode={mode} />
+        <FacebookMark className="anxf-fb-xl" />
       </div>
 
       {/* ── 4: the four stations ──────────────────────────────────────── */}
       <ol className="anxf-stations" data-station={STATIONS[at].k}>
         {STATIONS.map(({ k, label }, i) => (
           <li key={k} data-step={k} data-state={i < at ? 'past' : i === at ? 'live' : 'next'}>
-            {i > 0 && (
-              <svg aria-hidden className="anxf-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 12h15M13 6l6 6-6 6" />
-              </svg>
-            )}
+            {/* "התחנות מחוברות בקו כחול דק" — a line, not an arrow glyph. */}
+            {i > 0 && <span aria-hidden className="anxf-link" />}
             <span className="anxf-box">
               <span className="anxf-ic">{ICON[k]}</span>
               <span className="anxf-lb">
@@ -368,15 +380,25 @@ export function LiveFlow({
 
       {/* ── 6: the queue ──────────────────────────────────────────────── */}
       {rows.length > 0 && (
-        <>
-          <h3 className="anxf-qhead">
-            <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m12 3 9 4.6-9 4.6-9-4.6z" />
-              <path d="m3 12.4 9 4.6 9-4.6" />
-              <path d="m3 16.9 9 4.6 9-4.6" />
-            </svg>
-            תור פרסומים ({rows.length})
-          </h3>
+        <div className="anxf-qcard">
+          <div className="anxf-qtop">
+            <h3 className="anxf-qhead">
+              <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m12 3 9 4.6-9 4.6-9-4.6z" />
+                <path d="m3 12.4 9 4.6 9-4.6" />
+                <path d="m3 16.9 9 4.6 9-4.6" />
+              </svg>
+              תור פרסומים ({rows.length})
+            </h3>
+            {/* A WAY INTO THE WHOLE LIST, and it goes to the screen that
+                already is that list — no new route, no new mechanism. */}
+            <a className="anxf-all" href="/social/history">
+              הצג הכול
+              <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m14 6-6 6 6 6" />
+              </svg>
+            </a>
+          </div>
           <ul className="anxf-queue">
             {rows.map((r, i) => {
               /* "בתור הבא" is a claim that nothing is in front of it, so only
@@ -385,11 +407,22 @@ export function LiveFlow({
               const firstNext = rows.findIndex((o) => o.state === 'next');
               return (
               <li key={r.id} data-row={r.state}>
+                <a className="anxf-row" href="/social/history">
                 <FacebookMark />
                 <PeopleMark />
                 <span className="anxf-row-words">
                   <span className="anxf-row-name" dir="auto">{r.name}</span>
                   {r.state === 'live' && r.note && <span className="anxf-row-note">{r.note}…</span>}
+                  {/* THE REASON, WHEN THERE IS ONE. A failed row that only
+                      said "נכשל" sent the owner hunting through the history
+                      for what went wrong; the row carries the worker's own
+                      words for it, so it says them. */}
+                  {r.state === 'failed' && (
+                    <span className="anxf-row-why">
+                      <b>נכשל</b>
+                      {r.note ? ` · ${r.note}` : ''}
+                    </span>
+                  )}
                 </span>
                 {r.state === 'done' && r.at && <span className="anxf-row-at">{r.at} · בוצע</span>}
                 {r.state === 'next' && <span className="anxf-row-at">{i === firstNext ? 'בתור הבא' : 'בתור'}</span>}
@@ -416,11 +449,15 @@ export function LiveFlow({
                     </svg>
                   )}
                 </span>
+                <svg aria-hidden className="anxf-row-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m14 6-6 6 6 6" />
+                </svg>
+                </a>
                 </li>
               );
             })}
           </ul>
-        </>
+        </div>
       )}
 
       {/* ── 7: the four figures ───────────────────────────────────────── */}

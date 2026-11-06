@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type { SceneMode } from './sceneState';
 
 /**
  * THE ROBOT THAT IS ACTUALLY SENDING HIS POSTS.
@@ -163,6 +164,46 @@ const LAMP = { x: ROBOT.x + 0.509 * ROBOT.w, y: ROBOT.y + 5 };
 const HAND = { x: ROBOT.x + 0.9 * ROBOT.w, y: ROBOT.y + 0.69 * ROBOT.h };
 
 /**
+ * ─── ITS EYES, AND WHY THE LIGHT BLINKS RATHER THAN THE EYE ───────────────
+ *
+ * "עיניים מוארות בכחול … מצמוץ."
+ *
+ * The eyes are PAINTED INTO THE ASSET: two cyan arcs on the black face plate,
+ * rgb(0, 239, 250), each about a tenth of the picture wide. A raster picture
+ * cannot close them, and the obvious trick — a lid of the plate's own colour
+ * scaled over each arc — does not work here either: measured across the plate,
+ * the dark around the eyes runs from rgb(0,2,27) to rgb(12,30,100) and each
+ * arc sits in its own bloom, so a flat lid is a visible patch.
+ *
+ * So what blinks is the LIGHT. A soft cyan glow sits exactly over each arc —
+ * both measured on the file, by clustering its lit pixels: centres at 0.4072
+ * and 0.5997 across, 0.2705 down, each arc 0.0995 x 0.0442 of the picture —
+ * and the glow drops out for a twentieth of a six-second cycle. On a screen-
+ * faced robot that reads as the face blinking, which is what it is: the panel
+ * it wears is a display.
+ *
+ * MEASURED, NOT PLACED BY EYE, for the same reason the hand was: a glow four
+ * units out is a glow on its cheek, and nothing in SVG complains.
+ */
+const EYE = {
+  y: ROBOT.y + 0.2705 * ROBOT.h,
+  rx: 0.0995 * ROBOT.w * 0.75,
+  ry: 0.0442 * ROBOT.h * 1.25,
+  left: ROBOT.x + 0.4072 * ROBOT.w,
+  right: ROBOT.x + 0.5997 * ROBOT.w,
+};
+
+/**
+ * WHERE THE TWO BADGES SIT — above the head, clear of the antenna.
+ *
+ * Only one of them is ever drawn, and each says the same thing the headline
+ * above the scene is already saying: `error` is the dashboard's
+ * `needs_intervention` and `offline` is a PC that has not sent a heartbeat.
+ * Neither is a mood the scene decided on its own.
+ */
+const BADGE = { x: ROBOT.x + ROBOT.w / 2 + 34, y: ROBOT.y + 16, r: 13 };
+
+/**
  * THE BALL IT BOUNCES WHEN THERE IS NOTHING TO SEND.
  *
  * "תעשה אותו שהוא מקפיץ כדור שאין כלום ואין פרסום."
@@ -252,15 +293,20 @@ function arc(i: number): string {
 }
 
 /**
- * WHAT THE SCENE IS SHOWING.
+ * WHAT THE SCENE IS SHOWING — eight names, each of them a fact.
  *
- * `done` is the only one of these that CONGRATULATES, so it is the only one
- * whose meaning is worth spelling out here: it is "today has nothing left" —
- * every row the day planned has been through a worker and no row is in a
- * worker's hands right now. LiveCampaignHero works it out from the two numbers
- * printed under the bar, so the dance and the figures can never disagree.
+ * The list and the ladder that produces it live in sceneState.ts, next to the
+ * stages the worker reports, because that is where they are decided; this file
+ * only draws what it is handed. Re-exported so the callers that have always
+ * imported the type from the component still can.
+ *
+ * `done` is the only one of them that CONGRATULATES, so it is the one worth
+ * repeating here: it is "today has nothing left" — every row the day planned
+ * has been through a worker and no row is in a worker's hands right now.
+ * LiveCampaignHero works it out from the two numbers printed under the bar, so
+ * the dance and the figures can never disagree.
  */
-export type SceneMode = 'sending' | 'waiting' | 'paused' | 'idle' | 'done';
+export type { SceneMode };
 
 export function PublishingScene({
   mode,
@@ -314,7 +360,38 @@ export function PublishingScene({
    * BALL above for why it is a ball and not a pose.
    */
   const resting = mode === 'waiting';
-  const running = mode === 'sending' || resting;
+  /*
+   * ─── THE TWO HALVES OF A PUBLICATION, TOLD APART ──────────────────────
+   *
+   * `preparing` is a worker holding a row and reporting a stage BEFORE the
+   * final click — opening the group, waiting for the composer, uploading the
+   * media. The post exists, it is in the robot's hand, and NOTHING has been
+   * submitted. So the card is drawn at the hand and does not travel: a card
+   * crossing to a group while the media is still uploading would be the scene
+   * describing a submission that has not happened.
+   *
+   * `sending` is that same row at the click, or a worker that has not said
+   * which stage it is on. Then the card flies.
+   *
+   * Neither of them ticks. Only a rise in the real published count does.
+   */
+  const preparing = mode === 'preparing';
+  /*
+   * AND THE TWO WAYS NOTHING IS MOVING AT ALL.
+   *
+   * `blocked` is the dashboard's `needs_intervention` with the machine alive;
+   * `asleep` is the same state with no heartbeat behind it. The robot is drawn
+   * in both — a card that empties itself is a card that looks broken — but it
+   * stands still, nothing leaves its hand and no group is named, because
+   * nothing is going anywhere until a person acts.
+   */
+  const blocked = mode === 'error';
+  const asleep = mode === 'offline';
+  /** On screen at all. `idle` is the one state that draws no robot. */
+  const drawn = mode !== 'idle';
+  /** On screen AND powered: the lamp, the eyes and the glow. */
+  const lit = drawn && !asleep;
+  const running = mode === 'sending' || resting || preparing;
   const travelling = mode === 'sending' && !success;
   const to = centre(active);
 
@@ -323,15 +400,24 @@ export function PublishingScene({
       viewBox="0 0 400 180"
       role="img"
       aria-label={
+        /* The same sentence the headline above the scene is making, in the
+           same order, so a screen reader and a pair of eyes are never told
+           two different things about one machine. */
         mode === 'paused'
           ? 'הפרסום מושהה'
-          : mode === 'idle'
-            ? 'אין פרסום פעיל'
-            : celebrating
-              ? `הרובוט סיים לפרסם — ${published} מתוך ${total} היום`
-              : resting
-                ? `מחכה לעבודות — ${published} מתוך ${total} פורסמו היום`
-                : `מפרסם לקבוצות — ${published} מתוך ${total} היום`
+          : asleep
+            ? 'המחשב לא מחובר — הפרסום עומד'
+            : blocked
+              ? 'נדרשת פעולה שלכם — הפרסום עומד'
+              : mode === 'idle'
+                ? 'אין פרסום פעיל'
+                : celebrating
+                  ? `הרובוט סיים לפרסם — ${published} מתוך ${total} היום`
+                  : resting
+                    ? `מחכה לעבודות — ${published} מתוך ${total} פורסמו היום`
+                    : preparing
+                      ? `מכין פרסום לקבוצה — ${published} מתוך ${total} היום`
+                      : `מפרסם לקבוצות — ${published} מתוך ${total} היום`
       }
       className="block w-full"
     >
@@ -353,6 +439,21 @@ export function PublishingScene({
           <feDropShadow dx="0" dy="3" stdDeviation="4" floodColor="#0b2545" floodOpacity="0.16" />
         </filter>
         {/*
+          THE DISCONNECTED ROBOT IS THE SAME PICTURE WITH THE COLOUR TAKEN
+          OUT, not a second asset and not a grey rectangle over it. A static
+          filter costs one paint and nothing per frame, and it is the cue
+          everybody already reads as "this is not running".
+        */}
+        <filter id="anx-grey">
+          <feColorMatrix type="saturate" values="0.12" />
+        </filter>
+        {/* The eyes' own cyan, read off the asset: rgb(0, 239, 250). */}
+        <radialGradient id="anx-eye">
+          <stop offset="0%" stopColor="#00effa" stopOpacity="0.85" />
+          <stop offset="55%" stopColor="#00effa" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#00effa" stopOpacity="0" />
+        </radialGradient>
+        {/*
           TWO MARKERS, NOT ONE WITH currentColor. A marker is its own element:
           `currentColor` inside it resolves against the marker's inherited
           colour — black — and not against the path that references it, which
@@ -371,7 +472,11 @@ export function PublishingScene({
           group, and nothing is taking it: four dim arrows aimed out of an
           empty space — the flier is not even on screen in that state — read as
           a diagram of something about to happen. */}
-      {!celebrating && TILE.map((_, i) => {
+      {/* AND NOT WHILE NOTHING CAN MOVE. Four arrows aimed at four groups,
+          over a machine that is off or a queue waiting on a person, read as a
+          diagram of something about to happen — the same reason they are gone
+          on a finished day. */}
+      {!celebrating && !blocked && !asleep && TILE.map((_, i) => {
         const hot = i === active && travelling;
         return (
           <path
@@ -406,11 +511,11 @@ export function PublishingScene({
         fades as it rises reads as a thing in the air. It is the cheapest cue
         in the scene and the one doing most of the work.
       */}
-      {mode !== 'idle' && (
+      {drawn && (
         <ellipse
-          /* No class while it is bouncing a ball: a shadow that shrinks is
-             the cue for a body in the AIR, and this one is standing on the
-             floor with its feet down. */
+          /* No class while it is bouncing a ball, standing blocked or
+             switched off: a shadow that shrinks is the cue for a body in the
+             AIR, and in all three of those its feet are on the floor. */
           className={celebrating ? 'anx-shadow-dance' : resting ? undefined : running ? 'anx-shadow' : undefined}
           cx={FLOOR.x}
           cy={FLOOR.y}
@@ -431,36 +536,112 @@ export function PublishingScene({
         `center` for the hover and the dance, the feet for the throw and the
         squash — a body pivots from the ground, not from its waist.
       */}
-      <g
-        className={
-          mode === 'idle'
-            ? undefined
-            : celebrating
+      {drawn && (
+        <g
+          className={
+            celebrating
               ? 'anx-dance'
               : resting
                 ? 'anx-tricks'
-                : running
-                  ? 'anx-bot'
-                  : 'anx-bot-min'
-        }
-      >
-        <g className={celebrating ? 'anx-cheer' : travelling ? 'anx-send' : undefined}>
-          <image
-            href="/social/robot-full.webp"
-            x={ROBOT.x}
-            y={ROBOT.y}
-            width={ROBOT.w}
-            height={ROBOT.h}
-            preserveAspectRatio="xMidYMid meet"
-          />
-          {/* The antenna light, INSIDE the group that squashes and throws. A
-              flat picture cannot pulse on its own, so the one part of it that
-              should is given a soft lamp over the ball — and a lamp left
-              outside this group would drift off the antenna by a tenth of the
-              robot's height at the bottom of every hop. */}
-          {mode !== 'idle' && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="9" fill="url(#anx-lamp)" />}
+                : preparing
+                  ? /* AWAKE AND ABOUT TO ACT — a shorter, tighter clock than
+                       the publishing float, leaning towards the groups. It is
+                       the "picks the post up" half of the sequence, and it has
+                       to look different from both the idle game it follows and
+                       the throw it leads into, or the three stages are one
+                       stage with three names. */
+                    'anx-wake'
+                  : mode === 'sending'
+                    ? 'anx-bot'
+                    : asleep
+                      ? /* NOTHING. A machine that is not connected is not
+                           breathing, and a robot that kept bobbing over
+                           "המחשב לא מחובר" would be the panel contradicting
+                           its own headline. */
+                        undefined
+                      : 'anx-bot-min'
+          }
+        >
+          <g
+            className={
+              celebrating
+                ? 'anx-cheer'
+                : /* THE SUCCESS GESTURE RIDES THE TICK AND NOTHING ELSE.
+                     `success` is true only while a publication that really
+                     happened is being presented — it comes from a rise in the
+                     count out of the database (see the header) — so the nod
+                     cannot appear on a machine that published nothing. */
+                  success && running
+                  ? 'anx-yes'
+                  : travelling
+                    ? 'anx-send'
+                    : preparing
+                      ? 'anx-lift-body'
+                      : undefined
+            }
+          >
+            <image
+              href="/social/robot-full.webp"
+              x={ROBOT.x}
+              y={ROBOT.y}
+              width={ROBOT.w}
+              height={ROBOT.h}
+              preserveAspectRatio="xMidYMid meet"
+              opacity={asleep ? 0.5 : 1}
+              filter={asleep ? 'url(#anx-grey)' : undefined}
+            />
+            {/* The antenna light, INSIDE the group that squashes and throws. A
+                flat picture cannot pulse on its own, so the one part of it that
+                should is given a soft lamp over the ball — and a lamp left
+                outside this group would drift off the antenna by a tenth of the
+                robot's height at the bottom of every hop. */}
+            {lit && <circle className="anx-blip" cx={LAMP.x} cy={LAMP.y} r="9" fill="url(#anx-lamp)" />}
+            {/* AND THE EYES. One group, one animation on opacity, two glows —
+                see EYE above for why the light blinks and the arc does not. */}
+            {lit && (
+              <g data-eyes="" className="anx-eyeshine">
+                <ellipse cx={EYE.left} cy={EYE.y} rx={EYE.rx} ry={EYE.ry} fill="url(#anx-eye)" />
+                <ellipse cx={EYE.right} cy={EYE.y} rx={EYE.rx} ry={EYE.ry} fill="url(#anx-eye)" />
+              </g>
+            )}
+          </g>
         </g>
-      </g>
+      )}
+
+      {/* ── and what is stopping it ─────────────────────────────────────── */}
+      {/*
+        ONE BADGE, ONLY IN THE TWO STATES THAT HAVE ONE, and each is the mark
+        of a fact the dashboard already decided: `error` is
+        `needs_intervention` with the machine alive, `offline` is no heartbeat.
+        The headline directly above this scene names which — the badge is there
+        so the picture does not say "fine" while the sentence says "stopped".
+      */}
+      {blocked && (
+        <g data-badge="alert" className="anx-alert">
+          <circle cx={BADGE.x} cy={BADGE.y} r={BADGE.r} fill="#ffffff" />
+          <circle cx={BADGE.x} cy={BADGE.y} r={BADGE.r - 2} fill="#f59e0b" />
+          <rect x={BADGE.x - 1.5} y={BADGE.y - 6.5} width="3" height="8" rx="1.5" fill="#ffffff" />
+          <circle cx={BADGE.x} cy={BADGE.y + 5} r="1.8" fill="#ffffff" />
+        </g>
+      )}
+      {asleep && (
+        /* NO ANIMATION ON THIS ONE. The machine is not there; a pulsing badge
+           would be the one moving thing on a card whose whole message is that
+           nothing is moving. */
+        <g data-badge="offline">
+          <circle cx={BADGE.x} cy={BADGE.y} r={BADGE.r} fill="#ffffff" />
+          <circle cx={BADGE.x} cy={BADGE.y} r={BADGE.r - 2} fill="#64748b" />
+          {/* the power glyph: a ring open at the top, with the stem through it */}
+          <path
+            d={`M ${BADGE.x - 4.3} ${BADGE.y - 2.2} a 5.6 5.6 0 1 0 8.6 0`}
+            fill="none"
+            stroke="#ffffff"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <rect x={BADGE.x - 1} y={BADGE.y - 6.5} width="2" height="6.5" rx="1" fill="#ffffff" />
+        </g>
+      )}
 
       {/* ── the ball ───────────────────────────────────────────────────── */}
       {/*
@@ -561,6 +742,35 @@ export function PublishingScene({
           style={{ ['--dx' as string]: `${to.x - HAND.x}px`, ['--dy' as string]: `${to.y - HAND.y}px` }}
         >
           <g data-card="" className="anx-fly">
+            <rect x="0" y="0" width="34" height="40" rx="5" fill="#ffffff" filter="url(#anx-soft)" />
+            <rect x="4.5" y="4.5" width="25" height="15" rx="3" fill="#c7b6f7" />
+            <rect x="9" y="8" width="7" height="7" rx="1.5" fill="#8b7bea" />
+            <rect x="18" y="7" width="8" height="8" rx="1.5" fill="#8b7bea" />
+            <rect x="4.5" y="23" width="25" height="2.6" rx="1.3" fill="#e4e0f3" />
+            <rect x="4.5" y="28.5" width="25" height="2.6" rx="1.3" fill="#e4e0f3" />
+            <rect x="4.5" y="34" width="15" height="2.6" rx="1.3" fill="#e4e0f3" />
+          </g>
+        </g>
+      )}
+
+      {/* ── the card being picked up ───────────────────────────────────── */}
+      {/*
+        THE SAME CARD, IN THE HAND, NOT CROSSING THE SCENE.
+        
+        This is the whole difference between PREPARING and PUBLISHING, and it
+        is the difference the worker itself reports: while the step is
+        'opening' / 'composer_opened' / 'uploading_media' / 'ready_to_publish'
+        the post has not been submitted to anything. A card flying towards a
+        group during those stages would be the scene claiming a submission
+        that has not been made — which is the one thing this panel may never
+        do. So it rises into the hand and waits there.
+        
+        It carries `data-card` like the flying one: it is the same post, at an
+        earlier moment.
+      */}
+      {preparing && (
+        <g transform={`translate(${HAND.x - 17} ${HAND.y - 20})`}>
+          <g data-card="" className="anx-lift">
             <rect x="0" y="0" width="34" height="40" rx="5" fill="#ffffff" filter="url(#anx-soft)" />
             <rect x="4.5" y="4.5" width="25" height="15" rx="3" fill="#c7b6f7" />
             <rect x="9" y="8" width="7" height="7" rx="1.5" fill="#8b7bea" />

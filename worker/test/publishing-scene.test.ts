@@ -32,7 +32,18 @@ let checks = 0;
 const eq = (a: unknown, b: unknown, msg: string) => { checks += 1; assert.deepEqual(a, b, msg); };
 const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
 
-const ticks = (page: Page) => page.locator('svg path[stroke="#ffffff"]').count();
+/*
+ * THE GREEN MARKS ON SCREEN — scoped to the tick itself.
+ *
+ * RE-POINTED, NOT WEAKENED. This used to count every white-stroked path in
+ * the scene, which was fine while the tick was the only one. It is not any
+ * more: the ball's seam is a white stroke and so is the glyph on the
+ * disconnected badge, and either of them would have been counted as a
+ * publication that landed — a false GREEN, which is the single worst
+ * direction for this suite to be wrong in. The claim is unchanged: the drawn
+ * check mark, counted.
+ */
+const ticks = (page: Page) => page.locator('svg [data-tick] path[stroke="#ffffff"]').count();
 const flying = (page: Page) => page.locator('.anx-fly').count();
 
 async function main(): Promise<void> {
@@ -142,7 +153,7 @@ async function main(): Promise<void> {
 
     /* ── 4. THE FOUR STATES ARE TOLD APART ──────────────────────────────── */
     {
-      const seenIn = async (mode: 'sending' | 'waiting' | 'paused' | 'idle' | 'done') => {
+      const seenIn = async (mode: 'sending' | 'waiting' | 'paused' | 'idle' | 'done' | 'preparing' | 'error' | 'offline') => {
         await page.evaluate((m) => window.__mode(m), mode);
         await page.waitForTimeout(150);
         return page.evaluate(() => ({
@@ -158,6 +169,17 @@ async function main(): Promise<void> {
           dribbling: document.querySelectorAll('.anx-tricks').length,
           ball: document.querySelectorAll('[data-ball]').length,
           bounce: document.querySelectorAll('.anx-bounce').length,
+          /* the stage before the click: the post is held, not thrown */
+          waking: document.querySelectorAll('.anx-wake').length,
+          lifting: document.querySelectorAll('.anx-lift').length,
+          cards: document.querySelectorAll('[data-card]').length,
+          /* and the two ways nothing is moving */
+          alert: document.querySelectorAll('[data-badge="alert"]').length,
+          unplugged: document.querySelectorAll('[data-badge="offline"]').length,
+          robots: document.querySelectorAll('svg image').length,
+          eyes: document.querySelectorAll('[data-eyes]').length,
+          /* every dashed arc, not only the flowing one */
+          arrows: document.querySelectorAll('path[stroke-dasharray]').length,
         }));
       };
 
@@ -348,9 +370,117 @@ async function main(): Promise<void> {
         const other = await seenIn(m);
         eq(other.ball, 0, `${m.toUpperCase()}: no ball — it kills time only when its hands are empty`);
       }
+
+    /* ── 4a. THE STAGE BEFORE THE CLICK ─────────────────────────────────── */
+    /*
+     * "שלב 2 — התעוררות והרמת יד."
+     *
+     * PREPARING is a worker holding a row whose reported stage is still
+     * 'opening' / 'composer_opened' / 'uploading_media' / 'ready_to_publish'.
+     * Nothing has been submitted to Facebook. So the post is in the robot's
+     * hand and it does NOT cross the scene — a card flying to a group while
+     * the media is still uploading is the scene claiming a submission that
+     * has not been made, which is the same class of lie as a tick that was
+     * not earned.
+     */
+    {
+      const ready = await seenIn('preparing');
+      eq(ready.cards, 1, 'PREPARING: the post is drawn — it exists, the worker is holding it');
+      eq(ready.lifting, 1, 'and it is being raised in the hand');
+      eq(ready.fly, 0, 'and it is NOT travelling: nothing has been submitted yet');
+      eq(ready.trail, 0, 'and nothing flows towards a group');
+      eq(ready.breathing, 0, 'and no group pulses — nothing is on its way to one');
+      eq(ready.active, 1, 'but the group it is for is named, because the row has one');
+      eq(ready.waking, 1, 'the robot is awake and leaning towards them');
+      eq(ready.bot + ready.botMin, 0, 'and it is not doing the publishing float — that is the next stage, not this one');
+      eq(ready.ball, 0, 'and it has stopped killing time: its hands are full');
+      eq(ready.confetti + ready.dancing, 0, 'nothing is being celebrated');
+      eq(await ticks(page), 0, 'AND NOT ONE TICK — a post being prepared has landed nowhere');
+
+      /* And the two really run: a missing @keyframes leaves the name in place
+         and animates nothing (see 5b, which this is the same lesson as). */
+      const alive = await page.evaluate(() =>
+        ['.anx-wake', '.anx-lift', '.anx-lift-body', '.anx-eyeshine'].map((sel) => {
+          const el = document.querySelector(sel);
+          return { sel, name: el ? getComputedStyle(el).animationName : 'absent', n: el ? el.getAnimations().length : -1 };
+        }),
+      );
+      for (const a of alive) {
+        is(a.n >= 1, `${a.sel} has a name AND a running animation behind it (${a.name}, ${a.n})`);
+      }
+
+      /* AND THE CARD IS IN ITS HAND, measured rather than assumed — the same
+         check the flight gets, for the same reason: a card that renders at
+         the scene's origin is a card nobody can see is wrong. */
+      const held = await page.evaluate(() => {
+        const svg = document.querySelector('svg') as SVGSVGElement;
+        const img = svg.querySelector('image') as SVGImageElement;
+        const hx = Number(img.getAttribute('x')) + 0.9 * Number(img.getAttribute('width'));
+        const hy = Number(img.getAttribute('y')) + 0.69 * Number(img.getAttribute('height'));
+        const m = svg.getScreenCTM()!;
+        const hand = new DOMPoint(hx, hy).matrixTransform(m);
+        const r = (document.querySelector('[data-card]') as SVGGElement).getBoundingClientRect();
+        return Math.hypot(r.left + r.width / 2 - hand.x, r.top + r.height / 2 - hand.y) / (Math.hypot(m.a, m.b) || 1);
+      });
+      is(held < 14, `the held post stays at the hand (${held.toFixed(1)} scene units from it)`);
     }
 
-    /* ── 4b. THE CARD IS BIGGER, AND VISIBLE THE WHOLE WAY ──────────────── */
+    /* ── 4b. AND THE TWO WAYS NOTHING IS MOVING AT ALL ──────────────────── */
+    /*
+     * Both come from the dashboard's own `needs_intervention`, split by the
+     * heartbeat: ERROR is a live machine waiting on a person, OFFLINE is the
+     * PC not being there. The headline directly above the scene names which.
+     *
+     * What they must have in common is everything that says work: no post in
+     * the air or in a hand, no group named, no arrow aimed at one. A robot
+     * that kept throwing cards over "המחשב לא מחובר" is the lie this panel
+     * exists to stop, in its loudest form.
+     */
+    {
+      const stopped = await seenIn('error');
+      eq(stopped.alert, 1, 'ERROR: the badge says somebody is needed');
+      eq(stopped.unplugged, 0, 'and it is not the disconnected one — the machine is alive');
+      eq(stopped.robots, 1, 'the robot is still drawn: an empty card reads as broken');
+      eq(stopped.botMin, 1, 'and it breathes, slowly — frozen reads as broken too');
+      eq(stopped.fly + stopped.cards, 0, 'nothing is in the air and nothing is in its hand');
+      eq(stopped.active, 0, 'no group is named as a destination, because nothing is going anywhere');
+      eq(stopped.arrows, 0, 'and not one arrow is aimed at one — four of them read as a diagram of what is about to happen');
+      eq(stopped.ball + stopped.confetti + stopped.dancing, 0, 'it is not killing time and it is not celebrating');
+      eq(await ticks(page), 0, 'and nothing has landed');
+
+      const dark = await seenIn('offline');
+      eq(dark.unplugged, 1, 'OFFLINE: the disconnected badge');
+      eq(dark.alert, 0, 'and not the "somebody is needed" one — the thing that is missing is the machine');
+      eq(dark.robots, 1, 'the robot is still drawn');
+      eq(dark.bot + dark.botMin + dark.waking + dark.dribbling, 0, 'and it is COMPLETELY still: a machine that is not connected is not breathing');
+      eq(dark.eyes, 0, 'its eyes are out');
+      eq(dark.fly + dark.cards + dark.active + dark.arrows, 0, 'nothing in the air, in its hand, named or aimed at');
+      eq(dark.ball + dark.confetti + dark.dancing, 0, 'and nothing playful or celebratory over a machine that is off');
+      eq(await ticks(page), 0, 'and nothing has landed');
+
+      /* The picture itself is greyed, which is the cue everybody reads
+         without a legend — and it is the SAME picture, not a second asset. */
+      const dim = await page.evaluate(() => {
+        const img = document.querySelector('svg image') as SVGImageElement;
+        return { href: img.getAttribute('href'), opacity: img.getAttribute('opacity'), filter: img.getAttribute('filter') };
+      });
+      is(Number(dim.opacity) > 0 && Number(dim.opacity) < 0.8, `the disconnected robot is faded (opacity ${dim.opacity})`);
+      is((dim.filter ?? '').includes('anx-grey'), 'and desaturated, rather than replaced by a second picture');
+      is((dim.href ?? '').includes('robot-full'), 'it is still his robot');
+
+      /*
+       * AND NEITHER OF THEM CAN EVER EARN A TICK BY WAITING. Three seconds in
+       * each, which is longer than every loop in the scene, with nothing
+       * published.
+       */
+      for (const m of ['error', 'offline', 'preparing'] as const) {
+        await seenIn(m);
+        await page.waitForTimeout(1100);
+        eq(await ticks(page), 0, `${m.toUpperCase()}: a second later, still nothing — the scene cannot reach a success by waiting`);
+      }
+    }
+    }
+    /* ── 4c. THE CARD IS BIGGER, AND VISIBLE THE WHOLE WAY ──────────────── */
     {
       await page.evaluate(() => window.__mode('sending'));
       await page.waitForTimeout(150);
@@ -838,20 +968,55 @@ async function main(): Promise<void> {
 
       await page.evaluate(() => { window.__mode('sending'); window.__plan(170, 248); });
       await page.waitForTimeout(150);
-      const mid2 = await page.evaluate(() => {
-        const p = document.querySelector('[data-panel]') as HTMLElement;
-        return {
-          pictures: Array.from(p.querySelectorAll('svg image')).map((i) => i.getAttribute('href') ?? ''),
-          cards: p.querySelectorAll('[data-card]').length,
-          throwing: p.querySelectorAll('.anx-send').length,
-        };
-      });
+      const look = () =>
+        page.evaluate(() => {
+          const p = document.querySelector('[data-panel]') as HTMLElement;
+          return {
+            pictures: Array.from(p.querySelectorAll('svg image')).map((i) => i.getAttribute('href') ?? ''),
+            cards: p.querySelectorAll('[data-card]').length,
+            throwing: p.querySelectorAll('.anx-send').length,
+            lifting: p.querySelectorAll('.anx-lift').length,
+            flying: p.querySelectorAll('.anx-fly').length,
+            waking: p.querySelectorAll('.anx-wake').length,
+          };
+        });
+      /*
+       * MID-ROUND, AND THE ROW SAYS IT IS STILL UPLOADING THE MEDIA.
+       *
+       * RE-POINTED, NOT DELETED. This used to assert the throw here, and the
+       * claim behind it was "a picture with its arms down has to put the
+       * gesture in the motion" — which is still true, and is still asserted
+       * four lines below. What changed is that the panel no longer has one
+       * state for a whole publication: the worker reports where it is, and at
+       * 'uploading_media' NOTHING HAS BEEN SUBMITTED. A body throwing a post
+       * at a group at that moment is the scene describing a submission that
+       * has not happened.
+       *
+       * The harness's row carries exactly the stage his own screen carried
+       * when this panel was written.
+       */
+      const mid2 = await look();
       is(
         mid2.pictures.length === 1 && mid2.pictures[0].includes('robot-full'),
         `MID-ROUND: the same whole body is publishing (${mid2.pictures[0] ?? 'none'})`,
       );
-      eq(mid2.cards, 1, 'with a post leaving its hand');
-      eq(mid2.throwing, 1, 'and the body throwing it — a picture with its arms down has to put the gesture in the motion');
+      eq(mid2.cards, 1, 'with the post in its hand');
+      eq(mid2.lifting, 1, 'being raised — the stage the row actually reports is "מעלה מדיה"');
+      eq(mid2.flying, 0, 'and NOT crossing to a group, because nothing has been submitted yet');
+      eq(mid2.waking, 1, 'with the body awake and leaning towards them');
+      eq(mid2.throwing, 0, 'and not throwing: that is the next stage, and the row has not reached it');
+
+      /* AND WHEN THE WORKER REACHES THE CLICK, it throws. Same panel, same
+         row, one column different — which is the whole point. */
+      await page.evaluate(() => window.__step('publishing'));
+      await page.waitForTimeout(150);
+      const clicking = await look();
+      eq(clicking.throwing, 1, 'AT THE CLICK: the body throws it — a picture with its arms down has to put the gesture in the motion');
+      eq(clicking.flying, 1, 'and the post crosses to the group');
+      eq(clicking.lifting, 0, 'and is no longer being held');
+      eq(clicking.cards, 1, 'still exactly one post — it is the same publication at a later moment');
+      await page.evaluate(() => window.__step('uploading_media'));
+      await page.waitForTimeout(120);
       await page.evaluate(() => { window.__mode('waiting'); window.__plan(248, 248); });
       await page.waitForTimeout(200);
 
@@ -1004,6 +1169,87 @@ async function main(): Promise<void> {
       await page.waitForTimeout(120);
     }
 
+    /* ── 5g. THE PANEL CHOOSES THE STATE, FROM THE ROW AND NOTHING ELSE ── */
+    /*
+     * Everything above drives the scene with a mode. This drives the REAL
+     * PANEL with the facts, and watches which mode it picks — which is the
+     * only part of this feature that can mislead him. The exhaustive stage
+     * table is asserted without a browser in worker/test/scene-states.test.ts;
+     * what is checked here is that the panel is really wired to it, and that
+     * the picture and the headline above it never say two different things.
+     */
+    {
+      const show = () =>
+        page.evaluate(() => {
+          const p = document.querySelector('[data-panel]') as HTMLElement;
+          return {
+            title: (p.querySelector('h2')?.textContent ?? '').trim(),
+            held: p.querySelectorAll('.anx-lift').length,
+            flying: p.querySelectorAll('.anx-fly').length,
+            alert: p.querySelectorAll('[data-badge="alert"]').length,
+            unplugged: p.querySelectorAll('[data-badge="offline"]').length,
+            robots: p.querySelectorAll('svg image').length,
+            label: p.querySelector('svg')?.getAttribute('aria-label') ?? '',
+          };
+        });
+
+      await page.evaluate(() => { window.__mode('sending'); window.__plan(170, 248); });
+      /* THE BOUNDARY, both sides of it: the last stage before Facebook's own
+         publish button, and the button itself. */
+      for (const [step, carries] of [
+        ['opening', 'held'],
+        ['ready_to_publish', 'held'],
+        ['publishing', 'flying'],
+        ['verifying', 'flying'],
+        ['', 'flying'],
+      ] as const) {
+        await page.evaluate((st) => window.__step(st as never), step);
+        await page.waitForTimeout(140);
+        const seen = await show();
+        eq(
+          { held: seen.held, flying: seen.flying },
+          carries === 'held' ? { held: 1, flying: 0 } : { held: 0, flying: 1 },
+          `the row says "${step || '(nothing)'}", so the post is ${carries === 'held' ? 'in its hand' : 'on its way'}`,
+        );
+      }
+
+      /*
+       * AND THE TWO STOPPED STATES COME FROM THE DASHBOARD'S OWN VERDICT.
+       *
+       * Driven here the way the page drives it — a system state and a
+       * heartbeat — rather than by handing the scene a mode, because the
+       * question that matters is whether the panel can ever draw a working
+       * robot under a headline that says it is stopped.
+       */
+      await page.evaluate(() => window.__system('needs_intervention', false));
+      await page.waitForTimeout(150);
+      const off = await show();
+      eq(off.unplugged, 1, 'NO HEARTBEAT: the panel draws the disconnected robot');
+      eq(off.alert, 0, 'and not the "somebody is needed" badge');
+      eq(off.held + off.flying, 0, 'and NOTHING is being published on a machine that is not connected');
+      eq(off.title, 'נדרשת פעולה שלכם', 'under the headline the page gave it');
+      is(off.label.includes('המחשב לא מחובר'), `and a screen reader is told the same — "${off.label}"`);
+
+      await page.evaluate(() => window.__system('needs_intervention', true));
+      await page.waitForTimeout(150);
+      const blocked = await show();
+      eq(blocked.alert, 1, 'A LIVE MACHINE WAITING ON A PERSON: the alert badge');
+      eq(blocked.unplugged, 0, 'and not the disconnected one — the PC is there');
+      eq(blocked.held + blocked.flying, 0, 'and still nothing in the air: a person is needed first');
+      is(blocked.label.includes('נדרשת פעולה'), `and the label says so too — "${blocked.label}"`);
+
+      /* BACK TO WORK, and the badges go with it. */
+      await page.evaluate(() => { window.__system('active', true); window.__step('publishing'); });
+      await page.waitForTimeout(150);
+      const back = await show();
+      eq(back.alert + back.unplugged, 0, 'and once the dashboard says active again, neither badge is left behind');
+      eq(back.flying, 1, 'with the post on its way');
+      eq(back.title, 'רובוט בפעולה', 'and the headline that has always said this');
+
+      await page.evaluate(() => { window.__step('uploading_media'); window.__plan(0, 0); window.__mode('sending'); });
+      await page.waitForTimeout(120);
+    }
+
     /* ── 6. AND IT STOPS FOR SOMEBODY WHO ASKED IT TO ───────────────────── */
     {
       const quiet = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
@@ -1012,14 +1258,57 @@ async function main(): Promise<void> {
       await quiet.evaluate(() => { window.__publish(3); window.__plan(170, 248); });
       await quiet.waitForTimeout(150);
       const names = await quiet.evaluate(() =>
-        ['.anx-bot', '.anx-fly', '.anx-trail', '.anx-shadow', '.anx-bar-live'].map((sel) => {
+        ['.anx-bot', '.anx-fly', '.anx-trail', '.anx-shadow', '.anx-bar-live', '.anx-eyeshine'].map((sel) => {
           const el = document.querySelector(sel);
           return el ? getComputedStyle(el).animationName : 'absent';
         }),
       );
       for (const [i, n] of names.entries()) {
-        is(n === 'none' || n === 'absent', `reduced motion: nothing animates (${['bot', 'fly', 'trail', 'shadow', 'bar'][i]} = ${n})`);
+        is(n === 'none' || n === 'absent', `reduced motion: nothing animates (${['bot', 'fly', 'trail', 'shadow', 'bar', 'eyes'][i]} = ${n})`);
       }
+
+      /*
+       * AND THE STAGE BEFORE THE CLICK IS STILL AND STILL THERE. The post is
+       * in its hand, at rest — switched off, not hidden: the stage is a fact
+       * about the machine and must survive a reader asking for less motion.
+       */
+      await quiet.evaluate(() => window.__mode('preparing'));
+      await quiet.waitForTimeout(150);
+      const ready = await quiet.evaluate(() => {
+        const names = ['.anx-wake', '.anx-lift'].map((sel) => {
+          const el = document.querySelector(sel);
+          return el ? getComputedStyle(el).animationName : 'absent';
+        });
+        /*
+         * AND THE WHOLE SCENE, not a list of names. A name is only as good as
+         * the list it is on, and this list has been out of date twice. Every
+         * element in every svg on the page is asked whether anything is
+         * actually running on it — the one question `animation-name` cannot
+         * answer, and the one a class added later cannot slip past.
+         */
+        const moving = [...document.querySelectorAll('svg *')].filter((el) => el.getAnimations().length > 0).length;
+        return { names, cards: document.querySelectorAll('[data-card]').length, moving };
+      });
+      for (const [i, n] of ready.names.entries()) {
+        eq(n, 'none', `reduced motion: the wake-up is still (${['stance', 'post'][i]} = ${n})`);
+      }
+      is(ready.cards >= 1, 'and the post is still drawn in its hand');
+      eq(ready.moving, 0, 'and NOTHING in the scene is running an animation — every element asked, not a list of class names');
+
+      /* The alert badge is the one thing on a stopped card that moves, so it
+         is the one a reader who asked for less motion most needs stopped —
+         and it must still be ON SCREEN, because it is the reason nothing is
+         happening. */
+      await quiet.evaluate(() => window.__mode('error'));
+      await quiet.waitForTimeout(150);
+      const stopped = await quiet.evaluate(() => {
+        const el = document.querySelector('.anx-alert');
+        return { anim: el ? getComputedStyle(el).animationName : 'absent', badges: document.querySelectorAll('[data-badge]').length };
+      });
+      eq(stopped.anim, 'none', `reduced motion: the alert badge is still (${stopped.anim})`);
+      is(stopped.badges >= 1, 'and still there — it is why nothing is moving');
+      await quiet.evaluate(() => window.__mode('sending'));
+      await quiet.waitForTimeout(120);
       is((await ticks(quiet)) > 0, 'but the scene is still drawn, and every tick that was earned is still there — the state was never in the motion');
 
       /*

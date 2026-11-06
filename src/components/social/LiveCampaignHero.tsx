@@ -32,7 +32,8 @@ import { PostCover } from './PostCover';
 import { stageElapsed } from './PublicationItem';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
-import { PublishingScene, type SceneMode } from './PublishingScene';
+import { PublishingScene } from './PublishingScene';
+import { sceneModeFor, type SceneMode } from './sceneState';
 import { SYSTEM_STATE_TONE, type SystemState } from './systemState';
 
 /**
@@ -1057,17 +1058,22 @@ export function LiveQueueHero({
    */
   inFlightRows?: QueueRow[];
   /**
-   * STILL ACCEPTED, NO LONGER READ HERE — and left in deliberately.
+   * READ FOR ONE THING ONLY: WHICH KIND OF STOP THIS IS.
    *
-   * It used to decide the headline, and that was the bug: a heartbeat says
+   * It used to decide the headline, and that was the bug — a heartbeat says
    * the PC is awake, which it is for most of a day in which almost nothing is
-   * being published. The sleeping-PC case it was guarding is handled upstream
-   * now, where it is stronger: page.tsx turns an offline worker with a queue
-   * into `needs_intervention` before this panel is asked anything.
+   * being published, so the card read "רובוט בפעולה" over a morning with
+   * nothing published at all. That decision is gone and is not coming back:
+   * the headline is `inFlight`, and the sleeping-PC case moved upstream,
+   * where page.tsx turns an offline worker with a queue into
+   * `needs_intervention` before this panel is asked anything.
    *
-   * The prop stays because every caller passes it and because the next fact
-   * this panel needs about the machine will want it. Removing it would be a
-   * change to four call sites for nothing.
+   * What it answers NOW is narrower and only ever asked once the dashboard
+   * has already said a person is needed: is the missing thing the machine?
+   * If it is, the scene draws the disconnected robot rather than the "waiting
+   * for you" one. It can never put the robot to work — look at the ladder in
+   * sceneState.ts: `workerOnline` is read in one branch and only to choose
+   * between two stopped states.
    */
   workerOnline?: boolean;
   /**
@@ -1151,24 +1157,43 @@ export function LiveQueueHero({
    * WHAT THE SCENE IS ALLOWED TO SHOW, from the same facts the sentence above
    * the panel is made of — never from a timer of its own.
    *
-   * `sending` is `inFlight`, which is a row a worker is holding right now.
-   * `waiting` is the system running between publications, which is most of the
-   * day: the robot stays alive and nothing travels, because nothing is. `done`
-   * is `dayDone` above and is asked FIRST, so an empty evening queue reads as
-   * finished rather than as an endless `waiting`. Paused and idle stop it
+   * `sending` and `preparing` are both "a worker is holding a row right now",
+   * split by the stage THAT WORKER REPORTED: before the final click the post
+   * has not been submitted to anything, so the scene holds it in the robot's
+   * hand instead of flying it to a group. `waiting` is the system running
+   * between publications, which is most of the day: the robot stays alive and
+   * nothing travels, because nothing is. `done` is `dayDone` above and is
+   * asked after the states that stop everything, so an empty evening queue
+   * reads as finished rather than as an endless `waiting`. `offline` and
+   * `error` are the dashboard's own `needs_intervention`, split by whether
+   * the machine is the thing that is missing. Paused and idle stop it
    * entirely. A scene that animated on a clock would be telling him his posts
    * were going out on an afternoon when the PC was off.
+   *
+   * THE LADDER ITSELF IS IN sceneState.ts, with the stage list beside it, so
+   * it can be read against the engine's own steps and tested without a
+   * browser. This card hands it facts and renders what comes back.
    */
-  const sceneMode: SceneMode =
-    systemState === 'paused'
-      ? 'paused'
-      : systemState !== 'active'
-        ? 'idle'
-        : dayDone
-          ? 'done'
-          : inFlight > 0
-            ? 'sending'
-            : 'waiting';
+  const sceneMode: SceneMode = sceneModeFor({
+    systemState,
+    workerOnline,
+    dayDone,
+    /*
+     * THE STAGE OF EVERY ROW A WORKER IS HOLDING, which is what tells
+     * `preparing` from `sending` — the worker writes it to the row as it
+     * goes, and the line directly above this scene already prints it in
+     * words. Two surfaces, one fact.
+     *
+     * A caller that counts the rows without listing them still gets exactly
+     * the behaviour this card has always had: a null stage is not a
+     * preparing stage, so it reads as a publication in progress, which is
+     * what "a worker is holding a row and has told us nothing else" means.
+     */
+    inFlightSteps:
+      inFlightRows.length > 0
+        ? inFlightRows.map((row) => row.step ?? null)
+        : Array.from({ length: Math.max(0, inFlight) }, () => null),
+  });
   const due = Boolean(nextAt) && !paused && new Date(nextAt as string).getTime() <= now;
   /*
    * AT ZERO, THE DATABASE DECIDES WHAT COMES NEXT.

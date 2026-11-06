@@ -12,6 +12,8 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PublishingScene, type SceneMode } from '@/components/social/PublishingScene';
 import { Ratio, LiveQueueHero } from '@/components/social/LiveCampaignHero';
+import type { SystemState } from '@/components/social/systemState';
+import type { QueueStep } from '@/lib/social/types';
 
 declare global {
   interface Window {
@@ -20,6 +22,18 @@ declare global {
     /* The panel's day. 0 draws no bar and no second scene, which is how the
        scene assertions keep counting one robot; the bar test raises it. */
     __plan: (done: number, total: number) => void;
+    /*
+     * THE STAGE THE WORKER SAYS IT IS ON, on the row the panel is holding.
+     *
+     * This is the control that matters most in this harness: `preparing` and
+     * `sending` are not two moods, they are two values of this column, and a
+     * test that could not set it would be asserting that a mode renders
+     * rather than that the right mode is chosen.
+     */
+    __step: (step: QueueStep) => void;
+    /* The dashboard's own verdict, so the two stopped states can be driven
+       through the real panel instead of being handed to the scene directly. */
+    __system: (state: SystemState, online: boolean) => void;
   }
 }
 
@@ -27,9 +41,13 @@ function Harness() {
   const [published, setPublished] = useState(0);
   const [mode, setMode] = useState<SceneMode>('sending');
   const [day, setDay] = useState<[number, number]>([0, 0]);
+  const [step, setStep] = useState<QueueStep>('uploading_media');
+  const [system, setSystem] = useState<{ state: SystemState; online: boolean } | null>(null);
   window.__publish = setPublished;
   window.__mode = setMode;
   window.__plan = (done, total) => setDay([done, total]);
+  window.__step = setStep;
+  window.__system = (state, online) => setSystem({ state, online });
   return (
     <div style={{ padding: 12 }}>
       <PublishingScene mode={mode} published={published} total={279} />
@@ -47,7 +65,11 @@ function Harness() {
       */}
       <div data-panel style={{ width: '100%', marginTop: 12 }}>
         <LiveQueueHero
-          systemState={mode === 'paused' ? 'paused' : 'active'}
+          /* The panel decides its own scene from these two and the row
+             below — never from `mode`, which drives only the standalone scene
+             above it. */
+          systemState={system ? system.state : mode === 'paused' ? 'paused' : 'active'}
+          workerOnline={system ? system.online : true}
           publishedToday={day[0]}
           dailyTarget={300}
           /* Zero on purpose: the panel then draws no scene of its own, so the
@@ -57,7 +79,6 @@ function Harness() {
           pendingCancellable={120}
           nextAt={new Date(Date.now() + 600000).toISOString()}
           nextTargetName="קבוצה"
-          workerOnline
           /*
             TIED TO THE MODE, so the panel's own "today is finished" test can
             be driven without a fourth control: a row in a worker's hands is
@@ -85,7 +106,7 @@ function Harness() {
                   {
                     id: 'q-live',
                     status: 'publishing',
-                    step: 'uploading_media',
+                    step,
                     step_at: new Date(Date.now() - 12_000).toISOString(),
                     scheduled_at: new Date().toISOString(),
                     target: { name: 'Чистка диванов Беэр-Шева и окрестности — объявления' },

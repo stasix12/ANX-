@@ -10,7 +10,8 @@
  */
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { PublishingScene, type SceneMode } from '@/components/social/PublishingScene';
+import { PublishingStage } from '@/components/social/PublishingStage';
+import type { SceneMode } from '@/components/social/sceneState';
 import { Ratio, LiveQueueHero } from '@/components/social/LiveCampaignHero';
 import type { SystemState } from '@/components/social/systemState';
 import type { QueueStep } from '@/lib/social/types';
@@ -56,7 +57,7 @@ function Harness() {
   window.__system = (state, online, blocked) => setSystem({ state, online, blocked });
   return (
     <div style={{ padding: 12 }}>
-      <PublishingScene mode={mode} published={published} total={279} />
+      <PublishingStage mode={mode} published={published} total={279} />
       {/* The real counter line, so "auto font" can be MEASURED rather than
           eyeballed. The widest shape the data can take — four digits on each
           side — is the one that decides whether it fits. */}

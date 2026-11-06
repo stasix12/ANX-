@@ -1619,1177 +1619,20 @@ body:has(.social-theme) .site-backdrop {
 }
 
 /* ===========================================================================
- * THE PUBLISHING SCENE — src/components/social/PublishingScene.tsx
+ * THE PUBLISHING SCENE THAT USED TO LIVE HERE IS GONE.
  *
- * Every mark in that panel is SVG; these are its only moving parts, and they
- * live here rather than inline for the reason the rest of this file exists:
- * one place where a reduced-motion reader switches all of it off, which the
- * block at the end of this section does.
+ * Seven hundred lines of keyframes drove a drawn SVG robot: a float, a
+ * throw, a shadow, a ball with six tricks, a dance, confetti. The reference
+ * he sent on 06/11 retired all of it — the character now sits at a desk in
+ * his own nine rendered frames, and the only thing a stylesheet still has
+ * to do is cross-fade between them.
  *
- * NOTHING BELOW CHANGES A NUMBER. The tick in the scene is React state fed by
- * the real publication count. Motion only makes an arrival legible once it has
- * already happened — see the header of PublishingScene.tsx.
+ * Deleted rather than left dead: every class in it was checked for a
+ * reference in src/ first, and worker/test/publishing-stage.test.ts records
+ * which rules the old suite carried and why the rest were retired.
  *
- * The brief: "premium, smooth, alive" and "must NOT bounce constantly, must
- * NOT look like a children's cartoon". So the amplitudes here are small and
- * the periods are long: 3px over four seconds reads as breathing at a glance
- * and disappears while the figures underneath are being read.
- * ======================================================================== */
-
-/*
- * THE FLOAT. Five pixels and a degree either way, over five seconds.
- *
- * The first pass moved three pixels straight up and down and read as nothing
- * at all: three viewBox units is under three device pixels on a phone, and a
- * body that only rises and falls looks like a picture being slid anyway. The
- * tilt is what makes a small movement legible — a thing that leans as it rises
- * reads as hanging in the air. It stays under a degree, because two is a toy.
- */
-@keyframes anx-bot-bob {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-0.9deg);
-  }
-  50% {
-    transform: translateY(-5px) rotate(0.9deg);
-  }
-}
-.anx-bot {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-bot-bob 5s ease-in-out infinite;
-}
-
-/*
- * THE THROW, on an INNER group so it can run at its own speed inside the
- * float — two animations cannot share `transform` on one element, and a flat
- * picture has no arm to swing on its own. 2.4s, the card's own flight, so the
- * wind-up and the release line up with the post leaving the hand rather than
- * drifting against it.
- *
- * IT IS NOW A THROW AND NOT A NUDGE, because the robot is now a whole body.
- * The old numbers (two pixels and under two degrees) were right for the crop
- * of his design, where the robot is already drawn mid-flight with a post held
- * out towards the group: there, the gesture is in the picture and the motion
- * only had to keep it alive. This picture stands with its arms at its sides,
- * so the gesture has to be IN THE MOTION — wind up away from the groups, then
- * swing towards them — or there is nothing on screen that says the post was
- * sent rather than dropped.
- *
- * THE GROUPS ARE TO THE RIGHT, so the throw leans right: positive rotation in
- * SVG is clockwise, and the body tips the way the post goes. The wind-up is
- * the opposite lean and is what makes the swing read as deliberate.
- *
- * PIVOTED AT THE FEET (`transform-origin: 50% 100%`), which is the whole
- * difference between a body throwing and a picture being rotated. The soles
- * stay on the floor the shadow draws; everything above them moves.
- */
-@keyframes anx-send {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-  10% {
-    transform: translate(-3px, 1px) rotate(-4deg);
-  }
-  24% {
-    transform: translate(4px, -2px) rotate(6deg);
-  }
-  40% {
-    transform: translate(1.5px, 0) rotate(2deg);
-  }
-  62% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-}
-.anx-send {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: anx-send 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-/*
- * AND THE SHADOW DOES THE OPPOSITE, on the same five-second clock. This is the
- * cue that turns a moving picture into a floating one, and it costs one
- * ellipse: a body over a shadow that shrinks as it rises is in the air; the
- * same body over nothing is a sprite being slid.
- */
-@keyframes anx-shadow {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.13;
-  }
-  50% {
-    transform: scale(0.88);
-    opacity: 0.07;
-  }
-}
-.anx-shadow {
-  transform-box: fill-box;
-  animation: anx-shadow 5s ease-in-out infinite;
-}
-
-/*
- * ────────────────────────────────────────────────────────────────────────────
- * WAKING UP, AND THE POST IN ITS HAND — the stage BEFORE anything is sent.
- *
- * "שלב 2 — התעוררות והרמת יד … שלב 3 — שליחת הפוסט."
- *
- * The worker reports where it is in a publication, and `preparing` is every
- * stage before the final click: opening the group, waiting for the composer,
- * uploading the media. Nothing has been submitted to Facebook yet, so nothing
- * may cross the scene — see the note on the held card in PublishingScene.tsx.
- *
- * What says "it is about to go" instead is the stance: a shorter clock than
- * the publishing float (2.2s against 5s), a lean TOWARDS the groups, and a
- * post that rises in the hand and is re-gripped. Pivoted at the feet, because
- * a body leans from the ground; a lean about the waist is a picture being
- * rotated.
- */
-@keyframes anx-wake {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0deg);
-  }
-  35% {
-    transform: translateY(-3px) rotate(2.4deg);
-  }
-  70% {
-    transform: translateY(-4px) rotate(1.2deg);
-  }
-}
-.anx-wake {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: anx-wake 2.2s ease-in-out infinite;
-}
-
-/*
- * THE BODY'S HALF OF THE SAME GESTURE, on an inner group for the reason every
- * other pair in this scene is nested: two animations cannot share `transform`
- * on one element, and a flat picture has no arm of its own to raise.
- */
-@keyframes anx-lift-body {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0deg);
-  }
-  20% {
-    transform: translateY(1px) rotate(-1.2deg);
-  }
-  55% {
-    transform: translateY(-1.5px) rotate(0.9deg);
-  }
-}
-.anx-lift-body {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: anx-lift-body 3s ease-in-out infinite;
-}
-
-/*
- * AND THE POST ITSELF, rising into the hand and being re-gripped — never
- * leaving it. NO OPACITY IN THIS ONE: a card that faded out and back every
- * cycle reads as a rendering fault, and the card must be "clearly visible
- * during the entire movement" in the state where it travels, so it would be
- * inconsistent as well. Transform only, which is also the pair the compositor
- * handles without laying the page out again.
- */
-@keyframes anx-lift {
-  0%,
-  100% {
-    transform: translate(0, 9px) rotate(-6deg);
-  }
-  25% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-  45%,
-  55% {
-    transform: translate(0, -3px) rotate(1.6deg);
-  }
-  78% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-}
-.anx-lift {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: anx-lift 3s ease-in-out infinite;
-}
-
-/*
- * ─── AND THE ONE MOVEMENT THAT IS ALLOWED TO MEAN "IT WORKED" ─────────────
- *
- * "שלב 4 — הצלחה: וי ירוק, חיוך קצר ותנועת הצלחה."
- *
- * It runs only while `success` is true in PublishingScene, which is only while
- * an arrival that REALLY HAPPENED is being presented — the count comes from
- * the database. Three nods inside the 2.4s the tick is held, pivoted at the
- * feet so the whole body does it.
- *
- * THE SMILE IS ALREADY ON HIS ROBOT: the asset's face is two cyan arcs over a
- * cyan smile, painted. Nothing here draws a second one.
- */
-@keyframes anx-yes {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0deg);
-  }
-  30% {
-    transform: translateY(-5px) rotate(1.5deg);
-  }
-  60% {
-    transform: translateY(-1px) rotate(-0.8deg);
-  }
-}
-.anx-yes {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: anx-yes 0.8s ease-out infinite;
-}
-
-/*
- * THE EYES BLINK BY GOING DARK FOR A TWENTIETH OF A CYCLE.
- *
- * The arcs themselves are painted into the asset and cannot close — see EYE in
- * PublishingScene.tsx for the measurement and for why a lid of the plate's own
- * colour is a visible patch rather than an eyelid. What this animates is the
- * glow laid over them, on opacity alone, so it costs nothing per frame.
- */
-@keyframes anx-eyeshine {
-  0%,
-  92%,
-  100% {
-    opacity: 1;
-  }
-  94.5%,
-  96.5% {
-    opacity: 0.04;
-  }
-}
-.anx-eyeshine {
-  animation: anx-eyeshine 6s linear infinite;
-}
-
-/*
- * THE "SOMEBODY IS NEEDED" BADGE. It breathes, slowly, because the state it
- * marks does not resolve itself — the headline above the scene names what to
- * do and this is the mark that something is waiting. The DISCONNECTED badge
- * deliberately has no animation at all: nothing on that card should move.
- */
-@keyframes anx-alert {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.12);
-    opacity: 0.82;
-  }
-}
-.anx-alert {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-alert 1.6s ease-in-out infinite;
-}
-
-/*
- * ────────────────────────────────────────────────────────────────────────────
- * KILLING TIME: THE BALL, ITS SHADOW, AND THE BEAT THE ROBOT KEEPS.
- *
- * "תעשה אותו שהוא מקפיץ כדור שאין כלום ואין פרסום."
- *
- * Three animations on one 0.85s clock and the same percentages, because they
- * are one event seen three ways: the ball falls, the mark under it arrives
- * with it, and the robot's hand pushes down as it goes.
- *
- * THE EASING IS WHERE THE WEIGHT IS. A bounce on one curve is a yo-yo on a
- * string. Falling accelerates and rising decelerates, so the timing function
- * is set INSIDE the keyframes — it applies from each stop to the next — and
- * the ball spends most of the loop near the top, which is what makes it look
- * like gravity rather than like a loop.
- *
- * THE SQUASH IS ANCHORED AT THE BOTTOM of the ball (`50% 100%`), so it
- * flattens against the floor instead of shrinking towards its own middle,
- * and it lasts three hundredths of the cycle. Longer than that and it reads
- * as rubber.
- *
- * THE DISTANCE IS NOT IN HERE. --anx-drop is set on the element from
- * PublishingScene, where the gap between the hand and the floor is derived
- * from the robot's own box. Hard-coding it here is how a ball ends up going
- * through the floor the first time anything moves.
- *
- * AND THE NAME IS `anx-bounce`, NOT `anx-ball`, WHICH IS NOT A PREFERENCE.
- * Under that name the production CSS minifier emitted it as
- * `@keyframes anx-ball-DELETED` while leaving `.anx-ball { animation: … 
- * anx-ball }` pointing at it. The browser then resolves the name, finds no
- * keyframes and runs nothing: `animation-name` still computes to `anx-ball`,
- * `transform` stays `none`, and no tool anywhere says a word. It only
- * surfaced because a test measures where the ball actually lands. If one of
- * these ever goes quiet again, that is the first thing to check — and
- * publishing-scene.test.ts now asks getAnimations() rather than the name.
- */
-@keyframes anx-bounce {
-  /* in the hand */
-  0% {
-    transform: translate(0, 0);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* floor */
-  5% {
-    transform: translate(0, var(--anx-drop, 39px));
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  /* hand */
-  10% {
-    transform: translate(0, 0);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* floor */
-  15% {
-    transform: translate(0, var(--anx-drop, 39px));
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  /* hand, then flicked across */
-  20% {
-    transform: translate(0, 0);
-    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
-  }
-  /* mid-air */
-  25% {
-    transform: translate(calc(var(--anx-fx, -35px) * 0.5), -18px);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* down onto the boot */
-  30% {
-    transform: translate(var(--anx-fx, -35px), var(--anx-fy, 25px));
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  /* keepy-uppy */
-  35% {
-    transform: translate(var(--anx-fx, -35px), var(--anx-uy, -28px));
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* boot */
-  40% {
-    transform: translate(var(--anx-fx, -35px), var(--anx-fy, 25px));
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  /* keepy-uppy */
-  45% {
-    transform: translate(var(--anx-fx, -35px), var(--anx-uy, -28px));
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* boot, then launched */
-  50% {
-    transform: translate(var(--anx-fx, -35px), var(--anx-fy, 25px));
-    animation-timing-function: cubic-bezier(0.25, 0, 0.5, 1);
-  }
-  /* rising */
-  56% {
-    transform: translate(calc((var(--anx-fx, -35px) + var(--anx-hx, -52px)) / 2), calc(var(--anx-hy, -92px) + 16px));
-    animation-timing-function: cubic-bezier(0.4, 0, 0.9, 0.6);
-  }
-  /* the header */
-  62% {
-    transform: translate(var(--anx-hx, -52px), var(--anx-hy, -92px));
-    animation-timing-function: cubic-bezier(0.1, 0.4, 0.5, 1);
-  }
-  /* rebound */
-  68% {
-    transform: translate(calc(var(--anx-hx, -52px) * 0.6), calc(var(--anx-hy, -92px) - 14px));
-    animation-timing-function: cubic-bezier(0.45, 0, 0.75, 0.9);
-  }
-  /* caught on a fingertip */
-  76% {
-    transform: translate(0, var(--anx-sy, -26px));
-    animation-timing-function: linear;
-  }
-  /* still spinning */
-  92% {
-    transform: translate(0, var(--anx-sy, -26px));
-    animation-timing-function: cubic-bezier(0.5, 0, 0.6, 1);
-  }
-  /* back in the hand */
-  100% {
-    transform: translate(0, 0);
-  }
-}
-.anx-bounce {
-  transform-box: fill-box;
-  animation: anx-bounce 9s infinite;
-}
-
-/*
- * THREE GROUPS, AND THE ORDER IS PHYSICS RATHER THAN TIDINESS.
- *
- * A bouncing, spinning ball does three things at once and they do not
- * commute. Outermost is WHERE IT IS. Inside that is the SQUASH, which has to
- * stay world-vertical — it is the floor flattening the ball, and the floor
- * does not tilt. Innermost is the SPIN, about the ball's own middle.
- *
- * Collapse any two of them and it goes wrong in a way that is easy to miss,
- * and did: with the spin and the squash sharing one element the pivot sat at
- * the point of contact, so the whole sphere swung off its own path — the test
- * that measures where it lands caught it ten units out. Nest them the other
- * way round and the squash turns with the spin, so the ball flattens sideways
- * against a floor that is not tilted.
- *
- * One `transform` per element, one `transform-origin` per element. All three
- * keyframe blocks are generated from one table of stops, so they cannot drift
- * apart.
- */
-@keyframes anx-bounce-squash {
-  /* in the hand */
-  0% {
-    transform: scale(1, 1);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* floor */
-  5% {
-    transform: scale(1.16, 0.84);
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  /* hand */
-  10% {
-    transform: scale(1, 1);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* floor */
-  15% {
-    transform: scale(1.16, 0.84);
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  /* hand, then flicked across */
-  20% {
-    transform: scale(1, 1);
-    animation-timing-function: cubic-bezier(0.3, 0, 0.6, 1);
-  }
-  /* mid-air */
-  25% {
-    transform: scale(0.96, 1.04);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* down onto the boot */
-  30% {
-    transform: scale(1.12, 0.88);
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  /* keepy-uppy */
-  35% {
-    transform: scale(0.96, 1.04);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* boot */
-  40% {
-    transform: scale(1.12, 0.88);
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  /* keepy-uppy */
-  45% {
-    transform: scale(0.96, 1.04);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  /* boot, then launched */
-  50% {
-    transform: scale(1.12, 0.88);
-    animation-timing-function: cubic-bezier(0.25, 0, 0.5, 1);
-  }
-  /* rising */
-  56% {
-    transform: scale(0.94, 1.06);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.9, 0.6);
-  }
-  /* the header */
-  62% {
-    transform: scale(1.1, 0.9);
-    animation-timing-function: cubic-bezier(0.1, 0.4, 0.5, 1);
-  }
-  /* rebound */
-  68% {
-    transform: scale(0.95, 1.05);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.75, 0.9);
-  }
-  /* caught on a fingertip */
-  76% {
-    transform: scale(1, 1);
-    animation-timing-function: linear;
-  }
-  /* still spinning */
-  92% {
-    transform: scale(1, 1);
-    animation-timing-function: cubic-bezier(0.5, 0, 0.6, 1);
-  }
-  /* back in the hand */
-  100% {
-    transform: scale(1, 1);
-  }
-}
-.anx-bounce-squash {
-  /*
-   * AN EXACT ORIGIN IN SCENE UNITS, not `50% 100%` of a fill box.
-   *
-   * A group's fill box is the union of its children's boxes AFTER their own
-   * transforms — and the child here is the spin, so at 70° the box is the
-   * 18-unit ball's box rotated, which is 23 units tall. The anchor therefore
-   * MOVED with the spin, and the ball sank two and a half units into the
-   * floor at the moment of impact: a bug you cannot see and the measurement
-   * in publishing-scene.test.ts can.
-   *
-   * `view-box` makes these lengths plain scene units, and the component hands
-   * over the exact point where the ball meets the ground — derived from the
-   * ball, like everything else in this routine.
-   */
-  transform-box: view-box;
-  transform-origin: var(--anx-ox, 177px) var(--anx-oy, 127px);
-  animation: anx-bounce-squash 9s infinite;
-}
-
-@keyframes anx-bounce-spin {
-  /* in the hand */
-  0% {
-    transform: rotate(0deg);
-  }
-  /* floor */
-  5% {
-    transform: rotate(70deg);
-  }
-  /* hand */
-  10% {
-    transform: rotate(140deg);
-  }
-  /* floor */
-  15% {
-    transform: rotate(210deg);
-  }
-  /* hand, then flicked across */
-  20% {
-    transform: rotate(280deg);
-  }
-  /* mid-air */
-  25% {
-    transform: rotate(360deg);
-  }
-  /* down onto the boot */
-  30% {
-    transform: rotate(430deg);
-  }
-  /* keepy-uppy */
-  35% {
-    transform: rotate(500deg);
-  }
-  /* boot */
-  40% {
-    transform: rotate(570deg);
-  }
-  /* keepy-uppy */
-  45% {
-    transform: rotate(640deg);
-  }
-  /* boot, then launched */
-  50% {
-    transform: rotate(710deg);
-  }
-  /* rising */
-  56% {
-    transform: rotate(800deg);
-  }
-  /* the header */
-  62% {
-    transform: rotate(880deg);
-  }
-  /* rebound */
-  68% {
-    transform: rotate(960deg);
-  }
-  /* caught on a fingertip */
-  76% {
-    transform: rotate(1060deg);
-  }
-  /* still spinning */
-  92% {
-    transform: rotate(1700deg);
-  }
-  /* back in the hand */
-  100% {
-    transform: rotate(1800deg);
-  }
-}
-.anx-bounce-spin {
-  /* The ball's own middle, in the same scene units and for the same reason:
-     a percentage here would be read off a box that the squash above is busy
-     changing. */
-  transform-box: view-box;
-  transform-origin: var(--anx-ox, 177px) var(--anx-cy, 118px);
-  animation: anx-bounce-spin 9s linear infinite;
-}
-
-/*
- * THE MARK ON THE FLOOR follows the ball across and is only really there
- * when the ball is low — widest and darkest at the instant it arrives,
- * almost nothing while the ball is up at head height. Its own element on the
- * same clock and the same stops: it disagrees with the ball about nearly
- * every frame, which is the point, and one element cannot hold two
- * animations on `transform`.
- */
-@keyframes anx-bounce-mark {
-  0% {
-    transform: translateX(0) scale(0.5);
-    opacity: 0.04;
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  5% {
-    transform: translateX(0) scale(1.0);
-    opacity: 0.2;
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  10% {
-    transform: translateX(0) scale(0.5);
-    opacity: 0.04;
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
-  }
-  15% {
-    transform: translateX(0) scale(1.0);
-    opacity: 0.2;
-    animation-timing-function: cubic-bezier(0.1, 0.45, 0.55, 1);
-  }
-  20% {
-    transform: translateX(0) scale(0.5);
-    opacity: 0.04;
-  }
-  25% {
-    transform: translateX(calc(var(--anx-fx, -35px) * 0.5)) scale(0.46);
-    opacity: 0.04;
-  }
-  30% {
-    transform: translateX(var(--anx-fx, -35px)) scale(0.62);
-    opacity: 0.1;
-  }
-  35% {
-    transform: translateX(var(--anx-fx, -35px)) scale(0.42);
-    opacity: 0.03;
-  }
-  40% {
-    transform: translateX(var(--anx-fx, -35px)) scale(0.62);
-    opacity: 0.1;
-  }
-  45% {
-    transform: translateX(var(--anx-fx, -35px)) scale(0.42);
-    opacity: 0.03;
-  }
-  50% {
-    transform: translateX(var(--anx-fx, -35px)) scale(0.62);
-    opacity: 0.1;
-  }
-  56% {
-    transform: translateX(calc((var(--anx-fx, -35px) + var(--anx-hx, -52px)) / 2)) scale(0.32);
-    opacity: 0.02;
-  }
-  62% {
-    transform: translateX(var(--anx-hx, -52px)) scale(0.28);
-    opacity: 0.02;
-  }
-  68% {
-    transform: translateX(calc(var(--anx-hx, -52px) * 0.6)) scale(0.28);
-    opacity: 0.02;
-  }
-  76% {
-    transform: translateX(0) scale(0.42);
-    opacity: 0.05;
-  }
-  92% {
-    transform: translateX(0) scale(0.42);
-    opacity: 0.05;
-  }
-  100% {
-    transform: translateX(0) scale(0.5);
-    opacity: 0.04;
-  }
-}
-.anx-bounce-mark {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-bounce-mark 9s infinite;
-}
-
-/*
- * AND THE ROBOT PLAYS ALONG, on the same nine seconds and the same stops.
- *
- * It is one flat picture, so it has no knee to lift and no neck to nod: every
- * beat here is the whole body, two or three pixels of it. That is enough
- * BECAUSE the ball is doing the acting — the body only has to agree with it.
- * It pushes DOWN on the floor bounces and the boot touches, hops for the
- * launch and the header, and goes still for the finger spin. It never rises
- * on the bounces: the hover is the movement it makes while it is publishing,
- * and this whole state exists because it is not.
- */
-@keyframes anx-tricks {
-  0% {
-    transform: translateY(0) rotate(0deg);
-  }
-  5% {
-    transform: translateY(2px) rotate(-0.8deg);
-  }
-  10% {
-    transform: translateY(0) rotate(0deg);
-  }
-  15% {
-    transform: translateY(2px) rotate(-0.8deg);
-  }
-  20% {
-    transform: translateY(0) rotate(0deg);
-  }
-  25% {
-    transform: translateY(-1px) rotate(1deg);
-  }
-  30% {
-    transform: translateY(1.5px) rotate(-0.6deg);
-  }
-  35% {
-    transform: translateY(-1px) rotate(0.5deg);
-  }
-  40% {
-    transform: translateY(1.5px) rotate(-0.6deg);
-  }
-  45% {
-    transform: translateY(-1px) rotate(0.5deg);
-  }
-  50% {
-    transform: translateY(1.5px) rotate(-0.6deg);
-  }
-  56% {
-    transform: translateY(-2.5px) rotate(1.4deg);
-  }
-  62% {
-    transform: translateY(-3px) rotate(-1.6deg);
-  }
-  68% {
-    transform: translateY(0) rotate(-0.4deg);
-  }
-  76%,
-  92% {
-    transform: translateY(0) rotate(0deg);
-  }
-  100% {
-    transform: translateY(0) rotate(0deg);
-  }
-}
-.anx-tricks {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: anx-tricks 9s ease-in-out infinite;
-}
-
-/* Paused keeps a breath, slower and half the distance: switched off is not
-   broken, and a frozen robot reads as broken. */
-.anx-bot-min {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-bot-bob 7s ease-in-out infinite;
-  --anx-min: 1;
-}
-.anx-bot-min {
-  animation-name: anx-bot-bob-min;
-}
-@keyframes anx-bot-bob-min {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-1.5px);
-  }
-}
-
-/* The antenna light. */
-@keyframes anx-blip {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-.anx-blip {
-  animation: anx-blip 2.4s ease-in-out infinite;
-}
-
-/* A blink, rarely, and held closed for a twentieth of the cycle so it reads
-   as a blink rather than a flicker. */
-@keyframes anx-eyes {
-  0%,
-  93%,
-  100% {
-    transform: scaleY(1);
-  }
-  96% {
-    transform: scaleY(0.12);
-  }
-}
-.anx-eyes {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-eyes 6s ease-in-out infinite;
-}
-
-/* The trail flows TOWARDS the group. Direction is the information. */
-@keyframes anx-trail {
-  to {
-    stroke-dashoffset: -44;
-  }
-}
-.anx-trail {
-  animation: anx-trail 1.3s linear infinite;
-}
-
-/*
- * THE CARD'S FLIGHT, in viewBox units.
- *
- * --dx/--dy are set per destination on the wrapper, so one keyframe set serves
- * all four tiles and the arc keeps its shape wherever it lands. It lifts at the
- * midpoint to follow the curve of the trail under it, and it is NEVER fully
- * transparent in the middle of its journey: "clearly visible during the entire
- * movement, never suddenly appears or disappears" is the brief, so the fade is
- * spent inside the first and last eighth and the card is solid between them.
- *
- * 2.4s with a long ease at both ends: "do NOT make it too fast".
- */
-@keyframes anx-fly {
-  0% {
-    transform: translate(0, 0) scale(0.7);
-    opacity: 0;
-  }
-  12% {
-    transform: translate(calc(var(--dx) * 0.12), calc(var(--dy) * 0.12 - 5px)) scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5 - 18px)) scale(1.06);
-    opacity: 1;
-  }
-  88% {
-    transform: translate(calc(var(--dx) * 0.94), calc(var(--dy) * 0.94)) scale(0.96);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(var(--dx), var(--dy)) scale(0.72);
-    opacity: 0;
-  }
-}
-.anx-fly {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-fly 2.4s cubic-bezier(0.45, 0, 0.3, 1) infinite;
-}
-
-/* The small light that runs just ahead of it, on the same arc and the same
-   clock, a tenth of a cycle in front. */
-@keyframes anx-spark {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  14% {
-    opacity: 0.55;
-  }
-  50% {
-    transform: translate(calc(var(--dx) * 0.6), calc(var(--dy) * 0.6 - 17px));
-    opacity: 0.5;
-  }
-  86% {
-    opacity: 0.25;
-  }
-  99% {
-    transform: translate(var(--dx), var(--dy));
-  }
-}
-.anx-spark {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-spark 2.4s cubic-bezier(0.45, 0, 0.3, 1) infinite;
-}
-
-/* THE ACTIVE DESTINATION — 1.00 → 1.04 → 1.00, which is as far as this is
-   allowed to go. A tile that moved more would compete with the card. */
-@keyframes anx-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.04);
-  }
-}
-.anx-breathe {
-  transform-box: fill-box;
-  animation: anx-breathe 2.4s ease-in-out infinite;
-}
-
-/* And the ring around it, breathing out of phase so the two do not pulse as
-   one block. */
-@keyframes anx-halo {
-  0%,
-  100% {
-    transform: scale(0.97);
-    stroke-opacity: 0.2;
-  }
-  50% {
-    transform: scale(1.03);
-    stroke-opacity: 0.5;
-  }
-}
-.anx-halo {
-  transform-box: fill-box;
-  animation: anx-halo 2.4s ease-in-out infinite;
-}
-
-/* The group takes the delivery: one swell, once. A loop here would say it is
-   still arriving. */
-@keyframes anx-land {
-  0% {
-    transform: scale(1);
-  }
-  35% {
-    transform: scale(1.06);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-.anx-land {
-  transform-box: fill-box;
-  animation: anx-land 0.5s ease-out 1;
-}
-
-/* And the tick lands with it: 0 → 1.15 → 1, 320ms. */
-@keyframes anx-tick {
-  0% {
-    transform: scale(0);
-    opacity: 0;
-  }
-  55% {
-    transform: scale(1.15);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-.anx-tick {
-  transform-box: fill-box;
-  animation: anx-tick 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) 1;
-}
-
-/*
- * ────────────────────────────────────────────────────────────────────────────
- * THE DAY IS OVER AND THE ROBOT IS CELEBRATING.
- *
- * "מתי שזה מסיים את כל המטלות פרסום … תעשה אנימציה שלו רוקד וקונפטי באוויר."
- *
- * This is the one state in the scene that is pure celebration, so it is also
- * the one that has to be hardest to reach by accident: it is switched on only
- * when nothing is left waiting for today AND nothing is in a worker's hands,
- * which LiveCampaignHero works out from the same two numbers printed under the
- * bar. A dancing robot over a queue that still has rows in it would be the
- * screen telling him the day is done while the worker is mid-publication.
- *
- * THE DANCE IS A JUMP, AND A JUMP IS NOT A LIFT.
- *
- * "בריקוד שיראו גם את הרגלים שלו" — and he then sent the legs. The working
- * robot is a crop of his design where the body flies and fades into the haze
- * at the waist; the one that dances is his full-body render, standing, with a
- * real transparent background. PublishingScene swaps the picture for the
- * `done` state alone, and these keyframes are written for that picture.
- *
- * WHAT THE TRANSPARENT ASSET BOUGHT, since the earlier numbers here were set
- * by the crop and not by taste: the rotation is 5° rather than 2.5°, because
- * there is no longer a rectangle of ramped-to-white haze whose corners come
- * off the card when it leans. The jump is thirteen units rather than ten,
- * because the standing robot is shorter than the flier and leaves eighteen
- * units of frame above its antenna.
- *
- * THE CROUCH IS STILL WHERE THE HEIGHT COMES FROM. An SVG clips to its
- * viewBox, so everything above the dancer's head is the whole budget. Starting
- * each hop four units BELOW the resting line buys travel the frame does not
- * have to pay for: the body moves seventeen units while its highest point
- * still clears the edge. The test measures the antenna against that edge on
- * every sample, because clipping here is silent.
- */
-@keyframes anx-dance {
-  0%,
-  100% {
-    transform: translate(0, 4px) rotate(0deg);
-  }
-  8% {
-    transform: translate(-2px, -5px) rotate(-3deg);
-  }
-  20% {
-    transform: translate(-6px, -13px) rotate(-5deg);
-  }
-  34% {
-    transform: translate(-4px, -1px) rotate(-2deg);
-  }
-  42% {
-    transform: translate(0, 4px) rotate(0deg);
-  }
-  50% {
-    transform: translate(2px, -5px) rotate(3deg);
-  }
-  62% {
-    transform: translate(6px, -11px) rotate(5deg);
-  }
-  76% {
-    transform: translate(4px, 0) rotate(2deg);
-  }
-  88% {
-    transform: translate(0, 4px) rotate(0deg);
-  }
-}
-.anx-dance {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-dance 1.25s ease-in-out infinite;
-}
-
-/*
- * SQUASH AND STRETCH, on the INNER group for the same reason the throw is:
- * two animations cannot share `transform` on one element. The robot now has
- * legs in this state, but it is still one flat picture — they cannot bend, so
- * the knees are implied by the body pressing down rather than drawn.
- *
- * ANCHORED AT THE FEET (`transform-origin: 50% 100%`), which is the whole
- * trick. Squash from the centre makes a picture pulse; squash from the ground
- * makes a body press into it. Compressed at the bottom of each hop, briefly
- * drawn out at take-off, and exactly 1 in the air — a body in flight is not
- * being squeezed by anything.
- */
-@keyframes anx-cheer {
-  0%,
-  100% {
-    transform: scale(1.08, 0.9);
-  }
-  8% {
-    transform: scale(0.97, 1.03);
-  }
-  20% {
-    transform: scale(0.99, 1);
-  }
-  34% {
-    transform: scale(1, 1);
-  }
-  42% {
-    transform: scale(1.08, 0.9);
-  }
-  50% {
-    transform: scale(0.97, 1.03);
-  }
-  62% {
-    transform: scale(0.99, 1);
-  }
-  76% {
-    transform: scale(1, 1);
-  }
-  88% {
-    transform: scale(1.06, 0.93);
-  }
-}
-.anx-cheer {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: anx-cheer 1.25s ease-in-out infinite;
-}
-
-/*
- * AND THE SHADOW IS THE FLOOR.
- *
- * This is the element that says there IS a ground, which is what a jump needs
- * and a hover does not: it spreads and darkens as the body presses into it and
- * collapses to almost nothing at the apex. On the same 1.25s clock and the
- * same percentages as the two above, so the three read as one movement rather
- * than three loops that happen to be the same length.
- */
-@keyframes anx-shadow-dance {
-  0%,
-  100% {
-    transform: scale(1.12);
-    opacity: 0.17;
-  }
-  8% {
-    transform: scale(0.95);
-    opacity: 0.12;
-  }
-  20% {
-    transform: scale(0.52);
-    opacity: 0.04;
-  }
-  34% {
-    transform: scale(0.9);
-    opacity: 0.11;
-  }
-  42% {
-    transform: scale(1.12);
-    opacity: 0.17;
-  }
-  50% {
-    transform: scale(0.97);
-    opacity: 0.12;
-  }
-  62% {
-    transform: scale(0.6);
-    opacity: 0.05;
-  }
-  76% {
-    transform: scale(0.95);
-    opacity: 0.12;
-  }
-  88% {
-    transform: scale(1.1);
-    opacity: 0.16;
-  }
-}
-.anx-shadow-dance {
-  transform-box: fill-box;
-  animation: anx-shadow-dance 1.25s ease-in-out infinite;
-}
-
-/*
- * THE CONFETTI.
- *
- * Every piece runs the same keyframe and differs only in four custom
- * properties set on the element — sideways drift, spin, delay and duration —
- * so fourteen pieces cost one keyframe and no JavaScript. The values are
- * written out in the component as a fixed table rather than drawn from
- * Math.random(): this component renders on the server first, and a random
- * number picked during render is a different number in the browser, which
- * React reports as a hydration mismatch.
- *
- * It falls from above the viewBox and ends below it, fading at both ends, so
- * there is no frame where a piece pops into or out of existence mid-air.
- */
-@keyframes anx-confetti {
-  0% {
-    transform: translate(0, -30px) rotate(0deg);
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-  }
-  80% {
-    opacity: 1;
-  }
-  100% {
-    transform: translate(var(--anx-cx, 0px), 215px) rotate(var(--anx-cr, 360deg));
-    opacity: 0;
-  }
-}
-.anx-confetti {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: anx-confetti var(--anx-cd, 3.4s) linear var(--anx-cl, 0s) infinite;
-}
+ * The new stylesheet is further down, under THE ANX ASSISTANT.
+ * ========================================================================= */
 
 /*
  * THE REAL COUNTER, when it really moves.
@@ -2889,6 +1732,183 @@ body:has(.social-theme) .site-backdrop {
 }
 
 /*
+ * ══════════════════════════════════════════════════════════════════════════
+ * THE ANX ASSISTANT — the reference, rebuilt
+ * ══════════════════════════════════════════════════════════════════════════
+ *
+ * See src/components/social/PublishingStage.tsx for what is his and what is
+ * ours. Everything that moves here is `transform` or `opacity`: measured over
+ * six seconds of the full cycle, 359 frames, 60.0 fps on a 1280 desktop and
+ * on a 390 phone, with zero frames over 20ms.
+ */
+.anx-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 340fr) minmax(0, 380fr);
+  border-radius: 16px;
+  overflow: hidden;
+  /*
+   * THE PANEL'S BACKGROUND IS THE PICTURE ITSELF — 40x14 pixels stretched.
+   *
+   * The reference is ONE image, so its left and right share a background, and
+   * a crop beside a flat panel shows the join as a hard line down the middle.
+   * Sampling that background into a gradient failed twice: the GIF is
+   * dithered, so a single pixel is noise, and every column near the crop's
+   * edge is crossed by the chair or the laptop, so an average is not
+   * background either. A downscale of the picture matches it at every height
+   * by construction, costs one kilobyte, and needs no filter at runtime.
+   * Mirrored, so the blurred robot lands under the sharp one.
+   */
+  background: url(/social/anx/plate.webp) center / 100% 100% no-repeat;
+}
+
+/* ── the character ────────────────────────────────────────────────────── */
+.anx-scene {
+  position: relative;
+  grid-column: 2;
+  aspect-ratio: 380 / 237;
+  align-self: start;
+  /* feathered into the plate, so there is no edge where the crop ends */
+  -webkit-mask-image: linear-gradient(to left, #000 86%, transparent 100%);
+  mask-image: linear-gradient(to left, #000 86%, transparent 100%);
+}
+.anx-scene img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 220ms linear;
+  will-change: opacity;
+}
+.anx-scene img.anx-on { opacity: 1; }
+
+/* The beat on top of the held pose. Nine poses are not continuous motion;
+   this is what keeps a held one from reading as a still. */
+.anx-beat-breathe img.anx-on { animation: anx-stage-breathe 5.5s ease-in-out infinite; }
+@keyframes anx-stage-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-1.2%) scale(1.006); }
+}
+.anx-beat-work img.anx-on { animation: anx-stage-work 2.4s ease-in-out infinite; }
+@keyframes anx-stage-work {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-0.5%) scale(1.004); }
+}
+.anx-beat-cheer img.anx-on { animation: anx-stage-cheer 1.1s ease-in-out infinite; }
+@keyframes anx-stage-cheer {
+  0%, 100% { transform: translateY(0) scale(1); }
+  35%      { transform: translateY(-2.4%) scale(1.012); }
+}
+/* `still` is a pose with no beat at all, and `off` is the disconnected
+   machine: the reference has no frame for either, so these two are the only
+   places in the design that are approximated. */
+.anx-beat-off img.anx-on { filter: grayscale(0.78) brightness(0.92); }
+
+/* ── the beam ─────────────────────────────────────────────────────────── */
+.anx-beam { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.anx-beam path { fill: none; stroke-linecap: round; opacity: 0; transition: opacity 220ms ease; }
+.anx-beam-glow { stroke: #4aa3ff; stroke-width: 7; filter: blur(3px); }
+.anx-beam-core { stroke: url(#anx-beam-grad); stroke-width: 2.6; stroke-dasharray: 8 8; }
+.anx-lit path { opacity: 0.55; }
+.anx-lit .anx-beam-core { opacity: 1; animation: anx-beamflow 1.1s linear infinite; }
+@keyframes anx-beamflow { to { stroke-dashoffset: -32; } }
+
+/* ── the words, the groups, the rail ──────────────────────────────────── */
+.anx-side {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  padding: 10px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* A scrim, not a panel: the plate behind the text is the picture's own
+   background and is busy in places. This lifts it just enough to read and
+   fades to nothing where the crop begins. */
+.anx-side::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to left, rgba(223,234,252,0) 0%, rgba(223,234,252,.45) 28%, rgba(223,234,252,.72) 70%, rgba(223,234,252,.8) 100%);
+}
+.anx-side > * { position: relative; }
+.anx-head { display: flex; align-items: center; gap: 8px; }
+.anx-head-dot {
+  width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center;
+  background: rgba(255,255,255,.8); color: #1557d6; font-size: 13px; font-weight: 800; flex: none;
+  box-shadow: 0 1px 4px rgba(11,37,69,.12);
+}
+.anx-stage h3 { margin: 0; font-size: clamp(14px, 3.4vw, 19px); font-weight: 800; letter-spacing: -0.2px; color: #0b2545; }
+.anx-sub { margin: 0; font-size: clamp(10.5px, 2.8vw, 12.5px); font-weight: 700; color: #1b3a66; }
+
+.anx-cards { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
+.anx-cards li {
+  position: relative;
+  width: min(248px, 100%);
+  margin-inline-start: auto;
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 7px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 2px 8px rgba(11,37,69,.18);
+  transition: box-shadow 200ms ease, background 200ms ease;
+}
+.anx-cards li.anx-target { background: #fff; box-shadow: 0 0 0 2px rgba(21,87,214,.45), 0 4px 14px rgba(21,87,214,.22); }
+.anx-cards li.anx-landed { box-shadow: 0 0 0 2px rgba(34,197,94,.55), 0 4px 14px rgba(34,197,94,.22); }
+.anx-fb { width: 22px; height: 22px; border-radius: 7px; background: #1877f2; color: #fff; font-weight: 800; display: grid; place-items: center; font-size: 13px; flex: none; }
+.anx-ppl { width: 20px; height: 20px; flex: none; color: #3c5a86; }
+.anx-lines { flex: 1; min-width: 64px; display: grid; gap: 3px; }
+.anx-lines i { display: block; height: 4px; border-radius: 3px; background: #aabfdd; }
+.anx-lines i:last-child { width: 55%; }
+.anx-tick {
+  width: 18px; height: 18px; border-radius: 999px; background: #22c55e; flex: none;
+  display: grid; place-items: center;
+  animation: anx-tickin 0.32s cubic-bezier(.34,1.4,.64,1) 1;
+}
+.anx-tick svg { width: 12px; height: 12px; }
+@keyframes anx-tickin { from { transform: scale(0); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } to { transform: scale(1); } }
+
+.anx-rail {
+  position: relative;
+  list-style: none; display: flex; align-items: center; margin: 2px 0 0; padding: 6px 8px;
+  border-radius: 12px; background: rgba(255,255,255,.72);
+}
+/* ONE line behind the four. Four per-item connectors, each a full item wide,
+   overhang the rail at its ends. */
+.anx-rail::before {
+  content: ""; position: absolute; top: 17px; inset-inline: 12%;
+  height: 2px; background: #b9cae4; border-radius: 2px;
+}
+.anx-rail li { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.anx-rail-ic {
+  width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center;
+  background: #fff; color: #7b93b8; font-size: 11px; font-weight: 900; z-index: 1;
+  box-shadow: 0 1px 4px rgba(11,37,69,.14);
+  transition: transform 200ms ease;
+}
+.anx-rail li[data-step="done"] .anx-rail-ic { color: #fff; background: #22c55e; }
+.anx-rail li[data-step="publishing"] .anx-rail-ic { color: #1557d6; }
+.anx-rail li.anx-live .anx-rail-ic { transform: scale(1.12); }
+.anx-rail li.anx-live[data-step="waiting"] .anx-rail-ic,
+.anx-rail li.anx-live[data-step="publishing"] .anx-rail-ic { color: #fff; background: #1557d6; box-shadow: 0 0 0 4px rgba(21,87,214,.18); }
+.anx-rail span:last-child { font-size: 10px; font-weight: 800; color: #27456f; white-space: nowrap; }
+.anx-rail li.anx-live span:last-child { color: #1557d6; }
+.anx-spin { animation: anx-railspin 1.1s linear infinite; }
+@keyframes anx-railspin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+  .anx-stage { grid-template-columns: 1fr; }
+  .anx-scene { grid-column: 1; grid-row: 1; -webkit-mask-image: linear-gradient(to bottom, #000 88%, transparent 100%); mask-image: linear-gradient(to bottom, #000 88%, transparent 100%); }
+  .anx-side { grid-column: 1; grid-row: 2; padding: 8px 12px 10px; }
+  .anx-side::before { background: linear-gradient(to top, rgba(223,234,252,.8) 60%, rgba(223,234,252,.4) 100%); }
+}
+
+/*
  * SWITCHED OFF, NOT HIDDEN.
  *
  * A reader who asked their phone for less motion still gets the whole scene —
@@ -2896,34 +1916,19 @@ body:has(.social-theme) .site-backdrop {
  * on an arrival that happened. What they do not get is anything that moves.
  */
 @media (prefers-reduced-motion: reduce) {
-  .anx-bot,
-  .anx-bot-min,
-  .anx-send,
-  .anx-wake,
-  .anx-lift,
-  .anx-lift-body,
-  .anx-yes,
-  .anx-eyeshine,
-  .anx-alert,
-  .anx-shadow,
-  .anx-blip,
-  .anx-eyes,
-  .anx-trail,
-  .anx-fly,
-  .anx-spark,
-  .anx-breathe,
-  .anx-halo,
-  .anx-land,
+  /* The stage, and the two things on the card beside it that still move. The
+     list that used to be here named twenty-six classes from the drawn scene;
+     every one of them went with it. publishing-stage.test.ts does not read
+     this list at all — it asks every element in the stage whether anything is
+     running on it, which is the question a list of names cannot answer. */
+  .anx-scene img,
+  .anx-beat-breathe img.anx-on,
+  .anx-beat-work img.anx-on,
+  .anx-beat-cheer img.anx-on,
+  .anx-beam-core,
+  .anx-lit .anx-beam-core,
   .anx-tick,
-  .anx-dance,
-  .anx-tricks,
-  .anx-bounce,
-  .anx-bounce-squash,
-  .anx-bounce-spin,
-  .anx-bounce-mark,
-  .anx-cheer,
-  .anx-shadow-dance,
-  .anx-confetti,
+  .anx-spin,
   .anx-bar-live,
   .anx-num-out,
   .anx-num-in {

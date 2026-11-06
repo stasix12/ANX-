@@ -32,7 +32,7 @@ import { PostCover } from './PostCover';
 import { stageElapsed } from './PublicationItem';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
-import { PublishingScene } from './PublishingScene';
+import { PublishingStage } from './PublishingStage';
 import { sceneModeFor, type SceneMode } from './sceneState';
 import { SYSTEM_STATE_TONE, type SystemState } from './systemState';
 
@@ -1062,7 +1062,7 @@ export function LiveQueueHero({
    * headline flip to "רובוט בפעולה" and the scene start looping, and then
    * nothing on this card moved again until the publication finished — a
    * minute, sometimes several. The scene is an idle animation by design and
-   * asserts nothing about progress (PublishingScene's own header says so), so
+   * asserts nothing about progress (PublishingStage's own header says so), so
    * between 'opening' and 'verifying' there was no difference on screen
    * between a machine working and a machine wedged.
    *
@@ -1375,7 +1375,7 @@ export function LiveQueueHero({
           thing in the panel that is not in the design. */}
       {plannedToday > 0 && (
         <div className="mt-2">
-          <PublishingScene mode={sceneMode} published={publishedToday} total={plannedToday} />
+          <PublishingStage mode={sceneMode} published={publishedToday} total={plannedToday} />
           {/*
             SAID IN WORDS TOO, because a dancing robot is a mood and not a
             sentence. This is the precise form of what `dayDone` knows — the
@@ -1384,11 +1384,15 @@ export function LiveQueueHero({
             are not in this sum. A line that implied otherwise would be the
             panel contradicting the tile two inches above it.
           */}
-          {dayDone && (
-            <p data-done className="mt-1 text-center text-[12.5px] font-extrabold leading-[17px] text-success-400">
-              אין עוד פרסומים שממתינים לצאת היום
-            </p>
-          )}
+          {/*
+            THE FINISHED-DAY SENTENCE MOVED INTO THE STAGE, where it is the
+            subtitle under "הרובוט סיים לפרסם". It used to be a line of its
+            own here, and printing it again two centimetres below the same
+            claim is the duplication this panel keeps being corrected for.
+            It is still the precise form of what `dayDone` knows — the queue
+            has nothing left for today — and deliberately not "הכול הצליח":
+            posts that failed are counted in the red tile above.
+          */}
         </div>
       )}
 

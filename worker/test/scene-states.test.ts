@@ -235,12 +235,12 @@ const code = ladder.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
    * is exactly the invented publication the brief forbids.
    */
   is(!/'success'/.test(code), 'there is no state called success — an arrival is an event, and a state could be sat in');
-  const scene = readFileSync(new URL('../../src/components/social/PublishingScene.tsx', import.meta.url), 'utf8')
+  const scene = readFileSync(new URL('../../src/components/social/PublishingStage.tsx', import.meta.url), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
   is(
-    /const success = shown < target;/.test(scene),
-    'and in the scene it is still the presentation catching up with the real count, and nothing else',
+    /const landing = shown < target;/.test(scene),
+    'and in the stage it is still the presentation catching up with the real count, and nothing else',
   );
   /*
    * THE HELD CARD MAY NOT TRAVEL. `preparing` draws the post in the hand;
@@ -248,9 +248,16 @@ const code = ladder.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
    * card ever took the flight class, the scene would be carrying a post to a
    * group while the media was still uploading.
    */
-  is(/preparing && \(/.test(scene), 'the preparing branch draws its own card');
-  const lift = scene.slice(scene.indexOf('{preparing && ('));
-  is(!/anx-fly/.test(lift.slice(0, 600)), 'and that card is NOT given the flight: nothing is submitted yet, so nothing crosses the scene');
+  /*
+   * RE-POINTED ONTO THE NEW STAGE. The old scene drew its own post card and
+   * the claim was that the card does not travel while the row is still being
+   * prepared. The reference's own frames carry the card now — it is in the
+   * robot's hand in pose 4 and leaving in pose 5 — so the claim moved to the
+   * BEAM, which is the only thing this file still draws on that journey: it
+   * is lit for `sending` and for nothing else.
+   */
+  is(/const travelling = playing === 'sending';/.test(scene), 'the beam belongs to one state');
+  is(/anx-lit/.test(scene) && /travelling \? ' anx-lit' : ''/.test(scene), 'and it is lit only while that state is live');
 }
 
 {
@@ -279,42 +286,62 @@ const code = ladder.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
    * is not.
    */
   const css = readFileSync(new URL('../../src/app/globals.css', import.meta.url), 'utf8');
-  const added = ['anx-wake', 'anx-lift', 'anx-lift-body', 'anx-yes', 'anx-eyeshine', 'anx-alert'];
-  for (const name of added) {
+  /*
+   * RE-POINTED ONTO THE STAGE. These were the drawn scene's keyframes — the
+   * wake, the lift, the nod — and they went with it when the reference
+   * replaced the drawing with nine rendered frames. The claim did not change:
+   * only `transform` and `opacity` are composited, and anything else in a
+   * keyframe costs a layout or a paint PER FRAME, which on a phone is where
+   * 60fps becomes 24.
+   */
+  const added = ['anx-stage-breathe', 'anx-stage-work', 'anx-stage-cheer', 'anx-beamflow', 'anx-tickin', 'anx-railspin'];
+  /*
+   * The whole `@keyframes` rule and nothing after it. Braces are counted
+   * rather than a fixed window being taken, because these rules are three
+   * lines long and the rules that follow them DO carry a `filter:` — the
+   * beam's glow — so a window that overran the closing brace would read a
+   * neighbour's declaration as this keyframe's and fail for the wrong reason.
+   */
+  const blockOf = (name: string): string | null => {
     const at = css.indexOf(`@keyframes ${name} {`);
-    is(at !== -1, `@keyframes ${name} exists — a class whose keyframes are missing animates nothing, silently`);
-    /* the block, by brace depth: these keyframes contain nested rules */
+    if (at === -1) return null;
     let depth = 0;
-    let end = at;
     for (let i = css.indexOf('{', at); i < css.length; i += 1) {
       if (css[i] === '{') depth += 1;
       else if (css[i] === '}') {
         depth -= 1;
-        if (depth === 0) {
-          end = i;
-          break;
-        }
+        if (depth === 0) return css.slice(at, i + 1);
       }
     }
-    const block = css.slice(at, end);
-    const properties = [...block.matchAll(/^\s*([a-z-]+)\s*:/gm)].map((m) => m[1]);
+    return null;
+  };
+
+  for (const name of added) {
+    const block = blockOf(name);
+    is(block !== null, `@keyframes ${name} exists — a class whose keyframes are missing animates nothing, silently`);
+    if (!block) continue;
+    /*
+     * A step may be written on one line — `0%, 100% { transform: …; }` — so
+     * a declaration is anything that opens after a `{` or a `;`, not
+     * something that happens to start a line.
+     */
+    const properties = [...block.matchAll(/[{;]\s*([a-z-]+)\s*:/g)].map((m) => m[1]);
     is(properties.length > 0, `@keyframes ${name} actually declares something`);
     for (const prop of properties) {
       is(
-        prop === 'transform' || prop === 'opacity',
+        ['transform', 'opacity', 'stroke-dashoffset'].includes(prop),
         `@keyframes ${name} animates "${prop}" — only transform and opacity are composited; everything else repaints every frame`,
       );
     }
+    /*
+     * AND THE CHARACTER IS NEVER FILTERED WHILE IT MOVES. `anx-beat-off`
+     * greys the disconnected robot and the beam's glow is blurred, but both
+     * are static declarations — one paint each. A `filter` inside a keyframe
+     * would be a blur recomputed sixty times a second.
+     */
+    is(!/filter:/.test(block), `@keyframes ${name} does not animate a filter`);
   }
-  /* And the class really points at the keyframes, which is the other half of
-     the same mistake: a minifier once renamed one of this scene's keyframes
-     and left the class pointing at the old name. Nothing warned. */
-  for (const name of added) {
-    is(
-      new RegExp(`\\.${name} \\{[^}]*animation:[^;]*${name}`).test(css),
-      `.${name} is wired to its own keyframes`,
-    );
-  }
+  is(/\.anx-beat-off img\.anx-on \{ filter:/.test(css), 'the disconnected robot is greyed by a static declaration, not by a keyframe');
 }
 
 console.log(`scene states OK — ${checks} assertions`);

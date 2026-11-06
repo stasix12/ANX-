@@ -444,7 +444,24 @@ async function main(): Promise<void> {
         document.body.insertAdjacentHTML('afterbegin', '<div data-spacer style="height:600px"></div>');
         const strip = document.querySelector('[role="group"]') as HTMLElement;
         const b = strip.getBoundingClientRect();
-        window.scrollTo({ top: Math.max(0, b.top + window.scrollY - (window.innerHeight - b.height) / 2) });
+        /*
+         * `behavior: 'instant'`, AND IT IS THE FIX FOR A RACE THAT HAS BEEN
+         * IN THIS FILE SINCE IT WAS WRITTEN.
+         *
+         * globals.css sets `html { scroll-behavior: smooth }`, so a bare
+         * scrollTo ANIMATES — and the 250ms below is a guess at how long an
+         * eight-hundred-pixel glide takes. It usually wins. Measured on
+         * 06/11 it lost twice in a suite run and once in three runs on its
+         * own, always with the strip reporting its correct 832px height: the
+         * box was fine, the page simply had not arrived yet.
+         *
+         * This step is not measuring the scroll. It is PLACING the strip so
+         * the dot-tap checks below have somewhere to jump from, and the
+         * assertion after it is about where the strip SITS. The animation is
+         * something the later steps exercise deliberately —
+         * scrollIntoViewIfNeeded and the dot click both keep it.
+         */
+        window.scrollTo({ top: Math.max(0, b.top + window.scrollY - (window.innerHeight - b.height) / 2), behavior: 'instant' });
       });
       await tall.waitForTimeout(250);
       const fits = await tall.evaluate(() => {

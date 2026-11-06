@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { planQueue } from '../../src/lib/social/plan';
+import { zonedDateISO, zonedToUtc } from '../../src/lib/social/time';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
@@ -167,6 +168,25 @@ function world(plans: Plan[]) {
   return { db, log, queue, note };
 }
 
+/*
+ * ─── EVERY PASS IN THIS FILE IS DRIVEN AT A FIXED MINUTE ──────────────────
+ *
+ * These fixtures publish at 09:00 and 11:00 and used to call planQueue() with
+ * the real clock. That worked only because the horizon was 48 hours: whatever
+ * the hour of the run, TOMORROW's 09:00 was always inside it, so there was
+ * always an occasion to plan.
+ *
+ * The planner now plans the current day and no further ("אני רוצה שהמתכנן
+ * יספור רק את של אותו היום הנוכחי בלבד לא 48 שעות"), and the borrowed
+ * tomorrow is gone — so a suite run after 09:15 found no occasion at all,
+ * planned nothing, and the fully-blocked launch had nothing to report. The
+ * assertion that failed was right; the clock underneath it was the problem,
+ * and it had been a latent one all along.
+ *
+ * 00:30 local, so every hour these fixtures use is still ahead of the pass.
+ */
+const AT = zonedToUtc(zonedDateISO(new Date()), '00:30');
+
 const skips = (log: { event: string }[]) => log.filter((e) => e.event === 'plan_targets_skipped').length;
 const blocked = (log: { event: string }[]) => log.filter((e) => e.event === 'plan_all_blocked').length;
 const builds = (log: { event: string }[]) => log.filter((e) => e.event === 'planned').length;
@@ -175,9 +195,9 @@ async function main(): Promise<void> {
   /* ── 1. THE BUG: every group already busy, nothing to plan ───────────── */
   {
     const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2', 't3'], busy: ['t1', 't2', 't3'], hour: '09:00' }]);
-    await planQueue({ db: w.db, log: w.note as never });
-    await planQueue({ db: w.db, log: w.note as never });
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(
       skips(w.log),
       0,
@@ -221,7 +241,7 @@ async function main(): Promise<void> {
      * "טרם פורסם" in the library for ever.
      */
     const w = world([{ id: 'd1', post: 'p1', mode: 'drip', targets: ['t1', 't2', 't3'], busy: ['t1', 't2', 't3'], hour: '09:00' }]);
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(blocked(w.log), 1, 'A FULLY-BLOCKED QUICK PUBLISH SAYS SO — it was the one launch path with no voice');
     const line = w.log.find((e) => e.event === 'plan_all_blocked')!.message;
     is(/אף קבוצה לא נכנסה לתור/.test(line), 'in the same words the other loop uses, for the same situation');
@@ -234,7 +254,7 @@ async function main(): Promise<void> {
     is(!/לא ייצא עד שהתור/.test(line), 'a retired launch promises it will go out later — it will not');
     /* And it is still said ONCE: the drip retires itself at the end of the
        pass, so a second pass has no schedule left to report on. */
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(blocked(w.log), 1, 'and not again on the next tick');
   }
 
@@ -248,14 +268,14 @@ async function main(): Promise<void> {
      * is what separates "could not" from "had nothing to".
      */
     const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: [], busy: [], hour: '09:00' }]);
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(blocked(w.log), 0, 'a schedule with no groups at all is not a blocked launch — it placed nothing because it had nothing');
   }
 
   /* ── 2. AND THE REPORT IS NOT LOST: a partial occasion still says so ─── */
   {
     const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2', 't3'], busy: ['t2'], hour: '09:00' }]);
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(skips(w.log), 1, 'a pass that planned SOME and left one out says which — that is what this message is for');
     eq(blocked(w.log), 0, 'and a pass that DID place rows is not "fully blocked" — the two messages must never both fire');
     is(/קבוצה t2/.test(w.log.find((e) => e.event === 'plan_targets_skipped')!.message), 'and it names the group, because a count is not something anybody can act on');
@@ -270,11 +290,11 @@ async function main(): Promise<void> {
      * show this, which is why the fake database remembers.
      */
     const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2', 't3'], busy: ['t2'], hour: '09:00' }]);
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     const after1 = skips(w.log);
-    await planQueue({ db: w.db, log: w.note as never });
-    await planQueue({ db: w.db, log: w.note as never });
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(skips(w.log), after1, `said once and then quiet — three more passes added ${skips(w.log) - after1} repeats of it`);
   }
 
@@ -284,14 +304,14 @@ async function main(): Promise<void> {
        the drip: the schedule retires after its first pass, so it had exactly
        one chance to complain. It still takes it. */
     const w = world([{ id: 's1', post: 'p1', mode: 'now', targets: ['t1', 't2'], busy: ['t2'], hour: '09:00' }]);
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(skips(w.log), 1, 'a one-off launch still reports the group it left out');
   }
 
   /* ── 5. and nothing is reported when nothing was left out ────────────── */
   {
     const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2'], busy: [], hour: '09:00' }]);
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(skips(w.log), 0, 'a clean pass says nothing about groups it did not skip');
   }
 
@@ -312,7 +332,7 @@ async function main(): Promise<void> {
    */
   {
     const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2', 't3'], busy: ['t2', 't3'], hour: '09:00' }]);
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(builds(w.log), 1, 'the pass that plans an occasion says a round was built');
     eq(skips(w.log), 1, 'and names the groups it could not fit in');
     const afterRound = w.queue.length;
@@ -320,7 +340,7 @@ async function main(): Promise<void> {
     /* One publication finishes, exactly as it does all afternoon. */
     w.queue.find((r) => r.target_id === 't2')!.status = 'published';
 
-    const made = await planQueue({ db: w.db, log: w.note as never });
+    const made = await planQueue({ db: w.db, now: AT, log: w.note as never });
     /* One row per occasion inside the 48-hour horizon, so a daily schedule
        refills two — the number is not the claim, that it refilled at all is. */
     is(made > 0, 'the next pass DOES refill the group that freed — silence must not mean the planner stopped');
@@ -330,8 +350,8 @@ async function main(): Promise<void> {
 
     /* And again, and again, as it does every minute until the round ends. */
     w.queue.find((r) => r.target_id === 't3')!.status = 'published';
-    await planQueue({ db: w.db, log: w.note as never });
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(builds(w.log), 1, 'still one round announced, however many refills follow it');
     eq(skips(w.log), 1, 'and still one list of skipped groups');
   }
@@ -345,12 +365,13 @@ async function main(): Promise<void> {
    */
   {
     const w = world([{ id: 's1', post: 'p1', mode: 'weekly', targets: ['t1', 't2'], busy: [], hour: '09:00' }]);
-    const t0 = new Date();
+    const t0 = AT;
     await planQueue({ db: w.db, now: t0, log: w.note as never });
     eq(builds(w.log), 1, 'the first round is announced');
 
-    /* Past the 48-hour horizon the first pass planned to. */
-    const later = new Date(t0.getTime() + 49 * 3_600_000);
+    /* Past the horizon the first pass planned to — which is now the end of
+       that day, so tomorrow's first minute is already beyond it. */
+    const later = new Date(t0.getTime() + 25 * 3_600_000);
     w.queue.forEach((r) => (r.status = 'published'));
     await planQueue({ db: w.db, now: later, log: w.note as never });
     eq(builds(w.log), 2, 'and so is the next one, once the clock is past what was already planned');
@@ -372,7 +393,7 @@ async function main(): Promise<void> {
       /* Entirely blocked, exactly like his round that is still running. */
       { id: 'sB', post: 'pB', mode: 'weekly', targets: ['b1', 'b2'], busy: ['b1', 'b2'], hour: '11:00' },
     ]);
-    await planQueue({ db: w.db, log: w.note as never });
+    await planQueue({ db: w.db, now: AT, log: w.note as never });
     eq(skips(w.log), 0, "a blocked campaign stays silent even when another campaign in the same pass planned rows");
   }
 

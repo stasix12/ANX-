@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { dedupeKey, renderPostText } from './compose';
-import { zonedHM } from './time';
+import { addDaysISO, zonedDateISO, zonedHM, zonedToUtc } from './time';
 import { dripSlots, slotsFor } from './slots';
 import { windowedStagger } from './projection';
 import { readSchedule, type CampaignSchedule } from './campaign-schedule';
@@ -82,7 +82,7 @@ async function revivePlanFailures(db: SupabaseClient, note: PlanLogger): Promise
 
 /**
  * Materialises schedules into concrete queue rows a little ahead of time
- * (HORIZON_HOURS). Idempotent: the unique (schedule, target, scheduled_at)
+ * (endOfPlanningDay). Idempotent: the unique (schedule, target, scheduled_at)
  * index means re-running the planner never double-books a slot.
  *
  * Planning is pure queue bookkeeping — no network call to Meta, no
@@ -104,7 +104,40 @@ async function revivePlanFailures(db: SupabaseClient, note: PlanLogger): Promise
  * Variant assignment is delegated to ./variants.ts (rotate / distribute /
  * fixed per-target map) so the UI can show the same choice in advance.
  */
-const HORIZON_HOURS = 48;
+/**
+ * ─── HOW FAR AHEAD THE PLANNER WRITES: TO THE END OF TODAY, AND NO FURTHER ─
+ *
+ * "אני רוצה שהמתכנן יספור רק את של אותו היום הנוכחי בלבד לא 48 שעות."
+ *
+ * It was 48 hours, and that is what put the same post in front of the same
+ * group twice in one afternoon. Measured on the owner's live database on
+ * 06/11: one pass at 20:50 planned BOTH today's 12:00 occasion and tomorrow's,
+ * 232 groups each; when the start hour was changed at 23:48 the queue was
+ * re-stamped and the cascade laid tomorrow's round end-to-end after today's —
+ * 464 rows, 12:00 to 15:51, every group twice, two hours apart. His account's
+ * same-group repeat floor is 0, so nothing stood in the way.
+ *
+ * A day-long horizon makes that impossible by construction rather than by a
+ * guard: tomorrow's occasion is not written until tomorrow, so there is
+ * nothing for a re-stamp to pull forward.
+ *
+ * WHAT IT COSTS, and it is a real cost. The 48 hours also acted as a buffer:
+ * a round whose hour passed while the PC was asleep still had its rows, and
+ * published them late when the machine woke. Planned only for today, a window
+ * missed while the PC is off is missed for good — `from` is now-15min, so a
+ * pass that starts after the hour does not reach back for it. That is the
+ * trade the owner asked for, and it is the honest direction: a queue that
+ * says "today" and means it.
+ *
+ * END OF THE LOCAL DAY, not `now + 24h`: the boundary has to be midnight in
+ * Asia/Jerusalem or the horizon drifts with the hour the planner happens to
+ * run at, and a round at 23:30 would be planned twice on the days either side
+ * of a clock change. One millisecond before tomorrow begins, so slotsFor()'s
+ * inclusive `at <= until` cannot catch tomorrow's 00:00 occasion.
+ */
+export function endOfPlanningDay(now: Date): Date {
+  return new Date(zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').getTime() - 1);
+}
 
 export type PlanLogger = (
   level: 'info' | 'warn' | 'error',
@@ -123,7 +156,7 @@ const sha256 = (value: string) => createHash('sha256').update(value).digest('hex
 
 export async function planQueue({ db, now = new Date(), log }: PlanOptions): Promise<number> {
   const note: PlanLogger = log ?? (async () => undefined);
-  const until = new Date(now.getTime() + HORIZON_HOURS * 3_600_000);
+  const until = endOfPlanningDay(now);
   // Slots up to 15 minutes in the past still count — a cron that ran late
   // should not silently drop the morning post.
   const from = new Date(now.getTime() - 15 * 60_000);
@@ -865,7 +898,7 @@ async function noteOccupied(db: SupabaseClient, note: PlanLogger, scheduleId: st
  * minute, for ever.
  *
  * WHY HIS QUEUE STOPPED. "סיים ואפס" cancels every not-yet-started row of the
- * round in one UPDATE, and the planner's horizon is 48 hours (HORIZON_HOURS),
+ * round in one UPDATE, and the planner's horizon is the rest of today,
  * so one press tombstones every occasion for two days. The instants are
  * clock-free — slotsFor derives them from the calendar and schedule.weekly,
  * windowedStagger and the gap are deterministic — and re-arming the daily

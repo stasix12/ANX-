@@ -120,8 +120,33 @@ const row = (o: Partial<QueueRow>): QueueRow => ({ id: 'q', status: 'publishing'
 
   const hero = src('../../src/components/social/LiveCampaignHero.tsx');
   is(/useTick\(\(Boolean\(nextAt\) \|\| inFlightRows\.length > 0\) && !paused\)/.test(hero), 'the card must keep a beat while something is in flight, or the counter it draws never moves');
-  is(/\{publishing && inFlightRows\.length > 0 && \(/.test(hero), 'and must draw the live lines only while something really is publishing');
-  is(/data-must-fit/.test(hero.slice(hero.indexOf('inFlightRows.map'))), 'the stage and its counter must be marked as text that may never be cut');
+  /*
+   * RE-POINTED ONTO THE CARD THAT SAYS IT NOW. The hero used to print one
+   * line per held row — group, stage, age — and this pinned that it did so
+   * only while something was really publishing. The ANX Live Flow reference
+   * says the same thing in a card of its own, with the stage under the group
+   * name and the stage's own position as a bar, and the gate is the same
+   * gate: a row the engine is not on is not drawn as going out.
+   */
+  is(
+    /const working = sceneMode === 'preparing' \|\| sceneMode === 'sending';/.test(hero),
+    'the card draws "what is going out" only while the engine is really on a row',
+  );
+  is(
+    /const live = working \? \(inFlightRows\[0\] \?\? null\) : null;/.test(hero),
+    'and the row it draws is one a worker is holding — a dead worker holds rows too, which is what the gate is for',
+  );
+  /*
+   * THE NAME MAY BE CUT; THE STAGE MAY NOT. A group's name is data and can be
+   * any length — the owner's longest is a 48-character Russian title — but
+   * the stage is the whole reason the line exists, and a card that truncated
+   * to "מעלה מד…" would be the frozen card this file was written for.
+   */
+  const flowCss = src('../../src/app/globals.css');
+  const nameRule = flowCss.slice(flowCss.indexOf('.anxf-now-name span'), flowCss.indexOf('.anxf-now-step'));
+  const stepRule = flowCss.slice(flowCss.indexOf('.anxf-now-step'), flowCss.indexOf('.anxf-now-cover'));
+  is(/text-overflow:\s*ellipsis/.test(nameRule), 'the group name is allowed to be cut');
+  is(!/text-overflow|white-space:\s*nowrap/.test(stepRule), 'and the stage beside it is not');
 }
 
 /* ───────── 5. a launch that has not become rows yet, and says so ───────── */

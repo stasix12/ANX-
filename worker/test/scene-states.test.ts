@@ -235,32 +235,47 @@ const code = ladder.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
    * is exactly the invented publication the brief forbids.
    */
   is(!/'success'/.test(code), 'there is no state called success — an arrival is an event, and a state could be sat in');
-  const scene = readFileSync(new URL('../../src/components/social/PublishingStage.tsx', import.meta.url), 'utf8')
+  /*
+   * ─── RE-POINTED ONTO THE CARD THAT DRAWS IT, A THIRD TIME ─────────────
+   *
+   * The drawn scene's claim was that its post card does not travel while the
+   * row is still being prepared; when the reference's nine frames replaced
+   * the drawing, the claim moved to the beam; when the ANX Live Flow
+   * reference replaced the stage, there is no post crossing the panel at
+   * all. What there IS, and what carries the same claim, is a percentage:
+   * the only honest reading of "how far in is this publication", taken from
+   * the stage the worker wrote on the row. So the claim is that this number
+   * has ONE source and that the source is that column.
+   */
+  const card = readFileSync(new URL('../../src/components/social/LiveFlow.tsx', import.meta.url), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
-  is(
-    /const landing = shown < target;/.test(scene),
-    'and in the stage it is still the presentation catching up with the real count, and nothing else',
-  );
+  is(/const percent = now \? progressOfStep\(now\.step\) : null;/.test(card), 'the percentage is the row’s own stage and nothing else');
+  is(/if \(i < 0\) return null;/.test(card), 'and a stage that is not on the ladder yields no number at all — never a zero');
+  is(/shown !== null && <span className="anxf-pct">/.test(card), 'so a row with no stage prints no figure');
   /*
-   * THE HELD CARD MAY NOT TRAVEL. `preparing` draws the post in the hand;
-   * the flight belongs to `travelling`, which is `sending`. If the lifted
-   * card ever took the flight class, the scene would be carrying a post to a
-   * group while the media was still uploading.
+   * ONE TIMER ON THE CARD, AND IT MOVES A PICTURE. The character cycles
+   * between two poses while he waits; that is a drawing. Every NUMBER — the
+   * percentage, the four figures, the queue — is handed in and printed. A
+   * timer that touched one of those would be the card advancing a
+   * publication on its own, which is the whole thing this file guards.
    */
+  const timers = card.match(/setInterval\([\s\S]{0,70}/g) ?? [];
+  eq(timers.length, 1, 'exactly one timer on the card');
+  is(/setStep/.test(timers[0] ?? ''), 'and it advances the POSE, never a figure');
+  is(!/Date\.now|new Date\(/.test(card), 'and nothing on it reads a clock');
   /*
-   * RE-POINTED ONTO THE NEW STAGE, TWICE. The drawn scene's claim was that
-   * its post card does not travel while the row is still being prepared;
-   * when the reference's frames replaced the drawing the claim moved to the
-   * beam. The post is a card of ours again — flown from the hand to the
-   * group in the app's own skin — so the claim is back where it started, and
-   * it is the same claim: the flight belongs to `sending` and to nothing
-   * else. A post crossing the panel while the media is still uploading would
-   * be a publication the engine has not attempted.
+   * AND THE LADDER IS THE WORKER'S OWN ORDER. Written out here rather than
+   * imported, so that re-ordering the pipeline in one file and not the other
+   * fails loudly instead of quietly drawing a bar that disagrees with the
+   * stage printed beside it.
    */
-  is(/const travelling = phase === 'sending';/.test(scene), 'the post in flight belongs to one state');
-  is(/if \(!travelling\) \{\s*setFlight\(null\);/.test(scene), 'and the flight is torn down the moment that state ends');
-  is(/\{flight && \(/.test(scene), 'so the post and its trail are not in the page at all unless one is really on its way');
+  const ladder = card.slice(card.indexOf('const PIPELINE'), card.indexOf('export function progressOfStep'));
+  for (const step of ['pending', 'opening', 'composer_opened', 'uploading_media', 'ready_to_publish', 'publishing', 'verifying']) {
+    is(ladder.includes(`'${step}'`), `the ladder carries ${step}`);
+  }
+  is(!ladder.includes("'published'"), 'and not `published`: a finished row is off this card and into the queue');
+  is(!ladder.includes("'failed'"), 'and not `failed`: a failure is not a position on the way to success');
 }
 
 {
@@ -302,11 +317,10 @@ const code = ladder.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
     'anx-stage-work',
     'anx-stage-cheer',
     'anx-blink',
-    'anx-trailflow',
-    'anx-fly',
-    'anx-fly-arc',
-    'anx-tickin',
     'anx-railspin',
+    'anxf-live',
+    'anxf-stripes',
+    'anxf-sweep',
   ];
   /*
    * The whole `@keyframes` rule and nothing after it. Braces are counted

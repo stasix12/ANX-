@@ -3389,8 +3389,18 @@ const scenario: { step: string; line: string }[] = [];
    * ceiling says what it is in words beside the bar (pinned above).
    * worker/test/today-count.test.ts drives the rest of it.
    */
-  pin('the bar clamps its width only', cards, 'Math.min(publishedToday, plannedToday)');
-  pin("and it is measured against today's own total", cards, 'total={plannedToday}');
+  /*
+   * RE-POINTED A SECOND TIME, and again not weakened. The daily bar went with
+   * the stage: the ANX Live Flow reference replaces "22 out of 48 as a bar"
+   * with four counted figures and one bar that is about ONE publication. The
+   * rule the pin carries is the same one — A FIGURE IS NEVER CLAMPED, ONLY A
+   * FILL IS — so it moves to where the figures and the fill now live.
+   */
+  const flow = readFileSync('src/components/social/LiveFlow.tsx', 'utf8');
+  pin('the figures are printed whole', flow, '<b>{stats.attempts}</b>');
+  pin('and the only fill on the card is a stage position', flow, 'style={shown === null ? undefined : { width: `${shown}%` }}');
+  pin('which cannot pass a hundred by construction', flow, '((i + 1) / (PIPELINE.length + 1)) * 100');
+  pin('and is null, never zero, when the row has no stage', flow, 'if (i < 0) return null;');
   pin("which the dashboard builds from what went out plus what is still to go", dash, 'plannedToday: today + waitingToday');
   pin('the run card counts open rows through campaign.ts', cards, 'openRows(progress)');
   /*

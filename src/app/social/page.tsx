@@ -65,9 +65,10 @@ import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
 import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
-import { addDaysISO, agree, counted, startOfZonedDay, startOfZonedWeek, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { addDaysISO, agree, counted, formatTimeHe, ltr, startOfZonedDay, startOfZonedWeek, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
-import type { ActivityEntry, BrowserSettings, Campaign, ControlSettings, LimitsSettings, MediaItem, QueueStatus } from '@/lib/social/types';
+import type { FlowRow, FlowStats } from '@/components/social/LiveFlow';
+import { QUEUE_STEP_LABEL, type ActivityEntry, type BrowserSettings, type Campaign, type ControlSettings, type LimitsSettings, type MediaItem, type QueueStatus, type QueueStep } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { AlertTriangleIcon, MessageIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
@@ -1558,6 +1559,58 @@ export default function SocialDashboard() {
   );
 
   /*
+   * ─── THE QUEUE THE SYSTEM CARD DRAWS, AND THE FOUR FIGURES UNDER IT ─────
+   *
+   * "המידע חייב להגיע ממערכת הפרסום האמיתית. אין להציג נתוני דוגמה במערכת
+   *  הפעילה."
+   *
+   * Three rows, in the reference's own order: the last publication that
+   * FINISHED, the one a worker is holding, and the one after it. Every one of
+   * them is a row this screen already read — doneToday, inFlightRows,
+   * upcoming — so the card shows the same three facts the rest of the page
+   * does, rather than a fourth opinion about them.
+   */
+  const flowRows: FlowRow[] = data
+    ? [
+        ...data.doneToday.slice(0, 1).map((r) => ({
+          id: r.id,
+          name: r.target?.name ?? 'קבוצה',
+          /* A skipped row is not a success, and the mark on it may not be the
+             green one. `status` is the row's own word for what happened. */
+          state: (r.status === 'published' ? 'done' : 'failed') as FlowRow['state'],
+          at: ltr(formatTimeHe(r.published_at ?? r.updated_at ?? r.scheduled_at)),
+        })),
+        ...data.inFlightRows.slice(0, 1).map((r) => ({
+          id: r.id,
+          name: r.target?.name ?? 'קבוצה',
+          state: 'live' as const,
+          note: QUEUE_STEP_LABEL[(r.step ?? '') as QueueStep] || 'מפרסם עכשיו',
+        })),
+        ...data.upcoming.slice(0, 1).map((r) => ({
+          id: r.id,
+          name: r.target?.name ?? 'קבוצה',
+          state: 'next' as const,
+        })),
+      ]
+    : [];
+
+  /*
+   * ATTEMPTED, SUCCEEDED, FAILED — and the first is the sum of the other two
+   * rather than a third read. `today` counts rows that PUBLISHED and
+   * `failedToday` counts the ones that did not, so their sum is what was
+   * tried; a tile that called the successes "פרסומים היום" would disagree
+   * with the one beside it the moment anything failed.
+   */
+  const flowStats: FlowStats = data
+    ? {
+        attempts: data.today + data.failedToday,
+        success: data.today,
+        failed: data.failedToday,
+        groups: data.activeTargets,
+      }
+    : { attempts: 0, success: 0, failed: 0, groups: null };
+
+  /*
    * What the intervention is, and the one place to go and fix it. Stalled
    * wins: a dead worker blocks the rows waiting on a person too, so telling
    * the owner to go and confirm something would send them to a screen where
@@ -1950,6 +2003,8 @@ export default function SocialDashboard() {
             nextTarget={data.upcoming[0]?.target ?? null}
             inFlight={summary.inFlight}
             inFlightRows={data.inFlightRows}
+            flowRows={flowRows}
+            flowStats={flowStats}
             workerOnline={data.workerOnline}
             publishingBlocked={publishingBlocked}
             fbAccount={data.fbAccount}

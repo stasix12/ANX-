@@ -1739,37 +1739,16 @@ body:has(.social-theme) .site-backdrop {
  * "אין להציג רקע כחול מלבני מאחורי הרובוט. אין להציג מסגרת של תמונה או וידאו.
  *  הרקע של התוכנה חייב להמשיך בצורה טבעית מאחורי הרובוט."
  *
- * There is NO BACKGROUND IN THIS BLOCK. Not a tinted one, not a faked one —
- * none. The nine pose images carry real alpha (scripts/anx-cutout.mjs), so
- * whatever the card is painted in that day is what shows between the robot's
- * arm and his coffee. The only two things drawn behind him are light: a pool
- * of the app's OWN accent and a contact shadow under him, both mixed from the
- * theme's tokens, which is what stops a lit 3D character reading as a sticker.
- *
- * Every colour below is a token. Not one hex is written here except the
- * Facebook blue, which is a brand mark and belongs to Facebook.
+ * There is NO BACKGROUND behind the character. Not a tinted one, not a faked
+ * one — none. The nine pose images carry real alpha (scripts/anx-cutout.mjs),
+ * so whatever the card is painted in that day is what shows between his arm
+ * and his coffee. The only two things drawn behind him are LIGHT: a pool of
+ * the app's own accent and a contact shadow, both mixed from the live theme.
  *
  * Everything that moves is `transform` or `opacity` — the two properties the
  * compositor can run without laying the page out or painting it again.
  * worker/test/scene-states.test.ts reads these keyframes and fails on a third.
  */
-.anx-stage {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
-  align-items: center;
-  gap: 2px;
-}
-
-/* ── the character ────────────────────────────────────────────────────── */
-.anx-figure {
-  position: relative;
-  grid-column: 2;
-  grid-row: 1;
-  min-width: 0;
-  /* the pose canvas, which every pose is rendered into at the same scale */
-  aspect-ratio: 440 / 276;
-}
 .anx-poses {
   position: absolute;
   inset: 0;
@@ -1819,11 +1798,8 @@ body:has(.social-theme) .site-backdrop {
   );
 }
 
-/*
- * THE BEAT ON TOP OF THE HELD POSE. Nine poses are nine poses; this is what
- * keeps a held one from reading as a photograph. It runs on the wrapper, so
- * the eyelids below ride the same breath as the face they close over.
- */
+/* THE BEAT ON TOP OF THE HELD POSE. It runs on the wrapper, so the eyelids
+   ride the same breath as the face they close over. */
 .anx-beat-breathe .anx-poses { animation: anx-stage-breathe 5.5s ease-in-out infinite; }
 @keyframes anx-stage-breathe {
   0%, 100% { transform: translateY(0) scale(1); }
@@ -1840,18 +1816,12 @@ body:has(.social-theme) .site-backdrop {
   35%      { transform: translateY(-2.2%) scale(1.011); }
 }
 /* `still` is a pose with no beat at all, and `off` is the disconnected
-   machine: the reference has no frame for either, so these two are the only
-   places in the design that are approximated. The grey is a static
-   declaration — a filter inside a keyframe would be recomputed sixty times a
-   second. */
+   machine. The grey is a static declaration — a filter inside a keyframe
+   would be recomputed sixty times a second. */
 .anx-beat-off .anx-poses img.anx-on { filter: grayscale(0.78) brightness(0.94); }
 
-/*
- * THE BLINK. Two lids in the visor's own measured colour (src/components/
- * social/anxPoses.ts), closing over the eye lights of whichever pose is
- * showing. Collapsed to nothing for 92% of the cycle, which costs the
- * compositor one transform and the page nothing.
- */
+/* THE BLINK. Two lids in the visor's own measured colour (anxPoses.ts),
+   closing over the eye lights of whichever pose is showing. */
 .anx-lid {
   position: absolute;
   border-radius: 46%;
@@ -1866,267 +1836,500 @@ body:has(.social-theme) .site-backdrop {
   0%, 91%, 100% { transform: scaleY(0); }
   94%, 96%      { transform: scaleY(1); }
 }
-
-/* ── the post on its way, and the trail behind it ─────────────────────── */
-.anx-flight {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.anx-trail {
-  position: absolute;
-  inset: 0;
-}
-.anx-trail path { fill: none; stroke-linecap: round; }
-.anx-trail-glow {
-  stroke: color-mix(in oklab, var(--color-brand-300) 34%, transparent);
-  stroke-width: 7;
-}
-.anx-trail-core {
-  stroke: url(#anx-trail-grad);
-  stroke-width: 2.6;
-  stroke-dasharray: 8 8;
-  animation: anx-trailflow 1.1s linear infinite;
-}
-@keyframes anx-trailflow { to { stroke-dashoffset: -32; } }
-
-/*
- * THE POST ITSELF, in the app's card skin — the same white, the same radius
- * and the same shadow every other card on this screen wears. Two nested
- * elements: the outer carries the straight run to the group, the inner the
- * lift and the shrink, and the two together are an arc. Both are transforms.
- */
-.anx-parcel {
-  position: absolute;
-  width: 56px;
-  margin: -15px 0 0 -28px;
-  animation: anx-fly 1.15s linear infinite;
-  will-change: transform;
-}
-@keyframes anx-fly {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(var(--anx-tx), var(--anx-ty), 0); }
-}
-.anx-parcel-in {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 6px;
-  border-radius: var(--radius-lg);
-  background: var(--color-ink-850);
-  border: 1px solid var(--color-ink-700);
-  box-shadow: 0 2px 6px rgba(40, 20, 80, 0.06), 0 8px 20px rgba(40, 20, 80, 0.12);
-  animation: anx-fly-arc 1.15s cubic-bezier(0.37, 0, 0.63, 1) infinite;
-  will-change: transform, opacity;
-}
-@keyframes anx-fly-arc {
-  0%   { transform: translateY(0) scale(0.9); opacity: 0; }
-  14%  { transform: translateY(-7px) scale(1); opacity: 1; }
-  50%  { transform: translateY(-15px) scale(0.92); opacity: 1; }
-  86%  { opacity: 1; }
-  100% { transform: translateY(0) scale(0.6); opacity: 0; }
-}
-.anx-parcel-pic {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  flex: none;
-  background: color-mix(in oklab, var(--color-brand-500) 72%, transparent);
-}
-.anx-parcel-line {
-  height: 3px;
-  flex: 1;
-  border-radius: 2px;
-  background: color-mix(in oklab, var(--color-mist-500) 34%, transparent);
-}
-.anx-parcel-short { flex: 0 0 11px; }
-
-/* ── the words, the groups, the rail ──────────────────────────────────── */
-.anx-side {
-  position: relative;
-  grid-column: 1;
-  grid-row: 1;
-  min-width: 0;
-  padding: 8px 10px 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.anx-head { display: flex; align-items: center; gap: 8px; }
-.anx-head-dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  font-size: 13px;
-  font-weight: 800;
-  background: color-mix(in oklab, var(--color-brand-500) 13%, transparent);
-  color: var(--color-brand-400);
-}
-.anx-stage h3 {
-  margin: 0;
-  font-size: clamp(14px, 3.4vw, 19px);
-  font-weight: 800;
-  letter-spacing: -0.2px;
-  color: var(--color-mist-100);
-}
-.anx-sub {
-  margin: 0;
-  font-size: clamp(10.5px, 2.8vw, 12.5px);
-  font-weight: 700;
-  color: var(--color-mist-300);
-}
-
-.anx-cards { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
-.anx-cards li {
-  position: relative;
-  width: min(252px, 100%);
-  margin-inline-start: auto;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 7px;
-  /* the app's own card: same radius, same ground, same hairline, same lift */
-  border-radius: var(--radius-lg);
-  background: var(--color-ink-850);
-  border: 1px solid var(--color-ink-700);
-  box-shadow: 0 2px 6px rgba(40, 20, 80, 0.03), 0 8px 24px rgba(40, 20, 80, 0.06);
-  transition: box-shadow 200ms ease, border-color 200ms ease;
-}
-.anx-cards li.anx-target {
-  border-color: color-mix(in oklab, var(--color-brand-500) 60%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand-500) 16%, transparent),
-    0 6px 16px rgba(40, 20, 80, 0.1);
-}
-.anx-cards li.anx-landed {
-  border-color: color-mix(in oklab, var(--color-success-400) 62%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-success-400) 16%, transparent),
-    0 6px 16px rgba(40, 20, 80, 0.1);
-}
-/* Facebook's own blue, which is the one mark on this card that is not ours
-   to re-colour. */
-.anx-fb {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: #1877f2;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  flex: none;
-}
-.anx-fb svg { width: 15px; height: 15px; }
-.anx-ppl { width: 20px; height: 20px; flex: none; color: var(--color-mist-500); }
-.anx-lines { flex: 1; min-width: 56px; display: grid; gap: 3px; }
-.anx-lines i {
-  display: block;
-  height: 4px;
-  border-radius: 3px;
-  background: color-mix(in oklab, var(--color-mist-500) 32%, transparent);
-}
-.anx-lines i:last-child { width: 55%; }
-.anx-tick {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  background: var(--color-success-400);
-  color: var(--color-on-brand);
-  animation: anx-tickin 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) 1;
-}
-.anx-tick svg { width: 12px; height: 12px; }
-@keyframes anx-tickin {
-  from { transform: scale(0); opacity: 0; }
-  60%  { transform: scale(1.15); opacity: 1; }
-  to   { transform: scale(1); }
-}
-
-.anx-rail {
-  position: relative;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  margin: 2px 0 0;
-  padding: 6px 8px;
-  border-radius: var(--radius-lg);
-  background: color-mix(in oklab, var(--color-ink-800) 60%, transparent);
-}
-/* ONE line behind the four. Four per-item connectors, each a full item wide,
-   overhang the rail at its ends. */
-.anx-rail::before {
-  content: "";
-  position: absolute;
-  top: 17px;
-  inset-inline: 12%;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--color-ink-700);
-}
-.anx-rail li { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.anx-rail-ic {
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  z-index: 1;
-  font-size: 11px;
-  font-weight: 900;
-  background: var(--color-ink-850);
-  border: 1px solid var(--color-ink-700);
-  color: var(--color-mist-500);
-  transition: transform 200ms ease;
-}
-/* "השלב הפעיל יודגש בכחול והשלב שהושלם בירוק" — and a step counts as
-   completed only when the live step is genuinely past it in this
-   publication's own order. Nothing is green while the queue is only waiting. */
-.anx-rail li[data-past] .anx-rail-ic {
-  background: var(--color-success-400);
-  border-color: transparent;
-  color: var(--color-on-brand);
-}
-.anx-rail li.anx-live .anx-rail-ic {
-  transform: scale(1.12);
-  background: var(--color-brand-500);
-  border-color: transparent;
-  color: var(--color-on-brand);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-brand-500) 15%, transparent);
-}
-.anx-rail li.anx-live[data-step="done"] .anx-rail-ic {
-  background: var(--color-success-400);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-success-400) 15%, transparent);
-}
-.anx-rail span:last-child { font-size: 10px; font-weight: 800; color: var(--color-mist-300); white-space: nowrap; }
-.anx-rail li.anx-live span:last-child { color: var(--color-brand-400); }
-.anx-rail li[data-past] span:last-child { color: var(--color-success-400); }
 .anx-spin { animation: anx-railspin 1.1s linear infinite; }
 @keyframes anx-railspin { to { transform: rotate(360deg); } }
 
-/* ── the phone ────────────────────────────────────────────────────────── */
-/* "באייפון: הרובוט יוקטן בצורה פרופורציונלית … לא תהיה גלילה אופקית מיותרת
-    … האנימציה לא תגרום לקפיצות בפריסת העמוד." The figure keeps its aspect
-    ratio, so the row it occupies is reserved before the first image decodes
-    and nothing below it moves when they arrive. */
-@media (max-width: 640px) {
-  .anx-stage { grid-template-columns: 1fr; }
-  .anx-figure { grid-column: 1; grid-row: 1; }
-  .anx-side { grid-column: 1; grid-row: 2; padding: 2px 8px 8px; }
-  .anx-cards li { width: 100%; }
+/*
+ * ══════════════════════════════════════════════════════════════════════════
+ * ANX LIVE FLOW — the reference, section by section
+ * ══════════════════════════════════════════════════════════════════════════
+ *
+ * "התמונה היא המפרט הסופי. אין לשנות צבעים, גדלים, מיקומים, פרופורציות,
+ *  ריווחים, פינות, אייקונים, צללים או את סדר הרכיבים לפי שיקול דעתך."
+ *
+ * Laid out against the reference and then corrected against a screenshot of
+ * it, twice — see the comparison in worker/test/live-flow.test.ts, which
+ * measures the parts a stylesheet can get wrong silently.
+ *
+ * EVERY COLOUR IS A TOKEN, with one exception: Facebook's blue, which is a
+ * brand mark and is not ours to re-pick. The reference's palette and this
+ * theme's are the same family by construction — the theme was built from an
+ * earlier reference by the same hand — so taking the tokens is both what the
+ * brief asks for and what keeps the card alive when the theme moves.
+ */
+.anxf {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── 1-3: the headline, the character, the lockup, the live line ──────── */
+.anxf-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42%;
+  /* Bottom-aligned, as the reference has him: his desk sits on the same line
+     the live-system line sits on, rather than floating in the middle of the
+     block. */
+  align-items: end;
+  gap: 2px;
+  /*
+   * THE CHARACTER IS ZOOMED, AND A ZOOM OVERFLOWS ITS BOX. Measured at 320px:
+   * he reached two pixels past the left edge of the screen and the whole page
+   * gained a horizontal scrollbar — "אין לגרום לגלילה אופקית", and two pixels
+   * is enough to break it. `clip` confines him without ever becoming a scroll
+   * container; the margin lets the zoom breathe over the card's own padding,
+   * which is transparent in every pose.
+   */
+  overflow: clip;
+  overflow-clip-margin: 10px;
+}
+.anxf-words {
+  grid-column: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.anxf h2 {
+  margin: 0;
+  /* One line in the reference, and one line here for the sentence it draws.
+     The count is data, though — "26 פרסומים ממתינים לכם" is four characters
+     longer than "פרסום אחד" — so it is allowed to wrap, balanced, rather
+     than shrink to fit a number nobody can predict. */
+  text-wrap: balance;
+  font-size: clamp(16px, 4.8vw, 22px);
+  font-weight: 800;
+  line-height: 1.22;
+  letter-spacing: -0.4px;
+  color: var(--color-mist-100);
+}
+/* THE LOCKUP: "ANX" in the product's navy, "Live Flow" in a filled pill. */
+.anxf-logo {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+.anxf-logo-anx {
+  font-size: clamp(17px, 5.4vw, 24px);
+  color: var(--color-brand-400);
+}
+.anxf-logo-pill {
+  font-size: clamp(13.5px, 4.2vw, 19px);
+  padding: 3px 13px 4px;
+  border-radius: 999px;
+  color: var(--color-on-brand);
+  background: linear-gradient(135deg, var(--color-brand-500), var(--color-brand-300));
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--color-brand-500) 28%, transparent);
+}
+.anxf-state {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: clamp(11px, 3.2vw, 13px);
+  font-weight: 700;
+  color: var(--color-mist-300);
+}
+.anxf-state i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--color-mist-500);
+}
+.anxf-state[data-tone="good"] i { background: var(--color-success-400); }
+.anxf-state[data-tone="warn"] i { background: var(--color-warning-400); }
+.anxf-state[data-tone="bad"] i { background: var(--color-error-300); }
+
+.anxf-robot {
+  position: relative;
+  grid-column: 2;
+  aspect-ratio: 440 / 276;
+  min-width: 0;
+}
+/*
+ * HE FILLS HIS CORNER. The pose canvas is sized for the WIDEST of the nine —
+ * the one with both arms out — so the one at the laptop sits inside it with
+ * room to spare and rendered a third smaller than the reference draws him.
+ * The scale is on the <img>, not on the wrapper, because the wrapper is
+ * carrying the breath; two transforms on one element would fight.
+ */
+.anxf-robot .anx-poses img { scale: 1.56; }
+
+/* ── 4: the four stations ────────────────────────────────────────────── */
+.anxf-stations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+}
+.anxf-stations li {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.anxf-arrow {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: color-mix(in oklab, var(--color-brand-500) 55%, transparent);
+}
+/* RTL: the flow runs right to left, so the arrow that joins two stations
+   points the way the queue actually moves. */
+[dir="rtl"] .anxf-arrow { transform: scaleX(-1); }
+.anxf-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 2px 9px;
+  border-radius: var(--radius-lg);
+  background: var(--color-ink-850);
+  border: 1px solid var(--color-ink-700);
+  box-shadow: 0 1px 3px rgba(40, 20, 80, 0.04);
+  transition: background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+}
+.anxf-ic {
+  width: 24px;
+  height: 24px;
+  color: var(--color-mist-300);
+}
+.anxf-ic svg { width: 100%; height: 100%; }
+.anxf-lb {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: clamp(9px, 2.6vw, 11px);
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-mist-300);
+  white-space: nowrap;
+}
+.anxf-pass {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--color-success-400);
+  color: var(--color-on-brand);
+}
+.anxf-pass svg { width: 9px; height: 9px; }
+/* THE LIVE STATION, exactly as the reference draws it: filled, white inside,
+   ringed in its own light, and carrying a caret towards what it is about. */
+.anxf-stations li[data-state="live"] .anxf-box {
+  background: linear-gradient(140deg, var(--color-brand-500), var(--color-brand-300));
+  border-color: color-mix(in oklab, var(--color-brand-300) 70%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--color-brand-500) 18%, transparent),
+    0 0 18px color-mix(in oklab, var(--color-brand-300) 45%, transparent),
+    0 8px 20px color-mix(in oklab, var(--color-brand-500) 30%, transparent);
+  /* The reference lifts the lit station out of the row rather than only
+     colouring it, so a glance finds it before the words are read. */
+  transform: scale(1.06);
+  animation: anxf-live 2.6s ease-in-out infinite;
+}
+.anxf-stations li[data-state="live"] .anxf-ic,
+.anxf-stations li[data-state="live"] .anxf-lb { color: var(--color-on-brand); }
+@keyframes anxf-live {
+  0%, 100% { transform: scale(1.06) translateY(0); }
+  50%      { transform: scale(1.06) translateY(-1.5px); }
+}
+/* The reference puts a caret under the lit station, pointing at the card it
+   is about. Drawn as a rotated square so it takes the gradient's own colour
+   rather than a second guess at it. */
+.anxf-stations li[data-state="live"] .anxf-box { position: relative; }
+.anxf-stations li[data-state="live"] .anxf-box::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 2px;
+  background: var(--color-brand-300);
+}
+
+/* ── 5: the publication going out right now ──────────────────────────── */
+.anxf-now {
+  border-radius: var(--radius-tile);
+  background: var(--color-ink-850);
+  border: 1px solid color-mix(in oklab, var(--color-brand-500) 26%, transparent);
+  box-shadow: 0 2px 6px rgba(40, 20, 80, 0.04), 0 10px 26px rgba(40, 20, 80, 0.07);
+  padding: 10px 11px 11px;
+}
+.anxf-now-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.anxf-now-words { flex: 1; min-width: 0; }
+.anxf-now-kicker {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--color-mist-500);
+}
+.anxf-now-name {
+  margin: 1px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: clamp(13px, 3.9vw, 16px);
+  font-weight: 800;
+  color: var(--color-mist-100);
+}
+.anxf-now-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anxf-now-step {
+  margin: 1px 0 0;
+  font-size: clamp(10.5px, 3.1vw, 12.5px);
+  font-weight: 600;
+  color: var(--color-mist-300);
+}
+.anxf-now-cover {
+  width: 62px;
+  height: 48px;
+  flex: none;
+  border-radius: 9px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--color-brand-500) 10%, transparent);
+  color: color-mix(in oklab, var(--color-brand-500) 60%, transparent);
+}
+.anxf-now-cover img { width: 100%; height: 100%; object-fit: cover; }
+.anxf-now-cover svg { width: 30px; height: 30px; }
+
+.anxf-bar {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.anxf-track {
+  flex: 1;
+  min-width: 0;
+  /* The reference fills this one left to right even on an RTL screen, with
+     the figure at the start of the row — so the track carries its own
+     direction rather than inheriting the page's. */
+  direction: ltr;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--color-ink-800);
+  overflow: hidden;
+}
+.anxf-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-brand-600), var(--color-brand-300));
+  transition: width 420ms ease;
+}
+/* THE STRIPES OF THE REFERENCE, and they are the only thing on this card
+   that moves without a number behind it — which is exactly what they are
+   for: a machine working, with no claim about how far in. */
+.anxf-fill::after {
+  content: "";
+  display: block;
+  height: 100%;
+  background-image: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.26) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.26) 50%,
+    rgba(255, 255, 255, 0.26) 75%,
+    transparent 75%
+  );
+  background-size: 16px 16px;
+  animation: anxf-stripes 0.9s linear infinite;
+}
+@keyframes anxf-stripes { to { transform: translateX(-16px); } }
+/* No stage to make a number from: the whole bar becomes the motion. */
+.anxf-fill-live {
+  width: 42%;
+  animation: anxf-sweep 1.5s ease-in-out infinite;
+}
+@keyframes anxf-sweep {
+  0%   { transform: translateX(0); }
+  50%  { transform: translateX(138%); }
+  100% { transform: translateX(0); }
+}
+.anxf-pct {
+  font-size: clamp(13px, 3.9vw, 16px);
+  font-weight: 900;
+  color: var(--color-mist-100);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 6: the queue ────────────────────────────────────────────────────── */
+.anxf-qhead {
+  margin: 2px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: clamp(13px, 3.9vw, 15.5px);
+  font-weight: 800;
+  color: var(--color-mist-100);
+}
+.anxf-qhead svg { width: 19px; height: 19px; color: var(--color-brand-400); }
+.anxf-queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+.anxf-queue li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: var(--radius-lg);
+  background: var(--color-ink-850);
+  border: 1px solid var(--color-ink-700);
+  box-shadow: 0 1px 3px rgba(40, 20, 80, 0.04);
+}
+.anxf-queue li[data-row="live"] {
+  background: color-mix(in oklab, var(--color-brand-500) 7%, var(--color-ink-850));
+  border-color: color-mix(in oklab, var(--color-brand-500) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand-500) 10%, transparent);
+}
+.anxf-row-words { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.anxf-row-name {
+  font-size: clamp(11.5px, 3.4vw, 13.5px);
+  font-weight: 800;
+  color: var(--color-mist-100);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.anxf-row-note {
+  font-size: clamp(9.5px, 2.9vw, 11.5px);
+  font-weight: 700;
+  color: var(--color-brand-400);
+}
+.anxf-row-at {
+  flex: none;
+  font-size: clamp(9.5px, 2.9vw, 11.5px);
+  font-weight: 700;
+  color: var(--color-mist-500);
+  white-space: nowrap;
+}
+.anxf-row-mark { width: 22px; height: 22px; flex: none; }
+.anxf-row-mark svg { width: 100%; height: 100%; }
+.anxf-mark-done { color: var(--color-success-400); }
+.anxf-mark-failed { color: var(--color-error-300); }
+.anxf-mark-live { color: var(--color-brand-500); }
+.anxf-mark-next { color: var(--color-mist-500); }
+
+/* ── the Facebook mark and the group glyph, shared by three sections ──── */
+.anxf-fb {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  /* Facebook's own blue: a brand mark, and the one colour on this card that
+     is not ours to re-pick. */
+  background: #1877f2;
+  color: #fff;
+}
+.anxf-fb svg { width: 17px; height: 17px; }
+.anxf-fb-lg { width: 54px; height: 54px; border-radius: 15px; }
+.anxf-fb-lg svg { width: 34px; height: 34px; }
+.anxf-ppl { width: 17px; height: 17px; flex: none; color: var(--color-brand-400); }
+
+/* ── 7: the four figures ─────────────────────────────────────────────── */
+.anxf-tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.anxf-tiles li {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 11px 3px 10px;
+  border-radius: var(--radius-lg);
+  background: var(--color-ink-850);
+  border: 1px solid var(--color-ink-700);
+  box-shadow: 0 1px 3px rgba(40, 20, 80, 0.04), 0 6px 18px rgba(40, 20, 80, 0.05);
+}
+.anxf-tiles b {
+  font-size: clamp(17px, 5.4vw, 24px);
+  font-weight: 900;
+  line-height: 1.1;
+  color: var(--color-mist-100);
+  font-variant-numeric: tabular-nums;
+}
+.anxf-tiles span {
+  font-size: clamp(9px, 2.7vw, 11px);
+  font-weight: 700;
+  text-align: center;
+  color: var(--color-mist-300);
+  line-height: 1.15;
+}
+.anxf-tiles i { font-style: normal; display: block; }
+.anxf-tile-ic { width: 28px; height: 28px; display: grid; place-items: center; }
+.anxf-tile-ic svg { width: 100%; height: 100%; }
+/* Scoped to the tile, because `.anxf-tiles b` and `.anxf-tiles span` are two
+   classes deep and would otherwise out-rank a bare tone class — which is how
+   the green figure and the red one came out grey on the first screenshot. */
+.anxf-tiles .anxf-good,
+.anxf-tiles b.anxf-good,
+.anxf-tiles span.anxf-good { color: var(--color-success-400); }
+.anxf-tiles .anxf-bad,
+.anxf-tiles b.anxf-bad,
+.anxf-tiles span.anxf-bad { color: var(--color-error-300); }
+.anxf-tiles .anxf-brand { color: var(--color-brand-400); }
+.anxf-good { color: var(--color-success-400); }
+.anxf-bad { color: var(--color-error-300); }
+.anxf-brand { color: var(--color-brand-400); }
+
+/* ── wider than a phone ──────────────────────────────────────────────── */
+/* "במחשב יש להתאים את הפריסה לרוחב הקיים של האפליקציה, תוך שמירה על אותה
+    שפה עיצובית." Same order, same parts, more room — the character takes a
+    third of it instead of a share that would make him a postage stamp. */
+@media (min-width: 641px) {
+  .anxf { gap: 14px; }
+  .anxf-head { grid-template-columns: minmax(0, 1fr) 32%; }
+  /* A narrower column and the same zoom put his laptop through the side of
+     the card — seen on the 900px shot before it was measured. */
+  .anxf-robot .anx-poses img { scale: 1.22; }
+  .anxf-box { padding: 9px 4px 8px; }
+  .anxf-ic { width: 24px; height: 24px; }
+  .anxf-now-cover { width: 62px; height: 46px; }
+  .anxf-tiles { gap: 10px; }
 }
 
 /*
  * SWITCHED OFF, NOT HIDDEN.
  *
- * A reader who asked their phone for less motion still gets the whole scene —
- * the character, the groups, the ring around the active destination and the
- * tick on an arrival that happened. What they do not get is anything that
- * moves. publishing-stage.test.ts does not read this list: it asks every
- * element in the stage whether anything is running on it, which is the
- * question a list of names cannot answer.
+ * A reader who asked their phone for less motion still gets the whole card —
+ * the character, the stations, the lit one, the queue and every figure. What
+ * they do not get is anything that moves. live-flow.test.ts does not read
+ * this list: it asks every element in the card whether anything is running
+ * on it, which is the question a list of names cannot answer.
  */
 @media (prefers-reduced-motion: reduce) {
   .anx-poses img,
@@ -2135,17 +2338,18 @@ body:has(.social-theme) .site-backdrop {
   .anx-beat-cheer .anx-poses,
   .anx-beat-breathe .anx-lid,
   .anx-beat-work .anx-lid,
-  .anx-trail-core,
-  .anx-parcel,
-  .anx-parcel-in,
-  .anx-tick,
+  .anxf-stations li[data-state="live"] .anxf-box,
+  .anxf-fill::after,
+  .anxf-fill-live,
   .anx-spin,
   .anx-bar-live,
   .anx-num-out,
   .anx-num-in {
     animation: none !important;
   }
-  /* with no flight to watch, the post would otherwise sit frozen on his hand */
-  .anx-parcel { display: none; }
   .anx-poses img { transition: none; }
+  .anxf-fill { transition: none; }
+  /* With no sweep to watch, a 42%-wide bar would read as a percentage that
+     nothing stands behind. */
+  .anxf-fill-live { width: 100%; opacity: 0.5; }
 }

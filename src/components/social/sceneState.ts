@@ -29,10 +29,10 @@ import type { QueueStep } from '@/lib/social/types';
  *
  * THE SIXTH STATE HE NAMED — SUCCESS — IS DELIBERATELY NOT HERE. A success is
  * an EVENT, not a state: it is one publication arriving in one group, and the
- * scene presents it from a rise in the real published count (PublishingStage's
- * `target`/`shown`). A mode called `success` would be a state the scene could
- * sit in, and sitting in it is exactly the invented publication the rule above
- * forbids. See the header of PublishingStage.tsx.
+ * card reports it from the queue itself — a row is marked done because the
+ * DATABASE says that row published. A mode called `success` would be a state
+ * the card could SIT in, and sitting in it is exactly the invented
+ * publication the rule above forbids. See the header of LiveFlow.tsx.
  */
 export type SceneMode =
   | 'offline'

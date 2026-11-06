@@ -32,7 +32,7 @@ import { PostCover } from './PostCover';
 import { stageElapsed } from './PublicationItem';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
-import { PublishingStage } from './PublishingStage';
+import { LiveFlow, type FlowRow, type FlowStats } from './LiveFlow';
 import { sceneModeFor, type SceneMode } from './sceneState';
 import { SYSTEM_STATE_TONE, type SystemState } from './systemState';
 
@@ -962,6 +962,8 @@ export function LiveQueueHero({
   onDue,
   inFlight = 0,
   inFlightRows = [],
+  flowRows = [],
+  flowStats = { attempts: 0, success: 0, failed: 0, groups: null },
   workerOnline,
   publishingBlocked = false,
   intervention = null,
@@ -1053,6 +1055,15 @@ export function LiveQueueHero({
   profiles?: { name: string; kind?: 'profile' | 'page'; image?: string }[];
   /** Ask the machine to move onto one. Absent while nothing can be asked. */
   onSwitchProfile?: (name: string) => void;
+  /**
+   * THE QUEUE AS THE REFERENCE DRAWS IT — the last one that finished, the one
+   * going out, the one after it. Built on the screen above, because that is
+   * where the three reads live (doneToday, inFlightRows, upcoming); this
+   * panel draws rows, it does not decide which rows exist.
+   */
+  flowRows?: readonly FlowRow[];
+  /** The four figures under it, counted in the database by that same screen. */
+  flowStats?: FlowStats;
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
   /**
@@ -1062,7 +1073,7 @@ export function LiveQueueHero({
    * headline flip to "רובוט בפעולה" and the scene start looping, and then
    * nothing on this card moved again until the publication finished — a
    * minute, sometimes several. The scene is an idle animation by design and
-   * asserts nothing about progress (PublishingStage's own header says so), so
+   * asserted nothing about progress (the stage's own header said so), so
    * between 'opening' and 'verifying' there was no difference on screen
    * between a machine working and a machine wedged.
    *
@@ -1245,236 +1256,95 @@ export function LiveQueueHero({
     onDue?.();
   }, [due, nextAt, onDue]);
 
+  /*
+   * ─── WHAT THE HEADLINE COUNTS ─────────────────────────────────────────
+   *
+   * "פרסום אחד ממתין לכם" — the reference's own first line, and the number
+   * in it is the queue's, not a mood: today's plan minus what has already
+   * gone out. A finished day and an empty queue are different sentences,
+   * because they are different facts, and neither is "0 ממתינים".
+   */
+  const waitingToday = Math.max(0, plannedToday - publishedToday);
+  const headline =
+    systemState === 'empty'
+      ? 'אין פרסום מתוזמן'
+      : systemState === 'paused'
+        ? 'שום דבר לא יוצא עד שתפעילו'
+        : plannedToday === 0
+        ? /* A DAY WITH NOTHING IN IT IS NOT A FINISHED ONE. 0 of 0 would have
+             read as "הרובוט סיים לפרסם היום" over a queue that never had
+             anything in it — a claim about work that was never there. Caught
+             by today-count.test.ts the hour this card replaced the bar. */
+          'אין פרסומים מתוכננים להיום'
+        : dayDone || waitingToday === 0
+          ? 'הרובוט סיים לפרסם היום'
+          : `${counted(waitingToday, 'פרסום אחד', 'פרסומים', 'שני פרסומים')} ${agree(waitingToday, 'ממתין', 'ממתינים')} לכם`;
+
+  /*
+   * THE PUBLICATION GOING OUT RIGHT NOW. One row, the first a worker is
+   * holding — the reference draws one card and there is no honest way to
+   * draw two in it. `step` is what the worker last wrote on that row, and it
+   * is the only thing the bar under the card is ever filled from.
+   */
+  /*
+   * AND ONLY WHILE THE ENGINE IS REALLY ON IT.
+   *
+   * A row stays "in flight" in the database when the machine dies holding it,
+   * so a disconnected PC drew a card reading "שולח פוסט לקבוצה…" over a
+   * progress bar — a publication in progress on a computer that is switched
+   * off. Caught in the screenshot comparison against the reference, which is
+   * what that comparison is for. The scene mode is the panel's own verdict on
+   * whether anything is being published, and it is the gate.
+   */
+  const working = sceneMode === 'preparing' || sceneMode === 'sending';
+  const live = working ? (inFlightRows[0] ?? null) : null;
+  /* `now` up there is the clock this panel ticks on; this one is a row. */
+  const nowRow = live
+    ? {
+        name: live.target?.name ?? 'קבוצה',
+        step: (live.step ?? null) as QueueStep | null,
+        cover: live.post?.media?.find((m) => m.kind === 'image')?.url ?? null,
+      }
+    : null;
+
   return (
     <HeroPanel ariaLabel="מצב המערכת">
       {/*
-        WHAT IT IS DOING — not what state it is in.
-
-        This line used to be the state itself ("המערכת פעילה") with the
-        activity underneath it in grey. The identity bar at the top of every
-        screen now carries the state, from the same value this card was
-        handed, so printing it again 300px lower was the same sentence twice
-        before the owner reached anything they did not already know — which
-        is what they said, in those words.
-
-        The state and the activity are different facts and the split is the
-        point: the bar says whether the system is running, this says what it
-        is running ON right now. The dot went with the label, for the same
-        reason — the bar has one, in the same tone, from the same state.
-
-        "+ פוסט חדש" used to live here too. It moved up into the pair of
-        primary actions above this panel, so the screen offers it once.
+        ─── THE WHOLE CARD IS THE REFERENCE NOW ──────────────────────────
+        
+        "התמונה המצורפת היא מפרט העיצוב הסופי והמחייב … יש להתייחס לתמונה
+         כאל מקור האמת של ממשק המשתמש."
+        
+        What stood here — a headline, the character on a stage of his own, a
+        ratio, a bar out of the day's plan — is the same information in the
+        order the reference puts it in: the headline, the character beside
+        the Live Flow lockup, four stations, the publication going out, the
+        queue, four figures. Nothing was invented to fill it and nothing real
+        was dropped to fit it: every number below is one this panel was
+        already being handed.
       */}
-      {/*
-        THE HEADER IS THE TITLE AND NOTHING ELSE.
-        
-        What stood to its left is gone, by name: the green chip carrying the
-        Facebook account's face and name, its swap icon, and the refresh button
-        beside it. "השאר את האזור שהתפנה לבן ונקי … אל תוסיף בו כפתור, טקסט או
-        אייקון חלופי."
-        
-        WHAT WENT WITH THEM, said plainly rather than discovered later:
-        
-          * SWITCHING PROFILES is no longer possible from this panel. The
-            mechanism is untouched — /social/account still lists the profiles
-            and switches between them, and the active profile, the campaigns'
-            ownership and everything the worker reads are exactly as they were.
-            This removed a shortcut, not a capability. He asked for exactly
-            that: "הסרת בורר המשתמש כאן היא שינוי בתצוגה בלבד."
-          * THE MANUAL REFRESH went with it. Pulling the screen down still
-            re-reads everything (PullToRefresh), and the dashboard re-reads
-            itself on its own every thirty seconds, so what is lost is the
-            button and not the refresh.
-        
-        `min-w-0` and no truncation on a twelve-character title: it fits at
-        320px with room to spare now that nothing shares the row, and the
-        measured test says so rather than this comment.
-      */}
-      <div className="flex items-center">
-        <h2 dir="auto" className="min-w-0 text-[17px] font-extrabold leading-[22px] text-mist-100">
-          {/*
-            THREE SENTENCES, AND THE ORDER IS THE WHOLE OF IT.
-            
-            "שהרובוט לא בפעולה תרשום מחכה לעבודות." The middle one used to be
-            the default and read "רובוט בפעולה" whenever the PC was awake —
-            which is most of the day, including the morning he screenshotted
-            with nothing published at all. It is now the narrow case: a row is
-            in a worker's hands RIGHT NOW. Everything else that is still a
-            running system is the robot waiting for its next job, and says so.
-            
-            The finished day is asked first, or an evening with an empty queue
-            would read as waiting for work that is not coming.
-          */}
-          {systemState === 'active'
-            ? dayDone
-              ? 'הרובוט סיים לפרסם'
-              : publishing
-                ? 'רובוט בפעולה'
-                : 'מחכה לעבודות'
-            : systemState === 'paused'
-              ? 'שום דבר לא יוצא עד שתפעילו'
-              : systemState === 'empty'
-                ? 'אין פרסום מתוזמן'
-                : (intervention?.title ?? 'נדרשת פעולה שלכם')}
-        </h2>
-      </div>
+      <LiveFlow
+        mode={sceneMode}
+        headline={headline}
+        now={nowRow}
+        /* Same gate on the list: a row the machine stopped holding is still
+           queued, and drawing it with a spinner would say a dead worker is
+           working. It goes back to being the next one up, which it is. */
+        rows={working ? flowRows : flowRows.map((r) => (r.state === 'live' ? { ...r, state: 'next' as const, note: null } : r))}
+        stats={flowStats}
+      />
 
-      {/*
-        ─── AND WHAT IT IS DOING, IN WORDS THAT CHANGE ────────────────────
-        
-        "שזה מחפש / טוען / מפרסם זה נראה כאילו זה נתקע."
-        
-        The headline above says a robot is working and the scene below loops
-        whether or not anything is moving — it is an idle animation and its
-        own header says it asserts nothing. So for the length of a whole
-        publication this card looked identical to a card whose machine had
-        wedged.
-        
-        One line per row a worker is holding: the group, the stage the worker
-        is actually on, and how long it has been on it. Every one of those is
-        a column the row already carries. There is no percentage, because a
-        publication has no honest one.
-        
-        No link and no picture, deliberately: the measured suite asserts zero
-        of each across this panel, so that a tap meant for the card cannot
-        land on something else.
-      */}
-      {publishing && inFlightRows.length > 0 && (
-        <ul className="mt-1.5 space-y-0.5">
-          {inFlightRows.map((row) => (
-            /*
-              THE NAME MAY BE CUT; THE MOVING PART MAY NOT. A group's name is
-              data and can be any length — this one is a 48-character Russian
-              title — but the stage and its counter are the whole reason the
-              line exists, and a line that truncated to "Чистка дива…" would
-              be exactly the frozen card it replaces.
-            */
-            <li key={row.id} className="flex min-w-0 items-center justify-center gap-1 text-[11.5px] font-bold leading-4 text-mist-500">
-              <span dir="auto" className="min-w-0 truncate text-mist-300">{row.target?.name ?? 'קבוצה'}</span>
-              <span data-must-fit className="shrink-0">
-                {'· '}
-                {QUEUE_STEP_LABEL[(row.step ?? '') as QueueStep] || 'מפרסם'}
-                {stageElapsed(row, now)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/*
-        THE SCENE SITS ABOVE THE FIGURES, not instead of them.
-        
-        It is the only part of this panel that was redesigned: the ratio, the
-        bar, the ceiling line and both buttons below are untouched and still
-        read from the same props. Drawn only while there is a day to draw —
-        a robot throwing cards at four groups over "אין פרסומים מתוכננים
-        להיום" would be the screen contradicting itself in two places at once.
-      */}
-      {/* No box and no border: the reference is the scene sitting straight on
-          the white card, and the grey tray I had wrapped it in was the one
-          thing in the panel that is not in the design. */}
-      {plannedToday > 0 && (
-        <div className="mt-2">
-          <PublishingStage mode={sceneMode} published={publishedToday} total={plannedToday} />
-          {/*
-            SAID IN WORDS TOO, because a dancing robot is a mood and not a
-            sentence. This is the precise form of what `dayDone` knows — the
-            queue has nothing left for today — and deliberately not "הכול
-            הצליח": posts that failed are counted in the red tile above and
-            are not in this sum. A line that implied otherwise would be the
-            panel contradicting the tile two inches above it.
-          */}
-          {/*
-            THE FINISHED-DAY SENTENCE MOVED INTO THE STAGE, where it is the
-            subtitle under "הרובוט סיים לפרסם". It used to be a line of its
-            own here, and printing it again two centimetres below the same
-            claim is the duplication this panel keeps being corrected for.
-            It is still the precise form of what `dayDone` knows — the queue
-            has nothing left for today — and deliberately not "הכול הצליח":
-            posts that failed are counted in the red tile above.
-          */}
-        </div>
-      )}
-
-      <div className="mt-3.5">
-        {plannedToday > 0 ? (
-          <>
-            <Ratio done={publishedToday} total={plannedToday} suffix={`${agree(publishedToday, 'פורסם', 'פורסמו')} מתוך המתוכננים להיום`} />
-            {/* THE SCOPE, ON ITS OWN LINE. countPublishedSince and
-                countWaitingWithin have no campaign filter at all, so this
-                ratio is every round in the account plus the rows that belong
-                to none — and read beside a card saying "0 / 207" it looks like
-                one round's. It cannot go in the suffix: Ratio is
-                whitespace-nowrap and clamps to 11px, so more words there is an
-                overflow at 375, not a clarification. */}
-            <p dir="auto" className="mt-0.5 text-center text-[11px] leading-4 text-mist-500">
-              סך כל הסבבים יחד — לא של סבב בודד
-            </p>
-          </>
-        ) : (
-          /* Nothing today: a ratio out of zero is a bar that is either empty
-             or full depending on how the division is written, and neither is
-             a fact. The sentence is. */
-          <p className="text-[13px] font-bold leading-5 text-mist-300">אין פרסומים מתוכננים להיום</p>
-        )}
-        {/*
-          The bar CLAMPS ITS WIDTH AND NEVER ITS NUMBER. `today > maxPerDay` is
-          reachable in real data — markManualPublished() and publishNow() go
-          round the rules engine, and the owner can lower the cap in settings
-          after publishing — so the figure above prints the true count while
-          only the fill is bounded. ProgressBar's own Math.max(1, total) keeps
-          a cap of 0 from dividing.
-        */}
-        {plannedToday > 0 && (
-          <div className="mt-2">
-            {/*
-              THE BAR OF THE REFERENCE, measured off it rather than guessed:
-              a 18px track and a fill rounded at BOTH ends so it reads as a
-              pill inside the track rather than as a block filling it.
-
-              THE GRADIENT IS THE THEME'S NOW, not the recording's. It was
-              sampled violet-to-blue (#6d2ffd → #4a5cfb) from the original
-              reference; the product is blue — "אין להשאיר צבעי סגול מהעיצוב
-              הישן" — so .anx-bar runs brand-600 → brand-300 and moves with
-              the theme instead of holding a second opinion about what the
-              brand fill is. Paused keeps the grey it always had: a paused
-              round still wearing the brand gradient would look like it was
-              running.
-            */}
-            <ProgressBar
-              segments={[
-                {
-                  value: Math.min(publishedToday, plannedToday),
-                  /*
-                   * THE LIGHT RUNS ONLY WHILE THE ROUND DOES. Paused keeps the
-                   * grey it always had; a finished day keeps the gradient and
-                   * loses the sheen. A bar that still shimmered over a round
-                   * that is over — or one the owner switched off — would be
-                   * this panel saying something is happening while nothing is.
-                   */
-                  className: paused
-                    ? 'rounded-full bg-mist-500'
-                    : `rounded-full anx-bar${publishedToday >= plannedToday ? '' : ' anx-bar-live'}`,
-                },
-              ]}
-              total={plannedToday}
-              ariaLabel={`${publishedToday} מתוך ${plannedToday} ${agree(publishedToday, 'פורסם', 'פורסמו')} מהמתוכננים להיום`}
-              height="h-[18px]"
-            />
-          </div>
-        )}
-        {ceilingReached && (
-          <p className="mt-1.5 text-[11px] font-bold leading-[15px] text-warning-400">
-            הגעתם לתקרה היומית שהגדרתם. פרסומים שזמנם יגיע היום ימתינו למחר — אפשר להעלות את התקרה בהגדרות.
-          </p>
-        )}
-        {/* House rule 2, verbatim. The ceiling is no longer the bar's
-            denominator — it is a limit, not a plan — so it says here what it
-            is, which is all it was ever able to tell him. */}
-        <p className="mt-1.5 text-[11px] leading-[15px] text-mist-500">
-          המגבלה היומית ({dailyTarget}) היא מספר שאתם קובעים בהגדרות — היא לא מכסה רשמית של פייסבוק.
+      {ceilingReached && (
+        <p className="mt-2.5 text-[11px] font-bold leading-[15px] text-warning-400">
+          הגעתם לתקרה היומית שהגדרתם. פרסומים שזמנם יגיע היום ימתינו למחר — אפשר להעלות את התקרה בהגדרות.
         </p>
-      </div>
+      )}
+      {/* House rule 2, verbatim, and it stays: the ceiling is a limit and not
+          a plan, and this is the one line on the screen that says so. It is
+          in the reference too — the last words under the card are its tail. */}
+      <p className="mt-2 text-[11px] leading-[15px] text-mist-500">
+        המגבלה היומית ({dailyTarget}) היא מספר שאתם קובעים בהגדרות — היא לא מכסה רשמית של פייסבוק.
+      </p>
 
       {systemState === 'paused' && (
         <div className="mt-3">

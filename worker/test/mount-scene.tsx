@@ -1,16 +1,20 @@
 /*
- * THE PUBLISHING SCENE, MOUNTED SO ITS CLAIMS CAN BE TESTED.
+ * ANX LIVE FLOW, MOUNTED SO ITS CLAIMS CAN BE TESTED.
  *
- * The scene has one rule that matters more than every pixel in it: a green
- * tick means a post landed in a group, so a tick may appear only when the real
- * publication count rises. That is a claim about a SEQUENCE — run it, wait,
- * nothing appears; raise the number, one appears — and a static render cannot
- * see it. So this is the real component with React behind it, and the test
- * drives it through `window.__publish` and `window.__mode`.
+ * The card has one rule that matters more than every pixel in it: nothing on
+ * it may say a publication happened unless the database says so. That is a
+ * claim about a SEQUENCE — set a stage, nothing is ticked; put a finished row
+ * in, a tick appears on THAT row — and a static render cannot see it. So this
+ * is the real panel with React behind it, driven through the handles below.
+ *
+ * There is no standalone mount of the card any more: it is only ever drawn by
+ * LiveQueueHero, and the panel is what decides which state it is in. A second
+ * mount that was handed a state directly would be testing the drawing and not
+ * the deciding, which is the half that has had the bugs.
  */
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { PublishingStage } from '@/components/social/PublishingStage';
+import type { FlowRow } from '@/components/social/LiveFlow';
 import type { SceneMode } from '@/components/social/sceneState';
 import { Ratio, LiveQueueHero } from '@/components/social/LiveCampaignHero';
 import type { SystemState } from '@/components/social/systemState';
@@ -18,46 +22,61 @@ import type { QueueStep } from '@/lib/social/types';
 
 declare global {
   interface Window {
+    /** Publications that really finished today — the stats and the headline. */
     __publish: (n: number) => void;
+    /** Kept for the states the panel cannot be driven into from a row. */
     __mode: (m: SceneMode) => void;
-    /* The panel's day. 0 draws no bar and no second scene, which is how the
-       scene assertions keep counting one robot; the bar test raises it. */
+    /** The panel's day: done and planned. */
     __plan: (done: number, total: number) => void;
     /*
      * THE STAGE THE WORKER SAYS IT IS ON, on the row the panel is holding.
      *
-     * This is the control that matters most in this harness: `preparing` and
-     * `sending` are not two moods, they are two values of this column, and a
-     * test that could not set it would be asserting that a mode renders
-     * rather than that the right mode is chosen.
+     * The control that matters most here: `preparing` and `sending` are not
+     * two moods, they are two values of this column, and the percentage under
+     * the current publication is read from it and from nothing else.
      */
     __step: (step: QueueStep) => void;
     /*
      * The dashboard's own verdict, so the stopped states can be driven
-     * through the real panel instead of being handed to the scene directly.
-     *
-     * `blocked` is the third fact and the one the 06/11 bug turned on:
-     * whether the thing that needs a person also STOPS the engine. A backlog
-     * of parked rows does not.
+     * through the real panel. `blocked` is the third fact: whether the thing
+     * that needs a person also STOPS the engine. A backlog does not.
      */
     __system: (state: SystemState, online: boolean, blocked: boolean) => void;
+    /** Today's failures, for the red figure and the queue's failed row. */
+    __failed: (n: number) => void;
+    /** Rows for the queue list, when a test needs a particular shape. */
+    __rows: (rows: FlowRow[] | null) => void;
   }
 }
 
 function Harness() {
-  const [published, setPublished] = useState(0);
   const [mode, setMode] = useState<SceneMode>('sending');
   const [day, setDay] = useState<[number, number]>([0, 0]);
   const [step, setStep] = useState<QueueStep>('uploading_media');
+  const [failed, setFailed] = useState(0);
+  const [rows, setRows] = useState<FlowRow[] | null>(null);
   const [system, setSystem] = useState<{ state: SystemState; online: boolean; blocked: boolean } | null>(null);
-  window.__publish = setPublished;
+  /* ONE SOURCE FOR THE DAY'S COUNT. It was two — a `published` state and
+     day[0], read as `published || day[0]` — and that `||` quietly turned a
+     deliberate zero back into 22, which is exactly the case the "nothing
+     attempted, no share" assertion is about. */
+  window.__publish = (n) => setDay(([, total]) => [n, total]);
   window.__mode = setMode;
   window.__plan = (done, total) => setDay([done, total]);
   window.__step = setStep;
+  window.__failed = setFailed;
+  window.__rows = setRows;
   window.__system = (state, online, blocked) => setSystem({ state, online, blocked });
+
+  const live = mode === 'sending' || mode === 'preparing';
+  const queue: FlowRow[] = rows ?? [
+    { id: 'r-done', name: 'באר שבע והסביבה', state: 'done', at: '20:15' },
+    ...(live ? ([{ id: 'r-live', name: 'קבוצת באר שבע', state: 'live', note: 'מפרסם עכשיו' }] as FlowRow[]) : []),
+    { id: 'r-next', name: 'לוח באר שבע', state: 'next' },
+  ];
+
   return (
     <div style={{ padding: 12 }}>
-      <PublishingStage mode={mode} published={published} total={279} />
       {/* The real counter line, so "auto font" can be MEASURED rather than
           eyeballed. The widest shape the data can take — four digits on each
           side — is the one that decides whether it fits. */}
@@ -65,24 +84,18 @@ function Harness() {
         <Ratio done={1180} total={2655} suffix="פורסמו מתוך המתוכננים להיום" />
       </div>
       {/*
-        The real panel, so "the title is never cut on a phone" can be MEASURED.
-        Every prop the chip used to read is still passed — a face, a name, a
-        second profile, a refresh handler — because the claim is that the panel
-        no longer DRAWS them, not that nobody hands them over.
+        The real panel. Every prop the old chip read is still passed — a face,
+        a name, a second profile, a refresh handler — because the claim is that
+        the panel no longer DRAWS them, not that nobody hands them over.
       */}
       <div data-panel style={{ width: '100%', marginTop: 12 }}>
         <LiveQueueHero
-          /* The panel decides its own scene from these two and the row
-             below — never from `mode`, which drives only the standalone scene
-             above it. */
+          /* The panel decides its own state from these and the row below. */
           systemState={system ? system.state : mode === 'paused' ? 'paused' : 'active'}
           workerOnline={system ? system.online : true}
           publishingBlocked={system ? system.blocked : false}
           publishedToday={day[0]}
           dailyTarget={300}
-          /* Zero on purpose: the panel then draws no scene of its own, so the
-             scene assertions above keep counting ONE robot and one active
-             destination. The header is what this mount is for. */
           plannedToday={day[1]}
           pendingCancellable={120}
           nextAt={new Date(Date.now() + 600000).toISOString()}
@@ -91,25 +104,19 @@ function Harness() {
             TIED TO THE MODE, so the panel's own "today is finished" test can
             be driven without a fourth control: a row in a worker's hands is
             exactly what `sending` means, and a finished day is one where
-            nobody is holding anything. A fixed 1 here would have made the
-            done state unreachable from this mount — which is to say,
-            untestable, which is to say, the test would have been written
-            against hand-written markup instead of the real panel.
+            nobody is holding anything.
           */
-          inFlight={mode === 'sending' ? 1 : 0}
+          inFlight={live ? 1 : 0}
           /*
-           * THE ROW ITSELF, so the line that says WHAT is going out is drawn
+           * THE ROW ITSELF, so the card that says WHAT is going out is drawn
            * and therefore measured. A long Cyrillic group name on purpose:
-           * that is the case the clipping guard exists for, and the stage
-           * line is now the longest thing in this panel.
+           * that is the case the clipping guard exists for.
            *
-           * `step_at` is twelve seconds back, so the counter has something
-           * honest to print — the component clamps anything negative or over
-           * an hour away, and a fixed instant would drift past that clamp as
-           * the page sits open.
+           * `step_at` is twelve seconds back, so anything that prints an age
+           * has something honest to print.
            */
           inFlightRows={
-            mode === 'sending'
+            live
               ? ([
                   {
                     id: 'q-live',
@@ -118,10 +125,18 @@ function Harness() {
                     step_at: new Date(Date.now() - 12_000).toISOString(),
                     scheduled_at: new Date().toISOString(),
                     target: { name: 'Чистка диванов Беэр-Шева и окрестности — объявления' },
+                    post: { media: [] },
                   },
                 ] as never)
               : []
           }
+          flowRows={queue}
+          flowStats={{
+            attempts: day[0] + failed,
+            success: day[0],
+            failed,
+            groups: 28,
+          }}
           fbAccount={{ name: 'Stas Terehin', avatar: 'https://example.invalid/a.jpg' }}
           profiles={[
             { name: 'Stas Terehin', kind: 'profile', image: 'https://example.invalid/a.jpg' },

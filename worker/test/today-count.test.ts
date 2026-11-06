@@ -56,10 +56,19 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
 
 /* ───────── 1. the bar is about TODAY, not about the ceiling ───────────── */
 {
+  /*
+   * RE-POINTED ONTO THE ANX LIVE FLOW CARD. The daily bar is gone: the
+   * reference replaces "22 out of 48" with a headline that counts what is
+   * still waiting and four counted figures. The RULE is untouched and is the
+   * only thing this section was ever about — the number is read off TODAY'S
+   * OWN PLAN and never off the settings ceiling. 48 − 22 = 26 waiting;
+   * 300 − 22 = 278, which is what a card measuring against the ceiling would
+   * have to say.
+   */
   const html = card(22, 48);
   const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-  is(/22\s*\/\s*48/.test(text), `the ratio must be out of today's own total — got: ${text.slice(0, 160)}`);
-  is(text.includes('מתוך המתוכננים להיום'), 'and must say that is what it is out of');
+  is(/26 פרסומים ממתינים לכם/.test(text), `the headline counts out of today's own total — got: ${text.slice(0, 160)}`);
+  is(!/278/.test(text), 'and never out of the ceiling');
   /* THE CEILING IS NOT THE DENOMINATOR ANY MORE. Asserted on the ratio rather
      than on the page, because 300 is still legitimately named below — as the
      limit it is, which is all it was ever able to tell him. */
@@ -67,32 +76,24 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
   is(text.includes('300'), 'but it is still stated, because it is still a real limit');
 
   /*
-   * THE BAR AGREES WITH THE FIGURE ABOVE IT — one number, two drawings.
-   *
-   * Checked on the FILL'S WIDTH and not only on its label, and that distinction
-   * caught a real hole: a mutation that pointed the bar back at the 300 while
-   * leaving the label alone passed every other assertion here. The label is
-   * what a screen reader is told; the width is what he sees. They are two
-   * expressions and nothing but this line makes them say the same thing.
+   * AND THE ONE BAR LEFT ON THE CARD IS ABOUT ONE PUBLICATION, NOT THE DAY.
+   * It is filled from the stage the worker wrote on the row in flight, so a
+   * card with no row in flight draws no fill at all — which is also why the
+   * day's figures can never leak into it.
    */
-  is(/aria-label="22 מתוך 48[^"]*"/.test(html), `the bar's own label must say the same thing — got: ${(html.match(/aria-label="[^"]*מתוך[^"]*"/) ?? [])[0]}`);
-  /*
-   * MEASURED FROM THE BAR'S OWN LABEL ONWARDS. "the first width:% in the
-   * card" was never the bar — it was only the first one by accident, and the
-   * robot above it now carries per-cent widths of its own (the eyelids, which
-   * are placed over the eye lights of a 440px pose). Anchoring on the label
-   * the assertion above already pins is both narrower and stable.
-   */
-  const bar = html.slice(html.indexOf('aria-label="22 מתוך 48'));
-  const fill = Number((bar.match(/width:\s*([\d.]+)%/) ?? [])[1]);
-  is(Math.abs(fill - (22 / 48) * 100) < 0.5, `the bar must be filled to 22 of 48 (${(22 / 48 * 100).toFixed(1)}%), not to 22 of the ceiling — got ${fill}%`);
+  is(!/aria-label="\d+ מתוך \d+ (פורסם|פורסמו)/.test(html), 'the day is no longer drawn as a bar at all');
+  is(!/anxf-fill/.test(html), 'and with nothing in flight there is no fill on the card');
 }
 
 /* ───────── 2. nothing today is a sentence, not a bar out of zero ───────── */
 {
   const html = card(0, 0);
   const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  /* AND IT IS NOT A FINISHED DAY. 0 of 0 satisfies "everything planned has
+     gone out" arithmetically, and for one commit the headline said so over a
+     queue that never had anything in it. */
   is(text.includes('אין פרסומים מתוכננים להיום'), 'a day with nothing in it says so');
+  is(!text.includes('סיים לפרסם'), 'and does not claim the robot finished work it never had');
   /*
    * AND DRAWS NO BAR. A ratio out of zero is a bar that is either empty or
    * full depending on how the division is written, and neither is a fact —
@@ -112,8 +113,9 @@ const card = (publishedToday: number, plannedToday: number, dailyTarget = 300): 
    * somebody "optimises" it into a separate count.
    */
   const html = card(48, 48);
-  is(/48\s*\/\s*48/.test(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')), 'a finished day reads as complete, not as overflowing');
-  is(/aria-label="48 מתוך 48/.test(html), 'and the bar is full rather than past its end');
+  const done = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  is(done.includes('הרובוט סיים לפרסם היום'), 'a finished day reads as complete');
+  is(!/-\d+ פרסומים/.test(done), 'and never as a negative remainder — the published half is inside the total by construction');
 }
 
 /* ───────── 4. "ואז יתאפס" — the boundary that makes it reset ──────────── */

@@ -963,6 +963,7 @@ export function LiveQueueHero({
   inFlight = 0,
   inFlightRows = [],
   workerOnline,
+  publishingBlocked = false,
   intervention = null,
   profiles = [],
   onSwitchProfile,
@@ -1100,6 +1101,20 @@ export function LiveQueueHero({
    * saying so until the machine's own state changes, so they omit it.
    */
   intervention?: { title: string; body: string; actionLabel: string; href: string; onAction?: () => void } | null;
+  /**
+   * THE INTERVENTION ABOVE ALSO STOPS PUBLISHING.
+   *
+   * Carried, not decided: page.tsx raises `needs_intervention` for five
+   * different things and only some of them stop the engine. The robot below
+   * reads this to tell "the machine is stopped" from "something is waiting
+   * for you while the machine works" — see sceneState.ts, and the afternoon
+   * on 06/11 when it could not.
+   *
+   * Defaults to false, which is the honest answer for a caller that does not
+   * know: the robot then reports what the machine is doing, and the headline
+   * still names what needs a person.
+   */
+  publishingBlocked?: boolean;
 }) {
   const paused = systemState === 'paused';
   /* Also while something is in flight: the stage counter below needs a beat,
@@ -1190,6 +1205,10 @@ export function LiveQueueHero({
   const sceneMode: SceneMode = sceneModeFor({
     systemState,
     workerOnline,
+    /* Whether the thing that needs a person also STOPS the engine. Decided by
+       the page, which knows which of the five causes it raised — see the
+       field's own note in sceneState.ts. */
+    publishingBlocked,
     dayDone,
     /*
      * THE STAGE OF EVERY ROW A WORKER IS HOLDING, which is what tells

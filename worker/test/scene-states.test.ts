@@ -37,42 +37,80 @@ const is = (cond: boolean, claim: string) => {
 
 /** The common case: everything running, nothing blocking. */
 const live = (over: Partial<Parameters<typeof sceneModeFor>[0]> = {}): SceneMode =>
-  sceneModeFor({ systemState: 'active', workerOnline: true, dayDone: false, inFlightSteps: [], ...over });
+  sceneModeFor({
+    systemState: 'active',
+    workerOnline: true,
+    publishingBlocked: false,
+    dayDone: false,
+    inFlightSteps: [],
+    ...over,
+  });
 
-/* ─── §1 — the three states that stop everything are read FIRST ──────────── */
+/* ─── §1 — what stops the engine, and what only waits for a person ──────── */
 
 {
-  /*
-   * AND THEY ARE READ IN THE DASHBOARD'S OWN ORDER. page.tsx decides
-   * `systemState` and the headline directly above this scene is written from
-   * it. If the scene asked "is a worker holding a row?" first, a card could
-   * be flying to a group under a headline reading "נדרשת התערבות" — the panel
-   * contradicting itself in two places two centimetres apart, which is the
-   * exact class of bug this product keeps paying for.
-   */
+  /* The owner's own switch first: it explains every other symptom on the
+     screen, and he pressed it himself. */
   eq(live({ systemState: 'paused', inFlightSteps: ['publishing'] }), 'paused', 'PAUSED beats a row in flight');
   eq(live({ systemState: 'paused', dayDone: true }), 'paused', 'and beats a finished day — switched off is not finished');
-  eq(
-    live({ systemState: 'needs_intervention', inFlightSteps: ['publishing'] }),
-    'error',
-    'NEEDS A PERSON beats a row in flight, because the headline over the scene already says so',
-  );
   eq(live({ systemState: 'empty', dayDone: true }), 'idle', 'and an empty queue is not a finished day');
 }
 
 {
   /*
-   * WHICH KIND OF STOP IT IS. Both come from `needs_intervention`; the
-   * heartbeat is the only thing that tells them apart, and it is read for
-   * nothing else anywhere in this ladder.
+   * ─── THE BUG THAT SHIPPED, AND THE SHAPE OF ITS FIX ────────────────────
+   *
+   * The first version of this ladder read `needs_intervention` as "the
+   * engine is stopped". Measured on his account on 06/11 at 18:01: the
+   * engine was publishing once a minute — 15:57:41, 15:59:00, 16:00:06 —
+   * with a row 37 seconds into 'ready_to_publish', and the scene drew the
+   * orange "stopped, a person is needed" robot over all of it. The
+   * intervention was 173 old rows parked for his eyes, which stop nothing.
+   *
+   * `needs_intervention` is five causes and only three of them stop
+   * publishing. `publishingBlocked` is the page's answer to which kind this
+   * is, and it is required precisely so nobody can forget to decide.
    */
-  eq(live({ systemState: 'needs_intervention', workerOnline: false }), 'offline', 'no heartbeat: the disconnected robot');
-  eq(live({ systemState: 'needs_intervention', workerOnline: true }), 'error', 'a live machine waiting on a person: the alert');
+  const backlog = { systemState: 'needs_intervention' as const, publishingBlocked: false };
+  eq(live({ ...backlog, inFlightSteps: ['publishing'] }), 'sending', 'A BACKLOG STOPS NOTHING: a row at the click is drawn as going out');
+  eq(live({ ...backlog, inFlightSteps: ['ready_to_publish'] }), 'preparing', 'and the stage is read — this is the exact row that was on his screen');
   eq(
-    live({ systemState: 'needs_intervention', workerOnline: undefined }),
+    live({ ...backlog, inFlightSteps: [] }),
+    'waiting',
+    'and between publications the robot kills time as usual — the queue is running, and the headline above it still names what needs him',
+  );
+  /*
+   * AND IT MAY NOT FLICKER. During a round `inFlight` goes 1 → 0 → 1 every
+   * minute; if a backlog produced the alert whenever nothing was in hand,
+   * the badge would blink on and off all afternoon. Both halves of that
+   * cycle are asked here, and neither is the alert.
+   */
+  is(
+    live({ ...backlog, inFlightSteps: [] }) !== 'error' && live({ ...backlog, inFlightSteps: ['opening'] }) !== 'error',
+    'neither half of the gap-between-publications cycle shows the alert, so the badge cannot blink through a working round',
+  );
+}
+
+{
+  /*
+   * AND WHEN IT REALLY IS STOPPED — the PC off, a publication overdue and
+   * unclaimed, Chrome asking for a Facebook login — it outranks everything
+   * below, including a row that still reads "in flight". With no heartbeat
+   * such a row is one a dead worker was holding, which sweepStranded() frees
+   * on the next pass; drawing it as work would report motion from a
+   * switched-off computer.
+   */
+  const blocked = { systemState: 'needs_intervention' as const, publishingBlocked: true };
+  eq(live({ ...blocked, workerOnline: false }), 'offline', 'no heartbeat: the disconnected robot');
+  eq(live({ ...blocked, workerOnline: true }), 'error', 'a live machine that cannot publish: the alert');
+  eq(
+    live({ ...blocked, workerOnline: undefined }),
     'error',
     'and nobody said: that is NOT the same as "the PC is off" — it must not accuse a machine that may be running',
   );
+  eq(live({ ...blocked, workerOnline: false, inFlightSteps: ['publishing'] }), 'offline', 'A STRANDED ROW IS NOT WORK: the missing machine still wins');
+  eq(live({ ...blocked, inFlightSteps: ['publishing'] }), 'error', 'and nor is one held by a machine that cannot reach Facebook');
+
   /*
    * AND A HEARTBEAT CAN NEVER START THE ROBOT. This is the bug that put
    * "רובוט בפעולה" over a morning with 0 of 268 published: the PC being awake
@@ -101,7 +139,20 @@ const live = (over: Partial<Parameters<typeof sceneModeFor>[0]> = {}): SceneMode
    * the ladder still answers consistently rather than inventing a third
    * thing.
    */
-  eq(live({ dayDone: true, inFlightSteps: ['publishing'] }), 'done', 'and `dayDone` is the panel’s to decide, not this function’s to second-guess');
+  /*
+   * RE-POINTED WITH THE ORDER ABOVE, and it now answers the safer way round.
+   * The panel cannot produce this pair — its own `dayDone` carries
+   * `inFlight === 0` — so this is a question about an input that should not
+   * arrive. A row in a worker's hands is the same fact the panel's guard is
+   * made of: while one exists, the day is not over. So the scene reports the
+   * work rather than congratulating over it.
+   */
+  eq(
+    live({ dayDone: true, inFlightSteps: ['publishing'] }),
+    'sending',
+    'a row still in a worker’s hands is not a finished day — the same rule the panel’s own guard encodes',
+  );
+  eq(live({ dayDone: true, inFlightSteps: [] }), 'done', 'and with nobody holding anything, it is');
 }
 
 {

@@ -1221,25 +1221,68 @@ async function main(): Promise<void> {
        * question that matters is whether the panel can ever draw a working
        * robot under a headline that says it is stopped.
        */
-      await page.evaluate(() => window.__system('needs_intervention', false));
+      /* WITH A ROW STILL READING "in flight", deliberately: a worker that died
+         holding one leaves exactly that, and sweepStranded() frees it on the
+         next pass. Drawing it as work would report motion from a switched-off
+         computer, so the missing machine has to outrank it. */
+      await page.evaluate(() => { window.__system('needs_intervention', false, true); window.__mode('sending'); });
       await page.waitForTimeout(150);
       const off = await show();
       eq(off.unplugged, 1, 'NO HEARTBEAT: the panel draws the disconnected robot');
+      eq(off.held + off.flying, 0, 'A STRANDED ROW IS NOT WORK: nothing is drawn as going out');
       eq(off.alert, 0, 'and not the "somebody is needed" badge');
       eq(off.held + off.flying, 0, 'and NOTHING is being published on a machine that is not connected');
       eq(off.title, 'נדרשת פעולה שלכם', 'under the headline the page gave it');
       is(off.label.includes('המחשב לא מחובר'), `and a screen reader is told the same — "${off.label}"`);
 
-      await page.evaluate(() => window.__system('needs_intervention', true));
+      /*
+       * ─── THE BUG HE PHOTOGRAPHED, 06/11 18:01 ───────────────────────────
+       *
+       * `needs_intervention` WHILE THE ENGINE IS PUBLISHING. On his account
+       * it was 173 old rows parked for him to look at — rows that stop
+       * nothing — and the scene drew the orange "a person is needed" robot
+       * over an engine publishing once a minute, with a row 37 seconds into
+       * 'ready_to_publish'.
+       *
+       * The row in a worker's hands is a fact about this second. The backlog
+       * is a fact about his afternoon. The robot reports the first, and the
+       * headline above it still reports the second.
+       */
+      await page.evaluate(() => { window.__system('needs_intervention', true, false); window.__mode('sending'); window.__step('ready_to_publish'); });
+      await page.waitForTimeout(150);
+      const busy = await show();
+      eq(busy.alert, 0, 'A BACKLOG DOES NOT STOP THE ROBOT: no alert badge while a worker is holding a row');
+      eq(busy.unplugged, 0, 'and certainly not the disconnected one — the PC is heartbeating');
+      eq(busy.held, 1, 'the post is in its hand, which is the stage the row actually reports');
+      is(busy.label.includes('מכין פרסום'), `and a screen reader is told the same — "${busy.label}"`);
+      /* AND THE HEADLINE IS UNTOUCHED: it still names what needs him, from
+         the system state, exactly as it did before. That is the whole shape
+         of the fix — two sentences about two different things, neither
+         pretending to be the other. */
+      eq(busy.title, 'נדרשת פעולה שלכם', 'the headline still says what needs him');
+
+      /* AND WITH NOTHING IN ANYONE'S HANDS IT IS THE ALERT, which is what
+         that state is for. */
+      /* A BACKLOG WITH NOTHING IN HAND IS NOT AN ALERT EITHER — the queue is
+         running and the next slot has not come round. The robot kills time
+         exactly as it does on any other afternoon. */
+      await page.evaluate(() => window.__mode('waiting'));
+      await page.waitForTimeout(150);
+      const lull = await show();
+      eq(lull.alert, 0, 'A BACKLOG IS STILL NOT A STOPPED MACHINE, even between publications — the badge may not blink through a working round');
+
+      /* AND THE ALERT IS FOR THE INTERVENTIONS THAT REALLY STOP IT: Chrome
+         asking for a Facebook login, a publication overdue and unclaimed. */
+      await page.evaluate(() => window.__system('needs_intervention', true, true));
       await page.waitForTimeout(150);
       const blocked = await show();
-      eq(blocked.alert, 1, 'A LIVE MACHINE WAITING ON A PERSON: the alert badge');
+      eq(blocked.alert, 1, 'A LIVE MACHINE THAT CANNOT PUBLISH: the alert badge');
       eq(blocked.unplugged, 0, 'and not the disconnected one — the PC is there');
       eq(blocked.held + blocked.flying, 0, 'and still nothing in the air: a person is needed first');
       is(blocked.label.includes('נדרשת פעולה'), `and the label says so too — "${blocked.label}"`);
 
       /* BACK TO WORK, and the badges go with it. */
-      await page.evaluate(() => { window.__system('active', true); window.__step('publishing'); });
+      await page.evaluate(() => { window.__system('active', true, false); window.__mode('sending'); window.__step('publishing'); });
       await page.waitForTimeout(150);
       const back = await show();
       eq(back.alert + back.unplugged, 0, 'and once the dashboard says active again, neither badge is left behind');

@@ -83,26 +83,69 @@ export function sceneModeFor(facts: {
   systemState: SystemState;
   /** A real heartbeat. Only its ABSENCE may draw the disconnected robot. */
   workerOnline?: boolean;
+  /**
+   * ─── DOES THIS INTERVENTION ACTUALLY STOP PUBLISHING? ───────────────────
+   *
+   * REQUIRED, with no default, and that is the point: every caller has to
+   * decide, because getting it wrong is what put the orange "stopped" robot
+   * over an engine publishing once a minute on 06/11.
+   *
+   * `needs_intervention` is not one state. page.tsx raises it for five
+   * different things, and only some of them stop the engine:
+   *
+   *   the PC is off while work is queued        STOPS EVERYTHING
+   *   a publication is overdue and unclaimed    STOPS EVERYTHING
+   *   Chrome is asking for a Facebook login     STOPS EVERYTHING
+   *   N rows are parked for a person to move    stops nothing
+   *   some rows are paused                      stops only those rows
+   *
+   * On his account it was the fourth: 173 old rows waiting for his eyes,
+   * while publishing ran all afternoon. The headline above the scene is
+   * right to name them — they do need him — but the robot is about the
+   * machine, and the machine was working.
+   */
+  publishingBlocked: boolean;
   /** Decided by the panel from today's two figures — never by the scene. */
   dayDone: boolean;
   /** The stage of each row a worker is holding right now. */
   inFlightSteps: readonly (QueueStep | null | undefined)[];
 }): SceneMode {
-  const { systemState, workerOnline, dayDone, inFlightSteps } = facts;
+  const { systemState, workerOnline, publishingBlocked, dayDone, inFlightSteps } = facts;
+  /* The owner's own switch, first: it explains every other symptom. */
   if (systemState === 'paused') return 'paused';
-  if (systemState === 'needs_intervention') return workerOnline === false ? 'offline' : 'error';
+
+  /*
+   * THEN THE THINGS THAT REALLY DO STOP THE ENGINE, split by whether the
+   * missing piece is the machine itself. These outrank a row that still
+   * reads "in flight": with no heartbeat such a row is one a dead worker was
+   * holding, which sweepStranded() frees on the next pass, and drawing it as
+   * work would report motion from a switched-off computer.
+   */
+  if (publishingBlocked) return workerOnline === false ? 'offline' : 'error';
+
+  /*
+   * AND THEN WHAT THE MACHINE IS DOING THIS SECOND.
+   *
+   * Above an intervention that stops nothing, deliberately. A worker holding
+   * a row is a fact about right now; a backlog is a fact about the
+   * afternoon. The robot reports the first and the headline reports the
+   * second, and neither pretends to be the other.
+   */
+  if (inFlightSteps.length > 0) {
+    /*
+     * THE MOST ADVANCED ROW DECIDES. Several lanes publish at once, so a
+     * pass can hold one row still opening a group and another at the click.
+     * The scene can only be in one state, and the one it must not get wrong
+     * is the one where something is being submitted: if ANY row has reached
+     * the click, the scene says so.
+     */
+    const everyRowIsStillPreparing = inFlightSteps.every(
+      (step) => step != null && (PREPARING_STEPS as readonly string[]).includes(step),
+    );
+    return everyRowIsStillPreparing ? 'preparing' : 'sending';
+  }
+
   if (systemState === 'empty') return 'idle';
   if (dayDone) return 'done';
-  if (inFlightSteps.length === 0) return 'waiting';
-  /*
-   * THE MOST ADVANCED ROW DECIDES. Several lanes publish at once, so a pass
-   * can hold one row that is still opening a group and another that is at the
-   * click. The scene can only be in one state, and the one it must not get
-   * wrong is the one where something is being submitted: if ANY row has
-   * reached the click, the scene says so.
-   */
-  const everyRowIsStillPreparing = inFlightSteps.every(
-    (step) => step != null && (PREPARING_STEPS as readonly string[]).includes(step),
-  );
-  return everyRowIsStillPreparing ? 'preparing' : 'sending';
+  return 'waiting';
 }

@@ -31,9 +31,15 @@ declare global {
      * rather than that the right mode is chosen.
      */
     __step: (step: QueueStep) => void;
-    /* The dashboard's own verdict, so the two stopped states can be driven
-       through the real panel instead of being handed to the scene directly. */
-    __system: (state: SystemState, online: boolean) => void;
+    /*
+     * The dashboard's own verdict, so the stopped states can be driven
+     * through the real panel instead of being handed to the scene directly.
+     *
+     * `blocked` is the third fact and the one the 06/11 bug turned on:
+     * whether the thing that needs a person also STOPS the engine. A backlog
+     * of parked rows does not.
+     */
+    __system: (state: SystemState, online: boolean, blocked: boolean) => void;
   }
 }
 
@@ -42,12 +48,12 @@ function Harness() {
   const [mode, setMode] = useState<SceneMode>('sending');
   const [day, setDay] = useState<[number, number]>([0, 0]);
   const [step, setStep] = useState<QueueStep>('uploading_media');
-  const [system, setSystem] = useState<{ state: SystemState; online: boolean } | null>(null);
+  const [system, setSystem] = useState<{ state: SystemState; online: boolean; blocked: boolean } | null>(null);
   window.__publish = setPublished;
   window.__mode = setMode;
   window.__plan = (done, total) => setDay([done, total]);
   window.__step = setStep;
-  window.__system = (state, online) => setSystem({ state, online });
+  window.__system = (state, online, blocked) => setSystem({ state, online, blocked });
   return (
     <div style={{ padding: 12 }}>
       <PublishingScene mode={mode} published={published} total={279} />
@@ -70,6 +76,7 @@ function Harness() {
              above it. */
           systemState={system ? system.state : mode === 'paused' ? 'paused' : 'active'}
           workerOnline={system ? system.online : true}
+          publishingBlocked={system ? system.blocked : false}
           publishedToday={day[0]}
           dailyTarget={300}
           /* Zero on purpose: the panel then draws no scene of its own, so the

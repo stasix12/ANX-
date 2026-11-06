@@ -1541,6 +1541,23 @@ export default function SocialDashboard() {
           : 'active';
 
   /*
+   * ─── AND WHETHER IT STOPS THE ENGINE, WHICH IS A DIFFERENT QUESTION ─────
+   *
+   * `needs_intervention` is five causes and only three of them stop
+   * publishing. The other two — rows parked for a person, rows paused — stop
+   * those rows and nothing else; the queue keeps going.
+   *
+   * The robot on the system card reads this. Without it, it read the STATE,
+   * and on 06/11 at 18:01 that drew the orange "stopped, a person is needed"
+   * robot over an engine publishing once a minute — the intervention being
+   * 173 old rows waiting for his eyes. The headline is right to name them.
+   * The picture of the machine is about the machine.
+   */
+  const publishingBlocked = Boolean(
+    data && ((!data.workerOnline && summary.queued > 0) || stalledSince || data.workerNeedsAuth),
+  );
+
+  /*
    * What the intervention is, and the one place to go and fix it. Stalled
    * wins: a dead worker blocks the rows waiting on a person too, so telling
    * the owner to go and confirm something would send them to a screen where
@@ -1934,6 +1951,7 @@ export default function SocialDashboard() {
             inFlight={summary.inFlight}
             inFlightRows={data.inFlightRows}
             workerOnline={data.workerOnline}
+            publishingBlocked={publishingBlocked}
             fbAccount={data.fbAccount}
             profiles={data.profiles}
             onSwitchProfile={switchProfile}

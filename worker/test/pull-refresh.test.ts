@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { copyFileSync, mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium, type Page } from 'playwright-core';
@@ -56,6 +56,30 @@ async function drag(page: Page, from: { x: number; y: number }, to: { x: number;
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await cdp.detach();
+}
+
+/**
+ * THE SAME DRAG, BUT THE FINGER STAYS DOWN.
+ *
+ * Section 8 is about the state that exists only while a thumb is on the glass,
+ * and `drag` above ends every gesture it starts — so the one moment the bug he
+ * photographed lives in was unreachable from this file. This returns with the
+ * touch still held, and the caller releases it.
+ */
+async function dragAndHold(page: Page, from: { x: number; y: number }, to: { x: number; y: number }, steps = 12): Promise<() => Promise<void>> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from.x, y: from.y }] });
+  for (let i = 1; i <= steps; i += 1) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: from.x + ((to.x - from.x) * i) / steps, y: from.y + ((to.y - from.y) * i) / steps }],
+    });
+    await page.waitForTimeout(12);
+  }
+  return async () => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+  };
 }
 
 async function main(): Promise<void> {
@@ -257,22 +281,27 @@ async function main(): Promise<void> {
      * every sheet and overlay in the product, not only the bar.
      *
      * Nothing in sections 1-6 could see it: the harness had no fixed element
-     * in it. It has one now.
+     * in it. It has one now — two, in fact: `[data-bar]`, outside the wrapper,
+     * where the shell keeps the bar today, and `[data-bar-inside]`, where it
+     * used to be, kept as the control section 8 fails against.
      *
      * THE WAIT BELOW IS NOT PADDING. The snap-back is a 220ms transition on
      * the transform, and a transform mid-transition is still a containing
-     * block — so a read taken the instant the spinner appears finds the bar at
-     * 2718 and looks exactly like the bug. The promise this section holds is
-     * about the states that LAST: at rest, and for the seconds a reload takes.
+     * block — so a read taken the instant the spinner appears found the bar at
+     * 2718 and looked exactly like the bug. This section is about the states
+     * that LAST: at rest, and for the seconds a reload takes. The state that
+     * does NOT last is section 8, and it is where he was looking.
      */
     {
       const bar = '[data-bar]';
       const barBottom = () => page.evaluate((sel) => document.querySelector(sel)!.getBoundingClientRect().bottom, bar);
       const viewport = await page.evaluate(() => window.innerHeight);
+      /* The lifted wrapper is read off the bar that is still INSIDE it — the
+         one outside has no such ancestor any more, which is the whole point. */
       const settled = () =>
         page.waitForFunction(
-          (sel) => getComputedStyle(document.querySelector(sel)!.parentElement!.parentElement!).transform === 'none',
-          bar,
+          () => getComputedStyle(document.querySelector('[data-bar-inside]')!.parentElement!.parentElement!).transform === 'none',
+          undefined,
           { timeout: 3000 },
         );
 
@@ -294,8 +323,7 @@ async function main(): Promise<void> {
          only one of them stops being a containing block. */
       is(
         (await page.evaluate(
-          (sel) => getComputedStyle(document.querySelector(sel)!.parentElement!.parentElement!).transform,
-          bar,
+          () => getComputedStyle(document.querySelector('[data-bar-inside]')!.parentElement!.parentElement!).transform,
         )) === 'none',
         'the wrapper carries NO transform at rest — translateY(0) would pin the bar to the wrapper just as firmly as translateY(56px)',
       );
@@ -317,6 +345,101 @@ async function main(): Promise<void> {
       await finish();
       await settled();
       eq(Math.round(await barBottom()), viewport, 'and it is there afterwards');
+    }
+
+    /* ── 8. AND WHILE THE FINGER IS STILL DOWN ────────────────────────── */
+    /*
+     * "תראה איפה נראה הסרגל כלים באמצע ראשי קמפיינים קבוצות .. באמצע המסך",
+     * and when asked what it does: "קופץ לאמצע ואז חוזר למטה".
+     *
+     * Section 7 promised the bar is pinned at rest and for the length of a
+     * reload, and said in its own comment that a read taken mid-gesture finds
+     * it at 2718 — the state it deliberately did not promise. That state is
+     * the one he was photographing. A gesture is short, but it is a gesture
+     * he makes by hand several times a day on the three screens he named, and
+     * a navigation bar that leaves the bottom of the screen while his thumb is
+     * on the glass is a navigation bar that moves.
+     *
+     * So the bar came out of the lifted subtree, and this is the assertion
+     * that says so. The control proves the assertion can fail: the same bar,
+     * still inside the wrapper, is measured in the same breath.
+     */
+    {
+      const bottomOf = (sel: string) => page.evaluate((s) => document.querySelector(s)!.getBoundingClientRect().bottom, sel);
+      const viewport = await page.evaluate(() => window.innerHeight);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForFunction(() => window.scrollY === 0, undefined, { timeout: 3000 });
+      await page.waitForFunction(
+        () => getComputedStyle(document.querySelector('[data-bar-inside]')!.parentElement!.parentElement!).transform === 'none',
+        undefined,
+        { timeout: 3000 },
+      );
+
+      /* Held, not finished: 180px of pull, which is 90px of page after the
+         friction — a finger halfway through the gesture. */
+      const release = await dragAndHold(page, { x: 195, y: 120 }, { x: 195, y: 300 }, 10);
+      try {
+        /* FIRST, THAT THE PAGE REALLY IS BEING HELD DOWN. Without this the
+           two reads below would pass on a gesture that never armed, and the
+           section would be measuring nothing. */
+        const held = await page.evaluate(
+          () => getComputedStyle(document.querySelector('[data-bar-inside]')!.parentElement!.parentElement!).transform,
+        );
+        is(/^matrix/.test(held) && held !== 'matrix(1, 0, 0, 1, 0, 0)', `the page is translated down while the finger is on it (${held})`);
+
+        eq(
+          Math.round(await bottomOf('[data-bar]')),
+          viewport,
+          'AND THE BAR IS STILL ON THE BOTTOM EDGE OF THE SCREEN MID-GESTURE — "קופץ לאמצע ואז חוזר למטה"',
+        );
+
+        /* THE MUTATION, live, in the same run: the bar as the shell used to
+           carry it, on this same frame of this same drag. */
+        const inside = Math.round(await bottomOf('[data-bar-inside]'));
+        is(
+          inside > viewport + 24,
+          `and the control bar — the one still inside the wrapper — is ${inside - viewport}px off that edge, which is what the real bar did until it moved out`,
+        );
+      } finally {
+        await release();
+      }
+      await page.waitForFunction(
+        () => getComputedStyle(document.querySelector('[data-bar-inside]')!.parentElement!.parentElement!).transform === 'none',
+        undefined,
+        { timeout: 3000 },
+      );
+      eq(Math.round(await bottomOf('[data-bar]')), viewport, 'and it never left, so there is nothing to come back from');
+    }
+
+    /* ── 9. AND THE PRODUCT CARRIES IT THE SAME WAY AS THIS HARNESS ───── */
+    /*
+     * Sections 7 and 8 measure a model of the shell. This one reads the shell.
+     * It finds which JSX block holds the bar rather than assuming a name, so a
+     * rename cannot quietly turn it into a test of nothing — and the thing it
+     * forbids is the one line that caused this: the block with the bar in it
+     * being the block handed to PullToRefresh.
+     */
+    {
+      const shell = readFileSync('src/components/social/SocialShell.tsx', 'utf8');
+      /* Two-space indent and nothing else on the line: the component's own
+         top-level blocks, not a `const x = (` nested inside one. Anchored with
+         ^/$ under /m rather than with \n, which never matches on the Windows
+         runner that builds the installer — a rule package.test.ts enforces. */
+      const starts = [...shell.matchAll(/^ {2}const (\w+) = \(\s*$/gm)].map((m) => ({ name: m[1], at: m.index ?? 0 }));
+      is(starts.length >= 2, `the shell renders from ${starts.length} top-level JSX blocks`);
+      const blocks = starts.map((b, i) => ({ ...b, end: i + 1 < starts.length ? starts[i + 1].at : shell.length }));
+      const holder = blocks.find((b) => shell.slice(b.at, b.end).includes('aria-label="ניווט ראשי"'));
+      is(holder, 'one of them renders the bottom navigation bar');
+      const lifted = shell.match(/<PullToRefresh onRefresh=\{onRefresh\}>\{(\w+)\}<\/PullToRefresh>/);
+      is(lifted, 'and the screen is still wrapped in PullToRefresh');
+      is(
+        holder && lifted && holder.name !== lifted[1],
+        `THE BAR IS NOT IN WHAT THE GESTURE LIFTS — lifted: \`${lifted?.[1]}\`, bar: \`${holder?.name}\``,
+      );
+      is(
+        holder && shell.slice(shell.indexOf('</PullToRefresh>')).includes(`{${holder.name}}`),
+        'and it is still rendered, after the wrapper rather than inside it',
+      );
     }
 
     eq(crashes, [], 'the gesture threw');

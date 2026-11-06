@@ -588,10 +588,15 @@ export function SocialShell({
    * is the same constant the floating selection bars are anchored to, so the
    * bottom of the product is one number.
    */
-  /* The gesture wraps the whole shell, header included, so the bar comes down
-     with the page — a header that stayed nailed in place while the content
-     slid under it would read as two screens, not one being pulled. */
-  const shell = (
+  /* The gesture wraps the whole page, header included, so the identity bar
+     comes down with the page — a header that stayed nailed in place while the
+     content slid under it would read as two screens, not one being pulled.
+     The bottom tab bar is the one thing it must NOT wrap: `furniture` below. */
+  /*
+   * THE SCROLLING PAGE, AND THE FURNITURE THAT MUST NOT SCROLL. Two blocks and
+   * not one on purpose — the reason is written out at `furniture` below.
+   */
+  const page = (
     <div className="min-h-dvh bg-ink-950 pb-[calc(4.5rem+var(--safe-b))] md:pb-10">
       {/*
         A quiet identity bar, and identity here means the OWNER's, not the
@@ -1062,7 +1067,49 @@ export function SocialShell({
         )}
         {children}
       </main>
+    </div>
+  );
 
+  /*
+   * ─────────────────────────────────────────────────────────────────────────
+   * THE BOTTOM BAR, THE SHEETS AND THE DIALOGS — OUTSIDE THE PULL WRAPPER.
+   *
+   * "תראה איפה נראה הסרגל כלים באמצע ראשי קמפיינים קבוצות .. באמצע המסך",
+   * and when asked what it does: "קופץ לאמצע ואז חוזר למטה".
+   *
+   * THE THREE SCREENS HE NAMED ARE EXACTLY THE SCREENS THAT PULL TO REFRESH.
+   * ראשי, קמפיינים and קבוצות pass `onRefresh`; הגדרות, דפי פייסבוק and
+   * גילוי קבוצות do not, and he has never reported it on one of those.
+   *
+   * `position: fixed` is measured against the viewport only while NO ancestor
+   * is transformed: a transform on an ancestor makes IT the containing block
+   * for every fixed descendant. PullToRefresh translates the whole page down
+   * by up to 96px for the length of the gesture, so for those few hundred
+   * milliseconds the bar was being positioned against the bottom of the PAGE
+   * instead of the bottom of the SCREEN — and then snapped back when the
+   * finger left, which is the "ואז חוזר למטה" half of what he described.
+   *
+   * MEASURED, in Chromium at 390x844. On a page 1965px tall: at rest the bar
+   * sits at 785-844, on the bottom edge; with the wrapper lifted 48px it sits
+   * at 1954-2013 — off the screen altogether. And on a page whose own box is
+   * SHORTER than the window, which is what 100dvh resolves to on a phone that
+   * is showing its browser's bar: 509-568 in an 844-tall window. The middle
+   * of the screen, which is where he photographed it. An identical bar
+   * rendered as a SIBLING of that wrapper measured 785-844 in every one of
+   * those states.
+   *
+   * PullToRefresh already carries a long comment about this trap, because its
+   * first version transformed the wrapper at ALL times and he found that too
+   * ("הסרגל כלים למטה לא מקובע"). That fix only emptied the property AT REST.
+   * This one takes the bar out of the subtree, so no transform anywhere on
+   * the page — this one, a future animation, anything — can unpin it again.
+   *
+   * Nothing inside this block changed: same markup, same classes, same links,
+   * same handlers, same order. Only its parent. It is still inside the
+   * layout's `.social-theme`, which is where every colour in it comes from.
+   */
+  const furniture = (
+    <>
       {/* Phone: iOS-style bottom tab bar, thumb-reachable. */}
       <nav
         aria-label="ניווט ראשי"
@@ -1190,8 +1237,16 @@ export function SocialShell({
         </p>
       </Sheet>
       {confirm.dialog}
-    </div>
+    </>
   );
 
-  return onRefresh ? <PullToRefresh onRefresh={onRefresh}>{shell}</PullToRefresh> : shell;
+  /*
+   * The page is what the finger pulls; the furniture is not dragged with it.
+   */
+  return (
+    <>
+      {onRefresh ? <PullToRefresh onRefresh={onRefresh}>{page}</PullToRefresh> : page}
+      {furniture}
+    </>
+  );
 }

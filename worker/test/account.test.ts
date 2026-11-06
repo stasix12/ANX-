@@ -158,6 +158,31 @@ async function main() {
   await page.goto('https://www.facebook.com/');
 
   /*
+   * ─────────────────────────────────────────────────────────────────────────
+   * A JAR TIMELINE, because the only machine that can answer is CI.
+   *
+   * The assertion at the end of this file has never passed in CI and passes
+   * here every time. CI's answer, asked for in the last run and given on
+   * 06/11: `cookies now: []` — that build ends this file with the facebook.com
+   * jar EMPTY, while the FIRST read in the same run found `c_user` and
+   * returned a profile. So something between the two empties it, and a single
+   * reading at the end cannot say which step.
+   *
+   * This marks the jar after every step between them. It reads cookies and
+   * nothing else — no product behaviour depends on it — and it costs one
+   * line of output only when something really is missing.
+   */
+  const marks: string[] = [];
+  const mark = async (label: string): Promise<void> => {
+    const jar = await page
+      .context()
+      .cookies('https://www.facebook.com')
+      .catch((e: unknown) => `threw: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
+    marks.push(`${label}=${typeof jar === 'string' ? jar : jar.map((c) => c.name).join('+') || 'EMPTY'}`);
+  };
+  await mark('after-setup');
+
+  /*
    * THE REGRESSION GUARD. A named helper inside an evaluate is exactly the
    * shape that esbuild rewrites, and this context deliberately does NOT get
    * session.ts's init script — so if account.ts ever grows one back, this
@@ -177,6 +202,7 @@ async function main() {
   if (ran !== 'OK') console.log('  (this browser reproduces the __name hazard, which is the point)');
 
   const profile = await readAccountProfile(page);
+  await mark('after-first-read');
   assert.ok(profile, 'a page with a c_user cookie must yield a profile');
   assert.equal(profile.id, ID, 'the id comes from the cookie');
   assert.equal(profile.name, 'Stas Terehin', 'and the name from the page, not the "Facebook" placeholder');
@@ -198,6 +224,7 @@ async function main() {
     const r = el.getBoundingClientRect();
     return { w: r.width, h: r.height };
   });
+  await mark('after-decoy-evaluate');
   assert.equal(decoy.w, 300, 'the decoy really is the bigger picture');
   assert.ok(profile.image.bytes.length < 40_000, 'yet the captured face is the small proven avatar, not the 300px post');
   /* This fixture's src cannot be fetched, so the element screenshot is what
@@ -215,7 +242,9 @@ async function main() {
         '</body></html>',
     }),
   );
+  await mark('after-second-route');
   await page.goto('https://www.facebook.com/');
+  await mark('after-second-goto');
   const unproven = await readAccountProfile(page);
   /*
    * THIS LINE CARRIES ITS OWN POST-MORTEM, and here is why.
@@ -231,13 +260,22 @@ async function main() {
    * The 131 build cannot be run here to find out: its download is refused by
    * this environment's network policy (tried, 2026-11-06). So the assertion
    * asks the question itself and CI answers it on the next run.
+   *
+   * IT ANSWERED: `cookies now: []`. The jar is empty by the time this line
+   * runs, and the first read in the same run had `c_user` — so one of the
+   * steps in between takes it away, and the guard in account.ts that puts it
+   * back is not putting it back. The timeline above (`mark(...)`) narrows it
+   * to a step; this message carries it, so the next run names the culprit
+   * instead of repeating what is already known.
    */
   const jar = await page.context().cookies('https://www.facebook.com').catch((e) => `read failed: ${e}`);
+  await mark('at-the-end');
+  if (marks.some((m) => m.endsWith('EMPTY') || m.includes('threw'))) console.log(`  (jar timeline: ${marks.join(' | ')})`);
   assert.ok(
     unproven,
     'still a signed-in session — ' +
       (typeof jar === 'string' ? jar : `cookies now: ${JSON.stringify(jar.map((c) => `${c.name}@${c.domain}${c.path}`))}`) +
-      `, url ${page.url()}`,
+      `, url ${page.url()} — jar timeline: ${marks.join(' | ')}`,
   );
   assert.equal(unproven.image, null, 'nothing provable means no face, however well it fits');
   assert.equal(unproven.imageNote, 'no-element', 'and it says so');

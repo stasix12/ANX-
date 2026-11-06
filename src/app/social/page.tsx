@@ -1575,6 +1575,9 @@ export default function SocialDashboard() {
         ...data.doneToday.slice(0, 1).map((r) => ({
           id: r.id,
           name: r.target?.name ?? 'קבוצה',
+          /* The group's own picture — already on every row this screen reads
+             (target:social_targets(...,image_url)), so it costs no query. */
+          image: r.target?.image_url ?? null,
           /* A skipped row is not a success, and the mark on it may not be the
              green one. `status` is the row's own word for what happened. */
           state: (r.status === 'published' ? 'done' : 'failed') as FlowRow['state'],
@@ -1583,12 +1586,14 @@ export default function SocialDashboard() {
         ...data.inFlightRows.slice(0, 1).map((r) => ({
           id: r.id,
           name: r.target?.name ?? 'קבוצה',
+          image: r.target?.image_url ?? null,
           state: 'live' as const,
           note: QUEUE_STEP_LABEL[(r.step ?? '') as QueueStep] || 'מפרסם עכשיו',
         })),
         ...data.upcoming.slice(0, 1).map((r) => ({
           id: r.id,
           name: r.target?.name ?? 'קבוצה',
+          image: r.target?.image_url ?? null,
           state: 'next' as const,
         })),
       ]

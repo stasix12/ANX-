@@ -2380,6 +2380,25 @@ body:has(.social-theme) .site-backdrop {
 }
 .anxf-fb-xl svg { width: 62%; height: 62%; }
 .anxf-ppl { width: 17px; height: 17px; flex: none; color: var(--color-brand-400); }
+/*
+ * THE GROUP'S PICTURE, in the Facebook mark's own box.
+ *
+ * "להוסיף גם את התמונה של הקבוצות." Same 26px, same radius, same place in the
+ * row — so a queue of groups with pictures and a queue of groups without them
+ * lay out identically and nothing shifts when one loads. The hairline is the
+ * card's own border colour: these are crops of a Facebook cover and some of
+ * them are nearly white at the edges.
+ */
+.anxf-pic {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 7px;
+  object-fit: cover;
+  object-position: center;
+  background: var(--color-ink-800);
+  box-shadow: inset 0 0 0 1px var(--color-ink-700);
+}
 
 /* ── 7: the four figures — DELETED ──────────────────────────────────────
    "כאן למחוק את הריבועים מתחת עם המספרים."

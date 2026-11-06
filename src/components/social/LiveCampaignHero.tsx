@@ -1302,6 +1302,9 @@ export function LiveQueueHero({
         name: live.target?.name ?? 'קבוצה',
         step: (live.step ?? null) as QueueStep | null,
         cover: live.post?.media?.find((m) => m.kind === 'image')?.url ?? null,
+        /* And the group's picture behind it, for the square the post's own
+           picture leaves empty — which is most publications. */
+        image: live.target?.image_url ?? null,
       }
     : null;
 

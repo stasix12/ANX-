@@ -183,6 +183,17 @@ function FacebookMark({ className }: { className?: string }) {
   );
 }
 
+/**
+ * The group's picture where the Facebook mark used to be, and the mark itself
+ * when the group has no picture stored. `loading="lazy"` for the same reason
+ * TargetAvatar carries it: these are unresized crops of a Facebook cover.
+ */
+function GroupPic({ src, className = '' }: { src?: string | null; className?: string }) {
+  if (!src) return <FacebookMark className={className} />;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className={`anxf-pic ${className}`} src={src} alt="" loading="lazy" decoding="async" data-pic="group" />;
+}
+
 function PeopleMark() {
   return (
     <svg aria-hidden className="anxf-ppl" viewBox="0 0 24 24" fill="currentColor">
@@ -228,6 +239,16 @@ export type FlowRow = {
   id: string;
   /** The group this publication is for. */
   name: string;
+  /**
+   * THE GROUP'S OWN PICTURE, when Facebook has given us one.
+   *
+   * "בצד ימין ליד השם של הקבוצה בריבוע הריק להוסיף גם את התמונה של הקבוצות."
+   * It is `social_targets.image_url`, which every screen that lists groups
+   * already draws — nothing new is fetched for this. A group with no picture
+   * stored keeps the Facebook mark that was there before, because an invented
+   * placeholder would say less than the mark does.
+   */
+  image?: string | null;
   state: 'done' | 'live' | 'next' | 'failed';
   /** For a finished one: when it finished, already formatted as HH:MM. */
   at?: string | null;
@@ -256,7 +277,7 @@ export function LiveFlow({
   /** "פרסום אחד ממתין לכם" — counted off the real queue by the screen. */
   headline: string;
   /** The publication going out right now, or null when none is. */
-  now: { name: string; step: QueueStep | null; cover: string | null } | null;
+  now: { name: string; step: QueueStep | null; cover: string | null; image?: string | null } | null;
   rows: readonly FlowRow[];
 }) {
   const at = STATION_OF[mode];
@@ -335,9 +356,24 @@ export function LiveFlow({
               right, so the post's picture leads and the Facebook mark closes
               the row on the left — which is where the reference has them. */}
           <div className="anxf-now-top">
-            <span className="anxf-now-cover" aria-hidden>
+            {/*
+              THE SQUARE BESIDE THE NAME, AND WHAT GOES IN IT.
+
+              "בצד ימין ליד השם של הקבוצה בריבוע הריק להוסיף גם את התמונה של
+               הקבוצות" — it was a grey placeholder on every publication whose
+              post carries no picture, which is most of them.
+
+              In order, and the order is the point: the POST's own picture if
+              it has one, because that is what is going out; otherwise the
+              GROUP's picture, because that is where it is going; and only
+              with neither does the outline stay. Nothing is invented and
+              nothing is fetched that the screen did not already have.
+            */}
+            <span className="anxf-now-cover" data-pic={now.cover ? 'post' : now.image ? 'group' : 'none'} aria-hidden>
               {now.cover ? (
                 <img src={now.cover} alt="" decoding="async" />
+              ) : now.image ? (
+                <img src={now.image} alt="" loading="lazy" decoding="async" />
               ) : (
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="4.5" width="18" height="15" rx="2.6" />
@@ -397,7 +433,9 @@ export function LiveFlow({
               return (
               <li key={r.id} data-row={r.state}>
                 <a className="anxf-row" href="/social/history">
-                <FacebookMark />
+                {/* The group's picture where the mark was — same box, same
+                    place, and the mark stays for a group with no picture. */}
+                <GroupPic src={r.image} />
                 <PeopleMark />
                 <span className="anxf-row-words">
                   <span className="anxf-row-name" dir="auto">{r.name}</span>

@@ -65,9 +65,21 @@ function Harness() {
   window.__system = (state, online, blocked) => setSystem({ state, online, blocked });
 
   const live = mode === 'sending' || mode === 'preparing';
+  /*
+   * A REAL PICTURE, SERVED FROM THE PAGE ITSELF.
+   *
+   * "להוסיף גם את התמונה של הקבוצות" — the square beside a group's name now
+   * carries that group's picture. An inline SVG is a real decoded image to
+   * the browser and needs no network, so the test can measure the box it
+   * lands in. The THIRD row deliberately has none: a group Facebook never
+   * gave us a picture for keeps the mark, and that half has to be measured
+   * too.
+   */
+  const pic = (fill: string) =>
+    `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" fill="${fill}"/></svg>`)}`;
   const queue: FlowRow[] = rows ?? [
-    { id: 'r-done', name: 'באר שבע והסביבה', state: 'done', at: '20:15' },
-    ...(live ? ([{ id: 'r-live', name: 'קבוצת באר שבע', state: 'live', note: 'מפרסם עכשיו' }] as FlowRow[]) : []),
+    { id: 'r-done', name: 'באר שבע והסביבה', state: 'done', at: '20:15', image: pic('#2f7d32') },
+    ...(live ? ([{ id: 'r-live', name: 'קבוצת באר שבע', state: 'live', note: 'מפרסם עכשיו', image: pic('#1557d6') }] as FlowRow[]) : []),
     { id: 'r-next', name: 'לוח באר שבע', state: 'next' },
   ];
 
@@ -120,7 +132,9 @@ function Harness() {
                     step,
                     step_at: new Date(Date.now() - 12_000).toISOString(),
                     scheduled_at: new Date().toISOString(),
-                    target: { name: 'Чистка диванов Беэр-Шева и окрестности — объявления' },
+                    /* With a picture, and no post media: the square beside
+                       the name is exactly the one he photographed empty. */
+                    target: { name: 'Чистка диванов Беэр-Шева и окрестности — объявления', image_url: pic('#7a4bd0') },
                     post: { media: [] },
                   },
                 ] as never)

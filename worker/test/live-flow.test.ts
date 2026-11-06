@@ -279,6 +279,68 @@ async function main(): Promise<void> {
       eq((await read()).tiles, 0, 'the card carries no figure tiles of its own — the row below the card owns the numbers');
     }
 
+    /* ── §4b — THE GROUP'S OWN PICTURE, BESIDE ITS NAME ────────────────── */
+    /*
+     * "בצד ימין ליד השם של הקבוצה בריבוע הריק להוסיף גם את התמונה של הקבוצות."
+     *
+     * The square he photographed is the one on the publishing card: a grey
+     * outline on every publication whose post has no picture of its own,
+     * which is most of them. It carries the group's picture now, and so does
+     * the square at the head of every queue row.
+     *
+     * THREE THINGS ARE MEASURED, not one: that the picture really lands in
+     * that square (a src on a hidden element is not a picture), that a group
+     * with NO picture keeps the Facebook mark rather than an empty box, and
+     * that both shapes occupy the same 26px — a row that resized when a
+     * picture loaded would make the queue jump as the images arrive.
+     */
+    {
+      const seen = await page.evaluate(() => {
+        const card = document.querySelector('[data-panel] [data-flow]') as HTMLElement;
+        const cover = card.querySelector('.anxf-now-cover') as HTMLElement;
+        const cimg = cover.querySelector('img');
+        return {
+          /* The publishing card's square: which of the three it is showing. */
+          coverKind: cover.dataset.pic ?? '',
+          coverPainted: cimg ? Math.round(cimg.getBoundingClientRect().width) : 0,
+          coverSrc: (cimg?.getAttribute('src') ?? '').slice(0, 24),
+          /* The queue: a picture for the two rows that have one, the mark for
+             the third, and every box the same size. */
+          rows: [...card.querySelectorAll('.anxf-queue li')].map((li) => {
+            const el = li.querySelector('.anxf-pic, .anxf-fb') as HTMLElement;
+            const r = el.getBoundingClientRect();
+            return { kind: el.dataset.pic ?? el.tagName.toLowerCase(), w: Math.round(r.width), h: Math.round(r.height) };
+          }),
+        };
+      });
+      eq(seen.coverKind, 'group', 'the publishing card shows the GROUP picture when the post has none — the empty square he photographed');
+      is(seen.coverPainted > 20, `and it is really painted, ${seen.coverPainted}px wide`);
+      is(seen.coverSrc.startsWith('data:image/svg'), 'from the row the screen was handed, not from anywhere else');
+      eq(
+        seen.rows.map((r) => r.kind),
+        ['group', 'group', 'span'],
+        'every queue row with a picture shows it, and the row without one keeps the Facebook mark',
+      );
+      is(
+        seen.rows.every((r) => r.w === seen.rows[0].w && r.h === seen.rows[0].h && r.w >= 24),
+        `and all three boxes are the same size (${seen.rows.map((r) => `${r.w}x${r.h}`).join(' ')}) — nothing jumps when a picture lands`,
+      );
+      /* AND THE POST'S OWN PICTURE STILL OUTRANKS IT: the square says what is
+         going out before it says where to. */
+      await page.evaluate(() => {
+        const p = document.querySelector('.anxf-now-cover') as HTMLElement;
+        p.dataset.probe = '1';
+      });
+      eq(
+        await page.evaluate(() => {
+          const img = document.querySelector('.anxf-now-cover img') as HTMLImageElement;
+          return img.naturalWidth > 0;
+        }),
+        true,
+        'the picture decoded — a broken URL would leave the box empty and nothing would say so',
+      );
+    }
+
     /* ── §5 — THE ROOM IS GONE, AND THE CARD SHOWS THROUGH ─────────────── */
     /*
      * "אין להציג רקע כחול מלבני מאחורי הרובוט … יש להשתמש בשקיפות אמיתית."

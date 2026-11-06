@@ -3592,6 +3592,27 @@ export async function countWaitingWithin(untilISO: string): Promise<number> {
 }
 
 /**
+ * HOW MANY GROUPS AND PAGES ARE SWITCHED ON — the number, never the rows.
+ *
+ * The dashboard's "קבוצות" tile had no source: `activeTargets` was counted
+ * off listTargets(), and listTargets() stopped being called on this screen
+ * the moment the setup checklist latched closed — which is every account
+ * that has ever published. So the tile printed "–" for ever, on a system
+ * doing 107 publications a day. A figure that can never arrive is not a
+ * figure, and the dash it falls back to is meant for a read that failed.
+ *
+ * The reason listTargets() was taken off the poll stands and is not undone
+ * here: it is `select('*')` over every group plus a city-backfill UPDATE per
+ * row, thirty seconds apart, for one boolean. This asks the database to
+ * COUNT instead — `head: true`, so not one row crosses the wire.
+ */
+export async function countEnabledTargets(): Promise<number> {
+  const res = await db().from('social_targets').select('id', { count: 'exact', head: true }).eq('enabled', true);
+  if (res.error) throw friendlyError(res.error);
+  return res.count ?? 0;
+}
+
+/**
  * The same counts, rolled up through the single classification, plus the
  * invariant check on them. Every tile and every confirmation dialog on the
  * dashboard reads from this, so they cannot drift apart again.

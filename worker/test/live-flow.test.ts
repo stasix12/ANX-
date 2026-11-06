@@ -398,8 +398,31 @@ async function main(): Promise<void> {
       eq(hexes, [], `every colour on the card comes from a theme token — found ${hexes.join(', ')}`);
     }
 
-    /* ── §7 — IT FITS, AT EVERY WIDTH ──────────────────────────────────── */
+    /* ── §7 — IT FITS, AT EVERY WIDTH, WITH THE NAMES HE REALLY HAS ───── */
     {
+      /*
+       * "גם פה בתור פרסומים במלבן של הקבוצה יוצא ממסגרת."
+       *
+       * The queue in that photograph held a group called
+       * "דרושים ערד /עבודה בערד והסביבה", and every row in the list — the
+       * short ones too — was hanging 55px off the left edge of the card and
+       * off the screen. This section already asked "does it fit", at six
+       * widths, and answered yes every time: the harness's own rows are three
+       * short names, so the question could not come out wrong. A fit test
+       * measured on data that cannot overflow is not a fit test.
+       *
+       * So the real names go in first — his, exactly — and the queue is then
+       * measured against the card that is supposed to contain it.
+       */
+      await page.evaluate(() => {
+        window.__rows([
+          { id: 'q-done', name: 'דירות למכירה באר שבע', state: 'done', at: '21:21' },
+          { id: 'q-live', name: 'דרושים בערד', state: 'live', note: 'מעלה מדיה' },
+          { id: 'q-next', name: 'דרושים ערד /עבודה בערד והסביבה', state: 'next' },
+          { id: 'q-fail', name: 'Чистка диванов Беэр-Шева и окрестности — объявления', state: 'failed', note: 'לא נמצאה תיבת הכתיבה' },
+        ]);
+      });
+      await page.waitForTimeout(140);
       for (const width of [320, 360, 390, 430, 768, 1280]) {
         await page.setViewportSize({ width, height: 1400 });
         await page.waitForTimeout(140);
@@ -417,8 +440,37 @@ async function main(): Promise<void> {
             /* four across, never wrapped to two rows */
             oneRow: tiles.every((t) => Math.abs(t.top - tiles[0].top) < 2),
             cut: [...card.querySelectorAll<HTMLElement>('.anxf-lb, .anxf-row-at, .anxf-pct')].some((el) => el.scrollWidth > el.clientWidth + 1),
+            /*
+             * THE QUEUE AGAINST ITS OWN CARD, measured on the card's CONTENT
+             * box — border and padding taken off — because that is the line
+             * the rows were crossing.
+             */
+            queue: (() => {
+              const q = card.querySelector('.anxf-qcard') as HTMLElement;
+              const b = q.getBoundingClientRect();
+              const st = getComputedStyle(q);
+              const left = b.left + parseFloat(st.borderLeftWidth) + parseFloat(st.paddingLeft);
+              const right = b.right - parseFloat(st.borderRightWidth) - parseFloat(st.paddingRight);
+              const li = [...q.querySelectorAll<HTMLElement>('.anxf-queue li')].map((el) => el.getBoundingClientRect());
+              const over = li.map((r) => Math.round(Math.max(left - r.left, r.right - right)));
+              const names = [...q.querySelectorAll<HTMLElement>('.anxf-row-name')];
+              return {
+                rows: li.length,
+                worst: over.length ? Math.max(...over) : 0,
+                inner: Math.round(right - left),
+                widest: li.length ? Math.round(Math.max(...li.map((r) => r.width))) : 0,
+                /* The long name is ellipsised rather than widening its row —
+                   the other half of the same fix. */
+                clipped: names.some((el) => el.scrollWidth > el.clientWidth + 1),
+              };
+            })(),
           };
         });
+        eq(seen.queue.rows, 4, `${width}px: all four queue rows are drawn`);
+        is(
+          seen.queue.worst <= 1,
+          `${width}px: NO QUEUE ROW MAY LEAVE ITS CARD — widest row ${seen.queue.widest}px in a ${seen.queue.inner}px card, over by ${seen.queue.worst}px`,
+        );
         is(!seen.overflow, `${width}px: the card must not push the page sideways`);
         is(seen.w <= seen.inner, `${width}px: it is ${seen.w}px inside a ${seen.inner}px screen`);
         is(Math.abs(seen.ratio - 440 / 276) < 0.06, `${width}px: and the character is never squashed (${seen.ratio.toFixed(2)})`);
@@ -426,7 +478,17 @@ async function main(): Promise<void> {
         is(seen.oneRow, `${width}px: and they are one row, as the reference draws them`);
         is(!seen.cut, `${width}px: nothing on the card is cut off mid-word`);
       }
+      /* And at the width he photographed, the long name really is being cut
+         to fit — which is what the row is supposed to do with it. */
       await page.setViewportSize({ width: 390, height: 1400 });
+      await page.waitForTimeout(140);
+      is(
+        await page.evaluate(() =>
+          [...document.querySelectorAll<HTMLElement>('.anxf-row-name')].some((el) => el.scrollWidth > el.clientWidth + 1),
+        ),
+        '390px: a name longer than the row is ellipsised inside it, not carried out of the card',
+      );
+      await page.evaluate(() => window.__rows(null));
       await page.waitForTimeout(140);
     }
 
@@ -490,6 +552,24 @@ async function main(): Promise<void> {
         'progressOfStep is declared once and called once — the percentage has exactly one source',
       );
       is(/const percent = now \? progressOfStep\(now\.step\) : null;/.test(code), 'and that source is the row’s own stage');
+      /*
+       * AND THE FOUR FIGURES NEED A SOURCE THAT CAN ACTUALLY ARRIVE.
+       *
+       * "קבוצות" printed "–" on his screen while the same card reported 107
+       * publications that day. The dash is the honest fallback for a figure
+       * the database did not give — and this one could never be given: it was
+       * counted off listTargets(), which the dashboard stops calling the
+       * moment the setup checklist latches closed, i.e. on every account that
+       * has ever published. A tile whose number cannot arrive is a decoration
+       * with a dash in it.
+       */
+      const dash = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
+      const dashCode = dash.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      is(/countEnabledTargets\(\)/.test(dashCode), 'the groups figure is COUNTED by the database — head: true, no rows');
+      is(
+        !/activeTargets:\s*targets\s*\?/.test(dashCode),
+        'and it is NOT read off listTargets(), which this screen stops calling once anything has published',
+      );
       const assets = readdirSync(path.resolve('public/social/anx'));
       eq(assets.filter((f) => /^pose-\d\.webp$/.test(f)).length, 9, 'all nine poses are on disk');
       const bytes = assets.reduce((n, f) => n + statSync(path.resolve('public/social/anx', f)).size, 0);

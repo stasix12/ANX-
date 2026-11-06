@@ -21,6 +21,7 @@ import {
   cancelAllScheduled,
   countFailuresSince,
   countCommentsDoneSince,
+  countEnabledTargets,
   countPublishedSince,
   getControl,
   getLimits,
@@ -404,7 +405,9 @@ export default function SocialDashboard() {
       const statesPromise = campaignsPromise.then((cs) => campaignStates(cs.filter((c) => c.status !== 'archived').map((c) => c.id)));
       /*
        * The targets table is read for ONE boolean: whether the setup checklist
-       * still has its first step open. That card removes itself for good once
+       * still has its first step open. (The "קבוצות" tile's number does NOT
+       * come from here — countEnabledTargets() below asks the database to
+       * count, which is why that tile survived this read being skipped.) That card removes itself for good once
        * anything has been published, and after that this was a full
        * `select('*')` over every group and page — plus listTargets()'s own
        * city-backfill UPDATEs — every 30 seconds, for a number no screen
@@ -412,7 +415,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, inFlightRows, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, inFlightRows, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday, enabledTargets] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -494,7 +497,14 @@ export default function SocialDashboard() {
          * tomorrow's, and this morning's publications are no longer counted
          * by countPublishedSince.
          */
-        countWaitingWithin(zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').toISOString())
+        countWaitingWithin(zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').toISOString()),
+        /*
+         * THE "קבוצות" TILE'S OWN NUMBER, and it is a COUNT — head: true, so
+         * the database answers with a figure and sends no rows. The tile read
+         * `activeTargets` off listTargets() above, which is skipped on every
+         * account that has ever published, so it printed "–" for ever.
+         */
+        countEnabledTargets(),
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
       const next: DashboardData = {
@@ -534,7 +544,10 @@ export default function SocialDashboard() {
          */
         waitingToday,
         control,
-        activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
+        /* The count, every tick. `targets` is still read on a fresh install
+           for the checklist's own first step, and is no longer what this
+           number comes from. */
+        activeTargets: enabledTargets,
         waitingForYou,
         manual,
         log,

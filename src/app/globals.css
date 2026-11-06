@@ -2259,6 +2259,27 @@ body:has(.social-theme) .site-backdrop {
   margin: 0;
   padding: 0;
   display: grid;
+  /*
+   * minmax(0, 1fr), AND THE 0 IS THE WHOLE POINT.
+   *
+   * "גם פה בתור פרסומים במלבן של הקבוצה יוצא ממסגרת" — with a group called
+   * "דרושים ערד /עבודה בערד והסביבה" in the queue, every row in this list
+   * came out 399px wide inside a 344px card: 55px past the card's edge, off
+   * the left of a 390px screen, with the page itself 422px wide.
+   *
+   * A grid with no declared columns gets ONE implicit `auto` column, and an
+   * auto track is never smaller than its item's min-content width. The row's
+   * min-content is the group's name on one line, because `min-width: 0` on
+   * the words column lets the name SHRINK during layout but does not lower
+   * what it CONTRIBUTES to an intrinsic measurement. So the track grew to the
+   * longest name in the queue and took every row with it — which is why the
+   * row that fits was escaping the card too.
+   *
+   * `minmax(0, 1fr)` says the column may be as narrow as nothing and takes
+   * the free space: the track is the card's width, and the name ellipsises
+   * inside it as it was always meant to.
+   */
+  grid-template-columns: minmax(0, 1fr);
   gap: 7px;
 }
 .anxf-queue li {

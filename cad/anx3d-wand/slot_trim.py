@@ -1,9 +1,10 @@
 # v60: cut the flare flush with the two ring-end faces (radial planes at +-30.01 deg) beside the spray-tube slot.
 # Inside the gap only the real grip / channel lip (r < RCUT) stays, so nothing overhangs the gap and the
 # ring-end face continues straight up; its outline above the ring is the flare's own arc.
+# E<0: the cut plane sits 0.02 mm inside the gap, so the ring and its thread are not touched at all.
 import sys,numpy as np,trimesh,manifold3d as mf
 IN,OUT=sys.argv[1],sys.argv[2]
-P0=np.radians(30.01); E=0.03; RCUT=17.42; ZF=41.7
+P0=np.radians(30.01); E=-0.02; RCUT=17.42; ZF=41.7
 s=trimesh.load(IN); t=s.to_geometry() if isinstance(s,trimesh.Scene) else s
 M=mf.Manifold(mf.Mesh(vert_properties=np.asarray(t.vertices,np.float32),tri_verts=np.asarray(t.faces,np.uint32)))
 z0b=t.bounds[0][2]
